@@ -9,3 +9,7 @@
 关于Verilog的运行和调试，目前只需支持ISE，其他工具暂不接入，但保留未来接入的可能
 
 本地目前没有安装ISE
+
+---
+
+扩展“buaa-co-extension”中的一个或多个代码片段很可能混淆了片段变量和片段占位符 (有关详细信息，请访问 https://code.visualstudio.com/docs/editor/userdefinedsnippets#_snippet-syntax )
