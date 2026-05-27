@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -16,6 +17,7 @@ import { AppServices, ProjectProfile } from './types';
 interface MipsInstruction {
   mnemonic: string;
   summary: string;
+  type: MipsInstructionType;
   formats: string[];
   operands: [number, number];
   description: string;
@@ -25,17 +27,24 @@ interface MipsInstruction {
   delaySlot?: boolean;
 }
 
+type MipsInstructionType = 'R-type' | 'I-type' | 'J-type' | 'special' | 'pseudo';
+
 interface MipsSymbol {
   name: string;
-  kind: 'label' | 'data' | 'macro' | 'macroParam';
+  kind: 'label' | 'data' | 'eqv' | 'macro' | 'macroParam';
   range: vscode.Range;
   selectionRange: vscode.Range;
   detail?: string;
+  macroName?: string;
 }
 
 interface MipsMacro {
   name: string;
   params: string[];
+  paramSymbols: Map<string, MipsSymbol>;
+  labels: Map<string, MipsSymbol>;
+  dataSymbols: Map<string, MipsSymbol>;
+  eqvSymbols: Map<string, MipsSymbol>;
   range: vscode.Range;
   selectionRange: vscode.Range;
   bodyStartLine: number;
@@ -52,153 +61,101 @@ interface MipsLine {
 interface MipsLabelReference {
   line: number;
   operand: string;
+  macro?: MipsMacro;
 }
 
 interface MipsParseResult {
   labels: Map<string, MipsSymbol>;
   dataSymbols: Map<string, MipsSymbol>;
+  eqvSymbols: Map<string, MipsSymbol>;
   macros: Map<string, MipsMacro>;
-  macroParams: Map<string, MipsSymbol>;
   instructions: MipsLine[];
   diagnostics: vscode.Diagnostic[];
 }
 
-const registerNames = new Set([
-  '$zero',
-  '$at',
-  '$v0',
-  '$v1',
-  '$a0',
-  '$a1',
-  '$a2',
-  '$a3',
-  '$t0',
-  '$t1',
-  '$t2',
-  '$t3',
-  '$t4',
-  '$t5',
-  '$t6',
-  '$t7',
-  '$s0',
-  '$s1',
-  '$s2',
-  '$s3',
-  '$s4',
-  '$s5',
-  '$s6',
-  '$s7',
-  '$t8',
-  '$t9',
-  '$k0',
-  '$k1',
-  '$gp',
-  '$sp',
-  '$fp',
-  '$ra'
-]);
+interface MipsSymbolScope {
+  labels: Map<string, MipsSymbol>;
+  dataSymbols: Map<string, MipsSymbol>;
+  eqvSymbols: Map<string, MipsSymbol>;
+}
 
-const registerDescriptions = new Map<string, string>([
-  ['$zero', 'Constant zero register.'],
-  ['$at', 'Assembler temporary. Avoid using it directly unless you know the expansion.'],
-  ['$v0', 'Return value / syscall code register.'],
-  ['$v1', 'Return value register.'],
-  ['$a0', 'Argument register 0.'],
-  ['$a1', 'Argument register 1.'],
-  ['$a2', 'Argument register 2.'],
-  ['$a3', 'Argument register 3.'],
-  ['$sp', 'Stack pointer.'],
-  ['$ra', 'Return address register.'],
-  ['$gp', 'Global pointer. Course-modified MARS may initialize it differently from standard MARS.']
-]);
+interface MipsRegisterInfo {
+  number: number;
+  names: string[];
+  usage: string;
+}
 
-const directives = new Set([
-  '.data',
-  '.text',
-  '.kdata',
-  '.ktext',
-  '.word',
-  '.half',
-  '.byte',
-  '.space',
-  '.ascii',
-  '.asciiz',
-  '.align',
-  '.globl',
-  '.extern',
-  '.eqv',
-  '.macro',
-  '.end_macro',
-  '.include'
-]);
+const sessionIgnoredPseudoInstructionFiles = new Set<string>();
+const sessionIgnoredPseudoInstructionMnemonics = new Set<string>();
 
-const instructions: Record<string, MipsInstruction> = makeInstructionMap([
-  ins('add', 'Add', ['add $rd, $rs, $rt'], [3, 3], 'rd <- rs + rt. Signed overflow may trap in normal MIPS.'),
-  ins('addu', 'Add unsigned', ['addu $rd, $rs, $rt'], [3, 3], 'rd <- rs + rt without signed overflow trap.'),
-  ins('addi', 'Add immediate', ['addi $rt, $rs, imm'], [3, 3], 'rt <- rs + sign_extend(imm).'),
-  ins('addiu', 'Add immediate unsigned', ['addiu $rt, $rs, imm'], [3, 3], 'rt <- rs + sign_extend(imm), no signed overflow trap.'),
-  ins('sub', 'Subtract', ['sub $rd, $rs, $rt'], [3, 3], 'rd <- rs - rt.'),
-  ins('subu', 'Subtract unsigned', ['subu $rd, $rs, $rt'], [3, 3], 'rd <- rs - rt without signed overflow trap.'),
-  ins('and', 'Bitwise AND', ['and $rd, $rs, $rt'], [3, 3], 'rd <- rs & rt.'),
-  ins('andi', 'Bitwise AND immediate', ['andi $rt, $rs, imm'], [3, 3], 'rt <- rs & zero_extend(imm).'),
-  ins('or', 'Bitwise OR', ['or $rd, $rs, $rt'], [3, 3], 'rd <- rs | rt.'),
-  ins('ori', 'Bitwise OR immediate', ['ori $rt, $rs, imm'], [3, 3], 'rt <- rs | zero_extend(imm).'),
-  ins('xor', 'Bitwise XOR', ['xor $rd, $rs, $rt'], [3, 3], 'rd <- rs ^ rt.'),
-  ins('xori', 'Bitwise XOR immediate', ['xori $rt, $rs, imm'], [3, 3], 'rt <- rs ^ zero_extend(imm).'),
-  ins('nor', 'Bitwise NOR', ['nor $rd, $rs, $rt'], [3, 3], 'rd <- ~(rs | rt).'),
-  ins('slt', 'Set less than', ['slt $rd, $rs, $rt'], [3, 3], 'rd <- signed(rs) < signed(rt).'),
-  ins('sltu', 'Set less than unsigned', ['sltu $rd, $rs, $rt'], [3, 3], 'rd <- unsigned(rs) < unsigned(rt).'),
-  ins('slti', 'Set less than immediate', ['slti $rt, $rs, imm'], [3, 3], 'rt <- signed(rs) < sign_extend(imm).'),
-  ins('sltiu', 'Set less than immediate unsigned', ['sltiu $rt, $rs, imm'], [3, 3], 'rt <- unsigned(rs) < unsigned(sign_extend(imm)).'),
-  ins('sll', 'Shift left logical', ['sll $rd, $rt, shamt'], [3, 3], 'rd <- rt << shamt.'),
-  ins('srl', 'Shift right logical', ['srl $rd, $rt, shamt'], [3, 3], 'rd <- rt >> shamt with zero fill.'),
-  ins('sra', 'Shift right arithmetic', ['sra $rd, $rt, shamt'], [3, 3], 'rd <- rt >> shamt with sign fill.'),
-  ins('lui', 'Load upper immediate', ['lui $rt, imm'], [2, 2], 'rt <- imm << 16.'),
-  ins('lw', 'Load word', ['lw $rt, offset($base)'], [2, 2], 'Load 32-bit word from memory.'),
-  ins('sw', 'Store word', ['sw $rt, offset($base)'], [2, 2], 'Store 32-bit word to memory.'),
-  ins('lb', 'Load byte', ['lb $rt, offset($base)'], [2, 2], 'Load signed byte.'),
-  ins('lbu', 'Load byte unsigned', ['lbu $rt, offset($base)'], [2, 2], 'Load zero-extended byte.'),
-  ins('lh', 'Load halfword', ['lh $rt, offset($base)'], [2, 2], 'Load signed halfword.'),
-  ins('lhu', 'Load halfword unsigned', ['lhu $rt, offset($base)'], [2, 2], 'Load zero-extended halfword.'),
-  ins('sb', 'Store byte', ['sb $rt, offset($base)'], [2, 2], 'Store low 8 bits to memory.'),
-  ins('sh', 'Store halfword', ['sh $rt, offset($base)'], [2, 2], 'Store low 16 bits to memory.'),
-  ins('beq', 'Branch if equal', ['beq $rs, $rt, label'], [3, 3], 'Branch when rs == rt.', { labelOperand: 'last', delaySlot: true }),
-  ins('bne', 'Branch if not equal', ['bne $rs, $rt, label'], [3, 3], 'Branch when rs != rt.', { labelOperand: 'last', delaySlot: true }),
-  ins('blez', 'Branch if less or equal zero', ['blez $rs, label'], [2, 2], 'Branch when signed(rs) <= 0.', { labelOperand: 'last', delaySlot: true }),
-  ins('bgtz', 'Branch if greater than zero', ['bgtz $rs, label'], [2, 2], 'Branch when signed(rs) > 0.', { labelOperand: 'last', delaySlot: true }),
-  ins('j', 'Jump', ['j label'], [1, 1], 'Jump to label.', { labelOperand: 'first', delaySlot: true }),
-  ins('jal', 'Jump and link', ['jal label'], [1, 1], 'Jump to label and write return address to $ra.', { labelOperand: 'first', delaySlot: true }),
-  ins('jr', 'Jump register', ['jr $rs'], [1, 1], 'Jump to address in rs.', { delaySlot: true }),
-  ins('jalr', 'Jump and link register', ['jalr $rs', 'jalr $rd, $rs'], [1, 2], 'Jump to rs and write return address.'),
-  ins('mult', 'Multiply signed', ['mult $rs, $rt'], [2, 2], 'Signed multiply into HI/LO.', { projects: ['P6', 'P7'] }),
-  ins('multu', 'Multiply unsigned', ['multu $rs, $rt'], [2, 2], 'Unsigned multiply into HI/LO.', { projects: ['P6', 'P7'] }),
-  ins('div', 'Divide signed', ['div $rs, $rt'], [2, 2], 'Signed divide into LO quotient and HI remainder.', { projects: ['P6', 'P7'] }),
-  ins('divu', 'Divide unsigned', ['divu $rs, $rt'], [2, 2], 'Unsigned divide into LO quotient and HI remainder.', { projects: ['P6', 'P7'] }),
-  ins('mfhi', 'Move from HI', ['mfhi $rd'], [1, 1], 'rd <- HI.', { projects: ['P6', 'P7'] }),
-  ins('mflo', 'Move from LO', ['mflo $rd'], [1, 1], 'rd <- LO.', { projects: ['P6', 'P7'] }),
-  ins('mthi', 'Move to HI', ['mthi $rs'], [1, 1], 'HI <- rs.', { projects: ['P6', 'P7'] }),
-  ins('mtlo', 'Move to LO', ['mtlo $rs'], [1, 1], 'LO <- rs.', { projects: ['P6', 'P7'] }),
-  ins('mfc0', 'Move from CP0', ['mfc0 $rt, $rd'], [2, 2], 'rt <- CP0[rd].', { projects: ['P7'] }),
-  ins('mtc0', 'Move to CP0', ['mtc0 $rt, $rd'], [2, 2], 'CP0[rd] <- rt.', { projects: ['P7'] }),
-  ins('eret', 'Exception return', ['eret'], [0, 0], 'Return from exception. In BUAA CO P7, eret has no delay slot.', { projects: ['P7'] }),
-  ins('syscall', 'System call / exception', ['syscall'], [0, 0], 'Invokes a MARS syscall in P2 or raises syscall exception in P7.'),
-  ins('nop', 'No operation', ['nop'], [0, 0], 'Expands to sll $zero, $zero, 0.'),
-  ins('li', 'Load immediate', ['li $rt, imm'], [2, 2], 'Pseudo instruction for loading an immediate.', { pseudo: true }),
-  ins('la', 'Load address', ['la $rt, label'], [2, 2], 'Pseudo instruction for loading an address.', { pseudo: true, labelOperand: 'second' }),
-  ins('move', 'Move register', ['move $rd, $rs'], [2, 2], 'Pseudo instruction, usually addu $rd, $rs, $zero.', { pseudo: true }),
-  ins('blt', 'Branch less than', ['blt $rs, $rt, label'], [3, 3], 'Pseudo branch.', { pseudo: true, labelOperand: 'last', delaySlot: true }),
-  ins('bgt', 'Branch greater than', ['bgt $rs, $rt, label'], [3, 3], 'Pseudo branch.', { pseudo: true, labelOperand: 'last', delaySlot: true }),
-  ins('ble', 'Branch less or equal', ['ble $rs, $rt, label'], [3, 3], 'Pseudo branch.', { pseudo: true, labelOperand: 'last', delaySlot: true }),
-  ins('bge', 'Branch greater or equal', ['bge $rs, $rt, label'], [3, 3], 'Pseudo branch.', { pseudo: true, labelOperand: 'last', delaySlot: true })
-]);
+interface MipsResourceData {
+  registers: MipsRegisterInfo[];
+  directives: string[];
+  instructions: MipsInstruction[];
+}
+
+const mipsResourceData = loadMipsResourceData();
+const registerInfos = mipsResourceData.registers;
+const registerNames = new Set(registerInfos.flatMap((info) => info.names.map((name) => name.toLowerCase())));
+const registerByNumber = new Map(registerInfos.map((info) => [info.number, info]));
+const registerAliases = new Map(registerInfos.flatMap((info) => info.names.map((name) => [name.toLowerCase(), info.names[0].toLowerCase()] as const)));
+const registerDescriptions = new Map<string, string>();
+for (const info of registerInfos) {
+  const names = info.names.join(' / ');
+  const description = '$' + info.number + ' (' + names + '): ' + info.usage;
+  registerDescriptions.set('$' + info.number, description);
+  for (const name of info.names) {
+    registerDescriptions.set(name.toLowerCase(), description);
+  }
+}
+
+const directives = new Set(mipsResourceData.directives);
+const instructions: Record<string, MipsInstruction> = makeInstructionMap(mipsResourceData.instructions);
+const mipsSemanticTokenTypes = [
+  'mipsDirective',
+  'mipsInstruction',
+  'mipsRealInstruction',
+  'mipsRInstruction',
+  'mipsIInstruction',
+  'mipsJInstruction',
+  'mipsSpecialInstruction',
+  'mipsPseudoInstruction',
+  'mipsRegister',
+  'mipsMacro',
+  'mipsMacroParameter',
+  'mipsLabel',
+  'mipsDataSymbol',
+  'mipsEqvSymbol',
+  'mipsNumber',
+  'mipsString',
+  'mipsComment',
+  'mipsPunctuation'
+] as const;
+
+type MipsSemanticTokenType = typeof mipsSemanticTokenTypes[number];
+type MipsInstructionColorMode = 'realVsPseudo' | 'same' | 'byType';
+
+interface MipsSemanticTokenCandidate {
+  range: vscode.Range;
+  tokenType: MipsSemanticTokenType;
+  modifiers?: string[];
+}
+
+const mipsSemanticTokenLegend = new vscode.SemanticTokensLegend([...mipsSemanticTokenTypes], ['declaration']);
 
 export function registerMips(context: vscode.ExtensionContext, services: AppServices): void {
   const diagnostics = vscode.languages.createDiagnosticCollection('buaa-co-mips');
   context.subscriptions.push(diagnostics);
 
-  const refresh = (document: vscode.TextDocument) => {
+  const refresh = (document: vscode.TextDocument): void => {
     if (document.languageId === 'mipsasm') {
       diagnostics.set(document.uri, parseMips(document).diagnostics);
+    }
+  };
+
+  const refreshAll = (): void => {
+    for (const document of vscode.workspace.textDocuments) {
+      refresh(document);
     }
   };
 
@@ -215,6 +172,33 @@ export function registerMips(context: vscode.ExtensionContext, services: AppServ
     vscode.languages.registerDefinitionProvider({ language: 'mipsasm' }, new MipsDefinitionProvider()),
     vscode.languages.registerDocumentSymbolProvider({ language: 'mipsasm' }, new MipsDocumentSymbolProvider()),
     vscode.languages.registerDocumentFormattingEditProvider({ language: 'mipsasm' }, new MipsFormatter()),
+    (() => {
+      const semanticTokensProvider = new MipsSemanticTokensProvider();
+      return vscode.Disposable.from(
+        semanticTokensProvider,
+        vscode.languages.registerDocumentSemanticTokensProvider({ language: 'mipsasm' }, semanticTokensProvider, mipsSemanticTokenLegend),
+        vscode.workspace.onDidChangeConfiguration((event) => {
+          if (event.affectsConfiguration('co.mips.instructionColorMode')) {
+            semanticTokensProvider.refresh();
+          }
+        })
+      );
+    })(),
+    vscode.languages.registerCodeActionsProvider({ language: 'mipsasm' }, new MipsCodeActionProvider(), {
+      providedCodeActionKinds: [vscode.CodeActionKind.QuickFix]
+    }),
+    vscode.commands.registerCommand('co.mips.ignorePseudoWarningsForFile', (uri: vscode.Uri) => {
+      sessionIgnoredPseudoInstructionFiles.add(uri.toString());
+      refreshAll();
+    }),
+    vscode.commands.registerCommand('co.mips.ignorePseudoWarningsForMnemonic', (mnemonic: string) => {
+      sessionIgnoredPseudoInstructionMnemonics.add(mnemonic.toLowerCase());
+      refreshAll();
+    }),
+    vscode.commands.registerCommand('co.mips.disablePseudoWarnings', async () => {
+      await vscode.workspace.getConfiguration('co').update('mips.warnPseudoInstruction', false, vscode.ConfigurationTarget.Workspace);
+      refreshAll();
+    }),
     vscode.commands.registerCommand('co.mips.runCurrentFile', () => runMarsCurrentFile(services, 'run')),
     vscode.commands.registerCommand('co.mips.dumpText', () => runMarsCurrentFile(services, 'dumpText')),
     vscode.commands.registerCommand('co.mips.dumpKernelText', () => runMarsCurrentFile(services, 'dumpKernel'))
@@ -237,7 +221,7 @@ class MipsCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     if (/%[\w]*$/.test(linePrefix)) {
-      for (const symbol of parsed.macroParams.values()) {
+      for (const symbol of findMacroAtPosition(parsed, position)?.paramSymbols.values() ?? []) {
         const item = new vscode.CompletionItem(symbol.name, vscode.CompletionItemKind.Variable);
         item.detail = 'Macro parameter';
         items.push(item);
@@ -247,7 +231,7 @@ class MipsCompletionProvider implements vscode.CompletionItemProvider {
 
     for (const instruction of Object.values(instructions)) {
       const item = new vscode.CompletionItem(instruction.mnemonic, vscode.CompletionItemKind.Keyword);
-      item.detail = instruction.summary;
+      item.detail = `${instructionTypeLabel(instruction.type)} - ${instruction.summary}`;
       item.documentation = new vscode.MarkdownString(instruction.formats.join('\n\n'));
       item.insertText = instruction.mnemonic;
       items.push(item);
@@ -257,9 +241,9 @@ class MipsCompletionProvider implements vscode.CompletionItemProvider {
       items.push(new vscode.CompletionItem(directive, vscode.CompletionItemKind.Keyword));
     }
 
-    for (const symbol of [...parsed.labels.values(), ...parsed.dataSymbols.values()]) {
+    for (const symbol of symbolsVisibleAtPosition(parsed, position)) {
       const item = new vscode.CompletionItem(symbol.name, vscode.CompletionItemKind.Reference);
-      item.detail = symbol.kind === 'data' ? 'Data symbol' : 'Label';
+      item.detail = symbol.kind === 'data' ? 'Data symbol' : symbol.kind === 'eqv' ? '.eqv symbol' : 'Label';
       items.push(item);
     }
 
@@ -287,6 +271,7 @@ class MipsHoverProvider implements vscode.HoverProvider {
     if (instruction) {
       const md = new vscode.MarkdownString();
       md.appendMarkdown(`**${instruction.mnemonic}** - ${instruction.summary}\n\n`);
+      md.appendMarkdown(`Type: **${instructionTypeLabel(instruction.type)}**\n\n`);
       md.appendCodeblock(instruction.formats.join('\n'), 'mipsasm');
       md.appendMarkdown(`\n${instruction.description}`);
       if (instruction.pseudo) {
@@ -303,9 +288,15 @@ class MipsHoverProvider implements vscode.HoverProvider {
       return new vscode.Hover(registerDescriptions.get(canonical) ?? `MIPS register ${word}`, wordRange);
     }
 
-    const symbol = parsed.labels.get(word) ?? parsed.dataSymbols.get(word);
+    const param = findMacroParamAtPosition(parsed, word, position);
+    if (param) {
+      return new vscode.Hover(`Macro parameter defined on line ${param.range.start.line + 1}.`, wordRange);
+    }
+
+    const symbol = resolveSymbolAtPosition(parsed, word, position);
     if (symbol) {
-      return new vscode.Hover(`${symbol.kind === 'data' ? 'Data symbol' : 'Label'} defined on line ${symbol.range.start.line + 1}.`, wordRange);
+      const kind = symbol.kind === 'data' ? 'Data symbol' : symbol.kind === 'eqv' ? '.eqv symbol' : 'Label';
+      return new vscode.Hover(`${kind} defined on line ${symbol.range.start.line + 1}.`, wordRange);
     }
 
     const macro = parsed.macros.get(word);
@@ -328,7 +319,11 @@ class MipsDefinitionProvider implements vscode.DefinitionProvider {
     }
     const word = document.getText(wordRange);
     const parsed = parseMips(document);
-    const symbol = parsed.labels.get(word) ?? parsed.dataSymbols.get(word);
+    const param = findMacroParamAtPosition(parsed, word, position);
+    if (param) {
+      return new vscode.Location(document.uri, param.selectionRange);
+    }
+    const symbol = resolveSymbolAtPosition(parsed, word, position);
     if (symbol) {
       return new vscode.Location(document.uri, symbol.selectionRange);
     }
@@ -336,11 +331,148 @@ class MipsDefinitionProvider implements vscode.DefinitionProvider {
     if (macro) {
       return new vscode.Location(document.uri, macro.selectionRange);
     }
-    const param = parsed.macroParams.get(word);
-    if (param) {
-      return new vscode.Location(document.uri, param.selectionRange);
-    }
     return undefined;
+  }
+}
+
+class MipsCodeActionProvider implements vscode.CodeActionProvider {
+  provideCodeActions(document: vscode.TextDocument, _range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] {
+    const pseudoDiagnostic = context.diagnostics.find((diagnostic) => typeof diagnostic.code === 'string' && diagnostic.code.startsWith('pseudo-instruction:'));
+    if (!pseudoDiagnostic || typeof pseudoDiagnostic.code !== 'string') {
+      return [];
+    }
+
+    const mnemonic = pseudoDiagnostic.code.slice('pseudo-instruction:'.length);
+    const actions: vscode.CodeAction[] = [];
+
+    const ignoreMnemonic = new vscode.CodeAction(`Ignore '${mnemonic}' pseudo-instruction warnings until reload`, vscode.CodeActionKind.QuickFix);
+    ignoreMnemonic.command = {
+      command: 'co.mips.ignorePseudoWarningsForMnemonic',
+      title: `Ignore ${mnemonic}`,
+      arguments: [mnemonic]
+    };
+    actions.push(ignoreMnemonic);
+
+    const ignoreFile = new vscode.CodeAction('Ignore pseudo-instruction warnings in this file until reload', vscode.CodeActionKind.QuickFix);
+    ignoreFile.command = {
+      command: 'co.mips.ignorePseudoWarningsForFile',
+      title: 'Ignore pseudo warnings for file',
+      arguments: [document.uri]
+    };
+    actions.push(ignoreFile);
+
+    const disableWorkspace = new vscode.CodeAction('Disable pseudo-instruction warnings in this workspace', vscode.CodeActionKind.QuickFix);
+    disableWorkspace.command = {
+      command: 'co.mips.disablePseudoWarnings',
+      title: 'Disable pseudo warnings'
+    };
+    actions.push(disableWorkspace);
+
+    return actions;
+  }
+}
+
+class MipsSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+  private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
+  readonly onDidChangeSemanticTokens = this.onDidChangeEmitter.event;
+
+  refresh(): void {
+    this.onDidChangeEmitter.fire();
+  }
+
+  dispose(): void {
+    this.onDidChangeEmitter.dispose();
+  }
+
+  provideDocumentSemanticTokens(document: vscode.TextDocument): vscode.SemanticTokens {
+    const parsed = parseMips(document);
+    const tokens: MipsSemanticTokenCandidate[] = [];
+    const builder = new vscode.SemanticTokensBuilder(mipsSemanticTokenLegend);
+
+    for (const macro of parsed.macros.values()) {
+      pushSemanticToken(tokens, macro.selectionRange, 'mipsMacro', ['declaration']);
+    }
+    for (const param of allMacroParams(parsed)) {
+      pushSemanticToken(tokens, param.selectionRange, 'mipsMacroParameter', ['declaration']);
+    }
+    for (const symbol of allLabelSymbols(parsed)) {
+      pushSemanticToken(tokens, symbol.selectionRange, 'mipsLabel', ['declaration']);
+    }
+    for (const symbol of allDataSymbols(parsed)) {
+      pushSemanticToken(tokens, symbol.selectionRange, 'mipsDataSymbol', ['declaration']);
+    }
+    for (const symbol of allEqvSymbols(parsed)) {
+      pushSemanticToken(tokens, symbol.selectionRange, 'mipsEqvSymbol', ['declaration']);
+    }
+
+    const tokenRegex = /%?[A-Za-z_.$][\w.$]*|\$[A-Za-z0-9_]+/g;
+    const numberRegex = /[-+]?(?:0x[0-9A-Fa-f]+|\b\d+\b)/g;
+    const punctuationRegex = /[(),:]/g;
+    for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
+      const text = document.lineAt(lineNumber).text;
+      const commentIndex = findCommentIndex(text);
+      if (commentIndex >= 0) {
+        pushSemanticToken(tokens, new vscode.Range(lineNumber, commentIndex, lineNumber, text.length), 'mipsComment');
+      }
+      const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
+      const stringRanges = getStringRanges(code);
+      for (const stringRange of stringRanges) {
+        pushSemanticToken(tokens, new vscode.Range(lineNumber, stringRange.start, lineNumber, stringRange.end), 'mipsString');
+      }
+
+      let numberMatch: RegExpExecArray | null;
+      while ((numberMatch = numberRegex.exec(code))) {
+        const previous = numberMatch.index > 0 ? code[numberMatch.index - 1] : '';
+        if (!isInsideAnyRange(numberMatch.index, stringRanges) && previous !== '$') {
+          pushSemanticToken(tokens, new vscode.Range(lineNumber, numberMatch.index, lineNumber, numberMatch.index + numberMatch[0].length), 'mipsNumber');
+        }
+      }
+
+      let punctuationMatch: RegExpExecArray | null;
+      while ((punctuationMatch = punctuationRegex.exec(code))) {
+        if (!isInsideAnyRange(punctuationMatch.index, stringRanges)) {
+          pushSemanticToken(tokens, new vscode.Range(lineNumber, punctuationMatch.index, lineNumber, punctuationMatch.index + punctuationMatch[0].length), 'mipsPunctuation');
+        }
+      }
+
+      let match: RegExpExecArray | null;
+      while ((match = tokenRegex.exec(code))) {
+        const token = match[0];
+        const previous = match.index > 0 ? code[match.index - 1] : '';
+        if (previous === '$' || isInsideAnyRange(match.index, stringRanges)) {
+          continue;
+        }
+
+        const range = new vscode.Range(lineNumber, match.index, lineNumber, match.index + token.length);
+        if (isKnownDeclarationRange(range, parsed)) {
+          continue;
+        }
+
+        if (token.startsWith('$') && isRegister(token)) {
+          pushSemanticToken(tokens, range, 'mipsRegister');
+        } else if (token.startsWith('.') && directives.has(token.toLowerCase())) {
+          pushSemanticToken(tokens, range, 'mipsDirective');
+        } else if (token.startsWith('%') && findMacroParamAtPosition(parsed, token, range.start)) {
+          pushSemanticToken(tokens, range, 'mipsMacroParameter');
+        } else if (instructions[token.toLowerCase()]) {
+          pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], document.uri));
+        } else if (parsed.macros.has(token)) {
+          pushSemanticToken(tokens, range, 'mipsMacro');
+        } else if (resolveLabelAtPosition(parsed, token, range.start)) {
+          pushSemanticToken(tokens, range, 'mipsLabel');
+        } else if (resolveDataSymbolAtPosition(parsed, token, range.start)) {
+          pushSemanticToken(tokens, range, 'mipsDataSymbol');
+        } else if (resolveEqvSymbolAtPosition(parsed, token, range.start)) {
+          pushSemanticToken(tokens, range, 'mipsEqvSymbol');
+        }
+      }
+    }
+
+    tokens.sort(compareSemanticTokens);
+    for (const token of tokens) {
+      builder.push(token.range, token.tokenType, token.modifiers);
+    }
+    return builder.build();
   }
 }
 
@@ -348,8 +480,8 @@ class MipsDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
   provideDocumentSymbols(document: vscode.TextDocument): vscode.DocumentSymbol[] {
     const parsed = parseMips(document);
     const symbols: vscode.DocumentSymbol[] = [];
-    for (const symbol of [...parsed.labels.values(), ...parsed.dataSymbols.values()]) {
-      const kind = symbol.kind === 'data' ? vscode.SymbolKind.Variable : vscode.SymbolKind.Function;
+    for (const symbol of allSymbols(parsed)) {
+      const kind = symbol.kind === 'data' || symbol.kind === 'eqv' ? vscode.SymbolKind.Variable : vscode.SymbolKind.Function;
       symbols.push(new vscode.DocumentSymbol(symbol.name, symbol.kind, kind, symbol.range, symbol.selectionRange));
     }
     for (const macro of parsed.macros.values()) {
@@ -376,13 +508,14 @@ class MipsFormatter implements vscode.DocumentFormattingEditProvider {
 export function parseMips(document: vscode.TextDocument): MipsParseResult {
   const labels = new Map<string, MipsSymbol>();
   const dataSymbols = new Map<string, MipsSymbol>();
+  const eqvSymbols = new Map<string, MipsSymbol>();
   const macros = new Map<string, MipsMacro>();
-  const macroParams = new Map<string, MipsSymbol>();
   const instructionsSeen: MipsLine[] = [];
   const labelReferences: MipsLabelReference[] = [];
   const diagnostics: vscode.Diagnostic[] = [];
   const profile = getProfile(document.uri);
   let section: 'text' | 'data' | 'other' = 'text';
+  let sectionBeforeMacro: 'text' | 'data' | 'other' | undefined;
   let activeMacro: MipsMacro | undefined;
   let hasSyscall = false;
 
@@ -403,10 +536,12 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
         name,
         kind: section === 'data' ? 'data' : 'label',
         range: document.lineAt(lineNumber).range,
-        selectionRange
+        selectionRange,
+        macroName: activeMacro?.name
       };
-      const targetMap = section === 'data' ? dataSymbols : labels;
-      if (targetMap.has(name) || labels.has(name) || dataSymbols.has(name)) {
+      const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
+      const targetMap = section === 'data' ? scope.dataSymbols : scope.labels;
+      if (symbolScopeHas(scope, name)) {
         diagnostics.push(makeDiagnostic(selectionRange, `Duplicate symbol '${name}'.`, vscode.DiagnosticSeverity.Error, 'duplicate-symbol'));
       } else {
         targetMap.set(name, symbol);
@@ -419,6 +554,26 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
     const trimmed = code.trim();
     if (!trimmed) {
       continue;
+    }
+
+    const eqvMatch = trimmed.match(/^\.eqv\s+([A-Za-z_.$][\w.$]*)/);
+    if (eqvMatch) {
+      const name = eqvMatch[1];
+      const start = original.indexOf(name);
+      const selectionRange = new vscode.Range(lineNumber, start, lineNumber, start + name.length);
+      const symbol: MipsSymbol = {
+        name,
+        kind: 'eqv',
+        range: document.lineAt(lineNumber).range,
+        selectionRange,
+        macroName: activeMacro?.name
+      };
+      const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
+      if (symbolScopeHas(scope, name)) {
+        diagnostics.push(makeDiagnostic(selectionRange, `Duplicate symbol '${name}'.`, vscode.DiagnosticSeverity.Error, 'duplicate-symbol'));
+      } else {
+        scope.eqvSymbols.set(name, symbol);
+      }
     }
 
     if (trimmed.startsWith('.data')) {
@@ -445,6 +600,10 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
       const macro: MipsMacro = {
         name,
         params,
+        paramSymbols: new Map(),
+        labels: new Map(),
+        dataSymbols: new Map(),
+        eqvSymbols: new Map(),
         range: document.lineAt(lineNumber).range,
         selectionRange,
         bodyStartLine: lineNumber + 1
@@ -457,15 +616,21 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
       } else {
         macros.set(name, macro);
       }
+      sectionBeforeMacro = section;
       activeMacro = macro;
       for (const param of params) {
         const paramIndex = original.indexOf(param);
         if (paramIndex >= 0) {
-          macroParams.set(param, {
+          if (macro.paramSymbols.has(param)) {
+            diagnostics.push(makeDiagnostic(new vscode.Range(lineNumber, paramIndex, lineNumber, paramIndex + param.length), `Duplicate macro parameter '${param}'.`, vscode.DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
+            continue;
+          }
+          macro.paramSymbols.set(param, {
             name: param,
             kind: 'macroParam',
             range: document.lineAt(lineNumber).range,
-            selectionRange: new vscode.Range(lineNumber, paramIndex, lineNumber, paramIndex + param.length)
+            selectionRange: new vscode.Range(lineNumber, paramIndex, lineNumber, paramIndex + param.length),
+            macroName: macro.name
           });
         }
       }
@@ -479,6 +644,8 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
         activeMacro.bodyEndLine = lineNumber - 1;
         activeMacro.range = new vscode.Range(activeMacro.range.start, document.lineAt(lineNumber).range.end);
         activeMacro = undefined;
+        section = sectionBeforeMacro ?? section;
+        sectionBeforeMacro = undefined;
       }
       continue;
     }
@@ -521,18 +688,20 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
       if (labelRef && isSymbolLike(labelRef)) {
         labelReferences.push({
           line: lineNumber,
-          operand: labelRef
+          operand: labelRef,
+          macro: activeMacro
         });
       }
     }
   }
 
   if (activeMacro) {
+    activeMacro.range = new vscode.Range(activeMacro.range.start, document.lineAt(document.lineCount - 1).range.end);
     diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `Macro '${activeMacro.name}' is missing .end_macro.`, vscode.DiagnosticSeverity.Error, 'macro-unclosed'));
   }
 
   for (const reference of labelReferences) {
-    if (!labels.has(reference.operand) && !dataSymbols.has(reference.operand)) {
+    if (!resolveReferenceSymbol(reference.operand, reference.macro, labels, dataSymbols)) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, reference.line, reference.operand), `Cannot find label or data symbol '${reference.operand}'.`, vscode.DiagnosticSeverity.Error, 'missing-label'));
     }
   }
@@ -545,8 +714,8 @@ export function parseMips(document: vscode.TextDocument): MipsParseResult {
   return {
     labels,
     dataSymbols,
+    eqvSymbols,
     macros,
-    macroParams,
     instructions: instructionsSeen,
     diagnostics
   };
@@ -636,13 +805,13 @@ function validateInstruction(
     );
   }
 
-  if (instruction.pseudo && config<boolean>('mips.warnPseudoInstruction', true, document.uri)) {
+  if (instruction.pseudo && shouldWarnPseudoInstruction(document, instruction.mnemonic)) {
     diagnostics.push(
       makeDiagnostic(
         rangeOfText(document, lineNumber, instruction.mnemonic),
         `${instruction.mnemonic} is a pseudo instruction. Verify expansion when generating CPU tests.`,
         vscode.DiagnosticSeverity.Information,
-        'pseudo-instruction'
+        `pseudo-instruction:${instruction.mnemonic}`
       )
     );
   }
@@ -724,47 +893,276 @@ function isRegister(value: string): boolean {
 function canonicalRegister(value: string): string {
   if (/^\$(?:[0-9]|[12][0-9]|3[01])$/.test(value)) {
     const number = Number(value.slice(1));
-    const names = [
-      '$zero',
-      '$at',
-      '$v0',
-      '$v1',
-      '$a0',
-      '$a1',
-      '$a2',
-      '$a3',
-      '$t0',
-      '$t1',
-      '$t2',
-      '$t3',
-      '$t4',
-      '$t5',
-      '$t6',
-      '$t7',
-      '$s0',
-      '$s1',
-      '$s2',
-      '$s3',
-      '$s4',
-      '$s5',
-      '$s6',
-      '$s7',
-      '$t8',
-      '$t9',
-      '$k0',
-      '$k1',
-      '$gp',
-      '$sp',
-      '$fp',
-      '$ra'
-    ];
-    return names[number] ?? value;
+    return registerByNumber.get(number)?.names[0].toLowerCase() ?? value;
   }
-  return value.toLowerCase();
+  const lower = value.toLowerCase();
+  return registerAliases.get(lower) ?? lower;
+}
+
+function shouldWarnPseudoInstruction(document: vscode.TextDocument, mnemonic: string): boolean {
+  return (
+    config<boolean>('mips.warnPseudoInstruction', true, document.uri) &&
+    !sessionIgnoredPseudoInstructionFiles.has(document.uri.toString()) &&
+    !sessionIgnoredPseudoInstructionMnemonics.has(mnemonic.toLowerCase())
+  );
+}
+
+function symbolScope(
+  macro: MipsMacro | undefined,
+  labels: Map<string, MipsSymbol>,
+  dataSymbols: Map<string, MipsSymbol>,
+  eqvSymbols: Map<string, MipsSymbol>
+): MipsSymbolScope {
+  if (macro) {
+    return {
+      labels: macro.labels,
+      dataSymbols: macro.dataSymbols,
+      eqvSymbols: macro.eqvSymbols
+    };
+  }
+  return {
+    labels,
+    dataSymbols,
+    eqvSymbols
+  };
+}
+
+function symbolScopeHas(scope: MipsSymbolScope, name: string): boolean {
+  return scope.labels.has(name) || scope.dataSymbols.has(name) || scope.eqvSymbols.has(name);
+}
+
+function findMacroAtPosition(parsed: MipsParseResult, position: vscode.Position): MipsMacro | undefined {
+  for (const macro of parsed.macros.values()) {
+    if (macro.range.contains(position)) {
+      return macro;
+    }
+  }
+  return undefined;
+}
+
+function findMacroParamAtPosition(parsed: MipsParseResult, name: string, position: vscode.Position): MipsSymbol | undefined {
+  return findMacroAtPosition(parsed, position)?.paramSymbols.get(name);
+}
+
+function resolveSymbolAtPosition(parsed: MipsParseResult, name: string, position: vscode.Position): MipsSymbol | undefined {
+  return resolveLabelAtPosition(parsed, name, position) ?? resolveDataSymbolAtPosition(parsed, name, position) ?? resolveEqvSymbolAtPosition(parsed, name, position);
+}
+
+function resolveLabelAtPosition(parsed: MipsParseResult, name: string, position: vscode.Position): MipsSymbol | undefined {
+  return findMacroAtPosition(parsed, position)?.labels.get(name) ?? parsed.labels.get(name);
+}
+
+function resolveDataSymbolAtPosition(parsed: MipsParseResult, name: string, position: vscode.Position): MipsSymbol | undefined {
+  return findMacroAtPosition(parsed, position)?.dataSymbols.get(name) ?? parsed.dataSymbols.get(name);
+}
+
+function resolveEqvSymbolAtPosition(parsed: MipsParseResult, name: string, position: vscode.Position): MipsSymbol | undefined {
+  return findMacroAtPosition(parsed, position)?.eqvSymbols.get(name) ?? parsed.eqvSymbols.get(name);
+}
+
+function resolveReferenceSymbol(
+  name: string,
+  macro: MipsMacro | undefined,
+  labels: Map<string, MipsSymbol>,
+  dataSymbols: Map<string, MipsSymbol>
+): MipsSymbol | undefined {
+  return macro?.labels.get(name) ?? macro?.dataSymbols.get(name) ?? labels.get(name) ?? dataSymbols.get(name);
+}
+
+function symbolsVisibleAtPosition(parsed: MipsParseResult, position: vscode.Position): MipsSymbol[] {
+  const macro = findMacroAtPosition(parsed, position);
+  return [
+    ...(macro ? [...macro.labels.values(), ...macro.dataSymbols.values(), ...macro.eqvSymbols.values()] : []),
+    ...parsed.labels.values(),
+    ...parsed.dataSymbols.values(),
+    ...parsed.eqvSymbols.values()
+  ];
+}
+
+function allMacroParams(parsed: MipsParseResult): MipsSymbol[] {
+  return [...parsed.macros.values()].flatMap((macro) => [...macro.paramSymbols.values()]);
+}
+
+function allLabelSymbols(parsed: MipsParseResult): MipsSymbol[] {
+  return [...parsed.labels.values(), ...[...parsed.macros.values()].flatMap((macro) => [...macro.labels.values()])];
+}
+
+function allDataSymbols(parsed: MipsParseResult): MipsSymbol[] {
+  return [...parsed.dataSymbols.values(), ...[...parsed.macros.values()].flatMap((macro) => [...macro.dataSymbols.values()])];
+}
+
+function allEqvSymbols(parsed: MipsParseResult): MipsSymbol[] {
+  return [...parsed.eqvSymbols.values(), ...[...parsed.macros.values()].flatMap((macro) => [...macro.eqvSymbols.values()])];
+}
+
+function allSymbols(parsed: MipsParseResult): MipsSymbol[] {
+  return [...allLabelSymbols(parsed), ...allDataSymbols(parsed), ...allEqvSymbols(parsed)];
+}
+
+function isKnownDeclarationRange(range: vscode.Range, parsed: MipsParseResult): boolean {
+  const declarationRanges = [
+    ...[...parsed.macros.values()].map((macro) => macro.selectionRange),
+    ...allMacroParams(parsed).map((param) => param.selectionRange),
+    ...allSymbols(parsed).map((symbol) => symbol.selectionRange)
+  ];
+  return declarationRanges.some((declarationRange) => declarationRange.isEqual(range));
+}
+
+function pushSemanticToken(
+  tokens: MipsSemanticTokenCandidate[],
+  range: vscode.Range,
+  tokenType: MipsSemanticTokenType,
+  modifiers?: string[]
+): void {
+  if (range.isEmpty) {
+    return;
+  }
+  tokens.push({
+    range,
+    tokenType,
+    modifiers
+  });
+}
+
+function compareSemanticTokens(left: MipsSemanticTokenCandidate, right: MipsSemanticTokenCandidate): number {
+  if (left.range.start.line !== right.range.start.line) {
+    return left.range.start.line - right.range.start.line;
+  }
+  if (left.range.start.character !== right.range.start.character) {
+    return left.range.start.character - right.range.start.character;
+  }
+  return left.range.end.character - right.range.end.character;
+}
+
+function instructionSemanticTokenType(instruction: MipsInstruction, resource: vscode.Uri): MipsSemanticTokenType {
+  const colorMode = config<MipsInstructionColorMode>('mips.instructionColorMode', 'realVsPseudo', resource);
+  if (colorMode === 'same') {
+    return 'mipsInstruction';
+  }
+  if (colorMode === 'realVsPseudo') {
+    return instruction.type === 'pseudo' ? 'mipsPseudoInstruction' : 'mipsRealInstruction';
+  }
+
+  switch (instruction.type) {
+    case 'R-type':
+      return 'mipsRInstruction';
+    case 'I-type':
+      return 'mipsIInstruction';
+    case 'J-type':
+      return 'mipsJInstruction';
+    case 'special':
+      return 'mipsSpecialInstruction';
+    case 'pseudo':
+      return 'mipsPseudoInstruction';
+  }
+}
+
+function getStringRanges(code: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  let start: number | undefined;
+  for (let index = 0; index < code.length; index++) {
+    if (code[index] !== '"' || code[index - 1] === '\\') {
+      continue;
+    }
+    if (start === undefined) {
+      start = index;
+    } else {
+      ranges.push({
+        start,
+        end: index + 1
+      });
+      start = undefined;
+    }
+  }
+  if (start !== undefined) {
+    ranges.push({
+      start,
+      end: code.length
+    });
+  }
+  return ranges;
+}
+
+function isInsideAnyRange(index: number, ranges: Array<{ start: number; end: number }>): boolean {
+  return ranges.some((range) => index >= range.start && index < range.end);
 }
 
 function numericRegisters(): string[] {
   return Array.from({ length: 32 }, (_, index) => `$${index}`);
+}
+
+function loadMipsResourceData(): MipsResourceData {
+  const resourceRoot = path.join(__dirname, '..', 'resources', 'mips');
+  const registers = readJsonResource<MipsRegisterInfo[]>(path.join(resourceRoot, 'registers.json'));
+  const directives = readJsonResource<string[]>(path.join(resourceRoot, 'directives.json')).map((directive) => directive.toLowerCase());
+  const loadedInstructions = readJsonResource<MipsInstruction[]>(path.join(resourceRoot, 'instructions.json'));
+  const instructions = loadedInstructions.map((instruction) => ({
+    ...instruction,
+    mnemonic: instruction.mnemonic.toLowerCase(),
+    operands: normalizeOperandRange(instruction.operands)
+  }));
+
+  validateMipsResources(registers, directives, instructions);
+  return {
+    registers,
+    directives,
+    instructions
+  };
+}
+
+function readJsonResource<T>(file: string): T {
+  const content = fs.readFileSync(file, 'utf8');
+  return JSON.parse(content) as T;
+}
+
+function normalizeOperandRange(value: unknown): [number, number] {
+  if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'number' || typeof value[1] !== 'number') {
+    throw new Error('Invalid MIPS instruction operand range in resources.');
+  }
+  return [value[0], value[1]];
+}
+
+function validateMipsResources(registers: MipsRegisterInfo[], directiveList: string[], instructionList: MipsInstruction[]): void {
+  if (!Array.isArray(registers) || registers.length !== 32) {
+    throw new Error('MIPS register resource must contain 32 registers.');
+  }
+  for (const register of registers) {
+    if (!Number.isInteger(register.number) || register.number < 0 || register.number > 31 || !Array.isArray(register.names) || register.names.length === 0) {
+      throw new Error('Invalid MIPS register resource entry.');
+    }
+  }
+
+  if (!Array.isArray(directiveList) || directiveList.some((directive) => typeof directive !== 'string' || !directive.startsWith('.'))) {
+    throw new Error('Invalid MIPS directive resource.');
+  }
+
+  const seen = new Set<string>();
+  for (const instruction of instructionList) {
+    if (!instruction.mnemonic || seen.has(instruction.mnemonic) || !Array.isArray(instruction.formats) || !isMipsInstructionType(instruction.type)) {
+      throw new Error('Invalid or duplicate MIPS instruction resource entry.');
+    }
+    normalizeOperandRange(instruction.operands);
+    seen.add(instruction.mnemonic);
+  }
+}
+
+function isMipsInstructionType(value: unknown): value is MipsInstructionType {
+  return value === 'R-type' || value === 'I-type' || value === 'J-type' || value === 'special' || value === 'pseudo';
+}
+
+function instructionTypeLabel(type: MipsInstructionType): string {
+  switch (type) {
+    case 'R-type':
+      return 'R 型指令';
+    case 'I-type':
+      return 'I 型指令';
+    case 'J-type':
+      return 'J 型指令';
+    case 'special':
+      return '特殊指令';
+    case 'pseudo':
+      return '伪指令';
+  }
 }
 
 function makeInstructionMap(list: MipsInstruction[]): Record<string, MipsInstruction> {
@@ -773,24 +1171,6 @@ function makeInstructionMap(list: MipsInstruction[]): Record<string, MipsInstruc
     map[item.mnemonic] = item;
   }
   return map;
-}
-
-function ins(
-  mnemonic: string,
-  summary: string,
-  formats: string[],
-  operands: [number, number],
-  description: string,
-  options: Partial<MipsInstruction> = {}
-): MipsInstruction {
-  return {
-    mnemonic,
-    summary,
-    formats,
-    operands,
-    description,
-    ...options
-  };
 }
 
 function makeDiagnostic(range: vscode.Range, message: string, severity: vscode.DiagnosticSeverity, code: string): vscode.Diagnostic {

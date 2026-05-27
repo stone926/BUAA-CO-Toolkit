@@ -9,7 +9,7 @@ import {
   getTestbench,
   getTopModule
 } from './config';
-import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { runTool } from './process';
 import { findFuse } from './toolchain';
 import { AppServices, ProjectProfile } from './types';

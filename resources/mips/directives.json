@@ -1,0 +1,19 @@
+[
+  ".data",
+  ".text",
+  ".kdata",
+  ".ktext",
+  ".word",
+  ".half",
+  ".byte",
+  ".space",
+  ".ascii",
+  ".asciiz",
+  ".align",
+  ".globl",
+  ".extern",
+  ".eqv",
+  ".macro",
+  ".end_macro",
+  ".include"
+]

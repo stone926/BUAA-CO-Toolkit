@@ -94,6 +94,122 @@
         "path": "./snippets/verilog.json"
       }
     ],
+    "semanticTokenTypes": [
+      {
+        "id": "mipsDirective",
+        "superType": "keyword",
+        "description": "MIPS assembler directive such as .data, .text, .eqv, or .macro."
+      },
+      {
+        "id": "mipsInstruction",
+        "superType": "function",
+        "description": "MIPS instruction in single-color mode."
+      },
+      {
+        "id": "mipsRealInstruction",
+        "superType": "function",
+        "description": "MIPS non-pseudo instruction in real-vs-pseudo mode."
+      },
+      {
+        "id": "mipsRInstruction",
+        "superType": "function",
+        "description": "MIPS R-type instruction."
+      },
+      {
+        "id": "mipsIInstruction",
+        "superType": "function",
+        "description": "MIPS I-type instruction."
+      },
+      {
+        "id": "mipsJInstruction",
+        "superType": "function",
+        "description": "MIPS J-type instruction."
+      },
+      {
+        "id": "mipsSpecialInstruction",
+        "superType": "function",
+        "description": "MIPS special instruction such as syscall, break, eret, or CP0 moves."
+      },
+      {
+        "id": "mipsPseudoInstruction",
+        "superType": "function",
+        "description": "MIPS pseudo instruction or assembler idiom."
+      },
+      {
+        "id": "mipsRegister",
+        "superType": "variable",
+        "description": "MIPS register such as $t0, $s0, or $zero."
+      },
+      {
+        "id": "mipsMacro",
+        "superType": "function",
+        "description": "MIPS assembler macro definition or macro call."
+      },
+      {
+        "id": "mipsMacroParameter",
+        "superType": "parameter",
+        "description": "MIPS macro parameter such as %i."
+      },
+      {
+        "id": "mipsLabel",
+        "superType": "variable",
+        "description": "MIPS text label definition or reference."
+      },
+      {
+        "id": "mipsDataSymbol",
+        "superType": "variable",
+        "description": "MIPS data segment symbol."
+      },
+      {
+        "id": "mipsEqvSymbol",
+        "superType": "variable",
+        "description": "MIPS .eqv symbol."
+      },
+      {
+        "id": "mipsNumber",
+        "superType": "number",
+        "description": "MIPS numeric literal."
+      },
+      {
+        "id": "mipsString",
+        "superType": "string",
+        "description": "MIPS string literal."
+      },
+      {
+        "id": "mipsComment",
+        "superType": "comment",
+        "description": "MIPS line comment."
+      },
+      {
+        "id": "mipsPunctuation",
+        "superType": "operator",
+        "description": "MIPS punctuation such as comma, colon, and parentheses."
+      }
+    ],
+    "configurationDefaults": {
+      "editor.semanticHighlighting.enabled": true,
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "mipsDirective": "#C586C0",
+          "mipsInstruction": "#9CDCFE",
+          "mipsRealInstruction": "#9CDCFE",
+          "mipsRInstruction": "#9CDCFE",
+          "mipsIInstruction": "#4EC9B0",
+          "mipsJInstruction": "#569CD6",
+          "mipsSpecialInstruction": "#F44747",
+          "mipsPseudoInstruction": "#D7BA7D",
+          "mipsRegister": "#4FC1FF",
+          "mipsMacro": "#569CD6",
+          "mipsMacroParameter": "#FFCB6B",
+          "mipsLabel": "#C586C0",
+          "mipsDataSymbol": "#DCDCAA",
+          "mipsEqvSymbol": "#C3E88D",
+          "mipsNumber": "#B5CEA8",
+          "mipsString": "#CE9178",
+          "mipsComment": "#6A9955"
+        }
+      }
+    },
     "commands": [
       {
         "command": "co.checkToolchain",
@@ -300,6 +416,21 @@
           "default": true,
           "description": "Warn when an ASM file uses MIPS pseudo instructions."
         },
+        "co.mips.instructionColorMode": {
+          "type": "string",
+          "default": "realVsPseudo",
+          "enum": [
+            "realVsPseudo",
+            "same",
+            "byType"
+          ],
+          "enumDescriptions": [
+            "Use one color for real instructions and another color for pseudo instructions.",
+            "Use one color for all instructions.",
+            "Use separate colors for R-type, I-type, J-type, special, and pseudo instructions."
+          ],
+          "description": "Controls how MIPS ASM instruction semantic highlighting groups instruction colors."
+        },
         "co.mips.warnMissingExitSyscall": {
           "type": "boolean",
           "default": true,
@@ -351,7 +482,7 @@
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
-    "@types/node": "^20.14.9",
+    "@types/node": "^20.19.41",
     "@types/vscode": "^1.90.0",
     "typescript": "^5.5.2"
   }

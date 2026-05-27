@@ -1,0 +1,1469 @@
+[
+  {
+    "mnemonic": "add",
+    "summary": "Add",
+    "formats": [
+      "add $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs + rt. Signed overflow may trap in normal MIPS.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "addu",
+    "summary": "Add unsigned",
+    "formats": [
+      "addu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs + rt without signed overflow trap.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "addi",
+    "summary": "Add immediate",
+    "formats": [
+      "addi $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- rs + sign_extend(imm).",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "addiu",
+    "summary": "Add immediate unsigned",
+    "formats": [
+      "addiu $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- rs + sign_extend(imm), no signed overflow trap.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "sub",
+    "summary": "Subtract",
+    "formats": [
+      "sub $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs - rt.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "subu",
+    "summary": "Subtract unsigned",
+    "formats": [
+      "subu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs - rt without signed overflow trap.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "and",
+    "summary": "Bitwise AND",
+    "formats": [
+      "and $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs & rt.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "andi",
+    "summary": "Bitwise AND immediate",
+    "formats": [
+      "andi $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- rs & zero_extend(imm).",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "or",
+    "summary": "Bitwise OR",
+    "formats": [
+      "or $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs | rt.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "ori",
+    "summary": "Bitwise OR immediate",
+    "formats": [
+      "ori $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- rs | zero_extend(imm).",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "xor",
+    "summary": "Bitwise XOR",
+    "formats": [
+      "xor $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rs ^ rt.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "xori",
+    "summary": "Bitwise XOR immediate",
+    "formats": [
+      "xori $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- rs ^ zero_extend(imm).",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "nor",
+    "summary": "Bitwise NOR",
+    "formats": [
+      "nor $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- ~(rs | rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "slt",
+    "summary": "Set less than",
+    "formats": [
+      "slt $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- signed(rs) < signed(rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "sltu",
+    "summary": "Set less than unsigned",
+    "formats": [
+      "sltu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- unsigned(rs) < unsigned(rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "slti",
+    "summary": "Set less than immediate",
+    "formats": [
+      "slti $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- signed(rs) < sign_extend(imm).",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "sltiu",
+    "summary": "Set less than immediate unsigned",
+    "formats": [
+      "sltiu $rt, $rs, imm"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rt <- unsigned(rs) < unsigned(sign_extend(imm)).",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "sll",
+    "summary": "Shift left logical",
+    "formats": [
+      "sll $rd, $rt, shamt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt << shamt.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "sllv",
+    "summary": "Shift left logical variable",
+    "formats": [
+      "sllv $rd, $rt, $rs"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt << (rs & 0x1f).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "srl",
+    "summary": "Shift right logical",
+    "formats": [
+      "srl $rd, $rt, shamt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt >> shamt with zero fill.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "srlv",
+    "summary": "Shift right logical variable",
+    "formats": [
+      "srlv $rd, $rt, $rs"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt >> (rs & 0x1f) with zero fill.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "sra",
+    "summary": "Shift right arithmetic",
+    "formats": [
+      "sra $rd, $rt, shamt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt >> shamt with sign fill.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "srav",
+    "summary": "Shift right arithmetic variable",
+    "formats": [
+      "srav $rd, $rt, $rs"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt >> (rs & 0x1f) with sign fill.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "rotr",
+    "summary": "Rotate right",
+    "formats": [
+      "rotr $rd, $rt, shamt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt rotated right by shamt. MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "rotrv",
+    "summary": "Rotate right variable",
+    "formats": [
+      "rotrv $rd, $rt, $rs"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- rt rotated right by (rs & 0x1f). MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "clz",
+    "summary": "Count leading zeros",
+    "formats": [
+      "clz $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "rd <- number of leading zero bits in rs.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "clo",
+    "summary": "Count leading ones",
+    "formats": [
+      "clo $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "rd <- number of leading one bits in rs.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "ext",
+    "summary": "Extract bit field",
+    "formats": [
+      "ext $rt, $rs, pos, size"
+    ],
+    "operands": [
+      4,
+      4
+    ],
+    "description": "rt <- bit field extracted from rs. MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "ins",
+    "summary": "Insert bit field",
+    "formats": [
+      "ins $rt, $rs, pos, size"
+    ],
+    "operands": [
+      4,
+      4
+    ],
+    "description": "Insert low bits from rs into rt starting at pos. MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "seb",
+    "summary": "Sign-extend byte",
+    "formats": [
+      "seb $rd, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "rd <- sign_extend(rt[7:0]). MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "seh",
+    "summary": "Sign-extend halfword",
+    "formats": [
+      "seh $rd, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "rd <- sign_extend(rt[15:0]). MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "wsbh",
+    "summary": "Word swap bytes within halfwords",
+    "formats": [
+      "wsbh $rd, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Swap bytes within each halfword. MIPS32r2 instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "lui",
+    "summary": "Load upper immediate",
+    "formats": [
+      "lui $rt, imm"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "rt <- imm << 16.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "lw",
+    "summary": "Load word",
+    "formats": [
+      "lw $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load 32-bit word from memory.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "sw",
+    "summary": "Store word",
+    "formats": [
+      "sw $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Store 32-bit word to memory.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "lb",
+    "summary": "Load byte",
+    "formats": [
+      "lb $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load signed byte.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "lbu",
+    "summary": "Load byte unsigned",
+    "formats": [
+      "lbu $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load zero-extended byte.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "lh",
+    "summary": "Load halfword",
+    "formats": [
+      "lh $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load signed halfword.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "lhu",
+    "summary": "Load halfword unsigned",
+    "formats": [
+      "lhu $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load zero-extended halfword.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "sb",
+    "summary": "Store byte",
+    "formats": [
+      "sb $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Store low 8 bits to memory.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "sh",
+    "summary": "Store halfword",
+    "formats": [
+      "sh $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Store low 16 bits to memory.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "beq",
+    "summary": "Branch if equal",
+    "formats": [
+      "beq $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Branch when rs == rt.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "bne",
+    "summary": "Branch if not equal",
+    "formats": [
+      "bne $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Branch when rs != rt.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "bgez",
+    "summary": "Branch if greater or equal zero",
+    "formats": [
+      "bgez $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Branch when signed(rs) >= 0.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "bltz",
+    "summary": "Branch if less than zero",
+    "formats": [
+      "bltz $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Branch when signed(rs) < 0.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "blez",
+    "summary": "Branch if less or equal zero",
+    "formats": [
+      "blez $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Branch when signed(rs) <= 0.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "bgtz",
+    "summary": "Branch if greater than zero",
+    "formats": [
+      "bgtz $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Branch when signed(rs) > 0.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "bgezal",
+    "summary": "Branch if greater or equal zero and link",
+    "formats": [
+      "bgezal $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Branch when signed(rs) >= 0 and write return address to $ra.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "bltzal",
+    "summary": "Branch if less than zero and link",
+    "formats": [
+      "bltzal $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Branch when signed(rs) < 0 and write return address to $ra.",
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "b",
+    "summary": "Unconditional branch",
+    "formats": [
+      "b label"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "Pseudo branch, usually beq $zero, $zero, label.",
+    "pseudo": true,
+    "labelOperand": "first",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bal",
+    "summary": "Branch and link",
+    "formats": [
+      "bal label"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "Branch unconditionally and write return address to $ra. Assembly idiom, usually bgezal $zero, label.",
+    "labelOperand": "first",
+    "delaySlot": true,
+    "type": "pseudo",
+    "pseudo": true
+  },
+  {
+    "mnemonic": "j",
+    "summary": "Jump",
+    "formats": [
+      "j label"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "Jump to label.",
+    "labelOperand": "first",
+    "delaySlot": true,
+    "type": "J-type"
+  },
+  {
+    "mnemonic": "jal",
+    "summary": "Jump and link",
+    "formats": [
+      "jal label"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "Jump to label and write return address to $ra.",
+    "labelOperand": "first",
+    "delaySlot": true,
+    "type": "J-type"
+  },
+  {
+    "mnemonic": "jr",
+    "summary": "Jump register",
+    "formats": [
+      "jr $rs"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "Jump to address in rs.",
+    "delaySlot": true,
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "jalr",
+    "summary": "Jump and link register",
+    "formats": [
+      "jalr $rs",
+      "jalr $rd, $rs"
+    ],
+    "operands": [
+      1,
+      2
+    ],
+    "description": "Jump to rs and write return address.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "movn",
+    "summary": "Move conditional on not zero",
+    "formats": [
+      "movn $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "If rt != 0 then rd <- rs.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "movz",
+    "summary": "Move conditional on zero",
+    "formats": [
+      "movz $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "If rt == 0 then rd <- rs.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mul",
+    "summary": "Multiply low word",
+    "formats": [
+      "mul $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "rd <- low 32 bits of signed rs * rt. Common MARS/MIPS32 arithmetic instruction.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "madd",
+    "summary": "Multiply and add signed",
+    "formats": [
+      "madd $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "{HI, LO} <- {HI, LO} + signed(rs) * signed(rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "maddu",
+    "summary": "Multiply and add unsigned",
+    "formats": [
+      "maddu $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "{HI, LO} <- {HI, LO} + unsigned(rs) * unsigned(rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "msub",
+    "summary": "Multiply and subtract signed",
+    "formats": [
+      "msub $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "{HI, LO} <- {HI, LO} - signed(rs) * signed(rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "msubu",
+    "summary": "Multiply and subtract unsigned",
+    "formats": [
+      "msubu $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "{HI, LO} <- {HI, LO} - unsigned(rs) * unsigned(rt).",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mult",
+    "summary": "Multiply signed",
+    "formats": [
+      "mult $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Signed multiply into HI/LO. Included in the MIPS-C simplified set.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "multu",
+    "summary": "Multiply unsigned",
+    "formats": [
+      "multu $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Unsigned multiply into HI/LO. Included in the MIPS-C simplified set.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "div",
+    "summary": "Divide signed",
+    "formats": [
+      "div $rs, $rt",
+      "div $rd, $rs, $rt"
+    ],
+    "operands": [
+      2,
+      3
+    ],
+    "description": "Two-operand form writes quotient/remainder to LO/HI. Three-operand MARS pseudo form writes quotient to rd.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "divu",
+    "summary": "Divide unsigned",
+    "formats": [
+      "divu $rs, $rt",
+      "divu $rd, $rs, $rt"
+    ],
+    "operands": [
+      2,
+      3
+    ],
+    "description": "Two-operand form writes quotient/remainder to LO/HI. Three-operand MARS pseudo form writes quotient to rd.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mfhi",
+    "summary": "Move from HI",
+    "formats": [
+      "mfhi $rd"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "rd <- HI. Included in the MIPS-C simplified set.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mflo",
+    "summary": "Move from LO",
+    "formats": [
+      "mflo $rd"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "rd <- LO. Included in the MIPS-C simplified set.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mthi",
+    "summary": "Move to HI",
+    "formats": [
+      "mthi $rs"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "HI <- rs. Included in the MIPS-C simplified set.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mtlo",
+    "summary": "Move to LO",
+    "formats": [
+      "mtlo $rs"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "LO <- rs. Included in the MIPS-C simplified set.",
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "mfc0",
+    "summary": "Move from CP0",
+    "formats": [
+      "mfc0 $rt, $rd"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "rt <- CP0[rd].",
+    "projects": [
+      "P7"
+    ],
+    "type": "special"
+  },
+  {
+    "mnemonic": "mtc0",
+    "summary": "Move to CP0",
+    "formats": [
+      "mtc0 $rt, $rd"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "CP0[rd] <- rt.",
+    "projects": [
+      "P7"
+    ],
+    "type": "special"
+  },
+  {
+    "mnemonic": "eret",
+    "summary": "Exception return",
+    "formats": [
+      "eret"
+    ],
+    "operands": [
+      0,
+      0
+    ],
+    "description": "Return from exception. In BUAA CO P7, eret has no delay slot.",
+    "projects": [
+      "P7"
+    ],
+    "type": "special"
+  },
+  {
+    "mnemonic": "break",
+    "summary": "Breakpoint exception",
+    "formats": [
+      "break",
+      "break code"
+    ],
+    "operands": [
+      0,
+      1
+    ],
+    "description": "Raise a breakpoint exception. Included in the MIPS-C simplified set.",
+    "type": "special"
+  },
+  {
+    "mnemonic": "syscall",
+    "summary": "System call / exception",
+    "formats": [
+      "syscall"
+    ],
+    "operands": [
+      0,
+      0
+    ],
+    "description": "Invokes a MARS syscall in P2 or raises syscall exception in P7.",
+    "type": "special"
+  },
+  {
+    "mnemonic": "nop",
+    "summary": "No operation",
+    "formats": [
+      "nop"
+    ],
+    "operands": [
+      0,
+      0
+    ],
+    "description": "Expands to sll $zero, $zero, 0.",
+    "type": "special"
+  },
+  {
+    "mnemonic": "ssnop",
+    "summary": "Superscalar no operation",
+    "formats": [
+      "ssnop"
+    ],
+    "operands": [
+      0,
+      0
+    ],
+    "description": "No operation with a conventional encoding useful for scheduling.",
+    "type": "special"
+  },
+  {
+    "mnemonic": "ehb",
+    "summary": "Execution hazard barrier",
+    "formats": [
+      "ehb"
+    ],
+    "operands": [
+      0,
+      0
+    ],
+    "description": "Execution hazard barrier. MIPS32r2 instruction.",
+    "type": "special"
+  },
+  {
+    "mnemonic": "abs",
+    "summary": "Absolute value",
+    "formats": [
+      "abs $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction for rd <- abs(rs).",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "neg",
+    "summary": "Negate",
+    "formats": [
+      "neg $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction for rd <- -rs with overflow behavior depending on assembler expansion.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "negu",
+    "summary": "Negate unsigned",
+    "formats": [
+      "negu $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction for rd <- 0 - rs without overflow trap.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "not",
+    "summary": "Bitwise NOT",
+    "formats": [
+      "not $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction, usually nor $rd, $rs, $zero.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "clear",
+    "summary": "Clear register",
+    "formats": [
+      "clear $rd"
+    ],
+    "operands": [
+      1,
+      1
+    ],
+    "description": "Pseudo instruction, usually addu $rd, $zero, $zero.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "li",
+    "summary": "Load immediate",
+    "formats": [
+      "li $rt, imm"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction for loading an immediate.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "la",
+    "summary": "Load address",
+    "formats": [
+      "la $rt, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction for loading an address.",
+    "pseudo": true,
+    "labelOperand": "second",
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "move",
+    "summary": "Move register",
+    "formats": [
+      "move $rd, $rs"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo instruction, usually addu $rd, $rs, $zero.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "rem",
+    "summary": "Remainder signed",
+    "formats": [
+      "rem $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "MARS pseudo instruction for rd <- signed(rs) % signed(rt).",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "remu",
+    "summary": "Remainder unsigned",
+    "formats": [
+      "remu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "MARS pseudo instruction for rd <- unsigned(rs) % unsigned(rt).",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "seq",
+    "summary": "Set if equal",
+    "formats": [
+      "seq $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- rs == rt ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sne",
+    "summary": "Set if not equal",
+    "formats": [
+      "sne $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- rs != rt ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sgt",
+    "summary": "Set if greater than",
+    "formats": [
+      "sgt $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- signed(rs) > signed(rt) ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sgtu",
+    "summary": "Set if greater than unsigned",
+    "formats": [
+      "sgtu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- unsigned(rs) > unsigned(rt) ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sge",
+    "summary": "Set if greater or equal",
+    "formats": [
+      "sge $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- signed(rs) >= signed(rt) ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sgeu",
+    "summary": "Set if greater or equal unsigned",
+    "formats": [
+      "sgeu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- unsigned(rs) >= unsigned(rt) ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sle",
+    "summary": "Set if less or equal",
+    "formats": [
+      "sle $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- signed(rs) <= signed(rt) ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "sleu",
+    "summary": "Set if less or equal unsigned",
+    "formats": [
+      "sleu $rd, $rs, $rt"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo compare: rd <- unsigned(rs) <= unsigned(rt) ? 1 : 0.",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "beqz",
+    "summary": "Branch if equal zero",
+    "formats": [
+      "beqz $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo branch, usually beq $rs, $zero, label.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bnez",
+    "summary": "Branch if not equal zero",
+    "formats": [
+      "bnez $rs, label"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Pseudo branch, usually bne $rs, $zero, label.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "blt",
+    "summary": "Branch less than",
+    "formats": [
+      "blt $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bltu",
+    "summary": "Branch less than unsigned",
+    "formats": [
+      "bltu $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo unsigned branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bgt",
+    "summary": "Branch greater than",
+    "formats": [
+      "bgt $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bgtu",
+    "summary": "Branch greater than unsigned",
+    "formats": [
+      "bgtu $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo unsigned branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "ble",
+    "summary": "Branch less or equal",
+    "formats": [
+      "ble $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bleu",
+    "summary": "Branch less or equal unsigned",
+    "formats": [
+      "bleu $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo unsigned branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bge",
+    "summary": "Branch greater or equal",
+    "formats": [
+      "bge $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "bgeu",
+    "summary": "Branch greater or equal unsigned",
+    "formats": [
+      "bgeu $rs, $rt, label"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "Pseudo unsigned branch for if/loop conditions.",
+    "pseudo": true,
+    "labelOperand": "last",
+    "delaySlot": true,
+    "type": "pseudo"
+  }
+]

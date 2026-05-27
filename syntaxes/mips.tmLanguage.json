@@ -10,6 +10,18 @@
       "include": "#strings"
     },
     {
+      "include": "#macroDefinitions"
+    },
+    {
+      "include": "#eqvDefinitions"
+    },
+    {
+      "include": "#macroParameters"
+    },
+    {
+      "include": "#macroCalls"
+    },
+    {
       "include": "#directives"
     },
     {
@@ -49,6 +61,54 @@
         }
       ]
     },
+    "macroDefinitions": {
+      "patterns": [
+        {
+          "name": "meta.macro.definition.mips",
+          "match": "^\\s*(\\.macro)\\s+([A-Za-z_.$][\\w.$]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.directive.macro.mips"
+            },
+            "2": {
+              "name": "entity.name.function.macro.mips"
+            }
+          }
+        }
+      ]
+    },
+    "eqvDefinitions": {
+      "patterns": [
+        {
+          "name": "meta.eqv.definition.mips",
+          "match": "^\\s*(\\.eqv)\\s+([A-Za-z_.$][\\w.$]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.directive.eqv.mips"
+            },
+            "2": {
+              "name": "variable.other.constant.eqv.mips"
+            }
+          }
+        }
+      ]
+    },
+    "macroParameters": {
+      "patterns": [
+        {
+          "name": "variable.parameter.macro.mips",
+          "match": "%[A-Za-z_.$][\\w.$]*\\b"
+        }
+      ]
+    },
+    "macroCalls": {
+      "patterns": [
+        {
+          "name": "entity.name.function.macro-call.mips",
+          "match": "\\b[A-Za-z_.$][\\w.$]*(?=\\s*\\()"
+        }
+      ]
+    },
     "directives": {
       "patterns": [
         {
@@ -77,7 +137,7 @@
       "patterns": [
         {
           "name": "variable.language.register.mips",
-          "match": "\\$(?:zero|at|v[01]|a[0-3]|t[0-9]|s[0-7]|k[01]|gp|sp|fp|ra|[0-9]|[12][0-9]|3[01])\\b"
+          "match": "\\$(?:zero|at|v[01]|a[0-3]|t[0-9]|s[0-8]|k[01]|gp|sp|fp|ra|[0-9]|[12][0-9]|3[01])\\b"
         }
       ]
     },
@@ -97,7 +157,7 @@
       "patterns": [
         {
           "name": "keyword.control.instruction.mips",
-          "match": "\\b(?:add|addu|addi|addiu|sub|subu|and|andi|or|ori|xor|xori|nor|slt|slti|sltu|sltiu|sll|srl|sra|lui|lw|sw|lb|lbu|lh|lhu|sb|sh|beq|bne|blez|bgtz|j|jal|jr|jalr|mult|multu|div|divu|mfhi|mflo|mthi|mtlo|mfc0|mtc0|eret|syscall|nop|li|la|move|blt|bgt|ble|bge)\\b"
+          "match": "\\b(?i:add|addu|addi|addiu|abs|and|andi|b|bal|beq|beqz|bgez|bgezal|bge|bgeu|bgt|bgtu|bgtz|ble|bleu|blez|blt|bltu|bltz|bltzal|bne|bnez|break|clear|clo|clz|div|divu|ehb|eret|ext|ins|j|jal|jalr|jr|la|lb|lbu|lh|lhu|li|lui|lw|madd|maddu|mfc0|mfhi|mflo|movn|movz|move|msub|msubu|mtc0|mthi|mtlo|mul|mult|multu|neg|negu|nop|nor|not|or|ori|rem|remu|rotr|rotrv|sb|seb|seh|seq|sge|sgeu|sgt|sgtu|sh|sle|sleu|sll|sllv|slt|slti|sltiu|sltu|sne|sra|srav|srl|srlv|ssnop|sub|subu|sw|syscall|wsbh|xor|xori)\\b"
         }
       ]
     }

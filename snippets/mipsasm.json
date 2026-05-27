@@ -31,12 +31,216 @@
       "li ${1:\\$t0}, 0",
       "${2:loop}:",
       "    beq ${1}, ${3:\\$t1}, ${4:end_loop}",
-      "    nop",
       "    addi ${1}, ${1}, 1",
       "    j ${2}",
-      "    nop",
       "${4}:"
     ],
     "description": "Counted loop template"
+  },
+  "If equal": {
+    "prefix": "ifeq",
+    "body": [
+      "bne ${1:\\$t0}, ${2:\\$t1}, ${3:else_branch}",
+      "    ${0:# then branch}",
+      "j ${4:end_if}",
+      "${3}:",
+      "    # else branch",
+      "${4}:"
+    ],
+    "description": "if (rs == rt) template using bne"
+  },
+  "If less than": {
+    "prefix": "iflt",
+    "body": [
+      "bge ${1:\\$t0}, ${2:\\$t1}, ${3:end_if}",
+      "    ${0:# then branch}",
+      "${3}:"
+    ],
+    "description": "if (rs < rt) template using pseudo branch"
+  },
+  "While less than": {
+    "prefix": "whilelt",
+    "body": [
+      "${1:loop}:",
+      "    bge ${2:\\$t0}, ${3:\\$t1}, ${4:end_loop}",
+      "    ${0:# loop body}",
+      "    j ${1}",
+      "${4}:"
+    ],
+    "description": "while (rs < rt) loop template"
+  },
+  "CO macro library": {
+    "prefix": "co_macros",
+    "body": [
+      ".macro end",
+      "  li \\$v0, 10",
+      "  syscall",
+      ".end_macro",
+      "",
+      ".macro get_int(%des)",
+      "  li \\$v0, 5",
+      "  syscall",
+      "  move %des, \\$v0",
+      ".end_macro",
+      "",
+      ".macro get_char(%des)",
+      "  li \\$v0, 12",
+      "  syscall",
+      "  move %des, \\$v0",
+      ".end_macro",
+      "",
+      ".macro print(%str)",
+      "  .data",
+      "    _str: .asciiz %str",
+      "  .text",
+      "    la \\$a0, _str",
+      "    li \\$v0, 4",
+      "    syscall",
+      ".end_macro",
+      "",
+      ".macro put_int(%int, %sep)",
+      "  .data",
+      "    _str: .asciiz %sep",
+      "  .text",
+      "    move \\$a0, %int",
+      "    li \\$v0, 1",
+      "    syscall",
+      "",
+      "    la \\$a0, _str",
+      "    li \\$v0, 4",
+      "    syscall",
+      ".end_macro",
+      "",
+      ".macro index1(%index, %res)",
+      "  sll %res, %index, 2",
+      ".end_macro",
+      "",
+      ".macro index2(%n, %m, %s, %ans)",
+      "  mult %n, %s",
+      "  mflo %ans",
+      "  add %ans, %ans, %m",
+      "  sll %ans, %ans, 2",
+      ".end_macro",
+      "",
+      ".macro for(%i, %end, %begin_label, %end_label)",
+      "  li %i, 0",
+      "  %begin_label:",
+      "  bge %i, %end, %end_label",
+      ".end_macro",
+      "",
+      ".macro for_end(%i, %end, %begin_label, %end_label)",
+      "  add %i, %i, 1",
+      "  j %begin_label",
+      "  %end_label:",
+      ".end_macro"
+    ],
+    "description": "Insert the BUAA CO MIPS macro helper library"
+  },
+  "CO macro end": {
+    "prefix": "macro_end",
+    "body": [
+      ".macro end",
+      "  li \\$v0, 10",
+      "  syscall",
+      ".end_macro"
+    ],
+    "description": "Define end macro for syscall exit"
+  },
+  "CO macro get_int": {
+    "prefix": "macro_get_int",
+    "body": [
+      ".macro get_int(%des)",
+      "  li \\$v0, 5",
+      "  syscall",
+      "  move %des, \\$v0",
+      ".end_macro"
+    ],
+    "description": "Define get_int macro"
+  },
+  "CO macro get_char": {
+    "prefix": "macro_get_char",
+    "body": [
+      ".macro get_char(%des)",
+      "  li \\$v0, 12",
+      "  syscall",
+      "  move %des, \\$v0",
+      ".end_macro"
+    ],
+    "description": "Define get_char macro"
+  },
+  "CO macro print": {
+    "prefix": "macro_print",
+    "body": [
+      ".macro print(%str)",
+      "  .data",
+      "    _str: .asciiz %str",
+      "  .text",
+      "    la \\$a0, _str",
+      "    li \\$v0, 4",
+      "    syscall",
+      ".end_macro"
+    ],
+    "description": "Define print macro for string literals"
+  },
+  "CO macro put_int": {
+    "prefix": "macro_put_int",
+    "body": [
+      ".macro put_int(%int, %sep)",
+      "  .data",
+      "    _str: .asciiz %sep",
+      "  .text",
+      "    move \\$a0, %int",
+      "    li \\$v0, 1",
+      "    syscall",
+      "",
+      "    la \\$a0, _str",
+      "    li \\$v0, 4",
+      "    syscall",
+      ".end_macro"
+    ],
+    "description": "Define put_int macro with separator output"
+  },
+  "CO macro index1": {
+    "prefix": "macro_index1",
+    "body": [
+      ".macro index1(%index, %res)",
+      "  sll %res, %index, 2",
+      ".end_macro"
+    ],
+    "description": "Define index1 macro for 1D word offset"
+  },
+  "CO macro index2": {
+    "prefix": "macro_index2",
+    "body": [
+      ".macro index2(%n, %m, %s, %ans)",
+      "  mult %n, %s",
+      "  mflo %ans",
+      "  add %ans, %ans, %m",
+      "  sll %ans, %ans, 2",
+      ".end_macro"
+    ],
+    "description": "Define index2 macro for 2D word offset"
+  },
+  "CO macro for": {
+    "prefix": "macro_for",
+    "body": [
+      ".macro for(%i, %end, %begin_label, %end_label)",
+      "  li %i, 0",
+      "  %begin_label:",
+      "  bge %i, %end, %end_label",
+      ".end_macro"
+    ],
+    "description": "Define for macro begin helper"
+  },
+  "CO macro for_end": {
+    "prefix": "macro_for_end",
+    "body": [
+      ".macro for_end(%i, %end, %begin_label, %end_label)",
+      "  add %i, %i, 1",
+      "  j %begin_label",
+      "  %end_label:",
+      ".end_macro"
+    ],
+    "description": "Define for_end macro close helper"
   }
 }
