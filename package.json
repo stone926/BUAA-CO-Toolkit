@@ -1,0 +1,358 @@
+{
+  "name": "buaa-co-extension",
+  "displayName": "BUAA CO Toolkit",
+  "description": "VSCode toolkit for BUAA Computer Organization labs: Logisim, MARS/MIPS ASM, and Verilog support.",
+  "version": "0.1.0",
+  "publisher": "buaa-co",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:mipsasm",
+    "onLanguage:verilog",
+    "onLanguage:logisim-circ",
+    "onCommand:co.checkToolchain",
+    "onCommand:co.selectProjectProfile",
+    "onCommand:co.mips.runCurrentFile",
+    "onCommand:co.mips.dumpText",
+    "onCommand:co.mips.dumpKernelText",
+    "onCommand:co.verilog.generateTestbench",
+    "onCommand:co.verilog.generateIseProject",
+    "onCommand:co.verilog.runIsim",
+    "onCommand:co.logisim.generateRom",
+    "onCommand:co.logisim.convertLogToCsv",
+    "onCommand:co.logisim.openCurrentCircuit"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mipsasm",
+        "aliases": [
+          "MIPS ASM",
+          "mipsasm"
+        ],
+        "extensions": [
+          ".asm",
+          ".s",
+          ".mips"
+        ],
+        "configuration": "./language-configuration/mipsasm.json"
+      },
+      {
+        "id": "verilog",
+        "aliases": [
+          "Verilog",
+          "verilog"
+        ],
+        "extensions": [
+          ".v"
+        ],
+        "configuration": "./language-configuration/verilog.json"
+      },
+      {
+        "id": "logisim-circ",
+        "aliases": [
+          "Logisim Circuit",
+          "circ"
+        ],
+        "extensions": [
+          ".circ"
+        ],
+        "configuration": "./language-configuration/logisim-circ.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mipsasm",
+        "scopeName": "source.mips",
+        "path": "./syntaxes/mips.tmLanguage.json"
+      },
+      {
+        "language": "verilog",
+        "scopeName": "source.verilog",
+        "path": "./syntaxes/verilog.tmLanguage.json"
+      },
+      {
+        "language": "logisim-circ",
+        "scopeName": "text.xml.logisim",
+        "path": "./syntaxes/logisim-circ.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "mipsasm",
+        "path": "./snippets/mipsasm.json"
+      },
+      {
+        "language": "verilog",
+        "path": "./snippets/verilog.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "co.checkToolchain",
+        "title": "CO: Check Toolchain"
+      },
+      {
+        "command": "co.selectProjectProfile",
+        "title": "CO: Select Project Profile"
+      },
+      {
+        "command": "co.mips.runCurrentFile",
+        "title": "CO: MIPS Run Current File"
+      },
+      {
+        "command": "co.mips.dumpText",
+        "title": "CO: MIPS Dump Text Segment"
+      },
+      {
+        "command": "co.mips.dumpKernelText",
+        "title": "CO: MIPS Dump Kernel Text Segment"
+      },
+      {
+        "command": "co.verilog.generateTestbench",
+        "title": "CO: Verilog Generate Testbench"
+      },
+      {
+        "command": "co.verilog.generateIseProject",
+        "title": "CO: Verilog Generate ISE PRJ/TCL"
+      },
+      {
+        "command": "co.verilog.runIsim",
+        "title": "CO: Verilog Run ISim"
+      },
+      {
+        "command": "co.logisim.generateRom",
+        "title": "CO: Logisim Generate ROM File"
+      },
+      {
+        "command": "co.logisim.convertLogToCsv",
+        "title": "CO: Logisim Convert Logging To CSV"
+      },
+      {
+        "command": "co.logisim.openCurrentCircuit",
+        "title": "CO: Logisim Open Current Circuit"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "co.mips.runCurrentFile",
+          "when": "resourceLangId == mipsasm",
+          "group": "navigation@10"
+        },
+        {
+          "command": "co.mips.dumpText",
+          "when": "resourceLangId == mipsasm",
+          "group": "navigation@11"
+        },
+        {
+          "command": "co.verilog.runIsim",
+          "when": "resourceLangId == verilog",
+          "group": "navigation@10"
+        },
+        {
+          "command": "co.logisim.openCurrentCircuit",
+          "when": "resourceLangId == logisim-circ",
+          "group": "navigation@10"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "co.logisim.generateRom",
+          "when": "resourceLangId == mipsasm || resourceLangId == logisim-circ",
+          "group": "co@10"
+        },
+        {
+          "command": "co.verilog.generateTestbench",
+          "when": "resourceLangId == verilog",
+          "group": "co@10"
+        },
+        {
+          "command": "co.verilog.generateIseProject",
+          "when": "resourceLangId == verilog",
+          "group": "co@11"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "co.checkToolchain"
+        },
+        {
+          "command": "co.selectProjectProfile"
+        },
+        {
+          "command": "co.mips.runCurrentFile"
+        },
+        {
+          "command": "co.mips.dumpText"
+        },
+        {
+          "command": "co.mips.dumpKernelText"
+        },
+        {
+          "command": "co.verilog.generateTestbench"
+        },
+        {
+          "command": "co.verilog.generateIseProject"
+        },
+        {
+          "command": "co.verilog.runIsim"
+        },
+        {
+          "command": "co.logisim.generateRom"
+        },
+        {
+          "command": "co.logisim.convertLogToCsv"
+        },
+        {
+          "command": "co.logisim.openCurrentCircuit"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "BUAA CO Toolkit",
+      "properties": {
+        "co.project.profile": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "P0",
+            "P1",
+            "P2",
+            "P3",
+            "P4",
+            "P5",
+            "P6",
+            "P7"
+          ],
+          "description": "Current BUAA CO project profile. Auto enables generic checks and infers some Verilog interface rules."
+        },
+        "co.project.topModule": {
+          "type": "string",
+          "default": "mips",
+          "description": "Top Verilog module name used by course checks and ISim project generation."
+        },
+        "co.project.testbench": {
+          "type": "string",
+          "default": "mips_tb",
+          "description": "Default Verilog testbench module for ISim."
+        },
+        "co.project.machineCode": {
+          "type": "string",
+          "default": "code.txt",
+          "description": "Default machine code file generated by MARS and loaded by Verilog/Logisim workflows."
+        },
+        "co.project.simTime": {
+          "type": "string",
+          "default": "200us",
+          "description": "Default ISim TCL run duration."
+        },
+        "co.toolchain.java": {
+          "type": "string",
+          "default": "java",
+          "description": "Java executable used for MARS and Logisim."
+        },
+        "co.toolchain.mars": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Mars.jar."
+        },
+        "co.toolchain.marsP7": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the course-specific P7 MARS jar."
+        },
+        "co.toolchain.logisim": {
+          "type": "string",
+          "default": "",
+          "description": "Path to logisim.jar."
+        },
+        "co.toolchain.isePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Xilinx ISE directory, for example D:/Xilinx/14.7/ISE_DS/ISE."
+        },
+        "co.mips.delayedBranching": {
+          "type": "string",
+          "default": "profile",
+          "enum": [
+            "profile",
+            "on",
+            "off"
+          ],
+          "description": "Delayed branching mode for MARS commands. Profile enables it for P5/P6/P7."
+        },
+        "co.mips.memoryConfiguration": {
+          "type": "string",
+          "default": "CompactDataAtZero",
+          "description": "MARS memory configuration passed after mc."
+        },
+        "co.mips.warnPseudoInstruction": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when an ASM file uses MIPS pseudo instructions."
+        },
+        "co.mips.warnMissingExitSyscall": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn in P2 profile when the file has no syscall instruction."
+        },
+        "co.verilog.implicitNet.diagnostic": {
+          "type": "string",
+          "default": "warning",
+          "enum": [
+            "off",
+            "hint",
+            "warning",
+            "error"
+          ],
+          "description": "Severity for Verilog implicit net diagnostics."
+        },
+        "co.verilog.implicitNet.ignorePatterns": {
+          "type": "array",
+          "default": [
+            "^uut\\.",
+            "^tb\\."
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Regular expressions for Verilog implicit net identifiers to ignore."
+        },
+        "co.verilog.lint.courseRules": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable BUAA CO course-specific Verilog lint checks."
+        },
+        "co.run.showCommandBeforeRun": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the exact external command before running it."
+        },
+        "co.run.timeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "Timeout for external tool runs."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.2"
+  }
+}

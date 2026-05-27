@@ -1,0 +1,105 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MIPS ASM",
+  "scopeName": "source.mips",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#labels"
+    },
+    {
+      "include": "#registers"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#instructions"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.mips",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.mips",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.mips",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.directive.mips",
+          "match": "\\B\\.(?:data|text|ktext|kdata|word|half|byte|space|ascii|asciiz|align|globl|extern|eqv|macro|end_macro|include)\\b"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.mips",
+          "match": "^\\s*([A-Za-z_.$][\\w.$]*)(:)",
+          "captures": {
+            "1": {
+              "name": "entity.name.label.mips"
+            },
+            "2": {
+              "name": "punctuation.separator.label.mips"
+            }
+          }
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.register.mips",
+          "match": "\\$(?:zero|at|v[01]|a[0-3]|t[0-9]|s[0-7]|k[01]|gp|sp|fp|ra|[0-9]|[12][0-9]|3[01])\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.mips",
+          "match": "[-+]?0x[0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.mips",
+          "match": "[-+]?\\b\\d+\\b"
+        }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        {
+          "name": "keyword.control.instruction.mips",
+          "match": "\\b(?:add|addu|addi|addiu|sub|subu|and|andi|or|ori|xor|xori|nor|slt|slti|sltu|sltiu|sll|srl|sra|lui|lw|sw|lb|lbu|lh|lhu|sb|sh|beq|bne|blez|bgtz|j|jal|jr|jalr|mult|multu|div|divu|mfhi|mflo|mthi|mtlo|mfc0|mtc0|eret|syscall|nop|li|la|move|blt|bgt|ble|bge)\\b"
+        }
+      ]
+    }
+  }
+}

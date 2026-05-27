@@ -1,0 +1,42 @@
+{
+  "Exit by syscall": {
+    "prefix": "exit",
+    "body": [
+      "li $v0, 10",
+      "syscall"
+    ],
+    "description": "Exit program in MARS"
+  },
+  "Read integer": {
+    "prefix": "readint",
+    "body": [
+      "li $v0, 5",
+      "syscall",
+      "move ${1:$t0}, $v0"
+    ],
+    "description": "Read one integer from stdin"
+  },
+  "Print integer": {
+    "prefix": "printint",
+    "body": [
+      "move $a0, ${1:$t0}",
+      "li $v0, 1",
+      "syscall"
+    ],
+    "description": "Print one integer"
+  },
+  "For loop": {
+    "prefix": "fori",
+    "body": [
+      "li ${1:$t0}, 0",
+      "${2:loop}:",
+      "    beq ${1:$t0}, ${3:$t1}, ${4:end_loop}",
+      "    nop",
+      "    addi ${1:$t0}, ${1:$t0}, 1",
+      "    j ${2:loop}",
+      "    nop",
+      "${4:end_loop}:"
+    ],
+    "description": "Counted loop template"
+  }
+}

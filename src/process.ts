@@ -1,0 +1,125 @@
+import { spawn } from 'child_process';
+import * as vscode from 'vscode';
+import { getRunTimeout, showCommandBeforeRun } from './config';
+import { RunResult } from './types';
+
+export interface RunToolOptions {
+  cwd: string;
+  output: vscode.OutputChannel;
+  env?: NodeJS.ProcessEnv;
+  resource?: vscode.Uri;
+  timeoutMs?: number;
+  stdin?: string;
+}
+
+export function quoteArg(arg: string): string {
+  if (/^[A-Za-z0-9_./:=-]+$/.test(arg)) {
+    return arg;
+  }
+  return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
+export function commandLine(command: string, args: readonly string[]): string {
+  return [quoteArg(command), ...args.map(quoteArg)].join(' ');
+}
+
+export async function runTool(command: string, args: string[], options: RunToolOptions): Promise<RunResult> {
+  const timeoutMs = options.timeoutMs ?? getRunTimeout(options.resource);
+  const display = commandLine(command, args);
+  const cwd = options.cwd;
+  options.output.appendLine(`$ ${display}`);
+  options.output.appendLine(`cwd: ${cwd}`);
+
+  if (showCommandBeforeRun(options.resource)) {
+    const choice = await vscode.window.showInformationMessage(`Run external tool?\n${display}`, 'Run');
+    if (choice !== 'Run') {
+      return {
+        ok: false,
+        exitCode: null,
+        commandLine: display,
+        cwd,
+        stdout: '',
+        stderr: 'Cancelled by user.',
+        timedOut: false
+      };
+    }
+  }
+
+  return await new Promise<RunResult>((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timedOut = false;
+
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        ...(options.env ?? {})
+      },
+      shell: false,
+      windowsHide: true
+    });
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      stdout += text;
+      options.output.append(text);
+    });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      options.output.append(text);
+    });
+
+    child.on('error', (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      stderr += error.message;
+      options.output.appendLine(error.message);
+      resolve({
+        ok: false,
+        exitCode: null,
+        commandLine: display,
+        cwd,
+        stdout,
+        stderr,
+        timedOut
+      });
+    });
+
+    child.on('close', (code: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      if (timedOut) {
+        options.output.appendLine(`Timed out after ${timeoutMs} ms.`);
+      }
+      resolve({
+        ok: code === 0 && !timedOut,
+        exitCode: code,
+        commandLine: display,
+        cwd,
+        stdout,
+        stderr,
+        timedOut
+      });
+    });
+
+    if (options.stdin !== undefined) {
+      child.stdin.write(options.stdin);
+      child.stdin.end();
+    }
+  });
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Logisim Circuit",
+  "scopeName": "text.xml.logisim",
+  "patterns": [
+    {
+      "name": "comment.block.xml.logisim",
+      "begin": "<!--",
+      "end": "-->"
+    },
+    {
+      "name": "meta.tag.xml.logisim",
+      "begin": "</?",
+      "end": "/?>",
+      "patterns": [
+        {
+          "name": "entity.name.tag.xml.logisim",
+          "match": "\\b(?:project|lib|tool|circuit|comp|wire|a|appear|rect|circ-port|main)\\b"
+        },
+        {
+          "name": "entity.other.attribute-name.xml.logisim",
+          "match": "\\b(?:name|val|loc|from|to|lib|source|version|class|facing|width)\\b"
+        },
+        {
+          "name": "string.quoted.double.xml.logisim",
+          "begin": "\"",
+          "end": "\""
+        }
+      ]
+    }
+  ]
+}

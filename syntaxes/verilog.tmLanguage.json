@@ -1,0 +1,87 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Verilog",
+  "scopeName": "source.verilog",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#compilerDirectives"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#systemTasks"
+    },
+    {
+      "include": "#keywords"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.verilog",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.verilog",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.verilog",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.verilog",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "compilerDirectives": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.verilog",
+          "match": "`(?:define|undef|ifdef|ifndef|elsif|else|endif|include|timescale|default_nettype)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.verilog",
+          "match": "\\b\\d+'[sS]?[bBoOdDhH][0-9a-fA-F_xXzZ?]+\\b|\\b\\d+\\b"
+        }
+      ]
+    },
+    "systemTasks": {
+      "patterns": [
+        {
+          "name": "support.function.system-task.verilog",
+          "match": "\\$(?:display|monitor|finish|stop|readmemh|readmemb|dumpfile|dumpvars|time|fsdbDumpfile|fsdbDumpvars)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.verilog",
+          "match": "\\b(?:module|endmodule|input|output|inout|wire|reg|logic|integer|parameter|localparam|assign|always|initial|begin|end|if|else|case|casex|casez|endcase|for|while|repeat|forever|posedge|negedge|or|and|generate|endgenerate|genvar|function|endfunction|task|endtask)\\b"
+        }
+      ]
+    }
+  }
+}

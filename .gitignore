@@ -1,0 +1,10 @@
+node_modules/
+out/
+*.vsix
+.vscode-test/
+.co/out/
+.co/isim/*.exe
+.co/isim/*.log
+.co/isim/*.wdb
+fuse.log
+isim.log

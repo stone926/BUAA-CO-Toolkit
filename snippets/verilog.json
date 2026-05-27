@@ -1,0 +1,54 @@
+{
+  "MIPS top P4/P5": {
+    "prefix": "mips_top_p4",
+    "body": [
+      "module mips(",
+      "    input clk,",
+      "    input reset",
+      ");",
+      "",
+      "endmodule"
+    ],
+    "description": "BUAA CO P4/P5 top module"
+  },
+  "Clock reset testbench": {
+    "prefix": "tb_clk_reset",
+    "body": [
+      "`timescale 1ns / 1ps",
+      "",
+      "module ${1:mips_tb};",
+      "    reg clk;",
+      "    reg reset;",
+      "",
+      "    ${2:mips} uut (",
+      "        .clk(clk),",
+      "        .reset(reset)",
+      "    );",
+      "",
+      "    initial begin",
+      "        clk = 1'b0;",
+      "        forever #5 clk = ~clk;",
+      "    end",
+      "",
+      "    initial begin",
+      "        reset = 1'b1;",
+      "        #20;",
+      "        reset = 1'b0;",
+      "        #200000;",
+      "        $finish;",
+      "    end",
+      "endmodule"
+    ],
+    "description": "Clock/reset testbench skeleton"
+  },
+  "GRF display P5": {
+    "prefix": "display_grf_p5",
+    "body": "$display(\"%d@%h: $%d <= %h\", $time, ${1:WPC}, ${2:Waddr}, ${3:WData});",
+    "description": "BUAA CO P5 GRF write display"
+  },
+  "DM display P5": {
+    "prefix": "display_dm_p5",
+    "body": "$display(\"%d@%h: *%h <= %h\", $time, ${1:pc}, ${2:addr}, ${3:din});",
+    "description": "BUAA CO P5 DM write display"
+  }
+}
