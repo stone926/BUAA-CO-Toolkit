@@ -6,7 +6,28 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}"
+        "--extensionDevelopmentPath=${workspaceFolder}",
+
+        "--disable-extension",
+        "AngaBlue.asm-formatter",
+
+        "--disable-extension",
+        "kdarkhan.mips",
+
+        "--disable-extension",
+        "tzylee.verilog-highlight",
+
+        "--disable-extension",
+        "Truecrab.verilog-testbench-instance",
+
+        "--disable-extension",
+        "IsaacT.verilog-formatter",
+
+        "--disable-extension",
+        "mshr-h.veriloghdl",
+
+        "--disable-extension",
+        "streetsidesoftware.code-spell-checker"
       ],
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
