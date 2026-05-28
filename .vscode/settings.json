@@ -1,7 +1,23 @@
 {
     "cSpell.words": [
         "buaa",
+        "dumpfile",
+        "dumpvars",
+        "endmodule",
+        "fsdb",
+        "genvar",
+        "Isim",
+        "localparam",
         "Logisim",
+        "mipsasm",
+        "nettype",
+        "nodebug",
+        "nolog",
+        "nonblocking",
+        "readmemb",
+        "readmemh",
+        "tclbatch",
+        "Testbench",
         "verilog"
     ]
 }

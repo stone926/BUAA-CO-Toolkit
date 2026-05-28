@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ProjectProfile } from './types';
+import { ProjectProfile } from './projectProfile';
 
 export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
   const value = vscode.workspace.getConfiguration('co', resource).get<T>(key);

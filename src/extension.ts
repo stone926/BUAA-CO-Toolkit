@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getProfile } from './config';
+import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
 import { checkToolchain } from './toolchain';
@@ -7,6 +8,8 @@ import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
 
 export function activate(context: vscode.ExtensionContext): void {
+  startLanguageServer(context);
+
   const output = vscode.window.createOutputChannel('BUAA CO');
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBar.command = 'co.checkToolchain';
@@ -35,8 +38,8 @@ export function activate(context: vscode.ExtensionContext): void {
   updateStatus(statusBar);
 }
 
-export function deactivate(): void {
-  // No background processes are kept by the extension.
+export async function deactivate(): Promise<void> {
+  await stopLanguageServer();
 }
 
 async function showToolchainReport(output: vscode.OutputChannel): Promise<void> {
