@@ -106,13 +106,16 @@ export function instructionTypeLabel(type: MipsInstructionType): string {
   }
 }
 
-export function instructionSemanticTokenType(instruction: MipsInstruction, settings: CoSettings): MipsSemanticTokenType {
+export function instructionSemanticTokenType(instruction: MipsInstruction, settings: CoSettings, usesPseudoForm = false): MipsSemanticTokenType {
   const colorMode = settings.mips.instructionColorMode;
   if (colorMode === 'same') {
     return 'mipsInstruction';
   }
   if (colorMode === 'realVsPseudo') {
-    return instruction.type === 'pseudo' ? 'mipsPseudoInstruction' : 'mipsRealInstruction';
+    return usesPseudoForm || instruction.type === 'pseudo' ? 'mipsPseudoInstruction' : 'mipsRealInstruction';
+  }
+  if (usesPseudoForm) {
+    return 'mipsPseudoInstruction';
   }
 
   switch (instruction.type) {

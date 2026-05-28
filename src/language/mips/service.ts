@@ -37,6 +37,7 @@ import {
   MipsMacro,
   MipsParseResult,
   parseMips,
+  parseMacroArguments,
   parseOperands,
   resolveDataSymbolAtPosition,
   resolveEqvSymbolAtPosition,
@@ -90,6 +91,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   });
   const linePrefix = lineAt(document, position.line).text.slice(0, position.character);
   const items: CompletionItem[] = [];
+  const directiveReplaceRange = directiveCompletionReplaceRange(linePrefix, position);
 
   if (/\$[\w]*$/.test(linePrefix)) {
     for (const name of [...registerNames, ...numericRegisters()]) {
@@ -126,10 +128,22 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   }
 
   for (const directive of directives) {
-    items.push({
+    const item: CompletionItem = {
       label: directive,
       kind: CompletionItemKind.Keyword
-    });
+    };
+    if (directiveReplaceRange) {
+      item.textEdit = TextEdit.replace(directiveReplaceRange, directive);
+    }
+    if (directive === '.macro') {
+      item.detail = 'MIPS macro definition';
+      item.insertTextFormat = InsertTextFormat.Snippet;
+      item.textEdit = TextEdit.replace(
+        directiveReplaceRange ?? Range.create(position, position),
+        '.macro ${1:name}(${2:%arg})\n  ${0}\n.end_macro'
+      );
+    }
+    items.push(item);
   }
 
   for (const symbol of symbolsVisibleAtPosition(parsed, position)) {
@@ -151,6 +165,14 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   }
 
   return items;
+}
+
+function directiveCompletionReplaceRange(linePrefix: string, position: Position): Range | undefined {
+  const match = linePrefix.match(/\.[A-Za-z_]*$/);
+  if (!match) {
+    return undefined;
+  }
+  return Range.create(position.line, position.character - match[0].length, position.line, position.character);
 }
 
 export function getMipsHover(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): Hover | undefined {
@@ -376,7 +398,7 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
   }
 
   const tokenRegex = /%?[A-Za-z_.$][\w.$]*|\$[A-Za-z0-9_]+/g;
-  const numberRegex = /[-+]?(?:0x[0-9A-Fa-f]+|\b\d+\b)/g;
+  const numberRegex = /[-+]?(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|0[0-7]+|\b\d+\b)/g;
   const punctuationRegex = /[(),:]/g;
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
     const text = lineAt(document, lineNumber).text;
@@ -425,7 +447,8 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
       } else if (token.startsWith('%') && findMacroParamAtPosition(parsed, token, range.start)) {
         pushSemanticToken(tokens, range, 'mipsMacroParameter');
       } else if (instructions[token.toLowerCase()]) {
-        pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], settings));
+        const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, range));
+        pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], settings, parsedInstruction?.usesPseudoForm));
       } else if (parsed.macros.has(token)) {
         pushSemanticToken(tokens, range, 'mipsMacro');
       } else if (resolveLabelAtPosition(parsed, token, range.start)) {
@@ -506,7 +529,7 @@ function macroCallArityAtPosition(document: TextDocument, name: string, position
   if (position.character < tokenStart || position.character > tokenEnd) {
     return undefined;
   }
-  return parseOperands(trimmed.slice(firstToken[0].length).trim()).length;
+  return parseMacroArguments(trimmed.slice(firstToken[0].length).trim()).length;
 }
 
 function collectTokenReferences(

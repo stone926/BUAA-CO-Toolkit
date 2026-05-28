@@ -3,33 +3,35 @@
     "mnemonic": "add",
     "summary": "Add",
     "formats": [
-      "add $rd, $rs, $rt"
+      "add $rd, $rs, $rt",
+      "add $rd, $rs, imm32"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "rd <- rs + rt. Signed overflow may trap in normal MIPS.",
+    "description": "rd <- rs + rt. Signed overflow may trap in normal MIPS. The immediate form is a MARS pseudo-instruction.",
     "type": "R-type"
   },
   {
     "mnemonic": "addu",
     "summary": "Add unsigned",
     "formats": [
-      "addu $rd, $rs, $rt"
+      "addu $rd, $rs, $rt",
+      "addu $rd, $rs, imm32"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "rd <- rs + rt without signed overflow trap.",
+    "description": "rd <- rs + rt without signed overflow trap. The immediate form is a MARS pseudo-instruction.",
     "type": "R-type"
   },
   {
     "mnemonic": "addi",
     "summary": "Add immediate",
     "formats": [
-      "addi $rt, $rs, imm"
+      "addi $rt, $rs, simm16"
     ],
     "operands": [
       3,
@@ -42,7 +44,7 @@
     "mnemonic": "addiu",
     "summary": "Add immediate unsigned",
     "formats": [
-      "addiu $rt, $rs, imm"
+      "addiu $rt, $rs, simm16"
     ],
     "operands": [
       3,
@@ -55,46 +57,50 @@
     "mnemonic": "sub",
     "summary": "Subtract",
     "formats": [
-      "sub $rd, $rs, $rt"
+      "sub $rd, $rs, $rt",
+      "sub $rd, $rs, imm32"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "rd <- rs - rt.",
+    "description": "rd <- rs - rt. The immediate form is a MARS pseudo-instruction.",
     "type": "R-type"
   },
   {
     "mnemonic": "subu",
     "summary": "Subtract unsigned",
     "formats": [
-      "subu $rd, $rs, $rt"
+      "subu $rd, $rs, $rt",
+      "subu $rd, $rs, imm32"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "rd <- rs - rt without signed overflow trap.",
+    "description": "rd <- rs - rt without signed overflow trap. The immediate form is a MARS pseudo-instruction.",
     "type": "R-type"
   },
   {
     "mnemonic": "and",
     "summary": "Bitwise AND",
     "formats": [
-      "and $rd, $rs, $rt"
+      "and $rd, $rs, $rt",
+      "and $rd, $rs, uimm16",
+      "and $rd, uimm16"
     ],
     "operands": [
-      3,
+      2,
       3
     ],
-    "description": "rd <- rs & rt.",
+    "description": "rd <- rs & rt. The immediate forms are MARS pseudo-instructions over 16-bit unsigned immediates.",
     "type": "R-type"
   },
   {
     "mnemonic": "andi",
     "summary": "Bitwise AND immediate",
     "formats": [
-      "andi $rt, $rs, imm"
+      "andi $rt, $rs, uimm16"
     ],
     "operands": [
       3,
@@ -107,20 +113,22 @@
     "mnemonic": "or",
     "summary": "Bitwise OR",
     "formats": [
-      "or $rd, $rs, $rt"
+      "or $rd, $rs, $rt",
+      "or $rd, $rs, uimm16",
+      "or $rd, uimm16"
     ],
     "operands": [
-      3,
+      2,
       3
     ],
-    "description": "rd <- rs | rt.",
+    "description": "rd <- rs | rt. The immediate forms are MARS pseudo-instructions over 16-bit unsigned immediates.",
     "type": "R-type"
   },
   {
     "mnemonic": "ori",
     "summary": "Bitwise OR immediate",
     "formats": [
-      "ori $rt, $rs, imm"
+      "ori $rt, $rs, uimm16"
     ],
     "operands": [
       3,
@@ -133,20 +141,22 @@
     "mnemonic": "xor",
     "summary": "Bitwise XOR",
     "formats": [
-      "xor $rd, $rs, $rt"
+      "xor $rd, $rs, $rt",
+      "xor $rd, $rs, uimm16",
+      "xor $rd, uimm16"
     ],
     "operands": [
-      3,
+      2,
       3
     ],
-    "description": "rd <- rs ^ rt.",
+    "description": "rd <- rs ^ rt. The immediate forms are MARS pseudo-instructions over 16-bit unsigned immediates.",
     "type": "R-type"
   },
   {
     "mnemonic": "xori",
     "summary": "Bitwise XOR immediate",
     "formats": [
-      "xori $rt, $rs, imm"
+      "xori $rt, $rs, uimm16"
     ],
     "operands": [
       3,
@@ -198,7 +208,7 @@
     "mnemonic": "slti",
     "summary": "Set less than immediate",
     "formats": [
-      "slti $rt, $rs, imm"
+      "slti $rt, $rs, simm16"
     ],
     "operands": [
       3,
@@ -211,7 +221,7 @@
     "mnemonic": "sltiu",
     "summary": "Set less than immediate unsigned",
     "formats": [
-      "sltiu $rt, $rs, imm"
+      "sltiu $rt, $rs, simm16"
     ],
     "operands": [
       3,
@@ -419,7 +429,7 @@
     "mnemonic": "lui",
     "summary": "Load upper immediate",
     "formats": [
-      "lui $rt, imm"
+      "lui $rt, uimm16"
     ],
     "operands": [
       2,
@@ -536,13 +546,14 @@
     "mnemonic": "beq",
     "summary": "Branch if equal",
     "formats": [
-      "beq $rs, $rt, label"
+      "beq $rs, $rt, label",
+      "beq $rs, imm32, label"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "Branch when rs == rt.",
+    "description": "Branch when rs == rt. The immediate comparison form is a MARS pseudo-instruction.",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -551,13 +562,14 @@
     "mnemonic": "bne",
     "summary": "Branch if not equal",
     "formats": [
-      "bne $rs, $rt, label"
+      "bne $rs, $rt, label",
+      "bne $rs, imm32, label"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "Branch when rs != rt.",
+    "description": "Branch when rs != rt. The immediate comparison form is a MARS pseudo-instruction.",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -772,13 +784,14 @@
     "mnemonic": "mul",
     "summary": "Multiply low word",
     "formats": [
-      "mul $rd, $rs, $rt"
+      "mul $rd, $rs, $rt",
+      "mul $rd, $rs, imm32"
     ],
     "operands": [
       3,
       3
     ],
-    "description": "rd <- low 32 bits of signed rs * rt. Common MARS/MIPS32 arithmetic instruction.",
+    "description": "rd <- low 32 bits of signed rs * rt. The immediate form is a MARS pseudo-instruction.",
     "type": "R-type"
   },
   {
@@ -864,7 +877,8 @@
     "summary": "Divide signed",
     "formats": [
       "div $rs, $rt",
-      "div $rd, $rs, $rt"
+      "div $rd, $rs, $rt",
+      "div $rd, $rs, imm32"
     ],
     "operands": [
       2,
@@ -878,7 +892,8 @@
     "summary": "Divide unsigned",
     "formats": [
       "divu $rs, $rt",
-      "divu $rd, $rs, $rt"
+      "divu $rd, $rs, $rt",
+      "divu $rd, $rs, imm32"
     ],
     "operands": [
       2,
@@ -992,7 +1007,7 @@
     "summary": "Breakpoint exception",
     "formats": [
       "break",
-      "break code"
+      "break code16"
     ],
     "operands": [
       0,
@@ -1127,7 +1142,7 @@
     "mnemonic": "li",
     "summary": "Load immediate",
     "formats": [
-      "li $rt, imm"
+      "li $rt, imm32"
     ],
     "operands": [
       2,
@@ -1170,7 +1185,8 @@
     "mnemonic": "rem",
     "summary": "Remainder signed",
     "formats": [
-      "rem $rd, $rs, $rt"
+      "rem $rd, $rs, $rt",
+      "rem $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1184,7 +1200,8 @@
     "mnemonic": "remu",
     "summary": "Remainder unsigned",
     "formats": [
-      "remu $rd, $rs, $rt"
+      "remu $rd, $rs, $rt",
+      "remu $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1198,7 +1215,8 @@
     "mnemonic": "seq",
     "summary": "Set if equal",
     "formats": [
-      "seq $rd, $rs, $rt"
+      "seq $rd, $rs, $rt",
+      "seq $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1212,7 +1230,8 @@
     "mnemonic": "sne",
     "summary": "Set if not equal",
     "formats": [
-      "sne $rd, $rs, $rt"
+      "sne $rd, $rs, $rt",
+      "sne $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1226,7 +1245,8 @@
     "mnemonic": "sgt",
     "summary": "Set if greater than",
     "formats": [
-      "sgt $rd, $rs, $rt"
+      "sgt $rd, $rs, $rt",
+      "sgt $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1240,7 +1260,8 @@
     "mnemonic": "sgtu",
     "summary": "Set if greater than unsigned",
     "formats": [
-      "sgtu $rd, $rs, $rt"
+      "sgtu $rd, $rs, $rt",
+      "sgtu $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1254,7 +1275,8 @@
     "mnemonic": "sge",
     "summary": "Set if greater or equal",
     "formats": [
-      "sge $rd, $rs, $rt"
+      "sge $rd, $rs, $rt",
+      "sge $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1268,7 +1290,8 @@
     "mnemonic": "sgeu",
     "summary": "Set if greater or equal unsigned",
     "formats": [
-      "sgeu $rd, $rs, $rt"
+      "sgeu $rd, $rs, $rt",
+      "sgeu $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1282,7 +1305,8 @@
     "mnemonic": "sle",
     "summary": "Set if less or equal",
     "formats": [
-      "sle $rd, $rs, $rt"
+      "sle $rd, $rs, $rt",
+      "sle $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1296,7 +1320,8 @@
     "mnemonic": "sleu",
     "summary": "Set if less or equal unsigned",
     "formats": [
-      "sleu $rd, $rs, $rt"
+      "sleu $rd, $rs, $rt",
+      "sleu $rd, $rs, imm32"
     ],
     "operands": [
       3,
@@ -1342,7 +1367,8 @@
     "mnemonic": "blt",
     "summary": "Branch less than",
     "formats": [
-      "blt $rs, $rt, label"
+      "blt $rs, $rt, label",
+      "blt $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1358,7 +1384,8 @@
     "mnemonic": "bltu",
     "summary": "Branch less than unsigned",
     "formats": [
-      "bltu $rs, $rt, label"
+      "bltu $rs, $rt, label",
+      "bltu $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1374,7 +1401,8 @@
     "mnemonic": "bgt",
     "summary": "Branch greater than",
     "formats": [
-      "bgt $rs, $rt, label"
+      "bgt $rs, $rt, label",
+      "bgt $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1390,7 +1418,8 @@
     "mnemonic": "bgtu",
     "summary": "Branch greater than unsigned",
     "formats": [
-      "bgtu $rs, $rt, label"
+      "bgtu $rs, $rt, label",
+      "bgtu $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1406,7 +1435,8 @@
     "mnemonic": "ble",
     "summary": "Branch less or equal",
     "formats": [
-      "ble $rs, $rt, label"
+      "ble $rs, $rt, label",
+      "ble $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1422,7 +1452,8 @@
     "mnemonic": "bleu",
     "summary": "Branch less or equal unsigned",
     "formats": [
-      "bleu $rs, $rt, label"
+      "bleu $rs, $rt, label",
+      "bleu $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1438,7 +1469,8 @@
     "mnemonic": "bge",
     "summary": "Branch greater or equal",
     "formats": [
-      "bge $rs, $rt, label"
+      "bge $rs, $rt, label",
+      "bge $rs, imm32, label"
     ],
     "operands": [
       3,
@@ -1454,7 +1486,8 @@
     "mnemonic": "bgeu",
     "summary": "Branch greater or equal unsigned",
     "formats": [
-      "bgeu $rs, $rt, label"
+      "bgeu $rs, $rt, label",
+      "bgeu $rs, imm32, label"
     ],
     "operands": [
       3,

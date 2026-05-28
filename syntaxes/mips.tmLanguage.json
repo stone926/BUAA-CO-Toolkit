@@ -113,7 +113,7 @@
       "patterns": [
         {
           "name": "keyword.directive.mips",
-          "match": "\\B\\.(?:data|text|ktext|kdata|word|half|byte|space|ascii|asciiz|align|globl|extern|eqv|macro|end_macro|include)\\b"
+          "match": "\\B\\.(?:data|text|ktext|kdata|word|half|byte|float|double|space|ascii|asciiz|align|globl|extern|eqv|macro|end_macro|include)\\b"
         }
       ]
     },
@@ -145,7 +145,15 @@
       "patterns": [
         {
           "name": "constant.numeric.hex.mips",
-          "match": "[-+]?0x[0-9A-Fa-f]+\\b"
+          "match": "[-+]?0[xX][0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.mips",
+          "match": "[-+]?0[bB][01]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.mips",
+          "match": "[-+]?0[0-7]+\\b"
         },
         {
           "name": "constant.numeric.decimal.mips",

@@ -6,6 +6,8 @@
   ".word",
   ".half",
   ".byte",
+  ".float",
+  ".double",
   ".space",
   ".ascii",
   ".asciiz",
