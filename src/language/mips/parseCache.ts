@@ -1,7 +1,7 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { MipsParseOptions, MipsParseResult, parseMips } from './parser';
-import type { MipsServerState } from './service';
+import type { MipsServerState } from './state';
 
 interface CacheEntry {
   uri: string;
