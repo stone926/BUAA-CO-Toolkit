@@ -165,7 +165,7 @@
       "patterns": [
         {
           "name": "keyword.control.instruction.mips",
-          "match": "\\b(?i:add|addu|addi|addiu|abs|and|andi|b|bal|beq|beqz|bgez|bgezal|bge|bgeu|bgt|bgtu|bgtz|ble|bleu|blez|blt|bltu|bltz|bltzal|bne|bnez|break|clear|clo|clz|div|divu|ehb|eret|ext|ins|j|jal|jalr|jr|la|lb|lbu|lh|lhu|li|lui|lw|madd|maddu|mfc0|mfhi|mflo|movn|movz|move|msub|msubu|mtc0|mthi|mtlo|mul|mult|multu|neg|negu|nop|nor|not|or|ori|rem|remu|rotr|rotrv|sb|seb|seh|seq|sge|sgeu|sgt|sgtu|sh|sle|sleu|sll|sllv|slt|slti|sltiu|sltu|sne|sra|srav|srl|srlv|ssnop|sub|subu|sw|syscall|wsbh|xor|xori)\\b"
+          "match": "\\b(?i:abs|add|addi|addiu|addu|and|andi|b|beq|beqz|bge|bgeu|bgez|bgezal|bgt|bgtu|bgtz|ble|bleu|blez|blt|bltu|bltz|bltzal|bne|bnez|break|clo|clz|div|divu|eret|j|jal|jalr|jr|la|lb|lbu|lh|lhu|li|lui|lw|lwl|lwr|madd|maddu|mfc0|mfhi|mflo|move|movn|movz|msub|msubu|mtc0|mthi|mtlo|mul|mult|multu|neg|negu|nop|nor|not|or|ori|rem|remu|sb|seq|sge|sgeu|sgt|sgtu|sh|sle|sleu|sll|sllv|slt|slti|sltiu|sltu|sne|sra|srav|srl|srlv|sub|subu|sw|swl|swr|syscall|xor|xori)\\b"
         }
       ]
     }

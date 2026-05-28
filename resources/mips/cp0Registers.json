@@ -1,0 +1,117 @@
+[
+  {
+    "number": 12,
+    "name": "SR",
+    "alias": "Status",
+    "courseRequired": true,
+    "writableByTest": true,
+    "description": "State Register. 初值为 0；测试程序可以通过 mtc0 写入。",
+    "fields": [
+      {
+        "name": "IM",
+        "bits": "15:10",
+        "description": "中断屏蔽，1 表示允许对应中断；共 6 位，对应 6 个外部中断。"
+      },
+      {
+        "name": "EXL",
+        "bits": "1",
+        "description": "异常级。进入异常时硬件自动置 1，禁止所有中断并强制内核态；eret 时清 0。"
+      },
+      {
+        "name": "IE",
+        "bits": "0",
+        "description": "全局中断使能，1 表示开中断。"
+      }
+    ],
+    "notes": [
+      "示例初始化：ori $t0, $0, 0x1001, mtc0 $t0, $12。此时 IM=0b010000，IE=1。"
+    ]
+  },
+  {
+    "number": 13,
+    "name": "Cause",
+    "courseRequired": true,
+    "writableByTest": false,
+    "description": "Exception cause register. 初值为 0；测试程序保证不写 Cause。",
+    "fields": [
+      {
+        "name": "BD",
+        "bits": "31",
+        "description": "1 表示异常发生在延迟槽内，EPC 指向对应分支指令。"
+      },
+      {
+        "name": "IP",
+        "bits": "15:10",
+        "description": "中断挂起，每周期由硬件更新。bit10=Timer0，bit11=Timer1，bit12=IntGen。"
+      },
+      {
+        "name": "ExcCode",
+        "bits": "6:2",
+        "description": "异常编码，5 位。"
+      }
+    ],
+    "excCodes": [
+      {
+        "code": 0,
+        "name": "Int",
+        "description": "外部中断，来自 Timer 或 IntGen。"
+      },
+      {
+        "code": 4,
+        "name": "AdEL",
+        "description": "加载地址错误：PC 未对齐或越界、lw 地址非 4 字节对齐、lh 地址非 2 字节对齐、地址溢出。"
+      },
+      {
+        "code": 5,
+        "name": "AdES",
+        "description": "存储地址错误：sw 地址非 4 字节对齐、sh 地址非 2 字节对齐、写 Timer Count、地址越界。"
+      },
+      {
+        "code": 8,
+        "name": "Syscall",
+        "description": "syscall 指令。"
+      },
+      {
+        "code": 10,
+        "name": "RI",
+        "description": "未识别指令或非法 opcode。"
+      },
+      {
+        "code": 12,
+        "name": "Ov",
+        "description": "算术溢出，仅 add、addi、sub。"
+      }
+    ]
+  },
+  {
+    "number": 14,
+    "name": "EPC",
+    "courseRequired": true,
+    "writableByTest": true,
+    "description": "Exception program counter. 初值为 0；eret 隐式使用 EPC 作为返回地址。",
+    "fields": [
+      {
+        "name": "EPC",
+        "bits": "31:0",
+        "description": "异常返回地址。异常时写入受害者 PC；若异常发生在延迟槽，EPC=PC-4；中断时写入宏观 PC。"
+      }
+    ],
+    "notes": [
+      "测试程序可以通过 mtc0 写入 EPC，常见模式是读出 EPC、加 4、写回，从而跳过出错指令。"
+    ]
+  },
+  {
+    "number": 15,
+    "name": "PRId",
+    "courseRequired": false,
+    "writableByTest": false,
+    "description": "Processor ID register. mips-1 教程提及，但 P7 不要求实现。"
+  },
+  {
+    "number": 8,
+    "name": "BadVAddr",
+    "courseRequired": false,
+    "writableByTest": false,
+    "description": "记录导致地址错误异常的地址。教程未提及，P7 不要求实现。"
+  }
+]

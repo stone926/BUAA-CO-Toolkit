@@ -1,0 +1,86 @@
+[
+  {
+    "code": 1,
+    "name": "print integer",
+    "parameters": "$a0 = integer",
+    "returns": "无",
+    "description": "打印整数。"
+  },
+  {
+    "code": 2,
+    "name": "print float",
+    "parameters": "$f12 = float",
+    "returns": "无",
+    "description": "打印单精度浮点数。"
+  },
+  {
+    "code": 3,
+    "name": "print double",
+    "parameters": "$f12 = double",
+    "returns": "无",
+    "description": "打印双精度浮点数。"
+  },
+  {
+    "code": 4,
+    "name": "print string",
+    "parameters": "$a0 = 以 null 结尾的字符串地址",
+    "returns": "无",
+    "description": "打印字符串。"
+  },
+  {
+    "code": 5,
+    "name": "read integer",
+    "parameters": "无",
+    "returns": "$v0 = 读入的 int",
+    "description": "读取整数。"
+  },
+  {
+    "code": 6,
+    "name": "read float",
+    "parameters": "无",
+    "returns": "$f0 = 读入的 float",
+    "description": "读取单精度浮点数。"
+  },
+  {
+    "code": 7,
+    "name": "read double",
+    "parameters": "无",
+    "returns": "$f0 = 读入的 double",
+    "description": "读取双精度浮点数。"
+  },
+  {
+    "code": 8,
+    "name": "read string",
+    "parameters": "$a0 = buffer 地址；$a1 = 最大长度",
+    "returns": "结果写入 buffer",
+    "description": "读取字符串。"
+  },
+  {
+    "code": 9,
+    "name": "sbrk",
+    "parameters": "$a0 = 字节数",
+    "returns": "$v0 = 分配到的内存地址",
+    "description": "分配堆内存。"
+  },
+  {
+    "code": 10,
+    "name": "exit",
+    "parameters": "无",
+    "returns": "程序结束",
+    "description": "结束程序。"
+  },
+  {
+    "code": 11,
+    "name": "print character",
+    "parameters": "$a0 = 字符",
+    "returns": "无",
+    "description": "打印字符。"
+  },
+  {
+    "code": 12,
+    "name": "read character",
+    "parameters": "无",
+    "returns": "$v0 = 读入字符",
+    "description": "读取字符。"
+  }
+]

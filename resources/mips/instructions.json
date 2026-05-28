@@ -309,32 +309,6 @@
     "type": "R-type"
   },
   {
-    "mnemonic": "rotr",
-    "summary": "Rotate right",
-    "formats": [
-      "rotr $rd, $rt, shamt"
-    ],
-    "operands": [
-      3,
-      3
-    ],
-    "description": "rd <- rt rotated right by shamt. MIPS32r2 instruction.",
-    "type": "R-type"
-  },
-  {
-    "mnemonic": "rotrv",
-    "summary": "Rotate right variable",
-    "formats": [
-      "rotrv $rd, $rt, $rs"
-    ],
-    "operands": [
-      3,
-      3
-    ],
-    "description": "rd <- rt rotated right by (rs & 0x1f). MIPS32r2 instruction.",
-    "type": "R-type"
-  },
-  {
     "mnemonic": "clz",
     "summary": "Count leading zeros",
     "formats": [
@@ -358,71 +332,6 @@
       2
     ],
     "description": "rd <- number of leading one bits in rs.",
-    "type": "R-type"
-  },
-  {
-    "mnemonic": "ext",
-    "summary": "Extract bit field",
-    "formats": [
-      "ext $rt, $rs, pos, size"
-    ],
-    "operands": [
-      4,
-      4
-    ],
-    "description": "rt <- bit field extracted from rs. MIPS32r2 instruction.",
-    "type": "R-type"
-  },
-  {
-    "mnemonic": "ins",
-    "summary": "Insert bit field",
-    "formats": [
-      "ins $rt, $rs, pos, size"
-    ],
-    "operands": [
-      4,
-      4
-    ],
-    "description": "Insert low bits from rs into rt starting at pos. MIPS32r2 instruction.",
-    "type": "R-type"
-  },
-  {
-    "mnemonic": "seb",
-    "summary": "Sign-extend byte",
-    "formats": [
-      "seb $rd, $rt"
-    ],
-    "operands": [
-      2,
-      2
-    ],
-    "description": "rd <- sign_extend(rt[7:0]). MIPS32r2 instruction.",
-    "type": "R-type"
-  },
-  {
-    "mnemonic": "seh",
-    "summary": "Sign-extend halfword",
-    "formats": [
-      "seh $rd, $rt"
-    ],
-    "operands": [
-      2,
-      2
-    ],
-    "description": "rd <- sign_extend(rt[15:0]). MIPS32r2 instruction.",
-    "type": "R-type"
-  },
-  {
-    "mnemonic": "wsbh",
-    "summary": "Word swap bytes within halfwords",
-    "formats": [
-      "wsbh $rd, $rt"
-    ],
-    "operands": [
-      2,
-      2
-    ],
-    "description": "Swap bytes within each halfword. MIPS32r2 instruction.",
     "type": "R-type"
   },
   {
@@ -452,6 +361,32 @@
     "type": "I-type"
   },
   {
+    "mnemonic": "lwl",
+    "summary": "Load word left",
+    "formats": [
+      "lwl $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load the left part of an unaligned word. Included in the MIPS-C simplified set and supported by MARS.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "lwr",
+    "summary": "Load word right",
+    "formats": [
+      "lwr $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Load the right part of an unaligned word. Included in the MIPS-C simplified set and supported by MARS.",
+    "type": "I-type"
+  },
+  {
     "mnemonic": "sw",
     "summary": "Store word",
     "formats": [
@@ -462,6 +397,32 @@
       2
     ],
     "description": "Store 32-bit word to memory.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "swl",
+    "summary": "Store word left",
+    "formats": [
+      "swl $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Store the left part of an unaligned word. Included in the MIPS-C simplified set and supported by MARS.",
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "swr",
+    "summary": "Store word right",
+    "formats": [
+      "swr $rt, offset($base)"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "Store the right part of an unaligned word. Included in the MIPS-C simplified set and supported by MARS.",
     "type": "I-type"
   },
   {
@@ -681,22 +642,6 @@
     "type": "pseudo"
   },
   {
-    "mnemonic": "bal",
-    "summary": "Branch and link",
-    "formats": [
-      "bal label"
-    ],
-    "operands": [
-      1,
-      1
-    ],
-    "description": "Branch unconditionally and write return address to $ra. Assembly idiom, usually bgezal $zero, label.",
-    "labelOperand": "first",
-    "delaySlot": true,
-    "type": "pseudo",
-    "pseudo": true
-  },
-  {
     "mnemonic": "j",
     "summary": "Jump",
     "formats": [
@@ -744,14 +689,14 @@
     "mnemonic": "jalr",
     "summary": "Jump and link register",
     "formats": [
-      "jalr $rs",
-      "jalr $rd, $rs"
+      "jalr $rd, $rs",
+      "jalr $rs"
     ],
     "operands": [
       1,
       2
     ],
-    "description": "Jump to rs and write return address.",
+    "description": "Jump to rs and write the return address. MIPS-C uses jalr rd, rs; MARS also accepts jalr rs with $ra as the destination.",
     "type": "R-type"
   },
   {
@@ -765,7 +710,10 @@
       3
     ],
     "description": "If rt != 0 then rd <- rs.",
-    "type": "R-type"
+    "type": "R-type",
+    "projects": [
+      "P6"
+    ]
   },
   {
     "mnemonic": "movz",
@@ -778,7 +726,10 @@
       3
     ],
     "description": "If rt == 0 then rd <- rs.",
-    "type": "R-type"
+    "type": "R-type",
+    "projects": [
+      "P6"
+    ]
   },
   {
     "mnemonic": "mul",
@@ -805,7 +756,10 @@
       2
     ],
     "description": "{HI, LO} <- {HI, LO} + signed(rs) * signed(rt).",
-    "type": "R-type"
+    "type": "R-type",
+    "projects": [
+      "P6"
+    ]
   },
   {
     "mnemonic": "maddu",
@@ -818,7 +772,10 @@
       2
     ],
     "description": "{HI, LO} <- {HI, LO} + unsigned(rs) * unsigned(rt).",
-    "type": "R-type"
+    "type": "R-type",
+    "projects": [
+      "P6"
+    ]
   },
   {
     "mnemonic": "msub",
@@ -831,7 +788,10 @@
       2
     ],
     "description": "{HI, LO} <- {HI, LO} - signed(rs) * signed(rt).",
-    "type": "R-type"
+    "type": "R-type",
+    "projects": [
+      "P6"
+    ]
   },
   {
     "mnemonic": "msubu",
@@ -844,7 +804,10 @@
       2
     ],
     "description": "{HI, LO} <- {HI, LO} - unsigned(rs) * unsigned(rt).",
-    "type": "R-type"
+    "type": "R-type",
+    "projects": [
+      "P6"
+    ]
   },
   {
     "mnemonic": "mult",
@@ -958,13 +921,13 @@
     "mnemonic": "mfc0",
     "summary": "Move from CP0",
     "formats": [
-      "mfc0 $rt, $rd"
+      "mfc0 $rt, cp0"
     ],
     "operands": [
       2,
       2
     ],
-    "description": "rt <- CP0[rd].",
+    "description": "rt <- CP0[cp0]. BUAA CO P7 commonly uses $12(SR), $13(Cause), $14(EPC), and mentions $15(PRId), $8(BadVAddr).",
     "projects": [
       "P7"
     ],
@@ -974,13 +937,13 @@
     "mnemonic": "mtc0",
     "summary": "Move to CP0",
     "formats": [
-      "mtc0 $rt, $rd"
+      "mtc0 $rt, cp0"
     ],
     "operands": [
       2,
       2
     ],
-    "description": "CP0[rd] <- rt.",
+    "description": "CP0[cp0] <- rt. BUAA CO P7 test programs may write $12(SR) and $14(EPC), and guarantee not to write $13(Cause).",
     "projects": [
       "P7"
     ],
@@ -1013,7 +976,7 @@
       0,
       1
     ],
-    "description": "Raise a breakpoint exception. Included in the MIPS-C simplified set.",
+    "description": "Raise a breakpoint exception. MIPS-C commonly uses the no-operand form; MARS also accepts a 16-bit code operand.",
     "type": "special"
   },
   {
@@ -1040,32 +1003,6 @@
       0
     ],
     "description": "Expands to sll $zero, $zero, 0.",
-    "type": "special"
-  },
-  {
-    "mnemonic": "ssnop",
-    "summary": "Superscalar no operation",
-    "formats": [
-      "ssnop"
-    ],
-    "operands": [
-      0,
-      0
-    ],
-    "description": "No operation with a conventional encoding useful for scheduling.",
-    "type": "special"
-  },
-  {
-    "mnemonic": "ehb",
-    "summary": "Execution hazard barrier",
-    "formats": [
-      "ehb"
-    ],
-    "operands": [
-      0,
-      0
-    ],
-    "description": "Execution hazard barrier. MIPS32r2 instruction.",
     "type": "special"
   },
   {
@@ -1121,20 +1058,6 @@
       2
     ],
     "description": "Pseudo instruction, usually nor $rd, $rs, $zero.",
-    "pseudo": true,
-    "type": "pseudo"
-  },
-  {
-    "mnemonic": "clear",
-    "summary": "Clear register",
-    "formats": [
-      "clear $rd"
-    ],
-    "operands": [
-      1,
-      1
-    ],
-    "description": "Pseudo instruction, usually addu $rd, $zero, $zero.",
     "pseudo": true,
     "type": "pseudo"
   },

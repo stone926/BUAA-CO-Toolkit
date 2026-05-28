@@ -6,3 +6,5 @@ tsconfig.json
 tutorial_toolchain_vscode_plugin_analysis.md
 CO-Extension设计文档.md
 prompt.md
+AGENTS.md
+MIPS迭代建议.md

@@ -7,6 +7,8 @@ import {
   Diagnostic,
   DocumentSymbol,
   Hover,
+  InlayHint,
+  InlayHintKind,
   InsertTextFormat,
   Location,
   MarkupKind,
@@ -36,27 +38,34 @@ import {
   isInsideAnyRange,
   MipsMacro,
   MipsParseResult,
-  parseMips,
+  parseIntegerLiteral,
   parseMacroArguments,
-  parseOperands,
   resolveDataSymbolAtPosition,
   resolveEqvSymbolAtPosition,
   resolveLabelAtPosition,
   resolveSymbolAtPosition,
   symbolsVisibleAtPosition
 } from './parser';
+import { clearCachedMipsParse, getCachedMipsParse } from './parseCache';
 import {
   canonicalRegister,
+  cp0Registers,
+  cp0RegistersByNumber,
   directives,
   instructions,
   instructionSemanticTokenType,
   instructionTypeLabel,
+  isFloatingPointRegister,
   isRegister,
+  MipsCp0RegisterInfo,
   mipsSemanticTokenTypes,
   MipsSemanticTokenType,
+  MipsSyscallInfo,
   numericRegisters,
   registerDescriptions,
-  registerNames
+  registerNames,
+  syscalls,
+  syscallsByCode
 } from './resources';
 
 export const mipsIgnorePseudoFileCommand = 'co.server.mips.ignorePseudoWarningsForFile';
@@ -76,40 +85,49 @@ interface MipsSemanticTokenCandidate {
 const tokenTypeIndex = new Map(mipsSemanticTokenTypes.map((type, index) => [type, index] as const));
 const tokenModifierIndex = new Map<string, number>([['declaration', 0]]);
 
+export const clearMipsParseCache = clearCachedMipsParse;
+
 export function getMipsDiagnostics(document: TextDocument, settings: CoSettings, state: MipsServerState): Diagnostic[] {
-  return parseMips(document, settings, {
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  }).diagnostics;
+  return getCachedMipsParse(document, settings, state).diagnostics;
 }
 
 export function getMipsCompletions(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): CompletionItem[] {
-  const parsed = parseMips(document, settings, {
-    includeDiagnostics: false,
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  });
+  const parsed = getCachedMipsParse(document, settings, state);
   const linePrefix = lineAt(document, position.line).text.slice(0, position.character);
   const items: CompletionItem[] = [];
   const directiveReplaceRange = directiveCompletionReplaceRange(linePrefix, position);
 
+  const cp0Items = cp0CompletionItems(linePrefix, position);
+  if (cp0Items) {
+    return cp0Items;
+  }
+
+  const syscallItems = syscallCompletionItems(linePrefix, position);
+  if (syscallItems) {
+    return syscallItems;
+  }
+
   if (/\$[\w]*$/.test(linePrefix)) {
+    const replaceRange = completionReplaceRange(linePrefix, position, /\$[\w]*$/);
     for (const name of [...registerNames, ...numericRegisters()]) {
       items.push({
         label: name,
         kind: CompletionItemKind.Variable,
-        detail: registerDescriptions.get(name) ?? 'MIPS register'
+        detail: registerDescriptions.get(name) ?? 'MIPS register',
+        textEdit: TextEdit.replace(replaceRange, name)
       });
     }
     return items;
   }
 
   if (/%[\w]*$/.test(linePrefix)) {
+    const replaceRange = completionReplaceRange(linePrefix, position, /%[\w]*$/);
     for (const symbol of findMacroAtPosition(parsed, position)?.paramSymbols.values() ?? []) {
       items.push({
         label: symbol.name,
         kind: CompletionItemKind.Variable,
-        detail: 'Macro parameter'
+        detail: 'Macro parameter',
+        textEdit: TextEdit.replace(replaceRange, symbol.name)
       });
     }
     return items;
@@ -142,9 +160,32 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
         directiveReplaceRange ?? Range.create(position, position),
         '.macro ${1:name}(${2:%arg})\n  ${0}\n.end_macro'
       );
+    } else if (directive === '.align') {
+      item.detail = 'Align next data item to 2^n bytes';
     }
     items.push(item);
   }
+
+  items.push(
+    {
+      label: '.align 0',
+      kind: CompletionItemKind.Keyword,
+      detail: '1-byte alignment',
+      textEdit: directiveReplaceRange ? TextEdit.replace(directiveReplaceRange, '.align 0') : undefined
+    },
+    {
+      label: '.align 1',
+      kind: CompletionItemKind.Keyword,
+      detail: '2-byte alignment',
+      textEdit: directiveReplaceRange ? TextEdit.replace(directiveReplaceRange, '.align 1') : undefined
+    },
+    {
+      label: '.align 2',
+      kind: CompletionItemKind.Keyword,
+      detail: '4-byte alignment',
+      textEdit: directiveReplaceRange ? TextEdit.replace(directiveReplaceRange, '.align 2') : undefined
+    }
+  );
 
   for (const symbol of symbolsVisibleAtPosition(parsed, position)) {
     items.push({
@@ -175,17 +216,77 @@ function directiveCompletionReplaceRange(linePrefix: string, position: Position)
   return Range.create(position.line, position.character - match[0].length, position.line, position.character);
 }
 
+function completionReplaceRange(linePrefix: string, position: Position, pattern: RegExp): Range {
+  const match = linePrefix.match(pattern);
+  const length = match?.[0].length ?? 0;
+  return Range.create(position.line, position.character - length, position.line, position.character);
+}
+
+function syscallCompletionItems(linePrefix: string, position: Position): CompletionItem[] | undefined {
+  if (!/\bli\s+\$v0\s*,\s*[-+]?(?:0[xX][0-9A-Fa-f]*|0[bB][01]*|0[0-7]*|\d*)?$/.test(linePrefix)) {
+    return undefined;
+  }
+  const replaceRange = completionReplaceRange(linePrefix, position, /[-+]?(?:0[xX][0-9A-Fa-f]*|0[bB][01]*|0[0-7]*|\d*)$/);
+  return syscalls.map((syscall) => ({
+    label: String(syscall.code),
+    kind: CompletionItemKind.Value,
+    detail: `syscall ${syscall.name}`,
+    textEdit: TextEdit.replace(replaceRange, String(syscall.code)),
+    documentation: {
+      kind: MarkupKind.Markdown,
+      value: syscallMarkdown(syscall)
+    }
+  }));
+}
+
+function cp0CompletionItems(linePrefix: string, position: Position): CompletionItem[] | undefined {
+  if (!/\b(?:mfc0|mtc0)\s+\$[A-Za-z0-9_]+\s*,\s*\$?[A-Za-z0-9_]*$/.test(linePrefix)) {
+    return undefined;
+  }
+  const replaceRange = completionReplaceRange(linePrefix, position, /\$?[A-Za-z0-9_]*$/);
+  return cp0Registers.map((register) => ({
+    label: `$${register.number}`,
+    kind: CompletionItemKind.Variable,
+    detail: `CP0 ${register.name}${register.alias ? ` (${register.alias})` : ''}`,
+    textEdit: TextEdit.replace(replaceRange, `$${register.number}`),
+    documentation: {
+      kind: MarkupKind.Markdown,
+      value: cp0Markdown(register)
+    }
+  }));
+}
+
+function directiveHoverText(directive: string): string | undefined {
+  if (!directives.has(directive)) {
+    return undefined;
+  }
+  if (directive === '.align') {
+    return '**.align n**\n\nAligns the next data item to a 2^n byte boundary. Common BUAA CO values are `.align 0`, `.align 1`, and `.align 2`.';
+  }
+  if (directive === '.data' || directive === '.text') {
+    return `**${directive}**\n\nSwitches the current assembly section. BUAA CO uses CompactDataAtZero, so course code should not pass a custom section address.`;
+  }
+  return `MIPS assembler directive \`${directive}\`.`;
+}
+
 export function getMipsHover(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): Hover | undefined {
   const wordRange = getMipsWordRange(document, position);
   if (!wordRange) {
     return undefined;
   }
   const word = document.getText(wordRange);
-  const parsed = parseMips(document, settings, {
-    includeDiagnostics: false,
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  });
+  const parsed = getCachedMipsParse(document, settings, state);
+  const directiveHover = directiveHoverText(word.toLowerCase());
+  if (directiveHover) {
+    return {
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: directiveHover
+      },
+      range: wordRange
+    };
+  }
+
   const instruction = instructions[word.toLowerCase()];
   if (instruction) {
     const details = [
@@ -205,6 +306,17 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     if (instruction.delaySlot) {
       details.push('', 'Control-transfer instruction. Delay-slot behavior depends on the current project/profile.');
     }
+    const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));
+    const expansion = parsedInstruction ? pseudoExpansionPreview(instruction.mnemonic, parsedInstruction.operands) : undefined;
+    if (expansion?.length) {
+      details.push('', 'Possible MARS expansion:', '', '```mipsasm', expansion.join('\n'), '```');
+    }
+    if (instruction.mnemonic === 'syscall') {
+      const syscall = syscallServiceBeforeLine(document, position.line);
+      if (syscall) {
+        details.push('', `Current $v0 service: **${syscall.code} ${syscall.name}** - ${syscall.description}`, '', `参数：${syscall.parameters ?? '无'}`, '', `返回值：${syscall.returns ?? '无'}`);
+      }
+    }
     return {
       contents: {
         kind: MarkupKind.Markdown,
@@ -214,10 +326,32 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  if (isRegister(word)) {
+  const syscall = syscallAtLiV0Operand(document, wordRange);
+  if (syscall) {
+    return {
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: syscallMarkdown(syscall)
+      },
+      range: wordRange
+    };
+  }
+
+  const cp0 = cp0RegisterAtPosition(document, word, position);
+  if (cp0) {
+    return {
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: cp0Markdown(cp0)
+      },
+      range: wordRange
+    };
+  }
+
+  if (isRegister(word) || isFloatingPointRegister(word)) {
     const canonical = canonicalRegister(word);
     return {
-      contents: registerDescriptions.get(canonical) ?? `MIPS register ${word}`,
+      contents: registerDescriptions.get(canonical) ?? (isFloatingPointRegister(word) ? `MARS floating-point register ${word}` : `MIPS register ${word}`),
       range: wordRange
     };
   }
@@ -233,6 +367,13 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const symbol = resolveSymbolAtPosition(parsed, word, position);
   if (symbol) {
     const kind = symbol.kind === 'data' ? 'Data symbol' : symbol.kind === 'eqv' ? '.eqv symbol' : 'Label';
+    if (symbol.kind === 'eqv') {
+      const replacement = eqvReplacementText(document, symbol.selectionRange.start.line, symbol.name);
+      return {
+        contents: replacement ? `${kind} defined on line ${symbol.range.start.line + 1}.\n\nReplacement: \`${replacement}\`` : `${kind} defined on line ${symbol.range.start.line + 1}.`,
+        range: wordRange
+      };
+    }
     return {
       contents: `${kind} defined on line ${symbol.range.start.line + 1}.`,
       range: wordRange
@@ -241,10 +382,21 @@ export function getMipsHover(document: TextDocument, position: Position, setting
 
   const macro = findMacroOverloadAtPosition(document, parsed, word, position);
   if (macro) {
+    const expansion = macroExpansionPreview(document, macro, word, position);
+    const value = [
+      `**Macro** \`${macro.name}(${macro.params.join(', ')})\``,
+      '',
+      '```mipsasm',
+      macroBody(document, macro.bodyStartLine, macro.bodyEndLine),
+      '```'
+    ];
+    if (expansion) {
+      value.push('', 'Expansion preview:', '', '```mipsasm', expansion, '```');
+    }
     return {
       contents: {
         kind: MarkupKind.Markdown,
-        value: `**Macro** \`${macro.name}(${macro.params.join(', ')})\`\n\n\`\`\`mipsasm\n${macroBody(document, macro.bodyStartLine, macro.bodyEndLine)}\n\`\`\``
+        value: value.join('\n')
       },
       range: wordRange
     };
@@ -259,11 +411,7 @@ export function getMipsDefinition(document: TextDocument, position: Position, se
     return undefined;
   }
   const word = document.getText(wordRange);
-  const parsed = parseMips(document, settings, {
-    includeDiagnostics: false,
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  });
+  const parsed = getCachedMipsParse(document, settings, state);
   const param = findMacroParamAtPosition(parsed, word, position);
   if (param) {
     return Location.create(document.uri, param.selectionRange);
@@ -286,11 +434,7 @@ export function getMipsReferences(document: TextDocument, params: ReferenceParam
     return [];
   }
   const word = document.getText(wordRange);
-  const parsed = parseMips(document, settings, {
-    includeDiagnostics: false,
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  });
+  const parsed = getCachedMipsParse(document, settings, state);
 
   const param = findMacroParamAtPosition(parsed, word, position) ?? allMacroParams(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (param) {
@@ -318,11 +462,7 @@ export function getMipsReferences(document: TextDocument, params: ReferenceParam
 }
 
 export function getMipsDocumentSymbols(document: TextDocument, settings: CoSettings, state: MipsServerState): DocumentSymbol[] {
-  const parsed = parseMips(document, settings, {
-    includeDiagnostics: false,
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  });
+  const parsed = getCachedMipsParse(document, settings, state);
   const symbols: DocumentSymbol[] = [];
   for (const symbol of allSymbols(parsed)) {
     const kind = symbol.kind === 'data' || symbol.kind === 'eqv' ? SymbolKind.Variable : SymbolKind.Function;
@@ -372,12 +512,84 @@ export function getMipsFormattingEdits(document: TextDocument): TextEdit[] {
   return edits;
 }
 
+export function getMipsInlayHints(document: TextDocument, range: Range, settings: CoSettings, state: MipsServerState): InlayHint[] {
+  const hints: InlayHint[] = [];
+  const startLine = Math.max(0, range.start.line);
+  const endLine = Math.min(document.lineCount - 1, range.end.line);
+  const serviceStack: Array<MipsSyscallInfo | undefined> = [];
+  let currentSyscall: MipsSyscallInfo | undefined;
+
+  for (let lineNumber = 0; lineNumber <= endLine; lineNumber++) {
+    const text = lineAt(document, lineNumber).text;
+    const code = stripLineComment(text);
+    const trimmed = code.trim();
+    const inRequestedRange = lineNumber >= startLine;
+
+    if (/^\.macro\b/.test(trimmed)) {
+      serviceStack.push(currentSyscall);
+      currentSyscall = undefined;
+      continue;
+    }
+
+    if (/^\.end_macro\b/.test(trimmed)) {
+      currentSyscall = serviceStack.pop();
+      continue;
+    }
+
+    const syscallLoad = code.match(/\bli\s+\$v0\s*,\s*(\S+)/);
+    if (syscallLoad) {
+      const syscall = syscallByOperand(syscallLoad[1]);
+      if (syscall) {
+        const start = code.indexOf(syscallLoad[1]);
+        if (inRequestedRange) {
+          hints.push({
+            position: Position.create(lineNumber, start + syscallLoad[1].length),
+            label: ` ${syscall.name}`,
+            kind: InlayHintKind.Parameter,
+            tooltip: markdownTooltip(syscallMarkdown(syscall)),
+            paddingLeft: true
+          });
+        }
+        currentSyscall = syscall;
+      }
+    } else if (instructionWritesV0(code)) {
+      currentSyscall = undefined;
+    }
+
+    const syscallInstruction = code.match(/^\s*syscall\b/);
+    if (syscallInstruction) {
+      if (currentSyscall && inRequestedRange) {
+        hints.push({
+          position: Position.create(lineNumber, syscallInstruction[0].length),
+          label: ` ${currentSyscall.name}`,
+          kind: InlayHintKind.Parameter,
+          tooltip: markdownTooltip(syscallMarkdown(currentSyscall)),
+          paddingLeft: true
+        });
+      }
+      currentSyscall = undefined;
+    }
+
+    const cp0Access = code.match(/\b(?:mfc0|mtc0)\s+\$[A-Za-z0-9_]+\s*,\s*(\$?\d+)\b/);
+    if (cp0Access && inRequestedRange) {
+      const register = cp0ByOperand(cp0Access[1]);
+      if (register) {
+        const start = code.indexOf(cp0Access[1]);
+        hints.push({
+          position: Position.create(lineNumber, start + cp0Access[1].length),
+          label: ` ${register.name}${register.alias ? `/${register.alias}` : ''}`,
+          kind: InlayHintKind.Type,
+          tooltip: markdownTooltip(cp0Markdown(register)),
+          paddingLeft: true
+        });
+      }
+    }
+  }
+  return hints;
+}
+
 export function getMipsSemanticTokens(document: TextDocument, settings: CoSettings, state: MipsServerState): SemanticTokens {
-  const parsed = parseMips(document, settings, {
-    includeDiagnostics: false,
-    ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-    ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-  });
+  const parsed = getCachedMipsParse(document, settings, state);
   const tokens: MipsSemanticTokenCandidate[] = [];
   const builder = new SemanticTokensBuilder();
 
@@ -440,7 +652,9 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
         continue;
       }
 
-      if (token.startsWith('$') && isRegister(token)) {
+      if (token.startsWith('$') && cp0RegisterAtPosition(document, token, range.start)) {
+        pushSemanticToken(tokens, range, 'mipsCp0Register');
+      } else if (token.startsWith('$') && (isRegister(token) || isFloatingPointRegister(token))) {
         pushSemanticToken(tokens, range, 'mipsRegister');
       } else if (token.startsWith('.') && directives.has(token.toLowerCase())) {
         pushSemanticToken(tokens, range, 'mipsDirective');
@@ -503,15 +717,15 @@ function findMacroOverloadAtPosition(document: TextDocument, parsed: MipsParseRe
     return undefined;
   }
 
-  const callArity = macroCallArityAtPosition(document, name, position);
-  if (callArity !== undefined) {
-    return overloads.find((macro) => macro.params.length === callArity) ?? overloads[0];
+  const callArgs = macroCallArgumentsAtPosition(document, name, position);
+  if (callArgs !== undefined) {
+    return overloads.find((macro) => macro.params.length === callArgs.length) ?? overloads[0];
   }
 
   return overloads[0];
 }
 
-function macroCallArityAtPosition(document: TextDocument, name: string, position: Position): number | undefined {
+function macroCallArgumentsAtPosition(document: TextDocument, name: string, position: Position): string[] | undefined {
   const text = lineAt(document, position.line).text;
   const commentIndex = findCommentIndex(text);
   const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
@@ -529,7 +743,7 @@ function macroCallArityAtPosition(document: TextDocument, name: string, position
   if (position.character < tokenStart || position.character > tokenEnd) {
     return undefined;
   }
-  return parseMacroArguments(trimmed.slice(firstToken[0].length).trim()).length;
+  return parseMacroArguments(trimmed.slice(firstToken[0].length).trim());
 }
 
 function collectTokenReferences(
@@ -583,7 +797,278 @@ function macroBody(document: TextDocument, bodyStartLine: number, bodyEndLine?: 
   return lines.join('\n');
 }
 
-function isKnownDeclarationRange(range: Range, parsed: ReturnType<typeof parseMips>): boolean {
+function macroExpansionPreview(document: TextDocument, macro: MipsMacro, name: string, position: Position): string | undefined {
+  const args = macroCallArgumentsAtPosition(document, name, position);
+  if (!args || args.length !== macro.params.length) {
+    return undefined;
+  }
+  const replacements = new Map(macro.params.map((param, index) => [param, args[index]] as const));
+  return macroBody(document, macro.bodyStartLine, macro.bodyEndLine)
+    .split(/\r?\n/)
+    .map((line) => {
+      let expanded = line;
+      for (const [param, arg] of replacements) {
+        expanded = expanded.replace(new RegExp(`${escapeRegExp(param)}\\b`, 'g'), arg);
+      }
+      return expanded;
+    })
+    .join('\n');
+}
+
+function pseudoExpansionPreview(mnemonic: string, operands: string[]): string[] | undefined {
+  if (mnemonic === 'li' && operands.length === 2) {
+    return expandLoadImmediate(operands[0], operands[1]);
+  }
+  if (['add', 'addu', 'sub', 'subu'].includes(mnemonic) && operands.length === 3 && parseIntegerLiteral(operands[2]) !== undefined) {
+    return [...(expandLoadImmediate('$at', operands[2]) ?? []), `${mnemonic} ${operands[0]}, ${operands[1]}, $at`];
+  }
+  if ((mnemonic === 'addi' || mnemonic === 'addiu') && operands.length === 3) {
+    const immediate = parseIntegerLiteral(operands[2]);
+    if (immediate !== undefined && !fitsSigned16(immediate)) {
+      return [...(expandLoadImmediate('$at', operands[2]) ?? []), `${mnemonic === 'addi' ? 'add' : 'addu'} ${operands[0]}, ${operands[1]}, $at`];
+    }
+  }
+  if (mnemonic === 'la' && operands.length === 2) {
+    return [`lui $at, upper(${operands[1]})`, `ori ${operands[0]}, $at, lower(${operands[1]})`];
+  }
+  if (mnemonic === 'move' && operands.length === 2) {
+    return [`addu ${operands[0]}, ${operands[1]}, $zero`];
+  }
+  if (mnemonic === 'nop' && operands.length === 0) {
+    return ['sll $zero, $zero, 0'];
+  }
+  if (mnemonic === 'b' && operands.length === 1) {
+    return [`beq $zero, $zero, ${operands[0]}`];
+  }
+  if (mnemonic === 'beqz' && operands.length === 2) {
+    return [`beq ${operands[0]}, $zero, ${operands[1]}`];
+  }
+  if (mnemonic === 'bnez' && operands.length === 2) {
+    return [`bne ${operands[0]}, $zero, ${operands[1]}`];
+  }
+  if (mnemonic === 'not' && operands.length === 2) {
+    return [`nor ${operands[0]}, ${operands[1]}, $zero`];
+  }
+  if (mnemonic === 'neg' && operands.length === 2) {
+    return [`sub ${operands[0]}, $zero, ${operands[1]}`];
+  }
+  if (mnemonic === 'negu' && operands.length === 2) {
+    return [`subu ${operands[0]}, $zero, ${operands[1]}`];
+  }
+  if (mnemonic === 'mul' && operands.length === 3) {
+    return [`mult ${operands[1]}, ${operands[2]}`, `mflo ${operands[0]}`];
+  }
+  if ((mnemonic === 'div' || mnemonic === 'divu') && operands.length === 3) {
+    return [`${mnemonic} ${operands[1]}, ${operands[2]}`, `mflo ${operands[0]}`];
+  }
+  if ((mnemonic === 'rem' || mnemonic === 'remu') && operands.length === 3) {
+    const real = mnemonic === 'remu' ? 'divu' : 'div';
+    return [`${real} ${operands[1]}, ${operands[2]}`, `mfhi ${operands[0]}`];
+  }
+  if (['blt', 'bltu', 'bgt', 'bgtu', 'ble', 'bleu', 'bge', 'bgeu'].includes(mnemonic) && operands.length === 3) {
+    return expandCompareBranch(mnemonic, operands);
+  }
+  return undefined;
+}
+
+function expandLoadImmediate(register: string, operand: string): string[] | undefined {
+  const value = parseIntegerLiteral(operand);
+  if (value === undefined) {
+    return undefined;
+  }
+  const unsigned = value < 0 ? value + 0x100000000 : value;
+  const upper = Math.floor(unsigned / 0x10000) & 0xffff;
+  const lower = unsigned & 0xffff;
+  if (upper === 0) {
+    return [`ori ${register}, $zero, ${formatHex16(lower)}`];
+  }
+  if (lower === 0) {
+    return [`lui ${register}, ${formatHex16(upper)}`];
+  }
+  return [`lui $at, ${formatHex16(upper)}`, `ori ${register}, $at, ${formatHex16(lower)}`];
+}
+
+function formatHex16(value: number): string {
+  return `0x${value.toString(16).padStart(4, '0')}`;
+}
+
+function fitsSigned16(value: number): boolean {
+  const signed = value > 0x7fffffff ? value - 0x100000000 : value;
+  return signed >= -32768 && signed <= 32767;
+}
+
+function expandCompareBranch(mnemonic: string, operands: string[]): string[] {
+  const [left, right, label] = operands;
+  switch (mnemonic) {
+    case 'blt':
+      return [`slt $at, ${left}, ${right}`, `bne $at, $zero, ${label}`];
+    case 'bltu':
+      return [`sltu $at, ${left}, ${right}`, `bne $at, $zero, ${label}`];
+    case 'bgt':
+      return [`slt $at, ${right}, ${left}`, `bne $at, $zero, ${label}`];
+    case 'bgtu':
+      return [`sltu $at, ${right}, ${left}`, `bne $at, $zero, ${label}`];
+    case 'ble':
+      return [`slt $at, ${right}, ${left}`, `beq $at, $zero, ${label}`];
+    case 'bleu':
+      return [`sltu $at, ${right}, ${left}`, `beq $at, $zero, ${label}`];
+    case 'bge':
+      return [`slt $at, ${left}, ${right}`, `beq $at, $zero, ${label}`];
+    case 'bgeu':
+      return [`sltu $at, ${left}, ${right}`, `beq $at, $zero, ${label}`];
+    default:
+      return [];
+  }
+}
+
+function syscallMarkdown(syscall: MipsSyscallInfo): string {
+  return [
+    `**MARS syscall ${syscall.code}** - ${syscall.name}`,
+    '',
+    syscall.description,
+    '',
+    `参数：${syscall.parameters ?? '无'}`,
+    '',
+    `返回值：${syscall.returns ?? '无'}`
+  ].join('\n');
+}
+
+function markdownTooltip(value: string) {
+  return {
+    kind: MarkupKind.Markdown,
+    value
+  };
+}
+
+function cp0Markdown(register: MipsCp0RegisterInfo): string {
+  const lines = [
+    `**CP0 $${register.number} ${register.name}${register.alias ? ` (${register.alias})` : ''}**`,
+    '',
+    register.description,
+    '',
+    `P7 要求实现：${register.courseRequired ? '是' : '否'}`,
+    '',
+    `测试程序写入：${register.writableByTest ? '可以' : '不要求/保证不写'}`
+  ];
+
+  if (register.fields?.length) {
+    lines.push('', '| 字段 | 位 | 含义 |', '| :--- | :--- | :--- |');
+    for (const field of register.fields) {
+      lines.push(`| ${field.name} | ${field.bits} | ${field.description} |`);
+    }
+  }
+
+  if (register.excCodes?.length) {
+    lines.push('', 'ExcCode 编码：', '', '| ExcCode | 名称 | 触发条件 |', '| :--- | :--- | :--- |');
+    for (const code of register.excCodes) {
+      lines.push(`| ${code.code} | ${code.name} | ${code.description} |`);
+    }
+  }
+
+  if (register.notes?.length) {
+    lines.push('', ...register.notes.map((note) => `- ${note}`));
+  }
+
+  return lines.join('\n');
+}
+
+function syscallByOperand(operand: string): MipsSyscallInfo | undefined {
+  const value = parseIntegerLiteral(operand);
+  return value === undefined ? undefined : syscallsByCode.get(value);
+}
+
+function cp0ByOperand(operand: string): MipsCp0RegisterInfo | undefined {
+  const value = parseIntegerLiteral(operand.replace(/^\$/, ''));
+  return value === undefined ? undefined : cp0RegistersByNumber.get(value);
+}
+
+function syscallAtLiV0Operand(document: TextDocument, wordRange: Range) {
+  const text = lineAt(document, wordRange.start.line).text;
+  const code = stripLineComment(text);
+  const word = document.getText(wordRange);
+  const syscall = syscallByOperand(word);
+  if (!syscall) {
+    return undefined;
+  }
+
+  const prefix = code.slice(0, wordRange.start.character);
+  if (!/\bli\s+\$v0\s*,\s*$/.test(prefix)) {
+    return undefined;
+  }
+  return syscall;
+}
+
+function syscallServiceBeforeLine(document: TextDocument, targetLine: number): MipsSyscallInfo | undefined {
+  let activeMacro = false;
+  let service: MipsSyscallInfo | undefined;
+  for (let line = 0; line < targetLine; line++) {
+    const code = stripLineComment(lineAt(document, line).text).trim();
+    if (/^\.macro\b/.test(code)) {
+      activeMacro = true;
+      continue;
+    }
+    if (/^\.end_macro\b/.test(code)) {
+      activeMacro = false;
+      continue;
+    }
+    if (activeMacro || !code) {
+      continue;
+    }
+
+    const li = code.match(/^li\s+\$v0\s*,\s*(\S+)\s*$/);
+    if (li) {
+      service = syscallByOperand(li[1]);
+      continue;
+    }
+    if (/^syscall\b/.test(code)) {
+      service = undefined;
+      continue;
+    }
+    if (instructionWritesV0(code)) {
+      service = undefined;
+    }
+  }
+  return service;
+}
+
+function instructionWritesV0(code: string): boolean {
+  const match = code.match(/^[A-Za-z_.$][\w.$]*\s+([^,\s]+)/);
+  return Boolean(match && (match[1] === '$v0' || match[1] === '$2'));
+}
+
+function cp0RegisterAtPosition(document: TextDocument, word: string, position: Position) {
+  const register = cp0ByOperand(word);
+  if (!register) {
+    return undefined;
+  }
+  const code = stripLineComment(lineAt(document, position.line).text);
+  const match = code.match(/\b(?:mfc0|mtc0)\s+\$[A-Za-z0-9_]+\s*,\s*(\$?\d+)\b/);
+  if (!match || match[1] !== word) {
+    return undefined;
+  }
+  const start = code.indexOf(match[1]);
+  if (position.character < start || position.character > start + match[1].length) {
+    return undefined;
+  }
+  return register;
+}
+
+function eqvReplacementText(document: TextDocument, lineNumber: number, name: string): string | undefined {
+  const code = stripLineComment(lineAt(document, lineNumber).text);
+  const pattern = new RegExp(`^\\s*\\.eqv\\s+${escapeRegExp(name)}(?:\\s*,?\\s+|\\s*,)(.+)$`);
+  return code.match(pattern)?.[1]?.trim();
+}
+
+function stripLineComment(line: string): string {
+  const commentIndex = findCommentIndex(line);
+  return commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isKnownDeclarationRange(range: Range, parsed: MipsParseResult): boolean {
   const declarationRanges = [
     ...allMacros(parsed).map((macro) => macro.selectionRange),
     ...allMacroParams(parsed).map((param) => param.selectionRange),

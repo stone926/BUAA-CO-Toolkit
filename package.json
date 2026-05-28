@@ -141,6 +141,11 @@
         "description": "MIPS register such as $t0, $s0, or $zero."
       },
       {
+        "id": "mipsCp0Register",
+        "superType": "variable",
+        "description": "MIPS CP0 register such as $12 Status, $13 Cause, or $14 EPC."
+      },
+      {
         "id": "mipsMacro",
         "superType": "function",
         "description": "MIPS assembler macro definition or macro call."
@@ -199,6 +204,7 @@
           "mipsSpecialInstruction": "#F44747",
           "mipsPseudoInstruction": "#D7BA7D",
           "mipsRegister": "#4FC1FF",
+          "mipsCp0Register": "#B8D7FF",
           "mipsMacro": "#569CD6",
           "mipsMacroParameter": "#FFCB6B",
           "mipsLabel": "#C586C0",

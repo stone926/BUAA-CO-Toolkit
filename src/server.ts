@@ -1,11 +1,22 @@
 import {
+  CodeAction,
   CodeActionKind,
+  CompletionItem,
   createConnection,
   DidChangeConfigurationNotification,
+  Diagnostic,
+  DocumentSymbol,
+  Hover,
+  InlayHint,
   InitializeParams,
   InitializeResult,
+  Location,
+  Position,
   ProposedFeatures,
+  Range,
+  ReferenceParams,
   SemanticTokens,
+  TextEdit,
   TextDocumentSyncKind,
   TextDocuments,
   WorkspaceFolder
@@ -25,8 +36,10 @@ import {
   getMipsDocumentSymbols,
   getMipsFormattingEdits,
   getMipsHover,
+  getMipsInlayHints,
   getMipsReferences,
   getMipsSemanticTokens,
+  clearMipsParseCache,
   mipsIgnorePseudoFileCommand,
   mipsIgnorePseudoMnemonicCommand,
   MipsServerState
@@ -49,6 +62,52 @@ const mipsState: MipsServerState = {
   ignoredPseudoInstructionFiles: new Set(),
   ignoredPseudoInstructionMnemonics: new Set()
 };
+
+interface CoLanguageService {
+  getDiagnostics?: (document: TextDocument, settings: CoSettings) => Diagnostic[];
+  getCompletions?: (document: TextDocument, position: Position, settings: CoSettings) => CompletionItem[];
+  getHover?: (document: TextDocument, position: Position, settings: CoSettings) => Hover | undefined;
+  getDefinition?: (document: TextDocument, position: Position, settings: CoSettings) => Location | undefined;
+  getReferences?: (document: TextDocument, params: ReferenceParams, settings: CoSettings) => Location[];
+  getDocumentSymbols?: (document: TextDocument, settings: CoSettings) => DocumentSymbol[];
+  getCodeActions?: (document: TextDocument, range: Range, diagnostics: Diagnostic[], settings: CoSettings) => CodeAction[];
+  getFormattingEdits?: (document: TextDocument, settings: CoSettings) => TextEdit[];
+  getInlayHints?: (document: TextDocument, range: Range, settings: CoSettings) => InlayHint[];
+  getSemanticTokens?: (document: TextDocument, settings: CoSettings) => SemanticTokens;
+  updateDocument?: (document: TextDocument, settings: CoSettings) => void;
+  removeDocument?: (uri: string) => void;
+}
+
+const languageServices = new Map<string, CoLanguageService>([
+  ['mipsasm', {
+    getDiagnostics: (document, settings) => getMipsDiagnostics(document, settings, mipsState),
+    getCompletions: (document, position, settings) => getMipsCompletions(document, position, settings, mipsState),
+    getHover: (document, position, settings) => getMipsHover(document, position, settings, mipsState),
+    getDefinition: (document, position, settings) => getMipsDefinition(document, position, settings, mipsState),
+    getReferences: (document, params, settings) => getMipsReferences(document, params, settings, mipsState),
+    getDocumentSymbols: (document, settings) => getMipsDocumentSymbols(document, settings, mipsState),
+    getCodeActions: (document, _range, diagnostics) => getMipsCodeActions(document, diagnostics),
+    getFormattingEdits: (document) => getMipsFormattingEdits(document),
+    getInlayHints: (document, range, settings) => getMipsInlayHints(document, range, settings, mipsState),
+    getSemanticTokens: (document, settings) => getMipsSemanticTokens(document, settings, mipsState),
+    removeDocument: clearMipsParseCache
+  }],
+  ['verilog', {
+    getDiagnostics: getVerilogDiagnostics,
+    getCompletions: (document, position, settings) => getVerilogCompletions(document, position, settings, verilogIndex),
+    getHover: (document, position, settings) => getVerilogHover(document, position, settings, verilogIndex),
+    getDefinition: (document, position, settings) => getVerilogDefinition(document, position, settings, verilogIndex),
+    getDocumentSymbols: getVerilogDocumentSymbols,
+    getCodeActions: (document, range, diagnostics, settings) => getVerilogCodeActions(document, range, diagnostics, settings),
+    updateDocument: (document, settings) => verilogIndex.updateDocument(document, settings),
+    removeDocument: (uri) => verilogIndex.remove(uri)
+  }],
+  ['logisim-circ', {
+    getDiagnostics: (document) => getLogisimDiagnostics(document),
+    getHover: (document, position) => getLogisimHover(document, position),
+    getDocumentSymbols: (document) => getLogisimDocumentSymbols(document)
+  }]
+]);
 
 let hasConfigurationCapability = false;
 let workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -73,6 +132,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         codeActionKinds: [CodeActionKind.QuickFix]
       },
       documentFormattingProvider: true,
+      inlayHintProvider: true,
       executeCommandProvider: {
         commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand]
       },
@@ -125,7 +185,7 @@ documents.onDidSave((event) => {
 
 documents.onDidClose((event) => {
   documentSettings.delete(event.document.uri);
-  verilogIndex.remove(event.document.uri);
+  languageServices.get(event.document.languageId)?.removeDocument?.(event.document.uri);
   connection.sendDiagnostics({
     uri: event.document.uri,
     diagnostics: []
@@ -138,13 +198,7 @@ connection.onCompletion(async (params) => {
     return [];
   }
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    return getMipsCompletions(document, params.position, settings, mipsState);
-  }
-  if (document.languageId === 'verilog') {
-    return getVerilogCompletions(document, params.position, settings, verilogIndex);
-  }
-  return [];
+  return languageServices.get(document.languageId)?.getCompletions?.(document, params.position, settings) ?? [];
 });
 
 connection.onHover(async (params) => {
@@ -153,16 +207,7 @@ connection.onHover(async (params) => {
     return undefined;
   }
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    return getMipsHover(document, params.position, settings, mipsState);
-  }
-  if (document.languageId === 'verilog') {
-    return getVerilogHover(document, params.position, settings, verilogIndex);
-  }
-  if (document.languageId === 'logisim-circ') {
-    return getLogisimHover(document, params.position);
-  }
-  return undefined;
+  return languageServices.get(document.languageId)?.getHover?.(document, params.position, settings);
 });
 
 connection.onDefinition(async (params) => {
@@ -171,13 +216,7 @@ connection.onDefinition(async (params) => {
     return undefined;
   }
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    return getMipsDefinition(document, params.position, settings, mipsState);
-  }
-  if (document.languageId === 'verilog') {
-    return getVerilogDefinition(document, params.position, settings, verilogIndex);
-  }
-  return undefined;
+  return languageServices.get(document.languageId)?.getDefinition?.(document, params.position, settings);
 });
 
 connection.onReferences(async (params) => {
@@ -186,10 +225,7 @@ connection.onReferences(async (params) => {
     return [];
   }
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    return getMipsReferences(document, params, settings, mipsState);
-  }
-  return [];
+  return languageServices.get(document.languageId)?.getReferences?.(document, params, settings) ?? [];
 });
 
 connection.onDocumentSymbol(async (params) => {
@@ -198,16 +234,7 @@ connection.onDocumentSymbol(async (params) => {
     return [];
   }
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    return getMipsDocumentSymbols(document, settings, mipsState);
-  }
-  if (document.languageId === 'verilog') {
-    return getVerilogDocumentSymbols(document, settings);
-  }
-  if (document.languageId === 'logisim-circ') {
-    return getLogisimDocumentSymbols(document);
-  }
-  return [];
+  return languageServices.get(document.languageId)?.getDocumentSymbols?.(document, settings) ?? [];
 });
 
 connection.onCodeAction(async (params) => {
@@ -216,30 +243,34 @@ connection.onCodeAction(async (params) => {
     return [];
   }
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    return getMipsCodeActions(document, params.context.diagnostics);
-  }
-  if (document.languageId === 'verilog') {
-    return getVerilogCodeActions(document, params.range, params.context.diagnostics, settings);
-  }
-  return [];
+  return languageServices.get(document.languageId)?.getCodeActions?.(document, params.range, params.context.diagnostics, settings) ?? [];
 });
 
-connection.onDocumentFormatting((params) => {
+connection.onDocumentFormatting(async (params) => {
   const document = documents.get(params.textDocument.uri);
-  if (!document || document.languageId !== 'mipsasm') {
+  if (!document) {
     return [];
   }
-  return getMipsFormattingEdits(document);
+  const settings = await getDocumentSettings(document.uri);
+  return languageServices.get(document.languageId)?.getFormattingEdits?.(document, settings) ?? [];
+});
+
+connection.languages.inlayHint.on(async (params): Promise<InlayHint[]> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return [];
+  }
+  const settings = await getDocumentSettings(document.uri);
+  return languageServices.get(document.languageId)?.getInlayHints?.(document, params.range, settings) ?? [];
 });
 
 connection.languages.semanticTokens.on(async (params): Promise<SemanticTokens> => {
   const document = documents.get(params.textDocument.uri);
-  if (!document || document.languageId !== 'mipsasm') {
+  if (!document) {
     return { data: [] };
   }
   const settings = await getDocumentSettings(document.uri);
-  return getMipsSemanticTokens(document, settings, mipsState);
+  return languageServices.get(document.languageId)?.getSemanticTokens?.(document, settings) ?? { data: [] };
 });
 
 connection.onExecuteCommand(async (params) => {
@@ -254,30 +285,17 @@ connection.onExecuteCommand(async (params) => {
 
 async function updateIndexAndValidate(document: TextDocument): Promise<void> {
   const settings = await getDocumentSettings(document.uri);
-  if (document.languageId === 'verilog') {
-    verilogIndex.updateDocument(document, settings);
-  }
+  languageServices.get(document.languageId)?.updateDocument?.(document, settings);
   await validateDocument(document, settings);
 }
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
   const resolvedSettings = settings ?? await getDocumentSettings(document.uri);
-  if (document.languageId === 'mipsasm') {
-    connection.sendDiagnostics({
-      uri: document.uri,
-      diagnostics: getMipsDiagnostics(document, resolvedSettings, mipsState)
-    });
-  } else if (document.languageId === 'verilog') {
-    connection.sendDiagnostics({
-      uri: document.uri,
-      diagnostics: getVerilogDiagnostics(document, resolvedSettings)
-    });
-  } else if (document.languageId === 'logisim-circ') {
-    connection.sendDiagnostics({
-      uri: document.uri,
-      diagnostics: getLogisimDiagnostics(document)
-    });
-  }
+  const diagnostics = languageServices.get(document.languageId)?.getDiagnostics?.(document, resolvedSettings) ?? [];
+  connection.sendDiagnostics({
+    uri: document.uri,
+    diagnostics
+  });
 }
 
 async function validateAllDocuments(): Promise<void> {
@@ -290,9 +308,7 @@ async function rebuildVerilogIndex(): Promise<void> {
   const settings = await getDocumentSettings('');
   await verilogIndex.rebuild(workspaceFolders, settings);
   for (const document of documents.all()) {
-    if (document.languageId === 'verilog') {
-      verilogIndex.updateDocument(document, settings);
-    }
+    languageServices.get(document.languageId)?.updateDocument?.(document, settings);
   }
 }
 

@@ -1,0 +1,67 @@
+{
+  "registerRegisterImmediate": [
+    "add",
+    "addu",
+    "sub",
+    "subu"
+  ],
+  "bitwiseImmediate": [
+    "and",
+    "or",
+    "xor"
+  ],
+  "signedImmediateExpansion": [
+    "addi",
+    "addiu"
+  ],
+  "unsignedImmediateExpansion": [
+    "andi",
+    "ori",
+    "xori"
+  ],
+  "threeOperandImmediate": [
+    "mul",
+    "div",
+    "divu",
+    "rem",
+    "remu",
+    "seq",
+    "sne",
+    "sgt",
+    "sgtu",
+    "sge",
+    "sgeu",
+    "sle",
+    "sleu"
+  ],
+  "threeRegisterPseudo": [
+    "div",
+    "divu"
+  ],
+  "branchImmediateCompare": [
+    "beq",
+    "bne",
+    "blt",
+    "bltu",
+    "bgt",
+    "bgtu",
+    "ble",
+    "bleu",
+    "bge",
+    "bgeu"
+  ],
+  "loadStorePseudoOffset": [
+    "lw",
+    "sw",
+    "lb",
+    "lbu",
+    "lh",
+    "lhu",
+    "lwl",
+    "lwr",
+    "sb",
+    "sh",
+    "swl",
+    "swr"
+  ]
+}
