@@ -10,6 +10,7 @@ import { MipsMacro, MipsParseOptions, MipsSymbol } from './model';
 import {
   canonicalRegister,
   cp0RegistersByNumber,
+  instructionMeta,
   isRegister,
   MipsInstruction,
   pseudoForms,
@@ -26,13 +27,10 @@ import {
   isSymbolLike
 } from './syntax';
 
-const MEMORY_ALIGNMENT = new Map<string, number>([
-  ['lw', 4],
-  ['sw', 4],
-  ['lh', 2],
-  ['lhu', 2],
-  ['sh', 2]
-]);
+// 从资源文件加载内存对齐要求
+const MEMORY_ALIGNMENT = new Map<string, number>(
+  Object.entries(instructionMeta.memoryAlignment)
+);
 
 type ImmediateKind = 'imm32' | 'simm16' | 'uimm16';
 
@@ -186,7 +184,9 @@ export function instructionWritesRegister(mnemonic: string, operands: string[], 
   if (!operands.length) {
     return false;
   }
-  if (['sw', 'swl', 'swr', 'sb', 'sh', 'beq', 'bne', 'bgez', 'bltz', 'blez', 'bgtz', 'bgezal', 'bltzal', 'b', 'j', 'jal', 'jr', 'syscall', 'break', 'eret', 'mtc0', 'mthi', 'mtlo', 'mult', 'multu', 'madd', 'maddu', 'msub', 'msubu'].includes(mnemonic)) {
+  // 从资源文件检查指令是否写入第一个操作数
+  const writesFirst = instructionMeta.writesFirstOperand[mnemonic];
+  if (writesFirst === false) {
     return false;
   }
   if (mnemonic === 'jalr') {
@@ -237,7 +237,7 @@ function validateInstructionOperands(
   if (usesMarsPseudoInstructionForm(instruction.mnemonic, operands, activeMacro, eqvSymbols)) {
     return;
   }
-  diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, instruction.mnemonic), `${instruction.mnemonic} operands do not match supported MARS format(s): ${instruction.formats.join(' | ')}.`, DiagnosticSeverity.Error, 'operand-type'));
+  diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, instruction.mnemonic), `${instruction.mnemonic} 操作数与支持的 MARS 格式不匹配：${instruction.formats.join(' | ')}。`, DiagnosticSeverity.Error, 'operand-type'));
 }
 
 function validateMemoryAlignment(
@@ -300,7 +300,7 @@ function validateCp0Access(
   diagnostics.push(
     makeDiagnostic(
       rangeOfText(document, lineNumber, operands[1]),
-      `BUAA CO tests do not write CP0 $${register.number} (${register.name}); ${register.description}`,
+      `BUAA CO 测试不写入 CP0 $${register.number} (${register.name})；${register.description}`,
       DiagnosticSeverity.Warning,
       'cp0-write'
     )

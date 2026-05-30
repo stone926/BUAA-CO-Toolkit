@@ -1,0 +1,157 @@
+{
+  "loadImmediate": {
+    "mnemonic": "li",
+    "operands": 2,
+    "description": "加载立即数到寄存器",
+    "expansions": [
+      {
+        "condition": "upper16 == 0",
+        "template": ["ori {dst}, $zero, {lower16}"]
+      },
+      {
+        "condition": "lower16 == 0",
+        "template": ["lui {dst}, {upper16}"]
+      },
+      {
+        "condition": "default",
+        "template": ["lui $at, {upper16}", "ori {dst}, $at, {lower16}"]
+      }
+    ]
+  },
+  "loadAddress": {
+    "mnemonic": "la",
+    "operands": 2,
+    "description": "加载地址到寄存器",
+    "template": ["lui $at, upper({src})", "ori {dst}, $at, lower({src})"]
+  },
+  "move": {
+    "mnemonic": "move",
+    "operands": 2,
+    "description": "寄存器间移动",
+    "template": ["addu {dst}, {src}, $zero"]
+  },
+  "nop": {
+    "mnemonic": "nop",
+    "operands": 0,
+    "description": "空操作",
+    "template": ["sll $zero, $zero, 0"]
+  },
+  "branch": {
+    "mnemonic": "b",
+    "operands": 1,
+    "description": "无条件分支",
+    "template": ["beq $zero, $zero, {label}"]
+  },
+  "branchEqualZero": {
+    "mnemonic": "beqz",
+    "operands": 2,
+    "description": "等于零分支",
+    "template": ["beq {reg}, $zero, {label}"]
+  },
+  "branchNotEqualZero": {
+    "mnemonic": "bnez",
+    "operands": 2,
+    "description": "不等于零分支",
+    "template": ["bne {reg}, $zero, {label}"]
+  },
+  "not": {
+    "mnemonic": "not",
+    "operands": 2,
+    "description": "按位取反",
+    "template": ["nor {dst}, {src}, $zero"]
+  },
+  "neg": {
+    "mnemonic": "neg",
+    "operands": 2,
+    "description": "取负（有符号）",
+    "template": ["sub {dst}, $zero, {src}"]
+  },
+  "negu": {
+    "mnemonic": "negu",
+    "operands": 2,
+    "description": "取负（无符号）",
+    "template": ["subu {dst}, $zero, {src}"]
+  },
+  "multiply": {
+    "mnemonic": "mul",
+    "operands": 3,
+    "description": "乘法（取低位）",
+    "template": ["mult {src1}, {src2}", "mflo {dst}"]
+  },
+  "divide": {
+    "mnemonic": "div",
+    "operands": 3,
+    "description": "除法（取商）",
+    "template": ["div {src1}, {src2}", "mflo {dst}"]
+  },
+  "divideUnsigned": {
+    "mnemonic": "divu",
+    "operands": 3,
+    "description": "无符号除法（取商）",
+    "template": ["divu {src1}, {src2}", "mflo {dst}"]
+  },
+  "remainder": {
+    "mnemonic": "rem",
+    "operands": 3,
+    "description": "取余（有符号）",
+    "template": ["div {src1}, {src2}", "mfhi {dst}"]
+  },
+  "remainderUnsigned": {
+    "mnemonic": "remu",
+    "operands": 3,
+    "description": "取余（无符号）",
+    "template": ["divu {src1}, {src2}", "mfhi {dst}"]
+  },
+  "compareBranch": {
+    "blt": {
+      "description": "小于分支（有符号）",
+      "template": ["slt $at, {left}, {right}", "bne $at, $zero, {label}"]
+    },
+    "bltu": {
+      "description": "小于分支（无符号）",
+      "template": ["sltu $at, {left}, {right}", "bne $at, $zero, {label}"]
+    },
+    "bgt": {
+      "description": "大于分支（有符号）",
+      "template": ["slt $at, {right}, {left}", "bne $at, $zero, {label}"]
+    },
+    "bgtu": {
+      "description": "大于分支（无符号）",
+      "template": ["sltu $at, {right}, {left}", "bne $at, $zero, {label}"]
+    },
+    "ble": {
+      "description": "小于等于分支（有符号）",
+      "template": ["slt $at, {right}, {left}", "beq $at, $zero, {label}"]
+    },
+    "bleu": {
+      "description": "小于等于分支（无符号）",
+      "template": ["sltu $at, {right}, {left}", "beq $at, $zero, {label}"]
+    },
+    "bge": {
+      "description": "大于等于分支（有符号）",
+      "template": ["slt $at, {left}, {right}", "beq $at, $zero, {label}"]
+    },
+    "bgeu": {
+      "description": "大于等于分支（无符号）",
+      "template": ["sltu $at, {left}, {right}", "beq $at, $zero, {label}"]
+    }
+  },
+  "threeOperandArithmetic": {
+    "add": {
+      "description": "加法（三操作数形式）",
+      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "add {dst}, {src}, $at"]
+    },
+    "addu": {
+      "description": "加法无溢出（三操作数形式）",
+      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "addu {dst}, {src}, $at"]
+    },
+    "sub": {
+      "description": "减法（三操作数形式）",
+      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "sub {dst}, {src}, $at"]
+    },
+    "subu": {
+      "description": "减法无溢出（三操作数形式）",
+      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "subu {dst}, {src}, $at"]
+    }
+  }
+}

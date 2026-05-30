@@ -80,6 +80,15 @@ interface MipsResourceData {
   pseudoForms: MipsPseudoFormGroup;
 }
 
+export interface MipsInstructionMeta {
+  memoryAlignment: Record<string, number>;
+  writesFirstOperand: Record<string, boolean>;
+  operandPatterns: Record<string, string[]>;
+  sectionDirectives: Record<string, string>;
+  storageDirectives: string[];
+  coFixedSectionDirectives: string[];
+}
+
 export const mipsSemanticTokenTypes = [
   'mipsDirective',
   'mipsInstruction',
@@ -106,6 +115,7 @@ export type MipsSemanticTokenType = typeof mipsSemanticTokenTypes[number];
 export type MipsInstructionColorMode = CoSettings['mips']['instructionColorMode'];
 
 const mipsResourceData = loadMipsResourceData();
+const mipsInstructionMeta = loadMipsInstructionMeta();
 const registerInfos = mipsResourceData.registers;
 const registerByNumber = new Map(registerInfos.map((info) => [info.number, info]));
 const registerAliases = new Map(registerInfos.flatMap((info) => info.names.map((name) => [name.toLowerCase(), info.names[0].toLowerCase()] as const)));
@@ -119,6 +129,7 @@ export const syscallsByCode = new Map(syscalls.map((syscall) => [syscall.code, s
 export const cp0Registers = mipsResourceData.cp0Registers;
 export const cp0RegistersByNumber = new Map(cp0Registers.map((register) => [register.number, register]));
 export const pseudoForms = mipsResourceData.pseudoForms;
+export const instructionMeta = mipsInstructionMeta;
 
 for (const info of registerInfos) {
   const names = info.names.join(' / ');
@@ -223,6 +234,11 @@ function loadMipsResourceData(): MipsResourceData {
     cp0Registers,
     pseudoForms
   };
+}
+
+function loadMipsInstructionMeta(): MipsInstructionMeta {
+  const resourceRoot = path.join(__dirname, '..', '..', '..', 'resources', 'mips');
+  return readJsonResource<MipsInstructionMeta>(path.join(resourceRoot, 'instructionMeta.json'));
 }
 
 function readJsonResource<T>(file: string): T {
