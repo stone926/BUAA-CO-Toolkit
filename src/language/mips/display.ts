@@ -21,12 +21,12 @@ export function directiveHoverText(directive: string): string | undefined {
     return undefined;
   }
   if (directive === '.align') {
-    return '**.align n**\n\nAligns the next data item to a 2^n byte boundary. Common BUAA CO values are `.align 0`, `.align 1`, and `.align 2`.';
+    return '**.align n**\n\n将下一个数据项按 2^n 字节边界对齐。BUAA CO 常用值为 `.align 0`、`.align 1` 和 `.align 2`。';
   }
   if (directive === '.data' || directive === '.text') {
-    return `**${directive}**\n\nSwitches the current assembly section. BUAA CO uses CompactDataAtZero, so course code should not pass a custom section address.`;
+    return `**${directive}**\n\n切换当前汇编段。BUAA CO 使用 CompactDataAtZero 配置，课程代码不应传递自定义段地址。`;
   }
-  return `MIPS assembler directive \`${directive}\`.`;
+  return `MIPS 汇编指令 \`${directive}\`.`;
 }
 
 export function macroBody(document: TextDocument, bodyStartLine: number, bodyEndLine?: number): string {

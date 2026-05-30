@@ -54,7 +54,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     const details = [
       `**${instruction.mnemonic}** - ${instruction.summary}`,
       '',
-      `Type: **${instructionTypeLabel(instruction.type)}**`,
+      `类型：**${instructionTypeLabel(instruction.type)}**`,
       '',
       '```mipsasm',
       instruction.formats.join('\n'),
@@ -63,20 +63,20 @@ export function getMipsHover(document: TextDocument, position: Position, setting
       instruction.description
     ];
     if (instruction.pseudo) {
-      details.push('', 'Pseudo instruction. Check generated code before using it in restricted projects.');
+      details.push('', '⚠️ 伪指令。在受限项目中使用前请检查生成的代码。');
     }
     if (instruction.delaySlot) {
-      details.push('', 'Control-transfer instruction. Delay-slot behavior depends on the current project/profile.');
+      details.push('', '🔄 控制转移指令。延迟槽行为取决于当前项目/Profile。');
     }
     const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));
     const expansion = parsedInstruction ? pseudoExpansionPreview(instruction.mnemonic, parsedInstruction.operands) : undefined;
     if (expansion?.length) {
-      details.push('', 'Possible MARS expansion:', '', '```mipsasm', expansion.join('\n'), '```');
+      details.push('', '可能的 MARS 展开：', '', '```mipsasm', expansion.join('\n'), '```');
     }
     if (instruction.mnemonic === 'syscall') {
       const syscall = syscallServiceBeforeLine(document, position.line);
       if (syscall) {
-        details.push('', `Current $v0 service: **${syscall.code} ${syscall.name}** - ${syscall.description}`, '', `参数：${syscall.parameters ?? '无'}`, '', `返回值：${syscall.returns ?? '无'}`);
+        details.push('', `当前 $v0 服务：**${syscall.code} ${syscall.name}** - ${syscall.description}`, '', `参数：${syscall.parameters ?? '无'}`, '', `返回值：${syscall.returns ?? '无'}`);
       }
     }
     return {
@@ -113,7 +113,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   if (isRegister(word) || isFloatingPointRegister(word)) {
     const canonical = canonicalRegister(word);
     return {
-      contents: registerDescriptions.get(canonical) ?? (isFloatingPointRegister(word) ? `MARS floating-point register ${word}` : `MIPS register ${word}`),
+      contents: registerDescriptions.get(canonical) ?? (isFloatingPointRegister(word) ? `MARS 浮点寄存器 ${word}` : `MIPS 寄存器 ${word}`),
       range: wordRange
     };
   }
@@ -121,23 +121,23 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const param = findMacroParamAtPosition(parsed, word, position);
   if (param) {
     return {
-      contents: `Macro parameter defined on line ${param.range.start.line + 1}.`,
+      contents: `宏参数，定义于第 ${param.range.start.line + 1} 行。`,
       range: wordRange
     };
   }
 
   const symbol = resolveSymbolAtPosition(parsed, word, position);
   if (symbol) {
-    const kind = symbol.kind === 'data' ? 'Data symbol' : symbol.kind === 'eqv' ? '.eqv symbol' : 'Label';
+    const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
     if (symbol.kind === 'eqv') {
       const replacement = eqvReplacementText(document, symbol.selectionRange.start.line, symbol.name);
       return {
-        contents: replacement ? `${kind} defined on line ${symbol.range.start.line + 1}.\n\nReplacement: \`${replacement}\`` : `${kind} defined on line ${symbol.range.start.line + 1}.`,
+        contents: replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行。\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`,
         range: wordRange
       };
     }
     return {
-      contents: `${kind} defined on line ${symbol.range.start.line + 1}.`,
+      contents: `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`,
       range: wordRange
     };
   }
@@ -146,14 +146,14 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   if (macro) {
     const expansion = macroExpansionPreview(document, macro, word, position);
     const value = [
-      `**Macro** \`${macro.name}(${macro.params.join(', ')})\``,
+      `**宏** \`${macro.name}(${macro.params.join(', ')})\``,
       '',
       '```mipsasm',
       macroBody(document, macro.bodyStartLine, macro.bodyEndLine),
       '```'
     ];
     if (expansion) {
-      value.push('', 'Expansion preview:', '', '```mipsasm', expansion, '```');
+      value.push('', '展开预览：', '', '```mipsasm', expansion, '```');
     }
     return {
       contents: {

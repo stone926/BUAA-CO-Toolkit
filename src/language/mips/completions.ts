@@ -55,7 +55,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
       items.push({
         label: name,
         kind: CompletionItemKind.Variable,
-        detail: registerDescriptions.get(name) ?? 'MIPS register',
+        detail: registerDescriptions.get(name) ?? 'MIPS 寄存器',
         textEdit: TextEdit.replace(replaceRange, name)
       });
     }
@@ -68,7 +68,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
       items.push({
         label: symbol.name,
         kind: CompletionItemKind.Variable,
-        detail: 'Macro parameter',
+        detail: '宏参数',
         textEdit: TextEdit.replace(replaceRange, symbol.name)
       });
     }
@@ -96,14 +96,14 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
       item.textEdit = TextEdit.replace(directiveReplaceRange, directive);
     }
     if (directive === '.macro') {
-      item.detail = 'MIPS macro definition';
+      item.detail = 'MIPS 宏定义';
       item.insertTextFormat = InsertTextFormat.Snippet;
       item.textEdit = TextEdit.replace(
         directiveReplaceRange ?? Range.create(position, position),
         '.macro ${1:name}(${2:%arg})\n  ${0}\n.end_macro'
       );
     } else if (directive === '.align') {
-      item.detail = 'Align next data item to 2^n bytes';
+      item.detail = '按 2^n 字节对齐下一个数据项';
     }
     items.push(item);
   }
@@ -112,19 +112,19 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     {
       label: '.align 0',
       kind: CompletionItemKind.Keyword,
-      detail: '1-byte alignment',
+      detail: '1 字节对齐',
       textEdit: directiveReplaceRange ? TextEdit.replace(directiveReplaceRange, '.align 0') : undefined
     },
     {
       label: '.align 1',
       kind: CompletionItemKind.Keyword,
-      detail: '2-byte alignment',
+      detail: '2 字节对齐',
       textEdit: directiveReplaceRange ? TextEdit.replace(directiveReplaceRange, '.align 1') : undefined
     },
     {
       label: '.align 2',
       kind: CompletionItemKind.Keyword,
-      detail: '4-byte alignment',
+      detail: '4 字节对齐',
       textEdit: directiveReplaceRange ? TextEdit.replace(directiveReplaceRange, '.align 2') : undefined
     }
   );
@@ -133,7 +133,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     items.push({
       label: symbol.name,
       kind: CompletionItemKind.Reference,
-      detail: symbol.kind === 'data' ? 'Data symbol' : symbol.kind === 'eqv' ? '.eqv symbol' : 'Label'
+      detail: symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签'
     });
   }
 
@@ -141,7 +141,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     items.push({
       label: macro.name,
       kind: CompletionItemKind.Function,
-      detail: `Macro(${macro.params.join(', ')})`,
+      detail: `宏(${macro.params.join(', ')})`,
       insertText: `${macro.name}(${macro.params.map((param, index) => `\${${index + 1}:${param}}`).join(', ')})`,
       insertTextFormat: InsertTextFormat.Snippet
     });
