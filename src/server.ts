@@ -6,6 +6,7 @@ import {
   DidChangeConfigurationNotification,
   Diagnostic,
   DocumentSymbol,
+  FoldingRange,
   Hover,
   InlayHint,
   InitializeParams,
@@ -16,9 +17,11 @@ import {
   Range,
   ReferenceParams,
   SemanticTokens,
+  SignatureHelp,
   TextEdit,
   TextDocumentSyncKind,
   TextDocuments,
+  WorkspaceEdit,
   WorkspaceFolder
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -34,11 +37,15 @@ import {
   getMipsDefinition,
   getMipsDiagnostics,
   getMipsDocumentSymbols,
+  getMipsFoldingRanges,
   getMipsFormattingEdits,
   getMipsHover,
   getMipsInlayHints,
   getMipsReferences,
+  getMipsRenameEdits,
+  getMipsRenamePrepare,
   getMipsSemanticTokens,
+  getMipsSignatureHelp,
   clearMipsParseCache,
   mipsIgnorePseudoFileCommand,
   mipsIgnorePseudoMnemonicCommand,
@@ -74,6 +81,10 @@ interface CoLanguageService {
   getFormattingEdits?: (document: TextDocument, settings: CoSettings) => TextEdit[];
   getInlayHints?: (document: TextDocument, range: Range, settings: CoSettings) => InlayHint[];
   getSemanticTokens?: (document: TextDocument, settings: CoSettings) => SemanticTokens;
+  getFoldingRanges?: (document: TextDocument, settings: CoSettings) => FoldingRange[];
+  getSignatureHelp?: (document: TextDocument, position: Position, settings: CoSettings) => SignatureHelp | undefined;
+  getRenameEdits?: (document: TextDocument, position: Position, newName: string, settings: CoSettings) => WorkspaceEdit | undefined;
+  getRenamePrepare?: (document: TextDocument, position: Position, settings: CoSettings) => Range | undefined;
   updateDocument?: (document: TextDocument, settings: CoSettings) => void;
   removeDocument?: (uri: string) => void;
 }
@@ -90,6 +101,10 @@ const languageServices = new Map<string, CoLanguageService>([
     getFormattingEdits: (document) => getMipsFormattingEdits(document),
     getInlayHints: (document, range, settings) => getMipsInlayHints(document, range, settings, mipsState),
     getSemanticTokens: (document, settings) => getMipsSemanticTokens(document, settings, mipsState),
+    getFoldingRanges: (document, settings) => getMipsFoldingRanges(document, settings, mipsState),
+    getSignatureHelp: (document, position, settings) => getMipsSignatureHelp(document, position, settings, mipsState),
+    getRenameEdits: (document, position, newName, settings) => getMipsRenameEdits(document, position, newName, settings, mipsState),
+    getRenamePrepare: (document, position, settings) => getMipsRenamePrepare(document, position, settings, mipsState),
     removeDocument: clearMipsParseCache
   }],
   ['verilog', {
@@ -132,6 +147,14 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         codeActionKinds: [CodeActionKind.QuickFix]
       },
       documentFormattingProvider: true,
+      foldingRangeProvider: true,
+      signatureHelpProvider: {
+        triggerCharacters: ['(', ',', ' '],
+        retriggerCharacters: [',']
+      },
+      renameProvider: {
+        prepareProvider: true
+      },
       inlayHintProvider: true,
       executeCommandProvider: {
         commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand]
@@ -271,6 +294,42 @@ connection.languages.semanticTokens.on(async (params): Promise<SemanticTokens> =
   }
   const settings = await getDocumentSettings(document.uri);
   return languageServices.get(document.languageId)?.getSemanticTokens?.(document, settings) ?? { data: [] };
+});
+
+connection.onFoldingRanges(async (params): Promise<FoldingRange[]> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return [];
+  }
+  const settings = await getDocumentSettings(document.uri);
+  return languageServices.get(document.languageId)?.getFoldingRanges?.(document, settings) ?? [];
+});
+
+connection.onSignatureHelp(async (params): Promise<SignatureHelp | undefined> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return undefined;
+  }
+  const settings = await getDocumentSettings(document.uri);
+  return languageServices.get(document.languageId)?.getSignatureHelp?.(document, params.position, settings);
+});
+
+connection.onRenameRequest(async (params): Promise<WorkspaceEdit | undefined> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return undefined;
+  }
+  const settings = await getDocumentSettings(document.uri);
+  return languageServices.get(document.languageId)?.getRenameEdits?.(document, params.position, params.newName, settings);
+});
+
+connection.onPrepareRename(async (params): Promise<Range | undefined> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return undefined;
+  }
+  const settings = await getDocumentSettings(document.uri);
+  return languageServices.get(document.languageId)?.getRenamePrepare?.(document, params.position, settings);
 });
 
 connection.onExecuteCommand(async (params) => {

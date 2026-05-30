@@ -1,4 +1,4 @@
-import { Diagnostic } from 'vscode-languageserver/node';
+import { Diagnostic, FoldingRange, SignatureHelp, WorkspaceEdit } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { getMipsCodeActions } from './codeActions';
@@ -7,6 +7,7 @@ import {
   mipsIgnorePseudoMnemonicCommand
 } from './commands';
 import { getMipsCompletions } from './completions';
+import { getMipsFoldingRanges } from './folding';
 import { getMipsFormattingEdits } from './formatting';
 import { getMipsHover } from './hover';
 import { getMipsInlayHints } from './inlayHints';
@@ -16,7 +17,9 @@ import {
   getMipsReferences
 } from './navigation';
 import { clearCachedMipsParse, getCachedMipsParse } from './parseCache';
+import { getMipsRenameEdits, getMipsRenamePrepare } from './rename';
 import { getMipsSemanticTokens } from './semanticTokens';
+import { getMipsSignatureHelp } from './signatureHelp';
 import { MipsServerState } from './state';
 
 export {
@@ -24,11 +27,15 @@ export {
   getMipsCompletions,
   getMipsDefinition,
   getMipsDocumentSymbols,
+  getMipsFoldingRanges,
   getMipsFormattingEdits,
   getMipsHover,
   getMipsInlayHints,
   getMipsReferences,
+  getMipsRenameEdits,
+  getMipsRenamePrepare,
   getMipsSemanticTokens,
+  getMipsSignatureHelp,
   mipsIgnorePseudoFileCommand,
   mipsIgnorePseudoMnemonicCommand
 };
