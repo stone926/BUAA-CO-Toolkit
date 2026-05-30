@@ -8,3 +8,5 @@ out/
 .co/isim/*.wdb
 fuse.log
 isim.log
+CLAUDE.md
+doc
