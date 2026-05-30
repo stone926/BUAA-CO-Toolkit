@@ -3,9 +3,12 @@ import { getProfile } from './config';
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
+import { clearProjectConfigCache } from './projectConfig';
+import { CoSidebarProvider } from './sidebar';
 import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
+import { runProjectWizard } from './wizard';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -20,22 +23,68 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar
   };
 
+  // Register sidebar
+  const sidebarProvider = new CoSidebarProvider(context);
+  const sidebarView = vscode.window.registerTreeDataProvider('coSidebar', sidebarProvider);
+  context.subscriptions.push(sidebarView);
+
+  // Watch .co/config.json changes
+  const configWatcher = vscode.workspace.createFileSystemWatcher('**/.co/config.json');
+  configWatcher.onDidChange(() => {
+    clearProjectConfigCache();
+    sidebarProvider.refresh();
+  });
+  configWatcher.onDidCreate(() => {
+    clearProjectConfigCache();
+    sidebarProvider.refresh();
+  });
+  configWatcher.onDidDelete(() => {
+    clearProjectConfigCache();
+    sidebarProvider.refresh();
+  });
+  context.subscriptions.push(configWatcher);
+
+  // Register refresh command for sidebar
+  context.subscriptions.push(
+    vscode.commands.registerCommand('co.sidebar.refresh', () => sidebarProvider.refresh())
+  );
+
   registerMips(context, services);
   registerVerilog(context, services);
   registerLogisim(context, services);
 
+  // Cache toolchain status
+  let cachedToolchain: ToolDetection[] | undefined;
+  let toolchainCacheTime = 0;
+  const TOOLCHAIN_CACHE_TTL = 60000; // 1 minute
+
+  async function getToolchainStatus(): Promise<ToolDetection[]> {
+    const now = Date.now();
+    if (cachedToolchain && now - toolchainCacheTime < TOOLCHAIN_CACHE_TTL) {
+      return cachedToolchain;
+    }
+    const resource = vscode.window.activeTextEditor?.document.uri;
+    cachedToolchain = await checkToolchain(output, resource);
+    toolchainCacheTime = now;
+    sidebarProvider.refresh();
+    return cachedToolchain;
+  }
+
   context.subscriptions.push(
     vscode.commands.registerCommand('co.checkToolchain', () => showToolchainReport(output)),
     vscode.commands.registerCommand('co.selectProjectProfile', () => selectProjectProfile()),
-    vscode.window.onDidChangeActiveTextEditor(() => updateStatus(statusBar)),
+    vscode.commands.registerCommand('co.projectWizard', () => runProjectWizard()),
+    vscode.window.onDidChangeActiveTextEditor(() => updateStatus(statusBar, getToolchainStatus)),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('co.project.profile')) {
-        updateStatus(statusBar);
+      if (event.affectsConfiguration('co.project.profile') || event.affectsConfiguration('co.toolchain')) {
+        cachedToolchain = undefined; // Invalidate cache
+        updateStatus(statusBar, getToolchainStatus);
+        sidebarProvider.refresh();
       }
     })
   );
 
-  updateStatus(statusBar);
+  updateStatus(statusBar, getToolchainStatus);
 }
 
 export async function deactivate(): Promise<void> {
@@ -81,29 +130,49 @@ async function selectProjectProfile(): Promise<void> {
   vscode.window.showInformationMessage(`BUAA CO profile set to ${picked.profile}.`);
 }
 
-function updateStatus(statusBar: vscode.StatusBarItem): void {
+function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: () => Promise<ToolDetection[]>): void {
   const resource = vscode.window.activeTextEditor?.document.uri;
   const profile = getProfile(resource);
   statusBar.text = `CO: ${profile}`;
   statusBar.tooltip = 'BUAA CO Toolkit - click to check toolchain';
   statusBar.show();
+
+  // Update with toolchain info asynchronously
+  if (getToolchainStatus) {
+    getToolchainStatus().then((checks) => {
+      const toolStatus = checks
+        .filter((check) => ['MARS', 'ISE fuse', 'Logisim'].includes(check.name))
+        .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
+        .join(' | ');
+      if (toolStatus) {
+        statusBar.text = `CO: ${profile} | ${toolStatus}`;
+      }
+    }).catch(() => {
+      // Keep the basic status if toolchain check fails
+    });
+  }
 }
 
 function profileDescription(profile: ProjectProfile): string {
   switch (profile) {
     case 'P0':
-    case 'P3':
-      return 'Logisim';
-    case 'P2':
-      return 'MIPS ASM';
+      return '初识 Logisim';
     case 'P1':
+      return '初识 Verilog';
+    case 'P2':
+      return '初识 ASM';
+    case 'P3':
+      return 'Logisim 单周期 CPU';
     case 'P4':
+      return 'Verilog 单周期 CPU';
     case 'P5':
+      return 'Verilog 五级流水线（阻塞+转发）';
     case 'P6':
+      return '流水线 + 乘除法 + 外置存储器';
     case 'P7':
-      return 'Verilog';
+      return 'MIPS 微系统（异常+外设）';
     default:
-      return 'Infer where possible';
+      return '自动推断';
   }
 }
 

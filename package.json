@@ -30,6 +30,25 @@
     "onCommand:co.logisim.openCurrentCircuit"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "coSidebarContainer",
+          "title": "BUAA CO",
+          "icon": "$(circuit-board)"
+        }
+      ]
+    },
+    "views": {
+      "coSidebarContainer": [
+        {
+          "id": "coSidebar",
+          "name": "BUAA CO Toolkit",
+          "icon": "$(circuit-board)",
+          "contextualTitle": "BUAA CO"
+        }
+      ]
+    },
     "languages": [
       {
         "id": "mipsasm",
@@ -226,6 +245,16 @@
         "title": "CO: Select Project Profile"
       },
       {
+        "command": "co.sidebar.refresh",
+        "title": "CO: Refresh Sidebar",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "co.projectWizard",
+        "title": "CO: Project Wizard",
+        "icon": "$(new-folder)"
+      },
+      {
         "command": "co.mips.runCurrentFile",
         "title": "CO: MIPS Run Current File"
       },
@@ -263,6 +292,13 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "co.sidebar.refresh",
+          "when": "view == coSidebar",
+          "group": "navigation"
+        }
+      ],
       "editor/title": [
         {
           "command": "co.mips.runCurrentFile",
@@ -308,6 +344,12 @@
         },
         {
           "command": "co.selectProjectProfile"
+        },
+        {
+          "command": "co.sidebar.refresh"
+        },
+        {
+          "command": "co.projectWizard"
         },
         {
           "command": "co.mips.runCurrentFile"
