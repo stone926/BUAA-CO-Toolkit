@@ -1,0 +1,160 @@
+{
+  "memoryLayout": {
+    "CompactDataAtZero": {
+      "data": {
+        "min": "0x00000000",
+        "max": "0x00002fff",
+        "label": "0x00000000-0x00002fff"
+      },
+      "text": {
+        "min": "0x00003000",
+        "max": "0x00006fff",
+        "label": "0x00003000-0x00006fff"
+      },
+      "ktext": {
+        "min": "0x00004180",
+        "max": "0x00004ffc",
+        "label": "0x00004180-0x00004ffc"
+      }
+    }
+  },
+  "profiles": {
+    "P0": {
+      "name": "初识 Logisim",
+      "description": "Logisim 基本操作",
+      "language": "logisim",
+      "directories": [".co", "logisim", "test"],
+      "requiredTools": ["logisim", "java"]
+    },
+    "P1": {
+      "name": "初识 Verilog",
+      "description": "Verilog 基本语法",
+      "language": "verilog",
+      "directories": [".co", "src", "test", "sim"],
+      "requiredTools": ["ise"]
+    },
+    "P2": {
+      "name": "初识 ASM",
+      "description": "MIPS 汇编编程",
+      "language": "mipsasm",
+      "directories": [".co", "src", "test", "data"],
+      "requiredTools": ["mars", "java"]
+    },
+    "P3": {
+      "name": "Logisim 单周期 CPU",
+      "description": "用 Logisim 实现单周期 CPU",
+      "language": "logisim",
+      "directories": [".co", "logisim", "test"],
+      "requiredTools": ["logisim", "java"]
+    },
+    "P4": {
+      "name": "Verilog 单周期 CPU",
+      "description": "用 Verilog 实现单周期 CPU",
+      "language": "verilog",
+      "directories": [".co", "src", "test", "sim", "data"],
+      "requiredTools": ["mars", "ise", "java"]
+    },
+    "P5": {
+      "name": "Verilog 五级流水线（阻塞+转发）",
+      "description": "带阻塞和转发的五级流水线 CPU",
+      "language": "verilog",
+      "directories": [".co", "src", "test", "sim", "data"],
+      "requiredTools": ["mars", "ise", "java"]
+    },
+    "P6": {
+      "name": "流水线 + 乘除法 + 外置存储器",
+      "description": "流水线 CPU + 乘除法 + 存储器外置 + 按字节访存",
+      "language": "verilog",
+      "directories": [".co", "src", "test", "sim", "data"],
+      "requiredTools": ["mars", "ise", "java"]
+    },
+    "P7": {
+      "name": "MIPS 微系统（异常+外设）",
+      "description": "异常处理和访问外设",
+      "language": "verilog",
+      "directories": [".co", "src", "test", "sim", "data"],
+      "requiredTools": ["marsP7", "ise", "java"]
+    }
+  },
+  "verilogPorts": {
+    "P4": [
+      {"name": "clk", "direction": "input", "width": 1},
+      {"name": "reset", "direction": "input", "width": 1}
+    ],
+    "P5": [
+      {"name": "clk", "direction": "input", "width": 1},
+      {"name": "reset", "direction": "input", "width": 1},
+      {"name": "macroscopicPC", "direction": "output", "width": 32}
+    ],
+    "P6": [
+      {"name": "clk", "direction": "input", "width": 1},
+      {"name": "reset", "direction": "input", "width": 1},
+      {"name": "macroscopicPC", "direction": "output", "width": 32},
+      {"name": "i_inst_addr", "direction": "output", "width": 32},
+      {"name": "i_inst_rdata", "direction": "input", "width": 32},
+      {"name": "m_data_addr", "direction": "output", "width": 32},
+      {"name": "m_data_rdata", "direction": "input", "width": 32},
+      {"name": "m_data_wdata", "direction": "output", "width": 32},
+      {"name": "m_data_byteen", "direction": "output", "width": 4},
+      {"name": "m_inst_addr", "direction": "output", "width": 32},
+      {"name": "w_grf_wnum", "direction": "output", "width": 5},
+      {"name": "w_grf_wdata", "direction": "output", "width": 32},
+      {"name": "w_grf_we", "direction": "output", "width": 1},
+      {"name": "w_inst_addr", "direction": "output", "width": 32}
+    ],
+    "P7": [
+      {"name": "clk", "direction": "input", "width": 1},
+      {"name": "reset", "direction": "input", "width": 1},
+      {"name": "interrupt", "direction": "input", "width": 1},
+      {"name": "macroscopicPC", "direction": "output", "width": 32},
+      {"name": "i_inst_addr", "direction": "output", "width": 32},
+      {"name": "i_inst_rdata", "direction": "input", "width": 32},
+      {"name": "m_data_addr", "direction": "output", "width": 32},
+      {"name": "m_data_rdata", "direction": "input", "width": 32},
+      {"name": "m_data_wdata", "direction": "output", "width": 32},
+      {"name": "m_data_byteen", "direction": "output", "width": 4},
+      {"name": "m_inst_addr", "direction": "output", "width": 32},
+      {"name": "m_int_addr", "direction": "output", "width": 32},
+      {"name": "m_int_byteen", "direction": "output", "width": 4},
+      {"name": "w_grf_wnum", "direction": "output", "width": 5},
+      {"name": "w_grf_wdata", "direction": "output", "width": 32},
+      {"name": "w_grf_we", "direction": "output", "width": 1},
+      {"name": "w_inst_addr", "direction": "output", "width": 32}
+    ]
+  },
+  "directiveDescriptions": {
+    ".data": "切换到数据段",
+    ".text": "切换到代码段",
+    ".kdata": "切换到内核数据段",
+    ".ktext": "切换到内核代码段",
+    ".word": "存储 32 位字",
+    ".half": "存储 16 位半字",
+    ".byte": "存储 8 位字节",
+    ".ascii": "存储 ASCII 字符串（不含终止符）",
+    ".asciiz": "存储以 null 结尾的 ASCII 字符串",
+    ".space": "分配指定字节数的空间",
+    ".align": "按 2^n 字节边界对齐",
+    ".globl": "声明全局符号",
+    ".extern": "声明外部符号",
+    ".eqv": "定义符号常量",
+    ".macro": "开始宏定义",
+    ".end_macro": "结束宏定义",
+    ".include": "包含外部文件"
+  },
+  "directiveDetails": {
+    ".align": {
+      "description": "按 2^n 字节边界对齐下一个数据项",
+      "commonValues": {
+        "0": "1 字节对齐",
+        "1": "2 字节对齐",
+        "2": "4 字节对齐"
+      }
+    },
+    ".data": {
+      "description": "切换当前汇编段到数据段。BUAA CO 使用 CompactDataAtZero 配置，不应传递自定义段地址。"
+    },
+    ".text": {
+      "description": "切换当前汇编段到代码段。BUAA CO 使用 CompactDataAtZero 配置，不应传递自定义段地址。"
+    }
+  }
+}
