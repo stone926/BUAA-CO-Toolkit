@@ -5,13 +5,26 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { CoSettings } from '../common/settings';
 import { parseVerilog } from './parser';
-import { VerilogModule } from './model';
+import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
+
+export interface VerilogIndexedFile {
+  uri: string;
+  text: string;
+  modules: VerilogModule[];
+  macros: VerilogMacro[];
+  macroUses: VerilogMacroUse[];
+  includes: VerilogInclude[];
+}
 
 export class VerilogWorkspaceIndex {
-  private readonly modules = new Map<string, VerilogModule>();
+  private readonly files = new Map<string, VerilogIndexedFile>();
+  private readonly modules = new Map<string, VerilogModule[]>();
+  private readonly macros = new Map<string, VerilogMacro[]>();
 
   async rebuild(workspaceFolders: WorkspaceFolder[] | null | undefined, settings: CoSettings): Promise<void> {
+    this.files.clear();
     this.modules.clear();
+    this.macros.clear();
     if (!workspaceFolders?.length) {
       return;
     }
@@ -30,31 +43,86 @@ export class VerilogWorkspaceIndex {
     if (document.languageId !== 'verilog') {
       return;
     }
-    for (const [name, module] of this.modules) {
-      if (module.uri === document.uri) {
-        this.modules.delete(name);
-      }
-    }
+    this.remove(document.uri);
     const parsed = parseVerilog(document, settings, false);
+    const file: VerilogIndexedFile = {
+      uri: document.uri,
+      text: document.getText(),
+      modules: parsed.modules,
+      macros: parsed.macros,
+      macroUses: parsed.macroUses,
+      includes: parsed.includes
+    };
+    this.files.set(document.uri, file);
     for (const module of parsed.modules) {
-      this.modules.set(module.name, module);
+      const list = this.modules.get(module.name) ?? [];
+      list.push(module);
+      this.modules.set(module.name, list);
+    }
+    for (const macro of parsed.macros) {
+      const list = this.macros.get(macro.name) ?? [];
+      list.push(macro);
+      this.macros.set(macro.name, list);
     }
   }
 
   remove(uri: string): void {
-    for (const [name, module] of this.modules) {
-      if (module.uri === uri) {
-        this.modules.delete(name);
-      }
+    const existing = this.files.get(uri);
+    if (!existing) {
+      return;
+    }
+    this.files.delete(uri);
+    for (const module of existing.modules) {
+      removeByUri(this.modules, module.name, uri, (item) => item.uri);
+    }
+    for (const macro of existing.macros) {
+      removeByUri(this.macros, macro.name, uri, () => uri);
     }
   }
 
   getModule(name: string): VerilogModule | undefined {
-    return this.modules.get(name);
+    return this.modules.get(name)?.[0];
+  }
+
+  getModules(name: string): VerilogModule[] {
+    return this.modules.get(name) ?? [];
   }
 
   allModules(): VerilogModule[] {
-    return [...this.modules.values()];
+    return [...this.modules.values()].flat();
+  }
+
+  getMacro(name: string): VerilogMacro | undefined {
+    return this.macros.get(name)?.[0];
+  }
+
+  getMacros(name: string): VerilogMacro[] {
+    return this.macros.get(name) ?? [];
+  }
+
+  allMacros(): VerilogMacro[] {
+    return [...this.macros.values()].flat();
+  }
+
+  allFiles(): VerilogIndexedFile[] {
+    return [...this.files.values()];
+  }
+
+  getFile(uri: string): VerilogIndexedFile | undefined {
+    return this.files.get(uri);
+  }
+}
+
+function removeByUri<T>(map: Map<string, T[]>, key: string, uri: string, getUri: (item: T) => string): void {
+  const list = map.get(key);
+  if (!list) {
+    return;
+  }
+  const filtered = list.filter((item) => getUri(item) !== uri);
+  if (filtered.length) {
+    map.set(key, filtered);
+  } else {
+    map.delete(key);
   }
 }
 
@@ -86,4 +154,3 @@ function scanVerilogFiles(root: string): string[] {
   }
   return files;
 }
-

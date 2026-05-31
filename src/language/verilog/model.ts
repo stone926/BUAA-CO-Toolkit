@@ -1,6 +1,6 @@
 import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
 
-export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'parameter' | 'localparam' | 'genvar';
+export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar';
 
 export interface VerilogDecl {
   name: string;
@@ -15,12 +15,28 @@ export interface VerilogInstance {
   moduleName: string;
   instanceName: string;
   range: Range;
+  moduleSelectionRange: Range;
   selectionRange: Range;
+  portListRange?: Range;
+  parameterListRange?: Range;
+  portConnections: VerilogPortConnection[];
+  parameterConnections: VerilogPortConnection[];
+}
+
+export interface VerilogPortConnection {
+  name?: string;
+  nameRange?: Range;
+  expression: string;
+  expressionRange: Range;
+  range: Range;
+  positionalIndex: number;
+  shorthand?: boolean;
 }
 
 export interface VerilogModule {
   name: string;
   ports: VerilogDecl[];
+  parameters: VerilogDecl[];
   declarations: Map<string, VerilogDecl>;
   instances: VerilogInstance[];
   range: Range;
@@ -28,6 +44,8 @@ export interface VerilogModule {
   headerEnd: Position;
   uri: string;
   bodyText: string;
+  hasEndmodule: boolean;
+  endmoduleRange?: Range;
 }
 
 export interface VerilogMacro {
@@ -36,57 +54,176 @@ export interface VerilogMacro {
   selectionRange: Range;
 }
 
+export interface VerilogMacroUse {
+  name: string;
+  range: Range;
+  selectionRange: Range;
+}
+
+export interface VerilogInclude {
+  path: string;
+  range: Range;
+  pathRange: Range;
+}
+
 export interface VerilogParseResult {
   modules: VerilogModule[];
   macros: VerilogMacro[];
+  macroUses: VerilogMacroUse[];
+  includes: VerilogInclude[];
   diagnostics: Diagnostic[];
 }
 
+export const verilogSemanticTokenTypes = [
+  'verilogModule',
+  'verilogPort',
+  'verilogSignal',
+  'verilogParameter',
+  'verilogInstance',
+  'verilogMacro',
+  'verilogSystemTask',
+  'verilogNumber',
+  'verilogKeyword',
+  'verilogComment',
+  'verilogString',
+  'verilogFormatSpecifier',
+  'verilogPunctuation'
+] as const;
+
+export type VerilogSemanticTokenType = typeof verilogSemanticTokenTypes[number];
+
 export const verilogKeywords = new Set([
   'always',
+  'automatic',
   'and',
   'assign',
   'begin',
+  'buf',
+  'bufif0',
+  'bufif1',
   'case',
   'casex',
   'casez',
+  'cell',
+  'cmos',
+  'config',
+  'deassign',
   'default',
   'defparam',
+  'design',
+  'disable',
+  'edge',
   'else',
   'end',
   'endcase',
+  'endconfig',
   'endfunction',
   'endgenerate',
   'endmodule',
+  'endprimitive',
+  'endspecify',
+  'endtable',
   'endtask',
+  'event',
   'for',
+  'force',
   'forever',
+  'fork',
   'function',
   'generate',
   'genvar',
+  'highz0',
+  'highz1',
   'if',
+  'ifnone',
+  'ifdef',
+  'ifndef',
+  'incdir',
+  'include',
   'initial',
   'inout',
   'input',
+  'instance',
   'integer',
+  'join',
+  'large',
+  'liblist',
+  'library',
   'localparam',
+  'macromodule',
+  'medium',
   'module',
+  'nand',
   'negedge',
+  'nmos',
+  'nor',
+  'noshowcancelled',
+  'not',
+  'notif0',
+  'notif1',
   'or',
   'output',
   'parameter',
+  'pmos',
   'posedge',
+  'primitive',
+  'pull0',
+  'pull1',
+  'pulldown',
+  'pullup',
+  'pulsestyle_onevent',
+  'pulsestyle_ondetect',
+  'rcmos',
+  'real',
+  'realtime',
   'reg',
+  'release',
   'repeat',
+  'rnmos',
+  'rpmos',
+  'rtran',
+  'rtranif0',
+  'rtranif1',
+  'scalared',
   'signed',
+  'showcancelled',
+  'small',
+  'specify',
+  'specparam',
+  'strong0',
+  'strong1',
+  'supply0',
+  'supply1',
+  'table',
   'task',
+  'time',
+  'tran',
+  'tranif0',
+  'tranif1',
+  'tri',
+  'tri0',
+  'tri1',
+  'triand',
+  'trior',
+  'trireg',
+  'unsigned',
+  'use',
+  'vectored',
+  'wait',
+  'wand',
+  'weak0',
+  'weak1',
   'wire',
+  'wor',
   'while',
-  'logic'
+  'logic',
+  'xnor',
+  'xor'
 ]);
 
 export const systemTasks = new Set([
   'display',
+  'write',
   'monitor',
   'finish',
   'stop',
@@ -94,6 +231,15 @@ export const systemTasks = new Set([
   'readmemb',
   'dumpfile',
   'dumpvars',
+  'signed',
+  'unsigned',
+  'clog2',
+  'random',
+  'fopen',
+  'fclose',
+  'fdisplay',
+  'fwrite',
+  'fflush',
   'fsdbDumpfile',
   'fsdbDumpvars',
   'time'
@@ -143,4 +289,3 @@ export const expectedPorts: Record<string, Record<string, string | undefined>> =
     w_inst_addr: '[31:0]'
   }
 };
-

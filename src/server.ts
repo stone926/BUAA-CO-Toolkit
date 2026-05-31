@@ -58,8 +58,17 @@ import {
   getVerilogDefinition,
   getVerilogDiagnostics,
   getVerilogDocumentSymbols,
-  getVerilogHover
+  getVerilogFoldingRanges,
+  getVerilogFormattingEdits,
+  getVerilogHover,
+  getVerilogInlayHints,
+  getVerilogReferences,
+  getVerilogRenameEdits,
+  getVerilogRenamePrepare,
+  getVerilogSemanticTokens,
+  getVerilogSignatureHelp
 } from './language/verilog/service';
+import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -108,12 +117,20 @@ const languageServices = new Map<string, CoLanguageService>([
     removeDocument: clearMipsParseCache
   }],
   ['verilog', {
-    getDiagnostics: getVerilogDiagnostics,
+    getDiagnostics: (document, settings) => getVerilogDiagnostics(document, settings, verilogIndex),
     getCompletions: (document, position, settings) => getVerilogCompletions(document, position, settings, verilogIndex),
     getHover: (document, position, settings) => getVerilogHover(document, position, settings, verilogIndex),
     getDefinition: (document, position, settings) => getVerilogDefinition(document, position, settings, verilogIndex),
+    getReferences: (document, params, settings) => getVerilogReferences(document, params, settings, verilogIndex),
     getDocumentSymbols: getVerilogDocumentSymbols,
-    getCodeActions: (document, range, diagnostics, settings) => getVerilogCodeActions(document, range, diagnostics, settings),
+    getCodeActions: (document, range, diagnostics, settings) => getVerilogCodeActions(document, range, diagnostics, settings, verilogIndex),
+    getFormattingEdits: (document) => getVerilogFormattingEdits(document),
+    getInlayHints: (document, range, settings) => getVerilogInlayHints(document, range, settings, verilogIndex),
+    getSemanticTokens: (document, settings) => getVerilogSemanticTokens(document, settings, verilogIndex),
+    getFoldingRanges: getVerilogFoldingRanges,
+    getSignatureHelp: (document, position, settings) => getVerilogSignatureHelp(document, position, settings, verilogIndex),
+    getRenameEdits: (document, position, newName, settings) => getVerilogRenameEdits(document, position, newName, settings, verilogIndex),
+    getRenamePrepare: (document, position, settings) => getVerilogRenamePrepare(document, position, settings, verilogIndex),
     updateDocument: (document, settings) => verilogIndex.updateDocument(document, settings),
     removeDocument: (uri) => verilogIndex.remove(uri)
   }],
@@ -144,7 +161,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       referencesProvider: true,
       documentSymbolProvider: true,
       codeActionProvider: {
-        codeActionKinds: [CodeActionKind.QuickFix]
+        codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
       },
       documentFormattingProvider: true,
       foldingRangeProvider: true,
@@ -161,7 +178,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       semanticTokensProvider: {
         legend: {
-          tokenTypes: [...mipsSemanticTokenTypes],
+          tokenTypes: [...mipsSemanticTokenTypes, ...verilogSemanticTokenTypes],
           tokenModifiers: ['declaration']
         },
         full: true

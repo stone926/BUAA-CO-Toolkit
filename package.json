@@ -208,6 +208,71 @@
         "id": "mipsPunctuation",
         "superType": "operator",
         "description": "MIPS punctuation such as comma, colon, and parentheses."
+      },
+      {
+        "id": "verilogModule",
+        "superType": "class",
+        "description": "Verilog module declarations and module type references."
+      },
+      {
+        "id": "verilogPort",
+        "superType": "property",
+        "description": "Verilog ports and named port connections."
+      },
+      {
+        "id": "verilogSignal",
+        "superType": "variable",
+        "description": "Verilog nets, registers, logic signals, integers, and genvars."
+      },
+      {
+        "id": "verilogParameter",
+        "superType": "enumMember",
+        "description": "Verilog parameters and localparams."
+      },
+      {
+        "id": "verilogInstance",
+        "superType": "variable",
+        "description": "Verilog module instance names."
+      },
+      {
+        "id": "verilogMacro",
+        "superType": "function",
+        "description": "Verilog preprocessor macros."
+      },
+      {
+        "id": "verilogSystemTask",
+        "superType": "function",
+        "description": "Verilog system tasks such as $display and $readmemh."
+      },
+      {
+        "id": "verilogNumber",
+        "superType": "number",
+        "description": "Verilog numeric literals."
+      },
+      {
+        "id": "verilogKeyword",
+        "superType": "keyword",
+        "description": "Verilog keywords."
+      },
+      {
+        "id": "verilogComment",
+        "superType": "comment",
+        "description": "Verilog comments."
+      },
+      {
+        "id": "verilogString",
+        "superType": "string",
+        "description": "Verilog string literals."
+      },
+      {
+        "id": "verilogFormatSpecifier",
+        "superType": "regexp",
+        "description": "Verilog display format specifiers such as %d, %h, or %0d."
+      },
+      {
+        "id": "verilogPunctuation",
+        "superType": "operator",
+        "description": "Verilog punctuation."
       }
     ],
     "configurationDefaults": {
@@ -231,7 +296,19 @@
           "mipsEqvSymbol": "#C3E88D",
           "mipsNumber": "#B5CEA8",
           "mipsString": "#CE9178",
-          "mipsComment": "#6A9955"
+          "mipsComment": "#6A9955",
+          "verilogModule": "#4EC9B0",
+          "verilogPort": "#9CDCFE",
+          "verilogSignal": "#9CDCFE",
+          "verilogParameter": "#D7BA7D",
+          "verilogInstance": "#DCDCAA",
+          "verilogMacro": "#C586C0",
+          "verilogSystemTask": "#D7BA7D",
+          "verilogNumber": "#B5CEA8",
+          "verilogKeyword": "#569CD6",
+          "verilogComment": "#6A9955",
+          "verilogString": "#CE9178",
+          "verilogFormatSpecifier": "#D7BA7D"
         }
       }
     },
@@ -510,6 +587,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable BUAA CO course-specific Verilog lint checks."
+        },
+        "co.verilog.lint.synthesizableHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable informational hints for synthesizable Verilog style issues such as initial blocks, declaration initializers, and multiply/divide operators."
         },
         "co.run.showCommandBeforeRun": {
           "type": "boolean",

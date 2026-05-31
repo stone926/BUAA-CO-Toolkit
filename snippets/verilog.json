@@ -11,6 +11,78 @@
     ],
     "description": "BUAA CO P4/P5 top module"
   },
+  "MIPS top P6": {
+    "prefix": "mips_top_p6",
+    "body": [
+      "module mips(",
+      "    input clk,",
+      "    input reset,",
+      "    input [31:0] i_inst_rdata,",
+      "    input [31:0] m_data_rdata,",
+      "    output [31:0] i_inst_addr,",
+      "    output [31:0] m_data_addr,",
+      "    output [31:0] m_data_wdata,",
+      "    output [3:0] m_data_byteen,",
+      "    output [31:0] m_inst_addr,",
+      "    output w_grf_we,",
+      "    output [4:0] w_grf_addr,",
+      "    output [31:0] w_grf_wdata,",
+      "    output [31:0] w_inst_addr",
+      ");",
+      "",
+      "endmodule"
+    ],
+    "description": "BUAA CO P6 top module interface"
+  },
+  "MIPS top P7": {
+    "prefix": "mips_top_p7",
+    "body": [
+      "module mips(",
+      "    input clk,",
+      "    input reset,",
+      "    input interrupt,",
+      "    output [31:0] macroscopic_pc,",
+      "    output [31:0] i_inst_addr,",
+      "    input [31:0] i_inst_rdata,",
+      "    output [31:0] m_data_addr,",
+      "    input [31:0] m_data_rdata,",
+      "    output [31:0] m_data_wdata,",
+      "    output [3:0] m_data_byteen,",
+      "    output [31:0] m_int_addr,",
+      "    output [3:0] m_int_byteen,",
+      "    output [31:0] m_inst_addr,",
+      "    output w_grf_we,",
+      "    output [4:0] w_grf_addr,",
+      "    output [31:0] w_grf_wdata,",
+      "    output [31:0] w_inst_addr",
+      ");",
+      "",
+      "endmodule"
+    ],
+    "description": "BUAA CO P7 top module interface"
+  },
+  "Named module instance": {
+    "prefix": "inst_named",
+    "body": [
+      "${1:module_name} ${2:u_module_name} (",
+      "    .${3:port}(${4:signal})",
+      ");"
+    ],
+    "description": "Named Verilog module instance"
+  },
+  "Pipeline register": {
+    "prefix": "pipe_reg",
+    "body": [
+      "always @(posedge ${1:clk}) begin",
+      "    if (${2:reset}) begin",
+      "        ${3:stage_reg} <= ${4:0};",
+      "    end else if (${5:enable}) begin",
+      "        ${3:stage_reg} <= ${6:next_value};",
+      "    end",
+      "end"
+    ],
+    "description": "Clocked pipeline register with reset and enable"
+  },
   "Clock reset testbench": {
     "prefix": "tb_clk_reset",
     "body": [

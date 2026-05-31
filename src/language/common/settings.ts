@@ -20,6 +20,7 @@ export interface CoSettings {
     };
     lint: {
       courseRules: boolean;
+      synthesizableHints: boolean;
     };
   };
 }
@@ -43,7 +44,8 @@ export const defaultCoSettings: CoSettings = {
       ignorePatterns: ['^uut\\.', '^tb\\.']
     },
     lint: {
-      courseRules: true
+      courseRules: true,
+      synthesizableHints: true
     }
   }
 };
@@ -71,4 +73,3 @@ export function mergeCoSettings(value: unknown): CoSettings {
     }
   };
 }
-
