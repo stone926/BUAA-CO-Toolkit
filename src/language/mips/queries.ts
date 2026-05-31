@@ -2,13 +2,13 @@ import { Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt, rangesEqual } from '../common/lsp';
 import {
-  allMacroParams,
   allMacros,
-  allSymbols,
-  findMacroAtPosition
+  findMacroAtPosition,
+  getDeclarationRangeSet
 } from './parser';
 import { MipsMacro, MipsParseResult } from './model';
 import { findCommentIndex, parseMacroArguments } from './syntax';
+import { rangeKey } from '../common/util';
 
 export function findMacroOverloadAtPosition(document: TextDocument, parsed: MipsParseResult, name: string, position: Position): MipsMacro | undefined {
   const currentMacro = findMacroAtPosition(parsed, position);
@@ -50,11 +50,9 @@ export function macroCallArgumentsAtPosition(document: TextDocument, name: strin
   return parseMacroArguments(trimmed.slice(firstToken[0].length).trim());
 }
 
+/**
+ * O(1) 声明范围查找，使用预计算的 rangeKey 集合。
+ */
 export function isKnownDeclarationRange(range: Range, parsed: MipsParseResult): boolean {
-  const declarationRanges = [
-    ...allMacros(parsed).map((macro) => macro.selectionRange),
-    ...allMacroParams(parsed).map((param) => param.selectionRange),
-    ...allSymbols(parsed).map((symbol) => symbol.selectionRange)
-  ];
-  return declarationRanges.some((declarationRange) => rangesEqual(declarationRange, range));
+  return getDeclarationRangeSet(parsed).has(rangeKey(range));
 }

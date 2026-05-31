@@ -4,12 +4,15 @@ import { WorkspaceFolder } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { CoSettings } from '../common/settings';
-import { parseVerilog } from './parser';
+import { stripCommentsAndStrings } from './parser';
+import { getCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
 
 export interface VerilogIndexedFile {
   uri: string;
   text: string;
+  /** 去除注释和字符串后的文本，避免下游重复计算 */
+  strippedText: string;
   modules: VerilogModule[];
   macros: VerilogMacro[];
   macroUses: VerilogMacroUse[];
@@ -44,10 +47,11 @@ export class VerilogWorkspaceIndex {
       return;
     }
     this.remove(document.uri);
-    const parsed = parseVerilog(document, settings, false);
+    const parsed = getCachedVerilogParse(document, settings, false);
     const file: VerilogIndexedFile = {
       uri: document.uri,
       text: document.getText(),
+      strippedText: stripCommentsAndStrings(document.getText()),
       modules: parsed.modules,
       macros: parsed.macros,
       macroUses: parsed.macroUses,

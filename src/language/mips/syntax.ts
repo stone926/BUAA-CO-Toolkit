@@ -1,15 +1,6 @@
 export function stripComment(line: string): string {
-  let inString = false;
-  for (let index = 0; index < line.length; index++) {
-    const char = line[index];
-    if (char === '"' && line[index - 1] !== '\\') {
-      inString = !inString;
-    }
-    if (char === '#' && !inString) {
-      return line.slice(0, index);
-    }
-  }
-  return line;
+  const idx = findCommentIndex(line);
+  return idx >= 0 ? line.slice(0, idx) : line;
 }
 
 export function parseOperands(text: string): string[] {
@@ -183,8 +174,4 @@ export function signed32ImmediateValue(value: number): number {
 
 export function integerFitsRange(value: number, min: number, max: number): boolean {
   return value >= min && value <= max;
-}
-
-export function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

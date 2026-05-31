@@ -1,7 +1,8 @@
 import { Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
-import { escapeRegExp, findCommentIndex } from './syntax';
+import { findCommentIndex } from './syntax';
+import { escapeRegExp } from '../common/util';
 
 export function getMipsWordRange(document: TextDocument, position: Position): Range | undefined {
   const text = lineAt(document, position.line).text;

@@ -6,6 +6,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import { rangeKey } from '../common/util';
 import { mipsSemanticTokenTypes } from '../mips/resources';
 import {
   systemTasks,
@@ -318,8 +319,4 @@ function declTokenType(decl: VerilogDecl | undefined): VerilogSemanticTokenType 
     return 'verilogPort';
   }
   return 'verilogSignal';
-}
-
-function rangeKey(range: Range): string {
-  return `${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
 }

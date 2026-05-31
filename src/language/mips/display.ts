@@ -1,6 +1,7 @@
 import { MarkupKind, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
+import { escapeRegExp } from '../common/util';
 import { MipsMacro } from './model';
 import { macroCallArgumentsAtPosition } from './queries';
 import {
@@ -11,7 +12,6 @@ import {
   syscallsByCode
 } from './resources';
 import {
-  escapeRegExp,
   parseIntegerLiteral
 } from './syntax';
 import { stripLineComment } from './text';

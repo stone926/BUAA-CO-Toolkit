@@ -11,6 +11,7 @@ import { URI } from 'vscode-uri';
 import { ProjectProfile } from '../../projectProfile';
 import { containsPosition, lineAt, makeDiagnostic, rangeAtOffset } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import { escapeRegExp, rangeKey } from '../common/util';
 import {
   expectedPorts,
   systemTasks,
@@ -1409,10 +1410,6 @@ function isInsideBracketRange(text: string, index: number): boolean {
   return before.lastIndexOf('[') > before.lastIndexOf(']') && after.includes(']');
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function isInsideForControl(text: string, offset: number): boolean {
   const prefix = text.slice(0, offset);
   const forMatch = /\bfor\s*\([^()]*$/m.exec(prefix);
@@ -1575,8 +1572,4 @@ function findMatchingParen(text: string, openIndex: number): number | undefined 
 
 function leadingWhitespaceLength(text: string): number {
   return text.length - text.trimStart().length;
-}
-
-function rangeKey(range: Range): string {
-  return `${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
 }

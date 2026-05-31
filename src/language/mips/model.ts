@@ -43,6 +43,13 @@ export interface MipsParseResult {
   macros: Map<string, MipsMacro[]>;
   instructions: MipsLine[];
   diagnostics: Diagnostic[];
+
+  /** 惰性缓存：展开后的所有宏（含重载），避免重复 flat */
+  _allMacros?: MipsMacro[];
+  /** 惰性缓存：展开后的所有符号（labels + data + eqv + 宏内符号 + 宏参数） */
+  _allSymbols?: MipsSymbol[];
+  /** 惰性缓存：所有声明 Range 的字符串键集合，用于 O(1) 查找 */
+  _declarationRangeKeys?: Set<string>;
 }
 
 export interface MipsParseOptions {

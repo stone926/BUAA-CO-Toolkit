@@ -4,7 +4,8 @@ import {
   SemanticTokensBuilder
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt, rangesEqual } from '../common/lsp';
+import { rangesEqual } from '../common/lsp';
+import { createMipsTokenRegex } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { cp0RegisterAtPosition } from './display';
 import {
@@ -66,11 +67,12 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
     pushSemanticToken(tokens, symbol.selectionRange, 'mipsEqvSymbol', ['declaration']);
   }
 
-  const tokenRegex = /%?[A-Za-z_.$][\w.$]*|\$[A-Za-z0-9_]+/g;
+  const tokenRegex = createMipsTokenRegex();
   const numberRegex = /[-+]?(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|0[0-7]+|\b\d+\b)/g;
   const punctuationRegex = /[(),:]/g;
-  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-    const text = lineAt(document, lineNumber).text;
+  const lines = document.getText().split('\n');
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+    const text = lines[lineNumber];
     const commentIndex = findCommentIndex(text);
     if (commentIndex >= 0) {
       pushSemanticToken(tokens, Range.create(lineNumber, commentIndex, lineNumber, text.length), 'mipsComment');

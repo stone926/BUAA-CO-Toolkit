@@ -24,6 +24,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { containsPosition, lineAt, rangeAtOffset, rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import { rangeKey } from '../common/util';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import {
   systemTasks,
@@ -44,6 +45,7 @@ import {
   splitTopLevelCommaSpans,
   stripCommentsAndStrings
 } from './parser';
+import { getCachedVerilogParse } from './parseCache';
 import { getVerilogLiteralCodeActions } from './numericLiterals';
 import { addVerilogWorkspaceDiagnostics } from './workspaceDiagnostics';
 
@@ -109,12 +111,12 @@ interface InstanceContext {
 }
 
 export function getVerilogDiagnostics(document: TextDocument, settings: CoSettings, index?: VerilogWorkspaceIndex): Diagnostic[] {
-  const diagnostics = parseVerilog(document, settings, true).diagnostics;
-  return index ? addVerilogWorkspaceDiagnostics(document, settings, index, diagnostics) : diagnostics;
+  const parsed = getCachedVerilogParse(document, settings, true);
+  return index ? addVerilogWorkspaceDiagnostics(document, settings, index, parsed.diagnostics, parsed) : parsed.diagnostics;
 }
 
 export function getVerilogCompletions(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): CompletionItem[] {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const connectionContext = findInstanceContext(parsed.modules, position, index);
   if (connectionContext?.targetModule) {
     const connected = new Set(connectionContext.connections.map((connection) => connection.name).filter((name): name is string => Boolean(name)));
@@ -304,7 +306,7 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
   const implicit = diagnostics.find((diagnostic) => typeof diagnostic.code === 'string' && diagnostic.code.startsWith('implicit-net:'));
   if (implicit && typeof implicit.code === 'string') {
     const name = implicit.code.slice('implicit-net:'.length);
-    const parsed = parseVerilog(document, settings, false);
+    const parsed = getCachedVerilogParse(document, settings, false);
     const module = moduleAtPosition(parsed.modules, range.start) ?? parsed.modules[0];
     if (module) {
       actions.push(makeDeclareWireAction(document, module, name));
@@ -331,7 +333,7 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
 }
 
 export function getVerilogSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): SignatureHelp | undefined {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const context = findInstanceContext(parsed.modules, position, index);
   if (!context?.targetModule) {
     return undefined;
@@ -364,7 +366,7 @@ export function getVerilogSignatureHelp(document: TextDocument, position: Positi
 
 export function getVerilogInlayHints(document: TextDocument, range: Range, settings: CoSettings, index: VerilogWorkspaceIndex): InlayHint[] {
   const hints: InlayHint[] = [];
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   for (const module of parsed.modules) {
     for (const instance of module.instances) {
       const target = index.getModule(instance.moduleName);
@@ -419,7 +421,7 @@ function makeDeclareWireAction(document: TextDocument, module: VerilogModule, na
 }
 
 function getInstanceCodeActions(document: TextDocument, range: Range, settings: CoSettings, index: VerilogWorkspaceIndex): CodeAction[] {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const instanceContext = findInstanceForRange(parsed.modules, range, index);
   if (!instanceContext) {
     return [];
@@ -645,7 +647,7 @@ function moduleCompletionItem(module: VerilogModule): CompletionItem {
 }
 
 function resolveVerilogSymbol(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): ResolvedVerilogSymbol | undefined {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const include = parsed.includes.find((item) => containsPosition(item.pathRange, position));
   if (include) {
     return { kind: 'include', include };
@@ -957,10 +959,6 @@ function dedupeLocations(locations: Location[]): Location[] {
     result.push(location);
   }
   return result;
-}
-
-function rangeKey(range: Range): string {
-  return `${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
 }
 
 function placeholder(index: number, value: string): string {

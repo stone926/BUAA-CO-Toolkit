@@ -15,7 +15,6 @@ import {
  */
 
 export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
-  // 优先从 VSCode Settings 读取
   const value = vscode.workspace.getConfiguration('co', resource).get<T>(key);
   if (value !== undefined && value !== null) {
     return value;
@@ -23,209 +22,86 @@ export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
   return fallback;
 }
 
+/**
+ * 三层字符串配置读取：VSCode Settings → .co/config.json → 默认值。
+ * 消除各 getter 中重复的 "读 VSCode → trim → 判断 → 读 config.json → 返回默认值" 模式。
+ */
+function layeredGetString(
+  vsKey: string,
+  configFallback: (() => string | undefined) | undefined,
+  defaultValue: string,
+  resource?: vscode.Uri
+): string {
+  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>(vsKey);
+  if (vsValue && vsValue.trim()) {
+    return vsValue.trim();
+  }
+  const configValue = configFallback?.();
+  if (configValue) {
+    return configValue;
+  }
+  return defaultValue;
+}
+
 export function getProfile(resource?: vscode.Uri): ProjectProfile {
-  // 优先从 VSCode Settings 读取
   const vsProfile = vscode.workspace.getConfiguration('co', resource).get<ProjectProfile>('project.profile');
   if (vsProfile && vsProfile !== 'auto') {
     return vsProfile;
   }
-
-  // 其次从 .co/config.json 读取
-  const configProfile = getProjectProfileFromConfig(resource);
-  if (configProfile) {
-    return configProfile;
-  }
-
-  return 'auto';
+  return getProjectProfileFromConfig(resource) ?? 'auto';
 }
 
 export function getTopModule(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('project.topModule');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const simConfig = getSimulationFromConfig(resource);
-  if (simConfig?.top) {
-    return simConfig.top;
-  }
-
-  return 'mips';
+  return layeredGetString('project.topModule', () => getSimulationFromConfig(resource)?.top, 'mips', resource);
 }
 
 export function getTestbench(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('project.testbench');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const simConfig = getSimulationFromConfig(resource);
-  if (simConfig?.testbench) {
-    return simConfig.testbench;
-  }
-
-  return 'mips_tb';
+  return layeredGetString('project.testbench', () => getSimulationFromConfig(resource)?.testbench, 'mips_tb', resource);
 }
 
 export function getMachineCode(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('project.machineCode');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const simConfig = getSimulationFromConfig(resource);
-  if (simConfig?.machineCode) {
-    return simConfig.machineCode;
-  }
-
-  return 'code.txt';
+  return layeredGetString('project.machineCode', () => getSimulationFromConfig(resource)?.machineCode, 'code.txt', resource);
 }
 
 export function getSimTime(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('project.simTime');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const simConfig = getSimulationFromConfig(resource);
-  if (simConfig?.time) {
-    return simConfig.time;
-  }
-
-  return '200us';
+  return layeredGetString('project.simTime', () => getSimulationFromConfig(resource)?.time, '200us', resource);
 }
 
 export function getSimBackend(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取（如果存在的话）
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('project.simBackend');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const simConfig = getSimulationFromConfig(resource);
-  if (simConfig?.backend) {
-    return simConfig.backend;
-  }
-
-  return 'isim';
+  return layeredGetString('project.simBackend', () => getSimulationFromConfig(resource)?.backend, 'isim', resource);
 }
 
 export function useDelayedBranching(resource?: vscode.Uri): boolean {
   const mode = config<string>('mips.delayedBranching', 'profile', resource);
-  if (mode === 'on') {
-    return true;
-  }
-  if (mode === 'off') {
-    return false;
-  }
+  if (mode === 'on') { return true; }
+  if (mode === 'off') { return false; }
   const profile = getProfile(resource);
   return profile === 'P5' || profile === 'P6' || profile === 'P7';
 }
 
 export function getJava(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('toolchain.java');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const toolConfig = getToolchainFromConfig(resource);
-  if (toolConfig?.java) {
-    return toolConfig.java;
-  }
-
-  return 'java';
+  return layeredGetString('toolchain.java', () => getToolchainFromConfig(resource)?.java, 'java', resource);
 }
 
 export function getMarsJar(resource?: vscode.Uri): string {
   const profile = getProfile(resource);
-
-  // P7 优先使用 P7 专用 MARS
   if (profile === 'P7') {
-    // 优先从 VSCode Settings 读取
-    const p7Jar = config<string>('toolchain.marsP7', '', resource).trim();
-    if (p7Jar) {
-      return p7Jar;
-    }
-
-    // 其次从 .co/config.json 读取
-    const toolConfig = getToolchainFromConfig(resource);
-    if (toolConfig?.marsP7) {
-      return toolConfig.marsP7;
-    }
+    const p7 = layeredGetString('toolchain.marsP7', () => getToolchainFromConfig(resource)?.marsP7, '', resource);
+    if (p7) { return p7; }
   }
-
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('toolchain.mars');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const toolConfig = getToolchainFromConfig(resource);
-  if (toolConfig?.mars) {
-    return toolConfig.mars;
-  }
-
-  return '';
+  return layeredGetString('toolchain.mars', () => getToolchainFromConfig(resource)?.mars, '', resource);
 }
 
 export function getLogisimJar(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('toolchain.logisim');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const toolConfig = getToolchainFromConfig(resource);
-  if (toolConfig?.logisim) {
-    return toolConfig.logisim;
-  }
-
-  return '';
+  return layeredGetString('toolchain.logisim', () => getToolchainFromConfig(resource)?.logisim, '', resource);
 }
 
 export function getIsePath(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('toolchain.isePath');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const toolConfig = getToolchainFromConfig(resource);
-  if (toolConfig?.isePath) {
-    return toolConfig.isePath;
-  }
-
-  return '';
+  return layeredGetString('toolchain.isePath', () => getToolchainFromConfig(resource)?.isePath, '', resource);
 }
 
 export function getHazardCalculator(resource?: vscode.Uri): string {
-  // 优先从 VSCode Settings 读取（如果存在的话）
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>('toolchain.hazardCalculator');
-  if (vsValue && vsValue.trim()) {
-    return vsValue.trim();
-  }
-
-  // 其次从 .co/config.json 读取
-  const toolConfig = getToolchainFromConfig(resource);
-  if (toolConfig?.hazardCalculator) {
-    return toolConfig.hazardCalculator;
-  }
-
-  return '';
+  return layeredGetString('toolchain.hazardCalculator', () => getToolchainFromConfig(resource)?.hazardCalculator, '', resource);
 }
 
 export function getRunTimeout(resource?: vscode.Uri): number {

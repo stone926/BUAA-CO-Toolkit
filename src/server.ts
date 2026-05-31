@@ -232,122 +232,75 @@ documents.onDidClose((event) => {
   });
 });
 
-connection.onCompletion(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getCompletions?.(document, params.position, settings) ?? [];
-});
+function withDocument<R>(
+  handler: (doc: TextDocument, params: any, settings: CoSettings, svc: CoLanguageService) => R | undefined,
+  fallback: R
+): (params: any) => Promise<R> {
+  return async (params) => {
+    try {
+      const document = documents.get(params.textDocument.uri);
+      if (!document) return fallback;
+      const settings = await getDocumentSettings(document.uri);
+      const svc = languageServices.get(document.languageId);
+      return svc ? (handler(document, params, settings, svc) ?? fallback) : fallback;
+    } catch (e) {
+      connection.console.error(`[BUAA CO] Handler error: ${e}`);
+      return fallback;
+    }
+  };
+}
 
-connection.onHover(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return undefined;
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getHover?.(document, params.position, settings);
-});
+connection.onCompletion(withDocument(
+  (doc, params, _settings, svc) => svc.getCompletions?.(doc, params.position, _settings), []
+));
 
-connection.onDefinition(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return undefined;
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getDefinition?.(document, params.position, settings);
-});
+connection.onHover(withDocument(
+  (doc, params, settings, svc) => svc.getHover?.(doc, params.position, settings), undefined
+));
 
-connection.onReferences(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getReferences?.(document, params, settings) ?? [];
-});
+connection.onDefinition(withDocument(
+  (doc, params, settings, svc) => svc.getDefinition?.(doc, params.position, settings), undefined
+));
 
-connection.onDocumentSymbol(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getDocumentSymbols?.(document, settings) ?? [];
-});
+connection.onReferences(withDocument(
+  (doc, params, settings, svc) => svc.getReferences?.(doc, params, settings), []
+));
 
-connection.onCodeAction(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getCodeActions?.(document, params.range, params.context.diagnostics, settings) ?? [];
-});
+connection.onDocumentSymbol(withDocument(
+  (doc, _params, settings, svc) => svc.getDocumentSymbols?.(doc, settings), []
+));
 
-connection.onDocumentFormatting(async (params) => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getFormattingEdits?.(document, settings) ?? [];
-});
+connection.onCodeAction(withDocument(
+  (doc, params, settings, svc) => svc.getCodeActions?.(doc, params.range, params.context.diagnostics, settings), []
+));
 
-connection.languages.inlayHint.on(async (params): Promise<InlayHint[]> => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getInlayHints?.(document, params.range, settings) ?? [];
-});
+connection.onDocumentFormatting(withDocument(
+  (doc, _params, settings, svc) => svc.getFormattingEdits?.(doc, settings), []
+));
 
-connection.languages.semanticTokens.on(async (params): Promise<SemanticTokens> => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return { data: [] };
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getSemanticTokens?.(document, settings) ?? { data: [] };
-});
+connection.languages.inlayHint.on(withDocument(
+  (doc, params, settings, svc) => svc.getInlayHints?.(doc, params.range, settings), [] as InlayHint[]
+));
 
-connection.onFoldingRanges(async (params): Promise<FoldingRange[]> => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getFoldingRanges?.(document, settings) ?? [];
-});
+connection.languages.semanticTokens.on(withDocument(
+  (doc, _params, settings, svc) => svc.getSemanticTokens?.(doc, settings), { data: [] } as SemanticTokens
+));
 
-connection.onSignatureHelp(async (params): Promise<SignatureHelp | undefined> => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return undefined;
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getSignatureHelp?.(document, params.position, settings);
-});
+connection.onFoldingRanges(withDocument(
+  (doc, _params, settings, svc) => svc.getFoldingRanges?.(doc, settings), [] as FoldingRange[]
+));
 
-connection.onRenameRequest(async (params): Promise<WorkspaceEdit | undefined> => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return undefined;
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getRenameEdits?.(document, params.position, params.newName, settings);
-});
+connection.onSignatureHelp(withDocument(
+  (doc, params, settings, svc) => svc.getSignatureHelp?.(doc, params.position, settings), undefined
+));
 
-connection.onPrepareRename(async (params): Promise<Range | undefined> => {
-  const document = documents.get(params.textDocument.uri);
-  if (!document) {
-    return undefined;
-  }
-  const settings = await getDocumentSettings(document.uri);
-  return languageServices.get(document.languageId)?.getRenamePrepare?.(document, params.position, settings);
-});
+connection.onRenameRequest(withDocument(
+  (doc, params, settings, svc) => svc.getRenameEdits?.(doc, params.position, params.newName, settings), undefined
+));
+
+connection.onPrepareRename(withDocument(
+  (doc, params, settings, svc) => svc.getRenamePrepare?.(doc, params.position, settings), undefined
+));
 
 connection.onExecuteCommand(async (params) => {
   if (params.command === mipsIgnorePseudoFileCommand && typeof params.arguments?.[0] === 'string') {
@@ -375,9 +328,7 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
 }
 
 async function validateAllDocuments(): Promise<void> {
-  for (const document of documents.all()) {
-    await validateDocument(document);
-  }
+  await Promise.all(documents.all().map((document) => validateDocument(document)));
 }
 
 async function rebuildVerilogIndex(): Promise<void> {

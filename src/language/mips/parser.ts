@@ -6,6 +6,7 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition, lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp';
+import { createMipsTokenRegex, escapeRegExp, rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
 import {
   instructionWritesRegister,
@@ -22,7 +23,6 @@ import {
   isRegister
 } from './resources';
 import {
-  escapeRegExp,
   findCommentIndex,
   getNumericLikeRanges,
   getStringRanges,
@@ -408,11 +408,40 @@ export function allEqvSymbols(parsed: MipsParseResult): MipsSymbol[] {
 }
 
 export function allSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return [...allLabelSymbols(parsed), ...allDataSymbols(parsed), ...allEqvSymbols(parsed)];
+  if (!parsed._allSymbols) {
+    parsed._allSymbols = [
+      ...parsed.labels.values(),
+      ...parsed.dataSymbols.values(),
+      ...parsed.eqvSymbols.values(),
+      ...allMacros(parsed).flatMap((m) => [...m.labels.values(), ...m.dataSymbols.values(), ...m.eqvSymbols.values(), ...m.paramSymbols.values()])
+    ];
+  }
+  return parsed._allSymbols;
 }
 
 export function allMacros(parsed: MipsParseResult): MipsMacro[] {
-  return [...parsed.macros.values()].flat();
+  if (!parsed._allMacros) {
+    parsed._allMacros = [...parsed.macros.values()].flat();
+  }
+  return parsed._allMacros;
+}
+
+/**
+ * 获取所有声明 Range 的字符串键集合，用于 O(1) 查找。
+ * 替代原来的 isDeclarationRange / isKnownDeclarationRange 中的线性扫描。
+ */
+export function getDeclarationRangeSet(parsed: MipsParseResult): Set<string> {
+  if (!parsed._declarationRangeKeys) {
+    const keys = new Set<string>();
+    for (const macro of allMacros(parsed)) {
+      keys.add(rangeKey(macro.selectionRange));
+    }
+    for (const symbol of allSymbols(parsed)) {
+      keys.add(rangeKey(symbol.selectionRange));
+    }
+    parsed._declarationRangeKeys = keys;
+  }
+  return parsed._declarationRangeKeys;
 }
 
 function validateDirective(document: TextDocument, lineNumber: number, trimmed: string, section: MipsSection, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
@@ -690,7 +719,7 @@ function collectUndeclaredSymbolDiagnostics(document: TextDocument, parsed: Mips
       continue;
     }
     const macroCall = macroCallAtLine(parsed, document, lineNumber, code);
-    const tokenRegex = /%?[A-Za-z_.$][\w.$]*|\$[A-Za-z0-9_]+/g;
+    const tokenRegex = createMipsTokenRegex();
     let match: RegExpExecArray | null;
     while ((match = tokenRegex.exec(code))) {
       const token = match[0];
@@ -763,11 +792,7 @@ function executableTokenRange(code: string, lineNumber: number): Range | undefin
 }
 
 function isDeclarationRange(parsed: MipsParseResult, range: Range): boolean {
-  return [
-    ...allMacros(parsed).map((macro) => macro.selectionRange),
-    ...allMacroParams(parsed).map((param) => param.selectionRange),
-    ...allSymbols(parsed).map((symbol) => symbol.selectionRange)
-  ].some((declarationRange) => rangesEqual(declarationRange, range));
+  return getDeclarationRangeSet(parsed).has(rangeKey(range));
 }
 
 function macroCallAtLine(parsed: MipsParseResult, document: TextDocument, lineNumber: number, code: string): { macro: MipsMacro; operands: string[] } | undefined {
@@ -845,10 +870,6 @@ function macroLabelParameters(document: TextDocument, macro: MipsMacro): Set<str
     }
   }
   return labelParams;
-}
-
-function rangeKey(range: Range): string {
-  return `${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
 }
 
 function isDeclaredBefore(symbol: MipsSymbol, position: Position): boolean {

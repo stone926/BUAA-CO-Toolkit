@@ -8,6 +8,7 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt, rangesEqual } from '../common/lsp';
+import { createMipsTokenRegex } from '../common/util';
 import { CoSettings } from '../common/settings';
 import {
   allMacroParams,
@@ -110,7 +111,7 @@ function collectTokenReferences(
     locations.push(Location.create(document.uri, declarationRange));
   }
 
-  const tokenRegex = /%?[A-Za-z_.$][\w.$]*|\$[A-Za-z0-9_]+/g;
+  const tokenRegex = createMipsTokenRegex();
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
     const text = lineAt(document, lineNumber).text;
     const commentIndex = findCommentIndex(text);

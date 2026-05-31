@@ -7,26 +7,29 @@ import { makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
   VerilogModule,
-  VerilogPortConnection
+  VerilogPortConnection,
+  VerilogParseResult
 } from './model';
 import {
-  parseVerilog,
   shouldReportWidthMismatch,
   stripCommentsAndStrings,
   widthOfDecl,
   widthOfExpression
 } from './parser';
+import { getCachedVerilogParse } from './parseCache';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 
 export function addVerilogWorkspaceDiagnostics(
   document: TextDocument,
   settings: CoSettings,
   index: VerilogWorkspaceIndex,
-  baseDiagnostics: Diagnostic[]
+  baseDiagnostics: Diagnostic[],
+  parsed?: VerilogParseResult
 ): Diagnostic[] {
   const diagnostics = filterWorkspaceAwareDiagnostics(baseDiagnostics, settings, index);
-  diagnostics.push(...getWorkspaceInstanceDiagnostics(document, settings, index));
-  diagnostics.push(...getWorkspaceProjectDiagnostics(document, settings, index));
+  const resolved = parsed ?? getCachedVerilogParse(document, settings, false);
+  diagnostics.push(...getWorkspaceInstanceDiagnostics(document, settings, index, resolved));
+  diagnostics.push(...getWorkspaceProjectDiagnostics(document, settings, index, resolved));
   return diagnostics;
 }
 
@@ -38,9 +41,8 @@ function filterWorkspaceAwareDiagnostics(diagnostics: Diagnostic[], settings: Co
   return diagnostics.filter((diagnostic) => diagnostic.code !== 'missing-top');
 }
 
-function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex): Diagnostic[] {
+function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  const parsed = parseVerilog(document, settings, false);
   for (const module of parsed.modules) {
     for (const instance of module.instances) {
       const target = index.getModule(instance.moduleName);
@@ -91,7 +93,7 @@ function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSet
   return diagnostics;
 }
 
-function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex): Diagnostic[] {
+function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
   if (!settings.verilog.lint.courseRules) {
     return [];
   }
@@ -100,7 +102,6 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
     return [];
   }
 
-  const parsed = parseVerilog(document, settings, false);
   const topName = settings.project.topModule.trim() || 'mips';
   const top = parsed.modules.find((module) => module.name === topName);
   if (!top) {
@@ -108,8 +109,8 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
   }
 
   const diagnostics: Diagnostic[] = [];
-  const workspaceText = index.allFiles().map((file) => file.text).join('\n');
-  const workspaceCode = stripCommentsAndStrings(workspaceText);
+  // 使用索引中已缓存的去除注释文本，避免拼接全部文件并重复 strip
+  const workspaceCode = index.allFiles().map((file) => file.strippedText ?? stripCommentsAndStrings(file.text)).join('\n');
   const topRange = top.selectionRange;
 
   if (profile === 'P4' || profile === 'P5') {
