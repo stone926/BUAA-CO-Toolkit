@@ -6,6 +6,9 @@ export interface VerilogDecl {
   name: string;
   kind: VerilogDeclKind;
   width?: string;
+  inferredWidth?: number;
+  inferredMinWidth?: number;
+  inferredFlexible?: boolean;
   range: Range;
   selectionRange: Range;
   direction?: 'input' | 'output' | 'inout';

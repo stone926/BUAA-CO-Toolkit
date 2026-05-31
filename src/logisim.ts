@@ -1,10 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getJava, getLogisimJar, getMachineCode } from './config';
-import { dirname, readTextFile, writeTextFile, workspaceFolderFor } from './fsUtil';
+import { getJava, getLogisimJar } from './config';
+import { dirname, readTextFile, writeTextFile } from './fsUtil';
 import { runTool } from './process';
 import { AppServices } from './types';
+import { pickOneFile, resolveActiveOrPickedTextFile, resolveMachineCodeInput } from './workflowInputs';
 
 export function registerLogisim(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
@@ -65,37 +66,6 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
   }
 }
 
-async function resolveMachineCodeInput(): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.uri.scheme === 'file' && path.basename(editor.document.uri.fsPath).toLowerCase() === getMachineCode(editor.document.uri).toLowerCase()) {
-    return editor.document.uri;
-  }
-  const base = editor?.document.uri.scheme === 'file'
-    ? path.dirname(editor.document.uri.fsPath)
-    : workspaceFolderFor()?.uri.fsPath;
-  if (base) {
-    const candidate = path.join(base, getMachineCode(editor?.document.uri));
-    if (fs.existsSync(candidate)) {
-      return vscode.Uri.file(candidate);
-    }
-  }
-  return await pickOneFile('Select MARS HexText machine code file', {
-    Code: ['txt'],
-    All: ['*']
-  });
-}
-
-async function resolveActiveOrPickedTextFile(title: string): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.uri.scheme === 'file') {
-    return editor.document.uri;
-  }
-  return await pickOneFile(title, {
-    Text: ['txt', 'log'],
-    All: ['*']
-  });
-}
-
 async function resolveCircuitInput(): Promise<vscode.Uri | undefined> {
   const editor = vscode.window.activeTextEditor;
   if (editor && editor.document.languageId === 'logisim-circ' && editor.document.uri.scheme === 'file') {
@@ -107,17 +77,6 @@ async function resolveCircuitInput(): Promise<vscode.Uri | undefined> {
   return await pickOneFile('Select Logisim .circ file', {
     Logisim: ['circ']
   });
-}
-
-async function pickOneFile(title: string, filters: Record<string, string[]>): Promise<vscode.Uri | undefined> {
-  const picked = await vscode.window.showOpenDialog({
-    title,
-    canSelectFiles: true,
-    canSelectFolders: false,
-    canSelectMany: false,
-    filters
-  });
-  return picked?.[0];
 }
 
 function normalizeLogisimRom(text: string): string {

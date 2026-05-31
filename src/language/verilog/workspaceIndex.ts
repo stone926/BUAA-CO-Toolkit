@@ -4,8 +4,7 @@ import { WorkspaceFolder } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { CoSettings } from '../common/settings';
-import { stripCommentsAndStrings } from './parser';
-import { getCachedVerilogParse } from './parseCache';
+import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
 
 export interface VerilogIndexedFile {
@@ -23,6 +22,11 @@ export class VerilogWorkspaceIndex {
   private readonly files = new Map<string, VerilogIndexedFile>();
   private readonly modules = new Map<string, VerilogModule[]>();
   private readonly macros = new Map<string, VerilogMacro[]>();
+  private readonly maxFiles: number;
+
+  constructor(options: { maxFiles?: number } = {}) {
+    this.maxFiles = options.maxFiles ?? 5000;
+  }
 
   async rebuild(workspaceFolders: WorkspaceFolder[] | null | undefined, settings: CoSettings): Promise<void> {
     this.files.clear();
@@ -33,12 +37,30 @@ export class VerilogWorkspaceIndex {
     }
     for (const folder of workspaceFolders) {
       const folderPath = URI.parse(folder.uri).fsPath;
-      for (const file of scanVerilogFiles(folderPath)) {
-        const text = fs.readFileSync(file, 'utf8');
-        const uri = URI.file(file).toString();
-        const document = TextDocument.create(uri, 'verilog', 0, text);
-        this.updateDocument(document, settings);
+      for (const file of scanVerilogFiles(folderPath, this.maxFiles - this.files.size)) {
+        if (this.files.size >= this.maxFiles) {
+          return;
+        }
+        this.updateFile(URI.file(file).toString(), settings);
       }
+    }
+  }
+
+  updateFile(uri: string, settings: CoSettings): void {
+    if (!isVerilogUri(uri)) {
+      return;
+    }
+    try {
+      const filePath = URI.parse(uri).fsPath;
+      if (!fs.existsSync(filePath)) {
+        this.remove(uri);
+        return;
+      }
+      const text = fs.readFileSync(filePath, 'utf8');
+      const document = TextDocument.create(uri, 'verilog', 0, text);
+      this.updateDocument(document, settings);
+    } catch {
+      this.remove(uri);
     }
   }
 
@@ -51,7 +73,7 @@ export class VerilogWorkspaceIndex {
     const file: VerilogIndexedFile = {
       uri: document.uri,
       text: document.getText(),
-      strippedText: stripCommentsAndStrings(document.getText()),
+      strippedText: getCachedStrippedText(document, settings),
       modules: parsed.modules,
       macros: parsed.macros,
       macroUses: parsed.macroUses,
@@ -73,8 +95,10 @@ export class VerilogWorkspaceIndex {
   remove(uri: string): void {
     const existing = this.files.get(uri);
     if (!existing) {
+      clearCachedVerilogParse(uri);
       return;
     }
+    clearCachedVerilogParse(uri);
     this.files.delete(uri);
     for (const module of existing.modules) {
       removeByUri(this.modules, module.name, uri, (item) => item.uri);
@@ -130,10 +154,13 @@ function removeByUri<T>(map: Map<string, T[]>, key: string, uri: string, getUri:
   }
 }
 
-function scanVerilogFiles(root: string): string[] {
+function scanVerilogFiles(root: string, limit: number): string[] {
   const files: string[] = [];
+  if (limit <= 0) {
+    return files;
+  }
   const stack = [root];
-  while (stack.length) {
+  while (stack.length && files.length < limit) {
     const current = stack.pop();
     if (!current) {
       continue;
@@ -145,7 +172,7 @@ function scanVerilogFiles(root: string): string[] {
       continue;
     }
     for (const entry of entries) {
-      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'out') {
+      if (entry.isDirectory() && shouldSkipDirectory(entry.name)) {
         continue;
       }
       const fullPath = path.join(current, entry.name);
@@ -153,8 +180,31 @@ function scanVerilogFiles(root: string): string[] {
         stack.push(fullPath);
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.v')) {
         files.push(fullPath);
+        if (files.length >= limit) {
+          break;
+        }
       }
     }
   }
   return files;
+}
+
+function shouldSkipDirectory(name: string): boolean {
+  return name === '.git' ||
+    name === '.co' ||
+    name === '.vscode' ||
+    name === '.vscode-test' ||
+    name === 'node_modules' ||
+    name === 'out' ||
+    name === 'dist' ||
+    name === 'build' ||
+    name === 'coverage';
+}
+
+export function isVerilogUri(uri: string): boolean {
+  try {
+    return URI.parse(uri).fsPath.toLowerCase().endsWith('.v');
+  } catch {
+    return false;
+  }
 }

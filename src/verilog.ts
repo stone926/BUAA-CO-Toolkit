@@ -23,10 +23,24 @@ import { AppServices } from './types';
 
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
+    vscode.commands.registerCommand('co.verilog.disableLintRule', (rule?: string) => disableLintRule(rule)),
     vscode.commands.registerCommand('co.verilog.generateTestbench', () => generateTestbench()),
     vscode.commands.registerCommand('co.verilog.generateIseProject', () => generateIseProject(services)),
     vscode.commands.registerCommand('co.verilog.runIsim', () => runIsim(services))
   );
+}
+
+async function disableLintRule(rule?: string): Promise<void> {
+  const normalized = normalizeLintRule(rule);
+  if (!normalized) {
+    vscode.window.showErrorMessage('Cannot disable this Verilog lint rule because its rule id is invalid.');
+    return;
+  }
+  const config = vscode.workspace.getConfiguration('co');
+  const current = config.get<string[]>('verilog.lint.disabledRules', defaultCoSettings.verilog.lint.disabledRules);
+  const merged = [...new Set([...current.map((item) => item.toLowerCase()), normalized])].sort();
+  await config.update('verilog.lint.disabledRules', merged, vscode.ConfigurationTarget.Workspace);
+  vscode.window.showInformationMessage(`Disabled ${normalized.toUpperCase()} in this workspace.`);
 }
 
 async function generateTestbench(): Promise<void> {
@@ -165,8 +179,14 @@ function coSettingsForUri(uri: vscode.Uri): CoSettings {
       },
       lint: {
         courseRules: config<boolean>('verilog.lint.courseRules', defaultCoSettings.verilog.lint.courseRules, uri),
-        synthesizableHints: config<boolean>('verilog.lint.synthesizableHints', defaultCoSettings.verilog.lint.synthesizableHints, uri)
+        synthesizableHints: config<boolean>('verilog.lint.synthesizableHints', defaultCoSettings.verilog.lint.synthesizableHints, uri),
+        disabledRules: config<string[]>('verilog.lint.disabledRules', defaultCoSettings.verilog.lint.disabledRules, uri)
       }
     }
   };
+}
+
+function normalizeLintRule(rule?: string): string | undefined {
+  const normalized = rule?.trim().toLowerCase();
+  return normalized && /^vc-\d{3}$/.test(normalized) ? normalized : undefined;
 }

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { mergeCoSettings, defaultCoSettings } from '../../../language/common/settings';
+import {
+  defaultCoSettings,
+  defaultDisabledVerilogLintRules,
+  isVerilogLintRuleEnabled,
+  mergeCoSettings
+} from '../../../language/common/settings';
 
 describe('mergeCoSettings', () => {
   it('returns defaults when given null', () => {
@@ -47,7 +52,20 @@ describe('mergeCoSettings', () => {
     const result = mergeCoSettings({ verilog: { lint: { courseRules: false } } });
     expect(result.verilog.lint.courseRules).toBe(false);
     expect(result.verilog.lint.synthesizableHints).toBe(defaultCoSettings.verilog.lint.synthesizableHints);
+    expect(result.verilog.lint.disabledRules).toEqual(defaultCoSettings.verilog.lint.disabledRules);
     expect(result.verilog.implicitNet).toEqual(defaultCoSettings.verilog.implicitNet);
+  });
+
+  it('defaults selected Verilog course lint rules to disabled', () => {
+    const result = mergeCoSettings({});
+    expect(result.verilog.lint.disabledRules).toEqual([...defaultDisabledVerilogLintRules]);
+    expect(isVerilogLintRuleEnabled(result, 'vc-001')).toBe(false);
+    expect(isVerilogLintRuleEnabled(result, 'VC-002')).toBe(true);
+  });
+
+  it('normalizes custom disabled Verilog lint rules', () => {
+    const result = mergeCoSettings({ verilog: { lint: { disabledRules: ['VC-002', 'bad', 'vc-002', ' vc-017 '] } } });
+    expect(result.verilog.lint.disabledRules).toEqual(['vc-002', 'vc-017']);
   });
 
   it('merges multiple sections at once', () => {

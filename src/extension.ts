@@ -9,6 +9,7 @@ import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
 import { runProjectWizard } from './wizard';
+import { registerHazard } from './hazard';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -28,19 +29,29 @@ export function activate(context: vscode.ExtensionContext): void {
   const sidebarView = vscode.window.registerTreeDataProvider('coSidebar', sidebarProvider);
   context.subscriptions.push(sidebarView);
 
+  // Cache toolchain status per resource so multi-root and .co/config.json overrides do not leak across projects.
+  const toolchainCache = new Map<string, { checks: ToolDetection[]; timestamp: number }>();
+  const TOOLCHAIN_CACHE_TTL = 60000; // 1 minute
+
   // Watch .co/config.json changes
   const configWatcher = vscode.workspace.createFileSystemWatcher('**/.co/config.json');
   configWatcher.onDidChange(() => {
     clearProjectConfigCache();
+    invalidateToolchainCache();
     sidebarProvider.refresh();
+    updateStatus(statusBar, getToolchainStatus);
   });
   configWatcher.onDidCreate(() => {
     clearProjectConfigCache();
+    invalidateToolchainCache();
     sidebarProvider.refresh();
+    updateStatus(statusBar, getToolchainStatus);
   });
   configWatcher.onDidDelete(() => {
     clearProjectConfigCache();
+    invalidateToolchainCache();
     sidebarProvider.refresh();
+    updateStatus(statusBar, getToolchainStatus);
   });
   context.subscriptions.push(configWatcher);
 
@@ -52,22 +63,23 @@ export function activate(context: vscode.ExtensionContext): void {
   registerMips(context, services);
   registerVerilog(context, services);
   registerLogisim(context, services);
+  registerHazard(context, services);
 
-  // Cache toolchain status
-  let cachedToolchain: ToolDetection[] | undefined;
-  let toolchainCacheTime = 0;
-  const TOOLCHAIN_CACHE_TTL = 60000; // 1 minute
-
-  async function getToolchainStatus(): Promise<ToolDetection[]> {
+  async function getToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): Promise<ToolDetection[]> {
     const now = Date.now();
-    if (cachedToolchain && now - toolchainCacheTime < TOOLCHAIN_CACHE_TTL) {
-      return cachedToolchain;
+    const key = toolchainCacheKey(resource);
+    const cached = toolchainCache.get(key);
+    if (cached && now - cached.timestamp < TOOLCHAIN_CACHE_TTL) {
+      return cached.checks;
     }
-    const resource = vscode.window.activeTextEditor?.document.uri;
-    cachedToolchain = await checkToolchain(output, resource);
-    toolchainCacheTime = now;
+    const checks = await checkToolchain(output, resource);
+    toolchainCache.set(key, { checks, timestamp: now });
     sidebarProvider.refresh();
-    return cachedToolchain;
+    return checks;
+  }
+
+  function invalidateToolchainCache(): void {
+    toolchainCache.clear();
   }
 
   context.subscriptions.push(
@@ -77,7 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeActiveTextEditor(() => updateStatus(statusBar, getToolchainStatus)),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('co.project.profile') || event.affectsConfiguration('co.toolchain')) {
-        cachedToolchain = undefined; // Invalidate cache
+        invalidateToolchainCache();
         updateStatus(statusBar, getToolchainStatus);
         sidebarProvider.refresh();
       }
@@ -130,7 +142,7 @@ async function selectProjectProfile(): Promise<void> {
   vscode.window.showInformationMessage(`BUAA CO profile set to ${picked.profile}.`);
 }
 
-function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: () => Promise<ToolDetection[]>): void {
+function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => Promise<ToolDetection[]>): void {
   const resource = vscode.window.activeTextEditor?.document.uri;
   const profile = getProfile(resource);
   statusBar.text = `CO: ${profile}`;
@@ -139,7 +151,10 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: () =
 
   // Update with toolchain info asynchronously
   if (getToolchainStatus) {
-    getToolchainStatus().then((checks) => {
+    getToolchainStatus(resource).then((checks) => {
+      if (!sameResource(resource, vscode.window.activeTextEditor?.document.uri)) {
+        return;
+      }
       const toolStatus = checks
         .filter((check) => ['MARS', 'ISE fuse', 'Logisim'].includes(check.name))
         .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
@@ -151,6 +166,14 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: () =
       // Keep the basic status if toolchain check fails
     });
   }
+}
+
+function toolchainCacheKey(resource?: vscode.Uri): string {
+  return resource?.toString() ?? vscode.workspace.workspaceFolders?.[0]?.uri.toString() ?? 'global';
+}
+
+function sameResource(left?: vscode.Uri, right?: vscode.Uri): boolean {
+  return (left?.toString() ?? '') === (right?.toString() ?? '');
 }
 
 function profileDescription(profile: ProjectProfile): string {

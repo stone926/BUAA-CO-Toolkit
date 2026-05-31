@@ -1,6 +1,7 @@
 import {
   CodeAction,
   CodeActionKind,
+  Command,
   CompletionItem,
   CompletionItemKind,
   Diagnostic,
@@ -326,10 +327,37 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
     });
   }
 
+  actions.push(...getVerilogLintRuleCodeActions(diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogLiteralCodeActions(document, range));
 
   return actions;
+}
+
+function getVerilogLintRuleCodeActions(diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
+  const actions: CodeAction[] = [];
+  const seen = new Set<string>();
+  const disabled = new Set(settings.verilog.lint.disabledRules.map((rule) => rule.toLowerCase()));
+  for (const diagnostic of diagnostics) {
+    const rule = verilogLintRuleFromDiagnostic(diagnostic);
+    if (!rule || seen.has(rule) || disabled.has(rule)) {
+      continue;
+    }
+    seen.add(rule);
+    actions.push({
+      title: `Disable ${rule.toUpperCase()} in this workspace`,
+      kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
+      command: Command.create(`Disable ${rule.toUpperCase()}`, 'co.verilog.disableLintRule', rule)
+    });
+  }
+  return actions;
+}
+
+function verilogLintRuleFromDiagnostic(diagnostic: Diagnostic): string | undefined {
+  const code = typeof diagnostic.code === 'string' ? diagnostic.code : undefined;
+  const source = code ?? diagnostic.message;
+  return source.match(/\bvc-\d{3}\b/i)?.[0].toLowerCase();
 }
 
 export function getVerilogSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): SignatureHelp | undefined {

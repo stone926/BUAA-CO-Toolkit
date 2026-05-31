@@ -1,0 +1,89 @@
+import { describe, expect, it } from 'vitest';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import { mergeCoSettings } from '../../../language/common/settings';
+import { getVerilogCodeActions, getVerilogDiagnostics } from '../../../language/verilog/service';
+import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
+
+let documentVersion = 1;
+
+function doc(text: string): TextDocument {
+  return TextDocument.create(`test://lint-${documentVersion}.v`, 'verilog', documentVersion++, text);
+}
+
+function diagnosticCodes(text: string, disabledRules?: string[]): string[] {
+  const settings = mergeCoSettings({
+    verilog: {
+      lint: {
+        disabledRules
+      }
+    }
+  });
+  return getVerilogDiagnostics(doc(text), settings)
+    .map((diagnostic) => diagnostic.code)
+    .filter((code): code is string => typeof code === 'string');
+}
+
+describe('Verilog course lint rule configuration', () => {
+  const disabledByDefaultSample = `
+module demo(input a, output reg y);
+    wire BAD_name;
+    wire mux;
+    wire bare;
+    always @(*) begin
+        if (a) y = 1;
+        y = 42;
+    end
+endmodule
+`.trim();
+
+  it('keeps requested noisy rules disabled by default', () => {
+    const codes = diagnosticCodes(disabledByDefaultSample);
+    expect(codes.some((code) => code.startsWith('vc-001'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-003'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-004'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-008'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-021'))).toBe(false);
+  });
+
+  it('emits default-disabled rules when the user enables them', () => {
+    const codes = diagnosticCodes(disabledByDefaultSample, []);
+    expect(codes.some((code) => code.startsWith('vc-001'))).toBe(true);
+    expect(codes.some((code) => code.startsWith('vc-003'))).toBe(true);
+    expect(codes.some((code) => code.startsWith('vc-004'))).toBe(true);
+    expect(codes.some((code) => code.startsWith('vc-008'))).toBe(true);
+    expect(codes.some((code) => code.startsWith('vc-021'))).toBe(true);
+  });
+
+  it('does not emit removed formatting or abstraction rules', () => {
+    const text = `
+module huge(input a,output reg y);
+assign y=a;
+${Array.from({ length: 170 }, (_, index) => `wire sig_${index};`).join('\n')}
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text, []);
+    expect(codes.some((code) => code.startsWith('vc-018'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-019'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-020'))).toBe(false);
+    expect(codes.some((code) => code.startsWith('vc-022'))).toBe(false);
+  });
+
+  it('offers a quick fix to disable every emitted VC rule', () => {
+    const text = `
+module demo(input a, output reg y);
+    always @(*) begin
+        y <= a;
+    end
+endmodule
+`.trim();
+    const document = doc(text);
+    const settings = mergeCoSettings({});
+    const diagnostics = getVerilogDiagnostics(document, settings);
+    const vc007 = diagnostics.find((diagnostic) => diagnostic.code === 'vc-007-comb-nonblocking');
+    expect(vc007).toBeDefined();
+
+    const actions = getVerilogCodeActions(document, vc007!.range, [vc007!], settings, new VerilogWorkspaceIndex());
+    const disableAction = actions.find((action) => action.command?.command === 'co.verilog.disableLintRule');
+    expect(disableAction?.command?.arguments).toEqual(['vc-007']);
+  });
+});

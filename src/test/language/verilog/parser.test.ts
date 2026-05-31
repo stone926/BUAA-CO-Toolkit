@@ -226,6 +226,19 @@ describe('widthOfDecl', () => {
     expect(widthOfDecl(makeDecl({ kind: 'time' }))).toEqual({ width: 32 });
   });
 
+  it('returns inferred width for untyped parameters', () => {
+    expect(widthOfDecl(makeDecl({ kind: 'parameter', inferredWidth: 6 }))).toEqual({ width: 6 });
+  });
+
+  it('preserves flexible inferred width for unsized parameter literals', () => {
+    expect(widthOfDecl(makeDecl({
+      kind: 'parameter',
+      inferredWidth: 32,
+      inferredMinWidth: 1,
+      inferredFlexible: true
+    }))).toEqual({ width: 32, minWidth: 1, flexible: true });
+  });
+
   it('returns 1 for declarations without width', () => {
     expect(widthOfDecl(makeDecl({ kind: 'wire' }))).toEqual({ width: 1 });
   });
@@ -542,6 +555,57 @@ describe('parseModules — edge cases', () => {
     expect(modules[0].parameters[0].name).toBe('WIDTH');
   });
 
+  it('parses nested expressions in parameterized module headers', () => {
+    const text = `
+module fifo #(
+    parameter DEPTH = 16,
+    parameter AW = $clog2(DEPTH)
+)(
+    input [AW-1:0] addr,
+    output [DEPTH-1:0] data
+);
+endmodule
+`.trim();
+    const d = doc(text);
+    const modules = parseModules(d, text);
+
+    expect(modules).toHaveLength(1);
+    expect(modules[0].parameters.map((param) => param.name)).toEqual(['DEPTH', 'AW']);
+    expect(modules[0].ports.map((port) => port.name)).toEqual(['addr', 'data']);
+  });
+
+  it('infers parameter widths from sized literal initializers', () => {
+    const text = `
+module test #(parameter OP = 6'b000000)(input add, input sub, output [5:0] type);
+    parameter ADD = 6'b100000, SUB = 6'b100010, NOP = 6'b000000;
+    assign type = add ? ADD : sub ? SUB : NOP;
+endmodule
+`.trim();
+    const d = doc(text);
+    const module = parseModules(d, text)[0];
+
+    expect(module.declarations.get('OP')?.inferredWidth).toBe(6);
+    expect(module.declarations.get('ADD')?.inferredWidth).toBe(6);
+    expect(widthOfExpression('add ? ADD : sub ? SUB : NOP', module).width).toBe(6);
+  });
+
+  it('keeps unsized parameter literals flexible inside ternary expressions', () => {
+    const text = `
+module test(input add, output [5:0] type);
+    parameter ADD = 6'b100000, NOP = 0;
+    assign type = add ? ADD : NOP;
+endmodule
+`.trim();
+    const d = doc(text);
+    const module = parseModules(d, text)[0];
+    const result = widthOfExpression('add ? ADD : NOP', module);
+
+    expect(module.declarations.get('NOP')?.inferredFlexible).toBe(true);
+    expect(result.width).toBe(32);
+    expect(result.minWidth).toBe(6);
+    expect(result.flexible).toBe(true);
+  });
+
   it('parses module ports from header', () => {
     const text = 'module test(input clk, input reset, output [31:0] data); endmodule';
     const d = doc(text);
@@ -664,12 +728,13 @@ describe('parseMacroUses', () => {
 // parseIncludes
 // ────────────────────────────────────────────────────────────────────────────────
 describe('parseIncludes', () => {
-  it('parseIncludes returns array type', () => {
-    // Note: parseIncludes strips strings before matching, which may affect path extraction
+  it('parses include paths and keeps their ranges', () => {
     const text = '`include "defines.v"';
     const d = doc(text);
     const includes = parseIncludes(d, text);
-    expect(Array.isArray(includes)).toBe(true);
+    expect(includes).toHaveLength(1);
+    expect(includes[0].path).toBe('defines.v');
+    expect(d.getText(includes[0].pathRange)).toBe('defines.v');
   });
 });
 

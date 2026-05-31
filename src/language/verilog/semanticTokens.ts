@@ -17,9 +17,9 @@ import {
 } from './model';
 import {
   moduleAtPosition,
-  parseVerilog,
   stripCommentsAndStrings
 } from './parser';
+import { getCachedVerilogParse } from './parseCache';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 
 interface SemanticTokenCandidate {
@@ -32,7 +32,7 @@ const verilogTokenTypeIndex = new Map(verilogSemanticTokenTypes.map((type, index
 const tokenModifierIndex = new Map<string, number>([['declaration', 0]]);
 
 export function getVerilogSemanticTokens(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex): SemanticTokens {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const tokens: SemanticTokenCandidate[] = [];
   const pushed = new Set<string>();
   const builder = new SemanticTokensBuilder();
@@ -41,7 +41,7 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
     pushSemanticToken(tokens, pushed, macro.selectionRange, 'verilogMacro', ['declaration']);
   }
   for (const macroUse of parsed.macroUses) {
-    pushSemanticToken(tokens, pushed, macroUse.selectionRange, 'verilogMacro');
+    pushSemanticToken(tokens, pushed, macroUse.range, 'verilogMacro');
   }
   for (const module of parsed.modules) {
     pushSemanticToken(tokens, pushed, module.selectionRange, 'verilogModule', ['declaration']);
@@ -103,6 +103,11 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
         continue;
       }
       const range = Range.create(lineNumber, match.index, lineNumber, match.index + token.length);
+      if (previous === '`') {
+        const macroRange = Range.create(lineNumber, match.index - 1, lineNumber, match.index + token.length);
+        pushSemanticToken(tokens, pushed, macroRange, 'verilogMacro');
+        continue;
+      }
       if (pushed.has(rangeKey(range))) {
         continue;
       }
@@ -111,9 +116,7 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
         continue;
       }
       const module = moduleAtPosition(parsed.modules, range.start);
-      if (previous === '`') {
-        pushSemanticToken(tokens, pushed, range, 'verilogMacro');
-      } else if (module?.declarations.has(token)) {
+      if (module?.declarations.has(token)) {
         const decl = module.declarations.get(token);
         pushSemanticToken(tokens, pushed, range, declTokenType(decl));
       } else if (index.getModule(token) ?? parsed.modules.find((item) => item.name === token)) {

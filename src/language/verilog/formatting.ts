@@ -8,12 +8,12 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
-  parseVerilog,
   stripCommentsAndStrings
 } from './parser';
+import { getCachedVerilogParse } from './parseCache';
 
 export function getVerilogFoldingRanges(document: TextDocument, settings: CoSettings): FoldingRange[] {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const ranges: FoldingRange[] = [];
   for (const module of parsed.modules) {
     if (module.range.end.line > module.range.start.line) {

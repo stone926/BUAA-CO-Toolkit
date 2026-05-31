@@ -65,9 +65,8 @@ export function getProjectConfig(resource?: vscode.Uri): CoProjectConfig | undef
   }
 
   // 检查缓存
-  const cached = configCache.get(configPath);
-  if (cached !== undefined) {
-    return cached;
+  if (configCache.has(configPath)) {
+    return configCache.get(configPath);
   }
 
   // 读取配置

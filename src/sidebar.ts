@@ -117,6 +117,10 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     items.push(this.createCommandItem('Verilog Testbench', 'co.verilog.generateTestbench', 'file-code'));
     items.push(this.createCommandItem('Verilog ISE 工程', 'co.verilog.generateIseProject', 'project'));
     items.push(this.createCommandItem('Logisim ROM', 'co.logisim.generateRom', 'file-binary'));
+    if (profile === 'P5' || profile === 'P6') {
+      items.push(this.createCommandItem('Hazard 分析', 'co.hazard.analyzeCurrentMachineCode', 'pulse'));
+      items.push(this.createCommandItem('打开 Hazard 报告', 'co.hazard.openReport', 'json'));
+    }
 
     return items;
   }

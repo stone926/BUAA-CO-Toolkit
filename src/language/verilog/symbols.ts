@@ -5,12 +5,12 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import {
-  declDetail,
-  parseVerilog
+  declDetail
 } from './parser';
+import { getCachedVerilogParse } from './parseCache';
 
 export function getVerilogDocumentSymbols(document: TextDocument, settings: CoSettings): DocumentSymbol[] {
-  const parsed = parseVerilog(document, settings, false);
+  const parsed = getCachedVerilogParse(document, settings, false);
   const symbols: DocumentSymbol[] = parsed.macros.map((macro) => DocumentSymbol.create(macro.name, 'macro', SymbolKind.Constant, macro.range, macro.selectionRange));
   for (const module of parsed.modules) {
     const symbol = DocumentSymbol.create(module.name, 'module', SymbolKind.Module, module.range, module.selectionRange, []);

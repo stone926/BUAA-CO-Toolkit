@@ -19,6 +19,9 @@
     "onLanguage:logisim-circ",
     "onCommand:co.checkToolchain",
     "onCommand:co.selectProjectProfile",
+    "onCommand:co.sidebar.refresh",
+    "onCommand:co.projectWizard",
+    "onCommand:co.mips.disablePseudoWarnings",
     "onCommand:co.mips.runCurrentFile",
     "onCommand:co.mips.dumpText",
     "onCommand:co.mips.dumpKernelText",
@@ -27,7 +30,10 @@
     "onCommand:co.verilog.runIsim",
     "onCommand:co.logisim.generateRom",
     "onCommand:co.logisim.convertLogToCsv",
-    "onCommand:co.logisim.openCurrentCircuit"
+    "onCommand:co.logisim.openCurrentCircuit",
+    "onCommand:co.hazard.analyzeCurrentMachineCode",
+    "onCommand:co.hazard.openReport",
+    "onView:coSidebar"
   ],
   "contributes": {
     "viewsContainers": {
@@ -366,6 +372,14 @@
       {
         "command": "co.logisim.openCurrentCircuit",
         "title": "CO: Logisim Open Current Circuit"
+      },
+      {
+        "command": "co.hazard.analyzeCurrentMachineCode",
+        "title": "CO: Analyze Pipeline Hazards"
+      },
+      {
+        "command": "co.hazard.openReport",
+        "title": "CO: Open Hazard Report"
       }
     ],
     "menus": {
@@ -454,6 +468,12 @@
         },
         {
           "command": "co.logisim.openCurrentCircuit"
+        },
+        {
+          "command": "co.hazard.analyzeCurrentMachineCode"
+        },
+        {
+          "command": "co.hazard.openReport"
         }
       ]
     },
@@ -520,6 +540,11 @@
           "type": "string",
           "default": "",
           "description": "Path to Xilinx ISE directory, for example D:/Xilinx/14.7/ISE_DS/ISE."
+        },
+        "co.toolchain.hazardCalculator": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Hazard-Calculator.jar for P5/P6 pipeline hazard analysis."
         },
         "co.mips.delayedBranching": {
           "type": "string",
@@ -592,6 +617,41 @@
           "type": "boolean",
           "default": true,
           "description": "Enable informational hints for synthesizable Verilog style issues such as initial blocks, declaration initializers, and multiply/divide operators."
+        },
+        "co.verilog.lint.disabledRules": {
+          "type": "array",
+          "default": [
+            "vc-001",
+            "vc-003",
+            "vc-004",
+            "vc-008",
+            "vc-014",
+            "vc-017",
+            "vc-021"
+          ],
+          "items": {
+            "type": "string",
+            "enum": [
+              "vc-001",
+              "vc-002",
+              "vc-003",
+              "vc-004",
+              "vc-005",
+              "vc-006",
+              "vc-007",
+              "vc-008",
+              "vc-009",
+              "vc-010",
+              "vc-011",
+              "vc-012",
+              "vc-013",
+              "vc-014",
+              "vc-015",
+              "vc-017",
+              "vc-021"
+            ]
+          },
+          "description": "Verilog course lint rule ids to suppress. VC-018, VC-019, VC-020, and VC-022 are not emitted; formatting handles spacing and indentation."
         },
         "co.run.showCommandBeforeRun": {
           "type": "boolean",

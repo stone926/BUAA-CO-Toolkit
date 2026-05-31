@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getIsePath, getJava, getLogisimJar, getMarsJar } from './config';
+import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile } from './config';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 
@@ -36,6 +36,12 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
     detail: fuse || 'not configured',
     suggestion: fuse ? undefined : 'Set co.toolchain.isePath to the ISE directory.'
   });
+
+  const hazard = getHazardCalculator(resource);
+  const profile = getProfile(resource);
+  if (hazard || profile === 'P5' || profile === 'P6') {
+    checks.push(fileCheck('Hazard Calculator', hazard, 'Set co.toolchain.hazardCalculator for P5/P6 hazard analysis.'));
+  }
 
   return checks;
 }

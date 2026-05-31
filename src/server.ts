@@ -6,6 +6,8 @@ import {
   DidChangeConfigurationNotification,
   Diagnostic,
   DocumentSymbol,
+  FileChangeType,
+  FileEvent,
   FoldingRange,
   Hover,
   InlayHint,
@@ -69,7 +71,7 @@ import {
   getVerilogSignatureHelp
 } from './language/verilog/service';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
-import { VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
+import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -207,8 +209,8 @@ connection.onDidChangeConfiguration((change) => {
   void validateAllDocuments();
 });
 
-connection.onDidChangeWatchedFiles(() => {
-  void rebuildVerilogIndex().then(validateAllDocuments);
+connection.onDidChangeWatchedFiles((params) => {
+  void handleWatchedFilesChanged(params.changes).then(validateAllDocuments);
 });
 
 documents.onDidOpen((event) => {
@@ -336,6 +338,30 @@ async function rebuildVerilogIndex(): Promise<void> {
   await verilogIndex.rebuild(workspaceFolders, settings);
   for (const document of documents.all()) {
     languageServices.get(document.languageId)?.updateDocument?.(document, settings);
+  }
+}
+
+async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<void> {
+  const verilogChanges = changes.filter((change) => isVerilogUri(change.uri));
+  if (!verilogChanges.length) {
+    return;
+  }
+  if (verilogChanges.length > 50) {
+    await rebuildVerilogIndex();
+    return;
+  }
+  const settings = await getDocumentSettings('');
+  for (const change of verilogChanges) {
+    if (change.type === FileChangeType.Deleted) {
+      verilogIndex.remove(change.uri);
+      continue;
+    }
+    const openDocument = documents.get(change.uri);
+    if (openDocument) {
+      verilogIndex.updateDocument(openDocument, settings);
+    } else {
+      verilogIndex.updateFile(change.uri, settings);
+    }
   }
 }
 
