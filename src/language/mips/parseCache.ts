@@ -6,6 +6,7 @@ import type { MipsServerState } from './state';
 interface CacheEntry {
   uri: string;
   version: number;
+  textKey: string;
   key: string;
   parsed: MipsParseResult;
 }
@@ -14,7 +15,8 @@ let entry: CacheEntry | undefined;
 
 export function getCachedMipsParse(document: TextDocument, settings: CoSettings, state: MipsServerState): MipsParseResult {
   const key = cacheKey(settings, state);
-  if (entry && entry.uri === document.uri && entry.version === document.version && entry.key === key) {
+  const currentTextKey = textKey(document.getText());
+  if (entry && entry.uri === document.uri && entry.version === document.version && entry.textKey === currentTextKey && entry.key === key) {
     return entry.parsed;
   }
 
@@ -26,6 +28,7 @@ export function getCachedMipsParse(document: TextDocument, settings: CoSettings,
   entry = {
     uri: document.uri,
     version: document.version,
+    textKey: currentTextKey,
     key,
     parsed
   };
@@ -44,4 +47,13 @@ function cacheKey(settings: CoSettings, state: MipsServerState): string {
     ignoredFiles: [...state.ignoredPseudoInstructionFiles].sort(),
     ignoredMnemonics: [...state.ignoredPseudoInstructionMnemonics].sort()
   });
+}
+
+function textKey(text: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${text.length}:${hash >>> 0}`;
 }

@@ -4,7 +4,6 @@ import {
   SemanticTokensBuilder
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { rangeKey } from '../common/util';
 import { mipsSemanticTokenTypes } from '../mips/resources';
@@ -16,11 +15,11 @@ import {
   verilogSemanticTokenTypes
 } from './model';
 import {
-  moduleAtPosition,
-  stripCommentsAndStrings
+  moduleAtPosition
 } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
+import { verilogTokenRange } from './cst';
 
 interface SemanticTokenCandidate {
   range: Range;
@@ -69,59 +68,59 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
     }
   }
 
-  let inBlockComment = false;
-  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-    const text = lineAt(document, lineNumber).text;
-    const strippedLine = stripCommentsForSemanticLine(text, lineNumber, inBlockComment);
-    inBlockComment = strippedLine.inBlockComment;
-    const code = strippedLine.code;
-    for (const commentRange of strippedLine.commentRanges) {
-      pushSemanticToken(tokens, pushed, commentRange, 'verilogComment');
+  for (const tokenNode of parsed.cst.tokens) {
+    if (tokenNode.kind === 'eof') {
+      continue;
     }
-    const stringRanges = pushStringAndFormatTokens(tokens, pushed, lineNumber, code);
-    const numberRegex = /\b\d+'[sS]?[bBoOdDhH][0-9a-fA-F_xXzZ?]+\b|\b\d+\b/g;
-    let numberMatch: RegExpExecArray | null;
-    while ((numberMatch = numberRegex.exec(code))) {
-      if (isInsideRanges(numberMatch.index, stringRanges)) {
-        continue;
-      }
-      pushSemanticToken(tokens, pushed, Range.create(lineNumber, numberMatch.index, lineNumber, numberMatch.index + numberMatch[0].length), 'verilogNumber');
+    const range = verilogTokenRange(document, tokenNode);
+    const token = tokenNode.value;
+    if (tokenNode.kind === 'comment') {
+      pushTokenText(tokens, pushed, range, token, 'verilogComment');
+      continue;
     }
-    const taskRegex = /\$([A-Za-z_]\w*)/g;
-    let taskMatch: RegExpExecArray | null;
-    while ((taskMatch = taskRegex.exec(code))) {
-      if (systemTasks.has(taskMatch[1])) {
-        pushSemanticToken(tokens, pushed, Range.create(lineNumber, taskMatch.index, lineNumber, taskMatch.index + taskMatch[0].length), 'verilogSystemTask');
-      }
+    if (tokenNode.kind === 'string') {
+      pushStringTokenParts(tokens, pushed, range, token);
+      continue;
     }
-    const tokenRegex = /\b[A-Za-z_]\w*\b/g;
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(code))) {
-      const token = match[0];
-      const previous = match.index > 0 ? code[match.index - 1] : '';
-      if (previous === '$' || previous === "'" || isInsideRanges(match.index, stringRanges)) {
-        continue;
+    if (tokenNode.kind === 'number') {
+      pushSemanticToken(tokens, pushed, range, 'verilogNumber');
+      continue;
+    }
+    if (tokenNode.kind === 'systemIdentifier') {
+      const name = token.startsWith('$') ? token.slice(1) : token;
+      if (systemTasks.has(name)) {
+        pushSemanticToken(tokens, pushed, range, 'verilogSystemTask');
       }
-      const range = Range.create(lineNumber, match.index, lineNumber, match.index + token.length);
-      if (previous === '`') {
-        const macroRange = Range.create(lineNumber, match.index - 1, lineNumber, match.index + token.length);
-        pushSemanticToken(tokens, pushed, macroRange, 'verilogMacro');
-        continue;
-      }
-      if (pushed.has(rangeKey(range))) {
-        continue;
-      }
-      if (verilogKeywords.has(token)) {
-        pushSemanticToken(tokens, pushed, range, 'verilogKeyword');
-        continue;
-      }
-      const module = moduleAtPosition(parsed.modules, range.start);
-      if (module?.declarations.has(token)) {
-        const decl = module.declarations.get(token);
-        pushSemanticToken(tokens, pushed, range, declTokenType(decl));
-      } else if (index.getModule(token) ?? parsed.modules.find((item) => item.name === token)) {
-        pushSemanticToken(tokens, pushed, range, 'verilogModule');
-      }
+      continue;
+    }
+    if (tokenNode.kind === 'directive') {
+      pushSemanticToken(tokens, pushed, range, 'verilogMacro');
+      continue;
+    }
+    if (tokenNode.kind === 'keyword') {
+      pushSemanticToken(tokens, pushed, range, 'verilogKeyword');
+      continue;
+    }
+    if (tokenNode.kind === 'punctuation' || tokenNode.kind === 'operator') {
+      pushSemanticToken(tokens, pushed, range, 'verilogPunctuation');
+      continue;
+    }
+    if (tokenNode.kind !== 'identifier') {
+      continue;
+    }
+    if (pushed.has(rangeKey(range))) {
+      continue;
+    }
+    if (verilogKeywords.has(token)) {
+      pushSemanticToken(tokens, pushed, range, 'verilogKeyword');
+      continue;
+    }
+    const module = moduleAtPosition(parsed.modules, range.start);
+    if (module?.declarations.has(token)) {
+      const decl = module.declarations.get(token);
+      pushSemanticToken(tokens, pushed, range, declTokenType(decl));
+    } else if (index.getModule(token) ?? parsed.modules.find((item) => item.name === token)) {
+      pushSemanticToken(tokens, pushed, range, 'verilogModule');
     }
   }
 
@@ -142,126 +141,116 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
   return builder.build();
 }
 
-function stripCommentsForSemanticLine(text: string, lineNumber: number, startsInBlockComment: boolean): { code: string; commentRanges: Range[]; inBlockComment: boolean } {
-  const chars = text.split('');
-  const commentRanges: Range[] = [];
-  let index = 0;
-  let inBlockComment = startsInBlockComment;
-
-  while (index < chars.length) {
-    if (inBlockComment) {
-      const start = index;
-      let end = chars.length;
-      while (index < chars.length - 1) {
-        if (chars[index] === '*' && chars[index + 1] === '/') {
-          end = index + 2;
-          inBlockComment = false;
-          break;
-        }
-        index++;
-      }
-      for (let item = start; item < end; item++) {
-        chars[item] = ' ';
-      }
-      commentRanges.push(Range.create(lineNumber, start, lineNumber, end));
-      index = end;
-      continue;
-    }
-
-    if (chars[index] === '"') {
-      index++;
-      while (index < chars.length) {
-        if (chars[index] === '\\') {
-          index += 2;
-          continue;
-        }
-        if (chars[index] === '"') {
-          index++;
-          break;
-        }
-        index++;
-      }
-      continue;
-    }
-
-    if (chars[index] === '/' && chars[index + 1] === '/') {
-      const start = index;
-      const end = chars.length;
-      for (let item = start; item < end; item++) {
-        chars[item] = ' ';
-      }
-      commentRanges.push(Range.create(lineNumber, start, lineNumber, end));
-      index = end;
-      continue;
-    }
-
-    if (chars[index] === '/' && chars[index + 1] === '*') {
-      const start = index;
-      index += 2;
-      let end = chars.length;
-      inBlockComment = true;
-      while (index < chars.length - 1) {
-        if (chars[index] === '*' && chars[index + 1] === '/') {
-          end = index + 2;
-          inBlockComment = false;
-          break;
-        }
-        index++;
-      }
-      for (let item = start; item < end; item++) {
-        chars[item] = ' ';
-      }
-      commentRanges.push(Range.create(lineNumber, start, lineNumber, end));
-      index = end;
-      continue;
-    }
-
-    index++;
-  }
-
-  return {
-    code: chars.join(''),
-    commentRanges,
-    inBlockComment
-  };
-}
-
-function pushStringAndFormatTokens(
+function pushTokenText(
   tokens: SemanticTokenCandidate[],
   pushed: Set<string>,
-  lineNumber: number,
-  code: string
-): Range[] {
-  const stringRanges: Range[] = [];
-  const stringRegex = /"([^"\\]|\\.)*"/g;
-  const formatRegex = /%[-+0# ]*(?:\d+|\*)?(?:\.\d+)?[bBcCdDeEfFgGhHlLmMoOpPsStTuUvVzZ%]/g;
-  let stringMatch: RegExpExecArray | null;
-  while ((stringMatch = stringRegex.exec(code))) {
-    const stringStart = stringMatch.index;
-    const stringEnd = stringStart + stringMatch[0].length;
-    stringRanges.push(Range.create(lineNumber, stringStart, lineNumber, stringEnd));
-
-    let segmentStart = stringStart;
-    let formatMatch: RegExpExecArray | null;
-    formatRegex.lastIndex = 0;
-    while ((formatMatch = formatRegex.exec(stringMatch[0]))) {
-      const formatStart = stringStart + formatMatch.index;
-      const formatEnd = formatStart + formatMatch[0].length;
-      if (formatStart > segmentStart) {
-        pushSemanticToken(tokens, pushed, Range.create(lineNumber, segmentStart, lineNumber, formatStart), 'verilogString');
-      }
-      pushSemanticToken(tokens, pushed, Range.create(lineNumber, formatStart, lineNumber, formatEnd), 'verilogFormatSpecifier');
-      segmentStart = formatEnd;
+  range: Range,
+  text: string,
+  tokenType: VerilogSemanticTokenType
+): void {
+  let line = range.start.line;
+  let character = range.start.character;
+  let segmentStart = 0;
+  for (let index = 0; index <= text.length; index++) {
+    if (index < text.length && text[index] !== '\n') {
+      continue;
     }
-    if (segmentStart < stringEnd) {
-      pushSemanticToken(tokens, pushed, Range.create(lineNumber, segmentStart, lineNumber, stringEnd), 'verilogString');
+    const rawSegment = text.slice(segmentStart, index);
+    const segment = rawSegment.endsWith('\r') ? rawSegment.slice(0, -1) : rawSegment;
+    if (segment.length > 0) {
+      pushSemanticToken(tokens, pushed, Range.create(line, character, line, character + segment.length), tokenType);
     }
+    line++;
+    character = 0;
+    segmentStart = index + 1;
   }
-  return stringRanges;
 }
 
-function isInsideRanges(index: number, ranges: Range[]): boolean {
-  return ranges.some((range) => index >= range.start.character && index < range.end.character);
+function pushStringTokenParts(
+  tokens: SemanticTokenCandidate[],
+  pushed: Set<string>,
+  range: Range,
+  text: string
+): void {
+  let segmentStart = 0;
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] !== '%') {
+      index++;
+      continue;
+    }
+    const formatEnd = readFormatSpecifierEnd(text, index);
+    if (formatEnd === undefined) {
+      index++;
+      continue;
+    }
+    if (index > segmentStart) {
+      pushSemanticToken(tokens, pushed, offsetRange(range, segmentStart, index), 'verilogString');
+    }
+    pushSemanticToken(tokens, pushed, offsetRange(range, index, formatEnd), 'verilogFormatSpecifier');
+    index = formatEnd;
+    segmentStart = formatEnd;
+  }
+  if (segmentStart < text.length) {
+    pushSemanticToken(tokens, pushed, offsetRange(range, segmentStart, text.length), 'verilogString');
+  }
+}
+
+function readFormatSpecifierEnd(text: string, start: number): number | undefined {
+  let index = start + 1;
+  if (index >= text.length) {
+    return undefined;
+  }
+  if (text[index] === '%') {
+    return index + 1;
+  }
+  while (index < text.length && isFormatFlag(text[index])) {
+    index++;
+  }
+  if (text[index] === '*') {
+    index++;
+  } else {
+    while (index < text.length && isAsciiDigit(text[index])) {
+      index++;
+    }
+  }
+  if (text[index] === '.') {
+    index++;
+    while (index < text.length && isAsciiDigit(text[index])) {
+      index++;
+    }
+  }
+  while (index < text.length && isFormatLengthModifier(text[index])) {
+    index++;
+  }
+  return index < text.length && isFormatConversion(text[index]) ? index + 1 : undefined;
+}
+
+function offsetRange(range: Range, start: number, end: number): Range {
+  return Range.create(
+    range.start.line,
+    range.start.character + start,
+    range.start.line,
+    range.start.character + end
+  );
+}
+
+function isFormatFlag(char: string): boolean {
+  return char === '-' || char === '+' || char === '0' || char === '#' || char === ' ';
+}
+
+function isFormatLengthModifier(char: string): boolean {
+  const lower = char.toLowerCase();
+  return lower === 'h' || lower === 'l' || lower === 'm';
+}
+
+function isFormatConversion(char: string): boolean {
+  const lower = char.toLowerCase();
+  return lower >= 'a' && lower <= 'z';
+}
+
+function isAsciiDigit(char: string): boolean {
+  return char >= '0' && char <= '9';
 }
 
 function pushSemanticToken(

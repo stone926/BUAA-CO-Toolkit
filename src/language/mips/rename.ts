@@ -5,8 +5,7 @@ import {
   WorkspaceEdit
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt, rangesEqual } from '../common/lsp';
-import { createMipsTokenRegex } from '../common/util';
+import { rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
   allMacroParams,
@@ -19,7 +18,7 @@ import {
 import { getCachedMipsParse } from './parseCache';
 import { findMacroOverloadAtPosition } from './queries';
 import { MipsServerState } from './state';
-import { findCommentIndex, getStringRanges, isInsideAnyRange } from './syntax';
+import { mipsCstTokenRange } from './syntax';
 import { getMipsWordRange } from './text';
 
 export function getMipsRenameEdits(document: TextDocument, position: Position, newName: string, settings: CoSettings, state: MipsServerState): WorkspaceEdit | undefined {
@@ -33,7 +32,7 @@ export function getMipsRenameEdits(document: TextDocument, position: Position, n
   // Check macro parameter rename
   const param = findMacroParamAtPosition(parsed, word, position) ?? allMacroParams(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (param) {
-    return buildRenameForToken(document, word, (range) => {
+    return buildRenameForToken(document, parsed, word, (range) => {
       const macro = findMacroAtPosition(parsed, range.start);
       return Boolean(macro && macro.name === param.macroName && macro.paramSymbols.get(word)?.selectionRange.start.line === param.selectionRange.start.line);
     }, param.selectionRange, newName);
@@ -42,7 +41,7 @@ export function getMipsRenameEdits(document: TextDocument, position: Position, n
   // Check symbol rename (label, data, eqv)
   const symbol = resolveSymbolAtPosition(parsed, word, position) ?? allSymbols(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (symbol) {
-    return buildRenameForToken(document, word, (range) => {
+    return buildRenameForToken(document, parsed, word, (range) => {
       return resolveSymbolAtPosition(parsed, word, range.start)?.selectionRange.start.line === symbol.selectionRange.start.line;
     }, symbol.selectionRange, newName);
   }
@@ -51,7 +50,7 @@ export function getMipsRenameEdits(document: TextDocument, position: Position, n
   const macro = findMacroOverloadAtPosition(document, parsed, word, position) ?? allMacros(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (macro) {
     const targetMacro = macro;
-    return buildRenameForToken(document, word, (range) => {
+    return buildRenameForToken(document, parsed, word, (range) => {
       const overload = findMacroOverloadAtPosition(document, parsed, word, range.start);
       return overload?.selectionRange.start.line === targetMacro.selectionRange.start.line;
     }, targetMacro.selectionRange, newName);
@@ -83,6 +82,7 @@ export function getMipsRenamePrepare(document: TextDocument, position: Position,
 
 function buildRenameForToken(
   document: TextDocument,
+  parsed: ReturnType<typeof getCachedMipsParse>,
   name: string,
   matchesTarget: (range: Range) => boolean,
   declarationRange: Range | undefined,
@@ -96,22 +96,12 @@ function buildRenameForToken(
   }
 
   // Find all references
-  const tokenRegex = createMipsTokenRegex();
-  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-    const text = lineAt(document, lineNumber).text;
-    const commentIndex = findCommentIndex(text);
-    const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
-    const stringRanges = getStringRanges(code);
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(code))) {
-      if (match[0] !== name || isInsideAnyRange(match.index, stringRanges)) {
+  for (const line of parsed.lines) {
+    for (const token of line.tokens) {
+      if (token.value !== name || !isReferenceTokenKind(token.kind)) {
         continue;
       }
-      const previous = match.index > 0 ? code[match.index - 1] : '';
-      if (previous === '$') {
-        continue;
-      }
-      const range = Range.create(lineNumber, match.index, lineNumber, match.index + name.length);
+      const range = mipsCstTokenRange(token);
       if (declarationRange && rangesEqual(range, declarationRange)) {
         continue;
       }
@@ -126,4 +116,8 @@ function buildRenameForToken(
       [document.uri]: edits
     }
   };
+}
+
+function isReferenceTokenKind(kind: string): boolean {
+  return kind === 'identifier' || kind === 'macroParameter' || kind === 'register';
 }

@@ -13,6 +13,7 @@ import {
   VerilogModule,
   VerilogPortConnection
 } from './model';
+import { VerilogCstDocument } from './cst';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import {
   collectAssignmentDiagnostics,
@@ -31,10 +32,11 @@ export function collectVerilogDiagnostics(
   settings: CoSettings,
   text: string,
   modules: VerilogModule[],
-  includes: VerilogInclude[]
+  includes: VerilogInclude[],
+  cst: VerilogCstDocument
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  collectSyntaxDiagnostics(document, text, modules, diagnostics);
+  collectSyntaxDiagnostics(document, cst, modules, diagnostics);
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(modules, diagnostics);

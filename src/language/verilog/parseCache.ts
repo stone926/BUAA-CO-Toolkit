@@ -24,7 +24,8 @@ function settingsKey(settings: CoSettings): string {
  */
 export function getCachedVerilogParse(document: TextDocument, settings: CoSettings, includeDiagnostics: boolean): VerilogParseResult {
   const settingKey = settingsKey(settings);
-  const key = documentCacheKey(document.uri, document.version, settingKey);
+  const text = document.getText();
+  const key = documentCacheKey(document.uri, document.version, settingKey, textKey(text));
   const cached = entries.get(key);
   if (cached && (!includeDiagnostics || cached.hasDiagnostics)) {
     touchCacheEntry(key, cached);
@@ -42,7 +43,7 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
   }
 
   const parsed = parseVerilog(document, settings, includeDiagnostics);
-  const strippedText = stripCommentsAndStrings(document.getText());
+  const strippedText = stripCommentsAndStrings(text);
   storeCacheEntry(key, {
     uri: document.uri,
     version: document.version,
@@ -60,7 +61,7 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
  */
 export function getCachedStrippedText(document: TextDocument, settings: CoSettings): string {
   const settingKey = settingsKey(settings);
-  const key = documentCacheKey(document.uri, document.version, settingKey);
+  const key = documentCacheKey(document.uri, document.version, settingKey, textKey(document.getText()));
   const cached = entries.get(key);
   if (cached) {
     touchCacheEntry(key, cached);
@@ -82,8 +83,21 @@ export function clearCachedVerilogParse(uri?: string): void {
   }
 }
 
-function documentCacheKey(uri: string, version: number, settings: string): string {
-  return `${uri}\u0000${version}\u0000${settings}`;
+function documentCacheKey(uri: string, version: number, settings: string, text: string): string {
+  return `${uri}\u0000${version}\u0000${settings}\u0000${text}`;
+}
+
+function textKey(text: string): string {
+  return `${text.length}:${hashText(text)}`;
+}
+
+function hashText(text: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function storeCacheEntry(key: string, value: CacheEntry): void {

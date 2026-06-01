@@ -1,4 +1,5 @@
 import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
+import type { VerilogCstDocument } from './cst';
 
 export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar';
 
@@ -70,6 +71,7 @@ export interface VerilogInclude {
 }
 
 export interface VerilogParseResult {
+  cst: VerilogCstDocument;
   modules: VerilogModule[];
   macros: VerilogMacro[];
   macroUses: VerilogMacroUse[];

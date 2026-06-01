@@ -5,6 +5,7 @@ export type VerilogTokenKind =
   | 'keyword'
   | 'number'
   | 'string'
+  | 'comment'
   | 'systemIdentifier'
   | 'directive'
   | 'operator'
@@ -64,6 +65,18 @@ const punctuation = new Set(['(', ')', '[', ']', '{', '}', ';', ',', '.', ':', '
 const singleOperators = new Set(['+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '=', '<', '>']);
 
 export function lexVerilog(text: string): VerilogLexResult {
+  const scanned = scanVerilog(text, false);
+  return {
+    tokens: scanned.tokens,
+    diagnostics: scanned.diagnostics
+  };
+}
+
+export function lexVerilogCst(text: string): VerilogLexResult {
+  return scanVerilog(text, true);
+}
+
+function scanVerilog(text: string, includeComments: boolean): VerilogLexResult {
   const tokens: VerilogToken[] = [];
   const diagnostics: VerilogLexDiagnostic[] = [];
   let index = 0;
@@ -77,13 +90,20 @@ export function lexVerilog(text: string): VerilogLexResult {
     }
 
     if (char === '/' && text[index + 1] === '/') {
-      index = skipLineComment(text, index + 2);
+      const end = skipLineComment(text, index + 2);
+      if (includeComments) {
+        tokens.push({ kind: 'comment', value: text.slice(index, end), start: index, end });
+      }
+      index = end;
       continue;
     }
 
     if (char === '/' && text[index + 1] === '*') {
       const end = text.indexOf('*/', index + 2);
       if (end < 0) {
+        if (includeComments) {
+          tokens.push({ kind: 'comment', value: text.slice(index), start: index, end: text.length });
+        }
         diagnostics.push({
           start: index,
           end: text.length,
@@ -91,6 +111,9 @@ export function lexVerilog(text: string): VerilogLexResult {
           code: 'syntax-unclosed-comment'
         });
         break;
+      }
+      if (includeComments) {
+        tokens.push({ kind: 'comment', value: text.slice(index, end + 2), start: index, end: end + 2 });
       }
       index = end + 2;
       continue;

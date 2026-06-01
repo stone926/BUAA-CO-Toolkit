@@ -7,8 +7,7 @@ import {
   SymbolKind
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt, rangesEqual } from '../common/lsp';
-import { createMipsTokenRegex } from '../common/util';
+import { rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
   allMacroParams,
@@ -23,11 +22,7 @@ import {
   findMacroOverloadAtPosition
 } from './queries';
 import { MipsServerState } from './state';
-import {
-  findCommentIndex,
-  getStringRanges,
-  isInsideAnyRange
-} from './syntax';
+import { mipsCstTokenRange } from './syntax';
 import { getMipsWordRange } from './text';
 
 export function getMipsDefinition(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): Location | undefined {
@@ -63,7 +58,7 @@ export function getMipsReferences(document: TextDocument, params: ReferenceParam
 
   const param = findMacroParamAtPosition(parsed, word, position) ?? allMacroParams(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (param) {
-    return collectTokenReferences(document, word, (range) => {
+    return collectTokenReferences(document, parsed, word, (range) => {
       const macro = findMacroAtPosition(parsed, range.start);
       return Boolean(macro && macro.name === param.macroName && macro.paramSymbols.get(word)?.selectionRange.start.line === param.selectionRange.start.line);
     }, param.selectionRange, params.context.includeDeclaration);
@@ -71,13 +66,13 @@ export function getMipsReferences(document: TextDocument, params: ReferenceParam
 
   const symbol = resolveSymbolAtPosition(parsed, word, position) ?? allSymbols(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (symbol) {
-    return collectTokenReferences(document, word, (range) => resolveSymbolAtPosition(parsed, word, range.start)?.selectionRange.start.line === symbol.selectionRange.start.line, symbol.selectionRange, params.context.includeDeclaration);
+    return collectTokenReferences(document, parsed, word, (range) => resolveSymbolAtPosition(parsed, word, range.start)?.selectionRange.start.line === symbol.selectionRange.start.line, symbol.selectionRange, params.context.includeDeclaration);
   }
 
   const macro = findMacroOverloadAtPosition(document, parsed, word, position) ?? allMacros(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (macro) {
     const targetMacro = macro;
-    return collectTokenReferences(document, word, (range) => {
+    return collectTokenReferences(document, parsed, word, (range) => {
       const overload = findMacroOverloadAtPosition(document, parsed, word, range.start);
       return overload?.selectionRange.start.line === targetMacro.selectionRange.start.line;
     }, targetMacro.selectionRange, params.context.includeDeclaration);
@@ -101,6 +96,7 @@ export function getMipsDocumentSymbols(document: TextDocument, settings: CoSetti
 
 function collectTokenReferences(
   document: TextDocument,
+  parsed: ReturnType<typeof getCachedMipsParse>,
   name: string,
   matchesTarget: (range: Range) => boolean,
   declarationRange?: Range,
@@ -111,22 +107,12 @@ function collectTokenReferences(
     locations.push(Location.create(document.uri, declarationRange));
   }
 
-  const tokenRegex = createMipsTokenRegex();
-  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-    const text = lineAt(document, lineNumber).text;
-    const commentIndex = findCommentIndex(text);
-    const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
-    const stringRanges = getStringRanges(code);
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(code))) {
-      if (match[0] !== name || isInsideAnyRange(match.index, stringRanges)) {
+  for (const line of parsed.lines) {
+    for (const token of line.tokens) {
+      if (token.value !== name || !isReferenceTokenKind(token.kind)) {
         continue;
       }
-      const previous = match.index > 0 ? code[match.index - 1] : '';
-      if (previous === '$') {
-        continue;
-      }
-      const range = Range.create(lineNumber, match.index, lineNumber, match.index + name.length);
+      const range = mipsCstTokenRange(token);
       if (declarationRange && rangesEqual(range, declarationRange)) {
         continue;
       }
@@ -137,4 +123,8 @@ function collectTokenReferences(
   }
 
   return locations;
+}
+
+function isReferenceTokenKind(kind: string): boolean {
+  return kind === 'identifier' || kind === 'macroParameter' || kind === 'register';
 }

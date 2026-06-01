@@ -3,6 +3,7 @@ import {
   stripComment,
   parseOperands,
   parseMacroArguments,
+  parseMipsCstDocument,
   formatMipsLine,
   findCommentIndex,
   getStringRanges,
@@ -487,6 +488,25 @@ describe('parseMacroArguments', () => {
 
   it('trims whitespace', () => {
     expect(parseMacroArguments('  $a  ,  $b  ')).toEqual(['$a', '$b']);
+  });
+});
+
+describe('parseMipsCstDocument', () => {
+  it('captures labels, executable ranges, operands, strings, and comments once', () => {
+    const text = 'main: loop: add $t0, 4($sp), "a#b" # comment';
+    const cst = parseMipsCstDocument(text);
+    const line = cst.lines[0];
+
+    expect(line.kind).toBe('statement');
+    if (line.kind !== 'statement') {
+      return;
+    }
+    expect(line.labels.map((label) => label.name)).toEqual(['main', 'loop']);
+    expect(line.executable?.mnemonic).toBe('add');
+    expect(line.executable?.operands.map((operand) => operand.text)).toEqual(['$t0', '4($sp)', '"a#b"']);
+    expect(line.comment?.value).toBe('# comment');
+    expect(line.tokens.some((token) => token.kind === 'string' && token.value === '"a#b"')).toBe(true);
+    expect(line.tokens.filter((token) => token.kind === 'comment')).toHaveLength(1);
   });
 });
 

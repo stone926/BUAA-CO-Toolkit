@@ -1,4 +1,5 @@
 import { Diagnostic, Range } from 'vscode-languageserver/node';
+import type { MipsCstLine } from './syntax';
 
 export interface MipsSymbol {
   name: string;
@@ -37,6 +38,7 @@ export interface MipsLabelReference {
 }
 
 export interface MipsParseResult {
+  lines: MipsCstLine[];
   labels: Map<string, MipsSymbol>;
   dataSymbols: Map<string, MipsSymbol>;
   eqvSymbols: Map<string, MipsSymbol>;

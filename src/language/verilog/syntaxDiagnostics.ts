@@ -2,7 +2,8 @@ import { Diagnostic, DiagnosticSeverity } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic, rangeAtOffset } from '../common/lsp';
 import { VerilogModule } from './model';
-import { lexVerilog, VerilogToken } from './lexer';
+import { VerilogToken } from './lexer';
+import { VerilogCstDocument } from './cst';
 
 type BlockToken = 'begin' | 'case' | 'generate' | 'function' | 'task';
 
@@ -57,12 +58,11 @@ const bodyBoundaryKeywords = new Set([
 
 export function collectSyntaxDiagnostics(
   document: TextDocument,
-  text: string,
+  cst: VerilogCstDocument,
   modules: VerilogModule[],
   diagnostics: Diagnostic[]
 ): void {
-  const lexed = lexVerilog(text);
-  for (const diagnostic of lexed.diagnostics) {
+  for (const diagnostic of cst.diagnostics) {
     diagnostics.push(makeDiagnostic(
       rangeAtOffset(document, diagnostic.start, Math.max(1, diagnostic.end - diagnostic.start)),
       diagnostic.message,
@@ -71,10 +71,10 @@ export function collectSyntaxDiagnostics(
     ));
   }
 
-  collectMalformedModuleDiagnostics(document, lexed.tokens, modules, diagnostics);
-  collectDelimiterDiagnostics(document, lexed.tokens, diagnostics);
-  collectBlockBalanceDiagnostics(document, lexed.tokens, diagnostics);
-  collectStatementTerminatorDiagnostics(document, lexed.tokens, modules, diagnostics);
+  collectMalformedModuleDiagnostics(document, cst.codeTokens, modules, diagnostics);
+  collectDelimiterDiagnostics(document, cst.codeTokens, diagnostics);
+  collectBlockBalanceDiagnostics(document, cst.codeTokens, diagnostics);
+  collectStatementTerminatorDiagnostics(document, cst.codeTokens, modules, diagnostics);
 }
 
 function collectMalformedModuleDiagnostics(

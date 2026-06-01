@@ -5,7 +5,6 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangesEqual } from '../common/lsp';
-import { createMipsTokenRegex } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { cp0RegisterAtPosition } from './display';
 import {
@@ -32,9 +31,7 @@ import {
 } from './resources';
 import { MipsServerState } from './state';
 import {
-  findCommentIndex,
-  getStringRanges,
-  isInsideAnyRange
+  mipsCstTokenRange
 } from './syntax';
 
 interface MipsSemanticTokenCandidate {
@@ -67,46 +64,29 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
     pushSemanticToken(tokens, symbol.selectionRange, 'mipsEqvSymbol', ['declaration']);
   }
 
-  const tokenRegex = createMipsTokenRegex();
-  const numberRegex = /[-+]?(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|0[0-7]+|\b\d+\b)/g;
-  const punctuationRegex = /[(),:]/g;
-  const lines = document.getText().split('\n');
-  for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
-    const text = lines[lineNumber];
-    const commentIndex = findCommentIndex(text);
-    if (commentIndex >= 0) {
-      pushSemanticToken(tokens, Range.create(lineNumber, commentIndex, lineNumber, text.length), 'mipsComment');
-    }
-    const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
-    const stringRanges = getStringRanges(code);
-    for (const stringRange of stringRanges) {
-      pushSemanticToken(tokens, Range.create(lineNumber, stringRange.start, lineNumber, stringRange.end), 'mipsString');
-    }
-
-    let numberMatch: RegExpExecArray | null;
-    while ((numberMatch = numberRegex.exec(code))) {
-      const previous = numberMatch.index > 0 ? code[numberMatch.index - 1] : '';
-      if (!isInsideAnyRange(numberMatch.index, stringRanges) && previous !== '$') {
-        pushSemanticToken(tokens, Range.create(lineNumber, numberMatch.index, lineNumber, numberMatch.index + numberMatch[0].length), 'mipsNumber');
-      }
-    }
-
-    let punctuationMatch: RegExpExecArray | null;
-    while ((punctuationMatch = punctuationRegex.exec(code))) {
-      if (!isInsideAnyRange(punctuationMatch.index, stringRanges)) {
-        pushSemanticToken(tokens, Range.create(lineNumber, punctuationMatch.index, lineNumber, punctuationMatch.index + punctuationMatch[0].length), 'mipsPunctuation');
-      }
-    }
-
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(code))) {
-      const token = match[0];
-      const previous = match.index > 0 ? code[match.index - 1] : '';
-      if (previous === '$' || isInsideAnyRange(match.index, stringRanges)) {
+  for (const line of parsed.lines) {
+    for (const cstToken of line.tokens) {
+      const token = cstToken.value;
+      const range = mipsCstTokenRange(cstToken);
+      if (cstToken.kind === 'comment') {
+        pushSemanticToken(tokens, range, 'mipsComment');
         continue;
       }
-
-      const range = Range.create(lineNumber, match.index, lineNumber, match.index + token.length);
+      if (cstToken.kind === 'string') {
+        pushSemanticToken(tokens, range, 'mipsString');
+        continue;
+      }
+      if (cstToken.kind === 'number') {
+        pushSemanticToken(tokens, range, 'mipsNumber');
+        continue;
+      }
+      if (cstToken.kind === 'punctuation') {
+        pushSemanticToken(tokens, range, 'mipsPunctuation');
+        continue;
+      }
+      if (cstToken.kind !== 'identifier' && cstToken.kind !== 'directive' && cstToken.kind !== 'register' && cstToken.kind !== 'macroParameter') {
+        continue;
+      }
       if (isKnownDeclarationRange(range, parsed)) {
         continue;
       }
