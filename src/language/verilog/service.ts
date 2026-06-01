@@ -25,6 +25,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { containsPosition, lineAt, rangeAtOffset, rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import { filterDisabledDiagnostics } from '../common/diagnosticActions';
 import { rangeKey } from '../common/util';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import {
@@ -113,7 +114,8 @@ interface InstanceContext {
 
 export function getVerilogDiagnostics(document: TextDocument, settings: CoSettings, index?: VerilogWorkspaceIndex): Diagnostic[] {
   const parsed = getCachedVerilogParse(document, settings, true);
-  return index ? addVerilogWorkspaceDiagnostics(document, settings, index, parsed.diagnostics, parsed) : parsed.diagnostics;
+  const diagnostics = index ? addVerilogWorkspaceDiagnostics(document, settings, index, parsed.diagnostics, parsed) : parsed.diagnostics;
+  return filterDisabledDiagnostics(document.languageId, diagnostics, settings);
 }
 
 export function getVerilogCompletions(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): CompletionItem[] {

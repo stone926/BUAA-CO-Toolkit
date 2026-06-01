@@ -168,15 +168,14 @@ function stripCommentsForSemanticLine(text: string, lineNumber: number, startsIn
       continue;
     }
 
-    if (chars[index] === '"' || chars[index] === "'") {
-      const quote = chars[index];
+    if (chars[index] === '"') {
       index++;
       while (index < chars.length) {
         if (chars[index] === '\\') {
           index += 2;
           continue;
         }
-        if (chars[index] === quote) {
+        if (chars[index] === '"') {
           index++;
           break;
         }

@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   defaultCoSettings,
   defaultDisabledVerilogLintRules,
+  diagnosticCodeKey,
+  diagnosticCodeToString,
+  isDiagnosticCodeDisabled,
   isVerilogLintRuleEnabled,
   mergeCoSettings
 } from '../../../language/common/settings';
@@ -64,6 +67,7 @@ describe('mergeCoSettings', () => {
           style: 'custom',
           continuationIndent: 0,
           spaceInRange: false,
+          declarationRangeSpacing: 'compact',
           maxBlankLines: -1
         }
       }
@@ -71,6 +75,7 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.style).toBe('custom');
     expect(result.verilog.format.continuationIndent).toBe(1);
     expect(result.verilog.format.spaceInRange).toBe(false);
+    expect(result.verilog.format.declarationRangeSpacing).toBe('compact');
     expect(result.verilog.format.maxBlankLines).toBe(0);
   });
 
@@ -91,6 +96,19 @@ describe('mergeCoSettings', () => {
   it('normalizes custom disabled Verilog lint rules', () => {
     const result = mergeCoSettings({ verilog: { lint: { disabledRules: ['VC-002', 'bad', 'vc-002', ' vc-017 '] } } });
     expect(result.verilog.lint.disabledRules).toEqual(['vc-002', 'vc-017']);
+  });
+
+  it('normalizes disabled diagnostic codes', () => {
+    const result = mergeCoSettings({
+      diagnostics: {
+        disabledCodes: [' Verilog:SYNTH-MUL-DIV ', 'bad code', 'verilog:synth-mul-div', 'mipsasm:co-section-address']
+      }
+    });
+    expect(result.diagnostics.disabledCodes).toEqual(['mipsasm:co-section-address', 'verilog:synth-mul-div']);
+    expect(diagnosticCodeKey('Verilog', 'SYNTH-MUL-DIV')).toBe('verilog:synth-mul-div');
+    expect(diagnosticCodeToString(' missing-endmodule ')).toBe('missing-endmodule');
+    expect(isDiagnosticCodeDisabled(result, 'verilog', 'SYNTH-MUL-DIV')).toBe(true);
+    expect(isDiagnosticCodeDisabled(result, 'mipsasm', 'co-section-address')).toBe(true);
   });
 
   it('merges multiple sections at once', () => {

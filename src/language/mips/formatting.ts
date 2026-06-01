@@ -1,16 +1,16 @@
-import { TextEdit } from 'vscode-languageserver/node';
+import { Range, TextEdit } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt } from '../common/lsp';
-import { formatMipsLine } from './syntax';
+import {
+  parseMipsFormatDocument,
+  printMipsFormatDocument
+} from './syntax';
 
 export function getMipsFormattingEdits(document: TextDocument): TextEdit[] {
-  const edits: TextEdit[] = [];
-  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-    const line = lineAt(document, lineNumber);
-    const formatted = formatMipsLine(line.text);
-    if (formatted !== line.text) {
-      edits.push(TextEdit.replace(line.range, formatted));
-    }
+  const text = document.getText();
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const formatted = printMipsFormatDocument(parseMipsFormatDocument(text), eol);
+  if (formatted === text) {
+    return [];
   }
-  return edits;
+  return [TextEdit.replace(Range.create(0, 0, document.lineCount, 0), formatted)];
 }

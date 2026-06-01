@@ -30,6 +30,10 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { defaultCoSettings, mergeCoSettings, CoSettings } from './language/common/settings';
 import {
+  filterDisabledDiagnostics,
+  getDiagnosticSuppressActions
+} from './language/common/diagnosticActions';
+import {
   getLogisimDiagnostics,
   getLogisimDocumentSymbols,
   getLogisimHover
@@ -274,7 +278,7 @@ connection.onDocumentSymbol(withDocument(
 ));
 
 connection.onCodeAction(withDocument(
-  (doc, params, settings, svc) => svc.getCodeActions?.(doc, params.range, params.context.diagnostics, settings), []
+  (doc, params, settings, svc) => getCodeActions(doc, params.range, params.context.diagnostics, settings, svc), []
 ));
 
 connection.onDocumentFormatting(withDocument(
@@ -323,11 +327,29 @@ async function updateIndexAndValidate(document: TextDocument): Promise<void> {
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
   const resolvedSettings = settings ?? await getDocumentSettings(document.uri);
-  const diagnostics = languageServices.get(document.languageId)?.getDiagnostics?.(document, resolvedSettings) ?? [];
+  const diagnostics = filterDisabledDiagnostics(
+    document.languageId,
+    languageServices.get(document.languageId)?.getDiagnostics?.(document, resolvedSettings) ?? [],
+    resolvedSettings
+  );
   connection.sendDiagnostics({
     uri: document.uri,
     diagnostics
   });
+}
+
+function getCodeActions(
+  document: TextDocument,
+  range: Range,
+  diagnostics: Diagnostic[],
+  settings: CoSettings,
+  service: CoLanguageService
+): CodeAction[] {
+  const languageActions = service.getCodeActions?.(document, range, diagnostics, settings) ?? [];
+  return [
+    ...languageActions,
+    ...getDiagnosticSuppressActions(document.languageId, diagnostics, settings)
+  ];
 }
 
 async function validateAllDocuments(): Promise<void> {

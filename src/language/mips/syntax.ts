@@ -14,10 +14,7 @@ export function parseOperands(text: string): string[] {
   if (!normalized) {
     return [];
   }
-  return normalized
-    .split(',')
-    .map((operand) => operand.trim())
-    .filter(Boolean);
+  return splitMipsCommaOperands(normalized);
 }
 
 export function parseMacroArguments(text: string): string[] {
@@ -48,19 +45,197 @@ export function parseMacroArguments(text: string): string[] {
   return args;
 }
 
-export function formatMipsLine(line: string): string {
+export interface MipsFormatDocument {
+  kind: 'document';
+  lines: MipsFormatLine[];
+}
+
+export type MipsFormatLine =
+  | MipsBlankLine
+  | MipsCommentLine
+  | MipsStatementLine;
+
+export interface MipsBlankLine {
+  kind: 'blank';
+}
+
+export interface MipsCommentLine {
+  kind: 'comment';
+  comment: string;
+}
+
+export interface MipsStatementLine {
+  kind: 'statement';
+  labels: string[];
+  executable?: MipsExecutableNode;
+  comment?: string;
+}
+
+export interface MipsExecutableNode {
+  kind: 'directive' | 'instruction';
+  mnemonic: string;
+  operandText: string;
+  operands: string[];
+}
+
+export function parseMipsFormatDocument(text: string): MipsFormatDocument {
+  return {
+    kind: 'document',
+    lines: text.split(/\r?\n/).map(parseMipsFormatLine)
+  };
+}
+
+export function printMipsFormatDocument(ast: MipsFormatDocument, eol = '\n'): string {
+  let macroDepth = 0;
+  return ast.lines.map((line) => {
+    if (isMipsDirective(line, '.end_macro')) {
+      macroDepth = Math.max(0, macroDepth - 1);
+    }
+    const formatted = printMipsFormatLineWithContext(line, macroDepth > 0);
+    if (isMipsDirective(line, '.macro')) {
+      macroDepth++;
+    }
+    return formatted;
+  }).join(eol);
+}
+
+export function parseMipsFormatLine(line: string): MipsFormatLine {
   const commentIndex = findCommentIndex(line);
   const code = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
   const comment = commentIndex >= 0 ? line.slice(commentIndex).trimEnd() : '';
   if (!code.trim()) {
-    return comment ? comment : '';
+    return comment ? { kind: 'comment', comment } : { kind: 'blank' };
   }
-  const trimmed = code.trim().replace(/\s*,\s*/g, ', ');
-  const formattedCode = /^[A-Za-z_.$][\w.$]*:/.test(trimmed) || trimmed.startsWith('.') ? trimmed : `    ${trimmed}`;
-  if (!comment) {
+
+  let rest = code.trim();
+  const labels: string[] = [];
+  while (true) {
+    const labelMatch = /^([A-Za-z_.$%][\w.$%]*):/.exec(rest);
+    if (!labelMatch) {
+      break;
+    }
+    labels.push(labelMatch[1]);
+    rest = rest.slice(labelMatch[0].length).trimStart();
+  }
+
+  const tokenMatch = /^([A-Za-z_.$][\w.$]*|\.[A-Za-z_][\w.]*)([\s\S]*)$/.exec(rest);
+  const executable = tokenMatch
+    ? {
+      kind: tokenMatch[1].startsWith('.') ? 'directive' as const : 'instruction' as const,
+      mnemonic: tokenMatch[1],
+      operandText: normalizeMipsOperandText(tokenMatch[2].trim()),
+      operands: parseOperands(tokenMatch[2].trim())
+    }
+    : undefined;
+
+  return {
+    kind: 'statement',
+    labels,
+    executable,
+    comment: comment || undefined
+  };
+}
+
+export function printMipsFormatLine(line: MipsFormatLine): string {
+  return printMipsFormatLineWithContext(line, false);
+}
+
+function printMipsFormatLineWithContext(line: MipsFormatLine, indentDirectives: boolean): string {
+  if (line.kind === 'blank') {
+    return '';
+  }
+  if (line.kind === 'comment') {
+    return line.comment;
+  }
+  const formattedCode = printMipsStatement(line, indentDirectives);
+  if (!line.comment) {
     return formattedCode;
   }
-  return `${formattedCode.padEnd(Math.max(formattedCode.length + 1, 32))}${comment}`;
+  return `${formattedCode.padEnd(Math.max(formattedCode.length + 1, 32))}${line.comment}`;
+}
+
+export function formatMipsLine(line: string): string {
+  return printMipsFormatLine(parseMipsFormatLine(line));
+}
+
+function printMipsStatement(line: MipsStatementLine, indentDirectives: boolean): string {
+  const labels = line.labels.map((label) => `${label}:`).join(' ');
+  const executable = line.executable ? printMipsExecutable(line.executable) : '';
+  if (labels && executable) {
+    return `${labels} ${executable}`;
+  }
+  if (labels) {
+    return labels;
+  }
+  if (!line.executable) {
+    return '';
+  }
+  return line.executable.kind === 'directive' && !indentDirectives
+    ? executable
+    : `    ${executable}`;
+}
+
+function printMipsExecutable(executable: MipsExecutableNode): string {
+  return executable.operandText
+    ? `${executable.mnemonic} ${executable.operandText}`
+    : executable.mnemonic;
+}
+
+function normalizeMipsOperandText(text: string): string {
+  return splitMipsCommaOperandSpans(text)
+    .map((operand) => operand.trim())
+    .join(', ');
+}
+
+function splitMipsCommaOperands(text: string): string[] {
+  return splitMipsCommaOperandSpans(text)
+    .map((operand) => operand.trim())
+    .filter(Boolean);
+}
+
+function splitMipsCommaOperandSpans(text: string): string[] {
+  const operands: string[] = [];
+  let start = 0;
+  let paren = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      escaped = char === '\\' && !escaped;
+      if (char === '"' && !escaped) {
+        inString = false;
+      } else if (char !== '\\') {
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      escaped = false;
+      continue;
+    }
+    if (char === '(') {
+      paren++;
+      continue;
+    }
+    if (char === ')') {
+      paren = Math.max(0, paren - 1);
+      continue;
+    }
+    if (char === ',' && paren === 0) {
+      operands.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  operands.push(text.slice(start));
+  return operands;
+}
+
+function isMipsDirective(line: MipsFormatLine, directive: string): boolean {
+  return line.kind === 'statement'
+    && line.executable?.kind === 'directive'
+    && line.executable.mnemonic.toLowerCase() === directive;
 }
 
 export function findCommentIndex(line: string): number {

@@ -37,7 +37,7 @@ describe('Verilog formatting', () => {
     ].join('\n');
 
     expect(format(input)).toBe([
-      'module demo(',
+      'module demo (',
       '    input [31: 0] a,',
       '    output reg [3: 0] y',
       '  );',
@@ -83,7 +83,7 @@ describe('Verilog formatting', () => {
     ].join('\n');
 
     expect(format(input, settings, { insertSpaces: true, tabSize: 4 })).toBe([
-      'module demo(',
+      'module demo (',
       '    input [31:0] a',
       '    );',
       '    Sub u_sub(',
@@ -112,6 +112,149 @@ describe('Verilog formatting', () => {
     expect(format('module demo;\nalways@( * ) begin\nend\nendmodule')).toContain('always @(*) begin');
   });
 
+  it('formats declaration range bracket spacing by default', () => {
+    const input = [
+      'module demo;',
+      'input[1:0]a;',
+      'output reg[3 :0]y;',
+      'wire[7:0]w;',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module demo;',
+      '  input [1: 0] a;',
+      '  output reg [3: 0] y;',
+      '  wire [7: 0] w;',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('supports compact and preserved declaration range bracket spacing', () => {
+    const compact = mergeCoSettings({
+      verilog: {
+        format: {
+          style: 'custom',
+          spaceInRange: false,
+          declarationRangeSpacing: 'compact'
+        }
+      }
+    });
+    expect(format('module demo;\ninput [1 : 0] a;\nendmodule', compact)).toBe([
+      'module demo;',
+      '  input[1:0]a;',
+      'endmodule'
+    ].join('\n'));
+
+    const preserve = mergeCoSettings({
+      verilog: {
+        format: {
+          style: 'custom',
+          spaceInRange: false,
+          declarationRangeSpacing: 'preserve'
+        }
+      }
+    });
+    expect(format('module demo;\ninput[1 : 0]a;\noutput reg   [3 : 0]   y;\nendmodule', preserve)).toBe([
+      'module demo;',
+      '  input[1:0]a;',
+      '  output reg   [3:0]   y;',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('normalizes line comment slash spacing', () => {
+    const input = [
+      '//abc',
+      '////sth////',
+      'module demo;',
+      'assign a=b;////inline////',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      '// abc',
+      '//// sth ////',
+      'module demo;',
+      '  assign a = b; //// inline ////',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('indents case item bodies one level and spaces same-line case item colons', () => {
+    const input = [
+      'module demo;',
+      'case(PC_slt)',
+      'ADD4:',
+      "PC_reg<=PC_reg+32'd4;",
+      'RA:PC_reg<=ra;',
+      'IMM26://absolute jump',
+      "PC_reg<={PC_plus4[31:28],imm26,2'b00};",
+      'IMM16:////branch////',
+      "PC_reg<=zero?PC_reg:32'd4;",
+      'default:',
+      "PC_reg<=PC_reg+32'd4;",
+      'endcase',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module demo;',
+      '  case (PC_slt)',
+      '    ADD4:',
+      "      PC_reg <= PC_reg + 32'd4;",
+      '    RA: PC_reg <= ra;',
+      '    IMM26: // absolute jump',
+      "      PC_reg <= {PC_plus4[31: 28], imm26, 2'b00};",
+      '    IMM16: //// branch ////',
+      "      PC_reg <= zero ? PC_reg : 32'd4;",
+      '    default:',
+      "      PC_reg <= PC_reg + 32'd4;",
+      '  endcase',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('keeps chained ternary continuations aligned', () => {
+    const input = [
+      'assign ALU_out=(ALU_op==ADD)?(ALU_in1+ALU_in2):',
+      '(ALU_op==SUB)?(ALU_in1-ALU_in2):',
+      '(ALU_op==OR)?(ALU_in1|ALU_in2):',
+      "32'b0;"
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'assign ALU_out = (ALU_op == ADD) ? (ALU_in1 + ALU_in2) :',
+      '    (ALU_op == SUB) ? (ALU_in1 - ALU_in2) :',
+      '    (ALU_op == OR) ? (ALU_in1 | ALU_in2) :',
+      "    32'b0;"
+    ].join('\n'));
+  });
+
+  it('aligns assign and parameter continuations to the course examples', () => {
+    const input = [
+      'module demo;',
+      'parameter ADD=6\'b000000,',
+      'SUB=6\'b000001,',
+      'ORI=6\'b000010;',
+      'assign outputA=',
+      'type==ADD?a_add_b:',
+      'type==SUB?a_sub_b:none;',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module demo;',
+      "  parameter ADD = 6'b000000,",
+      "            SUB = 6'b000001,",
+      "            ORI = 6'b000010;",
+      '  assign outputA =',
+      '         type == ADD ? a_add_b :',
+      '         type == SUB ? a_sub_b : none;',
+      'endmodule'
+    ].join('\n'));
+  });
+
   it('does not treat comment-only lines ending in colon as continued expressions', () => {
     const input = [
       '// Company:',
@@ -129,7 +272,7 @@ describe('Verilog formatting', () => {
       '// Engineer:',
       '// Project Name:',
       '`default_nettype none',
-      'module demo(',
+      'module demo (',
       '    input clk',
       '  );',
       'endmodule'
@@ -150,6 +293,92 @@ describe('Verilog formatting', () => {
       '\tif (a) begin',
       '\t\ta <= 1;',
       '\tend',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('keeps spaces around else-if conditions and begin', () => {
+    const input = [
+      'module Hazard;',
+      "if(E_new!=3'b111&&E_A3!=5'b0&&E_A3==D_rs&&D_Trs<E_new)begin",
+      'stall=1;',
+      'end',
+      "else if(M_new!=3'b111&&M_A3!=5'b0&&M_A3==D_rs&&D_Trs<M_new)begin",
+      'stall=1;',
+      'end',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module Hazard;',
+      "  if (E_new != 3'b111 && E_A3 != 5'b0 && E_A3 == D_rs && D_Trs < E_new) begin",
+      '    stall = 1;',
+      '  end',
+      "  else if (M_new != 3'b111 && M_A3 != 5'b0 && M_A3 == D_rs && D_Trs < M_new) begin",
+      '    stall = 1;',
+      '  end',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('uses a space before module declaration port lists', () => {
+    expect(format('module Hazard(input clk);\nendmodule')).toBe('module Hazard (input clk);\nendmodule');
+  });
+
+  it('formats macro-based case labels as code instead of preprocessor directives', () => {
+    const input = [
+      'module demo;',
+      'case(state)',
+      '`IDLE: if(ctrl[0]) begin',
+      'state<=`LOAD;',
+      'end',
+      '`LOAD: begin',
+      '`count<=`preset;',
+      'state<=`CNT;',
+      'end',
+      '`CNT:',
+      'if(ctrl[0]) begin',
+      "if(`count>1) `count<=`count-1;",
+      'else begin',
+      '`count<=0;',
+      'state<=`INT;',
+      'end',
+      'end',
+      'else state<=`IDLE;',
+      'default: begin',
+      "if(ctrl[2:1]==2'b00) ctrl[0]<=1'b0;",
+      "else _IRQ<=1'b0;",
+      'state<=`IDLE;',
+      'end',
+      'endcase',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module demo;',
+      '  case (state)',
+      '    `IDLE: if (ctrl[0]) begin',
+      '      state <= `LOAD;',
+      '    end',
+      '    `LOAD: begin',
+      '      `count <= `preset;',
+      '      state <= `CNT;',
+      '    end',
+      '    `CNT:',
+      '      if (ctrl[0]) begin',
+      "        if (`count > 1) `count <= `count - 1;",
+      '        else begin',
+      '          `count <= 0;',
+      '          state <= `INT;',
+      '        end',
+      '      end',
+      '      else state <= `IDLE;',
+      '    default: begin',
+      "      if (ctrl[2: 1] == 2'b00) ctrl[0] <= 1'b0;",
+      "      else _IRQ <= 1'b0;",
+      '      state <= `IDLE;',
+      '    end',
+      '  endcase',
       'endmodule'
     ].join('\n'));
   });

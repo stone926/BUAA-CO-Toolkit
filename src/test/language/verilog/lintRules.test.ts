@@ -23,6 +23,12 @@ function diagnosticCodes(text: string, disabledRules?: string[]): string[] {
     .filter((code): code is string => typeof code === 'string');
 }
 
+function diagnosticCodesWithSettings(text: string, settingsValue: unknown): string[] {
+  return getVerilogDiagnostics(doc(text), mergeCoSettings(settingsValue))
+    .map((diagnostic) => diagnostic.code)
+    .filter((code): code is string => typeof code === 'string');
+}
+
 describe('Verilog course lint rule configuration', () => {
   const disabledByDefaultSample = `
 module demo(input a, output reg y);
@@ -85,5 +91,46 @@ endmodule
     const actions = getVerilogCodeActions(document, vc007!.range, [vc007!], settings, new VerilogWorkspaceIndex());
     const disableAction = actions.find((action) => action.command?.command === 'co.verilog.disableLintRule');
     expect(disableAction?.command?.arguments).toEqual(['vc-007']);
+  });
+
+  it('does not report synth-mul-div for sensitivity wildcards, attributes, or timescale directives', () => {
+    const text = `
+\`timescale 1ns / 1ps
+module demo(input a, output reg y);
+    (* keep = "true" *) wire kept;
+    always @(*) begin
+        y = a | kept;
+    end
+    always @* begin
+        y = y ^ a;
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).not.toContain('synth-mul-div');
+  });
+
+  it('still reports actual multiply, divide, and modulo operators', () => {
+    const text = `
+module demo(input [3:0] a, input [3:0] b, output [3:0] y);
+    assign y = (a * b) / 2 % 3;
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes.filter((code) => code === 'synth-mul-div')).toHaveLength(3);
+  });
+
+  it('filters diagnostics disabled through the generic diagnostic suppress setting', () => {
+    const text = `
+module demo(input [3:0] a, input [3:0] b, output [3:0] y);
+    assign y = a * b;
+endmodule
+`.trim();
+    const codes = diagnosticCodesWithSettings(text, {
+      diagnostics: {
+        disabledCodes: ['verilog:synth-mul-div']
+      }
+    });
+    expect(codes).not.toContain('synth-mul-div');
   });
 });

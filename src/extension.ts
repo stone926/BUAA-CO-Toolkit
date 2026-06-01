@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
 import { getProfile } from './config';
+import {
+  diagnosticCodeKey,
+  diagnosticCodeToString,
+  disableDiagnosticCodeCommand,
+  defaultCoSettings
+} from './language/common/settings';
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
@@ -58,6 +64,10 @@ export function activate(context: vscode.ExtensionContext): void {
   // Register refresh command for sidebar
   context.subscriptions.push(
     vscode.commands.registerCommand('co.sidebar.refresh', () => sidebarProvider.refresh())
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(disableDiagnosticCodeCommand, (languageId?: string, code?: string) => disableDiagnosticCode(languageId, code))
   );
 
   registerMips(context, services);
@@ -140,6 +150,21 @@ async function selectProjectProfile(): Promise<void> {
   }
   await vscode.workspace.getConfiguration('co').update('project.profile', picked.profile, vscode.ConfigurationTarget.Workspace);
   vscode.window.showInformationMessage(`BUAA CO profile set to ${picked.profile}.`);
+}
+
+async function disableDiagnosticCode(languageId?: string, code?: string): Promise<void> {
+  const normalizedLanguageId = typeof languageId === 'string' ? languageId.trim().toLowerCase() : '';
+  const normalizedCode = diagnosticCodeToString(code);
+  if (!normalizedLanguageId || !normalizedCode) {
+    vscode.window.showErrorMessage('Cannot suppress this diagnostic because its code is invalid.');
+    return;
+  }
+  const key = diagnosticCodeKey(normalizedLanguageId, normalizedCode);
+  const config = vscode.workspace.getConfiguration('co');
+  const current = config.get<string[]>('diagnostics.disabledCodes', defaultCoSettings.diagnostics.disabledCodes);
+  const merged = [...new Set([...current.map((item) => item.trim().toLowerCase()).filter(Boolean), key])].sort();
+  await config.update('diagnostics.disabledCodes', merged, vscode.ConfigurationTarget.Workspace);
+  vscode.window.showInformationMessage(`Suppressed ${normalizedCode} diagnostics in this workspace.`);
 }
 
 function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => Promise<ToolDetection[]>): void {

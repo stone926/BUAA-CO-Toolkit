@@ -63,7 +63,7 @@ export function collectCourseStyleDiagnostics(
 }
 
 export function collectSynthesizableHintDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
-  const stripped = stripCommentsAndStrings(text);
+  const stripped = stripVerilogAttributes(stripPreprocessorDirectives(stripCommentsAndStrings(text)));
   const initialRegex = /\binitial\b/g;
   let initialMatch: RegExpExecArray | null;
   while ((initialMatch = initialRegex.exec(stripped))) {
@@ -79,6 +79,9 @@ export function collectSynthesizableHintDiagnostics(document: TextDocument, text
   const mulDivRegex = /(?<![*/])(?:\*|\/|%)(?![*/])/g;
   let operatorMatch: RegExpExecArray | null;
   while ((operatorMatch = mulDivRegex.exec(stripped))) {
+    if (!shouldReportSynthesizableOperator(stripped, operatorMatch.index)) {
+      continue;
+    }
     diagnostics.push(makeDiagnostic(rangeAtOffset(document, operatorMatch.index, operatorMatch[0].length), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
   }
 }
@@ -399,4 +402,62 @@ function isInsideBracketRange(text: string, index: number): boolean {
   const before = text.slice(lineStart, index);
   const after = text.slice(index, lineEnd);
   return before.lastIndexOf('[') > before.lastIndexOf(']') && after.includes(']');
+}
+
+function stripPreprocessorDirectives(text: string): string {
+  return text.replace(/^[ \t]*`(?:timescale|default_nettype|include|define|undef|ifdef|ifndef|elsif|else|endif)\b.*$/gm, (match) => ' '.repeat(match.length));
+}
+
+function stripVerilogAttributes(text: string): string {
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] !== '(' || text[index + 1] !== '*' || previousNonWhitespace(text, index - 1)?.char === '@') {
+      result += text[index] ?? '';
+      index++;
+      continue;
+    }
+    const end = text.indexOf('*)', index + 2);
+    if (end < 0) {
+      result += text.slice(index);
+      break;
+    }
+    result += ' '.repeat(end + 2 - index);
+    index = end + 2;
+  }
+  return result;
+}
+
+function shouldReportSynthesizableOperator(text: string, index: number): boolean {
+  if (text[index] !== '*') {
+    return true;
+  }
+  const previous = previousNonWhitespace(text, index - 1);
+  const next = nextNonWhitespace(text, index + 1);
+  if (previous?.char === '@') {
+    return false;
+  }
+  if (previous?.char !== '(' || next?.char !== ')') {
+    return true;
+  }
+  const beforeOpen = previousNonWhitespace(text, previous.index - 1);
+  return beforeOpen?.char !== '@';
+}
+
+function previousNonWhitespace(text: string, start: number): { char: string; index: number } | undefined {
+  for (let index = start; index >= 0; index--) {
+    if (!/\s/.test(text[index])) {
+      return { char: text[index], index };
+    }
+  }
+  return undefined;
+}
+
+function nextNonWhitespace(text: string, start: number): { char: string; index: number } | undefined {
+  for (let index = start; index < text.length; index++) {
+    if (!/\s/.test(text[index])) {
+      return { char: text[index], index };
+    }
+  }
+  return undefined;
 }

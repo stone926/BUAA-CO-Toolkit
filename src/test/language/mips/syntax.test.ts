@@ -447,6 +447,10 @@ describe('parseOperands', () => {
   it('filters out empty operands from trailing commas', () => {
     expect(parseOperands('$t0,')).toEqual(['$t0']);
   });
+
+  it('does not split commas inside strings or memory operands', () => {
+    expect(parseOperands('"hello, world", 4($sp), $t0')).toEqual(['"hello, world"', '4($sp)', '$t0']);
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -520,6 +524,14 @@ describe('formatMipsLine', () => {
   it('normalizes comma spacing', () => {
     const result = formatMipsLine('add $t0,$t1,$t2');
     expect(result).toContain('add $t0, $t1, $t2');
+  });
+
+  it('formats label and executable nodes on the same line', () => {
+    expect(formatMipsLine('main:add $t0,$t1,$t2')).toBe('main: add $t0, $t1, $t2');
+  });
+
+  it('does not alter commas inside string literals while formatting', () => {
+    expect(formatMipsLine('.asciiz "hello,world", "a,b"')).toBe('.asciiz "hello,world", "a,b"');
   });
 });
 

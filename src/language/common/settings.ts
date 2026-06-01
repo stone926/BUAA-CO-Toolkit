@@ -1,8 +1,12 @@
 import { ProjectProfile } from '../../projectProfile';
 
 export const defaultDisabledVerilogLintRules = ['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-021'] as const;
+export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
+  diagnostics: {
+    disabledCodes: string[];
+  };
   project: {
     profile: ProjectProfile;
     topModule: string;
@@ -29,6 +33,7 @@ export interface CoSettings {
       style: 'course' | 'compact' | 'custom';
       continuationIndent: number;
       spaceInRange: boolean;
+      declarationRangeSpacing: 'space' | 'compact' | 'preserve';
       spaceBeforeInstancePorts: boolean;
       separateElse: boolean;
       maxBlankLines: number;
@@ -37,6 +42,9 @@ export interface CoSettings {
 }
 
 export const defaultCoSettings: CoSettings = {
+  diagnostics: {
+    disabledCodes: []
+  },
   project: {
     profile: 'auto',
     topModule: 'mips',
@@ -63,6 +71,7 @@ export const defaultCoSettings: CoSettings = {
       style: 'course',
       continuationIndent: 2,
       spaceInRange: true,
+      declarationRangeSpacing: 'space',
       spaceBeforeInstancePorts: true,
       separateElse: true,
       maxBlankLines: 1
@@ -73,6 +82,11 @@ export const defaultCoSettings: CoSettings = {
 export function mergeCoSettings(value: unknown): CoSettings {
   const candidate = typeof value === 'object' && value !== null ? value as Partial<CoSettings> : {};
   return {
+    diagnostics: {
+      ...defaultCoSettings.diagnostics,
+      ...(candidate.diagnostics ?? {}),
+      disabledCodes: normalizeDisabledDiagnosticCodes(candidate.diagnostics?.disabledCodes)
+    },
     project: {
       ...defaultCoSettings.project,
       ...(candidate.project ?? {})
@@ -99,6 +113,37 @@ export function mergeCoSettings(value: unknown): CoSettings {
 export function isVerilogLintRuleEnabled(settings: CoSettings, rule: string): boolean {
   const normalized = rule.toLowerCase();
   return !settings.verilog.lint.disabledRules.some((item) => item.toLowerCase() === normalized);
+}
+
+export function diagnosticCodeKey(languageId: string, code: string): string {
+  return `${languageId.trim().toLowerCase()}:${code.trim().toLowerCase()}`;
+}
+
+export function diagnosticCodeToString(code: unknown): string | undefined {
+  if (typeof code !== 'string' && typeof code !== 'number') {
+    return undefined;
+  }
+  const normalized = String(code).trim().toLowerCase();
+  return normalized && /^\S+$/.test(normalized) ? normalized : undefined;
+}
+
+export function isDiagnosticCodeDisabled(settings: CoSettings, languageId: string, code: unknown): boolean {
+  const normalized = diagnosticCodeToString(code);
+  if (!normalized) {
+    return false;
+  }
+  const languageKey = diagnosticCodeKey(languageId, normalized);
+  return settings.diagnostics.disabledCodes.some((item) => item === languageKey || item === normalized);
+}
+
+function normalizeDisabledDiagnosticCodes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [...defaultCoSettings.diagnostics.disabledCodes];
+  }
+  return [...new Set(value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => Boolean(item) && /^\S+$/.test(item)))].sort();
 }
 
 function normalizeDisabledRules(value: unknown): string[] {
@@ -135,10 +180,18 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
     ...preset,
     continuationIndent: normalizeInteger(candidate.continuationIndent, preset.continuationIndent, 1, 4),
     spaceInRange: typeof candidate.spaceInRange === 'boolean' ? candidate.spaceInRange : preset.spaceInRange,
+    declarationRangeSpacing: normalizeDeclarationRangeSpacing(candidate.declarationRangeSpacing, preset.declarationRangeSpacing),
     spaceBeforeInstancePorts: typeof candidate.spaceBeforeInstancePorts === 'boolean' ? candidate.spaceBeforeInstancePorts : preset.spaceBeforeInstancePorts,
     separateElse: typeof candidate.separateElse === 'boolean' ? candidate.separateElse : preset.separateElse,
     maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3)
   };
+}
+
+function normalizeDeclarationRangeSpacing(
+  value: unknown,
+  fallback: CoSettings['verilog']['format']['declarationRangeSpacing']
+): CoSettings['verilog']['format']['declarationRangeSpacing'] {
+  return value === 'space' || value === 'compact' || value === 'preserve' ? value : fallback;
 }
 
 function normalizeInteger(value: unknown, fallback: number, min: number, max: number): number {

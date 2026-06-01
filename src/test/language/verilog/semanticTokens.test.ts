@@ -56,4 +56,28 @@ describe('Verilog semantic tokens', () => {
       type: macroType
     });
   });
+
+  it('does not highlight code tokens inside line comments after based literals', () => {
+    const text = [
+      'module m;',
+      '    wire [31:0] pc;',
+      "    assign plusJUMP = pc + 32'h00000004; // pc+4",
+      "    assign immJUMP = {pc[31:28], imm26, 2'b00}; // J型指令跳转",
+      'endmodule'
+    ].join('\n');
+    const tokens = decode(getVerilogSemanticTokens(doc(text), mergeCoSettings({}), new VerilogWorkspaceIndex()).data);
+    const commentType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogComment');
+    const lines = text.split('\n');
+
+    for (const lineNumber of [2, 3]) {
+      const commentStart = lines[lineNumber].indexOf('//');
+      const tokensInComment = tokens.filter((token) => token.line === lineNumber && token.character >= commentStart);
+
+      expect(tokensInComment).toEqual([expect.objectContaining({
+        line: lineNumber,
+        character: commentStart,
+        type: commentType
+      })]);
+    }
+  });
 });
