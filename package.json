@@ -653,6 +653,50 @@
           },
           "description": "Verilog course lint rule ids to suppress. VC-018, VC-019, VC-020, and VC-022 are not emitted; formatting handles spacing and indentation."
         },
+        "co.verilog.format.style": {
+          "type": "string",
+          "default": "course",
+          "enum": [
+            "course",
+            "compact",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "BUAA CO course style based on the bundled P5/P6 project examples.",
+            "A denser 4-space style with compact ranges.",
+            "Use the individual co.verilog.format.* settings below."
+          ],
+          "description": "Controls the base style used by the Verilog formatter."
+        },
+        "co.verilog.format.continuationIndent": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 4,
+          "description": "Extra indentation levels for module ports and instance connection continuations."
+        },
+        "co.verilog.format.spaceInRange": {
+          "type": "boolean",
+          "default": true,
+          "description": "Format packed and unpacked ranges as [31: 0] instead of [31:0]."
+        },
+        "co.verilog.format.spaceBeforeInstancePorts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep a space before instance port lists, for example PC pc (...). Module declarations still use module m(...)."
+        },
+        "co.verilog.format.separateElse": {
+          "type": "boolean",
+          "default": true,
+          "description": "Place else on a separate line after an end statement."
+        },
+        "co.verilog.format.maxBlankLines": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Maximum number of consecutive blank lines preserved by the Verilog formatter."
+        },
         "co.run.showCommandBeforeRun": {
           "type": "boolean",
           "default": false,

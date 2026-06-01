@@ -54,6 +54,31 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.lint.synthesizableHints).toBe(defaultCoSettings.verilog.lint.synthesizableHints);
     expect(result.verilog.lint.disabledRules).toEqual(defaultCoSettings.verilog.lint.disabledRules);
     expect(result.verilog.implicitNet).toEqual(defaultCoSettings.verilog.implicitNet);
+    expect(result.verilog.format).toEqual(defaultCoSettings.verilog.format);
+  });
+
+  it('merges and normalizes Verilog format settings', () => {
+    const result = mergeCoSettings({
+      verilog: {
+        format: {
+          style: 'custom',
+          continuationIndent: 0,
+          spaceInRange: false,
+          maxBlankLines: -1
+        }
+      }
+    });
+    expect(result.verilog.format.style).toBe('custom');
+    expect(result.verilog.format.continuationIndent).toBe(1);
+    expect(result.verilog.format.spaceInRange).toBe(false);
+    expect(result.verilog.format.maxBlankLines).toBe(0);
+  });
+
+  it('uses the compact Verilog format preset', () => {
+    const result = mergeCoSettings({ verilog: { format: { style: 'compact' } } });
+    expect(result.verilog.format.continuationIndent).toBe(1);
+    expect(result.verilog.format.spaceInRange).toBe(false);
+    expect(result.verilog.format.separateElse).toBe(false);
   });
 
   it('defaults selected Verilog course lint rules to disabled', () => {

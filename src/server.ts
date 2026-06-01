@@ -9,6 +9,7 @@ import {
   FileChangeType,
   FileEvent,
   FoldingRange,
+  FormattingOptions,
   Hover,
   InlayHint,
   InitializeParams,
@@ -89,7 +90,7 @@ interface CoLanguageService {
   getReferences?: (document: TextDocument, params: ReferenceParams, settings: CoSettings) => Location[];
   getDocumentSymbols?: (document: TextDocument, settings: CoSettings) => DocumentSymbol[];
   getCodeActions?: (document: TextDocument, range: Range, diagnostics: Diagnostic[], settings: CoSettings) => CodeAction[];
-  getFormattingEdits?: (document: TextDocument, settings: CoSettings) => TextEdit[];
+  getFormattingEdits?: (document: TextDocument, settings: CoSettings, options: FormattingOptions) => TextEdit[];
   getInlayHints?: (document: TextDocument, range: Range, settings: CoSettings) => InlayHint[];
   getSemanticTokens?: (document: TextDocument, settings: CoSettings) => SemanticTokens;
   getFoldingRanges?: (document: TextDocument, settings: CoSettings) => FoldingRange[];
@@ -126,7 +127,7 @@ const languageServices = new Map<string, CoLanguageService>([
     getReferences: (document, params, settings) => getVerilogReferences(document, params, settings, verilogIndex),
     getDocumentSymbols: getVerilogDocumentSymbols,
     getCodeActions: (document, range, diagnostics, settings) => getVerilogCodeActions(document, range, diagnostics, settings, verilogIndex),
-    getFormattingEdits: (document) => getVerilogFormattingEdits(document),
+    getFormattingEdits: (document, settings, options) => getVerilogFormattingEdits(document, settings, options),
     getInlayHints: (document, range, settings) => getVerilogInlayHints(document, range, settings, verilogIndex),
     getSemanticTokens: (document, settings) => getVerilogSemanticTokens(document, settings, verilogIndex),
     getFoldingRanges: getVerilogFoldingRanges,
@@ -277,7 +278,7 @@ connection.onCodeAction(withDocument(
 ));
 
 connection.onDocumentFormatting(withDocument(
-  (doc, _params, settings, svc) => svc.getFormattingEdits?.(doc, settings), []
+  (doc, params, settings, svc) => svc.getFormattingEdits?.(doc, settings, params.options), []
 ));
 
 connection.languages.inlayHint.on(withDocument(
