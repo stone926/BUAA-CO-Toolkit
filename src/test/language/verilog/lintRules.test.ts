@@ -133,4 +133,22 @@ endmodule
     });
     expect(codes).not.toContain('synth-mul-div');
   });
+
+  it('does not report declarations after procedural blocks as implicit nets', () => {
+    const text = `
+module test(input clk, input reset, input w_grf_we, input [4:0] w_grf_addr, input [31:0] w_inst_addr, input [31:0] w_grf_wdata);
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (w_grf_we && (w_grf_addr != 0)) begin
+                $display("%d@%h: $%d <= %h", $time, w_inst_addr, w_grf_addr, w_grf_wdata);
+            end
+        end
+    end
+
+    wire [31:0] fixed_macroscopic_pc;
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).not.toContain('implicit-net:fixed_macroscopic_pc');
+  });
 });

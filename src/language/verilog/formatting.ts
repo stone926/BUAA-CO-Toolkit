@@ -31,6 +31,11 @@ interface ContinuationContext {
   blockCloseIndent?: number;
 }
 
+interface DelimiterContinuation {
+  itemIndent: number;
+  closeIndent: number;
+}
+
 type VerilogBlockKind = 'module' | 'begin' | 'case' | 'generate' | 'function' | 'task';
 
 interface FormattingBlock {
@@ -111,6 +116,7 @@ function printVerilogFormattingAst(
 ): string {
   const formatted: string[] = [];
   const continuations: ContinuationContext[] = [];
+  const delimiterContinuations: DelimiterContinuation[] = [];
   const blocks: FormattingBlock[] = [];
   let blankLines = 0;
   let expressionContinuationIndent: number | undefined;
@@ -148,6 +154,9 @@ function printVerilogFormattingAst(
       && normalized.kind !== 'directive'
       && !caseItem
       && closingIndent === undefined;
+    const delimiterIndent = normalized.kind === 'code' && !continuation && closingIndent === undefined
+      ? currentDelimiterIndent(delimiterContinuations, normalized.text)
+      : undefined;
 
     const lineIndent = normalized.kind === 'directive'
       ? 0
@@ -155,10 +164,10 @@ function printVerilogFormattingAst(
           ? continuation.closeIndent
           : continuation
             ? continuation.itemIndent
-            : closingIndent ?? (usesPendingCaseIndent
+            : closingIndent ?? delimiterIndent ?? (usesPendingCaseIndent
               ? Math.max(pendingCaseItemIndent ?? 0, expressionContinuationIndent ?? currentFormattingIndent(blocks))
               : expressionContinuationIndent ?? currentFormattingIndent(blocks));
-    const linePrefix = !continuation && closingIndent === undefined && !usesPendingCaseIndent && expressionContinuationPrefix
+    const linePrefix = delimiterIndent === undefined && !continuation && closingIndent === undefined && !usesPendingCaseIndent && expressionContinuationPrefix
       ? expressionContinuationPrefix
       : indentText(lineIndent, formatOptions);
     formatted.push(`${linePrefix}${normalized.text}`);
@@ -188,12 +197,21 @@ function printVerilogFormattingAst(
       }
     }
 
+    if (!continuation && !opened && !closesContinuation && normalized.kind === 'code') {
+      updateDelimiterContinuations(delimiterContinuations, normalized.text, lineIndent, style);
+    }
+
     if (caseItem) {
       pendingCaseItemIndent = caseItem.labelOnly ? lineIndent + 1 : undefined;
     }
 
     const continuationText = caseItem?.statement ?? node.codeText;
-    if (normalized.kind !== 'code' || caseItem?.labelOnly || endsExpressionContinuation(continuationText)) {
+    if (normalized.kind !== 'code') {
+      if (normalized.kind !== 'comment' || expressionContinuationIndent === undefined) {
+        expressionContinuationIndent = undefined;
+        expressionContinuationPrefix = undefined;
+      }
+    } else if (caseItem?.labelOnly || endsExpressionContinuation(continuationText)) {
       expressionContinuationIndent = undefined;
       expressionContinuationPrefix = undefined;
     } else if (startsExpressionContinuation(continuationText) || startsAlignedListContinuation(continuationText)) {
@@ -514,6 +532,34 @@ function currentFormattingIndent(blocks: FormattingBlock[]): number {
   return blocks[blocks.length - 1]?.bodyIndent ?? 0;
 }
 
+function currentDelimiterIndent(stack: DelimiterContinuation[], line: string): number | undefined {
+  const continuation = stack[stack.length - 1];
+  if (!continuation) {
+    return undefined;
+  }
+  return startsWithDelimiterClose(line) ? continuation.closeIndent : continuation.itemIndent;
+}
+
+function startsWithDelimiterClose(line: string): boolean {
+  const first = formattingTokens(line)[0]?.value;
+  return first === ')' || first === ']' || first === '}';
+}
+
+function updateDelimiterContinuations(stack: DelimiterContinuation[], line: string, lineIndent: number, style: VerilogFormattingStyle): void {
+  for (const token of formattingTokens(line)) {
+    if (token.value === '(' || token.value === '[' || token.value === '{') {
+      stack.push({
+        closeIndent: lineIndent,
+        itemIndent: lineIndent + style.continuationIndent
+      });
+      continue;
+    }
+    if (token.value === ')' || token.value === ']' || token.value === '}') {
+      stack.pop();
+    }
+  }
+}
+
 function isInsideCaseBlock(blocks: FormattingBlock[]): boolean {
   return blocks.some((block) => block.kind === 'case');
 }
@@ -605,7 +651,7 @@ function isContinuationClose(line: string): boolean {
 function startsExpressionContinuation(line: string): boolean {
   const tokens = formattingTokens(line);
   const last = tokens[tokens.length - 1]?.value;
-  return last === '=' || last === '?' || last === ':';
+  return last === '=' || last === '?' || last === ':' || expressionContinuationOperators.has(last);
 }
 
 function startsAlignedListContinuation(line: string): boolean {
@@ -615,9 +661,6 @@ function startsAlignedListContinuation(line: string): boolean {
 
 function alignedContinuationPrefix(line: string, linePrefix: string): string | undefined {
   const tokens = formattingTokens(line);
-  if (tokens[0]?.value === 'assign' && tokens[tokens.length - 1]?.value === '=') {
-    return `${linePrefix}${' '.repeat('assign '.length)}`;
-  }
   if (tokens[0]?.value === 'parameter' && tokens[tokens.length - 1]?.value === ',') {
     return `${linePrefix}${' '.repeat('parameter '.length)}`;
   }
@@ -634,6 +677,30 @@ function isFormattingKeyword(value: string): boolean {
 }
 
 const formattingKeywords = new Set(['if', 'for', 'while', 'case', 'casex', 'casez', 'repeat', 'module', 'always', 'assign', 'else', 'begin', 'end']);
+const expressionContinuationOperators = new Set([
+  '||',
+  '&&',
+  '|',
+  '&',
+  '^',
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '==',
+  '!=',
+  '===',
+  '!==',
+  '<',
+  '>',
+  '<=',
+  '>=',
+  '<<',
+  '>>',
+  '<<<',
+  '>>>'
+]);
 
 function formattingTokens(line: string): VerilogToken[] {
   const code = splitLineComment(line).code.trim();

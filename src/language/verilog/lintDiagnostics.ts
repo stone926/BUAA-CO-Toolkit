@@ -139,6 +139,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
   const assignedBlocks = new Map<string, Set<number>>();
   for (let index = 0; index < blocks.length; index++) {
     const block = blocks[index];
+    const blockCst = cstFromTokenRange(cst, block.bodyStart, block.bodyEnd);
     if (block.combinational) {
       if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
@@ -170,7 +171,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       if (isVerilogLintRuleEnabled(settings, 'vc-014') && edgeSignals.length > 1) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', DiagnosticSeverity.Information, 'vc-014-sync-reset'));
       }
-      const assignments = collectAssignmentsFromTokens(document, cstFromStatements(cst, block.statements), 0, index);
+      const assignments = collectAssignmentsFromTokens(document, blockCst, 0, index);
       for (const assignment of assignments) {
         if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=' && !isOffsetInsideForControl(block.bodyTokens, document.offsetAt(assignment.range.start))) {
           diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-010-seq-blocking'));
@@ -184,7 +185,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       }
     }
 
-    for (const assignment of collectAssignmentsFromTokens(document, cstFromStatements(cst, block.statements), 0, index)) {
+    for (const assignment of collectAssignmentsFromTokens(document, blockCst, 0, index)) {
       const set = assignedBlocks.get(assignment.name) ?? new Set<number>();
       set.add(index);
       assignedBlocks.set(assignment.name, set);
@@ -482,6 +483,26 @@ function cstFromStatements(cst: VerilogCstDocument, statements: VerilogCstStatem
     ...cst,
     statements
   };
+}
+
+function cstFromTokenRange(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
+  return cstFromStatements(
+    cst,
+    cst.statements
+      .map((statement) => {
+        const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
+        if (!tokens.length) {
+          return undefined;
+        }
+        return {
+          ...statement,
+          tokens,
+          start: tokens[0].start,
+          end: tokens[tokens.length - 1].end
+        };
+      })
+      .filter((statement): statement is VerilogCstStatement => Boolean(statement))
+  );
 }
 
 function hasPosedgeSignal(tokens: VerilogToken[]): boolean {

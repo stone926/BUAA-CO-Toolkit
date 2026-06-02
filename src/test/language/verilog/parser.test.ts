@@ -626,6 +626,25 @@ endmodule
     expect(modules[0].declarations.get('b')?.width).toBe('[7:0]');
   });
 
+  it('parses declarations that follow procedural blocks', () => {
+    const text = `
+module test(input clk, input reset, input w_grf_we, input [4:0] w_grf_addr, input [31:0] w_inst_addr, input [31:0] w_grf_wdata);
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (w_grf_we && (w_grf_addr != 0)) begin
+                $display("%d@%h: $%d <= %h", $time, w_inst_addr, w_grf_addr, w_grf_wdata);
+            end
+        end
+    end
+
+    wire [31:0] fixed_macroscopic_pc;
+endmodule
+`.trim();
+    const d = doc(text);
+    const modules = parseModules(d, text);
+    expect(modules[0].declarations.get('fixed_macroscopic_pc')?.width).toBe('[31:0]');
+  });
+
   it('parses instances', () => {
     const text = 'module test(input clk);\nsub u_sub(.clk(clk));\nendmodule';
     const d = doc(text);

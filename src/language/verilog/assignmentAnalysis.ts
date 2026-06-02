@@ -100,21 +100,27 @@ function assignmentTargetsFromLeftHandSide(tokens: VerilogToken[]): AssignmentTa
   if (concat) {
     return splitTopLevel(concat.slice(1, -1), ',').flatMap(assignmentTargetsFromLeftHandSide);
   }
-  let index = trimmed.length - 1;
-  if (trimmed[index].value === ']') {
-    const open = findMatchingTokenBackward(trimmed, index, '[', ']');
-    if (open >= 0) {
-      index = open - 1;
-    }
-  }
+  const target = trailingScalarTarget(trimmed);
+  return target ? [target] : [];
+}
+
+function trailingScalarTarget(tokens: VerilogToken[]): AssignmentTarget | undefined {
+  let index = tokens.length - 1;
   while (index >= 0) {
-    const token = trimmed[index];
-    if (token.kind === 'identifier' && !verilogKeywords.has(token.value)) {
-      return [{ name: token.value, token }];
+    if (tokens[index].value !== ']') {
+      break;
     }
-    index--;
+    const open = findMatchingTokenBackward(tokens, index, '[', ']');
+    if (open < 0) {
+      break;
+    }
+    index = open - 1;
   }
-  return [];
+  const token = tokens[index];
+  if (!token || token.kind !== 'identifier' || verilogKeywords.has(token.value)) {
+    return undefined;
+  }
+  return { name: token.value, token };
 }
 
 function isDeclarationStatement(tokens: VerilogToken[]): boolean {

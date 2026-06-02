@@ -231,6 +231,32 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
+  it('preserves manual ternary line breaks and aligns nested parentheses', () => {
+    const input = [
+      'module demo;',
+      'assign ExcCode =',
+      '// LW：访问范围错误',
+      '(type == LW && !(',
+      "(ALU_Result >= 32'h00000000 && ALU_Result < 32'h00003000) ||",
+      "(ALU_Result >= 32'h00007f00 && ALU_Result < 32'h00007f0c)",
+      ')) ? 5\'b00100 :',
+      "((type == ADD || type == SUB || type == ADDI) && overflow) ? 5'b01100 : 5'b00000;",
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module demo;',
+      '  assign ExcCode =',
+      '      // LW：访问范围错误',
+      '      (type == LW && !(',
+      "          (ALU_Result >= 32'h00000000 && ALU_Result < 32'h00003000) ||",
+      "          (ALU_Result >= 32'h00007f00 && ALU_Result < 32'h00007f0c)",
+      "      )) ? 5'b00100 :",
+      "      ((type == ADD || type == SUB || type == ADDI) && overflow) ? 5'b01100 : 5'b00000;",
+      'endmodule'
+    ].join('\n'));
+  });
+
   it('aligns assign and parameter continuations to the course examples', () => {
     const input = [
       'module demo;',
@@ -249,8 +275,8 @@ describe('Verilog formatting', () => {
       "            SUB = 6'b000001,",
       "            ORI = 6'b000010;",
       '  assign outputA =',
-      '         type == ADD ? a_add_b :',
-      '         type == SUB ? a_sub_b : none;',
+      '      type == ADD ? a_add_b :',
+      '      type == SUB ? a_sub_b : none;',
       'endmodule'
     ].join('\n'));
   });
