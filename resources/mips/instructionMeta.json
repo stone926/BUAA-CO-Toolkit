@@ -17,6 +17,8 @@
     "addiu": true,
     "sub": true,
     "subu": true,
+    "subi": true,
+    "subiu": true,
     "and": true,
     "andi": true,
     "or": true,

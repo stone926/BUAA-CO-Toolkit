@@ -12,7 +12,9 @@
   ],
   "signedImmediateExpansion": [
     "addi",
-    "addiu"
+    "addiu",
+    "subi",
+    "subiu"
   ],
   "unsignedImmediateExpansion": [
     "andi",

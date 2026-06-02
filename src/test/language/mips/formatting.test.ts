@@ -46,4 +46,13 @@ describe('MIPS AST formatting', () => {
       '.end_macro'
     ].join('\n'));
   });
+
+  it('keeps macro call parentheses attached to the macro name', () => {
+    expect(format('read_int ($s0)')).toBe('    read_int($s0)');
+  });
+
+  it('adds a space after comment markers', () => {
+    expect(format('nop #comment')).toBe('    nop'.padEnd(32) + '# comment');
+    expect(format('#comment')).toBe('# comment');
+  });
 });

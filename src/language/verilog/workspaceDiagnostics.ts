@@ -12,12 +12,12 @@ import {
 } from './model';
 import {
   shouldReportWidthMismatch,
-  stripCommentsAndStrings,
   widthOfDecl,
   widthOfExpression
 } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
+import { VerilogToken } from './lexer';
 
 export function addVerilogWorkspaceDiagnostics(
   document: TextDocument,
@@ -109,18 +109,16 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
   }
 
   const diagnostics: Diagnostic[] = [];
-  // 使用索引中已缓存的去除注释文本，避免拼接全部文件并重复 strip
-  const workspaceCode = index.allFiles().map((file) => file.strippedText ?? stripCommentsAndStrings(file.text)).join('\n');
   const topRange = top.selectionRange;
 
   if (profile === 'P4' || profile === 'P5') {
-    if (!hasPcResetAddress(workspaceCode)) {
+    if (!hasWorkspaceNumericValue(index, 0x3000)) {
       diagnostics.push(makeDiagnostic(topRange, `${profile}: PC should reset to 0x00003000; no obvious 0x3000 reset constant was found in the workspace.`, DiagnosticSeverity.Information, 'project-pc-reset'));
     }
-    if (!hasMemoryDepth(workspaceCode, 4096)) {
+    if (!hasMemoryDepth(index, 4096)) {
       diagnostics.push(makeDiagnostic(topRange, `${profile}: IM is expected to be 16 KiB (4096 32-bit words).`, DiagnosticSeverity.Information, 'project-im-size'));
     }
-    if (!hasMemoryDepth(workspaceCode, 3072)) {
+    if (!hasMemoryDepth(index, 3072)) {
       diagnostics.push(makeDiagnostic(topRange, `${profile}: DM is expected to be 12 KiB (3072 32-bit words).`, DiagnosticSeverity.Information, 'project-dm-size'));
     }
   }
@@ -143,7 +141,7 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
         }
       }
     }
-    if (!hasExceptionEntry(workspaceCode)) {
+    if (!hasWorkspaceNumericValue(index, 0x4180)) {
       diagnostics.push(makeDiagnostic(topRange, 'P7: exception entry address should be 0x00004180; no obvious 0x4180 constant was found in the workspace.', DiagnosticSeverity.Warning, 'p7-exception-entry'));
     }
   }
@@ -151,18 +149,105 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
   return diagnostics;
 }
 
-function hasPcResetAddress(code: string): boolean {
-  return /(?:\d+\s*'\s*h\s*0*3000\b|\b0x0*3000\b|\b12288\b)/i.test(code);
+function hasWorkspaceNumericValue(index: VerilogWorkspaceIndex, expected: number): boolean {
+  for (const file of index.allFiles()) {
+    for (const token of file.cst.codeTokens) {
+      if (token.kind === 'number' && numericTokenValue(token) === BigInt(expected)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
-function hasExceptionEntry(code: string): boolean {
-  return /(?:\d+\s*'\s*h\s*0*4180\b|\b0x0*4180\b|\b16768\b)/i.test(code);
-}
-
-function hasMemoryDepth(code: string, depth: number): boolean {
+function hasMemoryDepth(index: VerilogWorkspaceIndex, depth: number): boolean {
   const last = depth - 1;
-  const pattern = new RegExp(`\\[\\s*(?:0\\s*:\\s*${last}|${last}\\s*:\\s*0)\\s*\\]`);
-  return pattern.test(code);
+  for (const file of index.allFiles()) {
+    const tokens = file.cst.codeTokens;
+    for (let index = 0; index + 4 < tokens.length; index++) {
+      if (
+        tokens[index].value === '[' &&
+        tokens[index + 2].value === ':' &&
+        tokens[index + 4].value === ']' &&
+        bracketBoundsMatch(tokens[index + 1], tokens[index + 3], last)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function bracketBoundsMatch(left: VerilogToken, right: VerilogToken, last: number): boolean {
+  const leftValue = numericTokenValue(left);
+  const rightValue = numericTokenValue(right);
+  return (leftValue === 0n && rightValue === BigInt(last)) ||
+    (leftValue === BigInt(last) && rightValue === 0n);
+}
+
+function numericTokenValue(token: VerilogToken): bigint | undefined {
+  if (token.kind !== 'number') {
+    return undefined;
+  }
+  const parsed = parseVerilogNumber(token.value);
+  if (!parsed) {
+    return undefined;
+  }
+  const radix = parsed.base === 'b' ? 2n : parsed.base === 'o' ? 8n : parsed.base === 'h' ? 16n : 10n;
+  let value = 0n;
+  for (const char of parsed.digits) {
+    if (char === '_') {
+      continue;
+    }
+    const digit = digitValue(char);
+    if (digit === undefined || BigInt(digit) >= radix) {
+      return undefined;
+    }
+    value = value * radix + BigInt(digit);
+  }
+  return value;
+}
+
+function parseVerilogNumber(value: string): { base: 'b' | 'o' | 'd' | 'h'; digits: string } | undefined {
+  const apostrophe = value.indexOf("'");
+  if (apostrophe < 0) {
+    return allDecimalDigits(value) ? { base: 'd', digits: value } : undefined;
+  }
+  let index = apostrophe + 1;
+  if (value[index] === 's' || value[index] === 'S') {
+    index++;
+  }
+  const base = value[index]?.toLowerCase();
+  if (base !== 'b' && base !== 'o' && base !== 'd' && base !== 'h') {
+    return undefined;
+  }
+  const digits = value.slice(index + 1);
+  return digits ? { base, digits } : undefined;
+}
+
+function allDecimalDigits(value: string): boolean {
+  let sawDigit = false;
+  for (const char of value) {
+    if (char === '_') {
+      continue;
+    }
+    if (char < '0' || char > '9') {
+      return false;
+    }
+    sawDigit = true;
+  }
+  return sawDigit;
+}
+
+function digitValue(char: string): number | undefined {
+  if (char >= '0' && char <= '9') {
+    return char.charCodeAt(0) - '0'.charCodeAt(0);
+  }
+  const lower = char.toLowerCase();
+  if (lower >= 'a' && lower <= 'f') {
+    return lower.charCodeAt(0) - 'a'.charCodeAt(0) + 10;
+  }
+  return undefined;
 }
 
 function hasModuleCaseInsensitive(index: VerilogWorkspaceIndex, name: string): boolean {

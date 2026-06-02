@@ -74,7 +74,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
       details.push('', '可能的 MARS 展开：', '', '```mipsasm', expansion.join('\n'), '```');
     }
     if (instruction.mnemonic === 'syscall') {
-      const syscall = syscallServiceBeforeLine(document, position.line);
+      const syscall = syscallServiceBeforeLine(parsed, position.line);
       if (syscall) {
         details.push('', `当前 $v0 服务：**${syscall.code} ${syscall.name}** - ${syscall.description}`, '', `参数：${syscall.parameters ?? '无'}`, '', `返回值：${syscall.returns ?? '无'}`);
       }
@@ -88,7 +88,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const syscall = syscallAtLiV0Operand(document, wordRange);
+  const syscall = syscallAtLiV0Operand(parsed, wordRange);
   if (syscall) {
     return {
       contents: {
@@ -99,7 +99,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const cp0 = cp0RegisterAtPosition(document, word, position);
+  const cp0 = cp0RegisterAtPosition(parsed, word, position);
   if (cp0) {
     return {
       contents: {
@@ -130,7 +130,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   if (symbol) {
     const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
     if (symbol.kind === 'eqv') {
-      const replacement = eqvReplacementText(document, symbol.selectionRange.start.line, symbol.name);
+      const replacement = eqvReplacementText(parsed, symbol.selectionRange.start.line, symbol.name);
       return {
         contents: replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行。\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`,
         range: wordRange
@@ -142,9 +142,9 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const macro = findMacroOverloadAtPosition(document, parsed, word, position);
+  const macro = findMacroOverloadAtPosition(parsed, word, position);
   if (macro) {
-    const expansion = macroExpansionPreview(document, macro, word, position);
+    const expansion = macroExpansionPreview(document, parsed, macro, word, position);
     const value = [
       `**宏** \`${macro.name}(${macro.params.join(', ')})\``,
       '',

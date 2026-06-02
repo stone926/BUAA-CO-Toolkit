@@ -26,6 +26,12 @@ import {
   signed32ImmediateValue,
   isSymbolLike
 } from './syntax';
+import {
+  isMipsMacroArgumentTokenText,
+  parseMipsMemoryOperand,
+  splitFormatMnemonic,
+  stripLeadingDollar
+} from './operandAst';
 
 // 从资源文件加载内存对齐要求
 const MEMORY_ALIGNMENT = new Map<string, number>(
@@ -130,11 +136,20 @@ export function usesMarsPseudoInstructionForm(mnemonic: string, operands: string
 
   if (
     pseudoForms.unsignedImmediateExpansion.has(mnemonic) &&
-    operands.length === 3 &&
-    isRegisterOperand(operands[0], activeMacro, eqvSymbols) &&
-    isRegisterOperand(operands[1], activeMacro, eqvSymbols) &&
-    isImmediateOperand(operands[2], activeMacro, eqvSymbols, 'imm32') &&
-    !isImmediateOperand(operands[2], activeMacro, eqvSymbols, 'uimm16')
+    (
+      (
+        operands.length === 3 &&
+        isRegisterOperand(operands[0], activeMacro, eqvSymbols) &&
+        isRegisterOperand(operands[1], activeMacro, eqvSymbols) &&
+        isImmediateOperand(operands[2], activeMacro, eqvSymbols, 'imm32') &&
+        !isImmediateOperand(operands[2], activeMacro, eqvSymbols, 'uimm16')
+      ) ||
+      (
+        operands.length === 2 &&
+        isRegisterOperand(operands[0], activeMacro, eqvSymbols) &&
+        isImmediateOperand(operands[1], activeMacro, eqvSymbols, 'imm32')
+      )
+    )
   ) {
     return true;
   }
@@ -209,9 +224,7 @@ export function labelOperand(instruction: MipsInstruction, operands: string[]): 
 }
 
 export function isMacroArgumentToken(operand: string): boolean {
-  return /^"([^"\\]|\\.)*"$/.test(operand) ||
-    /^'(?:[^'\\]|\\.)'$/.test(operand) ||
-    /^[%$]?[A-Za-z_.$][\w.$]*$/.test(operand) ||
+  return isMipsMacroArgumentTokenText(operand) ||
     isIntegerLiteral(operand) ||
     isFloatLiteral(operand);
 }
@@ -271,8 +284,8 @@ function constantMemoryOffset(operand: string, activeMacro: MipsMacro | undefine
   if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand) || isSymbolLike(operand)) {
     return undefined;
   }
-  const memory = operand.match(/^(.+)?\(([^()]+)\)$/);
-  const offsetText = memory ? (memory[1] ?? '0').trim() : operand.trim();
+  const memory = parseMipsMemoryOperand(operand);
+  const offsetText = memory ? memory.offset : operand.trim();
   if (!offsetText || activeMacro?.paramSymbols.has(offsetText) || eqvSymbols.has(offsetText) || isSymbolLike(offsetText)) {
     return undefined;
   }
@@ -312,11 +325,11 @@ function registerOperandMatches(operand: string, canonical: string): boolean {
 }
 
 function instructionPattern(format: string): string[] {
-  const parts = format.trim().split(/\s+/, 2);
-  if (parts.length < 2) {
+  const split = splitFormatMnemonic(format);
+  if (!split) {
     return [];
   }
-  return parseOperands(format.slice(parts[0].length).trim());
+  return parseOperands(split.operands);
 }
 
 function operandMatchesPattern(operand: string, pattern: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
@@ -328,6 +341,27 @@ function operandMatchesPattern(operand: string, pattern: string, activeMacro: Mi
   }
   if (pattern === 'offset($base)') {
     return isMemoryOperand(operand, activeMacro, eqvSymbols, 'simm16');
+  }
+  if (pattern === '($base)') {
+    return isZeroOffsetMemoryOperand(operand, activeMacro, eqvSymbols);
+  }
+  if (pattern === 'simm16($base)') {
+    return isMemoryOperandWithImmediateOffset(operand, activeMacro, eqvSymbols, 'simm16');
+  }
+  if (pattern === 'uimm16($base)') {
+    return isMemoryOperandWithImmediateOffset(operand, activeMacro, eqvSymbols, 'uimm16');
+  }
+  if (pattern === 'imm32($base)') {
+    return isMemoryOperandWithImmediateOffset(operand, activeMacro, eqvSymbols, 'imm32');
+  }
+  if (pattern === 'label($base)') {
+    return isMemoryOperandWithLabelOffset(operand, activeMacro, eqvSymbols);
+  }
+  if (pattern === 'label+imm32') {
+    return isLabelPlusImmediateOperand(operand, activeMacro, eqvSymbols);
+  }
+  if (pattern === 'label+imm32($base)') {
+    return isMemoryOperandWithLabelPlusImmediateOffset(operand, activeMacro, eqvSymbols);
   }
   if (pattern === 'imm' || pattern === 'imm32') {
     return isImmediateOperand(operand, activeMacro, eqvSymbols, 'imm32');
@@ -368,7 +402,7 @@ function cp0RegisterNumber(operand: string, activeMacro: MipsMacro | undefined, 
   if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
     return undefined;
   }
-  const value = parseIntegerLiteral(operand.replace(/^\$/, ''));
+  const value = parseIntegerLiteral(stripLeadingDollar(operand));
   return value !== undefined && cp0RegistersByNumber.has(value) ? value : undefined;
 }
 
@@ -404,29 +438,76 @@ function isBitSizeOperand(operand: string, activeMacro: MipsMacro | undefined, e
 }
 
 function isMemoryOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind = 'simm16'): boolean {
-  const memory = operand.match(/^(.+)?\(([^()]+)\)$/);
+  const memory = parseMipsMemoryOperand(operand);
   if (memory) {
-    const offset = (memory[1] ?? '0').trim();
-    const base = memory[2].trim();
-    return (!offset || isImmediateOperand(offset, activeMacro, eqvSymbols, offsetKind) || isSymbolLike(offset)) &&
-      isRegisterOperand(base, activeMacro, eqvSymbols);
+    return (memory.offset === '0' || isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) || isSymbolLike(memory.offset)) &&
+      isRegisterOperand(memory.base, activeMacro, eqvSymbols);
   }
   return isSymbolLike(operand) || isImmediateOperand(operand, activeMacro, eqvSymbols, offsetKind);
 }
 
+function isZeroOffsetMemoryOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = parseMipsMemoryOperand(operand);
+  return Boolean(memory && memory.offset === '0' && isRegisterOperand(memory.base, activeMacro, eqvSymbols));
+}
+
+function isMemoryOperandWithImmediateOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind): boolean {
+  const memory = parseMipsMemoryOperand(operand);
+  return Boolean(
+    memory &&
+    isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) &&
+    isRegisterOperand(memory.base, activeMacro, eqvSymbols)
+  );
+}
+
+function isMemoryOperandWithLabelOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = parseMipsMemoryOperand(operand);
+  return Boolean(
+    memory &&
+    isLabelLikeOperand(memory.offset, activeMacro, eqvSymbols) &&
+    isRegisterOperand(memory.base, activeMacro, eqvSymbols)
+  );
+}
+
+function isMemoryOperandWithLabelPlusImmediateOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = parseMipsMemoryOperand(operand);
+  return Boolean(
+    memory &&
+    isLabelPlusImmediateOperand(memory.offset, activeMacro, eqvSymbols) &&
+    isRegisterOperand(memory.base, activeMacro, eqvSymbols)
+  );
+}
+
 function isMemoryOperandWithPseudoOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  const memory = operand.match(/^(.+)?\(([^()]+)\)$/);
+  const memory = parseMipsMemoryOperand(operand);
   if (!memory) {
     return isImmediateOperand(operand, activeMacro, eqvSymbols, 'imm32') &&
       !isImmediateOperand(operand, activeMacro, eqvSymbols, 'simm16');
   }
-  const offset = (memory[1] ?? '0').trim();
-  if (!offset || activeMacro?.paramSymbols.has(offset) || eqvSymbols.has(offset) || isSymbolLike(offset)) {
+  if (memory.offset === '0' || activeMacro?.paramSymbols.has(memory.offset) || eqvSymbols.has(memory.offset) || isSymbolLike(memory.offset)) {
     return false;
   }
-  return isImmediateOperand(offset, activeMacro, eqvSymbols, 'imm32') &&
-    !isImmediateOperand(offset, activeMacro, eqvSymbols, 'simm16') &&
-    isRegisterOperand(memory[2].trim(), activeMacro, eqvSymbols);
+  return isImmediateOperand(memory.offset, activeMacro, eqvSymbols, 'imm32') &&
+    !isImmediateOperand(memory.offset, activeMacro, eqvSymbols, 'simm16') &&
+    isRegisterOperand(memory.base, activeMacro, eqvSymbols);
+}
+
+function isLabelPlusImmediateOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
+    return true;
+  }
+  const plusIndex = operand.indexOf('+');
+  if (plusIndex <= 0 || plusIndex === operand.length - 1) {
+    return false;
+  }
+  const label = operand.slice(0, plusIndex).trim();
+  const immediate = operand.slice(plusIndex + 1).trim();
+  return isLabelLikeOperand(label, activeMacro, eqvSymbols) &&
+    isImmediateOperand(immediate, activeMacro, eqvSymbols, 'imm32');
+}
+
+function isLabelLikeOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  return isSymbolLike(operand) || Boolean(activeMacro?.paramSymbols.has(operand)) || eqvSymbols.has(operand);
 }
 
 function isLabelOperand(operand: string, activeMacro: MipsMacro | undefined): boolean {

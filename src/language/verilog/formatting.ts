@@ -1,56 +1,12 @@
 import {
-  FoldingRange,
-  FoldingRangeKind,
   FormattingOptions,
   Range,
   TextEdit
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import {
-  stripCommentsAndStrings
-} from './parser';
-import { getCachedVerilogParse } from './parseCache';
-
-export function getVerilogFoldingRanges(document: TextDocument, settings: CoSettings): FoldingRange[] {
-  const parsed = getCachedVerilogParse(document, settings, false);
-  const ranges: FoldingRange[] = [];
-  for (const module of parsed.modules) {
-    if (module.range.end.line > module.range.start.line) {
-      ranges.push({
-        startLine: module.range.start.line,
-        endLine: module.range.end.line,
-        kind: FoldingRangeKind.Region
-      });
-    }
-  }
-
-  const stack: Array<{ token: string; line: number }> = [];
-  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-    const text = stripCommentsAndStrings(lineAt(document, lineNumber).text);
-    const trimmed = text.trim();
-    if (/^\/\/\s*region\b/i.test(lineAt(document, lineNumber).text)) {
-      stack.push({ token: 'region', line: lineNumber });
-      continue;
-    }
-    if (/^\/\/\s*endregion\b/i.test(lineAt(document, lineNumber).text)) {
-      closeFold(stack, ranges, 'region', lineNumber);
-      continue;
-    }
-    const keywordRegex = /\b(begin|case|casex|casez|generate|function|task|end|endcase|endgenerate|endfunction|endtask)\b/g;
-    let match: RegExpExecArray | null;
-    while ((match = keywordRegex.exec(trimmed))) {
-      const token = match[1];
-      if (token === 'begin' || token === 'case' || token === 'casex' || token === 'casez' || token === 'generate' || token === 'function' || token === 'task') {
-        stack.push({ token, line: lineNumber });
-      } else {
-        closeFold(stack, ranges, matchingFoldStart(token), lineNumber);
-      }
-    }
-  }
-  return ranges;
-}
+import { parseVerilogCst } from './cst';
+import { VerilogToken } from './lexer';
 
 interface VerilogFormattingStyle {
   continuationIndent: number;
@@ -563,52 +519,52 @@ function isInsideCaseBlock(blocks: FormattingBlock[]): boolean {
 }
 
 function closingBlockKind(line: string): VerilogBlockKind | undefined {
-  const code = splitLineComment(line).code.trim();
-  if (/^endmodule\b/.test(code)) {
+  const first = formattingTokens(line)[0]?.value;
+  if (first === 'endmodule') {
     return 'module';
   }
-  if (/^endcase\b/.test(code)) {
+  if (first === 'endcase') {
     return 'case';
   }
-  if (/^endgenerate\b/.test(code)) {
+  if (first === 'endgenerate') {
     return 'generate';
   }
-  if (/^endfunction\b/.test(code)) {
+  if (first === 'endfunction') {
     return 'function';
   }
-  if (/^endtask\b/.test(code)) {
+  if (first === 'endtask') {
     return 'task';
   }
-  if (/^end\b/.test(code)) {
+  if (first === 'end') {
     return 'begin';
   }
   return undefined;
 }
 
 function openingBlockKind(line: string): VerilogBlockKind | undefined {
-  const code = splitLineComment(line).code.trim();
-  if (/^end\s+else\b/.test(code)) {
-    return /\bbegin\b/.test(code) ? 'begin' : undefined;
+  const tokens = formattingTokens(line);
+  if (tokens[0]?.value === 'end' && tokens[1]?.value === 'else') {
+    return tokens.some((token) => token.value === 'begin') ? 'begin' : undefined;
   }
-  if (closingBlockKind(code)) {
+  if (closingBlockKindFromTokens(tokens)) {
     return undefined;
   }
-  if (/^module\b/.test(code) && /;\s*$/.test(code)) {
+  if (tokens[0]?.value === 'module' && tokens[tokens.length - 1]?.value === ';') {
     return 'module';
   }
-  if (/\b(case|casex|casez)\s*\(/.test(code)) {
+  if (tokens.some((token) => token.value === 'case' || token.value === 'casex' || token.value === 'casez')) {
     return 'case';
   }
-  if (/\bgenerate\b/.test(code)) {
+  if (tokens.some((token) => token.value === 'generate')) {
     return 'generate';
   }
-  if (/\bfunction\b/.test(code)) {
+  if (tokens.some((token) => token.value === 'function')) {
     return 'function';
   }
-  if (/\btask\b/.test(code)) {
+  if (tokens.some((token) => token.value === 'task')) {
     return 'task';
   }
-  if (/\bbegin\b/.test(code)) {
+  if (tokens.some((token) => token.value === 'begin')) {
     return 'begin';
   }
   return undefined;
@@ -625,13 +581,14 @@ function popFormattingBlock(blocks: FormattingBlock[], kind: VerilogBlockKind): 
 }
 
 function openedContinuation(line: string, lineIndent: number, style: VerilogFormattingStyle): ContinuationContext | undefined {
-  if (!/\(\s*$/.test(line)) {
+  const tokens = formattingTokens(line);
+  if (tokens[tokens.length - 1]?.value !== '(') {
     return undefined;
   }
-  if (!/^module\b/.test(line) && !/^([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*\($/.test(line) && !/^#\s*\($/.test(line)) {
+  if (!isModuleHeaderStart(tokens) && !isInstanceHeaderStart(tokens) && !(tokens[0]?.value === '#' && tokens[1]?.value === '(')) {
     return undefined;
   }
-  const moduleHeader = /^module\b/.test(line);
+  const moduleHeader = isModuleHeaderStart(tokens);
   return {
     itemIndent: lineIndent + style.continuationIndent,
     closeIndent: lineIndent + 1,
@@ -641,63 +598,79 @@ function openedContinuation(line: string, lineIndent: number, style: VerilogForm
 }
 
 function isContinuationClose(line: string): boolean {
-  return /^\)\s*;/.test(line);
+  const tokens = formattingTokens(line);
+  return tokens[0]?.value === ')' && tokens[1]?.value === ';';
 }
 
 function startsExpressionContinuation(line: string): boolean {
-  return !/;\s*$/.test(line) && /(?:=\s*|\?\s*|:\s*)$/.test(line);
+  const tokens = formattingTokens(line);
+  const last = tokens[tokens.length - 1]?.value;
+  return last === '=' || last === '?' || last === ':';
 }
 
 function startsAlignedListContinuation(line: string): boolean {
-  return /^parameter\b/.test(line) && /,\s*$/.test(line);
+  const tokens = formattingTokens(line);
+  return tokens[0]?.value === 'parameter' && tokens[tokens.length - 1]?.value === ',';
 }
 
 function alignedContinuationPrefix(line: string, linePrefix: string): string | undefined {
-  if (/^assign\b[\s\S]*=\s*$/.test(line)) {
+  const tokens = formattingTokens(line);
+  if (tokens[0]?.value === 'assign' && tokens[tokens.length - 1]?.value === '=') {
     return `${linePrefix}${' '.repeat('assign '.length)}`;
   }
-  if (/^parameter\b/.test(line) && /,\s*$/.test(line)) {
+  if (tokens[0]?.value === 'parameter' && tokens[tokens.length - 1]?.value === ',') {
     return `${linePrefix}${' '.repeat('parameter '.length)}`;
   }
   return undefined;
 }
 
 function endsExpressionContinuation(line: string): boolean {
-  return /;\s*$/.test(line);
+  const tokens = formattingTokens(line);
+  return tokens[tokens.length - 1]?.value === ';';
 }
 
 function isFormattingKeyword(value: string): boolean {
-  return /^(?:if|for|while|case|casex|casez|repeat|module|always|assign|else|begin|end)$/.test(value);
+  return formattingKeywords.has(value);
 }
 
-function closeFold(stack: Array<{ token: string; line: number }>, ranges: FoldingRange[], token: string, endLine: number): void {
-  for (let index = stack.length - 1; index >= 0; index--) {
-    if (stack[index].token !== token) {
-      continue;
-    }
-    const start = stack.splice(index, 1)[0];
-    if (endLine > start.line) {
-      ranges.push({
-        startLine: start.line,
-        endLine,
-        kind: FoldingRangeKind.Region
-      });
-    }
-    return;
+const formattingKeywords = new Set(['if', 'for', 'while', 'case', 'casex', 'casez', 'repeat', 'module', 'always', 'assign', 'else', 'begin', 'end']);
+
+function formattingTokens(line: string): VerilogToken[] {
+  const code = splitLineComment(line).code.trim();
+  if (!code) {
+    return [];
   }
+  const document = TextDocument.create('format://line', 'verilog', 0, code);
+  return parseVerilogCst(document, code).codeTokens.filter((token) => token.kind !== 'eof' && token.kind !== 'comment');
 }
 
-function matchingFoldStart(token: string): string {
-  switch (token) {
-    case 'endcase':
-      return 'case';
-    case 'endgenerate':
-      return 'generate';
-    case 'endfunction':
-      return 'function';
-    case 'endtask':
-      return 'task';
-    default:
-      return 'begin';
+function closingBlockKindFromTokens(tokens: VerilogToken[]): VerilogBlockKind | undefined {
+  const first = tokens[0]?.value;
+  if (first === 'endmodule') {
+    return 'module';
   }
+  if (first === 'endcase') {
+    return 'case';
+  }
+  if (first === 'endgenerate') {
+    return 'generate';
+  }
+  if (first === 'endfunction') {
+    return 'function';
+  }
+  if (first === 'endtask') {
+    return 'task';
+  }
+  return first === 'end' ? 'begin' : undefined;
+}
+
+function isModuleHeaderStart(tokens: VerilogToken[]): boolean {
+  return tokens[0]?.value === 'module';
+}
+
+function isInstanceHeaderStart(tokens: VerilogToken[]): boolean {
+  return tokens.length >= 3
+    && tokens[0].kind === 'identifier'
+    && tokens[1].kind === 'identifier'
+    && tokens[tokens.length - 1]?.value === '(';
 }

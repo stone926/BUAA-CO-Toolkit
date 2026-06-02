@@ -1,5 +1,18 @@
 import { Range } from 'vscode-languageserver/node';
 
+export {
+  getNumericLikeRanges,
+  getStringRanges,
+  integerFitsRange,
+  isCharLiteral,
+  isFloatLiteral,
+  isIntegerLiteral,
+  isNonNegativeIntegerLiteral,
+  isSymbolLike,
+  parseIntegerLiteral,
+  signed32ImmediateValue
+} from './literals';
+
 export function stripComment(line: string): string {
   const idx = findCommentIndex(line);
   return idx >= 0 ? line.slice(0, idx) : line;
@@ -573,7 +586,7 @@ export function parseMipsFormatLine(line: string): MipsFormatLine {
     return { kind: 'blank' };
   }
   if (cst.kind === 'comment') {
-    return { kind: 'comment', comment: cst.comment?.value.trimEnd() ?? '' };
+    return { kind: 'comment', comment: normalizeMipsComment(cst.comment?.value ?? '') };
   }
   return {
     kind: 'statement',
@@ -586,7 +599,7 @@ export function parseMipsFormatLine(line: string): MipsFormatLine {
         operands: cst.executable.operands.map((operand) => operand.text)
       }
       : undefined,
-    comment: cst.comment?.value.trimEnd()
+    comment: cst.comment ? normalizeMipsComment(cst.comment.value) : undefined
   };
 }
 
@@ -630,9 +643,24 @@ function printMipsStatement(line: MipsStatementLine, indentDirectives: boolean):
 }
 
 function printMipsExecutable(executable: MipsExecutableNode): string {
+  if (!executable.operandText) {
+    return executable.mnemonic;
+  }
+  if (executable.kind === 'instruction' && executable.operandText.startsWith('(')) {
+    return `${executable.mnemonic}${executable.operandText}`;
+  }
   return executable.operandText
     ? `${executable.mnemonic} ${executable.operandText}`
     : executable.mnemonic;
+}
+
+function normalizeMipsComment(comment: string): string {
+  const trimmed = comment.trimEnd();
+  if (!trimmed.startsWith('#')) {
+    return trimmed;
+  }
+  const body = trimmed.slice(1).trimStart();
+  return body ? `# ${body}` : '#';
 }
 
 function normalizeMipsOperandText(text: string): string {
@@ -706,101 +734,6 @@ export function findCommentIndex(line: string): number {
   return -1;
 }
 
-export function getStringRanges(code: string): Array<{ start: number; end: number }> {
-  const ranges: Array<{ start: number; end: number }> = [];
-  let start: number | undefined;
-  for (let index = 0; index < code.length; index++) {
-    if (code[index] !== '"' || code[index - 1] === '\\') {
-      continue;
-    }
-    if (start === undefined) {
-      start = index;
-    } else {
-      ranges.push({
-        start,
-        end: index + 1
-      });
-      start = undefined;
-    }
-  }
-  if (start !== undefined) {
-    ranges.push({
-      start,
-      end: code.length
-    });
-  }
-  return ranges;
-}
-
-export function getNumericLikeRanges(code: string): Array<{ start: number; end: number }> {
-  const ranges: Array<{ start: number; end: number }> = [];
-  const regex = /[-+]?(?:0[xX][\w]+|0[bB][\w]+|0\d+|\b\d+\b)/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(code))) {
-    ranges.push({
-      start: match.index,
-      end: match.index + match[0].length
-    });
-  }
-  return ranges;
-}
-
 export function isInsideAnyRange(index: number, ranges: Array<{ start: number; end: number }>): boolean {
   return ranges.some((range) => index >= range.start && index < range.end);
-}
-
-export function isIntegerLiteral(value: string): boolean {
-  return parseIntegerLiteral(value) !== undefined;
-}
-
-export function isNonNegativeIntegerLiteral(value: string): boolean {
-  const parsed = parseIntegerLiteral(value);
-  return parsed !== undefined && parsed >= 0;
-}
-
-export function parseIntegerLiteral(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!/^[-+]?(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|0[0-7]+|\d+)$/.test(trimmed)) {
-    return undefined;
-  }
-  const sign = trimmed.startsWith('-') ? -1n : 1n;
-  const unsigned = trimmed.replace(/^[-+]/, '');
-  if (/^0\d+$/.test(unsigned) && !/^0[0-7]+$/.test(unsigned)) {
-    return undefined;
-  }
-  let magnitude: bigint;
-  if (/^0[xX]/.test(unsigned)) {
-    magnitude = BigInt(unsigned);
-  } else if (/^0[bB]/.test(unsigned)) {
-    magnitude = BigInt(unsigned);
-  } else if (/^0[0-7]+$/.test(unsigned) && unsigned.length > 1) {
-    magnitude = BigInt(`0o${unsigned.slice(1)}`);
-  } else {
-    magnitude = BigInt(unsigned);
-  }
-  const parsed = sign * magnitude;
-  if (parsed < -2147483648n || parsed > 0xffffffffn) {
-    return undefined;
-  }
-  return Number(parsed);
-}
-
-export function isFloatLiteral(value: string): boolean {
-  return /^[-+]?(?:(?:\d+\.\d*|\.\d+)(?:[eE][-+]?\d+)?|\d+[eE][-+]?\d+|\d+)$/.test(value.trim());
-}
-
-export function isCharLiteral(value: string): boolean {
-  return /^'(?:[^'\\]|\\.)'$/.test(value.trim());
-}
-
-export function isSymbolLike(value: string): boolean {
-  return /^[A-Za-z_.$][\w.$]*$/.test(value);
-}
-
-export function signed32ImmediateValue(value: number): number {
-  return value > 0x7fffffff ? value - 0x100000000 : value;
-}
-
-export function integerFitsRange(value: number, min: number, max: number): boolean {
-  return value >= min && value <= max;
 }

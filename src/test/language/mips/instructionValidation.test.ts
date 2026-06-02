@@ -88,6 +88,10 @@ describe('instructionWritesRegister', () => {
     expect(instructionWritesRegister('ori', ['$v0', '$zero', '0x1234'], '$v0')).toBe(true);
   });
 
+  it('detects $v0 write for subi', () => {
+    expect(instructionWritesRegister('subi', ['$v0', '$v0', '1'], '$v0')).toBe(true);
+  });
+
   it('detects $v0 write for lui', () => {
     expect(instructionWritesRegister('lui', ['$v0', '0x1234'], '$v0')).toBe(true);
   });

@@ -52,7 +52,19 @@ describe('MARS工程 real patterns', () => {
       const text = '    ori $t1, 0xfffff';
       const result = parseMips(doc(text), settings());
       // MARS supports 2-operand ori, parser flags as pseudo form
+      expect(errorCodes(result)).toHaveLength(0);
       expect(result.instructions).toHaveLength(1);
+    });
+
+    it('parses andi/xori 2-operand forms as pseudo-instructions', () => {
+      const text = `
+.text
+main:
+    andi $t0, 0xf
+    xori $t1, 0x10000
+`;
+      const result = parseMips(doc(text), settings());
+      expect(errorCodes(result)).toHaveLength(0);
     });
   });
 
@@ -192,17 +204,17 @@ target:
   });
 
   describe('subi pseudo-instruction (from Tower of Hanoi)', () => {
-    it('subi is recognized by MARS as addi with negated immediate', () => {
-      // subi is a MARS pseudo-instruction that expands to addi with negative immediate
-      // The parser reports it as unknown since it's not in the standard instruction set
-      // This is expected — students should use addi with negative immediate instead
+    it('parses subi and subiu as MARS pseudo-instructions', () => {
       const text = `
 .text
 main:
-    addi $sp, $sp, -8
+    subi $sp, $sp, 8
+    subiu $t0, $t0, 0x10000
 `;
       const result = parseMips(doc(text), settings());
       expect(errorCodes(result)).toHaveLength(0);
+      expect(result.instructions.map((instruction) => instruction.mnemonic)).toEqual(['subi', 'subiu']);
+      expect(result.instructions.every((instruction) => instruction.usesPseudoForm)).toBe(true);
     });
   });
 
@@ -339,6 +351,21 @@ array: .space 400
 main:
     sll $t1, $t0, 2
     lw $t2, array($t1)
+`;
+      const result = parseMips(doc(text), settings());
+      expect(errorCodes(result)).toHaveLength(0);
+    });
+  });
+
+  describe('load/store pseudo address forms', () => {
+    it('parses label plus offset memory operands from PseudoOps.txt', () => {
+      const text = `
+.data
+array: .space 4
+.text
+main:
+    lw $t0, array+100000($t1)
+    sw $t0, array+100000
 `;
       const result = parseMips(doc(text), settings());
       expect(errorCodes(result)).toHaveLength(0);

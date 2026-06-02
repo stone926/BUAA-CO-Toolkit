@@ -1,11 +1,7 @@
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import { parseVerilogCst } from './cst';
+import { VerilogToken } from './lexer';
 import { VerilogDecl, VerilogModule } from './model';
-import {
-  isWrappedByParens,
-  splitTernary,
-  splitTopLevelCommaSpans,
-  splitTopLevelOperator,
-  stripCommentsAndStrings
-} from './textUtils';
 
 export interface WidthInfo {
   width?: number;
@@ -35,141 +31,11 @@ export function widthOfDecl(decl: VerilogDecl): WidthInfo {
 }
 
 export function widthOfExpression(expression: string, module: VerilogModule): WidthInfo {
-  let text = stripCommentsAndStrings(expression).trim();
-  while (isWrappedByParens(text)) {
-    text = text.slice(1, -1).trim();
-  }
-  if (!text) {
-    return {};
-  }
-
-  const ternary = splitTernary(text);
-  if (ternary) {
-    return maxWidth(widthOfExpression(ternary.whenTrue, module), widthOfExpression(ternary.whenFalse, module));
-  }
-
-  if (text.startsWith('{') && text.endsWith('}')) {
-    const inner = text.slice(1, -1).trim();
-    const repeat = inner.match(/^(\d+)\s*\{([\s\S]*)\}$/);
-    if (repeat) {
-      const count = Number(repeat[1]);
-      const repeated = widthOfExpression(repeat[2], module).width;
-      return repeated !== undefined ? { width: count * repeated } : {};
-    }
-    let width = 0;
-    for (const part of splitTopLevelCommaSpans(inner)) {
-      const partWidth = widthOfExpression(part.text, module).width;
-      if (partWidth === undefined) {
-        return {};
-      }
-      width += partWidth;
-    }
-    return { width };
-  }
-
-  const shifted = splitTopLevelOperator(text, ['<<<', '>>>', '<<', '>>']);
-  if (shifted) {
-    return widthOfExpression(shifted.left, module);
-  }
-
-  const comparison = splitTopLevelOperator(text, ['==', '!=', '<=', '>=', '<', '>', '&&', '||']);
-  if (comparison) {
-    return { width: 1 };
-  }
-
-  const binary = splitTopLevelOperator(text, ['+', '-', '^', '|', '&', '*', '/', '%']);
-  if (binary) {
-    return maxWidth(widthOfExpression(binary.left, module), widthOfExpression(binary.right, module));
-  }
-
-  if (/^[!~&|^]+/.test(text)) {
-    const operator = text.match(/^[!~&|^]+/)?.[0] ?? '';
-    const operand = widthOfExpression(text.slice(operator.length), module);
-    return operator === '~' ? operand : { width: 1 };
-  }
-
-  const rangeMatch = text.match(/^([A-Za-z_]\w*)\s*\[\s*(\d+)\s*(?::\s*(\d+)\s*)?\]$/);
-  if (rangeMatch) {
-    if (rangeMatch[3] !== undefined) {
-      return { width: Math.abs(Number(rangeMatch[2]) - Number(rangeMatch[3])) + 1 };
-    }
-    return { width: 1 };
-  }
-
-  const literal = literalWidth(text);
-  if (literal.width !== undefined) {
-    return literal;
-  }
-
-  const identifier = text.match(/^[A-Za-z_]\w*$/);
-  if (identifier) {
-    const decl = module.declarations.get(identifier[0]);
-    return decl ? widthOfDecl(decl) : {};
-  }
-
-  return {};
+  return widthOfExpressionTokens(expressionTokens(expression), module);
 }
 
 export function widthOfConstantInitializer(expression: string): WidthInfo {
-  let text = stripCommentsAndStrings(expression).trim();
-  while (isWrappedByParens(text)) {
-    text = text.slice(1, -1).trim();
-  }
-  if (!text) {
-    return {};
-  }
-
-  const ternary = splitTernary(text);
-  if (ternary) {
-    return maxWidth(widthOfConstantInitializer(ternary.whenTrue), widthOfConstantInitializer(ternary.whenFalse));
-  }
-
-  if (text.startsWith('{') && text.endsWith('}')) {
-    const inner = text.slice(1, -1).trim();
-    const repeat = inner.match(/^(\d+)\s*\{([\s\S]*)\}$/);
-    if (repeat) {
-      const count = Number(repeat[1]);
-      const repeated = widthOfConstantInitializer(repeat[2]).width;
-      return repeated !== undefined ? { width: count * repeated } : {};
-    }
-    let width = 0;
-    for (const part of splitTopLevelCommaSpans(inner)) {
-      const partWidth = widthOfConstantInitializer(part.text).width;
-      if (partWidth === undefined) {
-        return {};
-      }
-      width += partWidth;
-    }
-    return { width };
-  }
-
-  const shifted = splitTopLevelOperator(text, ['<<<', '>>>', '<<', '>>']);
-  if (shifted) {
-    return widthOfConstantInitializer(shifted.left);
-  }
-
-  const comparison = splitTopLevelOperator(text, ['==', '!=', '<=', '>=', '<', '>', '&&', '||']);
-  if (comparison) {
-    return { width: 1 };
-  }
-
-  const binary = splitTopLevelOperator(text, ['+', '-', '^', '|', '&', '*', '/', '%']);
-  if (binary) {
-    return maxWidth(widthOfConstantInitializer(binary.left), widthOfConstantInitializer(binary.right));
-  }
-
-  const sign = text.match(/^[+-]\s*([\s\S]+)$/);
-  if (sign) {
-    return widthOfConstantInitializer(sign[1]);
-  }
-
-  if (/^[!~&|^]+/.test(text)) {
-    const operator = text.match(/^[!~&|^]+/)?.[0] ?? '';
-    const operand = widthOfConstantInitializer(text.slice(operator.length));
-    return operator === '~' ? operand : { width: 1 };
-  }
-
-  return literalWidth(text);
+  return widthOfExpressionTokens(expressionTokens(expression), undefined);
 }
 
 export function shouldReportWidthMismatch(expected: WidthInfo, actual: WidthInfo): boolean {
@@ -186,35 +52,347 @@ function widthFromRange(width?: string): number | undefined {
   if (!width) {
     return undefined;
   }
-  const match = width.match(/^\[\s*(\d+)\s*:\s*(\d+)\s*\]$/);
-  if (!match) {
+  const tokens = expressionTokens(width);
+  if (tokens.length !== 5 || tokens[0].value !== '[' || tokens[2].value !== ':' || tokens[4].value !== ']') {
     return undefined;
   }
-  return Math.abs(Number(match[1]) - Number(match[2])) + 1;
+  const left = decimalNumber(tokens[1]);
+  const right = decimalNumber(tokens[3]);
+  return left === undefined || right === undefined ? undefined : Math.abs(left - right) + 1;
 }
 
-function literalWidth(text: string): WidthInfo {
-  const based = text.match(/^(\d+)?\s*'\s*[sS]?\s*([bBoOdDhH])\s*([0-9a-fA-F_xXzZ?]+)$/);
-  if (based) {
-    if (based[1]) {
-      return { width: Number(based[1]) };
+function expressionTokens(expression: string): VerilogToken[] {
+  const document = TextDocument.create('expr://verilog', 'verilog', 0, expression);
+  return parseVerilogCst(document, expression).codeTokens.filter((token) => token.kind !== 'eof');
+}
+
+function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModule | undefined): WidthInfo {
+  let tokens = trimOuterParens(trimTokens(rawTokens));
+  if (!tokens.length) {
+    return {};
+  }
+
+  const ternary = splitTopLevelTernary(tokens);
+  if (ternary) {
+    return maxWidth(widthOfExpressionTokens(ternary.whenTrue, module), widthOfExpressionTokens(ternary.whenFalse, module));
+  }
+
+  if (tokens[0]?.value === '{' && tokens[tokens.length - 1]?.value === '}' && findMatchingForward(tokens, 0, '{', '}') === tokens.length - 1) {
+    return widthOfConcatenation(tokens.slice(1, -1), module);
+  }
+
+  const shifted = splitTopLevelOperatorTokens(tokens, new Set(['<<<', '>>>', '<<', '>>']));
+  if (shifted) {
+    return widthOfExpressionTokens(shifted.left, module);
+  }
+
+  const comparison = splitTopLevelOperatorTokens(tokens, new Set(['==', '!=', '<=', '>=', '<', '>', '&&', '||']));
+  if (comparison) {
+    return { width: 1 };
+  }
+
+  const binary = splitTopLevelOperatorTokens(tokens, new Set(['+', '-', '^', '|', '&', '*', '/', '%']));
+  if (binary) {
+    return maxWidth(widthOfExpressionTokens(binary.left, module), widthOfExpressionTokens(binary.right, module));
+  }
+
+  if (isUnaryOperator(tokens[0]?.value)) {
+    const operand = widthOfExpressionTokens(tokens.slice(1), module);
+    return tokens[0].value === '~' ? operand : { width: 1 };
+  }
+
+  const selectWidth = widthOfPartSelect(tokens);
+  if (selectWidth !== undefined) {
+    return { width: selectWidth };
+  }
+
+  if (tokens.length === 1 && tokens[0].kind === 'number') {
+    return literalWidth(tokens[0]);
+  }
+
+  if (tokens.length === 1 && tokens[0].kind === 'identifier' && module) {
+    const decl = module.declarations.get(tokens[0].value);
+    return decl ? widthOfDecl(decl) : {};
+  }
+
+  return {};
+}
+
+function widthOfConcatenation(tokens: VerilogToken[], module: VerilogModule | undefined): WidthInfo {
+  const repeat = repeatConcatenation(tokens);
+  if (repeat) {
+    const repeated = widthOfExpressionTokens(repeat.tokens, module).width;
+    return repeated !== undefined ? { width: repeat.count * repeated } : {};
+  }
+  let width = 0;
+  for (const part of splitTopLevel(tokens, ',')) {
+    const partWidth = widthOfExpressionTokens(part, module).width;
+    if (partWidth === undefined) {
+      return {};
     }
-    const digits = based[3].replace(/_/g, '');
-    const base = based[2].toLowerCase();
+    width += partWidth;
+  }
+  return { width };
+}
+
+function repeatConcatenation(tokens: VerilogToken[]): { count: number; tokens: VerilogToken[] } | undefined {
+  if (tokens.length < 4 || tokens[0].kind !== 'number' || tokens[1].value !== '{' || tokens[tokens.length - 1].value !== '}') {
+    return undefined;
+  }
+  const count = decimalNumber(tokens[0]);
+  if (count === undefined || findMatchingForward(tokens, 1, '{', '}') !== tokens.length - 1) {
+    return undefined;
+  }
+  return { count, tokens: tokens.slice(2, -1) };
+}
+
+function literalWidth(token: VerilogToken): WidthInfo {
+  const parsed = parseNumberToken(token.value);
+  if (parsed?.kind === 'based') {
+    if (parsed.size !== undefined) {
+      return { width: parsed.size };
+    }
+    const digits = parsed.digits.split('_').join('');
+    const base = parsed.base.toLowerCase();
     const bitsPerDigit = base === 'b' ? 1 : base === 'o' ? 3 : base === 'h' ? 4 : undefined;
     const minWidth = bitsPerDigit ? Math.max(1, digits.length * bitsPerDigit) : minimalBitsForDecimal(digits);
     return { width: Math.max(32, minWidth), minWidth, flexible: true };
   }
-  if (/^\d+$/.test(text)) {
-    const minWidth = minimalBitsForDecimal(text);
+  if (parsed?.kind === 'decimal') {
+    const minWidth = minimalBitsForDecimal(parsed.digits);
     return { width: Math.max(32, minWidth), minWidth, flexible: true };
   }
   return {};
 }
 
+function widthOfPartSelect(tokens: VerilogToken[]): number | undefined {
+  if (tokens.length !== 4 && tokens.length !== 6) {
+    return undefined;
+  }
+  if (tokens[0].kind !== 'identifier' || tokens[1].value !== '[' || tokens[tokens.length - 1].value !== ']') {
+    return undefined;
+  }
+  const left = decimalNumber(tokens[2]);
+  if (left === undefined) {
+    return undefined;
+  }
+  if (tokens.length === 4) {
+    return 1;
+  }
+  if (tokens[3].value !== ':') {
+    return undefined;
+  }
+  const right = decimalNumber(tokens[4]);
+  return right === undefined ? undefined : Math.abs(left - right) + 1;
+}
+
+function trimTokens(tokens: VerilogToken[]): VerilogToken[] {
+  return tokens.filter((token) => token.kind !== 'comment' && token.kind !== 'eof');
+}
+
+function trimOuterParens(tokens: VerilogToken[]): VerilogToken[] {
+  let current = tokens;
+  while (current[0]?.value === '(' && current[current.length - 1]?.value === ')' && findMatchingForward(current, 0, '(', ')') === current.length - 1) {
+    current = current.slice(1, -1);
+  }
+  return current;
+}
+
+function splitTopLevelTernary(tokens: VerilogToken[]): { condition: VerilogToken[]; whenTrue: VerilogToken[]; whenFalse: VerilogToken[] } | undefined {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  let question = -1;
+  let nestedTernary = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    }
+    if (paren !== 0 || bracket !== 0 || brace !== 0) {
+      continue;
+    }
+    if (token.value === '?') {
+      if (question >= 0) {
+        nestedTernary++;
+      } else {
+        question = index;
+      }
+    } else if (token.value === ':' && question >= 0) {
+      if (nestedTernary > 0) {
+        nestedTernary--;
+      } else {
+        return {
+          condition: tokens.slice(0, question),
+          whenTrue: tokens.slice(question + 1, index),
+          whenFalse: tokens.slice(index + 1)
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
+function splitTopLevelOperatorTokens(tokens: VerilogToken[], operators: Set<string>): { left: VerilogToken[]; operator: VerilogToken; right: VerilogToken[] } | undefined {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = tokens.length - 1; index >= 0; index--) {
+    const token = tokens[index];
+    if (token.value === ')') {
+      paren++;
+    } else if (token.value === '(') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === ']') {
+      bracket++;
+    } else if (token.value === '[') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '}') {
+      brace++;
+    } else if (token.value === '{') {
+      brace = Math.max(0, brace - 1);
+    }
+    if (paren !== 0 || bracket !== 0 || brace !== 0 || !operators.has(token.value) || index === 0 || index === tokens.length - 1) {
+      continue;
+    }
+    if ((token.value === '+' || token.value === '-') && isUnaryContext(tokens[index - 1])) {
+      continue;
+    }
+    return {
+      left: tokens.slice(0, index),
+      operator: token,
+      right: tokens.slice(index + 1)
+    };
+  }
+  return undefined;
+}
+
+function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
+  const parts: VerilogToken[][] = [];
+  let start = 0;
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    }
+    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
+      parts.push(tokens.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(tokens.slice(start));
+  return parts.map(trimTokens).filter((part) => part.length > 0);
+}
+
+function findMatchingForward(tokens: VerilogToken[], openIndex: number, open: string, close: string): number {
+  let depth = 0;
+  for (let index = openIndex; index < tokens.length; index++) {
+    if (tokens[index].value === open) {
+      depth++;
+    } else if (tokens[index].value === close) {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function isUnaryOperator(value: string | undefined): boolean {
+  return value === '!' || value === '~' || value === '&' || value === '|' || value === '^' || value === '+' || value === '-';
+}
+
+function isUnaryContext(previous: VerilogToken | undefined): boolean {
+  return !previous || previous.value === '(' || previous.value === '[' || previous.value === '{' || previous.value === '?' || previous.value === ':' || previous.value === ',' || previous.kind === 'operator';
+}
+
+type ParsedNumberToken =
+  | { kind: 'decimal'; digits: string }
+  | { kind: 'based'; size?: number; base: string; digits: string };
+
+function parseNumberToken(value: string): ParsedNumberToken | undefined {
+  const apostrophe = value.indexOf("'");
+  if (apostrophe < 0) {
+    return allDecimalDigits(value) ? { kind: 'decimal', digits: value } : undefined;
+  }
+  const sizeText = value.slice(0, apostrophe);
+  const size = sizeText ? decimalStringToNumber(sizeText) : undefined;
+  if (sizeText && size === undefined) {
+    return undefined;
+  }
+  let index = apostrophe + 1;
+  if (value[index] === 's' || value[index] === 'S') {
+    index++;
+  }
+  const base = value[index];
+  if (!base || !isBasedLiteralBase(base)) {
+    return undefined;
+  }
+  const digits = value.slice(index + 1);
+  return digits ? { kind: 'based', size, base, digits } : undefined;
+}
+
+function decimalNumber(token: VerilogToken | undefined): number | undefined {
+  if (!token || token.kind !== 'number') {
+    return undefined;
+  }
+  const parsed = parseNumberToken(token.value);
+  return parsed?.kind === 'decimal' ? decimalStringToNumber(parsed.digits) : undefined;
+}
+
+function decimalStringToNumber(value: string): number | undefined {
+  if (!allDecimalDigits(value)) {
+    return undefined;
+  }
+  const parsed = Number(value.split('_').join(''));
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function allDecimalDigits(value: string): boolean {
+  let sawDigit = false;
+  for (const char of value) {
+    if (char === '_') {
+      continue;
+    }
+    if (char < '0' || char > '9') {
+      return false;
+    }
+    sawDigit = true;
+  }
+  return sawDigit;
+}
+
+function isBasedLiteralBase(char: string): boolean {
+  return char === 'b' || char === 'B' || char === 'o' || char === 'O' || char === 'd' || char === 'D' || char === 'h' || char === 'H';
+}
+
 function minimalBitsForDecimal(text: string): number {
   try {
-    const value = BigInt(text);
+    const value = BigInt(text.split('_').join(''));
     if (value === 0n) {
       return 1;
     }

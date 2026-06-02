@@ -47,11 +47,11 @@ export function getMipsRenameEdits(document: TextDocument, position: Position, n
   }
 
   // Check macro name rename
-  const macro = findMacroOverloadAtPosition(document, parsed, word, position) ?? allMacros(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
+  const macro = findMacroOverloadAtPosition(parsed, word, position) ?? allMacros(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (macro) {
     const targetMacro = macro;
     return buildRenameForToken(document, parsed, word, (range) => {
-      const overload = findMacroOverloadAtPosition(document, parsed, word, range.start);
+      const overload = findMacroOverloadAtPosition(parsed, word, range.start);
       return overload?.selectionRange.start.line === targetMacro.selectionRange.start.line;
     }, targetMacro.selectionRange, newName);
   }
@@ -74,7 +74,7 @@ export function getMipsRenamePrepare(document: TextDocument, position: Position,
   if (resolveSymbolAtPosition(parsed, word, position)) {
     return wordRange;
   }
-  if (findMacroOverloadAtPosition(document, parsed, word, position)) {
+  if (findMacroOverloadAtPosition(parsed, word, position)) {
     return wordRange;
   }
   return undefined;

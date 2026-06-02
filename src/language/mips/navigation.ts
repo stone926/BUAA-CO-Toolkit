@@ -40,7 +40,7 @@ export function getMipsDefinition(document: TextDocument, position: Position, se
   if (symbol) {
     return Location.create(document.uri, symbol.selectionRange);
   }
-  const macro = findMacroOverloadAtPosition(document, parsed, word, position);
+  const macro = findMacroOverloadAtPosition(parsed, word, position);
   if (macro) {
     return Location.create(document.uri, macro.selectionRange);
   }
@@ -69,11 +69,11 @@ export function getMipsReferences(document: TextDocument, params: ReferenceParam
     return collectTokenReferences(document, parsed, word, (range) => resolveSymbolAtPosition(parsed, word, range.start)?.selectionRange.start.line === symbol.selectionRange.start.line, symbol.selectionRange, params.context.includeDeclaration);
   }
 
-  const macro = findMacroOverloadAtPosition(document, parsed, word, position) ?? allMacros(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
+  const macro = findMacroOverloadAtPosition(parsed, word, position) ?? allMacros(parsed).find((item) => rangesEqual(item.selectionRange, wordRange));
   if (macro) {
     const targetMacro = macro;
     return collectTokenReferences(document, parsed, word, (range) => {
-      const overload = findMacroOverloadAtPosition(document, parsed, word, range.start);
+      const overload = findMacroOverloadAtPosition(parsed, word, range.start);
       return overload?.selectionRange.start.line === targetMacro.selectionRange.start.line;
     }, targetMacro.selectionRange, params.context.includeDeclaration);
   }

@@ -4,6 +4,7 @@
     "summary": "Add",
     "formats": [
       "add $rd, $rs, $rt",
+      "add $rd, $rs, simm16",
       "add $rd, $rs, imm32"
     ],
     "operands": [
@@ -31,7 +32,8 @@
     "mnemonic": "addi",
     "summary": "Add immediate",
     "formats": [
-      "addi $rt, $rs, simm16"
+      "addi $rt, $rs, simm16",
+      "addi $rt, $rs, imm32"
     ],
     "operands": [
       3,
@@ -44,7 +46,8 @@
     "mnemonic": "addiu",
     "summary": "Add immediate unsigned",
     "formats": [
-      "addiu $rt, $rs, simm16"
+      "addiu $rt, $rs, simm16",
+      "addiu $rt, $rs, imm32"
     ],
     "operands": [
       3,
@@ -58,6 +61,7 @@
     "summary": "Subtract",
     "formats": [
       "sub $rd, $rs, $rt",
+      "sub $rd, $rs, simm16",
       "sub $rd, $rs, imm32"
     ],
     "operands": [
@@ -82,6 +86,35 @@
     "type": "R-type"
   },
   {
+    "mnemonic": "subi",
+    "summary": "Subtract immediate",
+    "formats": [
+      "subi $rt, $rs, simm16",
+      "subi $rt, $rs, imm32"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "MARS 伪指令：rt ← rs - imm。",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
+    "mnemonic": "subiu",
+    "summary": "Subtract immediate unsigned",
+    "formats": [
+      "subiu $rt, $rs, imm32"
+    ],
+    "operands": [
+      3,
+      3
+    ],
+    "description": "MARS 伪指令：rt ← rs - imm，不触发有符号溢出异常。",
+    "pseudo": true,
+    "type": "pseudo"
+  },
+  {
     "mnemonic": "and",
     "summary": "Bitwise AND",
     "formats": [
@@ -100,10 +133,13 @@
     "mnemonic": "andi",
     "summary": "Bitwise AND immediate",
     "formats": [
-      "andi $rt, $rs, uimm16"
+      "andi $rt, $rs, uimm16",
+      "andi $rt, $rs, imm32",
+      "andi $rt, uimm16",
+      "andi $rt, imm32"
     ],
     "operands": [
-      3,
+      2,
       3
     ],
     "description": "rt ← rs & zero_extend(imm)。",
@@ -128,10 +164,13 @@
     "mnemonic": "ori",
     "summary": "Bitwise OR immediate",
     "formats": [
-      "ori $rt, $rs, uimm16"
+      "ori $rt, $rs, uimm16",
+      "ori $rt, $rs, imm32",
+      "ori $rt, uimm16",
+      "ori $rt, imm32"
     ],
     "operands": [
-      3,
+      2,
       3
     ],
     "description": "rt ← rs | zero_extend(imm)。",
@@ -156,10 +195,13 @@
     "mnemonic": "xori",
     "summary": "Bitwise XOR immediate",
     "formats": [
-      "xori $rt, $rs, uimm16"
+      "xori $rt, $rs, uimm16",
+      "xori $rt, $rs, imm32",
+      "xori $rt, uimm16",
+      "xori $rt, imm32"
     ],
     "operands": [
-      3,
+      2,
       3
     ],
     "description": "rt ← rs ^ zero_extend(imm)。",
@@ -351,7 +393,17 @@
     "mnemonic": "lw",
     "summary": "Load word",
     "formats": [
-      "lw $rt, offset($base)"
+      "lw $rt, offset($base)",
+      "lw $rt, ($base)",
+      "lw $rt, simm16",
+      "lw $rt, uimm16",
+      "lw $rt, imm32",
+      "lw $rt, uimm16($base)",
+      "lw $rt, imm32($base)",
+      "lw $rt, label",
+      "lw $rt, label($base)",
+      "lw $rt, label+imm32",
+      "lw $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -364,7 +416,17 @@
     "mnemonic": "lwl",
     "summary": "Load word left",
     "formats": [
-      "lwl $rt, offset($base)"
+      "lwl $rt, offset($base)",
+      "lwl $rt, ($base)",
+      "lwl $rt, simm16",
+      "lwl $rt, uimm16",
+      "lwl $rt, imm32",
+      "lwl $rt, uimm16($base)",
+      "lwl $rt, imm32($base)",
+      "lwl $rt, label",
+      "lwl $rt, label($base)",
+      "lwl $rt, label+imm32",
+      "lwl $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -377,7 +439,17 @@
     "mnemonic": "lwr",
     "summary": "Load word right",
     "formats": [
-      "lwr $rt, offset($base)"
+      "lwr $rt, offset($base)",
+      "lwr $rt, ($base)",
+      "lwr $rt, simm16",
+      "lwr $rt, uimm16",
+      "lwr $rt, imm32",
+      "lwr $rt, uimm16($base)",
+      "lwr $rt, imm32($base)",
+      "lwr $rt, label",
+      "lwr $rt, label($base)",
+      "lwr $rt, label+imm32",
+      "lwr $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -390,7 +462,17 @@
     "mnemonic": "sw",
     "summary": "Store word",
     "formats": [
-      "sw $rt, offset($base)"
+      "sw $rt, offset($base)",
+      "sw $rt, ($base)",
+      "sw $rt, simm16",
+      "sw $rt, uimm16",
+      "sw $rt, imm32",
+      "sw $rt, uimm16($base)",
+      "sw $rt, imm32($base)",
+      "sw $rt, label",
+      "sw $rt, label($base)",
+      "sw $rt, label+imm32",
+      "sw $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -403,7 +485,17 @@
     "mnemonic": "swl",
     "summary": "Store word left",
     "formats": [
-      "swl $rt, offset($base)"
+      "swl $rt, offset($base)",
+      "swl $rt, ($base)",
+      "swl $rt, simm16",
+      "swl $rt, uimm16",
+      "swl $rt, imm32",
+      "swl $rt, uimm16($base)",
+      "swl $rt, imm32($base)",
+      "swl $rt, label",
+      "swl $rt, label($base)",
+      "swl $rt, label+imm32",
+      "swl $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -416,7 +508,17 @@
     "mnemonic": "swr",
     "summary": "Store word right",
     "formats": [
-      "swr $rt, offset($base)"
+      "swr $rt, offset($base)",
+      "swr $rt, ($base)",
+      "swr $rt, simm16",
+      "swr $rt, uimm16",
+      "swr $rt, imm32",
+      "swr $rt, uimm16($base)",
+      "swr $rt, imm32($base)",
+      "swr $rt, label",
+      "swr $rt, label($base)",
+      "swr $rt, label+imm32",
+      "swr $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -429,7 +531,17 @@
     "mnemonic": "lb",
     "summary": "Load byte",
     "formats": [
-      "lb $rt, offset($base)"
+      "lb $rt, offset($base)",
+      "lb $rt, ($base)",
+      "lb $rt, simm16",
+      "lb $rt, uimm16",
+      "lb $rt, imm32",
+      "lb $rt, uimm16($base)",
+      "lb $rt, imm32($base)",
+      "lb $rt, label",
+      "lb $rt, label($base)",
+      "lb $rt, label+imm32",
+      "lb $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -442,7 +554,17 @@
     "mnemonic": "lbu",
     "summary": "Load byte unsigned",
     "formats": [
-      "lbu $rt, offset($base)"
+      "lbu $rt, offset($base)",
+      "lbu $rt, ($base)",
+      "lbu $rt, simm16",
+      "lbu $rt, uimm16",
+      "lbu $rt, imm32",
+      "lbu $rt, uimm16($base)",
+      "lbu $rt, imm32($base)",
+      "lbu $rt, label",
+      "lbu $rt, label($base)",
+      "lbu $rt, label+imm32",
+      "lbu $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -455,7 +577,17 @@
     "mnemonic": "lh",
     "summary": "Load halfword",
     "formats": [
-      "lh $rt, offset($base)"
+      "lh $rt, offset($base)",
+      "lh $rt, ($base)",
+      "lh $rt, simm16",
+      "lh $rt, uimm16",
+      "lh $rt, imm32",
+      "lh $rt, uimm16($base)",
+      "lh $rt, imm32($base)",
+      "lh $rt, label",
+      "lh $rt, label($base)",
+      "lh $rt, label+imm32",
+      "lh $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -468,7 +600,17 @@
     "mnemonic": "lhu",
     "summary": "Load halfword unsigned",
     "formats": [
-      "lhu $rt, offset($base)"
+      "lhu $rt, offset($base)",
+      "lhu $rt, ($base)",
+      "lhu $rt, simm16",
+      "lhu $rt, uimm16",
+      "lhu $rt, imm32",
+      "lhu $rt, uimm16($base)",
+      "lhu $rt, imm32($base)",
+      "lhu $rt, label",
+      "lhu $rt, label($base)",
+      "lhu $rt, label+imm32",
+      "lhu $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -481,7 +623,17 @@
     "mnemonic": "sb",
     "summary": "Store byte",
     "formats": [
-      "sb $rt, offset($base)"
+      "sb $rt, offset($base)",
+      "sb $rt, ($base)",
+      "sb $rt, simm16",
+      "sb $rt, uimm16",
+      "sb $rt, imm32",
+      "sb $rt, uimm16($base)",
+      "sb $rt, imm32($base)",
+      "sb $rt, label",
+      "sb $rt, label($base)",
+      "sb $rt, label+imm32",
+      "sb $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -494,7 +646,17 @@
     "mnemonic": "sh",
     "summary": "Store halfword",
     "formats": [
-      "sh $rt, offset($base)"
+      "sh $rt, offset($base)",
+      "sh $rt, ($base)",
+      "sh $rt, simm16",
+      "sh $rt, uimm16",
+      "sh $rt, imm32",
+      "sh $rt, uimm16($base)",
+      "sh $rt, imm32($base)",
+      "sh $rt, label",
+      "sh $rt, label($base)",
+      "sh $rt, label+imm32",
+      "sh $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -508,6 +670,7 @@
     "summary": "Branch if equal",
     "formats": [
       "beq $rs, $rt, label",
+      "beq $rs, simm16, label",
       "beq $rs, imm32, label"
     ],
     "operands": [
@@ -524,6 +687,7 @@
     "summary": "Branch if not equal",
     "formats": [
       "bne $rs, $rt, label",
+      "bne $rs, simm16, label",
       "bne $rs, imm32, label"
     ],
     "operands": [
@@ -736,6 +900,7 @@
     "summary": "Multiply low word",
     "formats": [
       "mul $rd, $rs, $rt",
+      "mul $rd, $rs, simm16",
       "mul $rd, $rs, imm32"
     ],
     "operands": [
@@ -841,6 +1006,7 @@
     "formats": [
       "div $rs, $rt",
       "div $rd, $rs, $rt",
+      "div $rd, $rs, simm16",
       "div $rd, $rs, imm32"
     ],
     "operands": [
@@ -856,6 +1022,7 @@
     "formats": [
       "divu $rs, $rt",
       "divu $rd, $rs, $rt",
+      "divu $rd, $rs, simm16",
       "divu $rd, $rs, imm32"
     ],
     "operands": [
@@ -1065,6 +1232,8 @@
     "mnemonic": "li",
     "summary": "Load immediate",
     "formats": [
+      "li $rt, simm16",
+      "li $rt, uimm16",
       "li $rt, imm32"
     ],
     "operands": [
@@ -1079,7 +1248,16 @@
     "mnemonic": "la",
     "summary": "Load address",
     "formats": [
-      "la $rt, label"
+      "la $rt, label",
+      "la $rt, ($base)",
+      "la $rt, simm16",
+      "la $rt, uimm16",
+      "la $rt, imm32",
+      "la $rt, uimm16($base)",
+      "la $rt, imm32($base)",
+      "la $rt, label($base)",
+      "la $rt, label+imm32",
+      "la $rt, label+imm32($base)"
     ],
     "operands": [
       2,
@@ -1109,6 +1287,7 @@
     "summary": "Remainder signed",
     "formats": [
       "rem $rd, $rs, $rt",
+      "rem $rd, $rs, simm16",
       "rem $rd, $rs, imm32"
     ],
     "operands": [
@@ -1124,6 +1303,7 @@
     "summary": "Remainder unsigned",
     "formats": [
       "remu $rd, $rs, $rt",
+      "remu $rd, $rs, simm16",
       "remu $rd, $rs, imm32"
     ],
     "operands": [
@@ -1139,6 +1319,7 @@
     "summary": "Set if equal",
     "formats": [
       "seq $rd, $rs, $rt",
+      "seq $rd, $rs, simm16",
       "seq $rd, $rs, imm32"
     ],
     "operands": [
@@ -1154,6 +1335,7 @@
     "summary": "Set if not equal",
     "formats": [
       "sne $rd, $rs, $rt",
+      "sne $rd, $rs, simm16",
       "sne $rd, $rs, imm32"
     ],
     "operands": [
@@ -1169,6 +1351,7 @@
     "summary": "Set if greater than",
     "formats": [
       "sgt $rd, $rs, $rt",
+      "sgt $rd, $rs, simm16",
       "sgt $rd, $rs, imm32"
     ],
     "operands": [
@@ -1184,6 +1367,7 @@
     "summary": "Set if greater than unsigned",
     "formats": [
       "sgtu $rd, $rs, $rt",
+      "sgtu $rd, $rs, simm16",
       "sgtu $rd, $rs, imm32"
     ],
     "operands": [
@@ -1199,6 +1383,7 @@
     "summary": "Set if greater or equal",
     "formats": [
       "sge $rd, $rs, $rt",
+      "sge $rd, $rs, simm16",
       "sge $rd, $rs, imm32"
     ],
     "operands": [
@@ -1214,6 +1399,7 @@
     "summary": "Set if greater or equal unsigned",
     "formats": [
       "sgeu $rd, $rs, $rt",
+      "sgeu $rd, $rs, simm16",
       "sgeu $rd, $rs, imm32"
     ],
     "operands": [
@@ -1229,6 +1415,7 @@
     "summary": "Set if less or equal",
     "formats": [
       "sle $rd, $rs, $rt",
+      "sle $rd, $rs, simm16",
       "sle $rd, $rs, imm32"
     ],
     "operands": [
@@ -1244,6 +1431,7 @@
     "summary": "Set if less or equal unsigned",
     "formats": [
       "sleu $rd, $rs, $rt",
+      "sleu $rd, $rs, simm16",
       "sleu $rd, $rs, imm32"
     ],
     "operands": [
@@ -1291,6 +1479,7 @@
     "summary": "Branch less than",
     "formats": [
       "blt $rs, $rt, label",
+      "blt $rs, simm16, label",
       "blt $rs, imm32, label"
     ],
     "operands": [
@@ -1308,6 +1497,7 @@
     "summary": "Branch less than unsigned",
     "formats": [
       "bltu $rs, $rt, label",
+      "bltu $rs, simm16, label",
       "bltu $rs, imm32, label"
     ],
     "operands": [
@@ -1325,6 +1515,7 @@
     "summary": "Branch greater than",
     "formats": [
       "bgt $rs, $rt, label",
+      "bgt $rs, simm16, label",
       "bgt $rs, imm32, label"
     ],
     "operands": [
@@ -1342,6 +1533,7 @@
     "summary": "Branch greater than unsigned",
     "formats": [
       "bgtu $rs, $rt, label",
+      "bgtu $rs, simm16, label",
       "bgtu $rs, imm32, label"
     ],
     "operands": [
@@ -1359,6 +1551,7 @@
     "summary": "Branch less or equal",
     "formats": [
       "ble $rs, $rt, label",
+      "ble $rs, simm16, label",
       "ble $rs, imm32, label"
     ],
     "operands": [
@@ -1376,6 +1569,7 @@
     "summary": "Branch less or equal unsigned",
     "formats": [
       "bleu $rs, $rt, label",
+      "bleu $rs, simm16, label",
       "bleu $rs, imm32, label"
     ],
     "operands": [
@@ -1393,6 +1587,7 @@
     "summary": "Branch greater or equal",
     "formats": [
       "bge $rs, $rt, label",
+      "bge $rs, simm16, label",
       "bge $rs, imm32, label"
     ],
     "operands": [
@@ -1410,6 +1605,7 @@
     "summary": "Branch greater or equal unsigned",
     "formats": [
       "bgeu $rs, $rt, label",
+      "bgeu $rs, simm16, label",
       "bgeu $rs, imm32, label"
     ],
     "operands": [

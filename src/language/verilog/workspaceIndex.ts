@@ -6,6 +6,7 @@ import { URI } from 'vscode-uri';
 import { CoSettings } from '../common/settings';
 import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
+import { VerilogCstDocument } from './cst';
 
 export interface VerilogIndexedFile {
   uri: string;
@@ -16,6 +17,7 @@ export interface VerilogIndexedFile {
   macros: VerilogMacro[];
   macroUses: VerilogMacroUse[];
   includes: VerilogInclude[];
+  cst: VerilogCstDocument;
 }
 
 export class VerilogWorkspaceIndex {
@@ -77,7 +79,8 @@ export class VerilogWorkspaceIndex {
       modules: parsed.modules,
       macros: parsed.macros,
       macroUses: parsed.macroUses,
-      includes: parsed.includes
+      includes: parsed.includes,
+      cst: parsed.cst
     };
     this.files.set(document.uri, file);
     for (const module of parsed.modules) {

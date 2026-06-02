@@ -91,7 +91,7 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
         continue;
       }
 
-      if (token.startsWith('$') && cp0RegisterAtPosition(document, token, range.start)) {
+      if (token.startsWith('$') && cp0RegisterAtPosition(parsed, token, range.start)) {
         pushSemanticToken(tokens, range, 'mipsCp0Register');
       } else if (token.startsWith('$') && (isRegister(token) || isFloatingPointRegister(token))) {
         pushSemanticToken(tokens, range, 'mipsRegister');

@@ -5,52 +5,56 @@ import {
   Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
   cp0ByOperand,
   cp0Markdown,
-  instructionWritesV0,
   markdownTooltip,
   syscallByOperand,
   syscallMarkdown
 } from './display';
+import { instructionWritesRegister } from './instructionValidation';
+import { getCachedMipsParse } from './parseCache';
 import { MipsSyscallInfo } from './resources';
 import { MipsServerState } from './state';
-import { stripLineComment } from './text';
 
 export function getMipsInlayHints(document: TextDocument, range: Range, settings: CoSettings, state: MipsServerState): InlayHint[] {
+  const parsed = getCachedMipsParse(document, settings, state);
   const hints: InlayHint[] = [];
   const startLine = Math.max(0, range.start.line);
   const endLine = Math.min(document.lineCount - 1, range.end.line);
   const serviceStack: Array<MipsSyscallInfo | undefined> = [];
   let currentSyscall: MipsSyscallInfo | undefined;
 
-  for (let lineNumber = 0; lineNumber <= endLine; lineNumber++) {
-    const text = lineAt(document, lineNumber).text;
-    const code = stripLineComment(text);
-    const trimmed = code.trim();
+  for (const line of parsed.lines) {
+    if (line.line > endLine) {
+      break;
+    }
+    if (line.kind !== 'statement' || !line.executable) {
+      continue;
+    }
+    const executable = line.executable;
+    const lineNumber = line.line;
     const inRequestedRange = lineNumber >= startLine;
 
-    if (/^\.macro\b/.test(trimmed)) {
+    if (executable.lowerMnemonic === '.macro') {
       serviceStack.push(currentSyscall);
       currentSyscall = undefined;
       continue;
     }
 
-    if (/^\.end_macro\b/.test(trimmed)) {
+    if (executable.lowerMnemonic === '.end_macro') {
       currentSyscall = serviceStack.pop();
       continue;
     }
 
-    const syscallLoad = code.match(/\bli\s+\$v0\s*,\s*(\S+)/);
-    if (syscallLoad) {
-      const syscall = syscallByOperand(syscallLoad[1]);
+    if (executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
+      const operand = executable.operands[1];
+      const syscall = syscallByOperand(operand.text);
       if (syscall) {
-        const start = code.indexOf(syscallLoad[1]);
         if (inRequestedRange) {
           hints.push({
-            position: Position.create(lineNumber, start + syscallLoad[1].length),
+            position: Position.create(lineNumber, operand.range.end),
             label: ` ${syscall.name}`,
             kind: InlayHintKind.Parameter,
             tooltip: markdownTooltip(syscallMarkdown(syscall)),
@@ -59,15 +63,14 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
         }
         currentSyscall = syscall;
       }
-    } else if (instructionWritesV0(code)) {
+    } else if (instructionWritesRegister(executable.lowerMnemonic, executable.operands.map((operand) => operand.text), '$v0')) {
       currentSyscall = undefined;
     }
 
-    const syscallInstruction = code.match(/^\s*syscall\b/);
-    if (syscallInstruction) {
+    if (executable.lowerMnemonic === 'syscall') {
       if (currentSyscall && inRequestedRange) {
         hints.push({
-          position: Position.create(lineNumber, syscallInstruction[0].length),
+          position: Position.create(lineNumber, executable.range.end),
           label: ` ${currentSyscall.name}`,
           kind: InlayHintKind.Parameter,
           tooltip: markdownTooltip(syscallMarkdown(currentSyscall)),
@@ -77,13 +80,12 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
       currentSyscall = undefined;
     }
 
-    const cp0Access = code.match(/\b(?:mfc0|mtc0)\s+\$[A-Za-z0-9_]+\s*,\s*(\$?\d+)\b/);
-    if (cp0Access && inRequestedRange) {
-      const register = cp0ByOperand(cp0Access[1]);
+    if ((executable.lowerMnemonic === 'mfc0' || executable.lowerMnemonic === 'mtc0') && executable.operands[1] && inRequestedRange) {
+      const operand = executable.operands[1];
+      const register = cp0ByOperand(operand.text);
       if (register) {
-        const start = code.indexOf(cp0Access[1]);
         hints.push({
-          position: Position.create(lineNumber, start + cp0Access[1].length),
+          position: Position.create(lineNumber, operand.range.end),
           label: ` ${register.name}${register.alias ? `/${register.alias}` : ''}`,
           kind: InlayHintKind.Type,
           tooltip: markdownTooltip(cp0Markdown(register)),

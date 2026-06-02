@@ -4,16 +4,18 @@ import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/nod
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { ProjectProfile } from '../../projectProfile';
-import { lineAt, makeDiagnostic, rangeAtOffset } from '../common/lsp';
+import { lineAt, makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { shouldReportWidthMismatch, widthOfDecl, widthOfExpression } from './expressions';
+import { findAssignmentOperator } from './assignmentAnalysis';
 import {
   expectedPorts,
   VerilogInclude,
   VerilogModule,
   VerilogPortConnection
 } from './model';
-import { VerilogCstDocument } from './cst';
+import { VerilogCstDocument, verilogTokenRange } from './cst';
+import { VerilogToken } from './lexer';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import {
   collectAssignmentDiagnostics,
@@ -21,11 +23,7 @@ import {
   collectImplicitNetDiagnostics,
   collectSynthesizableHintDiagnostics
 } from './lintDiagnostics';
-import {
-  isInsideForControl,
-  normalizeWidth,
-  stripCommentsAndStrings
-} from './textUtils';
+import { normalizeWidth } from './textUtils';
 
 export function collectVerilogDiagnostics(
   document: TextDocument,
@@ -40,16 +38,16 @@ export function collectVerilogDiagnostics(
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(modules, diagnostics);
-  collectWidthDiagnostics(document, text, modules, diagnostics);
+  collectWidthDiagnostics(document, text, modules, cst, diagnostics);
   if (settings.verilog.lint.courseRules) {
-    collectCourseDiagnostics(document, settings, text, modules, diagnostics);
-    collectAssignmentDiagnostics(document, text, modules, diagnostics);
-    collectCourseStyleDiagnostics(document, settings, text, modules, diagnostics);
+    collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
+    collectAssignmentDiagnostics(document, text, modules, cst, diagnostics);
+    collectCourseStyleDiagnostics(document, settings, text, modules, cst, diagnostics);
   }
   if (settings.verilog.lint.synthesizableHints) {
-    collectSynthesizableHintDiagnostics(document, text, modules, diagnostics);
+    collectSynthesizableHintDiagnostics(document, text, modules, cst, diagnostics);
   }
-  collectImplicitNetDiagnostics(document, settings, text, modules, diagnostics);
+  collectImplicitNetDiagnostics(document, settings, text, modules, cst, diagnostics);
   return diagnostics;
 }
 
@@ -121,27 +119,32 @@ function collectInstancePortDiagnostics(modules: VerilogModule[], diagnostics: D
   }
 }
 
-function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
+function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   const modulesByName = new Map(modules.map((module) => [module.name, module]));
   for (const module of modules) {
     const bodyStart = document.offsetAt(module.headerEnd);
     const bodyEnd = document.offsetAt(module.range.end);
-    const body = text.slice(bodyStart, bodyEnd);
-    const stripped = stripCommentsAndStrings(body);
-    const assignmentRegex = /(?:\bassign\s+)?([A-Za-z_]\w*(?:\s*\[[^\]]+\])?)\s*(?:<=|=)(?!=)\s*([^;]+);/g;
-    let match: RegExpExecArray | null;
-    while ((match = assignmentRegex.exec(stripped))) {
-      if (isInsideForControl(stripped, match.index)) {
+    for (const statement of cst.statements) {
+      if (statement.start < bodyStart || statement.start >= bodyEnd) {
         continue;
       }
-      const lhsText = match[1].trim();
-      const rhsText = match[2].trim();
+      const tokens = trimStatementTokens(statement.tokens);
+      const operatorIndex = findAssignmentOperator(tokens);
+      if (operatorIndex < 0 || isDeclarationStatement(tokens)) {
+        continue;
+      }
+      const lhsTokens = lhsTokensForAssignment(tokens, operatorIndex);
+      const rhsTokens = tokens.slice(operatorIndex + 1);
+      if (!lhsTokens.length || !rhsTokens.length) {
+        continue;
+      }
+      const lhsText = tokenText(text, lhsTokens).trim();
+      const rhsText = tokenText(text, rhsTokens).trim();
       const lhs = widthOfExpression(lhsText, module);
       const rhs = widthOfExpression(rhsText, module);
       if (shouldReportWidthMismatch(lhs, rhs)) {
-        const absolute = bodyStart + match.index + match[0].indexOf(rhsText);
         diagnostics.push(makeDiagnostic(
-          rangeAtOffset(document, absolute, rhsText.length),
+          tokenRange(document, rhsTokens),
           `Width mismatch: '${lhsText}' is ${lhs.width} bit(s), but this expression is ${rhs.width} bit(s).`,
           DiagnosticSeverity.Warning,
           'width-mismatch'
@@ -176,7 +179,47 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
   }
 }
 
-function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
+const declarationStatementKeywords = new Set([
+  'input',
+  'output',
+  'inout',
+  'wire',
+  'reg',
+  'logic',
+  'integer',
+  'real',
+  'realtime',
+  'time',
+  'parameter',
+  'localparam',
+  'genvar'
+]);
+
+function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
+  const result = tokens.filter((token) => token.kind !== 'eof');
+  return result[result.length - 1]?.value === ';' ? result.slice(0, -1) : result;
+}
+
+function isDeclarationStatement(tokens: VerilogToken[]): boolean {
+  return Boolean(tokens[0] && declarationStatementKeywords.has(tokens[0].value));
+}
+
+function lhsTokensForAssignment(tokens: VerilogToken[], operatorIndex: number): VerilogToken[] {
+  return tokens[0]?.value === 'assign' ? tokens.slice(1, operatorIndex) : tokens.slice(0, operatorIndex);
+}
+
+function tokenText(text: string, tokens: VerilogToken[]): string {
+  if (!tokens.length) {
+    return '';
+  }
+  return text.slice(tokens[0].start, tokens[tokens.length - 1].end);
+}
+
+function tokenRange(document: TextDocument, tokens: VerilogToken[]): Range {
+  return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
+}
+
+function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   const profile = settings.project.profile;
   const topName = settings.project.topModule.trim() || 'mips';
   const top = modules.find((module) => module.name === topName);
@@ -191,19 +234,18 @@ function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, 
   }
 
   if (profile === 'P6') {
-    const strippedText = stripCommentsAndStrings(text);
-    const displayRegex = /\$display\b/g;
-    let match: RegExpExecArray | null;
-    while ((match = displayRegex.exec(strippedText))) {
-      diagnostics.push(makeDiagnostic(rangeAtOffset(document, match.index, '$display'.length), 'P6 top-level design should not contain $display; the testbench should monitor external outputs.', DiagnosticSeverity.Error, 'p6-display'));
+    for (const token of cst.codeTokens) {
+      if (token.kind === 'systemIdentifier' && token.value === '$display') {
+        diagnostics.push(makeDiagnostic(verilogTokenRange(document, token), 'P6 top-level design should not contain $display; the testbench should monitor external outputs.', DiagnosticSeverity.Error, 'p6-display'));
+      }
     }
   }
 
   if (profile === 'P4' || profile === 'P5') {
-    validateDisplayFormats(document, text, profile, diagnostics);
+    validateDisplayFormats(document, cst, profile, diagnostics);
   }
 
-  if (!/`default_nettype\s+none/.test(text)) {
+  if (!hasDefaultNettypeNone(document, cst)) {
     const firstLine = lineAt(document, 0).text;
     diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, firstLine.length)), 'Consider adding `default_nettype none to catch implicit wires early.', DiagnosticSeverity.Information, 'default-nettype-none'));
   }
@@ -227,20 +269,79 @@ function checkExpectedPorts(module: VerilogModule, profile: ProjectProfile, diag
   }
 }
 
-function validateDisplayFormats(document: TextDocument, text: string, profile: ProjectProfile, diagnostics: Diagnostic[]): void {
-  const strippedText = stripCommentsAndStrings(text);
-  const displayRegex = /\$display\s*\(\s*"([^"]*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = displayRegex.exec(text))) {
-    if (strippedText.slice(match.index, match.index + '$display'.length) !== '$display') {
+function validateDisplayFormats(document: TextDocument, cst: VerilogCstDocument, profile: ProjectProfile, diagnostics: Diagnostic[]): void {
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    if (token.kind !== 'systemIdentifier' || token.value !== '$display') {
       continue;
     }
-    const format = match[1];
-    const ok = profile === 'P5'
-      ? /%d@%h:\s*(?:\$%d|\*%h)\s*<=\s*%h/.test(format)
-      : /@%h:\s*(?:\$%d|\*%h)\s*<=\s*%h/.test(format);
-    if (!ok) {
-      diagnostics.push(makeDiagnostic(rangeAtOffset(document, match.index, '$display'.length), `${profile} $display format does not match the expected CPU trace format.`, DiagnosticSeverity.Warning, 'display-format'));
+    const format = firstDisplayFormatString(cst.codeTokens, index);
+    if (format !== undefined && !traceFormatLooksOk(format, profile)) {
+      diagnostics.push(makeDiagnostic(verilogTokenRange(document, token), `${profile} $display format does not match the expected CPU trace format.`, DiagnosticSeverity.Warning, 'display-format'));
     }
   }
+}
+
+function firstDisplayFormatString(tokens: VerilogToken[], displayIndex: number): string | undefined {
+  const open = nextTokenValue(tokens, displayIndex + 1, '(');
+  if (open < 0) {
+    return undefined;
+  }
+  for (let index = open + 1; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === ')') {
+      return undefined;
+    }
+    if (token.kind === 'string') {
+      return token.value.length >= 2 ? token.value.slice(1, -1) : '';
+    }
+    if (token.value !== ',') {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument): boolean {
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    if (token.kind !== 'directive' || token.value !== '`default_nettype') {
+      continue;
+    }
+    const next = cst.codeTokens[index + 1];
+    if (next && document.positionAt(next.start).line === document.positionAt(token.start).line && next.value === 'none') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function traceFormatLooksOk(format: string, profile: ProjectProfile): boolean {
+  const normalized = removeAsciiWhitespace(format);
+  const expected = profile === 'P5'
+    ? ['%d@%h:$%d<=%h', '%d@%h:*%h<=%h']
+    : ['@%h:$%d<=%h', '@%h:*%h<=%h'];
+  return expected.some((pattern) => normalized.includes(pattern));
+}
+
+function removeAsciiWhitespace(text: string): string {
+  let result = '';
+  for (const char of text) {
+    if (char !== ' ' && char !== '\t' && char !== '\r' && char !== '\n' && char !== '\f' && char !== '\v') {
+      result += char;
+    }
+  }
+  return result;
+}
+
+function nextTokenValue(tokens: VerilogToken[], start: number, value: string): number {
+  for (let index = start; index < tokens.length; index++) {
+    if (tokens[index].value === value) {
+      return index;
+    }
+    if (tokens[index].kind !== 'comment') {
+      return -1;
+    }
+  }
+  return -1;
 }

@@ -23,7 +23,7 @@ import {
 import * as path from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
-import { containsPosition, lineAt, rangeAtOffset, rangesEqual } from '../common/lsp';
+import { containsPosition, lineAt, rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { filterDisabledDiagnostics } from '../common/diagnosticActions';
 import { rangeKey } from '../common/util';
@@ -44,15 +44,20 @@ import {
   declDetail,
   moduleAtPosition,
   parseVerilog,
-  splitTopLevelCommaSpans,
-  stripCommentsAndStrings
+  splitTopLevelCommaSpans
 } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { getVerilogLiteralCodeActions } from './numericLiterals';
 import { addVerilogWorkspaceDiagnostics } from './workspaceDiagnostics';
+import { VerilogCstDocument } from './cst';
+import {
+  collectIdentifierReferencesInModule,
+  verilogWordRangeAtPosition
+} from './tokenNavigation';
 
 export { buildTestbench, parseVerilog, moduleAtPosition };
-export { getVerilogFoldingRanges, getVerilogFormattingEdits } from './formatting';
+export { getVerilogFoldingRanges } from './folding';
+export { getVerilogFormattingEdits } from './formatting';
 export { getVerilogSemanticTokens } from './semanticTokens';
 export { getVerilogDocumentSymbols } from './symbols';
 export type { VerilogModule } from './model';
@@ -200,9 +205,10 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
   if (!resolved) {
     return undefined;
   }
+  const parsed = getCachedVerilogParse(document, settings, false);
   const hoverRange = resolved.kind === 'include'
     ? resolved.include.pathRange
-    : getVerilogWordRange(document, position) ?? resolvedRange(resolved);
+    : getVerilogWordRange(document, position, parsed.cst) ?? resolvedRange(resolved);
   switch (resolved.kind) {
     case 'decl':
       return markdownHover(`\`${declDetail(resolved.decl)}\``, hoverRange);
@@ -247,21 +253,22 @@ export function getVerilogReferences(document: TextDocument, params: ReferencePa
   if (!resolved || resolved.kind === 'include') {
     return [];
   }
+  const parsed = getCachedVerilogParse(document, settings, false);
   const includeDeclaration = params.context.includeDeclaration;
   switch (resolved.kind) {
     case 'decl': {
-      const locations = collectSignalReferences(document, resolved.module, resolved.decl.name, resolved.decl.selectionRange, includeDeclaration);
+      const locations = collectSignalReferences(document, parsed.cst, resolved.module, resolved.decl.name, resolved.decl.selectionRange, includeDeclaration);
       if (resolved.decl.direction) {
         locations.push(...collectPortConnectionReferences(index, resolved.module.name, resolved.decl.name));
       }
       return dedupeLocations(locations);
     }
     case 'instance':
-      return collectSignalReferences(document, resolved.module, resolved.instance.instanceName, resolved.instance.selectionRange, includeDeclaration);
+      return collectSignalReferences(document, parsed.cst, resolved.module, resolved.instance.instanceName, resolved.instance.selectionRange, includeDeclaration);
     case 'module':
       return collectModuleReferences(index, resolved.module, includeDeclaration);
     case 'portConnection': {
-      const locations = collectSignalReferencesForIndexedModule(index, resolved.targetModule, resolved.targetPort.name, resolved.targetPort.selectionRange, includeDeclaration);
+      const locations = collectSignalReferencesForIndexedModule(index, settings, resolved.targetModule, resolved.targetPort.name, resolved.targetPort.selectionRange, includeDeclaration);
       locations.push(...collectPortConnectionReferences(index, resolved.targetModule.name, resolved.targetPort.name));
       return dedupeLocations(locations);
     }
@@ -296,7 +303,8 @@ export function getVerilogRenamePrepare(document: TextDocument, position: Positi
   if (!resolved || resolved.kind === 'include') {
     return undefined;
   }
-  const range = getVerilogWordRange(document, position);
+  const parsed = getCachedVerilogParse(document, settings, false);
+  const range = getVerilogWordRange(document, position, parsed.cst);
   if (!range) {
     return undefined;
   }
@@ -682,7 +690,7 @@ function resolveVerilogSymbol(document: TextDocument, position: Position, settin
   if (include) {
     return { kind: 'include', include };
   }
-  const wordRange = getVerilogWordRange(document, position);
+  const wordRange = getVerilogWordRange(document, position, parsed.cst);
   if (!wordRange) {
     return undefined;
   }
@@ -730,42 +738,18 @@ function resolveVerilogSymbol(document: TextDocument, position: Position, settin
   return undefined;
 }
 
-function collectSignalReferences(document: TextDocument, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
-  const locations: Location[] = [];
-  if (includeDeclaration && declarationRange) {
-    locations.push(Location.create(document.uri, declarationRange));
-  }
-  const start = document.offsetAt(module.range.start);
-  const end = document.offsetAt(module.range.end);
-  const text = document.getText();
-  const stripped = stripCommentsAndStrings(text.slice(start, end));
-  const regex = /\b[A-Za-z_]\w*\b/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(stripped))) {
-    if (match[0] !== name) {
-      continue;
-    }
-    const absolute = start + match.index;
-    const previous = text[absolute - 1] ?? '';
-    if (previous === '.' || previous === '`' || previous === '$' || previous === "'") {
-      continue;
-    }
-    const range = rangeAtOffset(document, absolute, name.length);
-    if (declarationRange && rangesEqual(range, declarationRange)) {
-      continue;
-    }
-    locations.push(Location.create(document.uri, range));
-  }
-  return locations;
+function collectSignalReferences(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
+  return collectIdentifierReferencesInModule(document, cst, module, name, declarationRange, includeDeclaration);
 }
 
-function collectSignalReferencesForIndexedModule(index: VerilogWorkspaceIndex, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
+function collectSignalReferencesForIndexedModule(index: VerilogWorkspaceIndex, settings: CoSettings, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
   const file = index.getFile(module.uri);
   if (!file) {
     return includeDeclaration && declarationRange ? [Location.create(module.uri, declarationRange)] : [];
   }
   const document = TextDocument.create(file.uri, 'verilog', 0, file.text);
-  return collectSignalReferences(document, module, name, declarationRange, includeDeclaration);
+  const parsed = getCachedVerilogParse(document, settings, false);
+  return collectSignalReferences(document, parsed.cst, module, name, declarationRange, includeDeclaration);
 }
 
 function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogModule, includeDeclaration: boolean): Location[] {
@@ -913,18 +897,8 @@ function resolvedRange(resolved: ResolvedVerilogSymbol): Range | undefined {
   }
 }
 
-function getVerilogWordRange(document: TextDocument, position: Position): Range | undefined {
-  const text = lineAt(document, position.line).text;
-  const regex = /[A-Za-z_]\w*/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text))) {
-    const start = match.index;
-    const end = start + match[0].length;
-    if (position.character >= start && position.character <= end) {
-      return Range.create(position.line, start, position.line, end);
-    }
-  }
-  return undefined;
+function getVerilogWordRange(document: TextDocument, position: Position, cst: VerilogCstDocument): Range | undefined {
+  return verilogWordRangeAtPosition(document, cst, position);
 }
 
 function markdownHover(value: string, range?: Range): Hover {
@@ -996,5 +970,21 @@ function placeholder(index: number, value: string): string {
 }
 
 function isIdentifier(value: string): boolean {
-  return /^[A-Za-z_]\w*$/.test(value);
+  if (!value || !isIdentifierStart(value[0])) {
+    return false;
+  }
+  for (let index = 1; index < value.length; index++) {
+    if (!isIdentifierPart(value[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isIdentifierStart(char: string): boolean {
+  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || char === '_';
+}
+
+function isIdentifierPart(char: string): boolean {
+  return isIdentifierStart(char) || (char >= '0' && char <= '9');
 }

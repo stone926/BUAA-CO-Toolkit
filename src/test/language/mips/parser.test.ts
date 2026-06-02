@@ -127,6 +127,21 @@ describe('parseMips', () => {
       const result = parseMips(doc(text), settings());
       expect(diagCodes(result)).not.toContain('instruction-in-data');
     });
+
+    it('does not treat macro body instructions as data segment instructions', () => {
+      const text = [
+        '.data',
+        'space: .asciiz " "',
+        '',
+        '.macro print_string(%string)',
+        '    li $v0, 4',
+        '    la $a0, %string',
+        '    syscall',
+        '.end_macro'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('instruction-in-data');
+    });
   });
 
   describe('multiple labels on one line', () => {

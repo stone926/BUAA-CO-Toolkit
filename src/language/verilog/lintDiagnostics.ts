@@ -1,34 +1,29 @@
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { makeDiagnostic, rangeAtOffset, lineAt } from '../common/lsp';
+import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
-import { escapeRegExp } from '../common/util';
-import { collectAssignmentsInText } from './assignmentAnalysis';
+import { collectAssignmentsFromTokens } from './assignmentAnalysis';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
+import { VerilogCstDocument, VerilogCstStatement } from './cst';
+import { VerilogToken } from './lexer';
 import {
-  findMatchingParen,
-  isInsideForControl,
   safeRegExp,
-  skipWhitespace,
-  stripCommentsAndStrings
 } from './textUtils';
+import {
+  assignmentRhsContainsIdentifier,
+  collectAlwaysBlocksFromCst,
+  edgeSignalsFromSensitivity,
+  hasAnyTokenValue,
+  hasTokenValue,
+  isOffsetInsideForControl
+} from './blockAst';
 
-interface AlwaysBlockInfo {
-  sensitivity: string;
-  range: Range;
-  headerRange: Range;
-  bodyText: string;
-  bodyOffset: number;
-  sequential: boolean;
-  combinational: boolean;
-}
-
-export function collectAssignmentDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
+export function collectAssignmentDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
     const bodyStart = document.offsetAt(module.headerEnd);
-    const body = text.slice(bodyStart, document.offsetAt(module.range.end));
+    const bodyEnd = document.offsetAt(module.range.end);
     const assignmentKinds = new Map<string, Set<string>>();
-    for (const assignment of collectAssignmentsInText(document, body, bodyStart, -1)) {
+    for (const assignment of collectAssignmentsFromTokens(document, cstWithStatements(cst, bodyStart, bodyEnd), 0, -1)) {
       if (!assignmentKinds.has(assignment.name)) {
         assignmentKinds.set(assignment.name, new Set());
       }
@@ -49,44 +44,45 @@ export function collectCourseStyleDiagnostics(
   settings: CoSettings,
   text: string,
   modules: VerilogModule[],
+  cst: VerilogCstDocument,
   diagnostics: Diagnostic[]
 ): void {
   for (const module of modules) {
     collectNamingDiagnostics(settings, module, diagnostics);
-    collectAlwaysStyleDiagnostics(document, settings, text, module, diagnostics);
+    collectAlwaysStyleDiagnostics(document, settings, cst, module, diagnostics);
     collectInstantiationStyleDiagnostics(settings, module, diagnostics);
     collectExplicitWidthDiagnostics(settings, module, diagnostics);
-    collectMagicNumberDiagnostics(document, settings, text, module, diagnostics);
+    collectMagicNumberDiagnostics(document, settings, text, module, cst, diagnostics);
     collectInoutDiagnostics(settings, module, diagnostics);
   }
   collectTestbenchDiagnostics(document, settings, text, modules, diagnostics);
 }
 
-export function collectSynthesizableHintDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
-  const stripped = stripVerilogAttributes(stripPreprocessorDirectives(stripCommentsAndStrings(text)));
-  const initialRegex = /\binitial\b/g;
-  let initialMatch: RegExpExecArray | null;
-  while ((initialMatch = initialRegex.exec(stripped))) {
-    diagnostics.push(makeDiagnostic(rangeAtOffset(document, initialMatch.index, 'initial'.length), 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
-  }
-
-  const declInitializerRegex = /\b(reg|logic|integer)\b\s*(?:signed\s*)?(?:\[[^\]]+\]\s*)?[A-Za-z_]\w*\s*=/g;
-  let initializerMatch: RegExpExecArray | null;
-  while ((initializerMatch = declInitializerRegex.exec(stripped))) {
-    diagnostics.push(makeDiagnostic(rangeAtOffset(document, initializerMatch.index, initializerMatch[0].length), 'Synthesizable style: avoid declaration initializers for registers; reset them in clocked logic.', DiagnosticSeverity.Information, 'synth-decl-init'));
-  }
-
-  const mulDivRegex = /(?<![*/])(?:\*|\/|%)(?![*/])/g;
-  let operatorMatch: RegExpExecArray | null;
-  while ((operatorMatch = mulDivRegex.exec(stripped))) {
-    if (!shouldReportSynthesizableOperator(stripped, operatorMatch.index)) {
+export function collectSynthesizableHintDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+  const moduleRanges = modules.map((module) => [document.offsetAt(module.range.start), document.offsetAt(module.range.end)] as const);
+  for (const token of cst.codeTokens) {
+    if (!isInsideAnyOffsetRange(token.start, moduleRanges)) {
       continue;
     }
-    diagnostics.push(makeDiagnostic(rangeAtOffset(document, operatorMatch.index, operatorMatch[0].length), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
+    if (token.value === 'initial') {
+      diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
+    }
+    if ((token.value === '*' || token.value === '/' || token.value === '%') && shouldReportSynthesizableOperatorToken(document, cst.codeTokens, token)) {
+      diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
+    }
+  }
+  for (const statement of cst.statements) {
+    const tokens = trimStatementTokens(statement.tokens);
+    if (!tokens.length || !['reg', 'logic', 'integer'].includes(tokens[0].value)) {
+      continue;
+    }
+    if (findTopLevelToken(tokens, '=') >= 0) {
+      diagnostics.push(makeDiagnostic(tokenRange(document, tokens[0]), 'Synthesizable style: avoid declaration initializers for registers; reset them in clocked logic.', DiagnosticSeverity.Information, 'synth-decl-init'));
+    }
   }
 }
 
-export function collectImplicitNetDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
+export function collectImplicitNetDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   const severityMode = settings.verilog.implicitNet.diagnostic;
   if (severityMode === 'off') {
     return;
@@ -109,63 +105,63 @@ export function collectImplicitNetDiagnostics(document: TextDocument, settings: 
     }
     const bodyStart = document.offsetAt(module.headerEnd);
     const bodyEnd = document.offsetAt(module.range.end);
-    const stripped = stripCommentsAndStrings(text.slice(bodyStart, bodyEnd));
-    const tokenRegex = /\b[A-Za-z_]\w*\b/g;
     const reported = new Set<string>();
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(stripped))) {
-      const token = match[0];
-      const absolute = bodyStart + match.index;
-      const previous = text[absolute - 1] ?? '';
+    const bodyTokens = cst.codeTokens.filter((token) => token.start >= bodyStart && token.start < bodyEnd);
+    for (let index = 0; index < bodyTokens.length; index++) {
+      const token = bodyTokens[index];
+      if (token.kind !== 'identifier') {
+        continue;
+      }
+      const name = token.value;
+      const previous = previousToken(bodyTokens, index);
       if (
-        declared.has(token) ||
-        reported.has(token) ||
-        verilogKeywords.has(token) ||
-        systemTasks.has(token) ||
-        previous === '.' ||
-        previous === '`' ||
-        previous === '$' ||
-        previous === "'"
+        declared.has(name) ||
+        reported.has(name) ||
+        verilogKeywords.has(name) ||
+        systemTasks.has(name) ||
+        previous?.value === '.' ||
+        previous?.kind === 'directive' ||
+        previous?.kind === 'systemIdentifier'
       ) {
         continue;
       }
-      if (ignorePatterns.some((pattern) => pattern.test(token))) {
+      if (ignorePatterns.some((pattern) => pattern.test(name))) {
         continue;
       }
-      reported.add(token);
-      diagnostics.push(makeDiagnostic(rangeAtOffset(document, absolute, token.length), `Implicit net or undeclared identifier '${token}'.`, severity, `implicit-net:${token}`));
+      reported.add(name);
+      diagnostics.push(makeDiagnostic(tokenRange(document, token), `Implicit net or undeclared identifier '${name}'.`, severity, `implicit-net:${name}`));
     }
   }
 }
 
-function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, text: string, module: VerilogModule, diagnostics: Diagnostic[]): void {
-  const blocks = collectAlwaysBlocks(document, text, module);
+function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, cst: VerilogCstDocument, module: VerilogModule, diagnostics: Diagnostic[]): void {
+  const blocks = collectAlwaysBlocksFromCst(document, cst, module);
   const assignedBlocks = new Map<string, Set<number>>();
   for (let index = 0; index < blocks.length; index++) {
     const block = blocks[index];
     if (block.combinational) {
-      if (isVerilogLintRuleEnabled(settings, 'vc-006') && !/\*/.test(block.sensitivity)) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-007') && /<=(?!=)/.test(block.bodyText)) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-007') && hasTokenValue(block.bodyTokens, '<=')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-007: combinational always blocks should use blocking assignments (=), not nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-007-comb-nonblocking'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-008') && /\bif\b/.test(block.bodyText) && !/\belse\b/.test(block.bodyText)) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-008') && hasTokenValue(block.bodyTokens, 'if') && !hasTokenValue(block.bodyTokens, 'else')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-008: combinational if statements should cover every branch to avoid inferred latches.', DiagnosticSeverity.Information, 'vc-008-comb-branch'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-008') && /\bcase[xyz]?\b/.test(block.bodyText) && !/\bdefault\b/.test(block.bodyText)) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-008') && hasAnyTokenValue(block.bodyTokens, new Set(['case', 'casex', 'casez'])) && !hasTokenValue(block.bodyTokens, 'default')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-008: combinational case statements should include default assignments to avoid inferred latches.', DiagnosticSeverity.Information, 'vc-008-case-default'));
       }
     }
 
     if (block.sequential) {
-      if (isVerilogLintRuleEnabled(settings, 'vc-009') && !/\bposedge\s+[A-Za-z_]\w*/.test(block.sensitivity)) {
+      const edgeSignals = edgeSignalsFromSensitivity(block.sensitivityTokens);
+      if (isVerilogLintRuleEnabled(settings, 'vc-009') && !hasPosedgeSignal(block.sensitivityTokens)) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-009: sequential logic should be implemented in always @(posedge clock) blocks.', DiagnosticSeverity.Warning, 'vc-009-seq-posedge'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-011') && /\bnegedge\b/.test(block.sensitivity)) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-011') && hasTokenValue(block.sensitivityTokens, 'negedge')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-011: avoid negedge-triggered logic unless a protocol explicitly requires it.', DiagnosticSeverity.Warning, 'vc-011-negedge'));
       }
-      const edgeSignals = [...block.sensitivity.matchAll(/\b(?:posedge|negedge)\s+([A-Za-z_]\w*)/g)].map((match) => match[1]);
       for (const signal of edgeSignals) {
         if (isVerilogLintRuleEnabled(settings, 'vc-012') && !isClockOrResetSignal(signal)) {
           diagnostics.push(makeDiagnostic(block.headerRange, `VC-012: edge trigger on '${signal}' is not a clock/reset signal.`, DiagnosticSeverity.Warning, 'vc-012-edge-signal'));
@@ -174,22 +170,21 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       if (isVerilogLintRuleEnabled(settings, 'vc-014') && edgeSignals.length > 1) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', DiagnosticSeverity.Information, 'vc-014-sync-reset'));
       }
-      const assignments = collectAssignmentsInText(document, block.bodyText, block.bodyOffset, index);
+      const assignments = collectAssignmentsFromTokens(document, cstFromStatements(cst, block.statements), 0, index);
       for (const assignment of assignments) {
-        if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=' && !isInsideForControl(block.bodyText, document.offsetAt(assignment.range.start) - block.bodyOffset)) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=' && !isOffsetInsideForControl(block.bodyTokens, document.offsetAt(assignment.range.start))) {
           diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-010-seq-blocking'));
         }
       }
-      const clockSignals = edgeSignals.filter((signal) => /clk|clock/i.test(signal));
+      const clockSignals = edgeSignals.filter(isClockSignalName);
       for (const clock of clockSignals) {
-        const clockAsData = new RegExp(`(?:<=|=)\\s*[^;]*\\b${escapeRegExp(clock)}\\b`).exec(block.bodyText);
-        if (isVerilogLintRuleEnabled(settings, 'vc-013') && clockAsData) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-013') && assignmentRhsContainsIdentifier(block.bodyTokens, clock)) {
           diagnostics.push(makeDiagnostic(block.headerRange, `VC-013: clock signal '${clock}' should not be used as data inside sequential logic.`, DiagnosticSeverity.Information, 'vc-013-clock-data'));
         }
       }
     }
 
-    for (const assignment of collectAssignmentsInText(document, block.bodyText, block.bodyOffset, index)) {
+    for (const assignment of collectAssignmentsFromTokens(document, cstFromStatements(cst, block.statements), 0, index)) {
       const set = assignedBlocks.get(assignment.name) ?? new Set<number>();
       set.add(index);
       assignedBlocks.set(assignment.name, set);
@@ -258,23 +253,26 @@ function collectExplicitWidthDiagnostics(settings: CoSettings, module: VerilogMo
   }
 }
 
-function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSettings, text: string, module: VerilogModule, diagnostics: Diagnostic[]): void {
+function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSettings, text: string, module: VerilogModule, cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   if (!isVerilogLintRuleEnabled(settings, 'vc-004')) {
     return;
   }
   const bodyStart = document.offsetAt(module.headerEnd);
   const bodyEnd = document.offsetAt(module.range.end);
-  const body = stripCommentsAndStrings(text.slice(bodyStart, bodyEnd));
-  const numberRegex = /\b(?:\d+'\s*[sS]?[bBoOdDhH]\s*[0-9a-fA-F_xXzZ?]+|\d+)\b/g;
-  let match: RegExpExecArray | null;
-  while ((match = numberRegex.exec(body))) {
-    const absolute = bodyStart + match.index;
-    const line = document.positionAt(absolute).line;
-    const lineText = lineAt(document, line).text;
-    if (/\b(?:parameter|localparam)\b|`define/.test(lineText) || isTrivialLiteral(match[0]) || isInsideBracketRange(body, match.index)) {
+  for (const token of cst.codeTokens) {
+    if (token.kind !== 'number' || token.start < bodyStart || token.start >= bodyEnd) {
       continue;
     }
-    diagnostics.push(makeDiagnostic(rangeAtOffset(document, absolute, match[0].length), 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
+    const statement = cst.statements.find((item) => token.start >= item.start && token.start < item.end);
+    const statementTokens = statement ? trimStatementTokens(statement.tokens) : [];
+    if (
+      statementTokens.some((item) => item.value === 'parameter' || item.value === 'localparam' || item.value === '`define') ||
+      isTrivialLiteralToken(token.value) ||
+      isInsideBracketRangeTokens(statementTokens, token)
+    ) {
+      continue;
+    }
+    diagnostics.push(makeDiagnostic(tokenRange(document, token), 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
   }
 }
 
@@ -317,55 +315,185 @@ function collectTestbenchDiagnostics(document: TextDocument, settings: CoSetting
   }
 }
 
-function collectAlwaysBlocks(document: TextDocument, text: string, module: VerilogModule): AlwaysBlockInfo[] {
-  const blocks: AlwaysBlockInfo[] = [];
-  const moduleStart = document.offsetAt(module.headerEnd);
-  const moduleEnd = document.offsetAt(module.range.end);
-  const moduleText = text.slice(moduleStart, moduleEnd);
-  const stripped = stripCommentsAndStrings(moduleText);
-  const alwaysRegex = /\balways\s*@\s*\(([\s\S]*?)\)\s*/g;
-  let match: RegExpExecArray | null;
-  while ((match = alwaysRegex.exec(stripped))) {
-    const headerStart = moduleStart + match.index;
-    const bodyOffset = moduleStart + match.index + match[0].length;
-    const bodyInfo = findAlwaysBody(stripped, match.index + match[0].length);
-    const endOffset = moduleStart + bodyInfo.end;
-    const sensitivity = match[1];
-    const sequential = /\b(?:posedge|negedge)\b/.test(sensitivity);
-    blocks.push({
-      sensitivity,
-      range: Range.create(document.positionAt(headerStart), document.positionAt(endOffset)),
-      headerRange: Range.create(document.positionAt(headerStart), document.positionAt(bodyOffset)),
-      bodyText: text.slice(bodyOffset, endOffset),
-      bodyOffset,
-      sequential,
-      combinational: !sequential
-    });
-  }
-  return blocks;
+function tokenRange(document: TextDocument, token: VerilogToken): Range {
+  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }
 
-function findAlwaysBody(text: string, from: number): { end: number } {
-  const start = skipWhitespace(text, from);
-  if (/\bbegin\b/.test(text.slice(start, start + 12))) {
-    const tokenRegex = /\b(begin|end)\b/g;
-    tokenRegex.lastIndex = start;
-    let depth = 0;
-    let match: RegExpExecArray | null;
-    while ((match = tokenRegex.exec(text))) {
-      if (match[1] === 'begin') {
-        depth++;
-      } else {
-        depth--;
-        if (depth === 0) {
-          return { end: tokenRegex.lastIndex };
-        }
-      }
+function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
+  const result = tokens.filter((token) => token.kind !== 'eof');
+  return result[result.length - 1]?.value === ';' ? result.slice(0, -1) : result;
+}
+
+function previousToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
+  for (let current = index - 1; current >= 0; current--) {
+    if (tokens[current].kind !== 'eof') {
+      return tokens[current];
     }
-    return { end: text.length };
   }
-  const semicolon = text.indexOf(';', start);
-  return { end: semicolon >= 0 ? semicolon + 1 : text.length };
+  return undefined;
+}
+
+function isInsideAnyOffsetRange(offset: number, ranges: Array<readonly [number, number]>): boolean {
+  return ranges.some(([start, end]) => offset >= start && offset < end);
+}
+
+function shouldReportSynthesizableOperatorToken(document: TextDocument, tokens: VerilogToken[], token: VerilogToken): boolean {
+  if (hasDirectiveBeforeOnLine(document, tokens, token)) {
+    return false;
+  }
+  if (token.value !== '*') {
+    return true;
+  }
+  const index = tokens.indexOf(token);
+  const previous = previousToken(tokens, index);
+  const next = nextToken(tokens, index);
+  if (previous?.value === '@') {
+    return false;
+  }
+  if (previous?.value === '(' || next?.value === ')') {
+    return false;
+  }
+  if (previous?.value !== '(' || next?.value !== ')') {
+    return true;
+  }
+  const beforeOpen = previousToken(tokens, tokens.indexOf(previous));
+  return beforeOpen?.value !== '@';
+}
+
+function hasDirectiveBeforeOnLine(document: TextDocument, tokens: VerilogToken[], token: VerilogToken): boolean {
+  const line = document.positionAt(token.start).line;
+  const tokenIndex = tokens.indexOf(token);
+  for (let index = tokenIndex - 1; index >= 0; index--) {
+    const current = tokens[index];
+    const currentLine = document.positionAt(current.start).line;
+    if (currentLine !== line) {
+      return false;
+    }
+    if (current.kind === 'directive') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function nextToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
+  for (let current = index + 1; current < tokens.length; current++) {
+    if (tokens[current].kind !== 'eof') {
+      return tokens[current];
+    }
+  }
+  return undefined;
+}
+
+function findTopLevelToken(tokens: VerilogToken[], value: string): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isTrivialLiteralToken(value: string): boolean {
+  const parsed = parseVerilogLiteral(value);
+  return parsed !== undefined && (parsed === 0n || parsed === 1n);
+}
+
+function isInsideBracketRangeTokens(tokens: VerilogToken[], target: VerilogToken): boolean {
+  const index = tokens.indexOf(target);
+  if (index < 0) {
+    return false;
+  }
+  let left = index - 1;
+  while (left >= 0 && tokens[left].value !== '[' && tokens[left].value !== ';') {
+    if (tokens[left].value === ']') {
+      return false;
+    }
+    left--;
+  }
+  if (tokens[left]?.value !== '[') {
+    return false;
+  }
+  let right = index + 1;
+  while (right < tokens.length && tokens[right].value !== ']' && tokens[right].value !== ';') {
+    right++;
+  }
+  return tokens[right]?.value === ']';
+}
+
+function parseVerilogLiteral(value: string): bigint | undefined {
+  const apostrophe = value.indexOf("'");
+  if (apostrophe < 0) {
+    return parseDecimalBigInt(value);
+  }
+  const sizeAndBase = value.slice(apostrophe + 1).split('_').join('');
+  const baseChar = [...sizeAndBase].find((char) => {
+    const lower = char.toLowerCase();
+    return lower === 'b' || lower === 'o' || lower === 'd' || lower === 'h';
+  });
+  if (!baseChar) {
+    return undefined;
+  }
+  const digits = sizeAndBase.slice(sizeAndBase.indexOf(baseChar) + 1);
+  if (!digits || [...digits].some((char) => char === 'x' || char === 'X' || char === 'z' || char === 'Z' || char === '?')) {
+    return undefined;
+  }
+  const radix = baseChar.toLowerCase() === 'b' ? 2 : baseChar.toLowerCase() === 'o' ? 8 : baseChar.toLowerCase() === 'd' ? 10 : 16;
+  let result = 0n;
+  for (const char of digits) {
+    const digit = parseInt(char, radix);
+    if (!Number.isInteger(digit) || digit < 0 || digit >= radix) {
+      return undefined;
+    }
+    result = result * BigInt(radix) + BigInt(digit);
+  }
+  return result;
+}
+
+function parseDecimalBigInt(value: string): bigint | undefined {
+  if (![...value].every((char) => char === '_' || (char >= '0' && char <= '9'))) {
+    return undefined;
+  }
+  return BigInt(value.split('_').join(''));
+}
+
+function cstWithStatements(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
+  return cstFromStatements(cst, cst.statements.filter((statement) => statement.end > start && statement.start < end));
+}
+
+function cstFromStatements(cst: VerilogCstDocument, statements: VerilogCstStatement[]): VerilogCstDocument {
+  return {
+    ...cst,
+    statements
+  };
+}
+
+function hasPosedgeSignal(tokens: VerilogToken[]): boolean {
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].value !== 'posedge') {
+      continue;
+    }
+    if (tokens.slice(index + 1).some((token) => token.kind === 'identifier')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function identifierStyle(name: string): 'snake' | 'camel' | 'pascal' | undefined {
@@ -388,6 +516,11 @@ function looksLowActiveWithoutSuffix(name: string): boolean {
 
 function isClockOrResetSignal(name: string): boolean {
   return /(?:^|_)(?:clk|clock|rst|reset|clr|clear)(?:_n)?(?:_|$)/i.test(name);
+}
+
+function isClockSignalName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.includes('clk') || lower.includes('clock');
 }
 
 function isTrivialLiteral(value: string): boolean {

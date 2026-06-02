@@ -29,47 +29,54 @@ import {
 } from './resources';
 import { MipsServerState } from './state';
 import {
-  completionReplaceRange,
-  directiveCompletionReplaceRange
+  directiveCompletionReplaceRange,
+  isIntegerLiteralPart,
+  isMacroParameterPart,
+  isRegisterPart,
+  prefixedCompletionReplaceRange,
+  suffixCompletionReplaceRange
 } from './text';
+import { MipsCstExecutable, parseMipsCstLine } from './syntax';
 
 export function getMipsCompletions(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): CompletionItem[] {
   const parsed = getCachedMipsParse(document, settings, state);
   const linePrefix = lineAt(document, position.line).text.slice(0, position.character);
+  const prefixLine = parseMipsCstLine(linePrefix, position.line);
+  const prefixExecutable = prefixLine.kind === 'statement' ? prefixLine.executable : undefined;
   const items: CompletionItem[] = [];
   const directiveReplaceRange = directiveCompletionReplaceRange(linePrefix, position);
 
-  const cp0Items = cp0CompletionItems(linePrefix, position);
+  const cp0Items = cp0CompletionItems(prefixExecutable, linePrefix, position);
   if (cp0Items) {
     return cp0Items;
   }
 
-  const syscallItems = syscallCompletionItems(linePrefix, position);
+  const syscallItems = syscallCompletionItems(prefixExecutable, linePrefix, position);
   if (syscallItems) {
     return syscallItems;
   }
 
-  if (/\$[\w]*$/.test(linePrefix)) {
-    const replaceRange = completionReplaceRange(linePrefix, position, /\$[\w]*$/);
+  const registerReplaceRange = prefixedCompletionReplaceRange(linePrefix, position, '$', isRegisterPart);
+  if (registerReplaceRange) {
     for (const name of [...registerNames, ...numericRegisters()]) {
       items.push({
         label: name,
         kind: CompletionItemKind.Variable,
         detail: registerDescriptions.get(name) ?? 'MIPS 寄存器',
-        textEdit: TextEdit.replace(replaceRange, name)
+        textEdit: TextEdit.replace(registerReplaceRange, name)
       });
     }
     return items;
   }
 
-  if (/%[\w]*$/.test(linePrefix)) {
-    const replaceRange = completionReplaceRange(linePrefix, position, /%[\w]*$/);
+  const macroParameterReplaceRange = prefixedCompletionReplaceRange(linePrefix, position, '%', isMacroParameterPart);
+  if (macroParameterReplaceRange) {
     for (const symbol of findMacroAtPosition(parsed, position)?.paramSymbols.values() ?? []) {
       items.push({
         label: symbol.name,
         kind: CompletionItemKind.Variable,
         detail: '宏参数',
-        textEdit: TextEdit.replace(replaceRange, symbol.name)
+        textEdit: TextEdit.replace(macroParameterReplaceRange, symbol.name)
       });
     }
     return items;
@@ -150,11 +157,11 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   return items;
 }
 
-function syscallCompletionItems(linePrefix: string, position: Position): CompletionItem[] | undefined {
-  if (!/\bli\s+\$v0\s*,\s*[-+]?(?:0[xX][0-9A-Fa-f]*|0[bB][01]*|0[0-7]*|\d*)?$/.test(linePrefix)) {
+function syscallCompletionItems(executable: MipsCstExecutable | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
+  if (!executable || executable.lowerMnemonic !== 'li' || executable.operands[0]?.text !== '$v0' || operandSlotAtPosition(executable, position.character) !== 1) {
     return undefined;
   }
-  const replaceRange = completionReplaceRange(linePrefix, position, /[-+]?(?:0[xX][0-9A-Fa-f]*|0[bB][01]*|0[0-7]*|\d*)$/);
+  const replaceRange = suffixCompletionReplaceRange(linePrefix, position, isIntegerLiteralPart);
   return syscalls.map((syscall) => ({
     label: String(syscall.code),
     kind: CompletionItemKind.Value,
@@ -167,11 +174,11 @@ function syscallCompletionItems(linePrefix: string, position: Position): Complet
   }));
 }
 
-function cp0CompletionItems(linePrefix: string, position: Position): CompletionItem[] | undefined {
-  if (!/\b(?:mfc0|mtc0)\s+\$[A-Za-z0-9_]+\s*,\s*\$?[A-Za-z0-9_]*$/.test(linePrefix)) {
+function cp0CompletionItems(executable: MipsCstExecutable | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
+  if (!executable || (executable.lowerMnemonic !== 'mfc0' && executable.lowerMnemonic !== 'mtc0') || !executable.operands[0] || operandSlotAtPosition(executable, position.character) !== 1) {
     return undefined;
   }
-  const replaceRange = completionReplaceRange(linePrefix, position, /\$?[A-Za-z0-9_]*$/);
+  const replaceRange = suffixCompletionReplaceRange(linePrefix, position, isCp0RegisterPart);
   return cp0Registers.map((register) => ({
     label: `$${register.number}`,
     kind: CompletionItemKind.Variable,
@@ -182,4 +189,44 @@ function cp0CompletionItems(linePrefix: string, position: Position): CompletionI
       value: cp0Markdown(register)
     }
   }));
+}
+
+function operandSlotAtPosition(executable: MipsCstExecutable, character: number): number | undefined {
+  if (!executable.operandRange || character < executable.operandRange.start) {
+    return undefined;
+  }
+  const relativeEnd = Math.max(0, Math.min(character - executable.operandRange.start, executable.operandText.length));
+  let slot = 0;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < relativeEnd; index++) {
+    const char = executable.operandText[index];
+    if (inString) {
+      escaped = char === '\\' && !escaped;
+      if (char === '"' && !escaped) {
+        inString = false;
+      } else if (char !== '\\') {
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      escaped = false;
+      continue;
+    }
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (char === ',' && depth === 0) {
+      slot++;
+    }
+  }
+  return slot;
+}
+
+function isCp0RegisterPart(char: string): boolean {
+  return char === '$' || isRegisterPart(char);
 }

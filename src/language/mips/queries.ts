@@ -1,16 +1,13 @@
 import { Position, Range } from 'vscode-languageserver/node';
-import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt, rangesEqual } from '../common/lsp';
 import {
-  allMacros,
   findMacroAtPosition,
   getDeclarationRangeSet
 } from './parser';
 import { MipsMacro, MipsParseResult } from './model';
-import { findCommentIndex, parseMacroArguments } from './syntax';
+import { parseMacroArguments } from './syntax';
 import { rangeKey } from '../common/util';
 
-export function findMacroOverloadAtPosition(document: TextDocument, parsed: MipsParseResult, name: string, position: Position): MipsMacro | undefined {
+export function findMacroOverloadAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsMacro | undefined {
   const currentMacro = findMacroAtPosition(parsed, position);
   if (currentMacro?.name === name) {
     return currentMacro;
@@ -21,7 +18,7 @@ export function findMacroOverloadAtPosition(document: TextDocument, parsed: Mips
     return undefined;
   }
 
-  const callArgs = macroCallArgumentsAtPosition(document, name, position);
+  const callArgs = macroCallArgumentsAtPosition(parsed, name, position);
   if (callArgs !== undefined) {
     return overloads.find((macro) => macro.params.length === callArgs.length) ?? overloads[0];
   }
@@ -29,25 +26,17 @@ export function findMacroOverloadAtPosition(document: TextDocument, parsed: Mips
   return overloads[0];
 }
 
-export function macroCallArgumentsAtPosition(document: TextDocument, name: string, position: Position): string[] | undefined {
-  const text = lineAt(document, position.line).text;
-  const commentIndex = findCommentIndex(text);
-  const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
-  const indent = code.search(/\S/);
-  if (indent < 0) {
+export function macroCallArgumentsAtPosition(parsed: MipsParseResult, name: string, position: Position): string[] | undefined {
+  const line = parsed.lines[position.line];
+  if (line?.kind !== 'statement' || !line.executable || line.executable.mnemonic !== name) {
     return undefined;
   }
-  const trimmed = code.trim();
-  const firstToken = trimmed.match(/^([A-Za-z_.$][\w.$]*)/);
-  if (!firstToken || firstToken[1] !== name) {
+
+  const executable = line.executable;
+  if (position.character < executable.range.start || position.character > executable.range.end) {
     return undefined;
   }
-  const tokenStart = indent + trimmed.indexOf(firstToken[1]);
-  const tokenEnd = tokenStart + firstToken[1].length;
-  if (position.character < tokenStart || position.character > tokenEnd) {
-    return undefined;
-  }
-  return parseMacroArguments(trimmed.slice(firstToken[0].length).trim());
+  return parseMacroArguments(executable.operandText);
 }
 
 /**

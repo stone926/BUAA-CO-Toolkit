@@ -1,14 +1,8 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { rangeAtOffset } from '../common/lsp';
+import { parseVerilogCst, VerilogCstDocument } from './cst';
+import { VerilogToken } from './lexer';
 import { verilogKeywords } from './model';
-import {
-  isInsideForControl,
-  splitSemicolonStatementSpans,
-  splitTopLevelCommaSpans,
-  stripCommentsAndStrings,
-  TextSpan
-} from './textUtils';
 
 export interface AssignmentUse {
   name: string;
@@ -19,36 +13,48 @@ export interface AssignmentUse {
 
 interface AssignmentTarget {
   name: string;
-  start: number;
-  end: number;
+  token: VerilogToken;
 }
 
-interface AssignmentOperatorInfo {
-  operator: '=' | '<=';
-  offset: number;
-}
+const declarationKeywords = new Set([
+  'input',
+  'output',
+  'inout',
+  'wire',
+  'reg',
+  'logic',
+  'integer',
+  'real',
+  'realtime',
+  'time',
+  'parameter',
+  'localparam',
+  'genvar'
+]);
 
 export function collectAssignmentsInText(document: TextDocument, text: string, offset: number, blockIndex: number): AssignmentUse[] {
+  const cst = parseVerilogCst(TextDocument.create(`${document.uri}#assignment`, 'verilog', document.version, text), text);
+  return collectAssignmentsFromTokens(document, cst, offset, blockIndex);
+}
+
+export function collectAssignmentsFromTokens(document: TextDocument, cst: VerilogCstDocument, offset: number, blockIndex: number): AssignmentUse[] {
   const assignments: AssignmentUse[] = [];
-  const stripped = stripCommentsAndStrings(text);
-  for (const statement of splitSemicolonStatementSpans(stripped)) {
-    const operator = findStatementAssignmentOperator(statement.text);
-    if (!operator) {
+  for (const statement of cst.statements) {
+    const tokens = trimSemicolon(statement.tokens);
+    const operatorIndex = findAssignmentOperator(tokens);
+    if (operatorIndex < 0 || isDeclarationStatement(tokens)) {
       continue;
     }
-    const operatorOffset = statement.start + operator.offset;
-    if (isInsideForControl(stripped, operatorOffset)) {
-      continue;
-    }
-    const lhs = statement.text.slice(0, operator.offset);
-    if (isDeclarationAssignmentPrefix(lhs)) {
-      continue;
-    }
+    const operator = tokens[operatorIndex].value as '=' | '<=';
+    const lhs = tokens.slice(0, operatorIndex);
     for (const target of assignmentTargetsFromLeftHandSide(lhs)) {
       assignments.push({
         name: target.name,
-        operator: operator.operator,
-        range: rangeAtOffset(document, offset + statement.start + target.start, target.end - target.start),
+        operator,
+        range: Range.create(
+          document.positionAt(offset + target.token.start),
+          document.positionAt(offset + target.token.end)
+        ),
         blockIndex
       });
     }
@@ -56,93 +62,124 @@ export function collectAssignmentsInText(document: TextDocument, text: string, o
   return assignments;
 }
 
-function findStatementAssignmentOperator(statement: string): AssignmentOperatorInfo | undefined {
-  let depth = 0;
-  for (let index = 0; index < statement.length; index++) {
-    const char = statement[index];
-    if (char === '(' || char === '[' || char === '{') {
-      depth++;
+export function findAssignmentOperator(tokens: VerilogToken[]): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    }
+    if (paren !== 0 || bracket !== 0 || brace !== 0) {
       continue;
     }
-    if (char === ')' || char === ']' || char === '}') {
-      depth = Math.max(0, depth - 1);
-      continue;
-    }
-    if (depth !== 0) {
-      continue;
-    }
-    if (statement.startsWith('<=', index)) {
-      return { operator: '<=', offset: index };
-    }
-    if (char === '=') {
-      const previous = statement[index - 1] ?? '';
-      const next = statement[index + 1] ?? '';
-      if (previous !== '<' && previous !== '>' && previous !== '!' && previous !== '=' && next !== '=' && next !== '>') {
-        return { operator: '=', offset: index };
-      }
+    if (token.value === '<=' || token.value === '=') {
+      return index;
     }
   }
-  return undefined;
+  return -1;
 }
 
-function isDeclarationAssignmentPrefix(lhs: string): boolean {
-  const prefix = lhs
-    .replace(/[\s\S]*\b(?:begin|fork|else)\b/, '')
-    .replace(/^\s*:\s*[A-Za-z_]\w*\s*/, '')
-    .replace(/^\s*[A-Za-z_]\w*\s*:\s*/, '')
-    .trimStart();
-  return /^(?:(?:automatic|signed|unsigned)\s+)*(?:input|output|inout|wire|reg|logic|integer|real|realtime|time|parameter|localparam|genvar)\b/.test(prefix);
-}
-
-function assignmentTargetsFromLeftHandSide(lhs: string): AssignmentTarget[] {
-  const trimmedEnd = lhs.trimEnd().length;
-  const beforeOperator = lhs.slice(0, trimmedEnd);
-  const concat = trailingConcatenation(beforeOperator);
+function assignmentTargetsFromLeftHandSide(tokens: VerilogToken[]): AssignmentTarget[] {
+  const trimmed = trimTokenList(tokens);
+  if (!trimmed.length) {
+    return [];
+  }
+  const concat = trailingConcatenation(trimmed);
   if (concat) {
-    const targets: AssignmentTarget[] = [];
-    for (const part of splitTopLevelCommaSpans(concat.text.slice(1, -1))) {
-      const nestedTargets = assignmentTargetsFromLeftHandSide(part.text);
-      for (const target of nestedTargets) {
-        targets.push({
-          ...target,
-          start: concat.start + 1 + part.start + target.start,
-          end: concat.start + 1 + part.start + target.end
-        });
-      }
+    return splitTopLevel(concat.slice(1, -1), ',').flatMap(assignmentTargetsFromLeftHandSide);
+  }
+  let index = trimmed.length - 1;
+  if (trimmed[index].value === ']') {
+    const open = findMatchingTokenBackward(trimmed, index, '[', ']');
+    if (open >= 0) {
+      index = open - 1;
     }
-    return targets;
   }
-
-  const match = /([A-Za-z_]\w*)\s*(?:\[[^\]]+\]\s*)?$/.exec(beforeOperator);
-  if (!match) {
-    return [];
+  while (index >= 0) {
+    const token = trimmed[index];
+    if (token.kind === 'identifier' && !verilogKeywords.has(token.value)) {
+      return [{ name: token.value, token }];
+    }
+    index--;
   }
-  const name = match[1];
-  if (verilogKeywords.has(name)) {
-    return [];
-  }
-  const start = match.index + match[0].indexOf(name);
-  return [{ name, start, end: start + name.length }];
+  return [];
 }
 
-function trailingConcatenation(text: string): TextSpan | undefined {
-  const end = text.trimEnd().length;
-  if (end === 0 || text[end - 1] !== '}') {
+function isDeclarationStatement(tokens: VerilogToken[]): boolean {
+  const first = tokens.find((token) => token.kind !== 'eof');
+  return Boolean(first && declarationKeywords.has(first.value));
+}
+
+function trailingConcatenation(tokens: VerilogToken[]): VerilogToken[] | undefined {
+  if (tokens[tokens.length - 1]?.value !== '}') {
     return undefined;
   }
-  let depth = 0;
-  for (let index = end - 1; index >= 0; index--) {
-    const char = text[index];
-    if (char === '}') {
-      depth++;
-      continue;
+  const open = findMatchingTokenBackward(tokens, tokens.length - 1, '{', '}');
+  return open >= 0 ? tokens.slice(open, tokens.length) : undefined;
+}
+
+function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
+  const parts: VerilogToken[][] = [];
+  let start = 0;
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
     }
-    if (char === '{') {
+    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
+      parts.push(trimTokenList(tokens.slice(start, index)));
+      start = index + 1;
+    }
+  }
+  parts.push(trimTokenList(tokens.slice(start)));
+  return parts.filter((part) => part.length > 0);
+}
+
+function findMatchingTokenBackward(tokens: VerilogToken[], closeIndex: number, openValue: string, closeValue: string): number {
+  let depth = 0;
+  for (let index = closeIndex; index >= 0; index--) {
+    if (tokens[index].value === closeValue) {
+      depth++;
+    } else if (tokens[index].value === openValue) {
       depth--;
       if (depth === 0) {
-        return { text: text.slice(index, end), start: index, end };
+        return index;
       }
     }
   }
-  return undefined;
+  return -1;
+}
+
+function trimSemicolon(tokens: VerilogToken[]): VerilogToken[] {
+  const trimmed = trimTokenList(tokens);
+  return trimmed[trimmed.length - 1]?.value === ';' ? trimmed.slice(0, -1) : trimmed;
+}
+
+function trimTokenList(tokens: VerilogToken[]): VerilogToken[] {
+  return tokens.filter((token) => token.kind !== 'eof');
 }

@@ -2,50 +2,41 @@ import {
   MarkupKind,
   Position,
   SignatureHelp,
-  SignatureHelpTriggerKind,
   SignatureInformation,
   ParameterInformation
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import {
-  allMacros,
-  findMacroAtPosition
-} from './parser';
 import { getCachedMipsParse } from './parseCache';
 import {
   instructions,
   instructionTypeLabel
 } from './resources';
 import { MipsServerState } from './state';
-import { stripComment } from './syntax';
+import type { MipsCstExecutable } from './syntax';
 
 export function getMipsSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): SignatureHelp | undefined {
-  const line = lineAt(document, position.line).text;
-  const code = stripComment(line);
-  const prefix = code.slice(0, position.character);
-
-  // Find the instruction or macro name
-  const tokenMatch = prefix.match(/^\s*(?:[A-Za-z_.$][\w.$]*:\s*)*(?:([A-Za-z_.$][\w.$]*)\s*)(.*)/);
-  if (!tokenMatch) {
+  const parsed = getCachedMipsParse(document, settings, state);
+  const line = parsed.lines[position.line];
+  if (line?.kind !== 'statement' || !line.executable) {
     return undefined;
   }
 
-  const name = tokenMatch[1];
-  const operandPrefix = tokenMatch[2];
+  const executable = line.executable;
+  const name = executable.mnemonic;
+  if (position.character < executable.range.end) {
+    return undefined;
+  }
+  if (line.comment && position.character >= line.comment.start) {
+    return undefined;
+  }
+  const activeParameter = activeParameterFromOperands(executable, position.character);
 
-  // Count active parameter by counting commas (respecting parentheses for macro args)
-  const activeParameter = countActiveParameter(operandPrefix);
-
-  // Try instruction signature help
   const instruction = instructions[name.toLowerCase()];
   if (instruction) {
     return buildInstructionSignatureHelp(instruction, activeParameter);
   }
 
-  // Try macro signature help
-  const parsed = getCachedMipsParse(document, settings, state);
   const macroOverloads = parsed.macros.get(name);
   if (macroOverloads?.length) {
     return buildMacroSignatureHelp(macroOverloads, activeParameter);
@@ -54,19 +45,23 @@ export function getMipsSignatureHelp(document: TextDocument, position: Position,
   return undefined;
 }
 
-function countActiveParameter(operandText: string): number {
-  let count = 0;
-  let depth = 0;
-  for (const char of operandText) {
-    if (char === '(') {
-      depth++;
-    } else if (char === ')') {
-      depth--;
-    } else if (char === ',' && depth === 0) {
-      count++;
+function activeParameterFromOperands(executable: MipsCstExecutable, character: number): number {
+  if (!executable.operandRange || character <= executable.operandRange.start || executable.operands.length === 0) {
+    return 0;
+  }
+
+  for (let index = 0; index < executable.operands.length; index++) {
+    const operand = executable.operands[index];
+    if (character <= operand.range.end) {
+      return index;
+    }
+    const next = executable.operands[index + 1];
+    if (!next || character < next.range.start) {
+      return Math.min(index + 1, executable.operands.length - 1);
     }
   }
-  return count;
+
+  return executable.operands.length - 1;
 }
 
 function buildInstructionSignatureHelp(instruction: { mnemonic: string; summary: string; type: string; formats: string[]; operands: [number, number]; description: string; pseudo?: boolean }, activeParameter: number): SignatureHelp {
@@ -110,7 +105,7 @@ function buildInstructionSignatureHelp(instruction: { mnemonic: string; summary:
 
   return {
     signatures,
-    activeParameter: Math.min(activeParameter, (signatures[activeSignature].parameters?.length ?? 1) - 1),
+    activeParameter: clampActiveParameter(activeParameter, signatures[activeSignature].parameters?.length ?? 0),
     activeSignature
   };
 }
@@ -141,17 +136,54 @@ function buildMacroSignatureHelp(overloads: { name: string; params: string[] }[]
 
   return {
     signatures,
-    activeParameter: Math.min(activeParameter, (signatures[activeSignature].parameters?.length ?? 1) - 1),
+    activeParameter: clampActiveParameter(activeParameter, signatures[activeSignature].parameters?.length ?? 0),
     activeSignature
   };
 }
 
 function extractFormatParameters(format: string): string[] {
-  // Extract parameter names from format strings like "add $rd, $rs, $rt"
-  const parts = format.split(/\s+/);
-  if (parts.length < 2) {
+  const operandStart = firstWhitespaceIndex(format);
+  if (operandStart < 0) {
     return [];
   }
-  // Skip the mnemonic, take operands
-  return parts.slice(1).join(' ').split(',').map((p) => p.trim()).filter(Boolean);
+  return splitCommaList(format.slice(operandStart)).map((part) => part.trim()).filter(Boolean);
+}
+
+function firstWhitespaceIndex(text: string): number {
+  for (let index = 0; index < text.length; index++) {
+    if (isAsciiWhitespace(text[index])) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function splitCommaList(text: string): string[] {
+  const values: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (char === ',' && depth === 0) {
+      values.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  values.push(text.slice(start));
+  return values;
+}
+
+function clampActiveParameter(activeParameter: number, parameterCount: number): number {
+  if (parameterCount <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(activeParameter, parameterCount - 1));
+}
+
+function isAsciiWhitespace(char: string): boolean {
+  return char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === '\f' || char === '\v';
 }

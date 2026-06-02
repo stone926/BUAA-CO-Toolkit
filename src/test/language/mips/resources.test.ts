@@ -252,6 +252,15 @@ describe('instructions', () => {
     expect(instructions).toHaveProperty('nop');
   });
 
+  it('contains MARS pseudo instruction forms from PseudoOps.txt', () => {
+    expect(instructions).toHaveProperty('subi');
+    expect(instructions).toHaveProperty('subiu');
+    expect(instructions.subi.formats).toContain('subi $rt, $rs, simm16');
+    expect(instructions.subiu.formats).toContain('subiu $rt, $rs, imm32');
+    expect(instructions.ori.formats).toContain('ori $rt, imm32');
+    expect(instructions.lw.formats).toContain('lw $rt, label+imm32($base)');
+  });
+
   it('each instruction has required fields', () => {
     for (const [name, instr] of Object.entries(instructions)) {
       expect(instr.mnemonic).toBe(name);

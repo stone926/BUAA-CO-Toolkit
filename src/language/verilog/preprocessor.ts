@@ -2,12 +2,13 @@ import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { rangeKey } from '../common/util';
+import { parseVerilogCst, VerilogCstDocument } from './cst';
+import { VerilogToken } from './lexer';
 import {
   VerilogInclude,
   VerilogMacro,
   VerilogMacroUse
 } from './model';
-import { stripCommentsAndStrings } from './textUtils';
 
 const preprocessorDirectives = new Set([
   'define',
@@ -19,63 +20,108 @@ const preprocessorDirectives = new Set([
   'endif',
   'include',
   'timescale',
-  'default_nettype'
+  'default_nettype',
+  'resetall',
+  'undefineall',
+  'begin_keywords',
+  'end_keywords',
+  'celldefine',
+  'endcelldefine',
+  'pragma'
 ]);
 
-export function parseMacros(document: TextDocument, text: string): VerilogMacro[] {
+export function parseMacros(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogMacro[] {
   const macros: VerilogMacro[] = [];
-  const stripped = stripCommentsAndStrings(text);
-  const macroRegex = /^\s*`define\s+([A-Za-z_]\w*)/gm;
-  let match: RegExpExecArray | null;
-  while ((match = macroRegex.exec(stripped))) {
-    const offset = match.index + match[0].indexOf(match[1]);
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    if (!isDirective(token, 'define')) {
+      continue;
+    }
+    const name = nextTokenOnLine(document, cst.codeTokens, index + 1, token);
+    if (!name || name.kind !== 'identifier') {
+      continue;
+    }
     macros.push({
-      name: match[1],
-      range: lineAt(document, document.positionAt(offset).line).range,
-      selectionRange: Range.create(document.positionAt(offset), document.positionAt(offset + match[1].length))
+      name: name.value,
+      range: lineAt(document, document.positionAt(token.start).line).range,
+      selectionRange: tokenRange(document, name)
     });
   }
   return macros;
 }
 
-export function parseMacroUses(document: TextDocument, text: string, macros: VerilogMacro[] = parseMacros(document, text)): VerilogMacroUse[] {
+export function parseMacroUses(
+  document: TextDocument,
+  text: string,
+  macros: VerilogMacro[] = parseMacros(document, text),
+  cst: VerilogCstDocument = parseVerilogCst(document, text)
+): VerilogMacroUse[] {
   const uses: VerilogMacroUse[] = [];
   const declarationRanges = new Set(macros.map((macro) => rangeKey(macro.selectionRange)));
-  const stripped = stripCommentsAndStrings(text);
-  const macroRegex = /`([A-Za-z_]\w*)/g;
-  let match: RegExpExecArray | null;
-  while ((match = macroRegex.exec(stripped))) {
-    const name = match[1];
-    const nameOffset = match.index + 1;
-    const selectionRange = Range.create(document.positionAt(nameOffset), document.positionAt(nameOffset + name.length));
-    if (preprocessorDirectives.has(name) || declarationRanges.has(rangeKey(selectionRange))) {
+  for (const token of cst.codeTokens) {
+    if (token.kind !== 'directive') {
+      continue;
+    }
+    const name = directiveName(token);
+    if (!name || preprocessorDirectives.has(name)) {
+      continue;
+    }
+    const selectionRange = Range.create(document.positionAt(token.start + 1), document.positionAt(token.end));
+    if (declarationRanges.has(rangeKey(selectionRange))) {
       continue;
     }
     uses.push({
       name,
-      range: Range.create(document.positionAt(match.index), document.positionAt(nameOffset + name.length)),
+      range: tokenRange(document, token),
       selectionRange
     });
   }
   return uses;
 }
 
-export function parseIncludes(document: TextDocument, text: string): VerilogInclude[] {
+export function parseIncludes(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogInclude[] {
   const includes: VerilogInclude[] = [];
-  const stripped = stripCommentsAndStrings(text);
-  const includeRegex = /^\s*`include\s+"([^"]+)"/gm;
-  let match: RegExpExecArray | null;
-  while ((match = includeRegex.exec(text))) {
-    const directiveEnd = match.index + match[0].indexOf(match[1]);
-    if (!stripped.slice(match.index, directiveEnd).includes('`include')) {
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    if (!isDirective(token, 'include')) {
       continue;
     }
-    const pathOffset = match.index + match[0].indexOf(match[1]);
+    const path = nextTokenOnLine(document, cst.codeTokens, index + 1, token);
+    if (!path || path.kind !== 'string' || path.value.length < 2) {
+      continue;
+    }
     includes.push({
-      path: match[1],
-      range: lineAt(document, document.positionAt(match.index).line).range,
-      pathRange: Range.create(document.positionAt(pathOffset), document.positionAt(pathOffset + match[1].length))
+      path: path.value.slice(1, -1),
+      range: lineAt(document, document.positionAt(token.start).line).range,
+      pathRange: Range.create(document.positionAt(path.start + 1), document.positionAt(path.end - 1))
     });
   }
   return includes;
+}
+
+function nextTokenOnLine(document: TextDocument, tokens: VerilogToken[], start: number, anchor: VerilogToken): VerilogToken | undefined {
+  const line = document.positionAt(anchor.start).line;
+  for (let index = start; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.kind === 'eof') {
+      return undefined;
+    }
+    if (document.positionAt(token.start).line !== line) {
+      return undefined;
+    }
+    return token;
+  }
+  return undefined;
+}
+
+function isDirective(token: VerilogToken, name: string): boolean {
+  return directiveName(token) === name;
+}
+
+function directiveName(token: VerilogToken): string | undefined {
+  return token.kind === 'directive' && token.value.startsWith('`') ? token.value.slice(1) : undefined;
+}
+
+function tokenRange(document: TextDocument, token: VerilogToken): Range {
+  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }

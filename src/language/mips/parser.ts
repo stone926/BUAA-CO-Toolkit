@@ -15,6 +15,7 @@ import {
   usesMarsPseudoInstructionForm,
   validateInstruction
 } from './instructionValidation';
+import { isMipsStringLiteralText } from './operandAst';
 import {
   directives,
   instructions,
@@ -187,6 +188,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         macros.set(name, overloads);
       }
       sectionBeforeMacro = section;
+      section = 'text';
       v0BeforeMacro = v0Initialized;
       v0Initialized = false;
       activeMacro = macro;
@@ -685,7 +687,7 @@ function validateStringList(document: TextDocument, lineNumber: number, directiv
     return;
   }
   for (const operand of operands) {
-    if (!(/^"([^"\\]|\\.)*"$/.test(operand) || Boolean(activeMacro?.paramSymbols.has(operand)))) {
+    if (!(isMipsStringLiteralText(operand) || Boolean(activeMacro?.paramSymbols.has(operand)))) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `${directive} expects string literal operands.`, DiagnosticSeverity.Error, 'directive-operand'));
     }
   }
