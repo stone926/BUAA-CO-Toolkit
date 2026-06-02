@@ -8,6 +8,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition, lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
+import { buildMipsAst } from './ast';
 import {
   instructionWritesRegister,
   isMacroArgumentToken,
@@ -35,6 +36,13 @@ import {
   parseMacroArguments,
   parseOperands
 } from './syntax';
+import {
+  buildMipsSemanticModel,
+  findMipsSemanticMacroAtPosition,
+  mipsSemanticSymbolsVisibleAtPosition,
+  resolveMipsSemanticMacroParamAtPosition,
+  resolveMipsSemanticSymbolAtPosition
+} from './semantic';
 import type { CstRange, MipsCstExecutable, MipsCstStatementLine } from './syntax';
 import type {
   MipsLabelReference,
@@ -73,6 +81,8 @@ interface MipsSymbolScope {
   eqvSymbols: Map<string, MipsSymbol>;
 }
 
+type MipsParseCore = Omit<MipsParseResult, 'ast' | 'semantic'>;
+
 // 从资源文件加载指令元数据
 const STORAGE_DIRECTIVES = new Set(instructionMeta.storageDirectives);
 const CO_FIXED_SECTION_DIRECTIVES = new Set(instructionMeta.coFixedSectionDirectives);
@@ -84,6 +94,7 @@ const SECTION_ADDRESS_RANGES = new Map<string, { min: number; max: number; label
 
 export function parseMips(document: TextDocument, settings: CoSettings, options: MipsParseOptions = {}): MipsParseResult {
   const cst = parseMipsCstDocument(document.getText());
+  const ast = buildMipsAst(document, cst);
   const labels = new Map<string, MipsSymbol>();
   const dataSymbols = new Map<string, MipsSymbol>();
   const eqvSymbols = new Map<string, MipsSymbol>();
@@ -300,7 +311,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `宏 '${activeMacro.name}' 缺少 .end_macro。`, DiagnosticSeverity.Error, 'macro-unclosed'));
   }
 
-  const parsed: MipsParseResult = {
+  const parsed: MipsParseCore = {
     lines: cst.lines,
     labels,
     dataSymbols,
@@ -308,6 +319,20 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     macros,
     instructions: instructionsSeen,
     diagnostics
+  };
+  const parsedForQueries: MipsParseResult = {
+    ...parsed,
+    ast,
+    semantic: buildMipsSemanticModel({
+      document,
+      ast,
+      labels,
+      dataSymbols,
+      eqvSymbols,
+      macros,
+      instructions: instructionsSeen,
+      diagnostics
+    })
   };
   const missingLabelRanges = new Set<string>();
   for (const reference of labelReferences) {
@@ -317,7 +342,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       diagnostics.push(makeDiagnostic(range, `找不到标签或数据符号 '${reference.operand}'。`, DiagnosticSeverity.Error, 'missing-label'));
     }
   }
-  collectUndeclaredSymbolDiagnostics(document, parsed, diagnostics, missingLabelRanges);
+  collectUndeclaredSymbolDiagnostics(document, parsedForQueries, diagnostics, missingLabelRanges);
 
   if (profile === 'P2' && settings.mips.warnMissingExitSyscall && !hasSyscall && document.lineCount > 2) {
     const firstLine = lineAt(document, 0).text;
@@ -325,23 +350,30 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     diagnostics.push(makeDiagnostic(range, 'P2 programs usually need a syscall exit path, otherwise MARS/online tests may time out.', DiagnosticSeverity.Warning, 'missing-syscall'));
   }
 
+  const resultDiagnostics = includeDiagnostics ? diagnostics : [];
   return {
     ...parsed,
-    diagnostics: includeDiagnostics ? diagnostics : []
+    ast,
+    semantic: buildMipsSemanticModel({
+      document,
+      ast,
+      labels,
+      dataSymbols,
+      eqvSymbols,
+      macros,
+      instructions: instructionsSeen,
+      diagnostics: resultDiagnostics
+    }),
+    diagnostics: resultDiagnostics
   };
 }
 
 export function findMacroAtPosition(parsed: MipsParseResult, position: Position): MipsMacro | undefined {
-  for (const macro of allMacros(parsed)) {
-    if (containsPosition(macro.range, position)) {
-      return macro;
-    }
-  }
-  return undefined;
+  return findMipsSemanticMacroAtPosition(parsed.semantic, position);
 }
 
 export function findMacroParamAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return findMacroAtPosition(parsed, position)?.paramSymbols.get(name);
+  return resolveMipsSemanticMacroParamAtPosition(parsed.semantic, name, position);
 }
 
 export function resolveSymbolAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
@@ -349,60 +381,43 @@ export function resolveSymbolAtPosition(parsed: MipsParseResult, name: string, p
 }
 
 export function resolveLabelAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return findMacroAtPosition(parsed, position)?.labels.get(name) ?? parsed.labels.get(name);
+  return resolveMipsSemanticSymbolAtPosition(parsed.semantic, name, position, ['label']);
 }
 
 export function resolveDataSymbolAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return findMacroAtPosition(parsed, position)?.dataSymbols.get(name) ?? parsed.dataSymbols.get(name);
+  return resolveMipsSemanticSymbolAtPosition(parsed.semantic, name, position, ['data']);
 }
 
 export function resolveEqvSymbolAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return findMacroAtPosition(parsed, position)?.eqvSymbols.get(name) ?? parsed.eqvSymbols.get(name);
+  return resolveMipsSemanticSymbolAtPosition(parsed.semantic, name, position, ['eqv']);
 }
 
 export function symbolsVisibleAtPosition(parsed: MipsParseResult, position: Position): MipsSymbol[] {
-  const macro = findMacroAtPosition(parsed, position);
-  return [
-    ...(macro ? [...macro.labels.values(), ...macro.dataSymbols.values(), ...macro.eqvSymbols.values()] : []),
-    ...parsed.labels.values(),
-    ...parsed.dataSymbols.values(),
-    ...parsed.eqvSymbols.values()
-  ];
+  return mipsSemanticSymbolsVisibleAtPosition(parsed.semantic, position);
 }
 
 export function allMacroParams(parsed: MipsParseResult): MipsSymbol[] {
-  return allMacros(parsed).flatMap((macro) => [...macro.paramSymbols.values()]);
+  return parsed.semantic.macroParams;
 }
 
 export function allLabelSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return [...parsed.labels.values(), ...allMacros(parsed).flatMap((macro) => [...macro.labels.values()])];
+  return parsed.semantic.labelSymbols;
 }
 
 export function allDataSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return [...parsed.dataSymbols.values(), ...allMacros(parsed).flatMap((macro) => [...macro.dataSymbols.values()])];
+  return parsed.semantic.dataSymbols;
 }
 
 export function allEqvSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return [...parsed.eqvSymbols.values(), ...allMacros(parsed).flatMap((macro) => [...macro.eqvSymbols.values()])];
+  return parsed.semantic.eqvSymbols;
 }
 
 export function allSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  if (!parsed._allSymbols) {
-    parsed._allSymbols = [
-      ...parsed.labels.values(),
-      ...parsed.dataSymbols.values(),
-      ...parsed.eqvSymbols.values(),
-      ...allMacros(parsed).flatMap((m) => [...m.labels.values(), ...m.dataSymbols.values(), ...m.eqvSymbols.values(), ...m.paramSymbols.values()])
-    ];
-  }
-  return parsed._allSymbols;
+  return parsed.semantic.symbols;
 }
 
 export function allMacros(parsed: MipsParseResult): MipsMacro[] {
-  if (!parsed._allMacros) {
-    parsed._allMacros = [...parsed.macros.values()].flat();
-  }
-  return parsed._allMacros;
+  return parsed.semantic.macros;
 }
 
 /**
@@ -410,17 +425,7 @@ export function allMacros(parsed: MipsParseResult): MipsMacro[] {
  * 替代原来的 isDeclarationRange / isKnownDeclarationRange 中的线性扫描。
  */
 export function getDeclarationRangeSet(parsed: MipsParseResult): Set<string> {
-  if (!parsed._declarationRangeKeys) {
-    const keys = new Set<string>();
-    for (const macro of allMacros(parsed)) {
-      keys.add(rangeKey(macro.selectionRange));
-    }
-    for (const symbol of allSymbols(parsed)) {
-      keys.add(rangeKey(symbol.selectionRange));
-    }
-    parsed._declarationRangeKeys = keys;
-  }
-  return parsed._declarationRangeKeys;
+  return parsed.semantic.declarationRangeKeys;
 }
 
 interface ParsedMacroDefinition {

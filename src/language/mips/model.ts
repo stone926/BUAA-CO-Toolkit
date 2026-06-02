@@ -1,4 +1,6 @@
 import { Diagnostic, Range } from 'vscode-languageserver/node';
+import type { MipsAstDocument } from './ast';
+import type { MipsSemanticModel } from './semantic';
 import type { MipsCstLine } from './syntax';
 
 export interface MipsSymbol {
@@ -38,6 +40,8 @@ export interface MipsLabelReference {
 }
 
 export interface MipsParseResult {
+  ast: MipsAstDocument;
+  semantic: MipsSemanticModel;
   lines: MipsCstLine[];
   labels: Map<string, MipsSymbol>;
   dataSymbols: Map<string, MipsSymbol>;

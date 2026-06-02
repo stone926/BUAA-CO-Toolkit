@@ -54,6 +54,10 @@ import {
   collectIdentifierReferencesInModule,
   verilogWordRangeAtPosition
 } from './tokenNavigation';
+import {
+  resolveVerilogSemanticAtPosition,
+  VerilogSemanticResolution
+} from './semanticModel';
 
 export { buildTestbench, parseVerilog, moduleAtPosition };
 export { getVerilogFoldingRanges } from './folding';
@@ -686,6 +690,10 @@ function moduleCompletionItem(module: VerilogModule): CompletionItem {
 
 function resolveVerilogSymbol(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): ResolvedVerilogSymbol | undefined {
   const parsed = getCachedVerilogParse(document, settings, false);
+  const semanticResolved = resolvedVerilogSymbolFromSemantic(parsed, position, index);
+  if (semanticResolved) {
+    return semanticResolved;
+  }
   const include = parsed.includes.find((item) => containsPosition(item.pathRange, position));
   if (include) {
     return { kind: 'include', include };
@@ -734,6 +742,77 @@ function resolveVerilogSymbol(document: TextDocument, position: Position, settin
   const module = index.getModule(word) ?? parsed.modules.find((item) => item.name === word);
   if (module) {
     return { kind: 'module', module };
+  }
+  return undefined;
+}
+
+function resolvedVerilogSymbolFromSemantic(
+  parsed: ReturnType<typeof getCachedVerilogParse>,
+  position: Position,
+  index: VerilogWorkspaceIndex
+): ResolvedVerilogSymbol | undefined {
+  const resolved = resolveVerilogSemanticAtPosition(parsed.semantic, position);
+  if (!resolved) {
+    return undefined;
+  }
+  return mapSemanticResolution(parsed.modules, resolved, index);
+}
+
+function mapSemanticResolution(
+  modules: VerilogModule[],
+  resolved: VerilogSemanticResolution,
+  index: VerilogWorkspaceIndex
+): ResolvedVerilogSymbol | undefined {
+  const reference = resolved.reference;
+  if (reference?.kind === 'portConnection' && reference.module && reference.instance && reference.portConnection?.name) {
+    const targetModule = index.getModule(reference.instance.moduleName) ?? modules.find((item) => item.name === reference.instance?.moduleName);
+    const targetPort = targetModule?.ports.find((port) => port.name === reference.portConnection?.name)
+      ?? targetModule?.parameters.find((param) => param.name === reference.portConnection?.name);
+    if (targetModule && targetPort) {
+      return {
+        kind: 'portConnection',
+        module: reference.module,
+        instance: reference.instance,
+        connection: reference.portConnection,
+        targetModule,
+        targetPort
+      };
+    }
+  }
+  if (reference?.kind === 'module') {
+    const module = resolved.symbol?.module ?? index.getModule(reference.name) ?? modules.find((item) => item.name === reference.name);
+    return module ? { kind: 'module', module } : undefined;
+  }
+  if (reference?.kind === 'macro') {
+    return {
+      kind: 'macro',
+      macro: resolved.symbol?.macro ?? index.getMacro(reference.name),
+      macroUse: reference.macroUse,
+      name: reference.name
+    };
+  }
+  if (reference?.kind === 'include' && reference.include) {
+    return { kind: 'include', include: reference.include };
+  }
+
+  const symbol = resolved.symbol;
+  if (!symbol) {
+    return undefined;
+  }
+  if (symbol.kind === 'module' && symbol.module) {
+    return { kind: 'module', module: symbol.module };
+  }
+  if ((symbol.kind === 'signal' || symbol.kind === 'port' || symbol.kind === 'parameter') && symbol.decl && symbol.module) {
+    return { kind: 'decl', decl: symbol.decl, module: symbol.module };
+  }
+  if (symbol.kind === 'instance' && symbol.instance && symbol.module) {
+    return { kind: 'instance', instance: symbol.instance, module: symbol.module };
+  }
+  if (symbol.kind === 'macro') {
+    return { kind: 'macro', macro: symbol.macro, name: symbol.name };
+  }
+  if (symbol.kind === 'include' && symbol.include) {
+    return { kind: 'include', include: symbol.include };
   }
   return undefined;
 }
