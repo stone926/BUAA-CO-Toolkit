@@ -13,21 +13,21 @@ import {
   instructionTypeLabel
 } from './resources';
 import { MipsServerState } from './state';
-import type { MipsCstExecutable } from './syntax';
+import type { MipsExecutableAst } from './ast';
 
 export function getMipsSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): SignatureHelp | undefined {
   const parsed = getCachedMipsParse(document, settings, state);
-  const line = parsed.lines[position.line];
-  if (line?.kind !== 'statement' || !line.executable) {
+  const line = parsed.ast.lines[position.line];
+  const executable = line?.kind === 'statement' ? line.executable : undefined;
+  if (!executable) {
     return undefined;
   }
 
-  const executable = line.executable;
   const name = executable.mnemonic;
-  if (position.character < executable.range.end) {
+  if (position.character < executable.mnemonicRange.end.character) {
     return undefined;
   }
-  if (line.comment && position.character >= line.comment.start) {
+  if (line.kind === 'statement' && line.comment && position.character >= line.comment.range.start.character) {
     return undefined;
   }
   const activeParameter = activeParameterFromOperands(executable, position.character);
@@ -37,26 +37,26 @@ export function getMipsSignatureHelp(document: TextDocument, position: Position,
     return buildInstructionSignatureHelp(instruction, activeParameter);
   }
 
-  const macroOverloads = parsed.macros.get(name);
-  if (macroOverloads?.length) {
+  const macroOverloads = parsed.semantic.macros.filter((macro) => macro.name === name);
+  if (macroOverloads.length) {
     return buildMacroSignatureHelp(macroOverloads, activeParameter);
   }
 
   return undefined;
 }
 
-function activeParameterFromOperands(executable: MipsCstExecutable, character: number): number {
-  if (!executable.operandRange || character <= executable.operandRange.start || executable.operands.length === 0) {
+function activeParameterFromOperands(executable: MipsExecutableAst, character: number): number {
+  if (!executable.operandRange || character <= executable.operandRange.start.character || executable.operands.length === 0) {
     return 0;
   }
 
   for (let index = 0; index < executable.operands.length; index++) {
     const operand = executable.operands[index];
-    if (character <= operand.range.end) {
+    if (character <= operand.range.end.character) {
       return index;
     }
     const next = executable.operands[index + 1];
-    if (!next || character < next.range.start) {
+    if (!next || character < next.range.start.character) {
       return Math.min(index + 1, executable.operands.length - 1);
     }
   }

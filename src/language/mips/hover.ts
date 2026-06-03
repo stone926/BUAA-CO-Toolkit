@@ -15,9 +15,9 @@ import {
   syscallServiceBeforeLine
 } from './display';
 import {
-  findMacroParamAtPosition,
-  resolveSymbolAtPosition
-} from './parser';
+  resolveMipsSemanticMacroParamAtPosition,
+  resolveMipsSemanticSymbolAtPosition
+} from './semantic';
 import { getCachedMipsParse } from './parseCache';
 import { findMacroOverloadAtPosition } from './queries';
 import {
@@ -118,7 +118,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const param = findMacroParamAtPosition(parsed, word, position);
+  const param = resolveMipsSemanticMacroParamAtPosition(parsed.semantic, word, position);
   if (param) {
     return {
       contents: `宏参数，定义于第 ${param.range.start.line + 1} 行。`,
@@ -126,7 +126,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const symbol = resolveSymbolAtPosition(parsed, word, position);
+  const symbol = resolveMipsSemanticSymbolAtPosition(parsed.semantic, word, position);
   if (symbol) {
     const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
     if (symbol.kind === 'eqv') {

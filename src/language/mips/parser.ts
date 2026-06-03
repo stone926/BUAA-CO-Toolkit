@@ -5,10 +5,11 @@ import {
   Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { containsPosition, lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp';
+import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { buildMipsAst } from './ast';
+import type { MipsStatementAst } from './ast';
 import {
   instructionWritesRegister,
   isMacroArgumentToken,
@@ -38,8 +39,6 @@ import {
 } from './syntax';
 import {
   buildMipsSemanticModel,
-  findMipsSemanticMacroAtPosition,
-  mipsSemanticSymbolsVisibleAtPosition,
   resolveMipsSemanticMacroParamAtPosition,
   resolveMipsSemanticSymbolAtPosition
 } from './semantic';
@@ -342,7 +341,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       diagnostics.push(makeDiagnostic(range, `找不到标签或数据符号 '${reference.operand}'。`, DiagnosticSeverity.Error, 'missing-label'));
     }
   }
-  collectUndeclaredSymbolDiagnostics(document, parsedForQueries, diagnostics, missingLabelRanges);
+  collectUndeclaredSymbolDiagnostics(parsedForQueries, diagnostics, missingLabelRanges);
 
   if (profile === 'P2' && settings.mips.warnMissingExitSyscall && !hasSyscall && document.lineCount > 2) {
     const firstLine = lineAt(document, 0).text;
@@ -366,66 +365,6 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }),
     diagnostics: resultDiagnostics
   };
-}
-
-export function findMacroAtPosition(parsed: MipsParseResult, position: Position): MipsMacro | undefined {
-  return findMipsSemanticMacroAtPosition(parsed.semantic, position);
-}
-
-export function findMacroParamAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return resolveMipsSemanticMacroParamAtPosition(parsed.semantic, name, position);
-}
-
-export function resolveSymbolAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return resolveLabelAtPosition(parsed, name, position) ?? resolveDataSymbolAtPosition(parsed, name, position) ?? resolveEqvSymbolAtPosition(parsed, name, position);
-}
-
-export function resolveLabelAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return resolveMipsSemanticSymbolAtPosition(parsed.semantic, name, position, ['label']);
-}
-
-export function resolveDataSymbolAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return resolveMipsSemanticSymbolAtPosition(parsed.semantic, name, position, ['data']);
-}
-
-export function resolveEqvSymbolAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsSymbol | undefined {
-  return resolveMipsSemanticSymbolAtPosition(parsed.semantic, name, position, ['eqv']);
-}
-
-export function symbolsVisibleAtPosition(parsed: MipsParseResult, position: Position): MipsSymbol[] {
-  return mipsSemanticSymbolsVisibleAtPosition(parsed.semantic, position);
-}
-
-export function allMacroParams(parsed: MipsParseResult): MipsSymbol[] {
-  return parsed.semantic.macroParams;
-}
-
-export function allLabelSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return parsed.semantic.labelSymbols;
-}
-
-export function allDataSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return parsed.semantic.dataSymbols;
-}
-
-export function allEqvSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return parsed.semantic.eqvSymbols;
-}
-
-export function allSymbols(parsed: MipsParseResult): MipsSymbol[] {
-  return parsed.semantic.symbols;
-}
-
-export function allMacros(parsed: MipsParseResult): MipsMacro[] {
-  return parsed.semantic.macros;
-}
-
-/**
- * 获取所有声明 Range 的字符串键集合，用于 O(1) 查找。
- * 替代原来的 isDeclarationRange / isKnownDeclarationRange 中的线性扫描。
- */
-export function getDeclarationRangeSet(parsed: MipsParseResult): Set<string> {
-  return parsed.semantic.declarationRangeKeys;
 }
 
 interface ParsedMacroDefinition {
@@ -853,19 +792,16 @@ function resolveEqvSymbolInScope(name: string, activeMacro: MipsMacro | undefine
   return activeMacro?.eqvSymbols.get(name) ?? eqvSymbols.get(name);
 }
 
-function collectUndeclaredSymbolDiagnostics(document: TextDocument, parsed: MipsParseResult, diagnostics: Diagnostic[], skippedRanges: Set<string>): void {
+function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics: Diagnostic[], skippedRanges: Set<string>): void {
   const reported = new Set<string>();
-  for (const line of parsed.lines) {
-    if (line.kind !== 'statement') {
-      continue;
-    }
-    const executable = line.executable;
-    const executableRange = executable ? mipsCstRange(line.line, executable.range) : undefined;
+  for (const statement of parsed.ast.statements) {
+    const executable = statement.executable;
+    const executableRange = executable?.mnemonicRange;
     if (shouldSkipUndeclaredCheckForDirective(executable)) {
       continue;
     }
-    const macroCall = macroCallAtLine(parsed, line);
-    for (const cstToken of line.tokens) {
+    const macroCall = macroCallAtStatement(parsed, statement);
+    for (const cstToken of statement.tokens) {
       if (!isIdentifierLikeToken(cstToken.kind)) {
         continue;
       }
@@ -887,7 +823,7 @@ function collectUndeclaredSymbolDiagnostics(document: TextDocument, parsed: Mips
       if (instructions[token.toLowerCase()]) {
         continue;
       }
-      if (parsed.macros.has(token)) {
+      if (parsed.semantic.macros.some((macro) => macro.name === token)) {
         continue;
       }
       if (macroCall && isMacroLabelArgument(parsed, macroCall, token)) {
@@ -895,14 +831,14 @@ function collectUndeclaredSymbolDiagnostics(document: TextDocument, parsed: Mips
       }
 
       if (token.startsWith('%')) {
-        if (!findMacroParamAtPosition(parsed, token, range.start)) {
+        if (!resolveMipsSemanticMacroParamAtPosition(parsed.semantic, token, range.start)) {
           diagnostics.push(makeDiagnostic(range, `使用未声明的宏参数 '${token}'。`, DiagnosticSeverity.Error, 'undeclared-symbol'));
           reported.add(key);
         }
         continue;
       }
 
-      const symbol = resolveSymbolAtPosition(parsed, token, range.start);
+      const symbol = resolveMipsSemanticSymbolAtPosition(parsed.semantic, token, range.start);
       if (!symbol) {
         diagnostics.push(makeDiagnostic(range, `使用未声明的符号 '${token}'。`, DiagnosticSeverity.Error, 'undeclared-symbol'));
         reported.add(key);
@@ -915,17 +851,17 @@ function collectUndeclaredSymbolDiagnostics(document: TextDocument, parsed: Mips
 }
 
 function isDeclarationRange(parsed: MipsParseResult, range: Range): boolean {
-  return getDeclarationRangeSet(parsed).has(rangeKey(range));
+  return parsed.semantic.declarationRangeKeys.has(rangeKey(range));
 }
 
-function macroCallAtLine(parsed: MipsParseResult, line: MipsCstStatementLine): { macro: MipsMacro; operands: string[] } | undefined {
-  const executable = line.executable;
+function macroCallAtStatement(parsed: MipsParseResult, statement: MipsStatementAst): { macro: MipsMacro; operands: string[] } | undefined {
+  const executable = statement.executable;
   if (!executable) {
     return undefined;
   }
   const name = executable.mnemonic;
-  const overloads = parsed.macros.get(name);
-  if (!overloads?.length) {
+  const overloads = parsed.semantic.macros.filter((macro) => macro.name === name);
+  if (!overloads.length) {
     return undefined;
   }
   const operands = parseMacroArguments(executable.operandText);
@@ -936,7 +872,7 @@ function macroCallAtLine(parsed: MipsParseResult, line: MipsCstStatementLine): {
   };
 }
 
-function shouldSkipUndeclaredCheckForDirective(executable: MipsCstExecutable | undefined): boolean {
+function shouldSkipUndeclaredCheckForDirective(executable: { lowerMnemonic: string } | undefined): boolean {
   if (!executable) {
     return false;
   }
@@ -960,16 +896,16 @@ function macroLabelParameters(parsed: MipsParseResult, macro: MipsMacro): Set<st
   if (macro.bodyEndLine === undefined) {
     return labelParams;
   }
-  for (const line of parsed.lines) {
-    if (line.kind !== 'statement' || line.line < macro.bodyStartLine || line.line > macro.bodyEndLine) {
+  for (const statement of parsed.ast.statements) {
+    if (statement.line < macro.bodyStartLine || statement.line > macro.bodyEndLine) {
       continue;
     }
-    for (const label of line.labels) {
+    for (const label of statement.labels) {
       if (macro.params.includes(label.name)) {
         labelParams.add(label.name);
       }
     }
-    const executable = line.executable;
+    const executable = statement.executable;
     if (!executable) {
       continue;
     }

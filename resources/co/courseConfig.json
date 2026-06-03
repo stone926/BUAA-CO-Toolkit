@@ -123,15 +123,15 @@
     ]
   },
   "directiveDescriptions": {
-    ".data": "切换到数据段",
-    ".text": "切换到代码段",
-    ".kdata": "切换到内核数据段",
-    ".ktext": "切换到内核代码段",
+    ".data": "数据段",
+    ".text": "代码段",
+    ".kdata": "内核数据段",
+    ".ktext": "内核代码段",
     ".word": "存储 32 位字",
     ".half": "存储 16 位半字",
     ".byte": "存储 8 位字节",
     ".ascii": "存储 ASCII 字符串（不含终止符）",
-    ".asciiz": "存储以 null 结尾的 ASCII 字符串",
+    ".asciiz": "存储以 0 结尾的 ASCII 字符串",
     ".space": "分配指定字节数的空间",
     ".align": "按 2^n 字节边界对齐",
     ".globl": "声明全局符号",
@@ -139,7 +139,7 @@
     ".eqv": "定义符号常量",
     ".macro": "开始宏定义",
     ".end_macro": "结束宏定义",
-    ".include": "包含外部文件"
+    ".include": "引用外部文件"
   },
   "directiveDetails": {
     ".align": {
@@ -151,10 +151,10 @@
       }
     },
     ".data": {
-      "description": "切换当前汇编段到数据段。BUAA CO 使用 CompactDataAtZero 配置，不应传递自定义段地址。"
+      "description": "数据段。使用 CompactDataAtZero 配置，不应自定义段地址"
     },
     ".text": {
-      "description": "切换当前汇编段到代码段。BUAA CO 使用 CompactDataAtZero 配置，不应传递自定义段地址。"
+      "description": "代码段。使用 CompactDataAtZero 配置，不应自定义段地址"
     }
   }
 }

@@ -39,19 +39,19 @@
   "branch": {
     "mnemonic": "b",
     "operands": 1,
-    "description": "无条件分支",
+    "description": "无条件跳转",
     "template": ["beq $zero, $zero, {label}"]
   },
   "branchEqualZero": {
     "mnemonic": "beqz",
     "operands": 2,
-    "description": "等于零分支",
+    "description": "等于零时跳转",
     "template": ["beq {reg}, $zero, {label}"]
   },
   "branchNotEqualZero": {
     "mnemonic": "bnez",
     "operands": 2,
-    "description": "不等于零分支",
+    "description": "不等于零时跳转",
     "template": ["bne {reg}, $zero, {label}"]
   },
   "not": {
@@ -63,13 +63,13 @@
   "neg": {
     "mnemonic": "neg",
     "operands": 2,
-    "description": "取负（有符号）",
+    "description": "有符号取负",
     "template": ["sub {dst}, $zero, {src}"]
   },
   "negu": {
     "mnemonic": "negu",
     "operands": 2,
-    "description": "取负（无符号）",
+    "description": "无符号取负跳转",
     "template": ["subu {dst}, $zero, {src}"]
   },
   "multiply": {
@@ -93,46 +93,46 @@
   "remainder": {
     "mnemonic": "rem",
     "operands": 3,
-    "description": "取余（有符号）",
+    "description": "有符号取余",
     "template": ["div {src1}, {src2}", "mfhi {dst}"]
   },
   "remainderUnsigned": {
     "mnemonic": "remu",
     "operands": 3,
-    "description": "取余（无符号）",
+    "description": "无符号取余跳转",
     "template": ["divu {src1}, {src2}", "mfhi {dst}"]
   },
   "compareBranch": {
     "blt": {
-      "description": "小于分支（有符号）",
+      "description": "有符号小于时跳转跳转",
       "template": ["slt $at, {left}, {right}", "bne $at, $zero, {label}"]
     },
     "bltu": {
-      "description": "小于分支（无符号）",
+      "description": "无符号小于时跳转跳转",
       "template": ["sltu $at, {left}, {right}", "bne $at, $zero, {label}"]
     },
     "bgt": {
-      "description": "大于分支（有符号）",
+      "description": "有符号大于时跳转跳转",
       "template": ["slt $at, {right}, {left}", "bne $at, $zero, {label}"]
     },
     "bgtu": {
-      "description": "大于分支（无符号）",
+      "description": "无符号大于时跳转跳转",
       "template": ["sltu $at, {right}, {left}", "bne $at, $zero, {label}"]
     },
     "ble": {
-      "description": "小于等于分支（有符号）",
+      "description": "有符号小于等于时跳转跳转",
       "template": ["slt $at, {right}, {left}", "beq $at, $zero, {label}"]
     },
     "bleu": {
-      "description": "小于等于分支（无符号）",
+      "description": "无符号小于等于时跳转跳转",
       "template": ["sltu $at, {right}, {left}", "beq $at, $zero, {label}"]
     },
     "bge": {
-      "description": "大于等于分支（有符号）",
+      "description": "有符号大于等于时跳转跳转",
       "template": ["slt $at, {left}, {right}", "beq $at, $zero, {label}"]
     },
     "bgeu": {
-      "description": "大于等于分支（无符号）",
+      "description": "无符号大于等于时跳转跳转",
       "template": ["sltu $at, {left}, {right}", "beq $at, $zero, {label}"]
     }
   },
@@ -142,7 +142,7 @@
       "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "add {dst}, {src}, $at"]
     },
     "addu": {
-      "description": "加法无溢出（三操作数形式）",
+      "description": "无溢出加法（三操作数形式）",
       "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "addu {dst}, {src}, $at"]
     },
     "sub": {
@@ -150,7 +150,7 @@
       "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "sub {dst}, {src}, $at"]
     },
     "subu": {
-      "description": "减法无溢出（三操作数形式）",
+      "description": "无溢出减法（三操作数形式）",
       "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "subu {dst}, {src}, $at"]
     }
   }

@@ -78,6 +78,11 @@ export interface VerilogSemanticResolution {
   reference?: VerilogSemanticReference;
 }
 
+export interface VerilogSemanticTarget {
+  name: string;
+  symbol: VerilogSemanticSymbol;
+}
+
 export interface VerilogSemanticModel {
   documentUri: string;
   ast: VerilogAstDocument;
@@ -146,6 +151,33 @@ export function resolveVerilogSemanticAtPosition(model: VerilogSemanticModel, po
 
 export function moduleScopeAtPosition(model: VerilogSemanticModel, position: Position): VerilogSemanticScope | undefined {
   return model.moduleScopes.find((scope) => containsPosition(scope.range, position));
+}
+
+export function verilogSemanticTargetFromSymbol(symbol: VerilogSemanticSymbol): VerilogSemanticTarget {
+  return {
+    name: symbol.name,
+    symbol
+  };
+}
+
+export function verilogSemanticReferenceRanges(model: VerilogSemanticModel, target: VerilogSemanticTarget, includeDeclaration: boolean): Range[] {
+  const ranges: Range[] = [];
+  if (includeDeclaration) {
+    ranges.push(target.symbol.selectionRange);
+  }
+  for (const reference of model.references) {
+    if (referenceMatchesTarget(reference, target)) {
+      ranges.push(reference.range);
+    }
+  }
+  return dedupeRanges(ranges);
+}
+
+export function findVerilogSemanticSymbol(
+  model: VerilogSemanticModel,
+  predicate: (symbol: VerilogSemanticSymbol) => boolean
+): VerilogSemanticSymbol | undefined {
+  return model.symbols.find(predicate);
 }
 
 function collectSymbols(
@@ -389,4 +421,27 @@ function previousSignificantToken(tokens: VerilogToken[], index: number): Verilo
     }
   }
   return undefined;
+}
+
+function referenceMatchesTarget(reference: VerilogSemanticReference, target: VerilogSemanticTarget): boolean {
+  if (reference.symbol) {
+    return reference.symbol === target.symbol;
+  }
+  return reference.name === target.symbol.name
+    && reference.scope === target.symbol.scope
+    && (target.symbol.kind === 'signal' || target.symbol.kind === 'port' || target.symbol.kind === 'parameter' || target.symbol.kind === 'instance');
+}
+
+function dedupeRanges(ranges: Range[]): Range[] {
+  const result: Range[] = [];
+  const seen = new Set<string>();
+  for (const range of ranges) {
+    const key = rangeKey(range);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(range);
+  }
+  return result;
 }

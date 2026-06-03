@@ -1,7 +1,6 @@
 import {
   InlayHint,
   InlayHintKind,
-  Position,
   Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -26,15 +25,15 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
   const serviceStack: Array<MipsSyscallInfo | undefined> = [];
   let currentSyscall: MipsSyscallInfo | undefined;
 
-  for (const line of parsed.lines) {
-    if (line.line > endLine) {
+  for (const statement of parsed.ast.statements) {
+    if (statement.line > endLine) {
       break;
     }
-    if (line.kind !== 'statement' || !line.executable) {
+    const executable = statement.executable;
+    if (!executable) {
       continue;
     }
-    const executable = line.executable;
-    const lineNumber = line.line;
+    const lineNumber = statement.line;
     const inRequestedRange = lineNumber >= startLine;
 
     if (executable.lowerMnemonic === '.macro') {
@@ -54,7 +53,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
       if (syscall) {
         if (inRequestedRange) {
           hints.push({
-            position: Position.create(lineNumber, operand.range.end),
+            position: operand.range.end,
             label: ` ${syscall.name}`,
             kind: InlayHintKind.Parameter,
             tooltip: markdownTooltip(syscallMarkdown(syscall)),
@@ -70,7 +69,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
     if (executable.lowerMnemonic === 'syscall') {
       if (currentSyscall && inRequestedRange) {
         hints.push({
-          position: Position.create(lineNumber, executable.range.end),
+          position: executable.range.end,
           label: ` ${currentSyscall.name}`,
           kind: InlayHintKind.Parameter,
           tooltip: markdownTooltip(syscallMarkdown(currentSyscall)),
@@ -85,7 +84,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
       const register = cp0ByOperand(operand.text);
       if (register) {
         hints.push({
-          position: Position.create(lineNumber, operand.range.end),
+          position: operand.range.end,
           label: ` ${register.name}${register.alias ? `/${register.alias}` : ''}`,
           kind: InlayHintKind.Type,
           tooltip: markdownTooltip(cp0Markdown(register)),

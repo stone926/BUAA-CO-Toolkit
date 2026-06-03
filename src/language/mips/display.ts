@@ -47,7 +47,7 @@ export function macroExpansionPreview(document: TextDocument, parsed: MipsParseR
   const replacements = new Map(macro.params.map((param, index) => [param, args[index]] as const));
   const lines: string[] = [];
   for (let lineNumber = macro.bodyStartLine; lineNumber <= (macro.bodyEndLine ?? macro.bodyStartLine - 1); lineNumber++) {
-    const line = parsed.lines[lineNumber];
+    const line = parsed.ast.lines[lineNumber];
     lines.push(line ? expandMacroBodyLine(line.text, line.tokens, replacements) : lineAt(document, lineNumber).text);
   }
   return lines.join('\n');
@@ -177,12 +177,13 @@ export function cp0ByOperand(operand: string): MipsCp0RegisterInfo | undefined {
 }
 
 export function syscallAtLiV0Operand(parsed: MipsParseResult, wordRange: Range) {
-  const line = parsed.lines[wordRange.start.line];
-  if (line?.kind !== 'statement' || !line.executable || line.executable.lowerMnemonic !== 'li') {
+  const line = parsed.ast.lines[wordRange.start.line];
+  const executable = line?.kind === 'statement' ? line.executable : undefined;
+  if (!executable || executable.lowerMnemonic !== 'li') {
     return undefined;
   }
-  const [target, serviceOperand] = line.executable.operands;
-  if (!target || !serviceOperand || target.text !== '$v0' || !rangesOverlap(wordRange, Range.create(line.line, serviceOperand.range.start, line.line, serviceOperand.range.end))) {
+  const [target, serviceOperand] = executable.operands;
+  if (!target || !serviceOperand || target.text !== '$v0' || !rangesOverlap(wordRange, serviceOperand.range)) {
     return undefined;
   }
   return syscallByOperand(serviceOperand.text);
@@ -191,14 +192,14 @@ export function syscallAtLiV0Operand(parsed: MipsParseResult, wordRange: Range) 
 export function syscallServiceBeforeLine(parsed: MipsParseResult, targetLine: number): MipsSyscallInfo | undefined {
   let service: MipsSyscallInfo | undefined;
   const serviceStack: Array<MipsSyscallInfo | undefined> = [];
-  for (const line of parsed.lines) {
-    if (line.line >= targetLine) {
+  for (const statement of parsed.ast.statements) {
+    if (statement.line >= targetLine) {
       break;
     }
-    if (line.kind !== 'statement' || !line.executable) {
+    const executable = statement.executable;
+    if (!executable) {
       continue;
     }
-    const executable = line.executable;
     if (executable.lowerMnemonic === '.macro') {
       serviceStack.push(service);
       service = undefined;
@@ -225,12 +226,13 @@ export function syscallServiceBeforeLine(parsed: MipsParseResult, targetLine: nu
 }
 
 export function cp0RegisterAtPosition(parsed: MipsParseResult, word: string, position: Position) {
-  const line = parsed.lines[position.line];
-  if (line?.kind !== 'statement' || !line.executable || (line.executable.lowerMnemonic !== 'mfc0' && line.executable.lowerMnemonic !== 'mtc0')) {
+  const line = parsed.ast.lines[position.line];
+  const executable = line?.kind === 'statement' ? line.executable : undefined;
+  if (!executable || (executable.lowerMnemonic !== 'mfc0' && executable.lowerMnemonic !== 'mtc0')) {
     return undefined;
   }
-  const operand = line.executable.operands[1];
-  if (!operand || operand.text !== word || position.character < operand.range.start || position.character > operand.range.end) {
+  const operand = executable.operands[1];
+  if (!operand || operand.text !== word || position.character < operand.range.start.character || position.character > operand.range.end.character) {
     return undefined;
   }
   const register = cp0ByOperand(operand.text);
@@ -241,20 +243,21 @@ export function cp0RegisterAtPosition(parsed: MipsParseResult, word: string, pos
 }
 
 export function eqvReplacementText(parsed: MipsParseResult, lineNumber: number, name: string): string | undefined {
-  const line = parsed.lines[lineNumber];
-  if (line?.kind !== 'statement' || !line.executable || line.executable.lowerMnemonic !== '.eqv' || !line.executable.operandRange) {
+  const line = parsed.ast.lines[lineNumber];
+  const executable = line?.kind === 'statement' ? line.executable : undefined;
+  if (!line || line.kind !== 'statement' || !executable || executable.lowerMnemonic !== '.eqv' || !executable.cst.operandRange) {
     return undefined;
   }
   const nameToken = line.tokens.find((token) =>
-    token.start >= line.executable!.operandRange!.start
-    && token.end <= line.executable!.operandRange!.end
+    token.start >= executable.cst.operandRange!.start
+    && token.end <= executable.cst.operandRange!.end
     && token.value === name
   );
   if (!nameToken) {
     return undefined;
   }
-  const replacementStart = skipEqvSeparator(line.code, nameToken.end);
-  const replacement = line.code.slice(replacementStart).trim();
+  const replacementStart = skipEqvSeparator(line.cst.code, nameToken.end);
+  const replacement = line.cst.code.slice(replacementStart).trim();
   return replacement || undefined;
 }
 

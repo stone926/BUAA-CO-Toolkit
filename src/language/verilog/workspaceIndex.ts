@@ -7,6 +7,7 @@ import { CoSettings } from '../common/settings';
 import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
 import { VerilogCstDocument } from './cst';
+import { VerilogSemanticModel } from './semanticModel';
 
 export interface VerilogIndexedFile {
   uri: string;
@@ -18,6 +19,7 @@ export interface VerilogIndexedFile {
   macroUses: VerilogMacroUse[];
   includes: VerilogInclude[];
   cst: VerilogCstDocument;
+  semantic: VerilogSemanticModel;
 }
 
 export class VerilogWorkspaceIndex {
@@ -80,7 +82,8 @@ export class VerilogWorkspaceIndex {
       macros: parsed.macros,
       macroUses: parsed.macroUses,
       includes: parsed.includes,
-      cst: parsed.cst
+      cst: parsed.cst,
+      semantic: parsed.semantic
     };
     this.files.set(document.uri, file);
     for (const module of parsed.modules) {

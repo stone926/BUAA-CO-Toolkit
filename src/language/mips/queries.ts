@@ -1,19 +1,19 @@
 import { Position, Range } from 'vscode-languageserver/node';
+import { containsPosition } from '../common/lsp';
+import { rangeKey } from '../common/util';
 import {
-  findMacroAtPosition,
-  getDeclarationRangeSet
-} from './parser';
+  resolveMipsSemanticMacroAtPosition
+} from './semantic';
 import { MipsMacro, MipsParseResult } from './model';
 import { parseMacroArguments } from './syntax';
-import { rangeKey } from '../common/util';
 
 export function findMacroOverloadAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsMacro | undefined {
-  const currentMacro = findMacroAtPosition(parsed, position);
-  if (currentMacro?.name === name) {
-    return currentMacro;
+  const semanticMacro = resolveMipsSemanticMacroAtPosition(parsed.semantic, name, position);
+  if (semanticMacro) {
+    return semanticMacro;
   }
 
-  const overloads = parsed.macros.get(name) ?? [];
+  const overloads = parsed.semantic.macros.filter((macro) => macro.name === name);
   if (!overloads.length) {
     return undefined;
   }
@@ -27,13 +27,13 @@ export function findMacroOverloadAtPosition(parsed: MipsParseResult, name: strin
 }
 
 export function macroCallArgumentsAtPosition(parsed: MipsParseResult, name: string, position: Position): string[] | undefined {
-  const line = parsed.lines[position.line];
-  if (line?.kind !== 'statement' || !line.executable || line.executable.mnemonic !== name) {
+  const line = parsed.ast.lines[position.line];
+  const executable = line?.kind === 'statement' ? line.executable : undefined;
+  if (!executable || executable.mnemonic !== name) {
     return undefined;
   }
 
-  const executable = line.executable;
-  if (position.character < executable.range.start || position.character > executable.range.end) {
+  if (!containsPosition(executable.range, position)) {
     return undefined;
   }
   return parseMacroArguments(executable.operandText);
@@ -43,5 +43,5 @@ export function macroCallArgumentsAtPosition(parsed: MipsParseResult, name: stri
  * O(1) 声明范围查找，使用预计算的 rangeKey 集合。
  */
 export function isKnownDeclarationRange(range: Range, parsed: MipsParseResult): boolean {
-  return getDeclarationRangeSet(parsed).has(rangeKey(range));
+  return parsed.semantic.declarationRangeKeys.has(rangeKey(range));
 }

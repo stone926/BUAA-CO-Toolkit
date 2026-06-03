@@ -15,8 +15,17 @@ export function parseVerilog(document: TextDocument, settings: CoSettings, inclu
   const macros = parseMacros(document, text, cst);
   const macroUses = parseMacroUses(document, text, macros, cst);
   const includes = parseIncludes(document, text, cst);
-  const diagnostics = includeDiagnostics ? collectVerilogDiagnostics(document, settings, text, modules, includes, cst) : [];
   const ast = buildVerilogAst(document, cst, modules, macros, macroUses, includes);
+  const semanticForDiagnostics = buildVerilogSemanticModel({
+    document,
+    ast,
+    modules,
+    macros,
+    macroUses,
+    includes,
+    diagnostics: []
+  });
+  const diagnostics = includeDiagnostics ? collectVerilogDiagnostics(document, settings, text, modules, includes, cst, semanticForDiagnostics) : [];
   return {
     ast,
     semantic: buildVerilogSemanticModel({

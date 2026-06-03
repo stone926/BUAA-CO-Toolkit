@@ -3,7 +3,6 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { getCachedMipsParse } from './parseCache';
-import { allMacros } from './parser';
 import { MipsServerState } from './state';
 import { stripComment } from './syntax';
 
@@ -12,7 +11,7 @@ export function getMipsFoldingRanges(document: TextDocument, settings: CoSetting
 
   // 1. Macro body folding (.macro line to .end_macro line)
   const parsed = getCachedMipsParse(document, settings, state);
-  for (const macro of allMacros(parsed)) {
+  for (const macro of parsed.semantic.macros) {
     if (macro.bodyEndLine !== undefined && macro.bodyEndLine > macro.bodyStartLine - 1) {
       ranges.push({
         startLine: macro.range.start.line,

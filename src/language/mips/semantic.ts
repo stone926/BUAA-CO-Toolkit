@@ -20,7 +20,8 @@ import type {
 import {
   MipsCstToken,
   isSymbolLike,
-  mipsCstTokenRange
+  mipsCstTokenRange,
+  parseMacroArguments
 } from './syntax';
 
 export type MipsSemanticScopeKind = 'global' | 'macro';
@@ -84,6 +85,20 @@ export interface MipsSemanticModel {
   macroParams: MipsSymbol[];
   declarationRangeKeys: Set<string>;
 }
+
+export type MipsSemanticTarget =
+  | {
+    kind: 'symbol';
+    name: string;
+    declarationRange: Range;
+    symbol: MipsSymbol;
+  }
+  | {
+    kind: 'macro';
+    name: string;
+    declarationRange: Range;
+    macro: MipsMacro;
+  };
 
 export interface MipsSemanticSource {
   document: TextDocument;
@@ -193,6 +208,84 @@ export function mipsSemanticSymbolsVisibleAtPosition(model: MipsSemanticModel, p
     ...model.globalScope.dataSymbols.values(),
     ...model.globalScope.eqvSymbols.values()
   ];
+}
+
+export function resolveMipsSemanticTarget(
+  model: MipsSemanticModel,
+  name: string,
+  range: Range,
+  position: Position
+): MipsSemanticTarget | undefined {
+  const declaration = model.declarations.find((item) => item.name === name && rangeEquals(item.selectionRange, range));
+  if (declaration?.symbol) {
+    return {
+      kind: 'symbol',
+      name,
+      declarationRange: declaration.symbol.selectionRange,
+      symbol: declaration.symbol
+    };
+  }
+  if (declaration?.macro) {
+    return {
+      kind: 'macro',
+      name,
+      declarationRange: declaration.macro.selectionRange,
+      macro: declaration.macro
+    };
+  }
+
+  const reference = model.references.find((item) => item.name === name && rangeEquals(item.range, range))
+    ?? model.references.find((item) => item.name === name && containsPosition(item.range, position));
+  if (reference?.symbol) {
+    return {
+      kind: 'symbol',
+      name,
+      declarationRange: reference.symbol.selectionRange,
+      symbol: reference.symbol
+    };
+  }
+  if (reference?.macro) {
+    return {
+      kind: 'macro',
+      name,
+      declarationRange: reference.macro.selectionRange,
+      macro: reference.macro
+    };
+  }
+
+  const symbol = resolveMipsSemanticMacroParamAtPosition(model, name, position)
+    ?? resolveMipsSemanticSymbolAtPosition(model, name, position);
+  if (symbol) {
+    return {
+      kind: 'symbol',
+      name,
+      declarationRange: symbol.selectionRange,
+      symbol
+    };
+  }
+  const macro = resolveMipsSemanticMacroAtPosition(model, name, position);
+  if (macro) {
+    return {
+      kind: 'macro',
+      name,
+      declarationRange: macro.selectionRange,
+      macro
+    };
+  }
+  return undefined;
+}
+
+export function mipsSemanticReferenceRanges(model: MipsSemanticModel, target: MipsSemanticTarget, includeDeclaration: boolean): Range[] {
+  const ranges: Range[] = [];
+  if (includeDeclaration) {
+    ranges.push(target.declarationRange);
+  }
+  for (const reference of model.references) {
+    if (referenceMatchesTarget(reference, target)) {
+      ranges.push(reference.range);
+    }
+  }
+  return dedupeRanges(ranges);
 }
 
 function collectDeclarations(
@@ -312,7 +405,7 @@ function classifyReference(
       symbol
     };
   }
-  const macro = resolveMacroReference(name, macros);
+  const macro = resolveMacroReference(name, macros, statement);
   if (macro) {
     return {
       name,
@@ -358,12 +451,14 @@ function resolveSymbolInScope(name: string, scope: MipsSemanticScope, globalScop
     ?? globalScope.eqvSymbols.get(name);
 }
 
-function resolveMacroReference(name: string, macros: Map<string, MipsMacro[]>): MipsMacro | undefined {
+function resolveMacroReference(name: string, macros: Map<string, MipsMacro[]>, statement: MipsStatementAst): MipsMacro | undefined {
   const overloads = macros.get(name);
   if (!overloads?.length) {
     return undefined;
   }
-  return overloads[0];
+  const operandText = statement.executable?.cst.operandText ?? '';
+  const argumentCount = parseMacroArguments(operandText).length;
+  return overloads.find((macro) => macro.params.length === argumentCount) ?? overloads[0];
 }
 
 function isReferenceToken(token: MipsCstToken): boolean {
@@ -372,4 +467,42 @@ function isReferenceToken(token: MipsCstToken): boolean {
 
 function isExecutableMnemonicRange(statement: MipsStatementAst, range: Range): boolean {
   return Boolean(statement.executable && rangeKey(statement.executable.mnemonicRange) === rangeKey(range));
+}
+
+export function resolveMipsSemanticMacroAtPosition(model: MipsSemanticModel, name: string, position: Position): MipsMacro | undefined {
+  const currentMacro = findMipsSemanticMacroAtPosition(model, position);
+  if (currentMacro?.name === name) {
+    return currentMacro;
+  }
+  const reference = model.references.find((item) => item.kind === 'macro' && item.name === name && containsPosition(item.range, position));
+  if (reference?.macro) {
+    return reference.macro;
+  }
+  const overloads = model.macros.filter((macro) => macro.name === name);
+  return overloads[0];
+}
+
+function referenceMatchesTarget(reference: MipsSemanticReference, target: MipsSemanticTarget): boolean {
+  if (target.kind === 'symbol') {
+    return Boolean(reference.symbol && reference.symbol === target.symbol);
+  }
+  return Boolean(reference.macro && reference.macro === target.macro);
+}
+
+function dedupeRanges(ranges: Range[]): Range[] {
+  const result: Range[] = [];
+  const seen = new Set<string>();
+  for (const range of ranges) {
+    const key = rangeKey(range);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(range);
+  }
+  return result;
+}
+
+function rangeEquals(left: Range, right: Range): boolean {
+  return rangeKey(left) === rangeKey(right);
 }

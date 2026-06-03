@@ -51,11 +51,14 @@ import { getVerilogLiteralCodeActions } from './numericLiterals';
 import { addVerilogWorkspaceDiagnostics } from './workspaceDiagnostics';
 import { VerilogCstDocument } from './cst';
 import {
-  collectIdentifierReferencesInModule,
   verilogWordRangeAtPosition
 } from './tokenNavigation';
 import {
+  findVerilogSemanticSymbol,
   resolveVerilogSemanticAtPosition,
+  verilogSemanticReferenceRanges,
+  verilogSemanticTargetFromSymbol,
+  VerilogSemanticModel,
   VerilogSemanticResolution
 } from './semanticModel';
 
@@ -261,18 +264,18 @@ export function getVerilogReferences(document: TextDocument, params: ReferencePa
   const includeDeclaration = params.context.includeDeclaration;
   switch (resolved.kind) {
     case 'decl': {
-      const locations = collectSignalReferences(document, parsed.cst, resolved.module, resolved.decl.name, resolved.decl.selectionRange, includeDeclaration);
+      const locations = collectSemanticSymbolReferences(document.uri, parsed.semantic, resolved.module, resolved.decl.name, resolved.decl.selectionRange, includeDeclaration);
       if (resolved.decl.direction) {
         locations.push(...collectPortConnectionReferences(index, resolved.module.name, resolved.decl.name));
       }
       return dedupeLocations(locations);
     }
     case 'instance':
-      return collectSignalReferences(document, parsed.cst, resolved.module, resolved.instance.instanceName, resolved.instance.selectionRange, includeDeclaration);
+      return collectSemanticSymbolReferences(document.uri, parsed.semantic, resolved.module, resolved.instance.instanceName, resolved.instance.selectionRange, includeDeclaration);
     case 'module':
       return collectModuleReferences(index, resolved.module, includeDeclaration);
     case 'portConnection': {
-      const locations = collectSignalReferencesForIndexedModule(index, settings, resolved.targetModule, resolved.targetPort.name, resolved.targetPort.selectionRange, includeDeclaration);
+      const locations = collectSignalReferencesForIndexedModule(index, resolved.targetModule, resolved.targetPort.name, resolved.targetPort.selectionRange, includeDeclaration);
       locations.push(...collectPortConnectionReferences(index, resolved.targetModule.name, resolved.targetPort.name));
       return dedupeLocations(locations);
     }
@@ -817,18 +820,25 @@ function mapSemanticResolution(
   return undefined;
 }
 
-function collectSignalReferences(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
-  return collectIdentifierReferencesInModule(document, cst, module, name, declarationRange, includeDeclaration);
-}
-
-function collectSignalReferencesForIndexedModule(index: VerilogWorkspaceIndex, settings: CoSettings, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
+function collectSignalReferencesForIndexedModule(index: VerilogWorkspaceIndex, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
   const file = index.getFile(module.uri);
   if (!file) {
     return includeDeclaration && declarationRange ? [Location.create(module.uri, declarationRange)] : [];
   }
-  const document = TextDocument.create(file.uri, 'verilog', 0, file.text);
-  const parsed = getCachedVerilogParse(document, settings, false);
-  return collectSignalReferences(document, parsed.cst, module, name, declarationRange, includeDeclaration);
+  return collectSemanticSymbolReferences(file.uri, file.semantic, module, name, declarationRange, includeDeclaration);
+}
+
+function collectSemanticSymbolReferences(uri: string, semantic: VerilogSemanticModel, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
+  const symbol = findVerilogSemanticSymbol(semantic, (candidate) =>
+    candidate.name === name &&
+    candidate.module?.name === module.name &&
+    (!declarationRange || rangesEqual(candidate.selectionRange, declarationRange))
+  );
+  if (!symbol) {
+    return includeDeclaration && declarationRange ? [Location.create(uri, declarationRange)] : [];
+  }
+  return verilogSemanticReferenceRanges(semantic, verilogSemanticTargetFromSymbol(symbol), includeDeclaration)
+    .map((range) => Location.create(uri, range));
 }
 
 function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogModule, includeDeclaration: boolean): Location[] {

@@ -12,10 +12,9 @@ import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { cp0Markdown, syscallMarkdown } from './display';
 import {
-  allMacros,
-  findMacroAtPosition,
-  symbolsVisibleAtPosition
-} from './parser';
+  findMipsSemanticMacroAtPosition,
+  mipsSemanticSymbolsVisibleAtPosition
+} from './semantic';
 import { getCachedMipsParse } from './parseCache';
 import {
   cp0Registers,
@@ -71,7 +70,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
 
   const macroParameterReplaceRange = prefixedCompletionReplaceRange(linePrefix, position, '%', isMacroParameterPart);
   if (macroParameterReplaceRange) {
-    for (const symbol of findMacroAtPosition(parsed, position)?.paramSymbols.values() ?? []) {
+    for (const symbol of findMipsSemanticMacroAtPosition(parsed.semantic, position)?.paramSymbols.values() ?? []) {
       items.push({
         label: symbol.name,
         kind: CompletionItemKind.Variable,
@@ -136,7 +135,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     }
   );
 
-  for (const symbol of symbolsVisibleAtPosition(parsed, position)) {
+  for (const symbol of mipsSemanticSymbolsVisibleAtPosition(parsed.semantic, position)) {
     items.push({
       label: symbol.name,
       kind: CompletionItemKind.Reference,
@@ -144,7 +143,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     });
   }
 
-  for (const macro of allMacros(parsed)) {
+  for (const macro of parsed.semantic.macros) {
     items.push({
       label: macro.name,
       kind: CompletionItemKind.Function,

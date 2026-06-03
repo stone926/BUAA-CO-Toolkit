@@ -24,6 +24,7 @@ import {
   collectSynthesizableHintDiagnostics
 } from './lintDiagnostics';
 import { normalizeWidth } from './textUtils';
+import type { VerilogSemanticModel } from './semanticModel';
 
 export function collectVerilogDiagnostics(
   document: TextDocument,
@@ -31,7 +32,8 @@ export function collectVerilogDiagnostics(
   text: string,
   modules: VerilogModule[],
   includes: VerilogInclude[],
-  cst: VerilogCstDocument
+  cst: VerilogCstDocument,
+  semantic?: VerilogSemanticModel
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   collectSyntaxDiagnostics(document, cst, modules, diagnostics);
@@ -47,7 +49,7 @@ export function collectVerilogDiagnostics(
   if (settings.verilog.lint.synthesizableHints) {
     collectSynthesizableHintDiagnostics(document, text, modules, cst, diagnostics);
   }
-  collectImplicitNetDiagnostics(document, settings, text, modules, cst, diagnostics);
+  collectImplicitNetDiagnostics(document, settings, text, modules, cst, diagnostics, semantic);
   return diagnostics;
 }
 

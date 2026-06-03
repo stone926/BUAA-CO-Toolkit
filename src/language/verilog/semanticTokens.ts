@@ -9,15 +9,12 @@ import { rangeKey } from '../common/util';
 import { mipsSemanticTokenTypes } from '../mips/resources';
 import {
   systemTasks,
-  VerilogDecl,
   VerilogSemanticTokenType,
   verilogKeywords,
   verilogSemanticTokenTypes
 } from './model';
-import {
-  moduleAtPosition
-} from './parser';
 import { getCachedVerilogParse } from './parseCache';
+import { VerilogSemanticReference, VerilogSemanticSymbol } from './semanticModel';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { verilogTokenRange } from './cst';
 
@@ -36,35 +33,16 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
   const pushed = new Set<string>();
   const builder = new SemanticTokensBuilder();
 
-  for (const macro of parsed.macros) {
-    pushSemanticToken(tokens, pushed, macro.selectionRange, 'verilogMacro', ['declaration']);
+  for (const symbol of parsed.semantic.symbols) {
+    const tokenType = semanticSymbolTokenType(symbol);
+    if (tokenType) {
+      pushSemanticToken(tokens, pushed, symbol.selectionRange, tokenType, ['declaration']);
+    }
   }
-  for (const macroUse of parsed.macroUses) {
-    pushSemanticToken(tokens, pushed, macroUse.range, 'verilogMacro');
-  }
-  for (const module of parsed.modules) {
-    pushSemanticToken(tokens, pushed, module.selectionRange, 'verilogModule', ['declaration']);
-    for (const param of module.parameters) {
-      pushSemanticToken(tokens, pushed, param.selectionRange, 'verilogParameter', ['declaration']);
-    }
-    for (const port of module.ports) {
-      pushSemanticToken(tokens, pushed, port.selectionRange, 'verilogPort', ['declaration']);
-    }
-    for (const decl of module.declarations.values()) {
-      if (module.ports.some((port) => port.name === decl.name) || module.parameters.some((param) => param.name === decl.name)) {
-        continue;
-      }
-      pushSemanticToken(tokens, pushed, decl.selectionRange, 'verilogSignal', ['declaration']);
-    }
-    for (const instance of module.instances) {
-      pushSemanticToken(tokens, pushed, instance.moduleSelectionRange, 'verilogModule');
-      pushSemanticToken(tokens, pushed, instance.selectionRange, 'verilogInstance', ['declaration']);
-      const target = index.getModule(instance.moduleName);
-      for (const connection of instance.portConnections) {
-        if (connection.nameRange) {
-          pushSemanticToken(tokens, pushed, connection.nameRange, target ? 'verilogPort' : 'verilogSignal');
-        }
-      }
+  for (const reference of parsed.semantic.references) {
+    const tokenType = semanticReferenceTokenType(reference, index);
+    if (tokenType) {
+      pushSemanticToken(tokens, pushed, reference.macroUse?.range ?? reference.range, tokenType);
     }
   }
 
@@ -115,13 +93,6 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
       pushSemanticToken(tokens, pushed, range, 'verilogKeyword');
       continue;
     }
-    const module = moduleAtPosition(parsed.modules, range.start);
-    if (module?.declarations.has(token)) {
-      const decl = module.declarations.get(token);
-      pushSemanticToken(tokens, pushed, range, declTokenType(decl));
-    } else if (index.getModule(token) ?? parsed.modules.find((item) => item.name === token)) {
-      pushSemanticToken(tokens, pushed, range, 'verilogModule');
-    }
   }
 
   tokens.sort(compareSemanticTokens);
@@ -139,6 +110,47 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
     );
   }
   return builder.build();
+}
+
+function semanticSymbolTokenType(symbol: VerilogSemanticSymbol): VerilogSemanticTokenType | undefined {
+  switch (symbol.kind) {
+    case 'module':
+      return 'verilogModule';
+    case 'port':
+      return 'verilogPort';
+    case 'signal':
+      return 'verilogSignal';
+    case 'parameter':
+      return 'verilogParameter';
+    case 'instance':
+      return 'verilogInstance';
+    case 'macro':
+      return 'verilogMacro';
+    default:
+      return undefined;
+  }
+}
+
+function semanticReferenceTokenType(reference: VerilogSemanticReference, index: VerilogWorkspaceIndex): VerilogSemanticTokenType | undefined {
+  if (reference.kind === 'portConnection') {
+    const targetModule = reference.instance ? index.getModule(reference.instance.moduleName) : undefined;
+    const target = targetModule?.ports.find((port) => port.name === reference.name)
+      ?? targetModule?.parameters.find((param) => param.name === reference.name);
+    if (target?.kind === 'parameter' || target?.kind === 'localparam') {
+      return 'verilogParameter';
+    }
+    return target ? 'verilogPort' : 'verilogSignal';
+  }
+  if (reference.kind === 'macro') {
+    return 'verilogMacro';
+  }
+  if (reference.kind === 'module') {
+    return 'verilogModule';
+  }
+  if (reference.symbol) {
+    return semanticSymbolTokenType(reference.symbol);
+  }
+  return undefined;
 }
 
 function pushTokenText(
@@ -297,17 +309,4 @@ function tokenModifierBitset(modifiers?: string[]): number {
     }
   }
   return bitset;
-}
-
-function declTokenType(decl: VerilogDecl | undefined): VerilogSemanticTokenType {
-  if (!decl) {
-    return 'verilogSignal';
-  }
-  if (decl.kind === 'parameter' || decl.kind === 'localparam') {
-    return 'verilogParameter';
-  }
-  if (decl.direction) {
-    return 'verilogPort';
-  }
-  return 'verilogSignal';
 }

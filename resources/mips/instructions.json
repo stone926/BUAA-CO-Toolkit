@@ -11,7 +11,7 @@
       3,
       3
     ],
-    "description": "rd ← rs + rt。在标准 MIPS 中有符号溢出可能触发异常。立即数形式是 MARS 伪指令。",
+    "description": "rd ← rs + rt。在标准 MIPS 中有符号溢出可能触发异常。立即数形式是 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -25,7 +25,7 @@
       3,
       3
     ],
-    "description": "rd ← rs + rt，不触发有符号溢出异常。立即数形式是 MARS 伪指令。",
+    "description": "rd ← rs + rt，不触发有符号溢出异常。立即数形式是 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -39,7 +39,7 @@
       3,
       3
     ],
-    "description": "rt ← rs + sign_extend(imm)。",
+    "description": "rt ← rs + sign_extend(imm)",
     "type": "I-type"
   },
   {
@@ -53,7 +53,7 @@
       3,
       3
     ],
-    "description": "rt ← rs + sign_extend(imm)，不触发有符号溢出异常。",
+    "description": "rt ← rs + sign_extend(imm)，不触发有符号溢出异常",
     "type": "I-type"
   },
   {
@@ -68,7 +68,7 @@
       3,
       3
     ],
-    "description": "rd ← rs - rt。立即数形式是 MARS 伪指令。",
+    "description": "rd ← rs - rt。立即数形式是 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -82,7 +82,7 @@
       3,
       3
     ],
-    "description": "rd ← rs - rt，不触发有符号溢出异常。立即数形式是 MARS 伪指令。",
+    "description": "rd ← rs - rt，不触发有符号溢出异常。立即数形式是 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -96,7 +96,7 @@
       3,
       3
     ],
-    "description": "MARS 伪指令：rt ← rs - imm。",
+    "description": "MARS 伪指令：rt ← rs - imm",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -110,7 +110,7 @@
       3,
       3
     ],
-    "description": "MARS 伪指令：rt ← rs - imm，不触发有符号溢出异常。",
+    "description": "MARS 伪指令：rt ← rs - imm，不触发有符号溢出异常",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -126,7 +126,7 @@
       2,
       3
     ],
-    "description": "rd ← rs & rt。立即数形式是基于 16 位无符号立即数的 MARS 伪指令。",
+    "description": "rd ← rs & rt。立即数形式是基于 16 位无符号立即数的 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -142,7 +142,7 @@
       2,
       3
     ],
-    "description": "rt ← rs & zero_extend(imm)。",
+    "description": "rt ← rs & zero_extend(imm)",
     "type": "I-type"
   },
   {
@@ -157,7 +157,7 @@
       2,
       3
     ],
-    "description": "rd ← rs | rt。立即数形式是基于 16 位无符号立即数的 MARS 伪指令。",
+    "description": "rd ← rs | rt。立即数形式是基于 16 位无符号立即数的 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -173,7 +173,7 @@
       2,
       3
     ],
-    "description": "rt ← rs | zero_extend(imm)。",
+    "description": "rt ← rs | zero_extend(imm)",
     "type": "I-type"
   },
   {
@@ -188,7 +188,7 @@
       2,
       3
     ],
-    "description": "rd ← rs ^ rt。立即数形式是基于 16 位无符号立即数的 MARS 伪指令。",
+    "description": "rd ← rs ^ rt。立即数形式是基于 16 位无符号立即数的 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -204,7 +204,7 @@
       2,
       3
     ],
-    "description": "rt ← rs ^ zero_extend(imm)。",
+    "description": "rt ← rs ^ zero_extend(imm)",
     "type": "I-type"
   },
   {
@@ -217,7 +217,7 @@
       3,
       3
     ],
-    "description": "rd ← ~(rs | rt)。",
+    "description": "rd ← ~(rs | rt)",
     "type": "R-type"
   },
   {
@@ -230,7 +230,7 @@
       3,
       3
     ],
-    "description": "rd ← signed(rs) < signed(rt)。",
+    "description": "rd ← signed(rs) < signed(rt)",
     "type": "R-type"
   },
   {
@@ -243,7 +243,7 @@
       3,
       3
     ],
-    "description": "rd ← unsigned(rs) < unsigned(rt)。",
+    "description": "rd ← unsigned(rs) < unsigned(rt)",
     "type": "R-type"
   },
   {
@@ -256,7 +256,7 @@
       3,
       3
     ],
-    "description": "rt ← signed(rs) < sign_extend(imm)。",
+    "description": "rt ← signed(rs) < sign_extend(imm)",
     "type": "I-type"
   },
   {
@@ -269,7 +269,7 @@
       3,
       3
     ],
-    "description": "rt ← unsigned(rs) < unsigned(sign_extend(imm))。",
+    "description": "rt ← unsigned(rs) < unsigned(sign_extend(imm))",
     "type": "I-type"
   },
   {
@@ -282,7 +282,7 @@
       3,
       3
     ],
-    "description": "rd ← rt << shamt。",
+    "description": "rd ← rt << shamt",
     "type": "R-type"
   },
   {
@@ -295,7 +295,7 @@
       3,
       3
     ],
-    "description": "rd ← rt << (rs & 0x1f)。",
+    "description": "rd ← rt << (rs & 0x1f)",
     "type": "R-type"
   },
   {
@@ -308,7 +308,7 @@
       3,
       3
     ],
-    "description": "rd ← rt >> shamt，高位补零。",
+    "description": "rd ← rt >> shamt，高位补零",
     "type": "R-type"
   },
   {
@@ -321,7 +321,7 @@
       3,
       3
     ],
-    "description": "rd ← rt >> (rs & 0x1f)，高位补零。",
+    "description": "rd ← rt >> (rs & 0x1f)，高位补零",
     "type": "R-type"
   },
   {
@@ -334,7 +334,7 @@
       3,
       3
     ],
-    "description": "rd ← rt >> shamt，高位补符号位。",
+    "description": "rd ← rt >> shamt，高位补符号位",
     "type": "R-type"
   },
   {
@@ -347,7 +347,7 @@
       3,
       3
     ],
-    "description": "rd ← rt >> (rs & 0x1f)，高位补符号位。",
+    "description": "rd ← rt >> (rs & 0x1f)，高位补符号位",
     "type": "R-type"
   },
   {
@@ -360,7 +360,7 @@
       2,
       2
     ],
-    "description": "rd ← rs 中前导零的个数。",
+    "description": "rd ← rs 中前导零的个数",
     "type": "R-type"
   },
   {
@@ -373,7 +373,7 @@
       2,
       2
     ],
-    "description": "rd ← rs 中前导一的个数。",
+    "description": "rd ← rs 中前导一的个数",
     "type": "R-type"
   },
   {
@@ -386,7 +386,7 @@
       2,
       2
     ],
-    "description": "rt ← imm << 16。",
+    "description": "rt ← imm << 16",
     "type": "I-type"
   },
   {
@@ -409,7 +409,7 @@
       2,
       2
     ],
-    "description": "从内存加载 32 位字。",
+    "description": "从内存加载 32 位字",
     "type": "I-type"
   },
   {
@@ -432,7 +432,7 @@
       2,
       2
     ],
-    "description": "加载非对齐字的左侧部分。属于 MIPS-C 简化指令集，MARS 支持。",
+    "description": "加载非对齐字的左侧部分。属于 MIPS-C 简化指令集，MARS 支持",
     "type": "I-type"
   },
   {
@@ -455,7 +455,7 @@
       2,
       2
     ],
-    "description": "加载非对齐字的右侧部分。属于 MIPS-C 简化指令集，MARS 支持。",
+    "description": "加载非对齐字的右侧部分。属于 MIPS-C 简化指令集，MARS 支持",
     "type": "I-type"
   },
   {
@@ -478,7 +478,7 @@
       2,
       2
     ],
-    "description": "将 32 位字存储到内存。",
+    "description": "将 32 位字存储到内存",
     "type": "I-type"
   },
   {
@@ -501,7 +501,7 @@
       2,
       2
     ],
-    "description": "存储非对齐字的左侧部分。属于 MIPS-C 简化指令集，MARS 支持。",
+    "description": "存储非对齐字的左侧部分。属于 MIPS-C 简化指令集，MARS 支持",
     "type": "I-type"
   },
   {
@@ -524,7 +524,7 @@
       2,
       2
     ],
-    "description": "存储非对齐字的右侧部分。属于 MIPS-C 简化指令集，MARS 支持。",
+    "description": "存储非对齐字的右侧部分。属于 MIPS-C 简化指令集，MARS 支持",
     "type": "I-type"
   },
   {
@@ -547,7 +547,7 @@
       2,
       2
     ],
-    "description": "加载有符号字节。",
+    "description": "加载有符号字节",
     "type": "I-type"
   },
   {
@@ -570,7 +570,7 @@
       2,
       2
     ],
-    "description": "加载零扩展字节。",
+    "description": "加载零扩展字节",
     "type": "I-type"
   },
   {
@@ -593,7 +593,7 @@
       2,
       2
     ],
-    "description": "加载有符号半字。",
+    "description": "加载有符号半字",
     "type": "I-type"
   },
   {
@@ -616,7 +616,7 @@
       2,
       2
     ],
-    "description": "加载零扩展半字。",
+    "description": "加载零扩展半字",
     "type": "I-type"
   },
   {
@@ -639,7 +639,7 @@
       2,
       2
     ],
-    "description": "将低 8 位存储到内存。",
+    "description": "将低 8 位存储到内存",
     "type": "I-type"
   },
   {
@@ -662,7 +662,7 @@
       2,
       2
     ],
-    "description": "将低 16 位存储到内存。",
+    "description": "将低 16 位存储到内存",
     "type": "I-type"
   },
   {
@@ -677,7 +677,7 @@
       3,
       3
     ],
-    "description": "当 rs == rt 时跳转。立即数比较形式是 MARS 伪指令。",
+    "description": "当 rs == rt 时跳转。立即数比较形式是 MARS 伪指令",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -694,7 +694,7 @@
       3,
       3
     ],
-    "description": "当 rs != rt 时跳转。立即数比较形式是 MARS 伪指令。",
+    "description": "当 rs != rt 时跳转。立即数比较形式是 MARS 伪指令",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -709,7 +709,7 @@
       2,
       2
     ],
-    "description": "当 signed(rs) >= 0 时跳转。",
+    "description": "当 signed(rs) >= 0 时跳转",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -724,7 +724,7 @@
       2,
       2
     ],
-    "description": "当 signed(rs) < 0 时跳转。",
+    "description": "当 signed(rs) < 0 时跳转",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -739,7 +739,7 @@
       2,
       2
     ],
-    "description": "当 signed(rs) <= 0 时跳转。",
+    "description": "当 signed(rs) <= 0 时跳转",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -754,7 +754,7 @@
       2,
       2
     ],
-    "description": "当 signed(rs) > 0 时跳转。",
+    "description": "当 signed(rs) > 0 时跳转",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -769,7 +769,7 @@
       2,
       2
     ],
-    "description": "当 signed(rs) >= 0 时跳转，并将返回地址写入 $ra。",
+    "description": "当 signed(rs) >= 0 时跳转，并将返回地址写入 $ra",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -784,7 +784,7 @@
       2,
       2
     ],
-    "description": "当 signed(rs) < 0 时跳转，并将返回地址写入 $ra。",
+    "description": "当 signed(rs) < 0 时跳转，并将返回地址写入 $ra",
     "labelOperand": "last",
     "delaySlot": true,
     "type": "I-type"
@@ -799,7 +799,7 @@
       1,
       1
     ],
-    "description": "伪跳转指令，通常为 beq $zero, $zero, label。",
+    "description": "伪跳转指令，通常为 beq $zero, $zero, label",
     "pseudo": true,
     "labelOperand": "first",
     "delaySlot": true,
@@ -815,7 +815,7 @@
       1,
       1
     ],
-    "description": "跳转到标签。",
+    "description": "跳转到标签",
     "labelOperand": "first",
     "delaySlot": true,
     "type": "J-type"
@@ -830,7 +830,7 @@
       1,
       1
     ],
-    "description": "跳转到标签，并将返回地址写入 $ra。",
+    "description": "跳转到标签，并将返回地址写入 $ra",
     "labelOperand": "first",
     "delaySlot": true,
     "type": "J-type"
@@ -845,7 +845,7 @@
       1,
       1
     ],
-    "description": "跳转到 rs 中的地址。",
+    "description": "跳转到 rs 中的地址",
     "delaySlot": true,
     "type": "R-type"
   },
@@ -860,7 +860,7 @@
       1,
       2
     ],
-    "description": "跳转到 rs 并写入返回地址。MIPS-C 使用 jalr rd, rs；MARS 也支持 jalr rs（返回地址写入 $ra）。",
+    "description": "跳转到 rs 并写入返回地址。MIPS-C 使用 jalr rd, rs；MARS 也支持 jalr rs（返回地址写入 $ra）",
     "type": "R-type"
   },
   {
@@ -873,7 +873,7 @@
       3,
       3
     ],
-    "description": "若 rt != 0，则 rd ← rs。",
+    "description": "若 rt != 0，则 rd ← rs",
     "type": "R-type",
     "projects": [
       "P6"
@@ -889,7 +889,7 @@
       3,
       3
     ],
-    "description": "若 rt == 0，则 rd ← rs。",
+    "description": "若 rt == 0，则 rd ← rs",
     "type": "R-type",
     "projects": [
       "P6"
@@ -907,7 +907,7 @@
       3,
       3
     ],
-    "description": "rd ← signed(rs) * signed(rt) 的低 32 位。立即数形式是 MARS 伪指令。",
+    "description": "rd ← signed(rs) * signed(rt) 的低 32 位。立即数形式是 MARS 伪指令",
     "type": "R-type"
   },
   {
@@ -920,7 +920,7 @@
       2,
       2
     ],
-    "description": "{HI, LO} ← {HI, LO} + signed(rs) * signed(rt)。",
+    "description": "{HI, LO} ← {HI, LO} + signed(rs) * signed(rt)",
     "type": "R-type",
     "projects": [
       "P6"
@@ -936,7 +936,7 @@
       2,
       2
     ],
-    "description": "{HI, LO} ← {HI, LO} + unsigned(rs) * unsigned(rt)。",
+    "description": "{HI, LO} ← {HI, LO} + unsigned(rs) * unsigned(rt)",
     "type": "R-type",
     "projects": [
       "P6"
@@ -952,7 +952,7 @@
       2,
       2
     ],
-    "description": "{HI, LO} ← {HI, LO} - signed(rs) * signed(rt)。",
+    "description": "{HI, LO} ← {HI, LO} - signed(rs) * signed(rt)",
     "type": "R-type",
     "projects": [
       "P6"
@@ -968,7 +968,7 @@
       2,
       2
     ],
-    "description": "{HI, LO} ← {HI, LO} - unsigned(rs) * unsigned(rt)。",
+    "description": "{HI, LO} ← {HI, LO} - unsigned(rs) * unsigned(rt)",
     "type": "R-type",
     "projects": [
       "P6"
@@ -984,7 +984,7 @@
       2,
       2
     ],
-    "description": "有符号乘法，结果写入 HI/LO。属于 MIPS-C 简化指令集。",
+    "description": "有符号乘法，结果写入 HI/LO。属于 MIPS-C 简化指令集",
     "type": "R-type"
   },
   {
@@ -997,7 +997,7 @@
       2,
       2
     ],
-    "description": "无符号乘法，结果写入 HI/LO。属于 MIPS-C 简化指令集。",
+    "description": "无符号乘法，结果写入 HI/LO。属于 MIPS-C 简化指令集",
     "type": "R-type"
   },
   {
@@ -1013,7 +1013,7 @@
       2,
       3
     ],
-    "description": "双操作数形式将商/余数写入 LO/HI。三操作数 MARS 伪指令形式将商写入 rd。",
+    "description": "双操作数形式将商/余数写入 LO/HI。三操作数 MARS 伪指令形式将商写入 rd",
     "type": "R-type"
   },
   {
@@ -1029,7 +1029,7 @@
       2,
       3
     ],
-    "description": "双操作数形式将商/余数写入 LO/HI。三操作数 MARS 伪指令形式将商写入 rd。",
+    "description": "双操作数形式将商/余数写入 LO/HI。三操作数 MARS 伪指令形式将商写入 rd",
     "type": "R-type"
   },
   {
@@ -1042,7 +1042,7 @@
       1,
       1
     ],
-    "description": "rd ← HI。属于 MIPS-C 简化指令集。",
+    "description": "rd ← HI。属于 MIPS-C 简化指令集",
     "type": "R-type"
   },
   {
@@ -1055,7 +1055,7 @@
       1,
       1
     ],
-    "description": "rd ← LO。属于 MIPS-C 简化指令集。",
+    "description": "rd ← LO。属于 MIPS-C 简化指令集",
     "type": "R-type"
   },
   {
@@ -1068,7 +1068,7 @@
       1,
       1
     ],
-    "description": "HI ← rs。属于 MIPS-C 简化指令集。",
+    "description": "HI ← rs。属于 MIPS-C 简化指令集",
     "type": "R-type"
   },
   {
@@ -1081,7 +1081,7 @@
       1,
       1
     ],
-    "description": "LO ← rs。属于 MIPS-C 简化指令集。",
+    "description": "LO ← rs。属于 MIPS-C 简化指令集",
     "type": "R-type"
   },
   {
@@ -1094,7 +1094,7 @@
       2,
       2
     ],
-    "description": "rt ← CP0[cp0]。BUAA CO P7 常用 $12(SR)、$13(Cause)、$14(EPC)，以及 $15(PRId)、$8(BadVAddr)。",
+    "description": "rt ← CP0[cp0]。BUAA CO P7 常用 $12(SR)、$13(Cause)、$14(EPC)，以及 $15(PRId)、$8(BadVAddr)",
     "projects": [
       "P7"
     ],
@@ -1110,7 +1110,7 @@
       2,
       2
     ],
-    "description": "CP0[cp0] ← rt。BUAA CO P7 测试程序可能写入 $12(SR) 和 $14(EPC)，并保证不写入 $13(Cause)。",
+    "description": "CP0[cp0] ← rt。BUAA CO P7 测试程序可能写入 $12(SR) 和 $14(EPC)，并保证不写入 $13(Cause)",
     "projects": [
       "P7"
     ],
@@ -1126,7 +1126,7 @@
       0,
       0
     ],
-    "description": "从异常返回。在 BUAA CO P7 中，eret 无延迟槽。",
+    "description": "从异常返回。在 BUAA CO P7 中，eret 无延迟槽",
     "projects": [
       "P7"
     ],
@@ -1143,7 +1143,7 @@
       0,
       1
     ],
-    "description": "触发断点异常。MIPS-C 通常使用无操作数形式；MARS 也支持 16 位代码操作数。",
+    "description": "触发断点异常。MIPS-C 通常使用无操作数形式；MARS 也支持 16 位代码操作数",
     "type": "special"
   },
   {
@@ -1156,7 +1156,7 @@
       0,
       0
     ],
-    "description": "在 P2 中调用 MARS 系统调用，或在 P7 中触发系统调用异常。",
+    "description": "在 P2 中调用 MARS 系统调用，或在 P7 中触发系统调用异常",
     "type": "special"
   },
   {
@@ -1169,7 +1169,7 @@
       0,
       0
     ],
-    "description": "展开为 sll $zero, $zero, 0。",
+    "description": "展开为 sll $zero, $zero, 0",
     "type": "special"
   },
   {
@@ -1182,7 +1182,7 @@
       2,
       2
     ],
-    "description": "伪指令：rd ← abs(rs)。",
+    "description": "伪指令：rd ← abs(rs)",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1196,7 +1196,7 @@
       2,
       2
     ],
-    "description": "伪指令：rd ← -rs，溢出行为取决于汇编器展开方式。",
+    "description": "伪指令：rd ← -rs，溢出行为取决于汇编器展开方式",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1210,7 +1210,7 @@
       2,
       2
     ],
-    "description": "伪指令：rd ← 0 - rs，不触发溢出异常。",
+    "description": "伪指令：rd ← 0 - rs，不触发溢出异常",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1224,7 +1224,7 @@
       2,
       2
     ],
-    "description": "伪指令，通常为 nor $rd, $rs, $zero。",
+    "description": "伪指令，通常为 nor $rd, $rs, $zero",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1240,7 +1240,7 @@
       2,
       2
     ],
-    "description": "伪指令，用于加载立即数。",
+    "description": "伪指令，用于加载立即数",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1263,7 +1263,7 @@
       2,
       2
     ],
-    "description": "伪指令，用于加载地址。",
+    "description": "伪指令，用于加载地址",
     "pseudo": true,
     "labelOperand": "second",
     "type": "pseudo"
@@ -1278,7 +1278,7 @@
       2,
       2
     ],
-    "description": "伪指令，通常为 addu $rd, $rs, $zero。",
+    "description": "伪指令，通常为 addu $rd, $rs, $zero",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1294,7 +1294,7 @@
       3,
       3
     ],
-    "description": "MARS 伪指令：rd ← signed(rs) % signed(rt)。",
+    "description": "MARS 伪指令：rd ← signed(rs) % signed(rt)",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1310,7 +1310,7 @@
       3,
       3
     ],
-    "description": "MARS 伪指令：rd ← unsigned(rs) % unsigned(rt)。",
+    "description": "MARS 伪指令：rd ← unsigned(rs) % unsigned(rt)",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1326,7 +1326,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← rs == rt ? 1 : 0。",
+    "description": "伪比较指令：rd ← rs == rt ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1342,7 +1342,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← rs != rt ? 1 : 0。",
+    "description": "伪比较指令：rd ← rs != rt ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1358,7 +1358,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← signed(rs) > signed(rt) ? 1 : 0。",
+    "description": "伪比较指令：rd ← signed(rs) > signed(rt) ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1374,7 +1374,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← unsigned(rs) > unsigned(rt) ? 1 : 0。",
+    "description": "伪比较指令：rd ← unsigned(rs) > unsigned(rt) ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1390,7 +1390,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← signed(rs) >= signed(rt) ? 1 : 0。",
+    "description": "伪比较指令：rd ← signed(rs) >= signed(rt) ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1406,7 +1406,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← unsigned(rs) >= unsigned(rt) ? 1 : 0。",
+    "description": "伪比较指令：rd ← unsigned(rs) >= unsigned(rt) ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1422,7 +1422,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← signed(rs) <= signed(rt) ? 1 : 0。",
+    "description": "伪比较指令：rd ← signed(rs) <= signed(rt) ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1438,7 +1438,7 @@
       3,
       3
     ],
-    "description": "伪比较指令：rd ← unsigned(rs) <= unsigned(rt) ? 1 : 0。",
+    "description": "伪比较指令：rd ← unsigned(rs) <= unsigned(rt) ? 1 : 0",
     "pseudo": true,
     "type": "pseudo"
   },
@@ -1452,7 +1452,7 @@
       2,
       2
     ],
-    "description": "伪跳转指令，通常为 beq $rs, $zero, label。",
+    "description": "伪跳转指令，通常为 beq $rs, $zero, label",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1468,7 +1468,7 @@
       2,
       2
     ],
-    "description": "伪跳转指令，通常为 bne $rs, $zero, label。",
+    "description": "伪跳转指令，通常为 bne $rs, $zero, label",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1486,7 +1486,7 @@
       3,
       3
     ],
-    "description": "伪跳转指令，用于 if/循环条件判断。",
+    "description": "伪跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1504,7 +1504,7 @@
       3,
       3
     ],
-    "description": "伪无符号跳转指令，用于 if/循环条件判断。",
+    "description": "伪无符号跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1522,7 +1522,7 @@
       3,
       3
     ],
-    "description": "伪跳转指令，用于 if/循环条件判断。",
+    "description": "伪跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1540,7 +1540,7 @@
       3,
       3
     ],
-    "description": "伪无符号跳转指令，用于 if/循环条件判断。",
+    "description": "伪无符号跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1558,7 +1558,7 @@
       3,
       3
     ],
-    "description": "伪跳转指令，用于 if/循环条件判断。",
+    "description": "伪跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1576,7 +1576,7 @@
       3,
       3
     ],
-    "description": "伪无符号跳转指令，用于 if/循环条件判断。",
+    "description": "伪无符号跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1594,7 +1594,7 @@
       3,
       3
     ],
-    "description": "伪跳转指令，用于 if/循环条件判断。",
+    "description": "伪跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,
@@ -1612,7 +1612,7 @@
       3,
       3
     ],
-    "description": "伪无符号跳转指令，用于 if/循环条件判断。",
+    "description": "伪无符号跳转指令，用于 if/循环条件判断",
     "pseudo": true,
     "labelOperand": "last",
     "delaySlot": true,

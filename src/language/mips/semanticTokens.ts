@@ -6,20 +6,9 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import { rangeKey } from '../common/util';
 import { cp0RegisterAtPosition } from './display';
-import {
-  allDataSymbols,
-  allEqvSymbols,
-  allLabelSymbols,
-  allMacroParams,
-  allMacros,
-  findMacroParamAtPosition,
-  resolveDataSymbolAtPosition,
-  resolveEqvSymbolAtPosition,
-  resolveLabelAtPosition
-} from './parser';
 import { getCachedMipsParse } from './parseCache';
-import { isKnownDeclarationRange } from './queries';
 import {
   directives,
   instructions,
@@ -29,6 +18,7 @@ import {
   MipsSemanticTokenType,
   mipsSemanticTokenTypes
 } from './resources';
+import { MipsSemanticReferenceKind } from './semantic';
 import { MipsServerState } from './state';
 import {
   mipsCstTokenRange
@@ -47,24 +37,20 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
   const parsed = getCachedMipsParse(document, settings, state);
   const tokens: MipsSemanticTokenCandidate[] = [];
   const builder = new SemanticTokensBuilder();
+  const semanticReferences = new Map(parsed.semantic.references.map((reference) => [rangeKey(reference.range), reference]));
 
-  for (const macro of allMacros(parsed)) {
-    pushSemanticToken(tokens, macro.selectionRange, 'mipsMacro', ['declaration']);
-  }
-  for (const param of allMacroParams(parsed)) {
-    pushSemanticToken(tokens, param.selectionRange, 'mipsMacroParameter', ['declaration']);
-  }
-  for (const symbol of allLabelSymbols(parsed)) {
-    pushSemanticToken(tokens, symbol.selectionRange, 'mipsLabel', ['declaration']);
-  }
-  for (const symbol of allDataSymbols(parsed)) {
-    pushSemanticToken(tokens, symbol.selectionRange, 'mipsDataSymbol', ['declaration']);
-  }
-  for (const symbol of allEqvSymbols(parsed)) {
-    pushSemanticToken(tokens, symbol.selectionRange, 'mipsEqvSymbol', ['declaration']);
+  for (const declaration of parsed.semantic.declarations) {
+    const tokenType = declaration.macro
+      ? 'mipsMacro'
+      : declaration.symbol
+        ? semanticSymbolTokenType(declaration.symbol.kind)
+        : undefined;
+    if (tokenType) {
+      pushSemanticToken(tokens, declaration.selectionRange, tokenType, ['declaration']);
+    }
   }
 
-  for (const line of parsed.lines) {
+  for (const line of parsed.ast.lines) {
     for (const cstToken of line.tokens) {
       const token = cstToken.value;
       const range = mipsCstTokenRange(cstToken);
@@ -87,7 +73,7 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
       if (cstToken.kind !== 'identifier' && cstToken.kind !== 'directive' && cstToken.kind !== 'register' && cstToken.kind !== 'macroParameter') {
         continue;
       }
-      if (isKnownDeclarationRange(range, parsed)) {
+      if (parsed.semantic.declarationRangeKeys.has(rangeKey(range))) {
         continue;
       }
 
@@ -97,19 +83,15 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
         pushSemanticToken(tokens, range, 'mipsRegister');
       } else if (token.startsWith('.') && directives.has(token.toLowerCase())) {
         pushSemanticToken(tokens, range, 'mipsDirective');
-      } else if (token.startsWith('%') && findMacroParamAtPosition(parsed, token, range.start)) {
-        pushSemanticToken(tokens, range, 'mipsMacroParameter');
       } else if (instructions[token.toLowerCase()]) {
         const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, range));
         pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], settings, parsedInstruction?.usesPseudoForm));
-      } else if (parsed.macros.has(token)) {
-        pushSemanticToken(tokens, range, 'mipsMacro');
-      } else if (resolveLabelAtPosition(parsed, token, range.start)) {
-        pushSemanticToken(tokens, range, 'mipsLabel');
-      } else if (resolveDataSymbolAtPosition(parsed, token, range.start)) {
-        pushSemanticToken(tokens, range, 'mipsDataSymbol');
-      } else if (resolveEqvSymbolAtPosition(parsed, token, range.start)) {
-        pushSemanticToken(tokens, range, 'mipsEqvSymbol');
+      } else {
+        const reference = semanticReferences.get(rangeKey(range));
+        const tokenType = reference ? semanticReferenceTokenType(reference.kind) : undefined;
+        if (tokenType) {
+          pushSemanticToken(tokens, range, tokenType);
+        }
       }
     }
   }
@@ -129,6 +111,38 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
     );
   }
   return builder.build();
+}
+
+function semanticSymbolTokenType(kind: string): MipsSemanticTokenType | undefined {
+  switch (kind) {
+    case 'label':
+      return 'mipsLabel';
+    case 'data':
+      return 'mipsDataSymbol';
+    case 'eqv':
+      return 'mipsEqvSymbol';
+    case 'macroParam':
+      return 'mipsMacroParameter';
+    default:
+      return undefined;
+  }
+}
+
+function semanticReferenceTokenType(kind: MipsSemanticReferenceKind): MipsSemanticTokenType | undefined {
+  switch (kind) {
+    case 'label':
+      return 'mipsLabel';
+    case 'data':
+      return 'mipsDataSymbol';
+    case 'eqv':
+      return 'mipsEqvSymbol';
+    case 'macro':
+      return 'mipsMacro';
+    case 'macroParam':
+      return 'mipsMacroParameter';
+    default:
+      return undefined;
+  }
 }
 
 function pushSemanticToken(
