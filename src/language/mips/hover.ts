@@ -22,6 +22,7 @@ import { getCachedMipsParse } from './parseCache';
 import { findMacroOverloadAtPosition } from './queries';
 import {
   canonicalRegister,
+  MipsInstruction,
   instructions,
   instructionTypeLabel,
   isFloatingPointRegister,
@@ -51,27 +52,16 @@ export function getMipsHover(document: TextDocument, position: Position, setting
 
   const instruction = instructions[word.toLowerCase()];
   if (instruction) {
-    const details = [
-      `**${instruction.mnemonic}** - ${instruction.summary}`,
-      '',
-      `类型：**${instructionTypeLabel(instruction.type)}**`,
-      '',
-      '```mipsasm',
-      instruction.formats.join('\n'),
-      '```',
-      '',
-      instruction.description
-    ];
-    if (instruction.pseudo) {
-      details.push('', '⚠️ 伪指令。在受限项目中使用前请检查生成的代码。');
-    }
-    if (instruction.delaySlot) {
-      details.push('', '🔄 控制转移指令。延迟槽行为取决于当前项目/Profile。');
-    }
     const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));
-    const expansion = parsedInstruction ? pseudoExpansionPreview(instruction.mnemonic, parsedInstruction.operands) : undefined;
+    const details = instructionHoverMarkdown(instruction, parsedInstruction);
+    const expansion = parsedInstruction && (instruction.pseudo || parsedInstruction.usesPseudoForm)
+      ? pseudoExpansionPreview(instruction.mnemonic, parsedInstruction.operands)
+      : undefined;
     if (expansion?.length) {
-      details.push('', '可能的 MARS 展开：', '', '```mipsasm', expansion.join('\n'), '```');
+      details.push('', '展开预览：', '', '```mipsasm', expansion.join('\n'), '```');
+      if (expansion.some((line) => usesAtRegister(line))) {
+        details.push('', '提示：展开会使用 `$at` (`$1`) 作为临时寄存器。');
+      }
     }
     if (instruction.mnemonic === 'syscall') {
       const syscall = syscallServiceBeforeLine(parsed, position.line);
@@ -165,4 +155,68 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   }
 
   return undefined;
+}
+
+function instructionHoverMarkdown(instruction: MipsInstruction, parsedInstruction?: { usesPseudoForm: boolean }): string[] {
+  const details = [
+    `**${instruction.mnemonic}** - ${instruction.summary}`,
+    '',
+    instructionStatusLine(instruction, parsedInstruction),
+    '',
+    '格式：',
+    '',
+    '```mipsasm',
+    ...instruction.formats,
+    '```',
+    '',
+    `说明：${instruction.description}`
+  ];
+
+  if (instruction.pseudo || parsedInstruction?.usesPseudoForm) {
+    details.push('', '受限项目中请确认展开后的基本指令。');
+  }
+  return details;
+}
+
+function instructionStatusLine(instruction: MipsInstruction, parsedInstruction?: { usesPseudoForm: boolean }): string {
+  const parts = [`类型：**${instructionTypeLabel(instruction.type)}**`];
+  if (!instruction.pseudo && parsedInstruction?.usesPseudoForm) {
+    parts.push('当前写法：**MARS 扩展伪格式**');
+  } else if (!instruction.pseudo && hasPseudoFormats(instruction)) {
+    parts.push('含 MARS 扩展伪格式');
+  }
+  if (instruction.delaySlot) {
+    parts.push('控制转移，延迟槽取决于项目配置');
+  }
+  return parts.join('；');
+}
+
+function hasPseudoFormats(instruction: MipsInstruction): boolean {
+  return !instruction.pseudo && instruction.formats.some((format) => formatUsesPseudoForm(instruction.mnemonic, format));
+}
+
+function formatUsesPseudoForm(mnemonic: string, format: string): boolean {
+  if (['add', 'addu', 'sub', 'subu', 'mul'].includes(mnemonic)) {
+    return /(?:simm16|uimm16|imm32)\b/.test(format);
+  }
+  if (['addi', 'addiu', 'andi', 'ori', 'xori'].includes(mnemonic)) {
+    return /\bimm32\b/.test(format);
+  }
+  if (['and', 'or', 'xor'].includes(mnemonic)) {
+    return /\buimm16\b/.test(format);
+  }
+  if (mnemonic === 'div' || mnemonic === 'divu') {
+    return format.includes('$rd') || /(?:simm16|imm32)\b/.test(format);
+  }
+  if (mnemonic === 'beq' || mnemonic === 'bne') {
+    return /(?:simm16|imm32)\b/.test(format);
+  }
+  if (['lw', 'sw', 'lb', 'lbu', 'lh', 'lhu', 'lwl', 'lwr', 'sb', 'sh', 'swl', 'swr'].includes(mnemonic)) {
+    return format.includes('label') || /\b(?:uimm16|imm32)\b/.test(format) || format.includes('($base)');
+  }
+  return false;
+}
+
+function usesAtRegister(line: string): boolean {
+  return /(?:^|[\s,])(?:\$at|\$1)(?=$|[\s,)])/.test(line);
 }

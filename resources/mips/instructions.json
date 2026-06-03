@@ -1151,7 +1151,7 @@
       0,
       0
     ],
-    "description": "展开为 sll $zero, $zero, 0",
+    "description": "空操作，机器码为 0，不改变寄存器或内存状态",
     "type": "special"
   },
   {
