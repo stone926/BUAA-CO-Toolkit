@@ -874,10 +874,7 @@
       3
     ],
     "description": "若 rt != 0，则 rd ← rs",
-    "type": "R-type",
-    "projects": [
-      "P6"
-    ]
+    "type": "R-type"
   },
   {
     "mnemonic": "movz",
@@ -890,10 +887,7 @@
       3
     ],
     "description": "若 rt == 0，则 rd ← rs",
-    "type": "R-type",
-    "projects": [
-      "P6"
-    ]
+    "type": "R-type"
   },
   {
     "mnemonic": "mul",
@@ -921,10 +915,7 @@
       2
     ],
     "description": "{HI, LO} ← {HI, LO} + signed(rs) * signed(rt)",
-    "type": "R-type",
-    "projects": [
-      "P6"
-    ]
+    "type": "R-type"
   },
   {
     "mnemonic": "maddu",
@@ -937,10 +928,7 @@
       2
     ],
     "description": "{HI, LO} ← {HI, LO} + unsigned(rs) * unsigned(rt)",
-    "type": "R-type",
-    "projects": [
-      "P6"
-    ]
+    "type": "R-type"
   },
   {
     "mnemonic": "msub",
@@ -953,10 +941,7 @@
       2
     ],
     "description": "{HI, LO} ← {HI, LO} - signed(rs) * signed(rt)",
-    "type": "R-type",
-    "projects": [
-      "P6"
-    ]
+    "type": "R-type"
   },
   {
     "mnemonic": "msubu",
@@ -969,10 +954,7 @@
       2
     ],
     "description": "{HI, LO} ← {HI, LO} - unsigned(rs) * unsigned(rt)",
-    "type": "R-type",
-    "projects": [
-      "P6"
-    ]
+    "type": "R-type"
   },
   {
     "mnemonic": "mult",
