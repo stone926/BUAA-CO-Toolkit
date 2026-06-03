@@ -13,6 +13,7 @@ import {
   syscallsByCode
 } from './resources';
 import {
+  parseCharLiteral,
   parseIntegerLiteral,
   signed32ImmediateValue
 } from './syntax';
@@ -26,6 +27,9 @@ export function directiveHoverText(directive: string): string | undefined {
   }
   if (directive === '.data' || directive === '.text') {
     return `**${directive}**\n\n切换当前汇编段。BUAA CO 使用 CompactDataAtZero 配置，课程代码不应传递自定义段地址。`;
+  }
+  if (directive === '.set') {
+    return '**.set**\n\nSPIM 兼容 directive。MARS 4.5 会识别它，但当前会忽略其效果并给出 warning。';
   }
   return `MIPS 汇编指令 \`${directive}\`.`;
 }
@@ -175,12 +179,12 @@ export function cp0Markdown(register: MipsCp0RegisterInfo): string {
 }
 
 export function syscallByOperand(operand: string): MipsSyscallInfo | undefined {
-  const value = parseIntegerLiteral(operand);
+  const value = parseIntegerOrCharLiteral(operand);
   return value === undefined ? undefined : syscallsByCode.get(value);
 }
 
 export function cp0ByOperand(operand: string): MipsCp0RegisterInfo | undefined {
-  const value = parseIntegerLiteral(operand.startsWith('$') ? operand.slice(1) : operand);
+  const value = parseIntegerOrCharLiteral(operand.startsWith('$') ? operand.slice(1) : operand);
   return value === undefined ? undefined : cp0RegistersByNumber.get(value);
 }
 
@@ -318,7 +322,7 @@ interface ImmediateInfo {
 }
 
 function parseImmediate(operand: string): ImmediateInfo | undefined {
-  const value = parseIntegerLiteral(operand);
+  const value = parseIntegerOrCharLiteral(operand);
   if (value === undefined) {
     return undefined;
   }
@@ -327,6 +331,11 @@ function parseImmediate(operand: string): ImmediateInfo | undefined {
     signed,
     unsigned: signed < 0 ? signed + 0x100000000 : signed
   };
+}
+
+function parseIntegerOrCharLiteral(operand: string): number | undefined {
+  const charValue = parseCharLiteral(operand);
+  return charValue === undefined ? parseIntegerLiteral(operand) : charValue;
 }
 
 function expandLoadImmediate(register: string, operand: string): string[] | undefined {

@@ -113,6 +113,62 @@ describe('parseMips', () => {
       const result = parseMips(doc(text), settings());
       expect(diagCodes(result)).toContain('directive-operand');
     });
+
+    it('accepts MARS character literals in data directives and immediates', () => {
+      const text = [
+        '.data',
+        "chars: .byte 'a', '\\n', '\\0', '\\377'",
+        "words: .word 'a', '\\n'",
+        '.text',
+        'main:',
+        "    li $t0, 'a'",
+        "    addiu $t1, $zero, '\\n'"
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const errors = result.diagnostics.filter((d) => d.severity === 1);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('reports malformed character literals without leaking inner undeclared symbols', () => {
+      const text = ".data\nbad: .word '\\x'";
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('directive-operand');
+      expect(diagCodes(result)).not.toContain('undeclared-symbol');
+    });
+
+    it('handles comments after strings ending with an escaped backslash', () => {
+      const text = '.data\nmsg: .asciiz "\\\\"# comment';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('directive-operand');
+    });
+
+    it('warns that .set is ignored instead of treating it as unknown', () => {
+      const text = '.set noreorder\nnop';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('set-ignored');
+      expect(diagCodes(result)).not.toContain('unknown-directive');
+    });
+
+    it('validates MARS data directive continuation lines', () => {
+      const text = [
+        '.data',
+        'arr: .word',
+        '    1',
+        "    2, 'a'",
+        '    later',
+        'msg: .asciiz "a",',
+        '    "b"',
+        'flt: .float',
+        '    1.0',
+        "    'a'",
+        'later: .word 3',
+        '.text',
+        'main: nop'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const errors = result.diagnostics.filter((d) => d.severity === 1);
+      expect(errors).toHaveLength(0);
+    });
   });
 
   describe('instruction in wrong section', () => {

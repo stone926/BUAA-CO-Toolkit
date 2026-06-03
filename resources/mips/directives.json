@@ -14,6 +14,7 @@
   ".align",
   ".globl",
   ".extern",
+  ".set",
   ".eqv",
   ".macro",
   ".end_macro",

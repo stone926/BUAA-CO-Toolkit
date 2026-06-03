@@ -183,6 +183,7 @@ describe('directives', () => {
     expect(directives.has('.eqv')).toBe(true);
     expect(directives.has('.include')).toBe(true);
     expect(directives.has('.extern')).toBe(true);
+    expect(directives.has('.set')).toBe(true);
     expect(directives.has('.float')).toBe(true);
     expect(directives.has('.double')).toBe(true);
   });

@@ -1,18 +1,29 @@
 export function getStringRanges(code: string): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
   let start: number | undefined;
+  let escaped = false;
   for (let index = 0; index < code.length; index++) {
-    if (code[index] !== '"' || code[index - 1] === '\\') {
+    const char = code[index];
+    if (start !== undefined) {
+      if (char === '"' && !escaped) {
+        ranges.push({
+          start,
+          end: index + 1
+        });
+        start = undefined;
+        escaped = false;
+        continue;
+      }
+      escaped = char === '\\' && !escaped;
+      if (char !== '\\') {
+        escaped = false;
+      }
       continue;
     }
-    if (start === undefined) {
+
+    if (char === '"') {
       start = index;
-    } else {
-      ranges.push({
-        start,
-        end: index + 1
-      });
-      start = undefined;
+      escaped = false;
     }
   }
   if (start !== undefined) {
@@ -75,23 +86,29 @@ export function isFloatLiteral(value: string): boolean {
 }
 
 export function isCharLiteral(value: string): boolean {
+  return parseCharLiteral(value) !== undefined;
+}
+
+export function parseCharLiteral(value: string): number | undefined {
   const text = value.trim();
   if (text.length < 3 || text[0] !== '\'' || text[text.length - 1] !== '\'') {
-    return false;
+    return undefined;
   }
-  let units = 0;
-  for (let index = 1; index < text.length - 1; index++) {
-    if (text[index] === '\\') {
-      index++;
-      if (index >= text.length - 1) {
-        return false;
-      }
-    } else if (text[index] === '\'') {
-      return false;
-    }
-    units++;
+  const body = text.slice(1, -1);
+  if (!body) {
+    return undefined;
   }
-  return units === 1;
+  if (body[0] !== '\\') {
+    return body.length === 1 ? body.charCodeAt(0) : undefined;
+  }
+  if (body.length === 2) {
+    return escapedCharValue(body[1]);
+  }
+  if (body.length === 4 && isOctalDigit(body[1]) && isOctalDigit(body[2]) && isOctalDigit(body[3])) {
+    const parsed = parseInt(body.slice(1), 8);
+    return parsed >= 0 && parsed <= 255 ? parsed : undefined;
+  }
+  return undefined;
 }
 
 export function isSymbolLike(value: string): boolean {
@@ -221,6 +238,35 @@ function digitValue(char: string): number | undefined {
     return lower.charCodeAt(0) - 'a'.charCodeAt(0) + 10;
   }
   return undefined;
+}
+
+function escapedCharValue(char: string): number | undefined {
+  switch (char) {
+    case '\'':
+      return 39;
+    case '"':
+      return 34;
+    case '\\':
+      return 92;
+    case 'n':
+      return 10;
+    case 't':
+      return 9;
+    case 'b':
+      return 8;
+    case 'r':
+      return 13;
+    case 'f':
+      return 12;
+    case '0':
+      return 0;
+    default:
+      return undefined;
+  }
+}
+
+function isOctalDigit(char: string): boolean {
+  return char >= '0' && char <= '7';
 }
 
 function isMipsIdentifierStart(char: string): boolean {

@@ -11,6 +11,7 @@ import {
   isInsideAnyRange,
   isIntegerLiteral,
   isNonNegativeIntegerLiteral,
+  parseCharLiteral,
   parseIntegerLiteral,
   isFloatLiteral,
   isCharLiteral,
@@ -240,11 +241,19 @@ describe('isCharLiteral', () => {
     expect(isCharLiteral("'\\n'")).toBe(true);
     expect(isCharLiteral("'\\t'")).toBe(true);
     expect(isCharLiteral("'\\''")).toBe(true);
+    expect(isCharLiteral("'\\\"'")).toBe(true);
     expect(isCharLiteral("'\\\\'")).toBe(true);
+    expect(isCharLiteral("'\\377'")).toBe(true);
   });
 
   it('returns false for multi-character literals', () => {
     expect(isCharLiteral("'ab'")).toBe(false);
+  });
+
+  it('returns false for invalid escaped character literals', () => {
+    expect(isCharLiteral("'\\x'")).toBe(false);
+    expect(isCharLiteral("'\\12'")).toBe(false);
+    expect(isCharLiteral("'\\400'")).toBe(false);
   });
 
   it('returns false for empty quotes', () => {
@@ -257,6 +266,25 @@ describe('isCharLiteral', () => {
 
   it('returns false for strings', () => {
     expect(isCharLiteral('"a"')).toBe(false);
+  });
+});
+
+describe('parseCharLiteral', () => {
+  it('parses MARS character literals to integer values', () => {
+    expect(parseCharLiteral("'a'")).toBe(97);
+    expect(parseCharLiteral("'\\n'")).toBe(10);
+    expect(parseCharLiteral("'\\0'")).toBe(0);
+    expect(parseCharLiteral("'\\''")).toBe(39);
+    expect(parseCharLiteral("'\\\"'")).toBe(34);
+    expect(parseCharLiteral("'\\\\'")).toBe(92);
+    expect(parseCharLiteral("'\\377'")).toBe(255);
+  });
+
+  it('rejects malformed character literals', () => {
+    expect(parseCharLiteral("''")).toBeUndefined();
+    expect(parseCharLiteral("'ab'")).toBeUndefined();
+    expect(parseCharLiteral("'\\x'")).toBeUndefined();
+    expect(parseCharLiteral("'\\400'")).toBeUndefined();
   });
 });
 
@@ -378,6 +406,11 @@ describe('stripComment', () => {
   it('handles escaped quotes inside strings correctly', () => {
     expect(stripComment('.asciiz "hello \\" # not comment"')).toBe('.asciiz "hello \\" # not comment"');
   });
+
+  it('treats # after a string ending in an escaped backslash as a comment', () => {
+    const text = '.asciiz "\\\\"# comment';
+    expect(stripComment(text)).toBe(text.slice(0, text.indexOf('#')));
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -402,6 +435,11 @@ describe('findCommentIndex', () => {
 
   it('returns the correct index for # after a string', () => {
     expect(findCommentIndex('.asciiz "hello" # comment')).toBe(16);
+  });
+
+  it('handles even backslashes before a closing quote', () => {
+    const text = '.asciiz "\\\\"# comment';
+    expect(findCommentIndex(text)).toBe(text.indexOf('#'));
   });
 
   it('returns -1 for an empty line', () => {
@@ -507,6 +545,19 @@ describe('parseMipsCstDocument', () => {
     expect(line.comment?.value).toBe('# comment');
     expect(line.tokens.some((token) => token.kind === 'string' && token.value === '"a#b"')).toBe(true);
     expect(line.tokens.filter((token) => token.kind === 'comment')).toHaveLength(1);
+  });
+
+  it('tokenizes character literals as number-like tokens', () => {
+    const cst = parseMipsCstDocument(".word 'a', '\\n', '\\377'");
+    const line = cst.lines[0];
+
+    expect(line.kind).toBe('statement');
+    if (line.kind !== 'statement') {
+      return;
+    }
+    const charTokens = line.tokens.filter((token) => token.value.startsWith('\''));
+    expect(charTokens.map((token) => token.kind)).toEqual(['number', 'number', 'number']);
+    expect(line.executable?.operands.map((operand) => operand.text)).toEqual(["'a'", "'\\n'", "'\\377'"]);
   });
 });
 

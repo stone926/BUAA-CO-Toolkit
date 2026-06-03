@@ -1,3 +1,5 @@
+import { isCharLiteral } from './literals';
+
 export interface MipsMemoryOperandAst {
   kind: 'memory';
   offset: string;
@@ -59,11 +61,13 @@ function matchingMemoryOpenParen(text: string): number {
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }
@@ -108,20 +112,7 @@ export function isMipsStringLiteralText(text: string): boolean {
 }
 
 function isMipsCharLiteralText(text: string): boolean {
-  if (text.length < 3 || text[0] !== '\'' || text[text.length - 1] !== '\'') {
-    return false;
-  }
-  if (!quotedLiteralHasValidBody(text, '\'')) {
-    return false;
-  }
-  let units = 0;
-  for (let index = 1; index < text.length - 1; index++) {
-    if (text[index] === '\\') {
-      index++;
-    }
-    units++;
-  }
-  return units === 1;
+  return isCharLiteral(text);
 }
 
 function quotedLiteralHasValidBody(text: string, quote: string): boolean {

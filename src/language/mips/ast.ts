@@ -8,6 +8,7 @@ import {
   MipsCstOperand,
   MipsCstStatementLine,
   MipsCstToken,
+  isCharLiteral,
   isFloatLiteral,
   isIntegerLiteral,
   isSymbolLike,
@@ -298,10 +299,10 @@ function classifyOperand(
   if (text.startsWith('%')) {
     return { kind: 'macroParameter', text, range, cst };
   }
-  if (isIntegerLiteral(text)) {
+  if (isIntegerLiteral(text) || isCharLiteral(text)) {
     return { kind: 'integer', text, range, cst };
   }
-  if (isFloatLiteral(text) && !isIntegerLiteral(text)) {
+  if (isFloatLiteral(text) && !isIntegerLiteral(text) && !isCharLiteral(text)) {
     return { kind: 'float', text, range, cst };
   }
   if (isMipsStringLiteralText(text)) {
@@ -432,11 +433,13 @@ function matchingMemoryOpenParen(text: string): number {
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }

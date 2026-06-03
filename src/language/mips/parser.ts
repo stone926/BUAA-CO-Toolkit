@@ -26,12 +26,12 @@ import {
   isRegister
 } from './resources';
 import {
+  isCharLiteral,
   isFloatLiteral,
-  isIntegerLiteral,
-  isNonNegativeIntegerLiteral,
   isSymbolLike,
   mipsCstRange,
   mipsCstTokenRange,
+  parseCharLiteral,
   parseMipsCstDocument,
   parseIntegerLiteral,
   parseMacroArguments,
@@ -84,6 +84,7 @@ type MipsParseCore = Omit<MipsParseResult, 'ast' | 'semantic'>;
 
 // 从资源文件加载指令元数据
 const STORAGE_DIRECTIVES = new Set(instructionMeta.storageDirectives);
+const CONTINUABLE_DATA_DIRECTIVES = new Set(['.byte', '.half', '.word', '.float', '.double', '.ascii', '.asciiz']);
 const CO_FIXED_SECTION_DIRECTIVES = new Set(instructionMeta.coFixedSectionDirectives);
 const SECTION_DIRECTIVES = new Map(Object.entries(instructionMeta.sectionDirectives));
 const SECTION_ADDRESS_RANGES = new Map<string, { min: number; max: number; label: string }>([
@@ -109,6 +110,8 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   let activeMacro: MipsMacro | undefined;
   let hasSyscall = false;
   let v0Initialized = false;
+  let activeDataContinuationDirective: string | undefined;
+  const directiveContinuationLines = new Map<number, string>();
 
   for (const parsedLine of cst.lines) {
     if (parsedLine.kind !== 'statement') {
@@ -140,6 +143,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
     const executable = parsedLine.executable;
     if (!executable) {
+      const continuationText = dataDirectiveContinuationText(parsedLine);
+      if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
+        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
+        directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+      }
       continue;
     }
 
@@ -241,12 +249,21 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令 '${executable.mnemonic}'。`, DiagnosticSeverity.Error, 'unknown-directive'));
       }
       validateDirective(document, lineNumber, executable, section, activeMacro, diagnostics);
+      activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
+        ? mnemonic
+        : undefined;
       continue;
     }
 
     const instruction = instructions[mnemonic];
     const macroOverloads = macros.get(executable.mnemonic);
     if (!instruction && !macroOverloads?.length) {
+      const continuationText = dataDirectiveContinuationText(parsedLine);
+      if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
+        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
+        directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+        continue;
+      }
       const eqv = resolveEqvSymbolInScope(executable.mnemonic, activeMacro, eqvSymbols);
       if (eqv && isDeclaredBefore(eqv, Range.create(lineNumber, 0, lineNumber, 0).start)) {
         continue;
@@ -254,6 +271,8 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令或宏 '${executable.mnemonic}'。`, DiagnosticSeverity.Error, 'unknown-instruction'));
       continue;
     }
+
+    activeDataContinuationDirective = undefined;
 
     if (section === 'data' && instruction) {
       diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `指令 '${executable.mnemonic}' 不能出现在数据段中。请先切换到 .text。`, DiagnosticSeverity.Error, 'instruction-in-data'));
@@ -341,7 +360,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       diagnostics.push(makeDiagnostic(range, `找不到标签或数据符号 '${reference.operand}'。`, DiagnosticSeverity.Error, 'missing-label'));
     }
   }
-  collectUndeclaredSymbolDiagnostics(parsedForQueries, diagnostics, missingLabelRanges);
+  collectUndeclaredSymbolDiagnostics(parsedForQueries, diagnostics, missingLabelRanges, directiveContinuationLines);
 
   if (profile === 'P2' && settings.mips.warnMissingExitSyscall && !hasSyscall && document.lineCount > 2) {
     const firstLine = lineAt(document, 0).text;
@@ -481,7 +500,7 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
     case '.ktext':
     case '.kdata':
       validateDirectiveOperandCount(document, lineNumber, directive, executable.operands.map((operand) => operand.text), 0, 1, diagnostics);
-      if (operandText && !isIntegerLiteral(operandText)) {
+      if (operandText && !isIntegerOrCharLiteral(operandText)) {
         diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} address must be an integer literal.`, DiagnosticSeverity.Error, 'directive-operand'));
       }
       validateSectionAddressRange(document, lineNumber, directive, operandText, diagnostics);
@@ -514,6 +533,9 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
     case '.extern':
       validateExternDirective(document, lineNumber, operandText, diagnostics);
       return;
+    case '.set':
+      diagnostics.push(makeDiagnostic(directiveRange, 'MARS currently ignores the .set directive.', DiagnosticSeverity.Warning, 'set-ignored'));
+      return;
     case '.eqv':
       validateEqvDirective(document, lineNumber, executable, diagnostics);
       return;
@@ -531,6 +553,43 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
       }
       return;
   }
+}
+
+function validateDirectiveContinuation(document: TextDocument, lineNumber: number, directive: string, operandText: string, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+  switch (directive) {
+    case '.byte':
+    case '.half':
+      validateStorageNumberList(document, lineNumber, directive, operandText, false, activeMacro, diagnostics);
+      return;
+    case '.word':
+      validateWordDirective(document, lineNumber, operandText, activeMacro, diagnostics);
+      return;
+    case '.float':
+    case '.double':
+      validateFloatList(document, lineNumber, directive, operandText, activeMacro, diagnostics);
+      return;
+    case '.ascii':
+    case '.asciiz':
+      validateStringList(document, lineNumber, directive, operandText, activeMacro, diagnostics);
+      return;
+  }
+}
+
+function shouldTreatAsDataDirectiveContinuation(section: MipsSection, directive: string | undefined, activeMacro: MipsMacro | undefined, operandText: string): boolean {
+  return section === 'data'
+    && !activeMacro
+    && directive !== undefined
+    && CONTINUABLE_DATA_DIRECTIVES.has(directive)
+    && operandText.trim().length > 0;
+}
+
+function dataDirectiveContinuationText(line: MipsCstStatementLine): string {
+  const code = line.code;
+  const start = line.labels.length
+    ? skipAsciiWhitespace(code, line.labels[line.labels.length - 1].colonRange.end)
+    : 0;
+  const end = trimRightIndex(code, code.length);
+  return start < end ? code.slice(start, end) : '';
 }
 
 function validateMacroHeader(document: TextDocument, lineNumber: number, name: string, params: string[], selectionRange: Range, diagnostics: Diagnostic[]): void {
@@ -568,7 +627,7 @@ function validateSectionAddressRange(document: TextDocument, lineNumber: number,
   if (!expected) {
     return;
   }
-  const address = parseIntegerLiteral(operandText);
+  const address = parseIntegerOrCharLiteral(operandText);
   if (address === undefined) {
     return;
   }
@@ -578,54 +637,66 @@ function validateSectionAddressRange(document: TextDocument, lineNumber: number,
 }
 
 function validateStorageNumberList(document: TextDocument, lineNumber: number, directive: string, operandText: string, allowLabels: boolean, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+  if (!operandText.trim()) {
+    return;
+  }
   const operands = parseOperands(operandText);
   if (!validateDirectiveOperandCount(document, lineNumber, directive, operands, 1, Number.MAX_SAFE_INTEGER, diagnostics)) {
     return;
   }
   for (const operand of operands) {
     const [value, count] = splitRepeatOperand(operand);
-    if (!(isIntegerLiteral(value) || Boolean(activeMacro?.paramSymbols.has(value)) || (allowLabels && isSymbolLike(value)))) {
+    if (!(isIntegerOrCharLiteral(value) || Boolean(activeMacro?.paramSymbols.has(value)) || (allowLabels && isSymbolLike(value)))) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, value), `${directive} expects integer${allowLabels ? ' or label' : ''} operands.`, DiagnosticSeverity.Error, 'directive-operand'));
     }
-    if (count !== undefined && !isNonNegativeIntegerLiteral(count)) {
+    if (count !== undefined && !isNonNegativeIntegerOrCharLiteral(count)) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, count), `${directive} repeat count must be a non-negative integer.`, DiagnosticSeverity.Error, 'directive-operand'));
     }
   }
 }
 
 function validateWordDirective(document: TextDocument, lineNumber: number, operandText: string, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+  if (!operandText.trim()) {
+    return;
+  }
   const operands = parseOperands(operandText);
   if (!validateDirectiveOperandCount(document, lineNumber, '.word', operands, 1, Number.MAX_SAFE_INTEGER, diagnostics)) {
     return;
   }
   for (const operand of operands) {
     const [value, count] = splitRepeatOperand(operand);
-    if (!(isIntegerLiteral(value) || isSymbolLike(value) || Boolean(activeMacro?.paramSymbols.has(value)))) {
+    if (!(isIntegerOrCharLiteral(value) || isSymbolLike(value) || Boolean(activeMacro?.paramSymbols.has(value)))) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, value), '.word expects integer or label operands.', DiagnosticSeverity.Error, 'directive-operand'));
     }
-    if (count !== undefined && !isNonNegativeIntegerLiteral(count)) {
+    if (count !== undefined && !isNonNegativeIntegerOrCharLiteral(count)) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, count), '.word repeat count must be a non-negative integer.', DiagnosticSeverity.Error, 'directive-operand'));
     }
   }
 }
 
 function validateFloatList(document: TextDocument, lineNumber: number, directive: string, operandText: string, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+  if (!operandText.trim()) {
+    return;
+  }
   const operands = parseOperands(operandText);
   if (!validateDirectiveOperandCount(document, lineNumber, directive, operands, 1, Number.MAX_SAFE_INTEGER, diagnostics)) {
     return;
   }
   for (const operand of operands) {
     const [value, count] = splitRepeatOperand(operand);
-    if (!(isFloatLiteral(value) || Boolean(activeMacro?.paramSymbols.has(value)))) {
+    if (!(isFloatLiteral(value) || isCharLiteral(value) || Boolean(activeMacro?.paramSymbols.has(value)))) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, value), `${directive} expects floating-point operands.`, DiagnosticSeverity.Error, 'directive-operand'));
     }
-    if (count !== undefined && !isNonNegativeIntegerLiteral(count)) {
+    if (count !== undefined && !isNonNegativeIntegerOrCharLiteral(count)) {
       diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, count), `${directive} repeat count must be a non-negative integer.`, DiagnosticSeverity.Error, 'directive-operand'));
     }
   }
 }
 
 function validateStringList(document: TextDocument, lineNumber: number, directive: string, operandText: string, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+  if (!operandText.trim()) {
+    return;
+  }
   const operands = parseOperands(operandText);
   if (!validateDirectiveOperandCount(document, lineNumber, directive, operands, 1, Number.MAX_SAFE_INTEGER, diagnostics)) {
     return;
@@ -643,12 +714,12 @@ function validateSingleIntegerDirective(document: TextDocument, lineNumber: numb
     return;
   }
   const operand = operands[0];
-  if (!(isNonNegativeIntegerLiteral(operand) || Boolean(activeMacro?.paramSymbols.has(operand)))) {
+  if (!(isNonNegativeIntegerOrCharLiteral(operand) || Boolean(activeMacro?.paramSymbols.has(operand)))) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `${directive} expects one non-negative integer operand.`, DiagnosticSeverity.Error, 'directive-operand'));
     return;
   }
 
-  const value = parseIntegerLiteral(operand);
+  const value = parseIntegerOrCharLiteral(operand);
   if (value === undefined) {
     return;
   }
@@ -680,7 +751,7 @@ function validateExternDirective(document: TextDocument, lineNumber: number, ope
   if (!isSymbolLike(operands[0])) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operands[0]), '.extern first operand must be a label.', DiagnosticSeverity.Error, 'directive-operand'));
   }
-  if (!isNonNegativeIntegerLiteral(operands[1])) {
+  if (!isNonNegativeIntegerOrCharLiteral(operands[1])) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operands[1]), '.extern size must be a non-negative integer.', DiagnosticSeverity.Error, 'directive-operand'));
   }
 }
@@ -715,6 +786,20 @@ function validateRegisterTokens(lineNumber: number, line: MipsCstStatementLine, 
 function splitRepeatOperand(operand: string): [string, string | undefined] {
   const parts = operand.split(':').map((part) => part.trim());
   return [parts[0], parts.length > 1 ? parts.slice(1).join(':').trim() : undefined];
+}
+
+function isIntegerOrCharLiteral(value: string): boolean {
+  return parseIntegerOrCharLiteral(value) !== undefined;
+}
+
+function isNonNegativeIntegerOrCharLiteral(value: string): boolean {
+  const parsed = parseIntegerOrCharLiteral(value);
+  return parsed !== undefined && parsed >= 0;
+}
+
+function parseIntegerOrCharLiteral(value: string): number | undefined {
+  const charValue = parseCharLiteral(value);
+  return charValue === undefined ? parseIntegerLiteral(value) : charValue;
 }
 
 function isReservedIdentifier(value: string): boolean {
@@ -752,12 +837,13 @@ function isQuotedStringLiteral(value: string): boolean {
     if (char === '"' && !escaped) {
       return false;
     }
-    escaped = char === '\\' && !escaped;
-    if (char !== '\\') {
+    if (char === '\\') {
+      escaped = !escaped;
+    } else {
       escaped = false;
     }
   }
-  return !escaped || text[text.length - 2] === '\\';
+  return !escaped;
 }
 
 function skipAsciiWhitespace(text: string, offset: number): number {
@@ -792,14 +878,19 @@ function resolveEqvSymbolInScope(name: string, activeMacro: MipsMacro | undefine
   return activeMacro?.eqvSymbols.get(name) ?? eqvSymbols.get(name);
 }
 
-function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics: Diagnostic[], skippedRanges: Set<string>): void {
+function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics: Diagnostic[], skippedRanges: Set<string>, continuationDirectives: Map<number, string>): void {
   const reported = new Set<string>();
   for (const statement of parsed.ast.statements) {
     const executable = statement.executable;
     const executableRange = executable?.mnemonicRange;
+    const continuationDirective = continuationDirectives.get(statement.line);
+    if (continuationDirective && continuationDirective !== '.word') {
+      continue;
+    }
     if (shouldSkipUndeclaredCheckForDirective(executable)) {
       continue;
     }
+    const firstContinuationWordOperand = continuationDirective === '.word';
     const macroCall = macroCallAtStatement(parsed, statement);
     for (const cstToken of statement.tokens) {
       if (!isIdentifierLikeToken(cstToken.kind)) {
@@ -812,7 +903,7 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
         skippedRanges.has(key) ||
         reported.has(key) ||
         isDeclarationRange(parsed, range) ||
-        (executableRange && rangesEqual(executableRange, range))
+        (executableRange && rangesEqual(executableRange, range) && !firstContinuationWordOperand)
       ) {
         continue;
       }

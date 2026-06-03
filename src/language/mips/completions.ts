@@ -202,11 +202,13 @@ function operandSlotAtPosition(executable: MipsCstExecutable, character: number)
   for (let index = 0; index < relativeEnd; index++) {
     const char = executable.operandText[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }

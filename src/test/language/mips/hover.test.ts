@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { defaultCoSettings } from '../../../language/common/settings';
-import { pseudoExpansionPreview } from '../../../language/mips/display';
+import { pseudoExpansionPreview, syscallByOperand } from '../../../language/mips/display';
 import { getMipsHover } from '../../../language/mips/hover';
 import { MipsServerState } from '../../../language/mips/state';
 
@@ -26,6 +26,7 @@ describe('pseudoExpansionPreview', () => {
   it('matches MARS li immediate selection', () => {
     expect(pseudoExpansionPreview('li', ['$t0', '100'])).toEqual(['addiu $t0, $zero, 100']);
     expect(pseudoExpansionPreview('li', ['$t0', '-1'])).toEqual(['addiu $t0, $zero, -1']);
+    expect(pseudoExpansionPreview('li', ['$t0', "'a'"])).toEqual(['addiu $t0, $zero, 97']);
     expect(pseudoExpansionPreview('li', ['$t0', '0xffff'])).toEqual(['ori $t0, $zero, 0xffff']);
     expect(pseudoExpansionPreview('li', ['$t0', '65536'])).toEqual(['lui $at, 0x0001', 'ori $t0, $at, 0x0000']);
   });
@@ -65,5 +66,11 @@ describe('getMipsHover instruction markdown', () => {
     expect(text).toContain('addi $at, $zero, 5');
     expect(text).toContain('mul $s0, $s1, $at');
     expect(text).toContain('展开会使用 `$at`');
+  });
+});
+
+describe('syscallByOperand', () => {
+  it('resolves character literal service numbers', () => {
+    expect(syscallByOperand("'\\n'")?.code).toBe(10);
   });
 });

@@ -1,4 +1,5 @@
 import { Range } from 'vscode-languageserver/node';
+import { parseCharLiteral } from './literals';
 
 export {
   getNumericLikeRanges,
@@ -9,6 +10,7 @@ export {
   isIntegerLiteral,
   isNonNegativeIntegerLiteral,
   isSymbolLike,
+  parseCharLiteral,
   parseIntegerLiteral,
   signed32ImmediateValue
 } from './literals';
@@ -200,6 +202,13 @@ function tokenizeMipsCode(code: string, lineNumber: number): MipsCstToken[] {
       index = end;
       continue;
     }
+    if (char === '\'') {
+      const end = readCharLiteralEnd(code, index);
+      const value = code.slice(index, end);
+      tokens.push(makeToken(parseCharLiteral(value) === undefined ? 'unknown' : 'number', value, lineNumber, index, end));
+      index = end;
+      continue;
+    }
     if (char === '%' && isMipsIdentifierStart(code[index + 1] ?? '')) {
       const end = readMipsIdentifierEnd(code, index + 1);
       tokens.push(makeToken('macroParameter', code.slice(index, end), lineNumber, index, end));
@@ -355,6 +364,23 @@ function readStringEnd(text: string, start: number): number {
   return text.length;
 }
 
+function readCharLiteralEnd(text: string, start: number): number {
+  let index = start + 1;
+  let escaped = false;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === '\'' && !escaped) {
+      return index + 1;
+    }
+    escaped = char === '\\' && !escaped;
+    if (char !== '\\') {
+      escaped = false;
+    }
+    index++;
+  }
+  return text.length;
+}
+
 function splitMipsCommaOperandSpansWithOffsets(text: string): TextSpan[] {
   const spans: TextSpan[] = [];
   let start = 0;
@@ -364,11 +390,13 @@ function splitMipsCommaOperandSpansWithOffsets(text: string): TextSpan[] {
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }
@@ -402,11 +430,13 @@ function splitMipsMacroArgumentSpans(text: string): TextSpan[] {
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }
@@ -441,11 +471,13 @@ function stripBalancedOuterParens(text: string): string {
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }
@@ -684,11 +716,13 @@ function splitMipsCommaOperandSpans(text: string): string[] {
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
     if (inString) {
-      escaped = char === '\\' && !escaped;
       if (char === '"' && !escaped) {
         inString = false;
+        escaped = false;
       } else if (char !== '\\') {
         escaped = false;
+      } else {
+        escaped = !escaped;
       }
       continue;
     }
@@ -722,12 +756,27 @@ function isMipsDirective(line: MipsFormatLine, directive: string): boolean {
 
 export function findCommentIndex(line: string): number {
   let inString = false;
+  let escaped = false;
   for (let index = 0; index < line.length; index++) {
     const char = line[index];
-    if (char === '"' && line[index - 1] !== '\\') {
-      inString = !inString;
+    if (inString) {
+      if (char === '"' && !escaped) {
+        inString = false;
+        escaped = false;
+        continue;
+      }
+      escaped = char === '\\' && !escaped;
+      if (char !== '\\') {
+        escaped = false;
+      }
+      continue;
     }
-    if (char === '#' && !inString) {
+    if (char === '"') {
+      inString = true;
+      escaped = false;
+      continue;
+    }
+    if (char === '#') {
       return index;
     }
   }

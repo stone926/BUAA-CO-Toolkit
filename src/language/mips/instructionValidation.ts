@@ -18,9 +18,9 @@ import {
 } from './resources';
 import {
   integerFitsRange,
-  isCharLiteral,
   isFloatLiteral,
   isIntegerLiteral,
+  parseCharLiteral,
   parseIntegerLiteral,
   parseOperands,
   signed32ImmediateValue,
@@ -289,7 +289,7 @@ function constantMemoryOffset(operand: string, activeMacro: MipsMacro | undefine
   if (!offsetText || activeMacro?.paramSymbols.has(offsetText) || eqvSymbols.has(offsetText) || isSymbolLike(offsetText)) {
     return undefined;
   }
-  const parsed = parseIntegerLiteral(offsetText);
+  const parsed = parseIntegerOrCharLiteral(offsetText);
   return parsed === undefined ? undefined : signed32ImmediateValue(parsed);
 }
 
@@ -402,7 +402,7 @@ function cp0RegisterNumber(operand: string, activeMacro: MipsMacro | undefined, 
   if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
     return undefined;
   }
-  const value = parseIntegerLiteral(stripLeadingDollar(operand));
+  const value = parseIntegerOrCharLiteral(stripLeadingDollar(operand));
   return value !== undefined && cp0RegistersByNumber.has(value) ? value : undefined;
 }
 
@@ -410,10 +410,7 @@ function isImmediateOperand(operand: string, activeMacro: MipsMacro | undefined,
   if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
     return true;
   }
-  if (isCharLiteral(operand)) {
-    return true;
-  }
-  const value = parseIntegerLiteral(operand);
+  const value = parseIntegerOrCharLiteral(operand);
   return value !== undefined && integerFitsImmediateKind(value, kind);
 }
 
@@ -421,7 +418,7 @@ function isShiftAmountOperand(operand: string, activeMacro: MipsMacro | undefine
   if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
     return true;
   }
-  const value = parseIntegerLiteral(operand);
+  const value = parseIntegerOrCharLiteral(operand);
   return value !== undefined && integerFitsRange(value, 0, 31);
 }
 
@@ -433,7 +430,7 @@ function isBitSizeOperand(operand: string, activeMacro: MipsMacro | undefined, e
   if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
     return true;
   }
-  const value = parseIntegerLiteral(operand);
+  const value = parseIntegerOrCharLiteral(operand);
   return value !== undefined && value >= 1 && value <= 32;
 }
 
@@ -522,4 +519,9 @@ function integerFitsImmediateKind(value: number, kind: ImmediateKind): boolean {
     return integerFitsRange(value, 0, 0xffff);
   }
   return integerFitsRange(signed32ImmediateValue(value), -32768, 32767);
+}
+
+function parseIntegerOrCharLiteral(operand: string): number | undefined {
+  const charValue = parseCharLiteral(operand);
+  return charValue === undefined ? parseIntegerLiteral(operand) : charValue;
 }
