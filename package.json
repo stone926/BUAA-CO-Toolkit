@@ -367,12 +367,18 @@
       {
         "command": "co.mips.runInTerminal",
         "title": "CO: MIPS Run Current File In Terminal",
-        "icon": "$(terminal)"
+        "icon": {
+          "light": "icons/run-terminal-light.svg",
+          "dark": "icons/run-terminal-dark.svg"
+        }
       },
       {
         "command": "co.mips.dumpText",
         "title": "CO: MIPS Dump Text Segment",
-        "icon": "$(file-code)"
+        "icon": {
+          "light": "icons/dump-text-light.svg",
+          "dark": "icons/dump-text-dark.svg"
+        }
       },
       {
         "command": "co.mips.dumpKernelText",
@@ -389,7 +395,10 @@
       {
         "command": "co.verilog.runIsim",
         "title": "CO: Verilog Run ISim",
-        "icon": "$(play)"
+        "icon": {
+          "light": "icons/run-isim-light.svg",
+          "dark": "icons/run-isim-dark.svg"
+        }
       },
       {
         "command": "co.logisim.generateRom",
@@ -406,7 +415,10 @@
       {
         "command": "co.logisim.openCurrentCircuit",
         "title": "CO: Logisim Open Current Circuit",
-        "icon": "$(circuit-board)"
+        "icon": {
+          "light": "icons/open-circuit-light.svg",
+          "dark": "icons/open-circuit-dark.svg"
+        }
       },
       {
         "command": "co.hazard.analyzeCurrentMachineCode",

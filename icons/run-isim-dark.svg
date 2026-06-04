@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Chip body -->
+  <rect x="3" y="3" width="10" height="10" rx="1" fill="none" stroke="#4FC3F7" stroke-width="1.5"/>
+  <!-- Chip pins -->
+  <line x1="6" y1="1" x2="6" y2="3" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="10" y1="1" x2="10" y2="3" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="6" y1="13" x2="6" y2="15" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="10" y1="13" x2="10" y2="15" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="1" y1="6" x2="3" y2="6" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="1" y1="10" x2="3" y2="10" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="13" y1="6" x2="15" y2="6" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="13" y1="10" x2="15" y2="10" stroke="#4FC3F7" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Play triangle inside chip -->
+  <polygon points="6.5,5.5 11,8 6.5,10.5" fill="#81C784" stroke="none"/>
+</svg>
