@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   config,
+  getMachineCode,
   getIsePath,
   getProfile,
   getSimTime,
@@ -19,7 +20,29 @@ import {
 import { ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { runTool } from './process';
 import { findFuse } from './toolchain';
-import { AppServices } from './types';
+import { AppServices, RunResult } from './types';
+
+export interface IseProjectFiles {
+  prj: vscode.Uri;
+  tcl: vscode.Uri;
+  outDir: vscode.Uri;
+}
+
+export interface IseProjectOptions {
+  resource?: vscode.Uri;
+  showMessages?: boolean;
+}
+
+export interface IsimRunOptions extends IseProjectOptions {
+  machineCodeSource?: vscode.Uri;
+}
+
+export interface IsimRunOutput {
+  generated: IseProjectFiles;
+  fuseResult: RunResult;
+  simResult: RunResult;
+  simOut?: vscode.Uri;
+}
 
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
@@ -77,13 +100,17 @@ async function generateTestbench(): Promise<void> {
   await vscode.window.showTextDocument(tbUri);
 }
 
-async function generateIseProject(services: AppServices): Promise<{ prj: vscode.Uri; tcl: vscode.Uri; outDir: vscode.Uri } | undefined> {
-  const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri);
+export async function generateIseProject(
+  services: AppServices,
+  options: IseProjectOptions = {}
+): Promise<IseProjectFiles | undefined> {
+  const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
+  const showMessages = options.showMessages !== false;
+  const folder = workspaceFolderFor(activeUri);
   if (!folder) {
     vscode.window.showErrorMessage('Open a workspace folder before generating ISE files.');
     return undefined;
   }
-  const activeUri = vscode.window.activeTextEditor?.document.uri;
   const top = getTestbench(activeUri);
   const simTime = getSimTime(activeUri);
   const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), '**/{node_modules,out,.git}/**', 5000);
@@ -105,12 +132,18 @@ async function generateIseProject(services: AppServices): Promise<{ prj: vscode.
   await writeTextFile(tcl, tclText);
   services.output.appendLine(`Generated ${prj.fsPath}`);
   services.output.appendLine(`Generated ${tcl.fsPath}`);
-  vscode.window.showInformationMessage('Generated ISE PRJ/TCL files.');
+  if (showMessages) {
+    vscode.window.showInformationMessage('Generated ISE PRJ/TCL files.');
+  }
   return { prj, tcl, outDir };
 }
 
-async function runIsim(services: AppServices): Promise<void> {
-  const activeUri = vscode.window.activeTextEditor?.document.uri;
+export async function runIsim(
+  services: AppServices,
+  options: IsimRunOptions = {}
+): Promise<IsimRunOutput | undefined> {
+  const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
+  const showMessages = options.showMessages !== false;
   const isePath = getIsePath(activeUri);
   if (!isePath) {
     vscode.window.showErrorMessage('ISE path is not configured. Set co.toolchain.isePath.');
@@ -121,9 +154,12 @@ async function runIsim(services: AppServices): Promise<void> {
     vscode.window.showErrorMessage(`Cannot find fuse executable: ${fuse}`);
     return;
   }
-  const generated = await generateIseProject(services);
+  const generated = await generateIseProject(services, { resource: activeUri, showMessages });
   if (!generated) {
     return;
+  }
+  if (options.machineCodeSource) {
+    await copyMachineCodeToSimDirectory(options.machineCodeSource, generated.outDir, activeUri);
   }
   const top = getTestbench(activeUri);
   const exeName = process.platform === 'win32' ? `${top}.exe` : top;
@@ -137,8 +173,10 @@ async function runIsim(services: AppServices): Promise<void> {
     }
   });
   if (!fuseResult.ok) {
-    vscode.window.showErrorMessage('ISim compile failed. Check the BUAA CO output panel.');
-    return;
+    if (showMessages) {
+      vscode.window.showErrorMessage('ISim compile failed. Check the BUAA CO output panel.');
+    }
+    return undefined;
   }
   const exePath = path.join(generated.outDir.fsPath, exeName);
   const simResult = await runTool(exePath, ['-nolog', '-tclbatch', path.basename(generated.tcl.fsPath)], {
@@ -149,13 +187,32 @@ async function runIsim(services: AppServices): Promise<void> {
       XILINX: isePath
     }
   });
+  let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
-    const out = vscode.Uri.file(path.join(generated.outDir.fsPath, `${top}.sim.out`));
-    await writeTextFile(out, simResult.stdout);
-    vscode.window.showInformationMessage('ISim run completed.');
+    simOut = vscode.Uri.file(path.join(generated.outDir.fsPath, `${top}.sim.out`));
+    await writeTextFile(simOut, simResult.stdout);
+    if (showMessages) {
+      vscode.window.showInformationMessage('ISim run completed.');
+    }
   } else {
-    vscode.window.showErrorMessage('ISim run failed. Check the BUAA CO output panel.');
+    if (showMessages) {
+      vscode.window.showErrorMessage('ISim run failed. Check the BUAA CO output panel.');
+    }
   }
+  return { generated, fuseResult, simResult, simOut };
+}
+
+async function copyMachineCodeToSimDirectory(
+  source: vscode.Uri,
+  outDir: vscode.Uri,
+  resource?: vscode.Uri
+): Promise<void> {
+  const target = vscode.Uri.file(path.join(outDir.fsPath, getMachineCode(resource)));
+  if (source.fsPath === target.fsPath) {
+    return;
+  }
+  const content = await vscode.workspace.fs.readFile(source);
+  await vscode.workspace.fs.writeFile(target, content);
 }
 
 function toTextDocument(document: vscode.TextDocument): TextDocument {

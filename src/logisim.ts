@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { getJava, getLogisimJar } from './config';
 import { dirname, readTextFile, writeTextFile } from './fsUtil';
+import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
 import { runTool } from './process';
 import { AppServices } from './types';
 import { pickOneFile, resolveActiveOrPickedTextFile, resolveMachineCodeInput } from './workflowInputs';
@@ -10,6 +11,7 @@ import { pickOneFile, resolveActiveOrPickedTextFile, resolveMachineCodeInput } f
 export function registerLogisim(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('co.logisim.generateRom', () => generateLogisimRom()),
+    vscode.commands.registerCommand('co.logisim.injectRomIntoCircuit', () => injectRomIntoCircuit()),
     vscode.commands.registerCommand('co.logisim.convertLogToCsv', () => convertLogToCsv()),
     vscode.commands.registerCommand('co.logisim.openCurrentCircuit', () => openCurrentCircuit(services))
   );
@@ -27,6 +29,41 @@ async function generateLogisimRom(): Promise<void> {
   await writeTextFile(output, rom);
   await vscode.window.showTextDocument(output);
   vscode.window.showInformationMessage(`Generated Logisim ROM file: ${path.basename(output.fsPath)}.`);
+}
+
+async function injectRomIntoCircuit(): Promise<void> {
+  const circuit = await resolveCircuitInput();
+  if (!circuit) {
+    return;
+  }
+  const machineCode = await resolveMachineCodeInput('Select MARS HexText machine code for Logisim ROM injection');
+  if (!machineCode) {
+    return;
+  }
+
+  const circuitText = await readTextFile(circuit);
+  const machineCodeText = await readTextFile(machineCode);
+  const target = await resolveRomTarget(circuitText);
+  if (!target) {
+    return;
+  }
+
+  let injected;
+  try {
+    injected = injectMachineCodeIntoLogisimRom(circuitText, machineCodeText, target.index);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(message);
+    return;
+  }
+
+  const output = vscode.Uri.file(path.join(
+    path.dirname(circuit.fsPath),
+    `${path.basename(circuit.fsPath, path.extname(circuit.fsPath))}.${path.basename(machineCode.fsPath, path.extname(machineCode.fsPath))}.circ`
+  ));
+  await writeTextFile(output, injected.text);
+  await vscode.window.showTextDocument(output);
+  vscode.window.showInformationMessage(`Injected ${injected.wordCount} machine-code word(s) into ${path.basename(output.fsPath)}.`);
 }
 
 async function convertLogToCsv(): Promise<void> {
@@ -77,6 +114,35 @@ async function resolveCircuitInput(): Promise<vscode.Uri | undefined> {
   return await pickOneFile('Select Logisim .circ file', {
     Logisim: ['circ']
   });
+}
+
+async function resolveRomTarget(circuitText: string): Promise<LogisimRomTarget | undefined> {
+  const candidates = findLogisimRomTargets(circuitText)
+    .filter((target) => target.dataWidth === undefined || target.dataWidth === 32);
+  if (!candidates.length) {
+    vscode.window.showErrorMessage('No 32-bit ROM component was found in the selected Logisim circuit.');
+    return undefined;
+  }
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  const picked = await vscode.window.showQuickPick(
+    candidates.map((target) => ({
+      label: target.label ? `${target.index}: ${target.label}` : `${target.index}: ROM`,
+      description: [
+        target.loc ? `loc ${target.loc}` : undefined,
+        target.addrWidth ? `addr ${target.addrWidth}` : undefined,
+        target.dataWidth ? `data ${target.dataWidth}` : undefined,
+        target.hasContents ? 'has contents' : 'empty'
+      ].filter(Boolean).join(' | '),
+      target
+    })),
+    {
+      title: 'Select Logisim ROM to inject machine code'
+    }
+  );
+  return picked?.target;
 }
 
 function normalizeLogisimRom(text: string): string {

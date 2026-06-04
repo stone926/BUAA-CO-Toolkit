@@ -16,6 +16,8 @@ import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
 import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
+import { registerTraceCompare } from './traceCompare';
+import { registerCourseTest } from './courseTest';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -74,6 +76,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerVerilog(context, services);
   registerLogisim(context, services);
   registerHazard(context, services);
+  registerTraceCompare(context, services);
+  registerCourseTest(context, services);
 
   async function getToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): Promise<ToolDetection[]> {
     const now = Date.now();

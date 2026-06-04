@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile } from './config';
+import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, getPython } from './config';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 
@@ -20,6 +20,20 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
     ok: javaResult.ok,
     detail: firstLine(javaResult.stderr || javaResult.stdout) || java,
     suggestion: javaResult.ok ? undefined : 'Install JRE/JDK or set co.toolchain.java.'
+  });
+
+  const python = getPython(resource);
+  const pythonResult = await runTool(python, ['--version'], {
+    cwd,
+    output,
+    resource,
+    timeoutMs: 10000
+  });
+  checks.push({
+    name: 'Python',
+    ok: pythonResult.ok,
+    detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
+    suggestion: pythonResult.ok ? undefined : 'Install Python or set co.toolchain.python.'
   });
 
   const mars = getMarsJar(resource);

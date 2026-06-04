@@ -119,7 +119,7 @@ export async function runTool(command: string, args: string[], options: RunToolO
 
     if (options.stdin !== undefined) {
       child.stdin.write(options.stdin);
-      child.stdin.end();
     }
+    child.stdin.end();
   });
 }

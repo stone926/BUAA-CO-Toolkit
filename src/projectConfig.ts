@@ -14,6 +14,7 @@ export interface CoProjectConfig {
     isePath?: string;
     logisim?: string;
     java?: string;
+    python?: string;
     hazardCalculator?: string;
   };
   simulation?: {
@@ -22,6 +23,10 @@ export interface CoProjectConfig {
     testbench?: string;
     time?: string;
     machineCode?: string;
+  };
+  test?: {
+    generatorArgs?: string[];
+    generatedAsmLimit?: number;
   };
 }
 
@@ -107,6 +112,13 @@ export function getSimulationFromConfig(resource?: vscode.Uri): CoProjectConfig[
 }
 
 /**
+ * 从 .co/config.json 获取测试配置
+ */
+export function getTestFromConfig(resource?: vscode.Uri): CoProjectConfig['test'] {
+  return getProjectConfig(resource)?.test;
+}
+
+/**
  * 保存配置到 .co/config.json
  */
 export async function saveProjectConfig(config: CoProjectConfig, resource?: vscode.Uri): Promise<void> {
@@ -148,6 +160,10 @@ export async function saveProjectConfig(config: CoProjectConfig, resource?: vsco
     simulation: {
       ...existingConfig.simulation,
       ...config.simulation
+    },
+    test: {
+      ...existingConfig.test,
+      ...config.test
     }
   };
 

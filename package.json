@@ -24,16 +24,30 @@
     "onCommand:co.diagnostics.disableCode",
     "onCommand:co.mips.disablePseudoWarnings",
     "onCommand:co.mips.runCurrentFile",
+    "onCommand:co.mips.runAndCapture",
+    "onCommand:co.mips.runWithStdinFile",
+    "onCommand:co.mips.runInTerminal",
     "onCommand:co.mips.dumpText",
     "onCommand:co.mips.dumpKernelText",
     "onCommand:co.verilog.generateTestbench",
     "onCommand:co.verilog.generateIseProject",
     "onCommand:co.verilog.runIsim",
     "onCommand:co.logisim.generateRom",
+    "onCommand:co.logisim.injectRomIntoCircuit",
     "onCommand:co.logisim.convertLogToCsv",
     "onCommand:co.logisim.openCurrentCircuit",
     "onCommand:co.hazard.analyzeCurrentMachineCode",
     "onCommand:co.hazard.openReport",
+    "onCommand:co.test.compareTraceFiles",
+    "onCommand:co.test.compareLatestOutputs",
+    "onCommand:co.test.runFullTest",
+    "onCommand:co.test.runBatchTraceTests",
+    "onCommand:co.test.runGeneratedTraceTests",
+    "onCommand:co.test.startContinuousGeneratedTraceTests",
+    "onCommand:co.test.stopContinuousTests",
+    "onCommand:co.test.prepareLogisimCases",
+    "onCommand:co.test.prepareGeneratedLogisimCases",
+    "onCommand:co.test.openBatchTraceReport",
     "onView:coSidebar"
   ],
   "contributes": {
@@ -343,8 +357,22 @@
         "title": "CO: MIPS Run Current File"
       },
       {
+        "command": "co.mips.runAndCapture",
+        "title": "CO: MIPS Run And Capture Output"
+      },
+      {
+        "command": "co.mips.runWithStdinFile",
+        "title": "CO: MIPS Run Current File With Stdin File"
+      },
+      {
+        "command": "co.mips.runInTerminal",
+        "title": "CO: MIPS Run Current File In Terminal",
+        "icon": "$(terminal)"
+      },
+      {
         "command": "co.mips.dumpText",
-        "title": "CO: MIPS Dump Text Segment"
+        "title": "CO: MIPS Dump Text Segment",
+        "icon": "$(file-code)"
       },
       {
         "command": "co.mips.dumpKernelText",
@@ -360,11 +388,16 @@
       },
       {
         "command": "co.verilog.runIsim",
-        "title": "CO: Verilog Run ISim"
+        "title": "CO: Verilog Run ISim",
+        "icon": "$(play)"
       },
       {
         "command": "co.logisim.generateRom",
         "title": "CO: Logisim Generate ROM File"
+      },
+      {
+        "command": "co.logisim.injectRomIntoCircuit",
+        "title": "CO: Logisim Inject ROM Into Circuit"
       },
       {
         "command": "co.logisim.convertLogToCsv",
@@ -372,7 +405,8 @@
       },
       {
         "command": "co.logisim.openCurrentCircuit",
-        "title": "CO: Logisim Open Current Circuit"
+        "title": "CO: Logisim Open Current Circuit",
+        "icon": "$(circuit-board)"
       },
       {
         "command": "co.hazard.analyzeCurrentMachineCode",
@@ -381,6 +415,46 @@
       {
         "command": "co.hazard.openReport",
         "title": "CO: Open Hazard Report"
+      },
+      {
+        "command": "co.test.compareTraceFiles",
+        "title": "CO: Compare Trace Output Files"
+      },
+      {
+        "command": "co.test.compareLatestOutputs",
+        "title": "CO: Compare Latest MARS/ISim Outputs"
+      },
+      {
+        "command": "co.test.runFullTest",
+        "title": "CO: Run Full Course Trace Test"
+      },
+      {
+        "command": "co.test.runBatchTraceTests",
+        "title": "CO: Run Batch Course Trace Tests"
+      },
+      {
+        "command": "co.test.runGeneratedTraceTests",
+        "title": "CO: Run Generated Course Trace Tests"
+      },
+      {
+        "command": "co.test.startContinuousGeneratedTraceTests",
+        "title": "CO: Start Continuous Generated Course Trace Tests"
+      },
+      {
+        "command": "co.test.stopContinuousTests",
+        "title": "CO: Stop Continuous Course Tests"
+      },
+      {
+        "command": "co.test.prepareLogisimCases",
+        "title": "CO: Prepare Logisim Circuit Cases"
+      },
+      {
+        "command": "co.test.prepareGeneratedLogisimCases",
+        "title": "CO: Prepare Generated Logisim Circuit Cases"
+      },
+      {
+        "command": "co.test.openBatchTraceReport",
+        "title": "CO: Open Batch Course Trace Report"
       }
     ],
     "menus": {
@@ -393,7 +467,7 @@
       ],
       "editor/title": [
         {
-          "command": "co.mips.runCurrentFile",
+          "command": "co.mips.runInTerminal",
           "when": "resourceLangId == mipsasm",
           "group": "navigation@10"
         },
@@ -418,6 +492,11 @@
           "command": "co.logisim.generateRom",
           "when": "resourceLangId == mipsasm || resourceLangId == logisim-circ",
           "group": "co@10"
+        },
+        {
+          "command": "co.logisim.injectRomIntoCircuit",
+          "when": "resourceLangId == logisim-circ || resourceLangId == mipsasm",
+          "group": "co@11"
         },
         {
           "command": "co.verilog.generateTestbench",
@@ -447,6 +526,15 @@
           "command": "co.mips.runCurrentFile"
         },
         {
+          "command": "co.mips.runAndCapture"
+        },
+        {
+          "command": "co.mips.runWithStdinFile"
+        },
+        {
+          "command": "co.mips.runInTerminal"
+        },
+        {
           "command": "co.mips.dumpText"
         },
         {
@@ -465,6 +553,9 @@
           "command": "co.logisim.generateRom"
         },
         {
+          "command": "co.logisim.injectRomIntoCircuit"
+        },
+        {
           "command": "co.logisim.convertLogToCsv"
         },
         {
@@ -475,6 +566,36 @@
         },
         {
           "command": "co.hazard.openReport"
+        },
+        {
+          "command": "co.test.compareTraceFiles"
+        },
+        {
+          "command": "co.test.compareLatestOutputs"
+        },
+        {
+          "command": "co.test.runFullTest"
+        },
+        {
+          "command": "co.test.runBatchTraceTests"
+        },
+        {
+          "command": "co.test.runGeneratedTraceTests"
+        },
+        {
+          "command": "co.test.startContinuousGeneratedTraceTests"
+        },
+        {
+          "command": "co.test.stopContinuousTests"
+        },
+        {
+          "command": "co.test.prepareLogisimCases"
+        },
+        {
+          "command": "co.test.prepareGeneratedLogisimCases"
+        },
+        {
+          "command": "co.test.openBatchTraceReport"
         }
       ]
     },
@@ -521,6 +642,11 @@
           "type": "string",
           "default": "java",
           "description": "Java executable used for MARS and Logisim."
+        },
+        "co.toolchain.python": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable used for random ASM test generators."
         },
         "co.toolchain.mars": {
           "type": "string",
@@ -730,6 +856,37 @@
           "type": "number",
           "default": 120000,
           "description": "Timeout for external tool runs."
+        },
+        "co.test.generatorArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra command-line arguments appended when running a random ASM test generator."
+        },
+        "co.test.generatedAsmLimit": {
+          "type": "number",
+          "default": 100,
+          "minimum": 1,
+          "description": "Maximum number of new or modified ASM files picked up after a test generator run."
+        },
+        "co.test.continuousIntervalMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Delay between continuous generated trace test iterations."
+        },
+        "co.test.continuousMaxIterations": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Maximum continuous generated trace test iterations. 0 means run until stopped or failure policy triggers."
+        },
+        "co.test.continuousStopOnFailure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stop a continuous generated trace test session after an iteration with failed or errored cases."
         }
       }
     }

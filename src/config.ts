@@ -4,7 +4,8 @@ import {
   getProjectConfig,
   getProjectProfileFromConfig,
   getToolchainFromConfig,
-  getSimulationFromConfig
+  getSimulationFromConfig,
+  getTestFromConfig
 } from './projectConfig';
 
 /**
@@ -83,6 +84,10 @@ export function getJava(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.java', () => getToolchainFromConfig(resource)?.java, 'java', resource);
 }
 
+export function getPython(resource?: vscode.Uri): string {
+  return layeredGetString('toolchain.python', () => getToolchainFromConfig(resource)?.python, 'python', resource);
+}
+
 export function getMarsJar(resource?: vscode.Uri): string {
   const profile = getProfile(resource);
   if (profile === 'P7') {
@@ -114,4 +119,66 @@ export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
 
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
   return config<string>('mips.memoryConfiguration', 'CompactDataAtZero', resource).trim() || 'CompactDataAtZero';
+}
+
+export function getGeneratorArgs(resource?: vscode.Uri): string[] {
+  return layeredGetArray('test.generatorArgs', () => getTestFromConfig(resource)?.generatorArgs, [], resource);
+}
+
+export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
+  const configured = inspectedValue<number>('test.generatedAsmLimit', resource);
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+    return Math.floor(configured);
+  }
+  const projectValue = getTestFromConfig(resource)?.generatedAsmLimit;
+  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
+    return Math.floor(projectValue);
+  }
+  return 100;
+}
+
+export function getContinuousIntervalMs(resource?: vscode.Uri): number {
+  return positiveIntegerConfig('test.continuousIntervalMs', 1000, resource);
+}
+
+export function getContinuousMaxIterations(resource?: vscode.Uri): number {
+  return nonNegativeIntegerConfig('test.continuousMaxIterations', 0, resource);
+}
+
+export function getContinuousStopOnFailure(resource?: vscode.Uri): boolean {
+  return config<boolean>('test.continuousStopOnFailure', true, resource);
+}
+
+function layeredGetArray(
+  vsKey: string,
+  configFallback: (() => string[] | undefined) | undefined,
+  defaultValue: string[],
+  resource?: vscode.Uri
+): string[] {
+  const configured = inspectedValue<string[]>(vsKey, resource);
+  if (Array.isArray(configured)) {
+    return configured.map((item) => String(item)).filter(Boolean);
+  }
+  const configValue = configFallback?.();
+  if (Array.isArray(configValue)) {
+    return configValue.map((item) => String(item)).filter(Boolean);
+  }
+  return [...defaultValue];
+}
+
+function inspectedValue<T>(key: string, resource?: vscode.Uri): T | undefined {
+  const inspected = vscode.workspace.getConfiguration('co', resource).inspect<T>(key);
+  return inspected?.workspaceFolderValue
+    ?? inspected?.workspaceValue
+    ?? inspected?.globalValue;
+}
+
+function positiveIntegerConfig(key: string, fallback: number, resource?: vscode.Uri): number {
+  const value = config<number>(key, fallback, resource);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function nonNegativeIntegerConfig(key: string, fallback: number, resource?: vscode.Uri): number {
+  const value = config<number>(key, fallback, resource);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
 }
