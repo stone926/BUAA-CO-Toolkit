@@ -131,7 +131,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       };
       const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
       const targetMap = section === 'data' ? scope.dataSymbols : scope.labels;
-      if (isReservedIdentifier(name)) {
+      if (isReservedSymbolName(name, symbol.kind)) {
         diagnostics.push(makeDiagnostic(selectionRange, `符号 '${name}' 与保留的 MIPS 关键字冲突。`, DiagnosticSeverity.Error, 'reserved-symbol'));
       }
       if (symbolScopeHas(scope, name)) {
@@ -805,6 +805,14 @@ function parseIntegerOrCharLiteral(value: string): number | undefined {
 function isReservedIdentifier(value: string): boolean {
   const lower = value.toLowerCase();
   return instructions[lower] !== undefined || directives.has(lower) || isRegister(value);
+}
+
+function isReservedSymbolName(value: string, kind: MipsSymbol['kind']): boolean {
+  const lower = value.toLowerCase();
+  if (directives.has(lower) || isRegister(value)) {
+    return true;
+  }
+  return kind !== 'data' && instructions[lower] !== undefined;
 }
 
 function isIdentifierLikeToken(kind: string): boolean {

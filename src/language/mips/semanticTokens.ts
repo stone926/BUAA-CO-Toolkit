@@ -81,16 +81,16 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
         pushSemanticToken(tokens, range, 'mipsCp0Register');
       } else if (token.startsWith('$') && (isRegister(token) || isFloatingPointRegister(token))) {
         pushSemanticToken(tokens, range, 'mipsRegister');
-      } else if (token.startsWith('.') && directives.has(token.toLowerCase())) {
-        pushSemanticToken(tokens, range, 'mipsDirective');
-      } else if (instructions[token.toLowerCase()]) {
-        const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, range));
-        pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], settings, parsedInstruction?.usesPseudoForm));
       } else {
         const reference = semanticReferences.get(rangeKey(range));
         const tokenType = reference ? semanticReferenceTokenType(reference.kind) : undefined;
         if (tokenType) {
           pushSemanticToken(tokens, range, tokenType);
+        } else if (token.startsWith('.') && directives.has(token.toLowerCase())) {
+          pushSemanticToken(tokens, range, 'mipsDirective');
+        } else if (instructions[token.toLowerCase()]) {
+          const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, range));
+          pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], settings, parsedInstruction?.usesPseudoForm));
         }
       }
     }

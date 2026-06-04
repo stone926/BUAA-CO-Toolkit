@@ -123,3 +123,74 @@ export async function runTool(command: string, args: string[], options: RunToolO
     child.stdin.end();
   });
 }
+
+export async function launchTool(command: string, args: string[], options: RunToolOptions): Promise<RunResult> {
+  const display = commandLine(command, args);
+  const cwd = options.cwd;
+  options.output.appendLine(`$ ${display}`);
+  options.output.appendLine(`cwd: ${cwd}`);
+
+  if (showCommandBeforeRun(options.resource)) {
+    const choice = await vscode.window.showInformationMessage(`Run external tool?\n${display}`, 'Run');
+    if (choice !== 'Run') {
+      return {
+        ok: false,
+        exitCode: null,
+        commandLine: display,
+        cwd,
+        stdout: '',
+        stderr: 'Cancelled by user.',
+        timedOut: false
+      };
+    }
+  }
+
+  return await new Promise<RunResult>((resolve) => {
+    let settled = false;
+    const resolveOnce = (result: RunResult): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        ...(options.env ?? {})
+      },
+      shell: false,
+      windowsHide: true,
+      detached: true,
+      stdio: 'ignore'
+    });
+
+    child.on('error', (error: Error) => {
+      options.output.appendLine(error.message);
+      resolveOnce({
+        ok: false,
+        exitCode: null,
+        commandLine: display,
+        cwd,
+        stdout: '',
+        stderr: error.message,
+        timedOut: false
+      });
+    });
+
+    child.on('spawn', () => {
+      child.unref();
+      resolveOnce({
+        ok: true,
+        exitCode: null,
+        commandLine: display,
+        cwd,
+        stdout: '',
+        stderr: '',
+        timedOut: false
+      });
+    });
+  });
+}

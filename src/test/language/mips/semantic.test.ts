@@ -56,4 +56,18 @@ describe('MIPS AST and semantic model', () => {
     expect(result.semantic.references.some((reference) => reference.name === 'emit' && reference.kind === 'macro')).toBe(true);
     expect(result.semantic.unresolvedReferences.some((reference) => reference.name === 'missing_symbol')).toBe(true);
   });
+
+  it('binds instruction-like data symbol references before mnemonic names', () => {
+    const result = parseMips(doc([
+      '.data',
+      'b: .word 0 : 64',
+      '.text',
+      'main: la $a0, b'
+    ].join('\n')), defaultCoSettings);
+
+    const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
+    expect(errors).toHaveLength(0);
+    expect(result.semantic.globalScope.dataSymbols.has('b')).toBe(true);
+    expect(result.semantic.references.some((reference) => reference.name === 'b' && reference.kind === 'data')).toBe(true);
+  });
 });

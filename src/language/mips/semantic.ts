@@ -380,9 +380,6 @@ function classifyReference(
   if (name.startsWith('.') && directives.has(name.toLowerCase())) {
     return undefined;
   }
-  if (instructions[name.toLowerCase()]) {
-    return undefined;
-  }
   if (name.startsWith('$') && (isRegister(name) || isFloatingPointRegister(name))) {
     return {
       name,
@@ -428,6 +425,9 @@ function classifyReference(
       scope,
       symbol
     };
+  }
+  if (instructions[name.toLowerCase()]) {
+    return undefined;
   }
   if (!name.startsWith('.') && isSymbolLike(name)) {
     return {

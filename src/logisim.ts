@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { getJava, getLogisimJar } from './config';
 import { dirname, readTextFile, writeTextFile } from './fsUtil';
 import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
-import { runTool } from './process';
+import { launchTool } from './process';
 import { AppServices } from './types';
 import { pickOneFile, resolveActiveOrPickedTextFile, resolveMachineCodeInput } from './workflowInputs';
 
@@ -92,14 +92,13 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
     vscode.window.showErrorMessage(`Logisim jar does not exist: ${logisim}`);
     return;
   }
-  services.output.show(true);
-  const result = await runTool(getJava(circuit), ['-jar', logisim, circuit.fsPath], {
+  const result = await launchTool(getJava(circuit), ['-jar', logisim, circuit.fsPath], {
     cwd: dirname(circuit),
     output: services.output,
     resource: circuit
   });
   if (!result.ok) {
-    vscode.window.showErrorMessage('Logisim exited with an error. Check the BUAA CO output panel.');
+    vscode.window.showErrorMessage('Failed to launch Logisim. Check the BUAA CO output panel.');
   }
 }
 

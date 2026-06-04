@@ -118,7 +118,6 @@ export async function deactivate(): Promise<void> {
 }
 
 async function showToolchainReport(output: vscode.OutputChannel): Promise<void> {
-  output.show(true);
   output.appendLine('Checking BUAA CO toolchain...');
   const resource = vscode.window.activeTextEditor?.document.uri;
   const checks = await checkToolchain(output, resource);

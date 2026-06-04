@@ -356,6 +356,19 @@ describe('parseMips', () => {
       expect(errors).toHaveLength(0);
     });
 
+    it('accepts .word repeat counts on instruction-like data labels', () => {
+      const text = [
+        '.data',
+        'b: .word 0 : 64',
+        '.text',
+        'main: la $a0, b'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const errors = result.diagnostics.filter((d) => d.severity === 1);
+      expect(result.dataSymbols.has('b')).toBe(true);
+      expect(errors).toHaveLength(0);
+    });
+
     it('accepts .word with label reference', () => {
       const text = '.data\n    .word main\n.text\nmain: nop';
       const result = parseMips(doc(text), settings());
@@ -433,6 +446,12 @@ describe('parseMips', () => {
       const text = 'add: nop';
       const result = parseMips(doc(text), settings());
       expect(diagCodes(result)).toContain('reserved-symbol');
+    });
+
+    it('allows data labels that conflict with instruction names', () => {
+      const text = '.data\nadd: .word 1';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('reserved-symbol');
     });
   });
 
