@@ -141,6 +141,39 @@ export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
   return 100;
 }
 
+export function useBuiltinTestGenerator(resource?: vscode.Uri): boolean {
+  const configured = inspectedValue<boolean>('test.builtinGenerator.enabled', resource);
+  if (typeof configured === 'boolean') {
+    return configured;
+  }
+  const projectValue = getTestFromConfig(resource)?.builtinGenerator?.enabled;
+  if (typeof projectValue === 'boolean') {
+    return projectValue;
+  }
+  return true;
+}
+
+export function getBuiltinGeneratorInstructions(resource?: vscode.Uri): string {
+  return layeredGetString(
+    'test.builtinGenerator.instructions',
+    () => getTestFromConfig(resource)?.builtinGenerator?.instructions,
+    '',
+    resource
+  );
+}
+
+export function getBuiltinGeneratorInstructionCount(resource?: vscode.Uri): number {
+  const configured = inspectedValue<number>('test.builtinGenerator.instructionCount', resource);
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+    return Math.floor(configured);
+  }
+  const projectValue = getTestFromConfig(resource)?.builtinGenerator?.instructionCount;
+  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
+    return Math.floor(projectValue);
+  }
+  return 80;
+}
+
 export function getContinuousIntervalMs(resource?: vscode.Uri): number {
   return positiveIntegerConfig('test.continuousIntervalMs', 1000, resource);
 }

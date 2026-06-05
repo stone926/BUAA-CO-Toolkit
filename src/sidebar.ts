@@ -160,10 +160,10 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     const isLogisimCircuit = activeDocument ? this.isLogisimCircuitFile(activeDocument.uri) : false;
     if (this.shouldShowMipsActions(profile, language)) {
       actionChildren.push(
-      this.createCommandItem('MIPS 运行', 'co.mips.runCurrentFile', 'play'),
-      this.createCommandItem('MIPS 带输入运行', 'co.mips.runWithStdinFile', 'terminal'),
-      this.createCommandItem('MIPS 终端运行', 'co.mips.runInTerminal', 'terminal-powershell'),
-        this.createCommandItem('MIPS 导出文本段', 'co.mips.dumpText', 'dump')
+      this.createCommandItem('ASM 运行', 'co.mips.runCurrentFile', 'play'),
+      this.createCommandItem('ASM 带输入运行', 'co.mips.runWithStdinFile', 'terminal'),
+      this.createCommandItem('ASM 终端运行', 'co.mips.runInTerminal', 'terminal-powershell'),
+        this.createCommandItem('ASM 导出文本段', 'co.mips.dumpText', 'dump')
       );
       if (profile === 'P7' || profile === 'auto') {
         actionChildren.push(this.createCommandItem('MIPS 导出内核段', 'co.mips.dumpKernelText', 'dump'));
@@ -171,14 +171,14 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     }
     if (this.shouldShowTraceTestActions(profile)) {
       actionChildren.push(
-      this.createCommandItem('Trace 文件对拍', 'co.test.compareTraceFiles', 'compare-changes'),
+      this.createCommandItem('手动选择输出对拍', 'co.test.compareTraceFiles', 'compare-changes'),
       this.createCommandItem('最近输出对拍', 'co.test.compareLatestOutputs', 'diff'),
-      this.createCommandItem('完整 Trace 测试', 'co.test.runFullTest', 'run-all'),
-      this.createCommandItem('批量 Trace 测试', 'co.test.runBatchTraceTests', 'list-selection'),
+      this.createCommandItem('单 ASM 输出测试', 'co.test.runFullTest', 'run-all'),
+      this.createCommandItem('多 ASM 输出测试', 'co.test.runBatchTraceTests', 'list-selection'),
       this.createCommandItem('生成并批量测试', 'co.test.runGeneratedTraceTests', 'beaker'),
-      this.createCommandItem('连续生成测试', 'co.test.startContinuousGeneratedTraceTests', 'sync'),
-      this.createCommandItem('停止连续测试', 'co.test.stopContinuousTests', 'debug-stop'),
-        this.createCommandItem('打开批量报告', 'co.test.openBatchTraceReport', 'preview')
+      this.createCommandItem('循环生成测试', 'co.test.startContinuousGeneratedTraceTests', 'sync'),
+      this.createCommandItem('停止循环测试', 'co.test.stopContinuousTests', 'debug-stop'),
+        this.createCommandItem('打开批量测试报告', 'co.test.openBatchTraceReport', 'preview')
       );
     }
     if (this.shouldShowLogisimActions(profile, language, isLogisimCircuit)) {

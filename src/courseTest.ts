@@ -2,14 +2,22 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+  getBuiltinGeneratorInstructionCount,
+  getBuiltinGeneratorInstructions,
   getContinuousIntervalMs,
   getContinuousMaxIterations,
   getContinuousStopOnFailure,
   getGeneratedAsmLimit,
   getGeneratorArgs,
   getJava,
-  getPython
+  getProfile,
+  getPython,
+  useBuiltinTestGenerator
 } from './config';
+import {
+  BuiltinAsmGeneratorError,
+  generateBuiltinAsmTestCase
+} from './courseTesting/builtinAsmGenerator';
 import {
   continuousCounts,
   ContinuousCounts,
@@ -42,7 +50,7 @@ import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarge
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { runIsim } from './verilog';
-import { AppServices } from './types';
+import { AppServices, ProjectProfile } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { runTool } from './process';
 import { pickOneFile } from './workflowInputs';
@@ -97,10 +105,22 @@ interface CourseTraceBatchSource {
   asmFiles?: string[];
 }
 
-interface GeneratorRunSetup {
+type GeneratorRunSetup = ExternalGeneratorRunSetup | BuiltinGeneratorRunSetup;
+
+interface ExternalGeneratorRunSetup {
+  kind: 'external';
   folder: vscode.WorkspaceFolder;
   generator: vscode.Uri;
   invocation: GeneratorInvocation;
+}
+
+interface BuiltinGeneratorRunSetup {
+  kind: 'builtin';
+  folder: vscode.WorkspaceFolder;
+  resource: vscode.Uri;
+  profile: ProjectProfile;
+  instructionText: string;
+  instructionCount: number;
 }
 
 interface GeneratedAsmBatch {
@@ -234,9 +254,9 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
     return;
   }
 
-  const intervalMs = getContinuousIntervalMs(setup.generator);
-  const maxIterations = getContinuousMaxIterations(setup.generator);
-  const stopOnFailure = getContinuousStopOnFailure(setup.generator);
+  const intervalMs = getContinuousIntervalMs(generatorResource(setup));
+  const maxIterations = getContinuousMaxIterations(generatorResource(setup));
+  const stopOnFailure = getContinuousStopOnFailure(generatorResource(setup));
   const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'out'));
   await ensureDirectory(outDir);
   const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
@@ -252,9 +272,9 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
       generatedAt: new Date().toISOString(),
       running: true,
       stopRequested: false,
-      generator: setup.generator.fsPath,
-      commandLine: [setup.invocation.command, ...setup.invocation.args].join(' '),
-      cwd: setup.invocation.cwd,
+      generator: generatorLabel(setup),
+      commandLine: generatorCommandLine(setup),
+      cwd: generatorCwd(setup),
       options: {
         intervalMs,
         maxIterations,
@@ -271,7 +291,7 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
   services.output.show(true);
   services.output.appendLine('');
   services.output.appendLine('Starting continuous generated course trace tests.');
-  services.output.appendLine(`Generator: ${setup.generator.fsPath}`);
+  services.output.appendLine(`Generator: ${generatorLabel(setup)}`);
   services.output.appendLine(`Interval: ${intervalMs} ms, max iterations: ${maxIterations || 'unlimited'}, stop on failure: ${stopOnFailure}`);
 
   try {
@@ -729,13 +749,7 @@ async function resolveGeneratedAsmBatch(services: AppServices): Promise<Generate
   }
   return {
     asms: picked,
-    source: {
-      kind: 'generator',
-      generator: setup.generator.fsPath,
-      commandLine: [setup.invocation.command, ...setup.invocation.args].join(' '),
-      cwd: setup.invocation.cwd,
-      asmFiles: picked.map((uri) => uri.fsPath)
-    }
+    source: generatorSource(setup, picked)
   };
 }
 
@@ -746,11 +760,35 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
     return undefined;
   }
 
+  const activeExternal = await resolveActiveGeneratorInput();
+  if (activeExternal) {
+    return buildExternalGeneratorRunSetup(folder, activeExternal);
+  }
+
+  const resource = vscode.window.activeTextEditor?.document.uri ?? folder.uri;
+  if (useBuiltinTestGenerator(resource)) {
+    return {
+      kind: 'builtin',
+      folder,
+      resource,
+      profile: getProfile(resource),
+      instructionText: getBuiltinGeneratorInstructions(resource),
+      instructionCount: getBuiltinGeneratorInstructionCount(resource)
+    };
+  }
+
   const generator = await resolveGeneratorInput(folder);
   if (!generator) {
     return undefined;
   }
 
+  return buildExternalGeneratorRunSetup(folder, generator);
+}
+
+function buildExternalGeneratorRunSetup(
+  folder: vscode.WorkspaceFolder,
+  generator: vscode.Uri
+): GeneratorRunSetup | undefined {
   const invocation = buildGeneratorInvocation(generator.fsPath, {
     python: getPython(generator),
     java: getJava(generator),
@@ -762,13 +800,17 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
     return undefined;
   }
 
-  return { folder, generator, invocation };
+  return { kind: 'external', folder, generator, invocation };
 }
 
 async function runGeneratorAndCollectAsms(
   services: AppServices,
   setup: GeneratorRunSetup
 ): Promise<GeneratedAsmBatch | undefined> {
+  if (setup.kind === 'builtin') {
+    return await runBuiltinGeneratorAndCollectAsms(services, setup);
+  }
+
   const before = snapshotAsmFiles(setup.folder.uri.fsPath);
   services.output.show(true);
   services.output.appendLine('');
@@ -785,17 +827,53 @@ async function runGeneratorAndCollectAsms(
 
   const after = snapshotAsmFiles(setup.folder.uri.fsPath);
   const generated = changedAsmFiles(before, after, getGeneratedAsmLimit(setup.generator)).map((file) => vscode.Uri.file(file));
-  const source: CourseTraceBatchSource = {
-    kind: 'generator',
-    generator: setup.generator.fsPath,
-    commandLine: result.commandLine,
-    cwd: result.cwd,
-    asmFiles: generated.map((uri) => uri.fsPath)
-  };
+  const source: CourseTraceBatchSource = generatorSource(setup, generated, result.commandLine, result.cwd);
   if (generated.length) {
     return { asms: generated, source };
   }
   return undefined;
+}
+
+async function runBuiltinGeneratorAndCollectAsms(
+  services: AppServices,
+  setup: BuiltinGeneratorRunSetup
+): Promise<GeneratedAsmBatch | undefined> {
+  const generatedAt = new Date();
+  let generated: ReturnType<typeof generateBuiltinAsmTestCase>;
+  try {
+    generated = generateBuiltinAsmTestCase({
+      profile: setup.profile,
+      instructionText: setup.instructionText,
+      instructionCount: setup.instructionCount,
+      generatedAt
+    });
+  } catch (error) {
+    const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(message);
+    services.output.show(true);
+    services.output.appendLine('');
+    services.output.appendLine(`Built-in ASM generator failed: ${message}`);
+    return undefined;
+  }
+
+  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'generated'));
+  await ensureDirectory(outDir);
+  const asm = vscode.Uri.file(path.join(outDir.fsPath, builtinAsmFileName(generated.profile, generatedAt)));
+  await writeTextFile(asm, generated.text);
+
+  services.output.show(true);
+  services.output.appendLine('');
+  services.output.appendLine('Running built-in random ASM generator.');
+  services.output.appendLine(`Profile: ${generated.profile}`);
+  services.output.appendLine(`Instruction count: ${generated.instructionCount}`);
+  services.output.appendLine(`Instruction set: ${generated.instructionSet.join(' ')}`);
+  services.output.appendLine(`Seed: ${generated.seed}`);
+  services.output.appendLine(`ASM: ${asm.fsPath}`);
+
+  return {
+    asms: [asm],
+    source: generatorSource(setup, [asm])
+  };
 }
 
 function expandTraceCases(asms: vscode.Uri[]): CourseTraceCaseInput[] {
@@ -811,6 +889,58 @@ function expandTraceCases(asms: vscode.Uri[]): CourseTraceCaseInput[] {
     }
   }
   return cases;
+}
+
+async function resolveActiveGeneratorInput(): Promise<vscode.Uri | undefined> {
+  const editor = vscode.window.activeTextEditor;
+  if (editor && editor.document.uri.scheme === 'file' && isSupportedGeneratorFile(editor.document.uri.fsPath)) {
+    if (editor.document.isDirty) {
+      await editor.document.save();
+    }
+    return editor.document.uri;
+  }
+  return undefined;
+}
+
+function generatorResource(setup: GeneratorRunSetup): vscode.Uri {
+  return setup.kind === 'external' ? setup.generator : setup.resource;
+}
+
+function generatorLabel(setup: GeneratorRunSetup): string {
+  return setup.kind === 'external' ? setup.generator.fsPath : 'builtin:random-asm';
+}
+
+function generatorCommandLine(setup: GeneratorRunSetup): string {
+  if (setup.kind === 'external') {
+    return [setup.invocation.command, ...setup.invocation.args].join(' ');
+  }
+  const instructionArg = setup.instructionText.trim() ? ` --instructions "${setup.instructionText.trim()}"` : ' --instructions <profile-default>';
+  return `builtin-random-asm --profile ${setup.profile} --count ${setup.instructionCount}${instructionArg}`;
+}
+
+function generatorCwd(setup: GeneratorRunSetup): string {
+  return setup.kind === 'external' ? setup.invocation.cwd : path.join(setup.folder.uri.fsPath, '.co', 'generated');
+}
+
+function generatorSource(
+  setup: GeneratorRunSetup,
+  asms: vscode.Uri[],
+  commandLine = generatorCommandLine(setup),
+  cwd = generatorCwd(setup)
+): CourseTraceBatchSource {
+  return {
+    kind: 'generator',
+    generator: generatorLabel(setup),
+    commandLine,
+    cwd,
+    asmFiles: asms.map((uri) => uri.fsPath)
+  };
+}
+
+function builtinAsmFileName(profile: string, generatedAt: Date): string {
+  const timestamp = generatedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const suffix = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+  return `builtin-${profile.toLowerCase()}-${timestamp}-${suffix}.asm`;
 }
 
 async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vscode.Uri | undefined> {

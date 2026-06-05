@@ -27,6 +27,11 @@ export interface CoProjectConfig {
   test?: {
     generatorArgs?: string[];
     generatedAsmLimit?: number;
+    builtinGenerator?: {
+      enabled?: boolean;
+      instructions?: string;
+      instructionCount?: number;
+    };
   };
 }
 
