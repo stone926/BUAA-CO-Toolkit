@@ -104,7 +104,7 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
 
 async function resolveCircuitInput(): Promise<vscode.Uri | undefined> {
   const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.languageId === 'logisim-circ' && editor.document.uri.scheme === 'file') {
+  if (editor && isLogisimCircuitFile(editor.document.uri)) {
     if (editor.document.isDirty) {
       await editor.document.save();
     }
@@ -113,6 +113,10 @@ async function resolveCircuitInput(): Promise<vscode.Uri | undefined> {
   return await pickOneFile('Select Logisim .circ file', {
     Logisim: ['circ']
   });
+}
+
+function isLogisimCircuitFile(uri: vscode.Uri): boolean {
+  return uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.circ';
 }
 
 async function resolveRomTarget(circuitText: string): Promise<LogisimRomTarget | undefined> {

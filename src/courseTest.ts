@@ -853,7 +853,7 @@ async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vs
 
 async function resolveLogisimCircuitInput(): Promise<vscode.Uri | undefined> {
   const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.languageId === 'logisim-circ' && editor.document.uri.scheme === 'file') {
+  if (editor && isLogisimCircuitFile(editor.document.uri)) {
     if (editor.document.isDirty) {
       await editor.document.save();
     }
@@ -883,6 +883,10 @@ async function resolveLogisimCircuitInput(): Promise<vscode.Uri | undefined> {
     Logisim: ['circ'],
     All: ['*']
   });
+}
+
+function isLogisimCircuitFile(uri: vscode.Uri): boolean {
+  return uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.circ';
 }
 
 async function resolveLogisimRomTarget(circuitText: string): Promise<LogisimRomTarget | undefined> {

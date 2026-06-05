@@ -16,7 +16,8 @@
   "activationEvents": [
     "onLanguage:mipsasm",
     "onLanguage:verilog",
-    "onLanguage:logisim-circ",
+    "onLanguage:xml",
+    "workspaceContains:**/*.circ",
     "onCommand:co.checkToolchain",
     "onCommand:co.selectProjectProfile",
     "onCommand:co.sidebar.refresh",
@@ -97,17 +98,6 @@
           ".v"
         ],
         "configuration": "./language-configuration/verilog.json"
-      },
-      {
-        "id": "logisim-circ",
-        "aliases": [
-          "Logisim Circuit",
-          "circ"
-        ],
-        "extensions": [
-          ".circ"
-        ],
-        "configuration": "./language-configuration/logisim-circ.json"
       }
     ],
     "grammars": [
@@ -120,11 +110,6 @@
         "language": "verilog",
         "scopeName": "source.verilog",
         "path": "./syntaxes/verilog.tmLanguage.json"
-      },
-      {
-        "language": "logisim-circ",
-        "scopeName": "text.xml.logisim",
-        "path": "./syntaxes/logisim-circ.tmLanguage.json"
       }
     ],
     "snippets": [
@@ -508,19 +493,19 @@
         },
         {
           "command": "co.logisim.openCurrentCircuit",
-          "when": "resourceLangId == logisim-circ",
+          "when": "resourceExtname == .circ",
           "group": "navigation@10"
         }
       ],
       "editor/context": [
         {
           "command": "co.logisim.generateRom",
-          "when": "resourceLangId == mipsasm || resourceLangId == logisim-circ",
+          "when": "resourceLangId == mipsasm || resourceExtname == .circ",
           "group": "co@10"
         },
         {
           "command": "co.logisim.injectRomIntoCircuit",
-          "when": "resourceLangId == logisim-circ || resourceLangId == mipsasm",
+          "when": "resourceExtname == .circ || resourceLangId == mipsasm",
           "group": "co@11"
         },
         {

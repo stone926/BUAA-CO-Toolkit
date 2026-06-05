@@ -6,7 +6,7 @@ VSCode extension for BUAA Computer Organization labs. The first implementation f
 
 - MIPS ASM language support: highlighting, completion, hover, labels, definitions, diagnostics, formatting, MARS run, MARS run with a stdin file, interactive terminal MARS run, `.text` dump, and kernel text dump.
 - Verilog language support: highlighting, module/signal outline, hover, definitions, implicit-net diagnostics, BUAA CO top-module checks, testbench generation, ISE `.prj/.tcl` generation, and ISim run command.
-- Logisim support: `.circ` recognition, circuit/component outline, label diagnostics, MARS `code.txt` to Logisim ROM conversion, machine-code injection into a `.circ` ROM copy, logging text to CSV conversion, and opening circuits with `logisim.jar`.
+- Logisim support: `.circ` file-pattern recognition, circuit/component outline, label diagnostics, MARS `code.txt` to Logisim ROM conversion, machine-code injection into a `.circ` ROM copy, logging text to CSV conversion, and opening circuits with `logisim.jar`. XML editing support is intentionally left to the user's VSCode/XML extensions.
 - Course testing helpers: run a random ASM generator, detect generated ASM files, continuously rerun generated trace tests with a live monitor, prepare P3 Logisim `.circ` copies with injected machine code, run MARS dump + MARS golden output + ISim simulation + trace compare, batch multiple ASM cases with auto-paired stdin files and a JSON summary report, or compare MARS/ISim trace outputs manually from `.co/out/*.mars.out` and `.co/out/*.sim.out`.
 
 ## Course Test Flow

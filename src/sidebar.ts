@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   getProfile,
@@ -154,7 +155,9 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       this.createCommandItem('选择 Profile', 'co.selectProjectProfile', 'settings-gear'),
       this.createCommandItem('刷新侧边栏', 'co.sidebar.refresh', 'refresh')
     ];
-    const language = vscode.window.activeTextEditor?.document.languageId;
+    const activeDocument = vscode.window.activeTextEditor?.document;
+    const language = activeDocument?.languageId;
+    const isLogisimCircuit = activeDocument ? this.isLogisimCircuitFile(activeDocument.uri) : false;
     if (this.shouldShowMipsActions(profile, language)) {
       actionChildren.push(
       this.createCommandItem('MIPS 运行', 'co.mips.runCurrentFile', 'play'),
@@ -178,7 +181,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         this.createCommandItem('打开批量报告', 'co.test.openBatchTraceReport', 'preview')
       );
     }
-    if (this.shouldShowLogisimActions(profile, language)) {
+    if (this.shouldShowLogisimActions(profile, language, isLogisimCircuit)) {
       actionChildren.push(
         this.createCommandItem('准备 Logisim 用例', 'co.test.prepareLogisimCases', 'file-submodule'),
         this.createCommandItem('生成 Logisim 用例', 'co.test.prepareGeneratedLogisimCases', 'files'),
@@ -299,11 +302,15 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     return language === 'verilog' || profile === 'auto' || ['P1', 'P4', 'P5', 'P6', 'P7'].includes(profile);
   }
 
-  private shouldShowLogisimActions(profile: ProjectProfile, language?: string): boolean {
-    return language === 'logisim-circ' || profile === 'auto' || profile === 'P0' || profile === 'P3';
+  private shouldShowLogisimActions(profile: ProjectProfile, language: string | undefined, isLogisimCircuit: boolean): boolean {
+    return isLogisimCircuit || language === 'logisim-circ' || profile === 'auto' || profile === 'P0' || profile === 'P3';
   }
 
   private shouldShowTraceTestActions(profile: ProjectProfile): boolean {
     return profile === 'auto' || ['P4', 'P5', 'P6', 'P7'].includes(profile);
+  }
+
+  private isLogisimCircuitFile(uri: vscode.Uri): boolean {
+    return uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.circ';
   }
 }

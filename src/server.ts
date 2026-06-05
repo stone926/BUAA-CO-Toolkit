@@ -5,6 +5,7 @@ import {
   createConnection,
   DidChangeConfigurationNotification,
   Diagnostic,
+  DocumentFormattingRequest,
   DocumentSymbol,
   FileChangeType,
   FileEvent,
@@ -81,6 +82,7 @@ import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspac
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 const verilogIndex = new VerilogWorkspaceIndex();
+const logisimLanguageId = 'logisim-circ';
 const mipsState: MipsServerState = {
   ignoredPseudoInstructionFiles: new Set(),
   ignoredPseudoInstructionMnemonics: new Set()
@@ -141,7 +143,7 @@ const languageServices = new Map<string, CoLanguageService>([
     updateDocument: (document, settings) => verilogIndex.updateDocument(document, settings),
     removeDocument: (uri) => verilogIndex.remove(uri)
   }],
-  ['logisim-circ', {
+  [logisimLanguageId, {
     getDiagnostics: (document) => getLogisimDiagnostics(document),
     getHover: (document, position) => getLogisimHover(document, position),
     getDocumentSymbols: (document) => getLogisimDocumentSymbols(document)
@@ -149,6 +151,7 @@ const languageServices = new Map<string, CoLanguageService>([
 ]);
 
 let hasConfigurationCapability = false;
+let hasFormattingDynamicRegistration = false;
 let workspaceFolders: WorkspaceFolder[] | null | undefined;
 let globalSettings: CoSettings = defaultCoSettings;
 const documentSettings = new Map<string, Thenable<CoSettings>>();
@@ -156,6 +159,7 @@ const updatedDocumentVersions = new Map<string, number>();
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
+  hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
   workspaceFolders = params.workspaceFolders;
 
   return {
@@ -171,7 +175,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       codeActionProvider: {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
       },
-      documentFormattingProvider: true,
       foldingRangeProvider: true,
       signatureHelpProvider: {
         triggerCharacters: ['(', ',', ' '],
@@ -201,6 +204,14 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 connection.onInitialized(() => {
   if (hasConfigurationCapability) {
     void connection.client.register(DidChangeConfigurationNotification.type, undefined);
+  }
+  if (hasFormattingDynamicRegistration) {
+    void connection.client.register(DocumentFormattingRequest.type, {
+      documentSelector: [
+        { scheme: 'file', language: 'mipsasm' },
+        { scheme: 'file', language: 'verilog' }
+      ]
+    });
   }
   void rebuildVerilogIndex();
 });
@@ -237,7 +248,7 @@ documents.onDidSave((event) => {
 documents.onDidClose((event) => {
   documentSettings.delete(event.document.uri);
   updatedDocumentVersions.delete(event.document.uri);
-  languageServices.get(event.document.languageId)?.removeDocument?.(event.document.uri);
+  serviceForDocument(event.document)?.removeDocument?.(event.document.uri);
   connection.sendDiagnostics({
     uri: event.document.uri,
     diagnostics: []
@@ -253,7 +264,7 @@ function withDocument<R>(
       const document = documents.get(params.textDocument.uri);
       if (!document) return fallback;
       const settings = await getDocumentSettings(document.uri);
-      const svc = languageServices.get(document.languageId);
+      const svc = serviceForDocument(document);
       return svc ? (handler(document, params, settings, svc) ?? fallback) : fallback;
     } catch (e) {
       connection.console.error(`[BUAA CO] Handler error: ${e}`);
@@ -326,16 +337,17 @@ connection.onExecuteCommand(async (params) => {
 
 async function updateIndexAndValidate(document: TextDocument): Promise<void> {
   const settings = await getDocumentSettings(document.uri);
-  languageServices.get(document.languageId)?.updateDocument?.(document, settings);
+  serviceForDocument(document)?.updateDocument?.(document, settings);
   await validateDocument(document, settings);
   updatedDocumentVersions.set(document.uri, document.version);
 }
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
   const resolvedSettings = settings ?? await getDocumentSettings(document.uri);
+  const diagnosticLanguageId = serviceKeyForDocument(document);
   const diagnostics = filterDisabledDiagnostics(
-    document.languageId,
-    languageServices.get(document.languageId)?.getDiagnostics?.(document, resolvedSettings) ?? [],
+    diagnosticLanguageId,
+    serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [],
     resolvedSettings
   );
   connection.sendDiagnostics({
@@ -354,7 +366,7 @@ function getCodeActions(
   const languageActions = service.getCodeActions?.(document, range, diagnostics, settings) ?? [];
   return [
     ...languageActions,
-    ...getDiagnosticSuppressActions(document.languageId, diagnostics, settings)
+    ...getDiagnosticSuppressActions(serviceKeyForDocument(document), diagnostics, settings)
   ];
 }
 
@@ -370,7 +382,7 @@ async function rebuildVerilogIndex(): Promise<void> {
   const settings = await getDocumentSettings('');
   await verilogIndex.rebuild(workspaceFolders, settings);
   for (const document of documents.all()) {
-    languageServices.get(document.languageId)?.updateDocument?.(document, settings);
+    serviceForDocument(document)?.updateDocument?.(document, settings);
   }
 }
 
@@ -403,6 +415,21 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<stri
 
 function isMipsDocument(document: TextDocument): boolean {
   return document.languageId === 'mipsasm';
+}
+
+function serviceForDocument(document: TextDocument): CoLanguageService | undefined {
+  return languageServices.get(serviceKeyForDocument(document));
+}
+
+function serviceKeyForDocument(document: TextDocument): string {
+  if (isLogisimCircuitUri(document.uri)) {
+    return logisimLanguageId;
+  }
+  return document.languageId;
+}
+
+function isLogisimCircuitUri(uri: string): boolean {
+  return uri.split(/[?#]/, 1)[0].toLowerCase().endsWith('.circ');
 }
 
 async function getDocumentSettings(resource: string): Promise<CoSettings> {

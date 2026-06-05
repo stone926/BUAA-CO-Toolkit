@@ -28,7 +28,7 @@ export function startLanguageServer(context: vscode.ExtensionContext): void {
     documentSelector: [
       { scheme: 'file', language: 'mipsasm' },
       { scheme: 'file', language: 'verilog' },
-      { scheme: 'file', language: 'logisim-circ' }
+      { scheme: 'file', pattern: '**/*.circ' }
     ],
     synchronize: {
       configurationSection: 'co',

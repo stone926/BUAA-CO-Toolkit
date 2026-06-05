@@ -6,6 +6,8 @@ interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
+    grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
+    languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
     views?: Record<string, Array<{ id: string }>>;
   };
 }
@@ -29,5 +31,18 @@ describe('package manifest', () => {
     const viewIds = Object.values(pkg.contributes?.views ?? {}).flat().map((view) => view.id);
     expect(viewIds).toContain('coSidebar');
     expect(activationEvents.has('onView:coSidebar')).toBe(true);
+  });
+
+  it('does not provide XML editor support for Logisim .circ files', () => {
+    const pkg = readPackage();
+    const logisimLanguage = (pkg.contributes?.languages ?? []).find((language) =>
+      language.id === 'logisim-circ' || language.extensions?.includes('.circ')
+    );
+    const logisimGrammar = (pkg.contributes?.grammars ?? []).find((grammar) =>
+      grammar.language === 'logisim-circ' || grammar.scopeName === 'text.xml.logisim'
+    );
+
+    expect(logisimLanguage).toBeUndefined();
+    expect(logisimGrammar).toBeUndefined();
   });
 });
