@@ -61,8 +61,6 @@ const defaultInstructionSets: Record<CpuProfile, string[]> = {
   ]
 };
 
-const unsupportedRealInstructions = new Set(['break', 'eret', 'nop', 'syscall']);
-
 const supportedMnemonics = new Set([
   'add', 'addu', 'addi', 'addiu', 'sub', 'subu',
   'and', 'andi', 'or', 'ori', 'xor', 'xori', 'nor',
@@ -76,7 +74,8 @@ const supportedMnemonics = new Set([
   'mul', 'madd', 'maddu', 'msub', 'msubu', 'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
   'mfc0', 'mtc0',
   'teq', 'tne', 'tge', 'tgeu', 'tlt', 'tltu',
-  'teqi', 'tnei', 'tgei', 'tgeiu', 'tlti', 'tltiu'
+  'teqi', 'tnei', 'tgei', 'tgeiu', 'tlti', 'tltiu',
+  'nop'
 ]);
 
 const controlMnemonics = new Set<string>([
@@ -147,7 +146,7 @@ export function resolveBuiltinInstructionSet(profile: ProjectProfile, instructio
       unknown.push(raw);
       continue;
     }
-    if (instruction.pseudo || unsupportedRealInstructions.has(mnemonic)) {
+    if (instruction.pseudo) {
       pseudo.push(raw);
       continue;
     }
@@ -507,9 +506,16 @@ class ProgramGenerator {
       case 'tltiu':
         this.emitTrapImmediate(mnemonic);
         return;
+      case 'nop':
+        this.emitNop();
+        return;
       default:
         throw new BuiltinAsmGeneratorError(`Built-in ASM generator does not know how to emit ${mnemonic}.`);
     }
+  }
+
+  private emitNop(): void {
+    this.emit('nop', 'nop');
   }
 
   private emitThreeRegister(mnemonic: string): void {
@@ -902,7 +908,7 @@ class ProgramGenerator {
     const preferred = [
       'sll', 'srl', 'sra', 'addu', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
       'addiu', 'andi', 'ori', 'xori', 'slti', 'sltiu',
-      'lw', 'lb', 'lbu', 'lh', 'lhu', 'mfhi', 'mflo', 'mfc0'
+      'lw', 'lb', 'lbu', 'lh', 'lhu', 'mfhi', 'mflo', 'mfc0', 'nop'
     ];
     return preferred.filter((mnemonic) =>
       this.allowed.has(mnemonic) &&
@@ -913,6 +919,10 @@ class ProgramGenerator {
   }
 
   private emitNoStateProbe(mnemonic: string): void {
+    if (mnemonic === 'nop') {
+      this.emitNop();
+      return;
+    }
     if (mnemonic === 'sll' || mnemonic === 'srl' || mnemonic === 'sra') {
       this.emit(mnemonic, `${mnemonic} $0, ${this.chooseReadRegister()}, ${this.rng.int(0, 31)}`);
       return;

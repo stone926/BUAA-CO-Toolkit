@@ -36,6 +36,19 @@ describe('built-in ASM generator', () => {
     }
   });
 
+  it('accepts nop as a real instruction', () => {
+    const resolved = resolveBuiltinInstructionSet('P5', 'nop');
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P5',
+      instructionText: 'nop',
+      instructionCount: 8,
+      seed: 'nop-only'
+    });
+
+    expect(resolved.mnemonics).toEqual(['nop']);
+    expect(executableMnemonics(result.text)).toEqual(Array(8).fill('nop'));
+  });
+
   it('does not generate divide by zero', () => {
     const result = generateBuiltinAsmTestCase({
       profile: 'P6',
@@ -53,8 +66,8 @@ describe('built-in ASM generator', () => {
   });
 
   it('rejects exception-only instructions that the current trace path cannot load safely', () => {
-    expect(() => resolveBuiltinInstructionSet('P7', 'syscall')).toThrow(/real CPU instructions/);
-    expect(() => resolveBuiltinInstructionSet('P7', 'eret')).toThrow(/real CPU instructions/);
+    expect(() => resolveBuiltinInstructionSet('P7', 'syscall')).toThrow(/not supported by the built-in generator/);
+    expect(() => resolveBuiltinInstructionSet('P7', 'eret')).toThrow(/not supported by the built-in generator/);
   });
 });
 
