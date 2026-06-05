@@ -5,6 +5,7 @@ import {
   getMachineCode,
   getMarsJar,
   getMemoryConfiguration,
+  getMipsExtraArgs,
   useDelayedBranching
 } from './config';
 import { basenameNoExt, dirname, ensureDirectory, writeTextFile } from './fsUtil';
@@ -178,6 +179,7 @@ function buildMarsArgs(asmUri: vscode.Uri, mars: string, mode: MarsRunMode): str
   if (useDelayedBranching(asmUri)) {
     args.push('db');
   }
+  args.push(...getMipsExtraArgs(asmUri));
   if (mode === 'run') {
     args.push(asmUri.fsPath);
   }

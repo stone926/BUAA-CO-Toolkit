@@ -5,7 +5,8 @@ import {
   getProjectProfileFromConfig,
   getToolchainFromConfig,
   getSimulationFromConfig,
-  getTestFromConfig
+  getTestFromConfig,
+  getMipsFromConfig
 } from './projectConfig';
 
 /**
@@ -123,6 +124,10 @@ export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
 
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
   return config<string>('mips.memoryConfiguration', 'CompactDataAtZero', resource).trim() || 'CompactDataAtZero';
+}
+
+export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
+  return layeredGetArray('mips.extraArgs', () => getMipsFromConfig(resource)?.extraArgs, [], resource);
 }
 
 export function getGeneratorArgs(resource?: vscode.Uri): string[] {

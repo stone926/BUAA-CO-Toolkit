@@ -709,6 +709,14 @@
           "default": "CompactDataAtZero",
           "description": "MARS memory configuration passed after mc."
         },
+        "co.mips.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments appended to every MARS command line. E.g. [\"sm\", \"dc4096\"]."
+        },
         "co.mips.warnPseudoInstruction": {
           "type": "boolean",
           "default": true,

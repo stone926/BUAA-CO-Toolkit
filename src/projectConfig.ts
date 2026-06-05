@@ -33,6 +33,9 @@ export interface CoProjectConfig {
       instructionCount?: number;
     };
   };
+  mips?: {
+    extraArgs?: string[];
+  };
 }
 
 /**
@@ -124,6 +127,13 @@ export function getTestFromConfig(resource?: vscode.Uri): CoProjectConfig['test'
 }
 
 /**
+ * 从 .co/config.json 获取 MIPS 配置
+ */
+export function getMipsFromConfig(resource?: vscode.Uri): CoProjectConfig['mips'] {
+  return getProjectConfig(resource)?.mips;
+}
+
+/**
  * 保存配置到 .co/config.json
  */
 export async function saveProjectConfig(config: CoProjectConfig, resource?: vscode.Uri): Promise<void> {
@@ -169,6 +179,10 @@ export async function saveProjectConfig(config: CoProjectConfig, resource?: vsco
     test: {
       ...existingConfig.test,
       ...config.test
+    },
+    mips: {
+      ...existingConfig.mips,
+      ...config.mips
     }
   };
 
