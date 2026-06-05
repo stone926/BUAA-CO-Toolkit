@@ -1,9 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from './types';
 import { CoProjectConfig, saveProjectConfig } from './projectConfig';
 import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
+import { defaultCoSettings } from './language/common/settings';
+import { buildTestbench, parseVerilog } from './language/verilog/service';
 
 export async function runProjectWizard(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -279,10 +282,11 @@ main:
 function createVerilogTemplate(rootPath: string, profile: ProjectProfile): void {
   const topModule = 'mips';
   const topPath = path.join(rootPath, 'src', `${topModule}.v`);
+  let topText: string;
 
   if (!fs.existsSync(topPath)) {
     const ports = getVerilogPorts(profile);
-    const template = `// BUAA CO ${profile} Verilog
+    topText = `// BUAA CO ${profile} Verilog
 // Author: Your Name
 // Date: ${new Date().toISOString().split('T')[0]}
 
@@ -293,64 +297,98 @@ ${ports}
 
 endmodule
 `;
-    fs.writeFileSync(topPath, template, 'utf8');
+    fs.writeFileSync(topPath, topText, 'utf8');
+  } else {
+    topText = fs.readFileSync(topPath, 'utf8');
   }
 
   // 创建 testbench
   const tbPath = path.join(rootPath, 'test', `${topModule}_tb.v`);
   if (!fs.existsSync(tbPath)) {
-    const tbTemplate = `// Testbench for ${topModule}
-\`timescale 1ns/1ps
-
-module ${topModule}_tb;
-    reg clk;
-    reg reset;
-
-    ${topModule} uut(
-        .clk(clk),
-        .reset(reset)
-    );
-
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    initial begin
-        reset = 1;
-        #20;
-        reset = 0;
-        #1000;
-        \$finish;
-    end
-
-    initial begin
-        \$dumpfile("wave.vcd");
-        \$dumpvars(0, ${topModule}_tb);
-    end
-endmodule
-`;
+    const tbTemplate = buildWizardTestbench(topText, topPath, topModule, `${topModule}_tb`);
     fs.writeFileSync(tbPath, tbTemplate, 'utf8');
   }
 }
 
 function getVerilogPorts(profile: ProjectProfile): string {
-  const ports: string[] = [
-    '    input clk',
-    '    input reset'
-  ];
-
-  if (profile >= 'P5') {
-    ports.push('    output [31:0] macroscopicPC');
+  if (profile === 'P6') {
+    return [
+      '    input clk',
+      '    input reset',
+      '    input [31:0] i_inst_rdata',
+      '    input [31:0] m_data_rdata',
+      '    output [31:0] i_inst_addr',
+      '    output [31:0] m_data_addr',
+      '    output [31:0] m_data_wdata',
+      '    output [3:0] m_data_byteen',
+      '    output [31:0] m_inst_addr',
+      '    output w_grf_we',
+      '    output [4:0] w_grf_addr',
+      '    output [31:0] w_grf_wdata',
+      '    output [31:0] w_inst_addr'
+    ].join(',\n');
   }
 
   if (profile === 'P7') {
-    ports.push('    input interrupt');
-    ports.push('    output [31:0] m_int_addr');
-    ports.push('    output [3:0] m_int_byteen');
+    return [
+      '    input clk',
+      '    input reset',
+      '    input interrupt',
+      '    output [31:0] macroscopic_pc',
+      '    output [31:0] i_inst_addr',
+      '    input [31:0] i_inst_rdata',
+      '    output [31:0] m_data_addr',
+      '    input [31:0] m_data_rdata',
+      '    output [31:0] m_data_wdata',
+      '    output [3:0] m_data_byteen',
+      '    output [31:0] m_int_addr',
+      '    output [3:0] m_int_byteen',
+      '    output [31:0] m_inst_addr',
+      '    output w_grf_we',
+      '    output [4:0] w_grf_addr',
+      '    output [31:0] w_grf_wdata',
+      '    output [31:0] w_inst_addr'
+    ].join(',\n');
   }
 
-  return ports.join(',\n');
+  return [
+    '    input clk',
+    '    input reset'
+  ].join(',\n');
+}
+
+function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string): string {
+  const document = TextDocument.create(vscode.Uri.file(topPath).toString(), 'verilog', 1, topText);
+  const parsed = parseVerilog(document, defaultCoSettings, false);
+  const module = parsed.modules.find((candidate) => candidate.name === topModule) ?? parsed.modules[0];
+  if (module) {
+    return buildTestbench(module, tbName);
+  }
+  return `\`timescale 1ns / 1ps
+
+module ${tbName};
+    reg clk;
+    reg reset;
+
+    ${topModule} uut (
+        .clk(clk),
+        .reset(reset)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    initial begin
+        reset = 1'b1;
+        #20;
+        reset = 1'b0;
+        #200000;
+        $finish;
+    end
+endmodule
+`;
 }
 
 async function updateProjectSettings(profile: ProjectProfile): Promise<void> {

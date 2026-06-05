@@ -80,4 +80,27 @@ describe('Verilog semantic tokens', () => {
       })]);
     }
   });
+
+  it('highlights single-letter display format conversions', () => {
+    const text = [
+      'module m;',
+      '    initial begin',
+      '        $display("%d@%h: $%d <= %h %% %m %ld", $time, pc, regno, data);',
+      '    end',
+      'endmodule'
+    ].join('\n');
+    const tokens = decode(getVerilogSemanticTokens(doc(text), mergeCoSettings({}), new VerilogWorkspaceIndex()).data);
+    const formatType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogFormatSpecifier');
+    const line = text.split('\n')[2];
+    const expected = Array.from(line.matchAll(/%[%0-9a-z]+/g)).map((match) => ({
+      line: 2,
+      character: match.index ?? 0,
+      length: match[0].length,
+      type: formatType
+    }));
+
+    for (const token of expected) {
+      expect(tokens).toContainEqual(token);
+    }
+  });
 });

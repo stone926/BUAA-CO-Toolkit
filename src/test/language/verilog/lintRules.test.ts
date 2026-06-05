@@ -151,4 +151,74 @@ endmodule
     const codes = diagnosticCodes(text);
     expect(codes).not.toContain('implicit-net:fixed_macroscopic_pc');
   });
+
+  it('reports port declarations that omit wire under default_nettype none', () => {
+    const text = `
+\`default_nettype none
+module mips(
+    input clk,
+    input wire reset,
+    output [31:0] instr,
+    output reg done
+);
+endmodule
+`.trim();
+    const diagnostics = getVerilogDiagnostics(doc(text), mergeCoSettings({}));
+    const explicitWireDiagnostics = diagnostics.filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
+    expect(explicitWireDiagnostics).toHaveLength(2);
+    expect(explicitWireDiagnostics.every((diagnostic) => diagnostic.severity === 1)).toBe(true);
+  });
+
+  it('reports old-style body port declarations that omit wire under default_nettype none', () => {
+    const text = `
+\`default_nettype none
+module mips(clk, reset);
+    input clk;
+    input wire reset;
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes.filter((code) => code === 'explicit-port-wire')).toHaveLength(1);
+  });
+
+  it('offers a quick fix to add explicit wire to a port declaration', () => {
+    const text = `
+\`default_nettype none
+module mips(
+    input clk,
+    input wire reset
+);
+endmodule
+`.trim();
+    const document = doc(text);
+    const settings = mergeCoSettings({});
+    const diagnostics = getVerilogDiagnostics(document, settings);
+    const explicitWire = diagnostics.find((diagnostic) => diagnostic.code === 'explicit-port-wire');
+    expect(explicitWire).toBeDefined();
+
+    const actions = getVerilogCodeActions(document, explicitWire!.range, [explicitWire!], settings, new VerilogWorkspaceIndex());
+    const action = actions.find((candidate) => candidate.title === 'Add explicit wire to port declaration');
+    const edit = action?.edit?.changes?.[document.uri]?.[0];
+    expect(edit?.newText).toBe(' wire');
+    expect(edit?.range.start).toEqual(explicitWire!.range.end);
+  });
+
+  it('offers a quick fix that declares undeclared wires on a new module body line', () => {
+    const text = `
+module demo(output y);
+    assign y = missing;
+endmodule
+`.trim();
+    const document = doc(text);
+    const settings = mergeCoSettings({});
+    const diagnostics = getVerilogDiagnostics(document, settings);
+    const implicit = diagnostics.find((diagnostic) => diagnostic.code === 'implicit-net:missing');
+    expect(implicit).toBeDefined();
+
+    const actions = getVerilogCodeActions(document, implicit!.range, [implicit!], settings, new VerilogWorkspaceIndex());
+    const action = actions.find((candidate) => candidate.title === 'Declare wire missing');
+    const edit = action?.edit?.changes?.[document.uri]?.[0];
+    expect(edit?.newText).toBe('    wire missing;\n');
+    expect(edit?.range.start).toEqual({ line: 1, character: 0 });
+  });
 });

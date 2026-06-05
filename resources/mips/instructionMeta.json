@@ -80,7 +80,19 @@
     "madd": false,
     "maddu": false,
     "msub": false,
-    "msubu": false
+    "msubu": false,
+    "teq": false,
+    "tne": false,
+    "tge": false,
+    "tgeu": false,
+    "tlt": false,
+    "tltu": false,
+    "teqi": false,
+    "tnei": false,
+    "tgei": false,
+    "tgeiu": false,
+    "tlti": false,
+    "tltiu": false
   },
   "operandPatterns": {
     "register": ["$rd", "$rs", "$rt", "$base", "$temp"],

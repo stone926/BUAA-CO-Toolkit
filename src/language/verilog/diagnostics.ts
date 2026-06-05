@@ -20,6 +20,7 @@ import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import {
   collectAssignmentDiagnostics,
   collectCourseStyleDiagnostics,
+  collectExplicitPortNetTypeDiagnostics,
   collectImplicitNetDiagnostics,
   collectSynthesizableHintDiagnostics
 } from './lintDiagnostics';
@@ -49,6 +50,7 @@ export function collectVerilogDiagnostics(
   if (settings.verilog.lint.synthesizableHints) {
     collectSynthesizableHintDiagnostics(document, text, modules, cst, diagnostics);
   }
+  collectExplicitPortNetTypeDiagnostics(document, modules, cst, diagnostics);
   collectImplicitNetDiagnostics(document, settings, text, modules, cst, diagnostics, semantic);
   return diagnostics;
 }
@@ -235,10 +237,10 @@ function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, 
     checkExpectedPorts(top, profile, diagnostics);
   }
 
-  if (profile === 'P6') {
+  if (top && (profile === 'P6' || profile === 'P7')) {
     for (const token of cst.codeTokens) {
-      if (token.kind === 'systemIdentifier' && token.value === '$display') {
-        diagnostics.push(makeDiagnostic(verilogTokenRange(document, token), 'P6 top-level design should not contain $display; the testbench should monitor external outputs.', DiagnosticSeverity.Error, 'p6-display'));
+      if (token.kind === 'systemIdentifier' && token.value === '$display' && tokenInsideModule(document, token, top)) {
+        diagnostics.push(makeDiagnostic(verilogTokenRange(document, token), `${profile} top-level design should not contain $display; the testbench should monitor external outputs.`, DiagnosticSeverity.Error, `${profile.toLowerCase()}-display`));
       }
     }
   }
@@ -251,6 +253,12 @@ function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, 
     const firstLine = lineAt(document, 0).text;
     diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, firstLine.length)), 'Consider adding `default_nettype none to catch implicit wires early.', DiagnosticSeverity.Information, 'default-nettype-none'));
   }
+}
+
+function tokenInsideModule(document: TextDocument, token: VerilogToken, module: VerilogModule): boolean {
+  const start = document.offsetAt(module.range.start);
+  const end = document.offsetAt(module.range.end);
+  return token.start >= start && token.start < end;
 }
 
 function checkExpectedPorts(module: VerilogModule, profile: ProjectProfile, diagnostics: Diagnostic[]): void {

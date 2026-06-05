@@ -344,6 +344,20 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
     });
   }
 
+  const explicitWireDiagnostics = diagnostics.filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
+  for (const diagnostic of explicitWireDiagnostics) {
+    actions.push({
+      title: 'Add explicit wire to port declaration',
+      kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
+      edit: {
+        changes: {
+          [document.uri]: [TextEdit.insert(diagnostic.range.end, ' wire')]
+        }
+      }
+    });
+  }
+
   actions.push(...getVerilogLintRuleCodeActions(diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogLiteralCodeActions(document, range));
@@ -459,10 +473,19 @@ function makeDeclareWireAction(document: TextDocument, module: VerilogModule, na
     kind: CodeActionKind.QuickFix,
     edit: {
       changes: {
-        [document.uri]: [TextEdit.insert(module.headerEnd, `    wire ${name};\n`)]
+        [document.uri]: [declareWireEdit(document, module, name)]
       }
     }
   };
+}
+
+function declareWireEdit(document: TextDocument, module: VerilogModule, name: string): TextEdit {
+  const headerLine = lineAt(document, module.headerEnd.line).text;
+  const afterHeader = headerLine.slice(module.headerEnd.character);
+  if (!afterHeader.trim() && module.headerEnd.line + 1 < document.lineCount) {
+    return TextEdit.insert(Position.create(module.headerEnd.line + 1, 0), `    wire ${name};\n`);
+  }
+  return TextEdit.insert(module.headerEnd, `\n    wire ${name};\n`);
 }
 
 function getInstanceCodeActions(document: TextDocument, range: Range, settings: CoSettings, index: VerilogWorkspaceIndex): CodeAction[] {

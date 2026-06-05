@@ -464,4 +464,38 @@ describe('parseMips', () => {
       expect(result.labels.has('outer')).toBe(true);
     });
   });
+
+  describe('P7 trap instructions', () => {
+    it('parses R-type trap instructions', () => {
+      const text = '.text\n    teq $t0, $t1\n    tne $t0, $t1\n    tge $t0, $t1\n    tgeu $t0, $t1\n    tlt $t0, $t1\n    tltu $t0, $t1';
+      const result = parseMips(doc(text), settings());
+      expect(result.instructions).toHaveLength(6);
+      expect(result.instructions[0].mnemonic).toBe('teq');
+      expect(result.instructions[1].mnemonic).toBe('tne');
+      expect(result.instructions[2].mnemonic).toBe('tge');
+      expect(result.instructions[3].mnemonic).toBe('tgeu');
+      expect(result.instructions[4].mnemonic).toBe('tlt');
+      expect(result.instructions[5].mnemonic).toBe('tltu');
+      expect(diagCodes(result)).toHaveLength(0);
+    });
+
+    it('parses I-type trap instructions', () => {
+      const text = '.text\n    teqi $t0, 100\n    tnei $t0, -50\n    tgei $t0, 0\n    tgeiu $t0, 200\n    tlti $t0, -1\n    tltiu $t0, 300';
+      const result = parseMips(doc(text), settings());
+      expect(result.instructions).toHaveLength(6);
+      expect(result.instructions[0].mnemonic).toBe('teqi');
+      expect(result.instructions[1].mnemonic).toBe('tnei');
+      expect(result.instructions[2].mnemonic).toBe('tgei');
+      expect(result.instructions[3].mnemonic).toBe('tgeiu');
+      expect(result.instructions[4].mnemonic).toBe('tlti');
+      expect(result.instructions[5].mnemonic).toBe('tltiu');
+      expect(diagCodes(result)).toHaveLength(0);
+    });
+
+    it('reports error for wrong operand count in trap instructions', () => {
+      const text = '.text\n    teq $t0\n    tne $t0, $t1, $t2';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('operand-count');
+    });
+  });
 });

@@ -58,7 +58,7 @@ async function compareLatestOutputs(services: AppServices): Promise<void> {
   const pair = await findLatestTracePair(folder);
   if (!pair) {
     const choice = await vscode.window.showWarningMessage(
-      'Could not find both .co/out/*.mars.out and .co/isim/*.sim.out in this workspace.',
+      'Could not find both .co/out/*.mars.out and .co/out/*.sim.out in this workspace.',
       'Pick Files'
     );
     if (choice === 'Pick Files') {
@@ -126,7 +126,7 @@ async function pickCompareMode(): Promise<CompareMode | undefined> {
 
 async function findLatestTracePair(folder: vscode.WorkspaceFolder): Promise<TraceFilePair | undefined> {
   const mars = await findLatestFile(folder, '.co/out/*.mars.out');
-  const sim = await findLatestFile(folder, '.co/isim/*.sim.out');
+  const sim = await findLatestFile(folder, '.co/out/*.sim.out');
   if (!mars || !sim) {
     return undefined;
   }

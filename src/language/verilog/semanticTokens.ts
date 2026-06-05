@@ -232,9 +232,14 @@ function readFormatSpecifierEnd(text: string, start: number): number | undefined
       index++;
     }
   }
+  const lengthStart = index;
   while (index < text.length && isFormatLengthModifier(text[index])) {
     index++;
   }
+  if (index > lengthStart && index < text.length && isFormatConversion(text[index])) {
+    return index + 1;
+  }
+  index = lengthStart;
   return index < text.length && isFormatConversion(text[index]) ? index + 1 : undefined;
 }
 

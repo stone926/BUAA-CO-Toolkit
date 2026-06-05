@@ -7,7 +7,7 @@ VSCode extension for BUAA Computer Organization labs. The first implementation f
 - MIPS ASM language support: highlighting, completion, hover, labels, definitions, diagnostics, formatting, MARS run, MARS run with a stdin file, interactive terminal MARS run, `.text` dump, and kernel text dump.
 - Verilog language support: highlighting, module/signal outline, hover, definitions, implicit-net diagnostics, BUAA CO top-module checks, testbench generation, ISE `.prj/.tcl` generation, and ISim run command.
 - Logisim support: `.circ` recognition, circuit/component outline, label diagnostics, MARS `code.txt` to Logisim ROM conversion, machine-code injection into a `.circ` ROM copy, logging text to CSV conversion, and opening circuits with `logisim.jar`.
-- Course testing helpers: run a random ASM generator, detect generated ASM files, continuously rerun generated trace tests with a live monitor, prepare P3 Logisim `.circ` copies with injected machine code, run MARS dump + MARS golden output + ISim simulation + trace compare, batch multiple ASM cases with auto-paired stdin files and a JSON summary report, or compare MARS/ISim trace outputs manually from `.co/out/*.mars.out` and `.co/isim/*.sim.out`.
+- Course testing helpers: run a random ASM generator, detect generated ASM files, continuously rerun generated trace tests with a live monitor, prepare P3 Logisim `.circ` copies with injected machine code, run MARS dump + MARS golden output + ISim simulation + trace compare, batch multiple ASM cases with auto-paired stdin files and a JSON summary report, or compare MARS/ISim trace outputs manually from `.co/out/*.mars.out` and `.co/out/*.sim.out`.
 
 ## Course Test Flow
 
@@ -35,8 +35,9 @@ Set these in VSCode settings as needed:
   "co.toolchain.logisim": "E:/path/to/logisim.jar",
   "co.toolchain.isePath": "D:/Xilinx/14.7/ISE_DS/ISE",
   "co.toolchain.python": "python",
-  "co.project.profile": "P5"
+  "co.project.profile": "P5",
+  "co.project.simTime": "200us"
 }
 ```
 
-Use `co.test.generatorArgs` when your generator needs extra arguments such as a seed or output count. `co.test.continuousIntervalMs`, `co.test.continuousMaxIterations`, and `co.test.continuousStopOnFailure` control continuous generated trace tests. Run `CO: Check Toolchain` to verify Java, Python, MARS, Logisim, and ISE paths.
+`co.project.simTime` is written into the generated ISim TCL as `run <value>; exit`; the default `200us` matches the course-style scripts. Use `co.test.generatorArgs` when your generator needs extra arguments such as a seed or output count. `co.test.continuousIntervalMs`, `co.test.continuousMaxIterations`, and `co.test.continuousStopOnFailure` control continuous generated trace tests. Run `CO: Check Toolchain` to verify Java, Python, MARS, Logisim, and ISE paths.

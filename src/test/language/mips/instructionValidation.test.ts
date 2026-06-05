@@ -95,6 +95,22 @@ describe('instructionWritesRegister', () => {
   it('detects $v0 write for lui', () => {
     expect(instructionWritesRegister('lui', ['$v0', '0x1234'], '$v0')).toBe(true);
   });
+
+  it('does not detect register write for trap instructions', () => {
+    // Trap instructions do not write to any register
+    expect(instructionWritesRegister('teq', ['$t0', '$t1'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tne', ['$t0', '$t1'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tge', ['$t0', '$t1'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tgeu', ['$t0', '$t1'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tlt', ['$t0', '$t1'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tltu', ['$t0', '$t1'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('teqi', ['$t0', '100'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tnei', ['$t0', '100'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tgei', ['$t0', '100'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tgeiu', ['$t0', '100'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tlti', ['$t0', '100'], '$t0')).toBe(false);
+    expect(instructionWritesRegister('tltiu', ['$t0', '100'], '$t0')).toBe(false);
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────

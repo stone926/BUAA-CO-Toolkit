@@ -648,7 +648,7 @@
         "co.project.simTime": {
           "type": "string",
           "default": "200us",
-          "description": "Default ISim TCL run duration."
+          "description": "ISim TCL run duration written as `run <value>; exit`. Defaults to the BUAA CO course-style 200us."
         },
         "co.toolchain.java": {
           "type": "string",

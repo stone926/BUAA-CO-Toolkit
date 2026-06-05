@@ -832,4 +832,88 @@ describe('buildTestbench', () => {
     expect(tb).toContain("reset = 1'b1");
     expect(tb).toContain("reset = 1'b0");
   });
+
+  it('uses the configured finish delay when generating a testbench', () => {
+    const module = makeModule({
+      name: 'm',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' })
+      ]
+    });
+    const tb = buildTestbench(module, 'm_tb', { finishDelay: '400000' });
+    expect(tb).toContain('        #400000;');
+    expect(tb).toContain('        $finish;');
+  });
+
+  it('generates external memory wiring for P6-style CPU interfaces', () => {
+    const module = makeModule({
+      name: 'mips',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'reset', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'i_inst_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'i_inst_rdata', kind: 'input', direction: 'input', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_rdata', kind: 'input', direction: 'input', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_wdata', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_byteen', kind: 'output', direction: 'output', width: '[3:0]' }),
+        makeDecl({ name: 'm_inst_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'w_grf_we', kind: 'output', direction: 'output' }),
+        makeDecl({ name: 'w_grf_addr', kind: 'output', direction: 'output', width: '[4:0]' }),
+        makeDecl({ name: 'w_grf_wdata', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'w_inst_addr', kind: 'output', direction: 'output', width: '[31:0]' })
+      ]
+    });
+    const tb = buildTestbench(module, 'mips_tb');
+    expect(tb).toContain('wire [31:0] i_inst_rdata;');
+    expect(tb).toContain('reg [31:0] data[0:4095];');
+    expect(tb).toContain('reg [31:0] fixed_addr;');
+    expect(tb).toContain('reg [31:0] fixed_wdata;');
+    expect(tb).toContain('$readmemh("code.txt", inst);');
+    expect(tb).toContain('for (i = 0; i < 4096; i = i + 1) begin');
+    expect(tb).toContain('data[i] <= 0;');
+    expect(tb).toContain('assign i_inst_rdata = inst[(i_inst_addr - 32\'h3000) >> 2];');
+    expect(tb).toContain('assign m_data_rdata = data[m_data_addr >> 2];');
+    expect(tb).toContain('fixed_wdata = data[m_data_addr >> 2];');
+    expect(tb).toContain('data[fixed_addr >> 2] <= fixed_wdata;');
+    expect(tb).toContain('$display("%d@%h: *%h <= %h", $time, m_inst_addr, fixed_addr, fixed_wdata);');
+    expect(tb).toContain('$display("%d@%h: $%d <= %h", $time, w_inst_addr, w_grf_addr, w_grf_wdata);');
+    expect(tb).toContain('always #2 clk <= ~clk;');
+    expect(tb).not.toContain('$finish;');
+  });
+
+  it('generates P7 normal official-style external memory wiring', () => {
+    const module = makeModule({
+      name: 'mips',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'reset', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'interrupt', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'macroscopic_pc', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'i_inst_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'i_inst_rdata', kind: 'input', direction: 'input', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_rdata', kind: 'input', direction: 'input', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_wdata', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'm_data_byteen', kind: 'output', direction: 'output', width: '[3:0]' }),
+        makeDecl({ name: 'm_int_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'm_int_byteen', kind: 'output', direction: 'output', width: '[3:0]' }),
+        makeDecl({ name: 'm_inst_addr', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'w_grf_we', kind: 'output', direction: 'output' }),
+        makeDecl({ name: 'w_grf_addr', kind: 'output', direction: 'output', width: '[4:0]' }),
+        makeDecl({ name: 'w_grf_wdata', kind: 'output', direction: 'output', width: '[31:0]' }),
+        makeDecl({ name: 'w_inst_addr', kind: 'output', direction: 'output', width: '[31:0]' })
+      ]
+    });
+    const tb = buildTestbench(module, 'mips_tb');
+    expect(tb).toContain('reg interrupt;');
+    expect(tb).toContain('interrupt = 0;');
+    expect(tb).toContain('reg [31:0] inst[0:5119];');
+    expect(tb).toContain('for (i = 0; i < 5120; i = i + 1) begin');
+    expect(tb).toContain('assign i_inst_rdata = inst[((i_inst_addr - 32\'h3000) >> 2) % 5120];');
+    expect(tb).toContain('assign m_data_rdata = data[(m_data_addr >> 2) % 5120];');
+    expect(tb).toContain('fixed_wdata = data[(m_data_addr >> 2) & 4095];');
+    expect(tb).toContain('else if (|m_data_byteen && fixed_addr >> 2 < 4096) begin');
+    expect(tb).not.toContain('$finish;');
+  });
 });

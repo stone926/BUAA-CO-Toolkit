@@ -1115,6 +1115,198 @@
     "type": "special"
   },
   {
+    "mnemonic": "teq",
+    "summary": "Trap if equal",
+    "formats": [
+      "teq $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 rs == rt 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "tne",
+    "summary": "Trap if not equal",
+    "formats": [
+      "tne $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 rs != rt 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "tge",
+    "summary": "Trap if greater or equal (signed)",
+    "formats": [
+      "tge $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 signed(rs) >= signed(rt) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "tgeu",
+    "summary": "Trap if greater or equal unsigned",
+    "formats": [
+      "tgeu $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 unsigned(rs) >= unsigned(rt) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "tlt",
+    "summary": "Trap if less than (signed)",
+    "formats": [
+      "tlt $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 signed(rs) < signed(rt) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "tltu",
+    "summary": "Trap if less than unsigned",
+    "formats": [
+      "tltu $rs, $rt"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 unsigned(rs) < unsigned(rt) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "R-type"
+  },
+  {
+    "mnemonic": "teqi",
+    "summary": "Trap if equal immediate",
+    "formats": [
+      "teqi $rs, simm16"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 rs == sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "tnei",
+    "summary": "Trap if not equal immediate",
+    "formats": [
+      "tnei $rs, simm16"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 rs != sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "tgei",
+    "summary": "Trap if greater or equal immediate (signed)",
+    "formats": [
+      "tgei $rs, simm16"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 signed(rs) >= sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "tgeiu",
+    "summary": "Trap if greater or equal immediate unsigned",
+    "formats": [
+      "tgeiu $rs, simm16"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 unsigned(rs) >= sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "tlti",
+    "summary": "Trap if less than immediate (signed)",
+    "formats": [
+      "tlti $rs, simm16"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 signed(rs) < sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "I-type"
+  },
+  {
+    "mnemonic": "tltiu",
+    "summary": "Trap if less than immediate unsigned",
+    "formats": [
+      "tltiu $rs, simm16"
+    ],
+    "operands": [
+      2,
+      2
+    ],
+    "description": "若 unsigned(rs) < sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
+    "projects": [
+      "P7"
+    ],
+    "type": "I-type"
+  },
+  {
     "mnemonic": "break",
     "summary": "Breakpoint exception",
     "formats": [

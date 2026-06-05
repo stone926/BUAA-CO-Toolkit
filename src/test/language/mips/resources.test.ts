@@ -253,6 +253,44 @@ describe('instructions', () => {
     expect(instructions).toHaveProperty('nop');
   });
 
+  it('contains P7 trap instructions (R-type)', () => {
+    expect(instructions).toHaveProperty('teq');
+    expect(instructions).toHaveProperty('tne');
+    expect(instructions).toHaveProperty('tge');
+    expect(instructions).toHaveProperty('tgeu');
+    expect(instructions).toHaveProperty('tlt');
+    expect(instructions).toHaveProperty('tltu');
+    // Verify R-type format
+    expect(instructions.teq.type).toBe('R-type');
+    expect(instructions.tne.type).toBe('R-type');
+    expect(instructions.tge.type).toBe('R-type');
+    expect(instructions.tgeu.type).toBe('R-type');
+    expect(instructions.tlt.type).toBe('R-type');
+    expect(instructions.tltu.type).toBe('R-type');
+    // Verify formats
+    expect(instructions.teq.formats).toContain('teq $rs, $rt');
+    expect(instructions.tne.formats).toContain('tne $rs, $rt');
+  });
+
+  it('contains P7 trap instructions (I-type)', () => {
+    expect(instructions).toHaveProperty('teqi');
+    expect(instructions).toHaveProperty('tnei');
+    expect(instructions).toHaveProperty('tgei');
+    expect(instructions).toHaveProperty('tgeiu');
+    expect(instructions).toHaveProperty('tlti');
+    expect(instructions).toHaveProperty('tltiu');
+    // Verify I-type format
+    expect(instructions.teqi.type).toBe('I-type');
+    expect(instructions.tnei.type).toBe('I-type');
+    expect(instructions.tgei.type).toBe('I-type');
+    expect(instructions.tgeiu.type).toBe('I-type');
+    expect(instructions.tlti.type).toBe('I-type');
+    expect(instructions.tltiu.type).toBe('I-type');
+    // Verify formats
+    expect(instructions.teqi.formats).toContain('teqi $rs, simm16');
+    expect(instructions.tnei.formats).toContain('tnei $rs, simm16');
+  });
+
   it('contains MARS pseudo instruction forms from PseudoOps.txt', () => {
     expect(instructions).toHaveProperty('subi');
     expect(instructions).toHaveProperty('subiu');

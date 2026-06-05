@@ -33,7 +33,7 @@ function layeredGetString(
   defaultValue: string,
   resource?: vscode.Uri
 ): string {
-  const vsValue = vscode.workspace.getConfiguration('co', resource).get<string>(vsKey);
+  const vsValue = inspectedValue<string>(vsKey, resource);
   if (vsValue && vsValue.trim()) {
     return vsValue.trim();
   }

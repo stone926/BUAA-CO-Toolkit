@@ -158,6 +158,140 @@ export function collectImplicitNetDiagnostics(
   }
 }
 
+const portDirections = new Set(['input', 'output', 'inout']);
+const explicitPortNetTypes = new Set([
+  'wire',
+  'tri',
+  'tri0',
+  'tri1',
+  'triand',
+  'trior',
+  'trireg',
+  'wand',
+  'wor',
+  'supply0',
+  'supply1',
+  'reg',
+  'logic',
+  'integer',
+  'time',
+  'real',
+  'realtime'
+]);
+const portDeclarationModifiers = new Set(['automatic', 'signed', 'unsigned', 'scalared', 'vectored']);
+
+export function collectExplicitPortNetTypeDiagnostics(
+  document: TextDocument,
+  modules: VerilogModule[],
+  cst: VerilogCstDocument,
+  diagnostics: Diagnostic[]
+): void {
+  if (!hasDefaultNettypeNone(document, cst)) {
+    return;
+  }
+
+  for (const module of modules) {
+    const moduleStart = document.offsetAt(module.range.start);
+    const headerEnd = document.offsetAt(module.headerEnd);
+    const moduleEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
+    const headerTokens = cst.codeTokens.filter((token) => token.start >= moduleStart && token.end <= headerEnd);
+    collectImplicitPortNetTypeDiagnosticsFromTokens(document, headerTokens, diagnostics);
+
+    for (const statement of cst.statements) {
+      if (statement.start < headerEnd || statement.start >= moduleEnd) {
+        continue;
+      }
+      const tokens = trimStatementTokens(statement.tokens);
+      if (!tokens.length || !portDirections.has(tokens[0].value)) {
+        continue;
+      }
+      if (!hasExplicitPortNetType(tokens, 0)) {
+        diagnostics.push(makeExplicitPortNetDiagnostic(document, tokens[0]));
+      }
+    }
+  }
+}
+
+function collectImplicitPortNetTypeDiagnosticsFromTokens(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (!portDirections.has(token.value)) {
+      continue;
+    }
+    if (!hasExplicitPortNetType(tokens, index)) {
+      diagnostics.push(makeExplicitPortNetDiagnostic(document, token));
+    }
+  }
+}
+
+function hasExplicitPortNetType(tokens: VerilogToken[], directionIndex: number): boolean {
+  let index = directionIndex + 1;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token.value === ',' || token.value === ';' || token.value === ')') {
+      return false;
+    }
+    if (explicitPortNetTypes.has(token.value)) {
+      return true;
+    }
+    if (portDeclarationModifiers.has(token.value)) {
+      index++;
+      continue;
+    }
+    if (token.value === '[') {
+      const close = findMatchingToken(tokens, index, '[', ']');
+      if (close < 0) {
+        return false;
+      }
+      index = close + 1;
+      continue;
+    }
+    if (token.kind === 'identifier') {
+      return false;
+    }
+    index++;
+  }
+  return false;
+}
+
+function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
+  let depth = 0;
+  for (let index = openIndex; index < tokens.length; index++) {
+    if (tokens[index].value === openValue) {
+      depth++;
+    } else if (tokens[index].value === closeValue) {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function makeExplicitPortNetDiagnostic(document: TextDocument, token: VerilogToken): Diagnostic {
+  return makeDiagnostic(
+    tokenRange(document, token),
+    'Port declaration relies on an implicit wire net type while `default_nettype none is active.',
+    DiagnosticSeverity.Error,
+    'explicit-port-wire'
+  );
+}
+
+function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument): boolean {
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    if (token.kind !== 'directive' || token.value !== '`default_nettype') {
+      continue;
+    }
+    const next = cst.codeTokens[index + 1];
+    if (next && document.positionAt(next.start).line === document.positionAt(token.start).line && next.value === 'none') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, cst: VerilogCstDocument, module: VerilogModule, diagnostics: Diagnostic[]): void {
   const blocks = collectAlwaysBlocksFromCst(document, cst, module);
   const assignedBlocks = new Map<string, Set<number>>();

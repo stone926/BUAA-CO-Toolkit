@@ -582,6 +582,39 @@ endmodule
       const p6Display = diagnostics.find((diag) => diag.code === 'p6-display');
       expect(p6Display).toBeDefined();
     });
+
+    it('does not report $display in the P6 testbench', () => {
+      const text = `
+module mips(input clk, input reset);
+endmodule
+
+module mips_tb;
+    initial begin
+        $display("%d@%h: $%d <= %h", $time, 32'h3000, 5'd1, 32'h2);
+    end
+endmodule
+`.trim();
+      const d = doc(text);
+      const s = settings({ project: { profile: 'P6' } });
+      const diagnostics = getVerilogDiagnostics(d, s);
+      const p6Display = diagnostics.find((diag) => diag.code === 'p6-display');
+      expect(p6Display).toBeUndefined();
+    });
+
+    it('reports error for $display in P7 top-level design', () => {
+      const text = `
+module mips(input clk, input reset);
+    initial begin
+        $display("%d@%h: $%d <= %h", $time, 32'h3000, 5'd1, 32'h2);
+    end
+endmodule
+`.trim();
+      const d = doc(text);
+      const s = settings({ project: { profile: 'P7' } });
+      const diagnostics = getVerilogDiagnostics(d, s);
+      const p7Display = diagnostics.find((diag) => diag.code === 'p7-display');
+      expect(p7Display).toBeDefined();
+    });
   });
 
   describe('Width inference with real expressions', () => {

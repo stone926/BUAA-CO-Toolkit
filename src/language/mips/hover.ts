@@ -20,6 +20,7 @@ import {
 } from './semantic';
 import { getCachedMipsParse } from './parseCache';
 import { findMacroOverloadAtPosition } from './queries';
+import { MipsSymbol } from './model';
 import {
   canonicalRegister,
   MipsInstruction,
@@ -46,6 +47,14 @@ export function getMipsHover(document: TextDocument, position: Position, setting
         kind: MarkupKind.Markdown,
         value: directiveHover
       },
+      range: wordRange
+    };
+  }
+
+  const semanticSymbol = semanticSymbolAtWordRange(parsed, word, position, wordRange);
+  if (semanticSymbol) {
+    return {
+      contents: semanticSymbolHoverContents(parsed, semanticSymbol),
       range: wordRange
     };
   }
@@ -118,16 +127,8 @@ export function getMipsHover(document: TextDocument, position: Position, setting
 
   const symbol = resolveMipsSemanticSymbolAtPosition(parsed.semantic, word, position);
   if (symbol) {
-    const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
-    if (symbol.kind === 'eqv') {
-      const replacement = eqvReplacementText(parsed, symbol.selectionRange.start.line, symbol.name);
-      return {
-        contents: replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行。\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`,
-        range: wordRange
-      };
-    }
     return {
-      contents: `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`,
+      contents: semanticSymbolHoverContents(parsed, symbol),
       range: wordRange
     };
   }
@@ -155,6 +156,35 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   }
 
   return undefined;
+}
+
+function semanticSymbolAtWordRange(parsed: ReturnType<typeof getCachedMipsParse>, word: string, position: Position, wordRange: { start: Position; end: Position }): MipsSymbol | undefined {
+  const declaration = parsed.semantic.declarations.find((item) =>
+    item.name === word &&
+    item.symbol &&
+    rangesEqual(item.selectionRange, wordRange)
+  );
+  if (declaration?.symbol) {
+    return declaration.symbol;
+  }
+
+  const reference = parsed.semantic.references.find((item) =>
+    item.name === word &&
+    item.symbol &&
+    rangesEqual(item.range, wordRange) &&
+    position.character >= item.range.start.character &&
+    position.character <= item.range.end.character
+  );
+  return reference?.symbol;
+}
+
+function semanticSymbolHoverContents(parsed: ReturnType<typeof getCachedMipsParse>, symbol: MipsSymbol): string {
+  const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
+  if (symbol.kind === 'eqv') {
+    const replacement = eqvReplacementText(parsed, symbol.selectionRange.start.line, symbol.name);
+    return replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行。\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`;
+  }
+  return `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`;
 }
 
 function instructionHoverMarkdown(instruction: MipsInstruction, parsedInstruction?: { usesPseudoForm: boolean }): string[] {

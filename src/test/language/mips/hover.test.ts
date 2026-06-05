@@ -67,10 +67,67 @@ describe('getMipsHover instruction markdown', () => {
     expect(text).toContain('mul $s0, $s1, $at');
     expect(text).toContain('展开会使用 `$at`');
   });
+
+  it('prefers a data symbol hover when the symbol name matches an instruction', () => {
+    const source = [
+      '.data',
+      'b: .word 0 : 64',
+      '.text',
+      '    la $t0, b',
+      '    b done',
+      'done: nop'
+    ].join('\n');
+
+    const declaration = hoverText(source, 1, 0);
+    expect(declaration).toContain('数据符号');
+    expect(declaration).not.toContain('Unconditional branch');
+
+    const reference = hoverText(source, 3, 12);
+    expect(reference).toContain('数据符号');
+    expect(reference).not.toContain('Unconditional branch');
+
+    const branch = hoverText(source, 4, 5);
+    expect(branch).toContain('**b**');
+    expect(branch).toContain('Unconditional branch');
+  });
 });
 
 describe('syscallByOperand', () => {
   it('resolves character literal service numbers', () => {
     expect(syscallByOperand("'\\n'")?.code).toBe(10);
+  });
+});
+
+describe('getMipsHover for trap instructions', () => {
+  it('shows hover for R-type trap instruction teq', () => {
+    const text = hoverText('    teq $t0, $t1', 0, 5);
+    expect(text).toContain('**teq**');
+    expect(text).toContain('Trap if equal');
+    expect(text).toContain('R 型指令');
+  });
+
+  it('shows hover for I-type trap instruction teqi', () => {
+    const text = hoverText('    teqi $t0, 100', 0, 5);
+    expect(text).toContain('**teqi**');
+    expect(text).toContain('Trap if equal immediate');
+    expect(text).toContain('I 型指令');
+  });
+
+  it('shows hover for tne instruction', () => {
+    const text = hoverText('    tne $t0, $t1', 0, 5);
+    expect(text).toContain('**tne**');
+    expect(text).toContain('Trap if not equal');
+  });
+
+  it('shows hover for tge instruction', () => {
+    const text = hoverText('    tge $t0, $t1', 0, 5);
+    expect(text).toContain('**tge**');
+    expect(text).toContain('Trap if greater or equal');
+  });
+
+  it('shows hover for tltu instruction', () => {
+    const text = hoverText('    tltu $t0, $t1', 0, 5);
+    expect(text).toContain('**tltu**');
+    expect(text).toContain('Trap if less than unsigned');
   });
 });
