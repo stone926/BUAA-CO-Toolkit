@@ -152,6 +152,7 @@ let hasConfigurationCapability = false;
 let workspaceFolders: WorkspaceFolder[] | null | undefined;
 let globalSettings: CoSettings = defaultCoSettings;
 const documentSettings = new Map<string, Thenable<CoSettings>>();
+const updatedDocumentVersions = new Map<string, number>();
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
@@ -215,7 +216,7 @@ connection.onDidChangeConfiguration((change) => {
 });
 
 connection.onDidChangeWatchedFiles((params) => {
-  void handleWatchedFilesChanged(params.changes).then(validateAllDocuments);
+  void handleWatchedFilesChanged(params.changes).then((languageIds) => validateDocuments((document) => languageIds.has(document.languageId)));
 });
 
 documents.onDidOpen((event) => {
@@ -227,11 +228,15 @@ documents.onDidChangeContent((event) => {
 });
 
 documents.onDidSave((event) => {
+  if (updatedDocumentVersions.get(event.document.uri) === event.document.version) {
+    return;
+  }
   void updateIndexAndValidate(event.document);
 });
 
 documents.onDidClose((event) => {
   documentSettings.delete(event.document.uri);
+  updatedDocumentVersions.delete(event.document.uri);
   languageServices.get(event.document.languageId)?.removeDocument?.(event.document.uri);
   connection.sendDiagnostics({
     uri: event.document.uri,
@@ -312,10 +317,10 @@ connection.onPrepareRename(withDocument(
 connection.onExecuteCommand(async (params) => {
   if (params.command === mipsIgnorePseudoFileCommand && typeof params.arguments?.[0] === 'string') {
     mipsState.ignoredPseudoInstructionFiles.add(params.arguments[0]);
-    await validateAllDocuments();
+    await validateDocuments(isMipsDocument);
   } else if (params.command === mipsIgnorePseudoMnemonicCommand && typeof params.arguments?.[0] === 'string') {
     mipsState.ignoredPseudoInstructionMnemonics.add(params.arguments[0].toLowerCase());
-    await validateAllDocuments();
+    await validateDocuments(isMipsDocument);
   }
 });
 
@@ -323,6 +328,7 @@ async function updateIndexAndValidate(document: TextDocument): Promise<void> {
   const settings = await getDocumentSettings(document.uri);
   languageServices.get(document.languageId)?.updateDocument?.(document, settings);
   await validateDocument(document, settings);
+  updatedDocumentVersions.set(document.uri, document.version);
 }
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
@@ -353,7 +359,11 @@ function getCodeActions(
 }
 
 async function validateAllDocuments(): Promise<void> {
-  await Promise.all(documents.all().map((document) => validateDocument(document)));
+  await validateDocuments(() => true);
+}
+
+async function validateDocuments(predicate: (document: TextDocument) => boolean): Promise<void> {
+  await Promise.all(documents.all().filter(predicate).map((document) => validateDocument(document)));
 }
 
 async function rebuildVerilogIndex(): Promise<void> {
@@ -364,14 +374,16 @@ async function rebuildVerilogIndex(): Promise<void> {
   }
 }
 
-async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<void> {
+async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<string>> {
   const verilogChanges = changes.filter((change) => isVerilogUri(change.uri));
+  const affectedLanguageIds = new Set<string>();
   if (!verilogChanges.length) {
-    return;
+    return affectedLanguageIds;
   }
+  affectedLanguageIds.add('verilog');
   if (verilogChanges.length > 50) {
     await rebuildVerilogIndex();
-    return;
+    return affectedLanguageIds;
   }
   const settings = await getDocumentSettings('');
   for (const change of verilogChanges) {
@@ -386,6 +398,11 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<void> {
       verilogIndex.updateFile(change.uri, settings);
     }
   }
+  return affectedLanguageIds;
+}
+
+function isMipsDocument(document: TextDocument): boolean {
+  return document.languageId === 'mipsasm';
 }
 
 async function getDocumentSettings(resource: string): Promise<CoSettings> {

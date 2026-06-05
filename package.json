@@ -21,6 +21,9 @@
     "onCommand:co.selectProjectProfile",
     "onCommand:co.sidebar.refresh",
     "onCommand:co.projectWizard",
+    "onCommand:co.course.openTutorial",
+    "onCommand:co.course.openProfileTutorial",
+    "onCommand:co.course.openTutorialLink",
     "onCommand:co.diagnostics.disableCode",
     "onCommand:co.mips.disablePseudoWarnings",
     "onCommand:co.mips.runCurrentFile",
@@ -353,6 +356,16 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "co.course.openTutorial",
+        "title": "CO: Open Course Tutorial",
+        "icon": "$(book)"
+      },
+      {
+        "command": "co.course.openProfileTutorial",
+        "title": "CO: Open Current Profile Tutorial",
+        "icon": "$(symbol-class)"
+      },
+      {
         "command": "co.mips.runCurrentFile",
         "title": "CO: MIPS Run Current File"
       },
@@ -535,6 +548,12 @@
           "command": "co.projectWizard"
         },
         {
+          "command": "co.course.openTutorial"
+        },
+        {
+          "command": "co.course.openProfileTutorial"
+        },
+        {
           "command": "co.mips.runCurrentFile"
         },
         {
@@ -629,6 +648,11 @@
             "P7"
           ],
           "description": "Current BUAA CO project profile. Auto enables generic checks and infers some Verilog interface rules."
+        },
+        "co.course.tutorialRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional BUAA CO tutorial root. Use a local mirror path such as E:/VSCode/BUAA-CO/cscore/site/cscore.buaa.edu.cn/tutorial or a URL. Empty auto-detects a nearby local mirror and falls back to the official site."
         },
         "co.project.topModule": {
           "type": "string",

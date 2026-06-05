@@ -242,6 +242,12 @@ async function ensureRunnableTestbench(
   const topName = getTopModule(resource);
   const topDefinition = await findTopModuleDefinition(resource, topName);
   if (!topDefinition) {
+    if (getProfile(resource) === 'P1') {
+      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages);
+      if (activeTestbench) {
+        return activeTestbench;
+      }
+    }
     services.output.appendLine(`Top module ${topName} was not found; using configured testbench ${configuredTestbench}.`);
     return configuredTestbench;
   }
@@ -257,6 +263,47 @@ async function ensureRunnableTestbench(
     vscode.window.showInformationMessage(`Generated ${path.basename(tbUri.fsPath)} for ISim.`);
   }
   return configuredTestbench;
+}
+
+async function ensureActiveModuleTestbench(
+  services: AppServices,
+  resource: vscode.Uri | undefined,
+  showMessages: boolean
+): Promise<string | undefined> {
+  const definition = await activeModuleDefinition(resource);
+  if (!definition) {
+    return undefined;
+  }
+  const tbName = `${definition.module.name}_tb`;
+  if (await findExistingTestbenchFile(definition.uri, tbName)) {
+    return tbName;
+  }
+  const tbUri = vscode.Uri.file(path.join(path.dirname(definition.uri.fsPath), `${tbName}.v`));
+  await writeTextFile(tbUri, buildTestbench(definition.module, tbName, { finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)) }));
+  services.output.appendLine(`Generated P1 testbench ${tbUri.fsPath}`);
+  if (showMessages) {
+    vscode.window.showInformationMessage(`Generated ${path.basename(tbUri.fsPath)} for ISim.`);
+  }
+  return tbName;
+}
+
+async function activeModuleDefinition(resource: vscode.Uri | undefined): Promise<VerilogModuleDefinition | undefined> {
+  if (!resource || resource.scheme !== 'file' || path.extname(resource.fsPath).toLowerCase() !== '.v') {
+    return undefined;
+  }
+  const document = await verilogDocumentForUri(resource);
+  if (!document) {
+    return undefined;
+  }
+  const parsed = parseVerilog(document, coSettingsForUri(resource), false);
+  const activeEditor = vscode.window.activeTextEditor;
+  const activePosition = activeEditor?.document.uri.toString() === resource.toString()
+    ? activeEditor.selection.active
+    : undefined;
+  const module = activePosition
+    ? moduleAtPosition(parsed.modules, activePosition) ?? parsed.modules[0]
+    : parsed.modules[0];
+  return module ? { module, uri: resource } : undefined;
 }
 
 async function activeTestbenchModuleName(resource: vscode.Uri | undefined, configuredTestbench: string): Promise<string | undefined> {

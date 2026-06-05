@@ -2,57 +2,71 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, getPython } from './config';
+import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 
 export async function checkToolchain(output: vscode.OutputChannel, resource?: vscode.Uri): Promise<ToolDetection[]> {
   const checks: ToolDetection[] = [];
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
-  const java = getJava(resource);
-  const javaResult = await runTool(java, ['-version'], {
-    cwd,
-    output,
-    resource,
-    timeoutMs: 10000
-  });
-  checks.push({
-    name: 'Java',
-    ok: javaResult.ok,
-    detail: firstLine(javaResult.stderr || javaResult.stdout) || java,
-    suggestion: javaResult.ok ? undefined : 'Install JRE/JDK or set co.toolchain.java.'
-  });
+  const profile = getProfile(resource);
+  const requiredTools = new Set(getProfileRequiredTools(profile).map(normalizeToolName));
+  const checkAll = profile === 'auto' || requiredTools.size === 0;
 
-  const python = getPython(resource);
-  const pythonResult = await runTool(python, ['--version'], {
-    cwd,
-    output,
-    resource,
-    timeoutMs: 10000
-  });
-  checks.push({
-    name: 'Python',
-    ok: pythonResult.ok,
-    detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
-    suggestion: pythonResult.ok ? undefined : 'Install Python or set co.toolchain.python.'
-  });
+  if (checkAll || requiredTools.has('java')) {
+    const java = getJava(resource);
+    const javaResult = await runTool(java, ['-version'], {
+      cwd,
+      output,
+      resource,
+      timeoutMs: 10000
+    });
+    checks.push({
+      name: 'Java',
+      ok: javaResult.ok,
+      detail: firstLine(javaResult.stderr || javaResult.stdout) || java,
+      suggestion: javaResult.ok ? undefined : 'Install JRE/JDK or set co.toolchain.java.'
+    });
+  }
 
-  const mars = getMarsJar(resource);
-  checks.push(fileCheck('MARS', mars, 'Set co.toolchain.mars or co.toolchain.marsP7.'));
+  if (checkAll) {
+    const python = getPython(resource);
+    const pythonResult = await runTool(python, ['--version'], {
+      cwd,
+      output,
+      resource,
+      timeoutMs: 10000
+    });
+    checks.push({
+      name: 'Python',
+      ok: pythonResult.ok,
+      detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
+      suggestion: pythonResult.ok ? undefined : 'Install Python or set co.toolchain.python.'
+    });
+  }
 
-  const logisim = getLogisimJar(resource);
-  checks.push(fileCheck('Logisim', logisim, 'Set co.toolchain.logisim.'));
+  if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
+    const mars = getMarsJar(resource);
+    checks.push(fileCheck('MARS', mars, profile === 'P7' ? 'Set co.toolchain.marsP7 to the course-specific P7 MARS jar.' : 'Set co.toolchain.mars.'));
+  }
 
-  const ise = getIsePath(resource);
-  const fuse = ise ? findFuse(ise) : '';
-  checks.push({
-    name: 'ISE fuse',
-    ok: Boolean(fuse && fs.existsSync(fuse)),
-    detail: fuse || 'not configured',
-    suggestion: fuse ? undefined : 'Set co.toolchain.isePath to the ISE directory.'
-  });
+  if (checkAll || requiredTools.has('logisim')) {
+    const logisim = getLogisimJar(resource);
+    checks.push(fileCheck('Logisim', logisim, 'Set co.toolchain.logisim.'));
+  }
+
+  if (checkAll || requiredTools.has('ise')) {
+    const ise = getIsePath(resource);
+    const fuse = ise ? findFuse(ise) : '';
+    checks.push({
+      name: 'ISE fuse',
+      ok: Boolean(fuse && fs.existsSync(fuse)),
+      detail: fuse || 'not configured',
+      suggestion: fuse ? undefined : 'Set co.toolchain.isePath to the ISE directory.'
+    });
+  }
 
   const hazard = getHazardCalculator(resource);
-  const profile = getProfile(resource);
   if (hazard || profile === 'P5' || profile === 'P6') {
     checks.push(fileCheck('Hazard Calculator', hazard, 'Set co.toolchain.hazardCalculator for P5/P6 hazard analysis.'));
   }
@@ -69,12 +83,17 @@ function fileCheck(name: string, file: string, suggestion: string): ToolDetectio
       suggestion
     };
   }
+  const exists = fs.existsSync(file);
   return {
     name,
-    ok: fs.existsSync(file),
+    ok: exists,
     detail: file,
-    suggestion: fs.existsSync(file) ? undefined : suggestion
+    suggestion: exists ? undefined : suggestion
   };
+}
+
+function normalizeToolName(name: string): string {
+  return name.trim().toLowerCase();
 }
 
 export function findFuse(isePath: string): string {

@@ -1,12 +1,13 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
-import { parseVerilog, stripCommentsAndStrings } from './parser';
+import { addVerilogDiagnostics, parseVerilog, stripCommentsAndStrings } from './parser';
 import type { VerilogParseResult } from './model';
 
 interface CacheEntry {
   uri: string;
   version: number;
   settingsKey: string;
+  text: string;
   hasDiagnostics: boolean;
   parsed: VerilogParseResult;
   strippedText: string;
@@ -32,7 +33,7 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
     return cached.parsed;
   }
   if (cached && includeDiagnostics && !cached.hasDiagnostics) {
-    const parsed = parseVerilog(document, settings, true);
+    const parsed = addVerilogDiagnostics(document, settings, cached.parsed, text);
     const upgraded: CacheEntry = {
       ...cached,
       hasDiagnostics: true,
@@ -48,6 +49,7 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
     uri: document.uri,
     version: document.version,
     settingsKey: settingKey,
+    text,
     hasDiagnostics: includeDiagnostics,
     parsed,
     strippedText

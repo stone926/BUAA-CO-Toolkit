@@ -150,7 +150,7 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
 }
 
 function hasWorkspaceNumericValue(index: VerilogWorkspaceIndex, expected: number): boolean {
-  for (const file of index.allFiles()) {
+  for (const file of index.indexedFiles()) {
     for (const token of file.cst.codeTokens) {
       if (token.kind === 'number' && numericTokenValue(token) === BigInt(expected)) {
         return true;
@@ -162,7 +162,7 @@ function hasWorkspaceNumericValue(index: VerilogWorkspaceIndex, expected: number
 
 function hasMemoryDepth(index: VerilogWorkspaceIndex, depth: number): boolean {
   const last = depth - 1;
-  for (const file of index.allFiles()) {
+  for (const file of index.indexedFiles()) {
     const tokens = file.cst.codeTokens;
     for (let index = 0; index + 4 < tokens.length; index++) {
       if (
@@ -251,17 +251,15 @@ function digitValue(char: string): number | undefined {
 }
 
 function hasModuleCaseInsensitive(index: VerilogWorkspaceIndex, name: string): boolean {
-  return Boolean(findModuleCaseInsensitive(index, name));
+  return Boolean(index.findModuleCaseInsensitive(name));
 }
 
 function findModuleCaseInsensitive(index: VerilogWorkspaceIndex, name: string): VerilogModule | undefined {
-  const lower = name.toLowerCase();
-  return index.allModules().find((module) => module.name.toLowerCase() === lower);
+  return index.findModuleCaseInsensitive(name);
 }
 
 function hasInstanceOfModuleCaseInsensitive(index: VerilogWorkspaceIndex, moduleName: string): boolean {
-  const lower = moduleName.toLowerCase();
-  return index.allModules().some((module) => module.instances.some((instance) => instance.moduleName.toLowerCase() === lower));
+  return index.hasInstanceOfModuleCaseInsensitive(moduleName);
 }
 
 function hasDeclarationCaseInsensitive(module: VerilogModule, name: string): boolean {

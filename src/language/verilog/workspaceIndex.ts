@@ -27,6 +27,11 @@ export class VerilogWorkspaceIndex {
   private readonly modules = new Map<string, VerilogModule[]>();
   private readonly macros = new Map<string, VerilogMacro[]>();
   private readonly maxFiles: number;
+  private fileListCache: VerilogIndexedFile[] | undefined;
+  private moduleListCache: VerilogModule[] | undefined;
+  private macroListCache: VerilogMacro[] | undefined;
+  private caseInsensitiveModuleCache = new Map<string, VerilogModule | undefined>();
+  private caseInsensitiveInstanceCache = new Map<string, boolean>();
 
   constructor(options: { maxFiles?: number } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
@@ -36,6 +41,7 @@ export class VerilogWorkspaceIndex {
     this.files.clear();
     this.modules.clear();
     this.macros.clear();
+    this.invalidateCaches();
     if (!workspaceFolders?.length) {
       return;
     }
@@ -96,6 +102,7 @@ export class VerilogWorkspaceIndex {
       list.push(macro);
       this.macros.set(macro.name, list);
     }
+    this.invalidateCaches();
   }
 
   remove(uri: string): void {
@@ -112,6 +119,7 @@ export class VerilogWorkspaceIndex {
     for (const macro of existing.macros) {
       removeByUri(this.macros, macro.name, uri, () => uri);
     }
+    this.invalidateCaches();
   }
 
   getModule(name: string): VerilogModule | undefined {
@@ -123,7 +131,7 @@ export class VerilogWorkspaceIndex {
   }
 
   allModules(): VerilogModule[] {
-    return [...this.modules.values()].flat();
+    return [...this.indexedModules()];
   }
 
   getMacro(name: string): VerilogMacro | undefined {
@@ -135,15 +143,61 @@ export class VerilogWorkspaceIndex {
   }
 
   allMacros(): VerilogMacro[] {
-    return [...this.macros.values()].flat();
+    return [...this.indexedMacros()];
   }
 
   allFiles(): VerilogIndexedFile[] {
-    return [...this.files.values()];
+    return [...this.indexedFiles()];
   }
 
   getFile(uri: string): VerilogIndexedFile | undefined {
     return this.files.get(uri);
+  }
+
+  indexedFiles(): readonly VerilogIndexedFile[] {
+    this.fileListCache ??= [...this.files.values()];
+    return this.fileListCache;
+  }
+
+  indexedModules(): readonly VerilogModule[] {
+    this.moduleListCache ??= [...this.modules.values()].flat();
+    return this.moduleListCache;
+  }
+
+  indexedMacros(): readonly VerilogMacro[] {
+    this.macroListCache ??= [...this.macros.values()].flat();
+    return this.macroListCache;
+  }
+
+  findModuleCaseInsensitive(name: string): VerilogModule | undefined {
+    const lower = name.toLowerCase();
+    if (this.caseInsensitiveModuleCache.has(lower)) {
+      return this.caseInsensitiveModuleCache.get(lower);
+    }
+    const module = this.indexedModules().find((candidate) => candidate.name.toLowerCase() === lower);
+    this.caseInsensitiveModuleCache.set(lower, module);
+    return module;
+  }
+
+  hasInstanceOfModuleCaseInsensitive(moduleName: string): boolean {
+    const lower = moduleName.toLowerCase();
+    const cached = this.caseInsensitiveInstanceCache.get(lower);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const found = this.indexedModules().some((module) =>
+      module.instances.some((instance) => instance.moduleName.toLowerCase() === lower)
+    );
+    this.caseInsensitiveInstanceCache.set(lower, found);
+    return found;
+  }
+
+  private invalidateCaches(): void {
+    this.fileListCache = undefined;
+    this.moduleListCache = undefined;
+    this.macroListCache = undefined;
+    this.caseInsensitiveModuleCache.clear();
+    this.caseInsensitiveInstanceCache.clear();
   }
 }
 

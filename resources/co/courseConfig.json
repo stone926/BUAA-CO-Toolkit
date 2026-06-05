@@ -83,16 +83,15 @@
     ],
     "P5": [
       {"name": "clk", "direction": "input", "width": 1},
-      {"name": "reset", "direction": "input", "width": 1},
-      {"name": "macroscopicPC", "direction": "output", "width": 32}
+      {"name": "reset", "direction": "input", "width": 1}
     ],
     "P6": [
       {"name": "clk", "direction": "input", "width": 1},
       {"name": "reset", "direction": "input", "width": 1},
-      {"name": "i_inst_addr", "direction": "output", "width": 32},
       {"name": "i_inst_rdata", "direction": "input", "width": 32},
-      {"name": "m_data_addr", "direction": "output", "width": 32},
       {"name": "m_data_rdata", "direction": "input", "width": 32},
+      {"name": "i_inst_addr", "direction": "output", "width": 32},
+      {"name": "m_data_addr", "direction": "output", "width": 32},
       {"name": "m_data_wdata", "direction": "output", "width": 32},
       {"name": "m_data_byteen", "direction": "output", "width": 4},
       {"name": "m_inst_addr", "direction": "output", "width": 32},
@@ -154,6 +153,109 @@
     },
     ".text": {
       "description": "代码段。使用 CompactDataAtZero 配置，不应自定义段地址"
+    }
+  },
+  "tutorial": {
+    "officialRoot": "http://cscore.buaa.edu.cn/tutorial/",
+    "profiles": {
+      "P0": {
+        "title": "P0: Logisim 电路模块",
+        "path": "P0/P0-1/",
+        "description": "电路模块设计、CRC、GRF、FSM"
+      },
+      "P1": {
+        "title": "P1: Verilog 部件设计",
+        "path": "P1/P1-1/",
+        "description": "组合逻辑、时序逻辑、FSM 与代码规范"
+      },
+      "P2": {
+        "title": "P2: MIPS 汇编课下作业",
+        "path": "P2/P2-1/",
+        "description": "MARS、内存操作、矩阵/字符串/递归题"
+      },
+      "P3": {
+        "title": "P3: Logisim 单周期 CPU",
+        "path": "P3/P3-1/",
+        "description": "Logisim CPU 整体结构、模块规格和测试"
+      },
+      "P4": {
+        "title": "P4: Verilog 单周期 CPU",
+        "path": "P4/P4-1/",
+        "description": "模块化设计、数据通路、控制器和在线测试"
+      },
+      "P5": {
+        "title": "P5: Verilog 流水线 CPU",
+        "path": "P5/methodology/P5-1-1/",
+        "description": "流水线、冒险处理、自动化测试和在线测试"
+      },
+      "P6": {
+        "title": "P6: 乘除与外置存储器",
+        "path": "P6/P6-1/",
+        "description": "乘除模块、外置存储器、按字节访存"
+      },
+      "P7": {
+        "title": "P7: MIPS 微系统",
+        "path": "P7/implement/P7-2-1/",
+        "description": "异常、中断、外设、CP0 和提交要求"
+      }
+    },
+    "tools": {
+      "logisim": [
+        {
+          "title": "Logisim 下载与资料",
+          "path": "logisim/logisim-1/logisim-1-3/",
+          "description": "课程推荐 Logisim 环境"
+        },
+        {
+          "title": "Logisim Logging",
+          "path": "logisim/logisim-6/logisim-6-1/",
+          "description": "记录电路仿真输出"
+        },
+        {
+          "title": "Logisim 自动化测试",
+          "path": "logisim/logisim-6/logisim-6-5/",
+          "description": "Logisim 测试数据和自动化思路"
+        }
+      ],
+      "mars": [
+        {
+          "title": "MARS 下载与配置",
+          "path": "mips/mips-3/mips3-2/",
+          "description": "MARS 获取、配置和基础使用"
+        },
+        {
+          "title": "MARS 代码与数据导出",
+          "path": "mips/mips-3/mips3-7/",
+          "description": "导出 text/data 供 CPU 测试使用"
+        },
+        {
+          "title": "MARS 命令行自动化",
+          "path": "P5/testcases/P5-4-7/#mars",
+          "description": "dump code.txt、运行标准输出和对拍"
+        }
+      ],
+      "ise": [
+        {
+          "title": "ISE 下载与安装",
+          "path": "verilog/verilog-2/verilog-2-01/",
+          "description": "ISE 获取、License 和安装入口"
+        },
+        {
+          "title": "生成 Testbench",
+          "path": "verilog/verilog-5/verilog-5-7/",
+          "description": "课程 Testbench 编写和实例化方式"
+        },
+        {
+          "title": "ISim 使用",
+          "path": "verilog/verilog-5/verilog-5-8/",
+          "description": "语法检查、波形查看和调试"
+        },
+        {
+          "title": "ISE 命令行自动化",
+          "path": "verilog/verilog-6/verilog-6-6/#ise",
+          "description": "PRJ/TCL、fuse、ISim 命令行运行"
+        }
+      ]
     }
   }
 }

@@ -170,7 +170,7 @@ export function getVerilogCompletions(document: TextDocument, position: Position
     }
   }
 
-  for (const macro of [...parsed.macros, ...index.allMacros()]) {
+  for (const macro of parsed.macros) {
     items.push({
       label: macro.name,
       kind: CompletionItemKind.Constant,
@@ -179,7 +179,16 @@ export function getVerilogCompletions(document: TextDocument, position: Position
     });
   }
 
-  for (const module of index.allModules()) {
+  for (const macro of index.indexedMacros()) {
+    items.push({
+      label: macro.name,
+      kind: CompletionItemKind.Constant,
+      detail: 'Verilog macro',
+      insertText: macro.name
+    });
+  }
+
+  for (const module of index.indexedModules()) {
     items.push(moduleCompletionItem(module));
   }
 
@@ -869,7 +878,7 @@ function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogMo
   if (includeDeclaration) {
     locations.push(Location.create(target.uri, target.selectionRange));
   }
-  for (const file of index.allFiles()) {
+  for (const file of index.indexedFiles()) {
     for (const module of file.modules) {
       for (const instance of module.instances) {
         if (instance.moduleName === target.name) {
@@ -883,7 +892,7 @@ function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogMo
 
 function collectPortConnectionReferences(index: VerilogWorkspaceIndex, moduleName: string, portName: string): Location[] {
   const locations: Location[] = [];
-  for (const file of index.allFiles()) {
+  for (const file of index.indexedFiles()) {
     for (const module of file.modules) {
       for (const instance of module.instances) {
         if (instance.moduleName !== moduleName) {
@@ -908,7 +917,7 @@ function collectMacroReferences(index: VerilogWorkspaceIndex, name: string, macr
       locations.push(Location.create(macroUri(index, definition, fallbackUri), definition.selectionRange));
     }
   }
-  for (const file of index.allFiles()) {
+  for (const file of index.indexedFiles()) {
     for (const use of file.macroUses) {
       if (use.name === name) {
         locations.push(Location.create(file.uri, use.selectionRange));
@@ -984,7 +993,7 @@ function includeLocation(document: TextDocument, include: VerilogInclude): Locat
 }
 
 function macroUri(index: VerilogWorkspaceIndex, macro: VerilogMacro, fallbackUri: string): string {
-  for (const file of index.allFiles()) {
+  for (const file of index.indexedFiles()) {
     if (file.macros.some((item) => rangesEqual(item.selectionRange, macro.selectionRange) && item.name === macro.name)) {
       return file.uri;
     }

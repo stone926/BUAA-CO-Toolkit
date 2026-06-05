@@ -5,6 +5,13 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from './types';
 import { CoProjectConfig, saveProjectConfig } from './projectConfig';
 import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
+import {
+  getProfileDescription,
+  getProfileDirectories,
+  getProfileName,
+  getProfileRequiredTools,
+  getVerilogPorts as getCourseVerilogPorts
+} from './courseConfig';
 import { defaultCoSettings } from './language/common/settings';
 import { buildTestbench, parseVerilog } from './language/verilog/service';
 
@@ -98,44 +105,26 @@ export async function runProjectWizard(): Promise<void> {
 }
 
 function profileDescription(profile: ProjectProfile): string {
-  switch (profile) {
-    case 'P0':
-      return '初识 Logisim';
-    case 'P1':
-      return '初识 Verilog';
-    case 'P2':
-      return '初识 ASM';
-    case 'P3':
-      return 'Logisim 单周期 CPU';
-    case 'P4':
-      return 'Verilog 单周期 CPU';
-    case 'P5':
-      return 'Verilog 五级流水线（阻塞+转发）';
-    case 'P6':
-      return '流水线 + 乘除法 + 外置存储器';
-    case 'P7':
-      return 'MIPS 微系统（异常+外设）';
-    default:
-      return '';
-  }
+  return getProfileName(profile) || getProfileDescription(profile);
 }
 
 async function configureToolchainPaths(profile: ProjectProfile): Promise<CoProjectConfig['toolchain']> {
   const toolchain: CoProjectConfig['toolchain'] = {};
+  const requiredTools = new Set(getProfileRequiredTools(profile));
 
-  // Java 路径
-  const javaPath = await vscode.window.showInputBox({
-    title: 'Java 路径',
-    prompt: '输入 Java 可执行文件路径',
-    value: getJava(),
-    placeHolder: 'java'
-  });
-  if (javaPath) {
-    toolchain.java = javaPath;
+  if (requiredTools.has('java')) {
+    const javaPath = await vscode.window.showInputBox({
+      title: 'Java 路径',
+      prompt: '输入 Java 可执行文件路径',
+      value: getJava(),
+      placeHolder: 'java'
+    });
+    if (javaPath) {
+      toolchain.java = javaPath;
+    }
   }
 
-  // MARS 路径（P2-P7 需要）
-  if (profile >= 'P2') {
+  if (requiredTools.has('mars')) {
     const marsPath = await vscode.window.showInputBox({
       title: 'MARS 路径',
       prompt: '输入 Mars.jar 文件路径',
@@ -145,22 +134,21 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<CoProje
     if (marsPath) {
       toolchain.mars = marsPath;
     }
+  }
 
-    // P7 专用 MARS
-    if (profile === 'P7') {
-      const marsP7Path = await vscode.window.showInputBox({
-        title: 'P7 MARS 路径',
-        prompt: '输入 P7 专用 Mars jar 路径',
-        placeHolder: 'E:/path/to/Mars_p7.jar'
-      });
-      if (marsP7Path) {
-        toolchain.marsP7 = marsP7Path;
-      }
+  if (requiredTools.has('marsP7')) {
+    const marsP7Path = await vscode.window.showInputBox({
+      title: 'P7 MARS 路径',
+      prompt: '输入 P7 专用 Mars jar 路径',
+      value: getMarsJar(),
+      placeHolder: 'E:/path/to/Mars_p7.jar'
+    });
+    if (marsP7Path) {
+      toolchain.marsP7 = marsP7Path;
     }
   }
 
-  // Logisim 路径（P0/P1/P3 需要）
-  if (profile === 'P0' || profile === 'P1' || profile === 'P3') {
+  if (requiredTools.has('logisim')) {
     const logisimPath = await vscode.window.showInputBox({
       title: 'Logisim 路径',
       prompt: '输入 logisim.jar 文件路径',
@@ -172,8 +160,7 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<CoProje
     }
   }
 
-  // ISE 路径（P4-P7 需要）
-  if (profile >= 'P4') {
+  if (requiredTools.has('ise')) {
     const isePath = await vscode.window.showInputBox({
       title: 'ISE 路径',
       prompt: '输入 Xilinx ISE 安装目录',
@@ -209,8 +196,8 @@ async function createProjectStructure(
     toolchain: toolchainConfig,
     simulation: {
       backend: 'isim',
-      top: profile >= 'P4' ? 'mips' : undefined,
-      testbench: profile >= 'P4' ? 'mips_tb' : undefined,
+      top: isCpuVerilogProfile(profile) ? 'mips' : undefined,
+      testbench: isCpuVerilogProfile(profile) ? 'mips_tb' : undefined,
       time: '200us',
       machineCode: 'code.txt'
     }
@@ -223,23 +210,7 @@ async function createProjectStructure(
 }
 
 function getDirectoriesForProfile(profile: ProjectProfile): string[] {
-  const common = ['.co'];
-
-  switch (profile) {
-    case 'P0':
-    case 'P1':
-    case 'P3':
-      return [...common, 'logisim', 'test'];
-    case 'P2':
-      return [...common, 'src', 'test', 'data'];
-    case 'P4':
-    case 'P5':
-    case 'P6':
-    case 'P7':
-      return [...common, 'src', 'test', 'sim', 'data'];
-    default:
-      return common;
-  }
+  return getProfileDirectories(profile);
 }
 
 async function createTemplateFiles(rootPath: string, profile: ProjectProfile): Promise<void> {
@@ -311,50 +282,22 @@ endmodule
 }
 
 function getVerilogPorts(profile: ProjectProfile): string {
-  if (profile === 'P6') {
-    return [
-      '    input clk',
-      '    input reset',
-      '    input [31:0] i_inst_rdata',
-      '    input [31:0] m_data_rdata',
-      '    output [31:0] i_inst_addr',
-      '    output [31:0] m_data_addr',
-      '    output [31:0] m_data_wdata',
-      '    output [3:0] m_data_byteen',
-      '    output [31:0] m_inst_addr',
-      '    output w_grf_we',
-      '    output [4:0] w_grf_addr',
-      '    output [31:0] w_grf_wdata',
-      '    output [31:0] w_inst_addr'
-    ].join(',\n');
-  }
-
-  if (profile === 'P7') {
-    return [
-      '    input clk',
-      '    input reset',
-      '    input interrupt',
-      '    output [31:0] macroscopic_pc',
-      '    output [31:0] i_inst_addr',
-      '    input [31:0] i_inst_rdata',
-      '    output [31:0] m_data_addr',
-      '    input [31:0] m_data_rdata',
-      '    output [31:0] m_data_wdata',
-      '    output [3:0] m_data_byteen',
-      '    output [31:0] m_int_addr',
-      '    output [3:0] m_int_byteen',
-      '    output [31:0] m_inst_addr',
-      '    output w_grf_we',
-      '    output [4:0] w_grf_addr',
-      '    output [31:0] w_grf_wdata',
-      '    output [31:0] w_inst_addr'
-    ].join(',\n');
+  const ports = getCourseVerilogPorts(profile);
+  if (ports.length) {
+    return ports.map((port) => {
+      const width = port.width === 1 ? '' : ` [${port.width - 1}:0]`;
+      return `    ${port.direction}${width} ${port.name}`;
+    }).join(',\n');
   }
 
   return [
     '    input clk',
     '    input reset'
   ].join(',\n');
+}
+
+function isCpuVerilogProfile(profile: ProjectProfile): boolean {
+  return profile === 'P4' || profile === 'P5' || profile === 'P6' || profile === 'P7';
 }
 
 function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string): string {

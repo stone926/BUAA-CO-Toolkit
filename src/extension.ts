@@ -18,6 +18,7 @@ import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
 import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
+import { registerCourseLinks } from './courseLinks';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -78,6 +79,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerHazard(context, services);
   registerTraceCompare(context, services);
   registerCourseTest(context, services);
+  registerCourseLinks(context);
 
   async function getToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): Promise<ToolDetection[]> {
     const now = Date.now();
