@@ -28,7 +28,7 @@ async function generateLogisimRom(): Promise<void> {
   const output = vscode.Uri.file(path.join(path.dirname(input.fsPath), defaultName));
   await writeTextFile(output, rom);
   await vscode.window.showTextDocument(output);
-  vscode.window.showInformationMessage(`已生成 Logisim ROM 文件：${path.basename(output.fsPath)}。`);
+  vscode.window.showInformationMessage(`已生成 Logisim ROM 文件：${path.basename(output.fsPath)}`);
 }
 
 async function injectRomIntoCircuit(): Promise<void> {
@@ -63,7 +63,7 @@ async function injectRomIntoCircuit(): Promise<void> {
   ));
   await writeTextFile(output, injected.text);
   await vscode.window.showTextDocument(output);
-  vscode.window.showInformationMessage(`已向 ${path.basename(output.fsPath)} 注入 ${injected.wordCount} 个机器码字。`);
+  vscode.window.showInformationMessage(`已向 ${path.basename(output.fsPath)} 注入 ${injected.wordCount} 个机器码字`);
 }
 
 async function convertLogToCsv(): Promise<void> {
@@ -85,7 +85,7 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
   }
   const logisim = getLogisimJar(circuit);
   if (!logisim) {
-    vscode.window.showErrorMessage('Logisim jar 未配置。请设置 co.toolchain.logisim。');
+    vscode.window.showErrorMessage('Logisim jar 未配置。请设置 co.toolchain.logisim');
     return;
   }
   if (!fs.existsSync(logisim)) {
@@ -98,7 +98,7 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
     resource: circuit
   });
   if (!result.ok) {
-    vscode.window.showErrorMessage('启动 Logisim 失败。请查看北航 CO 输出面板。');
+    vscode.window.showErrorMessage('启动 Logisim 失败。请查看插件输出面板');
   }
 }
 
@@ -123,7 +123,7 @@ async function resolveRomTarget(circuitText: string): Promise<LogisimRomTarget |
   const candidates = findLogisimRomTargets(circuitText)
     .filter((target) => target.dataWidth === undefined || target.dataWidth === 32);
   if (!candidates.length) {
-    vscode.window.showErrorMessage('所选 Logisim 电路中未找到 32 位 ROM 组件。');
+    vscode.window.showErrorMessage('所选 Logisim 电路中未找到 32 位 ROM 组件');
     return undefined;
   }
   if (candidates.length === 1) {

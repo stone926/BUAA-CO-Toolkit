@@ -18,7 +18,7 @@ import { buildTestbench, parseVerilog } from './language/verilog/service';
 export async function runProjectWizard(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage('请先打开一个工作区文件夹。');
+    vscode.window.showErrorMessage('请先打开一个工作区文件夹');
     return;
   }
 
@@ -49,7 +49,7 @@ export async function runProjectWizard(): Promise<void> {
     value: `co-${profile.toLowerCase()}`,
     validateInput: (value) => {
       if (!value || !/^[A-Za-z0-9_-]+$/.test(value)) {
-        return '项目名称只能包含字母、数字、连字符和下划线。';
+        return '项目名称只能包含字母、数字、连字符和下划线';
       }
       return undefined;
     }

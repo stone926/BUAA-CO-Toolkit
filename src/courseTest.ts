@@ -206,7 +206,7 @@ async function runFullCourseTraceTest(services: AppServices): Promise<void> {
     return;
   }
   if (!result.marsOut || !result.simOut) {
-    vscode.window.showErrorMessage('测试中止：Trace 输出未生成。');
+    vscode.window.showErrorMessage('测试中止：Trace 输出未生成');
     return;
   }
 
@@ -244,7 +244,7 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
 
 async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
   if (activeContinuousTraceSession) {
-    vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行。');
+    vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行');
     return;
   }
 
@@ -290,9 +290,9 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
 
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine('正在启动持续生成的课程 Trace 测试。');
+  services.output.appendLine('正在启动持续生成 Trace 测试');
   services.output.appendLine(`生成器: ${generatorLabel(setup)}`);
-  services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大迭代: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
+  services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大轮数: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
 
   try {
     await updateContinuousTraceMonitor(session);
@@ -375,12 +375,12 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
 
 function stopContinuousTests(): void {
   if (!activeContinuousTraceSession) {
-    vscode.window.showInformationMessage('当前没有正在运行的持续课程测试会话。');
+    vscode.window.showInformationMessage('当前没有正在运行的持续测试');
     return;
   }
   activeContinuousTraceSession.stopRequested = true;
   activeContinuousTraceSession.report.stopRequested = true;
-  vscode.window.showInformationMessage('将在当前工具运行完成后停止持续课程测试。');
+  vscode.window.showInformationMessage('将在当前工具运行完成后停止持续测试');
 }
 
 async function runCourseTraceBatch(
@@ -423,7 +423,7 @@ async function runCourseTraceBatch(
   const passed = summary.passed;
   const failed = summary.failed;
   const errors = summary.errors;
-  const message = `批量 Trace 测试完成: ${passed} 通过, ${failed} 失败, ${errors} 错误。`;
+  const message = `批量 Trace 测试完成: ${passed} 通过, ${failed} 失败, ${errors} 错误`;
   if (failed || errors) {
     vscode.window.showWarningMessage(message);
   } else {
@@ -490,7 +490,7 @@ async function runLogisimPrepareBatch(
         results.push({
           asm: asm.fsPath,
           status: 'error',
-          message: 'MARS 导出机器码失败。'
+          message: 'MARS 导出机器码失败'
         });
         continue;
       }
@@ -505,7 +505,7 @@ async function runLogisimPrepareBatch(
       results.push({
         asm: asm.fsPath,
         status: 'prepared',
-        message: `已注入 ${injected.wordCount} 个机器码字。`,
+        message: `已注入 ${injected.wordCount} 个机器码`,
         machineCode: dump.outputFile.fsPath,
         circuit: outFile.fsPath,
         wordCount: injected.wordCount
@@ -524,7 +524,7 @@ async function runLogisimPrepareBatch(
   const report = await writeLogisimPrepareReport(circuit, target, results, source, outDir);
   showLogisimPrepareReport(report, results, source, circuit, target);
   const summary = logisimPrepSummary(results);
-  const message = `Logisim 用例准备完成: ${summary.prepared} 已准备, ${summary.errors} 错误。`;
+  const message = `Logisim 用例准备完成: ${summary.prepared} 已准备, ${summary.errors} 错误`;
   if (summary.errors) {
     vscode.window.showWarningMessage(message);
   } else {
@@ -542,11 +542,11 @@ async function openBatchTraceReport(): Promise<void> {
   try {
     parsed = JSON.parse(text) as CourseTraceBatchReport;
   } catch {
-    vscode.window.showErrorMessage('所选批量 Trace 报告不是有效的 JSON。');
+    vscode.window.showErrorMessage('所选批量 Trace 报告不是有效的 JSON');
     return;
   }
   if (!Array.isArray(parsed.results)) {
-    vscode.window.showErrorMessage('所选批量 Trace 报告不包含 results 数组。');
+    vscode.window.showErrorMessage('所选批量 Trace 报告不包含 results 数组');
     return;
   }
   showBatchTraceReport(parsed.results, report, parsed.generatedAt, parsed.source);
@@ -562,7 +562,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
 
   const dump = await runMarsFile(services, asm, 'dumpText', { showMessages: false });
   if (!dump?.result.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', '测试中止：MARS 导出机器码失败。');
+    return failedCase(item, 'dump', '测试中止：MARS 导出机器码失败');
   }
   services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
 
@@ -573,7 +573,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
     stdinSource: item.stdin
   });
   if (!mars?.result.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', '测试中止：MARS 黄金模型运行失败。', dump.outputFile);
+    return failedCase(item, 'mars', '测试中止：MARS 黄金模型运行失败', dump.outputFile);
   }
 
   const isim = await runIsim(services, {
@@ -583,7 +583,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
     simOutputFileName: simOutputFileNameForCase(item)
   });
   if (!isim?.simResult.ok || !isim.simOut) {
-    return failedCase(item, 'isim', '测试中止：ISim 运行失败。', dump.outputFile, mars.outputFile);
+    return failedCase(item, 'isim', '测试中止：ISim 运行失败', dump.outputFile, mars.outputFile);
   }
 
   const marsText = await readTextFile(mars.outputFile);
@@ -598,7 +598,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
       stdin: item.stdin?.fsPath,
       status: 'error',
       stage: 'compare',
-      message: '其中一侧没有可解析的 Trace 事件。',
+      message: '某一端没有可解析的 Trace 事件',
       machineCode: dump.outputFile.fsPath,
       marsOut: mars.outputFile.fsPath,
       simOut: isim.simOut.fsPath,
@@ -738,7 +738,7 @@ async function resolveGeneratedAsmBatch(services: AppServices): Promise<Generate
   }
 
   const choice = await vscode.window.showWarningMessage(
-    '生成器已完成，但未检测到新建或修改的 ASM 文件。',
+    '生成器已完成，但未检测到新建或修改的 ASM 文件',
     '手动选择 ASM 文件'
   );
   if (choice !== '手动选择 ASM 文件') {
@@ -757,7 +757,7 @@ async function resolveGeneratedAsmBatch(services: AppServices): Promise<Generate
 async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined> {
   const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
-    vscode.window.showErrorMessage('运行测试生成器前请先打开一个工作区文件夹。');
+    vscode.window.showErrorMessage('运行测试生成器前请先打开一个工作区文件夹');
     return undefined;
   }
 
@@ -797,7 +797,7 @@ function buildExternalGeneratorRunSetup(
     extraArgs: getGeneratorArgs(generator)
   });
   if (!invocation) {
-    vscode.window.showErrorMessage(`不支持的测试生成器类型: ${path.extname(generator.fsPath) || '(无扩展名)'}。`);
+    vscode.window.showErrorMessage(`不支持的测试生成器类型: ${path.extname(generator.fsPath) || '(无扩展名)'}`);
     return undefined;
   }
 
@@ -822,7 +822,7 @@ async function runGeneratorAndCollectAsms(
     resource: setup.generator
   });
   if (!result.ok) {
-    vscode.window.showErrorMessage('测试生成器运行失败。请查看北航 CO 输出面板。');
+    vscode.window.showErrorMessage('测试生成器运行失败。请查看插件输出面板');
     return undefined;
   }
 
@@ -864,7 +864,7 @@ async function runBuiltinGeneratorAndCollectAsms(
 
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine('正在运行内置随机 ASM 生成器。');
+  services.output.appendLine('正在运行内置随机 ASM 生成器');
   services.output.appendLine(`Profile: ${generated.profile}`);
   services.output.appendLine(`指令数量: ${generated.instructionCount}`);
   services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
@@ -1041,7 +1041,7 @@ async function resolveLogisimRomTarget(circuitText: string): Promise<LogisimRomT
   const candidates = findLogisimRomTargets(circuitText)
     .filter((target) => target.dataWidth === undefined || target.dataWidth === 32);
   if (!candidates.length) {
-    vscode.window.showErrorMessage('所选 Logisim 电路中未找到 32 位 ROM 组件。');
+    vscode.window.showErrorMessage('所选 Logisim 电路中未找到 32 位 ROM 组件');
     return undefined;
   }
   if (candidates.length === 1) {

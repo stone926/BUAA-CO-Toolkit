@@ -25,7 +25,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       name: 'Java',
       ok: javaResult.ok,
       detail: firstLine(javaResult.stderr || javaResult.stdout) || java,
-      suggestion: javaResult.ok ? undefined : '请安装 JRE/JDK 或设置 co.toolchain.java。'
+      suggestion: javaResult.ok ? undefined : '请安装 JRE/JDK 或设置 co.toolchain.java'
     });
   }
 
@@ -41,18 +41,18 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       name: 'Python',
       ok: pythonResult.ok,
       detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
-      suggestion: pythonResult.ok ? undefined : '请安装 Python 或设置 co.toolchain.python。'
+      suggestion: pythonResult.ok ? undefined : '请安装 Python 或设置 co.toolchain.python'
     });
   }
 
   if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
     const mars = getMarsJar(resource);
-    checks.push(fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为课程专用 P7 MARS jar。' : '请设置 co.toolchain.mars。'));
+    checks.push(fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为课程专用 P7 MARS jar' : '请设置 co.toolchain.mars'));
   }
 
   if (checkAll || requiredTools.has('logisim')) {
     const logisim = getLogisimJar(resource);
-    checks.push(fileCheck('Logisim', logisim, '请设置 co.toolchain.logisim。'));
+    checks.push(fileCheck('Logisim', logisim, '请设置 co.toolchain.logisim'));
   }
 
   if (checkAll || requiredTools.has('ise')) {
@@ -62,7 +62,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       name: 'ISE fuse',
       ok: Boolean(fuse && fs.existsSync(fuse)),
       detail: fuse || '未配置',
-      suggestion: fuse ? undefined : '请设置 co.toolchain.isePath 为 ISE 目录。'
+      suggestion: fuse ? undefined : '请设置 co.toolchain.isePath 为 ISE 目录'
     });
   }
 
@@ -98,7 +98,7 @@ function hazardDirCheck(dir: string): ToolDetection {
       name: '冲突分析',
       ok: false,
       detail: '未配置',
-      suggestion: '请设置 co.toolchain.hazardCalculator 为 hazard_analysis 目录。'
+      suggestion: '请设置 co.toolchain.hazardCalculator 为 hazard_analysis 目录'
     };
   }
   const jarExists = fs.existsSync(path.join(dir, 'Hazard-Calculator.jar'));

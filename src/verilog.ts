@@ -64,20 +64,20 @@ export function registerVerilog(context: vscode.ExtensionContext, services: AppS
 async function disableLintRule(rule?: string): Promise<void> {
   const normalized = normalizeLintRule(rule);
   if (!normalized) {
-    vscode.window.showErrorMessage('无法禁用此 Verilog Lint 规则，因为规则 ID 无效。');
+    vscode.window.showErrorMessage('无法禁用此 Verilog Lint 规则，因为规则 ID 无效');
     return;
   }
   const config = vscode.workspace.getConfiguration('co');
   const current = config.get<string[]>('verilog.lint.disabledRules', defaultCoSettings.verilog.lint.disabledRules);
   const merged = [...new Set([...current.map((item) => item.toLowerCase()), normalized])].sort();
   await config.update('verilog.lint.disabledRules', merged, vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalized.toUpperCase()}。`);
+  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalized.toUpperCase()}`);
 }
 
 async function generateTestbench(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.languageId !== 'verilog') {
-    vscode.window.showErrorMessage('请先打开一个 Verilog 文件。');
+    vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
     return;
   }
   const document = toTextDocument(editor.document);
@@ -87,7 +87,7 @@ async function generateTestbench(): Promise<void> {
     character: editor.selection.active.character
   }) ?? parsed.modules[0];
   if (!target) {
-    vscode.window.showErrorMessage('当前文件中未找到 Verilog 模块。');
+    vscode.window.showErrorMessage('当前文件中未找到 Verilog 模块');
     return;
   }
 
@@ -95,7 +95,7 @@ async function generateTestbench(): Promise<void> {
   const tbName = target.name === getTopModule(editor.document.uri) ? configuredTb : `${target.name}_tb`;
   const tbUri = vscode.Uri.file(path.join(path.dirname(editor.document.uri.fsPath), `${tbName}.v`));
   if (fs.existsSync(tbUri.fsPath)) {
-    const choice = await vscode.window.showWarningMessage(`${path.basename(tbUri.fsPath)} 已存在。`, '打开', '覆盖');
+    const choice = await vscode.window.showWarningMessage(`${path.basename(tbUri.fsPath)} 已存在`, '打开', '覆盖');
     if (choice === '打开') {
       await vscode.window.showTextDocument(tbUri);
       return;
@@ -116,7 +116,7 @@ export async function generateIseProject(
   const showMessages = options.showMessages !== false;
   const folder = workspaceFolderFor(activeUri);
   if (!folder) {
-    vscode.window.showErrorMessage('生成 ISE 文件前请先打开一个工作区文件夹。');
+    vscode.window.showErrorMessage('生成 ISE 文件前请先打开一个工作区文件夹');
     return undefined;
   }
   const top = getTestbench(activeUri);
@@ -124,7 +124,7 @@ export async function generateIseProject(
   const simTime = getSimTime(activeUri);
   const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), '**/{node_modules,out,.git}/**', 5000);
   if (!files.length) {
-    vscode.window.showErrorMessage('工作区中未找到 Verilog 文件。');
+    vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
     return undefined;
   }
 
@@ -142,7 +142,7 @@ export async function generateIseProject(
   services.output.appendLine(`已生成 ${prj.fsPath}`);
   services.output.appendLine(`已生成 ${tcl.fsPath}`);
   if (showMessages) {
-    vscode.window.showInformationMessage('已生成 ISE PRJ/TCL 文件。');
+    vscode.window.showInformationMessage('已生成 ISE PRJ/TCL 文件');
   }
   return { prj, tcl, outDir };
 }
@@ -156,7 +156,7 @@ export async function runIsim(
   await vscode.workspace.saveAll(false);
   const isePath = getIsePath(activeUri);
   if (!isePath) {
-    vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath。');
+    vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath');
     return;
   }
   const fuse = findFuse(isePath);
@@ -174,9 +174,9 @@ export async function runIsim(
     await copyMachineCodeToSimDirectory(machineCodeSource, generated.outDir, activeUri);
     services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
   } else {
-    services.output.appendLine(`未找到可复制到 ${generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件。`);
+    services.output.appendLine(`未找到可复制到 ${generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
     if (showMessages) {
-      vscode.window.showWarningMessage(`未找到 ${getMachineCode(activeUri)}。如果设计中调用了 $readmemh("${getMachineCode(activeUri)}")，ISim 可能会失败。`);
+      vscode.window.showWarningMessage(`未找到 ${getMachineCode(activeUri)}。如果设计中调用了 $readmemh("${getMachineCode(activeUri)}")，ISim 可能会失败`);
     }
   }
   const top = testbenchName ?? getTestbench(activeUri);
@@ -192,7 +192,7 @@ export async function runIsim(
   });
   if (!fuseResult.ok) {
     if (showMessages) {
-      vscode.window.showErrorMessage('ISim 编译失败。请查看北航 CO 输出面板。');
+      vscode.window.showErrorMessage('ISim 编译失败。请查看北航 CO 输出面板');
     }
     return undefined;
   }
@@ -211,11 +211,11 @@ export async function runIsim(
     simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(top, options.simOutputFileName)));
     await writeTextFile(simOut, simResult.stdout);
     if (showMessages) {
-      vscode.window.showInformationMessage('ISim 运行完成。');
+      vscode.window.showInformationMessage('ISim 运行完成');
     }
   } else {
     if (showMessages) {
-      vscode.window.showErrorMessage('ISim 运行失败。请查看北航 CO 输出面板。');
+      vscode.window.showErrorMessage('ISim 运行失败。请查看北航 CO 输出面板');
     }
   }
   return { generated, fuseResult, simResult, simOut };
@@ -254,7 +254,7 @@ async function ensureRunnableTestbench(
         return activeTestbench;
       }
     }
-    services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}。`);
+    services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}`);
     return configuredTestbench;
   }
 
@@ -266,7 +266,7 @@ async function ensureRunnableTestbench(
   await writeTextFile(tbUri, buildTestbench(topDefinition.module, configuredTestbench, { finishDelay: verilogDelayFromSimTime(getSimTime(topDefinition.uri)) }));
   services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
   if (showMessages) {
-    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}。`);
+    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
   }
   return configuredTestbench;
 }
@@ -288,7 +288,7 @@ async function ensureActiveModuleTestbench(
   await writeTextFile(tbUri, buildTestbench(definition.module, tbName, { finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)) }));
   services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
   if (showMessages) {
-    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}。`);
+    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
   }
   return tbName;
 }

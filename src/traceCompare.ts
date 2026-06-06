@@ -20,7 +20,7 @@ export interface TraceFilePair {
 
 export const defaultTraceCompareMode: CompareMode = {
   label: '忽略周期/时间',
-  description: '仅比较 PC、目标和值。',
+  description: '仅比较 PC、目标和值',
   compareCycles: false
 };
 
@@ -52,13 +52,13 @@ async function compareTraceFiles(services: AppServices): Promise<void> {
 async function compareLatestOutputs(services: AppServices): Promise<void> {
   const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri);
   if (!folder) {
-    vscode.window.showErrorMessage('比较 Trace 输出前请先打开一个工作区文件夹。');
+    vscode.window.showErrorMessage('比较 Trace 输出前请先打开一个工作区文件夹');
     return;
   }
   const pair = await findLatestTracePair(folder);
   if (!pair) {
     const choice = await vscode.window.showWarningMessage(
-      '在当前工作区中未找到 .co/out/*.mars.out 和 .co/out/*.sim.out。',
+      '在当前工作区中未找到 .co/out/*.mars.out 和 .co/out/*.sim.out',
       '手动选择文件'
     );
     if (choice === '手动选择文件') {
@@ -99,11 +99,11 @@ export async function compareTracePair(
 
   showTraceCompareReport(pair, diff, selectedMode, marsEvents, simEvents);
   if (!marsEvents.length || !simEvents.length) {
-    vscode.window.showWarningMessage('Trace 比较完成，但其中一侧没有可解析的 Trace 事件。');
+    vscode.window.showWarningMessage('Trace 比较完成，但其中一侧没有可解析的 Trace 事件');
   } else if (diff.matched) {
-    vscode.window.showInformationMessage(`Trace 比较通过：${diff.summary.matchedEvents} 个事件匹配。`);
+    vscode.window.showInformationMessage(`Trace 比较通过：${diff.summary.matchedEvents} 个事件匹配`);
   } else {
-    vscode.window.showWarningMessage(`Trace 比较在事件 #${diff.firstDiffIndex + 1} 发现首个差异。`);
+    vscode.window.showWarningMessage(`Trace 比较在事件 #${diff.firstDiffIndex + 1} 发现首个差异`);
   }
   return diff;
 }
@@ -114,7 +114,7 @@ async function pickCompareMode(): Promise<CompareMode | undefined> {
       defaultTraceCompareMode,
       {
         label: '比较周期/时间',
-        description: '同时要求可选的前导周期/时间字段匹配。',
+        description: '同时要求可选的前导周期/时间字段匹配',
         compareCycles: true
       }
     ],

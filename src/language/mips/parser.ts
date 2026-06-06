@@ -132,10 +132,10 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
       const targetMap = section === 'data' ? scope.dataSymbols : scope.labels;
       if (isReservedSymbolName(name, symbol.kind)) {
-        diagnostics.push(makeDiagnostic(selectionRange, `符号 '${name}' 与保留的 MIPS 关键字冲突。`, DiagnosticSeverity.Error, 'reserved-symbol'));
+        diagnostics.push(makeDiagnostic(selectionRange, `符号 '${name}' 与保留的 MIPS 关键字冲突`, DiagnosticSeverity.Error, 'reserved-symbol'));
       }
       if (symbolScopeHas(scope, name)) {
-        diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'。`, DiagnosticSeverity.Error, 'duplicate-symbol'));
+        diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'`, DiagnosticSeverity.Error, 'duplicate-symbol'));
       } else {
         targetMap.set(name, symbol);
       }
@@ -165,7 +165,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         };
         const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
         if (symbolScopeHas(scope, name)) {
-          diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'。`, DiagnosticSeverity.Error, 'duplicate-symbol'));
+          diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'`, DiagnosticSeverity.Error, 'duplicate-symbol'));
         } else {
           scope.eqvSymbols.set(name, symbol);
         }
@@ -196,11 +196,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         bodyStartLine: lineNumber + 1
       };
       if (activeMacro) {
-        diagnostics.push(makeDiagnostic(selectionRange, `嵌套宏 '${name}' 不受此语言服务支持。`, DiagnosticSeverity.Warning, 'nested-macro'));
+        diagnostics.push(makeDiagnostic(selectionRange, `嵌套宏 '${name}' 不受此语言服务支持`, DiagnosticSeverity.Warning, 'nested-macro'));
       }
       const overloads = macros.get(name) ?? [];
       if (overloads.some((overload) => overload.params.length === macro.params.length)) {
-        diagnostics.push(makeDiagnostic(selectionRange, `重复的宏 '${name}'，具有 ${macro.params.length} 个参数。`, DiagnosticSeverity.Error, 'duplicate-macro'));
+        diagnostics.push(makeDiagnostic(selectionRange, `重复的宏 '${name}'，具有 ${macro.params.length} 个参数`, DiagnosticSeverity.Error, 'duplicate-macro'));
       } else {
         overloads.push(macro);
         macros.set(name, overloads);
@@ -212,7 +212,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       activeMacro = macro;
       for (const param of macroStart.params) {
         if (macro.paramSymbols.has(param.name)) {
-          diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, param.range), `重复的宏参数 '${param.name}'。`, DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
+          diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, param.range), `重复的宏参数 '${param.name}'`, DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
           continue;
         }
         macro.paramSymbols.set(param.name, {
@@ -246,7 +246,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     const mnemonic = executable.lowerMnemonic;
     if (mnemonic.startsWith('.')) {
       if (!directives.has(mnemonic)) {
-        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令 '${executable.mnemonic}'。`, DiagnosticSeverity.Error, 'unknown-directive'));
+        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令 '${executable.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-directive'));
       }
       validateDirective(document, lineNumber, executable, section, activeMacro, diagnostics);
       activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
@@ -268,26 +268,26 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       if (eqv && isDeclaredBefore(eqv, Range.create(lineNumber, 0, lineNumber, 0).start)) {
         continue;
       }
-      diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令或宏 '${executable.mnemonic}'。`, DiagnosticSeverity.Error, 'unknown-instruction'));
+      diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令或宏 '${executable.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-instruction'));
       continue;
     }
 
     activeDataContinuationDirective = undefined;
 
     if (section === 'data' && instruction) {
-      diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `指令 '${executable.mnemonic}' 不能出现在数据段中。请先切换到 .text。`, DiagnosticSeverity.Error, 'instruction-in-data'));
+      diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `指令 '${executable.mnemonic}' 不能出现在数据段中。请先切换到 .text`, DiagnosticSeverity.Error, 'instruction-in-data'));
     }
 
     if (!instruction && macroOverloads?.length) {
       const operands = parseMacroArguments(executable.operandText);
       for (const operand of operands) {
         if (!isMacroArgumentToken(operand)) {
-          diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `宏参数 '${operand}' 必须是单个 MARS 语言元素；内存操作数如 4($t0) 不是有效的宏参数。`, DiagnosticSeverity.Error, 'macro-argument'));
+          diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `宏参数 '${operand}' 必须是单个 MARS 语言元素；内存操作数如 4($t0) 不是有效的宏参数`, DiagnosticSeverity.Error, 'macro-argument'));
         }
       }
       if (!macroOverloads.some((macro) => macro.params.length === operands.length)) {
         const counts = [...new Set(macroOverloads.map((macro) => macro.params.length))].sort((a, b) => a - b).join('/');
-        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `宏 '${executable.mnemonic}' 期望 ${counts} 个参数，实际得到 ${operands.length} 个。`, DiagnosticSeverity.Error, 'macro-argument-count'));
+        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `宏 '${executable.mnemonic}' 期望 ${counts} 个参数，实际得到 ${operands.length} 个`, DiagnosticSeverity.Error, 'macro-argument-count'));
       }
     }
 
@@ -296,7 +296,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       if (mnemonic === 'syscall') {
         hasSyscall = true;
         if (profile === 'P2' && !v0Initialized) {
-          diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), 'P2 syscall uses $v0 as the service number, but $v0 has not been initialized since the previous syscall.', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
+          diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), 'P2 syscall 以 $v0 值为调用号, 但 $v0 自上次 syscall 起未赋值', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
         }
       }
       const usesPseudoForm = instruction.pseudo || usesMarsPseudoInstructionForm(mnemonic, operands, activeMacro, eqvSymbols);
@@ -326,7 +326,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
   if (activeMacro) {
     activeMacro.range = Range.create(activeMacro.range.start, lineAt(document, document.lineCount - 1).range.end);
-    diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `宏 '${activeMacro.name}' 缺少 .end_macro。`, DiagnosticSeverity.Error, 'macro-unclosed'));
+    diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `宏 '${activeMacro.name}' 缺少 .end_macro`, DiagnosticSeverity.Error, 'macro-unclosed'));
   }
 
   const parsed: MipsParseCore = {
@@ -357,7 +357,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     if (!resolveReferenceSymbol(reference.operand, reference.macro, labels, dataSymbols)) {
       const range = rangeOfText(document, reference.line, reference.operand);
       missingLabelRanges.add(rangeKey(range));
-      diagnostics.push(makeDiagnostic(range, `找不到标签或数据符号 '${reference.operand}'。`, DiagnosticSeverity.Error, 'missing-label'));
+      diagnostics.push(makeDiagnostic(range, `找不到标签或 data 段符号 '${reference.operand}'`, DiagnosticSeverity.Error, 'missing-label'));
     }
   }
   collectUndeclaredSymbolDiagnostics(parsedForQueries, diagnostics, missingLabelRanges, directiveContinuationLines);
@@ -505,7 +505,7 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
       }
       validateSectionAddressRange(document, lineNumber, directive, operandText, diagnostics);
       if (operandText && CO_FIXED_SECTION_DIRECTIVES.has(directive)) {
-        diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), '北航 CO 使用 CompactDataAtZero 内存配置；不要向 .data 或 .text 传递自定义地址。', DiagnosticSeverity.Error, 'co-section-address'));
+        diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), '使用 CompactDataAtZero 内存配置；不要向 .data 或 .text 传递自定义地址', DiagnosticSeverity.Error, 'co-section-address'));
       }
       return;
     case '.byte':
@@ -594,13 +594,13 @@ function dataDirectiveContinuationText(line: MipsCstStatementLine): string {
 
 function validateMacroHeader(document: TextDocument, lineNumber: number, name: string, params: string[], selectionRange: Range, diagnostics: Diagnostic[]): void {
   if (isReservedIdentifier(name)) {
-    diagnostics.push(makeDiagnostic(selectionRange, `宏名 '${name}' 与保留的 MIPS 关键字冲突。`, DiagnosticSeverity.Error, 'reserved-symbol'));
+    diagnostics.push(makeDiagnostic(selectionRange, `宏名 '${name}' 与保留的 MIPS 关键字冲突`, DiagnosticSeverity.Error, 'reserved-symbol'));
   }
   for (const param of params) {
     const paramIndex = lineAt(document, lineNumber).text.indexOf(param);
     const range = paramIndex >= 0 ? Range.create(lineNumber, paramIndex, lineNumber, paramIndex + param.length) : selectionRange;
     if (!isValidMacroParameterName(param)) {
-      diagnostics.push(makeDiagnostic(range, `宏参数 '${param}' 必须以 % 或 $ 开头，并使用标识符字符。`, DiagnosticSeverity.Error, 'macro-parameter'));
+      diagnostics.push(makeDiagnostic(range, `宏参数 '${param}' 必须以 % 或 $ 开头，并使用标识符字符`, DiagnosticSeverity.Error, 'macro-parameter'));
     }
   }
 }
@@ -632,7 +632,7 @@ function validateSectionAddressRange(document: TextDocument, lineNumber: number,
     return;
   }
   if (address < expected.min || address > expected.max) {
-    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} 地址 ${operandText} 超出北航 CO CompactDataAtZero 范围 ${expected.label}。`, DiagnosticSeverity.Warning, 'section-address-range'));
+    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} 地址 ${operandText} 超出 CompactDataAtZero 范围 ${expected.label}`, DiagnosticSeverity.Warning, 'section-address-range'));
   }
 }
 
@@ -724,10 +724,10 @@ function validateSingleIntegerDirective(document: TextDocument, lineNumber: numb
     return;
   }
   if (directive === '.space' && value % 4 !== 0) {
-    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), '在北航 CO 中，.space 大小通常是 4 的倍数，以保证后续字访问对齐。', DiagnosticSeverity.Warning, 'space-alignment'));
+    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), '.space 大小通常是 4 的倍数，以保证对齐', DiagnosticSeverity.Warning, 'space-alignment'));
   }
   if (directive === '.align' && value > 3) {
-    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `.align ${value} 表示 2^${value} 字节对齐；在北航 CO 中很少需要。`, DiagnosticSeverity.Warning, 'align-large'));
+    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `.align ${value} 表示 2^${value} 字节对齐；在该课程中很少需要`, DiagnosticSeverity.Warning, 'align-large'));
   }
 }
 
@@ -778,7 +778,7 @@ function validateRegisterTokens(lineNumber: number, line: MipsCstStatementLine, 
       continue;
     }
     if (!isRegister(reg) && !isFloatingPointRegister(reg)) {
-      diagnostics.push(makeDiagnostic(Range.create(lineNumber, token.start, lineNumber, token.end), `未知的寄存器 '${reg}'。`, DiagnosticSeverity.Error, 'unknown-register'));
+      diagnostics.push(makeDiagnostic(Range.create(lineNumber, token.start, lineNumber, token.end), `未知的寄存器 '${reg}'`, DiagnosticSeverity.Error, 'unknown-register'));
     }
   }
 }
@@ -931,7 +931,7 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
 
       if (token.startsWith('%')) {
         if (!resolveMipsSemanticMacroParamAtPosition(parsed.semantic, token, range.start)) {
-          diagnostics.push(makeDiagnostic(range, `使用未声明的宏参数 '${token}'。`, DiagnosticSeverity.Error, 'undeclared-symbol'));
+          diagnostics.push(makeDiagnostic(range, `使用未声明的宏参数 '${token}'`, DiagnosticSeverity.Error, 'undeclared-symbol'));
           reported.add(key);
         }
         continue;
@@ -939,10 +939,10 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
 
       const symbol = resolveMipsSemanticSymbolAtPosition(parsed.semantic, token, range.start);
       if (!symbol) {
-        diagnostics.push(makeDiagnostic(range, `使用未声明的符号 '${token}'。`, DiagnosticSeverity.Error, 'undeclared-symbol'));
+        diagnostics.push(makeDiagnostic(range, `使用未声明的符号 '${token}'`, DiagnosticSeverity.Error, 'undeclared-symbol'));
         reported.add(key);
       } else if (symbol.kind === 'eqv' && !isDeclaredBefore(symbol, range.start)) {
-        diagnostics.push(makeDiagnostic(range, `.eqv symbol '${token}' is used before it is defined. MARS .eqv substitutions only apply after the directive.`, DiagnosticSeverity.Error, 'eqv-forward-reference'));
+        diagnostics.push(makeDiagnostic(range, `.eqv 符号 '${token}' 的使用位于声明之前. MARS .eqv 替换只发生在声明之后`, DiagnosticSeverity.Error, 'eqv-forward-reference'));
         reported.add(key);
       }
     }

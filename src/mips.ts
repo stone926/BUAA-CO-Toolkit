@@ -49,7 +49,7 @@ async function resolveCurrentMipsDocument(): Promise<vscode.TextDocument | undef
   }
   const document = editor.document;
   if (document.isUntitled) {
-    vscode.window.showErrorMessage('运行 MARS 前请先保存 ASM 文件。');
+    vscode.window.showErrorMessage('运行 MARS 前请先保存 ASM 文件');
     return undefined;
   }
   if (document.isDirty) {
@@ -89,7 +89,7 @@ async function runMarsCurrentFileInTerminal(): Promise<void> {
 
   const mars = getMarsJar(document.uri);
   if (!mars) {
-    vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7。');
+    vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7');
     return;
   }
 
@@ -113,7 +113,7 @@ export async function runMarsFile(
   const showMessages = options.showMessages !== false;
   const mars = getMarsJar(asmUri);
   if (!mars) {
-    vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7。');
+    vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7');
     return undefined;
   }
 
@@ -151,15 +151,15 @@ export async function runMarsFile(
 
   if (result.ok) {
     if (mode === 'dumpText') {
-      vscode.window.showInformationMessage(`MARS 已导出 ${getMachineCode(asmUri)}。`);
+      vscode.window.showInformationMessage(`MARS 已导出 ${getMachineCode(asmUri)}`);
     } else if (mode === 'dumpKernel') {
-      vscode.window.showInformationMessage('MARS 已导出内核文本段。');
+      vscode.window.showInformationMessage('MARS 已导出内核文本段');
     } else {
       const input = options.stdinSource ? `，使用标准输入 ${path.basename(options.stdinSource.fsPath)}` : '';
-      vscode.window.showInformationMessage(`MARS 运行完成${input}。`);
+      vscode.window.showInformationMessage(`MARS 运行完成${input}`);
     }
   } else {
-    vscode.window.showErrorMessage(`MARS 运行失败${result.exitCode === null ? '' : `，退出码 ${result.exitCode}`}。`);
+    vscode.window.showErrorMessage(`MARS 运行失败${result.exitCode === null ? '' : `，退出码 ${result.exitCode}`}`);
   }
 
   return { result, outputFile };

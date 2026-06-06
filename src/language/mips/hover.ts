@@ -69,7 +69,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     if (expansion?.length) {
       details.push('', '展开预览：', '', '```mipsasm', expansion.join('\n'), '```');
       if (expansion.some((line) => usesAtRegister(line))) {
-        details.push('', '提示：展开会使用 `$at` (`$1`) 作为临时寄存器。');
+        details.push('', '提示：展开会使用 `$at` (`$1`) 作为临时寄存器');
       }
     }
     if (instruction.mnemonic === 'syscall') {
@@ -120,7 +120,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const param = resolveMipsSemanticMacroParamAtPosition(parsed.semantic, word, position);
   if (param) {
     return {
-      contents: `宏参数，定义于第 ${param.range.start.line + 1} 行。`,
+      contents: `宏参数，定义于第 ${param.range.start.line + 1} 行`,
       range: wordRange
     };
   }
@@ -182,9 +182,9 @@ function semanticSymbolHoverContents(parsed: ReturnType<typeof getCachedMipsPars
   const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
   if (symbol.kind === 'eqv') {
     const replacement = eqvReplacementText(parsed, symbol.selectionRange.start.line, symbol.name);
-    return replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行。\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`;
+    return replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行`;
   }
-  return `${kind}，定义于第 ${symbol.range.start.line + 1} 行。`;
+  return `${kind}，定义于第 ${symbol.range.start.line + 1} 行`;
 }
 
 function instructionHoverMarkdown(instruction: MipsInstruction, parsedInstruction?: { usesPseudoForm: boolean }): string[] {
@@ -203,7 +203,7 @@ function instructionHoverMarkdown(instruction: MipsInstruction, parsedInstructio
   ];
 
   if (instruction.pseudo || parsedInstruction?.usesPseudoForm) {
-    details.push('', '受限项目中请确认展开后的基本指令。');
+    details.push('', '请确认展开后的真指令');
   }
   return details;
 }
@@ -211,9 +211,9 @@ function instructionHoverMarkdown(instruction: MipsInstruction, parsedInstructio
 function instructionStatusLine(instruction: MipsInstruction, parsedInstruction?: { usesPseudoForm: boolean }): string {
   const parts = [`类型：**${instructionTypeLabel(instruction.type)}**`];
   if (!instruction.pseudo && parsedInstruction?.usesPseudoForm) {
-    parts.push('当前写法：**MARS 扩展伪格式**');
+    parts.push('当前写法：**伪指令形式**');
   } else if (!instruction.pseudo && hasPseudoFormats(instruction)) {
-    parts.push('含 MARS 扩展伪格式');
+    parts.push('含伪指令形式');
   }
   if (instruction.delaySlot) {
     parts.push('控制转移，延迟槽取决于项目配置');

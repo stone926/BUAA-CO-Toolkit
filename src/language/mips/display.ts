@@ -23,13 +23,13 @@ export function directiveHoverText(directive: string): string | undefined {
     return undefined;
   }
   if (directive === '.align') {
-    return '**.align n**\n\n将下一个数据项按 2^n 字节边界对齐。BUAA CO 常用值为 `.align 0`、`.align 1` 和 `.align 2`。';
+    return '**.align n**\n\n将下一个数据项按 2^n 字节边界对齐。常用值为 `.align 0`、`.align 1` 和 `.align 2`';
   }
   if (directive === '.data' || directive === '.text') {
-    return `**${directive}**\n\n切换当前汇编段。BUAA CO 使用 CompactDataAtZero 配置，课程代码不应传递自定义段地址。`;
+    return `**${directive}**\n\n切换当前汇编段。使用 CompactDataAtZero 配置，课程代码不应传递自定义段地址`;
   }
   if (directive === '.set') {
-    return '**.set**\n\nSPIM 兼容 directive。MARS 4.5 会识别它，但当前会忽略其效果并给出 warning。';
+    return '**.set**\n\nSPIM 兼容 directive。MARS 4.5 会识别它，但当前会忽略其效果并给出 warning';
   }
   return `MIPS 汇编指令 \`${directive}\`.`;
 }

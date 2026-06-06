@@ -250,7 +250,7 @@ function validateInstructionOperands(
   if (usesMarsPseudoInstructionForm(instruction.mnemonic, operands, activeMacro, eqvSymbols)) {
     return;
   }
-  diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, instruction.mnemonic), `${instruction.mnemonic} 操作数与支持的 MARS 格式不匹配：${instruction.formats.join(' | ')}。`, DiagnosticSeverity.Error, 'operand-type'));
+  diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, instruction.mnemonic), `${instruction.mnemonic} 操作数与 MARS 格式不匹配：${instruction.formats.join(' | ')}`, DiagnosticSeverity.Error, 'operand-type'));
 }
 
 function validateMemoryAlignment(
