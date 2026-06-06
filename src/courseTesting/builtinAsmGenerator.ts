@@ -28,6 +28,7 @@ export interface BuiltinAsmGeneratorResult {
 }
 
 type CpuProfile = 'P3' | 'P4' | 'P5' | 'P6' | 'P7';
+type MduReadProbeMode = 'busy' | 'ready';
 
 type ControlMnemonic =
   | 'beq'
@@ -92,6 +93,7 @@ const jumpLinkMnemonics = new Set<string>(['jal', 'jalr']);
 const divideMnemonics = new Set<string>(['div', 'divu']);
 const hiLoWriteMnemonics = new Set<string>(['mult', 'multu', 'div', 'divu', 'madd', 'maddu', 'msub', 'msubu', 'mthi', 'mtlo']);
 const hiLoReadMnemonics = new Set<string>(['mfhi', 'mflo']);
+const longLatencyHiLoWriteMnemonics = new Set<string>(['mult', 'multu', 'div', 'divu']);
 const loadMnemonics = new Set<string>(['lw', 'lwl', 'lwr', 'lb', 'lbu', 'lh', 'lhu']);
 const storeMnemonics = new Set<string>(['sw', 'swl', 'swr', 'sb', 'sh']);
 const cp0Mnemonics = new Set<string>(['mfc0', 'mtc0']);
@@ -108,6 +110,7 @@ const readRegisters = ['$0', ...writableRegisters];
 const dataByteLength = 1024;
 const dataWordCount = dataByteLength / 4;
 const textBaseAddress = 0x3000;
+const poisonRegister = '$26';
 
 export class BuiltinAsmGeneratorError extends Error {
   constructor(message: string) {
@@ -219,6 +222,8 @@ class ProgramGenerator {
   private hi = 0;
   private lo = 0;
   private pendingHiLoRead = false;
+  private mduProtectedSlots = 0;
+  private nextMduProbeMode: MduReadProbeMode = 'busy';
 
   constructor(profile: CpuProfile, mnemonics: string[], targetCount: number, seed: string, generatedAt: Date) {
     this.profile = profile;
@@ -227,6 +232,7 @@ class ProgramGenerator {
     this.seed = seed;
     this.generatedAt = generatedAt;
     this.rng = new Random(hashSeed(`${profile}:${targetCount}:${seed}`));
+    this.nextMduProbeMode = this.rng.chance(0.5) ? 'busy' : 'ready';
 
     for (const register of ['$0', ...writableRegisters, '$26', '$27', '$28', '$29', '$30', '$31']) {
       this.regs.set(register, 0);
@@ -370,6 +376,9 @@ class ProgramGenerator {
   }
 
   private canEmitSingle(mnemonic: string): boolean {
+    if (this.mduProtectedSlots > 0 && hiLoWriteMnemonics.has(mnemonic)) {
+      return false;
+    }
     if (divideMnemonics.has(mnemonic)) {
       return this.nonZeroRegisters(mnemonic === 'div').length > 0;
     }
@@ -704,6 +713,10 @@ class ProgramGenerator {
       this.lo = low;
     }
     this.markHiLoWritten();
+    if (longLatencyHiLoWriteMnemonics.has(mnemonic)) {
+      this.armMduProtection(mduBusyCycles(mnemonic));
+      this.maybeEmitMduReadProbe(mnemonic);
+    }
   }
 
   private emitDivide(mnemonic: string): void {
@@ -718,10 +731,12 @@ class ProgramGenerator {
       this.hi = signed32(left % right);
     }
     this.markHiLoWritten();
+    this.armMduProtection(mduBusyCycles(mnemonic));
+    this.maybeEmitMduReadProbe(mnemonic);
   }
 
-  private emitHiLoRead(mnemonic: string): void {
-    const rd = this.chooseWriteRegister();
+  private emitHiLoRead(mnemonic: string, forceVisibleWrite = false): void {
+    const rd = forceVisibleWrite ? this.chooseVisibleWriteRegister() : this.chooseWriteRegister();
     this.emit(mnemonic, `${mnemonic} ${rd}`);
     this.setRegister(rd, mnemonic === 'mfhi' ? this.hi : this.lo);
     this.pendingHiLoRead = false;
@@ -805,8 +820,12 @@ class ProgramGenerator {
   private emitBranch(mnemonic: ControlMnemonic): void {
     const label = this.nextLabel('br');
     const operands = this.branchOperands(mnemonic);
-    const canSkip = this.remaining() > 1 + this.delaySlotCost() && this.hasNoStateProbeCandidate();
-    const skipProbe = canSkip && this.rng.chance(0.55);
+    const canPoison = (
+      this.remaining() > 1 + this.delaySlotCost() &&
+      this.branchWillTake(mnemonic, operands) &&
+      this.hasStatefulPoisonCandidate()
+    );
+    const skipPoison = canPoison && this.rng.chance(0.75);
 
     this.emit(mnemonic, `${mnemonic} ${operands.join(', ')}, ${label}`);
     if (linkBranchMnemonics.has(mnemonic) && operands.length > 0) {
@@ -815,16 +834,16 @@ class ProgramGenerator {
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    if (skipProbe && this.remaining() > 0) {
-      this.emitSkippedProbeInstruction();
+    if (skipPoison && this.remaining() > 0) {
+      this.emitSkippedPoisonInstruction();
     }
     this.addLabel(label);
   }
 
   private emitJump(mnemonic: 'j' | 'jal'): void {
     const label = this.nextLabel(mnemonic);
-    const canSkip = this.remaining() > 1 + this.delaySlotCost() && this.hasNoStateProbeCandidate();
-    const skipProbe = canSkip && this.rng.chance(0.7);
+    const canPoison = this.remaining() > 1 + this.delaySlotCost() && this.hasStatefulPoisonCandidate();
+    const skipPoison = canPoison && this.rng.chance(0.85);
 
     this.emit(mnemonic, `${mnemonic} ${label}`);
     if (mnemonic === 'jal') {
@@ -833,8 +852,8 @@ class ProgramGenerator {
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    if (skipProbe && this.remaining() > 0) {
-      this.emitSkippedProbeInstruction();
+    if (skipPoison && this.remaining() > 0) {
+      this.emitSkippedPoisonInstruction();
     }
     this.addLabel(label);
   }
@@ -848,8 +867,8 @@ class ProgramGenerator {
     const label = this.nextLabel(mnemonic);
     const delayCost = this.delaySlotCost();
     const minCost = 2 + delayCost;
-    const skipProbe = this.remaining() > minCost && this.rng.chance(0.7);
-    const targetIndex = this.emittedCount + minCost + (skipProbe ? 1 : 0);
+    const skipPoison = this.remaining() > minCost && this.hasStatefulPoisonCandidate() && this.rng.chance(0.85);
+    const targetIndex = this.emittedCount + minCost + (skipPoison ? 1 : 0);
     const targetAddress = textBaseAddress + targetIndex * 4;
     const targetRegister = '$25';
 
@@ -863,8 +882,8 @@ class ProgramGenerator {
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    if (skipProbe && this.remaining() > 0) {
-      this.emitSkippedProbeInstruction();
+    if (skipPoison && this.remaining() > 0) {
+      this.emitSkippedPoisonInstruction();
     }
     this.addLabel(label);
   }
@@ -877,12 +896,12 @@ class ProgramGenerator {
     this.emitSingle(mnemonic);
   }
 
-  private emitSkippedProbeInstruction(): void {
-    const mnemonic = this.pickNoStateProbeMnemonic();
+  private emitSkippedPoisonInstruction(): void {
+    const mnemonic = this.pickStatefulPoisonMnemonic();
     if (!mnemonic) {
       return;
     }
-    this.emitNoStateProbe(mnemonic);
+    this.emitStatefulPoison(mnemonic);
   }
 
   private pickDelaySlotMnemonic(): string | undefined {
@@ -895,56 +914,86 @@ class ProgramGenerator {
     return this.rng.pick(Array.from(this.allowed).filter((mnemonic) => !controlMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic)));
   }
 
-  private hasNoStateProbeCandidate(): boolean {
-    return this.noStateProbeCandidates().length > 0;
+  private hasStatefulPoisonCandidate(): boolean {
+    return this.statefulPoisonCandidates().length > 0;
   }
 
-  private pickNoStateProbeMnemonic(): string | undefined {
-    const candidates = this.noStateProbeCandidates();
+  private pickStatefulPoisonMnemonic(): string | undefined {
+    const candidates = this.statefulPoisonCandidates();
     return candidates.length ? this.rng.pick(candidates) : undefined;
   }
 
-  private noStateProbeCandidates(): string[] {
+  private statefulPoisonCandidates(): string[] {
     const preferred = [
-      'sll', 'srl', 'sra', 'addu', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
-      'addiu', 'andi', 'ori', 'xori', 'slti', 'sltiu',
-      'lw', 'lb', 'lbu', 'lh', 'lhu', 'mfhi', 'mflo', 'mfc0', 'nop'
+      'ori', 'addiu', 'addi', 'lui',
+      'addu', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
+      'sll', 'srl', 'sra',
+      'lw', 'lb', 'lbu', 'lh', 'lhu',
+      'sw', 'sb', 'sh'
     ];
     return preferred.filter((mnemonic) =>
       this.allowed.has(mnemonic) &&
       !controlMnemonics.has(mnemonic) &&
-      this.canEmitSingle(mnemonic) &&
-      (mnemonic !== 'mfc0' || this.profile === 'P7')
+      !hiLoWriteMnemonics.has(mnemonic) &&
+      !hiLoReadMnemonics.has(mnemonic) &&
+      this.canEmitSingle(mnemonic)
     );
   }
 
-  private emitNoStateProbe(mnemonic: string): void {
-    if (mnemonic === 'nop') {
-      this.emitNop();
+  private emitStatefulPoison(mnemonic: string): void {
+    const imm = this.poisonImmediate();
+    if (mnemonic === 'lui') {
+      this.emitStaticInstruction(mnemonic, `lui ${poisonRegister}, ${formatUnsignedImmediate(imm)}`);
+      return;
+    }
+    if (mnemonic === 'addi' || mnemonic === 'addiu') {
+      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${formatImmediate(imm)}`);
+      return;
+    }
+    if (mnemonic === 'ori' || mnemonic === 'andi' || mnemonic === 'xori' || mnemonic === 'slti' || mnemonic === 'sltiu') {
+      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${formatImmediate(imm)}`);
       return;
     }
     if (mnemonic === 'sll' || mnemonic === 'srl' || mnemonic === 'sra') {
-      this.emit(mnemonic, `${mnemonic} $0, ${this.chooseReadRegister()}, ${this.rng.int(0, 31)}`);
-      return;
-    }
-    if (mnemonic === 'addiu' || mnemonic === 'andi' || mnemonic === 'ori' || mnemonic === 'xori' || mnemonic === 'slti' || mnemonic === 'sltiu') {
-      this.emit(mnemonic, `${mnemonic} $0, ${this.chooseReadRegister()}, ${formatImmediate(this.immediateFor(mnemonic))}`);
+      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${this.rng.int(0, 31)}`);
       return;
     }
     if (mnemonic === 'lw' || mnemonic === 'lb' || mnemonic === 'lbu' || mnemonic === 'lh' || mnemonic === 'lhu') {
-      const operand = this.memoryOperand(memoryAlignment(mnemonic));
-      this.emit(mnemonic, `${mnemonic} $0, ${operand.text}`);
+      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, 0($0)`);
       return;
     }
-    if (mnemonic === 'mfhi' || mnemonic === 'mflo') {
-      this.emit(mnemonic, `${mnemonic} $0`);
+    if (mnemonic === 'sw' || mnemonic === 'sb' || mnemonic === 'sh') {
+      this.emitStaticInstruction(mnemonic, `${mnemonic} $0, 0($0)`);
       return;
     }
-    if (mnemonic === 'mfc0') {
-      this.emit(mnemonic, `mfc0 $0, ${this.rng.pick(['$12', '$13', '$14', '$15', '$8'])}`);
-      return;
+    this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, $0`);
+  }
+
+  private poisonImmediate(): number {
+    return this.rng.pick([1, 2, 3, 0x1234, 0x5a5a, 0x7fff, this.rng.int(1, 0x7fff)]);
+  }
+
+  private branchWillTake(mnemonic: ControlMnemonic, operands: string[]): boolean {
+    const first = operands[0] ? this.regValue(operands[0]) : 0;
+    const second = operands[1] ? this.regValue(operands[1]) : 0;
+    switch (mnemonic) {
+      case 'beq':
+        return first === second;
+      case 'bne':
+        return first !== second;
+      case 'bgez':
+      case 'bgezal':
+        return signed32(first) >= 0;
+      case 'bgtz':
+        return signed32(first) > 0;
+      case 'blez':
+        return signed32(first) <= 0;
+      case 'bltz':
+      case 'bltzal':
+        return signed32(first) < 0;
+      default:
+        return false;
     }
-    this.emit(mnemonic, `${mnemonic} $0, ${this.chooseReadRegister()}, ${this.chooseReadRegister()}`);
   }
 
   private branchOperands(mnemonic: ControlMnemonic): string[] {
@@ -1010,6 +1059,10 @@ class ProgramGenerator {
     if (this.rng.chance(0.08)) {
       return '$0';
     }
+    return this.rng.pick(writableRegisters);
+  }
+
+  private chooseVisibleWriteRegister(): string {
     return this.rng.pick(writableRegisters);
   }
 
@@ -1149,7 +1202,114 @@ class ProgramGenerator {
     this.pendingHiLoRead = this.allowed.has('mfhi') || this.allowed.has('mflo');
   }
 
+  private armMduProtection(busyCycles: number): void {
+    this.mduProtectedSlots = Math.max(this.mduProtectedSlots, busyCycles + 1);
+  }
+
+  private maybeEmitMduReadProbe(sourceMnemonic: string): void {
+    if (!this.mduProbeProfile()) {
+      return;
+    }
+    const busyCycles = mduBusyCycles(sourceMnemonic);
+    const mode = this.pickMduProbeMode(busyCycles);
+    if (!mode) {
+      return;
+    }
+
+    const fillerCount = mode === 'busy'
+      ? this.rng.int(1, Math.min(busyCycles, this.remaining() - 1))
+      : busyCycles + 1;
+    for (let i = 0; i < fillerCount; i++) {
+      const filler = this.pickMduFillerMnemonic();
+      if (!filler) {
+        return;
+      }
+      this.emitSingle(filler);
+    }
+
+    const readers = this.mduReadCandidates();
+    if (!readers.length) {
+      return;
+    }
+    this.emitHiLoRead(this.rng.pick(readers), true);
+    this.nextMduProbeMode = mode === 'busy' ? 'ready' : 'busy';
+  }
+
+  private pickMduProbeMode(busyCycles: number): MduReadProbeMode | undefined {
+    const preferred = this.nextMduProbeMode;
+    const fallback = preferred === 'busy' ? 'ready' : 'busy';
+    if (this.canEmitMduReadProbe(preferred, busyCycles)) {
+      return preferred;
+    }
+    if (this.canEmitMduReadProbe(fallback, busyCycles)) {
+      return fallback;
+    }
+    return undefined;
+  }
+
+  private canEmitMduReadProbe(mode: MduReadProbeMode, busyCycles: number): boolean {
+    const minRemaining = mode === 'busy' ? 2 : busyCycles + 2;
+    return (
+      this.remaining() >= minRemaining &&
+      this.mduReadCandidates().length > 0 &&
+      this.mduFillerCandidates().length > 0
+    );
+  }
+
+  private mduProbeProfile(): boolean {
+    return this.profile === 'P6' || this.profile === 'P7';
+  }
+
+  private mduReadCandidates(): string[] {
+    return ['mflo', 'mfhi'].filter((mnemonic) => this.allowed.has(mnemonic) && this.canEmitSingle(mnemonic));
+  }
+
+  private pickMduFillerMnemonic(): string | undefined {
+    return this.rng.pick(this.mduFillerCandidates());
+  }
+
+  private mduFillerCandidates(): string[] {
+    const preferred = ['addu', 'subu', 'ori', 'addiu', 'sll', 'srl', 'sra', 'and', 'or', 'xor', 'slt', 'lw', 'sw', 'nop'];
+    const preferredCandidates = preferred.filter((mnemonic) =>
+      this.allowed.has(mnemonic) &&
+      !hiLoWriteMnemonics.has(mnemonic) &&
+      !hiLoReadMnemonics.has(mnemonic) &&
+      this.canEmitSingle(mnemonic)
+    );
+    if (preferredCandidates.length) {
+      return preferredCandidates;
+    }
+    return Array.from(this.allowed).filter((mnemonic) =>
+      !controlMnemonics.has(mnemonic) &&
+      !hiLoWriteMnemonics.has(mnemonic) &&
+      !hiLoReadMnemonics.has(mnemonic) &&
+      this.canEmitSingle(mnemonic)
+    );
+  }
+
+  private noteMduProgress(mnemonic: string): void {
+    if (this.mduProtectedSlots <= 0) {
+      return;
+    }
+    if (hiLoReadMnemonics.has(mnemonic)) {
+      this.mduProtectedSlots = 0;
+      return;
+    }
+    if (!hiLoWriteMnemonics.has(mnemonic)) {
+      this.mduProtectedSlots = Math.max(0, this.mduProtectedSlots - 1);
+    }
+  }
+
   private emit(mnemonic: string, text: string): void {
+    this.recordInstruction(mnemonic, text);
+    this.noteMduProgress(mnemonic);
+  }
+
+  private emitStaticInstruction(mnemonic: string, text: string): void {
+    this.recordInstruction(mnemonic, text);
+  }
+
+  private recordInstruction(mnemonic: string, text: string): void {
     if (this.remaining() <= 0) {
       throw new BuiltinAsmGeneratorError('Internal generator error: attempted to emit past the requested instruction count.');
     }
@@ -1223,6 +1383,10 @@ function memoryAlignment(mnemonic: string): number {
     return 2;
   }
   return 1;
+}
+
+function mduBusyCycles(mnemonic: string): number {
+  return mnemonic === 'div' || mnemonic === 'divu' ? 10 : 5;
 }
 
 function formatImmediate(value: number): string {

@@ -579,7 +579,8 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
   const isim = await runIsim(services, {
     resource: asm,
     showMessages: false,
-    machineCodeSource: dump.outputFile
+    machineCodeSource: dump.outputFile,
+    simOutputFileName: simOutputFileNameForCase(item)
   });
   if (!isim?.simResult.ok || !isim.simOut) {
     return failedCase(item, 'isim', 'Full test stopped because ISim failed.', dump.outputFile, mars.outputFile);
@@ -889,6 +890,23 @@ function expandTraceCases(asms: vscode.Uri[]): CourseTraceCaseInput[] {
     }
   }
   return cases;
+}
+
+function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
+  return `${traceOutputStem(item)}.sim.out`;
+}
+
+function traceOutputStem(item: CourseTraceCaseInput): string {
+  const asmName = path.basename(item.asm.fsPath, path.extname(item.asm.fsPath));
+  if (!item.stdin) {
+    return asmName;
+  }
+  const stdinName = path.basename(item.stdin.fsPath, path.extname(item.stdin.fsPath));
+  return `${asmName}.${sanitizeTraceFileStem(stdinName)}`;
+}
+
+function sanitizeTraceFileStem(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';
 }
 
 async function resolveActiveGeneratorInput(): Promise<vscode.Uri | undefined> {

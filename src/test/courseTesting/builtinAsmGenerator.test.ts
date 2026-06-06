@@ -65,13 +65,57 @@ describe('built-in ASM generator', () => {
     expect(divLines.every((line) => !/,\s*\$0\b/.test(line))).toBe(true);
   });
 
+  it('uses stateful skipped poison for taken control-flow probes', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P5',
+      instructionText: 'j beq ori addu',
+      instructionCount: 40,
+      seed: 'poison-0'
+    });
+    const poisonLines = executableLines(result.text).filter((line) => /\$26\b/.test(line));
+
+    expect(poisonLines.length).toBeGreaterThan(0);
+    expect(poisonLines.every((line) => /^(ori|addu)\s+\$26\b/.test(line))).toBe(true);
+  });
+
+  it('biases P6/P7 MDU reads into both busy and post-busy windows', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'ori addiu addu mult multu div divu mfhi mflo',
+      instructionCount: 160,
+      seed: 'mdu-probes'
+    });
+    const mnemonics = executableMnemonics(result.text);
+    const probes = mduReadProbeDistances(mnemonics);
+
+    expect(probes.some((probe) => isBusyMduReadProbe(probe))).toBe(true);
+    expect(probes.some((probe) => isReadyMduReadProbe(probe))).toBe(true);
+    expect(mduWriteViolationsDuringStartOrBusy(mnemonics)).toEqual([]);
+  });
+
   it('rejects exception-only instructions that the current trace path cannot load safely', () => {
     expect(() => resolveBuiltinInstructionSet('P7', 'syscall')).toThrow(/not supported by the built-in generator/);
     expect(() => resolveBuiltinInstructionSet('P7', 'eret')).toThrow(/not supported by the built-in generator/);
   });
 });
 
+interface MduReadProbe {
+  source: string;
+  distance: number;
+}
+
+const longMduWrites = new Set(['mult', 'multu', 'div', 'divu']);
+const allHiLoWrites = new Set(['mult', 'multu', 'div', 'divu', 'mthi', 'mtlo']);
+const hiLoReads = new Set(['mfhi', 'mflo']);
+
 function executableMnemonics(text: string): string[] {
+  return executableLines(text).map((line) => {
+    const match = /^([a-z][a-z0-9]*)\b/.exec(line);
+    return match ? match[1] : '';
+  }).filter(Boolean);
+}
+
+function executableLines(text: string): string[] {
   const result: string[] = [];
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -80,8 +124,54 @@ function executableMnemonics(text: string): string[] {
     }
     const match = /^([a-z][a-z0-9]*)\b/.exec(trimmed);
     if (match) {
-      result.push(match[1]);
+      result.push(trimmed);
     }
   }
   return result;
+}
+
+function mduReadProbeDistances(mnemonics: string[]): MduReadProbe[] {
+  const probes: MduReadProbe[] = [];
+  for (let i = 0; i < mnemonics.length; i++) {
+    const source = mnemonics[i];
+    if (!longMduWrites.has(source)) {
+      continue;
+    }
+    const readIndex = mnemonics.findIndex((mnemonic, index) => index > i && hiLoReads.has(mnemonic));
+    if (readIndex >= 0) {
+      probes.push({ source, distance: readIndex - i - 1 });
+    }
+  }
+  return probes;
+}
+
+function isBusyMduReadProbe(probe: MduReadProbe): boolean {
+  const busyCycles = probe.source === 'div' || probe.source === 'divu' ? 10 : 5;
+  return probe.distance >= 1 && probe.distance <= busyCycles;
+}
+
+function isReadyMduReadProbe(probe: MduReadProbe): boolean {
+  const busyCycles = probe.source === 'div' || probe.source === 'divu' ? 10 : 5;
+  return probe.distance >= busyCycles + 1;
+}
+
+function mduWriteViolationsDuringStartOrBusy(mnemonics: string[]): string[] {
+  const violations: string[] = [];
+  for (let i = 0; i < mnemonics.length; i++) {
+    const source = mnemonics[i];
+    if (!longMduWrites.has(source)) {
+      continue;
+    }
+    const protectedSlots = (source === 'div' || source === 'divu' ? 10 : 5) + 1;
+    for (let offset = 1; offset <= protectedSlots && i + offset < mnemonics.length; offset++) {
+      const mnemonic = mnemonics[i + offset];
+      if (hiLoReads.has(mnemonic)) {
+        break;
+      }
+      if (allHiLoWrites.has(mnemonic)) {
+        violations.push(`${source}->${mnemonic}@+${offset}`);
+      }
+    }
+  }
+  return violations;
 }

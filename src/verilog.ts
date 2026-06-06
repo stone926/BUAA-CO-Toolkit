@@ -37,6 +37,7 @@ export interface IseProjectOptions {
 
 export interface IsimRunOptions extends IseProjectOptions {
   machineCodeSource?: vscode.Uri;
+  simOutputFileName?: string;
 }
 
 export interface IsimRunOutput {
@@ -207,7 +208,7 @@ export async function runIsim(
   let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
     const simOutDir = await simulationOutputDirectory(activeUri, generated.outDir);
-    simOut = vscode.Uri.file(path.join(simOutDir.fsPath, `${top}.sim.out`));
+    simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(top, options.simOutputFileName)));
     await writeTextFile(simOut, simResult.stdout);
     if (showMessages) {
       vscode.window.showInformationMessage('ISim run completed.');
@@ -218,6 +219,11 @@ export async function runIsim(
     }
   }
   return { generated, fuseResult, simResult, simOut };
+}
+
+function isimOutputFileName(top: string, configured?: string): string {
+  const trimmed = configured?.trim();
+  return trimmed ? path.basename(trimmed) : `${top}.sim.out`;
 }
 
 async function simulationOutputDirectory(resource: vscode.Uri | undefined, isimDir: vscode.Uri): Promise<vscode.Uri> {

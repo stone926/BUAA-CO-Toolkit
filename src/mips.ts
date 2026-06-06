@@ -8,7 +8,7 @@ import {
   getMipsExtraArgs,
   useDelayedBranching
 } from './config';
-import { basenameNoExt, dirname, ensureDirectory, writeTextFile } from './fsUtil';
+import { basenameNoExt, dirname, ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, runTool } from './process';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
@@ -139,7 +139,7 @@ export async function runMarsFile(
   });
 
   if (mode === 'run') {
-    const outDir = vscode.Uri.file(path.join(cwd, '.co', 'out'));
+    const outDir = marsRunOutputDirectory(asmUri);
     await ensureDirectory(outDir);
     outputFile = vscode.Uri.file(path.join(outDir.fsPath, marsOutputFileName(asmUri, options.stdinSource)));
     await writeTextFile(outputFile, result.stdout);
@@ -163,6 +163,12 @@ export async function runMarsFile(
   }
 
   return { result, outputFile };
+}
+
+function marsRunOutputDirectory(asmUri: vscode.Uri): vscode.Uri {
+  const folder = workspaceFolderFor(asmUri);
+  const baseDir = folder?.uri.fsPath ?? dirname(asmUri);
+  return vscode.Uri.file(path.join(baseDir, '.co', 'out'));
 }
 
 function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): string {
