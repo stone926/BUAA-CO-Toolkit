@@ -129,9 +129,9 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       const ise = getIsePath(resource);
       toolChildren.push(this.createToolItem('ISE', ise || '未配置', 'co.checkToolchain'));
     }
-    const hazard = getHazardCalculator(resource);
-    if (hazard) {
-      toolChildren.push(this.createToolItem('Hazard Calc', hazard, 'co.checkToolchain'));
+    const hazardDir = getHazardCalculator(resource);
+    if (hazardDir) {
+      toolChildren.push(this.createToolItem('Hazard 工具', hazardDir, 'co.checkToolchain'));
     }
     sections.push({
       header: this.createHeader('工具链'),

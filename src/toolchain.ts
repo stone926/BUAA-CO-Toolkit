@@ -66,9 +66,9 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
     });
   }
 
-  const hazard = getHazardCalculator(resource);
-  if (hazard || profile === 'P5' || profile === 'P6') {
-    checks.push(fileCheck('Hazard Calculator', hazard, 'Set co.toolchain.hazardCalculator for P5/P6 hazard analysis.'));
+  const hazardDir = getHazardCalculator(resource);
+  if (hazardDir || profile === 'P5' || profile === 'P6') {
+    checks.push(hazardDirCheck(hazardDir));
   }
 
   return checks;
@@ -89,6 +89,30 @@ function fileCheck(name: string, file: string, suggestion: string): ToolDetectio
     ok: exists,
     detail: file,
     suggestion: exists ? undefined : suggestion
+  };
+}
+
+function hazardDirCheck(dir: string): ToolDetection {
+  if (!dir) {
+    return {
+      name: 'Hazard Analysis',
+      ok: false,
+      detail: 'not configured',
+      suggestion: 'Set co.toolchain.hazardCalculator to the hazard_analysis directory.'
+    };
+  }
+  const jarExists = fs.existsSync(path.join(dir, 'Hazard-Calculator.jar'));
+  const analyzerExists = fs.existsSync(path.join(dir, 'analyzer.py'));
+  const ok = jarExists && analyzerExists;
+  const missing = [
+    !jarExists && 'Hazard-Calculator.jar',
+    !analyzerExists && 'analyzer.py'
+  ].filter(Boolean).join(', ');
+  return {
+    name: 'Hazard Analysis',
+    ok,
+    detail: dir,
+    suggestion: ok ? undefined : `Missing ${missing} in ${dir}`
   };
 }
 

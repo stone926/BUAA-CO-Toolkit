@@ -692,7 +692,7 @@
         "co.toolchain.hazardCalculator": {
           "type": "string",
           "default": "",
-          "description": "Path to Hazard-Calculator.jar for P5/P6 pipeline hazard analysis."
+          "description": "Path to the hazard_analysis directory provided by the course (containing Hazard-Calculator.jar and analyzer.py)."
         },
         "co.mips.delayedBranching": {
           "type": "string",
