@@ -662,7 +662,7 @@ async function resolveAsmInput(): Promise<vscode.Uri | undefined> {
 }
 
 async function resolveAsmBatchInputs(): Promise<vscode.Uri[]> {
-  const files = await vscode.workspace.findFiles('**/*.{asm,s,mips}', '**/{node_modules,out,.git,.co}/**', 500);
+  const files = await vscode.workspace.findFiles('**/*.{asm,s,mips}', '**/{node_modules,out,.git}/**', 500);
   if (files.length) {
     const picked = await vscode.window.showQuickPick(
       files.map((uri) => ({
