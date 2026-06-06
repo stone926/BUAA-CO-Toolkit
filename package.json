@@ -1,7 +1,7 @@
 {
   "name": "buaa-co-extension",
   "displayName": "BUAA CO Toolkit",
-  "description": "VSCode toolkit for BUAA Computer Organization labs: Logisim, MARS/MIPS ASM, and Verilog support.",
+  "description": "北航计算机组成实验 VSCode 工具箱：支持 Logisim、MARS/MIPS 汇编和 Verilog",
   "version": "0.1.0",
   "publisher": "buaa-co",
   "license": "MIT",
@@ -59,7 +59,7 @@
       "activitybar": [
         {
           "id": "coSidebarContainer",
-          "title": "BUAA CO",
+          "title": "北航 CO",
           "icon": "$(circuit-board)"
         }
       ]
@@ -68,9 +68,9 @@
       "coSidebarContainer": [
         {
           "id": "coSidebar",
-          "name": "BUAA CO Toolkit",
+          "name": "计组工具箱",
           "icon": "$(circuit-board)",
-          "contextualTitle": "BUAA CO"
+          "contextualTitle": "北航 CO"
         }
       ]
     },
@@ -126,162 +126,162 @@
       {
         "id": "mipsDirective",
         "superType": "keyword",
-        "description": "MIPS assembler directive such as .data, .text, .eqv, or .macro."
+        "description": "MIPS 汇编器指令，如 .data、.text、.eqv 或 .macro。"
       },
       {
         "id": "mipsInstruction",
         "superType": "function",
-        "description": "MIPS instruction in single-color mode."
+        "description": "单色模式下的 MIPS 指令。"
       },
       {
         "id": "mipsRealInstruction",
         "superType": "function",
-        "description": "MIPS non-pseudo instruction in real-vs-pseudo mode."
+        "description": "真实/伪指令区分模式下的 MIPS 真实指令。"
       },
       {
         "id": "mipsRInstruction",
         "superType": "function",
-        "description": "MIPS R-type instruction."
+        "description": "MIPS R 型指令。"
       },
       {
         "id": "mipsIInstruction",
         "superType": "function",
-        "description": "MIPS I-type instruction."
+        "description": "MIPS I 型指令。"
       },
       {
         "id": "mipsJInstruction",
         "superType": "function",
-        "description": "MIPS J-type instruction."
+        "description": "MIPS J 型指令。"
       },
       {
         "id": "mipsSpecialInstruction",
         "superType": "function",
-        "description": "MIPS special instruction such as syscall, break, eret, or CP0 moves."
+        "description": "MIPS 特殊指令，如 syscall、break、eret 或 CP0 移动。"
       },
       {
         "id": "mipsPseudoInstruction",
         "superType": "function",
-        "description": "MIPS pseudo instruction or assembler idiom."
+        "description": "MIPS 伪指令或汇编器惯用法。"
       },
       {
         "id": "mipsRegister",
         "superType": "variable",
-        "description": "MIPS register such as $t0, $s0, or $zero."
+        "description": "MIPS 寄存器，如 $t0、$s0 或 $zero。"
       },
       {
         "id": "mipsCp0Register",
         "superType": "variable",
-        "description": "MIPS CP0 register such as $12 Status, $13 Cause, or $14 EPC."
+        "description": "MIPS CP0 寄存器，如 $12 Status、$13 Cause 或 $14 EPC。"
       },
       {
         "id": "mipsMacro",
         "superType": "function",
-        "description": "MIPS assembler macro definition or macro call."
+        "description": "MIPS 汇编器宏定义或宏调用。"
       },
       {
         "id": "mipsMacroParameter",
         "superType": "parameter",
-        "description": "MIPS macro parameter such as %i."
+        "description": "MIPS 宏参数，如 %i。"
       },
       {
         "id": "mipsLabel",
         "superType": "variable",
-        "description": "MIPS text label definition or reference."
+        "description": "MIPS 文本标签定义或引用。"
       },
       {
         "id": "mipsDataSymbol",
         "superType": "variable",
-        "description": "MIPS data segment symbol."
+        "description": "MIPS 数据段符号。"
       },
       {
         "id": "mipsEqvSymbol",
         "superType": "variable",
-        "description": "MIPS .eqv symbol."
+        "description": "MIPS .eqv 符号。"
       },
       {
         "id": "mipsNumber",
         "superType": "number",
-        "description": "MIPS numeric literal."
+        "description": "MIPS 数值字面量。"
       },
       {
         "id": "mipsString",
         "superType": "string",
-        "description": "MIPS string literal."
+        "description": "MIPS 字符串字面量。"
       },
       {
         "id": "mipsComment",
         "superType": "comment",
-        "description": "MIPS line comment."
+        "description": "MIPS 行注释。"
       },
       {
         "id": "mipsPunctuation",
         "superType": "operator",
-        "description": "MIPS punctuation such as comma, colon, and parentheses."
+        "description": "MIPS 标点符号，如逗号、冒号和括号。"
       },
       {
         "id": "verilogModule",
         "superType": "class",
-        "description": "Verilog module declarations and module type references."
+        "description": "Verilog 模块声明和模块类型引用。"
       },
       {
         "id": "verilogPort",
         "superType": "property",
-        "description": "Verilog ports and named port connections."
+        "description": "Verilog 端口和命名端口连接。"
       },
       {
         "id": "verilogSignal",
         "superType": "variable",
-        "description": "Verilog nets, registers, logic signals, integers, and genvars."
+        "description": "Verilog 网线、寄存器、逻辑信号、整数和 genvar。"
       },
       {
         "id": "verilogParameter",
         "superType": "enumMember",
-        "description": "Verilog parameters and localparams."
+        "description": "Verilog 参数和局部参数。"
       },
       {
         "id": "verilogInstance",
         "superType": "variable",
-        "description": "Verilog module instance names."
+        "description": "Verilog 模块实例名称。"
       },
       {
         "id": "verilogMacro",
         "superType": "function",
-        "description": "Verilog preprocessor macros."
+        "description": "Verilog 预处理器宏。"
       },
       {
         "id": "verilogSystemTask",
         "superType": "function",
-        "description": "Verilog system tasks such as $display and $readmemh."
+        "description": "Verilog 系统任务，如 $display 和 $readmemh。"
       },
       {
         "id": "verilogNumber",
         "superType": "number",
-        "description": "Verilog numeric literals."
+        "description": "Verilog 数值字面量。"
       },
       {
         "id": "verilogKeyword",
         "superType": "keyword",
-        "description": "Verilog keywords."
+        "description": "Verilog 关键字。"
       },
       {
         "id": "verilogComment",
         "superType": "comment",
-        "description": "Verilog comments."
+        "description": "Verilog 注释。"
       },
       {
         "id": "verilogString",
         "superType": "string",
-        "description": "Verilog string literals."
+        "description": "Verilog 字符串字面量。"
       },
       {
         "id": "verilogFormatSpecifier",
         "superType": "regexp",
-        "description": "Verilog display format specifiers such as %d, %h, or %0d."
+        "description": "Verilog 显示格式说明符，如 %d、%h 或 %0d。"
       },
       {
         "id": "verilogPunctuation",
         "superType": "operator",
-        "description": "Verilog punctuation."
+        "description": "Verilog 标点符号。"
       }
     ],
     "configurationDefaults": {
@@ -324,47 +324,47 @@
     "commands": [
       {
         "command": "co.checkToolchain",
-        "title": "CO: Check Toolchain"
+        "title": "CO: 检查工具链"
       },
       {
         "command": "co.selectProjectProfile",
-        "title": "CO: Select Project Profile"
+        "title": "CO: 选择项目 Profile"
       },
       {
         "command": "co.sidebar.refresh",
-        "title": "CO: Refresh Sidebar",
+        "title": "CO: 刷新侧边栏",
         "icon": "$(refresh)"
       },
       {
         "command": "co.projectWizard",
-        "title": "CO: Project Wizard",
+        "title": "CO: 项目向导",
         "icon": "$(new-folder)"
       },
       {
         "command": "co.course.openTutorial",
-        "title": "CO: Open Course Tutorial",
+        "title": "CO: 打开课程教程",
         "icon": "$(book)"
       },
       {
         "command": "co.course.openProfileTutorial",
-        "title": "CO: Open Current Profile Tutorial",
+        "title": "CO: 打开当前 Profile 教程",
         "icon": "$(symbol-class)"
       },
       {
         "command": "co.mips.runCurrentFile",
-        "title": "CO: MIPS Run Current File"
+        "title": "CO: MIPS 运行当前文件"
       },
       {
         "command": "co.mips.runAndCapture",
-        "title": "CO: MIPS Run And Capture Output"
+        "title": "CO: MIPS 运行并捕获输出"
       },
       {
         "command": "co.mips.runWithStdinFile",
-        "title": "CO: MIPS Run Current File With Stdin File"
+        "title": "CO: MIPS 带标准输入运行"
       },
       {
         "command": "co.mips.runInTerminal",
-        "title": "CO: MIPS Run Current File In Terminal",
+        "title": "CO: MIPS 在终端中运行",
         "icon": {
           "light": "icons/run-terminal-light.svg",
           "dark": "icons/run-terminal-dark.svg"
@@ -372,7 +372,7 @@
       },
       {
         "command": "co.mips.dumpText",
-        "title": "CO: MIPS Dump Text Segment",
+        "title": "CO: MIPS 导出文本段",
         "icon": {
           "light": "icons/dump-text-light.svg",
           "dark": "icons/dump-text-dark.svg"
@@ -380,19 +380,19 @@
       },
       {
         "command": "co.mips.dumpKernelText",
-        "title": "CO: MIPS Dump Kernel Text Segment"
+        "title": "CO: MIPS 导出内核文本段"
       },
       {
         "command": "co.verilog.generateTestbench",
-        "title": "CO: Verilog Generate Testbench"
+        "title": "CO: Verilog 生成 Testbench"
       },
       {
         "command": "co.verilog.generateIseProject",
-        "title": "CO: Verilog Generate ISE PRJ/TCL"
+        "title": "CO: Verilog 生成 ISE 工程"
       },
       {
         "command": "co.verilog.runIsim",
-        "title": "CO: Verilog Run ISim",
+        "title": "CO: Verilog 运行 ISim",
         "icon": {
           "light": "icons/run-isim-light.svg",
           "dark": "icons/run-isim-dark.svg"
@@ -400,19 +400,19 @@
       },
       {
         "command": "co.logisim.generateRom",
-        "title": "CO: Logisim Generate ROM File"
+        "title": "CO: Logisim 生成 ROM 文件"
       },
       {
         "command": "co.logisim.injectRomIntoCircuit",
-        "title": "CO: Logisim Inject ROM Into Circuit"
+        "title": "CO: Logisim 注入 ROM 到电路"
       },
       {
         "command": "co.logisim.convertLogToCsv",
-        "title": "CO: Logisim Convert Logging To CSV"
+        "title": "CO: Logisim 日志转 CSV"
       },
       {
         "command": "co.logisim.openCurrentCircuit",
-        "title": "CO: Logisim Open Current Circuit",
+        "title": "CO: Logisim 打开当前电路",
         "icon": {
           "light": "icons/open-circuit-light.svg",
           "dark": "icons/open-circuit-dark.svg"
@@ -420,51 +420,51 @@
       },
       {
         "command": "co.hazard.analyzeCurrentMachineCode",
-        "title": "CO: Analyze Pipeline Hazards"
+        "title": "CO: 分析流水线冲突"
       },
       {
         "command": "co.hazard.openReport",
-        "title": "CO: Open Hazard Report"
+        "title": "CO: 打开冲突报告"
       },
       {
         "command": "co.test.compareTraceFiles",
-        "title": "CO: Compare Trace Output Files"
+        "title": "CO: 比较 Trace 输出文件"
       },
       {
         "command": "co.test.compareLatestOutputs",
-        "title": "CO: Compare Latest MARS/ISim Outputs"
+        "title": "CO: 比较最近的 MARS/ISim 输出"
       },
       {
         "command": "co.test.runFullTest",
-        "title": "CO: Run Full Course Trace Test"
+        "title": "CO: 运行完整课程 Trace 测试"
       },
       {
         "command": "co.test.runBatchTraceTests",
-        "title": "CO: Run Batch Course Trace Tests"
+        "title": "CO: 运行批量课程 Trace 测试"
       },
       {
         "command": "co.test.runGeneratedTraceTests",
-        "title": "CO: Run Generated Course Trace Tests"
+        "title": "CO: 运行生成的课程 Trace 测试"
       },
       {
         "command": "co.test.startContinuousGeneratedTraceTests",
-        "title": "CO: Start Continuous Generated Course Trace Tests"
+        "title": "CO: 启动持续生成的课程 Trace 测试"
       },
       {
         "command": "co.test.stopContinuousTests",
-        "title": "CO: Stop Continuous Course Tests"
+        "title": "CO: 停止持续课程测试"
       },
       {
         "command": "co.test.prepareLogisimCases",
-        "title": "CO: Prepare Logisim Circuit Cases"
+        "title": "CO: 准备 Logisim 电路用例"
       },
       {
         "command": "co.test.prepareGeneratedLogisimCases",
-        "title": "CO: Prepare Generated Logisim Circuit Cases"
+        "title": "CO: 准备生成的 Logisim 电路用例"
       },
       {
         "command": "co.test.openBatchTraceReport",
-        "title": "CO: Open Batch Course Trace Report"
+        "title": "CO: 打开批量课程 Trace 报告"
       }
     ],
     "menus": {
@@ -616,7 +616,7 @@
       ]
     },
     "configuration": {
-      "title": "BUAA CO Toolkit",
+      "title": "北航计算机组成工具箱",
       "properties": {
         "co.project.profile": {
           "type": "string",
@@ -632,67 +632,67 @@
             "P6",
             "P7"
           ],
-          "description": "Current BUAA CO project profile. Auto enables generic checks and infers some Verilog interface rules."
+          "description": "当前北航 CO 项目 Profile。auto 启用通用检查并推断部分 Verilog 接口规则。"
         },
         "co.course.tutorialRoot": {
           "type": "string",
           "default": "",
-          "description": "Optional BUAA CO tutorial root. Use a local mirror path such as E:/VSCode/BUAA-CO/cscore/site/cscore.buaa.edu.cn/tutorial or a URL. Empty auto-detects a nearby local mirror and falls back to the official site."
+          "description": "可选的北航 CO 教程根目录。可使用本地镜像路径如 E:/VSCode/BUAA-CO/cscore/site/cscore.buaa.edu.cn/tutorial 或 URL。为空时自动检测附近的本地镜像，若无则回退到官方网站。"
         },
         "co.project.topModule": {
           "type": "string",
           "default": "mips",
-          "description": "Top Verilog module name used by course checks and ISim project generation."
+          "description": "课程检查和 ISim 工程生成使用的顶层 Verilog 模块名。"
         },
         "co.project.testbench": {
           "type": "string",
           "default": "mips_tb",
-          "description": "Default Verilog testbench module for ISim."
+          "description": "ISim 默认使用的 Verilog Testbench 模块。"
         },
         "co.project.machineCode": {
           "type": "string",
           "default": "code.txt",
-          "description": "Default machine code file generated by MARS and loaded by Verilog/Logisim workflows."
+          "description": "MARS 生成、Verilog/Logisim 工作流加载的默认机器码文件。"
         },
         "co.project.simTime": {
           "type": "string",
           "default": "200us",
-          "description": "ISim TCL run duration written as `run <value>; exit`. Defaults to the BUAA CO course-style 200us."
+          "description": "ISim TCL 运行时长，格式为 `run <值>; exit`。默认为北航 CO 课程风格的 200us。"
         },
         "co.toolchain.java": {
           "type": "string",
           "default": "java",
-          "description": "Java executable used for MARS and Logisim."
+          "description": "MARS 和 Logisim 使用的 Java 可执行文件。"
         },
         "co.toolchain.python": {
           "type": "string",
           "default": "python",
-          "description": "Python executable used for random ASM test generators."
+          "description": "随机 ASM 测试生成器使用的 Python 可执行文件。"
         },
         "co.toolchain.mars": {
           "type": "string",
           "default": "",
-          "description": "Path to Mars.jar."
+          "description": "Mars.jar 的路径。"
         },
         "co.toolchain.marsP7": {
           "type": "string",
           "default": "",
-          "description": "Path to the course-specific P7 MARS jar."
+          "description": "课程专用 P7 MARS jar 的路径。"
         },
         "co.toolchain.logisim": {
           "type": "string",
           "default": "",
-          "description": "Path to logisim.jar."
+          "description": "logisim.jar 的路径。"
         },
         "co.toolchain.isePath": {
           "type": "string",
           "default": "",
-          "description": "Path to Xilinx ISE directory, for example D:/Xilinx/14.7/ISE_DS/ISE."
+          "description": "Xilinx ISE 安装目录路径，例如 D:/Xilinx/14.7/ISE_DS/ISE。"
         },
         "co.toolchain.hazardCalculator": {
           "type": "string",
           "default": "",
-          "description": "Path to the hazard_analysis directory provided by the course (containing Hazard-Calculator.jar and analyzer.py)."
+          "description": "课程提供的 hazard_analysis 目录路径（包含 Hazard-Calculator.jar 和 analyzer.py）。"
         },
         "co.mips.delayedBranching": {
           "type": "string",
@@ -702,12 +702,12 @@
             "on",
             "off"
           ],
-          "description": "Delayed branching mode for MARS commands. Profile enables it for P5/P6/P7."
+          "description": "MARS 命令的延迟分支模式。profile 模式在 P5/P6/P7 时启用。"
         },
         "co.mips.memoryConfiguration": {
           "type": "string",
           "default": "CompactDataAtZero",
-          "description": "MARS memory configuration passed after mc."
+          "description": "MARS 内存配置，传递给 mc 参数。"
         },
         "co.mips.extraArgs": {
           "type": "array",
@@ -715,12 +715,12 @@
             "type": "string"
           },
           "default": [],
-          "description": "Extra arguments appended to every MARS command line. E.g. [\"sm\", \"dc4096\"]."
+          "description": "追加到每个 MARS 命令行的额外参数。例如 [\"sm\", \"dc4096\"]。"
         },
         "co.mips.warnPseudoInstruction": {
           "type": "boolean",
           "default": true,
-          "description": "Warn when an ASM file uses MIPS pseudo instructions."
+          "description": "当 ASM 文件使用 MIPS 伪指令时发出警告。"
         },
         "co.mips.instructionColorMode": {
           "type": "string",
@@ -731,16 +731,16 @@
             "byType"
           ],
           "enumDescriptions": [
-            "Use one color for real instructions and another color for pseudo instructions.",
-            "Use one color for all instructions.",
-            "Use separate colors for R-type, I-type, J-type, special, and pseudo instructions."
+            "真实指令和伪指令使用不同颜色。",
+            "所有指令使用相同颜色。",
+            "R 型、I 型、J 型、特殊指令和伪指令分别使用不同颜色。"
           ],
-          "description": "Controls how MIPS ASM instruction semantic highlighting groups instruction colors."
+          "description": "控制 MIPS 汇编指令语义高亮的分组着色方式。"
         },
         "co.mips.warnMissingExitSyscall": {
           "type": "boolean",
           "default": true,
-          "description": "Warn in P2 profile when the file has no syscall instruction."
+          "description": "在 P2 Profile 下，当文件没有 syscall 指令时发出警告。"
         },
         "co.diagnostics.disabledCodes": {
           "type": "array",
@@ -748,7 +748,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Diagnostic codes to suppress in this workspace. Entries generated by quick fixes are language-qualified, for example verilog:synth-mul-div."
+          "description": "在当前工作区中禁用的诊断代码。快速修复生成的条目带有语言前缀，例如 verilog:synth-mul-div。"
         },
         "co.verilog.implicitNet.diagnostic": {
           "type": "string",
@@ -759,7 +759,7 @@
             "warning",
             "error"
           ],
-          "description": "Severity for Verilog implicit net diagnostics."
+          "description": "Verilog 隐式网线诊断的严重级别。"
         },
         "co.verilog.implicitNet.ignorePatterns": {
           "type": "array",
@@ -770,17 +770,17 @@
           "items": {
             "type": "string"
           },
-          "description": "Regular expressions for Verilog implicit net identifiers to ignore."
+          "description": "需要忽略的 Verilog 隐式网线标识符的正则表达式。"
         },
         "co.verilog.lint.courseRules": {
           "type": "boolean",
           "default": true,
-          "description": "Enable BUAA CO course-specific Verilog lint checks."
+          "description": "启用北航 CO 课程专用的 Verilog Lint 检查。"
         },
         "co.verilog.lint.synthesizableHints": {
           "type": "boolean",
           "default": true,
-          "description": "Enable informational hints for synthesizable Verilog style issues such as initial blocks, declaration initializers, and multiply/divide operators."
+          "description": "启用可综合 Verilog 风格问题的信息提示，如 initial 块、声明初始化器和乘除运算符。"
         },
         "co.verilog.lint.disabledRules": {
           "type": "array",
@@ -815,7 +815,7 @@
               "vc-021"
             ]
           },
-          "description": "Verilog course lint rule ids to suppress. VC-018, VC-019, VC-020, and VC-022 are not emitted; formatting handles spacing and indentation."
+          "description": "需要禁用的 Verilog 课程 Lint 规则 ID。VC-018、VC-019、VC-020 和 VC-022 不会生成；格式化会处理间距和缩进。"
         },
         "co.verilog.format.style": {
           "type": "string",
@@ -826,23 +826,23 @@
             "custom"
           ],
           "enumDescriptions": [
-            "BUAA CO course style based on the bundled P5/P6 project examples.",
-            "A denser 4-space style with compact ranges.",
-            "Use the individual co.verilog.format.* settings below."
+            "基于内置 P5/P6 项目示例的北航 CO 课程风格。",
+            "更紧凑的 4 空格风格，范围表达式更紧凑。",
+            "使用下方的 co.verilog.format.* 各项设置。"
           ],
-          "description": "Controls the base style used by the Verilog formatter."
+          "description": "控制 Verilog 格式化器使用的基础风格。"
         },
         "co.verilog.format.continuationIndent": {
           "type": "number",
           "default": 2,
           "minimum": 1,
           "maximum": 4,
-          "description": "Extra indentation levels for module ports and instance connection continuations."
+          "description": "模块端口和实例连接续行的额外缩进级别。"
         },
         "co.verilog.format.spaceInRange": {
           "type": "boolean",
           "default": true,
-          "description": "Format packed and unpacked ranges as [31: 0] instead of [31:0]."
+          "description": "将 packed 和 unpacked 范围格式化为 [31: 0] 而非 [31:0]。"
         },
         "co.verilog.format.declarationRangeSpacing": {
           "type": "string",
@@ -853,38 +853,38 @@
             "preserve"
           ],
           "enumDescriptions": [
-            "Keep one space before [ and after ] in declarations, for example output reg [3: 0] y.",
-            "Remove spaces around declaration range brackets, for example output reg[3: 0]y.",
-            "Do not change spacing around declaration range brackets."
+            "在声明中的 [ 前和 ] 后保留一个空格，例如 output reg [3: 0] y。",
+            "移除声明范围方括号周围的空格，例如 output reg[3: 0]y。",
+            "不改变声明范围方括号周围的间距。"
           ],
-          "description": "Controls spacing around [ and ] for input/output/inout/wire/reg declaration ranges."
+          "description": "控制 input/output/inout/wire/reg 声明范围中 [ 和 ] 周围的间距。"
         },
         "co.verilog.format.spaceBeforeInstancePorts": {
           "type": "boolean",
           "default": true,
-          "description": "Keep a space before instance port lists, for example PC pc (...). Module declarations still use module m(...)."
+          "description": "在实例端口列表前保留空格，例如 PC pc (...)。模块声明仍使用 module m(...)。"
         },
         "co.verilog.format.separateElse": {
           "type": "boolean",
           "default": true,
-          "description": "Place else on a separate line after an end statement."
+          "description": "将 else 放在 end 语句后的单独一行。"
         },
         "co.verilog.format.maxBlankLines": {
           "type": "number",
           "default": 1,
           "minimum": 0,
           "maximum": 3,
-          "description": "Maximum number of consecutive blank lines preserved by the Verilog formatter."
+          "description": "Verilog 格式化器保留的最大连续空行数。"
         },
         "co.run.showCommandBeforeRun": {
           "type": "boolean",
           "default": false,
-          "description": "Show the exact external command before running it."
+          "description": "运行前显示完整的外部命令。"
         },
         "co.run.timeoutMs": {
           "type": "number",
           "default": 120000,
-          "description": "Timeout for external tool runs."
+          "description": "外部工具运行超时时间（毫秒）。"
         },
         "co.test.generatorArgs": {
           "type": "array",
@@ -892,47 +892,47 @@
           "items": {
             "type": "string"
           },
-          "description": "Extra command-line arguments appended when running a random ASM test generator."
+          "description": "运行随机 ASM 测试生成器时追加的额外命令行参数。"
         },
         "co.test.generatedAsmLimit": {
           "type": "number",
           "default": 100,
           "minimum": 1,
-          "description": "Maximum number of new or modified ASM files picked up after a test generator run."
+          "description": "测试生成器运行后获取的新建或修改 ASM 文件的最大数量。"
         },
         "co.test.builtinGenerator.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Use the built-in random ASM generator by default for generated course trace tests. Open an external generator file or disable this to use the external generator picker."
+          "description": "默认使用内置随机 ASM 生成器进行生成的课程 Trace 测试。打开外部生成器文件或禁用此项可使用外部生成器选择器。"
         },
         "co.test.builtinGenerator.instructions": {
           "type": "string",
           "default": "",
-          "description": "Instruction names allowed in the built-in random ASM generator. Separate names with any commas or whitespace. Only real instructions are accepted. Empty uses the current P3-P7 profile default."
+          "description": "内置随机 ASM 生成器允许的指令名称。用逗号或空白分隔。仅接受真实指令。为空时使用当前 P3-P7 Profile 默认值。"
         },
         "co.test.builtinGenerator.instructionCount": {
           "type": "number",
           "default": 1000,
           "minimum": 1,
           "maximum": 4000,
-          "description": "Executable instruction count for each ASM file generated by the built-in random ASM generator."
+          "description": "内置随机 ASM 生成器生成的每个 ASM 文件的可执行指令数量。"
         },
         "co.test.continuousIntervalMs": {
           "type": "number",
           "default": 1000,
           "minimum": 1,
-          "description": "Delay between continuous generated trace test iterations."
+          "description": "持续生成的 Trace 测试迭代之间的延迟（毫秒）。"
         },
         "co.test.continuousMaxIterations": {
           "type": "number",
           "default": 0,
           "minimum": 0,
-          "description": "Maximum continuous generated trace test iterations. 0 means run until stopped or failure policy triggers."
+          "description": "持续生成的 Trace 测试最大迭代次数。0 表示运行直到手动停止或失败策略触发。"
         },
         "co.test.continuousStopOnFailure": {
           "type": "boolean",
           "default": true,
-          "description": "Stop a continuous generated trace test session after an iteration with failed or errored cases."
+          "description": "当迭代中出现失败或错误用例时，停止持续生成的 Trace 测试会话。"
         }
       }
     }

@@ -30,7 +30,7 @@ export function registerMips(context: vscode.ExtensionContext, services: AppServ
   context.subscriptions.push(
     vscode.commands.registerCommand('co.mips.disablePseudoWarnings', async () => {
       await vscode.workspace.getConfiguration('co').update('mips.warnPseudoInstruction', false, vscode.ConfigurationTarget.Workspace);
-      vscode.window.showInformationMessage('Disabled MIPS pseudo-instruction warnings in this workspace.');
+      vscode.window.showInformationMessage('已在当前工作区中禁用 MIPS 伪指令警告');
     }),
     vscode.commands.registerCommand('co.mips.runCurrentFile', () => runMarsCurrentFile(services, 'run')),
     vscode.commands.registerCommand('co.mips.runAndCapture', () => runMarsCurrentFile(services, 'run')),
@@ -44,12 +44,12 @@ export function registerMips(context: vscode.ExtensionContext, services: AppServ
 async function resolveCurrentMipsDocument(): Promise<vscode.TextDocument | undefined> {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.languageId !== 'mipsasm') {
-    vscode.window.showErrorMessage('Open a MIPS ASM file first.');
+    vscode.window.showErrorMessage('请先打开一个 MIPS 汇编文件');
     return undefined;
   }
   const document = editor.document;
   if (document.isUntitled) {
-    vscode.window.showErrorMessage('Save the ASM file before running MARS.');
+    vscode.window.showErrorMessage('运行 MARS 前请先保存 ASM 文件。');
     return undefined;
   }
   if (document.isDirty) {
@@ -69,7 +69,7 @@ async function runMarsCurrentFileWithStdinFile(services: AppServices): Promise<v
   const document = await resolveCurrentMipsDocument();
   if (!document) { return; }
 
-  const stdinSource = await pickOneFile('Select stdin text file for MARS', {
+  const stdinSource = await pickOneFile('选择 MARS 标准输入文本文件', {
     Text: ['txt', 'in', 'input', 'dat'],
     All: ['*']
   });
@@ -89,7 +89,7 @@ async function runMarsCurrentFileInTerminal(): Promise<void> {
 
   const mars = getMarsJar(document.uri);
   if (!mars) {
-    vscode.window.showErrorMessage('MARS jar is not configured. Set co.toolchain.mars or co.toolchain.marsP7.');
+    vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7。');
     return;
   }
 
@@ -113,7 +113,7 @@ export async function runMarsFile(
   const showMessages = options.showMessages !== false;
   const mars = getMarsJar(asmUri);
   if (!mars) {
-    vscode.window.showErrorMessage('MARS jar is not configured. Set co.toolchain.mars or co.toolchain.marsP7.');
+    vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7。');
     return undefined;
   }
 
@@ -151,15 +151,15 @@ export async function runMarsFile(
 
   if (result.ok) {
     if (mode === 'dumpText') {
-      vscode.window.showInformationMessage(`MARS dumped ${getMachineCode(asmUri)}.`);
+      vscode.window.showInformationMessage(`MARS 已导出 ${getMachineCode(asmUri)}。`);
     } else if (mode === 'dumpKernel') {
-      vscode.window.showInformationMessage('MARS dumped kernel text segment.');
+      vscode.window.showInformationMessage('MARS 已导出内核文本段。');
     } else {
-      const input = options.stdinSource ? ` with stdin ${path.basename(options.stdinSource.fsPath)}` : '';
-      vscode.window.showInformationMessage(`MARS run completed${input}.`);
+      const input = options.stdinSource ? `，使用标准输入 ${path.basename(options.stdinSource.fsPath)}` : '';
+      vscode.window.showInformationMessage(`MARS 运行完成${input}。`);
     }
   } else {
-    vscode.window.showErrorMessage(`MARS failed${result.exitCode === null ? '' : ` with exit code ${result.exitCode}`}.`);
+    vscode.window.showErrorMessage(`MARS 运行失败${result.exitCode === null ? '' : `，退出码 ${result.exitCode}`}。`);
   }
 
   return { result, outputFile };

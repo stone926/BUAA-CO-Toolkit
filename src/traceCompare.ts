@@ -19,8 +19,8 @@ export interface TraceFilePair {
 }
 
 export const defaultTraceCompareMode: CompareMode = {
-  label: 'Ignore cycle/time',
-  description: 'Compare PC, target, and value only.',
+  label: '忽略周期/时间',
+  description: '仅比较 PC、目标和值。',
   compareCycles: false
 };
 
@@ -32,14 +32,14 @@ export function registerTraceCompare(context: vscode.ExtensionContext, services:
 }
 
 async function compareTraceFiles(services: AppServices): Promise<void> {
-  const mars = await pickOneFile('Select MARS answer trace output', {
+  const mars = await pickOneFile('选择 MARS 答案 Trace 输出', {
     Text: ['txt', 'out', 'log'],
     All: ['*']
   });
   if (!mars) {
     return;
   }
-  const sim = await pickOneFile('Select simulator trace output', {
+  const sim = await pickOneFile('选择仿真器 Trace 输出', {
     Text: ['txt', 'out', 'log'],
     All: ['*']
   });
@@ -52,16 +52,16 @@ async function compareTraceFiles(services: AppServices): Promise<void> {
 async function compareLatestOutputs(services: AppServices): Promise<void> {
   const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri);
   if (!folder) {
-    vscode.window.showErrorMessage('Open a workspace folder before comparing trace outputs.');
+    vscode.window.showErrorMessage('比较 Trace 输出前请先打开一个工作区文件夹。');
     return;
   }
   const pair = await findLatestTracePair(folder);
   if (!pair) {
     const choice = await vscode.window.showWarningMessage(
-      'Could not find both .co/out/*.mars.out and .co/out/*.sim.out in this workspace.',
-      'Pick Files'
+      '在当前工作区中未找到 .co/out/*.mars.out 和 .co/out/*.sim.out。',
+      '手动选择文件'
     );
-    if (choice === 'Pick Files') {
+    if (choice === '手动选择文件') {
       await compareTraceFiles(services);
     }
     return;
@@ -87,23 +87,23 @@ export async function compareTracePair(
 
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine('Trace compare');
+  services.output.appendLine('Trace 比较');
   services.output.appendLine(`MARS: ${pair.mars.fsPath}`);
   services.output.appendLine(`SIM:  ${pair.sim.fsPath}`);
-  services.output.appendLine(`Mode: ${selectedMode.label}`);
-  services.output.appendLine(`Events: MARS ${diff.summary.marsEvents}, SIM ${diff.summary.simEvents}, matched ${diff.summary.matchedEvents}, differences ${diff.summary.diffEvents}`);
+  services.output.appendLine(`模式: ${selectedMode.label}`);
+  services.output.appendLine(`事件: MARS ${diff.summary.marsEvents}, SIM ${diff.summary.simEvents}, 匹配 ${diff.summary.matchedEvents}, 差异 ${diff.summary.diffEvents}`);
   if (diff.firstDiffIndex >= 0) {
     const first = diff.entries[diff.firstDiffIndex];
-    services.output.appendLine(`First difference at event #${diff.firstDiffIndex + 1}: ${first.reason ?? first.status}`);
+    services.output.appendLine(`首个差异位于事件 #${diff.firstDiffIndex + 1}: ${first.reason ?? first.status}`);
   }
 
   showTraceCompareReport(pair, diff, selectedMode, marsEvents, simEvents);
   if (!marsEvents.length || !simEvents.length) {
-    vscode.window.showWarningMessage('Trace compare completed, but one side had no parseable trace events.');
+    vscode.window.showWarningMessage('Trace 比较完成，但其中一侧没有可解析的 Trace 事件。');
   } else if (diff.matched) {
-    vscode.window.showInformationMessage(`Trace compare passed: ${diff.summary.matchedEvents} events matched.`);
+    vscode.window.showInformationMessage(`Trace 比较通过：${diff.summary.matchedEvents} 个事件匹配。`);
   } else {
-    vscode.window.showWarningMessage(`Trace compare found first difference at event #${diff.firstDiffIndex + 1}.`);
+    vscode.window.showWarningMessage(`Trace 比较在事件 #${diff.firstDiffIndex + 1} 发现首个差异。`);
   }
   return diff;
 }
@@ -113,13 +113,13 @@ async function pickCompareMode(): Promise<CompareMode | undefined> {
     [
       defaultTraceCompareMode,
       {
-        label: 'Compare cycle/time',
-        description: 'Also require the optional leading cycle/time field to match.',
+        label: '比较周期/时间',
+        description: '同时要求可选的前导周期/时间字段匹配。',
         compareCycles: true
       }
     ],
     {
-      title: 'Select trace compare mode'
+      title: '选择 Trace 比较模式'
     }
   );
 }
@@ -152,7 +152,7 @@ function showTraceCompareReport(
   marsEvents: CpuTraceEvent[],
   simEvents: CpuTraceEvent[]
 ): void {
-  const panel = vscode.window.createWebviewPanel('coTraceCompare', 'CO Trace Compare', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coTraceCompare', 'CO Trace 比较', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
   panel.webview.html = renderTraceCompareReport(pair, diff, mode, marsEvents, simEvents);
@@ -167,12 +167,12 @@ function renderTraceCompareReport(
 ): string {
   const visible = visibleEntries(diff);
   const rows = visible.entries.map(renderDiffRow).join('\n');
-  const firstDiff = diff.firstDiffIndex >= 0 ? `#${diff.firstDiffIndex + 1}` : 'None';
+  const firstDiff = diff.firstDiffIndex >= 0 ? `#${diff.firstDiffIndex + 1}` : '无';
   const hiddenNote = visible.hidden
-    ? `<p class="muted">Showing ${visible.entries.length} of ${diff.entries.length} events around the first difference.</p>`
+    ? `<p class="muted">显示首个差异附近的 ${visible.entries.length} / ${diff.entries.length} 个事件。</p>`
     : '';
   const parseWarning = !marsEvents.length || !simEvents.length
-    ? '<p class="warn-text">One side has no parseable trace events. Check that the output contains lines like <code>@00003000: $3 &lt;= 00000000</code> or <code>100@00003000: *00001004 &lt;= 00000000</code>.</p>'
+    ? '<p class="warn-text">其中一侧没有可解析的 Trace 事件。请检查输出是否包含类似 <code>@00003000: $3 &lt;= 00000000</code> 或 <code>100@00003000: *00001004 &lt;= 00000000</code> 的行。</p>'
     : '';
 
   return `<!doctype html>
@@ -245,15 +245,15 @@ function renderTraceCompareReport(
   </style>
 </head>
 <body>
-  <h1>CO Trace Compare</h1>
+  <h1>CO Trace 比较</h1>
   <div class="summary">
-    <div class="metric"><span>Status</span><strong>${diff.matched ? 'Matched' : 'Different'}</strong></div>
-    <div class="metric"><span>MARS events</span><strong>${diff.summary.marsEvents}</strong></div>
-    <div class="metric"><span>SIM events</span><strong>${diff.summary.simEvents}</strong></div>
-    <div class="metric"><span>First difference</span><strong>${firstDiff}</strong></div>
+    <div class="metric"><span>状态</span><strong>${diff.matched ? '匹配' : '不同'}</strong></div>
+    <div class="metric"><span>MARS 事件</span><strong>${diff.summary.marsEvents}</strong></div>
+    <div class="metric"><span>SIM 事件</span><strong>${diff.summary.simEvents}</strong></div>
+    <div class="metric"><span>首个差异</span><strong>${firstDiff}</strong></div>
   </div>
   <div class="paths">
-    <div>Mode: ${escapeHtml(mode.label)}</div>
+    <div>模式: ${escapeHtml(mode.label)}</div>
     <div>MARS: <code>${escapeHtml(pair.mars.fsPath)}</code></div>
     <div>SIM: <code>${escapeHtml(pair.sim.fsPath)}</code></div>
   </div>
@@ -261,7 +261,7 @@ function renderTraceCompareReport(
   ${hiddenNote}
   <table>
     <thead>
-      <tr><th>Status</th><th>#</th><th>Reason</th><th>MARS</th><th>SIM</th></tr>
+      <tr><th>状态</th><th>#</th><th>原因</th><th>MARS</th><th>SIM</th></tr>
     </thead>
     <tbody>
       ${rows}

@@ -505,7 +505,7 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
       }
       validateSectionAddressRange(document, lineNumber, directive, operandText, diagnostics);
       if (operandText && CO_FIXED_SECTION_DIRECTIVES.has(directive)) {
-        diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), 'BUAA CO uses the CompactDataAtZero memory configuration; do not pass a custom address to .data or .text.', DiagnosticSeverity.Error, 'co-section-address'));
+        diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), '北航 CO 使用 CompactDataAtZero 内存配置；不要向 .data 或 .text 传递自定义地址。', DiagnosticSeverity.Error, 'co-section-address'));
       }
       return;
     case '.byte':
@@ -632,7 +632,7 @@ function validateSectionAddressRange(document: TextDocument, lineNumber: number,
     return;
   }
   if (address < expected.min || address > expected.max) {
-    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} address ${operandText} is outside the BUAA CO CompactDataAtZero range ${expected.label}.`, DiagnosticSeverity.Warning, 'section-address-range'));
+    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} 地址 ${operandText} 超出北航 CO CompactDataAtZero 范围 ${expected.label}。`, DiagnosticSeverity.Warning, 'section-address-range'));
   }
 }
 
@@ -724,10 +724,10 @@ function validateSingleIntegerDirective(document: TextDocument, lineNumber: numb
     return;
   }
   if (directive === '.space' && value % 4 !== 0) {
-    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), '.space size is usually a multiple of 4 in BUAA CO so later word accesses stay aligned.', DiagnosticSeverity.Warning, 'space-alignment'));
+    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), '在北航 CO 中，.space 大小通常是 4 的倍数，以保证后续字访问对齐。', DiagnosticSeverity.Warning, 'space-alignment'));
   }
   if (directive === '.align' && value > 3) {
-    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `.align ${value} means 2^${value} byte alignment; this is rarely needed in BUAA CO.`, DiagnosticSeverity.Warning, 'align-large'));
+    diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `.align ${value} 表示 2^${value} 字节对齐；在北航 CO 中很少需要。`, DiagnosticSeverity.Warning, 'align-large'));
   }
 }
 

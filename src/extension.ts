@@ -23,7 +23,7 @@ import { registerCourseLinks } from './courseLinks';
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
 
-  const output = vscode.window.createOutputChannel('BUAA CO');
+  const output = vscode.window.createOutputChannel('北航 CO');
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBar.command = 'co.checkToolchain';
   context.subscriptions.push(output, statusBar);
@@ -120,18 +120,18 @@ export async function deactivate(): Promise<void> {
 }
 
 async function showToolchainReport(output: vscode.OutputChannel): Promise<void> {
-  output.appendLine('Checking BUAA CO toolchain...');
+  output.appendLine('正在检查北航 CO 工具链...');
   const resource = vscode.window.activeTextEditor?.document.uri;
   const checks = await checkToolchain(output, resource);
   output.appendLine('');
   for (const check of checks) {
-    output.appendLine(`${check.ok ? 'OK' : 'MISS'} ${check.name}: ${check.detail}`);
+    output.appendLine(`${check.ok ? 'OK' : '缺失'} ${check.name}: ${check.detail}`);
     if (check.suggestion) {
-      output.appendLine(`  suggestion: ${check.suggestion}`);
+      output.appendLine(`  建议: ${check.suggestion}`);
     }
   }
 
-  const panel = vscode.window.createWebviewPanel('coToolchainReport', 'BUAA CO Toolchain', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coToolchainReport', '北航 CO 工具链', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
   panel.webview.html = renderToolchainReport(checks);
@@ -143,25 +143,25 @@ async function selectProjectProfile(): Promise<void> {
   const picked = await vscode.window.showQuickPick(
     profiles.map((profile) => ({
       label: profile,
-      description: profile === current ? 'current' : profileDescription(profile),
+      description: profile === current ? '当前' : profileDescription(profile),
       profile
     })),
     {
-      title: 'Select BUAA CO project profile'
+      title: '选择北航 CO 项目 Profile'
     }
   );
   if (!picked) {
     return;
   }
   await vscode.workspace.getConfiguration('co').update('project.profile', picked.profile, vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage(`BUAA CO profile set to ${picked.profile}.`);
+  vscode.window.showInformationMessage(`北航 CO Profile 已设置为 ${picked.profile}`);
 }
 
 async function disableDiagnosticCode(languageId?: string, code?: string): Promise<void> {
   const normalizedLanguageId = typeof languageId === 'string' ? languageId.trim().toLowerCase() : '';
   const normalizedCode = diagnosticCodeToString(code);
   if (!normalizedLanguageId || !normalizedCode) {
-    vscode.window.showErrorMessage('Cannot suppress this diagnostic because its code is invalid.');
+    vscode.window.showErrorMessage('无法禁用此诊断，因为其代码无效');
     return;
   }
   const key = diagnosticCodeKey(normalizedLanguageId, normalizedCode);
@@ -169,14 +169,14 @@ async function disableDiagnosticCode(languageId?: string, code?: string): Promis
   const current = config.get<string[]>('diagnostics.disabledCodes', defaultCoSettings.diagnostics.disabledCodes);
   const merged = [...new Set([...current.map((item) => item.trim().toLowerCase()).filter(Boolean), key])].sort();
   await config.update('diagnostics.disabledCodes', merged, vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage(`Suppressed ${normalizedCode} diagnostics in this workspace.`);
+  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalizedCode} 诊断`);
 }
 
 function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => Promise<ToolDetection[]>): void {
   const resource = vscode.window.activeTextEditor?.document.uri;
   const profile = getProfile(resource);
   statusBar.text = `CO: ${profile}`;
-  statusBar.tooltip = 'BUAA CO Toolkit - click to check toolchain';
+  statusBar.tooltip = '北航计算机组成工具箱 - 点击检查工具链';
   statusBar.show();
 
   // Update with toolchain info asynchronously
@@ -231,7 +231,7 @@ function profileDescription(profile: ProjectProfile): string {
 
 function renderToolchainReport(checks: ToolDetection[]): string {
   const rows = checks.map((check) => {
-    const status = check.ok ? 'OK' : 'Missing';
+    const status = check.ok ? '正常' : '缺失';
     const suggestion = check.suggestion ?? '';
     return `<tr class="${check.ok ? 'ok' : 'bad'}"><td>${escapeHtml(check.name)}</td><td>${status}</td><td>${escapeHtml(check.detail)}</td><td>${escapeHtml(suggestion)}</td></tr>`;
   }).join('\n');
@@ -271,10 +271,10 @@ function renderToolchainReport(checks: ToolDetection[]): string {
   </style>
 </head>
 <body>
-  <h1>BUAA CO Toolchain</h1>
+  <h1>北航 CO 工具链</h1>
   <table>
     <thead>
-      <tr><th>Tool</th><th>Status</th><th>Path / Version</th><th>Suggestion</th></tr>
+      <tr><th>工具</th><th>状态</th><th>路径 / 版本</th><th>建议</th></tr>
     </thead>
     <tbody>
       ${rows}

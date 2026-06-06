@@ -196,7 +196,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       }
     },
     serverInfo: {
-      name: 'BUAA CO Language Server'
+      name: '北航 CO 语言服务器'
     }
   };
 });
@@ -267,7 +267,7 @@ function withDocument<R>(
       const svc = serviceForDocument(document);
       return svc ? (handler(document, params, settings, svc) ?? fallback) : fallback;
     } catch (e) {
-      connection.console.error(`[BUAA CO] Handler error: ${e}`);
+      connection.console.error(`[北航 CO] 处理程序错误: ${e}`);
       return fallback;
     }
   };

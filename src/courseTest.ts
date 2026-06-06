@@ -206,7 +206,7 @@ async function runFullCourseTraceTest(services: AppServices): Promise<void> {
     return;
   }
   if (!result.marsOut || !result.simOut) {
-    vscode.window.showErrorMessage('Full test stopped before trace outputs were generated.');
+    vscode.window.showErrorMessage('测试中止：Trace 输出未生成。');
     return;
   }
 
@@ -244,7 +244,7 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
 
 async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
   if (activeContinuousTraceSession) {
-    vscode.window.showWarningMessage('A continuous course trace test session is already running.');
+    vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行。');
     return;
   }
 
@@ -290,9 +290,9 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
 
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine('Starting continuous generated course trace tests.');
-  services.output.appendLine(`Generator: ${generatorLabel(setup)}`);
-  services.output.appendLine(`Interval: ${intervalMs} ms, max iterations: ${maxIterations || 'unlimited'}, stop on failure: ${stopOnFailure}`);
+  services.output.appendLine('正在启动持续生成的课程 Trace 测试。');
+  services.output.appendLine(`生成器: ${generatorLabel(setup)}`);
+  services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大迭代: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
 
   try {
     await updateContinuousTraceMonitor(session);
@@ -375,12 +375,12 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
 
 function stopContinuousTests(): void {
   if (!activeContinuousTraceSession) {
-    vscode.window.showInformationMessage('No continuous course test session is running.');
+    vscode.window.showInformationMessage('当前没有正在运行的持续课程测试会话。');
     return;
   }
   activeContinuousTraceSession.stopRequested = true;
   activeContinuousTraceSession.report.stopRequested = true;
-  vscode.window.showInformationMessage('Stopping continuous course tests after the current tool run finishes.');
+  vscode.window.showInformationMessage('将在当前工具运行完成后停止持续课程测试。');
 }
 
 async function runCourseTraceBatch(
@@ -390,8 +390,8 @@ async function runCourseTraceBatch(
 ): Promise<void> {
   services.output.show(true);
   services.output.appendLine('');
-  const sourceLabel = source.kind === 'generator' ? 'Generated course trace test' : 'Batch course trace test';
-  services.output.appendLine(`${sourceLabel}: ${cases.length} case(s)`);
+  const sourceLabel = source.kind === 'generator' ? '生成的课程 Trace 测试' : '批量课程 Trace 测试';
+  services.output.appendLine(`${sourceLabel}: ${cases.length} 个用例`);
 
   const results: CourseTraceCaseResult[] = [];
   for (let i = 0; i < cases.length; i++) {
@@ -423,7 +423,7 @@ async function runCourseTraceBatch(
   const passed = summary.passed;
   const failed = summary.failed;
   const errors = summary.errors;
-  const message = `Batch trace test finished: ${passed} passed, ${failed} failed, ${errors} errors.`;
+  const message = `批量 Trace 测试完成: ${passed} 通过, ${failed} 失败, ${errors} 错误。`;
   if (failed || errors) {
     vscode.window.showWarningMessage(message);
   } else {
@@ -474,8 +474,8 @@ async function runLogisimPrepareBatch(
 
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine(`Prepare Logisim circuit cases: ${asms.length} case(s)`);
-  services.output.appendLine(`Circuit: ${circuit.fsPath}`);
+  services.output.appendLine(`准备 Logisim 电路用例: ${asms.length} 个用例`);
+  services.output.appendLine(`电路: ${circuit.fsPath}`);
   services.output.appendLine(`ROM: ${target.label ?? 'ROM'}${target.loc ? ` ${target.loc}` : ''}`);
 
   const results: LogisimPrepareCaseResult[] = [];
@@ -490,7 +490,7 @@ async function runLogisimPrepareBatch(
         results.push({
           asm: asm.fsPath,
           status: 'error',
-          message: 'MARS failed to dump machine code.'
+          message: 'MARS 导出机器码失败。'
         });
         continue;
       }
@@ -505,12 +505,12 @@ async function runLogisimPrepareBatch(
       results.push({
         asm: asm.fsPath,
         status: 'prepared',
-        message: `${injected.wordCount} machine-code word(s) injected.`,
+        message: `已注入 ${injected.wordCount} 个机器码字。`,
         machineCode: dump.outputFile.fsPath,
         circuit: outFile.fsPath,
         wordCount: injected.wordCount
       });
-      services.output.appendLine(`Prepared circuit: ${outFile.fsPath}`);
+      services.output.appendLine(`已准备电路: ${outFile.fsPath}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       results.push({
@@ -524,7 +524,7 @@ async function runLogisimPrepareBatch(
   const report = await writeLogisimPrepareReport(circuit, target, results, source, outDir);
   showLogisimPrepareReport(report, results, source, circuit, target);
   const summary = logisimPrepSummary(results);
-  const message = `Logisim case preparation finished: ${summary.prepared} prepared, ${summary.errors} errors.`;
+  const message = `Logisim 用例准备完成: ${summary.prepared} 已准备, ${summary.errors} 错误。`;
   if (summary.errors) {
     vscode.window.showWarningMessage(message);
   } else {
@@ -542,11 +542,11 @@ async function openBatchTraceReport(): Promise<void> {
   try {
     parsed = JSON.parse(text) as CourseTraceBatchReport;
   } catch {
-    vscode.window.showErrorMessage('Selected batch trace report is not valid JSON.');
+    vscode.window.showErrorMessage('所选批量 Trace 报告不是有效的 JSON。');
     return;
   }
   if (!Array.isArray(parsed.results)) {
-    vscode.window.showErrorMessage('Selected batch trace report does not contain a results array.');
+    vscode.window.showErrorMessage('所选批量 Trace 报告不包含 results 数组。');
     return;
   }
   showBatchTraceReport(parsed.results, report, parsed.generatedAt, parsed.source);
@@ -554,17 +554,17 @@ async function openBatchTraceReport(): Promise<void> {
 
 async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseInput): Promise<CourseTraceCaseResult> {
   const asm = item.asm;
-  services.output.appendLine('Full course trace test');
+  services.output.appendLine('完整课程 Trace 测试');
   services.output.appendLine(`ASM: ${asm.fsPath}`);
   if (item.stdin) {
-    services.output.appendLine(`stdin: ${item.stdin.fsPath}`);
+    services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
   }
 
   const dump = await runMarsFile(services, asm, 'dumpText', { showMessages: false });
   if (!dump?.result.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', 'Full test stopped because MARS failed to dump machine code.');
+    return failedCase(item, 'dump', '测试中止：MARS 导出机器码失败。');
   }
-  services.output.appendLine(`Machine code: ${dump.outputFile.fsPath}`);
+  services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
 
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
   const mars = await runMarsFile(services, asm, 'run', {
@@ -573,7 +573,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
     stdinSource: item.stdin
   });
   if (!mars?.result.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', 'Full test stopped because MARS golden-model run failed.', dump.outputFile);
+    return failedCase(item, 'mars', '测试中止：MARS 黄金模型运行失败。', dump.outputFile);
   }
 
   const isim = await runIsim(services, {
@@ -583,7 +583,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
     simOutputFileName: simOutputFileNameForCase(item)
   });
   if (!isim?.simResult.ok || !isim.simOut) {
-    return failedCase(item, 'isim', 'Full test stopped because ISim failed.', dump.outputFile, mars.outputFile);
+    return failedCase(item, 'isim', '测试中止：ISim 运行失败。', dump.outputFile, mars.outputFile);
   }
 
   const marsText = await readTextFile(mars.outputFile);
@@ -598,7 +598,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
       stdin: item.stdin?.fsPath,
       status: 'error',
       stage: 'compare',
-      message: 'One side had no parseable trace events.',
+      message: '其中一侧没有可解析的 Trace 事件。',
       machineCode: dump.outputFile.fsPath,
       marsOut: mars.outputFile.fsPath,
       simOut: isim.simOut.fsPath,
@@ -648,14 +648,14 @@ async function resolveAsmInput(): Promise<vscode.Uri | undefined> {
         uri
       })),
       {
-        title: 'Select MIPS ASM file for the course trace test',
+        title: '选择课程 Trace 测试的 MIPS ASM 文件',
         matchOnDescription: true
       }
     );
     return picked?.uri;
   }
 
-  return await pickOneFile('Select MIPS ASM file for the course trace test', {
+  return await pickOneFile('选择课程 Trace 测试的 MIPS ASM 文件', {
     ASM: ['asm', 's', 'mips'],
     All: ['*']
   });
@@ -671,7 +671,7 @@ async function resolveAsmBatchInputs(): Promise<vscode.Uri[]> {
         uri
       })),
       {
-        title: 'Select MIPS ASM files for batch trace testing',
+        title: '选择批量 Trace 测试的 MIPS ASM 文件',
         matchOnDescription: true,
         canPickMany: true
       }
@@ -680,7 +680,7 @@ async function resolveAsmBatchInputs(): Promise<vscode.Uri[]> {
   }
 
   const picked = await vscode.window.showOpenDialog({
-    title: 'Select MIPS ASM files for batch trace testing',
+    title: '选择批量 Trace 测试的 MIPS ASM 文件',
     canSelectFiles: true,
     canSelectFolders: false,
     canSelectMany: true,
@@ -704,8 +704,8 @@ async function resolveSingleStdinInput(asm: vscode.Uri): Promise<vscode.Uri | un
   const picked = await vscode.window.showQuickPick(
     [
       {
-        label: 'No stdin',
-        description: 'Run without stdin',
+        label: '无标准输入',
+        description: '不使用标准输入运行',
         uri: undefined
       },
       ...candidates.map((uri) => ({
@@ -715,7 +715,7 @@ async function resolveSingleStdinInput(asm: vscode.Uri): Promise<vscode.Uri | un
       }))
     ],
     {
-      title: 'Select stdin file for this ASM case',
+      title: '为此 ASM 用例选择标准输入文件',
       matchOnDescription: true
     }
   );
@@ -738,10 +738,10 @@ async function resolveGeneratedAsmBatch(services: AppServices): Promise<Generate
   }
 
   const choice = await vscode.window.showWarningMessage(
-    'The generator finished, but no new or modified ASM files were detected.',
-    'Pick ASM Files'
+    '生成器已完成，但未检测到新建或修改的 ASM 文件。',
+    '手动选择 ASM 文件'
   );
-  if (choice !== 'Pick ASM Files') {
+  if (choice !== '手动选择 ASM 文件') {
     return undefined;
   }
   const picked = await resolveAsmBatchInputs();
@@ -757,7 +757,7 @@ async function resolveGeneratedAsmBatch(services: AppServices): Promise<Generate
 async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined> {
   const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
-    vscode.window.showErrorMessage('Open a workspace folder before running a test generator.');
+    vscode.window.showErrorMessage('运行测试生成器前请先打开一个工作区文件夹。');
     return undefined;
   }
 
@@ -797,7 +797,7 @@ function buildExternalGeneratorRunSetup(
     extraArgs: getGeneratorArgs(generator)
   });
   if (!invocation) {
-    vscode.window.showErrorMessage(`Unsupported test generator type: ${path.extname(generator.fsPath) || '(no extension)'}.`);
+    vscode.window.showErrorMessage(`不支持的测试生成器类型: ${path.extname(generator.fsPath) || '(无扩展名)'}。`);
     return undefined;
   }
 
@@ -815,14 +815,14 @@ async function runGeneratorAndCollectAsms(
   const before = snapshotAsmFiles(setup.folder.uri.fsPath);
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine(`Running test generator: ${setup.generator.fsPath}`);
+  services.output.appendLine(`正在运行测试生成器: ${setup.generator.fsPath}`);
   const result = await runTool(setup.invocation.command, setup.invocation.args, {
     cwd: setup.invocation.cwd,
     output: services.output,
     resource: setup.generator
   });
   if (!result.ok) {
-    vscode.window.showErrorMessage('Test generator failed. Check the BUAA CO output panel.');
+    vscode.window.showErrorMessage('测试生成器运行失败。请查看北航 CO 输出面板。');
     return undefined;
   }
 
@@ -853,7 +853,7 @@ async function runBuiltinGeneratorAndCollectAsms(
     vscode.window.showErrorMessage(message);
     services.output.show(true);
     services.output.appendLine('');
-    services.output.appendLine(`Built-in ASM generator failed: ${message}`);
+    services.output.appendLine(`内置 ASM 生成器失败: ${message}`);
     return undefined;
   }
 
@@ -864,11 +864,11 @@ async function runBuiltinGeneratorAndCollectAsms(
 
   services.output.show(true);
   services.output.appendLine('');
-  services.output.appendLine('Running built-in random ASM generator.');
+  services.output.appendLine('正在运行内置随机 ASM 生成器。');
   services.output.appendLine(`Profile: ${generated.profile}`);
-  services.output.appendLine(`Instruction count: ${generated.instructionCount}`);
-  services.output.appendLine(`Instruction set: ${generated.instructionSet.join(' ')}`);
-  services.output.appendLine(`Seed: ${generated.seed}`);
+  services.output.appendLine(`指令数量: ${generated.instructionCount}`);
+  services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
+  services.output.appendLine(`种子: ${generated.seed}`);
   services.output.appendLine(`ASM: ${asm.fsPath}`);
 
   return {
@@ -986,14 +986,14 @@ async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vs
         uri
       })),
       {
-        title: 'Select random test generator',
+        title: '选择随机测试生成器',
         matchOnDescription: true
       }
     );
     return picked?.uri;
   }
 
-  return await pickOneFile('Select random test generator', {
+  return await pickOneFile('选择随机测试生成器', {
     Generator: ['py', 'js', 'mjs', 'cjs', 'jar', 'bat', 'cmd', 'exe', 'ps1'],
     All: ['*']
   });
@@ -1020,14 +1020,14 @@ async function resolveLogisimCircuitInput(): Promise<vscode.Uri | undefined> {
         uri
       })),
       {
-        title: 'Select Logisim circuit template',
+        title: '选择 Logisim 电路模板',
         matchOnDescription: true
       }
     );
     return picked?.uri;
   }
 
-  return await pickOneFile('Select Logisim circuit template', {
+  return await pickOneFile('选择 Logisim 电路模板', {
     Logisim: ['circ'],
     All: ['*']
   });
@@ -1041,7 +1041,7 @@ async function resolveLogisimRomTarget(circuitText: string): Promise<LogisimRomT
   const candidates = findLogisimRomTargets(circuitText)
     .filter((target) => target.dataWidth === undefined || target.dataWidth === 32);
   if (!candidates.length) {
-    vscode.window.showErrorMessage('No 32-bit ROM component was found in the selected Logisim circuit.');
+    vscode.window.showErrorMessage('所选 Logisim 电路中未找到 32 位 ROM 组件。');
     return undefined;
   }
   if (candidates.length === 1) {
@@ -1052,15 +1052,15 @@ async function resolveLogisimRomTarget(circuitText: string): Promise<LogisimRomT
     candidates.map((target) => ({
       label: target.label ? `${target.index}: ${target.label}` : `${target.index}: ROM`,
       description: [
-        target.loc ? `loc ${target.loc}` : undefined,
-        target.addrWidth ? `addr ${target.addrWidth}` : undefined,
-        target.dataWidth ? `data ${target.dataWidth}` : undefined,
-        target.hasContents ? 'has contents' : 'empty'
+        target.loc ? `位置 ${target.loc}` : undefined,
+        target.addrWidth ? `地址 ${target.addrWidth}` : undefined,
+        target.dataWidth ? `数据 ${target.dataWidth}` : undefined,
+        target.hasContents ? '有内容' : '空'
       ].filter(Boolean).join(' | '),
       target
     })),
     {
-      title: 'Select Logisim ROM to inject machine code'
+      title: '选择要注入机器码的 Logisim ROM'
     }
   );
   return picked?.target;
@@ -1252,14 +1252,14 @@ async function resolveBatchTraceReport(): Promise<vscode.Uri | undefined> {
           uri
         })),
         {
-          title: 'Select batch trace report',
+          title: '选择批量 Trace 报告',
           matchOnDescription: true
         }
       );
       return picked?.uri;
     }
   }
-  return await pickOneFile('Select batch trace report JSON', {
+  return await pickOneFile('选择批量 Trace 报告 JSON', {
     JSON: ['json'],
     All: ['*']
   });
@@ -1283,7 +1283,7 @@ function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile:
       <td>${firstProblem ? escapeHtml(firstProblem.message) : escapeHtml(iteration.message ?? '')}</td>
     </tr>`;
   }).join('\n');
-  const state = report.running ? (report.stopRequested ? 'Stopping' : 'Running') : 'Stopped';
+  const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
 
   return `<!doctype html>
 <html>
@@ -1353,24 +1353,24 @@ function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile:
   </style>
 </head>
 <body>
-  <h1>CO Continuous Trace Tests</h1>
+  <h1>CO 持续 Trace 测试</h1>
   <div class="summary">
-    <div class="metric"><span>State</span><strong>${escapeHtml(state)}</strong></div>
-    <div class="metric"><span>Iterations</span><strong>${report.iterations.length}</strong></div>
-    <div class="metric"><span>Latest passed</span><strong>${latestSummary.passed}</strong></div>
-    <div class="metric"><span>Latest failed</span><strong>${latestSummary.failed}</strong></div>
-    <div class="metric"><span>Latest errors</span><strong>${latestSummary.errors}</strong></div>
+    <div class="metric"><span>状态</span><strong>${escapeHtml(state)}</strong></div>
+    <div class="metric"><span>迭代</span><strong>${report.iterations.length}</strong></div>
+    <div class="metric"><span>最新通过</span><strong>${latestSummary.passed}</strong></div>
+    <div class="metric"><span>最新失败</span><strong>${latestSummary.failed}</strong></div>
+    <div class="metric"><span>最新错误</span><strong>${latestSummary.errors}</strong></div>
   </div>
   <div class="paths">
-    <div>Generator: <code>${escapeHtml(report.generator)}</code></div>
-    <div>Command: <code>${escapeHtml(report.commandLine)}</code></div>
-    <div>CWD: <code>${escapeHtml(report.cwd)}</code></div>
-    <div>Options: interval ${report.options.intervalMs} ms, max ${report.options.maxIterations || 'unlimited'}, stop on failure ${report.options.stopOnFailure}</div>
-    <div>JSON report: <code>${escapeHtml(reportFile.fsPath)}</code></div>
+    <div>生成器: <code>${escapeHtml(report.generator)}</code></div>
+    <div>命令: <code>${escapeHtml(report.commandLine)}</code></div>
+    <div>工作目录: <code>${escapeHtml(report.cwd)}</code></div>
+    <div>选项: 间隔 ${report.options.intervalMs} 毫秒, 最大 ${report.options.maxIterations || '无限制'}, 失败时停止 ${report.options.stopOnFailure}</div>
+    <div>JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
   </div>
   <table>
     <thead>
-      <tr><th>#</th><th>Status</th><th>Started</th><th>Finished</th><th>Total</th><th>Passed</th><th>Failed</th><th>Errors</th><th>First Problem</th><th>Message</th></tr>
+      <tr><th>#</th><th>状态</th><th>开始</th><th>结束</th><th>总数</th><th>通过</th><th>失败</th><th>错误</th><th>首个问题</th><th>消息</th></tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
@@ -1385,7 +1385,7 @@ function showLogisimPrepareReport(
   circuit: vscode.Uri,
   target: LogisimRomTarget
 ): void {
-  const panel = vscode.window.createWebviewPanel('coLogisimPrepareReport', 'CO Logisim Case Preparation', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coLogisimPrepareReport', 'CO Logisim 用例准备', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
   panel.webview.html = renderLogisimPrepareReport(report, results, source, circuit, target);
@@ -1397,7 +1397,7 @@ function showBatchTraceReport(
   generatedAt?: string,
   source?: CourseTraceBatchSource
 ): void {
-  const panel = vscode.window.createWebviewPanel('coBatchTraceReport', 'CO Batch Trace Test', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coBatchTraceReport', 'CO 批量 Trace 测试', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
   panel.webview.html = renderBatchTraceReport(results, report, generatedAt, source);
@@ -1486,19 +1486,19 @@ function renderBatchTraceReport(
   </style>
 </head>
 <body>
-  <h1>CO Batch Trace Test</h1>
+  <h1>CO 批量 Trace 测试</h1>
   <div class="summary">
-    <div class="metric"><span>Total</span><strong>${summary.total}</strong></div>
-    <div class="metric"><span>Passed</span><strong>${summary.passed}</strong></div>
-    <div class="metric"><span>Failed</span><strong>${summary.failed}</strong></div>
-    <div class="metric"><span>Errors</span><strong>${summary.errors}</strong></div>
+    <div class="metric"><span>总数</span><strong>${summary.total}</strong></div>
+    <div class="metric"><span>通过</span><strong>${summary.passed}</strong></div>
+    <div class="metric"><span>失败</span><strong>${summary.failed}</strong></div>
+    <div class="metric"><span>错误</span><strong>${summary.errors}</strong></div>
   </div>
-  ${generatedAt ? `<div class="paths">Generated: <code>${escapeHtml(generatedAt)}</code></div>` : ''}
+  ${generatedAt ? `<div class="paths">生成时间: <code>${escapeHtml(generatedAt)}</code></div>` : ''}
   ${renderBatchSource(source)}
-  <div class="paths">JSON report: <code>${escapeHtml(report.fsPath)}</code></div>
+  <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
   <table>
     <thead>
-      <tr><th>#</th><th>Status</th><th>ASM</th><th>Input</th><th>Stage</th><th>First Diff</th><th>First Diff Detail</th><th>Events</th><th>Message</th></tr>
+      <tr><th>#</th><th>状态</th><th>ASM</th><th>输入</th><th>阶段</th><th>首个差异</th><th>首个差异详情</th><th>事件</th><th>消息</th></tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
@@ -1587,21 +1587,21 @@ function renderLogisimPrepareReport(
   </style>
 </head>
 <body>
-  <h1>CO Logisim Case Preparation</h1>
+  <h1>CO Logisim 用例准备</h1>
   <div class="summary">
-    <div class="metric"><span>Total</span><strong>${summary.total}</strong></div>
-    <div class="metric"><span>Prepared</span><strong>${summary.prepared}</strong></div>
-    <div class="metric"><span>Errors</span><strong>${summary.errors}</strong></div>
+    <div class="metric"><span>总数</span><strong>${summary.total}</strong></div>
+    <div class="metric"><span>已准备</span><strong>${summary.prepared}</strong></div>
+    <div class="metric"><span>错误</span><strong>${summary.errors}</strong></div>
   </div>
   ${renderBatchSource(source)}
   <div class="paths">
-    <div>Circuit template: <code>${escapeHtml(circuit.fsPath)}</code></div>
-    <div>ROM target: <code>${escapeHtml(target.label ?? 'ROM')} #${target.index}${target.loc ? ` ${target.loc}` : ''}</code></div>
-    <div>JSON report: <code>${escapeHtml(report.fsPath)}</code></div>
+    <div>电路模板: <code>${escapeHtml(circuit.fsPath)}</code></div>
+    <div>ROM 目标: <code>${escapeHtml(target.label ?? 'ROM')} #${target.index}${target.loc ? ` ${target.loc}` : ''}</code></div>
+    <div>JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
   </div>
   <table>
     <thead>
-      <tr><th>#</th><th>Status</th><th>ASM</th><th>Words</th><th>Prepared Circuit</th><th>Message</th></tr>
+      <tr><th>#</th><th>状态</th><th>ASM</th><th>字数</th><th>已准备电路</th><th>消息</th></tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
@@ -1614,14 +1614,14 @@ function renderBatchSource(source: CourseTraceBatchSource | undefined): string {
     return '';
   }
   if (source.kind !== 'generator') {
-    return '<div class="paths">Source: selected ASM files</div>';
+    return '<div class="paths">来源: 手动选择的 ASM 文件</div>';
   }
   const asmCount = source.asmFiles?.length ?? 0;
   return `<div class="paths">
-    <div>Source: generated ASM files${asmCount ? ` (${asmCount})` : ''}</div>
-    ${source.generator ? `<div>Generator: <code>${escapeHtml(source.generator)}</code></div>` : ''}
-    ${source.commandLine ? `<div>Command: <code>${escapeHtml(source.commandLine)}</code></div>` : ''}
-    ${source.cwd ? `<div>CWD: <code>${escapeHtml(source.cwd)}</code></div>` : ''}
+    <div>来源: 生成的 ASM 文件${asmCount ? ` (${asmCount})` : ''}</div>
+    ${source.generator ? `<div>生成器: <code>${escapeHtml(source.generator)}</code></div>` : ''}
+    ${source.commandLine ? `<div>命令: <code>${escapeHtml(source.commandLine)}</code></div>` : ''}
+    ${source.cwd ? `<div>工作目录: <code>${escapeHtml(source.cwd)}</code></div>` : ''}
   </div>`;
 }
 

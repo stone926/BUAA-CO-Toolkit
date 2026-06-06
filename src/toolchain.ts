@@ -25,7 +25,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       name: 'Java',
       ok: javaResult.ok,
       detail: firstLine(javaResult.stderr || javaResult.stdout) || java,
-      suggestion: javaResult.ok ? undefined : 'Install JRE/JDK or set co.toolchain.java.'
+      suggestion: javaResult.ok ? undefined : '请安装 JRE/JDK 或设置 co.toolchain.java。'
     });
   }
 
@@ -41,18 +41,18 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       name: 'Python',
       ok: pythonResult.ok,
       detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
-      suggestion: pythonResult.ok ? undefined : 'Install Python or set co.toolchain.python.'
+      suggestion: pythonResult.ok ? undefined : '请安装 Python 或设置 co.toolchain.python。'
     });
   }
 
   if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
     const mars = getMarsJar(resource);
-    checks.push(fileCheck('MARS', mars, profile === 'P7' ? 'Set co.toolchain.marsP7 to the course-specific P7 MARS jar.' : 'Set co.toolchain.mars.'));
+    checks.push(fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为课程专用 P7 MARS jar。' : '请设置 co.toolchain.mars。'));
   }
 
   if (checkAll || requiredTools.has('logisim')) {
     const logisim = getLogisimJar(resource);
-    checks.push(fileCheck('Logisim', logisim, 'Set co.toolchain.logisim.'));
+    checks.push(fileCheck('Logisim', logisim, '请设置 co.toolchain.logisim。'));
   }
 
   if (checkAll || requiredTools.has('ise')) {
@@ -61,8 +61,8 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
     checks.push({
       name: 'ISE fuse',
       ok: Boolean(fuse && fs.existsSync(fuse)),
-      detail: fuse || 'not configured',
-      suggestion: fuse ? undefined : 'Set co.toolchain.isePath to the ISE directory.'
+      detail: fuse || '未配置',
+      suggestion: fuse ? undefined : '请设置 co.toolchain.isePath 为 ISE 目录。'
     });
   }
 
@@ -79,7 +79,7 @@ function fileCheck(name: string, file: string, suggestion: string): ToolDetectio
     return {
       name,
       ok: false,
-      detail: 'not configured',
+      detail: '未配置',
       suggestion
     };
   }
@@ -95,10 +95,10 @@ function fileCheck(name: string, file: string, suggestion: string): ToolDetectio
 function hazardDirCheck(dir: string): ToolDetection {
   if (!dir) {
     return {
-      name: 'Hazard Analysis',
+      name: '冲突分析',
       ok: false,
-      detail: 'not configured',
-      suggestion: 'Set co.toolchain.hazardCalculator to the hazard_analysis directory.'
+      detail: '未配置',
+      suggestion: '请设置 co.toolchain.hazardCalculator 为 hazard_analysis 目录。'
     };
   }
   const jarExists = fs.existsSync(path.join(dir, 'Hazard-Calculator.jar'));
@@ -109,10 +109,10 @@ function hazardDirCheck(dir: string): ToolDetection {
     !analyzerExists && 'analyzer.py'
   ].filter(Boolean).join(', ');
   return {
-    name: 'Hazard Analysis',
+    name: '冲突分析',
     ok,
     detail: dir,
-    suggestion: ok ? undefined : `Missing ${missing} in ${dir}`
+    suggestion: ok ? undefined : `${dir} 中缺少 ${missing}`
   };
 }
 

@@ -31,15 +31,15 @@ export async function runTool(command: string, args: string[], options: RunToolO
   options.output.appendLine(`cwd: ${cwd}`);
 
   if (showCommandBeforeRun(options.resource)) {
-    const choice = await vscode.window.showInformationMessage(`Run external tool?\n${display}`, 'Run');
-    if (choice !== 'Run') {
+    const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
+    if (choice !== '运行') {
       return {
         ok: false,
         exitCode: null,
         commandLine: display,
         cwd,
         stdout: '',
-        stderr: 'Cancelled by user.',
+        stderr: '用户取消',
         timedOut: false
       };
     }
@@ -104,7 +104,7 @@ export async function runTool(command: string, args: string[], options: RunToolO
       settled = true;
       clearTimeout(timer);
       if (timedOut) {
-        options.output.appendLine(`Timed out after ${timeoutMs} ms.`);
+        options.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
       }
       resolve({
         ok: code === 0 && !timedOut,
@@ -131,15 +131,15 @@ export async function launchTool(command: string, args: string[], options: RunTo
   options.output.appendLine(`cwd: ${cwd}`);
 
   if (showCommandBeforeRun(options.resource)) {
-    const choice = await vscode.window.showInformationMessage(`Run external tool?\n${display}`, 'Run');
-    if (choice !== 'Run') {
+    const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
+    if (choice !== '运行') {
       return {
         ok: false,
         exitCode: null,
         commandLine: display,
         cwd,
         stdout: '',
-        stderr: 'Cancelled by user.',
+        stderr: '用户取消',
         timedOut: false
       };
     }

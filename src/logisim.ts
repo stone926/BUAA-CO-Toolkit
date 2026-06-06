@@ -28,7 +28,7 @@ async function generateLogisimRom(): Promise<void> {
   const output = vscode.Uri.file(path.join(path.dirname(input.fsPath), defaultName));
   await writeTextFile(output, rom);
   await vscode.window.showTextDocument(output);
-  vscode.window.showInformationMessage(`Generated Logisim ROM file: ${path.basename(output.fsPath)}.`);
+  vscode.window.showInformationMessage(`已生成 Logisim ROM 文件：${path.basename(output.fsPath)}。`);
 }
 
 async function injectRomIntoCircuit(): Promise<void> {
@@ -36,7 +36,7 @@ async function injectRomIntoCircuit(): Promise<void> {
   if (!circuit) {
     return;
   }
-  const machineCode = await resolveMachineCodeInput('Select MARS HexText machine code for Logisim ROM injection');
+  const machineCode = await resolveMachineCodeInput('选择用于 Logisim ROM 注入的 MARS HexText 机器码');
   if (!machineCode) {
     return;
   }
@@ -63,11 +63,11 @@ async function injectRomIntoCircuit(): Promise<void> {
   ));
   await writeTextFile(output, injected.text);
   await vscode.window.showTextDocument(output);
-  vscode.window.showInformationMessage(`Injected ${injected.wordCount} machine-code word(s) into ${path.basename(output.fsPath)}.`);
+  vscode.window.showInformationMessage(`已向 ${path.basename(output.fsPath)} 注入 ${injected.wordCount} 个机器码字。`);
 }
 
 async function convertLogToCsv(): Promise<void> {
-  const input = await resolveActiveOrPickedTextFile('Select Logisim logging text file');
+  const input = await resolveActiveOrPickedTextFile('选择 Logisim 日志文本文件');
   if (!input) {
     return;
   }
@@ -85,11 +85,11 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
   }
   const logisim = getLogisimJar(circuit);
   if (!logisim) {
-    vscode.window.showErrorMessage('Logisim jar is not configured. Set co.toolchain.logisim.');
+    vscode.window.showErrorMessage('Logisim jar 未配置。请设置 co.toolchain.logisim。');
     return;
   }
   if (!fs.existsSync(logisim)) {
-    vscode.window.showErrorMessage(`Logisim jar does not exist: ${logisim}`);
+    vscode.window.showErrorMessage(`Logisim jar 不存在：${logisim}`);
     return;
   }
   const result = await launchTool(getJava(circuit), ['-jar', logisim, circuit.fsPath], {
@@ -98,7 +98,7 @@ async function openCurrentCircuit(services: AppServices): Promise<void> {
     resource: circuit
   });
   if (!result.ok) {
-    vscode.window.showErrorMessage('Failed to launch Logisim. Check the BUAA CO output panel.');
+    vscode.window.showErrorMessage('启动 Logisim 失败。请查看北航 CO 输出面板。');
   }
 }
 
@@ -110,7 +110,7 @@ async function resolveCircuitInput(): Promise<vscode.Uri | undefined> {
     }
     return editor.document.uri;
   }
-  return await pickOneFile('Select Logisim .circ file', {
+  return await pickOneFile('选择 Logisim .circ 文件', {
     Logisim: ['circ']
   });
 }
@@ -123,7 +123,7 @@ async function resolveRomTarget(circuitText: string): Promise<LogisimRomTarget |
   const candidates = findLogisimRomTargets(circuitText)
     .filter((target) => target.dataWidth === undefined || target.dataWidth === 32);
   if (!candidates.length) {
-    vscode.window.showErrorMessage('No 32-bit ROM component was found in the selected Logisim circuit.');
+    vscode.window.showErrorMessage('所选 Logisim 电路中未找到 32 位 ROM 组件。');
     return undefined;
   }
   if (candidates.length === 1) {
@@ -134,15 +134,15 @@ async function resolveRomTarget(circuitText: string): Promise<LogisimRomTarget |
     candidates.map((target) => ({
       label: target.label ? `${target.index}: ${target.label}` : `${target.index}: ROM`,
       description: [
-        target.loc ? `loc ${target.loc}` : undefined,
-        target.addrWidth ? `addr ${target.addrWidth}` : undefined,
-        target.dataWidth ? `data ${target.dataWidth}` : undefined,
-        target.hasContents ? 'has contents' : 'empty'
+        target.loc ? `位置 ${target.loc}` : undefined,
+        target.addrWidth ? `地址 ${target.addrWidth}` : undefined,
+        target.dataWidth ? `数据 ${target.dataWidth}` : undefined,
+        target.hasContents ? '有内容' : '空'
       ].filter(Boolean).join(' | '),
       target
     })),
     {
-      title: 'Select Logisim ROM to inject machine code'
+      title: '选择要注入机器码的 Logisim ROM'
     }
   );
   return picked?.target;
