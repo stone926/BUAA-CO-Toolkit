@@ -750,6 +750,14 @@
           },
           "description": "在当前工作区中禁用的诊断。快速修复的条目带有语言前缀，如 verilog:synth-mul-div"
         },
+        "co.diagnostics.disabledFileCodes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "在当前工作区中对特定文件禁用的诊断。快速修复写入形如 verilog:synth-mul-div@file:///... 的条目"
+        },
         "co.verilog.implicitNet.diagnostic": {
           "type": "string",
           "default": "warning",

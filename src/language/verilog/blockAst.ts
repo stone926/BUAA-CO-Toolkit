@@ -16,6 +16,21 @@ export interface VerilogAlwaysBlockAst {
   combinational: boolean;
 }
 
+export type VerilogProceduralBlockKind = 'always' | 'initial';
+export type VerilogProceduralControlKind = 'none' | 'event' | 'delay';
+
+export interface VerilogProceduralBlockAst {
+  kind: VerilogProceduralBlockKind;
+  headerRange: Range;
+  range: Range;
+  controlKind: VerilogProceduralControlKind;
+  controlTokens: VerilogToken[];
+  bodyTokens: VerilogToken[];
+  statements: VerilogCstStatement[];
+  bodyStart: number;
+  bodyEnd: number;
+}
+
 const blockOpeners = new Set(['begin', 'case', 'casex', 'casez', 'generate', 'function', 'task']);
 const blockClosers = new Map([
   ['end', 'begin'],
@@ -56,6 +71,24 @@ export function collectAlwaysBlocksFromCst(document: TextDocument, cst: VerilogC
       continue;
     }
     const parsed = parseAlwaysBlockAt(document, cst, index, moduleEnd);
+    if (parsed) {
+      blocks.push(parsed);
+    }
+  }
+  return blocks;
+}
+
+export function collectProceduralBlocksFromCst(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule): VerilogProceduralBlockAst[] {
+  const moduleStart = document.offsetAt(module.headerEnd);
+  const moduleEnd = document.offsetAt(module.range.end);
+  const tokens = cst.codeTokens;
+  const blocks: VerilogProceduralBlockAst[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.start < moduleStart || token.end > moduleEnd || (token.value !== 'always' && token.value !== 'initial')) {
+      continue;
+    }
+    const parsed = parseProceduralBlockAt(document, cst, index, moduleEnd);
     if (parsed) {
       blocks.push(parsed);
     }
@@ -176,6 +209,80 @@ function parseAlwaysBlockAt(document: TextDocument, cst: VerilogCstDocument, alw
     sequential,
     combinational: !sequential
   };
+}
+
+function parseProceduralBlockAt(document: TextDocument, cst: VerilogCstDocument, keywordIndex: number, moduleEnd: number): VerilogProceduralBlockAst | undefined {
+  const tokens = cst.codeTokens;
+  const keyword = tokens[keywordIndex];
+  if (keyword.value !== 'always' && keyword.value !== 'initial') {
+    return undefined;
+  }
+
+  let cursor = keywordIndex + 1;
+  let controlKind: VerilogProceduralControlKind = 'none';
+  let controlTokens: VerilogToken[] = [];
+  if (tokens[cursor]?.value === '@') {
+    const end = parseEventControlEnd(tokens, cursor);
+    if (end < 0) {
+      return undefined;
+    }
+    controlKind = 'event';
+    controlTokens = tokens.slice(cursor, end);
+    cursor = end;
+  } else if (tokens[cursor]?.value === '#') {
+    const end = parseDelayControlEnd(tokens, cursor);
+    controlKind = 'delay';
+    controlTokens = tokens.slice(cursor, end);
+    cursor = end;
+  }
+
+  const bodyStartToken = tokens[cursor];
+  if (!bodyStartToken || bodyStartToken.start >= moduleEnd) {
+    return undefined;
+  }
+
+  let endIndex: number;
+  if (bodyStartToken.value === 'begin') {
+    endIndex = findMatchingBeginEnd(tokens, cursor);
+  } else {
+    endIndex = findStatementSemicolon(tokens, cursor);
+  }
+  if (endIndex < cursor) {
+    endIndex = cursor;
+  }
+
+  const bodyEndToken = tokens[endIndex];
+  const bodyStart = bodyStartToken.start;
+  const bodyEnd = bodyEndToken?.end ?? bodyStartToken.end;
+  return {
+    kind: keyword.value,
+    headerRange: Range.create(document.positionAt(keyword.start), document.positionAt(bodyStartToken.start)),
+    range: Range.create(document.positionAt(keyword.start), document.positionAt(bodyEnd)),
+    controlKind,
+    controlTokens,
+    bodyTokens: tokens.slice(cursor, endIndex + 1),
+    statements: cst.statements.filter((statement) => statement.end > bodyStart && statement.start < bodyEnd),
+    bodyStart,
+    bodyEnd
+  };
+}
+
+function parseEventControlEnd(tokens: VerilogToken[], atIndex: number): number {
+  const cursor = atIndex + 1;
+  if (tokens[cursor]?.value === '(') {
+    const close = findMatchingForward(tokens, cursor, '(', ')');
+    return close >= 0 ? close + 1 : -1;
+  }
+  return tokens[cursor] ? cursor + 1 : -1;
+}
+
+function parseDelayControlEnd(tokens: VerilogToken[], hashIndex: number): number {
+  const cursor = hashIndex + 1;
+  if (tokens[cursor]?.value === '(') {
+    const close = findMatchingForward(tokens, cursor, '(', ')');
+    return close >= 0 ? close + 1 : cursor + 1;
+  }
+  return tokens[cursor] ? cursor + 1 : cursor;
 }
 
 function closeFoldStack(document: TextDocument, stack: Array<{ kind: string; token: VerilogToken }>, expected: string, close: VerilogToken, ranges: FoldingRange[]): void {

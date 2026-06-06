@@ -6,6 +6,7 @@ export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 export interface CoSettings {
   diagnostics: {
     disabledCodes: string[];
+    disabledFileCodes: string[];
   };
   project: {
     profile: ProjectProfile;
@@ -43,7 +44,8 @@ export interface CoSettings {
 
 export const defaultCoSettings: CoSettings = {
   diagnostics: {
-    disabledCodes: []
+    disabledCodes: [],
+    disabledFileCodes: []
   },
   project: {
     profile: 'auto',
@@ -85,7 +87,8 @@ export function mergeCoSettings(value: unknown): CoSettings {
     diagnostics: {
       ...defaultCoSettings.diagnostics,
       ...(candidate.diagnostics ?? {}),
-      disabledCodes: normalizeDisabledDiagnosticCodes(candidate.diagnostics?.disabledCodes)
+      disabledCodes: normalizeDisabledDiagnosticCodes(candidate.diagnostics?.disabledCodes),
+      disabledFileCodes: normalizeDisabledDiagnosticFileCodes(candidate.diagnostics?.disabledFileCodes)
     },
     project: {
       ...defaultCoSettings.project,
@@ -119,6 +122,10 @@ export function diagnosticCodeKey(languageId: string, code: string): string {
   return `${languageId.trim().toLowerCase()}:${code.trim().toLowerCase()}`;
 }
 
+export function diagnosticFileCodeKey(languageId: string, code: string, documentUri: string): string {
+  return `${diagnosticCodeKey(languageId, code)}@${documentUri.trim()}`;
+}
+
 export function diagnosticCodeToString(code: unknown): string | undefined {
   if (typeof code !== 'string' && typeof code !== 'number') {
     return undefined;
@@ -136,6 +143,27 @@ export function isDiagnosticCodeDisabled(settings: CoSettings, languageId: strin
   return settings.diagnostics.disabledCodes.some((item) => item === languageKey || item === normalized);
 }
 
+export function isDiagnosticCodeDisabledForFile(
+  settings: CoSettings,
+  languageId: string,
+  code: unknown,
+  documentUri: string | undefined
+): boolean {
+  const normalized = diagnosticCodeToString(code);
+  if (!normalized) {
+    return false;
+  }
+  if (isDiagnosticCodeDisabled(settings, languageId, normalized)) {
+    return true;
+  }
+  if (!documentUri?.trim()) {
+    return false;
+  }
+  const fileKey = diagnosticFileCodeKey(languageId, normalized, documentUri);
+  const codeOnlyFileKey = `${normalized}@${documentUri.trim()}`;
+  return settings.diagnostics.disabledFileCodes.some((item) => item === fileKey || item === codeOnlyFileKey);
+}
+
 function normalizeDisabledDiagnosticCodes(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [...defaultCoSettings.diagnostics.disabledCodes];
@@ -144,6 +172,31 @@ function normalizeDisabledDiagnosticCodes(value: unknown): string[] {
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim().toLowerCase())
     .filter((item) => Boolean(item) && /^\S+$/.test(item)))].sort();
+}
+
+function normalizeDisabledDiagnosticFileCodes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [...defaultCoSettings.diagnostics.disabledFileCodes];
+  }
+  return [...new Set(value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => normalizeDiagnosticFileCode(item))
+    .filter((item): item is string => Boolean(item)))].sort();
+}
+
+function normalizeDiagnosticFileCode(value: string): string | undefined {
+  const trimmed = value.trim();
+  const separator = trimmed.indexOf('@');
+  if (separator <= 0 || separator === trimmed.length - 1) {
+    return undefined;
+  }
+  const codePart = trimmed.slice(0, separator).trim();
+  const uriPart = trimmed.slice(separator + 1).trim();
+  if (!uriPart || /\s/.test(uriPart)) {
+    return undefined;
+  }
+  const normalizedCodePart = normalizeDisabledDiagnosticCodes([codePart])[0];
+  return normalizedCodePart ? `${normalizedCodePart}@${uriPart}` : undefined;
 }
 
 function normalizeDisabledRules(value: unknown): string[] {

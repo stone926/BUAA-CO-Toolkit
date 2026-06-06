@@ -120,6 +120,125 @@ endmodule
     expect(codes.filter((code) => code === 'synth-mul-div')).toHaveLength(3);
   });
 
+  it('does not report multiply, divide, or modulo synthesizable hints inside MDU by default', () => {
+    const text = `
+module MDU(input [31:0] a, input [31:0] b, output [31:0] y);
+    assign y = (a * b) / 2 % 3;
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).not.toContain('synth-mul-div');
+  });
+
+  it('does not report initial synthesizable hints inside testbench modules by default', () => {
+    const text = `
+module cpu_tb;
+    initial begin
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).not.toContain('synth-initial');
+  });
+
+  it('does not report mixed assignment for testbench clock signals by default', () => {
+    const text = `
+module cpu_tb;
+    reg clk;
+    initial begin
+        clk = 0;
+    end
+    always @(posedge clk) begin
+        clk <= ~clk;
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).not.toContain('mixed-assignment');
+  });
+
+  it('recognizes common delayed testbench clock generation forms', () => {
+    const clockGenerators = [
+      'always #2 clk <= ~clk;',
+      'always begin #2 clk = ~clk; end',
+      'initial begin forever #5 clk = ~clk; end'
+    ];
+
+    for (const clockGenerator of clockGenerators) {
+      const text = `
+\`timescale 1ns / 1ps
+module cpu_tb;
+    reg clk;
+    reg reset;
+    reg [31:0] inst [0:4095];
+    initial begin
+        $readmemh("code.txt", inst);
+        clk = 1'b0;
+        reset = 1'b1;
+        #20 reset = 1'b0;
+    end
+    ${clockGenerator}
+endmodule
+`.trim();
+      const codes = diagnosticCodes(text);
+      expect(codes).not.toContain('tb-clock');
+    }
+  });
+
+  it('still reports testbench modules without time-driven clock generation', () => {
+    const text = `
+\`timescale 1ns / 1ps
+module cpu_tb;
+    reg clk;
+    reg reset;
+    reg [31:0] inst [0:4095];
+    initial begin
+        $readmemh("code.txt", inst);
+        reset = 1'b1;
+        #20 reset = 1'b0;
+    end
+    always @(posedge clk) begin
+        reset <= reset;
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).toContain('tb-clock');
+  });
+
+  it('does not treat event-controlled delayed toggles as free-running testbench clocks', () => {
+    const eventControlledBlocks = [
+      `
+    always @(posedge reset) begin
+        #2 clk <= ~clk;
+    end`,
+      `
+    always begin
+        @(posedge reset);
+        #2 clk <= ~clk;
+    end`
+    ];
+
+    for (const eventControlledBlock of eventControlledBlocks) {
+      const text = `
+\`timescale 1ns / 1ps
+module cpu_tb;
+    reg clk;
+    reg reset;
+    reg [31:0] inst [0:4095];
+    initial begin
+        $readmemh("code.txt", inst);
+        reset = 1'b1;
+        #20 reset = 1'b0;
+    end
+    ${eventControlledBlock}
+endmodule
+`.trim();
+      const codes = diagnosticCodes(text);
+      expect(codes).toContain('tb-clock');
+    }
+  });
+
   it('filters diagnostics disabled through the generic diagnostic suppress setting', () => {
     const text = `
 module demo(input [3:0] a, input [3:0] b, output [3:0] y);

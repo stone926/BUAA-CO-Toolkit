@@ -7,7 +7,7 @@ import {
 } from '../../../language/common/diagnosticActions';
 
 describe('diagnostic suppress actions', () => {
-  it('creates one quick fix for each diagnostic code', () => {
+  it('creates workspace and file quick fixes for each diagnostic code', () => {
     const diagnostics = [
       {
         range: Range.create(0, 0, 0, 1),
@@ -28,10 +28,17 @@ describe('diagnostic suppress actions', () => {
         code: 'width-mismatch'
       }
     ];
-    const actions = getDiagnosticSuppressActions('verilog', diagnostics, mergeCoSettings({}));
-    expect(actions.map((action) => action.command?.command)).toEqual([disableDiagnosticCodeCommand, disableDiagnosticCodeCommand]);
+    const actions = getDiagnosticSuppressActions('verilog', diagnostics, mergeCoSettings({}), 'file:///work/cpu.v');
+    expect(actions.map((action) => action.command?.command)).toEqual([
+      disableDiagnosticCodeCommand,
+      disableDiagnosticCodeCommand,
+      disableDiagnosticCodeCommand,
+      disableDiagnosticCodeCommand
+    ]);
     expect(actions.map((action) => action.command?.arguments)).toEqual([
+      ['verilog', 'missing-endmodule', 'file:///work/cpu.v'],
       ['verilog', 'missing-endmodule'],
+      ['verilog', 'width-mismatch', 'file:///work/cpu.v'],
       ['verilog', 'width-mismatch']
     ]);
   });
@@ -58,5 +65,24 @@ describe('diagnostic suppress actions', () => {
     ];
     expect(filterDisabledDiagnostics('verilog', diagnostics, settings)).toHaveLength(0);
     expect(filterDisabledDiagnostics('mipsasm', diagnostics, settings)).toHaveLength(2);
+  });
+
+  it('filters diagnostics disabled only for a matching file', () => {
+    const settings = mergeCoSettings({
+      diagnostics: {
+        disabledFileCodes: ['verilog:synth-mul-div@file:///work/cpu.v']
+      }
+    });
+    const diagnostics = [
+      {
+        range: Range.create(0, 0, 0, 1),
+        message: 'mul',
+        severity: DiagnosticSeverity.Information,
+        code: 'synth-mul-div'
+      }
+    ];
+
+    expect(filterDisabledDiagnostics('verilog', diagnostics, settings, 'file:///work/cpu.v')).toHaveLength(0);
+    expect(filterDisabledDiagnostics('verilog', diagnostics, settings, 'file:///work/other.v')).toHaveLength(1);
   });
 });

@@ -13,17 +13,20 @@ import type { VerilogSemanticModel } from './semanticModel';
 import {
   assignmentRhsContainsIdentifier,
   collectAlwaysBlocksFromCst,
+  collectProceduralBlocksFromCst,
   edgeSignalsFromSensitivity,
   hasAnyTokenValue,
   hasTokenValue,
-  isOffsetInsideForControl
+  isOffsetInsideForControl,
+  VerilogProceduralBlockAst
 } from './blockAst';
 
-export function collectAssignmentDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+export function collectAssignmentDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
     const bodyStart = document.offsetAt(module.headerEnd);
     const bodyEnd = document.offsetAt(module.range.end);
     const assignmentKinds = new Map<string, Set<string>>();
+    const isTestbench = isTestbenchModule(module, settings);
     for (const assignment of collectAssignmentsFromTokens(document, cstWithStatements(cst, bodyStart, bodyEnd), 0, -1)) {
       if (!assignmentKinds.has(assignment.name)) {
         assignmentKinds.set(assignment.name, new Set());
@@ -32,6 +35,9 @@ export function collectAssignmentDiagnostics(document: TextDocument, text: strin
     }
     for (const [name, operators] of assignmentKinds) {
       if (operators.has('=') && operators.has('<=')) {
+        if (isTestbench && isClockSignalName(name)) {
+          continue;
+        }
         const decl = module.declarations.get(name);
         const range = decl?.selectionRange ?? module.selectionRange;
         diagnostics.push(makeDiagnostic(range, `Signal '${name}' is assigned with both blocking and nonblocking assignments.`, DiagnosticSeverity.Warning, 'mixed-assignment'));
@@ -56,20 +62,29 @@ export function collectCourseStyleDiagnostics(
     collectMagicNumberDiagnostics(document, settings, text, module, cst, diagnostics);
     collectInoutDiagnostics(settings, module, diagnostics);
   }
-  collectTestbenchDiagnostics(document, settings, text, modules, diagnostics);
+  collectTestbenchDiagnostics(document, settings, text, modules, cst, diagnostics);
 }
 
-export function collectSynthesizableHintDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
-  const moduleRanges = modules.map((module) => [document.offsetAt(module.range.start), document.offsetAt(module.range.end)] as const);
-  for (const token of cst.codeTokens) {
-    if (!isInsideAnyOffsetRange(token.start, moduleRanges)) {
-      continue;
-    }
-    if (token.value === 'initial') {
-      diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
-    }
-    if ((token.value === '*' || token.value === '/' || token.value === '%') && shouldReportSynthesizableOperatorToken(document, cst.codeTokens, token)) {
-      diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
+export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+  for (const module of modules) {
+    const moduleStart = document.offsetAt(module.range.start);
+    const moduleEnd = document.offsetAt(module.range.end);
+    const isTestbench = isTestbenchModule(module, settings);
+    const isMdu = isMduModule(module);
+    for (const token of cst.codeTokens) {
+      if (token.start < moduleStart || token.start >= moduleEnd) {
+        continue;
+      }
+      if (token.value === 'initial' && !isTestbench) {
+        diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
+      }
+      if (
+        !isMdu &&
+        (token.value === '*' || token.value === '/' || token.value === '%') &&
+        shouldReportSynthesizableOperatorToken(document, cst.codeTokens, token)
+      ) {
+        diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
+      }
     }
   }
   for (const statement of cst.statements) {
@@ -450,19 +465,19 @@ function collectInoutDiagnostics(settings: CoSettings, module: VerilogModule, di
   }
 }
 
-function collectTestbenchDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
+function collectTestbenchDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
-    const isTestbench = module.name.toLowerCase().includes('tb') || module.name === settings.project.testbench;
-    if (!isTestbench) {
+    if (!isTestbenchModule(module, settings)) {
       continue;
     }
     const bodyStart = document.offsetAt(module.headerEnd);
     const bodyEnd = document.offsetAt(module.range.end);
     const body = text.slice(bodyStart, bodyEnd);
+    const proceduralBlocks = collectProceduralBlocksFromCst(document, cst, module);
     if (!/`timescale\s+1ns\s*\/\s*1ps/.test(text)) {
       diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: standard course testbenches should use `timescale 1ns / 1ps.', DiagnosticSeverity.Information, 'tb-timescale'));
     }
-    if (!/\bclk\b[\s\S]*(?:forever\s*#|#\s*\d+)[\s\S]*\bclk\s*=\s*~\s*clk/.test(body)) {
+    if (!hasTestbenchClockGeneration(module, proceduralBlocks)) {
       diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: include clk generation logic.', DiagnosticSeverity.Information, 'tb-clock'));
     }
     if (!/\breset\b/.test(body)) {
@@ -472,6 +487,109 @@ function collectTestbenchDiagnostics(document: TextDocument, settings: CoSetting
       diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: use $readmemh("code.txt", im) to load machine code when simulating CPU projects.', DiagnosticSeverity.Information, 'tb-readmemh'));
     }
   }
+}
+
+function hasTestbenchClockGeneration(module: VerilogModule, blocks: VerilogProceduralBlockAst[]): boolean {
+  const clockNames = declaredClockNames(module);
+  if (!clockNames.size) {
+    return false;
+  }
+  for (const block of blocks) {
+    if (block.kind === 'always') {
+      if (block.controlKind === 'event') {
+        continue;
+      }
+      if (block.controlKind === 'delay' && findClockToggleAssignment(block.bodyTokens, clockNames) >= 0) {
+        return true;
+      }
+      if (block.controlKind === 'none' && hasDelayBeforeClockToggle(block.bodyTokens, clockNames)) {
+        return true;
+      }
+      continue;
+    }
+    if (block.kind === 'initial' && hasForeverDelayClockToggle(block.bodyTokens, clockNames)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function declaredClockNames(module: VerilogModule): Set<string> {
+  return new Set([...module.declarations.keys()].filter(isClockSignalName));
+}
+
+function hasForeverDelayClockToggle(tokens: VerilogToken[], clockNames: Set<string>): boolean {
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].value !== 'forever') {
+      continue;
+    }
+    const end = proceduralStatementWindowEnd(tokens, index + 1);
+    if (end <= index) {
+      continue;
+    }
+    if (hasDelayBeforeClockToggle(tokens.slice(index, end + 1), clockNames)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasDelayBeforeClockToggle(tokens: VerilogToken[], clockNames: Set<string>): boolean {
+  const assignmentIndex = findClockToggleAssignment(tokens, clockNames);
+  if (assignmentIndex < 0) {
+    return false;
+  }
+  const prefix = tokens.slice(0, assignmentIndex);
+  return prefix.some((token) => token.value === '#') && !prefix.some((token) => token.value === '@' || token.value === 'wait');
+}
+
+function findClockToggleAssignment(tokens: VerilogToken[], clockNames: Set<string>): number {
+  for (let index = 0; index <= tokens.length - 4; index++) {
+    const target = tokens[index];
+    if (target.kind !== 'identifier' || !clockNames.has(target.value)) {
+      continue;
+    }
+    const operator = tokens[index + 1];
+    const inverter = tokens[index + 2];
+    const source = tokens[index + 3];
+    if (
+      (operator.value === '=' || operator.value === '<=') &&
+      (inverter.value === '~' || inverter.value === '!') &&
+      source.kind === 'identifier' &&
+      source.value === target.value
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function proceduralStatementWindowEnd(tokens: VerilogToken[], start: number): number {
+  for (let index = start; index < tokens.length; index++) {
+    if (tokens[index].value === 'begin') {
+      const end = findMatchingBeginEndToken(tokens, index);
+      return end >= 0 ? end : index;
+    }
+    if (tokens[index].value === ';') {
+      return index;
+    }
+  }
+  return tokens.length - 1;
+}
+
+function findMatchingBeginEndToken(tokens: VerilogToken[], beginIndex: number): number {
+  let depth = 0;
+  for (let index = beginIndex; index < tokens.length; index++) {
+    if (tokens[index].value === 'begin') {
+      depth++;
+    } else if (tokens[index].value === 'end') {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
 }
 
 function tokenRange(document: TextDocument, token: VerilogToken): Range {
@@ -492,8 +610,14 @@ function previousToken(tokens: VerilogToken[], index: number): VerilogToken | un
   return undefined;
 }
 
-function isInsideAnyOffsetRange(offset: number, ranges: Array<readonly [number, number]>): boolean {
-  return ranges.some(([start, end]) => offset >= start && offset < end);
+function isTestbenchModule(module: VerilogModule, settings: CoSettings): boolean {
+  const configured = settings.project.testbench.trim().toLowerCase();
+  const name = module.name.toLowerCase();
+  return name.includes('tb') || (configured !== '' && name === configured);
+}
+
+function isMduModule(module: VerilogModule): boolean {
+  return module.name.toLowerCase() === 'mdu';
 }
 
 function shouldReportSynthesizableOperatorToken(document: TextDocument, tokens: VerilogToken[], token: VerilogToken): boolean {

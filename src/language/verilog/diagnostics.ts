@@ -44,11 +44,11 @@ export function collectVerilogDiagnostics(
   collectWidthDiagnostics(document, text, modules, cst, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
-    collectAssignmentDiagnostics(document, text, modules, cst, diagnostics);
+    collectAssignmentDiagnostics(document, settings, text, modules, cst, diagnostics);
     collectCourseStyleDiagnostics(document, settings, text, modules, cst, diagnostics);
   }
   if (settings.verilog.lint.synthesizableHints) {
-    collectSynthesizableHintDiagnostics(document, text, modules, cst, diagnostics);
+    collectSynthesizableHintDiagnostics(document, settings, text, modules, cst, diagnostics);
   }
   collectExplicitPortNetTypeDiagnostics(document, modules, cst, diagnostics);
   collectImplicitNetDiagnostics(document, settings, text, modules, cst, diagnostics, semantic);

@@ -47,7 +47,7 @@ type ControlMnemonic =
 const cpuProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
 
 const defaultInstructionSets: Record<CpuProfile, string[]> = {
-  P3: ['addu', 'subu', 'ori', 'lui', 'lw', 'sw', 'beq', 'j', 'jal', 'jr'],
+  P3: ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'nop'],
   P4: ['addu', 'subu', 'ori', 'lui', 'lw', 'sw', 'beq', 'j', 'jal', 'jr'],
   P5: ['addu', 'subu', 'addiu', 'ori', 'lui', 'lw', 'sw', 'beq', 'bne', 'j', 'jal', 'jr', 'sll', 'srl', 'slt'],
   P6: [

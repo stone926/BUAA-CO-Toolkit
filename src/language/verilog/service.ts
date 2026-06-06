@@ -127,7 +127,7 @@ interface InstanceContext {
 export function getVerilogDiagnostics(document: TextDocument, settings: CoSettings, index?: VerilogWorkspaceIndex): Diagnostic[] {
   const parsed = getCachedVerilogParse(document, settings, true);
   const diagnostics = index ? addVerilogWorkspaceDiagnostics(document, settings, index, parsed.diagnostics, parsed) : parsed.diagnostics;
-  return filterDisabledDiagnostics(document.languageId, diagnostics, settings);
+  return filterDisabledDiagnostics(document.languageId, diagnostics, settings, document.uri);
 }
 
 export function getVerilogCompletions(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): CompletionItem[] {

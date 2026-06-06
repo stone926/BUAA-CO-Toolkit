@@ -348,7 +348,8 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
   const diagnostics = filterDisabledDiagnostics(
     diagnosticLanguageId,
     serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [],
-    resolvedSettings
+    resolvedSettings,
+    document.uri
   );
   connection.sendDiagnostics({
     uri: document.uri,
@@ -366,7 +367,7 @@ function getCodeActions(
   const languageActions = service.getCodeActions?.(document, range, diagnostics, settings) ?? [];
   return [
     ...languageActions,
-    ...getDiagnosticSuppressActions(serviceKeyForDocument(document), diagnostics, settings)
+    ...getDiagnosticSuppressActions(serviceKeyForDocument(document), diagnostics, settings, document.uri)
   ];
 }
 

@@ -3,8 +3,10 @@ import {
   defaultCoSettings,
   defaultDisabledVerilogLintRules,
   diagnosticCodeKey,
+  diagnosticFileCodeKey,
   diagnosticCodeToString,
   isDiagnosticCodeDisabled,
+  isDiagnosticCodeDisabledForFile,
   isVerilogLintRuleEnabled,
   mergeCoSettings
 } from '../../../language/common/settings';
@@ -109,6 +111,24 @@ describe('mergeCoSettings', () => {
     expect(diagnosticCodeToString(' missing-endmodule ')).toBe('missing-endmodule');
     expect(isDiagnosticCodeDisabled(result, 'verilog', 'SYNTH-MUL-DIV')).toBe(true);
     expect(isDiagnosticCodeDisabled(result, 'mipsasm', 'co-section-address')).toBe(true);
+  });
+
+  it('normalizes disabled file diagnostic codes', () => {
+    const uri = 'file:///work/cpu.v';
+    const result = mergeCoSettings({
+      diagnostics: {
+        disabledFileCodes: [
+          ` Verilog:SYNTH-MUL-DIV@${uri} `,
+          'bad code@file:///work/cpu.v',
+          `verilog:synth-mul-div@${uri}`
+        ]
+      }
+    });
+
+    expect(result.diagnostics.disabledFileCodes).toEqual([`verilog:synth-mul-div@${uri}`]);
+    expect(diagnosticFileCodeKey('Verilog', 'SYNTH-MUL-DIV', uri)).toBe(`verilog:synth-mul-div@${uri}`);
+    expect(isDiagnosticCodeDisabledForFile(result, 'verilog', 'SYNTH-MUL-DIV', uri)).toBe(true);
+    expect(isDiagnosticCodeDisabledForFile(result, 'verilog', 'SYNTH-MUL-DIV', 'file:///work/other.v')).toBe(false);
   });
 
   it('merges multiple sections at once', () => {

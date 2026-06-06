@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { getProfile } from './config';
 import {
   diagnosticCodeKey,
+  diagnosticFileCodeKey,
   diagnosticCodeToString,
   disableDiagnosticCodeCommand,
   defaultCoSettings
@@ -70,7 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand(disableDiagnosticCodeCommand, (languageId?: string, code?: string) => disableDiagnosticCode(languageId, code))
+    vscode.commands.registerCommand(disableDiagnosticCodeCommand, (languageId?: string, code?: string, documentUri?: string) => disableDiagnosticCode(languageId, code, documentUri))
   );
 
   registerMips(context, services);
@@ -157,15 +158,24 @@ async function selectProjectProfile(): Promise<void> {
   vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
 }
 
-async function disableDiagnosticCode(languageId?: string, code?: string): Promise<void> {
+async function disableDiagnosticCode(languageId?: string, code?: string, documentUri?: string): Promise<void> {
   const normalizedLanguageId = typeof languageId === 'string' ? languageId.trim().toLowerCase() : '';
   const normalizedCode = diagnosticCodeToString(code);
   if (!normalizedLanguageId || !normalizedCode) {
     vscode.window.showErrorMessage('无法禁用此诊断，因为其代码无效');
     return;
   }
-  const key = diagnosticCodeKey(normalizedLanguageId, normalizedCode);
   const config = vscode.workspace.getConfiguration('co');
+  if (typeof documentUri === 'string' && documentUri.trim()) {
+    const key = diagnosticFileCodeKey(normalizedLanguageId, normalizedCode, documentUri);
+    const current = config.get<string[]>('diagnostics.disabledFileCodes', defaultCoSettings.diagnostics.disabledFileCodes);
+    const merged = [...new Set([...current.map((item) => item.trim()).filter(Boolean), key])].sort();
+    await config.update('diagnostics.disabledFileCodes', merged, vscode.ConfigurationTarget.Workspace);
+    vscode.window.showInformationMessage(`已在当前工作区中对该文件禁用 ${normalizedCode} 诊断`);
+    return;
+  }
+
+  const key = diagnosticCodeKey(normalizedLanguageId, normalizedCode);
   const current = config.get<string[]>('diagnostics.disabledCodes', defaultCoSettings.diagnostics.disabledCodes);
   const merged = [...new Set([...current.map((item) => item.trim().toLowerCase()).filter(Boolean), key])].sort();
   await config.update('diagnostics.disabledCodes', merged, vscode.ConfigurationTarget.Workspace);
