@@ -32,6 +32,7 @@ export interface IseProjectFiles {
 export interface IseProjectOptions {
   resource?: vscode.Uri;
   showMessages?: boolean;
+  revealOutput?: boolean;
   testbenchName?: string;
 }
 
@@ -181,7 +182,9 @@ export async function runIsim(
   }
   const top = testbenchName ?? getTestbench(activeUri);
   const exeName = process.platform === 'win32' ? `${top}.exe` : top;
-  services.output.show(true);
+  if (options.revealOutput !== false) {
+    services.output.show(true);
+  }
   const fuseResult = await runTool(fuse, ['-nodebug', '-prj', path.basename(generated.prj.fsPath), '-o', exeName, top], {
     cwd: generated.outDir.fsPath,
     output: services.output,
@@ -192,7 +195,7 @@ export async function runIsim(
   });
   if (!fuseResult.ok) {
     if (showMessages) {
-      vscode.window.showErrorMessage('ISim 编译失败。请查看北航 CO 输出面板');
+      vscode.window.showErrorMessage('ISim 编译失败。请查看插件输出面板');
     }
     return undefined;
   }
@@ -215,7 +218,7 @@ export async function runIsim(
     }
   } else {
     if (showMessages) {
-      vscode.window.showErrorMessage('ISim 运行失败。请查看北航 CO 输出面板');
+      vscode.window.showErrorMessage('ISim 运行失败。请查看插件输出面板');
     }
   }
   return { generated, fuseResult, simResult, simOut };

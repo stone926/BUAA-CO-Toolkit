@@ -23,7 +23,7 @@ import { registerCourseLinks } from './courseLinks';
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
 
-  const output = vscode.window.createOutputChannel('北航 CO');
+  const output = vscode.window.createOutputChannel('BUAA CO Toolkit');
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBar.command = 'co.checkToolchain';
   context.subscriptions.push(output, statusBar);
@@ -120,7 +120,7 @@ export async function deactivate(): Promise<void> {
 }
 
 async function showToolchainReport(output: vscode.OutputChannel): Promise<void> {
-  output.appendLine('正在检查北航 CO 工具链...');
+  output.appendLine('正在检查 CO 工具链...');
   const resource = vscode.window.activeTextEditor?.document.uri;
   const checks = await checkToolchain(output, resource);
   output.appendLine('');
@@ -131,7 +131,7 @@ async function showToolchainReport(output: vscode.OutputChannel): Promise<void> 
     }
   }
 
-  const panel = vscode.window.createWebviewPanel('coToolchainReport', '北航 CO 工具链', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coToolchainReport', 'CO 工具链', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
   panel.webview.html = renderToolchainReport(checks);
@@ -147,14 +147,14 @@ async function selectProjectProfile(): Promise<void> {
       profile
     })),
     {
-      title: '选择北航 CO 项目 Profile'
+      title: '选择项目 Profile'
     }
   );
   if (!picked) {
     return;
   }
   await vscode.workspace.getConfiguration('co').update('project.profile', picked.profile, vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage(`北航 CO Profile 已设置为 ${picked.profile}`);
+  vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
 }
 
 async function disableDiagnosticCode(languageId?: string, code?: string): Promise<void> {
@@ -271,7 +271,7 @@ function renderToolchainReport(checks: ToolDetection[]): string {
   </style>
 </head>
 <body>
-  <h1>北航 CO 工具链</h1>
+  <h1>CO 工具链</h1>
   <table>
     <thead>
       <tr><th>工具</th><th>状态</th><th>路径 / 版本</th><th>建议</th></tr>

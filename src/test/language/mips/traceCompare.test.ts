@@ -30,6 +30,49 @@ describe('CPU trace compare', () => {
     expect(result.entries[0].status).toBe('cycle-diff');
   });
 
+  it('matches adjacent memory and register writes from the same cycle regardless of display order', () => {
+    const mars = parseMarsOutput([
+      '@00003004: *00001000 <= 00000002',
+      '@00003000: $1 <= 00000001'
+    ].join('\n'));
+    const sim = parseMarsOutput([
+      '100@00003000: $1 <= 00000001',
+      '100@00003004: *00001000 <= 00000002'
+    ].join('\n'));
+
+    const result = compareTraces(mars, sim);
+
+    expect(result.matched).toBe(true);
+    expect(result.summary.matchedEvents).toBe(2);
+    expect(result.entries[0]).toMatchObject({
+      status: 'ok',
+      mars: { kind: 'dm', pc: '00003004' },
+      sim: { kind: 'dm', pc: '00003004' }
+    });
+    expect(result.entries[1]).toMatchObject({
+      status: 'ok',
+      mars: { kind: 'grf', pc: '00003000' },
+      sim: { kind: 'grf', pc: '00003000' }
+    });
+  });
+
+  it('does not hide reordered events from different cycles', () => {
+    const mars = parseMarsOutput([
+      '@00003004: *00001000 <= 00000002',
+      '@00003000: $1 <= 00000001'
+    ].join('\n'));
+    const sim = parseMarsOutput([
+      '100@00003000: $1 <= 00000001',
+      '120@00003004: *00001000 <= 00000002'
+    ].join('\n'));
+
+    const result = compareTraces(mars, sim);
+
+    expect(result.matched).toBe(false);
+    expect(result.firstDiffIndex).toBe(0);
+    expect(result.entries[0].status).toBe('diff');
+  });
+
   it('reports the first semantic difference', () => {
     const mars = parseMarsOutput('@00003000: $1 <= 00000001\n@00003004: $2 <= 00000002\n');
     const sim = parseMarsOutput('@00003000: $1 <= 00000001\n@00003004: $2 <= 00000003\n');

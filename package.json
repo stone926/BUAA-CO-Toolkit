@@ -59,7 +59,7 @@
       "activitybar": [
         {
           "id": "coSidebarContainer",
-          "title": "北航 CO",
+          "title": "BUAA CO Toolkit",
           "icon": "$(circuit-board)"
         }
       ]
@@ -70,7 +70,7 @@
           "id": "coSidebar",
           "name": "计组工具箱",
           "icon": "$(circuit-board)",
-          "contextualTitle": "北航 CO"
+          "contextualTitle": "BUAA CO Toolkit"
         }
       ]
     },
@@ -632,12 +632,12 @@
             "P6",
             "P7"
           ],
-          "description": "当前北航 CO 项目 Profile。auto 启用通用检查并推断部分 Verilog 接口规则"
+          "description": "当前项目 Profile。auto 启用通用检查并推断部分 Verilog 接口规则"
         },
         "co.course.tutorialRoot": {
           "type": "string",
           "default": "",
-          "description": "可选的北航 CO 教程根目录。可使用本地镜像路径如 C:/co/tutorial 或 URL。为空时自动检测附近的本地镜像，若无则回退到官方网站"
+          "description": "可选的教程根目录。可使用本地镜像路径如 C:/co/tutorial 或 URL。为空时自动检测附近的本地镜像，若无则回退到官方网站"
         },
         "co.project.topModule": {
           "type": "string",

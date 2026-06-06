@@ -31,7 +31,7 @@ export async function runProjectWizard(): Promise<void> {
       profile: p
     })),
     {
-      title: '选择北航 CO 项目 Profile',
+      title: '选择项目 Profile',
       placeHolder: '选择你的实验项目类型'
     }
   );
@@ -98,7 +98,7 @@ export async function runProjectWizard(): Promise<void> {
   try {
     await createProjectStructure(rootPath, profile, projectName, toolchainConfig);
     await updateProjectSettings(profile);
-    vscode.window.showInformationMessage(`北航 CO 项目 '${projectName}' (${profile}) 创建成功！`);
+    vscode.window.showInformationMessage(`CO 项目 '${projectName}' (${profile}) 创建成功！`);
   } catch (error) {
     vscode.window.showErrorMessage(`创建项目失败: ${error}`);
   }

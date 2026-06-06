@@ -67,7 +67,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
   }
 
   const hazardDir = getHazardCalculator(resource);
-  if (hazardDir || profile === 'P5' || profile === 'P6') {
+  if (hazardDir || profile === 'P5' || profile === 'P6' || profile === 'P7') {
     checks.push(hazardDirCheck(hazardDir));
   }
 

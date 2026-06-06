@@ -47,8 +47,7 @@ export function makeDiagnostic(range: Range, message: string, severity: Diagnost
     range,
     message,
     severity,
-    source: '北航 CO',
+    source: 'BUAA CO',
     code
   };
 }
-

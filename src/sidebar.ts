@@ -198,7 +198,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         this.createCommandItem('Verilog 运行 ISim', 'co.verilog.runIsim', 'run')
       );
     }
-    if (profile === 'P5' || profile === 'P6') {
+    if (profile === 'P5' || profile === 'P6' || profile === 'P7') {
       actionChildren.push(this.createCommandItem('Hazard 分析', 'co.hazard.analyzeCurrentMachineCode', 'pulse'));
       actionChildren.push(this.createCommandItem('打开 Hazard 报告', 'co.hazard.openReport', 'json'));
     }

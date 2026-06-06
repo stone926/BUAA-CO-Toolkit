@@ -55,14 +55,14 @@ describe('getMipsHover instruction markdown', () => {
   it('does not show pseudo expansion for basic mul register form', () => {
     const text = hoverText('    mul $s0, $s1, $s2', 0, 5);
     expect(text).toContain('**mul**');
-    expect(text).not.toContain('当前写法：**MARS 扩展伪格式**');
+    expect(text).not.toContain('当前写法：**伪指令形式**');
     expect(text).not.toContain('展开预览');
     expect(text).not.toContain('mflo');
   });
 
   it('shows compact expansion details for mul immediate form', () => {
     const text = hoverText('    mul $s0, $s1, 5', 0, 5);
-    expect(text).toContain('当前写法：**MARS 扩展伪格式**');
+    expect(text).toContain('当前写法：**伪指令形式**');
     expect(text).toContain('addi $at, $zero, 5');
     expect(text).toContain('mul $s0, $s1, $at');
     expect(text).toContain('展开会使用 `$at`');

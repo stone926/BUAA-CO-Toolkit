@@ -17,6 +17,7 @@ export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
 
 export interface MarsRunOptions {
   showMessages?: boolean;
+  revealOutput?: boolean;
   stdin?: string;
   stdinSource?: vscode.Uri;
 }
@@ -117,7 +118,9 @@ export async function runMarsFile(
     return undefined;
   }
 
-  services.output.show(true);
+  if (options.revealOutput !== false) {
+    services.output.show(true);
+  }
   const java = getJava(asmUri);
   const cwd = dirname(asmUri);
   const args = buildMarsArgs(asmUri, mars, mode);

@@ -79,6 +79,19 @@ export function compareTraces(
     const mars = marsEvents[i];
     const sim = simEvents[i];
     const entry = compareAtIndex(i, mars, sim, options);
+
+    if (entry.status !== 'ok') {
+      const swapped = compareAdjacentSwap(i, marsEvents, simEvents, options);
+      if (swapped) {
+        for (const swappedEntry of swapped) {
+          entries.push(swappedEntry);
+          matchedEvents++;
+        }
+        i++;
+        continue;
+      }
+    }
+
     entries.push(entry);
 
     if (entry.status === 'ok') {
@@ -102,6 +115,28 @@ export function compareTraces(
       diffEvents
     }
   };
+}
+
+function compareAdjacentSwap(
+  index: number,
+  marsEvents: readonly CpuTraceEvent[],
+  simEvents: readonly CpuTraceEvent[],
+  options: TraceCompareOptions
+): [TraceDiffEntry, TraceDiffEntry] | undefined {
+  const mars = marsEvents[index];
+  const marsNext = marsEvents[index + 1];
+  const sim = simEvents[index];
+  const simNext = simEvents[index + 1];
+  if (!mars || !marsNext || !sim || !simNext) {
+    return undefined;
+  }
+  if (!canReorderAdjacentPair(mars, marsNext, sim, simNext)) {
+    return undefined;
+  }
+
+  const first = compareAtIndex(index, mars, simNext, options);
+  const second = compareAtIndex(index + 1, marsNext, sim, options);
+  return first.status === 'ok' && second.status === 'ok' ? [first, second] : undefined;
 }
 
 function compareAtIndex(
@@ -144,6 +179,34 @@ function firstSemanticDifference(mars: CpuTraceEvent, sim: CpuTraceEvent): strin
     return 'Write value differs.';
   }
   return undefined;
+}
+
+function canReorderAdjacentPair(
+  mars: CpuTraceEvent,
+  marsNext: CpuTraceEvent,
+  sim: CpuTraceEvent,
+  simNext: CpuTraceEvent
+): boolean {
+  const marsHasCycles = hasCycle(mars) || hasCycle(marsNext);
+  const simHasCycles = hasCycle(sim) || hasCycle(simNext);
+  if (!marsHasCycles && !simHasCycles) {
+    return false;
+  }
+  if (marsHasCycles && !sameTraceMoment(mars, marsNext)) {
+    return false;
+  }
+  if (simHasCycles && !sameTraceMoment(sim, simNext)) {
+    return false;
+  }
+  return true;
+}
+
+function sameTraceMoment(left: CpuTraceEvent, right: CpuTraceEvent): boolean {
+  return left.cycle !== undefined && left.cycle === right.cycle;
+}
+
+function hasCycle(event: CpuTraceEvent): boolean {
+  return event.cycle !== undefined;
 }
 
 function traceEventSnapshot(event: CpuTraceEvent | undefined): TraceEventSnapshot | undefined {

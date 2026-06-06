@@ -36,7 +36,7 @@ export function startLanguageServer(context: vscode.ExtensionContext): void {
     }
   };
 
-  client = new LanguageClient('buaa-co-language-server', '北航 CO 语言服务器', serverOptions, clientOptions);
+  client = new LanguageClient('buaa-co-language-server', 'BUAA CO Toolkit LSP', serverOptions, clientOptions);
   context.subscriptions.push(client);
   void client.start();
 }

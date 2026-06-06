@@ -97,6 +97,10 @@ interface CourseTraceCaseInput {
   stdin?: vscode.Uri;
 }
 
+interface CourseTraceRunOptions {
+  revealOutput?: boolean;
+}
+
 interface CourseTraceBatchSource {
   kind: 'selected' | 'generator';
   generator?: string;
@@ -260,7 +264,7 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
   const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'out'));
   await ensureDirectory(outDir);
   const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
-  const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', 'CO Continuous Trace Tests', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
     enableScripts: false,
     retainContextWhenHidden: true
   });
@@ -288,7 +292,6 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
     session.stopRequested = true;
   });
 
-  services.output.show(true);
   services.output.appendLine('');
   services.output.appendLine('正在启动持续生成 Trace 测试');
   services.output.appendLine(`生成器: ${generatorLabel(setup)}`);
@@ -313,7 +316,7 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
       services.output.appendLine('');
       services.output.appendLine(`Continuous iteration #${index}`);
       try {
-        const generated = await runGeneratorAndCollectAsms(services, setup);
+        const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
         if (!generated?.asms.length) {
           iteration.status = 'error';
           iteration.message = 'Generator finished but no new or modified ASM files were detected.';
@@ -328,7 +331,7 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
             const item = cases[i];
             services.output.appendLine(`[iteration ${index}, case ${i + 1}/${cases.length}] ${item.asm.fsPath}`);
             try {
-              iteration.results.push(await runCourseTraceCase(services, item));
+              iteration.results.push(await runCourseTraceCase(services, item, { revealOutput: false }));
             } catch (error) {
               iteration.results.push({
                 asm: item.asm.fsPath,
@@ -552,7 +555,11 @@ async function openBatchTraceReport(): Promise<void> {
   showBatchTraceReport(parsed.results, report, parsed.generatedAt, parsed.source);
 }
 
-async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseInput): Promise<CourseTraceCaseResult> {
+async function runCourseTraceCase(
+  services: AppServices,
+  item: CourseTraceCaseInput,
+  options: CourseTraceRunOptions = {}
+): Promise<CourseTraceCaseResult> {
   const asm = item.asm;
   services.output.appendLine('完整课程 Trace 测试');
   services.output.appendLine(`ASM: ${asm.fsPath}`);
@@ -560,7 +567,10 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
     services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
   }
 
-  const dump = await runMarsFile(services, asm, 'dumpText', { showMessages: false });
+  const dump = await runMarsFile(services, asm, 'dumpText', {
+    showMessages: false,
+    revealOutput: options.revealOutput
+  });
   if (!dump?.result.ok || !dump.outputFile) {
     return failedCase(item, 'dump', '测试中止：MARS 导出机器码失败');
   }
@@ -569,6 +579,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
   const mars = await runMarsFile(services, asm, 'run', {
     showMessages: false,
+    revealOutput: options.revealOutput,
     stdin: stdinText,
     stdinSource: item.stdin
   });
@@ -579,6 +590,7 @@ async function runCourseTraceCase(services: AppServices, item: CourseTraceCaseIn
   const isim = await runIsim(services, {
     resource: asm,
     showMessages: false,
+    revealOutput: options.revealOutput,
     machineCodeSource: dump.outputFile,
     simOutputFileName: simOutputFileNameForCase(item)
   });
@@ -806,14 +818,17 @@ function buildExternalGeneratorRunSetup(
 
 async function runGeneratorAndCollectAsms(
   services: AppServices,
-  setup: GeneratorRunSetup
+  setup: GeneratorRunSetup,
+  options: CourseTraceRunOptions = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   if (setup.kind === 'builtin') {
-    return await runBuiltinGeneratorAndCollectAsms(services, setup);
+    return await runBuiltinGeneratorAndCollectAsms(services, setup, options);
   }
 
   const before = snapshotAsmFiles(setup.folder.uri.fsPath);
-  services.output.show(true);
+  if (options.revealOutput !== false) {
+    services.output.show(true);
+  }
   services.output.appendLine('');
   services.output.appendLine(`正在运行测试生成器: ${setup.generator.fsPath}`);
   const result = await runTool(setup.invocation.command, setup.invocation.args, {
@@ -837,7 +852,8 @@ async function runGeneratorAndCollectAsms(
 
 async function runBuiltinGeneratorAndCollectAsms(
   services: AppServices,
-  setup: BuiltinGeneratorRunSetup
+  setup: BuiltinGeneratorRunSetup,
+  options: CourseTraceRunOptions = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
   let generated: ReturnType<typeof generateBuiltinAsmTestCase>;
@@ -851,7 +867,9 @@ async function runBuiltinGeneratorAndCollectAsms(
   } catch (error) {
     const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(message);
-    services.output.show(true);
+    if (options.revealOutput !== false) {
+      services.output.show(true);
+    }
     services.output.appendLine('');
     services.output.appendLine(`内置 ASM 生成器失败: ${message}`);
     return undefined;
@@ -862,7 +880,9 @@ async function runBuiltinGeneratorAndCollectAsms(
   const asm = vscode.Uri.file(path.join(outDir.fsPath, builtinAsmFileName(generated.profile, generatedAt)));
   await writeTextFile(asm, generated.text);
 
-  services.output.show(true);
+  if (options.revealOutput !== false) {
+    services.output.show(true);
+  }
   services.output.appendLine('');
   services.output.appendLine('正在运行内置随机 ASM 生成器');
   services.output.appendLine(`Profile: ${generated.profile}`);
@@ -1353,13 +1373,13 @@ function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile:
   </style>
 </head>
 <body>
-  <h1>CO 持续 Trace 测试</h1>
+  <h1>持续测试</h1>
   <div class="summary">
     <div class="metric"><span>状态</span><strong>${escapeHtml(state)}</strong></div>
-    <div class="metric"><span>迭代</span><strong>${report.iterations.length}</strong></div>
-    <div class="metric"><span>最新通过</span><strong>${latestSummary.passed}</strong></div>
-    <div class="metric"><span>最新失败</span><strong>${latestSummary.failed}</strong></div>
-    <div class="metric"><span>最新错误</span><strong>${latestSummary.errors}</strong></div>
+    <div class="metric"><span>论述</span><strong>${report.iterations.length}</strong></div>
+    <div class="metric"><span>最近通过</span><strong>${latestSummary.passed}</strong></div>
+    <div class="metric"><span>最近失败</span><strong>${latestSummary.failed}</strong></div>
+    <div class="metric"><span>最近错误</span><strong>${latestSummary.errors}</strong></div>
   </div>
   <div class="paths">
     <div>生成器: <code>${escapeHtml(report.generator)}</code></div>
