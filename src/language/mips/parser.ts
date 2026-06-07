@@ -248,7 +248,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       if (!directives.has(mnemonic)) {
         diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令 '${executable.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-directive'));
       }
-      validateDirective(document, lineNumber, executable, section, activeMacro, diagnostics);
+      validateDirective(document, lineNumber, executable, section, profile, activeMacro, diagnostics);
       activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
         ? mnemonic
         : undefined;
@@ -486,7 +486,15 @@ function skipOperandSeparator(text: string, offset: number): number {
   return sawSeparator ? index : -1;
 }
 
-function validateDirective(document: TextDocument, lineNumber: number, executable: MipsCstExecutable, section: MipsSection, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+function validateDirective(
+  document: TextDocument,
+  lineNumber: number,
+  executable: MipsCstExecutable,
+  section: MipsSection,
+  profile: CoSettings['project']['profile'],
+  activeMacro: MipsMacro | undefined,
+  diagnostics: Diagnostic[]
+): void {
   const directive = executable.lowerMnemonic;
   const operandText = executable.operandText;
   const directiveRange = mipsCstRange(lineNumber, executable.range);
@@ -504,8 +512,8 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
         diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} address must be an integer literal.`, DiagnosticSeverity.Error, 'directive-operand'));
       }
       validateSectionAddressRange(document, lineNumber, directive, operandText, diagnostics);
-      if (operandText && CO_FIXED_SECTION_DIRECTIVES.has(directive)) {
-        diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), '使用 CompactDataAtZero 内存配置；不要向 .data 或 .text 传递自定义地址', DiagnosticSeverity.Error, 'co-section-address'));
+      if (operandText && CO_FIXED_SECTION_DIRECTIVES.has(directive) && !isAllowedCourseSectionAddress(directive, operandText, profile)) {
+        diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), '课程自动测试通常不应传递自定义段地址；P7 异常处理程序仅允许 .ktext 0x4180', DiagnosticSeverity.Error, 'co-section-address'));
       }
       return;
     case '.byte':
@@ -553,6 +561,14 @@ function validateDirective(document: TextDocument, lineNumber: number, executabl
       }
       return;
   }
+}
+
+function isAllowedCourseSectionAddress(directive: string, operandText: string, profile: CoSettings['project']['profile']): boolean {
+  if (profile !== 'P7' || directive !== '.ktext') {
+    return false;
+  }
+  const address = parseIntegerOrCharLiteral(operandText);
+  return address === 0x4180;
 }
 
 function validateDirectiveContinuation(document: TextDocument, lineNumber: number, directive: string, operandText: string, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {

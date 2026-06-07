@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   getBuiltinGeneratorInstructionCount,
+  getBuiltinGeneratorP7InstructionCount,
   getBuiltinGeneratorInstructions,
   getContinuousIntervalMs,
   getContinuousMaxIterations,
@@ -10,6 +11,7 @@ import {
   getGeneratedAsmLimit,
   getGeneratorArgs,
   getJava,
+  getMemoryConfiguration,
   getProfile,
   getPython,
   useBuiltinTestGenerator
@@ -49,8 +51,9 @@ import { parseSimOutput } from './language/verilog/traceParser';
 import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
+import { checkToolchain } from './toolchain';
 import { runIsim } from './verilog';
-import { AppServices, ProjectProfile } from './types';
+import { AppServices, ProjectProfile, RunResult, ToolDetection } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { runTool } from './process';
 import { pickOneFile } from './workflowInputs';
@@ -188,6 +191,8 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
     vscode.commands.registerCommand('co.test.runBatchTraceTests', () => runBatchCourseTraceTests(services)),
     vscode.commands.registerCommand('co.test.runGeneratedTraceTests', () => runGeneratedCourseTraceTests(services)),
     vscode.commands.registerCommand('co.test.startContinuousGeneratedTraceTests', () => startContinuousGeneratedTraceTests(services)),
+    vscode.commands.registerCommand('co.test.generateAsmTests', () => generateAsmTests(services)),
+    vscode.commands.registerCommand('co.test.generateAndDumpAsmTests', () => generateAndDumpAsmTests(services)),
     vscode.commands.registerCommand('co.test.stopContinuousTests', () => stopContinuousTests()),
     vscode.commands.registerCommand('co.test.prepareLogisimCases', () => prepareLogisimCases(services)),
     vscode.commands.registerCommand('co.test.prepareGeneratedLogisimCases', () => prepareGeneratedLogisimCases(services)),
@@ -196,6 +201,9 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
 }
 
 async function runFullCourseTraceTest(services: AppServices): Promise<void> {
+  if (rejectP7TraceAutomation()) {
+    return;
+  }
   await vscode.workspace.saveAll(false);
 
   const asm = await resolveAsmInput();
@@ -225,6 +233,9 @@ async function runFullCourseTraceTest(services: AppServices): Promise<void> {
 }
 
 async function runBatchCourseTraceTests(services: AppServices): Promise<void> {
+  if (rejectP7TraceAutomation()) {
+    return;
+  }
   await vscode.workspace.saveAll(false);
 
   const cases = await resolveBatchTraceCases();
@@ -236,6 +247,9 @@ async function runBatchCourseTraceTests(services: AppServices): Promise<void> {
 }
 
 async function runGeneratedCourseTraceTests(services: AppServices): Promise<void> {
+  if (rejectP7TraceAutomation()) {
+    return;
+  }
   await vscode.workspace.saveAll(false);
 
   const generated = await resolveGeneratedAsmBatch(services);
@@ -247,6 +261,9 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
 }
 
 async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
+  if (rejectP7TraceAutomation()) {
+    return;
+  }
   if (activeContinuousTraceSession) {
     vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行');
     return;
@@ -255,6 +272,9 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
   await vscode.workspace.saveAll(false);
   const setup = await resolveGeneratorRunSetup();
   if (!setup) {
+    return;
+  }
+  if (!await ensureContinuousTraceToolchainReady(services, generatorResource(setup))) {
     return;
   }
 
@@ -378,6 +398,9 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
 
 function stopContinuousTests(): void {
   if (!activeContinuousTraceSession) {
+    if (rejectP7TraceAutomation()) {
+      return;
+    }
     vscode.window.showInformationMessage('当前没有正在运行的持续测试');
     return;
   }
@@ -536,6 +559,9 @@ async function runLogisimPrepareBatch(
 }
 
 async function openBatchTraceReport(): Promise<void> {
+  if (rejectP7TraceAutomation()) {
+    return;
+  }
   const report = await resolveBatchTraceReport();
   if (!report) {
     return;
@@ -569,10 +595,11 @@ async function runCourseTraceCase(
 
   const dump = await runMarsFile(services, asm, 'dumpText', {
     showMessages: false,
-    revealOutput: options.revealOutput
+    revealOutput: options.revealOutput,
+    courseTrace: true
   });
   if (!dump?.result.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', '测试中止：MARS 导出机器码失败');
+    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.result));
   }
   services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
 
@@ -581,10 +608,11 @@ async function runCourseTraceCase(
     showMessages: false,
     revealOutput: options.revealOutput,
     stdin: stdinText,
-    stdinSource: item.stdin
+    stdinSource: item.stdin,
+    traceOutput: true
   });
   if (!mars?.result.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', '测试中止：MARS 黄金模型运行失败', dump.outputFile);
+    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), dump.outputFile);
   }
 
   const isim = await runIsim(services, {
@@ -779,14 +807,17 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
   }
 
   const resource = vscode.window.activeTextEditor?.document.uri ?? folder.uri;
+  const profile = getProfile(resource);
   if (useBuiltinTestGenerator(resource)) {
     return {
       kind: 'builtin',
       folder,
       resource,
-      profile: getProfile(resource),
+      profile,
       instructionText: getBuiltinGeneratorInstructions(resource),
-      instructionCount: getBuiltinGeneratorInstructionCount(resource)
+      instructionCount: profile === 'P7'
+        ? getBuiltinGeneratorP7InstructionCount(resource)
+        : getBuiltinGeneratorInstructionCount(resource)
     };
   }
 
@@ -1187,6 +1218,131 @@ function failedCase(
     machineCode: machineCode?.fsPath,
     marsOut: marsOut?.fsPath
   };
+}
+
+async function generateAsmTests(services: AppServices): Promise<void> {
+  await vscode.workspace.saveAll(false);
+  const setup = await resolveGeneratorRunSetup();
+  if (!setup) {
+    return;
+  }
+  const generated = await runGeneratorAndCollectAsms(services, setup);
+  if (!generated?.asms.length) {
+    vscode.window.showWarningMessage('测试生成器未产生新的 ASM 测试点');
+    return;
+  }
+  await vscode.window.showTextDocument(generated.asms[0], { preview: false });
+  vscode.window.showInformationMessage(`已生成 ${generated.asms.length} 个 ASM 测试点`);
+}
+
+async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
+  await vscode.workspace.saveAll(false);
+  const setup = await resolveGeneratorRunSetup();
+  if (!setup) {
+    return;
+  }
+  const generated = await runGeneratorAndCollectAsms(services, setup);
+  if (!generated?.asms.length) {
+    vscode.window.showWarningMessage('测试生成器未产生新的 ASM 测试点');
+    return;
+  }
+
+  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'out'));
+  await ensureDirectory(outDir);
+  let dumped = 0;
+  for (const asm of generated.asms) {
+    const dumpFile = generatedMachineCodeDumpFile(setup.folder, outDir, asm);
+    const dump = await runMarsFile(services, asm, 'dumpText', {
+      showMessages: false,
+      dumpOutputFile: dumpFile
+    });
+    if (!dump?.result.ok || !dump.outputFile) {
+      const detail = marsStageFailureMessage('MARS 导出机器码失败', dump?.result);
+      vscode.window.showErrorMessage(detail);
+      return;
+    }
+    dumped++;
+    services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
+  }
+  await vscode.window.showTextDocument(generated.asms[0], { preview: false });
+  vscode.window.showInformationMessage(`已生成 ${generated.asms.length} 个 ASM 测试点，并 dump ${dumped} 个机器码文件`);
+}
+
+function generatedMachineCodeDumpFile(
+  folder: vscode.WorkspaceFolder,
+  outDir: vscode.Uri,
+  asm: vscode.Uri
+): vscode.Uri {
+  const relative = path.relative(folder.uri.fsPath, asm.fsPath);
+  const stem = sanitizeTraceFileStem(relative.replace(/\.[^.\\/]+$/, ''));
+  return vscode.Uri.file(path.join(outDir.fsPath, `${stem}.code.txt`));
+}
+
+function rejectP7TraceAutomation(resource = vscode.window.activeTextEditor?.document.uri): boolean {
+  if (getProfile(resource) !== 'P7') {
+    return false;
+  }
+  vscode.window.showErrorMessage('P7 不再提供自动 Trace 测试或对拍。请使用“生成 ASM 测试点”与“MIPS 导出文本段”。');
+  return true;
+}
+
+async function ensureContinuousTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {
+  services.output.show(true);
+  services.output.appendLine('');
+  services.output.appendLine('正在检查持续生成 Trace 测试工具链');
+
+  const profile = getProfile(resource);
+  const memoryConfiguration = getMemoryConfiguration(resource);
+  const configurationError = courseTraceMemoryConfigurationError(profile, memoryConfiguration);
+  if (configurationError) {
+    services.output.appendLine(configurationError);
+    vscode.window.showErrorMessage(configurationError);
+    return false;
+  }
+
+  const checks = await checkToolchain(services.output, resource);
+  const required = requiredContinuousTraceChecks(profile, memoryConfiguration);
+  const failed = checks.filter((check) => required.has(check.name) && !check.ok);
+  if (!failed.length) {
+    return true;
+  }
+
+  const message = `持续生成测试工具链检查失败：${failed.map(formatToolchainFailure).join('；')}`;
+  services.output.appendLine(message);
+  vscode.window.showErrorMessage(message);
+  return false;
+}
+
+function courseTraceMemoryConfigurationError(profile: ProjectProfile, memoryConfiguration: string): string | undefined {
+  if (profile === 'P7') {
+    return memoryConfiguration === 'CompactDataAtZero'
+      ? undefined
+      : `P7 持续生成测试必须使用 CompactDataAtZero，当前为 ${memoryConfiguration}`;
+  }
+  return memoryConfiguration === 'FixedCompactLargeText' || memoryConfiguration === 'CompactLargeText'
+    ? undefined
+    : `非 P7 持续生成测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 ${memoryConfiguration}`;
+}
+
+function requiredContinuousTraceChecks(profile: ProjectProfile, memoryConfiguration: string): Set<string> {
+  const names = new Set(['Java', 'MARS', 'MARS coL1', 'ISE fuse']);
+  if (profile !== 'P7') {
+    names.add(`MARS ${memoryConfiguration}`);
+  }
+  return names;
+}
+
+function formatToolchainFailure(check: ToolDetection): string {
+  return `${check.name} ${check.detail}${check.suggestion ? `（${check.suggestion}）` : ''}`;
+}
+
+function marsStageFailureMessage(prefix: string, result?: RunResult): string {
+  const detail = firstNonEmptyLine(result?.stderr) ?? firstNonEmptyLine(result?.stdout);
+  return detail ? `${prefix}: ${detail}` : prefix;
+}
+
+function firstNonEmptyLine(text?: string): string | undefined {
+  return text?.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
 }
 
 function diffMessage(diff: TraceDiffResult): string {

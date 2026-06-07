@@ -186,7 +186,7 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
   const resource = vscode.window.activeTextEditor?.document.uri;
   const profile = getProfile(resource);
   statusBar.text = `CO: ${profile}`;
-  statusBar.tooltip = '北航计算机组成工具箱 - 点击检查工具链';
+  statusBar.tooltip = 'BUAA CO Toolkit - 点击检查工具链';
   statusBar.show();
 
   // Update with toolchain info asynchronously

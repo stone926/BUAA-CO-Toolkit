@@ -66,6 +66,18 @@ describe('parseMips', () => {
   });
 
   describe('directive validation — boundary cases', () => {
+    it('allows the P7 fixed exception handler entry', () => {
+      const text = '.text\nmain:\n    syscall\n.ktext 0x4180\n    eret';
+      const result = parseMips(doc(text), settings({ project: { profile: 'P7' } }));
+      expect(diagCodes(result)).not.toContain('co-section-address');
+    });
+
+    it('keeps section address diagnostics for ordinary text segments', () => {
+      const text = '.text 0x4180\nmain:\n    nop';
+      const result = parseMips(doc(text), settings({ project: { profile: 'P7' } }));
+      expect(diagCodes(result)).toContain('co-section-address');
+    });
+
     it('accepts .byte with valid values', () => {
       const text = '.data\n    .byte 1, 2, 3';
       const result = parseMips(doc(text), settings());

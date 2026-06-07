@@ -276,7 +276,7 @@ endmodule
   // 创建 testbench
   const tbPath = path.join(rootPath, 'test', `${topModule}_tb.v`);
   if (!fs.existsSync(tbPath)) {
-    const tbTemplate = buildWizardTestbench(topText, topPath, topModule, `${topModule}_tb`);
+    const tbTemplate = buildWizardTestbench(topText, topPath, topModule, `${topModule}_tb`, profile);
     fs.writeFileSync(tbPath, tbTemplate, 'utf8');
   }
 }
@@ -300,12 +300,12 @@ function isCpuVerilogProfile(profile: ProjectProfile): boolean {
   return profile === 'P4' || profile === 'P5' || profile === 'P6' || profile === 'P7';
 }
 
-function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string): string {
+function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string, profile: ProjectProfile): string {
   const document = TextDocument.create(vscode.Uri.file(topPath).toString(), 'verilog', 1, topText);
   const parsed = parseVerilog(document, defaultCoSettings, false);
   const module = parsed.modules.find((candidate) => candidate.name === topModule) ?? parsed.modules[0];
   if (module) {
-    return buildTestbench(module, tbName);
+    return buildTestbench(module, tbName, { profile });
   }
   return `\`timescale 1ns / 1ps
 

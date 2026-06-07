@@ -48,17 +48,22 @@ const cpuProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
 
 const defaultInstructionSets: Record<CpuProfile, string[]> = {
   P3: ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'nop'],
-  P4: ['addu', 'subu', 'ori', 'lui', 'lw', 'sw', 'beq', 'j', 'jal', 'jr'],
-  P5: ['addu', 'subu', 'addiu', 'ori', 'lui', 'lw', 'sw', 'beq', 'bne', 'j', 'jal', 'jr', 'sll', 'srl', 'slt'],
+  P4: ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'jal', 'jr', 'nop'],
+  P5: ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'jal', 'jr', 'nop'],
   P6: [
-    'addu', 'subu', 'addiu', 'ori', 'lui', 'lw', 'sw', 'lb', 'lbu', 'lh', 'lhu', 'sb', 'sh',
-    'beq', 'bne', 'j', 'jal', 'jr', 'sll', 'srl', 'sra', 'slt', 'mult', 'multu', 'div', 'divu',
-    'mfhi', 'mflo', 'mthi', 'mtlo'
+    'add', 'sub', 'and', 'or', 'slt', 'sltu', 'lui',
+    'addi', 'andi', 'ori',
+    'lb', 'lh', 'lw', 'sb', 'sh', 'sw',
+    'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
+    'beq', 'bne', 'jal', 'jr'
   ],
   P7: [
-    'addu', 'subu', 'addiu', 'ori', 'lui', 'lw', 'sw', 'lb', 'lbu', 'lh', 'lhu', 'sb', 'sh',
-    'beq', 'bne', 'j', 'jal', 'jr', 'sll', 'srl', 'sra', 'slt', 'mult', 'multu', 'div', 'divu',
-    'mfhi', 'mflo', 'mthi', 'mtlo', 'mfc0', 'mtc0', 'teqi', 'tnei', 'tgei', 'tlti'
+    'nop', 'add', 'sub', 'and', 'or', 'slt', 'sltu', 'lui',
+    'addi', 'andi', 'ori',
+    'lb', 'lh', 'lw', 'sb', 'sh', 'sw',
+    'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
+    'beq', 'bne', 'jal', 'jr',
+    'mfc0', 'mtc0', 'eret', 'syscall'
   ]
 };
 
@@ -74,6 +79,7 @@ const supportedMnemonics = new Set([
   'movn', 'movz',
   'mul', 'madd', 'maddu', 'msub', 'msubu', 'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
   'mfc0', 'mtc0',
+  'eret', 'syscall',
   'teq', 'tne', 'tge', 'tgeu', 'tlt', 'tltu',
   'teqi', 'tnei', 'tgei', 'tgeiu', 'tlti', 'tltiu',
   'nop'
@@ -110,7 +116,11 @@ const readRegisters = ['$0', ...writableRegisters];
 const dataByteLength = 1024;
 const dataWordCount = dataByteLength / 4;
 const textBaseAddress = 0x3000;
+const p7ExceptionHandlerAddress = 0x4180;
+const p7ExceptionHandlerInstructionIndex = (p7ExceptionHandlerAddress - textBaseAddress) / 4;
+const p7MainTerminatorInstructionCount = 2;
 const poisonRegister = '$26';
+const p7ExceptionHandlerRequiredMnemonics = ['mfc0', 'addi', 'mtc0', 'eret'] as const;
 
 export class BuiltinAsmGeneratorError extends Error {
   constructor(message: string) {
@@ -198,11 +208,39 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
   }
 
   const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText);
+  validateBuiltinGeneratorRequest(instructionSet, count);
   const seed = options.seed && options.seed.trim()
     ? options.seed.trim()
     : `${Date.now()}-${Math.floor(Math.random() * 0xffffffff).toString(16)}`;
   const generator = new ProgramGenerator(instructionSet.profile, instructionSet.mnemonics, count, seed, options.generatedAt ?? new Date());
   return generator.generate();
+}
+
+function validateBuiltinGeneratorRequest(instructionSet: BuiltinInstructionSet, count: number): void {
+  const allowed = new Set(instructionSet.mnemonics);
+  if (instructionSet.profile === 'P7') {
+    const p7MaxCount = p7CourseInstructionCountMaximum();
+    if (count > p7MaxCount) {
+      throw new BuiltinAsmGeneratorError(`P7 generated instruction count must be at most ${p7MaxCount}, because 0x${p7ExceptionHandlerAddress.toString(16)} is reserved for the course exception entry.`);
+    }
+  }
+  if (allowed.has('eret') && !allowed.has('syscall')) {
+    throw new BuiltinAsmGeneratorError('Built-in ASM generator emits eret only inside the P7 exception handler; include syscall to exercise it.');
+  }
+  if (!allowed.has('syscall')) {
+    return;
+  }
+  if (instructionSet.profile !== 'P7') {
+    throw new BuiltinAsmGeneratorError('Built-in ASM generator supports syscall only for P7.');
+  }
+  const missing = p7ExceptionHandlerRequiredMnemonics.filter((mnemonic) => !allowed.has(mnemonic));
+  if (missing.length) {
+    throw new BuiltinAsmGeneratorError(`Built-in ASM generator syscall support requires P7 exception handler instruction(s): ${missing.join(', ')}.`);
+  }
+}
+
+function p7CourseInstructionCountMaximum(): number {
+  return p7ExceptionHandlerInstructionIndex - p7MainTerminatorInstructionCount;
 }
 
 class ProgramGenerator {
@@ -212,6 +250,7 @@ class ProgramGenerator {
   private readonly targetCount: number;
   private readonly seed: string;
   private readonly generatedAt: Date;
+  private readonly p7ExceptionHandlerEnabled: boolean;
   private readonly regs = new Map<string, number>();
   private readonly memory = new Map<number, number>();
   private readonly lines: string[] = [];
@@ -231,6 +270,7 @@ class ProgramGenerator {
     this.targetCount = targetCount;
     this.seed = seed;
     this.generatedAt = generatedAt;
+    this.p7ExceptionHandlerEnabled = profile === 'P7' && this.allowed.has('syscall');
     this.rng = new Random(hashSeed(`${profile}:${targetCount}:${seed}`));
     this.nextMduProbeMode = this.rng.chance(0.5) ? 'busy' : 'ready';
 
@@ -297,8 +337,24 @@ class ProgramGenerator {
       '.globl main',
       'main:',
       ...this.lines,
+      ...this.renderP7ExceptionHandler(),
       ''
     ].join('\n');
+  }
+
+  private renderP7ExceptionHandler(): string[] {
+    if (!this.p7ExceptionHandlerEnabled) {
+      return [];
+    }
+    return [
+      '.ktext 0x4180',
+      '_co_exception_handler:',
+      '    mfc0 $27, $14',
+      '    addi $27, $27, 4',
+      '    mtc0 $27, $14',
+      '    eret',
+      '    addi $27, $0, 0x1234'
+    ];
   }
 
   private pickCoverageMnemonic(queue: string[]): string | undefined {
@@ -387,6 +443,12 @@ class ProgramGenerator {
     }
     if (cp0Mnemonics.has(mnemonic)) {
       return this.profile === 'P7';
+    }
+    if (mnemonic === 'syscall') {
+      return this.p7ExceptionHandlerEnabled;
+    }
+    if (mnemonic === 'eret') {
+      return false;
     }
     return true;
   }
@@ -499,6 +561,11 @@ class ProgramGenerator {
       case 'mtc0':
         this.emitCp0(mnemonic);
         return;
+      case 'syscall':
+        this.emitSyscall();
+        return;
+      case 'eret':
+        throw new BuiltinAsmGeneratorError('Built-in ASM generator emits eret only inside the P7 exception handler.');
       case 'teq':
       case 'tne':
       case 'tge':
@@ -783,9 +850,13 @@ class ProgramGenerator {
       return;
     }
 
-    const rt = this.chooseReadRegister();
     const cp0 = this.rng.pick(['$12', '$14']);
+    const rt = cp0 === '$12' ? '$0' : this.chooseReadRegister();
     this.emit(mnemonic, `mtc0 ${rt}, ${cp0}`);
+  }
+
+  private emitSyscall(): void {
+    this.emit('syscall', 'syscall');
   }
 
   private emitTrapRegister(mnemonic: string): void {

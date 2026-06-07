@@ -5,6 +5,35 @@ import {
 } from '../../courseTesting/builtinAsmGenerator';
 
 describe('built-in ASM generator', () => {
+  it('uses the course default instruction set for each CPU profile', () => {
+    const defaults = new Map([
+      ['P3', ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'nop']],
+      ['P4', ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'jal', 'jr', 'nop']],
+      ['P5', ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'jal', 'jr', 'nop']],
+      ['P6', [
+        'add', 'sub', 'and', 'or', 'slt', 'sltu', 'lui',
+        'addi', 'andi', 'ori',
+        'lb', 'lh', 'lw', 'sb', 'sh', 'sw',
+        'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
+        'beq', 'bne', 'jal', 'jr'
+      ]],
+      ['P7', [
+        'nop', 'add', 'sub', 'and', 'or', 'slt', 'sltu', 'lui',
+        'addi', 'andi', 'ori',
+        'lb', 'lh', 'lw', 'sb', 'sh', 'sw',
+        'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
+        'beq', 'bne', 'jal', 'jr',
+        'mfc0', 'mtc0', 'eret', 'syscall'
+      ]]
+    ] as const);
+
+    for (const [profile, mnemonics] of defaults) {
+      const resolved = resolveBuiltinInstructionSet(profile, '');
+      expect(resolved.mnemonics).toEqual(mnemonics);
+      expect(resolved.defaulted).toBe(true);
+    }
+  });
+
   it('parses comma and whitespace separated real instruction names', () => {
     const resolved = resolveBuiltinInstructionSet('P5', 'addu, subu   ori\nlw\t sw beq');
 
@@ -93,9 +122,71 @@ describe('built-in ASM generator', () => {
     expect(mduWriteViolationsDuringStartOrBusy(mnemonics)).toEqual([]);
   });
 
-  it('rejects exception-only instructions that the current trace path cannot load safely', () => {
-    expect(() => resolveBuiltinInstructionSet('P7', 'syscall')).toThrow(/not supported by the built-in generator/);
-    expect(() => resolveBuiltinInstructionSet('P7', 'eret')).toThrow(/not supported by the built-in generator/);
+  it('generates P7 syscall tests with a kernel exception handler', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 96,
+      seed: 'p7-default'
+    });
+    const mainMnemonics = executableMnemonics(beforeKernelText(result.text));
+
+    expect(result.instructionCount).toBe(96);
+    expect(mainMnemonics).toHaveLength(96);
+    expect(mainMnemonics).toContain('syscall');
+    expect(result.text).toContain('.ktext 0x4180');
+    expect(result.text).toContain('mfc0 $27, $14');
+    expect(result.text).toContain('mtc0 $27, $14');
+    expect(result.text).toContain('eret');
+  });
+
+  it('allows the configured P7 default count but rejects programs that would overlap the exception entry', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 1000,
+      seed: 'p7-default-count'
+    });
+
+    expect(result.instructionCount).toBe(1000);
+    expect(() => generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 1119,
+      seed: 'p7-too-long'
+    })).toThrow(/at most 1118/);
+    expect(() => generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'nop',
+      instructionCount: 1119,
+      seed: 'p7-nop-too-long'
+    })).toThrow(/at most 1118/);
+  });
+
+  it('does not apply the P7 instruction count rule to earlier profiles', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'nop',
+      instructionCount: 1200,
+      seed: 'p6-long'
+    });
+
+    expect(result.instructionCount).toBe(1200);
+  });
+
+  it('rejects P7 exception instruction sets that cannot build a returning handler', () => {
+    expect(() => generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'eret',
+      instructionCount: 4,
+      seed: 'eret-only'
+    })).toThrow(/include syscall/);
+    expect(() => generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'syscall',
+      instructionCount: 4,
+      seed: 'syscall-only'
+    })).toThrow(/requires P7 exception handler/);
   });
 });
 
@@ -128,6 +219,10 @@ function executableLines(text: string): string[] {
     }
   }
   return result;
+}
+
+function beforeKernelText(text: string): string {
+  return text.split(/^\.ktext\b/m)[0];
 }
 
 function mduReadProbeDistances(mnemonics: string[]): MduReadProbe[] {

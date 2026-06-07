@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, getPython } from './config';
@@ -47,7 +48,11 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
 
   if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
     const mars = getMarsJar(resource);
-    checks.push(fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为课程专用 P7 MARS jar' : '请设置 co.toolchain.mars'));
+    const marsFile = fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactDataAtZero dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
+    checks.push(marsFile);
+    if (marsFile.ok) {
+      checks.push(...await marsCapabilityChecks(output, resource, cwd, mars, profile));
+    }
   }
 
   if (checkAll || requiredTools.has('logisim')) {
@@ -72,6 +77,82 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
   }
 
   return checks;
+}
+
+async function marsCapabilityChecks(
+  output: vscode.OutputChannel,
+  resource: vscode.Uri | undefined,
+  cwd: string,
+  mars: string,
+  profile: string
+): Promise<ToolDetection[]> {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-mars-check-'));
+  try {
+    const asm = path.join(tempDir, 'capability.asm');
+    fs.writeFileSync(asm, '.text\nori $1, $0, 1\nsw $1, 0($0)\n', 'utf8');
+    const java = getJava(resource);
+    if (profile === 'P7') {
+      return [
+        await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactDataAtZero')
+      ];
+    }
+    const trace = await runTool(java, ['-jar', mars, 'nc', 'mc', 'CompactDataAtZero', 'db', 'coL1', asm], {
+      cwd,
+      output,
+      resource,
+      timeoutMs: 10000
+    });
+    const checks: ToolDetection[] = [traceCapabilityCheck(trace)];
+    checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'FixedCompactLargeText'));
+    checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactLargeText'));
+    return checks;
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+}
+
+function traceCapabilityCheck(result: Awaited<ReturnType<typeof runTool>>): ToolDetection {
+  const output = `${result.stdout}\n${result.stderr}`;
+  const unsupported = /Invalid Command Argument:\s*coL1/i.test(output);
+  const hasTrace = /@(?:0x)?[0-9a-f]{4,8}:\s*(?:\$|\*)/i.test(output);
+  return {
+    name: 'MARS coL1',
+    ok: result.ok && !unsupported && hasTrace,
+    detail: firstLine(output) || '无 trace 输出',
+    suggestion: result.ok && !unsupported && hasTrace ? undefined : '请使用 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 等支持 coL1 的修改版 Mars'
+  };
+}
+
+async function memoryConfigurationCapabilityCheck(
+  output: vscode.OutputChannel,
+  resource: vscode.Uri | undefined,
+  cwd: string,
+  java: string,
+  mars: string,
+  asm: string,
+  tempDir: string,
+  memoryConfiguration: 'CompactDataAtZero' | 'FixedCompactLargeText' | 'CompactLargeText'
+): Promise<ToolDetection> {
+  const outFile = path.join(tempDir, `${memoryConfiguration}.txt`);
+  const result = await runTool(java, ['-jar', mars, 'nc', 'mc', memoryConfiguration, 'db', 'a', 'dump', '.text', 'HexText', outFile, asm], {
+    cwd,
+    output,
+    resource,
+    timeoutMs: 10000
+  });
+  const combined = `${result.stdout}\n${result.stderr}`;
+  const unsupported = /Invalid memory configuration/i.test(combined);
+  const dumped = fs.existsSync(outFile) && fs.readFileSync(outFile, 'utf8').trim().length > 0;
+  return {
+    name: `MARS ${memoryConfiguration}`,
+    ok: result.ok && !unsupported && dumped,
+    detail: firstLine(combined) || (dumped ? 'dump ok' : '未生成 HexText'),
+    suggestion: result.ok && !unsupported && dumped ? undefined : `请使用支持 mc ${memoryConfiguration} 的修改版 Mars`
+  };
 }
 
 function fileCheck(name: string, file: string, suggestion: string): ToolDetection {

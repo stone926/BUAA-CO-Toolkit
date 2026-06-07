@@ -1,7 +1,7 @@
 {
   "name": "buaa-co-extension",
   "displayName": "BUAA CO Toolkit",
-  "description": "北航计算机组成实验 VSCode 工具箱：支持 Logisim、MARS/MIPS 汇编和 Verilog",
+  "description": "北航计算机组成实验 VSCode 工具箱：支持 Logisim、MARS MIPS 汇编和 Verilog",
   "version": "0.1.0",
   "publisher": "buaa-co",
   "license": "MIT",
@@ -48,6 +48,8 @@
     "onCommand:co.test.runBatchTraceTests",
     "onCommand:co.test.runGeneratedTraceTests",
     "onCommand:co.test.startContinuousGeneratedTraceTests",
+    "onCommand:co.test.generateAsmTests",
+    "onCommand:co.test.generateAndDumpAsmTests",
     "onCommand:co.test.stopContinuousTests",
     "onCommand:co.test.prepareLogisimCases",
     "onCommand:co.test.prepareGeneratedLogisimCases",
@@ -352,19 +354,19 @@
       },
       {
         "command": "co.mips.runCurrentFile",
-        "title": "CO: MIPS 运行当前文件"
+        "title": "CO: MARS 运行当前文件"
       },
       {
         "command": "co.mips.runAndCapture",
-        "title": "CO: MIPS 运行并捕获输出"
+        "title": "CO: MARS 运行并捕获输出"
       },
       {
         "command": "co.mips.runWithStdinFile",
-        "title": "CO: MIPS 带标准输入运行"
+        "title": "CO: MARS 带标准输入运行"
       },
       {
         "command": "co.mips.runInTerminal",
-        "title": "CO: MIPS 在终端中运行",
+        "title": "CO: MARS 在终端中运行",
         "icon": {
           "light": "icons/run-terminal-light.svg",
           "dark": "icons/run-terminal-dark.svg"
@@ -372,7 +374,7 @@
       },
       {
         "command": "co.mips.dumpText",
-        "title": "CO: MIPS 导出文本段",
+        "title": "CO: ASM 导出文本段",
         "icon": {
           "light": "icons/dump-text-light.svg",
           "dark": "icons/dump-text-dark.svg"
@@ -380,7 +382,7 @@
       },
       {
         "command": "co.mips.dumpKernelText",
-        "title": "CO: MIPS 导出内核文本段"
+        "title": "CO: ASM 导出内核文本段"
       },
       {
         "command": "co.verilog.generateTestbench",
@@ -449,6 +451,14 @@
       {
         "command": "co.test.startContinuousGeneratedTraceTests",
         "title": "CO: 启动持续生成的课程 Trace 测试"
+      },
+      {
+        "command": "co.test.generateAsmTests",
+        "title": "CO: 生成 ASM 测试点"
+      },
+      {
+        "command": "co.test.generateAndDumpAsmTests",
+        "title": "CO: 生成并导出机器码测试点"
       },
       {
         "command": "co.test.stopContinuousTests",
@@ -602,6 +612,12 @@
           "command": "co.test.startContinuousGeneratedTraceTests"
         },
         {
+          "command": "co.test.generateAsmTests"
+        },
+        {
+          "command": "co.test.generateAndDumpAsmTests"
+        },
+        {
           "command": "co.test.stopContinuousTests"
         },
         {
@@ -616,7 +632,7 @@
       ]
     },
     "configuration": {
-      "title": "北航计算机组成工具箱",
+      "title": "BUAA CO Toolkit",
       "properties": {
         "co.project.profile": {
           "type": "string",
@@ -672,12 +688,12 @@
         "co.toolchain.mars": {
           "type": "string",
           "default": "",
-          "description": "Mars 的 jar 包路径"
+          "description": "Mars jar 包路径。非 P7 课程 trace 对拍需要支持 coL1 和 large text 内存配置"
         },
         "co.toolchain.marsP7": {
           "type": "string",
           "default": "",
-          "description": "P7 Mars 的 jar 包路径"
+          "description": "P7 Mars 的 jar 包路径。P7 仅用于 ASM 运行和机器码 dump，dump 内存配置会限制为 CompactDataAtZero"
         },
         "co.toolchain.logisim": {
           "type": "string",
@@ -706,8 +722,8 @@
         },
         "co.mips.memoryConfiguration": {
           "type": "string",
-          "default": "CompactDataAtZero",
-          "description": "MARS 内存模式"
+          "default": "auto",
+          "description": "MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用课程要求的 CompactDataAtZero"
         },
         "co.mips.extraArgs": {
           "type": "array",
@@ -920,10 +936,17 @@
         },
         "co.test.builtinGenerator.instructionCount": {
           "type": "number",
-          "default": 1000,
+          "default": 4000,
           "minimum": 1,
           "maximum": 4000,
-          "description": "内置 ASM 生成器为每个 ASM 文件生成的指令数"
+          "description": "内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P7 下此设置被忽略，P7 使用 co.test.builtinGenerator.p7InstructionCount"
+        },
+        "co.test.builtinGenerator.p7InstructionCount": {
+          "type": "number",
+          "default": 1118,
+          "minimum": 1,
+          "maximum": 1118,
+          "description": "P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。课程异常入口固定在 0x4180，因此最大为 1118 条，以保留停机自环并避免覆盖处理程序"
         },
         "co.test.continuousIntervalMs": {
           "type": "number",

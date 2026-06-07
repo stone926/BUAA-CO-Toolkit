@@ -40,6 +40,17 @@ MARS 4.5
     });
   });
 
+  it('parses modified MARS coL1 register spacing', () => {
+    const event = parseCpuTraceLine('@00003000: $ 1 <= 00000001');
+
+    expect(event).toMatchObject({
+      pc: '00003000',
+      kind: 'grf',
+      target: '1',
+      value: '00000001'
+    });
+  });
+
   it('keeps unknown simulator values parseable for comparison reports', () => {
     const event = parseCpuTraceLine('140@00003008: $2 <= xxxxxxxx');
 

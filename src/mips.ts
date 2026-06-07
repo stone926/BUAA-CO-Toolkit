@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -6,9 +8,10 @@ import {
   getMarsJar,
   getMemoryConfiguration,
   getMipsExtraArgs,
+  getProfile,
   useDelayedBranching
 } from './config';
-import { basenameNoExt, dirname, ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { basenameNoExt, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, runTool } from './process';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
@@ -20,6 +23,9 @@ export interface MarsRunOptions {
   revealOutput?: boolean;
   stdin?: string;
   stdinSource?: vscode.Uri;
+  courseTrace?: boolean;
+  traceOutput?: boolean;
+  dumpOutputFile?: vscode.Uri;
 }
 
 export interface MarsRunOutput {
@@ -123,23 +129,41 @@ export async function runMarsFile(
   }
   const java = getJava(asmUri);
   const cwd = dirname(asmUri);
-  const args = buildMarsArgs(asmUri, mars, mode);
+  const memoryConfiguration = getMemoryConfiguration(asmUri);
+  const args = buildMarsArgs(asmUri, mars, mode, options, memoryConfiguration);
 
   let outputFile: vscode.Uri | undefined;
   if (mode === 'dumpText') {
-    outputFile = vscode.Uri.file(path.join(cwd, getMachineCode(asmUri)));
+    outputFile = options.dumpOutputFile ?? vscode.Uri.file(path.join(cwd, getMachineCode(asmUri)));
+    await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
     args.push('a', 'dump', '.text', 'HexText', outputFile.fsPath, asmUri.fsPath);
   } else if (mode === 'dumpKernel') {
-    outputFile = vscode.Uri.file(path.join(cwd, `${basenameNoExt(asmUri)}.kernel.txt`));
+    outputFile = options.dumpOutputFile ?? vscode.Uri.file(path.join(cwd, `${basenameNoExt(asmUri)}.kernel.txt`));
+    await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
     args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', outputFile.fsPath, asmUri.fsPath);
   }
 
-  const result = await runTool(java, args, {
+  const setupError = marsRunSetupError(asmUri, mode, options, memoryConfiguration);
+  if (setupError) {
+    services.output.appendLine(setupError);
+    const result = localMarsRunFailure(java, args, cwd, setupError);
+    if (showMessages) {
+      vscode.window.showErrorMessage(setupError);
+    }
+    return { result, outputFile };
+  }
+
+  let result = await runTool(java, args, {
     cwd,
     output: services.output,
     resource: asmUri,
     stdin: options.stdin
   });
+  result = withMarsCompatibilityDiagnostics(result, services, mode, options, memoryConfiguration);
+
+  if (mode === 'dumpText' && result.ok && outputFile && getProfile(asmUri) === 'P7') {
+    result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result);
+  }
 
   if (mode === 'run') {
     const outDir = marsRunOutputDirectory(asmUri);
@@ -168,6 +192,170 @@ export async function runMarsFile(
   return { result, outputFile };
 }
 
+function localMarsRunFailure(command: string, args: readonly string[], cwd: string, message: string): RunResult {
+  return {
+    ok: false,
+    exitCode: null,
+    commandLine: commandLine(command, args),
+    cwd,
+    stdout: '',
+    stderr: message,
+    timedOut: false
+  };
+}
+
+function marsRunSetupError(
+  asmUri: vscode.Uri,
+  mode: MarsRunMode,
+  options: MarsRunOptions,
+  memoryConfiguration: string
+): string | undefined {
+  const profile = getProfile(asmUri);
+  if (profile === 'P7') {
+    if ((mode === 'dumpText' || mode === 'dumpKernel' || isCourseTraceMarsRun(mode, options)) && memoryConfiguration !== p7CourseMemoryConfiguration) {
+      return `P7 机器码 dump 必须使用 MARS 内存配置 ${p7CourseMemoryConfiguration}。${memoryConfiguration} 会改变异常入口或让程序顺序落入 0x4180 处理程序，不适配课程 CPU。`;
+    }
+    return undefined;
+  }
+  if (!isCourseTraceMarsRun(mode, options)) {
+    return undefined;
+  }
+  if (!isLargeTextMemoryConfiguration(memoryConfiguration)) {
+    return `非 P7 自动化测试应使用 MARS 内存配置 FixedCompactLargeText 或 CompactLargeText，以支持更长的随机机器码。当前配置为 ${memoryConfiguration}。`;
+  }
+  return undefined;
+}
+
+function isCourseTraceMarsRun(mode: MarsRunMode, options: MarsRunOptions): boolean {
+  return options.courseTrace === true || options.traceOutput === true;
+}
+
+function withMarsCompatibilityDiagnostics(
+  result: RunResult,
+  services: AppServices,
+  mode: MarsRunMode,
+  options: MarsRunOptions,
+  memoryConfiguration: string
+): RunResult {
+  const message = marsCompatibilityMessage(result, mode, options, memoryConfiguration);
+  if (!message) {
+    return result;
+  }
+  services.output.appendLine(message);
+  return {
+    ...result,
+    ok: false,
+    stderr: result.stderr ? `${result.stderr}\n${message}` : message
+  };
+}
+
+function marsCompatibilityMessage(
+  result: RunResult,
+  mode: MarsRunMode,
+  options: MarsRunOptions,
+  memoryConfiguration: string
+): string | undefined {
+  const output = `${result.stdout}\n${result.stderr}`;
+  if (options.traceOutput && /Invalid Command Argument:\s*coL1/i.test(output)) {
+    return '当前 MARS 不支持 coL1 trace 参数。课程自动对拍默认需要 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 修改版 Mars，请检查 co.toolchain.mars / co.toolchain.marsP7。';
+  }
+  const memoryMatch = /Invalid memory configuration:\s*([A-Za-z0-9_]+)/i.exec(output);
+  if (memoryMatch) {
+    const rejected = memoryMatch[1] || memoryConfiguration;
+    if (isLargeTextMemoryConfiguration(rejected)) {
+      return `当前 MARS 不支持 ${rejected} 内存配置。非 P7 自动化测试默认使用 large text 配置以支持超长机器码，请改用修改版 Mars。`;
+    }
+    if (mode === 'dumpText' || mode === 'run') {
+      return `当前 MARS 不支持 ${rejected} 内存配置，请检查 co.mips.memoryConfiguration 或更换修改版 Mars。`;
+    }
+  }
+  return undefined;
+}
+
+async function mergeP7KernelTextDump(
+  services: AppServices,
+  asmUri: vscode.Uri,
+  java: string,
+  mars: string,
+  cwd: string,
+  textOutputFile: vscode.Uri,
+  previousResult: RunResult
+): Promise<RunResult> {
+  const tempDirPath = fs.mkdtempSync(path.join(os.tmpdir(), 'co-p7-ktext-'));
+  const tempDir = vscode.Uri.file(tempDirPath);
+  const kernelOutputFile = vscode.Uri.file(path.join(tempDir.fsPath, `${basenameNoExt(asmUri)}.kernel-merge.txt`));
+  const args = buildMarsArgs(asmUri, mars, 'dumpKernel', {}, p7CourseMemoryConfiguration);
+  args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
+
+  const kernelResult = await runTool(java, args, {
+    cwd,
+    output: services.output,
+    resource: asmUri
+  });
+  if (!kernelResult.ok) {
+    return kernelResult;
+  }
+
+  try {
+    if (!await workspaceFileExists(kernelOutputFile)) {
+      return previousResult;
+    }
+    const textLines = machineCodeLines(await readTextFile(textOutputFile));
+    const kernelLines = machineCodeLines(await readTextFile(kernelOutputFile));
+    if (!kernelLines.length) {
+      return previousResult;
+    }
+
+    const maxTextLinesBeforeStopLoop = p7KernelTextStartIndex - 2;
+    if (textLines.length > maxTextLinesBeforeStopLoop) {
+      const message = `P7 机器码导出失败：用户文本段已有 ${textLines.length} 条指令，无法在 0x${p7KernelTextBaseAddress.toString(16)} 异常入口前插入安全停机自环。`;
+      services.output.appendLine(message);
+      return {
+        ...previousResult,
+        ok: false,
+        exitCode: null,
+        stderr: previousResult.stderr ? `${previousResult.stderr}\n${message}` : message,
+        timedOut: false
+      };
+    }
+
+    const merged = [...textLines, mipsSelfBranchHex, mipsNopHex];
+    while (merged.length < p7KernelTextStartIndex) {
+      merged.push(mipsNopHex);
+    }
+    for (let i = 0; i < kernelLines.length; i++) {
+      merged[p7KernelTextStartIndex + i] = kernelLines[i];
+    }
+    await writeTextFile(textOutputFile, `${merged.join('\n')}\n`);
+    services.output.appendLine(`已合并 P7 内核文本段到 ${textOutputFile.fsPath}`);
+    return previousResult;
+  } finally {
+    try {
+      await vscode.workspace.fs.delete(kernelOutputFile, { useTrash: false });
+    } catch {
+      // Best-effort cleanup only.
+    }
+    try {
+      fs.rmSync(tempDirPath, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+}
+
+function machineCodeLines(text: string): string[] {
+  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+async function workspaceFileExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function marsRunOutputDirectory(asmUri: vscode.Uri): vscode.Uri {
   const folder = workspaceFolderFor(asmUri);
   const baseDir = folder?.uri.fsPath ?? dirname(asmUri);
@@ -183,16 +371,41 @@ function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): strin
   return `${asmName}.${sanitizeFileStem(inputName)}.mars.out`;
 }
 
-function buildMarsArgs(asmUri: vscode.Uri, mars: string, mode: MarsRunMode): string[] {
-  const args = ['-jar', mars, 'nc', 'mc', getMemoryConfiguration(asmUri)];
+const p7UserTextBaseAddress = 0x3000;
+const p7KernelTextBaseAddress = 0x4180;
+const p7KernelTextStartIndex = (p7KernelTextBaseAddress - p7UserTextBaseAddress) / 4;
+const p7CourseMemoryConfiguration = 'CompactDataAtZero';
+const largeTextMemoryConfigurations = new Set(['FixedCompactLargeText', 'CompactLargeText']);
+const mipsNopHex = '00000000';
+const mipsSelfBranchHex = '1000ffff';
+
+function buildMarsArgs(
+  asmUri: vscode.Uri,
+  mars: string,
+  mode: MarsRunMode,
+  options: MarsRunOptions = {},
+  memoryConfiguration = getMemoryConfiguration(asmUri)
+): string[] {
+  const args = ['-jar', mars, 'nc', 'mc', memoryConfiguration];
   if (useDelayedBranching(asmUri)) {
     args.push('db');
   }
   args.push(...getMipsExtraArgs(asmUri));
+  if (mode === 'run' && options.traceOutput && !hasMarsArg(args, 'coL1')) {
+    args.push('coL1');
+  }
   if (mode === 'run') {
     args.push(asmUri.fsPath);
   }
   return args;
+}
+
+function hasMarsArg(args: readonly string[], value: string): boolean {
+  return args.some((arg) => arg.toLowerCase() === value.toLowerCase());
+}
+
+function isLargeTextMemoryConfiguration(value: string): boolean {
+  return largeTextMemoryConfigurations.has(value);
 }
 
 function sanitizeFileStem(value: string): string {

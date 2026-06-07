@@ -4,6 +4,7 @@ import { compareTraces, TraceDiffEntry, TraceDiffResult } from './language/mips/
 import { CpuTraceEvent, parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
 import { readTextFile, workspaceFolderFor } from './fsUtil';
+import { getProfile } from './config';
 import { AppServices } from './types';
 import { pickOneFile } from './workflowInputs';
 
@@ -32,6 +33,9 @@ export function registerTraceCompare(context: vscode.ExtensionContext, services:
 }
 
 async function compareTraceFiles(services: AppServices): Promise<void> {
+  if (rejectP7TraceCompare()) {
+    return;
+  }
   const mars = await pickOneFile('选择 MARS 答案 Trace 输出', {
     Text: ['txt', 'out', 'log'],
     All: ['*']
@@ -50,6 +54,9 @@ async function compareTraceFiles(services: AppServices): Promise<void> {
 }
 
 async function compareLatestOutputs(services: AppServices): Promise<void> {
+  if (rejectP7TraceCompare()) {
+    return;
+  }
   const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri);
   if (!folder) {
     vscode.window.showErrorMessage('比较 Trace 输出前请先打开一个工作区文件夹');
@@ -67,6 +74,14 @@ async function compareLatestOutputs(services: AppServices): Promise<void> {
     return;
   }
   await compareTracePair(pair, services);
+}
+
+function rejectP7TraceCompare(resource = vscode.window.activeTextEditor?.document.uri): boolean {
+  if (getProfile(resource) !== 'P7') {
+    return false;
+  }
+  vscode.window.showErrorMessage('P7 不再提供 Trace 对拍。请使用“生成 ASM 测试点”与“MIPS 导出文本段”。');
+  return true;
 }
 
 export async function compareTracePair(

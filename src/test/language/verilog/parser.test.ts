@@ -906,14 +906,39 @@ describe('buildTestbench', () => {
       ]
     });
     const tb = buildTestbench(module, 'mips_tb');
+    expect(tb).toContain('`timescale 1ns/1ps');
+    expect(tb).toContain('module mips_tb;');
+    expect(tb).toContain('mips uut(');
     expect(tb).toContain('reg interrupt;');
-    expect(tb).toContain('interrupt = 0;');
+    expect(tb).toContain('interrupt <= 0;');
     expect(tb).toContain('reg [31:0] inst[0:5119];');
-    expect(tb).toContain('for (i = 0; i < 5120; i = i + 1) begin');
+    expect(tb).toContain('for (i = 0; i < 5120; i = i + 1) data[i] <= 0;');
     expect(tb).toContain('assign i_inst_rdata = inst[((i_inst_addr - 32\'h3000) >> 2) % 5120];');
     expect(tb).toContain('assign m_data_rdata = data[(m_data_addr >> 2) % 5120];');
     expect(tb).toContain('fixed_wdata = data[(m_data_addr >> 2) & 4095];');
     expect(tb).toContain('else if (|m_data_byteen && fixed_addr >> 2 < 4096) begin');
+    expect(tb).toContain('// ----------- For Interrupt -----------');
+    expect(tb).toContain("// parameter target_pc = 32'h00003010;");
+    expect(tb).toMatch(/\/\/\s+if \(\|m_int_byteen && \(m_int_addr & 32'hfffffffc\) == 32'h7f20\) begin/);
+    expect(tb).toMatch(/\/\/\s+interrupt = 1;/);
+    expect(tb).not.toMatch(/^\s*parameter\s+target_pc\b/m);
+    expect(tb).not.toMatch(/^\s*always\s+@\(negedge clk\)\s+begin/m);
     expect(tb).not.toContain('$finish;');
+  });
+
+  it('uses the P7 official testbench when the profile is P7', () => {
+    const module = makeModule({
+      name: 'mips',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'reset', kind: 'input', direction: 'input' })
+      ]
+    });
+    const tb = buildTestbench(module, 'mips_tb', { profile: 'P7' });
+
+    expect(tb).toContain('wire [31:0] macroscopic_pc;');
+    expect(tb).toContain('.interrupt(interrupt),');
+    expect(tb).toContain('reg [31:0] inst[0:5119];');
+    expect(tb).toContain('always #2 clk <= ~clk;');
   });
 });

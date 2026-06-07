@@ -105,7 +105,10 @@ async function generateTestbench(): Promise<void> {
       return;
     }
   }
-  await writeTextFile(tbUri, buildTestbench(target, tbName, { finishDelay: verilogDelayFromSimTime(getSimTime(editor.document.uri)) }));
+  await writeTextFile(tbUri, buildTestbench(target, tbName, {
+    finishDelay: verilogDelayFromSimTime(getSimTime(editor.document.uri)),
+    profile: getProfile(editor.document.uri)
+  }));
   await vscode.window.showTextDocument(tbUri);
 }
 
@@ -266,7 +269,10 @@ async function ensureRunnableTestbench(
   }
 
   const tbUri = vscode.Uri.file(path.join(path.dirname(topDefinition.uri.fsPath), `${configuredTestbench}.v`));
-  await writeTextFile(tbUri, buildTestbench(topDefinition.module, configuredTestbench, { finishDelay: verilogDelayFromSimTime(getSimTime(topDefinition.uri)) }));
+  await writeTextFile(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
+    finishDelay: verilogDelayFromSimTime(getSimTime(topDefinition.uri)),
+    profile: getProfile(topDefinition.uri)
+  }));
   services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
   if (showMessages) {
     vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
@@ -288,7 +294,10 @@ async function ensureActiveModuleTestbench(
     return tbName;
   }
   const tbUri = vscode.Uri.file(path.join(path.dirname(definition.uri.fsPath), `${tbName}.v`));
-  await writeTextFile(tbUri, buildTestbench(definition.module, tbName, { finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)) }));
+  await writeTextFile(tbUri, buildTestbench(definition.module, tbName, {
+    finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)),
+    profile: getProfile(definition.uri)
+  }));
   services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
   if (showMessages) {
     vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);

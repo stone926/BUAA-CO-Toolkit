@@ -7,11 +7,11 @@ VSCode extension for BUAA Computer Organization labs. The first implementation f
 - MIPS ASM language support: highlighting, completion, hover, labels, definitions, diagnostics, formatting, MARS run, MARS run with a stdin file, interactive terminal MARS run, `.text` dump, and kernel text dump.
 - Verilog language support: highlighting, module/signal outline, hover, definitions, implicit-net diagnostics, BUAA CO top-module checks, testbench generation, ISE `.prj/.tcl` generation, and ISim run command.
 - Logisim support: `.circ` file-pattern recognition, circuit/component outline, label diagnostics, MARS `code.txt` to Logisim ROM conversion, machine-code injection into a `.circ` ROM copy, logging text to CSV conversion, and opening circuits with `logisim.jar`. XML editing support is intentionally left to the user's VSCode/XML extensions.
-- Course testing helpers: run a random ASM generator, detect generated ASM files, continuously rerun generated trace tests with a live monitor, prepare P3 Logisim `.circ` copies with injected machine code, run MARS dump + MARS golden output + ISim simulation + trace compare, batch multiple ASM cases with auto-paired stdin files and a JSON summary report, or compare MARS/ISim trace outputs manually from `.co/out/*.mars.out` and `.co/out/*.sim.out`.
+- Course testing helpers: run a random ASM generator, detect generated ASM files, dump generated machine code, continuously rerun generated trace tests with a live monitor for P4-P6, prepare P3 Logisim `.circ` copies with injected machine code, run MARS dump + MARS golden output + ISim simulation + trace compare for P4-P6, batch multiple ASM cases with auto-paired stdin files and a JSON summary report, or compare MARS/ISim trace outputs manually from `.co/out/*.mars.out` and `.co/out/*.sim.out`. P7 intentionally exposes only ASM test generation and machine-code dump, not automatic trace testing or compare.
 
 ## Course Test Flow
 
-The intended CPU test loop is:
+The intended P4-P6 CPU trace test loop is:
 
 1. Write or select a random ASM generator.
 2. Run `CO: Run Generated Course Trace Tests`; `.py`, `.js`, `.jar`, `.bat/.cmd/.exe`, and `.ps1` generators are recognized.
@@ -20,6 +20,10 @@ The intended CPU test loop is:
 5. For P3 Logisim CPUs, use `CO: Prepare Generated Logisim Circuit Cases` to run the generator, MARS-dump each generated ASM, and write injected `.circ` copies plus `.co/logisim/logisim-prep-report.json`. For one-off imports, use `CO: MIPS Dump Text Segment` followed by `CO: Logisim Generate ROM File`, or `CO: Logisim Inject ROM Into Circuit`.
 
 Use `CO: Start Continuous Generated Course Trace Tests` when you want the generator + MARS + ISim + trace compare loop to keep running. It opens a live monitor, streams progress to the BUAA CO output channel, writes `.co/out/continuous-trace-report.json` after each case, and can be stopped with `CO: Stop Continuous Course Tests`. By default the session stops after the first failed or errored iteration; set `co.test.continuousStopOnFailure` to `false` to keep running.
+
+P7 uses `CO: Generate ASM Tests` and `CO: Generate and Dump Machine Code Tests` instead of automatic trace testing. Its built-in generator uses `co.test.builtinGenerator.p7InstructionCount` (default 1118) as the generated main-program instruction count, because the course CPU fixes the exception entry at `0x4180`. P7 dump is restricted to `CompactDataAtZero`; large-text memory modes change that layout or let execution fall into the handler area. P7 Verilog testbench generation uses the official tutorial testbench structure.
+
+Trace tests expect the modified MARS build that supports `coL1` trace output, such as `Toby-Shi-cloud/Mars-with-BUAA-CO-extension`. With `co.mips.memoryConfiguration: "auto"`, P3-P6 trace tests use `FixedCompactLargeText` to allow long generated machine-code files.
 
 For ASM programs that read stdin, use `CO: MIPS Run with Stdin File` for deterministic runs or `CO: MIPS Run in Terminal` for manual interactive input. Full and batch trace tests auto-pair stdin files named like `foo.in`, `foo.input`, `foo.stdin`, `foo.dat`, `foo.case.in`, `foo-case.in`, or `foo_case.in` next to `foo.asm`, including the `input`, `inputs`, `test`, `tests`, and `data` subdirectories.
 
@@ -36,6 +40,7 @@ Set these in VSCode settings as needed:
   "co.toolchain.isePath": "D:/Xilinx/14.7/ISE_DS/ISE",
   "co.toolchain.python": "python",
   "co.project.profile": "P5",
+  "co.mips.memoryConfiguration": "auto",
   "co.project.simTime": "200us"
 }
 ```

@@ -31,9 +31,11 @@ export interface CoProjectConfig {
       enabled?: boolean;
       instructions?: string;
       instructionCount?: number;
+      p7InstructionCount?: number;
     };
   };
   mips?: {
+    memoryConfiguration?: string;
     extraArgs?: string[];
   };
 }

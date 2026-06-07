@@ -123,7 +123,23 @@ export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
 }
 
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
-  return config<string>('mips.memoryConfiguration', 'CompactDataAtZero', resource).trim() || 'CompactDataAtZero';
+  const configured = configuredMemoryConfiguration(resource);
+  if (configured) {
+    return configured;
+  }
+  return getProfile(resource) === 'P7' ? 'CompactDataAtZero' : 'FixedCompactLargeText';
+}
+
+function configuredMemoryConfiguration(resource?: vscode.Uri): string | undefined {
+  const vsValue = inspectedValue<string>('mips.memoryConfiguration', resource)?.trim();
+  if (vsValue && vsValue.toLowerCase() !== 'auto') {
+    return vsValue;
+  }
+  const configValue = getMipsFromConfig(resource)?.memoryConfiguration?.trim();
+  if (configValue && configValue.toLowerCase() !== 'auto') {
+    return configValue;
+  }
+  return undefined;
 }
 
 export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
@@ -176,7 +192,19 @@ export function getBuiltinGeneratorInstructionCount(resource?: vscode.Uri): numb
   if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
     return Math.floor(projectValue);
   }
-  return 80;
+  return 1000;
+}
+
+export function getBuiltinGeneratorP7InstructionCount(resource?: vscode.Uri): number {
+  const configured = inspectedValue<number>('test.builtinGenerator.p7InstructionCount', resource);
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+    return Math.min(Math.floor(configured), 1118);
+  }
+  const projectValue = getTestFromConfig(resource)?.builtinGenerator?.p7InstructionCount;
+  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
+    return Math.min(Math.floor(projectValue), 1118);
+  }
+  return 1118;
 }
 
 export function getContinuousIntervalMs(resource?: vscode.Uri): number {

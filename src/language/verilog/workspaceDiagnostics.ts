@@ -124,7 +124,7 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
   }
 
   if (profile === 'P7') {
-    for (const required of ['CPU', 'Bridge', 'Timer0', 'Timer1']) {
+    for (const required of ['CPU', 'Bridge', 'TC']) {
       if (!hasModuleCaseInsensitive(index, required)) {
         diagnostics.push(makeDiagnostic(topRange, `P7: workspace should contain module '${required}'.`, DiagnosticSeverity.Warning, `p7-module-${required.toLowerCase()}`));
       } else if (!hasInstanceOfModuleCaseInsensitive(index, required) && required.toLowerCase() !== top.name.toLowerCase()) {

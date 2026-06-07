@@ -166,8 +166,14 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         this.createCommandItem('ASM 导出文本段', 'co.mips.dumpText', 'dump')
       );
       if (profile === 'P7' || profile === 'auto') {
-        actionChildren.push(this.createCommandItem('MIPS 导出内核段', 'co.mips.dumpKernelText', 'dump'));
+        actionChildren.push(this.createCommandItem('ASM 导出内核段', 'co.mips.dumpKernelText', 'dump'));
       }
+    }
+    if (this.shouldShowAsmGenerationActions(profile)) {
+      actionChildren.push(
+        this.createCommandItem('生成 ASM 测试点', 'co.test.generateAsmTests', 'file-code'),
+        this.createCommandItem('生成并导出机器码', 'co.test.generateAndDumpAsmTests', 'dump')
+      );
     }
     if (this.shouldShowTraceTestActions(profile)) {
       actionChildren.push(
@@ -307,7 +313,11 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   }
 
   private shouldShowTraceTestActions(profile: ProjectProfile): boolean {
-    return profile === 'auto' || ['P4', 'P5', 'P6', 'P7'].includes(profile);
+    return profile === 'auto' || ['P4', 'P5', 'P6'].includes(profile);
+  }
+
+  private shouldShowAsmGenerationActions(profile: ProjectProfile): boolean {
+    return profile === 'auto' || ['P3', 'P4', 'P5', 'P6', 'P7'].includes(profile);
   }
 
   private isLogisimCircuitFile(uri: vscode.Uri): boolean {
