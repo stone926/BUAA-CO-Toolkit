@@ -1315,9 +1315,9 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
 
 function courseTraceMemoryConfigurationError(profile: ProjectProfile, memoryConfiguration: string): string | undefined {
   if (profile === 'P7') {
-    return memoryConfiguration === 'CompactDataAtZero'
+    return memoryConfiguration === 'CompactLargeText'
       ? undefined
-      : `P7 持续生成测试必须使用 CompactDataAtZero，当前为 ${memoryConfiguration}`;
+      : `P7 持续生成测试必须使用 CompactLargeText，当前为 ${memoryConfiguration}`;
   }
   return memoryConfiguration === 'FixedCompactLargeText' || memoryConfiguration === 'CompactLargeText'
     ? undefined

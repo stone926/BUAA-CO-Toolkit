@@ -127,7 +127,7 @@ export function getMemoryConfiguration(resource?: vscode.Uri): string {
   if (configured) {
     return configured;
   }
-  return getProfile(resource) === 'P7' ? 'CompactDataAtZero' : 'FixedCompactLargeText';
+  return getProfile(resource) === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText';
 }
 
 function configuredMemoryConfiguration(resource?: vscode.Uri): string | undefined {

@@ -48,7 +48,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
 
   if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
     const mars = getMarsJar(resource);
-    const marsFile = fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactDataAtZero dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
+    const marsFile = fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactLargeText dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
     checks.push(marsFile);
     if (marsFile.ok) {
       checks.push(...await marsCapabilityChecks(output, resource, cwd, mars, profile));
@@ -93,7 +93,7 @@ async function marsCapabilityChecks(
     const java = getJava(resource);
     if (profile === 'P7') {
       return [
-        await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactDataAtZero')
+        await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactLargeText')
       ];
     }
     const trace = await runTool(java, ['-jar', mars, 'nc', 'mc', 'CompactDataAtZero', 'db', 'coL1', asm], {

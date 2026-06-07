@@ -368,7 +368,7 @@ function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): strin
 const p7UserTextBaseAddress = 0x3000;
 const p7KernelTextBaseAddress = 0x4180;
 const p7KernelTextStartIndex = (p7KernelTextBaseAddress - p7UserTextBaseAddress) / 4;
-const p7CourseMemoryConfiguration = 'CompactDataAtZero';
+const p7CourseMemoryConfiguration = 'CompactLargeText';
 const largeTextMemoryConfigurations = new Set(['FixedCompactLargeText', 'CompactLargeText']);
 const mipsNopHex = '00000000';
 const mipsSelfBranchHex = '1000ffff';
