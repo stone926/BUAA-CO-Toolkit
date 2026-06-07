@@ -163,16 +163,16 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       this.createCommandItem('ASM 运行', 'co.mips.runCurrentFile', 'play'),
       this.createCommandItem('ASM 带输入运行', 'co.mips.runWithStdinFile', 'terminal'),
       this.createCommandItem('ASM 终端运行', 'co.mips.runInTerminal', 'terminal-powershell'),
-        this.createCommandItem('ASM 导出文本段', 'co.mips.dumpText', 'dump')
+        this.createCommandItem('ASM 导出文本段', 'co.mips.dumpText', 'export')
       );
       if (profile === 'P7' || profile === 'auto') {
-        actionChildren.push(this.createCommandItem('ASM 导出内核段', 'co.mips.dumpKernelText', 'dump'));
+        actionChildren.push(this.createCommandItem('ASM 导出内核段', 'co.mips.dumpKernelText', 'export'));
       }
     }
     if (this.shouldShowAsmGenerationActions(profile)) {
       actionChildren.push(
         this.createCommandItem('生成 ASM 测试点', 'co.test.generateAsmTests', 'file-code'),
-        this.createCommandItem('生成并导出机器码', 'co.test.generateAndDumpAsmTests', 'dump')
+        this.createCommandItem('生成并导出机器码', 'co.test.generateAndDumpAsmTests', 'export')
       );
     }
     if (this.shouldShowTraceTestActions(profile)) {
