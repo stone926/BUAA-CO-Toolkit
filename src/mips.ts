@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -11,7 +9,7 @@ import {
   getProfile,
   useDelayedBranching
 } from './config';
-import { basenameNoExt, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, runTool } from './process';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
@@ -281,7 +279,7 @@ async function mergeP7KernelTextDump(
   textOutputFile: vscode.Uri,
   previousResult: RunResult
 ): Promise<RunResult> {
-  const tempDirPath = fs.mkdtempSync(path.join(os.tmpdir(), 'co-p7-ktext-'));
+  const tempDirPath = coTmpDir(asmUri, 'co-p7-ktext-');
   const tempDir = vscode.Uri.file(tempDirPath);
   const kernelOutputFile = vscode.Uri.file(path.join(tempDir.fsPath, `${basenameNoExt(asmUri)}.kernel-merge.txt`));
   const args = buildMarsArgs(asmUri, mars, 'dumpKernel', {}, p7CourseMemoryConfiguration);
@@ -335,11 +333,7 @@ async function mergeP7KernelTextDump(
     } catch {
       // Best-effort cleanup only.
     }
-    try {
-      fs.rmSync(tempDirPath, { recursive: true, force: true });
-    } catch {
-      // Best-effort cleanup only.
-    }
+    await cleanupCoTmp(tempDirPath);
   }
 }
 

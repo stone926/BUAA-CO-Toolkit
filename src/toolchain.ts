@@ -1,8 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, getPython } from './config';
+import { cleanupCoTmp, coTmpDir } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
 import { ToolDetection } from './types';
@@ -86,7 +86,7 @@ async function marsCapabilityChecks(
   mars: string,
   profile: string
 ): Promise<ToolDetection[]> {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-mars-check-'));
+  const tempDir = coTmpDir(resource, 'co-mars-check-');
   try {
     const asm = path.join(tempDir, 'capability.asm');
     fs.writeFileSync(asm, '.text\nori $1, $0, 1\nsw $1, 0($0)\n', 'utf8');
@@ -107,11 +107,7 @@ async function marsCapabilityChecks(
     checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactLargeText'));
     return checks;
   } finally {
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // Best-effort cleanup only.
-    }
+    await cleanupCoTmp(tempDir);
   }
 }
 

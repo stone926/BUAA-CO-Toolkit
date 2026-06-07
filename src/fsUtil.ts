@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
@@ -40,4 +42,40 @@ export async function readTextFile(uri: vscode.Uri): Promise<string> {
 
 export function toUri(file: string): vscode.Uri {
   return vscode.Uri.file(file);
+}
+
+/**
+ * Return a `.co/tmp/<prefix>XXXXXX` temp directory inside the workspace that
+ * owns `resource`. Falls back to `os.tmpdir()` when no workspace is open.
+ */
+export function coTmpDir(resource: vscode.Uri | undefined, prefix: string): string {
+  const folder = resource
+    ? vscode.workspace.getWorkspaceFolder(resource)
+    : vscode.workspace.workspaceFolders?.[0];
+  const base = folder ? path.join(folder.uri.fsPath, '.co', 'tmp') : os.tmpdir();
+  fs.mkdirSync(base, { recursive: true });
+  return fs.mkdtempSync(path.join(base, prefix));
+}
+
+/**
+ * Best-effort cleanup of a directory created by {@link coTmpDir}.
+ * Removes `dir`, then removes its parent `.co/tmp/` if it became empty.
+ */
+export async function cleanupCoTmp(dir: string): Promise<void> {
+  try {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup only.
+  }
+  const parent = path.dirname(dir);
+  try {
+    if (path.basename(parent) === 'tmp' && path.basename(path.dirname(parent)) === '.co') {
+      const entries = await fs.promises.readdir(parent);
+      if (entries.length === 0) {
+        await fs.promises.rm(parent, { recursive: true, force: true });
+      }
+    }
+  } catch {
+    // Best-effort cleanup only.
+  }
 }
