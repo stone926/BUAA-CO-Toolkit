@@ -842,12 +842,11 @@ class ProgramGenerator {
   private emitBranch(mnemonic: ControlMnemonic): void {
     const label = this.nextLabel('br');
     const operands = this.branchOperands(mnemonic);
-    const canPoison = (
+    const skipPoison = (
       this.remaining() > 1 + this.delaySlotCost() &&
       this.branchWillTake(mnemonic, operands) &&
       this.hasStatefulPoisonCandidate()
     );
-    const skipPoison = canPoison && this.rng.chance(0.75);
 
     this.emit(mnemonic, `${mnemonic} ${operands.join(', ')}, ${label}`);
     if (linkBranchMnemonics.has(mnemonic) && operands.length > 0) {
@@ -864,8 +863,7 @@ class ProgramGenerator {
 
   private emitJump(mnemonic: 'j' | 'jal'): void {
     const label = this.nextLabel(mnemonic);
-    const canPoison = this.remaining() > 1 + this.delaySlotCost() && this.hasStatefulPoisonCandidate();
-    const skipPoison = canPoison && this.rng.chance(0.85);
+    const skipPoison = this.remaining() > 1 + this.delaySlotCost() && this.hasStatefulPoisonCandidate();
 
     this.emit(mnemonic, `${mnemonic} ${label}`);
     if (mnemonic === 'jal') {
@@ -889,7 +887,7 @@ class ProgramGenerator {
     const label = this.nextLabel(mnemonic);
     const delayCost = this.delaySlotCost();
     const minCost = 2 + delayCost;
-    const skipPoison = this.remaining() > minCost && this.hasStatefulPoisonCandidate() && this.rng.chance(0.85);
+    const skipPoison = this.remaining() > minCost && this.hasStatefulPoisonCandidate();
     const targetIndex = this.emittedCount + minCost + (skipPoison ? 1 : 0);
     const targetAddress = textBaseAddress + targetIndex * 4;
     const targetRegister = '$25';
