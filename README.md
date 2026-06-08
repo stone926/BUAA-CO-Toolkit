@@ -1,48 +1,208 @@
-# BUAA CO Toolkit
+# BUAA CO 工具箱（VSCode 插件）
 
-VSCode extension for BUAA Computer Organization labs. The first implementation focuses on Logisim, MARS/MIPS ASM, and Verilog workflows.
+面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → MARS 黄金模型 → 仿真 → 自动对拍 → 报告，循环进行）。
 
-## Features
+---
 
-- MIPS ASM language support: highlighting, completion, hover, labels, definitions, diagnostics, formatting, MARS run, MARS run with a stdin file, interactive terminal MARS run, `.text` dump, and kernel text dump.
-- Verilog language support: highlighting, module/signal outline, hover, definitions, implicit-net diagnostics, BUAA CO top-module checks, testbench generation, ISE `.prj/.tcl` generation, and ISim run command.
-- Logisim support: `.circ` file-pattern recognition, circuit/component outline, label diagnostics, MARS `code.txt` to Logisim ROM conversion, machine-code injection into a `.circ` ROM copy, logging text to CSV conversion, and opening circuits with `logisim.jar`. XML editing support is intentionally left to the user's VSCode/XML extensions.
-- Course testing helpers: run a random ASM generator, detect generated ASM files, dump generated machine code, continuously rerun generated trace tests with a live monitor for P4-P6, prepare P3 Logisim `.circ` copies with injected machine code, run MARS dump + MARS golden output + ISim simulation + trace compare for P4-P6, batch multiple ASM cases with auto-paired stdin files and a JSON summary report, or compare MARS/ISim trace outputs manually from `.co/out/*.mars.out` and `.co/out/*.sim.out`. P7 intentionally exposes only ASM test generation and machine-code dump, not automatic trace testing or compare.
+## 1. 快速开始
 
-## Course Test Flow
+### 第一步：装好外部工具并填路径
 
-The intended P4-P6 CPU trace test loop is:
+打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
-1. Write or select a random ASM generator.
-2. Run `CO: Run Generated Course Trace Tests`; `.py`, `.js`, `.jar`, `.bat/.cmd/.exe`, and `.ps1` generators are recognized.
-3. The extension snapshots ASM files, runs the generator, then picks up new or modified `.asm`, `.s`, and `.mips` files.
-4. For each case, MARS dumps machine code, MARS produces the golden trace, and Verilog ISim imports the machine code for automatic trace comparison.
-5. For P3 Logisim CPUs, use `CO: Prepare Generated Logisim Circuit Cases` to run the generator, MARS-dump each generated ASM, and write injected `.circ` copies plus `.co/logisim/logisim-prep-report.json`. For one-off imports, use `CO: MIPS Dump Text Segment` followed by `CO: Logisim Generate ROM File`, or `CO: Logisim Inject ROM Into Circuit`.
-
-Use `CO: Start Continuous Generated Course Trace Tests` when you want the generator + MARS + ISim + trace compare loop to keep running. It opens a live monitor, streams progress to the BUAA CO output channel, writes `.co/out/continuous-trace-report.json` after each case, and can be stopped with `CO: Stop Continuous Course Tests`. By default the session stops after the first failed or errored iteration; set `co.test.continuousStopOnFailure` to `false` to keep running.
-
-P7 uses `CO: Generate ASM Tests` and `CO: Generate and Dump Machine Code Tests` instead of automatic trace testing. Its built-in generator uses `co.test.builtinGenerator.p7InstructionCount` (default 1118) as the generated main-program instruction count, because the course CPU fixes the exception entry at `0x4180`. P7 dump is restricted to `CompactLargeText`; large-text memory modes change that layout or let execution fall into the handler area. P7 Verilog testbench generation uses the official tutorial testbench structure.
-
-Trace tests expect the modified MARS build that supports `coL1` trace output, such as `Toby-Shi-cloud/Mars-with-BUAA-CO-extension`. With `co.mips.memoryConfiguration: "auto"`, P3-P6 trace tests use `FixedCompactLargeText` to allow long generated machine-code files.
-
-For ASM programs that read stdin, use `CO: MIPS Run with Stdin File` for deterministic runs or `CO: MIPS Run in Terminal` for manual interactive input. Full and batch trace tests auto-pair stdin files named like `foo.in`, `foo.input`, `foo.stdin`, `foo.dat`, `foo.case.in`, `foo-case.in`, or `foo_case.in` next to `foo.asm`, including the `input`, `inputs`, `test`, `tests`, and `data` subdirectories.
-
-Batch trace reports are written to `.co/out/trace-batch-report.json` and include the generator command, generated ASM files, and first differing MARS/SIM event for each failed case.
-
-## Required Configuration
-
-Set these in VSCode settings as needed:
-
-```json
+```jsonc
 {
-  "co.toolchain.mars": "E:/path/to/Mars4_5.jar",
-  "co.toolchain.logisim": "E:/path/to/logisim.jar",
-  "co.toolchain.isePath": "D:/Xilinx/14.7/ISE_DS/ISE",
-  "co.toolchain.python": "python",
-  "co.project.profile": "P5",
-  "co.mips.memoryConfiguration": "auto",
-  "co.project.simTime": "200us"
+  // MIPS / 对拍黄金模型（建议用修改版 Mars，支持 coL1 对拍输出）
+  "co.toolchain.mars":   "修改版 Mars 的路径",
+  // P7 专用 Mars（需支持 efc / p7irq / coL1）；不填则回退到上面的 mars
+  "co.toolchain.marsP7": "修改版 Mars P7 的路径",
+  // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
+  "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 common, EDK, ISE 等文件夹",
+  // Logisim（P0/P3）
+  "co.toolchain.logisim": "Logisim 的路径",
+  // Java / Python（一般保持默认即可）
+  "co.toolchain.java":   "java",
+  "co.toolchain.python": "python"
 }
 ```
 
-`co.project.simTime` is written into the generated ISim TCL as `run <value>; exit`; the default `200us` matches the course-style scripts. Use `co.test.generatorArgs` when your generator needs extra arguments such as a seed or output count. `co.test.continuousIntervalMs`, `co.test.continuousMaxIterations`, and `co.test.continuousStopOnFailure` control continuous generated trace tests. Run `CO: Check Toolchain` to verify Java, Python, MARS, Logisim, and ISE paths.
+> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮），逐项确认 Java / MARS / ISE / Logisim 是否就绪。
+
+### 第二步：告诉插件当前是哪个 Profile
+
+- 用命令 **`CO: 选择项目 Profile`**（P0–P7），或在工程根目录建 `.co/config.json` 写 `{"profile": "P7"}`。
+- 也可设 `co.project.profile`。`auto` 会尽量根据顶层模块接口推断。
+
+### 第三步：一键跑测试
+
+打开侧边栏「**BUAA CO**」面板 →「操作」区，点：
+
+- **P7 一键测试**（P7 专属按钮）/ **持续生成测试**（P4–P6）
+  → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
+
+就这么简单。下面是细节。
+
+---
+
+## 2. 核心功能：一键随机对拍测试（P3–P7）
+
+这是本插件最重要的能力。它把课程对拍流程全自动化：
+
+```
+随机生成器  →  ASM 测试点  →  MARS dump 机器码 ─┐
+                                               ├─→ 对拍 GRF/DM 写  →  报告（首个差异定位）
+                          MARS 黄金 trace ──────┘
+                          你的 CPU（ISim/Logisim 仿真）┘
+```
+
+### 怎么触发（侧边栏按钮 / 命令面板均可）
+
+| 我想…… | 按钮 / 命令 |
+|---|---|
+| **一直循环跑，直到出错或我手动停**（推荐） | `CO: 启动持续生成的课程 Trace 测试`（侧栏：持续生成测试 / **P7 一键测试**） |
+| 生成一批测试点并各跑一次对拍 | `CO: 运行生成的课程 Trace 测试`（侧栏：生成并批量测试） |
+| 只测当前打开 / 选定的单个 ASM | `CO: 运行完整课程 Trace 测试`（侧栏：单 ASM 测试） |
+| 批量测多个手选 ASM | `CO: 运行批量课程 Trace 测试` |
+| 停止持续测试 | `CO: 停止持续课程测试` |
+| 只生成测试点（不对拍） | `CO: 生成 ASM 测试点` / `CO: 生成并导出机器码` |
+| 手动选两个输出文件对拍 / 对拍最近一次输出 | `CO: 比较 Trace 输出文件` / `CO: 比较最近的 MARS/ISim 输出` |
+| 打开上次批量测试报告 | `CO: 打开批量 Trace 报告` |
+
+持续测试会打开一个**实时监控面板**，并把每轮结果写到 `.co/out/continuous-trace-report.json`（即使关掉 VSCode 也能看）。默认遇到第一个失败/异常就停（可用 `co.test.continuousStopOnFailure: false` 关闭）。
+
+### 内置随机生成器
+
+插件自带随机 ASM 生成器（默认启用，`co.test.builtinGenerator.enabled`），无需自己写脚本。它会：
+
+- 按 Profile 选用合适的默认指令集（也可用 `co.test.builtinGenerator.instructions` 自定义，逗号或空格分隔，只接受真实指令）；
+- 在内部**建模 CPU 状态**（寄存器、HI/LO、内存、CP0），从而生成**合法、确定**的测试点：避免除零、避免非预期的地址错/溢出、正确处理延迟槽与乘除部件占用窗口、在跳转后插入“毒化”指令检验控制流；
+- 生成数量由 `co.test.builtinGenerator.instructionCount`（P3–P6）/ `co.test.builtinGenerator.p7InstructionCount`（P7，默认/上限 1118）控制。
+
+> 也可以用**外部生成器**：打开你的 `.py/.js/.jar/.bat/.cmd/.exe/.ps1` 生成器文件再触发测试，或关掉 `co.test.builtinGenerator.enabled`。用 `co.test.generatorArgs` 传种子/数量等参数。
+
+### P7 专项说明（异常 + 外部中断 + Timer）
+
+P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。本插件的 P7 对拍：
+
+- **异常处理流**：生成器会按 `co.test.p7.exceptionRate`（默认 0.08）的比例**主动制造可控内部异常**（溢出 Ov、未对齐取数/存数 AdEL/AdES、syscall），并生成 `.ktext 0x4180` 处的统一处理程序，对拍异常进入/返回是否正确。
+- **外部中断**（`co.test.p7.interrupt`，默认开）：生成器在一个“安全指令点”安排外部中断，testbench 与 MARS **在同一架构点**注入中断（不是按周期，而是按宏观 PC），从而可对拍。
+  - 若你的流水线时序较特殊导致“正确 CPU 也报中断点差异”，把它**关掉**即可退化为纯异常/正常数据通路对拍（完全确定性）。
+- **Timer**：仅作内存映射设备支持（地址译码、寄存器读写）。**不**对拍 Timer 触发的中断——因为 MARS 按“指令条数”计时、Verilog 按“时钟周期”计时，二者计数无法对应。需要验证 Timer 模块本身时，请单独写 `TC` 单元 testbench。
+- **内存布局**：P7 固定用 `CompactLargeText`（异常入口 0x4180），机器码 dump 会自动合并用户段 + 0x4180 内核段。
+- **必须使用修改版 Mars**（支持 `efc`/`p7irq`/`coL1`），配在 `co.toolchain.marsP7`。
+
+### 输出/对拍约定
+
+- 两端 trace 格式一致：`@PC: $寄存器 <= 值`（寄存器写）、`@PC: *地址 <= 值`（内存写）。
+- 对拍**默认忽略周期/时间**，只比较 PC、目标、值（可在手动对拍时切换严格模式）。
+- 标准输入自动配对：`foo.asm` 旁的 `foo.in / foo.input / foo.stdin / foo.dat`（及 `foo.xxx.in`、`input/tests/data` 等子目录）会自动作为 stdin。
+- 报告与中间产物都在工程下的 `.co/` 目录（见第 6 节）。
+
+---
+
+## 3. 其他功能
+
+### MIPS 汇编
+语法高亮、补全、悬浮提示、标签/定义跳转、诊断、格式化；以及：
+- `CO: MARS 运行当前文件`、`CO: MARS 带标准输入运行`、`CO: MARS 在终端中运行`（交互输入）、`CO: ASM 导出文本段`、`CO: ASM 导出内核文本段`。
+
+### Verilog
+高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
+- `CO: Verilog 生成 Testbench`（P7 自动生成官方接口 testbench）、`CO: Verilog 生成 ISE 工程`、`CO: Verilog 运行 ISim`。
+
+### Logisim（P0 / P3）
+`.circ` 识别、电路/组件大纲、标签诊断；以及：
+- `CO: Logisim 生成 ROM 文件`、`CO: Logisim 注入 ROM 到电路`、`CO: Logisim 日志转 CSV`、`CO: Logisim 打开当前电路`；
+- 批量：`CO: 准备 Logisim 电路用例` / `CO: 准备生成的 Logisim 电路用例`（把机器码注入 `.circ` 副本，写到 `.co/logisim/`）。
+
+### 流水线冲突分析（P5/P6/P7）
+- `CO: 分析流水线冲突`、`CO: 打开冲突报告`（需配置 `co.toolchain.hazardCalculator`）。
+
+### 项目辅助
+- `CO: 项目向导`、`CO: 选择项目 Profile`、`CO: 检查工具链`、`CO: 刷新侧边栏`、`CO: 打开课程教程` / `CO: 打开当前 Profile 教程`。
+
+---
+
+## 4. 配置项（按常用程度排序）
+
+> 优先级：VSCode 设置 `co.*` → 工程内 `.co/config.json` → 默认值。
+
+### 最常用
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto） |
+| `co.toolchain.mars` | — | Mars jar（非 P7 对拍） |
+| `co.toolchain.marsP7` | — | P7 专用 Mars（需 efc/p7irq/coL1） |
+| `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
+| `co.toolchain.logisim` | — | Logisim jar |
+| `co.project.simTime` | `200us` | ISim 运行时长（写入 TCL `run <值>; exit`） |
+
+### 测试 / 对拍
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `co.test.builtinGenerator.enabled` | `true` | 使用内置随机生成器 |
+| `co.test.builtinGenerator.instructionCount` | `4000` | P3–P6 主程序指令数 |
+| `co.test.builtinGenerator.p7InstructionCount` | `1118` | P7 主程序指令数（上限 1118，0x4180 之前） |
+| `co.test.builtinGenerator.instructions` | `""` | 自定义指令集（空=用 Profile 默认） |
+| `co.test.p7.interrupt` | `true` | P7 是否注入外部中断对拍 |
+| `co.test.p7.exceptionRate` | `0.08` | P7 主动制造内部异常的比例（0–1） |
+| `co.test.continuousIntervalMs` | `1000` | 持续测试两轮间隔（毫秒） |
+| `co.test.continuousMaxIterations` | `0` | 持续测试最大轮数（0=不限） |
+| `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
+| `co.test.generatorArgs` | `[]` | 传给外部生成器的额外参数 |
+| `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
+
+### MIPS / MARS 行为
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `co.mips.memoryConfiguration` | `auto` | 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
+| `co.mips.delayedBranching` | `profile` | 延迟槽（profile：P5/P6/P7 启用） |
+| `co.mips.extraArgs` | `[]` | 追加 MARS 命令行参数 |
+| `co.mips.warnPseudoInstruction` | `true` | 使用伪指令时告警 |
+| `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
+| `co.mips.instructionColorMode` | `realVsPseudo` | 指令着色方式 |
+
+### 工程 / 工具链（其余）
+
+`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
+
+### Verilog 诊断 / 格式化（细项，按需调整）
+
+`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（风格、续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
+
+### 运行细项
+
+`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.timeoutMs`(`120000`)。
+
+---
+
+## 5. ⚠️ 特别注意事项
+
+1. **P7 必须用修改版 Mars**：普通 Mars 不支持 `efc`/`p7irq`/`coL1`，且其默认 SR/异常入口与课程 CPU 不一致，**不能**当 P7 黄金模型。请把 `co.toolchain.marsP7` 指向支持这些参数的构建（仓库里的 `Mars_CO.jar` 即可）。插件会在检测到不支持时给出明确提示。
+2. **ISE 路径要指到 `.../ISE_DS/ISE`**，不是上一级。例如 `D:/ISE/14.7/ISE_DS/ISE`。`fuse` 会编译工作区里**所有** `.v`；P7 自动测试会生成一个**专用 testbench**（不会覆盖你自己的 `mips_tb.v`）。
+3. **外部中断对拍依赖标准流水线时序**（CP0 在 M 级、宏观 PC = M 级 PC）。多数“教科书式”流水线能精确对齐；若你的设计时序特殊导致**正确 CPU 也报中断点差异**，把 `co.test.p7.interrupt` 关掉，仍可做确定性的异常/正常对拍。
+4. **Timer 中断不参与对拍**（原理：指令计数 vs 周期计数无法对应）。Timer 仅作 MMIO 设备；要验证 Timer 模块请单独写单元 testbench。
+5. **延迟槽**：P5/P6/P7 默认开启延迟槽（MARS 加 `db`）。若你的 CPU 不用延迟槽，请改 `co.mips.delayedBranching`，否则黄金模型与 CPU 行为会不一致。
+6. **对拍默认忽略周期**，只比较 PC/目标/值——这与课程评测一致；它**抓不到**“不体现在 GRF/DM 写上的错误”（如从不被读取的寄存器/CP0 位算错、纯时序问题）。
+7. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
+
+---
+
+## 6. 目录约定（工程下 `.co/`）
+
+| 路径 | 内容 |
+|---|---|
+| `.co/config.json` | 工程级配置（profile、toolchain、simulation、mips、test） |
+| `.co/generated/*.asm` + `*.co-meta.json` | 内置生成器产出的测试点及其元数据（含中断调度） |
+| `.co/out/*.mars.out` / `*.sim.out` | MARS / ISim 输出 |
+| `.co/out/trace-batch-report.json` | 批量测试报告（含命令、生成文件、首个差异） |
+| `.co/out/continuous-trace-report.json` | 持续测试报告 |
+| `.co/isim/` | ISE `.prj/.tcl`、生成的 testbench、`code.txt` |
+| `.co/logisim/` | 注入机器码后的 `.circ` 副本与报告 |
+
+---
+
+如需扩展（如 Timer 模块单元测试、显式校验 CP0 寄存器值、其他后端），欢迎提 issue / 反馈。
