@@ -135,8 +135,9 @@ describe('built-in ASM generator', () => {
     expect(mainMnemonics).toHaveLength(96);
     expect(mainMnemonics).toContain('syscall');
     expect(result.text).toContain('.ktext 0x4180');
-    expect(result.text).toContain('mfc0 $27, $14');
-    expect(result.text).toContain('mtc0 $27, $14');
+    expect(result.text).toContain('mfc0 $k0, $13');
+    expect(result.text).toContain('mtc0 $k0, $14');
+    expect(result.text).toContain('sw $0, 0($k0)');
     expect(result.text).toContain('eret');
   });
 
@@ -180,13 +181,60 @@ describe('built-in ASM generator', () => {
       instructionText: 'eret',
       instructionCount: 4,
       seed: 'eret-only'
-    })).toThrow(/include syscall/);
+    })).toThrow(/inside the P7 exception handler/);
     expect(() => generateBuiltinAsmTestCase({
       profile: 'P7',
       instructionText: 'syscall',
       instructionCount: 4,
       seed: 'syscall-only'
-    })).toThrow(/requires P7 exception handler/);
+    })).toThrow(/exception handler requires/);
+  });
+
+  it('schedules one external interrupt at a safe PC and installs the SR prologue', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-interrupt',
+      interrupt: true
+    });
+
+    expect(result.interruptSchedule).toHaveLength(1);
+    const target = result.interruptSchedule[0];
+    expect(target % 4).toBe(0);
+    expect(target).toBeGreaterThan(0x3000);
+    // SR prologue enables the external interrupt before any body instruction.
+    expect(result.text).toContain('ori $k0, $0, 0x1001');
+    expect(result.text).toContain('mtc0 $k0, $12');
+    // Handler acknowledges the external interrupt at 0x7f20.
+    expect(result.text).toContain('ori $k0, $0, 0x7f20');
+    expect(result.text).toContain('sw $0, 0($k0)');
+  });
+
+  it('emits no interrupt schedule when interrupt is disabled', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 120,
+      seed: 'p7-no-interrupt'
+    });
+
+    expect(result.interruptSchedule).toEqual([]);
+  });
+
+  it('injects controllable internal exceptions when exceptionRate is set', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 400,
+      seed: 'p7-exceptions',
+      exceptionRate: 0.5
+    });
+    const bodyLines = executableLines(beforeKernelText(result.text));
+    // At least one deliberately faulting access (misaligned load/store at offset 1 from $0).
+    const faulting = bodyLines.filter((line) => /\b(lw|lh|lhu|sw|sh)\b.*1\(\$0\)/.test(line));
+
+    expect(faulting.length).toBeGreaterThan(0);
   });
 });
 

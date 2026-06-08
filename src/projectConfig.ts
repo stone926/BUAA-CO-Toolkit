@@ -33,6 +33,10 @@ export interface CoProjectConfig {
       instructionCount?: number;
       p7InstructionCount?: number;
     };
+    p7?: {
+      interrupt?: boolean;
+      exceptionRate?: number;
+    };
   };
   mips?: {
     memoryConfiguration?: string;

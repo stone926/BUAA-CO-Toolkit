@@ -941,4 +941,24 @@ describe('buildTestbench', () => {
     expect(tb).toContain('reg [31:0] inst[0:5119];');
     expect(tb).toContain('always #2 clk <= ~clk;');
   });
+
+  it('activates the interrupt block with the scheduled target_pc when given a schedule', () => {
+    const module = makeModule({
+      name: 'mips',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'reset', kind: 'input', direction: 'input' })
+      ]
+    });
+    const tb = buildTestbench(module, 'mips_tb', { profile: 'P7', interruptSchedule: [0x3010] });
+
+    // The interrupt block is now active (uncommented) with the scheduled target_pc.
+    expect(tb).toMatch(/^\s*parameter target_pc = 32'h00003010;/m);
+    expect(tb).toMatch(/^\s*always @\(negedge clk\) begin/m);
+    expect(tb).toMatch(/^\s*assign fixed_macroscopic_pc = macroscopic_pc & 32'hfffffffc;/m);
+    expect(tb).toMatch(/^\s*if \(\|m_int_byteen && \(m_int_addr & 32'hfffffffc\) == 32'h7f20\) begin/m);
+    expect(tb).toMatch(/^\s*interrupt = 1;/m);
+    // No leftover commented interrupt scaffolding for the parameter line.
+    expect(tb).not.toContain("// parameter target_pc = 32'h00003010;");
+  });
 });

@@ -12,6 +12,8 @@ import {
   getGeneratorArgs,
   getJava,
   getMemoryConfiguration,
+  getP7ExceptionRate,
+  getP7InterruptEnabled,
   getProfile,
   getPython,
   useBuiltinTestGenerator
@@ -128,6 +130,8 @@ interface BuiltinGeneratorRunSetup {
   profile: ProjectProfile;
   instructionText: string;
   instructionCount: number;
+  interrupt: boolean;
+  exceptionRate: number;
 }
 
 interface GeneratedAsmBatch {
@@ -201,9 +205,6 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
 }
 
 async function runFullCourseTraceTest(services: AppServices): Promise<void> {
-  if (rejectP7TraceAutomation()) {
-    return;
-  }
   await vscode.workspace.saveAll(false);
 
   const asm = await resolveAsmInput();
@@ -233,9 +234,6 @@ async function runFullCourseTraceTest(services: AppServices): Promise<void> {
 }
 
 async function runBatchCourseTraceTests(services: AppServices): Promise<void> {
-  if (rejectP7TraceAutomation()) {
-    return;
-  }
   await vscode.workspace.saveAll(false);
 
   const cases = await resolveBatchTraceCases();
@@ -247,9 +245,6 @@ async function runBatchCourseTraceTests(services: AppServices): Promise<void> {
 }
 
 async function runGeneratedCourseTraceTests(services: AppServices): Promise<void> {
-  if (rejectP7TraceAutomation()) {
-    return;
-  }
   await vscode.workspace.saveAll(false);
 
   const generated = await resolveGeneratedAsmBatch(services);
@@ -261,9 +256,6 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
 }
 
 async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
-  if (rejectP7TraceAutomation()) {
-    return;
-  }
   if (activeContinuousTraceSession) {
     vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行');
     return;
@@ -398,9 +390,6 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
 
 function stopContinuousTests(): void {
   if (!activeContinuousTraceSession) {
-    if (rejectP7TraceAutomation()) {
-      return;
-    }
     vscode.window.showInformationMessage('当前没有正在运行的持续测试');
     return;
   }
@@ -559,9 +548,6 @@ async function runLogisimPrepareBatch(
 }
 
 async function openBatchTraceReport(): Promise<void> {
-  if (rejectP7TraceAutomation()) {
-    return;
-  }
   const report = await resolveBatchTraceReport();
   if (!report) {
     return;
@@ -603,13 +589,19 @@ async function runCourseTraceCase(
   }
   services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
 
+  const interruptSchedule = resolveCaseInterruptSchedule(asm);
+  if (interruptSchedule) {
+    services.output.appendLine(`外部中断目标 PC: ${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
+  }
+
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
   const mars = await runMarsFile(services, asm, 'run', {
     showMessages: false,
     revealOutput: options.revealOutput,
     stdin: stdinText,
     stdinSource: item.stdin,
-    traceOutput: true
+    traceOutput: true,
+    interruptSchedule
   });
   if (!mars?.result.ok || !mars.outputFile) {
     return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), dump.outputFile);
@@ -620,7 +612,8 @@ async function runCourseTraceCase(
     showMessages: false,
     revealOutput: options.revealOutput,
     machineCodeSource: dump.outputFile,
-    simOutputFileName: simOutputFileNameForCase(item)
+    simOutputFileName: simOutputFileNameForCase(item),
+    interruptSchedule
   });
   if (!isim?.simResult.ok || !isim.simOut) {
     return failedCase(item, 'isim', '测试中止：ISim 运行失败', dump.outputFile, mars.outputFile);
@@ -817,7 +810,9 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
       instructionText: getBuiltinGeneratorInstructions(resource),
       instructionCount: profile === 'P7'
         ? getBuiltinGeneratorP7InstructionCount(resource)
-        : getBuiltinGeneratorInstructionCount(resource)
+        : getBuiltinGeneratorInstructionCount(resource),
+      interrupt: profile === 'P7' && getP7InterruptEnabled(resource),
+      exceptionRate: profile === 'P7' ? getP7ExceptionRate(resource) : 0
     };
   }
 
@@ -893,7 +888,9 @@ async function runBuiltinGeneratorAndCollectAsms(
       profile: setup.profile,
       instructionText: setup.instructionText,
       instructionCount: setup.instructionCount,
-      generatedAt
+      generatedAt,
+      interrupt: setup.interrupt,
+      exceptionRate: setup.exceptionRate
     });
   } catch (error) {
     const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);
@@ -910,6 +907,7 @@ async function runBuiltinGeneratorAndCollectAsms(
   await ensureDirectory(outDir);
   const asm = vscode.Uri.file(path.join(outDir.fsPath, builtinAsmFileName(generated.profile, generatedAt)));
   await writeTextFile(asm, generated.text);
+  await writeInterruptScheduleSidecar(asm, generated.profile, generated.interruptSchedule, generated.seed);
 
   if (options.revealOutput !== false) {
     services.output.show(true);
@@ -920,6 +918,9 @@ async function runBuiltinGeneratorAndCollectAsms(
   services.output.appendLine(`指令数量: ${generated.instructionCount}`);
   services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
   services.output.appendLine(`种子: ${generated.seed}`);
+  if (generated.interruptSchedule.length) {
+    services.output.appendLine(`外部中断目标 PC: ${generated.interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
+  }
   services.output.appendLine(`ASM: ${asm.fsPath}`);
 
   return {
@@ -1278,12 +1279,50 @@ function generatedMachineCodeDumpFile(
   return vscode.Uri.file(path.join(outDir.fsPath, `${stem}.code.txt`));
 }
 
-function rejectP7TraceAutomation(resource = vscode.window.activeTextEditor?.document.uri): boolean {
-  if (getProfile(resource) !== 'P7') {
-    return false;
+function interruptScheduleSidecarUri(asm: vscode.Uri): vscode.Uri {
+  const dir = path.dirname(asm.fsPath);
+  const stem = path.basename(asm.fsPath, path.extname(asm.fsPath));
+  return vscode.Uri.file(path.join(dir, `${stem}.co-meta.json`));
+}
+
+async function writeInterruptScheduleSidecar(
+  asm: vscode.Uri,
+  profile: string,
+  interruptSchedule: number[],
+  seed: string
+): Promise<void> {
+  await writeTextFile(
+    interruptScheduleSidecarUri(asm),
+    JSON.stringify({ profile, seed, interruptSchedule }, null, 2) + '\n'
+  );
+}
+
+function readInterruptScheduleSidecar(asm: vscode.Uri): number[] {
+  try {
+    const uri = interruptScheduleSidecarUri(asm);
+    if (!fs.existsSync(uri.fsPath)) {
+      return [];
+    }
+    const data = JSON.parse(fs.readFileSync(uri.fsPath, 'utf8')) as { interruptSchedule?: unknown };
+    if (!Array.isArray(data.interruptSchedule)) {
+      return [];
+    }
+    return data.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  } catch {
+    return [];
   }
-  vscode.window.showErrorMessage('P7 不再提供自动 Trace 测试或对拍。请使用“生成 ASM 测试点”与“MIPS 导出文本段”。');
-  return true;
+}
+
+/**
+ * P7 external-interrupt target PCs for a case (from the generator sidecar), or undefined when the
+ * case is not P7, interrupts are disabled, or no schedule was recorded.
+ */
+function resolveCaseInterruptSchedule(asm: vscode.Uri): number[] | undefined {
+  if (getProfile(asm) !== 'P7' || !getP7InterruptEnabled(asm)) {
+    return undefined;
+  }
+  const schedule = readInterruptScheduleSidecar(asm);
+  return schedule.length ? schedule : undefined;
 }
 
 async function ensureContinuousTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {

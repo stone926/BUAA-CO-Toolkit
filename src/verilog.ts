@@ -39,6 +39,8 @@ export interface IseProjectOptions {
 export interface IsimRunOptions extends IseProjectOptions {
   machineCodeSource?: vscode.Uri;
   simOutputFileName?: string;
+  /** P7: external-interrupt target PCs; when set, a dedicated interrupt testbench is generated. */
+  interruptSchedule?: number[];
 }
 
 export interface IsimRunOutput {
@@ -168,7 +170,9 @@ export async function runIsim(
     vscode.window.showErrorMessage(`未找到 fuse 可执行文件：${fuse}`);
     return;
   }
-  const testbenchName = options.testbenchName ?? await ensureRunnableTestbench(services, activeUri, showMessages);
+  const testbenchName = options.testbenchName
+    ?? (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, showMessages))
+    ?? await ensureRunnableTestbench(services, activeUri, showMessages);
   const generated = await generateIseProject(services, { resource: activeUri, showMessages, testbenchName });
   if (!generated) {
     return;
@@ -238,6 +242,46 @@ async function simulationOutputDirectory(resource: vscode.Uri | undefined, isimD
   const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'out'));
   await ensureDirectory(outDir);
   return outDir;
+}
+
+const p7AutoInterruptTestbenchName = 'co_p7_auto_tb';
+
+/**
+ * For P7 automated trace runs that inject an external interrupt, generate a dedicated testbench
+ * (the official P7 interrupt testbench with the interrupt block active and target_pc baked in)
+ * under .co/isim, without overwriting the student's own testbench. Returns the module name, or
+ * undefined when no schedule is given or the top module cannot be located.
+ */
+async function ensureP7InterruptTestbench(
+  services: AppServices,
+  resource: vscode.Uri | undefined,
+  interruptSchedule: number[] | undefined,
+  showMessages: boolean
+): Promise<string | undefined> {
+  if (!interruptSchedule || !interruptSchedule.length) {
+    return undefined;
+  }
+  const topName = getTopModule(resource);
+  const topDefinition = await findTopModuleDefinition(resource, topName);
+  if (!topDefinition) {
+    services.output.appendLine(`未找到顶层模块 ${topName}，无法生成 P7 中断 testbench；改用默认 testbench（不注入外部中断）。`);
+    return undefined;
+  }
+  const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(topDefinition.uri) ?? vscode.workspace.workspaceFolders?.[0];
+  const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
+  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'isim'));
+  await ensureDirectory(outDir);
+  const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoInterruptTestbenchName}.v`));
+  await writeTextFile(tbUri, buildTestbench(topDefinition.module, p7AutoInterruptTestbenchName, {
+    finishDelay: verilogDelayFromSimTime(getSimTime(resource)),
+    profile: 'P7',
+    interruptSchedule
+  }));
+  services.output.appendLine(`已生成 P7 中断 testbench ${tbUri.fsPath}（target_pc=${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(',')}）`);
+  if (showMessages) {
+    vscode.window.showInformationMessage('已生成 P7 中断 testbench');
+  }
+  return p7AutoInterruptTestbenchName;
 }
 
 async function ensureRunnableTestbench(

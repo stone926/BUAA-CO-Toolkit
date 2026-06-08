@@ -176,6 +176,9 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       );
     }
     if (this.shouldShowTraceTestActions(profile)) {
+      if (profile === 'P7') {
+        actionChildren.push(this.createCommandItem('P7 一键测试', 'co.test.startContinuousGeneratedTraceTests', 'rocket'));
+      }
       actionChildren.push(
       this.createCommandItem('手动选择输出对拍', 'co.test.compareTraceFiles', 'compare-changes'),
       this.createCommandItem('最近输出对拍', 'co.test.compareLatestOutputs', 'diff'),
@@ -313,7 +316,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   }
 
   private shouldShowTraceTestActions(profile: ProjectProfile): boolean {
-    return profile === 'auto' || ['P4', 'P5', 'P6'].includes(profile);
+    return profile === 'auto' || ['P4', 'P5', 'P6', 'P7'].includes(profile);
   }
 
   private shouldShowAsmGenerationActions(profile: ProjectProfile): boolean {

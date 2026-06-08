@@ -219,6 +219,37 @@ export function getContinuousStopOnFailure(resource?: vscode.Uri): boolean {
   return config<boolean>('test.continuousStopOnFailure', true, resource);
 }
 
+/**
+ * P7 自动对拍是否注入外部中断（macroscopic_pc == target_pc 触发）。
+ * 关闭时退化为纯异常/正常数据通路对拍（完全确定性）。
+ */
+export function getP7InterruptEnabled(resource?: vscode.Uri): boolean {
+  const configured = inspectedValue<boolean>('test.p7.interrupt', resource);
+  if (typeof configured === 'boolean') {
+    return configured;
+  }
+  const projectValue = getTestFromConfig(resource)?.p7?.interrupt;
+  if (typeof projectValue === 'boolean') {
+    return projectValue;
+  }
+  return true;
+}
+
+/**
+ * P7 生成器主动制造内部异常（Ov/AdEL/AdES/Syscall）的比例，范围 [0, 1]。
+ */
+export function getP7ExceptionRate(resource?: vscode.Uri): number {
+  const configured = inspectedValue<number>('test.p7.exceptionRate', resource);
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
+    return Math.min(1, configured);
+  }
+  const projectValue = getTestFromConfig(resource)?.p7?.exceptionRate;
+  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue >= 0) {
+    return Math.min(1, projectValue);
+  }
+  return 0.15;
+}
+
 function layeredGetArray(
   vsKey: string,
   configFallback: (() => string[] | undefined) | undefined,

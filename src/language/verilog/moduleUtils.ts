@@ -14,6 +14,7 @@ export function declDetail(decl: VerilogDecl): string {
 interface TestbenchOptions {
   finishDelay?: string;
   profile?: ProjectProfile;
+  interruptSchedule?: number[];
 }
 
 export function buildTestbench(module: VerilogModule, tbName: string, options: TestbenchOptions = {}): string {
@@ -23,7 +24,7 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   const hasCourseExternalMemory = hasExternalInstructionMemory || hasExternalDataMemory;
   const isP7ExternalInterface = hasPort(module, 'interrupt') || hasPort(module, 'macroscopic_pc') || hasPort(module, 'm_int_addr') || hasPort(module, 'm_int_byteen');
   if (options.profile === 'P7' || isP7ExternalInterface) {
-    return buildP7OfficialTestbench(module.name, tbName);
+    return buildP7OfficialTestbench(module.name, tbName, options.interruptSchedule);
   }
   const hasWritebackTrace = hasPort(module, 'w_grf_we') && hasPort(module, 'w_grf_addr') && hasPort(module, 'w_grf_wdata') && hasPort(module, 'w_inst_addr');
   const hasDataMemoryTrace = hasExternalDataMemory && hasPort(module, 'm_inst_addr');
@@ -116,7 +117,7 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   return lines.join('\n');
 }
 
-function buildP7OfficialTestbench(topModuleName: string, tbName: string): string {
+function buildP7OfficialTestbench(topModuleName: string, tbName: string, interruptSchedule?: number[]): string {
   return [
     '`timescale 1ns/1ps',
     '',
@@ -225,13 +226,57 @@ function buildP7OfficialTestbench(topModuleName: string, tbName: string): string
     '        end',
     '    end',
     '',
-    ...commentedP7InterruptBlock(),
+    ...p7InterruptBlock(interruptSchedule),
     '',
     '    always #2 clk <= ~clk;',
     '',
     'endmodule',
     ''
   ].join('\n');
+}
+
+function p7InterruptBlock(interruptSchedule?: number[]): string[] {
+  const target = interruptSchedule?.find((pc) => Number.isFinite(pc));
+  if (target === undefined) {
+    return commentedP7InterruptBlock();
+  }
+  const targetHex = (target >>> 0).toString(16).padStart(8, '0');
+  // Official tb_interrupt_demo.v interrupt block: raise `interrupt` once when the
+  // macroscopic (M-stage) PC reaches target_pc, clear it when the handler writes 0x7f20.
+  return [
+    '    // ----------- For Interrupt -----------',
+    '',
+    '    wire [31:0] fixed_macroscopic_pc;',
+    '',
+    "    assign fixed_macroscopic_pc = macroscopic_pc & 32'hfffffffc;",
+    '',
+    `    parameter target_pc = 32'h${targetHex};`,
+    '',
+    '    integer count;',
+    '',
+    '    initial begin',
+    '        count = 0;',
+    '    end',
+    '',
+    '    always @(negedge clk) begin',
+    '        if (reset) begin',
+    '            interrupt = 0;',
+    '        end',
+    '        else begin',
+    '            if (interrupt) begin',
+    "                if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20) begin",
+    '                    interrupt = 0;',
+    '                end',
+    '            end',
+    '            else if (fixed_macroscopic_pc == target_pc) begin',
+    '                if (count == 0) begin',
+    '                    count = 1;',
+    '                    interrupt = 1;',
+    '                end',
+    '            end',
+    '        end',
+    '    end'
+  ];
 }
 
 function commentedP7InterruptBlock(): string[] {

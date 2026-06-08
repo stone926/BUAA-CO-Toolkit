@@ -24,6 +24,7 @@ export interface MarsRunOptions {
   courseTrace?: boolean;
   traceOutput?: boolean;
   dumpOutputFile?: vscode.Uri;
+  interruptSchedule?: number[];
 }
 
 export interface MarsRunOutput {
@@ -257,6 +258,9 @@ function marsCompatibilityMessage(
   if (options.traceOutput && /Invalid Command Argument:\s*coL1/i.test(output)) {
     return '当前 MARS 不支持 coL1 trace 参数。课程自动对拍默认需要 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 修改版 Mars，请检查 co.toolchain.mars / co.toolchain.marsP7。';
   }
+  if (isCourseTraceMarsRun(mode, options) && /Invalid Command Argument:\s*(efc|p7irq)/i.test(output)) {
+    return '当前 MARS 不支持 efc / p7irq（P7 异常与外部中断）参数。P7 自动对拍需要含该功能的修改版 Mars 构建，请重新构建并配置 co.toolchain.marsP7。';
+  }
   const memoryMatch = /Invalid memory configuration:\s*([A-Za-z0-9_]+)/i.exec(output);
   if (memoryMatch) {
     const rejected = memoryMatch[1] || memoryConfiguration;
@@ -387,6 +391,21 @@ function buildMarsArgs(
   args.push(...getMipsExtraArgs(asmUri));
   if (mode === 'run' && options.traceOutput && !hasMarsArg(args, 'coL1')) {
     args.push('coL1');
+  }
+  if (mode === 'run' && getProfile(asmUri) === 'P7' && isCourseTraceMarsRun(mode, options)) {
+    // efc = enable P7 exception/interrupt handling (dispatch to 0x4180, BUAA CP0 semantics).
+    if (!hasMarsArg(args, 'efc')) {
+      args.push('efc');
+    }
+    // p7irq = inject the external interrupt so MARS defers the same instruction the CPU does.
+    // The schedule holds the testbench target_pc (the instruction the CPU defers, sampled at its
+    // M-stage macroscopic_pc). MARS's prevIRQ injection commits the p7irq instruction and defers
+    // the next one, so fire one slot earlier (target - 4); the generator guarantees target - 4 is
+    // an executed simple instruction.
+    const schedule = (options.interruptSchedule ?? []).filter((pc) => Number.isFinite(pc) && pc > 0);
+    if (schedule.length && !args.some((arg) => arg.toLowerCase().startsWith('p7irq='))) {
+      args.push(`p7irq=${schedule.map((pc) => `0x${((pc - 4) >>> 0).toString(16)}`).join(',')}`);
+    }
   }
   if (mode === 'run') {
     args.push(asmUri.fsPath);

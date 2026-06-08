@@ -21,7 +21,6 @@ import {
   longLatencyHiLoWriteMnemonics,
   loadMnemonics,
   storeMnemonics,
-  cp0Mnemonics,
   falseTrapImmediateOperands,
   memoryAlignment,
   mduBusyCycles
@@ -45,6 +44,10 @@ export interface BuiltinAsmGeneratorOptions {
   instructionCount: number;
   seed?: string;
   generatedAt?: Date;
+  /** P7: inject an external interrupt scheduled at a generated "safe" PC. */
+  interrupt?: boolean;
+  /** P7: probability per body slot to emit a controllable internal exception (0..1). */
+  exceptionRate?: number;
 }
 
 export interface BuiltinInstructionSet {
@@ -60,6 +63,8 @@ export interface BuiltinAsmGeneratorResult {
   instructionSet: string[];
   instructionCount: number;
   usedInstructions: string[];
+  /** P7 external-interrupt target PCs (committed-PC trigger); empty when none. */
+  interruptSchedule: number[];
 }
 
 const generalRegisters = [
@@ -78,7 +83,18 @@ const p7ExceptionHandlerAddress = 0x4180;
 const p7ExceptionHandlerInstructionIndex = (p7ExceptionHandlerAddress - textBaseAddress) / 4;
 const p7MainTerminatorInstructionCount = 2;
 const poisonRegister = '$26';
-const p7ExceptionHandlerRequiredMnemonics = ['mfc0', 'addi', 'mtc0', 'eret'] as const;
+// The unified P7 handler (interrupt + exception) needs these CP0 instructions in the set.
+const p7HandlerRequiredMnemonics = ['mfc0', 'mtc0', 'eret'] as const;
+// SR value the prologue installs: IE=1 (bit0) + IM[2]=1 (bit12, the external-interrupt mask).
+const p7StatusEnableInterrupts = 0x1001;
+const p7IntAckAddress = 0x7f20;
+// Simple, value-producing ALU/immediate ops that are safe to interrupt (no control/memory side
+// effects that complicate the precise-interrupt point). Used to pick the external-interrupt target.
+const safeInterruptTargetMnemonics = new Set<string>([
+  'add', 'addu', 'sub', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
+  'addi', 'addiu', 'andi', 'ori', 'xori', 'slti', 'sltiu',
+  'sll', 'srl', 'sra', 'sllv', 'srlv', 'srav', 'lui'
+]);
 
 export class BuiltinAsmGeneratorError extends Error {
   constructor(message: string) {
@@ -166,34 +182,55 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
   }
 
   const instructionSet = resolveBuiltinInstructionSet(options.profile, options.instructionText);
-  validateBuiltinGeneratorRequest(instructionSet, count);
+  const interrupt = instructionSet.profile === 'P7' && options.interrupt === true;
+  const exceptionRate = instructionSet.profile === 'P7' ? clamp01(options.exceptionRate ?? 0) : 0;
+  validateBuiltinGeneratorRequest(instructionSet, count, { interrupt, exceptionRate });
   const seed = options.seed && options.seed.trim()
     ? options.seed.trim()
     : `${Date.now()}-${Math.floor(Math.random() * 0xffffffff).toString(16)}`;
-  const generator = new ProgramGenerator(instructionSet.profile, instructionSet.mnemonics, count, seed, options.generatedAt ?? new Date());
+  const generator = new ProgramGenerator(
+    instructionSet.profile,
+    instructionSet.mnemonics,
+    count,
+    seed,
+    options.generatedAt ?? new Date(),
+    { interrupt, exceptionRate }
+  );
   return generator.generate();
 }
 
-function validateBuiltinGeneratorRequest(instructionSet: BuiltinInstructionSet, count: number): void {
+function clamp01(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value >= 1 ? 1 : value;
+}
+
+function validateBuiltinGeneratorRequest(
+  instructionSet: BuiltinInstructionSet,
+  count: number,
+  options: { interrupt: boolean; exceptionRate: number }
+): void {
   const allowed = new Set(instructionSet.mnemonics);
-  if (instructionSet.profile === 'P7') {
+  const isP7 = instructionSet.profile === 'P7';
+  if (isP7) {
     const p7MaxCount = p7CourseInstructionCountMaximum();
     if (count > p7MaxCount) {
       throw new BuiltinAsmGeneratorError(`P7 generated instruction count must be at most ${p7MaxCount}, because 0x${p7ExceptionHandlerAddress.toString(16)} is reserved for the course exception entry.`);
     }
   }
-  if (allowed.has('eret') && !allowed.has('syscall')) {
-    throw new BuiltinAsmGeneratorError('Built-in ASM generator emits eret only inside the P7 exception handler; include syscall to exercise it.');
-  }
-  if (!allowed.has('syscall')) {
-    return;
-  }
-  if (instructionSet.profile !== 'P7') {
+  if (allowed.has('syscall') && !isP7) {
     throw new BuiltinAsmGeneratorError('Built-in ASM generator supports syscall only for P7.');
   }
-  const missing = p7ExceptionHandlerRequiredMnemonics.filter((mnemonic) => !allowed.has(mnemonic));
-  if (missing.length) {
-    throw new BuiltinAsmGeneratorError(`Built-in ASM generator syscall support requires P7 exception handler instruction(s): ${missing.join(', ')}.`);
+  const handlerEnabled = isP7 && (options.interrupt || options.exceptionRate > 0 || allowed.has('syscall'));
+  if (allowed.has('eret') && !handlerEnabled) {
+    throw new BuiltinAsmGeneratorError('Built-in ASM generator emits eret only inside the P7 exception handler; enable syscall, interrupt, or exceptions to exercise it.');
+  }
+  if (handlerEnabled) {
+    const missing = p7HandlerRequiredMnemonics.filter((mnemonic) => !allowed.has(mnemonic));
+    if (missing.length) {
+      throw new BuiltinAsmGeneratorError(`Built-in ASM generator P7 exception handler requires instruction(s): ${missing.join(', ')}.`);
+    }
   }
 }
 
@@ -208,52 +245,68 @@ class ProgramGenerator {
   private readonly targetCount: number;
   private readonly seed: string;
   private readonly generatedAt: Date;
-  private readonly p7ExceptionHandlerEnabled: boolean;
+  private readonly interruptEnabled: boolean;
+  private readonly exceptionRate: number;
+  private readonly p7HandlerEnabled: boolean;
   private readonly state = new CpuState();
   private readonly lines: string[] = [];
   private readonly used = new Set<string>();
+  /** Indices (0-based instruction positions) that are safe external-interrupt targets. */
+  private readonly interruptCandidates: number[] = [];
   private labelIndex = 0;
   private emittedCount = 0;
   private nextMduProbeMode: MduReadProbeMode = 'busy';
 
-  constructor(profile: CpuProfile, mnemonics: string[], targetCount: number, seed: string, generatedAt: Date) {
+  constructor(
+    profile: CpuProfile,
+    mnemonics: string[],
+    targetCount: number,
+    seed: string,
+    generatedAt: Date,
+    options: { interrupt: boolean; exceptionRate: number } = { interrupt: false, exceptionRate: 0 }
+  ) {
     this.profile = profile;
     this.allowed = new Set(mnemonics);
     this.targetCount = targetCount;
     this.seed = seed;
     this.generatedAt = generatedAt;
-    this.p7ExceptionHandlerEnabled = profile === 'P7' && this.allowed.has('syscall');
-    this.rng = new Random(hashSeed(`${profile}:${targetCount}:${seed}`));
+    this.interruptEnabled = profile === 'P7' && options.interrupt;
+    this.exceptionRate = profile === 'P7' ? options.exceptionRate : 0;
+    this.p7HandlerEnabled = profile === 'P7'
+      && (this.interruptEnabled || this.exceptionRate > 0 || this.allowed.has('syscall'));
+    this.rng = new Random(hashSeed(`${profile}:${targetCount}:${seed}:${options.interrupt ? 'i' : ''}:${this.exceptionRate}`));
     this.nextMduProbeMode = this.rng.chance(0.5) ? 'busy' : 'ready';
   }
 
   generate(): BuiltinAsmGeneratorResult {
+    if (this.p7HandlerEnabled) {
+      this.emitP7Prologue();
+    }
+
     const coverageQueue = this.shuffle(Array.from(this.allowed));
     let guard = this.targetCount * 30 + 200;
 
     while (this.remaining() > 0 && guard-- > 0) {
-      const fromCoverage = this.pickCoverageMnemonic(coverageQueue);
-      if (fromCoverage) {
-        this.emitMnemonic(fromCoverage);
+      if (this.wantsExceptionInjection() && this.emitException()) {
         continue;
       }
 
-      const biased = this.pickBiasedMnemonic();
-      if (biased) {
-        this.emitMnemonic(biased);
-        continue;
-      }
-
-      const fallback = this.pickAnyMnemonic();
-      if (!fallback) {
+      const mnemonic = this.pickCoverageMnemonic(coverageQueue)
+        ?? this.pickBiasedMnemonic()
+        ?? this.pickAnyMnemonic();
+      if (!mnemonic) {
         throw new BuiltinAsmGeneratorError('Built-in ASM generator could not fill the requested instruction count with the configured instruction set. Add a safe value-producing instruction such as ori/addiu/addu, or reduce control/MDU-only instructions.');
       }
-      this.emitMnemonic(fallback);
+      const startIndex = this.emittedCount;
+      this.emitMnemonic(mnemonic);
+      this.noteInterruptCandidate(mnemonic, startIndex);
     }
 
     if (this.emittedCount !== this.targetCount) {
       throw new BuiltinAsmGeneratorError(`Built-in ASM generator emitted ${this.emittedCount} instruction(s), expected ${this.targetCount}.`);
     }
+
+    const interruptSchedule = this.interruptEnabled ? this.chooseInterruptSchedule() : [];
 
     return {
       text: this.render(),
@@ -261,7 +314,8 @@ class ProgramGenerator {
       profile: this.profile,
       instructionSet: Array.from(this.allowed).sort(),
       instructionCount: this.emittedCount,
-      usedInstructions: Array.from(this.used).sort()
+      usedInstructions: Array.from(this.used).sort(),
+      interruptSchedule
     };
   }
 
@@ -288,18 +342,145 @@ class ProgramGenerator {
   }
 
   private renderP7ExceptionHandler(): string[] {
-    if (!this.p7ExceptionHandlerEnabled) {
+    if (!this.p7HandlerEnabled) {
       return [];
     }
+    // Unified P7 handler at 0x4180.
+    // 1. Acknowledge/clear the external interrupt by writing 0x7F20 FIRST. This both stops the
+    //    Verilog testbench from re-raising `interrupt` (no storm) and clears Cause.IP[2] before
+    //    we read Cause, so MARS (auto-clears IP at exception entry) and the CPU (holds the level
+    //    until the ack) agree on the traced Cause value.
+    // 2. Read Cause; if ExcCode == 0 (external interrupt) just eret (re-execute the deferred
+    //    instruction). Otherwise advance EPC by 4 to skip the faulting instruction.
+    // Only $k0/$k1 ($26/$27) are touched; generated user code never reads them, so the handler
+    // is transparent to user-visible state. eret has no delay slot.
     return [
       '.ktext 0x4180',
-      '_co_exception_handler:',
-      '    mfc0 $27, $14',
-      '    addi $27, $27, 4',
-      '    mtc0 $27, $14',
-      '    eret',
-      '    addi $27, $0, 0x1234'
+      '_co_excep:',
+      `    ori $k0, $0, 0x${p7IntAckAddress.toString(16)}`,
+      '    sw $0, 0($k0)',
+      '    mfc0 $k0, $13',
+      '    andi $k1, $k0, 0x7c',
+      '    beq $k1, $0, _co_excep_ret',
+      '    nop',
+      '    mfc0 $k0, $14',
+      '    addi $k0, $k0, 4',
+      '    mtc0 $k0, $14',
+      '_co_excep_ret:',
+      '    eret'
     ];
+  }
+
+  private emitP7Prologue(): void {
+    // Install SR = 0x1001 (IE=1, IM[2]=1) before any body instruction so the external interrupt
+    // can be taken and so mfc0 $12 reads agree between MARS (reset 0x0000FF11) and the Verilog
+    // CPU (reset 0). Emitted as static instructions: $k0 must not enter the read-candidate pool.
+    this.emitStaticInstruction('ori', `ori $k0, $0, 0x${p7StatusEnableInterrupts.toString(16)}`);
+    this.emitStaticInstruction('mtc0', `mtc0 $k0, $12`);
+    this.state.cp0_sr = p7StatusEnableInterrupts;
+  }
+
+  private wantsExceptionInjection(): boolean {
+    if (this.exceptionRate <= 0 || !this.p7HandlerEnabled) {
+      return false;
+    }
+    // Leave room: the faulting instruction takes a slot and must not be the last body slot.
+    if (this.remaining() <= 2) {
+      return false;
+    }
+    // Don't perturb a pending MDU read window or a delay-slot obligation.
+    if (this.state.pendingHiLoRead || this.state.mduProtectedSlots > 0) {
+      return false;
+    }
+    return this.rng.chance(this.exceptionRate);
+  }
+
+  private emitException(): boolean {
+    const kinds = this.availableExceptionKinds();
+    if (!kinds.length) {
+      return false;
+    }
+    this.rng.pick(kinds)();
+    return true;
+  }
+
+  // Each kind emits exactly one faulting instruction with NO modeled state change: the handler
+  // skips it (EPC += 4), so the destination register / memory is never written. Both MARS and a
+  // correct P7 CPU detect the same exception on the same instruction, so the (empty) effect and
+  // the handler trace align.
+  private availableExceptionKinds(): Array<() => void> {
+    const kinds: Array<() => void> = [];
+    if (this.allowed.has('syscall')) {
+      kinds.push(() => this.emitStaticInstruction('syscall', 'syscall'));
+    }
+    const load = ['lw', 'lh', 'lhu'].find((mnemonic) => this.allowed.has(mnemonic));
+    if (load) {
+      kinds.push(() => this.emitStaticInstruction(load, `${load} ${this.chooseWriteRegister()}, 1($0)`)); // AdEL: misaligned
+    }
+    const store = ['sw', 'sh'].find((mnemonic) => this.allowed.has(mnemonic));
+    if (store) {
+      kinds.push(() => this.emitStaticInstruction(store, `${store} ${this.chooseReadRegister()}, 1($0)`)); // AdES: misaligned
+    }
+    const overflow = this.overflowException();
+    if (overflow) {
+      kinds.push(overflow);
+    }
+    return kinds;
+  }
+
+  private overflowException(): (() => void) | undefined {
+    const overflows = (value: number): boolean => value > 0x7fffffff || value < -0x80000000;
+    if (this.allowed.has('add') || this.allowed.has('sub')) {
+      const useSub = !this.allowed.has('add');
+      for (const rs of readRegisters) {
+        for (const rt of readRegisters) {
+          const a = signed32(this.state.regValue(rs));
+          const b = signed32(this.state.regValue(rt));
+          if (overflows(useSub ? a - b : a + b)) {
+            const op = useSub ? 'sub' : 'add';
+            return () => this.emitStaticInstruction(op, `${op} ${this.chooseWriteRegister()}, ${rs}, ${rt}`);
+          }
+        }
+      }
+    }
+    if (this.allowed.has('addi')) {
+      for (const rs of readRegisters) {
+        const a = signed32(this.state.regValue(rs));
+        for (const imm of [0x7fff, -0x8000]) {
+          if (overflows(a + imm)) {
+            return () => this.emitStaticInstruction('addi', `addi ${this.chooseWriteRegister()}, ${rs}, ${formatImmediate(imm)}`);
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private noteInterruptCandidate(mnemonic: string, startIndex: number): void {
+    if (!this.interruptEnabled) {
+      return;
+    }
+    // Only a simple value-producing op that emitted exactly one instruction is a safe target.
+    if (safeInterruptTargetMnemonics.has(mnemonic) && this.emittedCount === startIndex + 1) {
+      this.interruptCandidates.push(startIndex);
+    }
+  }
+
+  private chooseInterruptSchedule(): number[] {
+    // Require a contiguous safe pair (k, k+1) of always-executed simple instructions. The schedule
+    // value is the testbench target_pc = the architectural instruction the CPU defers (its EPC),
+    // which is k+1. MARS fires p7irq one instruction earlier (at k) — see buildMarsArgs — because
+    // its prevIRQ injection commits the p7irq instruction and defers the next one, whereas the CPU
+    // samples the interrupt against the M-stage macroscopic_pc and defers that instruction. Both
+    // ends therefore defer k+1, and both k and k+1 are simple ops (so Cause.BD=0 and the precise
+    // interrupt point is unambiguous).
+    const candidateSet = new Set(this.interruptCandidates);
+    const contiguous = this.interruptCandidates.filter((index) => candidateSet.has(index + 1)).sort((a, b) => a - b);
+    if (!contiguous.length) {
+      return [];
+    }
+    const pick = contiguous[Math.floor(contiguous.length / 2)];
+    return [textBaseAddress + (pick + 1) * 4];
   }
 
   private pickCoverageMnemonic(queue: string[]): string | undefined {
@@ -386,11 +567,17 @@ class ProgramGenerator {
     if (mnemonic === 'teq' || mnemonic === 'tge' || mnemonic === 'tgeu' || mnemonic === 'tlt' || mnemonic === 'tltu') {
       return this.falseTrapRegisterOperands(mnemonic) !== undefined;
     }
-    if (cp0Mnemonics.has(mnemonic)) {
+    if (mnemonic === 'mfc0') {
+      // Body only reads Status ($12); EPC/Cause reads are left to the fixed handler.
       return this.profile === 'P7';
     }
+    if (mnemonic === 'mtc0') {
+      // Never generated in the body: mtc0 is reserved for the fixed prologue/handler so that
+      // Status stays at p7StatusEnableInterrupts and the model can predict mfc0 $12 reads.
+      return false;
+    }
     if (mnemonic === 'syscall') {
-      return this.p7ExceptionHandlerEnabled;
+      return this.p7HandlerEnabled;
     }
     if (mnemonic === 'eret') {
       return false;
@@ -410,7 +597,8 @@ class ProgramGenerator {
   }
 
   private hasDelaySlotCandidate(): boolean {
-    return Array.from(this.allowed).some((mnemonic) => !controlMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic));
+    return Array.from(this.allowed).some((mnemonic) =>
+      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && this.canEmitSingle(mnemonic));
   }
 
   private emitMnemonic(mnemonic: string): void {
@@ -787,27 +975,21 @@ class ProgramGenerator {
   }
 
   private emitCp0(mnemonic: string): void {
-    if (mnemonic === 'mfc0') {
-      const rt = this.chooseWriteRegister();
-      const cp0 = this.rng.pick(['$12', '$13', '$14', '$15', '$8']);
-      this.emit(mnemonic, `mfc0 ${rt}, ${cp0}`);
-      this.state.setRegister(rt, this.state.cp0ReadValue(cp0));
+    // Only mfc0 $12 (Status) is generated. Status is held constant by the prologue, so the read
+    // value is modelable and matches both MARS and the Verilog CPU. EPC/Cause reads and all mtc0
+    // writes are left to the fixed prologue/handler (see canEmitSingle).
+    if (mnemonic !== 'mfc0') {
       return;
     }
-
-    const cp0 = this.rng.pick(['$12', '$14']);
-    const rt = cp0 === '$12' ? '$0' : this.chooseReadRegister();
-    this.emit(mnemonic, `mtc0 ${rt}, ${cp0}`);
-    this.state.cp0WriteValue(cp0, this.state.regValue(rt));
+    const rt = this.chooseWriteRegister();
+    this.emit('mfc0', `mfc0 ${rt}, $12`);
+    this.state.setRegister(rt, this.state.cp0_sr);
   }
 
   private emitSyscall(): void {
+    // syscall raises ExcCode 8; the handler advances EPC by 4 so execution resumes after it.
+    // No user-visible (GPR/DM) state changes, so the software model treats it as a no-op.
     this.emit('syscall', 'syscall');
-    // Hardware: EPC ← syscall PC, Cause.ExcCode ← 8, SR.EXL ← 1.
-    // Handler (mfc0→addi 4→mtc0→eret): EPC ← syscall PC + 4, SR.EXL ← 0.
-    // Net effect: EPC points past syscall, SR unchanged, Cause has ExcCode=8.
-    this.state.cp0_epc = this.currentPc();
-    this.state.cp0_cause = (this.state.cp0_cause & ~0x7c) | (8 << 2);
   }
 
   private emitTrapRegister(mnemonic: string): void {
@@ -931,7 +1113,10 @@ class ProgramGenerator {
     if (candidates.length) {
       return this.rng.pick(candidates);
     }
-    return this.rng.pick(Array.from(this.allowed).filter((mnemonic) => !controlMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic)));
+    // Exclude syscall: an exception in a delay slot sets Cause.BD and makes the handler's EPC+4
+    // land back on the delay slot, looping forever.
+    return this.rng.pick(Array.from(this.allowed).filter((mnemonic) =>
+      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && this.canEmitSingle(mnemonic)));
   }
 
   private hasStatefulPoisonCandidate(): boolean {
