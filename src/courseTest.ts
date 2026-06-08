@@ -1571,7 +1571,7 @@ function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile:
   <h1>持续测试</h1>
   <div class="summary">
     <div class="metric"><span>状态</span><strong>${escapeHtml(state)}</strong></div>
-    <div class="metric"><span>论述</span><strong>${report.iterations.length}</strong></div>
+    <div class="metric"><span>轮数</span><strong>${report.iterations.length}</strong></div>
     <div class="metric"><span>最近通过</span><strong>${latestSummary.passed}</strong></div>
     <div class="metric"><span>最近失败</span><strong>${latestSummary.failed}</strong></div>
     <div class="metric"><span>最近错误</span><strong>${latestSummary.errors}</strong></div>
