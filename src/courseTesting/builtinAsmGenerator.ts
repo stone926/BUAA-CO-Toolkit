@@ -263,6 +263,9 @@ class ProgramGenerator {
   private pendingHiLoRead = false;
   private mduProtectedSlots = 0;
   private nextMduProbeMode: MduReadProbeMode = 'busy';
+  private cp0_sr = 0;
+  private cp0_cause = 0;
+  private cp0_epc = 0;
 
   constructor(profile: CpuProfile, mnemonics: string[], targetCount: number, seed: string, generatedAt: Date) {
     this.profile = profile;
@@ -846,17 +849,23 @@ class ProgramGenerator {
       const rt = this.chooseWriteRegister();
       const cp0 = this.rng.pick(['$12', '$13', '$14', '$15', '$8']);
       this.emit(mnemonic, `mfc0 ${rt}, ${cp0}`);
-      this.setRegister(rt, 0);
+      this.setRegister(rt, this.cp0ReadValue(cp0));
       return;
     }
 
     const cp0 = this.rng.pick(['$12', '$14']);
     const rt = cp0 === '$12' ? '$0' : this.chooseReadRegister();
     this.emit(mnemonic, `mtc0 ${rt}, ${cp0}`);
+    this.cp0WriteValue(cp0, this.regValue(rt));
   }
 
   private emitSyscall(): void {
     this.emit('syscall', 'syscall');
+    // Hardware: EPC ← syscall PC, Cause.ExcCode ← 8, SR.EXL ← 1.
+    // Handler (mfc0→addi 4→mtc0→eret): EPC ← syscall PC + 4, SR.EXL ← 0.
+    // Net effect: EPC points past syscall, SR unchanged, Cause has ExcCode=8.
+    this.cp0_epc = this.currentPc();
+    this.cp0_cause = (this.cp0_cause & ~0x7c) | (8 << 2);
   }
 
   private emitTrapRegister(mnemonic: string): void {
@@ -1250,6 +1259,31 @@ class ProgramGenerator {
     const mask = ~(0xff << shift);
     const previous = this.wordAt(aligned);
     this.memory.set(aligned, (previous & mask) | ((value & 0xff) << shift));
+  }
+
+  private cp0ReadValue(cp0Register: string): number {
+    switch (cp0Register) {
+      case '$12':
+        return this.cp0_sr;
+      case '$13':
+        return this.cp0_cause;
+      case '$14':
+        return this.cp0_epc;
+      default:
+        return 0;
+    }
+  }
+
+  private cp0WriteValue(cp0Register: string, value: number): void {
+    const normalized = signed32(value);
+    switch (cp0Register) {
+      case '$12':
+        this.cp0_sr = normalized;
+        break;
+      case '$14':
+        this.cp0_epc = normalized;
+        break;
+    }
   }
 
   private setRegister(register: string, value: number): void {
