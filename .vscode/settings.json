@@ -9,6 +9,8 @@
         "Isim",
         "localparam",
         "Logisim",
+        "Mfhi",
+        "Mflo",
         "mipsasm",
         "nettype",
         "nodebug",
@@ -16,6 +18,7 @@
         "nonblocking",
         "readmemb",
         "readmemh",
+        "regs",
         "tclbatch",
         "Testbench",
         "verilog"
