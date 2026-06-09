@@ -79,6 +79,7 @@ export function analyzeSignalWiring(
   const declaration = declarationOf(symbol);
 
   // 该信号的全部出现位置（不含声明本身）。其中既有读也有写。
+  // 端口连接的"端口名"（如 `.clk(clk)` 中的 `.clk`）已由语义模型区分，不会并入本地同名信号。
   const occurrences = verilogSemanticReferenceRanges(
     parsed.semantic,
     verilogSemanticTargetFromSymbol(symbol),
@@ -110,12 +111,20 @@ export function analyzeSignalWiring(
     }
     const hit = portHits.find((candidate) => containsPosition(candidate.expressionRange, range.start));
     if (hit) {
+      const meta = { instanceName: hit.instanceName, portName: hit.portName };
       if (hit.direction === 'output') {
-        drivers.push({ kind: 'instancePortDriver', range, instanceName: hit.instanceName, portName: hit.portName });
-      } else if (hit.direction === 'input' || hit.direction === 'inout') {
-        readers.push({ kind: 'instancePortReader', range, instanceName: hit.instanceName, portName: hit.portName });
+        // 实例 output 端口驱动本信号 → 写
+        drivers.push({ kind: 'instancePortDriver', range, ...meta });
+      } else if (hit.direction === 'input') {
+        // 本信号连到实例 input 端口 → 读
+        readers.push({ kind: 'instancePortReader', range, ...meta });
+      } else if (hit.direction === 'inout') {
+        // inout 端口既驱动又读取本信号 → 同时计入两侧
+        drivers.push({ kind: 'instancePortDriver', range, ...meta });
+        readers.push({ kind: 'instancePortReader', range, ...meta });
       } else {
-        readers.push({ kind: 'instancePort', range, instanceName: hit.instanceName, portName: hit.portName });
+        // 目标模块不在本文件、方向未知
+        readers.push({ kind: 'instancePort', range, ...meta });
       }
       continue;
     }

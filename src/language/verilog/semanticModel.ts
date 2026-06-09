@@ -423,9 +423,17 @@ function previousSignificantToken(tokens: VerilogToken[], index: number): Verilo
   return undefined;
 }
 
+// 未绑定引用只允许这些"裸标识符使用"类别按名字回退匹配。结构化引用——端口/参数连接名
+// （`.clk`）、模块名、宏名、include 名——指向的是其它实体，只是恰好与某个本地信号/端口同名，
+// 不应被当作该信号的引用（否则会污染 find-references / rename / 信号连线面板）。
+const nameMatchableReferenceKinds = new Set<VerilogSemanticReferenceKind>(['signal', 'instance', 'unresolved']);
+
 function referenceMatchesTarget(reference: VerilogSemanticReference, target: VerilogSemanticTarget): boolean {
   if (reference.symbol) {
     return reference.symbol === target.symbol;
+  }
+  if (!nameMatchableReferenceKinds.has(reference.kind)) {
+    return false;
   }
   return reference.name === target.symbol.name
     && reference.scope === target.symbol.scope

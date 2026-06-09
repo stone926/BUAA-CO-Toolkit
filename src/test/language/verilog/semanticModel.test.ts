@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { defaultCoSettings } from '../../../language/common/settings';
 import { parseVerilog } from '../../../language/verilog/parser';
-import { resolveVerilogSemanticAtPosition } from '../../../language/verilog/semanticModel';
+import { resolveVerilogSemanticAtPosition, verilogSemanticReferenceRanges, verilogSemanticTargetFromSymbol } from '../../../language/verilog/semanticModel';
 
 function doc(text: string): TextDocument {
   return TextDocument.create('test://semantic.v', 'verilog', 1, text);
@@ -56,5 +56,30 @@ describe('Verilog AST and semantic model', () => {
     const resolved = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(sigOffset));
     expect(resolved?.symbol?.name).toBe('sig');
     expect(resolved?.symbol?.kind).toBe('signal');
+  });
+
+  it('does not treat an instance port name as a reference to a same-named signal', () => {
+    const text = [
+      'module sub(input clk);',
+      'endmodule',
+      'module top(input clk);',
+      '    sub u(.clk(clk));',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const clkSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'clk' && symbol.module?.name === 'top');
+    expect(clkSymbol).toBeDefined();
+
+    const ranges = verilogSemanticReferenceRanges(result.semantic, verilogSemanticTargetFromSymbol(clkSymbol!), false);
+    const has = (offset: number): boolean => {
+      const pos = document.positionAt(offset);
+      return ranges.some((range) => range.start.line === pos.line && range.start.character === pos.character);
+    };
+
+    // `.clk` (the instantiated module's port name) must NOT count as a use of top's signal clk.
+    expect(has(text.indexOf('.clk(') + 1)).toBe(false);
+    // the connected expression `(clk)` IS a use of top's signal clk.
+    expect(has(text.indexOf('(clk)') + 1)).toBe(true);
   });
 });

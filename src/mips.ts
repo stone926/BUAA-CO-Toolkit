@@ -11,7 +11,8 @@ import {
 } from './config';
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
-import { AppServices, RunResult } from './types';
+import { appendHaltLoop } from './courseTesting/mipsUtil';
+import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 
 export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
@@ -162,6 +163,8 @@ export async function runMarsFile(
 
   if (mode === 'dumpText' && result.ok && outputFile && getProfile(asmUri) === 'P7') {
     result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result);
+  } else if (mode === 'dumpText' && result.ok && outputFile && cpuHaltProfiles.has(getProfile(asmUri))) {
+    await appendHaltLoopToTextDump(outputFile, services);
   }
 
   if (mode === 'run') {
@@ -343,6 +346,30 @@ async function mergeP7KernelTextDump(
 
 function machineCodeLines(text: string): string[] {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+/**
+ * 非 P7 的流水线/CPU Profile（P4/P5/P6）：其 dump 出的 code.txt 会被 ISim CPU 和 hazard 对拍工具执行。
+ * 这些工具会在执行完最后一条指令后继续向指令存储器末尾之外取指，触发取指 AdEL。P7 由
+ * mergeP7KernelTextDump 自带停机自环，这里覆盖 P4/P5/P6。
+ */
+const cpuHaltProfiles = new Set<ProjectProfile>(['P4', 'P5', 'P6']);
+
+/**
+ * 给 dump 出的机器码追加停机自环（与 P7 一致）。仅改 code.txt，不改源 ASM，所以 MARS 黄金 trace
+ * 直接运行 ASM 时仍按原样在末尾自然停机，两端写事件不变。
+ */
+async function appendHaltLoopToTextDump(outputFile: vscode.Uri, services: AppServices): Promise<void> {
+  try {
+    const text = await readTextFile(outputFile);
+    const terminated = appendHaltLoop(text);
+    if (terminated !== text) {
+      await writeTextFile(outputFile, terminated);
+      services.output.appendLine('已为机器码追加停机自环（防止流水线取指越界，避免 hazard 工具报 AdEL）');
+    }
+  } catch (error) {
+    services.output.appendLine(`追加停机自环失败：${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function workspaceFileExists(uri: vscode.Uri): Promise<boolean> {

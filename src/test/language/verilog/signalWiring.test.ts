@@ -70,3 +70,45 @@ describe('analyzeSignalWiring', () => {
     expect(report).toBeUndefined();
   });
 });
+
+const portText = [
+  'module sub(input a, output b, inout c, input clk);',
+  'endmodule',
+  'module top(input clk, output y);',
+  '    wire w;',
+  '    sub u(.a(w), .b(w), .c(y), .clk(clk));',
+  'endmodule'
+].join('\n');
+
+describe('analyzeSignalWiring instance port connections', () => {
+  function reportAt(anchor: string, skip: string): ReturnType<typeof analyzeSignalWiring> {
+    const document = doc(portText);
+    const parsed = parseVerilog(document, defaultCoSettings, false);
+    return analyzeSignalWiring(parsed, document, document.positionAt(portText.indexOf(anchor) + skip.length));
+  }
+
+  it('does not treat a same-named instance port (.clk) as a use of the signal', () => {
+    const report = reportAt('input clk, output y', 'input ');
+    expect(report?.name).toBe('clk');
+    // Only the `.clk(clk)` expression counts: an input port → reader. The `.clk` port name is excluded.
+    expect(report?.readers).toHaveLength(1);
+    expect(report?.readers[0].kind).toBe('instancePortReader');
+    expect(report?.readers[0].portName).toBe('clk');
+    expect(report?.drivers.concat(report?.readers ?? []).some((entry) => entry.kind === 'use')).toBe(false);
+  });
+
+  it('classifies input ports as readers and output ports as drivers', () => {
+    const report = reportAt('wire w', 'wire ');
+    expect(report?.name).toBe('w');
+    expect(report?.drivers.some((entry) => entry.kind === 'instancePortDriver' && entry.portName === 'b')).toBe(true);
+    expect(report?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'a')).toBe(true);
+    expect(report?.drivers.concat(report?.readers ?? []).some((entry) => entry.kind === 'use')).toBe(false);
+  });
+
+  it('counts an inout port connection as both a driver and a reader', () => {
+    const report = reportAt('output y', 'output ');
+    expect(report?.name).toBe('y');
+    expect(report?.drivers.some((entry) => entry.kind === 'instancePortDriver' && entry.portName === 'c')).toBe(true);
+    expect(report?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'c')).toBe(true);
+  });
+});
