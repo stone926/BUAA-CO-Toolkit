@@ -2,7 +2,7 @@
   "name": "buaa-co-toolkit",
   "displayName": "BUAA CO Toolkit",
   "description": "计算机组成实验 VSCode 工具箱：支持 Logisim、MARS MIPS 汇编和 Verilog",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "stone926",
   "icon": "icons/logo.png",
   "license": "MIT",

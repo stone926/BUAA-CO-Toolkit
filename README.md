@@ -8,12 +8,14 @@
 
 ### 第一步：装好外部工具并填路径
 
+先下载 [`MARS P7` 魔改版](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases)
+
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
 ```jsonc
 {
   // MIPS / 对拍黄金模型（建议用修改版 Mars，支持 coL1 对拍输出）
-  "co.toolchain.mars":   "修改版 Mars 的路径",
+  "co.toolchain.mars": "修改版 Mars 的路径",
   // P7 专用 Mars（需支持 efc / p7irq / coL1）；不填则回退到上面的 mars
   "co.toolchain.marsP7": "修改版 Mars P7 的路径",
   // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
@@ -21,7 +23,7 @@
   // Logisim（P0/P3）
   "co.toolchain.logisim": "Logisim 的路径",
   // Java / Python（一般保持默认即可）
-  "co.toolchain.java":   "java",
+  "co.toolchain.java": "java",
   "co.toolchain.python": "python"
 }
 ```
@@ -49,7 +51,7 @@
 这是本插件最重要的能力。它把课程对拍流程全自动化：
 
 ```
-随机生成器  →  ASM 测试点  →  MARS dump 机器码 ─┐
+随机生成器  →  ASM 测试点  →  MARS dump 机器码 ──┐
                                                ├─→ 对拍 GRF/DM 写  →  报告（首个差异定位）
                           MARS 黄金 trace ──────┘
                           你的 CPU（ISim/Logisim 仿真）┘
