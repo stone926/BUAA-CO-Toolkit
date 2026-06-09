@@ -225,7 +225,10 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
 }
 
 function toolchainCacheKey(resource?: vscode.Uri): string {
-  return resource?.toString() ?? vscode.workspace.workspaceFolders?.[0]?.uri.toString() ?? 'global';
+  const folder = resource
+    ? vscode.workspace.getWorkspaceFolder(resource)
+    : vscode.workspace.workspaceFolders?.[0];
+  return folder?.uri.toString() ?? 'global';
 }
 
 function sameResource(left?: vscode.Uri, right?: vscode.Uri): boolean {

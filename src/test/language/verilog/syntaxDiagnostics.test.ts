@@ -576,4 +576,58 @@ endmodule
       expect(result).not.toContain('syntax-invalid-number-literal');
     });
   });
+
+  describe('procedural delay and event control statements', () => {
+    it('does not report error for #delay statement in initial block', () => {
+      const result = codes(`
+module test();
+    initial begin
+        #200000;
+        $finish;
+    end
+endmodule
+`.trim());
+      expect(result).not.toContain('syntax-unrecognized-procedural-statement');
+      expect(result).not.toContain('syntax-unrecognized-module-item');
+    });
+
+    it('does not report error for #delay before assignment', () => {
+      const result = codes(`
+module test(output reg a);
+    initial begin
+        #10 a = 1;
+    end
+endmodule
+`.trim());
+      expect(result).not.toContain('syntax-unrecognized-procedural-statement');
+    });
+
+    it('does not report error for @ event control wait', () => {
+      const result = codes(`
+module test(input clk, output reg a);
+    always @(posedge clk) begin
+        @(negedge clk);
+        a <= 1;
+    end
+endmodule
+`.trim());
+      expect(result).not.toContain('syntax-unrecognized-procedural-statement');
+    });
+
+    it('does not report error for -> event trigger', () => {
+      const result = codes(`
+module test(output reg a);
+    event ev;
+    always @(ev) begin
+        a <= 1;
+    end
+    initial begin
+        #10;
+        -> ev;
+    end
+endmodule
+`.trim());
+      expect(result).not.toContain('syntax-unrecognized-procedural-statement');
+    });
+  });
 });

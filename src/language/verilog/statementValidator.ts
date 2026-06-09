@@ -1166,6 +1166,21 @@ function validateProceduralStatement(
     return;
   }
 
+  // 延迟控制: #delay 或 #(delay) — 过程块内合法
+  if (first.value === '#') {
+    return;
+  }
+
+  // 事件控制: @(event) 或 @identifier 或 @* — 过程块内合法
+  if (first.value === '@') {
+    return;
+  }
+
+  // 事件触发: -> event_trigger — 过程块内合法
+  if (first.value === '->') {
+    return;
+  }
+
   // 其他控制语句 — 当前不做深入验证
   if (first.value === 'forever' || first.value === 'repeat' ||
       first.value === 'disable' || first.value === 'wait' || first.value === 'fork' ||
