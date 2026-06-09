@@ -176,16 +176,13 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       );
     }
     if (this.shouldShowTraceTestActions(profile)) {
-      if (profile === 'P7') {
-        actionChildren.push(this.createCommandItem('P7 一键测试', 'co.test.startContinuousGeneratedTraceTests', 'rocket'));
-      }
       actionChildren.push(
       this.createCommandItem('手动选择输出对拍', 'co.test.compareTraceFiles', 'compare-changes'),
       this.createCommandItem('最近输出对拍', 'co.test.compareLatestOutputs', 'diff'),
       this.createCommandItem('单 ASM 测试', 'co.test.runFullTest', 'run-all'),
       this.createCommandItem('多 ASM 批量测试', 'co.test.runBatchTraceTests', 'list-selection'),
       this.createCommandItem('生成并批量测试', 'co.test.runGeneratedTraceTests', 'beaker'),
-      this.createCommandItem('持续生成测试', 'co.test.startContinuousGeneratedTraceTests', 'sync'),
+      this.createCommandItem('持续生成测试', 'co.test.startContinuousGeneratedTraceTests', 'rocket'),
       this.createCommandItem('停止持续测试', 'co.test.stopContinuousTests', 'debug-stop'),
         this.createCommandItem('打开批量测试报告', 'co.test.openBatchTraceReport', 'preview')
       );
