@@ -226,3 +226,40 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 ---
 
 如需扩展（如 Timer 模块单元测试、显式校验 CP0 寄存器值、其他后端），欢迎提 issue / 反馈。
+
+---
+
+## 附录
+
+## 与 MARS 在 P7 对拍中协作
+
+Mars 的 `coL1` 输出被本插件自动解析和对拍。协作流程：
+
+1. **插件** 调用 `java -jar Mars.jar <asm> nc db mc CompactLargeText efc coL1 [p7irq=...]`，捕获 stdout 为 `.mars.out`
+2. **插件** 生成 Verilog testbench 并运行 ISim 仿真，捕获 `$display` 输出为 `.sim.out`
+3. **插件** 用同一正则解析两路输出，逐事件比对 PC、目标寄存器/地址、写入值
+
+### 对拍约定（插件依赖的 Mars 行为）
+
+| 行为 | 说明 |
+|------|------|
+| 输出目标 | `coL1` → stdout，`coERR` → stderr。插件默认解析 stdout |
+| 事件格式 | `@<8位hex>: <$|*><target> <= <8位hex>`（每行一个事件） |
+| 事件顺序 | 按指令执行顺序输出；同一指令的多笔写操作在同一 PC 下分行输出 |
+| $0 写入 | **不输出**（与 testbench `$0` 过滤一致） |
+| hi/lo 写入 | **不输出**（MDU 内部寄存器，testbench 不追踪） |
+| CP0 写入 | **不输出**（`mtc0` 不可见于 `$display` trace） |
+| MMIO 写入 | **不输出**（Timer `0x7F00~0x7F1B`、中断响应 `0x7F20`，与 testbench 一致） |
+| 内存地址 | 字对齐（`addr & ~0x3`），与 testbench `fixed_addr = m_data_addr & 32'hfffffffc` 一致 |
+
+### 插件端参数映射
+
+插件根据用户配置自动拼接 Mars 参数，用户无需手动操作：
+
+| 插件配置 | 映射的 Mars 参数 |
+|----------|-----------------|
+| Profile `P7` | `mc CompactLargeText efc` |
+| Profile `P4/P5/P6` | `mc FixedCompactLargeText` |
+| `mips.delayedBranching` = `on` / `profile:P5+` | `db` |
+| `test.p7.interrupt` = `true` | `p7irq=<target_pc-4>` |
+| `mips.extraArgs` | 直接附加到命令行 |
