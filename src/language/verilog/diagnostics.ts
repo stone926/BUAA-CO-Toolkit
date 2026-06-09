@@ -15,7 +15,7 @@ import {
   VerilogPortConnection
 } from './model';
 import { VerilogCstDocument, verilogTokenRange } from './cst';
-import { VerilogToken } from './lexer';
+import { isIdentifierLike, VerilogToken } from './lexer';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import {
   collectAssignmentDiagnostics,
@@ -133,8 +133,12 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
         continue;
       }
       const tokens = trimStatementTokens(statement.tokens);
+      if (isDeclarationStatement(tokens)) {
+        collectDeclarationInitializerWidthDiagnostics(document, text, module, tokens, diagnostics);
+        continue;
+      }
       const operatorIndex = findAssignmentOperator(tokens);
-      if (operatorIndex < 0 || isDeclarationStatement(tokens)) {
+      if (operatorIndex < 0) {
         continue;
       }
       const lhsTokens = lhsTokensForAssignment(tokens, operatorIndex);
@@ -198,6 +202,124 @@ const declarationStatementKeywords = new Set([
   'localparam',
   'genvar'
 ]);
+
+const declarationModifierKeywords = new Set([
+  'signed', 'unsigned', 'automatic', 'scalared', 'vectored',
+  'tri', 'tri0', 'tri1', 'supply0', 'supply1', 'wand', 'wor'
+]);
+
+// parameter/localparam widths are inferred FROM their initializer, so checking them is circular;
+// genvar is a loop index, not a sized net.
+const initializerWidthCheckedKinds = new Set(['wire', 'reg', 'logic', 'integer', 'time', 'input', 'output', 'inout']);
+
+// `wire [31:0] x = {20'h0, imm16};` is a declaration with an initializer — the assignment-statement
+// loop skips declarations, so initializer width is checked here. Each declarator `name = expr` is
+// compared against the declared width; only truncation is reported (see shouldReportWidthMismatch).
+function collectDeclarationInitializerWidthDiagnostics(
+  document: TextDocument,
+  text: string,
+  module: VerilogModule,
+  tokens: VerilogToken[],
+  diagnostics: Diagnostic[]
+): void {
+  const start = firstDeclaratorIndex(tokens);
+  if (start < 0) {
+    return;
+  }
+  for (const declarator of splitTopLevelByComma(tokens.slice(start))) {
+    const operatorIndex = findAssignmentOperator(declarator);
+    if (operatorIndex <= 0 || declarator[operatorIndex].value !== '=') {
+      continue;
+    }
+    const nameToken = declarator[0];
+    if (!nameToken || !isIdentifierLike(nameToken.kind)) {
+      continue;
+    }
+    const decl = module.declarations.get(nameToken.value);
+    if (!decl || !initializerWidthCheckedKinds.has(decl.kind)) {
+      continue;
+    }
+    const initTokens = declarator.slice(operatorIndex + 1);
+    if (!initTokens.length) {
+      continue;
+    }
+    const expected = widthOfDecl(decl);
+    const actual = widthOfExpression(tokenText(text, initTokens).trim(), module);
+    if (shouldReportWidthMismatch(expected, actual)) {
+      diagnostics.push(makeDiagnostic(
+        tokenRange(document, initTokens),
+        `Width mismatch: '${nameToken.value}' is ${expected.width} bit(s), but its initializer is ${actual.width} bit(s).`,
+        DiagnosticSeverity.Warning,
+        'width-mismatch'
+      ));
+    }
+  }
+}
+
+function firstDeclaratorIndex(tokens: VerilogToken[]): number {
+  let index = 0;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token.value === '[') {
+      const close = matchingBracket(tokens, index);
+      if (close < 0) {
+        return -1;
+      }
+      index = close + 1;
+      continue;
+    }
+    if (token.kind === 'keyword' && (declarationStatementKeywords.has(token.value) || declarationModifierKeywords.has(token.value))) {
+      index++;
+      continue;
+    }
+    return isIdentifierLike(token.kind) ? index : -1;
+  }
+  return -1;
+}
+
+function matchingBracket(tokens: VerilogToken[], openIndex: number): number {
+  let depth = 0;
+  for (let index = openIndex; index < tokens.length; index++) {
+    if (tokens[index].value === '[') {
+      depth++;
+    } else if (tokens[index].value === ']') {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function splitTopLevelByComma(tokens: VerilogToken[]): VerilogToken[][] {
+  const parts: VerilogToken[][] = [];
+  let start = 0;
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const value = tokens[index].value;
+    if (value === '(') {
+      paren++;
+    } else if (value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (value === '[') {
+      bracket++;
+    } else if (value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (value === '{') {
+      brace++;
+    } else if (value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if (value === ',' && paren === 0 && bracket === 0 && brace === 0) {
+      parts.push(tokens.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(tokens.slice(start));
+  return parts.filter((part) => part.length > 0);
+}
 
 function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
   const result = tokens.filter((token) => token.kind !== 'eof');

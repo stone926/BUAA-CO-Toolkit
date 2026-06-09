@@ -3,6 +3,8 @@ import { Range as LspRange } from 'vscode-languageserver/node';
 import { parseVerilog } from './language/verilog/service';
 import { analyzeSignalWiring, SignalWiringEntry, SignalWiringEntryKind } from './language/verilog/signalWiring';
 import { coSettingsForUri, toTextDocument } from './verilog';
+import { VerilogModule } from './language/verilog/model';
+import { parseModules } from './language/verilog/parser';
 
 const placeholderMessage = '将光标放在 Verilog 信号上以查看其连线';
 
@@ -32,6 +34,7 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
 
   private cacheKey: string | undefined;
   private cacheParsed: ReturnType<typeof parseVerilog> | undefined;
+  private externalModulesCache: { key: string; modules: VerilogModule[] } | undefined;
 
   update(editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor): void {
     this.compute(editor);
@@ -71,11 +74,12 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
     }
     const doc = editor.document;
     const parsed = this.parse(doc);
+    const externalModules = this.collectExternalModules(doc);
     const position = editor.selection.active;
     const report = analyzeSignalWiring(parsed, toTextDocument(doc), {
       line: position.line,
       character: position.character
-    });
+    }, externalModules);
     if (!report) {
       this.message = placeholderMessage;
       return;
@@ -122,6 +126,32 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
       uri: doc.uri,
       range
     };
+  }
+
+  private collectExternalModules(currentDoc: vscode.TextDocument): VerilogModule[] {
+    const allDocs = vscode.workspace.textDocuments;
+    const uris = allDocs
+      .filter((d) => d.languageId === 'verilog' && d.uri.toString() !== currentDoc.uri.toString())
+      .map((d) => d.uri.toString())
+      .sort();
+    const key = uris.join('|') + '@' + allDocs.map((d) => d.version).join(',');
+    if (this.externalModulesCache?.key === key) {
+      return this.externalModulesCache.modules;
+    }
+    const modules: VerilogModule[] = [];
+    for (const doc of allDocs) {
+      if (doc.languageId !== 'verilog' || doc.uri.toString() === currentDoc.uri.toString()) {
+        continue;
+      }
+      try {
+        const text = doc.getText();
+        modules.push(...parseModules(toTextDocument(doc), text));
+      } catch {
+        // 解析失败则跳过该文件
+      }
+    }
+    this.externalModulesCache = { key, modules };
+    return modules;
   }
 
   private parse(doc: vscode.TextDocument): ReturnType<typeof parseVerilog> {

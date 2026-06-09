@@ -268,8 +268,12 @@ describe('shouldReportWidthMismatch', () => {
     expect(shouldReportWidthMismatch({}, {})).toBe(false);
   });
 
-  it('returns true when widths differ', () => {
-    expect(shouldReportWidthMismatch({ width: 32 }, { width: 16 })).toBe(true);
+  it('returns true when the value is wider than the target (truncation)', () => {
+    expect(shouldReportWidthMismatch({ width: 16 }, { width: 32 })).toBe(true);
+  });
+
+  it('returns false when the value is narrower than the target (extension)', () => {
+    expect(shouldReportWidthMismatch({ width: 32 }, { width: 16 })).toBe(false);
   });
 
   it('returns false when actual is flexible and fits', () => {
@@ -515,6 +519,64 @@ describe('widthOfExpression — edge cases', () => {
     });
     expect(widthOfExpression('{a, {b, b}}', module).width).toBe(16);
   });
+
+  it('handles case equality operators (===, !==)', () => {
+    const module = makeModule({
+      declarations: new Map([
+        ['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })],
+        ['b', makeDecl({ name: 'b', kind: 'wire', width: '[31:0]' })]
+      ])
+    });
+    expect(widthOfExpression('a === b', module)).toEqual({ width: 1 });
+    expect(widthOfExpression('a !== b', module)).toEqual({ width: 1 });
+  });
+
+  it('handles XNOR binary operators (~^, ^~)', () => {
+    const module = makeModule({
+      declarations: new Map([
+        ['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })],
+        ['b', makeDecl({ name: 'b', kind: 'wire', width: '[7:0]' })]
+      ])
+    });
+    expect(widthOfExpression('a ~^ b', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+    expect(widthOfExpression('a ^~ b', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+  });
+
+  it('handles power operator (**)', () => {
+    const module = makeModule({
+      declarations: new Map([
+        ['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })],
+        ['b', makeDecl({ name: 'b', kind: 'wire', width: '[4:0]' })]
+      ])
+    });
+    expect(widthOfExpression('a ** b', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+  });
+
+  it('handles reduction NAND, NOR, XNOR operators (~&, ~|, ~^, ^~)', () => {
+    const module = makeModule({
+      declarations: new Map([['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })]])
+    });
+    expect(widthOfExpression('~&a', module).width).toBe(1);
+    expect(widthOfExpression('~|a', module).width).toBe(1);
+    expect(widthOfExpression('~^a', module).width).toBe(1);
+    expect(widthOfExpression('^~a', module).width).toBe(1);
+  });
+
+  it('handles indexed part selects (+:, -:)', () => {
+    const module = makeModule({
+      declarations: new Map([['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })]])
+    });
+    expect(widthOfExpression('a[3+:4]', module)).toEqual({ width: 4 });
+    expect(widthOfExpression('a[7-:8]', module)).toEqual({ width: 8 });
+  });
+
+  it('handles indexed part selects with spaces (+:, -:)', () => {
+    const module = makeModule({
+      declarations: new Map([['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })]])
+    });
+    expect(widthOfExpression('a[3 +: 4]', module)).toEqual({ width: 4 });
+    expect(widthOfExpression('a[7 -: 8]', module)).toEqual({ width: 8 });
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -675,6 +737,23 @@ endmodule
     const modules = parseModules(d, text);
     expect(modules).toHaveLength(1);
     expect(modules[0].ports).toHaveLength(1);
+  });
+
+  it('parses instances whose module name matches a system task name', () => {
+    const text = 'module top(input [3:0] val);\ndisplay u(.val(val));\nendmodule';
+    const d = doc(text);
+    const modules = parseModules(d, text);
+    expect(modules[0].instances).toHaveLength(1);
+    expect(modules[0].instances[0].moduleName).toBe('display');
+    expect(modules[0].instances[0].instanceName).toBe('u');
+  });
+
+  it('parses instances whose module name is a Verilog keyword', () => {
+    const text = 'module top(input a);\nsmall u_small(.a(a));\nendmodule';
+    const d = doc(text);
+    const modules = parseModules(d, text);
+    expect(modules[0].instances).toHaveLength(1);
+    expect(modules[0].instances[0].moduleName).toBe('small');
   });
 });
 

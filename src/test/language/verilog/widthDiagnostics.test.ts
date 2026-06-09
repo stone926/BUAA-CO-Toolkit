@@ -92,4 +92,99 @@ endmodule
 `.trim());
     expect(result).toContain('width-mismatch');
   });
+
+  it('reports a declaration initializer whose concatenation overflows the wire', () => {
+    const result = codes(`
+module m(input [15:0] imm16);
+    wire [31:0] zero_ext = {20'h0000, imm16};
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
+
+  it('does not flag a correctly sized zero-extension concatenation initializer', () => {
+    const result = codes(`
+module m(input [15:0] imm16);
+    wire [31:0] zero_ext = {16'h0000, imm16};
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag widening a narrow signal (extension is not truncation)', () => {
+    const result = codes(`
+module m(input [7:0] sig8, output [31:0] y);
+    wire [31:0] ext = sig8;
+    assign y = sig8;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('reports a declaration initializer that truncates a sized literal', () => {
+    const result = codes(`
+module m;
+    reg [3:0] small = 8'hff;
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
+
+  it('does not flag case equality operators (===, !==)', () => {
+    const result = codes(`
+module m(input [31:0] a, input [31:0] b, output eq, output neq);
+    assign eq = a === b;
+    assign neq = a !== b;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag XNOR binary operator in correct-width assignment', () => {
+    const result = codes(`
+module m(input [31:0] a, input [31:0] b, output [31:0] y);
+    assign y = a ~^ b;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag reduction NAND/NOR/XNOR operators', () => {
+    const result = codes(`
+module m(input [31:0] a, output nand_all, output nor_all, output xnor_all);
+    assign nand_all = ~&a;
+    assign nor_all  = ~|a;
+    assign xnor_all = ~^a;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag indexed part selects (+:, -:)', () => {
+    const result = codes(`
+module m(input [31:0] a, output [3:0] lo, output [7:0] hi);
+    assign lo = a[3+:4];
+    assign hi = a[7-:8];
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('flags indexed part select that truncates', () => {
+    const result = codes(`
+module m(input [31:0] a, output [3:0] y);
+    assign y = a[7+:8];
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
+
+  it('does not flag power operator in correct context', () => {
+    const result = codes(`
+module m(input [3:0] a, input [3:0] b, output [31:0] y);
+    assign y = a ** b;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
 });

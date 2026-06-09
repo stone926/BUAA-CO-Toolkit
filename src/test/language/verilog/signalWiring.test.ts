@@ -112,3 +112,76 @@ describe('analyzeSignalWiring instance port connections', () => {
     expect(report?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'c')).toBe(true);
   });
 });
+
+const systemTaskModuleSource = [
+  'module display(input [3:0] val, output [6:0] seg);',
+  '    assign seg = val < 10 ? val + 48 : val + 55;',
+  'endmodule',
+  'module top(input [3:0] value, output [6:0] seg);',
+  '    display u(.val(value), .seg(seg));',
+  'endmodule'
+].join('\n');
+
+describe('analyzeSignalWiring with module named after system task', () => {
+  it('recognizes a module instance when the module name matches a system task name', () => {
+    const document = doc(systemTaskModuleSource);
+    const parsed = parseVerilog(document, defaultCoSettings, false);
+    // Verify the instance IS parsed
+    const top = parsed.modules.find((m) => m.name === 'top');
+    expect(top?.instances).toHaveLength(1);
+    expect(top?.instances[0].moduleName).toBe('display');
+    expect(top?.instances[0].instanceName).toBe('u');
+
+    // value connects to display.val (input) → should be a reader
+    const valueOffset = systemTaskModuleSource.indexOf('(value)') + 1;
+    const report = analyzeSignalWiring(parsed, document, document.positionAt(valueOffset));
+    expect(report?.name).toBe('value');
+    expect(report?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'val')).toBe(true);
+    expect(report?.drivers).toHaveLength(0);
+
+    // seg connects to display.seg (output) → should be a driver
+    const segOffset = systemTaskModuleSource.indexOf('(seg)') + 1;
+    const segReport = analyzeSignalWiring(parsed, document, document.positionAt(segOffset));
+    expect(segReport?.name).toBe('seg');
+    expect(segReport?.drivers.some((entry) => entry.kind === 'instancePortDriver' && entry.portName === 'seg')).toBe(true);
+  });
+});
+
+const crossFileBeSource = [
+  'module BE(',
+  '    input [31:0] addr,',
+  '    output [3:0] MemByteWrite,',
+  '    output [31:0] fixed_data',
+  ');',
+  'endmodule'
+].join('\n');
+
+const crossFileTopSource = [
+  'module mips();',
+  '    wire [31:0] M_addr;',
+  '    wire [3:0] M_MemByteWrite;',
+  '    wire [31:0] M_fixed_WD_Mem;',
+  '    BE BE (.addr(M_addr), .MemByteWrite(M_MemByteWrite), .fixed_data(M_fixed_WD_Mem));',
+  'endmodule'
+].join('\n');
+
+describe('analyzeSignalWiring cross-file', () => {
+  it('classifies cross-file output port as driver and input port as reader', () => {
+    const beDoc = doc(crossFileBeSource);
+    const topDoc = doc(crossFileTopSource);
+    const beParsed = parseVerilog(beDoc, defaultCoSettings, false);
+    const topParsed = parseVerilog(topDoc, defaultCoSettings, false);
+
+    // M_MemByteWrite → BE.MemByteWrite (output) → driver
+    const driverReport = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_MemByteWrite;')), beParsed.modules);
+    expect(driverReport?.name).toBe('M_MemByteWrite');
+    expect(driverReport?.drivers.some((entry) => entry.kind === 'instancePortDriver' && entry.portName === 'MemByteWrite')).toBe(true);
+    expect(driverReport?.readers).toHaveLength(0);
+
+    // M_addr → BE.addr (input) → reader
+    const readerReport = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_addr;')), beParsed.modules);
+    expect(readerReport?.name).toBe('M_addr');
+    expect(readerReport?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'addr')).toBe(true);
+    expect(readerReport?.drivers).toHaveLength(0);
+  });
+});

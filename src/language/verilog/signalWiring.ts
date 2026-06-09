@@ -66,7 +66,8 @@ const wireableSymbolKinds = new Set(['signal', 'port', 'parameter']);
 export function analyzeSignalWiring(
   parsed: VerilogParseResult,
   document: TextDocument,
-  position: Position
+  position: Position,
+  externalModules?: readonly VerilogModule[]
 ): SignalWiringReport | undefined {
   const resolved = resolveVerilogSemanticAtPosition(parsed.semantic, position);
   const symbol = resolved?.symbol;
@@ -105,7 +106,7 @@ export function analyzeSignalWiring(
     }
   }
 
-  const portHits = collectInstancePortHits(parsed, module, occurrences);
+  const portHits = collectInstancePortHits(parsed, module, occurrences, externalModules);
 
   const drivers: SignalWiringEntry[] = [...writes];
   const readers: SignalWiringEntry[] = [];
@@ -153,11 +154,16 @@ function declarationOf(symbol: VerilogSemanticSymbol): SignalWiringDeclaration |
 function collectInstancePortHits(
   parsed: VerilogParseResult,
   module: VerilogModule,
-  occurrences: Range[]
+  occurrences: Range[],
+  externalModules?: readonly VerilogModule[]
 ): InstancePortHit[] {
   const hits: InstancePortHit[] = [];
   for (const instance of module.instances) {
-    const target = parsed.modules.find((candidate) => candidate.name === instance.moduleName);
+    let target = parsed.modules.find((candidate) => candidate.name === instance.moduleName);
+    // 若当前文件没有目标模块，尝试从外部模块列表中查找（跨文件）
+    if (!target && externalModules) {
+      target = externalModules.find((candidate) => candidate.name === instance.moduleName);
+    }
     for (const connection of instance.portConnections) {
       const referenced = occurrences.some((range) => containsPosition(connection.expressionRange, range.start));
       if (!referenced) {

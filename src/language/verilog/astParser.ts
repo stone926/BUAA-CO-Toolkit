@@ -2,7 +2,7 @@ import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
 import { VerilogCstDocument, parseVerilogCst } from './cst';
-import { VerilogToken } from './lexer';
+import { isIdentifierLike, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
 import {
   systemTasks,
@@ -246,7 +246,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
     const kind = first.value as VerilogDeclKind;
     const width = lastRangeText(text, prefix);
     for (const part of splitTopLevel(semicolonTrimmed.slice(firstName), ',')) {
-      const nameToken = part.find((token) => token.kind === 'identifier');
+      const nameToken = declarationNameToken(part);
       if (!nameToken) {
         continue;
       }
@@ -400,7 +400,11 @@ function parseInstances(document: TextDocument, text: string, tokens: VerilogTok
   const instances: VerilogInstance[] = [];
   for (const statement of statementSlices(tokens)) {
     const first = statement[0];
-    if (!first || first.kind !== 'identifier' || first.value === currentModuleName || verilogKeywords.has(first.value) || systemTasks.has(first.value)) {
+    if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName) {
+      continue;
+    }
+    // 拒绝将声明关键字（reg, wire, input 等）误认为模块名来实例化
+    if (first.kind === 'keyword' && declKinds.has(first.value)) {
       continue;
     }
     let index = 1;
@@ -420,7 +424,7 @@ function parseInstances(document: TextDocument, text: string, tokens: VerilogTok
       index = close + 1;
     }
     const instanceToken = statement[index];
-    if (!instanceToken || instanceToken.kind !== 'identifier') {
+    if (!instanceToken || !isIdentifierLike(instanceToken.kind)) {
       continue;
     }
     index++;
@@ -470,7 +474,7 @@ function parseConnectionList(document: TextDocument, text: string, tokens: Veril
     if (!first) {
       continue;
     }
-    if (first.value === '.' && part[1]?.kind === 'identifier') {
+    if (first.value === '.' && part[1] && isIdentifierLike(part[1].kind)) {
       const nameToken = part[1];
       if (part[2]?.value === '(') {
         const close = findMatchingToken(part, 2, '(', ')');
@@ -562,7 +566,7 @@ function firstDeclaratorIndex(tokens: VerilogToken[], from: number): number {
       index++;
       continue;
     }
-    return token.kind === 'identifier' ? index : -1;
+    return isIdentifierLike(token.kind) ? index : -1;
   }
   return -1;
 }

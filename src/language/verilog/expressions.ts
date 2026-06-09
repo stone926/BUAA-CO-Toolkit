@@ -1,6 +1,6 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseVerilogCst } from './cst';
-import { VerilogToken } from './lexer';
+import { isIdentifierLike, VerilogToken } from './lexer';
 import { VerilogDecl, VerilogModule } from './model';
 
 export interface WidthInfo {
@@ -39,13 +39,14 @@ export function widthOfConstantInitializer(expression: string): WidthInfo {
 }
 
 export function shouldReportWidthMismatch(expected: WidthInfo, actual: WidthInfo): boolean {
-  if (!expected.width || !actual.width || expected.width === actual.width) {
+  if (!expected.width || !actual.width) {
     return false;
   }
-  if (actual.flexible && (actual.minWidth ?? actual.width) <= expected.width) {
-    return false;
-  }
-  return true;
+  // Only flag truncation — the value's minimal meaningful width exceeds the target, so bits are
+  // lost. Assigning a narrower value to a wider target is normal zero/sign-extension and must not
+  // warn. For "flexible" results (unsized literals, arithmetic/shift) the minimal width is used.
+  const actualMinimum = actual.flexible ? (actual.minWidth ?? actual.width) : actual.width;
+  return actualMinimum > expected.width;
 }
 
 function widthFromRange(width?: string): number | undefined {
@@ -86,12 +87,12 @@ function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModul
     return flexibleWidth(widthOfExpressionTokens(shifted.left, module));
   }
 
-  const comparison = splitTopLevelOperatorTokens(tokens, new Set(['==', '!=', '<=', '>=', '<', '>', '&&', '||']));
+  const comparison = splitTopLevelOperatorTokens(tokens, new Set(['===', '!==', '==', '!=', '<=', '>=', '<', '>', '&&', '||']));
   if (comparison) {
     return { width: 1 };
   }
 
-  const binary = splitTopLevelOperatorTokens(tokens, new Set(['+', '-', '^', '|', '&', '*', '/', '%']));
+  const binary = splitTopLevelOperatorTokens(tokens, new Set(['+', '-', '^', '|', '&', '~^', '^~', '**', '*', '/', '%']));
   if (binary) {
     return binaryOperatorWidth(
       widthOfExpressionTokens(binary.left, module),
@@ -113,7 +114,7 @@ function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModul
     return literalWidth(tokens[0]);
   }
 
-  if (tokens.length === 1 && tokens[0].kind === 'identifier' && module) {
+  if (tokens.length === 1 && isIdentifierLike(tokens[0].kind) && module) {
     const decl = module.declarations.get(tokens[0].value);
     return decl ? widthOfDecl(decl) : {};
   }
@@ -169,24 +170,35 @@ function literalWidth(token: VerilogToken): WidthInfo {
 }
 
 function widthOfPartSelect(tokens: VerilogToken[]): number | undefined {
-  if (tokens.length !== 4 && tokens.length !== 6) {
+  if (tokens.length < 4 || tokens.length > 7) {
     return undefined;
   }
-  if (tokens[0].kind !== 'identifier' || tokens[1].value !== '[' || tokens[tokens.length - 1].value !== ']') {
+  if (!isIdentifierLike(tokens[0].kind) || tokens[1].value !== '[' || tokens[tokens.length - 1].value !== ']') {
     return undefined;
   }
-  const left = decimalNumber(tokens[2]);
-  if (left === undefined) {
-    return undefined;
-  }
+  // Bit select: a[3]
   if (tokens.length === 4) {
-    return 1;
+    return decimalNumber(tokens[2]) !== undefined ? 1 : undefined;
+  }
+  // Find the separator and right operand index.
+  // Compact indexed part-select: a[3+:4] (6 tokens, sep at [3])
+  // Spaced indexed part-select:  a[3 +: 4] (7 tokens, + at [3], : at [4])
+  // Traditional range:          a[7:0] (tokens vary, : at some index)
+  if (tokens[3].value === '+:' || tokens[3].value === '-:') {
+    // Indexed part select (compact): width is the value after +: or -:
+    return decimalNumber(tokens[4]);
+  }
+  if (tokens.length >= 6 && (tokens[3].value === '+' || tokens[3].value === '-') && tokens[4]?.value === ':') {
+    // Indexed part select (spaced): width is the value after the colon
+    return decimalNumber(tokens[5]);
   }
   if (tokens[3].value !== ':') {
     return undefined;
   }
+  // Traditional range select: a[left:right] — width = |left - right| + 1
+  const left = decimalNumber(tokens[2]);
   const right = decimalNumber(tokens[4]);
-  return right === undefined ? undefined : Math.abs(left - right) + 1;
+  return left === undefined || right === undefined ? undefined : Math.abs(left - right) + 1;
 }
 
 function trimTokens(tokens: VerilogToken[]): VerilogToken[] {
@@ -326,7 +338,7 @@ function findMatchingForward(tokens: VerilogToken[], openIndex: number, open: st
 }
 
 function isUnaryOperator(value: string | undefined): boolean {
-  return value === '!' || value === '~' || value === '&' || value === '|' || value === '^' || value === '+' || value === '-';
+  return value === '!' || value === '~' || value === '&' || value === '|' || value === '^' || value === '+' || value === '-' || value === '~&' || value === '~|' || value === '~^' || value === '^~';
 }
 
 function isUnaryContext(previous: VerilogToken | undefined): boolean {

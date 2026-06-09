@@ -51,7 +51,13 @@ const twoCharOperators = new Set([
   '%=',
   '&=',
   '|=',
-  '^='
+  '^=',
+  '~^',
+  '^~',
+  '~&',
+  '~|',
+  '+:',
+  '-:'
 ]);
 
 const threeCharOperators = new Set([
@@ -302,6 +308,10 @@ function readIdentifierToken(text: string, start: number): VerilogToken {
     start,
     end: index
   };
+}
+
+export function isIdentifierLike(kind: VerilogTokenKind): boolean {
+  return kind === 'identifier' || kind === 'keyword';
 }
 
 function isIdentifierStart(char: string): boolean {
