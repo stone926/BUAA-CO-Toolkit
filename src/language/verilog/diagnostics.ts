@@ -17,7 +17,6 @@ import {
 import { VerilogCstDocument, verilogTokenRange } from './cst';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
-import { collectStatementSyntaxDiagnostics } from './statementValidator';
 import {
   collectAssignmentDiagnostics,
   collectCourseStyleDiagnostics,
@@ -39,7 +38,6 @@ export function collectVerilogDiagnostics(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   collectSyntaxDiagnostics(document, cst, modules, diagnostics);
-  collectStatementSyntaxDiagnostics(document, cst, modules, diagnostics);
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(modules, diagnostics);
