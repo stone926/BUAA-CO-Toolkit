@@ -73,6 +73,11 @@ export function analyzeSignalWiring(
   if (!symbol || !wireableSymbolKinds.has(symbol.kind) || !symbol.module) {
     return undefined;
   }
+  // task/function names are declared symbols (so they aren't flagged as implicit nets) but are
+  // not wires; don't analyze their "wiring".
+  if (symbol.decl?.kind === 'task' || symbol.decl?.kind === 'function') {
+    return undefined;
+  }
   const module = symbol.module;
   const name = symbol.name;
 

@@ -56,4 +56,40 @@ endmodule
 
     expect(result).not.toContain('width-mismatch');
   });
+
+  it('does not flag a multiply assigned to a wider result', () => {
+    const result = codes(`
+module m(input [3:0] a, input [3:0] b, output [7:0] c);
+    assign c = a * b;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag a carry-capturing concatenation target (\`{co, sum} = a + b\`)', () => {
+    const result = codes(`
+module m(input [3:0] a, input [3:0] b, output co, output [3:0] sum);
+    assign {co, sum} = a + b;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('computes nested concatenation width \`{a, {b, c}}\`', () => {
+    const result = codes(`
+module m(input [1:0] a, input b, input c, output [3:0] y);
+    assign y = {a, {b, c}};
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('still reports a concatenation that is wider than its target', () => {
+    const result = codes(`
+module m(input [3:0] a, input [3:0] b, output [3:0] y);
+    assign y = {a, b};
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
 });

@@ -3,7 +3,7 @@ import type { VerilogAstDocument } from './ast';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogCstDocument } from './cst';
 
-export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar';
+export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar' | 'task' | 'function';
 
 export interface VerilogDecl {
   name: string;

@@ -83,7 +83,7 @@ function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModul
 
   const shifted = splitTopLevelOperatorTokens(tokens, new Set(['<<<', '>>>', '<<', '>>']));
   if (shifted) {
-    return widthOfExpressionTokens(shifted.left, module);
+    return flexibleWidth(widthOfExpressionTokens(shifted.left, module));
   }
 
   const comparison = splitTopLevelOperatorTokens(tokens, new Set(['==', '!=', '<=', '>=', '<', '>', '&&', '||']));
@@ -93,7 +93,10 @@ function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModul
 
   const binary = splitTopLevelOperatorTokens(tokens, new Set(['+', '-', '^', '|', '&', '*', '/', '%']));
   if (binary) {
-    return maxWidth(widthOfExpressionTokens(binary.left, module), widthOfExpressionTokens(binary.right, module));
+    return binaryOperatorWidth(
+      widthOfExpressionTokens(binary.left, module),
+      widthOfExpressionTokens(binary.right, module)
+    );
   }
 
   if (isUnaryOperator(tokens[0]?.value)) {
@@ -400,6 +403,27 @@ function minimalBitsForDecimal(text: string): number {
   } catch {
     return 32;
   }
+}
+
+// Verilog 算术/按位/移位运算结果按上下文位宽求值：赋给更宽的 LHS 时操作数会被零/符号扩展，不丢位。
+// 因此把结果视为"可伸缩"（flexible）——仅当其最小有效位宽超过目标位宽（真正的截断）才算不匹配，
+// 避免对 `wide = narrow * narrow`、`{carry, sum} = a + b`、`wide = narrow << k` 这类常见且正确的
+// 写法误报。自决位宽沿用 IEEE 规则（取两操作数较大值）。
+function binaryOperatorWidth(left: WidthInfo, right: WidthInfo): WidthInfo {
+  if (left.width === undefined && right.width === undefined) {
+    return {};
+  }
+  const leftWidth = left.width ?? right.width ?? 0;
+  const rightWidth = right.width ?? left.width ?? 0;
+  const minWidth = Math.max(left.minWidth ?? leftWidth, right.minWidth ?? rightWidth);
+  return { width: Math.max(leftWidth, rightWidth), minWidth, flexible: true };
+}
+
+function flexibleWidth(info: WidthInfo): WidthInfo {
+  if (info.width === undefined) {
+    return {};
+  }
+  return { width: info.width, minWidth: info.minWidth ?? info.width, flexible: true };
 }
 
 function maxWidth(left: WidthInfo, right: WidthInfo): WidthInfo {

@@ -132,6 +132,14 @@ export function parseModulesFromCst(
     }
 
     module.instances = parseInstances(document, text, bodyTokens, module.name);
+    // task/function names, arguments and locals are not module ports/parameters, but they ARE
+    // declared identifiers — register them (without promotion) so implicit-net / references don't
+    // mis-report them. They never overwrite a real module-level declaration of the same name.
+    for (const decl of parseSubroutineDeclarations(document, text, bodyTokens)) {
+      if (!module.declarations.has(decl.name)) {
+        module.declarations.set(decl.name, decl);
+      }
+    }
     modules.push(module);
     index = header.nextIndex;
   }
@@ -259,6 +267,108 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
     }
   }
   return declarations;
+}
+
+function parseSubroutineDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
+  const result: VerilogDecl[] = [];
+  for (const statement of statementSlices(tokens)) {
+    const first = statement[0];
+    if (!first || (first.value !== 'task' && first.value !== 'function')) {
+      continue;
+    }
+    const kind = first.value as VerilogDeclKind; // 'task' | 'function'
+    const endValue = first.value === 'task' ? 'endtask' : 'endfunction';
+    const headerEnd = topLevelIndexOfValue(statement, ';', 1, statement.length);
+    const headerLimit = headerEnd < 0 ? statement.length : headerEnd;
+    const parenOpen = topLevelIndexOfValue(statement, '(', 1, headerLimit);
+    const nameLimit = parenOpen < 0 ? headerLimit : parenOpen;
+    const nameToken = lastIdentifierToken(statement, 1, nameLimit);
+    if (nameToken) {
+      result.push({
+        name: nameToken.value,
+        kind,
+        range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[statement.length - 1].end)),
+        selectionRange: tokenRange(document, nameToken)
+      });
+    }
+    if (parenOpen >= 0) {
+      const close = findMatchingToken(statement, parenOpen, '(', ')');
+      if (close > parenOpen && close < headerLimit) {
+        result.push(...subroutineArgumentDeclarations(document, text, statement.slice(parenOpen + 1, close)));
+      }
+    }
+    if (headerEnd >= 0) {
+      const endIndex = indexOfValueFrom(statement, endValue, headerEnd + 1);
+      const body = statement.slice(headerEnd + 1, endIndex < 0 ? statement.length : endIndex);
+      result.push(...parseBodyDeclarations(document, text, body));
+      result.push(...parseSubroutineDeclarations(document, text, body));
+    }
+  }
+  return result;
+}
+
+function subroutineArgumentDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
+  const result: VerilogDecl[] = [];
+  for (const part of splitTopLevel(tokens, ',')) {
+    const nameToken = declarationNameToken(part);
+    if (!nameToken) {
+      continue;
+    }
+    // Arguments are task/function locals, not module ports — keep them as a non-port kind.
+    result.push({
+      name: nameToken.value,
+      kind: 'reg',
+      width: firstRangeText(text, part),
+      range: Range.create(document.positionAt(part[0].start), document.positionAt(part[part.length - 1].end)),
+      selectionRange: tokenRange(document, nameToken)
+    });
+  }
+  return result;
+}
+
+function topLevelIndexOfValue(tokens: VerilogToken[], value: string, from: number, to: number): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = from; index < to; index++) {
+    const token = tokens[index];
+    if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
+      return index;
+    }
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    }
+  }
+  return -1;
+}
+
+function lastIdentifierToken(tokens: VerilogToken[], from: number, to: number): VerilogToken | undefined {
+  for (let index = Math.min(to, tokens.length) - 1; index >= from; index--) {
+    const token = tokens[index];
+    if (token.kind === 'identifier' && !verilogKeywords.has(token.value)) {
+      return token;
+    }
+  }
+  return undefined;
+}
+
+function indexOfValueFrom(tokens: VerilogToken[], value: string, from: number): number {
+  for (let index = from; index < tokens.length; index++) {
+    if (tokens[index].value === value) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function parseDeclFragment(document: TextDocument, text: string, tokens: VerilogToken[], fallbackKind: VerilogDeclKind): VerilogDecl | undefined {

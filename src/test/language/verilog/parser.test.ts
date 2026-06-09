@@ -378,15 +378,15 @@ describe('widthOfExpression', () => {
     expect(widthOfExpression('', makeModule())).toEqual({});
   });
 
-  it('handles shift operators (result width = left operand width)', () => {
+  it('handles shift operators (flexible, natural width = left operand width)', () => {
     const module = makeModule({
       declarations: new Map([
         ['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })],
         ['b', makeDecl({ name: 'b', kind: 'wire', width: '[4:0]' })]
       ])
     });
-    expect(widthOfExpression('a << b', module)).toEqual({ width: 32 });
-    expect(widthOfExpression('a >> b', module)).toEqual({ width: 32 });
+    expect(widthOfExpression('a << b', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+    expect(widthOfExpression('a >> b', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
   });
 
   it('handles ternary operator (max of branches)', () => {
