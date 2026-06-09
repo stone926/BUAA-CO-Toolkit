@@ -367,10 +367,50 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
     });
   }
 
+  actions.push(...getWidthMismatchCodeActions(document, diagnostics, settings));
   actions.push(...getVerilogLintRuleCodeActions(diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogLiteralCodeActions(document, range));
 
+  return actions;
+}
+
+function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
+  const actions: CodeAction[] = [];
+  const codes = new Set(['width-mismatch', 'port-width-mismatch']);
+  const seen = new Set<string>();
+  for (const diagnostic of diagnostics) {
+    const code = typeof diagnostic.code === 'string' ? diagnostic.code : undefined;
+    if (!code || !codes.has(code) || seen.has(code)) {
+      continue;
+    }
+    seen.add(code);
+    // 对此文件禁用
+    actions.push({
+      title: `对此文件禁用「${code}」检查`,
+      kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
+      command: Command.create(
+        `对此文件禁用 ${code}`,
+        'co.diagnostics.disableCode',
+        document.languageId,
+        code,
+        document.uri
+      )
+    });
+    // 对此工作区禁用
+    actions.push({
+      title: `对此工作区禁用「${code}」检查`,
+      kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
+      command: Command.create(
+        `对此工作区禁用 ${code}`,
+        'co.diagnostics.disableCode',
+        document.languageId,
+        code
+      )
+    });
+  }
   return actions;
 }
 

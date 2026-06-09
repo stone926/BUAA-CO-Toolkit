@@ -137,6 +137,9 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
         collectDeclarationInitializerWidthDiagnostics(document, text, module, tokens, diagnostics);
         continue;
       }
+      if (tokens[0] && proceduralKeywords.has(tokens[0].value)) {
+        continue; // 过程性语句（always / if / case 等），不在此分析
+      }
       const operatorIndex = findAssignmentOperator(tokens);
       if (operatorIndex < 0) {
         continue;
@@ -186,6 +189,31 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
     }
   }
 }
+
+/** 过程性关键词：出现在 always/initial 块内，不参与赋值位宽检测 */
+const proceduralKeywords = new Set([
+  'always',
+  'initial',
+  'if',
+  'else',
+  'case',
+  'casex',
+  'casez',
+  'for',
+  'while',
+  'repeat',
+  'forever',
+  'fork',
+  'begin',
+  'end',
+  'endcase',
+  'endfunction',
+  'endmodule',
+  'endtask',
+  'join',
+  'join_any',
+  'join_none'
+]);
 
 const declarationStatementKeywords = new Set([
   'input',

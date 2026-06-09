@@ -102,7 +102,11 @@ function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModul
 
   if (isUnaryOperator(tokens[0]?.value)) {
     const operand = widthOfExpressionTokens(tokens.slice(1), module);
-    return tokens[0].value === '~' ? operand : { width: 1 };
+    // IEEE 5.4.1 Table 5-22: ~, +, - 保留操作数位宽；其余一元归约运算结果 1 位
+    if (tokens[0].value === '~' || tokens[0].value === '+' || tokens[0].value === '-') {
+      return operand;
+    }
+    return { width: 1 };
   }
 
   const selectWidth = widthOfPartSelect(tokens);
@@ -117,6 +121,11 @@ function widthOfExpressionTokens(rawTokens: VerilogToken[], module: VerilogModul
   if (tokens.length === 1 && isIdentifierLike(tokens[0].kind) && module) {
     const decl = module.declarations.get(tokens[0].value);
     return decl ? widthOfDecl(decl) : {};
+  }
+
+  // $signed(expr) / $unsigned(expr) — 宽度透传，仅改变符号性
+  if (tokens[0]?.kind === 'systemIdentifier' && passThroughSystemFunction(tokens[0].value) && tokens[1]?.value === '(' && tokens[tokens.length - 1]?.value === ')' && findMatchingForward(tokens, 1, '(', ')') === tokens.length - 1) {
+    return widthOfExpressionTokens(tokens.slice(2, -1), module);
   }
 
   return {};
@@ -156,15 +165,18 @@ function literalWidth(token: VerilogToken): WidthInfo {
     if (parsed.size !== undefined) {
       return { width: parsed.size };
     }
+    // 无尺寸 based 常量：IEEE 规定 ≥32 位自决。不标记 flexible（严格模式），
+    // 但保留 minWidth 供算术表达式中的 flexible 计算使用。
     const digits = parsed.digits.split('_').join('');
     const base = parsed.base.toLowerCase();
     const bitsPerDigit = base === 'b' ? 1 : base === 'o' ? 3 : base === 'h' ? 4 : undefined;
     const minWidth = bitsPerDigit ? Math.max(1, digits.length * bitsPerDigit) : minimalBitsForDecimal(digits);
-    return { width: Math.max(32, minWidth), minWidth, flexible: true };
+    return { width: Math.max(32, minWidth), minWidth };
   }
   if (parsed?.kind === 'decimal') {
+    // 无尺寸十进制常量同理：宽度 ≥32，不灵活。
     const minWidth = minimalBitsForDecimal(parsed.digits);
-    return { width: Math.max(32, minWidth), minWidth, flexible: true };
+    return { width: Math.max(32, minWidth), minWidth };
   }
   return {};
 }
@@ -403,6 +415,11 @@ function allDecimalDigits(value: string): boolean {
 
 function isBasedLiteralBase(char: string): boolean {
   return char === 'b' || char === 'B' || char === 'o' || char === 'O' || char === 'd' || char === 'D' || char === 'h' || char === 'H';
+}
+
+/** 宽度透传的系统函数：参数位宽 = 返回值位宽 */
+function passThroughSystemFunction(value: string): boolean {
+  return value === '$signed' || value === '$unsigned';
 }
 
 function minimalBitsForDecimal(text: string): number {

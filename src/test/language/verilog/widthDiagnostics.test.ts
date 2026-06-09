@@ -39,7 +39,7 @@ module control(
               SW = 6'b101011,
               BEQ = 6'b000100,
               ORI = 6'b001101,
-              NOP = 0;
+              NOP = 6'b000000;
 
     assign type =
         add ? ADD :
@@ -186,5 +186,36 @@ module m(input [3:0] a, input [3:0] b, output [31:0] y);
 endmodule
 `.trim());
     expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag MDU-style signed multiply into {HI, LO} concatenation', () => {
+    const result = codes(`
+module m(input [31:0] a, input [31:0] b, output [31:0] hi_out, output [31:0] lo_out);
+    wire [31:0] HI;
+    wire [31:0] LO;
+    assign {HI, LO} = $signed(a) * $signed(b);
+    assign hi_out = HI;
+    assign lo_out = LO;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('does not flag MDU-style signed division into single register', () => {
+    const result = codes(`
+module m(input [31:0] a, input [31:0] b, output [31:0] q);
+    assign q = $signed(a) / $signed(b);
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('reports width mismatch when MDU-style expression overflows its target', () => {
+    const result = codes(`
+module m(input [31:0] a, input [31:0] b, output [15:0] y);
+    assign y = $signed(a) * $signed(b);
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
   });
 });

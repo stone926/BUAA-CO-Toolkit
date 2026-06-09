@@ -3,9 +3,15 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { defaultCoSettings } from '../../../language/common/settings';
 import { parseVerilog } from '../../../language/verilog/parser';
 import { analyzeSignalWiring } from '../../../language/verilog/signalWiring';
+import { VerilogModule } from '../../../language/verilog/model';
 
 function doc(text: string): TextDocument {
   return TextDocument.create('test://wiring.v', 'verilog', 1, text);
+}
+
+/** Helper: 将模块数组包装为 getExternalModule 回调 */
+function externalModulesFromArray(modules: VerilogModule[]): (name: string) => VerilogModule | undefined {
+  return (name: string) => modules.find((m) => m.name === name);
 }
 
 const source = [
@@ -37,6 +43,7 @@ describe('analyzeSignalWiring', () => {
     expect(report?.name).toBe('sig');
     expect(report?.moduleName).toBe('top');
     expect(report?.declaration?.detail).toContain('sig');
+    expect(report?.unresolved).toHaveLength(0);
 
     // drivers: assign sig = x  +  u_alu output port .result(sig)
     expect(report?.drivers).toHaveLength(2);
@@ -138,6 +145,7 @@ describe('analyzeSignalWiring with module named after system task', () => {
     expect(report?.name).toBe('value');
     expect(report?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'val')).toBe(true);
     expect(report?.drivers).toHaveLength(0);
+    expect(report?.unresolved).toHaveLength(0);
 
     // seg connects to display.seg (output) → should be a driver
     const segOffset = systemTaskModuleSource.indexOf('(seg)') + 1;
@@ -171,17 +179,42 @@ describe('analyzeSignalWiring cross-file', () => {
     const topDoc = doc(crossFileTopSource);
     const beParsed = parseVerilog(beDoc, defaultCoSettings, false);
     const topParsed = parseVerilog(topDoc, defaultCoSettings, false);
+    const getExternal = externalModulesFromArray(beParsed.modules);
 
     // M_MemByteWrite → BE.MemByteWrite (output) → driver
-    const driverReport = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_MemByteWrite;')), beParsed.modules);
+    const driverReport = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_MemByteWrite;')), getExternal);
     expect(driverReport?.name).toBe('M_MemByteWrite');
     expect(driverReport?.drivers.some((entry) => entry.kind === 'instancePortDriver' && entry.portName === 'MemByteWrite')).toBe(true);
     expect(driverReport?.readers).toHaveLength(0);
+    expect(driverReport?.unresolved).toHaveLength(0);
 
     // M_addr → BE.addr (input) → reader
-    const readerReport = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_addr;')), beParsed.modules);
+    const readerReport = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_addr;')), getExternal);
     expect(readerReport?.name).toBe('M_addr');
     expect(readerReport?.readers.some((entry) => entry.kind === 'instancePortReader' && entry.portName === 'addr')).toBe(true);
     expect(readerReport?.drivers).toHaveLength(0);
+  });
+
+  it('marks port connections as unresolved when the target module is not found', () => {
+    const topDoc = doc(crossFileTopSource);
+    const topParsed = parseVerilog(topDoc, defaultCoSettings, false);
+    // 不提供外部模块 — BE 模块不在当前文件中，应标记为 unresolved
+    const report = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_MemByteWrite;')));
+    expect(report?.name).toBe('M_MemByteWrite');
+    expect(report?.drivers).toHaveLength(0);
+    expect(report?.readers).toHaveLength(0);
+    expect(report?.unresolved).toHaveLength(1);
+    expect(report?.unresolved[0].kind).toBe('instancePortUnresolved');
+    expect(report?.unresolved[0].portName).toBe('MemByteWrite');
+    expect(report?.unresolved[0].instanceName).toBe('BE');
+  });
+
+  it('returns empty unresolved when getExternalModule returns undefined', () => {
+    const topDoc = doc(crossFileTopSource);
+    const topParsed = parseVerilog(topDoc, defaultCoSettings, false);
+    // getExternalModule always returns undefined → still unresolved
+    const report = analyzeSignalWiring(topParsed, topDoc, topDoc.positionAt(crossFileTopSource.indexOf('M_MemByteWrite;')), () => undefined);
+    expect(report?.unresolved).toHaveLength(1);
+    expect(report?.unresolved[0].kind).toBe('instancePortUnresolved');
   });
 });

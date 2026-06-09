@@ -16,6 +16,7 @@ import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
 import { registerVerilogSignalView } from './verilogSignalView';
+import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
 import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
 import { registerTraceCompare } from './traceCompare';
@@ -75,9 +76,22 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(disableDiagnosticCodeCommand, (languageId?: string, code?: string, documentUri?: string) => disableDiagnosticCode(languageId, code, documentUri))
   );
 
+  // 工作空间模块注册表：后台解析所有 .v 文件，供 sidebar 连线分析跨文件查找模块
+  const moduleRegistry = new WorkspaceModuleRegistry();
+  moduleRegistry.activate();
+  context.subscriptions.push(moduleRegistry);
+  // 监听文件保存事件，增量更新注册表
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      if (doc.languageId === 'verilog') {
+        moduleRegistry.updateDocument(doc);
+      }
+    })
+  );
+
   registerMips(context, services);
   registerVerilog(context, services);
-  registerVerilogSignalView(context);
+  registerVerilogSignalView(context, moduleRegistry);
   registerLogisim(context, services);
   registerHazard(context, services);
   registerTraceCompare(context, services);

@@ -21,6 +21,7 @@ export type SignalWiringEntryKind =
   | 'instancePortDriver' // 子模块实例的 output 端口连到本信号（本信号被驱动）
   | 'instancePortReader' // 本信号连到子模块实例的 input/inout 端口（本信号被读取）
   | 'instancePort' // 连到实例端口但目标模块不在本文件，方向未知
+  | 'instancePortUnresolved' // 目标模块跨文件且尚未被工作空间注册表解析
   | 'use'; // 出现在 RHS / 条件 / 其它读取位置
 
 export interface SignalWiringEntry {
@@ -46,6 +47,8 @@ export interface SignalWiringReport {
   drivers: SignalWiringEntry[];
   /** 读：RHS / 条件 / 实例 input 端口连接。 */
   readers: SignalWiringEntry[];
+  /** 尚未解析的实例端口连接：目标模块不在本文件且未被注册表找到。 */
+  unresolved: SignalWiringEntry[];
 }
 
 interface InstancePortHit {
@@ -53,6 +56,8 @@ interface InstancePortHit {
   instanceName: string;
   portName?: string;
   direction?: 'input' | 'output' | 'inout';
+  /** 目标模块在本文件内未找到，且外部注册表也未返回 */
+  unresolved?: boolean;
 }
 
 const wireableSymbolKinds = new Set(['signal', 'port', 'parameter']);
@@ -67,7 +72,7 @@ export function analyzeSignalWiring(
   parsed: VerilogParseResult,
   document: TextDocument,
   position: Position,
-  externalModules?: readonly VerilogModule[]
+  getExternalModule?: (name: string) => VerilogModule | undefined
 ): SignalWiringReport | undefined {
   const resolved = resolveVerilogSemanticAtPosition(parsed.semantic, position);
   const symbol = resolved?.symbol;
@@ -106,10 +111,11 @@ export function analyzeSignalWiring(
     }
   }
 
-  const portHits = collectInstancePortHits(parsed, module, occurrences, externalModules);
+  const portHits = collectInstancePortHits(parsed, module, occurrences, getExternalModule);
 
   const drivers: SignalWiringEntry[] = [...writes];
   const readers: SignalWiringEntry[] = [];
+  const unresolved: SignalWiringEntry[] = [];
 
   for (const range of occurrences) {
     if (writeKeys.has(rangeKey(range))) {
@@ -128,8 +134,11 @@ export function analyzeSignalWiring(
         // inout 端口既驱动又读取本信号 → 同时计入两侧
         drivers.push({ kind: 'instancePortDriver', range, ...meta });
         readers.push({ kind: 'instancePortReader', range, ...meta });
+      } else if (hit.unresolved) {
+        // 目标模块未解析（跨文件且不在注册表中）
+        unresolved.push({ kind: 'instancePortUnresolved', range, ...meta });
       } else {
-        // 目标模块不在本文件、方向未知
+        // 目标模块在同一文件但方向未知（不应该发生，但保留兜底）
         readers.push({ kind: 'instancePort', range, ...meta });
       }
       continue;
@@ -139,8 +148,9 @@ export function analyzeSignalWiring(
 
   drivers.sort(compareEntries);
   readers.sort(compareEntries);
+  unresolved.sort(compareEntries);
 
-  return { name, moduleName: module.name, declaration, drivers, readers };
+  return { name, moduleName: module.name, declaration, drivers, readers, unresolved };
 }
 
 function declarationOf(symbol: VerilogSemanticSymbol): SignalWiringDeclaration | undefined {
@@ -155,14 +165,20 @@ function collectInstancePortHits(
   parsed: VerilogParseResult,
   module: VerilogModule,
   occurrences: Range[],
-  externalModules?: readonly VerilogModule[]
+  getExternalModule?: (name: string) => VerilogModule | undefined
 ): InstancePortHit[] {
   const hits: InstancePortHit[] = [];
   for (const instance of module.instances) {
+    // 优先在当前文件查找目标模块
     let target = parsed.modules.find((candidate) => candidate.name === instance.moduleName);
-    // 若当前文件没有目标模块，尝试从外部模块列表中查找（跨文件）
-    if (!target && externalModules) {
-      target = externalModules.find((candidate) => candidate.name === instance.moduleName);
+    let unresolved = false;
+    // 若当前文件没有，尝试通过外部注册表查找（跨文件）
+    if (!target && getExternalModule) {
+      target = getExternalModule(instance.moduleName);
+    }
+    // 如果仍未找到目标模块，标记为未解析
+    if (!target) {
+      unresolved = true;
     }
     for (const connection of instance.portConnections) {
       const referenced = occurrences.some((range) => containsPosition(connection.expressionRange, range.start));
@@ -176,7 +192,8 @@ function collectInstancePortHits(
         expressionRange: connection.expressionRange,
         instanceName: instance.instanceName,
         portName: connection.name ?? port?.name,
-        direction: port?.direction
+        direction: port?.direction,
+        unresolved: unresolved && !port
       });
     }
   }

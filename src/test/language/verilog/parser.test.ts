@@ -304,10 +304,10 @@ describe('widthOfExpression', () => {
     expect(widthOfExpression("32'hFF", makeModule())).toEqual({ width: 32 });
   });
 
-  it('returns width of unsized literal as flexible', () => {
+  it('returns width of unsized literal (IEEE: ≥32 bits, no flexibility)', () => {
     const result = widthOfExpression('42', makeModule());
     expect(result.width).toBe(32);
-    expect(result.flexible).toBe(true);
+    expect(result.flexible).toBeUndefined();
   });
 
   it('returns width of concatenation', () => {
@@ -489,16 +489,16 @@ describe('widthOfExpression — edge cases', () => {
     expect(widthOfExpression("16'hFF00", makeModule()).width).toBe(16);
   });
 
-  it('handles unsized zero', () => {
+  it('handles unsized zero (IEEE strict: no flexibility)', () => {
     const result = widthOfExpression('0', makeModule());
     expect(result.width).toBe(32);
-    expect(result.flexible).toBe(true);
+    expect(result.flexible).toBeUndefined();
   });
 
-  it('handles unsized one', () => {
+  it('handles unsized one (IEEE strict: no flexibility)', () => {
     const result = widthOfExpression('1', makeModule());
     expect(result.width).toBe(32);
-    expect(result.flexible).toBe(true);
+    expect(result.flexible).toBeUndefined();
   });
 
   it('handles reduction operators', () => {
@@ -577,6 +577,29 @@ describe('widthOfExpression — edge cases', () => {
     expect(widthOfExpression('a[3 +: 4]', module)).toEqual({ width: 4 });
     expect(widthOfExpression('a[7 -: 8]', module)).toEqual({ width: 8 });
   });
+
+  it('handles $signed and $unsigned pass-through width', () => {
+    const module = makeModule({
+      declarations: new Map([['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })]])
+    });
+    expect(widthOfExpression('$signed(a)', module)).toEqual({ width: 32 });
+    expect(widthOfExpression('$unsigned(a)', module)).toEqual({ width: 32 });
+  });
+
+  it('handles $signed/$unsigned in arithmetic expressions', () => {
+    const module = makeModule({
+      declarations: new Map([
+        ['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })],
+        ['b', makeDecl({ name: 'b', kind: 'wire', width: '[31:0]' })]
+      ])
+    });
+    // $signed(a) * $signed(b) — both 32-bit operands, result flexible max=32
+    expect(widthOfExpression('$signed(a) * $signed(b)', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+    // $signed(a) / $signed(b) — division
+    expect(widthOfExpression('$signed(a) / $signed(b)', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+    // $signed(a) % $signed(b) — modulo
+    expect(widthOfExpression('$signed(a) % $signed(b)', module)).toEqual({ width: 32, minWidth: 32, flexible: true });
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -651,7 +674,7 @@ endmodule
     expect(widthOfExpression('add ? ADD : sub ? SUB : NOP', module).width).toBe(6);
   });
 
-  it('keeps unsized parameter literals flexible inside ternary expressions', () => {
+  it('treats unsized parameter literals as fixed-width (IEEE strict)', () => {
     const text = `
 module test(input add, output [5:0] type);
     parameter ADD = 6'b100000, NOP = 0;
@@ -662,10 +685,12 @@ endmodule
     const module = parseModules(d, text)[0];
     const result = widthOfExpression('add ? ADD : NOP', module);
 
-    expect(module.declarations.get('NOP')?.inferredFlexible).toBe(true);
+    // NOP = 0 → unsized literal → width ≥32, non-flexible per IEEE
+    expect(module.declarations.get('NOP')?.inferredFlexible).toBeUndefined();
+    // Ternary: max(6, 32) = 32, minWidth = max(6, 1) = 6
     expect(result.width).toBe(32);
     expect(result.minWidth).toBe(6);
-    expect(result.flexible).toBe(true);
+    expect(result.flexible).toBeUndefined();
   });
 
   it('parses module ports from header', () => {

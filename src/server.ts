@@ -156,6 +156,7 @@ let workspaceFolders: WorkspaceFolder[] | null | undefined;
 let globalSettings: CoSettings = defaultCoSettings;
 const documentSettings = new Map<string, Thenable<CoSettings>>();
 const updatedDocumentVersions = new Map<string, number>();
+const contentChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
@@ -234,8 +235,16 @@ documents.onDidOpen((event) => {
   void updateIndexAndValidate(event.document);
 });
 
+// 防抖：快速连续输入时合并为一次解析+验证，避免每次按键都重新计算
 documents.onDidChangeContent((event) => {
-  void updateIndexAndValidate(event.document);
+  const existing = contentChangeTimers.get(event.document.uri);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  contentChangeTimers.set(event.document.uri, setTimeout(() => {
+    contentChangeTimers.delete(event.document.uri);
+    void updateIndexAndValidate(event.document);
+  }, 250));
 });
 
 documents.onDidSave((event) => {
@@ -246,6 +255,11 @@ documents.onDidSave((event) => {
 });
 
 documents.onDidClose((event) => {
+  const timer = contentChangeTimers.get(event.document.uri);
+  if (timer) {
+    clearTimeout(timer);
+    contentChangeTimers.delete(event.document.uri);
+  }
   documentSettings.delete(event.document.uri);
   updatedDocumentVersions.delete(event.document.uri);
   serviceForDocument(event.document)?.removeDocument?.(event.document.uri);

@@ -3,8 +3,7 @@ import { Range as LspRange } from 'vscode-languageserver/node';
 import { parseVerilog } from './language/verilog/service';
 import { analyzeSignalWiring, SignalWiringEntry, SignalWiringEntryKind } from './language/verilog/signalWiring';
 import { coSettingsForUri, toTextDocument } from './verilog';
-import { VerilogModule } from './language/verilog/model';
-import { parseModules } from './language/verilog/parser';
+import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
 
 const placeholderMessage = '将光标放在 Verilog 信号上以查看其连线';
 
@@ -34,7 +33,8 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
 
   private cacheKey: string | undefined;
   private cacheParsed: ReturnType<typeof parseVerilog> | undefined;
-  private externalModulesCache: { key: string; modules: VerilogModule[] } | undefined;
+
+  constructor(private readonly moduleRegistry: WorkspaceModuleRegistry) {}
 
   update(editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor): void {
     this.compute(editor);
@@ -74,17 +74,19 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
     }
     const doc = editor.document;
     const parsed = this.parse(doc);
-    const externalModules = this.collectExternalModules(doc);
     const position = editor.selection.active;
     const report = analyzeSignalWiring(parsed, toTextDocument(doc), {
       line: position.line,
       character: position.character
-    }, externalModules);
+    }, (name: string) => this.moduleRegistry.getModule(name));
     if (!report) {
       this.message = placeholderMessage;
       return;
     }
-    this.message = `信号 ${report.name} · 模块 ${report.moduleName}`;
+
+    // 构建 message：显示扫描状态
+    const scanningSuffix = this.moduleRegistry.scanning ? ' · 正在解析项目结构...' : '';
+    this.message = `信号 ${report.name} · 模块 ${report.moduleName}${scanningSuffix}`;
 
     const groups: WiringGroupNode[] = [];
     if (report.declaration) {
@@ -111,6 +113,14 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
       label: `读取 / 使用 (${report.readers.length})`,
       children: report.readers.map((entry) => this.entryNode(doc, entry))
     });
+    if (report.unresolved.length) {
+      const suffix = this.moduleRegistry.scanning ? ' · 解析中...' : ' · 未定义模块';
+      groups.push({
+        kind: 'group',
+        label: `未解析连接 (${report.unresolved.length})${suffix}`,
+        children: report.unresolved.map((entry) => this.entryNode(doc, entry))
+      });
+    }
     this.roots = groups;
   }
 
@@ -128,32 +138,6 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
     };
   }
 
-  private collectExternalModules(currentDoc: vscode.TextDocument): VerilogModule[] {
-    const allDocs = vscode.workspace.textDocuments;
-    const uris = allDocs
-      .filter((d) => d.languageId === 'verilog' && d.uri.toString() !== currentDoc.uri.toString())
-      .map((d) => d.uri.toString())
-      .sort();
-    const key = uris.join('|') + '@' + allDocs.map((d) => d.version).join(',');
-    if (this.externalModulesCache?.key === key) {
-      return this.externalModulesCache.modules;
-    }
-    const modules: VerilogModule[] = [];
-    for (const doc of allDocs) {
-      if (doc.languageId !== 'verilog' || doc.uri.toString() === currentDoc.uri.toString()) {
-        continue;
-      }
-      try {
-        const text = doc.getText();
-        modules.push(...parseModules(toTextDocument(doc), text));
-      } catch {
-        // 解析失败则跳过该文件
-      }
-    }
-    this.externalModulesCache = { key, modules };
-    return modules;
-  }
-
   private parse(doc: vscode.TextDocument): ReturnType<typeof parseVerilog> {
     const key = `${doc.uri.toString()}@${doc.version}`;
     if (this.cacheKey === key && this.cacheParsed) {
@@ -166,8 +150,8 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
   }
 }
 
-export function registerVerilogSignalView(context: vscode.ExtensionContext): void {
-  const provider = new VerilogSignalWiringProvider();
+export function registerVerilogSignalView(context: vscode.ExtensionContext, moduleRegistry: WorkspaceModuleRegistry): void {
+  const provider = new VerilogSignalWiringProvider(moduleRegistry);
   const treeView = vscode.window.createTreeView('coVerilogSignal', { treeDataProvider: provider });
   context.subscriptions.push(treeView);
 
@@ -211,6 +195,8 @@ function iconForEntry(kind: SignalWiringEntryKind): string {
     case 'instancePortReader':
     case 'instancePort':
       return 'circuit-board';
+    case 'instancePortUnresolved':
+      return 'warning';
     case 'use':
       return 'eye';
     default:
