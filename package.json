@@ -1,9 +1,9 @@
 {
-  "name": "buaa-co-extension",
+  "name": "buaa-co-toolkit",
   "displayName": "BUAA CO Toolkit",
-  "description": "北航计算机组成实验 VSCode 工具箱：支持 Logisim、MARS MIPS 汇编和 Verilog",
+  "description": "计算机组成实验 VSCode 工具箱：支持 Logisim、MARS MIPS 汇编和 Verilog",
   "version": "0.1.0",
-  "publisher": "buaa-co",
+  "publisher": "stone926",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -12,7 +12,19 @@
     "Programming Languages",
     "Other"
   ],
+  "keywords": [
+    "mips",
+    "verilog",
+    "logisim",
+    "mars",
+    "co",
+    "计算机组成"
+  ],
   "main": "./out/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stone926/BUAA-CO-Toolkit.git"
+  },
   "activationEvents": [
     "onLanguage:mipsasm",
     "onLanguage:verilog",

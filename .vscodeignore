@@ -11,3 +11,9 @@ MIPS迭代建议.md
 CLAUDE.md
 doc
 .claude
+out/test/**          # 测试编译产物，不必随插件分发
+memory/**            # 开发用记忆文件
+.co/**               # 运行时产物
+**/*.test.*
+vitest.config.ts
+tsconfig.test.json
