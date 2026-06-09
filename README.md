@@ -4,6 +4,23 @@
 
 ---
 
+## 平台支持
+
+| 功能 | Windows | Linux | macOS |
+|---|---|---|---|
+| 语言特性（高亮 / 补全 / 诊断 / 格式化 / 大纲 / 折叠） | ✅ | ✅ | ✅ |
+| Logisim（打开 / ROM 生成 / 注入 / 日志转 CSV） | ✅ | ✅ | ✅ |
+| MARS 运行 / dump 机器码（Java） | ✅ | ✅ | ✅ |
+| 流水线冲突分析（Java + Python） | ✅ | ✅ | ✅ |
+| **ISim 仿真（依赖 Xilinx ISE）** | ✅ | ⚠️ | ❌ |
+| **一键随机对拍（P3–P7，依赖 ISim）** | ✅ | ⚠️ | ❌ |
+
+- **ISim 仿真与一键对拍依赖 Xilinx ISE**，而 ISE 只发布过 Windows 与 Linux 版本：**macOS 无法运行 Verilog 仿真**，P1 / P4 / P5 / P6 / P7 的仿真与自动对拍均不可用（语言特性、Logisim、MARS、冲突分析仍可正常使用）。
+- Linux（⚠️）：ISE 14.7 可用，但在现代 64 位发行版上通常需按照指导书自行处理兼容性问题
+- 其余功能为 TS / Java / Python 实现，三平台通用。`co.toolchain.python` 留空时会自动检测（macOS / Linux 优先 `python3`，Windows 优先 `python` / `py`）。
+
+---
+
 ## 1. 快速开始
 
 ### 第一步：装好外部工具并填路径
@@ -22,9 +39,9 @@
   "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 common, EDK, ISE 等文件夹",
   // Logisim（P0/P3）
   "co.toolchain.logisim": "Logisim 的路径",
-  // Java / Python（一般保持默认即可）
+  // Java（保持默认即可）；Python 留空自动检测（macOS/Linux 优先 python3）
   "co.toolchain.java": "java",
-  "co.toolchain.python": "python"
+  "co.toolchain.python": ""
 }
 ```
 

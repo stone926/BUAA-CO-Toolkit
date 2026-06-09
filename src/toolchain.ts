@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, getPython } from './config';
+import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, resolvePython } from './config';
 import { cleanupCoTmp, coTmpDir } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
@@ -31,7 +31,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
   }
 
   if (checkAll) {
-    const python = getPython(resource);
+    const python = await resolvePython(resource);
     const pythonResult = await runTool(python, ['--version'], {
       cwd,
       output,
@@ -42,7 +42,7 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       name: 'Python',
       ok: pythonResult.ok,
       detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
-      suggestion: pythonResult.ok ? undefined : '请安装 Python 或设置 co.toolchain.python'
+      suggestion: pythonResult.ok ? undefined : '请安装 Python3 或设置 co.toolchain.python（macOS/Linux 通常为 python3）'
     });
   }
 

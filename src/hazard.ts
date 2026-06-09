@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getHazardCalculator, getMachineCode, getProfile, getPython } from './config';
+import { getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
 import { ensureDirectory, readTextFile, workspaceFolderFor } from './fsUtil';
 import { runMarsFile } from './mips';
 import { runTool } from './process';
@@ -106,7 +106,7 @@ async function runHazardAnalysis(services: AppServices): Promise<void> {
     return;
   }
 
-  const python = getPython(resource ?? folder.uri);
+  const python = await resolvePython(resource ?? folder.uri);
   if (!python) {
     vscode.window.showErrorMessage('Python 未配置。请设置 co.toolchain.python');
     return;

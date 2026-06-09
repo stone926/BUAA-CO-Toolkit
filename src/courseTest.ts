@@ -15,7 +15,7 @@ import {
   getP7ExceptionRate,
   getP7InterruptEnabled,
   getProfile,
-  getPython,
+  resolvePython,
   useBuiltinTestGenerator
 } from './config';
 import {
@@ -796,7 +796,7 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
 
   const activeExternal = await resolveActiveGeneratorInput();
   if (activeExternal) {
-    return buildExternalGeneratorRunSetup(folder, activeExternal);
+    return await buildExternalGeneratorRunSetup(folder, activeExternal);
   }
 
   const resource = vscode.window.activeTextEditor?.document.uri ?? folder.uri;
@@ -821,15 +821,15 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
     return undefined;
   }
 
-  return buildExternalGeneratorRunSetup(folder, generator);
+  return await buildExternalGeneratorRunSetup(folder, generator);
 }
 
-function buildExternalGeneratorRunSetup(
+async function buildExternalGeneratorRunSetup(
   folder: vscode.WorkspaceFolder,
   generator: vscode.Uri
-): GeneratorRunSetup | undefined {
+): Promise<GeneratorRunSetup | undefined> {
   const invocation = buildGeneratorInvocation(generator.fsPath, {
-    python: getPython(generator),
+    python: await resolvePython(generator),
     java: getJava(generator),
     cwd: path.dirname(generator.fsPath),
     extraArgs: getGeneratorArgs(generator)

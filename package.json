@@ -695,8 +695,8 @@
         },
         "co.toolchain.python": {
           "type": "string",
-          "default": "python",
-          "description": "本机 Python 命令"
+          "default": "",
+          "description": "本机 Python 命令。留空时自动检测（macOS/Linux 优先 python3，Windows 优先 python/py），用于流水线冲突分析和外部 .py 生成器"
         },
         "co.toolchain.mars": {
           "type": "string",
