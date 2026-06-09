@@ -4,6 +4,7 @@ import { compareTraces, TraceDiffEntry, TraceDiffResult } from './language/mips/
 import { CpuTraceEvent, parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
 import { readTextFile, workspaceFolderFor } from './fsUtil';
+import { revealOutputChannel } from './process';
 import { AppServices } from './types';
 import { pickOneFile } from './workflowInputs';
 
@@ -85,7 +86,7 @@ export async function compareTracePair(
   const simEvents = parseSimOutput(simText);
   const diff = compareTraces(marsEvents, simEvents, { compareCycles: selectedMode.compareCycles });
 
-  services.output.show(true);
+  revealOutputChannel(services.output);
   services.output.appendLine('');
   services.output.appendLine('Trace 比较');
   services.output.appendLine(`MARS: ${pair.mars.fsPath}`);

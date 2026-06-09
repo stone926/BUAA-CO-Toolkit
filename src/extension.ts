@@ -15,6 +15,7 @@ import { CoSidebarProvider } from './sidebar';
 import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
+import { registerVerilogSignalView } from './verilogSignalView';
 import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
 import { registerTraceCompare } from './traceCompare';
@@ -76,6 +77,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerMips(context, services);
   registerVerilog(context, services);
+  registerVerilogSignalView(context);
   registerLogisim(context, services);
   registerHazard(context, services);
   registerTraceCompare(context, services);

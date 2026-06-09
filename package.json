@@ -49,6 +49,7 @@
     "onCommand:co.verilog.generateTestbench",
     "onCommand:co.verilog.generateIseProject",
     "onCommand:co.verilog.runIsim",
+    "onCommand:co.verilog.inspectSignal",
     "onCommand:co.logisim.generateRom",
     "onCommand:co.logisim.injectRomIntoCircuit",
     "onCommand:co.logisim.convertLogToCsv",
@@ -67,7 +68,8 @@
     "onCommand:co.test.prepareLogisimCases",
     "onCommand:co.test.prepareGeneratedLogisimCases",
     "onCommand:co.test.openBatchTraceReport",
-    "onView:coSidebar"
+    "onView:coSidebar",
+    "onView:coVerilogSignal"
   ],
   "contributes": {
     "viewsContainers": {
@@ -84,6 +86,12 @@
         {
           "id": "coSidebar",
           "name": "计组工具箱",
+          "icon": "$(circuit-board)",
+          "contextualTitle": "BUAA CO Toolkit"
+        },
+        {
+          "id": "coVerilogSignal",
+          "name": "信号连线",
           "icon": "$(circuit-board)",
           "contextualTitle": "BUAA CO Toolkit"
         }
@@ -414,6 +422,11 @@
         }
       },
       {
+        "command": "co.verilog.inspectSignal",
+        "title": "CO: 查看 Verilog 信号连线",
+        "icon": "$(circuit-board)"
+      },
+      {
         "command": "co.logisim.generateRom",
         "title": "CO: Logisim 生成 ROM 文件"
       },
@@ -540,6 +553,11 @@
           "command": "co.verilog.generateIseProject",
           "when": "resourceLangId == verilog",
           "group": "co@11"
+        },
+        {
+          "command": "co.verilog.inspectSignal",
+          "when": "resourceLangId == verilog",
+          "group": "co@12"
         }
       ],
       "commandPalette": [
@@ -587,6 +605,9 @@
         },
         {
           "command": "co.verilog.runIsim"
+        },
+        {
+          "command": "co.verilog.inspectSignal"
         },
         {
           "command": "co.logisim.generateRom"
@@ -917,6 +938,11 @@
           "type": "boolean",
           "default": false,
           "description": "运行前显示完整的外部命令"
+        },
+        "co.run.revealOutput": {
+          "type": "boolean",
+          "default": false,
+          "description": "运行外部工具（MARS/ISim/对拍等）时自动弹出「输出」面板。默认关闭，仅静默写入输出，可手动从输出面板查看"
         },
         "co.run.timeoutMs": {
           "type": "number",

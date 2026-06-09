@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
 import { ensureDirectory, readTextFile, workspaceFolderFor } from './fsUtil';
 import { runMarsFile } from './mips';
-import { runTool } from './process';
+import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
 import { pickOneFile } from './workflowInputs';
 
@@ -119,7 +119,7 @@ async function runHazardAnalysis(services: AppServices): Promise<void> {
 
   const prepared = await prepareHazardWorkspace(setup, folder, machineCode, resource ?? folder.uri);
 
-  services.output.show(true);
+  revealOutputChannel(services.output, resource);
   services.output.appendLine('');
   services.output.appendLine(`冲突分析工具：${setup.dir}`);
   services.output.appendLine(`工作目录：${prepared.rootDir}`);
@@ -454,8 +454,8 @@ function renderStatisticReport(report: HazardStatisticReport): string {
     ${renderMetric('转发评分', formatGrade(forwardGrade.average))}
     ${renderMetric('阻塞评分', formatGrade(stallGrade.average))}
   </div>
-  ${renderWarningList('转发缺失覆盖', forwardGrade.warning)}
-  ${renderWarningList('阻塞缺失覆盖', stallGrade.warning)}
+  ${renderWarningList('未测试到的转发', forwardGrade.warning)}
+  ${renderWarningList('未测试到的阻塞', stallGrade.warning)}
   ${renderGradeDetails(forwardGrade.details, stallGrade.details)}
   ${renderForwardTable(asArray(report.forward))}
   ${renderStallTable(asArray(report.stall))}

@@ -170,6 +170,14 @@ export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
   return config<boolean>('run.showCommandBeforeRun', false, resource);
 }
 
+/**
+ * 是否在运行外部工具时自动弹出「输出」面板。默认关闭：输出仍会静默写入通道，
+ * 用户可手动打开输出面板查看，避免侧边栏操作频繁抢占编辑器下方空间。
+ */
+export function shouldRevealOutput(resource?: vscode.Uri): boolean {
+  return config<boolean>('run.revealOutput', false, resource);
+}
+
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
   const configured = configuredMemoryConfiguration(resource);
   if (configured) {

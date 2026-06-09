@@ -1,7 +1,17 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
-import { getRunTimeout, showCommandBeforeRun } from './config';
+import { getRunTimeout, shouldRevealOutput, showCommandBeforeRun } from './config';
 import { RunResult } from './types';
+
+/**
+ * 仅在用户开启 `co.run.revealOutput` 时弹出「输出」面板，否则静默写入。
+ * 统一所有运行入口的弹出行为，避免侧边栏操作自动抢占下方面板。
+ */
+export function revealOutputChannel(output: vscode.OutputChannel, resource?: vscode.Uri): void {
+  if (shouldRevealOutput(resource)) {
+    output.show(true);
+  }
+}
 
 export interface RunToolOptions {
   cwd: string;

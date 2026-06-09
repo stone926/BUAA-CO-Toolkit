@@ -128,6 +128,7 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 ### Verilog
 高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
 - `CO: Verilog 生成 Testbench`（P7 自动生成官方接口 testbench）、`CO: Verilog 生成 ISE 工程`、`CO: Verilog 运行 ISim`。
+- **信号连线面板**（侧边栏「信号连线」）：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。也可用命令 `CO: 查看 Verilog 信号连线` 或右键触发。
 
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
@@ -194,7 +195,7 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 
 ### 运行细项
 
-`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.timeoutMs`(`120000`)。
+`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.revealOutput`(`false`，运行外部工具时是否自动弹出「输出」面板；默认不弹，仅静默写入)、`co.run.timeoutMs`(`120000`)。
 
 ---
 

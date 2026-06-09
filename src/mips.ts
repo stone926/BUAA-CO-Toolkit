@@ -10,7 +10,7 @@ import {
   useDelayedBranching
 } from './config';
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
-import { commandLine, runTool } from './process';
+import { commandLine, revealOutputChannel, runTool } from './process';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 
@@ -124,7 +124,7 @@ export async function runMarsFile(
   }
 
   if (options.revealOutput !== false) {
-    services.output.show(true);
+    revealOutputChannel(services.output, asmUri);
   }
   const java = getJava(asmUri);
   const cwd = dirname(asmUri);

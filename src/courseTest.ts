@@ -57,7 +57,7 @@ import { checkToolchain } from './toolchain';
 import { runIsim } from './verilog';
 import { AppServices, ProjectProfile, RunResult, ToolDetection } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
-import { runTool } from './process';
+import { revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
 
 type CourseTraceStatus = 'passed' | 'failed' | 'error';
@@ -403,7 +403,7 @@ async function runCourseTraceBatch(
   cases: CourseTraceCaseInput[],
   source: CourseTraceBatchSource
 ): Promise<void> {
-  services.output.show(true);
+  revealOutputChannel(services.output);
   services.output.appendLine('');
   const sourceLabel = source.kind === 'generator' ? '生成的课程 Trace 测试' : '批量课程 Trace 测试';
   services.output.appendLine(`${sourceLabel}: ${cases.length} 个用例`);
@@ -487,7 +487,7 @@ async function runLogisimPrepareBatch(
   const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'logisim'));
   await ensureDirectory(outDir);
 
-  services.output.show(true);
+  revealOutputChannel(services.output, circuit);
   services.output.appendLine('');
   services.output.appendLine(`准备 Logisim 电路用例: ${asms.length} 个用例`);
   services.output.appendLine(`电路: ${circuit.fsPath}`);
@@ -853,7 +853,7 @@ async function runGeneratorAndCollectAsms(
 
   const before = snapshotAsmFiles(setup.folder.uri.fsPath);
   if (options.revealOutput !== false) {
-    services.output.show(true);
+    revealOutputChannel(services.output, setup.generator);
   }
   services.output.appendLine('');
   services.output.appendLine(`正在运行测试生成器: ${setup.generator.fsPath}`);
@@ -896,7 +896,7 @@ async function runBuiltinGeneratorAndCollectAsms(
     const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(message);
     if (options.revealOutput !== false) {
-      services.output.show(true);
+      revealOutputChannel(services.output, setup.folder.uri);
     }
     services.output.appendLine('');
     services.output.appendLine(`内置 ASM 生成器失败: ${message}`);
@@ -910,7 +910,7 @@ async function runBuiltinGeneratorAndCollectAsms(
   await writeInterruptScheduleSidecar(asm, generated.profile, generated.interruptSchedule, generated.seed);
 
   if (options.revealOutput !== false) {
-    services.output.show(true);
+    revealOutputChannel(services.output, setup.folder.uri);
   }
   services.output.appendLine('');
   services.output.appendLine('正在运行内置随机 ASM 生成器');
@@ -1326,7 +1326,7 @@ function resolveCaseInterruptSchedule(asm: vscode.Uri): number[] | undefined {
 }
 
 async function ensureContinuousTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {
-  services.output.show(true);
+  revealOutputChannel(services.output, resource);
   services.output.appendLine('');
   services.output.appendLine('正在检查持续生成 Trace 测试工具链');
 

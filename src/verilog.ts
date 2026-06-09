@@ -19,7 +19,7 @@ import {
   VerilogModule
 } from './language/verilog/service';
 import { ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
-import { runTool } from './process';
+import { revealOutputChannel, runTool } from './process';
 import { findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
 
@@ -190,7 +190,7 @@ export async function runIsim(
   const top = testbenchName ?? getTestbench(activeUri);
   const exeName = process.platform === 'win32' ? `${top}.exe` : top;
   if (options.revealOutput !== false) {
-    services.output.show(true);
+    revealOutputChannel(services.output, activeUri);
   }
   const fuseResult = await runTool(fuse, ['-nodebug', '-prj', path.basename(generated.prj.fsPath), '-o', exeName, top], {
     cwd: generated.outDir.fsPath,
@@ -582,11 +582,11 @@ function verilogDelayFromSimTime(simTime: string): string {
   return Math.abs(delay - rounded) < 1e-9 ? String(rounded) : Number(delay.toFixed(6)).toString();
 }
 
-function toTextDocument(document: vscode.TextDocument): TextDocument {
+export function toTextDocument(document: vscode.TextDocument): TextDocument {
   return TextDocument.create(document.uri.toString(), document.languageId, document.version, document.getText());
 }
 
-function coSettingsForUri(uri: vscode.Uri): CoSettings {
+export function coSettingsForUri(uri: vscode.Uri): CoSettings {
   return {
     ...defaultCoSettings,
     project: {
