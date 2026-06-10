@@ -1078,15 +1078,18 @@ describe('buildTestbench', () => {
       profile: 'P7',
       p7Probe: {
         scenarios: [
-          { id: 1, kind: 'external', waitPc: 0x3020 },
+          { id: 1, kind: 'external', waitPc: 0x3020, armAddress: 0x27d0, armValue: 1, externalDelayCycles: 4 },
           { id: 2, kind: 'timer0', waitPc: 0x3040 }
         ]
       }
     });
 
     expect(tb).toContain('CO_P7_PROBE external_raise');
+    expect(tb).toContain('CO_P7_PROBE external_arm');
     expect(tb).toContain('CO_P7_PROBE external_ack');
     expect(tb).toContain("co_p7_external_target = 32'h00003020;");
+    expect(tb).toContain("co_p7_external_arm_addr = 32'h000027d0;");
+    expect(tb).toContain('co_p7_external_armed && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('uut.');
   });
 });

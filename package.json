@@ -2,7 +2,7 @@
   "name": "buaa-co-toolkit",
   "displayName": "BUAA CO Toolkit",
   "description": "计算机组成实验 VSCode 工具箱：支持 Logisim、MARS MIPS 汇编和 Verilog",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "publisher": "stone926",
   "icon": "icons/logo.png",
   "license": "MIT",
@@ -1041,9 +1041,10 @@
         },
         "co.test.p7.probeScenarioCount": {
           "type": "number",
-          "default": 4,
+          "default": 32,
           "minimum": 1,
-          "description": "P7 probe 模式每个 ASM 生成的场景数量"
+          "maximum": 64,
+          "description": "P7 probe 模式每个 ASM 生成的场景数量，最多 64 条以保持 probe log 在 DM 范围内"
         },
         "co.test.p7.exceptionRate": {
           "type": "number",

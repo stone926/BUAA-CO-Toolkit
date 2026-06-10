@@ -334,11 +334,15 @@ describe('built-in ASM generator', () => {
       interrupt: true,
       p7StressMode: 'probe',
       timerInterrupt: true,
-      probeScenarioCount: 4
+      probeScenarioCount: 32
     });
 
     expect(result.mode).toBe('probe');
     expect(result.probe?.logBase).toBe(0x2800);
+    expect(result.probe?.scenarios).toHaveLength(32);
+    expect(new Set(result.probe?.scenarios.map((scenario) => scenario.kind))).toEqual(new Set([
+      'external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'
+    ]));
     expect(result.text).toContain('mfc0 $24, $13');
     expect(result.text).toContain('mfc0 $25, $12');
     expect(result.text).toContain('mfc0 $23, $14');
@@ -350,6 +354,8 @@ describe('built-in ASM generator', () => {
     expect(result.text).toContain('sw $26, 0x7f10($0)');
     expect(result.text).not.toContain('sw $26, 0x7f08($0)');
     expect(result.text).not.toContain('sw $26, 0x7f18($0)');
+    expect(result.text).toContain('sw $26, 0x27d0($0)');
+    expect(result.text).toContain('_co_internal_unknown_instruction');
   });
 
   it('arms P7 probe timers only after the return PC is staged', () => {
@@ -361,27 +367,30 @@ describe('built-in ASM generator', () => {
       interrupt: false,
       p7StressMode: 'probe',
       timerInterrupt: true,
-      probeScenarioCount: 2
+      probeScenarioCount: 8,
+      exceptionTypes: []
     });
-    const scenario = result.probe?.scenarios[0];
+    const scenario = result.probe?.scenarios.find((item) => item.kind === 'timer0' || item.kind === 'timer1');
     if (!scenario) {
-      throw new Error('missing first probe scenario');
+      throw new Error('missing timer probe scenario');
     }
-    const timerStart = result.text.indexOf('# probe scenario 1: timer0');
-    const waitLabel = result.text.indexOf('_co_probe_s1_wait:', timerStart);
+    const timerStart = result.text.indexOf(`# probe scenario ${scenario.id}: ${scenario.kind}`);
+    const waitLabel = result.text.indexOf(`_co_probe_s${scenario.id}_wait:`, timerStart);
     const doneStore = result.text.lastIndexOf('sw $26, 0x27e8($0)', waitLabel);
     const enableStatus = result.text.indexOf('mtc0 $26, $12', timerStart);
 
-    expect(result.text.slice(timerStart, waitLabel)).toContain('mtc0 $0, $12');
-    expect(result.text.slice(timerStart, waitLabel)).toContain('sw $0, 0x7f00($0)');
-    expect(result.text.slice(timerStart, waitLabel)).toContain('sw $0, 0x7f10($0)');
+    expect(result.text.slice(timerStart, waitLabel)).toContain('jal _co_probe_guard');
+    expect(result.text).toContain('_co_probe_guard:');
+    expect(result.text).toContain('sw $0, 0x7f00($0)');
+    expect(result.text).toContain('sw $0, 0x7f10($0)');
     expect(doneStore).toBeGreaterThan(timerStart);
     expect(enableStatus).toBeGreaterThan(doneStore);
     expect(waitLabel).toBeGreaterThan(enableStatus);
-    expect(scenario.kind).toBe('timer0');
     expect(scenario.allowedEpc).toContain(scenario.waitPc);
     expect(scenario.allowedEpc).toContain((scenario.waitPc ?? 0) + 4);
     expect(scenario.allowedEpc.some((pc) => pc < (scenario.waitPc ?? 0))).toBe(true);
+    expect(scenario.timerPreset).toBeGreaterThanOrEqual(2);
+    expect(scenario.timerPreset).toBeLessThanOrEqual(96);
   });
 
   it('records the actual syscall PC for internal P7 probe scenarios', () => {
@@ -393,14 +402,33 @@ describe('built-in ASM generator', () => {
       interrupt: false,
       p7StressMode: 'probe',
       timerInterrupt: false,
-      probeScenarioCount: 1
+      probeScenarioCount: 1,
+      exceptionTypes: ['Syscall']
     });
     const scenario = result.probe?.scenarios[0];
     const bodyLines = instructionSlotLines(beforeKernelText(result.text));
     const syscallIndex = bodyLines.indexOf('syscall');
 
-    expect(scenario?.kind).toBe('internal');
+    expect(scenario?.kind).toBe('syscall');
+    expect(scenario?.expectedExcCode).toBe(8);
     expect(scenario?.allowedEpc).toEqual([0x3000 + syscallIndex * 4]);
+  });
+
+  it('caps P7 probe scenario count at the log capacity without overlapping the handler', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-probe-max',
+      interrupt: true,
+      p7StressMode: 'probe',
+      timerInterrupt: true,
+      probeScenarioCount: 99
+    });
+    const mainLines = instructionSlotLines(beforeKernelText(result.text));
+
+    expect(result.probe?.scenarios).toHaveLength(64);
+    expect(mainLines.length).toBeLessThanOrEqual((0x4180 - 0x3000) / 4 - 2);
   });
 });
 

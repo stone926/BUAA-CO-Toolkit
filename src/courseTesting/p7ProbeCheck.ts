@@ -2,8 +2,18 @@ import { CpuTraceEvent } from '../language/mips/traceParser';
 import { P7ProbeMetadata, P7ProbeScenario } from './builtinAsmGenerator';
 import {
   p7CauseExcCodeMask,
+  p7ExcCodeAdel,
+  p7ExcCodeAdes,
+  p7ExcCodeOv,
+  p7ExcCodeRi,
+  p7ExcCodeSyscall,
+  p7ProbeKindAdel,
+  p7ProbeKindAdes,
   p7ProbeKindExternal,
   p7ProbeKindInternal,
+  p7ProbeKindOv,
+  p7ProbeKindRi,
+  p7ProbeKindSyscall,
   p7ProbeKindTimer0,
   p7ProbeKindTimer1,
   p7ProbeMagic
@@ -42,22 +52,38 @@ export function checkP7Probe(
   const diagnostics = parseProbeDiagnostics(simOutput);
   const failures: P7ProbeFailure[] = [];
   for (const diagnostic of diagnostics) {
-    if (diagnostic.includes('mmio_on_dm')) {
+    if (diagnostic.includes('mmio_on_dm') || diagnostic.includes('external_raise_unarmed')) {
       failures.push({ scenarioId: 0, kind: 'tb', message: diagnostic });
     }
   }
 
+  const scenarioIds = new Set(metadata.scenarios.map((scenario) => scenario.id));
+  for (const record of records) {
+    if (record.scenarioId === 0 || !scenarioIds.has(record.scenarioId)) {
+      failures.push({ scenarioId: record.scenarioId, kind: 'record', message: `unexpected probe record scenario id ${record.scenarioId}` });
+    }
+  }
+
   for (const scenario of metadata.scenarios) {
-    const record = records.find((item) => item.scenarioId === scenario.id);
+    const scenarioRecords = records.filter((item) => item.scenarioId === scenario.id);
+    const record = scenarioRecords[0];
     if (!record) {
       failures.push(failure(scenario, 'missing probe record'));
       continue;
+    }
+    if (scenarioRecords.length > 1) {
+      failures.push(failure(scenario, `duplicate probe records: ${scenarioRecords.length}`));
     }
     if (record.kindCode !== kindCode(scenario.kind)) {
       failures.push(failure(scenario, `kind code differs: expected ${kindCode(scenario.kind)}, got ${record.kindCode}`));
     }
     const excCode = (record.cause & p7CauseExcCodeMask) >>> 2;
-    if (scenario.kind === 'internal') {
+    const expectedExcCode = scenario.expectedExcCode ?? expectedExcCodeForKind(scenario.kind);
+    if (expectedExcCode !== undefined && expectedExcCode !== 0) {
+      if (excCode !== expectedExcCode) {
+        failures.push(failure(scenario, `ExcCode differs: expected ${expectedExcCode}, got ${excCode}`));
+      }
+    } else if (scenario.kind === 'internal') {
       if (excCode === 0) {
         failures.push(failure(scenario, 'internal exception recorded ExcCode 0'));
       }
@@ -72,8 +98,26 @@ export function checkP7Probe(
     if (scenario.allowedEpc.length && !scenario.allowedEpc.includes(record.epc >>> 0)) {
       failures.push(failure(scenario, `EPC 0x${(record.epc >>> 0).toString(16)} is outside allowed set ${scenario.allowedEpc.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`));
     }
-    if (scenario.kind === 'external' && !diagnostics.includes(`external_ack:${scenario.id}`)) {
-      failures.push(failure(scenario, 'external interrupt was not acknowledged through 0x7f20'));
+    if (scenario.kind === 'external') {
+      const armIndex = diagnostics.indexOf(`external_arm:${scenario.id}`);
+      const raiseIndex = diagnostics.indexOf(`external_raise:${scenario.id}`);
+      const ackIndex = diagnostics.indexOf(`external_ack:${scenario.id}`);
+      const requiresArm = Number.isFinite(scenario.armAddress) && Number.isFinite(scenario.armValue);
+      if (requiresArm && armIndex < 0) {
+        failures.push(failure(scenario, 'external interrupt was not armed by software marker'));
+      }
+      if (requiresArm && raiseIndex < 0) {
+        failures.push(failure(scenario, 'external interrupt was not raised after arm marker'));
+      }
+      if (ackIndex < 0) {
+        failures.push(failure(scenario, 'external interrupt was not acknowledged through 0x7f20'));
+      }
+      if (requiresArm && armIndex >= 0 && raiseIndex >= 0 && armIndex > raiseIndex) {
+        failures.push(failure(scenario, 'external interrupt was raised before arm marker'));
+      }
+      if (raiseIndex >= 0 && ackIndex >= 0 && raiseIndex > ackIndex) {
+        failures.push(failure(scenario, 'external interrupt ack appeared before raise'));
+      }
     }
     if ((scenario.kind === 'timer0' || scenario.kind === 'timer1') && (record.aux0 & 1) !== 0) {
       failures.push(failure(scenario, `timer CTRL was not cleared, aux0=0x${(record.aux0 >>> 0).toString(16)}`));
@@ -140,6 +184,14 @@ function reconstructProbeRecords(
 function parseProbeDiagnostics(text: string): string[] {
   const diagnostics: string[] = [];
   for (const line of text.split(/\r?\n/)) {
+    const arm = /CO_P7_PROBE\s+external_arm\s+scenario=(\d+)/.exec(line);
+    if (arm) {
+      diagnostics.push(`external_arm:${Number(arm[1])}`);
+    }
+    const raise = /CO_P7_PROBE\s+external_raise\s+scenario=(\d+)/.exec(line);
+    if (raise) {
+      diagnostics.push(`external_raise:${Number(raise[1])}`);
+    }
     const ack = /CO_P7_PROBE\s+external_ack\s+scenario=(\d+)/.exec(line);
     if (ack) {
       diagnostics.push(`external_ack:${Number(ack[1])}`);
@@ -149,6 +201,9 @@ function parseProbeDiagnostics(text: string): string[] {
       diagnostics.push(`timeout:${Number(timeout[1])}`);
     }
     if (/CO_P7_PROBE\s+mmio_on_dm\b/.test(line)) {
+      diagnostics.push(line.trim());
+    }
+    if (/CO_P7_PROBE\s+external_raise_unarmed\b/.test(line)) {
       diagnostics.push(line.trim());
     }
   }
@@ -163,10 +218,41 @@ function kindCode(kind: P7ProbeScenario['kind']): number {
       return p7ProbeKindTimer0;
     case 'timer1':
       return p7ProbeKindTimer1;
+    case 'adel':
+      return p7ProbeKindAdel;
+    case 'ades':
+      return p7ProbeKindAdes;
+    case 'syscall':
+      return p7ProbeKindSyscall;
+    case 'ri':
+      return p7ProbeKindRi;
+    case 'ov':
+      return p7ProbeKindOv;
     case 'internal':
       return p7ProbeKindInternal;
     default:
       throw new Error(`unknown P7 probe scenario kind: ${String(kind)}`);
+  }
+}
+
+function expectedExcCodeForKind(kind: P7ProbeScenario['kind']): number | undefined {
+  switch (kind) {
+    case 'adel':
+      return p7ExcCodeAdel;
+    case 'ades':
+      return p7ExcCodeAdes;
+    case 'syscall':
+      return p7ExcCodeSyscall;
+    case 'ri':
+      return p7ExcCodeRi;
+    case 'ov':
+      return p7ExcCodeOv;
+    case 'external':
+    case 'timer0':
+    case 'timer1':
+      return 0;
+    case 'internal':
+      return undefined;
   }
 }
 

@@ -326,15 +326,16 @@ export function getP7TimerIntensity(resource?: vscode.Uri): number {
 }
 
 export function getP7ProbeScenarioCount(resource?: vscode.Uri): number {
+  const normalize = (value: number): number => Math.min(64, Math.max(1, Math.floor(value)));
   const configured = inspectedValue<number>('test.p7.probeScenarioCount', resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
-    return Math.floor(configured);
+    return normalize(configured);
   }
   const projectValue = getTestFromConfig(resource)?.p7?.probeScenarioCount;
   if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
-    return Math.floor(projectValue);
+    return normalize(projectValue);
   }
-  return 4;
+  return 32;
 }
 
 /**

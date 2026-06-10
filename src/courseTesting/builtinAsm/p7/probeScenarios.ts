@@ -3,7 +3,14 @@ import { P7ProbeScenario, P7ProbeScenarioKind } from '../types';
 import {
   p7CauseIpExternalMask,
   p7CauseIpTimer0Mask,
-  p7CauseIpTimer1Mask
+  p7CauseIpTimer1Mask,
+  p7ExcCodeAdel,
+  p7ExcCodeAdes,
+  p7ExcCodeOv,
+  p7ExcCodeRi,
+  p7ExcCodeSyscall,
+  p7ProbeDefaultScenarioCount,
+  p7ProbeMaxScenarioCount
 } from './constants';
 
 export interface ProbeScenarioPlanOptions {
@@ -12,34 +19,42 @@ export interface ProbeScenarioPlanOptions {
   timerInterrupt: boolean;
   externalIntensity: number;
   timerIntensity: number;
+  exceptionTypes: readonly string[];
+}
+
+const probeExceptionCoverageOrder: P7ProbeScenarioKind[] = ['adel', 'ades', 'syscall', 'ri', 'ov'];
+
+export function clampProbeScenarioCount(value: number | undefined): number {
+  if (!Number.isFinite(value) || value === undefined || value <= 0) {
+    return p7ProbeDefaultScenarioCount;
+  }
+  return Math.min(p7ProbeMaxScenarioCount, Math.max(1, Math.floor(value)));
 }
 
 export function planProbeScenarioKinds(options: ProbeScenarioPlanOptions, rng: Random): P7ProbeScenarioKind[] {
-  const count = Math.max(1, Math.floor(options.count));
-  const result: P7ProbeScenarioKind[] = [];
+  const count = clampProbeScenarioCount(options.count);
+  const enabledExceptions = enabledProbeExceptions(options.exceptionTypes);
+  const coverage: P7ProbeScenarioKind[] = [];
+
   if (options.externalInterrupt && options.externalIntensity > 0) {
-    result.push('external');
+    pushRepeated(coverage, 'external', 4);
   }
   if (options.timerInterrupt && options.timerIntensity > 0) {
-    result.push('timer0', 'timer1');
+    pushRepeated(coverage, 'timer0', 6);
+    pushRepeated(coverage, 'timer1', 6);
   }
-  if (!result.length) {
-    result.push('internal');
+  for (const kind of enabledExceptions) {
+    pushRepeated(coverage, kind, 2);
   }
+  if (!coverage.length) {
+    coverage.push('syscall');
+  }
+
+  const result = shuffle(coverage, rng).slice(0, count);
   while (result.length < count) {
-    const candidates: P7ProbeScenarioKind[] = [];
-    if (options.externalInterrupt && rng.chance(options.externalIntensity)) {
-      candidates.push('external');
-    }
-    if (options.timerInterrupt && rng.chance(options.timerIntensity)) {
-      candidates.push(rng.chance(0.5) ? 'timer0' : 'timer1');
-    }
-    if (!candidates.length) {
-      candidates.push('internal');
-    }
-    result.push(rng.pick(candidates));
+    result.push(pickFillerScenario(options, enabledExceptions, rng));
   }
-  return result.slice(0, count);
+  return result;
 }
 
 export function expectedIpMask(kind: P7ProbeScenarioKind): number {
@@ -50,9 +65,39 @@ export function expectedIpMask(kind: P7ProbeScenarioKind): number {
       return p7CauseIpTimer0Mask;
     case 'timer1':
       return p7CauseIpTimer1Mask;
+    case 'adel':
+    case 'ades':
+    case 'syscall':
+    case 'ri':
+    case 'ov':
     case 'internal':
       return 0;
   }
+}
+
+export function expectedExcCode(kind: P7ProbeScenarioKind): number | undefined {
+  switch (kind) {
+    case 'adel':
+      return p7ExcCodeAdel;
+    case 'ades':
+      return p7ExcCodeAdes;
+    case 'syscall':
+      return p7ExcCodeSyscall;
+    case 'ri':
+      return p7ExcCodeRi;
+    case 'ov':
+      return p7ExcCodeOv;
+    case 'external':
+    case 'timer0':
+    case 'timer1':
+      return 0;
+    case 'internal':
+      return undefined;
+  }
+}
+
+export function isInternalProbeKind(kind: P7ProbeScenarioKind): boolean {
+  return kind === 'internal' || expectedExcCode(kind) !== 0;
 }
 
 export function scenarioWithLocations(
@@ -65,9 +110,47 @@ export function scenarioWithLocations(
     id,
     kind,
     expectedIpMask: expectedIpMask(kind),
+    expectedExcCode: expectedExcCode(kind),
     allowedEpc: waitPc === undefined ? [] : [waitPc],
     donePc,
     waitPc
   };
 }
 
+function enabledProbeExceptions(values: readonly string[]): P7ProbeScenarioKind[] {
+  const enabled = new Set(values.map((value) => String(value).trim().toLowerCase()));
+  return probeExceptionCoverageOrder.filter((kind) => enabled.has(kind));
+}
+
+function pickFillerScenario(
+  options: ProbeScenarioPlanOptions,
+  enabledExceptions: readonly P7ProbeScenarioKind[],
+  rng: Random
+): P7ProbeScenarioKind {
+  const weighted: P7ProbeScenarioKind[] = [];
+  if (options.externalInterrupt && rng.chance(options.externalIntensity)) {
+    weighted.push('external');
+  }
+  if (options.timerInterrupt && rng.chance(options.timerIntensity)) {
+    weighted.push(rng.chance(0.5) ? 'timer0' : 'timer1');
+  }
+  if (!weighted.length || rng.chance(0.65)) {
+    weighted.push(rng.pick(enabledExceptions.length ? enabledExceptions : ['syscall']));
+  }
+  return rng.pick(weighted);
+}
+
+function pushRepeated<T>(target: T[], value: T, count: number): void {
+  for (let i = 0; i < count; i++) {
+    target.push(value);
+  }
+}
+
+function shuffle<T>(items: readonly T[], rng: Random): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
