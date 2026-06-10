@@ -346,27 +346,26 @@ class ProgramGenerator {
       return [];
     }
     // Unified P7 handler at 0x4180.
-    // 1. Acknowledge/clear the external interrupt by writing 0x7F20 FIRST. This both stops the
-    //    Verilog testbench from re-raising `interrupt` (no storm) and clears Cause.IP[2] before
-    //    we read Cause, so MARS (auto-clears IP at exception entry) and the CPU (holds the level
-    //    until the ack) agree on the traced Cause value.
-    // 2. Read Cause; if ExcCode == 0 (external interrupt) just eret (re-execute the deferred
-    //    instruction). Otherwise advance EPC by 4 to skip the faulting instruction.
+    // 1. Read Cause first and branch on ExcCode. Only an external interrupt (ExcCode == 0)
+    //    acknowledges/clears the interrupt generator at 0x7F20.
+    // 2. Internal exceptions advance EPC by 4 to skip the faulting instruction, but must not ack
+    //    the external interrupt generator: a pending interrupt may have arrived while EXL was set.
     // Only $k0/$k1 ($26/$27) are touched; generated user code never reads them, so the handler
     // is transparent to user-visible state. eret has no delay slot.
     return [
       '.ktext 0x4180',
       '_co_excep:',
-      `    ori $k0, $0, 0x${p7IntAckAddress.toString(16)}`,
-      '    sw $0, 0($k0)',
       '    mfc0 $k0, $13',
       '    andi $k1, $k0, 0x7c',
-      '    beq $k1, $0, _co_excep_ret',
+      '    bne $k1, $0, _co_excep_skip',
       '    nop',
+      `    ori $k0, $0, 0x${p7IntAckAddress.toString(16)}`,
+      '    sw $0, 0($k0)',
+      '    eret',
+      '_co_excep_skip:',
       '    mfc0 $k0, $14',
       '    addi $k0, $k0, 4',
       '    mtc0 $k0, $14',
-      '_co_excep_ret:',
       '    eret'
     ];
   }

@@ -206,9 +206,18 @@ describe('built-in ASM generator', () => {
     // SR prologue enables the external interrupt before any body instruction.
     expect(result.text).toContain('ori $k0, $0, 0x1001');
     expect(result.text).toContain('mtc0 $k0, $12');
-    // Handler acknowledges the external interrupt at 0x7f20.
-    expect(result.text).toContain('ori $k0, $0, 0x7f20');
-    expect(result.text).toContain('sw $0, 0($k0)');
+    // Handler checks Cause.ExcCode before acknowledging the external interrupt generator.
+    const handler = result.text.slice(result.text.indexOf('.ktext 0x4180'));
+    const causeRead = handler.indexOf('    mfc0 $k0, $13');
+    const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
+    const interruptAck = handler.indexOf('    ori $k0, $0, 0x7f20');
+    const exceptionPath = handler.indexOf('_co_excep_skip:');
+    expect(causeRead).toBeGreaterThanOrEqual(0);
+    expect(branchToException).toBeGreaterThan(causeRead);
+    expect(interruptAck).toBeGreaterThan(branchToException);
+    expect(handler).toContain('    sw $0, 0($k0)');
+    expect(exceptionPath).toBeGreaterThan(interruptAck);
+    expect(handler).toContain('    mtc0 $k0, $14');
   });
 
   it('emits no interrupt schedule when interrupt is disabled', () => {
