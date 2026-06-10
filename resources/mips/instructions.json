@@ -1791,5 +1791,18 @@
     "labelOperand": "last",
     "delaySlot": true,
     "type": "pseudo"
+  },
+  {
+    "mnemonic": "_co_internal_unknown_instruction",
+    "summary": "used for P7 RI test",
+    "formats": [
+      "_co_internal_unknown_instruction"
+    ],
+    "operands": [
+      0,
+      0
+    ],
+    "description": "用于 P7 未知指令异常测试",
+    "type": "special"
   }
 ]

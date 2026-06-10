@@ -303,7 +303,7 @@ export function getP7ExceptionRate(resource?: vscode.Uri): number {
   if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue >= 0) {
     return Math.min(1, projectValue);
   }
-  return 0.15;
+  return 0.08;
 }
 
 export function getP7ExceptionTypes(resource?: vscode.Uri): string[] {
