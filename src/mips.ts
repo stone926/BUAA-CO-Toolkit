@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -14,6 +15,7 @@ import { commandLine, revealOutputChannel, runTool } from './process';
 import { appendHaltLoop } from './courseTesting/mipsUtil';
 import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
+import { p7InternalUnknownInstructionMnemonic } from './courseTesting/builtinAsmGenerator';
 
 export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
 
@@ -26,6 +28,7 @@ export interface MarsRunOptions {
   traceOutput?: boolean;
   dumpOutputFile?: vscode.Uri;
   interruptSchedule?: number[];
+  p7RiInstruction?: boolean;
 }
 
 export interface MarsRunOutput {
@@ -130,7 +133,9 @@ export async function runMarsFile(
   const java = getJava(asmUri);
   const cwd = dirname(asmUri);
   const memoryConfiguration = getMemoryConfiguration(asmUri);
-  const args = buildMarsArgs(asmUri, mars, mode, options, memoryConfiguration);
+  const p7RiInstruction = options.p7RiInstruction ?? p7RiInstructionNeeded(asmUri);
+  const effectiveOptions: MarsRunOptions = { ...options, p7RiInstruction };
+  const args = buildMarsArgs(asmUri, mars, mode, effectiveOptions, memoryConfiguration);
 
   let outputFile: vscode.Uri | undefined;
   if (mode === 'dumpText') {
@@ -143,7 +148,7 @@ export async function runMarsFile(
     args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', outputFile.fsPath, asmUri.fsPath);
   }
 
-  const setupError = marsRunSetupError(asmUri, mode, options, memoryConfiguration);
+  const setupError = marsRunSetupError(asmUri, mode, effectiveOptions, memoryConfiguration);
   if (setupError) {
     services.output.appendLine(setupError);
     const result = localMarsRunFailure(java, args, cwd, setupError);
@@ -159,10 +164,10 @@ export async function runMarsFile(
     resource: asmUri,
     stdin: options.stdin
   });
-  result = withMarsCompatibilityDiagnostics(result, services, mode, options, memoryConfiguration);
+  result = withMarsCompatibilityDiagnostics(result, services, mode, effectiveOptions, memoryConfiguration);
 
   if (mode === 'dumpText' && result.ok && outputFile && getProfile(asmUri) === 'P7') {
-    result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result);
+    result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result, effectiveOptions);
   } else if (mode === 'dumpText' && result.ok && outputFile && cpuHaltProfiles.has(getProfile(asmUri))) {
     await appendHaltLoopToTextDump(outputFile, services);
   }
@@ -214,6 +219,9 @@ function marsRunSetupError(
 ): string | undefined {
   const profile = getProfile(asmUri);
   if (profile === 'P7') {
+    if (options.p7RiInstruction && !fs.existsSync(p7InternalUnknownInstructionClassPath())) {
+      return `P7 RI 异常测试需要内部 MARS 额外指令 class，但文件不存在: ${p7InternalUnknownInstructionClassPath()}`;
+    }
     if ((mode === 'dumpText' || mode === 'dumpKernel' || isCourseTraceMarsRun(mode, options)) && memoryConfiguration !== p7CourseMemoryConfiguration) {
       return `P7 机器码 dump 必须使用 MARS 内存配置 ${p7CourseMemoryConfiguration}。${memoryConfiguration} 会改变异常入口或让程序顺序落入 0x4180 处理程序，不适配课程 CPU。`;
     }
@@ -264,6 +272,9 @@ function marsCompatibilityMessage(
   if (isCourseTraceMarsRun(mode, options) && /Invalid Command Argument:\s*(efc|p7irq)/i.test(output)) {
     return '当前 MARS 不支持 efc / p7irq（P7 异常与外部中断）参数。P7 自动对拍需要含该功能的修改版 Mars 构建，请重新构建并配置 co.toolchain.marsP7。';
   }
+  if (options.p7RiInstruction && /Invalid Command Argument:\s*cl/i.test(output)) {
+    return '当前 MARS 不支持 cl 额外指令加载，无法生成/运行 P7 RI 异常测试。请使用支持 cl 的修改版 Mars，或从 co.test.p7.exceptionTypes 中移除 RI。';
+  }
   const memoryMatch = /Invalid memory configuration:\s*([A-Za-z0-9_]+)/i.exec(output);
   if (memoryMatch) {
     const rejected = memoryMatch[1] || memoryConfiguration;
@@ -284,12 +295,13 @@ async function mergeP7KernelTextDump(
   mars: string,
   cwd: string,
   textOutputFile: vscode.Uri,
-  previousResult: RunResult
+  previousResult: RunResult,
+  options: MarsRunOptions
 ): Promise<RunResult> {
   const tempDirPath = coTmpDir(asmUri, 'co-p7-ktext-');
   const tempDir = vscode.Uri.file(tempDirPath);
   const kernelOutputFile = vscode.Uri.file(path.join(tempDir.fsPath, `${basenameNoExt(asmUri)}.kernel-merge.txt`));
-  const args = buildMarsArgs(asmUri, mars, 'dumpKernel', {}, p7CourseMemoryConfiguration);
+  const args = buildMarsArgs(asmUri, mars, 'dumpKernel', options, p7CourseMemoryConfiguration);
   args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
 
   const kernelResult = await runTool(java, args, {
@@ -411,9 +423,14 @@ function buildMarsArgs(
   options: MarsRunOptions = {},
   memoryConfiguration = getMemoryConfiguration(asmUri)
 ): string[] {
-  const args = ['-jar', mars, 'nc', 'mc', memoryConfiguration];
+  const args = options.p7RiInstruction
+    ? ['-cp', `${mars}${path.delimiter}${p7InternalUnknownInstructionClassDir()}`, 'Mars', 'nc', 'mc', memoryConfiguration]
+    : ['-jar', mars, 'nc', 'mc', memoryConfiguration];
   if (useDelayedBranching(asmUri)) {
     args.push('db');
+  }
+  if (options.p7RiInstruction) {
+    args.push('cl', `${p7InternalUnknownInstructionMnemonic}.class`);
   }
   args.push(...getMipsExtraArgs(asmUri));
   if (mode === 'run' && options.traceOutput && !hasMarsArg(args, 'coL1')) {
@@ -438,6 +455,25 @@ function buildMarsArgs(
     args.push(asmUri.fsPath);
   }
   return args;
+}
+
+function p7RiInstructionNeeded(asmUri: vscode.Uri): boolean {
+  if (getProfile(asmUri) !== 'P7') {
+    return false;
+  }
+  try {
+    return fs.readFileSync(asmUri.fsPath, 'utf8').includes(p7InternalUnknownInstructionMnemonic);
+  } catch {
+    return false;
+  }
+}
+
+function p7InternalUnknownInstructionClassDir(): string {
+  return path.resolve(__dirname, '..', 'resources', 'mars');
+}
+
+function p7InternalUnknownInstructionClassPath(): string {
+  return path.join(p7InternalUnknownInstructionClassDir(), `${p7InternalUnknownInstructionMnemonic}.class`);
 }
 
 function hasMarsArg(args: readonly string[], value: string): boolean {

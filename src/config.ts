@@ -292,7 +292,7 @@ export function getP7InterruptEnabled(resource?: vscode.Uri): boolean {
 }
 
 /**
- * P7 生成器主动制造内部异常（Ov/AdEL/AdES/Syscall）的比例，范围 [0, 1]。
+ * P7 生成器主动制造内部异常（AdEL/AdES/Syscall/RI/Ov）的比例，范围 [0, 1]。
  */
 export function getP7ExceptionRate(resource?: vscode.Uri): number {
   const configured = inspectedValue<number>('test.p7.exceptionRate', resource);
@@ -304,6 +304,15 @@ export function getP7ExceptionRate(resource?: vscode.Uri): number {
     return Math.min(1, projectValue);
   }
   return 0.15;
+}
+
+export function getP7ExceptionTypes(resource?: vscode.Uri): string[] {
+  return layeredGetArray(
+    'test.p7.exceptionTypes',
+    () => getTestFromConfig(resource)?.p7?.exceptionTypes,
+    ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov'],
+    resource
+  );
 }
 
 function layeredGetArray(

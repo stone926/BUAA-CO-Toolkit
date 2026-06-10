@@ -1014,7 +1014,28 @@
           "default": 0.08,
           "minimum": 0,
           "maximum": 1,
-          "description": "P7 生成器主动制造内部异常（溢出 Ov、未对齐取数/存数 AdEL/AdES、syscall）的比例（0~1）。0 表示不主动制造内部异常"
+          "description": "P7 生成器主动制造内部异常（AdEL、AdES、Syscall、RI、Ov）的比例（0~1）。0 表示不主动制造内部异常"
+        },
+        "co.test.p7.exceptionTypes": {
+          "type": "array",
+          "default": [
+            "AdEL",
+            "AdES",
+            "Syscall",
+            "RI",
+            "Ov"
+          ],
+          "items": {
+            "type": "string",
+            "enum": [
+              "AdEL",
+              "AdES",
+              "Syscall",
+              "RI",
+              "Ov"
+            ]
+          },
+          "description": "P7 内置 ASM 生成器主动覆盖的异常类型。Syscall 关闭时也不会在用户态随机生成 syscall；RI 需要支持 cl 额外指令加载的 P7 修改版 MARS"
         }
       }
     }

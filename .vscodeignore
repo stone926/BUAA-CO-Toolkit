@@ -17,3 +17,4 @@ memory/**            # 开发用记忆文件
 **/*.test.*
 vitest.config.ts
 tsconfig.test.json
+resources/mars/_co_internal_unknown_instruction.java

@@ -36,6 +36,7 @@ export interface CoProjectConfig {
     p7?: {
       interrupt?: boolean;
       exceptionRate?: number;
+      exceptionTypes?: string[];
     };
   };
   mips?: {

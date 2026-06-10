@@ -11,3 +11,5 @@ isim.log
 CLAUDE.md
 doc
 .claude
+*.class
+!resources/mars/_co_internal_unknown_instruction.class

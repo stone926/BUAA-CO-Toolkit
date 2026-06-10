@@ -13,6 +13,7 @@ import {
   getJava,
   getMemoryConfiguration,
   getP7ExceptionRate,
+  getP7ExceptionTypes,
   getP7InterruptEnabled,
   getProfile,
   resolvePython,
@@ -132,6 +133,7 @@ interface BuiltinGeneratorRunSetup {
   instructionCount: number;
   interrupt: boolean;
   exceptionRate: number;
+  exceptionTypes: string[];
 }
 
 interface GeneratedAsmBatch {
@@ -812,7 +814,8 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
         ? getBuiltinGeneratorP7InstructionCount(resource)
         : getBuiltinGeneratorInstructionCount(resource),
       interrupt: profile === 'P7' && getP7InterruptEnabled(resource),
-      exceptionRate: profile === 'P7' ? getP7ExceptionRate(resource) : 0
+      exceptionRate: profile === 'P7' ? getP7ExceptionRate(resource) : 0,
+      exceptionTypes: profile === 'P7' ? getP7ExceptionTypes(resource) : []
     };
   }
 
@@ -890,7 +893,8 @@ async function runBuiltinGeneratorAndCollectAsms(
       instructionCount: setup.instructionCount,
       generatedAt,
       interrupt: setup.interrupt,
-      exceptionRate: setup.exceptionRate
+      exceptionRate: setup.exceptionRate,
+      exceptionTypes: setup.exceptionTypes
     });
   } catch (error) {
     const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);

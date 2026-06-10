@@ -206,18 +206,59 @@ describe('built-in ASM generator', () => {
     // SR prologue enables the external interrupt before any body instruction.
     expect(result.text).toContain('ori $k0, $0, 0x1001');
     expect(result.text).toContain('mtc0 $k0, $12');
-    // Handler checks Cause.ExcCode before acknowledging the external interrupt generator.
+    // The first handler entry is the pre-anchor external interrupt, so it must not read full Cause
+    // before acknowledging: MARS and legal CPUs may differ in Cause.IP visibility.
     const handler = result.text.slice(result.text.indexOf('.ktext 0x4180'));
-    const causeRead = handler.indexOf('    mfc0 $k0, $13');
+    const firstEntryFlag = handler.indexOf('    ori $k1, $0, 1');
     const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
     const interruptAck = handler.indexOf('    ori $k0, $0, 0x7f20');
     const exceptionPath = handler.indexOf('_co_excep_skip:');
-    expect(causeRead).toBeGreaterThanOrEqual(0);
-    expect(branchToException).toBeGreaterThan(causeRead);
-    expect(interruptAck).toBeGreaterThan(branchToException);
+    expect(handler).not.toContain('    mfc0 $k0, $13');
+    expect(branchToException).toBeGreaterThanOrEqual(0);
+    expect(firstEntryFlag).toBeGreaterThan(branchToException);
+    expect(interruptAck).toBeGreaterThan(firstEntryFlag);
     expect(handler).toContain('    sw $0, 0($k0)');
     expect(exceptionPath).toBeGreaterThan(interruptAck);
     expect(handler).toContain('    mtc0 $k0, $14');
+  });
+
+  it('keeps the Cause.ExcCode branch for P7 exception-only tests', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-exception-handler',
+      interrupt: false,
+      exceptionRate: 0.2
+    });
+    const handler = result.text.slice(result.text.indexOf('.ktext 0x4180'));
+    const causeRead = handler.indexOf('    mfc0 $k0, $13');
+    const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
+
+    expect(causeRead).toBeGreaterThanOrEqual(0);
+    expect(branchToException).toBeGreaterThan(causeRead);
+  });
+
+  it('keeps P7 external interrupt targets out of the internal-exception flush shadow', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'ori and lui lw sw syscall mfc0 mtc0 eret',
+      instructionCount: 400,
+      seed: 'p7-exception-shadow',
+      interrupt: true,
+      exceptionRate: 0.35
+    });
+
+    expect(result.interruptSchedule).toHaveLength(1);
+    const bodyLines = instructionSlotLines(beforeKernelText(result.text));
+    const exceptionVictims = exceptionVictimIndices(bodyLines);
+    expect(exceptionVictims.length).toBeGreaterThan(0);
+
+    const targetIndex = (result.interruptSchedule[0] - 0x3000) / 4;
+    expect(Number.isInteger(targetIndex)).toBe(true);
+    expect(targetIndex).toBeLessThan(Math.min(...exceptionVictims));
+    expect(isInExceptionFlushShadow(targetIndex - 1, exceptionVictims)).toBe(false);
+    expect(isInExceptionFlushShadow(targetIndex, exceptionVictims)).toBe(false);
   });
 
   it('emits no interrupt schedule when interrupt is disabled', () => {
@@ -244,6 +285,44 @@ describe('built-in ASM generator', () => {
     const faulting = bodyLines.filter((line) => /\b(lw|lh|lhu|sw|sh)\b.*1\(\$0\)/.test(line));
 
     expect(faulting.length).toBeGreaterThan(0);
+  });
+
+  it('covers all course-required P7 exception classes with default exception injection', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 400,
+      seed: 'p7-exception-coverage',
+      exceptionRate: 0.2
+    });
+    const bodyLines = instructionSlotLines(beforeKernelText(result.text));
+
+    expect(bodyLines.some((line) => /\b(lw|lh|lhu)\b.*1\(\$0\)/.test(line))).toBe(true);
+    expect(bodyLines.some((line) => /\b(sw|sh)\b.*1\(\$0\)/.test(line))).toBe(true);
+    expect(bodyLines).toContain('syscall');
+    expect(bodyLines).toContain('_co_internal_unknown_instruction');
+    expect(bodyLines.some((line) =>
+      /\baddi\s+\$\d+,\s+\$24,\s+-1\b/.test(line) ||
+      /\badd\s+\$\d+,\s+\$24,\s+\$24\b/.test(line) ||
+      /\bsub\s+\$\d+,\s+\$24,\s+\$23\b/.test(line)
+    )).toBe(true);
+  });
+
+  it('honors configured P7 exception classes', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'ori lui lw sw syscall mfc0 mtc0 eret',
+      instructionCount: 200,
+      seed: 'p7-exception-types',
+      exceptionRate: 0.5,
+      exceptionTypes: ['AdEL']
+    });
+    const bodyLines = instructionSlotLines(beforeKernelText(result.text));
+
+    expect(bodyLines.some((line) => /\b(lw|lh|lhu)\b.*1\(\$0\)/.test(line))).toBe(true);
+    expect(bodyLines.some((line) => /\b(sw|sh)\b.*1\(\$0\)/.test(line))).toBe(false);
+    expect(bodyLines).not.toContain('syscall');
+    expect(bodyLines).not.toContain('_co_internal_unknown_instruction');
   });
 });
 
@@ -278,8 +357,41 @@ function executableLines(text: string): string[] {
   return result;
 }
 
+function instructionSlotLines(text: string): string[] {
+  const result: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.endsWith(':')) {
+      continue;
+    }
+    if (trimmed.startsWith('.')) {
+      continue;
+    }
+    const match = /^(_?[a-z][a-z0-9_]*)\b/.exec(trimmed);
+    if (match) {
+      result.push(trimmed);
+    }
+  }
+  return result;
+}
+
 function beforeKernelText(text: string): string {
   return text.split(/^\.ktext\b/m)[0];
+}
+
+function exceptionVictimIndices(lines: string[]): number[] {
+  const victims: number[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (line === 'syscall' || line === '_co_internal_unknown_instruction' || /\b(lw|lh|lhu|sw|sh)\b.*1\(\$0\)/.test(line)) {
+      victims.push(index);
+    }
+  }
+  return victims;
+}
+
+function isInExceptionFlushShadow(index: number, victims: number[]): boolean {
+  return victims.some((victim) => index > victim && index <= victim + 2);
 }
 
 function mduReadProbeDistances(mnemonics: string[]): MduReadProbe[] {
