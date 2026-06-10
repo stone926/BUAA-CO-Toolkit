@@ -15,6 +15,15 @@ interface TestbenchOptions {
   finishDelay?: string;
   profile?: ProjectProfile;
   interruptSchedule?: number[];
+  p7Probe?: P7ProbeTestbenchMetadata;
+}
+
+interface P7ProbeTestbenchMetadata {
+  scenarios: Array<{
+    id: number;
+    kind: string;
+    waitPc?: number;
+  }>;
 }
 
 export function buildTestbench(module: VerilogModule, tbName: string, options: TestbenchOptions = {}): string {
@@ -24,7 +33,7 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   const hasCourseExternalMemory = hasExternalInstructionMemory || hasExternalDataMemory;
   const isP7ExternalInterface = hasPort(module, 'interrupt') || hasPort(module, 'macroscopic_pc') || hasPort(module, 'm_int_addr') || hasPort(module, 'm_int_byteen');
   if (options.profile === 'P7' || isP7ExternalInterface) {
-    return buildP7OfficialTestbench(module.name, tbName, options.interruptSchedule);
+    return buildP7OfficialTestbench(module.name, tbName, options.interruptSchedule, options.p7Probe);
   }
   const hasWritebackTrace = hasPort(module, 'w_grf_we') && hasPort(module, 'w_grf_addr') && hasPort(module, 'w_grf_wdata') && hasPort(module, 'w_inst_addr');
   const hasDataMemoryTrace = hasExternalDataMemory && hasPort(module, 'm_inst_addr');
@@ -117,7 +126,12 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   return lines.join('\n');
 }
 
-function buildP7OfficialTestbench(topModuleName: string, tbName: string, interruptSchedule?: number[]): string {
+function buildP7OfficialTestbench(
+  topModuleName: string,
+  tbName: string,
+  interruptSchedule?: number[],
+  p7Probe?: P7ProbeTestbenchMetadata
+): string {
   return [
     '`timescale 1ns/1ps',
     '',
@@ -226,7 +240,7 @@ function buildP7OfficialTestbench(topModuleName: string, tbName: string, interru
     '        end',
     '    end',
     '',
-    ...p7InterruptBlock(interruptSchedule),
+    ...(p7Probe ? p7ProbeBlock(p7Probe) : p7InterruptBlock(interruptSchedule)),
     '',
     '    always #2 clk <= ~clk;',
     '',
@@ -277,6 +291,77 @@ function p7InterruptBlock(interruptSchedule?: number[]): string[] {
     '        end',
     '    end'
   ];
+}
+
+function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string[] {
+  const externalScenarios = probe.scenarios.filter((scenario) =>
+    scenario.kind === 'external' && Number.isFinite(scenario.waitPc));
+  const lines: string[] = [
+    '    // ----------- For P7 Probe Interrupt -----------',
+    '',
+    '    wire [31:0] fixed_macroscopic_pc;',
+    '',
+    "    assign fixed_macroscopic_pc = macroscopic_pc & 32'hfffffffc;",
+    '',
+    '    integer co_p7_external_index;',
+    '    integer co_p7_external_scenario;',
+    '    reg [31:0] co_p7_external_target;',
+    '',
+    '    initial begin',
+    '        co_p7_external_index = 0;',
+    '        co_p7_external_scenario = 0;',
+    '        co_p7_external_target = 0;',
+    '    end',
+    '',
+    '    always @(*) begin',
+    '        co_p7_external_scenario = 0;',
+    '        co_p7_external_target = 0;',
+    '        case (co_p7_external_index)'
+  ];
+  externalScenarios.forEach((scenario, index) => {
+    const target = ((scenario.waitPc ?? 0) >>> 0).toString(16).padStart(8, '0');
+    lines.push(
+      `            ${index}: begin`,
+      `                co_p7_external_scenario = ${scenario.id};`,
+      `                co_p7_external_target = 32'h${target};`,
+      '            end'
+    );
+  });
+  lines.push(
+    '            default: begin',
+    '                co_p7_external_scenario = 0;',
+    '                co_p7_external_target = 0;',
+    '            end',
+    '        endcase',
+    '    end',
+    '',
+    '    always @(negedge clk) begin',
+    '        if (reset) begin',
+    '            interrupt = 0;',
+    '            co_p7_external_index = 0;',
+    '        end',
+    '        else begin',
+    '            if (interrupt) begin',
+    "                if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20) begin",
+    '                    $display("CO_P7_PROBE external_ack scenario=%0d time=%0d", co_p7_external_scenario, $time);',
+    '                    interrupt = 0;',
+    '                    co_p7_external_index = co_p7_external_index + 1;',
+    '                end',
+    '            end',
+    '            else if (co_p7_external_target != 0 && fixed_macroscopic_pc == co_p7_external_target) begin',
+    '                $display("CO_P7_PROBE external_raise scenario=%0d pc=%h time=%0d", co_p7_external_scenario, fixed_macroscopic_pc, $time);',
+    '                interrupt = 1;',
+    '            end',
+    '        end',
+    '    end',
+    '',
+    '    always @(posedge clk) begin',
+    '        if (~reset && |m_data_byteen && fixed_addr >= 32\'h00007f00 && fixed_addr <= 32\'h00007f2f) begin',
+    '            $display("CO_P7_PROBE mmio_on_dm pc=%h addr=%h byteen=%h time=%0d", m_inst_addr, fixed_addr, m_data_byteen, $time);',
+    '        end',
+    '    end'
+  );
+  return lines;
 }
 
 function commentedP7InterruptBlock(): string[] {

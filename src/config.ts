@@ -291,6 +291,52 @@ export function getP7InterruptEnabled(resource?: vscode.Uri): boolean {
   return true;
 }
 
+export type P7StressMode = 'anchor' | 'probe' | 'hybrid' | 'off';
+
+export function getP7StressMode(resource?: vscode.Uri): P7StressMode {
+  const normalize = (value: unknown): P7StressMode | undefined => {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return normalized === 'anchor' || normalized === 'probe' || normalized === 'hybrid' || normalized === 'off'
+      ? normalized
+      : undefined;
+  };
+  return normalize(inspectedValue<string>('test.p7.stressMode', resource))
+    ?? normalize(getTestFromConfig(resource)?.p7?.stressMode)
+    ?? 'anchor';
+}
+
+export function getP7TimerInterruptEnabled(resource?: vscode.Uri): boolean {
+  const configured = inspectedValue<boolean>('test.p7.timerInterrupt', resource);
+  if (typeof configured === 'boolean') {
+    return configured;
+  }
+  const projectValue = getTestFromConfig(resource)?.p7?.timerInterrupt;
+  if (typeof projectValue === 'boolean') {
+    return projectValue;
+  }
+  return false;
+}
+
+export function getP7ExternalInterruptIntensity(resource?: vscode.Uri): number {
+  return p7UnitIntervalConfig('test.p7.externalInterruptIntensity', () => getTestFromConfig(resource)?.p7?.externalInterruptIntensity, 0.25, resource);
+}
+
+export function getP7TimerIntensity(resource?: vscode.Uri): number {
+  return p7UnitIntervalConfig('test.p7.timerIntensity', () => getTestFromConfig(resource)?.p7?.timerIntensity, 0.2, resource);
+}
+
+export function getP7ProbeScenarioCount(resource?: vscode.Uri): number {
+  const configured = inspectedValue<number>('test.p7.probeScenarioCount', resource);
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+    return Math.floor(configured);
+  }
+  const projectValue = getTestFromConfig(resource)?.p7?.probeScenarioCount;
+  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
+    return Math.floor(projectValue);
+  }
+  return 4;
+}
+
 /**
  * P7 生成器主动制造内部异常（AdEL/AdES/Syscall/RI/Ov）的比例，范围 [0, 1]。
  */
@@ -347,4 +393,21 @@ function positiveIntegerConfig(key: string, fallback: number, resource?: vscode.
 function nonNegativeIntegerConfig(key: string, fallback: number, resource?: vscode.Uri): number {
   const value = config<number>(key, fallback, resource);
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
+}
+
+function p7UnitIntervalConfig(
+  key: string,
+  projectFallback: () => number | undefined,
+  fallback: number,
+  resource?: vscode.Uri
+): number {
+  const configured = inspectedValue<number>(key, resource);
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
+    return Math.min(1, configured);
+  }
+  const projectValue = projectFallback();
+  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue >= 0) {
+    return Math.min(1, projectValue);
+  }
+  return fallback;
 }

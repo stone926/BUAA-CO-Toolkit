@@ -35,6 +35,11 @@ export interface CoProjectConfig {
     };
     p7?: {
       interrupt?: boolean;
+      stressMode?: string;
+      timerInterrupt?: boolean;
+      externalInterruptIntensity?: number;
+      timerIntensity?: number;
+      probeScenarioCount?: number;
       exceptionRate?: number;
       exceptionTypes?: string[];
     };

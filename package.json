@@ -1009,6 +1009,42 @@
           "default": true,
           "description": "P7 自动对拍是否注入外部中断（在生成器选定的安全 PC 处，testbench 与 MARS 同步触发）。若你的流水线时序导致中断点假阳性，可关闭此项退化为纯异常/正常数据通路对拍（完全确定性）"
         },
+        "co.test.p7.stressMode": {
+          "type": "string",
+          "default": "anchor",
+          "enum": [
+            "anchor",
+            "probe",
+            "hybrid",
+            "off"
+          ],
+          "description": "P7 中断/Timer 压测模式。anchor 保持原精确对拍；probe 使用黑盒 probe 性质检查；hybrid 同时生成 anchor 与 probe；off 关闭中断/Timer 压测"
+        },
+        "co.test.p7.timerInterrupt": {
+          "type": "boolean",
+          "default": false,
+          "description": "P7 probe 模式是否生成 Timer0/Timer1 中断场景"
+        },
+        "co.test.p7.externalInterruptIntensity": {
+          "type": "number",
+          "default": 0.25,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "P7 probe 模式生成外部中断场景的强度（0~1）"
+        },
+        "co.test.p7.timerIntensity": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "P7 probe 模式生成 Timer 中断场景的强度（0~1）"
+        },
+        "co.test.p7.probeScenarioCount": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "description": "P7 probe 模式每个 ASM 生成的场景数量"
+        },
         "co.test.p7.exceptionRate": {
           "type": "number",
           "default": 0.08,

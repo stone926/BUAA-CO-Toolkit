@@ -14,15 +14,26 @@ import {
   getMemoryConfiguration,
   getP7ExceptionRate,
   getP7ExceptionTypes,
+  getP7ExternalInterruptIntensity,
   getP7InterruptEnabled,
+  getP7ProbeScenarioCount,
+  getP7StressMode,
+  getP7TimerIntensity,
+  getP7TimerInterruptEnabled,
   getProfile,
+  P7StressMode,
   resolvePython,
   useBuiltinTestGenerator
 } from './config';
 import {
   BuiltinAsmGeneratorError,
-  generateBuiltinAsmTestCase
+  generateBuiltinAsmTestCase,
+  P7ProbeMetadata
 } from './courseTesting/builtinAsmGenerator';
+import {
+  checkP7Probe,
+  P7ProbeCheckResult
+} from './courseTesting/p7ProbeCheck';
 import {
   continuousCounts,
   ContinuousCounts,
@@ -62,7 +73,7 @@ import { revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
 
 type CourseTraceStatus = 'passed' | 'failed' | 'error';
-type CourseTraceStage = 'dump' | 'mars' | 'isim' | 'compare';
+type CourseTraceStage = 'dump' | 'mars' | 'isim' | 'compare' | 'probe';
 
 const stdinExtensions = ['.in', '.input', '.stdin', '.dat'];
 const stdinSubdirectories = ['input', 'inputs', 'test', 'tests', 'data'];
@@ -82,6 +93,7 @@ interface CourseTraceCaseResult {
   simEvents?: number;
   matchedEvents?: number;
   diffEvents?: number;
+  probe?: P7ProbeCheckResult;
 }
 
 interface CourseTraceBatchSummary {
@@ -132,6 +144,11 @@ interface BuiltinGeneratorRunSetup {
   instructionText: string;
   instructionCount: number;
   interrupt: boolean;
+  p7StressMode: P7StressMode;
+  timerInterrupt: boolean;
+  externalInterruptIntensity: number;
+  timerIntensity: number;
+  probeScenarioCount: number;
   exceptionRate: number;
   exceptionTypes: string[];
 }
@@ -595,6 +612,35 @@ async function runCourseTraceCase(
   if (interruptSchedule) {
     services.output.appendLine(`外部中断目标 PC: ${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
   }
+  const probe = resolveCaseProbeMetadata(asm);
+  if (probe) {
+    services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
+    const isim = await runIsim(services, {
+      resource: asm,
+      showMessages: false,
+      revealOutput: options.revealOutput,
+      machineCodeSource: dump.outputFile,
+      simOutputFileName: simOutputFileNameForCase(item),
+      p7Probe: probe
+    });
+    if (!isim?.simResult.ok || !isim.simOut) {
+      return failedCase(item, 'isim', '测试中止：ISim 运行失败', dump.outputFile);
+    }
+    const simText = await readTextFile(isim.simOut);
+    const simEvents = parseSimOutput(simText);
+    const probeResult = checkP7Probe(simText, simEvents, probe);
+    return {
+      asm: asm.fsPath,
+      stdin: item.stdin?.fsPath,
+      status: probeResult.passed ? 'passed' : 'failed',
+      stage: 'probe',
+      message: probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
+      machineCode: dump.outputFile.fsPath,
+      simOut: isim.simOut.fsPath,
+      simEvents: simEvents.length,
+      probe: probeResult
+    };
+  }
 
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
   const mars = await runMarsFile(services, asm, 'run', {
@@ -814,6 +860,11 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
         ? getBuiltinGeneratorP7InstructionCount(resource)
         : getBuiltinGeneratorInstructionCount(resource),
       interrupt: profile === 'P7' && getP7InterruptEnabled(resource),
+      p7StressMode: profile === 'P7' ? getP7StressMode(resource) : 'off',
+      timerInterrupt: profile === 'P7' && getP7TimerInterruptEnabled(resource),
+      externalInterruptIntensity: profile === 'P7' ? getP7ExternalInterruptIntensity(resource) : 0,
+      timerIntensity: profile === 'P7' ? getP7TimerIntensity(resource) : 0,
+      probeScenarioCount: profile === 'P7' ? getP7ProbeScenarioCount(resource) : 0,
       exceptionRate: profile === 'P7' ? getP7ExceptionRate(resource) : 0,
       exceptionTypes: profile === 'P7' ? getP7ExceptionTypes(resource) : []
     };
@@ -885,17 +936,41 @@ async function runBuiltinGeneratorAndCollectAsms(
   options: CourseTraceRunOptions = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
-  let generated: ReturnType<typeof generateBuiltinAsmTestCase>;
+  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'generated'));
+  await ensureDirectory(outDir);
+  const modes: Array<P7StressMode | undefined> = setup.profile === 'P7'
+    ? (setup.p7StressMode === 'hybrid' ? ['anchor', 'probe'] : [setup.p7StressMode])
+    : [undefined];
+  const asms: vscode.Uri[] = [];
+  const generatedCases: ReturnType<typeof generateBuiltinAsmTestCase>[] = [];
   try {
-    generated = generateBuiltinAsmTestCase({
-      profile: setup.profile,
-      instructionText: setup.instructionText,
-      instructionCount: setup.instructionCount,
-      generatedAt,
-      interrupt: setup.interrupt,
-      exceptionRate: setup.exceptionRate,
-      exceptionTypes: setup.exceptionTypes
-    });
+    for (const mode of modes) {
+      const generated = generateBuiltinAsmTestCase({
+        profile: setup.profile,
+        instructionText: setup.instructionText,
+        instructionCount: setup.instructionCount,
+        generatedAt,
+        interrupt: setup.interrupt && mode !== 'off',
+        p7StressMode: mode,
+        timerInterrupt: mode === 'probe' && setup.timerInterrupt,
+        externalInterruptIntensity: setup.externalInterruptIntensity,
+        timerIntensity: setup.timerIntensity,
+        probeScenarioCount: setup.probeScenarioCount,
+        exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
+        exceptionTypes: setup.exceptionTypes
+      });
+      const asm = vscode.Uri.file(path.join(outDir.fsPath, builtinAsmFileName(generated.profile, generatedAt, generated.mode)));
+      await writeTextFile(asm, generated.text);
+      await writeCaseMetadata(asm, {
+        profile: generated.profile,
+        seed: generated.seed,
+        mode: generated.mode ?? mode,
+        interruptSchedule: generated.interruptSchedule,
+        probe: generated.probe
+      });
+      asms.push(asm);
+      generatedCases.push(generated);
+    }
   } catch (error) {
     const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(message);
@@ -907,29 +982,30 @@ async function runBuiltinGeneratorAndCollectAsms(
     return undefined;
   }
 
-  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'generated'));
-  await ensureDirectory(outDir);
-  const asm = vscode.Uri.file(path.join(outDir.fsPath, builtinAsmFileName(generated.profile, generatedAt)));
-  await writeTextFile(asm, generated.text);
-  await writeInterruptScheduleSidecar(asm, generated.profile, generated.interruptSchedule, generated.seed);
-
   if (options.revealOutput !== false) {
     revealOutputChannel(services.output, setup.folder.uri);
   }
   services.output.appendLine('');
   services.output.appendLine('正在运行内置随机 ASM 生成器');
-  services.output.appendLine(`Profile: ${generated.profile}`);
-  services.output.appendLine(`指令数量: ${generated.instructionCount}`);
-  services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
-  services.output.appendLine(`种子: ${generated.seed}`);
-  if (generated.interruptSchedule.length) {
-    services.output.appendLine(`外部中断目标 PC: ${generated.interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
+  services.output.appendLine(`Profile: ${setup.profile}`);
+  services.output.appendLine(`模式: ${modes.map((mode) => mode ?? 'default').join(', ')}`);
+  for (let i = 0; i < generatedCases.length; i++) {
+    const generated = generatedCases[i];
+    services.output.appendLine(`指令数量: ${generated.instructionCount}`);
+    services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
+    services.output.appendLine(`种子: ${generated.seed}`);
+    if (generated.interruptSchedule.length) {
+      services.output.appendLine(`外部中断目标 PC: ${generated.interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
+    }
+    if (generated.probe) {
+      services.output.appendLine(`Probe 场景: ${generated.probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
+    }
+    services.output.appendLine(`ASM: ${asms[i].fsPath}`);
   }
-  services.output.appendLine(`ASM: ${asm.fsPath}`);
 
   return {
-    asms: [asm],
-    source: generatorSource(setup, [asm])
+    asms,
+    source: generatorSource(setup, asms)
   };
 }
 
@@ -1011,10 +1087,11 @@ function generatorSource(
   };
 }
 
-function builtinAsmFileName(profile: string, generatedAt: Date): string {
+function builtinAsmFileName(profile: string, generatedAt: Date, mode?: string): string {
   const timestamp = generatedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   const suffix = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
-  return `builtin-${profile.toLowerCase()}-${timestamp}-${suffix}.asm`;
+  const modePart = mode ? `-${mode}` : '';
+  return `builtin-${profile.toLowerCase()}${modePart}-${timestamp}-${suffix}.asm`;
 }
 
 async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vscode.Uri | undefined> {
@@ -1289,32 +1366,59 @@ function interruptScheduleSidecarUri(asm: vscode.Uri): vscode.Uri {
   return vscode.Uri.file(path.join(dir, `${stem}.co-meta.json`));
 }
 
-async function writeInterruptScheduleSidecar(
-  asm: vscode.Uri,
-  profile: string,
-  interruptSchedule: number[],
-  seed: string
-): Promise<void> {
+interface CourseCaseMetadata {
+  profile?: string;
+  seed?: string;
+  mode?: string;
+  interruptSchedule?: number[];
+  probe?: P7ProbeMetadata;
+}
+
+async function writeCaseMetadata(asm: vscode.Uri, metadata: CourseCaseMetadata): Promise<void> {
   await writeTextFile(
     interruptScheduleSidecarUri(asm),
-    JSON.stringify({ profile, seed, interruptSchedule }, null, 2) + '\n'
+    JSON.stringify(metadata, null, 2) + '\n'
   );
 }
 
-function readInterruptScheduleSidecar(asm: vscode.Uri): number[] {
+function readCaseMetadata(asm: vscode.Uri): CourseCaseMetadata {
   try {
     const uri = interruptScheduleSidecarUri(asm);
     if (!fs.existsSync(uri.fsPath)) {
-      return [];
+      return {};
     }
-    const data = JSON.parse(fs.readFileSync(uri.fsPath, 'utf8')) as { interruptSchedule?: unknown };
-    if (!Array.isArray(data.interruptSchedule)) {
-      return [];
-    }
-    return data.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+    const data = JSON.parse(fs.readFileSync(uri.fsPath, 'utf8')) as CourseCaseMetadata;
+    return data && typeof data === 'object' ? data : {};
   } catch {
+    return {};
+  }
+}
+
+function readInterruptScheduleSidecar(asm: vscode.Uri): number[] {
+  const data = readCaseMetadata(asm);
+  if (!Array.isArray(data.interruptSchedule)) {
     return [];
   }
+  return data.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+}
+
+function resolveCaseProbeMetadata(asm: vscode.Uri): P7ProbeMetadata | undefined {
+  if (getProfile(asm) !== 'P7') {
+    return undefined;
+  }
+  const data = readCaseMetadata(asm);
+  return data.mode === 'probe' && isProbeMetadata(data.probe) ? data.probe : undefined;
+}
+
+function isProbeMetadata(value: unknown): value is P7ProbeMetadata {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const probe = value as P7ProbeMetadata;
+  return probe.version === 1
+    && Number.isFinite(probe.logBase)
+    && Number.isFinite(probe.recordWords)
+    && Array.isArray(probe.scenarios);
 }
 
 /**
@@ -1854,6 +1958,9 @@ function batchSummary(results: CourseTraceCaseResult[]): CourseTraceBatchSummary
 }
 
 function summaryText(item: CourseTraceCaseResult): string {
+  if (item.probe) {
+    return `Probe records ${item.probe.records.length}, failures ${item.probe.failures.length}`;
+  }
   if (item.marsEvents === undefined || item.simEvents === undefined) {
     return '';
   }
@@ -1861,6 +1968,9 @@ function summaryText(item: CourseTraceCaseResult): string {
 }
 
 function renderFirstDiffSummary(item: CourseTraceCaseResult): string {
+  if (item.probe) {
+    return renderProbeDetails(item.probe);
+  }
   if (!item.firstDiff) {
     return '';
   }
@@ -1870,6 +1980,16 @@ function renderFirstDiffSummary(item: CourseTraceCaseResult): string {
     `<div><code>MARS ${escapeHtml(traceEventSummary(item.firstDiff.mars))}</code></div>`,
     `<div><code>SIM ${escapeHtml(traceEventSummary(item.firstDiff.sim))}</code></div>`
   ].join('');
+}
+
+function renderProbeDetails(probe: P7ProbeCheckResult): string {
+  const failures = probe.failures.slice(0, 5).map((failure) =>
+    `<div><code>#${failure.scenarioId} ${escapeHtml(failure.kind)}: ${escapeHtml(failure.message)}</code></div>`
+  );
+  const records = probe.records.slice(0, 5).map((record) =>
+    `<div><code>#${record.scenarioId}: Cause=0x${(record.cause >>> 0).toString(16)} EPC=0x${(record.epc >>> 0).toString(16)} aux0=0x${(record.aux0 >>> 0).toString(16)}</code></div>`
+  );
+  return [...failures, ...records].join('');
 }
 
 function traceEventSummary(event: TraceEventSnapshot | undefined): string {

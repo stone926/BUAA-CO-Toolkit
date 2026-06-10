@@ -22,6 +22,7 @@ import { ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { revealOutputChannel, runTool } from './process';
 import { findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
+import { P7ProbeMetadata } from './courseTesting/builtinAsmGenerator';
 
 export interface IseProjectFiles {
   prj: vscode.Uri;
@@ -41,6 +42,8 @@ export interface IsimRunOptions extends IseProjectOptions {
   simOutputFileName?: string;
   /** P7: external-interrupt target PCs; when set, a dedicated interrupt testbench is generated. */
   interruptSchedule?: number[];
+  /** P7: black-box probe metadata; when set, a dedicated probe testbench is generated. */
+  p7Probe?: P7ProbeMetadata;
 }
 
 export interface IsimRunOutput {
@@ -171,7 +174,7 @@ export async function runIsim(
     return;
   }
   const testbenchName = options.testbenchName
-    ?? (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, showMessages))
+    ?? (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, options.p7Probe, showMessages))
     ?? await ensureRunnableTestbench(services, activeUri, showMessages);
   const generated = await generateIseProject(services, { resource: activeUri, showMessages, testbenchName });
   if (!generated) {
@@ -256,9 +259,10 @@ async function ensureP7InterruptTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
   interruptSchedule: number[] | undefined,
+  p7Probe: P7ProbeMetadata | undefined,
   showMessages: boolean
 ): Promise<string | undefined> {
-  if (!interruptSchedule || !interruptSchedule.length) {
+  if ((!interruptSchedule || !interruptSchedule.length) && !p7Probe) {
     return undefined;
   }
   const topName = getTopModule(resource);
@@ -275,9 +279,14 @@ async function ensureP7InterruptTestbench(
   await writeTextFile(tbUri, buildTestbench(topDefinition.module, p7AutoInterruptTestbenchName, {
     finishDelay: verilogDelayFromSimTime(getSimTime(resource)),
     profile: 'P7',
-    interruptSchedule
+    interruptSchedule,
+    p7Probe
   }));
-  services.output.appendLine(`已生成 P7 中断 testbench ${tbUri.fsPath}（target_pc=${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(',')}）`);
+  if (p7Probe) {
+    services.output.appendLine(`已生成 P7 probe testbench ${tbUri.fsPath}（scenarios=${p7Probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(',')}）`);
+  } else {
+    services.output.appendLine(`已生成 P7 中断 testbench ${tbUri.fsPath}（target_pc=${(interruptSchedule ?? []).map((pc) => `0x${(pc >>> 0).toString(16)}`).join(',')}）`);
+  }
   if (showMessages) {
     vscode.window.showInformationMessage('已生成 P7 中断 testbench');
   }

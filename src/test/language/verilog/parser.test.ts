@@ -1065,4 +1065,28 @@ describe('buildTestbench', () => {
     // No leftover commented interrupt scaffolding for the parameter line.
     expect(tb).not.toContain("// parameter target_pc = 32'h00003010;");
   });
+
+  it('generates a black-box P7 probe testbench without hierarchical reads', () => {
+    const module = makeModule({
+      name: 'mips',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'reset', kind: 'input', direction: 'input' })
+      ]
+    });
+    const tb = buildTestbench(module, 'mips_tb', {
+      profile: 'P7',
+      p7Probe: {
+        scenarios: [
+          { id: 1, kind: 'external', waitPc: 0x3020 },
+          { id: 2, kind: 'timer0', waitPc: 0x3040 }
+        ]
+      }
+    });
+
+    expect(tb).toContain('CO_P7_PROBE external_raise');
+    expect(tb).toContain('CO_P7_PROBE external_ack');
+    expect(tb).toContain("co_p7_external_target = 32'h00003020;");
+    expect(tb).not.toContain('uut.');
+  });
 });
