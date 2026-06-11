@@ -271,26 +271,39 @@ function getGitStatus() {
 
 function run(command, commandArgs) {
   console.log(`> ${[command, ...commandArgs].join(" ")}`);
-  execFileSync(resolveCommand(command), commandArgs, { stdio: "inherit" });
+  const invocation = resolveInvocation(command, commandArgs);
+  execFileSync(invocation.file, invocation.args, { stdio: "inherit" });
 }
 
 function capture(command, commandArgs) {
-  return execFileSync(resolveCommand(command), commandArgs, {
+  const invocation = resolveInvocation(command, commandArgs);
+  return execFileSync(invocation.file, invocation.args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
 
-function resolveCommand(command) {
-  if (process.platform !== "win32") {
-    return command;
+function resolveInvocation(command, commandArgs) {
+  if ((process.platform === "win32") && (command === "npm")) {
+    const commandLine = ["npm", ...commandArgs].map(quoteCmdArg).join(" ");
+    return {
+      file: "cmd.exe",
+      args: ["/d", "/s", "/c", commandLine],
+    };
   }
 
-  if (command === "npm") {
-    return "npm.cmd";
+  return {
+    file: command,
+    args: commandArgs,
+  };
+}
+
+function quoteCmdArg(value) {
+  if (/^[A-Za-z0-9_./:=@+-]+$/.test(value)) {
+    return value;
   }
 
-  return command;
+  return `"${value.replace(/"/g, '\\"')}"`;
 }
 
 function fail(message) {
