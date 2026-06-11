@@ -1,1 +1,0 @@
-- [P7 test system findings](p7-test-system-findings.md) — what already exists vs. what's missing for P7 one-click差分测试 (generator/Mars/testbench), course conventions, Mars fork capabilities

@@ -459,8 +459,8 @@ class ProgramGenerator {
 
   private emitP7Prologue(): void {
     // Install SR = 0x1001 (IE=1, IM[2]=1) before any body instruction so the external interrupt
-    // can be taken and so mfc0 $12 reads agree between MARS (reset 0x0000FF11) and the Verilog
-    // CPU (reset 0). Emitted as static instructions: $k0 must not enter the read-candidate pool.
+    // can be taken and mfc0 $12 remains predictable. Emitted as static instructions: $k0 must
+    // not enter the read-candidate pool.
     this.emitStaticInstruction('ori', `ori $k0, $0, 0x${p7StatusEnableInterrupts.toString(16)}`);
     this.emitStaticInstruction('mtc0', `mtc0 $k0, $12`);
     this.state.cp0_sr = p7StatusEnableInterrupts;

@@ -248,6 +248,48 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ---
 
+## 7. 发布流程
+
+发布由一条本地命令触发：
+
+```bash
+npm run publish -- patch
+```
+
+可用版本参数：
+
+- `patch`：`0.2.0 -> 0.2.1`（默认）
+- `minor`：`0.2.0 -> 0.3.0`
+- `major`：`0.2.0 -> 1.0.0`
+- 显式版本号：例如 `npm run publish -- 0.3.1`
+
+本地脚本会要求工作树干净，然后执行：
+
+1. `npm test` 和 `npm run compile`
+2. 更新 `package.json` / `package-lock.json` 的 version
+3. 根据最近一个 `v*` tag 之后的提交更新 `CHANGELOG.md`
+4. 创建 `chore: release vX.Y.Z` 提交和 `vX.Y.Z` annotated tag
+5. `git push origin HEAD --follow-tags`
+
+tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
+
+1. `npm ci`
+2. `npm test`
+3. `npm run compile`
+4. `vsce package` 生成 VSIX
+5. `vsce publish --packagePath <vsix>` 发布到 VS Code Marketplace
+6. 用同一个 VSIX 创建 GitHub Release
+
+首次使用前，需要在 GitHub 仓库的 Actions secrets 中添加 `VSCE_PAT`，该 token 需要有 VS Code Marketplace 的 Manage 权限。GitHub Release 使用仓库自带的 `GITHUB_TOKEN`，不需要额外配置。
+
+辅助命令：
+
+- `npm run publish:dry-run`：预览下一次 release notes 和步骤，不改文件
+- `npm run publish -- minor --no-push`：只在本地创建 release commit/tag，不推送
+- `npm run publish -- patch --skip-tests`：跳过本地测试（GitHub Actions 仍会测试）
+
+---
+
 如需扩展（如 Timer 模块单元测试、显式校验 CP0 寄存器值、其他后端），欢迎提 issue / 反馈。
 
 ---

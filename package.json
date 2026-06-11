@@ -1113,6 +1113,10 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
+    "package:vsix": "vsce package",
+    "deploy": "vsce publish",
+    "publish": "node scripts/release.mjs",
+    "publish:dry-run": "node scripts/release.mjs --dry-run",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -1120,6 +1124,7 @@
   "devDependencies": {
     "@types/node": "^20.19.41",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.5.2",
     "vitest": "^4.1.7"
   },

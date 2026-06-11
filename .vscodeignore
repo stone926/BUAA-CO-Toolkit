@@ -1,6 +1,10 @@
 .git/**
+.gitignore
+.github/**
 .vscode/**
 src/**
+scripts/**
+dist/**
 *.map
 tsconfig.json
 tutorial_toolchain_vscode_plugin_analysis.md
