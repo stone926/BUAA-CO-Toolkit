@@ -36,7 +36,7 @@
   // P7 专用 Mars（需支持 efc / p7irq / coL1）；不填则回退到上面的 mars
   "co.toolchain.marsP7": "修改版 Mars P7 的路径",
   // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
-  "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 common, EDK, ISE 等文件夹",
+  "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 bin 等文件夹",
   // Logisim（P0/P3）
   "co.toolchain.logisim": "Logisim 的路径",
   // Java（保持默认即可）；Python 留空自动检测（macOS/Linux 优先 python3）
@@ -58,6 +58,8 @@
 
 - **P7 一键测试**（P7 专属按钮）/ **持续生成测试**（P4–P6）
   → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
+
+P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`）。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
 
 就这么简单。下面是细节。
 
@@ -103,12 +105,17 @@
 
 P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。本插件的 P7 对拍：
 
-- **异常处理流**：生成器会按 `co.test.p7.exceptionRate`（默认 0.08）的比例**主动制造可控内部异常**（溢出 Ov、未对齐取数/存数 AdEL/AdES、syscall），并生成 `.ktext 0x4180` 处的统一处理程序，对拍异常进入/返回是否正确。
-- **外部中断**（`co.test.p7.interrupt`，默认开）：生成器在一个“安全指令点”安排外部中断，testbench 与 MARS **在同一架构点**注入中断（不是按周期，而是按宏观 PC），从而可对拍。
-  - 若你的流水线时序较特殊导致“正确 CPU 也报中断点差异”，把它**关掉**即可退化为纯异常/正常数据通路对拍（完全确定性）。
-- **Timer**：仅作内存映射设备支持（地址译码、寄存器读写）。**不**对拍 Timer 触发的中断——因为 MARS 按“指令条数”计时、Verilog 按“时钟周期”计时，二者计数无法对应。需要验证 Timer 模块本身时，请单独写 `TC` 单元 testbench。
+- **`anchor` 模式（默认）**：运行 MARS 黄金 trace + ISim trace，精确比较 GRF/DM 写事件。外部中断由生成器选定的安全 anchor PC 驱动，MARS 与 testbench 在同一架构点注入。此模式适合对拍。
+- **`probe` 模式**：生成黑盒 probe ASM，MARS 只 dump 机器码。CPU 运行时由软件 handler 在 DM `0x2800` 起写 probe log，checker 检查异常码、IP 位、EPC 窗口、外部中断响应、Timer CTRL 清零等课程可观察性质。此模式适合高强度测外部中断/Timer，但不是逐指令黄金模型对拍。
+- **`hybrid` 模式**：同一轮生成一个 `anchor` 精确对拍用例和一个 `probe` 性质检查用例。
+- **`off` 模式**：关闭 P7 外部中断/Timer 压测；仍可按 `co.test.p7.exceptionRate`/`exceptionTypes` 生成普通 P7 异常与指令对拍。
+- **内部异常覆盖**：默认覆盖课程要求的 AdEL、AdES、Syscall、RI、Ov。`exceptionRate` 只影响 anchor/random body；probe 内部异常覆盖由 `co.test.p7.exceptionTypes` 控制。
+- **外部中断**（`co.test.p7.interrupt`，默认开）：anchor 使用安全 PC 注入；probe 使用“软件 arm 标记 `0x27d0` + wait PC”双条件触发，避免内部异常 flush 后宏观 PC 不确定导致误拉高中断。
+- **Timer**：anchor 不做 Timer 中断精确对拍，因为 MARS 与 Verilog 的计时基准不同。probe 可在 `co.test.p7.timerInterrupt: true` 时测试 Timer0/Timer1 中断性质，但只检查课程可观察语义，不检查精确触发周期。
 - **内存布局**：P7 固定用 `CompactLargeText`（异常入口 0x4180），机器码 dump 会自动合并用户段 + 0x4180 内核段。
-- **必须使用修改版 Mars**（支持 `efc`/`p7irq`/`coL1`），配在 `co.toolchain.marsP7`。
+- **必须使用修改版 Mars**（支持 `efc`/`p7irq`/`coL1`，RI 还需要 `cl _co_internal_unknown_instruction.class`），配在 `co.toolchain.marsP7`。
+
+Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`，不读取、不检查 `BadVAddr($8)`。外部中断响应使用 `sb $0, 0x7f20($0)`；Timer 只通过 `lw/sw` 访问 CTRL/PRESET/COUNT，不写 Count，不用 byte/half 访问 Timer。
 
 ### 输出/对拍约定
 
@@ -116,6 +123,13 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 - 对拍**默认忽略周期/时间**，只比较 PC、目标、值（可在手动对拍时切换严格模式）。
 - 标准输入自动配对：`foo.asm` 旁的 `foo.in / foo.input / foo.stdin / foo.dat`（及 `foo.xxx.in`、`input/tests/data` 等子目录）会自动作为 stdin。
 - 报告与中间产物都在工程下的 `.co/` 目录（见第 6 节）。
+
+### 如何理解测试结果
+
+- `anchor`/普通 trace 对拍失败通常表示 CPU 与 Mars 在某个**可见写事件**上不一致；首个差异不一定就是根因，流水线错误常会在若干周期后才表现为 GRF/DM 写错。
+- `probe` 失败表示某个 P7 性质不满足，报告会给出 scenario、Cause、EPC、期望 IP/ExcCode、缺失的 ack/clear 等信息；它不是 Mars trace mismatch。
+- 通过不等于“完全正确”：随机测试只覆盖已生成样例，trace 只观察 GRF/DM 写，probe 只观察课程规定端口与软件日志。CP0 内部位、未被后续读取的数据、纯时序性能问题、未启用的异常类型都可能需要补充定向测试。
+- 需要复现时优先保留 `.co/generated/*.asm`、对应 `*.co-meta.json`、`.co/out/*.mars.out`/`*.sim.out` 和报告 JSON；这些文件包含 seed、mode、中断/probe 元数据和首个差异。
 
 ---
 
@@ -166,8 +180,14 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 | `co.test.builtinGenerator.instructionCount` | `4000` | P3–P6 主程序指令数 |
 | `co.test.builtinGenerator.p7InstructionCount` | `1118` | P7 主程序指令数（上限 1118，0x4180 之前） |
 | `co.test.builtinGenerator.instructions` | `""` | 自定义指令集（空=用 Profile 默认） |
-| `co.test.p7.interrupt` | `true` | P7 是否注入外部中断对拍 |
-| `co.test.p7.exceptionRate` | `0.08` | P7 主动制造内部异常的比例（0–1） |
+| `co.test.p7.stressMode` | `"anchor"` | P7 压测模式：`anchor` 精确对拍、`probe` 黑盒性质检查、`hybrid` 两者都跑、`off` 关闭中断/Timer 压测 |
+| `co.test.p7.interrupt` | `true` | P7 是否生成外部中断场景；关掉后 anchor/probe 都不会注入外部中断 |
+| `co.test.p7.timerInterrupt` | `false` | probe/hybrid 的 probe 用例是否生成 Timer0/Timer1 中断场景 |
+| `co.test.p7.externalInterruptIntensity` | `0.25` | probe 外部中断场景随机补齐强度（0–1） |
+| `co.test.p7.timerIntensity` | `0.20` | probe Timer 场景随机补齐强度（0–1） |
+| `co.test.p7.probeScenarioCount` | `32` | 每个 probe ASM 的场景数，最大 64 |
+| `co.test.p7.exceptionRate` | `0.08` | P7 anchor/random body 主动制造内部异常的比例（0–1） |
+| `co.test.p7.exceptionTypes` | `["AdEL","AdES","Syscall","RI","Ov"]` | P7 主动覆盖的异常类型；probe 内部异常覆盖按此配置生成 |
 | `co.test.continuousIntervalMs` | `1000` | 持续测试两轮间隔（毫秒） |
 | `co.test.continuousMaxIterations` | `0` | 持续测试最大轮数（0=不限） |
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
@@ -201,13 +221,16 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 
 ## 5. ⚠️ 特别注意事项
 
-1. **P7 必须用修改版 Mars**：普通 Mars 不支持 `efc`/`p7irq`/`coL1`，且其默认 SR/异常入口与课程 CPU 不一致，**不能**当 P7 黄金模型。请把 `co.toolchain.marsP7` 指向支持这些参数的构建（仓库里的 `Mars_CO.jar` 即可）。插件会在检测到不支持时给出明确提示。
-2. **ISE 路径要指到 `.../ISE_DS/ISE`**，不是上一级。例如 `D:/ISE/14.7/ISE_DS/ISE`。`fuse` 会编译工作区里**所有** `.v`；P7 自动测试会生成一个**专用 testbench**（不会覆盖你自己的 `mips_tb.v`）。
-3. **外部中断对拍依赖标准流水线时序**（CP0 在 M 级、宏观 PC = M 级 PC）。多数“教科书式”流水线能精确对齐；若你的设计时序特殊导致**正确 CPU 也报中断点差异**，把 `co.test.p7.interrupt` 关掉，仍可做确定性的异常/正常对拍。
-4. **Timer 中断不参与对拍**（原理：指令计数 vs 周期计数无法对应）。Timer 仅作 MMIO 设备；要验证 Timer 模块请单独写单元 testbench。
-5. **延迟槽**：P5/P6/P7 默认开启延迟槽（MARS 加 `db`）。若你的 CPU 不用延迟槽，请改 `co.mips.delayedBranching`，否则黄金模型与 CPU 行为会不一致。
-6. **对拍默认忽略周期**，只比较 PC/目标/值——这与课程评测一致；它**抓不到**“不体现在 GRF/DM 写上的错误”（如从不被读取的寄存器/CP0 位算错、纯时序问题）。
-7. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
+1. **P7 必须用修改版 Mars**：普通 Mars 不支持 `efc`/`p7irq`/`coL1`，不输出寄存器和内存写入日志，**不能**当 P7 黄金模型。请把 `co.toolchain.marsP7` 指向支持这些参数的 `Mars.jar`。插件会在检测到不支持时给出明确提示。
+2. **RI 异常依赖 Mars 额外指令加载**：插件用 `_co_internal_unknown_instruction` 作为 MARS 可识别、CPU 不应识别的未知指令，并通过 `cl _co_internal_unknown_instruction.class` 加载。该 class 打包在此插件中，若 Mars 不支持 `cl`，RI 测试会失败或无法 dump。
+3. **ISE 路径要指到 `.../ISE_DS/ISE`**，此目录下有 `bin`。例如 `D:/ISE/14.7/ISE_DS/ISE`。`fuse` 会编译工作区里**所有** `.v`；P7 自动测试会生成一个**专用 testbench**（不会覆盖你自己的 `mips_tb.v`）。
+4. **anchor 外部中断对拍仍依赖宏观 PC 约定**：testbench 只能从官方 `mips` 顶层端口看到宏观写回/访存信息，无法读取学生内部流水级。若你的实现对异常 flush 后的宏观 PC 暴露方式不同，anchor 外部中断可能出现假阳性；可切到 `probe` 或关闭 `co.test.p7.interrupt`。
+5. **probe 不是完整黄金模型**：probe 只检查课程可观察性质，不比较每条普通指令的 MARS trace，也不判断 Timer 精确触发周期。probe 通过只能说明这些性质通过，不等价于 CPU 全部行为正确。
+6. **probe 会占用部分 DM 地址**：log 固定从 `0x2800` 开始，每条 8 word；`0x27d0` 用作 external arm 标记，`0x27e0..0x27ec` 用作 handler 状态。随机 DM 扰动会避开 `0x27d0..0x2fff` 和 `0x7f00..0x7f2f`。手写 probe 用例或外部生成器不要覆盖这些区域。
+7. **BadVAddr 不测试**：课程不要求实现 BadVAddr，本插件的 P7 handler/probe 不读取、不记录、不检查 CP0 `$8`。如果你实现了 BadVAddr，需要另写专门测试。
+8. **延迟槽**：P5/P6/P7 默认开启延迟槽（MARS 加 `db`）。
+9. **对拍默认忽略周期**，只比较 PC/目标/值——这与课程评测一致；它**抓不到**“不体现在 GRF/DM 写上的错误”（如从不被读取的寄存器/CP0 位算错、纯时序问题）。
+10. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
 
 ---
 
@@ -216,7 +239,7 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 | 路径 | 内容 |
 |---|---|
 | `.co/config.json` | 工程级配置（profile、toolchain、simulation、mips、test） |
-| `.co/generated/*.asm` + `*.co-meta.json` | 内置生成器产出的测试点及其元数据（含中断调度） |
+| `.co/generated/*.asm` + `*.co-meta.json` | 内置生成器产出的测试点及其元数据（含中断调度 / probe 场景） |
 | `.co/out/*.mars.out` / `*.sim.out` | MARS / ISim 输出 |
 | `.co/out/trace-batch-report.json` | 批量测试报告（含命令、生成文件、首个差异） |
 | `.co/out/continuous-trace-report.json` | 持续测试报告 |
@@ -233,11 +256,13 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 
 ## 与 MARS 在 P7 对拍中协作
 
-Mars 的 `coL1` 输出被本插件自动解析和对拍。协作流程：
+Mars 的 `coL1` 输出被本插件自动解析和对拍。`anchor` 精确对拍流程：
 
-1. **插件** 调用 `java -jar Mars.jar <asm> nc db mc CompactLargeText efc coL1 [p7irq=...]`，捕获 stdout 为 `.mars.out`
+1. **插件** 调用修改版 Mars（普通路径为 `java -jar Mars.jar ...`；RI 路径为 `java -cp <Mars.jar;resources/mars> Mars ... cl _co_internal_unknown_instruction.class`），捕获 stdout 为 `.mars.out`
 2. **插件** 生成 Verilog testbench 并运行 ISim 仿真，捕获 `$display` 输出为 `.sim.out`
 3. **插件** 用同一正则解析两路输出，逐事件比对 PC、目标寄存器/地址、写入值
+
+`probe` 流程不同：Mars 只用于 `dump .text`/内核段机器码；不会运行 `coL1` trace，也不会用 MARS 判断 Timer 或外部中断发生在哪个周期。判定来自 ISim trace 中重建出的 probe log 和 `CO_P7_PROBE ...` 诊断行。
 
 ### 对拍约定（插件依赖的 Mars 行为）
 
@@ -261,5 +286,5 @@ Mars 的 `coL1` 输出被本插件自动解析和对拍。协作流程：
 | Profile `P7` | `mc CompactLargeText efc` |
 | Profile `P4/P5/P6` | `mc FixedCompactLargeText` |
 | `mips.delayedBranching` = `on` / `profile:P5+` | `db` |
-| `test.p7.interrupt` = `true` | `p7irq=<target_pc-4>` |
+| `test.p7.interrupt` = `true` 且 `stressMode=anchor` | `p7irq=<target_pc-4>` |
 | `mips.extraArgs` | 直接附加到命令行 |
