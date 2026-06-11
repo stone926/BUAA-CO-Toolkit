@@ -2,6 +2,18 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [0.2.1] - 2026-06-11
+
+- fix: support npm commands in Windows release script (ec2ded5)
+- update vscodeignore (c458926)
+- github workflow (cd6a935)
+- 插件设置分组 (4c5499a)
+- feat: p7 timer和中断强测 (1d6d8db)
+- feat: p7 timer和中断强测 (46b0455)
+- fix: add RI test intru to resources (5c41a92)
+- fix: P7 interrupt (86bfc45)
+- fix: exception handler (43790d1)
+
 ## [0.2.0] - 2026-06-11
 
 - p7 Timer和中断强测
