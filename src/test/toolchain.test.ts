@@ -10,8 +10,9 @@ import { buildIseEnvironment } from '../toolchain';
 
 describe('toolchain helpers', () => {
   it('builds an ISE environment that exposes simulator GUI helpers on PATH', () => {
-    const root = 'D:\\ISE\\14.7\\ISE_DS\\ISE';
-    const env = buildIseEnvironment(root, { Path: 'C:\\Windows\\System32' });
+    const root = path.resolve('fake-ise-root');
+    const inheritedPath = path.resolve('existing-path-entry');
+    const env = buildIseEnvironment(root, { Path: inheritedPath });
     const pathValue = env.Path ?? env.PATH ?? '';
     const entries = pathValue.split(path.delimiter);
 
@@ -21,6 +22,6 @@ describe('toolchain helpers', () => {
       path.join(root, 'bin', 'nt64', 'unwrapped'),
       path.join(root, 'lib', 'nt64')
     ]);
-    expect(entries).toContain('C:\\Windows\\System32');
+    expect(entries).toContain(inheritedPath);
   });
 });
