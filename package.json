@@ -307,41 +307,166 @@
         "description": "Verilog 标点符号"
       }
     ],
-    "configurationDefaults": {
-      "editor.semanticHighlighting.enabled": true,
-      "editor.semanticTokenColorCustomizations": {
-        "rules": {
-          "mipsDirective": "#C586C0",
-          "mipsInstruction": "#9CDCFE",
-          "mipsRealInstruction": "#9CDCFE",
-          "mipsRInstruction": "#9CDCFE",
-          "mipsIInstruction": "#4EC9B0",
-          "mipsJInstruction": "#569CD6",
-          "mipsSpecialInstruction": "#F44747",
-          "mipsPseudoInstruction": "#D7BA7D",
-          "mipsRegister": "#4FC1FF",
-          "mipsCp0Register": "#B8D7FF",
-          "mipsMacro": "#569CD6",
-          "mipsMacroParameter": "#FFCB6B",
-          "mipsLabel": "#C586C0",
-          "mipsDataSymbol": "#DCDCAA",
-          "mipsEqvSymbol": "#C3E88D",
-          "mipsNumber": "#B5CEA8",
-          "mipsString": "#CE9178",
-          "mipsComment": "#6A9955",
-          "verilogModule": "#4EC9B0",
-          "verilogPort": "#9CDCFE",
-          "verilogSignal": "#9CDCFE",
-          "verilogParameter": "#D7BA7D",
-          "verilogInstance": "#DCDCAA",
-          "verilogMacro": "#C586C0",
-          "verilogSystemTask": "#D7BA7D",
-          "verilogNumber": "#B5CEA8",
-          "verilogKeyword": "#569CD6",
-          "verilogComment": "#6A9955",
-          "verilogString": "#CE9178",
-          "verilogFormatSpecifier": "#D7BA7D"
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "mipsDirective": [
+            "keyword.directive.mips",
+            "keyword.control.directive",
+            "keyword.other"
+          ],
+          "mipsInstruction": [
+            "keyword.control.instruction.mips",
+            "entity.name.function.mips",
+            "keyword.control"
+          ],
+          "mipsRealInstruction": [
+            "keyword.control.instruction.real.mips",
+            "keyword.control.instruction.mips",
+            "keyword.control"
+          ],
+          "mipsRInstruction": [
+            "keyword.control.instruction.r-type.mips",
+            "keyword.control.instruction.mips",
+            "keyword.control"
+          ],
+          "mipsIInstruction": [
+            "keyword.control.instruction.i-type.mips",
+            "keyword.control.instruction.mips",
+            "keyword.control"
+          ],
+          "mipsJInstruction": [
+            "keyword.control.instruction.j-type.mips",
+            "keyword.control.instruction.mips",
+            "keyword.control"
+          ],
+          "mipsSpecialInstruction": [
+            "keyword.control.instruction.special.mips",
+            "keyword.control.instruction.mips",
+            "keyword.control"
+          ],
+          "mipsPseudoInstruction": [
+            "keyword.control.instruction.pseudo.mips",
+            "keyword.control.instruction.mips",
+            "keyword.control"
+          ],
+          "mipsRegister": [
+            "variable.language.register.mips",
+            "variable.language"
+          ],
+          "mipsCp0Register": [
+            "variable.language.register.cp0.mips",
+            "variable.language.register.mips",
+            "variable.language"
+          ],
+          "mipsMacro": [
+            "entity.name.function.macro.mips",
+            "entity.name.function"
+          ],
+          "mipsMacroParameter": [
+            "variable.parameter.macro.mips",
+            "variable.parameter"
+          ],
+          "mipsLabel": [
+            "entity.name.label.mips",
+            "entity.name.label"
+          ],
+          "mipsDataSymbol": [
+            "variable.other.data.mips",
+            "variable.other"
+          ],
+          "mipsEqvSymbol": [
+            "variable.other.constant.eqv.mips",
+            "variable.other.constant",
+            "constant.other"
+          ],
+          "mipsNumber": [
+            "constant.numeric.mips",
+            "constant.numeric"
+          ],
+          "mipsString": [
+            "string.quoted.double.mips",
+            "string.quoted.double"
+          ],
+          "mipsComment": [
+            "comment.line.number-sign.mips",
+            "comment.line",
+            "comment"
+          ],
+          "mipsPunctuation": [
+            "punctuation.separator.mips",
+            "punctuation.definition.mips",
+            "punctuation"
+          ],
+          "verilogModule": [
+            "entity.name.type.module.verilog",
+            "entity.name.type.verilog",
+            "entity.name.type.class"
+          ],
+          "verilogPort": [
+            "variable.other.port.verilog",
+            "variable.other.property.verilog",
+            "variable.other.property"
+          ],
+          "verilogSignal": [
+            "variable.other.signal.verilog",
+            "variable.other.readwrite.verilog",
+            "variable.other.readwrite"
+          ],
+          "verilogParameter": [
+            "constant.other.parameter.verilog",
+            "variable.other.constant.parameter.verilog",
+            "variable.other.constant"
+          ],
+          "verilogInstance": [
+            "variable.other.instance.verilog",
+            "variable.other"
+          ],
+          "verilogMacro": [
+            "entity.name.function.preprocessor.verilog",
+            "keyword.control.directive.verilog",
+            "entity.name.function.preprocessor"
+          ],
+          "verilogSystemTask": [
+            "support.function.system-task.verilog",
+            "support.function"
+          ],
+          "verilogNumber": [
+            "constant.numeric.verilog",
+            "constant.numeric"
+          ],
+          "verilogKeyword": [
+            "keyword.control.verilog",
+            "keyword.control"
+          ],
+          "verilogComment": [
+            "comment.line.double-slash.verilog",
+            "comment.block.verilog",
+            "comment"
+          ],
+          "verilogString": [
+            "string.quoted.double.verilog",
+            "string.quoted.double"
+          ],
+          "verilogFormatSpecifier": [
+            "constant.other.placeholder.verilog",
+            "constant.character.format.placeholder.verilog",
+            "constant.other"
+          ],
+          "verilogPunctuation": [
+            "punctuation.definition.verilog",
+            "punctuation.separator.verilog",
+            "punctuation"
+          ]
         }
+      }
+    ],
+    "configurationDefaults": {
+      "[mipsasm]": {
+        "editor.semanticHighlighting.enabled": true
+      },
+      "[verilog]": {
+        "editor.semanticHighlighting.enabled": true
       }
     },
     "commands": [
@@ -709,6 +834,28 @@
             "type": "string",
             "default": "200us",
             "description": "ISim TCL 运行时长，格式为 `run <值>; exit`。默认为课程的 200us"
+          }
+        }
+      },
+      {
+        "title": "编辑器外观",
+        "properties": {
+          "co.semanticColors.preset": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "auto",
+              "dark",
+              "light",
+              "off"
+            ],
+            "enumDescriptions": [
+              "根据当前 VS Code 主题明暗自动选择 CO 语义着色预设",
+              "始终使用深色主题语义着色预设",
+              "始终使用浅色主题语义着色预设",
+              "不自动写入 CO 语义着色预设；保留用户和主题自己的规则"
+            ],
+            "description": "控制 CO 自定义语义 token 的默认配色。auto 会按当前主题明暗切换，同时不覆盖用户已手动修改的 token 规则。"
           }
         }
       },

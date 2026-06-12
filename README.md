@@ -144,6 +144,11 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 - `CO: Verilog 生成 Testbench`（P7 自动生成官方接口 testbench）、`CO: Verilog 生成 ISE 工程`、`CO: Verilog 运行 ISim`。
 - **信号连线面板**（侧边栏「信号连线」）：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。也可用命令 `CO: 查看 Verilog 信号连线` 或右键触发。
 
+### 语义着色与主题适配
+插件默认对 MIPS ASM 和 Verilog 开启 semantic highlighting，并根据当前 VS Code 主题明暗自动应用 CO 自定义 token 配色。MIPS 指令类型、CP0 寄存器、Verilog 模块/端口等语义分类仍会输出；若你手动改过某个 token 颜色，插件不会覆盖该 token。
+
+可用 `co.semanticColors.preset` 选择 `auto` / `dark` / `light` / `off`，详见 [语义着色配色预设](docs/semantic-colors.md)。
+
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
 - `CO: Logisim 生成 ROM 文件`、`CO: Logisim 注入 ROM 到电路`、`CO: Logisim 日志转 CSV`、`CO: Logisim 打开当前电路`；

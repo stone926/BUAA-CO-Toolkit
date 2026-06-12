@@ -22,6 +22,7 @@ import { registerHazard } from './hazard';
 import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
 import { registerCourseLinks } from './courseLinks';
+import { registerSemanticColorDefaults } from './semanticColors';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -35,6 +36,8 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     statusBar
   };
+
+  registerSemanticColorDefaults(context, output);
 
   // Register sidebar
   const sidebarProvider = new CoSidebarProvider(context);

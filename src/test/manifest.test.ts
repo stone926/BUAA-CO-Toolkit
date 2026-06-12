@@ -1,19 +1,30 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
+import {
+  semanticColorPresets,
+  semanticColorTokenIds
+} from '../semanticColorPresets';
 
 interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
+    configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
+    semanticTokenScopes?: Array<{ scopes?: Record<string, string[]> }>;
+    semanticTokenTypes?: Array<{ id: string; superType?: string }>;
     views?: Record<string, Array<{ id: string }>>;
   };
 }
 
 function readPackage(): PackageJson {
   return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')) as PackageJson;
+}
+
+function readJsonFile<T>(relativePath: string): T {
+  return JSON.parse(fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')) as T;
 }
 
 describe('package manifest', () => {
@@ -44,5 +55,61 @@ describe('package manifest', () => {
 
     expect(logisimLanguage).toBeUndefined();
     expect(logisimGrammar).toBeUndefined();
+  });
+
+  it('does not hard-code global semantic token colors', () => {
+    const pkg = readPackage();
+    const defaults = JSON.stringify(pkg.contributes?.configurationDefaults ?? {});
+    expect(defaults).not.toContain('semanticTokenColorCustomizations');
+    expect(pkg.contributes?.configurationDefaults?.['editor.semanticHighlighting.enabled']).toBeUndefined();
+  });
+
+  it('enables semantic highlighting by default for CO languages only', () => {
+    const pkg = readPackage();
+    expect(pkg.contributes?.configurationDefaults?.['[mipsasm]']).toEqual(expect.objectContaining({
+      'editor.semanticHighlighting.enabled': true
+    }));
+    expect(pkg.contributes?.configurationDefaults?.['[verilog]']).toEqual(expect.objectContaining({
+      'editor.semanticHighlighting.enabled': true
+    }));
+  });
+
+  it('declares theme fallback scopes for every semantic token type', () => {
+    const pkg = readPackage();
+    const tokenTypes = pkg.contributes?.semanticTokenTypes ?? [];
+    const scopeMap = new Map<string, string[]>();
+    for (const entry of pkg.contributes?.semanticTokenScopes ?? []) {
+      for (const [selector, scopes] of Object.entries(entry.scopes ?? {})) {
+        scopeMap.set(selector, scopes);
+      }
+    }
+
+    expect(tokenTypes.length).toBeGreaterThan(0);
+    for (const token of tokenTypes) {
+      expect(token.superType, token.id).toBeTruthy();
+      expect(scopeMap.get(token.id), token.id).toEqual(expect.arrayContaining([expect.any(String)]));
+    }
+  });
+
+  it('keeps automatic semantic color presets aligned with declared token types', () => {
+    const pkg = readPackage();
+    const tokenIds = (pkg.contributes?.semanticTokenTypes ?? []).map((token) => token.id).sort();
+    expect([...semanticColorTokenIds].sort()).toEqual(tokenIds);
+    expect(Object.keys(semanticColorPresets.dark).sort()).toEqual(tokenIds);
+    expect(Object.keys(semanticColorPresets.light).sort()).toEqual(tokenIds);
+  });
+
+  it('keeps TextMate grammar coverage for basic highlighting without semantic tokens', () => {
+    const mipsGrammar = readJsonFile<{ repository?: Record<string, unknown> }>('syntaxes/mips.tmLanguage.json');
+    const verilogGrammar = readJsonFile<{ repository?: Record<string, unknown> }>('syntaxes/verilog.tmLanguage.json');
+    const mipsScopes = JSON.stringify(mipsGrammar.repository ?? {});
+    const verilogScopes = JSON.stringify(verilogGrammar.repository ?? {});
+
+    expect(mipsScopes).toContain('keyword.control.instruction.mips');
+    expect(mipsScopes).toContain('variable.language.register.mips');
+    expect(mipsScopes).toContain('keyword.directive.mips');
+    expect(verilogScopes).toContain('keyword.control.verilog');
+    expect(verilogScopes).toContain('support.function.system-task.verilog');
+    expect(verilogScopes).toContain('constant.numeric.verilog');
   });
 });

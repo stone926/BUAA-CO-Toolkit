@@ -9,6 +9,13 @@ import {
 import { MipsServerState } from '../../../language/mips/state';
 import { mipsSemanticTokenTypes } from '../../../language/mips/resources';
 
+interface DecodedToken {
+  line: number;
+  character: number;
+  length: number;
+  type: number;
+}
+
 function doc(text: string): TextDocument {
   return TextDocument.create('test://features.s', 'mipsasm', 1, text);
 }
@@ -18,6 +25,23 @@ function state(): MipsServerState {
     ignoredPseudoInstructionFiles: new Set(),
     ignoredPseudoInstructionMnemonics: new Set()
   };
+}
+
+function decode(data: number[]): DecodedToken[] {
+  const tokens: DecodedToken[] = [];
+  let line = 0;
+  let character = 0;
+  for (let index = 0; index < data.length; index += 5) {
+    line += data[index];
+    character = data[index] === 0 ? character + data[index + 1] : data[index + 1];
+    tokens.push({
+      line,
+      character,
+      length: data[index + 2],
+      type: data[index + 3]
+    });
+  }
+  return tokens;
 }
 
 describe('MIPS instruction-backed language features', () => {
@@ -40,5 +64,24 @@ describe('MIPS instruction-backed language features', () => {
     const iTypeIndex = mipsSemanticTokenTypes.indexOf('mipsIInstruction');
     expect(semantic.data.slice(0, 5)).toEqual([0, 0, 3, rTypeIndex, 0]);
     expect(semantic.data.slice(5, 10)).toEqual([1, 0, 4, iTypeIndex, 0]);
+  });
+
+  it('keeps ordinary registers and CP0 registers as distinct semantic token types', () => {
+    const semantic = decode(getMipsSemanticTokens(doc('mfc0 $t0, $12'), mergeCoSettings({}), state()).data);
+    const registerType = mipsSemanticTokenTypes.indexOf('mipsRegister');
+    const cp0RegisterType = mipsSemanticTokenTypes.indexOf('mipsCp0Register');
+
+    expect(semantic).toContainEqual({
+      line: 0,
+      character: 5,
+      length: 3,
+      type: registerType
+    });
+    expect(semantic).toContainEqual({
+      line: 0,
+      character: 10,
+      length: 3,
+      type: cp0RegisterType
+    });
   });
 });
