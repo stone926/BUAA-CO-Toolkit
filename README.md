@@ -54,9 +54,9 @@
 
 ### 第三步：一键跑测试
 
-打开侧边栏「**BUAA CO**」面板 →「操作」区，点：
+打开侧边栏「**BUAA CO Toolkit**」面板 →「操作」区，点：
 
-- **P7 一键测试**（P7 专属按钮）/ **持续生成测试**（P4–P6）
+- **持续生成测试**（P4–P7）
   → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
 
 P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`）。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
