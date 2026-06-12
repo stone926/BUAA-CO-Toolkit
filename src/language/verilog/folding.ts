@@ -11,16 +11,6 @@ import { getCachedVerilogParse } from './parseCache';
 export function getVerilogFoldingRanges(document: TextDocument, settings: CoSettings): FoldingRange[] {
   const parsed = getCachedVerilogParse(document, settings, false);
   const ranges: FoldingRange[] = [];
-  for (const module of parsed.modules) {
-    if (module.range.end.line > module.range.start.line) {
-      ranges.push({
-        startLine: module.range.start.line,
-        endLine: module.range.end.line,
-        kind: FoldingRangeKind.Region
-      });
-    }
-  }
-
   ranges.push(...collectVerilogFoldingRangesFromCst(document, parsed.cst));
   ranges.push(...regionFoldingRanges(document));
   return ranges;

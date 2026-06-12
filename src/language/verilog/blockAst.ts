@@ -1,7 +1,7 @@
 import { FoldingRange, FoldingRangeKind, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { VerilogCstDocument, VerilogCstStatement } from './cst';
-import { VerilogToken } from './lexer';
+import { isIdentifierLike, VerilogToken } from './lexer';
 import { VerilogModule } from './model';
 
 export interface VerilogAlwaysBlockAst {
@@ -39,6 +39,26 @@ const blockClosers = new Map([
   ['endfunction', 'function'],
   ['endtask', 'task']
 ]);
+const instanceExcludedFirstTokens = new Set([
+  'module',
+  'endmodule',
+  'assign',
+  'always',
+  'initial',
+  'input',
+  'output',
+  'inout',
+  'wire',
+  'reg',
+  'logic',
+  'integer',
+  'real',
+  'realtime',
+  'time',
+  'parameter',
+  'localparam',
+  'genvar'
+]);
 
 export function collectVerilogFoldingRangesFromCst(document: TextDocument, cst: VerilogCstDocument): FoldingRange[] {
   const ranges: FoldingRange[] = [];
@@ -57,6 +77,7 @@ export function collectVerilogFoldingRangesFromCst(document: TextDocument, cst: 
     }
     closeFoldStack(document, stack, expected, token, ranges);
   }
+  ranges.push(...collectPortListFoldingRanges(document, cst));
   return ranges;
 }
 
@@ -299,6 +320,96 @@ function closeFoldStack(document: TextDocument, stack: Array<{ kind: string; tok
     }
     return;
   }
+}
+
+function collectPortListFoldingRanges(document: TextDocument, cst: VerilogCstDocument): FoldingRange[] {
+  const ranges: FoldingRange[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const range = modulePortListFoldingRangeAt(document, cst.codeTokens, index) ??
+      instancePortListFoldingRangeAt(document, cst.codeTokens, index);
+    if (!range) {
+      continue;
+    }
+    const key = `${range.startLine}:${range.startCharacter ?? ''}:${range.endLine}:${range.endCharacter ?? ''}`;
+    if (!seen.has(key)) {
+      ranges.push(range);
+      seen.add(key);
+    }
+  }
+  return ranges;
+}
+
+function modulePortListFoldingRangeAt(document: TextDocument, tokens: VerilogToken[], moduleIndex: number): FoldingRange | undefined {
+  if (tokens[moduleIndex]?.value !== 'module' || tokens[moduleIndex + 1]?.kind !== 'identifier') {
+    return undefined;
+  }
+  let index = moduleIndex + 2;
+  if (tokens[index]?.value === '#') {
+    if (tokens[index + 1]?.value !== '(') {
+      return undefined;
+    }
+    const close = findMatchingForward(tokens, index + 1, '(', ')');
+    if (close < 0) {
+      return undefined;
+    }
+    index = close + 1;
+  }
+  if (tokens[index]?.value !== '(') {
+    return undefined;
+  }
+  const close = findMatchingForward(tokens, index, '(', ')');
+  if (close < 0 || tokens[close + 1]?.value !== ';') {
+    return undefined;
+  }
+  return parenthesizedSemicolonFoldingRange(document, tokens[index], tokens[close + 1]);
+}
+
+function instancePortListFoldingRangeAt(document: TextDocument, tokens: VerilogToken[], moduleIndex: number): FoldingRange | undefined {
+  const moduleToken = tokens[moduleIndex];
+  if (!moduleToken || !isIdentifierLike(moduleToken.kind) || instanceExcludedFirstTokens.has(moduleToken.value)) {
+    return undefined;
+  }
+  let index = moduleIndex + 1;
+  if (tokens[index]?.value === '#') {
+    if (tokens[index + 1]?.value !== '(') {
+      return undefined;
+    }
+    const close = findMatchingForward(tokens, index + 1, '(', ')');
+    if (close < 0) {
+      return undefined;
+    }
+    index = close + 1;
+  }
+
+  const instanceToken = tokens[index];
+  if (!instanceToken || !isIdentifierLike(instanceToken.kind)) {
+    return undefined;
+  }
+  index++;
+  if (tokens[index]?.value !== '(') {
+    return undefined;
+  }
+  const close = findMatchingForward(tokens, index, '(', ')');
+  if (close < 0 || tokens[close + 1]?.value !== ';') {
+    return undefined;
+  }
+  return parenthesizedSemicolonFoldingRange(document, tokens[index], tokens[close + 1]);
+}
+
+function parenthesizedSemicolonFoldingRange(document: TextDocument, open: VerilogToken, semicolon: VerilogToken): FoldingRange | undefined {
+  const start = document.positionAt(open.end);
+  const end = document.positionAt(semicolon.end);
+  if (end.line <= start.line) {
+    return undefined;
+  }
+  return {
+    startLine: start.line,
+    startCharacter: start.character,
+    endLine: end.line,
+    endCharacter: end.character,
+    kind: FoldingRangeKind.Region
+  };
 }
 
 function foldStackKind(value: string): string {
