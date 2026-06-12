@@ -12,8 +12,11 @@ import { VerilogModule } from './model';
  */
 export class WorkspaceModuleRegistry {
   private readonly modules = new Map<string, VerilogModule[]>();
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
   private _scanning = true;
   private _disposed = false;
+
+  readonly onDidChange = this._onDidChange.event;
 
   /** 是否正在执行初始扫描 */
   get scanning(): boolean {
@@ -46,11 +49,13 @@ export class WorkspaceModuleRegistry {
       return;
     }
     this.indexFile(uri.fsPath);
+    this.fireDidChange();
   }
 
   /** 公开的文件移除入口。用于文件系统删除事件清理旧模块记录。 */
   removeUri(uri: vscode.Uri): void {
     this.removeDocument(uri.toString());
+    this.fireDidChange();
   }
 
   /** 启动后台扫描 */
@@ -81,6 +86,7 @@ export class WorkspaceModuleRegistry {
     // 先移除旧条目
     this.removeDocument(document.uri.toString());
     this.indexDocument(document);
+    this.fireDidChange();
   }
 
   /** 移除某个文件的所有模块 */
@@ -97,6 +103,7 @@ export class WorkspaceModuleRegistry {
 
   dispose(): void {
     this._disposed = true;
+    this._onDidChange.dispose();
     this.modules.clear();
     this._scanning = false;
   }
@@ -172,6 +179,13 @@ export class WorkspaceModuleRegistry {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
     this._scanning = false;
+    this.fireDidChange();
+  }
+
+  private fireDidChange(): void {
+    if (!this._disposed) {
+      this._onDidChange.fire();
+    }
   }
 
   private collectVerilogFiles(folders: string[]): string[] {

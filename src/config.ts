@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
-import { ProjectProfile } from './projectProfile';
+import {
+  ConcreteProjectProfile,
+  ProjectProfile,
+  concreteProjectProfiles,
+  isConcreteProjectProfile
+} from './projectProfile';
+import { getProfileName } from './courseConfig';
 import {
   getProjectConfig,
   getProjectProfileFromConfig,
@@ -9,6 +15,12 @@ import {
   getMipsFromConfig
 } from './projectConfig';
 import { commandResponds, defaultPythonCommand, firstWorkingCommand, pythonCandidates } from './python';
+import {
+  ProfileConfiguredSource,
+  ProfileResolution,
+  ProfileResolverInput,
+  resolveProjectProfile
+} from './profileResolver';
 
 /**
  * 配置读取优先级：
@@ -23,6 +35,14 @@ export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
     return value;
   }
   return fallback;
+}
+
+export type ProfileInferenceProvider = (resource?: vscode.Uri) => Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'>;
+
+let profileInferenceProvider: ProfileInferenceProvider | undefined;
+
+export function setProfileInferenceProvider(provider: ProfileInferenceProvider | undefined): void {
+  profileInferenceProvider = provider;
 }
 
 /**
@@ -46,12 +66,71 @@ function layeredGetString(
   return defaultValue;
 }
 
-export function getProfile(resource?: vscode.Uri): ProjectProfile {
-  const vsProfile = vscode.workspace.getConfiguration('co', resource).get<ProjectProfile>('project.profile');
-  if (vsProfile && vsProfile !== 'auto') {
-    return vsProfile;
+export interface ConfiguredProjectProfile {
+  profile: ProjectProfile;
+  source: ProfileConfiguredSource;
+}
+
+export function getConfiguredProjectProfile(resource?: vscode.Uri): ConfiguredProjectProfile {
+  const inspected = vscode.workspace.getConfiguration('co', resource).inspect<ProjectProfile>('project.profile');
+  const vsValue = normalizeProjectProfile(
+    inspected?.workspaceFolderValue
+    ?? inspected?.workspaceValue
+    ?? inspected?.globalValue
+  );
+  const projectValue = normalizeProjectProfile(getProjectProfileFromConfig(resource));
+  if (isConcreteProjectProfile(vsValue)) {
+    return { profile: vsValue, source: 'settings' };
   }
-  return getProjectProfileFromConfig(resource) ?? 'auto';
+  if (isConcreteProjectProfile(projectValue)) {
+    return { profile: projectValue, source: '.co/config.json' };
+  }
+  if (projectValue === 'auto') {
+    return { profile: 'auto', source: '.co/config.json' };
+  }
+  if (vsValue === 'auto') {
+    return { profile: 'auto', source: 'settings' };
+  }
+  return { profile: 'auto', source: 'default' };
+}
+
+export function getProfileResolution(resource?: vscode.Uri): ProfileResolution {
+  const configured = getConfiguredProjectProfile(resource);
+  return resolveProjectProfile({
+    ...(profileInferenceProvider?.(resource) ?? {}),
+    configuredProfile: configured.profile,
+    configuredSource: configured.source,
+    topModule: getTopModule(resource)
+  });
+}
+
+export function getProfile(resource?: vscode.Uri): ProjectProfile {
+  const resolution = getProfileResolution(resource);
+  return resolution.effectiveProfile ?? resolution.configuredProfile;
+}
+
+export async function ensureConcreteProfile(resource?: vscode.Uri, detail?: string): Promise<ConcreteProjectProfile | undefined> {
+  const resolution = getProfileResolution(resource);
+  if (resolution.effectiveProfile) {
+    return resolution.effectiveProfile;
+  }
+  const picked = await vscode.window.showQuickPick(
+    concreteProjectProfiles.map((profile) => ({
+      label: profile,
+      description: getProfileName(profile),
+      profile
+    })),
+    {
+      title: '选择项目 Profile',
+      placeHolder: detail ?? '无法自动推断当前项目 Profile，请手动选择'
+    }
+  );
+  if (!picked) {
+    return undefined;
+  }
+  await vscode.workspace.getConfiguration('co').update('project.profile', picked.profile, vscode.ConfigurationTarget.Workspace);
+  vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
+  return picked.profile;
 }
 
 export function getTopModule(resource?: vscode.Uri): string {
@@ -384,6 +463,10 @@ function inspectedValue<T>(key: string, resource?: vscode.Uri): T | undefined {
   return inspected?.workspaceFolderValue
     ?? inspected?.workspaceValue
     ?? inspected?.globalValue;
+}
+
+function normalizeProjectProfile(value: unknown): ProjectProfile | undefined {
+  return value === 'auto' || isConcreteProjectProfile(value) ? value : undefined;
 }
 
 function positiveIntegerConfig(key: string, fallback: number, resource?: vscode.Uri): number {

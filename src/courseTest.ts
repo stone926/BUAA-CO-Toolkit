@@ -21,6 +21,7 @@ import {
   getP7TimerIntensity,
   getP7TimerInterruptEnabled,
   getProfile,
+  ensureConcreteProfile,
   P7StressMode,
   resolvePython,
   useBuiltinTestGenerator
@@ -896,7 +897,10 @@ async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined
   }
 
   const resource = vscode.window.activeTextEditor?.document.uri ?? folder.uri;
-  const profile = getProfile(resource);
+  const profile = await ensureConcreteProfile(resource, '运行测试生成器需要先确定项目 Profile');
+  if (!profile) {
+    return undefined;
+  }
   if (useBuiltinTestGenerator(resource)) {
     return {
       kind: 'builtin',
@@ -1546,7 +1550,10 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
   services.output.appendLine('');
   services.output.appendLine('正在检查持续生成 Trace 测试工具链');
 
-  const profile = getProfile(resource);
+  const profile = await ensureConcreteProfile(resource, '持续生成 Trace 测试需要先确定项目 Profile');
+  if (!profile) {
+    return false;
+  }
   const memoryConfiguration = getMemoryConfiguration(resource);
   const configurationError = courseTraceMemoryConfigurationError(profile, memoryConfiguration);
   if (configurationError) {

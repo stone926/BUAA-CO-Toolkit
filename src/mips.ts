@@ -8,7 +8,8 @@ import {
   getMemoryConfiguration,
   getMipsExtraArgs,
   getProfile,
-  useDelayedBranching
+  useDelayedBranching,
+  ensureConcreteProfile
 } from './config';
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
@@ -96,6 +97,7 @@ async function runMarsCurrentFileWithStdinFile(services: AppServices): Promise<v
 async function runMarsCurrentFileInTerminal(): Promise<void> {
   const document = await resolveCurrentMipsDocument();
   if (!document) { return; }
+  if (!await ensureConcreteProfile(document.uri, '运行 MARS 需要先确定项目 Profile')) { return; }
 
   const mars = getMarsJar(document.uri);
   if (!mars) {
@@ -121,6 +123,9 @@ export async function runMarsFile(
   options: MarsRunOptions = {}
 ): Promise<MarsRunOutput | undefined> {
   const showMessages = options.showMessages !== false;
+  if (!await ensureConcreteProfile(asmUri, '运行 MARS 需要先确定项目 Profile')) {
+    return undefined;
+  }
   const mars = getMarsJar(asmUri);
   if (!mars) {
     vscode.window.showErrorMessage('MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7');

@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   config,
+  ensureConcreteProfile,
   getMachineCode,
   getIsePath,
   getProfile,
@@ -143,6 +144,10 @@ async function generateTestbench(moduleRegistry?: WorkspaceModuleRegistry): Prom
     vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
     return;
   }
+  const profile = await ensureConcreteProfile(editor.document.uri, '生成 Testbench 需要先确定项目 Profile');
+  if (!profile) {
+    return;
+  }
   const document = toTextDocument(editor.document);
   const parsed = parseVerilog(document, coSettingsForUri(editor.document.uri), false);
   const target = moduleAtPosition(parsed.modules, {
@@ -178,7 +183,7 @@ async function generateTestbench(moduleRegistry?: WorkspaceModuleRegistry): Prom
   }
   await writeTextFile(tbUri, buildTestbench(target, tbName, {
     finishDelay: verilogDelayFromSimTime(getSimTime(editor.document.uri)),
-    profile: getProfile(editor.document.uri)
+    profile
   }));
   moduleRegistry?.updateUri(tbUri);
   await vscode.window.showTextDocument(tbUri);
@@ -200,6 +205,9 @@ export async function generateIseProject(
 ): Promise<IseProjectFiles | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = options.showMessages !== false;
+  if (!await ensureConcreteProfile(activeUri, '生成 ISE 工程需要先确定项目 Profile')) {
+    return undefined;
+  }
   const folder = workspaceFolderFor(activeUri);
   if (!folder) {
     vscode.window.showErrorMessage('生成 ISE 文件前请先打开一个工作区文件夹');
@@ -348,6 +356,9 @@ async function compileIsim(
 ): Promise<CompiledIsimOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = options.showMessages !== false;
+  if (!await ensureConcreteProfile(activeUri, '运行 ISim 需要先确定项目 Profile')) {
+    return undefined;
+  }
   await vscode.workspace.saveAll(false);
   const isePath = getIsePath(activeUri);
   if (!isePath) {

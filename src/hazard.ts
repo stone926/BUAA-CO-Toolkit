@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
+import { ensureConcreteProfile, getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
 import { ensureDirectory, readTextFile, workspaceFolderFor } from './fsUtil';
 import { runMarsFile } from './mips';
 import { revealOutputChannel, runTool } from './process';
@@ -98,6 +98,9 @@ async function runHazardAnalysis(services: AppServices): Promise<void> {
   const folder = findWorkspaceFolder(resource);
   if (!folder) {
     vscode.window.showErrorMessage('请先打开一个工作区文件夹');
+    return;
+  }
+  if (!await ensureConcreteProfile(resource ?? folder.uri, '运行 Hazard 分析需要先确定项目 Profile')) {
     return;
   }
 

@@ -29,7 +29,9 @@ import {
   WorkspaceFolder
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { URI } from 'vscode-uri';
 import { defaultCoSettings, mergeCoSettings, CoSettings } from './language/common/settings';
+import { applyResolvedProfile } from './profileResolver';
 import {
   filterDisabledDiagnostics,
   getDiagnosticSuppressActions
@@ -228,7 +230,9 @@ connection.onDidChangeConfiguration((change) => {
 });
 
 connection.onDidChangeWatchedFiles((params) => {
-  void handleWatchedFilesChanged(params.changes).then((languageIds) => validateDocuments((document) => languageIds.has(document.languageId)));
+  void handleWatchedFilesChanged(params.changes).then((languageIds) =>
+    languageIds.has('*') ? validateAllDocuments() : validateDocuments((document) => languageIds.has(document.languageId))
+  );
 });
 
 documents.onDidOpen((event) => {
@@ -277,7 +281,7 @@ function withDocument<R>(
     try {
       const document = documents.get(params.textDocument.uri);
       if (!document) return fallback;
-      const settings = await getDocumentSettings(document.uri);
+      const settings = effectiveSettingsForDocument(document, await getDocumentSettings(document.uri));
       const svc = serviceForDocument(document);
       return svc ? (handler(document, params, settings, svc) ?? fallback) : fallback;
     } catch (e) {
@@ -357,7 +361,7 @@ async function updateIndexAndValidate(document: TextDocument): Promise<void> {
 }
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
-  const resolvedSettings = settings ?? await getDocumentSettings(document.uri);
+  const resolvedSettings = effectiveSettingsForDocument(document, settings ?? await getDocumentSettings(document.uri));
   const diagnosticLanguageId = serviceKeyForDocument(document);
   const diagnostics = filterDisabledDiagnostics(
     diagnosticLanguageId,
@@ -401,6 +405,35 @@ async function rebuildVerilogIndex(): Promise<void> {
   }
 }
 
+function effectiveSettingsForDocument(document: TextDocument, settings: CoSettings): CoSettings {
+  return applyResolvedProfile(settings, {
+    activeLanguageId: serviceKeyForDocument(document),
+    activeFilePath: fsPathFromUri(document.uri),
+    files: indexedProfileFiles(document),
+    modules: verilogIndex.allModules(),
+    verilogTexts: verilogIndex.allFiles().map((file) => file.text)
+  });
+}
+
+function indexedProfileFiles(document: TextDocument): Array<{ path: string; languageId?: string }> {
+  const files = verilogIndex.allFiles()
+    .map((file) => ({ path: fsPathFromUri(file.uri), languageId: 'verilog' }))
+    .filter((file): file is { path: string; languageId: string } => Boolean(file.path));
+  const activePath = fsPathFromUri(document.uri);
+  if (activePath) {
+    files.push({ path: activePath, languageId: serviceKeyForDocument(document) });
+  }
+  return files;
+}
+
+function fsPathFromUri(uri: string): string | undefined {
+  try {
+    return URI.parse(uri).fsPath;
+  } catch {
+    return undefined;
+  }
+}
+
 async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<string>> {
   const verilogChanges = changes.filter((change) => isVerilogUri(change.uri));
   const affectedLanguageIds = new Set<string>();
@@ -408,6 +441,7 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<stri
     return affectedLanguageIds;
   }
   affectedLanguageIds.add('verilog');
+  affectedLanguageIds.add('*');
   if (verilogChanges.length > 50) {
     await rebuildVerilogIndex();
     return affectedLanguageIds;

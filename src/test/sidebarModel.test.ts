@@ -138,4 +138,22 @@ describe('sidebar model', () => {
     expect(tb?.description).toContain('mips_tb.v');
     expect(tb?.tooltip).toContain('Top: mips');
   });
+
+  it('does not expose course actions while auto remains unresolved', () => {
+    const model = buildSidebarModel(baseContext({
+      profile: 'auto',
+      activeFile: {
+        languageId: 'verilog',
+        fsPath: 'E:\\VSCode\\BUAA-CO\\unknown\\src\\mips.v',
+        basename: 'mips.v',
+        isLogisimCircuit: false
+      }
+    }));
+
+    expect(findCommand(model, 'co.selectProjectProfile')).toBeDefined();
+    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
+    expect(findCommand(model, 'co.test.startContinuousGeneratedTraceTests')).toBeUndefined();
+    const project = section(model, '项目');
+    expect(project.children?.find((item) => item.id === 'project.profile')?.description).toBe('未推断');
+  });
 });

@@ -83,7 +83,7 @@ function tutorialRoot(resource?: vscode.Uri): string {
 
 function relevantTutorialToolKeys(profile: ProjectProfile): string[] {
   if (profile === 'auto') {
-    return ['logisim', 'mars', 'ise'];
+    return [];
   }
   const requiredTools = new Set(getProfileRequiredTools(profile).map((tool) => tool.toLowerCase()));
   const keys: string[] = [];

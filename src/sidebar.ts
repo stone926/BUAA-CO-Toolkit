@@ -130,7 +130,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   private createToolModels(profile: ProjectProfile, resource?: vscode.Uri): SidebarToolModel[] {
     const tools: SidebarToolModel[] = [];
     const requiredTools = new Set(getProfileRequiredTools(profile).map((tool) => tool.toLowerCase()));
-    const showAllTools = profile === 'auto' || requiredTools.size === 0;
+    const showAllTools = profile !== 'auto' && requiredTools.size === 0;
     if (showAllTools || requiredTools.has('java')) {
       tools.push(this.createToolModel('java', 'Java', getJava(resource)));
     }

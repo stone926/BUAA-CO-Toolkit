@@ -844,7 +844,7 @@
               "P6",
               "P7"
             ],
-            "description": "当前项目 Profile。auto 启用通用检查并推断部分 Verilog 接口规则"
+            "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P；无法推断时会要求手动选择并保存"
           },
           "co.course.tutorialRoot": {
             "type": "string",

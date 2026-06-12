@@ -61,11 +61,11 @@ export interface SidebarModelContext {
   tutorials: SidebarTutorialModel[];
 }
 
-const traceProfiles = new Set<ProjectProfile>(['auto', 'P4', 'P5', 'P6', 'P7']);
-const verilogProfiles = new Set<ProjectProfile>(['auto', 'P1', 'P4', 'P5', 'P6', 'P7']);
-const mipsProfiles = new Set<ProjectProfile>(['auto', 'P2', 'P4', 'P5', 'P6', 'P7']);
-const asmGenerationProfiles = new Set<ProjectProfile>(['auto', 'P3', 'P4', 'P5', 'P6', 'P7']);
-const logisimProfiles = new Set<ProjectProfile>(['auto', 'P0', 'P3']);
+const traceProfiles = new Set<ProjectProfile>(['P4', 'P5', 'P6', 'P7']);
+const verilogProfiles = new Set<ProjectProfile>(['P1', 'P4', 'P5', 'P6', 'P7']);
+const mipsProfiles = new Set<ProjectProfile>(['P2', 'P4', 'P5', 'P6', 'P7']);
+const asmGenerationProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
+const logisimProfiles = new Set<ProjectProfile>(['P0', 'P3']);
 const hazardProfiles = new Set<ProjectProfile>(['P5', 'P6', 'P7']);
 
 export function buildSidebarModel(context: SidebarModelContext): SidebarNodeModel[] {
@@ -82,7 +82,7 @@ export function buildSidebarModel(context: SidebarModelContext): SidebarNodeMode
 function projectSection(context: SidebarModelContext): SidebarNodeModel {
   const toolSummary = summarizeTools(context.tools);
   const children: SidebarNodeModel[] = [
-    infoItem('project.profile', 'Profile', context.profile, `配置来源: ${context.configSource}`, 'symbol-class', {
+    infoItem('project.profile', 'Profile', profileDescription(context.profile), `配置来源: ${context.configSource}`, context.profile === 'auto' ? 'warning' : 'symbol-class', {
       command: 'co.selectProjectProfile',
       title: '选择 Profile'
     }),
@@ -111,8 +111,8 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
       '选择 Profile',
       'co.selectProjectProfile',
       'settings-gear',
-      `当前 ${context.profile}`,
-      '切换 co.project.profile。项目级 .co/config.json 存在时会优先作为配置来源。'
+      context.profile === 'auto' ? '无法自动推断' : `当前 ${context.profile}`,
+      '切换 co.project.profile。项目级 .co/config.json 存在时会优先作为配置来源；auto 无法推断时会要求手动选择。'
     ),
     actionItem(
       'project.checkToolchain',
@@ -336,7 +336,7 @@ function manualWorkflowSection(context: SidebarModelContext): SidebarNodeModel {
         active.fsPath
       )
     );
-    if (context.profile === 'P7' || context.profile === 'auto') {
+    if (context.profile === 'P7') {
       children.push(
         actionItem(
           'manual.asmDumpKernel',
@@ -638,15 +638,15 @@ function isLogisimCircuitFile(active: SidebarActiveFileModel): boolean {
 }
 
 function shouldShowMipsActions(profile: ProjectProfile, language?: string): boolean {
-  return language === 'mipsasm' || mipsProfiles.has(profile);
+  return profile !== 'auto' && (language === 'mipsasm' || mipsProfiles.has(profile));
 }
 
 function shouldShowVerilogActions(profile: ProjectProfile, language?: string): boolean {
-  return language === 'verilog' || verilogProfiles.has(profile);
+  return profile !== 'auto' && (language === 'verilog' || verilogProfiles.has(profile));
 }
 
 function shouldShowLogisimActions(profile: ProjectProfile, active?: SidebarActiveFileModel): boolean {
-  return Boolean(active && isLogisimCircuitFile(active)) || logisimProfiles.has(profile);
+  return profile !== 'auto' && (Boolean(active && isLogisimCircuitFile(active)) || logisimProfiles.has(profile));
 }
 
 function shouldShowTraceActions(profile: ProjectProfile): boolean {
@@ -655,6 +655,10 @@ function shouldShowTraceActions(profile: ProjectProfile): boolean {
 
 function shouldShowAsmGenerationActions(profile: ProjectProfile): boolean {
   return asmGenerationProfiles.has(profile);
+}
+
+function profileDescription(profile: ProjectProfile): string {
+  return profile === 'auto' ? '未推断' : profile;
 }
 
 function summarizeTools(tools: SidebarToolModel[]): { description: string; tooltip: string; icon: string } {

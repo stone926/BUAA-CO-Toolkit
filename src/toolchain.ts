@@ -1,18 +1,29 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, resolvePython } from './config';
+import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, resolvePython } from './config';
 import { cleanupCoTmp, coTmpDir } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 
-export async function checkToolchain(output: vscode.OutputChannel, resource?: vscode.Uri): Promise<ToolDetection[]> {
+export async function checkToolchain(output: vscode.OutputChannel, resource?: vscode.Uri, options: { promptForProfile?: boolean } = {}): Promise<ToolDetection[]> {
   const checks: ToolDetection[] = [];
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
-  const profile = getProfile(resource);
+  let profile = getProfile(resource);
+  if (profile === 'auto' && options.promptForProfile) {
+    profile = await ensureConcreteProfile(resource, '检查工具链需要先确定项目 Profile') ?? 'auto';
+  }
+  if (profile === 'auto') {
+    return [{
+      name: 'Profile',
+      ok: false,
+      detail: '无法自动推断',
+      suggestion: '请运行 CO: 选择项目 Profile'
+    }];
+  }
   const requiredTools = new Set(getProfileRequiredTools(profile).map(normalizeToolName));
-  const checkAll = profile === 'auto' || requiredTools.size === 0;
+  const checkAll = requiredTools.size === 0;
 
   if (checkAll || requiredTools.has('java')) {
     const java = getJava(resource);

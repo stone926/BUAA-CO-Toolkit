@@ -14,8 +14,28 @@ const vscodeMock = vi.hoisted(() => {
       return this.fsPath;
     }
   }
+  class MockEventEmitter<T> {
+    private listeners: Array<(event: T) => void> = [];
+    readonly event = (listener: (event: T) => void): { dispose(): void } => {
+      this.listeners.push(listener);
+      return {
+        dispose: () => {
+          this.listeners = this.listeners.filter((item) => item !== listener);
+        }
+      };
+    };
+    fire(event: T): void {
+      for (const listener of this.listeners) {
+        listener(event);
+      }
+    }
+    dispose(): void {
+      this.listeners = [];
+    }
+  }
   return {
     MockUri,
+    MockEventEmitter,
     state: {
       activeTextEditor: undefined as { document: { uri: InstanceType<typeof MockUri> } } | undefined,
       textDocuments: [] as Array<{ uri: InstanceType<typeof MockUri>; languageId: string }>
@@ -25,6 +45,7 @@ const vscodeMock = vi.hoisted(() => {
 
 vi.mock('vscode', () => ({
   Uri: vscodeMock.MockUri,
+  EventEmitter: vscodeMock.MockEventEmitter,
   workspace: {
     get textDocuments() {
       return vscodeMock.state.textDocuments;
@@ -105,6 +126,21 @@ describe('WorkspaceModuleRegistry', () => {
     registry.updateUri(uri);
 
     expect(registry.getModule('mips_tb')).toBeUndefined();
+  });
+
+  it('emits change events after registry updates', () => {
+    const root = makeTempDir();
+    const file = writeVerilog(root, 'src/top.v', 'module mips; endmodule\n');
+    const registry = new WorkspaceModuleRegistry();
+    let changes = 0;
+    registry.onDidChange(() => {
+      changes++;
+    });
+
+    registry.updateUri(vscodeMock.MockUri.file(file) as never);
+    registry.removeUri(vscodeMock.MockUri.file(file) as never);
+
+    expect(changes).toBe(2);
   });
 });
 

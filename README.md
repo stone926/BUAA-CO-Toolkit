@@ -50,7 +50,7 @@
 ### 第二步：告诉插件当前是哪个 Profile
 
 - 用命令 **`CO: 选择项目 Profile`**（P0–P7），或在工程根目录建 `.co/config.json` 写 `{"profile": "P7"}`。
-- 也可设 `co.project.profile`。`auto` 会尽量根据顶层模块接口推断。
+- 也可设 `co.project.profile`。`auto` 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P；无法唯一推断时会要求手动选择并保存。
 
 ### 第三步：一键跑测试
 
@@ -170,7 +170,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto） |
+| `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto；auto 会推断具体 P，无法推断时要求选择） |
 | `co.toolchain.mars` | — | Mars jar（非 P7 对拍） |
 | `co.toolchain.marsP7` | — | P7 专用 Mars（需 efc/p7irq/coL1） |
 | `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getProfile } from './config';
+import { getProfileResolution, setProfileInferenceProvider } from './config';
 import {
   diagnosticCodeKey,
   diagnosticFileCodeKey,
@@ -23,6 +23,7 @@ import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
 import { registerCourseLinks } from './courseLinks';
 import { registerSemanticColorDefaults } from './semanticColors';
+import { buildProfileInferenceInput, clearProfileInferenceCache } from './profileInference';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -52,18 +53,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const configWatcher = vscode.workspace.createFileSystemWatcher('**/.co/config.json');
   configWatcher.onDidChange(() => {
     clearProjectConfigCache();
+    clearProfileInferenceCache();
     invalidateToolchainCache();
     sidebarProvider.refresh();
     updateStatus(statusBar, getToolchainStatus);
   });
   configWatcher.onDidCreate(() => {
     clearProjectConfigCache();
+    clearProfileInferenceCache();
     invalidateToolchainCache();
     sidebarProvider.refresh();
     updateStatus(statusBar, getToolchainStatus);
   });
   configWatcher.onDidDelete(() => {
     clearProjectConfigCache();
+    clearProfileInferenceCache();
     invalidateToolchainCache();
     sidebarProvider.refresh();
     updateStatus(statusBar, getToolchainStatus);
@@ -81,8 +85,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 工作空间模块注册表：后台解析所有 .v 文件，供 sidebar 连线分析跨文件查找模块
   const moduleRegistry = new WorkspaceModuleRegistry();
+  setProfileInferenceProvider((resource) => buildProfileInferenceInput(resource, moduleRegistry));
+  context.subscriptions.push({ dispose: () => setProfileInferenceProvider(undefined) });
   moduleRegistry.activate();
   context.subscriptions.push(moduleRegistry);
+  context.subscriptions.push(moduleRegistry.onDidChange(() => {
+    invalidateToolchainCache();
+    sidebarProvider.refresh();
+    updateStatus(statusBar, getToolchainStatus);
+  }));
   // 监听文件保存事件，增量更新注册表
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
@@ -94,9 +105,43 @@ export function activate(context: vscode.ExtensionContext): void {
   const verilogWatcher = vscode.workspace.createFileSystemWatcher('**/*.v');
   context.subscriptions.push(
     verilogWatcher,
-    verilogWatcher.onDidCreate((uri) => moduleRegistry.updateUri(uri)),
-    verilogWatcher.onDidChange((uri) => moduleRegistry.updateUri(uri)),
-    verilogWatcher.onDidDelete((uri) => moduleRegistry.removeUri(uri))
+    verilogWatcher.onDidCreate((uri) => {
+      clearProfileInferenceCache();
+      invalidateToolchainCache();
+      moduleRegistry.updateUri(uri);
+    }),
+    verilogWatcher.onDidChange((uri) => {
+      clearProfileInferenceCache();
+      invalidateToolchainCache();
+      moduleRegistry.updateUri(uri);
+    }),
+    verilogWatcher.onDidDelete((uri) => {
+      clearProfileInferenceCache();
+      invalidateToolchainCache();
+      moduleRegistry.removeUri(uri);
+    })
+  );
+  const profileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{asm,s,mips,circ}');
+  context.subscriptions.push(
+    profileWatcher,
+    profileWatcher.onDidCreate(() => {
+      clearProfileInferenceCache();
+      invalidateToolchainCache();
+      sidebarProvider.refresh();
+      updateStatus(statusBar, getToolchainStatus);
+    }),
+    profileWatcher.onDidChange(() => {
+      clearProfileInferenceCache();
+      invalidateToolchainCache();
+      sidebarProvider.refresh();
+      updateStatus(statusBar, getToolchainStatus);
+    }),
+    profileWatcher.onDidDelete(() => {
+      clearProfileInferenceCache();
+      invalidateToolchainCache();
+      sidebarProvider.refresh();
+      updateStatus(statusBar, getToolchainStatus);
+    })
   );
 
   registerMips(context, services);
@@ -152,7 +197,7 @@ export async function deactivate(): Promise<void> {
 async function showToolchainReport(output: vscode.OutputChannel): Promise<void> {
   output.appendLine('正在检查 CO 工具链...');
   const resource = vscode.window.activeTextEditor?.document.uri;
-  const checks = await checkToolchain(output, resource);
+  const checks = await checkToolchain(output, resource, { promptForProfile: true });
   output.appendLine('');
   for (const check of checks) {
     output.appendLine(`${check.ok ? 'OK' : '缺失'} ${check.name}: ${check.detail}`);
@@ -169,11 +214,12 @@ async function showToolchainReport(output: vscode.OutputChannel): Promise<void> 
 
 async function selectProjectProfile(): Promise<void> {
   const profiles: ProjectProfile[] = ['auto', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'];
-  const current = getProfile(vscode.window.activeTextEditor?.document.uri);
+  const resolution = getProfileResolution(vscode.window.activeTextEditor?.document.uri);
+  const current = resolution.configuredProfile;
   const picked = await vscode.window.showQuickPick(
     profiles.map((profile) => ({
       label: profile,
-      description: profile === current ? '当前' : profileDescription(profile),
+      description: profile === current ? currentProfileDescription(profile, resolution) : profileDescription(profile),
       profile
     })),
     {
@@ -213,8 +259,8 @@ async function disableDiagnosticCode(languageId?: string, code?: string, documen
 
 function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => Promise<ToolDetection[]>): void {
   const resource = vscode.window.activeTextEditor?.document.uri;
-  const profile = getProfile(resource);
-  statusBar.text = `CO: ${profile}`;
+  const profileText = statusProfileText(resource);
+  statusBar.text = `CO: ${profileText}`;
   statusBar.tooltip = 'BUAA CO Toolkit - 点击检查工具链';
   statusBar.show();
 
@@ -229,7 +275,7 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
         .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
         .join(' | ');
       if (toolStatus) {
-        statusBar.text = `CO: ${profile} | ${toolStatus}`;
+        statusBar.text = `CO: ${profileText} | ${toolStatus}`;
       }
     }).catch(() => {
       // Keep the basic status if toolchain check fails
@@ -267,8 +313,27 @@ function profileDescription(profile: ProjectProfile): string {
     case 'P7':
       return 'MIPS 微系统（异常+外设）';
     default:
-      return '自动推断';
+      return '自动推断；无法推断时要求选择';
   }
+}
+
+function currentProfileDescription(profile: ProjectProfile, resolution: ReturnType<typeof getProfileResolution>): string {
+  if (profile !== 'auto') {
+    return '当前';
+  }
+  return resolution.effectiveProfile
+    ? `当前，已推断为 ${resolution.effectiveProfile}`
+    : '当前，无法推断时会要求选择';
+}
+
+function statusProfileText(resource?: vscode.Uri): string {
+  const resolution = getProfileResolution(resource);
+  if (resolution.effectiveProfile) {
+    return resolution.source === 'inferred'
+      ? `${resolution.effectiveProfile} (auto)`
+      : resolution.effectiveProfile;
+  }
+  return '选择 Profile';
 }
 
 function renderToolchainReport(checks: ToolDetection[]): string {
