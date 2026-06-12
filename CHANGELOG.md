@@ -2,6 +2,16 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [0.3.0] - 2026-06-12
+
+- ignore AGENTS.md (1e73e23)
+- feat: unify CO workflow management (854b031)
+- feat: 优化代码高亮 (93fa869)
+- feat: 优化代码高亮 (4a8df0f)
+- feat: module实例化和参数折叠 (3429f1c)
+- feat: module实例化和参数折叠 (3f142ba)
+- update README (206ff90)
+
 ## [0.2.1] - 2026-06-11
 
 - fix: support npm commands in Windows release script (ec2ded5)
