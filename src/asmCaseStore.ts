@@ -1,0 +1,406 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as vscode from 'vscode';
+import { getMemoryConfiguration, getProfile } from './config';
+import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { runMarsFile, MarsRunOptions, MarsRunOutput } from './mips';
+import { AppServices } from './types';
+import {
+  AsmCaseArtifactKind,
+  AsmCaseManifest,
+  AsmCaseP7Metadata,
+  AsmCaseSource,
+  asmCaseId,
+  asmCaseManifestVersion,
+  asmCasePaths,
+  machineCodeWordCount,
+  mergeAsmCaseArtifacts,
+  sha256Bytes
+} from './asmCaseStoreCore';
+
+export interface AsmCase {
+  id: string;
+  dir: vscode.Uri;
+  manifestUri: vscode.Uri;
+  asm: vscode.Uri;
+  machineCode: vscode.Uri;
+  sourceAsm: vscode.Uri;
+  stdin?: vscode.Uri;
+  manifest: AsmCaseManifest;
+}
+
+export interface CreateAsmCaseOptions {
+  source?: AsmCaseSource;
+  stdin?: vscode.Uri;
+  resource?: vscode.Uri;
+  createdAt?: Date;
+  p7?: AsmCaseP7Metadata;
+}
+
+export async function resolveAsmCaseInput(title = '选择 MIPS ASM 文件'): Promise<vscode.Uri | undefined> {
+  const editor = vscode.window.activeTextEditor;
+  if (editor && isAsmFile(editor.document.uri)) {
+    if (editor.document.isDirty) {
+      await editor.document.save();
+    }
+    return editor.document.uri;
+  }
+
+  const folder = workspaceFolderFor(editor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
+  if (folder) {
+    const files = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(folder, '**/*.{asm,s,mips}'),
+      asmCaseInputExcludeGlob,
+      500
+    );
+    if (files.length === 1) {
+      return files[0];
+    }
+    if (files.length > 1) {
+      const picked = await vscode.window.showQuickPick(
+        files.map((uri) => ({
+          label: vscode.workspace.asRelativePath(uri),
+          description: path.dirname(uri.fsPath),
+          uri
+        })),
+        {
+          title,
+          matchOnDescription: true
+        }
+      );
+      return picked?.uri;
+    }
+  }
+
+  const picked = await vscode.window.showOpenDialog({
+    title,
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    filters: {
+      ASM: ['asm', 's', 'mips'],
+      All: ['*']
+    }
+  });
+  return picked?.[0];
+}
+
+export async function createAsmCaseFromAsm(
+  asm: vscode.Uri,
+  options: CreateAsmCaseOptions = {}
+): Promise<AsmCase> {
+  const asmBytes = await vscode.workspace.fs.readFile(asm);
+  const asmHash = sha256Bytes(asmBytes);
+  const root = caseWorkspaceRoot(options.resource ?? asm);
+  const createdAt = options.createdAt ?? new Date();
+  const paths = nextAsmCasePaths(root, createdAt, asmHash);
+  const caseDir = vscode.Uri.file(paths.caseDir);
+  await ensureDirectory(caseDir);
+
+  const caseAsm = vscode.Uri.file(paths.asm);
+  await vscode.workspace.fs.writeFile(caseAsm, asmBytes);
+
+  const sidecar = readCaseSidecar(asm);
+  const p7 = mergeP7Metadata(options.p7, sidecar.metadata, sidecar.path);
+  const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
+
+  const manifest: AsmCaseManifest = {
+    version: asmCaseManifestVersion,
+    caseId: path.basename(paths.caseDir),
+    createdAt: createdAt.toISOString(),
+    profile: getProfile(options.resource ?? asm),
+    originalAsmPath: asm.fsPath,
+    asmSnapshot: {
+      path: caseAsm.fsPath,
+      sha256: asmHash,
+      bytes: asmBytes.byteLength
+    },
+    source: options.source ?? { kind: 'selected' },
+    stdin: stdin?.snapshot,
+    p7
+  };
+  const manifestUri = vscode.Uri.file(paths.manifest);
+  await writeTextFile(manifestUri, JSON.stringify(manifest, null, 2) + '\n');
+
+  return {
+    id: manifest.caseId,
+    dir: caseDir,
+    manifestUri,
+    asm: caseAsm,
+    machineCode: vscode.Uri.file(paths.machineCode),
+    sourceAsm: asm,
+    stdin: stdin?.uri,
+    manifest
+  };
+}
+
+export async function createAsmCaseFromText(
+  fileName: string,
+  text: string,
+  options: CreateAsmCaseOptions = {}
+): Promise<AsmCase> {
+  const bytes = Buffer.from(text, 'utf8');
+  const asmHash = sha256Bytes(bytes);
+  const root = caseWorkspaceRoot(options.resource);
+  const createdAt = options.createdAt ?? new Date();
+  const paths = nextAsmCasePaths(root, createdAt, asmHash);
+  const caseDir = vscode.Uri.file(paths.caseDir);
+  await ensureDirectory(caseDir);
+
+  const caseAsm = vscode.Uri.file(paths.asm);
+  await vscode.workspace.fs.writeFile(caseAsm, bytes);
+  const p7 = mergeP7Metadata(options.p7, undefined, undefined);
+  const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
+  const manifest: AsmCaseManifest = {
+    version: asmCaseManifestVersion,
+    caseId: path.basename(paths.caseDir),
+    createdAt: createdAt.toISOString(),
+    profile: getProfile(options.resource),
+    originalAsmPath: fileName,
+    asmSnapshot: {
+      path: caseAsm.fsPath,
+      sha256: asmHash,
+      bytes: bytes.byteLength
+    },
+    source: options.source ?? { kind: 'builtin' },
+    stdin: stdin?.snapshot,
+    p7
+  };
+  const manifestUri = vscode.Uri.file(paths.manifest);
+  await writeTextFile(manifestUri, JSON.stringify(manifest, null, 2) + '\n');
+
+  return {
+    id: manifest.caseId,
+    dir: caseDir,
+    manifestUri,
+    asm: caseAsm,
+    machineCode: vscode.Uri.file(paths.machineCode),
+    sourceAsm: caseAsm,
+    stdin: stdin?.uri,
+    manifest
+  };
+}
+
+export async function prepareAsmCaseMachineCode(
+  services: AppServices,
+  asmCase: AsmCase,
+  options: MarsRunOptions = {}
+): Promise<MarsRunOutput | undefined> {
+  const dump = await runMarsFile(services, asmCase.sourceAsm, 'dumpText', {
+    ...options,
+    showMessages: options.showMessages ?? false,
+    dumpOutputFile: asmCase.machineCode
+  });
+  if (!dump?.result.ok || !dump.outputFile) {
+    return dump;
+  }
+
+  const bytes = await vscode.workspace.fs.readFile(asmCase.machineCode);
+  const text = Buffer.from(bytes).toString('utf8');
+  asmCase.manifest = {
+    ...asmCase.manifest,
+    machineCode: {
+      path: asmCase.machineCode.fsPath,
+      sha256: sha256Bytes(bytes),
+      bytes: bytes.byteLength,
+      wordCount: machineCodeWordCount(text)
+    },
+    mars: {
+      commandLine: dump.result.commandLine,
+      cwd: dump.result.cwd,
+      memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm)
+    }
+  };
+  await writeAsmCaseManifest(asmCase);
+  return dump;
+}
+
+export async function updateAsmCaseArtifacts(
+  asmCase: AsmCase,
+  kind: AsmCaseArtifactKind,
+  artifacts: Record<string, string>
+): Promise<void> {
+  asmCase.manifest = mergeAsmCaseArtifacts(asmCase.manifest, kind, artifacts);
+  await writeAsmCaseManifest(asmCase);
+}
+
+export async function writeAsmCaseArtifact(
+  asmCase: AsmCase,
+  kind: 'verilog' | 'logisim' | 'mars',
+  fileName: string,
+  content: string,
+  artifactName = path.basename(fileName, path.extname(fileName))
+): Promise<vscode.Uri> {
+  const dir = artifactDirectory(asmCase, kind);
+  await ensureDirectory(dir);
+  const uri = vscode.Uri.file(path.join(dir.fsPath, path.basename(fileName)));
+  await writeTextFile(uri, content);
+  await updateAsmCaseArtifacts(asmCase, kind, { [artifactName]: uri.fsPath });
+  return uri;
+}
+
+export async function copyAsmCaseArtifact(
+  asmCase: AsmCase,
+  kind: 'verilog' | 'logisim' | 'mars',
+  source: vscode.Uri,
+  fileName = path.basename(source.fsPath),
+  artifactName = path.basename(fileName, path.extname(fileName))
+): Promise<vscode.Uri> {
+  const dir = artifactDirectory(asmCase, kind);
+  await ensureDirectory(dir);
+  const target = vscode.Uri.file(path.join(dir.fsPath, path.basename(fileName)));
+  if (normalizePathKey(source.fsPath) !== normalizePathKey(target.fsPath)) {
+    const bytes = await vscode.workspace.fs.readFile(source);
+    await vscode.workspace.fs.writeFile(target, bytes);
+  }
+  await updateAsmCaseArtifacts(asmCase, kind, { [artifactName]: target.fsPath });
+  return target;
+}
+
+export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array<{ manifest: AsmCaseManifest; uri: vscode.Uri }>> {
+  const root = caseWorkspaceRoot(resource);
+  const casesDir = path.join(root, '.co', 'cases');
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(casesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const manifests: Array<{ manifest: AsmCaseManifest; uri: vscode.Uri }> = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const uri = vscode.Uri.file(path.join(casesDir, entry.name, 'case.json'));
+    try {
+      const manifest = JSON.parse(await readTextFile(uri)) as AsmCaseManifest;
+      if (manifest?.version === asmCaseManifestVersion && manifest.caseId) {
+        manifests.push({ manifest, uri });
+      }
+    } catch {
+      // Ignore incomplete or hand-edited case directories.
+    }
+  }
+  return manifests.sort((left, right) => right.manifest.createdAt.localeCompare(left.manifest.createdAt));
+}
+
+export function readAsmCaseManifestForAsm(asm: vscode.Uri): AsmCaseManifest | undefined {
+  if (path.basename(asm.fsPath).toLowerCase() !== 'program.asm') {
+    return undefined;
+  }
+  const manifestPath = path.join(path.dirname(asm.fsPath), 'case.json');
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as AsmCaseManifest;
+    return manifest?.version === asmCaseManifestVersion ? manifest : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function isAsmFile(uri: vscode.Uri): boolean {
+  if (uri.scheme !== 'file') {
+    return false;
+  }
+  return ['.asm', '.s', '.mips'].includes(path.extname(uri.fsPath).toLowerCase());
+}
+
+const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/isim,.co/logisim,.co/tmp}/**';
+
+function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): ReturnType<typeof asmCasePaths> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const candidateDate = attempt === 0 ? createdAt : new Date(createdAt.getTime() + attempt);
+    const paths = asmCasePaths(root, asmCaseId(candidateDate, asmHash));
+    if (!fs.existsSync(paths.caseDir)) {
+      return paths;
+    }
+  }
+  return asmCasePaths(root, asmCaseId(new Date(), `${asmHash}${Math.random().toString(16).slice(2)}`));
+}
+
+function caseWorkspaceRoot(resource?: vscode.Uri): string {
+  const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  if (folder) {
+    return folder.uri.fsPath;
+  }
+  if (resource?.scheme === 'file') {
+    return path.dirname(resource.fsPath);
+  }
+  return process.cwd();
+}
+
+async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<{
+  uri: vscode.Uri;
+  snapshot: NonNullable<AsmCaseManifest['stdin']>;
+}> {
+  const bytes = await vscode.workspace.fs.readFile(stdin);
+  await ensureDirectory(vscode.Uri.file(stdinDir));
+  const uri = vscode.Uri.file(path.join(stdinDir, path.basename(stdin.fsPath)));
+  await vscode.workspace.fs.writeFile(uri, bytes);
+  return {
+    uri,
+    snapshot: {
+      originalPath: stdin.fsPath,
+      path: uri.fsPath,
+      sha256: sha256Bytes(bytes),
+      bytes: bytes.byteLength
+    }
+  };
+}
+
+function readCaseSidecar(asm: vscode.Uri): { path?: string; metadata?: AsmCaseP7Metadata } {
+  const dir = path.dirname(asm.fsPath);
+  const stem = path.basename(asm.fsPath, path.extname(asm.fsPath));
+  const sidecar = path.join(dir, `${stem}.co-meta.json`);
+  try {
+    const parsed = JSON.parse(fs.readFileSync(sidecar, 'utf8')) as Record<string, unknown>;
+    return {
+      path: sidecar,
+      metadata: {
+        interruptSchedule: Array.isArray(parsed.interruptSchedule)
+          ? parsed.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+          : undefined,
+        probe: parsed.probe
+      }
+    };
+  } catch {
+    return {};
+  }
+}
+
+function mergeP7Metadata(
+  explicit: AsmCaseP7Metadata | undefined,
+  sidecar: AsmCaseP7Metadata | undefined,
+  sidecarPath: string | undefined
+): AsmCaseP7Metadata | undefined {
+  const merged: AsmCaseP7Metadata = {
+    ...(sidecar ?? {}),
+    ...(explicit ?? {})
+  };
+  if (sidecarPath) {
+    merged.sidecar = sidecarPath;
+  }
+  if (!merged.interruptSchedule?.length) {
+    delete merged.interruptSchedule;
+  }
+  if (!merged.probe) {
+    delete merged.probe;
+  }
+  if (!merged.sidecar) {
+    delete merged.sidecar;
+  }
+  return merged.interruptSchedule || merged.probe || merged.sidecar ? merged : undefined;
+}
+
+function artifactDirectory(asmCase: AsmCase, kind: 'verilog' | 'logisim' | 'mars'): vscode.Uri {
+  return vscode.Uri.file(path.join(asmCase.dir.fsPath, kind));
+}
+
+async function writeAsmCaseManifest(asmCase: AsmCase): Promise<void> {
+  await writeTextFile(asmCase.manifestUri, JSON.stringify(asmCase.manifest, null, 2) + '\n');
+}
+
+function normalizePathKey(file: string): string {
+  const normalized = path.normalize(file);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}

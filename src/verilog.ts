@@ -19,10 +19,32 @@ import {
   VerilogModule
 } from './language/verilog/service';
 import { ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
-import { revealOutputChannel, runTool } from './process';
-import { findFuse } from './toolchain';
+import { launchTool, revealOutputChannel, runTool } from './process';
+import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
 import { P7ProbeMetadata } from './courseTesting/builtinAsmGenerator';
+import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
+import {
+  AsmCase,
+  copyAsmCaseArtifact,
+  createAsmCaseFromAsm,
+  prepareAsmCaseMachineCode,
+  resolveAsmCaseInput,
+  updateAsmCaseArtifacts,
+  writeAsmCaseArtifact
+} from './asmCaseStore';
+import {
+  buildIseProjectText,
+  buildIsimRunTcl,
+  buildIsimVcdTcl,
+  buildIsimWaveTcl,
+  generatedRuntimeTestbenchText,
+  isGeneratedRuntimeTestbench,
+  p7AutoRuntimeTestbenchName,
+  runtimeTestbenchFileName,
+  verilogProjectExcludeGlob
+} from './verilogSimulationFiles';
+import { sha256Bytes } from './asmCaseStoreCore';
 
 export interface IseProjectFiles {
   prj: vscode.Uri;
@@ -35,10 +57,15 @@ export interface IseProjectOptions {
   showMessages?: boolean;
   revealOutput?: boolean;
   testbenchName?: string;
+  extraVerilogFiles?: vscode.Uri[];
+  tclFileName?: string;
+  tclText?: string;
 }
 
 export interface IsimRunOptions extends IseProjectOptions {
   machineCodeSource?: vscode.Uri;
+  asmCase?: AsmCase;
+  moduleRegistry?: WorkspaceModuleRegistry;
   simOutputFileName?: string;
   /** P7: external-interrupt target PCs; when set, a dedicated interrupt testbench is generated. */
   interruptSchedule?: number[];
@@ -58,12 +85,42 @@ interface VerilogModuleDefinition {
   uri: vscode.Uri;
 }
 
-export function registerVerilog(context: vscode.ExtensionContext, services: AppServices): void {
+type TestbenchResolutionKind = 'active' | 'user' | 'generated' | 'p7-auto';
+
+interface TestbenchResolution {
+  moduleName: string;
+  kind: TestbenchResolutionKind;
+  sourceUri?: vscode.Uri;
+  generatedUri?: vscode.Uri;
+  sha256?: string;
+}
+
+interface CompiledIsimOutput {
+  generated: IseProjectFiles;
+  fuseResult: RunResult;
+  testbenchName: string;
+  exePath: string;
+  asmCase?: AsmCase;
+  testbench: TestbenchResolution;
+}
+
+interface CompileIsimOptions extends IsimRunOptions {
+  debug?: boolean;
+  tclFileName?: string;
+  tclText?: string;
+}
+
+let sharedModuleRegistry: WorkspaceModuleRegistry | undefined;
+
+export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: WorkspaceModuleRegistry): void {
+  sharedModuleRegistry = moduleRegistry;
   context.subscriptions.push(
     vscode.commands.registerCommand('co.verilog.disableLintRule', (rule?: string) => disableLintRule(rule)),
-    vscode.commands.registerCommand('co.verilog.generateTestbench', () => generateTestbench()),
+    vscode.commands.registerCommand('co.verilog.generateTestbench', () => generateTestbench(moduleRegistry)),
     vscode.commands.registerCommand('co.verilog.generateIseProject', () => generateIseProject(services)),
-    vscode.commands.registerCommand('co.verilog.runIsim', () => runIsim(services))
+    vscode.commands.registerCommand('co.verilog.runIsim', () => runIsim(services, { moduleRegistry })),
+    vscode.commands.registerCommand('co.verilog.openIsimWaveform', () => openIsimWaveform(services, moduleRegistry)),
+    vscode.commands.registerCommand('co.verilog.exportVcd', () => exportVcdWaveform(services, moduleRegistry))
   );
 }
 
@@ -80,7 +137,7 @@ async function disableLintRule(rule?: string): Promise<void> {
   vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalized.toUpperCase()}`);
 }
 
-async function generateTestbench(): Promise<void> {
+async function generateTestbench(moduleRegistry?: WorkspaceModuleRegistry): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.languageId !== 'verilog') {
     vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
@@ -98,8 +155,17 @@ async function generateTestbench(): Promise<void> {
   }
 
   const configuredTb = getTestbench(editor.document.uri);
-  const tbName = target.name === getTopModule(editor.document.uri) ? configuredTb : `${target.name}_tb`;
-  const tbUri = vscode.Uri.file(path.join(path.dirname(editor.document.uri.fsPath), `${tbName}.v`));
+  const isConfiguredTop = target.name === getTopModule(editor.document.uri);
+  const tbName = isConfiguredTop ? configuredTb : `${target.name}_tb`;
+  const existing = await findExistingTestbenchResolution(editor.document.uri, tbName, moduleRegistry);
+  if (existing.conflict) {
+    return;
+  }
+  if (existing.resolution?.sourceUri) {
+    await vscode.window.showTextDocument(existing.resolution.sourceUri);
+    return;
+  }
+  const tbUri = await defaultUserTestbenchUri(editor.document.uri, tbName, isConfiguredTop);
   if (fs.existsSync(tbUri.fsPath)) {
     const choice = await vscode.window.showWarningMessage(`${path.basename(tbUri.fsPath)} 已存在`, '打开', '覆盖');
     if (choice === '打开') {
@@ -114,7 +180,18 @@ async function generateTestbench(): Promise<void> {
     finishDelay: verilogDelayFromSimTime(getSimTime(editor.document.uri)),
     profile: getProfile(editor.document.uri)
   }));
+  moduleRegistry?.updateUri(tbUri);
   await vscode.window.showTextDocument(tbUri);
+}
+
+async function defaultUserTestbenchUri(resource: vscode.Uri, tbName: string, configuredTop: boolean): Promise<vscode.Uri> {
+  const folder = workspaceFolderFor(resource);
+  if (configuredTop && folder) {
+    const testDir = vscode.Uri.file(path.join(folder.uri.fsPath, 'test'));
+    await ensureDirectory(testDir);
+    return vscode.Uri.file(path.join(testDir.fsPath, `${tbName}.v`));
+  }
+  return vscode.Uri.file(path.join(path.dirname(resource.fsPath), `${tbName}.v`));
 }
 
 export async function generateIseProject(
@@ -131,8 +208,9 @@ export async function generateIseProject(
   const top = getTestbench(activeUri);
   const testbenchName = options.testbenchName ?? top;
   const simTime = getSimTime(activeUri);
-  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), '**/{node_modules,out,.git}/**', 5000);
-  if (!files.length) {
+  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), verilogProjectExcludeGlob, 5000);
+  const projectFiles = dedupeUris([...files, ...(options.extraVerilogFiles ?? [])]);
+  if (!projectFiles.length) {
     vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
     return undefined;
   }
@@ -140,12 +218,9 @@ export async function generateIseProject(
   const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, '.co', 'isim'));
   await ensureDirectory(outDir);
   const prj = vscode.Uri.file(path.join(outDir.fsPath, `${testbenchName}.prj`));
-  const tcl = vscode.Uri.file(path.join(outDir.fsPath, `${testbenchName}.tcl`));
-  const prjText = files
-    .map((uri) => `Verilog work "${uri.fsPath.replace(/\\/g, '/')}"`)
-    .sort()
-    .join('\n') + '\n';
-  const tclText = `run ${simTime};\nexit\n`;
+  const tcl = vscode.Uri.file(path.join(outDir.fsPath, options.tclFileName ?? `${testbenchName}.tcl`));
+  const prjText = buildIseProjectText(projectFiles.map((uri) => uri.fsPath));
+  const tclText = options.tclText ?? buildIsimRunTcl(simTime);
   await writeTextFile(prj, prjText);
   await writeTextFile(tcl, tclText);
   services.output.appendLine(`已生成 ${prj.fsPath}`);
@@ -162,46 +237,197 @@ export async function runIsim(
 ): Promise<IsimRunOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = options.showMessages !== false;
+  const compiled = await compileIsim(services, options);
+  if (!compiled) {
+    return;
+  }
+  const isePath = getIsePath(activeUri);
+  const iseEnv = buildIseEnvironment(isePath);
+  const simResult = await runTool(compiled.exePath, ['-nolog', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
+    cwd: compiled.generated.outDir.fsPath,
+    output: services.output,
+    resource: activeUri,
+    env: iseEnv
+  });
+  let simOut: vscode.Uri | undefined;
+  if (simResult.ok) {
+    const simOutDir = await simulationOutputDirectory(activeUri, compiled.generated.outDir);
+    simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(compiled.testbenchName, options.simOutputFileName)));
+    await writeTextFile(simOut, simResult.stdout);
+    if (compiled.asmCase) {
+      await writeAsmCaseArtifact(compiled.asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
+    }
+    if (showMessages) {
+      vscode.window.showInformationMessage('ISim 运行完成，输出见.co/out');
+    }
+  } else {
+    if (showMessages) {
+      vscode.window.showErrorMessage('ISim 运行失败。请查看插件输出面板');
+    }
+  }
+  return { generated: compiled.generated, fuseResult: compiled.fuseResult, simResult, simOut };
+}
+
+async function openIsimWaveform(services: AppServices, moduleRegistry?: WorkspaceModuleRegistry): Promise<void> {
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  const simTime = getSimTime(activeUri);
+  const compiled = await compileIsim(services, {
+    resource: activeUri,
+    moduleRegistry,
+    debug: true,
+    tclFileName: 'co_wave.tcl',
+    tclText: buildIsimWaveTcl(simTime)
+  });
+  if (!compiled) {
+    return;
+  }
+  const isePath = getIsePath(activeUri);
+  const iseEnv = buildIseEnvironment(isePath);
+  const result = await launchTool(compiled.exePath, ['-gui', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
+    cwd: compiled.generated.outDir.fsPath,
+    output: services.output,
+    resource: activeUri,
+    env: iseEnv
+  });
+  if (result.ok) {
+    if (compiled.asmCase) {
+      await updateAsmCaseArtifacts(compiled.asmCase, 'verilog', {
+        waveTcl: compiled.generated.tcl.fsPath,
+        isimExecutable: compiled.exePath
+      });
+    }
+    vscode.window.showInformationMessage('已启动 ISim 波形窗口');
+  } else {
+    vscode.window.showErrorMessage('启动 ISim 波形窗口失败。请查看插件输出面板');
+  }
+}
+
+async function exportVcdWaveform(services: AppServices, moduleRegistry?: WorkspaceModuleRegistry): Promise<void> {
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  const simTime = getSimTime(activeUri);
+  const simOutDir = await simulationOutputDirectory(activeUri, vscode.Uri.file(path.join(workspaceFolderFor(activeUri)?.uri.fsPath ?? process.cwd(), '.co', 'isim')));
+  const preliminaryTestbenchName = getTestbench(activeUri);
+  const preliminaryVcd = vscode.Uri.file(path.join(simOutDir.fsPath, `${preliminaryTestbenchName}.vcd`));
+  const compiled = await compileIsim(services, {
+    resource: activeUri,
+    moduleRegistry,
+    debug: true,
+    tclFileName: 'co_vcd.tcl',
+    tclText: buildIsimVcdTcl(preliminaryVcd.fsPath, preliminaryTestbenchName, simTime)
+  });
+  if (!compiled) {
+    return;
+  }
+
+  const vcd = vscode.Uri.file(path.join(simOutDir.fsPath, `${compiled.testbenchName}.vcd`));
+  if (!samePath(vcd.fsPath, preliminaryVcd.fsPath)) {
+    await writeTextFile(compiled.generated.tcl, buildIsimVcdTcl(vcd.fsPath, compiled.testbenchName, simTime));
+  }
+  const isePath = getIsePath(activeUri);
+  const iseEnv = buildIseEnvironment(isePath);
+  const result = await runTool(compiled.exePath, ['-nolog', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
+    cwd: compiled.generated.outDir.fsPath,
+    output: services.output,
+    resource: activeUri,
+    env: iseEnv
+  });
+  if (result.ok && fs.existsSync(vcd.fsPath)) {
+    if (compiled.asmCase) {
+      await copyAsmCaseArtifact(compiled.asmCase, 'verilog', vcd, path.basename(vcd.fsPath), 'vcd');
+    }
+    await vscode.commands.executeCommand('revealFileInOS', vcd);
+    vscode.window.showInformationMessage(`已导出 VCD 波形：${path.basename(vcd.fsPath)}`);
+  } else {
+    vscode.window.showErrorMessage('导出 VCD 波形失败。请查看插件输出面板');
+  }
+}
+
+async function compileIsim(
+  services: AppServices,
+  options: CompileIsimOptions = {}
+): Promise<CompiledIsimOutput | undefined> {
+  const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
+  const showMessages = options.showMessages !== false;
   await vscode.workspace.saveAll(false);
   const isePath = getIsePath(activeUri);
   if (!isePath) {
     vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath');
-    return;
+    return undefined;
   }
   const fuse = findFuse(isePath);
+  const iseEnv = buildIseEnvironment(isePath);
   if (!fs.existsSync(fuse)) {
     vscode.window.showErrorMessage(`未找到 fuse 可执行文件：${fuse}`);
-    return;
+    return undefined;
   }
-  const testbenchName = options.testbenchName
-    ?? (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, options.p7Probe, showMessages))
-    ?? await ensureRunnableTestbench(services, activeUri, showMessages);
-  const generated = await generateIseProject(services, { resource: activeUri, showMessages, testbenchName });
+
+  const moduleRegistry = options.moduleRegistry ?? sharedModuleRegistry;
+  const resolved = options.testbenchName
+    ? await resolveNamedTestbench(options.testbenchName, activeUri, moduleRegistry)
+    : (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, options.p7Probe, showMessages))
+    ?? await ensureRunnableTestbench(services, activeUri, showMessages, moduleRegistry);
+  if (!resolved?.moduleName) {
+    return undefined;
+  }
+
+  const generated = await generateIseProject(services, {
+    resource: activeUri,
+    showMessages,
+    testbenchName: resolved.moduleName,
+    extraVerilogFiles: resolved.generatedUri ? [resolved.generatedUri] : undefined,
+    tclFileName: options.tclFileName,
+    tclText: options.tclText
+  });
   if (!generated) {
-    return;
+    return undefined;
   }
-  const machineCodeSource = options.machineCodeSource ?? await resolveMachineCodeSource(activeUri, generated.outDir);
+
+  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, showMessages);
+  if (requiresAsmCase(activeUri) && !asmCase) {
+    return undefined;
+  }
+  const machineCodeExpected = getProfile(activeUri) !== 'P1';
+  const machineCodeSource = machineCodeExpected
+    ? asmCase?.machineCode ?? options.machineCodeSource ?? await resolveMachineCodeSource(activeUri, generated.outDir)
+    : undefined;
   if (machineCodeSource) {
     await copyMachineCodeToSimDirectory(machineCodeSource, generated.outDir, activeUri);
     services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
-  } else {
+    if (asmCase) {
+      await updateAsmCaseArtifacts(asmCase, 'verilog', {
+        machineCodeInSim: path.join(generated.outDir.fsPath, getMachineCode(activeUri)),
+        prj: generated.prj.fsPath,
+        tcl: generated.tcl.fsPath
+      });
+    }
+  } else if (machineCodeExpected) {
     services.output.appendLine(`未找到可复制到 ${generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
     if (showMessages) {
       vscode.window.showWarningMessage(`未找到 ${getMachineCode(activeUri)}。如果设计中调用了 $readmemh("${getMachineCode(activeUri)}")，ISim 可能会失败`);
     }
   }
-  const top = testbenchName ?? getTestbench(activeUri);
-  const exeName = process.platform === 'win32' ? `${top}.exe` : top;
+
+  if (asmCase) {
+    await recordTestbenchForAsmCase(asmCase, resolved);
+  }
+
+  const exeName = process.platform === 'win32' ? `${resolved.moduleName}.exe` : resolved.moduleName;
   if (options.revealOutput !== false) {
     revealOutputChannel(services.output, activeUri);
   }
-  const fuseResult = await runTool(fuse, ['-nodebug', '-prj', path.basename(generated.prj.fsPath), '-o', exeName, top], {
+  const fuseArgs = [
+    ...(options.debug ? [] : ['-nodebug']),
+    '-prj',
+    path.basename(generated.prj.fsPath),
+    '-o',
+    exeName,
+    resolved.moduleName
+  ];
+  const fuseResult = await runTool(fuse, fuseArgs, {
     cwd: generated.outDir.fsPath,
     output: services.output,
     resource: activeUri,
-    env: {
-      XILINX: isePath
-    }
+    env: iseEnv
   });
   if (!fuseResult.ok) {
     if (showMessages) {
@@ -209,29 +435,49 @@ export async function runIsim(
     }
     return undefined;
   }
-  const exePath = path.join(generated.outDir.fsPath, exeName);
-  const simResult = await runTool(exePath, ['-nolog', '-tclbatch', path.basename(generated.tcl.fsPath)], {
-    cwd: generated.outDir.fsPath,
-    output: services.output,
-    resource: activeUri,
-    env: {
-      XILINX: isePath
-    }
-  });
-  let simOut: vscode.Uri | undefined;
-  if (simResult.ok) {
-    const simOutDir = await simulationOutputDirectory(activeUri, generated.outDir);
-    simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(top, options.simOutputFileName)));
-    await writeTextFile(simOut, simResult.stdout);
-    if (showMessages) {
-      vscode.window.showInformationMessage('ISim 运行完成');
-    }
-  } else {
-    if (showMessages) {
-      vscode.window.showErrorMessage('ISim 运行失败。请查看插件输出面板');
-    }
+
+  return {
+    generated,
+    fuseResult,
+    testbenchName: resolved.moduleName,
+    exePath: path.join(generated.outDir.fsPath, exeName),
+    asmCase,
+    testbench: resolved
+  };
+}
+
+async function ensureSimulationAsmCase(
+  services: AppServices,
+  resource: vscode.Uri | undefined,
+  showMessages: boolean
+): Promise<AsmCase | undefined> {
+  if (!requiresAsmCase(resource)) {
+    return undefined;
   }
-  return { generated, fuseResult, simResult, simOut };
+  const asm = await resolveAsmCaseInput('选择用于 Verilog 仿真的 MIPS ASM 文件');
+  if (!asm) {
+    if (showMessages) {
+      vscode.window.showWarningMessage('已取消：P4-P7 Verilog 仿真需要选择 ASM 以生成可追溯机器码');
+    }
+    return undefined;
+  }
+  const asmCase = await createAsmCaseFromAsm(asm, {
+    resource,
+    source: { kind: 'selected' }
+  });
+  const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+  if (!dump?.result.ok || !dump.outputFile) {
+    if (showMessages) {
+      vscode.window.showErrorMessage('MARS 导出机器码失败，无法继续 Verilog 仿真');
+    }
+    return undefined;
+  }
+  services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+  return asmCase;
+}
+
+function requiresAsmCase(resource: vscode.Uri | undefined): boolean {
+  return new Set(['P4', 'P5', 'P6', 'P7']).has(getProfile(resource));
 }
 
 function isimOutputFileName(top: string, configured?: string): string {
@@ -247,8 +493,6 @@ async function simulationOutputDirectory(resource: vscode.Uri | undefined, isimD
   return outDir;
 }
 
-const p7AutoInterruptTestbenchName = 'co_p7_auto_tb';
-
 /**
  * For P7 automated trace runs that inject an external interrupt, generate a dedicated testbench
  * (the official P7 interrupt testbench with the interrupt block active and target_pc baked in)
@@ -261,7 +505,7 @@ async function ensureP7InterruptTestbench(
   interruptSchedule: number[] | undefined,
   p7Probe: P7ProbeMetadata | undefined,
   showMessages: boolean
-): Promise<string | undefined> {
+): Promise<TestbenchResolution | undefined> {
   if ((!interruptSchedule || !interruptSchedule.length) && !p7Probe) {
     return undefined;
   }
@@ -275,13 +519,16 @@ async function ensureP7InterruptTestbench(
   const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
   const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'isim'));
   await ensureDirectory(outDir);
-  const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoInterruptTestbenchName}.v`));
-  await writeTextFile(tbUri, buildTestbench(topDefinition.module, p7AutoInterruptTestbenchName, {
+  const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
+  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
     finishDelay: verilogDelayFromSimTime(getSimTime(resource)),
     profile: 'P7',
     interruptSchedule,
     p7Probe
   }));
+  if (!written) {
+    return undefined;
+  }
   if (p7Probe) {
     services.output.appendLine(`已生成 P7 probe testbench ${tbUri.fsPath}（scenarios=${p7Probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(',')}）`);
   } else {
@@ -290,72 +537,277 @@ async function ensureP7InterruptTestbench(
   if (showMessages) {
     vscode.window.showInformationMessage('已生成 P7 中断 testbench');
   }
-  return p7AutoInterruptTestbenchName;
+  return { moduleName: p7AutoRuntimeTestbenchName, kind: 'p7-auto', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
 }
 
 async function ensureRunnableTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
-  showMessages: boolean
-): Promise<string | undefined> {
+  showMessages: boolean,
+  moduleRegistry?: WorkspaceModuleRegistry
+): Promise<TestbenchResolution | undefined> {
   const configuredTestbench = getTestbench(resource);
   const activeTestbench = await activeTestbenchModuleName(resource, configuredTestbench);
   if (activeTestbench) {
-    return activeTestbench;
+    return {
+      moduleName: activeTestbench,
+      kind: 'active',
+      sourceUri: resource,
+      sha256: resource ? await fileSha256(resource) : undefined
+    };
   }
 
   const topName = getTopModule(resource);
-  const topDefinition = await findTopModuleDefinition(resource, topName);
+  const topDefinition = await findTopModuleDefinition(resource, topName, moduleRegistry);
   if (!topDefinition) {
     if (getProfile(resource) === 'P1') {
-      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages);
+      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages, moduleRegistry);
       if (activeTestbench) {
         return activeTestbench;
       }
     }
     services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}`);
-    return configuredTestbench;
+    return await resolveNamedTestbench(configuredTestbench, resource, moduleRegistry);
   }
 
-  if (await findExistingTestbenchFile(topDefinition.uri, configuredTestbench)) {
-    return configuredTestbench;
+  const existing = await findExistingTestbenchResolution(topDefinition.uri, configuredTestbench, moduleRegistry);
+  if (existing.conflict) {
+    return undefined;
+  }
+  if (existing.resolution) {
+    return existing.resolution;
   }
 
-  const tbUri = vscode.Uri.file(path.join(path.dirname(topDefinition.uri.fsPath), `${configuredTestbench}.v`));
-  await writeTextFile(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
+  const tbUri = await runtimeTestbenchUri(topDefinition.uri, configuredTestbench);
+  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
     finishDelay: verilogDelayFromSimTime(getSimTime(topDefinition.uri)),
     profile: getProfile(topDefinition.uri)
   }));
+  if (!written) {
+    return undefined;
+  }
   services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
   if (showMessages) {
     vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
   }
-  return configuredTestbench;
+  return { moduleName: configuredTestbench, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
 }
 
 async function ensureActiveModuleTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
-  showMessages: boolean
-): Promise<string | undefined> {
+  showMessages: boolean,
+  moduleRegistry?: WorkspaceModuleRegistry
+): Promise<TestbenchResolution | undefined> {
   const definition = await activeModuleDefinition(resource);
   if (!definition) {
     return undefined;
   }
   const tbName = `${definition.module.name}_tb`;
-  if (await findExistingTestbenchFile(definition.uri, tbName)) {
-    return tbName;
+  const existing = await findExistingTestbenchResolution(definition.uri, tbName, moduleRegistry);
+  if (existing.conflict) {
+    return undefined;
   }
-  const tbUri = vscode.Uri.file(path.join(path.dirname(definition.uri.fsPath), `${tbName}.v`));
-  await writeTextFile(tbUri, buildTestbench(definition.module, tbName, {
+  if (existing.resolution) {
+    return existing.resolution;
+  }
+  const tbUri = await runtimeTestbenchUri(definition.uri, tbName);
+  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(definition.module, tbName, {
     finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)),
     profile: getProfile(definition.uri)
   }));
+  if (!written) {
+    return undefined;
+  }
   services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
   if (showMessages) {
     vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
   }
-  return tbName;
+  return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
+}
+
+async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string): Promise<vscode.Uri> {
+  const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
+  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'isim'));
+  await ensureDirectory(outDir);
+  return vscode.Uri.file(path.join(outDir.fsPath, runtimeTestbenchFileName(testbenchName)));
+}
+
+async function resolveNamedTestbench(
+  testbenchName: string,
+  resource: vscode.Uri | undefined,
+  moduleRegistry?: WorkspaceModuleRegistry
+): Promise<TestbenchResolution | undefined> {
+  const existing = resource
+    ? await findExistingTestbenchResolution(resource, testbenchName, moduleRegistry)
+    : { resolution: undefined, conflict: false };
+  if (existing.conflict) {
+    return undefined;
+  }
+  return existing.resolution ?? { moduleName: testbenchName, kind: 'user' };
+}
+
+interface ExistingTestbenchSearchResult {
+  resolution?: TestbenchResolution;
+  conflict: boolean;
+}
+
+async function findExistingTestbenchResolution(
+  resource: vscode.Uri,
+  tbName: string,
+  moduleRegistry?: WorkspaceModuleRegistry
+): Promise<ExistingTestbenchSearchResult> {
+  const candidates = await testbenchCandidates(resource, tbName, moduleRegistry);
+  if (!candidates.length) {
+    if (moduleRegistry?.scanning) {
+      vscode.window.showWarningMessage('项目 Verilog 模块仍在解析，未找到跨文件 testbench 时可稍后重试');
+    }
+    return { conflict: false };
+  }
+  const ranked = candidates
+    .map((candidate) => ({
+      ...candidate,
+      rank: testbenchCandidateRank(candidate.uri, resource, tbName)
+    }))
+    .sort((left, right) => left.rank - right.rank || left.uri.fsPath.localeCompare(right.uri.fsPath));
+  const best = ranked[0];
+  const sameRank = ranked.filter((candidate) => candidate.rank === best.rank);
+  if (sameRank.length > 1) {
+    const choices = sameRank.map((candidate) => vscode.workspace.asRelativePath(candidate.uri)).join(', ');
+    vscode.window.showErrorMessage(`发现多个同优先级 testbench 模块 ${tbName}: ${choices}`);
+    return { conflict: true };
+  }
+  return {
+    conflict: false,
+    resolution: {
+      moduleName: best.module.name,
+      kind: 'user',
+      sourceUri: best.uri,
+      sha256: await fileSha256(best.uri)
+    }
+  };
+}
+
+async function testbenchCandidates(
+  resource: vscode.Uri,
+  tbName: string,
+  moduleRegistry?: WorkspaceModuleRegistry
+): Promise<Array<{ module: VerilogModule; uri: vscode.Uri }>> {
+  const seen = new Set<string>();
+  const candidates: Array<{ module: VerilogModule; uri: vscode.Uri }> = [];
+  const add = (module: VerilogModule): void => {
+    if (module.name !== tbName) {
+      return;
+    }
+    const uri = uriForVerilogModule(module);
+    if (!uri || isCoPath(uri.fsPath)) {
+      return;
+    }
+    if (!safeIsFile(uri.fsPath)) {
+      moduleRegistry?.removeUri(uri);
+      return;
+    }
+    const key = `${module.name}@${normalizePathKey(uri.fsPath)}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    candidates.push({ module, uri });
+  };
+
+  const active = await activeModuleDefinition(resource);
+  if (active) {
+    add(active.module);
+  }
+  for (const module of moduleRegistry?.getModules(tbName) ?? []) {
+    add(module);
+  }
+  if (!moduleRegistry) {
+    for (const module of await scanWorkspaceModulesByName(resource, tbName)) {
+      add(module);
+    }
+  }
+  return candidates;
+}
+
+function testbenchCandidateRank(uri: vscode.Uri, resource: vscode.Uri, tbName: string): number {
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  if (activeUri && samePath(activeUri.fsPath, uri.fsPath)) {
+    return 0;
+  }
+  const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(uri);
+  const relativeParts = folder ? path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep).map((part) => part.toLowerCase()) : [];
+  if (relativeParts.includes('test') || relativeParts.includes('tests')) {
+    return 10;
+  }
+  if (path.basename(uri.fsPath).toLowerCase() === `${tbName.toLowerCase()}.v`) {
+    return 20;
+  }
+  return 50 + relativeParts.length;
+}
+
+async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: string): Promise<VerilogModule[]> {
+  const folder = workspaceFolderFor(resource);
+  if (!folder) {
+    return [];
+  }
+  const files = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(folder, '**/*.v'),
+    '**/{node_modules,out,.git,.co}/**',
+    5000
+  );
+  const found: VerilogModule[] = [];
+  for (const uri of files) {
+    const document = await verilogDocumentForUri(uri);
+    if (!document) {
+      continue;
+    }
+    const parsed = parseVerilog(document, coSettingsForUri(uri), false);
+    found.push(...parsed.modules.filter((module) => module.name === moduleName));
+  }
+  return found;
+}
+
+async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: TestbenchResolution): Promise<void> {
+  const source = resolution.sourceUri ?? resolution.generatedUri;
+  const artifacts: Record<string, string> = {
+    testbenchModule: resolution.moduleName,
+    testbenchKind: resolution.kind
+  };
+  if (source) {
+    const snapshot = await copyAsmCaseArtifact(asmCase, 'verilog', source, 'testbench.v', 'testbenchSnapshot');
+    const sha256 = await fileSha256(source);
+    artifacts.testbenchSource = source.fsPath;
+    artifacts.testbenchSnapshot = snapshot.fsPath;
+    if (sha256) {
+      artifacts.testbenchSha256 = sha256;
+    }
+  } else if (resolution.sha256) {
+    artifacts.testbenchSha256 = resolution.sha256;
+  }
+  await updateAsmCaseArtifacts(asmCase, 'verilog', artifacts);
+}
+
+async function writeGeneratedRuntimeTestbench(uri: vscode.Uri, testbenchText: string): Promise<boolean> {
+  if (fs.existsSync(uri.fsPath)) {
+    const existing = await readTextFileSafe(uri);
+    if (!isGeneratedRuntimeTestbench(existing)) {
+      vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
+      return false;
+    }
+  }
+  await writeTextFile(uri, generatedRuntimeTestbenchText(testbenchText));
+  return true;
+}
+
+async function readTextFileSafe(uri: vscode.Uri): Promise<string> {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    return Buffer.from(bytes).toString('utf8');
+  } catch {
+    return '';
+  }
 }
 
 async function activeModuleDefinition(resource: vscode.Uri | undefined): Promise<VerilogModuleDefinition | undefined> {
@@ -415,13 +867,24 @@ function isTestbenchModule(module: { name: string; ports: unknown[] }, configure
   return module.name === configuredTestbench || lower.includes('tb') || (module.ports.length === 0 && lower.endsWith('test'));
 }
 
-async function findTopModuleDefinition(resource: vscode.Uri | undefined, topName: string): Promise<VerilogModuleDefinition | undefined> {
+async function findTopModuleDefinition(
+  resource: vscode.Uri | undefined,
+  topName: string,
+  moduleRegistry?: WorkspaceModuleRegistry
+): Promise<VerilogModuleDefinition | undefined> {
   if (!topName.trim()) {
     return undefined;
   }
   const active = await topModuleDefinitionFromUri(resource, topName);
   if (active) {
     return active;
+  }
+
+  for (const module of moduleRegistry?.getModules(topName) ?? []) {
+    const uri = uriForVerilogModule(module);
+    if (uri && resource?.toString() !== uri.toString()) {
+      return { module, uri };
+    }
   }
 
   const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
@@ -456,19 +919,6 @@ async function topModuleDefinitionFromUri(uri: vscode.Uri | undefined, topName: 
   const parsed = parseVerilog(document, coSettingsForUri(uri), false);
   const module = parsed.modules.find((candidate) => candidate.name === topName);
   return module ? { module, uri } : undefined;
-}
-
-async function findExistingTestbenchFile(resource: vscode.Uri, tbName: string): Promise<vscode.Uri | undefined> {
-  const folder = workspaceFolderFor(resource);
-  if (!folder) {
-    return undefined;
-  }
-  const matches = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, `**/${tbName}.v`),
-    '**/{node_modules,out,.git,.co}/**',
-    20
-  );
-  return matches[0];
 }
 
 async function resolveMachineCodeSource(resource: vscode.Uri | undefined, outDir: vscode.Uri): Promise<vscode.Uri | undefined> {
@@ -537,11 +987,45 @@ function dedupePaths(files: string[]): string[] {
   return result;
 }
 
+function dedupeUris(files: vscode.Uri[]): vscode.Uri[] {
+  const seen = new Set<string>();
+  const result: vscode.Uri[] = [];
+  for (const uri of files) {
+    const key = normalizePathKey(uri.fsPath);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(uri);
+  }
+  return result;
+}
+
 function safeIsFile(file: string): boolean {
   try {
     return fs.statSync(file).isFile();
   } catch {
     return false;
+  }
+}
+
+function uriForVerilogModule(module: VerilogModule): vscode.Uri | undefined {
+  try {
+    return vscode.Uri.parse(module.uri);
+  } catch {
+    return undefined;
+  }
+}
+
+async function fileSha256(uri: vscode.Uri | undefined): Promise<string | undefined> {
+  if (!uri || uri.scheme !== 'file') {
+    return undefined;
+  }
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    return sha256Bytes(bytes);
+  } catch {
+    return undefined;
   }
 }
 
@@ -566,6 +1050,10 @@ function samePath(left: string, right: string): boolean {
 function normalizePathKey(file: string): string {
   const normalized = path.normalize(file);
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isCoPath(file: string): boolean {
+  return file.split(/[\\/]+/).some((part) => part.toLowerCase() === '.co');
 }
 
 function verilogDelayFromSimTime(simTime: string): string {

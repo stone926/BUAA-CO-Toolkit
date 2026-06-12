@@ -13,6 +13,7 @@ interface PackageJson {
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
+    menus?: Record<string, Array<{ command: string; when?: string }>>;
     semanticTokenScopes?: Array<{ scopes?: Record<string, string[]> }>;
     semanticTokenTypes?: Array<{ id: string; superType?: string }>;
     views?: Record<string, Array<{ id: string }>>;
@@ -42,6 +43,36 @@ describe('package manifest', () => {
     const viewIds = Object.values(pkg.contributes?.views ?? {}).flat().map((view) => view.id);
     expect(viewIds).toContain('coSidebar');
     expect(activationEvents.has('onView:coSidebar')).toBe(true);
+  });
+
+  it('keeps every contributed command visible from the command palette', () => {
+    const pkg = readPackage();
+    const commandPalette = new Set((pkg.contributes?.menus?.commandPalette ?? []).map((item) => item.command));
+    for (const command of pkg.contributes?.commands ?? []) {
+      expect(commandPalette.has(command.command), command.command).toBe(true);
+    }
+  });
+
+  it('contributes Verilog waveform commands', () => {
+    const pkg = readPackage();
+    const commands = new Set((pkg.contributes?.commands ?? []).map((command) => command.command));
+    const contextCommands = new Set((pkg.contributes?.menus?.['editor/context'] ?? []).map((item) => item.command));
+
+    expect(commands.has('co.verilog.openIsimWaveform')).toBe(true);
+    expect(commands.has('co.verilog.exportVcd')).toBe(true);
+    expect(contextCommands.has('co.verilog.openIsimWaveform')).toBe(true);
+    expect(contextCommands.has('co.verilog.exportVcd')).toBe(true);
+  });
+
+  it('contributes the ASM case index command', () => {
+    const pkg = readPackage();
+    const commands = new Set((pkg.contributes?.commands ?? []).map((command) => command.command));
+    const commandPalette = new Set((pkg.contributes?.menus?.commandPalette ?? []).map((item) => item.command));
+    const activationEvents = new Set(pkg.activationEvents ?? []);
+
+    expect(commands.has('co.test.openAsmCaseIndex')).toBe(true);
+    expect(commandPalette.has('co.test.openAsmCaseIndex')).toBe(true);
+    expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(true);
   });
 
   it('does not provide XML editor support for Logisim .circ files', () => {

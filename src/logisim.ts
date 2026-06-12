@@ -6,43 +6,61 @@ import { dirname, readTextFile, writeTextFile } from './fsUtil';
 import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
 import { launchTool } from './process';
 import { AppServices } from './types';
-import { pickOneFile, resolveActiveOrPickedTextFile, resolveMachineCodeInput } from './workflowInputs';
+import { pickOneFile, resolveActiveOrPickedTextFile } from './workflowInputs';
+import {
+  createAsmCaseFromAsm,
+  prepareAsmCaseMachineCode,
+  resolveAsmCaseInput,
+  updateAsmCaseArtifacts,
+  writeAsmCaseArtifact
+} from './asmCaseStore';
 
 export function registerLogisim(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.logisim.generateRom', () => generateLogisimRom()),
-    vscode.commands.registerCommand('co.logisim.injectRomIntoCircuit', () => injectRomIntoCircuit()),
+    vscode.commands.registerCommand('co.logisim.generateRom', () => generateLogisimRom(services)),
+    vscode.commands.registerCommand('co.logisim.injectRomIntoCircuit', () => injectRomIntoCircuit(services)),
     vscode.commands.registerCommand('co.logisim.convertLogToCsv', () => convertLogToCsv()),
     vscode.commands.registerCommand('co.logisim.openCurrentCircuit', () => openCurrentCircuit(services))
   );
 }
 
-async function generateLogisimRom(): Promise<void> {
-  const input = await resolveMachineCodeInput();
-  if (!input) {
+async function generateLogisimRom(services: AppServices): Promise<void> {
+  const asm = await resolveAsmCaseInput('选择用于生成 Logisim ROM 的 MIPS ASM 文件');
+  if (!asm) {
     return;
   }
-  const text = await readTextFile(input);
+  const asmCase = await createAsmCaseFromAsm(asm, { source: { kind: 'selected' } });
+  const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+  if (!dump?.result.ok || !dump.outputFile) {
+    vscode.window.showErrorMessage('MARS 导出机器码失败，无法生成 Logisim ROM');
+    return;
+  }
+  const text = await readTextFile(asmCase.machineCode);
   const rom = normalizeLogisimRom(text);
-  const defaultName = `${path.basename(input.fsPath, path.extname(input.fsPath))}.logisim.txt`;
-  const output = vscode.Uri.file(path.join(path.dirname(input.fsPath), defaultName));
-  await writeTextFile(output, rom);
+  const defaultName = `${path.basename(asm.fsPath, path.extname(asm.fsPath))}.logisim.txt`;
+  const output = await writeAsmCaseArtifact(asmCase, 'logisim', defaultName, rom, 'rom');
   await vscode.window.showTextDocument(output);
   vscode.window.showInformationMessage(`已生成 Logisim ROM 文件：${path.basename(output.fsPath)}`);
 }
 
-async function injectRomIntoCircuit(): Promise<void> {
+async function injectRomIntoCircuit(services: AppServices): Promise<void> {
   const circuit = await resolveCircuitInput();
   if (!circuit) {
     return;
   }
-  const machineCode = await resolveMachineCodeInput('选择用于 Logisim ROM 注入的 MARS HexText 机器码');
-  if (!machineCode) {
+  const asm = await resolveAsmCaseInput('选择用于 Logisim ROM 注入的 MIPS ASM 文件');
+  if (!asm) {
+    return;
+  }
+  const asmCase = await createAsmCaseFromAsm(asm, { source: { kind: 'selected' } });
+  const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+  if (!dump?.result.ok || !dump.outputFile) {
+    vscode.window.showErrorMessage('MARS 导出机器码失败，无法注入 Logisim ROM');
     return;
   }
 
   const circuitText = await readTextFile(circuit);
-  const machineCodeText = await readTextFile(machineCode);
+  const machineCodeText = await readTextFile(asmCase.machineCode);
   const target = await resolveRomTarget(circuitText);
   if (!target) {
     return;
@@ -57,11 +75,14 @@ async function injectRomIntoCircuit(): Promise<void> {
     return;
   }
 
-  const output = vscode.Uri.file(path.join(
-    path.dirname(circuit.fsPath),
-    `${path.basename(circuit.fsPath, path.extname(circuit.fsPath))}.${path.basename(machineCode.fsPath, path.extname(machineCode.fsPath))}.circ`
-  ));
-  await writeTextFile(output, injected.text);
+  const output = await writeAsmCaseArtifact(
+    asmCase,
+    'logisim',
+    `${path.basename(circuit.fsPath, path.extname(circuit.fsPath))}.${path.basename(asm.fsPath, path.extname(asm.fsPath))}.circ`,
+    injected.text,
+    'injectedCircuit'
+  );
+  await updateAsmCaseArtifacts(asmCase, 'logisim', { circuitTemplate: circuit.fsPath });
   await vscode.window.showTextDocument(output);
   vscode.window.showInformationMessage(`已向 ${path.basename(output.fsPath)} 注入 ${injected.wordCount} 个机器码字`);
 }

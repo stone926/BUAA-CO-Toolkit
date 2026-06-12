@@ -4,6 +4,9 @@ export type LogisimPrepareStatus = 'prepared' | 'error';
 
 export interface LogisimPrepareCaseResult {
   asm: string;
+  caseId?: string;
+  caseManifest?: string;
+  asmSnapshot?: string;
   status: LogisimPrepareStatus;
   message: string;
   machineCode?: string;

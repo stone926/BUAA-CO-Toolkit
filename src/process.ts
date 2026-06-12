@@ -20,6 +20,7 @@ export interface RunToolOptions {
   resource?: vscode.Uri;
   timeoutMs?: number;
   stdin?: string;
+  launchSuccessDelayMs?: number;
 }
 
 export function quoteArg(arg: string): string {
@@ -137,6 +138,7 @@ export async function runTool(command: string, args: string[], options: RunToolO
 export async function launchTool(command: string, args: string[], options: RunToolOptions): Promise<RunResult> {
   const display = commandLine(command, args);
   const cwd = options.cwd;
+  const successDelayMs = options.launchSuccessDelayMs ?? 1500;
   options.output.appendLine(`$ ${display}`);
   options.output.appendLine(`cwd: ${cwd}`);
 
@@ -157,6 +159,7 @@ export async function launchTool(command: string, args: string[], options: RunTo
 
   return await new Promise<RunResult>((resolve) => {
     let settled = false;
+    let childPid: number | undefined;
     const resolveOnce = (result: RunResult): void => {
       if (settled) {
         return;
@@ -172,12 +175,20 @@ export async function launchTool(command: string, args: string[], options: RunTo
         ...(options.env ?? {})
       },
       shell: false,
-      windowsHide: true,
+      windowsHide: false,
       detached: true,
       stdio: 'ignore'
     });
 
+    let successTimer: NodeJS.Timeout | undefined;
+
     child.on('error', (error: Error) => {
+      if (settled) {
+        return;
+      }
+      if (successTimer) {
+        clearTimeout(successTimer);
+      }
       options.output.appendLine(error.message);
       resolveOnce({
         ok: false,
@@ -191,14 +202,39 @@ export async function launchTool(command: string, args: string[], options: RunTo
     });
 
     child.on('spawn', () => {
-      child.unref();
+      childPid = child.pid;
+      successTimer = setTimeout(() => {
+        successTimer = undefined;
+        options.output.appendLine(`GUI 进程已启动${childPid ? ` (pid ${childPid})` : ''}`);
+        child.unref();
+        resolveOnce({
+          ok: true,
+          exitCode: null,
+          commandLine: display,
+          cwd,
+          stdout: '',
+          stderr: '',
+          timedOut: false
+        });
+      }, successDelayMs);
+    });
+
+    child.on('close', (code: number | null) => {
+      if (settled) {
+        return;
+      }
+      if (successTimer) {
+        clearTimeout(successTimer);
+      }
+      const message = `GUI 进程启动后立即退出${code === null ? '' : `，退出码 ${code}`}`;
+      options.output.appendLine(message);
       resolveOnce({
-        ok: true,
-        exitCode: null,
+        ok: false,
+        exitCode: code,
         commandLine: display,
         cwd,
         stdout: '',
-        stderr: '',
+        stderr: message,
         timedOut: false
       });
     });

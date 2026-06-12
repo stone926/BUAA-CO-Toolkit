@@ -7,6 +7,7 @@ import { ProjectProfile } from './types';
  * .co/config.json 的完整结构
  */
 export interface CoProjectConfig {
+  name?: string;
   profile?: ProjectProfile;
   toolchain?: {
     mars?: string;

@@ -63,11 +63,20 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
   if (checkAll || requiredTools.has('ise')) {
     const ise = getIsePath(resource);
     const fuse = ise ? findFuse(ise) : '';
+    const isimGui = ise ? findIsimGui(ise) : '';
+    const fuseOk = Boolean(fuse && fs.existsSync(fuse));
+    const isimGuiOk = Boolean(isimGui && fs.existsSync(isimGui));
     checks.push({
       name: 'ISE fuse',
-      ok: Boolean(fuse && fs.existsSync(fuse)),
+      ok: fuseOk,
       detail: fuse || '未配置',
-      suggestion: fuse ? undefined : '请设置 co.toolchain.isePath 为 ISE 目录'
+      suggestion: fuseOk ? undefined : '请设置 co.toolchain.isePath 为 ISE 目录'
+    });
+    checks.push({
+      name: 'ISim GUI',
+      ok: isimGuiOk,
+      detail: isimGui || '未配置',
+      suggestion: isimGuiOk ? undefined : '请设置 co.toolchain.isePath 为包含 ISim 的 ISE 目录'
     });
   }
 
@@ -205,6 +214,33 @@ export function findFuse(isePath: string): string {
     path.join(isePath, 'bin', 'lin', 'fuse')
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+}
+
+export function findIsimGui(isePath: string): string {
+  const candidates = [
+    path.join(isePath, 'bin', 'nt64', 'isimgui.exe'),
+    path.join(isePath, 'bin', 'nt', 'isimgui.exe'),
+    path.join(isePath, 'bin', 'lin64', 'isimgui'),
+    path.join(isePath, 'bin', 'lin', 'isimgui')
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+}
+
+export function buildIseEnvironment(isePath: string, baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const fuse = findFuse(isePath);
+  const binDir = path.dirname(fuse);
+  const platform = path.basename(binDir);
+  const pathKey = Object.keys(baseEnv).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+  const entries = [
+    binDir,
+    path.join(binDir, 'unwrapped'),
+    path.join(isePath, 'lib', platform),
+    baseEnv[pathKey] ?? ''
+  ].filter(Boolean);
+  return {
+    XILINX: isePath,
+    [pathKey]: entries.join(path.delimiter)
+  };
 }
 
 function firstLine(text: string): string {

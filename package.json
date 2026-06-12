@@ -49,6 +49,8 @@
     "onCommand:co.verilog.generateTestbench",
     "onCommand:co.verilog.generateIseProject",
     "onCommand:co.verilog.runIsim",
+    "onCommand:co.verilog.openIsimWaveform",
+    "onCommand:co.verilog.exportVcd",
     "onCommand:co.verilog.inspectSignal",
     "onCommand:co.logisim.generateRom",
     "onCommand:co.logisim.injectRomIntoCircuit",
@@ -68,6 +70,7 @@
     "onCommand:co.test.prepareLogisimCases",
     "onCommand:co.test.prepareGeneratedLogisimCases",
     "onCommand:co.test.openBatchTraceReport",
+    "onCommand:co.test.openAsmCaseIndex",
     "onView:coSidebar",
     "onView:coVerilogSignal"
   ],
@@ -547,6 +550,16 @@
         }
       },
       {
+        "command": "co.verilog.openIsimWaveform",
+        "title": "CO: Verilog 查看 ISim 波形",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "co.verilog.exportVcd",
+        "title": "CO: Verilog 导出 VCD 波形",
+        "icon": "$(save)"
+      },
+      {
         "command": "co.verilog.inspectSignal",
         "title": "CO: 查看 Verilog 信号连线",
         "icon": "$(circuit-board)"
@@ -626,6 +639,10 @@
       {
         "command": "co.test.openBatchTraceReport",
         "title": "CO: 打开批量课程 Trace 报告"
+      },
+      {
+        "command": "co.test.openAsmCaseIndex",
+        "title": "CO: 查看 ASM 用例记录"
       }
     ],
     "menus": {
@@ -680,9 +697,19 @@
           "group": "co@11"
         },
         {
-          "command": "co.verilog.inspectSignal",
+          "command": "co.verilog.openIsimWaveform",
           "when": "resourceLangId == verilog",
           "group": "co@12"
+        },
+        {
+          "command": "co.verilog.exportVcd",
+          "when": "resourceLangId == verilog",
+          "group": "co@13"
+        },
+        {
+          "command": "co.verilog.inspectSignal",
+          "when": "resourceLangId == verilog",
+          "group": "co@14"
         }
       ],
       "commandPalette": [
@@ -730,6 +757,12 @@
         },
         {
           "command": "co.verilog.runIsim"
+        },
+        {
+          "command": "co.verilog.openIsimWaveform"
+        },
+        {
+          "command": "co.verilog.exportVcd"
         },
         {
           "command": "co.verilog.inspectSignal"
@@ -787,6 +820,9 @@
         },
         {
           "command": "co.test.openBatchTraceReport"
+        },
+        {
+          "command": "co.test.openAsmCaseIndex"
         }
       ]
     },

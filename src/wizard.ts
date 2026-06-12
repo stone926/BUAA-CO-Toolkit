@@ -93,12 +93,17 @@ export async function runProjectWizard(): Promise<void> {
     return;
   }
 
-  // Step 5: 创建项目
   const rootPath = workspaceFolder.uri.fsPath;
   try {
-    await createProjectStructure(rootPath, profile, projectName, toolchainConfig);
+    if (createStructure.value) {
+      await createProjectStructure(rootPath, profile, projectName, toolchainConfig);
+    } else {
+      await saveProjectConfig(projectConfigDefaults(profile, projectName, toolchainConfig));
+    }
     await updateProjectSettings(profile);
-    vscode.window.showInformationMessage(`CO 项目 '${projectName}' (${profile}) 创建成功！`);
+    vscode.window.showInformationMessage(createStructure.value
+      ? `CO 项目 '${projectName}' (${profile}) 创建成功！`
+      : `CO 项目 '${projectName}' (${profile}) 设置已更新`);
   } catch (error) {
     vscode.window.showErrorMessage(`创建项目失败: ${error}`);
   }
@@ -190,23 +195,29 @@ async function createProjectStructure(
     }
   }
 
-  // 创建 .co/config.json
-  const config: CoProjectConfig = {
+  await saveProjectConfig(projectConfigDefaults(profile, projectName, toolchainConfig));
+
+  await createTemplateFiles(rootPath, profile);
+}
+
+function projectConfigDefaults(
+  profile: ProjectProfile,
+  projectName: string,
+  toolchainConfig: CoProjectConfig['toolchain']
+): CoProjectConfig {
+  const topModule = defaultTopModuleForProfile(profile);
+  return {
+    name: projectName,
     profile,
     toolchain: toolchainConfig,
     simulation: {
       backend: 'isim',
-      top: isCpuVerilogProfile(profile) ? 'mips' : undefined,
-      testbench: isCpuVerilogProfile(profile) ? 'mips_tb' : undefined,
+      top: topModule,
+      testbench: topModule ? `${topModule}_tb` : undefined,
       time: '200us',
       machineCode: 'code.txt'
     }
   };
-
-  await saveProjectConfig(config);
-
-  // 创建模板文件
-  await createTemplateFiles(rootPath, profile);
 }
 
 function getDirectoriesForProfile(profile: ProjectProfile): string[] {
@@ -218,6 +229,7 @@ async function createTemplateFiles(rootPath: string, profile: ProjectProfile): P
     case 'P2':
       createMipsTemplate(rootPath);
       break;
+    case 'P1':
     case 'P4':
     case 'P5':
     case 'P6':
@@ -251,7 +263,7 @@ main:
 }
 
 function createVerilogTemplate(rootPath: string, profile: ProjectProfile): void {
-  const topModule = 'mips';
+  const topModule = defaultTopModuleForProfile(profile) ?? 'main';
   const topPath = path.join(rootPath, 'src', `${topModule}.v`);
   let topText: string;
 
@@ -296,8 +308,14 @@ function getVerilogPorts(profile: ProjectProfile): string {
   ].join(',\n');
 }
 
-function isCpuVerilogProfile(profile: ProjectProfile): boolean {
-  return profile === 'P4' || profile === 'P5' || profile === 'P6' || profile === 'P7';
+function defaultTopModuleForProfile(profile: ProjectProfile): string | undefined {
+  if (profile === 'P1') {
+    return 'main';
+  }
+  if (profile === 'P4' || profile === 'P5' || profile === 'P6' || profile === 'P7') {
+    return 'mips';
+  }
+  return undefined;
 }
 
 function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string, profile: ProjectProfile): string {

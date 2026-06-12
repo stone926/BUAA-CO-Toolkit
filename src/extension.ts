@@ -91,9 +91,16 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
+  const verilogWatcher = vscode.workspace.createFileSystemWatcher('**/*.v');
+  context.subscriptions.push(
+    verilogWatcher,
+    verilogWatcher.onDidCreate((uri) => moduleRegistry.updateUri(uri)),
+    verilogWatcher.onDidChange((uri) => moduleRegistry.updateUri(uri)),
+    verilogWatcher.onDidDelete((uri) => moduleRegistry.removeUri(uri))
+  );
 
   registerMips(context, services);
-  registerVerilog(context, services);
+  registerVerilog(context, services, moduleRegistry);
   registerVerilogSignalView(context, moduleRegistry);
   registerLogisim(context, services);
   registerHazard(context, services);
@@ -122,7 +129,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('co.checkToolchain', () => showToolchainReport(output)),
     vscode.commands.registerCommand('co.selectProjectProfile', () => selectProjectProfile()),
     vscode.commands.registerCommand('co.projectWizard', () => runProjectWizard()),
-    vscode.window.onDidChangeActiveTextEditor(() => updateStatus(statusBar, getToolchainStatus)),
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      sidebarProvider.refresh();
+      updateStatus(statusBar, getToolchainStatus);
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('co.project.profile') || event.affectsConfiguration('co.toolchain')) {
         invalidateToolchainCache();

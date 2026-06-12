@@ -22,12 +22,35 @@ export class WorkspaceModuleRegistry {
 
   /** 按名称查找模块（返回第一个匹配）。跨文件查找的核心入口。 */
   getModule(name: string): VerilogModule | undefined {
-    return this.modules.get(name)?.[0];
+    return this.getModules(name)[0];
   }
 
   /** 按名称获取所有同名模块 */
   getModules(name: string): VerilogModule[] {
-    return this.modules.get(name) ?? [];
+    return sortedModules(this.modules.get(name) ?? []);
+  }
+
+  /** 获取当前注册表中所有模块 */
+  allModules(): VerilogModule[] {
+    return sortedModules([...this.modules.values()].flat());
+  }
+
+  /** 按谓词查找模块，保持与 getModules 一致的稳定排序 */
+  findModules(predicate: (module: VerilogModule) => boolean): VerilogModule[] {
+    return this.allModules().filter(predicate);
+  }
+
+  /** 公开的单文件更新入口。用于生成用户 TB 后立即刷新索引。 */
+  updateUri(uri: vscode.Uri): void {
+    if (uri.scheme !== 'file' || !uri.fsPath.toLowerCase().endsWith('.v') || shouldSkipPath(uri.fsPath)) {
+      return;
+    }
+    this.indexFile(uri.fsPath);
+  }
+
+  /** 公开的文件移除入口。用于文件系统删除事件清理旧模块记录。 */
+  removeUri(uri: vscode.Uri): void {
+    this.removeDocument(uri.toString());
   }
 
   /** 启动后台扫描 */
@@ -95,9 +118,13 @@ export class WorkspaceModuleRegistry {
     if (this._disposed) {
       return;
     }
+    const uri = vscode.Uri.file(filePath).toString();
+    if (!fs.existsSync(filePath)) {
+      this.removeDocument(uri);
+      return;
+    }
     try {
       const text = fs.readFileSync(filePath, 'utf8');
-      const uri = vscode.Uri.file(filePath).toString();
       const parsed = parseModules(
         TextDocument.create(uri, 'verilog', 0, text),
         text
@@ -185,4 +212,23 @@ function shouldSkipDirectory(name: string): boolean {
     name === 'build' ||
     name === 'coverage'
   );
+}
+
+function shouldSkipPath(filePath: string): boolean {
+  return filePath.split(/[\\/]+/).some(shouldSkipDirectory);
+}
+
+function sortedModules(modules: VerilogModule[]): VerilogModule[] {
+  return [...modules].sort((left, right) => moduleRank(left) - moduleRank(right) || left.uri.localeCompare(right.uri) || left.name.localeCompare(right.name));
+}
+
+function moduleRank(module: VerilogModule): number {
+  const active = vscode.window.activeTextEditor?.document.uri.toString();
+  if (active && module.uri === active) {
+    return 0;
+  }
+  if (vscode.workspace.textDocuments.some((doc) => doc.uri.toString() === module.uri)) {
+    return 10;
+  }
+  return 20;
 }

@@ -24,7 +24,8 @@ export interface AsmSnapshotEntry {
 
 const generatorExtensions = new Set(['.py', '.js', '.mjs', '.cjs', '.jar', '.bat', '.cmd', '.exe', '.ps1']);
 const asmExtensions = new Set(['.asm', '.s', '.mips']);
-const ignoredDirectories = new Set(['.git', '.co', 'node_modules', 'out', '.vscode-test']);
+const ignoredDirectories = new Set(['.git', 'node_modules', 'out', '.vscode-test']);
+const ignoredCoDirectories = new Set(['cases', 'out', 'isim', 'logisim', 'tmp']);
 
 export function isSupportedGeneratorFile(file: string): boolean {
   return generatorExtensions.has(path.extname(file).toLowerCase());
@@ -121,6 +122,9 @@ function walk(directory: string, results: AsmSnapshotEntry[], maxFiles: number):
     }
     const file = path.join(directory, entry.name);
     if (entry.isDirectory()) {
+      if (path.basename(directory) === '.co' && ignoredCoDirectories.has(entry.name.toLowerCase())) {
+        continue;
+      }
       walk(file, results, maxFiles);
       continue;
     }

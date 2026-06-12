@@ -20,20 +20,22 @@ import {
   getToolTutorialLinksForProfile
 } from './courseLinks';
 import { getProjectConfig } from './projectConfig';
+import {
+  buildSidebarModel,
+  SidebarActiveFileModel,
+  SidebarNodeModel,
+  SidebarToolModel,
+  SidebarTutorialModel
+} from './sidebarModel';
 import { ProjectProfile } from './types';
 
-export type SidebarItem = vscode.TreeItem & { contextValue?: string };
-
-interface SidebarSection {
-  header: SidebarItem;
-  children: SidebarItem[];
-}
+export type SidebarItem = vscode.TreeItem & { children?: SidebarItem[]; contextValue?: string };
 
 export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<SidebarItem | undefined | null | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  constructor(private context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) {}
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
@@ -44,280 +46,165 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   }
 
   getChildren(element?: SidebarItem): SidebarItem[] {
-    if (!element) {
-      return this.buildSections().map((section) => section.header);
+    if (element) {
+      return element.children ?? [];
     }
-    const section = this.buildSections().find((s) => s.header.label === element.label);
-    return section?.children ?? [];
+    return this.buildTree();
   }
 
-  private buildSections(): SidebarSection[] {
-    const resource = vscode.window.activeTextEditor?.document.uri;
+  private buildTree(): SidebarItem[] {
+    return buildSidebarModel(this.buildModelContext()).map((node) => this.createTreeItem(node));
+  }
+
+  private buildModelContext() {
+    const activeDocument = this.currentTextDocument();
+    const resource = activeDocument?.uri;
     const profile = getProfile(resource);
+    const folder = this.workspaceFolder(resource);
     const coConfig = getProjectConfig(resource);
-    const hasCoConfig = coConfig !== undefined;
 
-    const sections: SidebarSection[] = [];
+    return {
+      profile,
+      workspaceName: folder?.name,
+      workspacePath: folder?.uri.fsPath,
+      configSource: coConfig ? '.co/config.json' as const : 'VS Code settings' as const,
+      topModule: getTopModule(resource),
+      testbench: getTestbench(resource),
+      machineCode: getMachineCode(resource),
+      simTime: getSimTime(resource),
+      simBackend: getSimBackend(resource),
+      activeFile: this.activeFileModel(activeDocument),
+      tools: this.createToolModels(profile, resource),
+      tutorials: this.createTutorialModels(profile)
+    };
+  }
 
-    // Project section
-    sections.push({
-      header: this.createHeader('项目配置'),
-      children: [
-        this.createInfoItem(
-          'Profile',
-          profile,
-          'co.selectProjectProfile',
-          '点击切换 Profile',
-          hasCoConfig && coConfig?.profile === profile ? '.co' : 'settings'
-        ),
-        this.createInfoItem(
-          '顶层模块',
-          getTopModule(resource),
-          undefined,
-          'co.project.topModule 或 .co/config.json'
-        ),
-        this.createInfoItem(
-          'Testbench',
-          getTestbench(resource),
-          undefined,
-          'co.project.testbench 或 .co/config.json'
-        ),
-        this.createInfoItem(
-          '机器码文件',
-          getMachineCode(resource),
-          undefined,
-          'co.project.machineCode 或 .co/config.json'
-        ),
-        this.createInfoItem(
-          '仿真时长',
-          getSimTime(resource),
-          undefined,
-          'co.project.simTime 或 .co/config.json'
-        ),
-        this.createInfoItem(
-          '仿真后端',
-          getSimBackend(resource),
-          undefined,
-          '.co/config.json: simulation.backend'
-        )
-      ]
-    });
+  private currentTextDocument(): vscode.TextDocument | undefined {
+    const active = vscode.window.activeTextEditor?.document;
+    if (active?.uri.scheme === 'file') {
+      return active;
+    }
+    return vscode.window.visibleTextEditors
+      .map((editor) => editor.document)
+      .find((document) => document.uri.scheme === 'file') ?? active;
+  }
 
-    const tutorialChildren = this.createTutorialItems(profile);
-    sections.push({
-      header: this.createHeader('课程教程'),
-      children: tutorialChildren
-    });
+  private createTreeItem(node: SidebarNodeModel): SidebarItem {
+    const children = node.children?.map((child) => this.createTreeItem(child)) ?? [];
+    const state = children.length
+      ? node.expanded === false
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.Expanded
+      : vscode.TreeItemCollapsibleState.None;
+    const item = new vscode.TreeItem(node.label, state) as SidebarItem;
+    item.id = node.id;
+    item.contextValue = node.contextValue ?? node.kind;
+    item.description = node.description;
+    item.tooltip = node.tooltip;
+    if (node.icon) {
+      item.iconPath = new vscode.ThemeIcon(node.icon);
+    }
+    if (node.command) {
+      item.command = {
+        command: node.command.command,
+        title: node.command.title ?? node.label,
+        arguments: node.command.arguments ?? []
+      };
+    }
+    item.children = children;
+    return item;
+  }
 
-    // Toolchain section
-    const toolChildren: SidebarItem[] = [];
+  private activeFileModel(document: vscode.TextDocument | undefined): SidebarActiveFileModel | undefined {
+    if (!document || document.uri.scheme !== 'file') {
+      return undefined;
+    }
+    return {
+      languageId: document.languageId,
+      fsPath: document.uri.fsPath,
+      basename: path.basename(document.uri.fsPath),
+      isLogisimCircuit: this.isLogisimCircuitFile(document.uri)
+    };
+  }
+
+  private createToolModels(profile: ProjectProfile, resource?: vscode.Uri): SidebarToolModel[] {
+    const tools: SidebarToolModel[] = [];
     const requiredTools = new Set(getProfileRequiredTools(profile).map((tool) => tool.toLowerCase()));
     const showAllTools = profile === 'auto' || requiredTools.size === 0;
     if (showAllTools || requiredTools.has('java')) {
-      toolChildren.push(this.createToolItem('Java', getJava(resource), 'co.checkToolchain'));
+      tools.push(this.createToolModel('java', 'Java', getJava(resource)));
     }
     if (showAllTools) {
-      toolChildren.push(this.createToolItem('Python', getPython(resource), 'co.checkToolchain'));
+      tools.push(this.createToolModel('python', 'Python', getPython(resource)));
     }
     if (showAllTools || requiredTools.has('mars') || requiredTools.has('marsp7')) {
-      toolChildren.push(this.createToolItem('MARS', getMarsJar(resource), 'co.checkToolchain'));
+      tools.push(this.createToolModel('mars', 'MARS', getMarsJar(resource)));
     }
     if (showAllTools || requiredTools.has('logisim')) {
-      toolChildren.push(this.createToolItem('Logisim', getLogisimJar(resource), 'co.checkToolchain'));
+      tools.push(this.createToolModel('logisim', 'Logisim', getLogisimJar(resource)));
     }
     if (showAllTools || requiredTools.has('ise')) {
-      const ise = getIsePath(resource);
-      toolChildren.push(this.createToolItem('ISE', ise || '未配置', 'co.checkToolchain'));
+      tools.push(this.createToolModel('ise', 'ISE', getIsePath(resource)));
     }
     const hazardDir = getHazardCalculator(resource);
     if (hazardDir) {
-      toolChildren.push(this.createToolItem('Hazard 工具', hazardDir, 'co.checkToolchain'));
+      tools.push(this.createToolModel('hazard', 'Hazard 工具', hazardDir));
     }
-    sections.push({
-      header: this.createHeader('工具链'),
-      children: toolChildren
-    });
+    return tools;
+  }
 
-    // Config source info
-    if (hasCoConfig) {
-      sections.push({
-        header: this.createHeader('配置来源'),
-        children: [
-          this.createInfoItem('.co/config.json', '已加载', undefined, '项目级配置文件')
-        ]
-      });
-    }
+  private createToolModel(id: string, name: string, value: string | undefined): SidebarToolModel {
+    const normalized = value?.trim() ?? '';
+    return {
+      id,
+      name,
+      value: normalized || '未配置',
+      configured: Boolean(normalized)
+    };
+  }
 
-    // Actions section
-    const actionChildren: SidebarItem[] = [
-      this.createCommandItem('项目向导', 'co.projectWizard', 'new-folder'),
-      this.createCommandItem('检查工具链', 'co.checkToolchain', 'check-all'),
-      this.createCommandItem('选择 Profile', 'co.selectProjectProfile', 'settings-gear'),
-      this.createCommandItem('刷新侧边栏', 'co.sidebar.refresh', 'refresh')
-    ];
-    const activeDocument = vscode.window.activeTextEditor?.document;
-    const language = activeDocument?.languageId;
-    const isLogisimCircuit = activeDocument ? this.isLogisimCircuitFile(activeDocument.uri) : false;
-    if (this.shouldShowMipsActions(profile, language)) {
-      actionChildren.push(
-      this.createCommandItem('ASM 运行', 'co.mips.runCurrentFile', 'play'),
-      this.createCommandItem('ASM 带输入运行', 'co.mips.runWithStdinFile', 'terminal'),
-      this.createCommandItem('ASM 终端运行', 'co.mips.runInTerminal', 'terminal-powershell'),
-        this.createCommandItem('ASM 导出文本段', 'co.mips.dumpText', 'export')
-      );
-      if (profile === 'P7' || profile === 'auto') {
-        actionChildren.push(this.createCommandItem('ASM 导出内核段', 'co.mips.dumpKernelText', 'export'));
+  private createTutorialModels(profile: ProjectProfile): SidebarTutorialModel[] {
+    const items: SidebarTutorialModel[] = [
+      {
+        id: 'home',
+        label: '课程教程首页',
+        description: '打开教程首页',
+        tooltip: '打开 CO 课程教程首页',
+        command: 'co.course.openTutorial',
+        icon: 'book'
       }
-    }
-    if (this.shouldShowAsmGenerationActions(profile)) {
-      actionChildren.push(
-        this.createCommandItem('生成 ASM 测试点', 'co.test.generateAsmTests', 'file-code'),
-        this.createCommandItem('生成并导出机器码', 'co.test.generateAndDumpAsmTests', 'export')
-      );
-    }
-    if (this.shouldShowTraceTestActions(profile)) {
-      actionChildren.push(
-      this.createCommandItem('手动选择输出对拍', 'co.test.compareTraceFiles', 'compare-changes'),
-      this.createCommandItem('最近输出对拍', 'co.test.compareLatestOutputs', 'diff'),
-      this.createCommandItem('单 ASM 测试', 'co.test.runFullTest', 'run-all'),
-      this.createCommandItem('多 ASM 批量测试', 'co.test.runBatchTraceTests', 'list-selection'),
-      this.createCommandItem('生成并批量测试', 'co.test.runGeneratedTraceTests', 'beaker'),
-      this.createCommandItem('持续生成测试', 'co.test.startContinuousGeneratedTraceTests', 'rocket'),
-      this.createCommandItem('停止持续测试', 'co.test.stopContinuousTests', 'debug-stop'),
-        this.createCommandItem('打开批量测试报告', 'co.test.openBatchTraceReport', 'preview')
-      );
-    }
-    if (this.shouldShowLogisimActions(profile, language, isLogisimCircuit)) {
-      actionChildren.push(
-        this.createCommandItem('准备 Logisim 用例', 'co.test.prepareLogisimCases', 'file-submodule'),
-        this.createCommandItem('生成 Logisim 用例', 'co.test.prepareGeneratedLogisimCases', 'files'),
-        this.createCommandItem('Logisim ROM', 'co.logisim.generateRom', 'file-binary'),
-        this.createCommandItem('Logisim 注入 ROM', 'co.logisim.injectRomIntoCircuit', 'circuit-board'),
-        this.createCommandItem('Logisim Logging 转 CSV', 'co.logisim.convertLogToCsv', 'table'),
-        this.createCommandItem('打开 Logisim 电路', 'co.logisim.openCurrentCircuit', 'circuit-board')
-      );
-    }
-    if (this.shouldShowVerilogActions(profile, language)) {
-      actionChildren.push(
-      this.createCommandItem('Verilog Testbench', 'co.verilog.generateTestbench', 'file-code'),
-      this.createCommandItem('Verilog ISE 工程', 'co.verilog.generateIseProject', 'project'),
-        this.createCommandItem('Verilog 运行 ISim', 'co.verilog.runIsim', 'run')
-      );
-    }
-    if (profile === 'P5' || profile === 'P6' || profile === 'P7') {
-      actionChildren.push(this.createCommandItem('Hazard 分析', 'co.hazard.analyzeCurrentMachineCode', 'pulse'));
-      actionChildren.push(this.createCommandItem('打开 Hazard 报告', 'co.hazard.openReport', 'json'));
-    }
-    sections.push({
-      header: this.createHeader('操作'),
-      children: actionChildren
-    });
-
-    return sections;
-  }
-
-  private createHeader(label: string): SidebarItem {
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
-    item.contextValue = 'header';
-    item.iconPath = new vscode.ThemeIcon('folder');
-    return item;
-  }
-
-  private createInfoItem(
-    label: string,
-    value: string,
-    command?: string,
-    tooltip?: string,
-    source?: string
-  ): SidebarItem {
-    const sourceLabel = source ? ` [${source}]` : '';
-    const item = new vscode.TreeItem(`${label}: ${value}${sourceLabel}`, vscode.TreeItemCollapsibleState.None);
-    item.contextValue = 'info';
-    item.tooltip = tooltip ?? value;
-    if (command) {
-      item.command = {
-        command,
-        title: label,
-        arguments: []
-      };
-    }
-    return item;
-  }
-
-  private createToolItem(name: string, path: string, command: string): SidebarItem {
-    const configured = path && path !== '未配置';
-    const item = new vscode.TreeItem(
-      `${name}: ${configured ? '✓' : '✗'}`,
-      vscode.TreeItemCollapsibleState.None
-    );
-    item.contextValue = 'tool';
-    item.tooltip = configured ? path : `${name} 未配置 - 点击检查工具链`;
-    item.iconPath = new vscode.ThemeIcon(configured ? 'check' : 'warning');
-    item.command = {
-      command,
-      title: '检查工具链',
-      arguments: []
-    };
-    return item;
-  }
-
-  private createCommandItem(label: string, command: string, icon: string): SidebarItem {
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-    item.contextValue = 'action';
-    item.command = {
-      command,
-      title: label,
-      arguments: []
-    };
-    item.iconPath = new vscode.ThemeIcon(icon);
-    return item;
-  }
-
-  private createTutorialItems(profile: ProjectProfile): SidebarItem[] {
-    const items: SidebarItem[] = [
-      this.createCommandItem('课程教程首页', 'co.course.openTutorial', 'book')
     ];
     const profileLink = getProfileTutorialLink(profile);
     if (profileLink) {
-      items.push(this.createTutorialLinkItem(`${profile} 教程`, profileLink, 'symbol-class'));
+      items.push({
+        id: `profile.${profile}`,
+        label: `${profile} 教程`,
+        description: profileLink.description,
+        tooltip: profileLink.description ?? profileLink.title,
+        command: 'co.course.openTutorialLink',
+        arguments: [profileLink],
+        icon: 'symbol-class'
+      });
     }
     for (const link of getToolTutorialLinksForProfile(profile)) {
-      items.push(this.createTutorialLinkItem(link.title, link, 'link-external'));
+      items.push({
+        id: `tool.${link.path}`,
+        label: link.title,
+        description: link.description,
+        tooltip: link.description ?? link.title,
+        command: 'co.course.openTutorialLink',
+        arguments: [link],
+        icon: 'link-external'
+      });
     }
     return items;
   }
 
-  private createTutorialLinkItem(label: string, link: { title: string; path: string; description?: string }, icon: string): SidebarItem {
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-    item.contextValue = 'tutorial';
-    item.tooltip = link.description ?? link.title;
-    item.command = {
-      command: 'co.course.openTutorialLink',
-      title: label,
-      arguments: [link]
-    };
-    item.iconPath = new vscode.ThemeIcon(icon);
-    return item;
-  }
-
-  private shouldShowMipsActions(profile: ProjectProfile, language?: string): boolean {
-    return language === 'mipsasm' || profile === 'auto' || ['P2', 'P4', 'P5', 'P6', 'P7'].includes(profile);
-  }
-
-  private shouldShowVerilogActions(profile: ProjectProfile, language?: string): boolean {
-    return language === 'verilog' || profile === 'auto' || ['P1', 'P4', 'P5', 'P6', 'P7'].includes(profile);
-  }
-
-  private shouldShowLogisimActions(profile: ProjectProfile, language: string | undefined, isLogisimCircuit: boolean): boolean {
-    return isLogisimCircuit || language === 'logisim-circ' || profile === 'auto' || profile === 'P0' || profile === 'P3';
-  }
-
-  private shouldShowTraceTestActions(profile: ProjectProfile): boolean {
-    return profile === 'auto' || ['P4', 'P5', 'P6', 'P7'].includes(profile);
-  }
-
-  private shouldShowAsmGenerationActions(profile: ProjectProfile): boolean {
-    return profile === 'auto' || ['P3', 'P4', 'P5', 'P6', 'P7'].includes(profile);
+  private workspaceFolder(resource?: vscode.Uri): vscode.WorkspaceFolder | undefined {
+    if (resource) {
+      return vscode.workspace.getWorkspaceFolder(resource) ?? vscode.workspace.workspaceFolders?.[0];
+    }
+    return vscode.workspace.workspaceFolders?.[0];
   }
 
   private isLogisimCircuitFile(uri: vscode.Uri): boolean {

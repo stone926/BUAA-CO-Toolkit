@@ -71,6 +71,17 @@ import { AppServices, ProjectProfile, RunResult, ToolDetection } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
+import {
+  AsmCase,
+  copyAsmCaseArtifact,
+  createAsmCaseFromAsm,
+  createAsmCaseFromText,
+  listAsmCaseManifests,
+  prepareAsmCaseMachineCode,
+  readAsmCaseManifestForAsm,
+  updateAsmCaseArtifacts
+} from './asmCaseStore';
+import { AsmCaseSource } from './asmCaseStoreCore';
 
 type CourseTraceStatus = 'passed' | 'failed' | 'error';
 type CourseTraceStage = 'dump' | 'mars' | 'isim' | 'compare' | 'probe';
@@ -81,6 +92,9 @@ const stdinSubdirectories = ['input', 'inputs', 'test', 'tests', 'data'];
 interface CourseTraceCaseResult {
   asm: string;
   stdin?: string;
+  caseId?: string;
+  caseManifest?: string;
+  asmSnapshot?: string;
   status: CourseTraceStatus;
   stage: CourseTraceStage;
   message: string;
@@ -113,10 +127,12 @@ interface CourseTraceBatchReport {
 interface CourseTraceCaseInput {
   asm: vscode.Uri;
   stdin?: vscode.Uri;
+  asmCase?: AsmCase;
 }
 
 interface CourseTraceRunOptions {
   revealOutput?: boolean;
+  source?: CourseTraceBatchSource;
 }
 
 interface CourseTraceBatchSource {
@@ -156,6 +172,7 @@ interface BuiltinGeneratorRunSetup {
 interface GeneratedAsmBatch {
   asms: vscode.Uri[];
   source: CourseTraceBatchSource;
+  asmCases?: AsmCase[];
 }
 
 interface LogisimPrepareReport {
@@ -219,7 +236,8 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
     vscode.commands.registerCommand('co.test.stopContinuousTests', () => stopContinuousTests()),
     vscode.commands.registerCommand('co.test.prepareLogisimCases', () => prepareLogisimCases(services)),
     vscode.commands.registerCommand('co.test.prepareGeneratedLogisimCases', () => prepareGeneratedLogisimCases(services)),
-    vscode.commands.registerCommand('co.test.openBatchTraceReport', () => openBatchTraceReport())
+    vscode.commands.registerCommand('co.test.openBatchTraceReport', () => openBatchTraceReport()),
+    vscode.commands.registerCommand('co.test.openAsmCaseIndex', () => openAsmCaseIndex())
   );
 }
 
@@ -271,7 +289,7 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
     return;
   }
 
-  await runCourseTraceBatch(services, expandTraceCases(generated.asms), generated.source);
+  await runCourseTraceBatch(services, expandTraceCases(generated.asms, generated.asmCases), generated.source);
 }
 
 async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
@@ -354,7 +372,7 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
           services.output.appendLine(iteration.message);
         } else {
           iteration.source = generated.source;
-          const cases = expandTraceCases(generated.asms);
+          const cases = expandTraceCases(generated.asms, generated.asmCases);
           for (let i = 0; i < cases.length; i++) {
             if (session.stopRequested) {
               break;
@@ -362,7 +380,7 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
             const item = cases[i];
             services.output.appendLine(`[iteration ${index}, case ${i + 1}/${cases.length}] ${item.asm.fsPath}`);
             try {
-              iteration.results.push(await runCourseTraceCase(services, item, { revealOutput: false }));
+              iteration.results.push(await runCourseTraceCase(services, item, { revealOutput: false, source: generated.source }));
             } catch (error) {
               iteration.results.push({
                 asm: item.asm.fsPath,
@@ -437,7 +455,7 @@ async function runCourseTraceBatch(
       services.output.appendLine(`stdin: ${item.stdin.fsPath}`);
     }
     try {
-      results.push(await runCourseTraceCase(services, item));
+      results.push(await runCourseTraceCase(services, item, { source }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       results.push({
@@ -472,7 +490,11 @@ async function prepareLogisimCases(services: AppServices): Promise<void> {
   if (!asms.length) {
     return;
   }
-  await runLogisimPrepareBatch(services, asms, { kind: 'selected', asmFiles: asms.map((uri) => uri.fsPath) });
+  await runLogisimPrepareBatch(
+    services,
+    asms.map((asm) => ({ asm })),
+    { kind: 'selected', asmFiles: asms.map((uri) => uri.fsPath) }
+  );
 }
 
 async function prepareGeneratedLogisimCases(services: AppServices): Promise<void> {
@@ -482,12 +504,12 @@ async function prepareGeneratedLogisimCases(services: AppServices): Promise<void
   if (!generated) {
     return;
   }
-  await runLogisimPrepareBatch(services, generated.asms, generated.source);
+  await runLogisimPrepareBatch(services, generatedCaseInputs(generated), generated.source);
 }
 
 async function runLogisimPrepareBatch(
   services: AppServices,
-  asms: vscode.Uri[],
+  cases: CourseTraceCaseInput[],
   source: CourseTraceBatchSource
 ): Promise<void> {
   const circuit = await resolveLogisimCircuitInput();
@@ -501,46 +523,52 @@ async function runLogisimPrepareBatch(
     return;
   }
 
-  const folder = workspaceFolderFor(circuit) ?? workspaceFolderFor(asms[0]) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderFor(circuit) ?? workspaceFolderFor(cases[0]?.asm) ?? vscode.workspace.workspaceFolders?.[0];
   const baseDir = folder?.uri.fsPath ?? path.dirname(circuit.fsPath);
   const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'logisim'));
   await ensureDirectory(outDir);
 
   revealOutputChannel(services.output, circuit);
   services.output.appendLine('');
-  services.output.appendLine(`准备 Logisim 电路用例: ${asms.length} 个用例`);
+  services.output.appendLine(`准备 Logisim 电路用例: ${cases.length} 个用例`);
   services.output.appendLine(`电路: ${circuit.fsPath}`);
   services.output.appendLine(`ROM: ${target.label ?? 'ROM'}${target.loc ? ` ${target.loc}` : ''}`);
 
   const results: LogisimPrepareCaseResult[] = [];
-  for (let i = 0; i < asms.length; i++) {
-    const asm = asms[i];
+  for (let i = 0; i < cases.length; i++) {
+    const item = cases[i];
+    const asm = item.asm;
     services.output.appendLine('');
-    services.output.appendLine(`[${i + 1}/${asms.length}] ${asm.fsPath}`);
+    services.output.appendLine(`[${i + 1}/${cases.length}] ${asm.fsPath}`);
 
     try {
-      const dump = await runMarsFile(services, asm, 'dumpText', { showMessages: false });
+      const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
+        source: asmCaseSourceFromBatchSource(source),
+        resource: circuit
+      });
+      const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
       if (!dump?.result.ok || !dump.outputFile) {
         results.push({
           asm: asm.fsPath,
+          ...caseResultFields(asmCase),
           status: 'error',
           message: 'MARS 导出机器码失败'
         });
         continue;
       }
 
-      const machineCodeText = await readTextFile(dump.outputFile);
+      const machineCodeText = await readTextFile(asmCase.machineCode);
       const injected = injectMachineCodeIntoLogisimRom(circuitText, machineCodeText, target.index);
-      const outFile = vscode.Uri.file(path.join(
-        outDir.fsPath,
-        preparedCircuitFileName(circuit.fsPath, asm.fsPath, baseDir)
-      ));
+      const outFile = vscode.Uri.file(path.join(outDir.fsPath, preparedCircuitFileName(circuit.fsPath, asm.fsPath, baseDir)));
       await writeTextFile(outFile, injected.text);
+      await copyAsmCaseArtifact(asmCase, 'logisim', outFile, path.basename(outFile.fsPath), 'preparedCircuit');
+      await updateAsmCaseArtifacts(asmCase, 'logisim', { circuitTemplate: circuit.fsPath });
       results.push({
         asm: asm.fsPath,
+        ...caseResultFields(asmCase),
         status: 'prepared',
         message: `已注入 ${injected.wordCount} 个机器码`,
-        machineCode: dump.outputFile.fsPath,
+        machineCode: asmCase.machineCode.fsPath,
         circuit: outFile.fsPath,
         wordCount: injected.wordCount
       });
@@ -586,6 +614,14 @@ async function openBatchTraceReport(): Promise<void> {
   showBatchTraceReport(parsed.results, report, parsed.generatedAt, parsed.source);
 }
 
+async function openAsmCaseIndex(): Promise<void> {
+  const manifests = await listAsmCaseManifests(vscode.window.activeTextEditor?.document.uri);
+  const panel = vscode.window.createWebviewPanel('coAsmCaseIndex', 'CO ASM 用例记录', vscode.ViewColumn.Beside, {
+    enableScripts: false
+  });
+  panel.webview.html = renderAsmCaseIndex(manifests);
+}
+
 async function runCourseTraceCase(
   services: AppServices,
   item: CourseTraceCaseInput,
@@ -598,33 +634,41 @@ async function runCourseTraceCase(
     services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
   }
 
-  const dump = await runMarsFile(services, asm, 'dumpText', {
+  const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
+    source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
+    stdin: item.stdin,
+    resource: asm,
+    p7: p7MetadataFromSidecar(asm)
+  });
+  services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+
+  const dump = await prepareAsmCaseMachineCode(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
     courseTrace: true
   });
   if (!dump?.result.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.result));
+    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.result), undefined, undefined, asmCase);
   }
-  services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
+  services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
 
-  const interruptSchedule = resolveCaseInterruptSchedule(asm);
+  const interruptSchedule = resolveCaseInterruptScheduleFromCase(asmCase) ?? resolveCaseInterruptSchedule(asm);
   if (interruptSchedule) {
     services.output.appendLine(`外部中断目标 PC: ${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
   }
-  const probe = resolveCaseProbeMetadata(asm);
+  const probe = resolveCaseProbeMetadataFromCase(asmCase) ?? resolveCaseProbeMetadata(asm);
   if (probe) {
     services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
     const isim = await runIsim(services, {
       resource: asm,
       showMessages: false,
       revealOutput: options.revealOutput,
-      machineCodeSource: dump.outputFile,
+      asmCase,
       simOutputFileName: simOutputFileNameForCase(item),
       p7Probe: probe
     });
     if (!isim?.simResult.ok || !isim.simOut) {
-      return failedCase(item, 'isim', '测试中止：ISim 运行失败', dump.outputFile);
+      return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, undefined, asmCase);
     }
     const simText = await readTextFile(isim.simOut);
     const simEvents = parseSimOutput(simText);
@@ -632,10 +676,11 @@ async function runCourseTraceCase(
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
+      ...caseResultFields(asmCase),
       status: probeResult.passed ? 'passed' : 'failed',
       stage: 'probe',
       message: probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
-      machineCode: dump.outputFile.fsPath,
+      machineCode: asmCase.machineCode.fsPath,
       simOut: isim.simOut.fsPath,
       simEvents: simEvents.length,
       probe: probeResult
@@ -643,7 +688,7 @@ async function runCourseTraceCase(
   }
 
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
-  const mars = await runMarsFile(services, asm, 'run', {
+  const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
     showMessages: false,
     revealOutput: options.revealOutput,
     stdin: stdinText,
@@ -652,19 +697,20 @@ async function runCourseTraceCase(
     interruptSchedule
   });
   if (!mars?.result.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), dump.outputFile);
+    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), asmCase.machineCode, undefined, asmCase);
   }
+  await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
 
   const isim = await runIsim(services, {
     resource: asm,
     showMessages: false,
     revealOutput: options.revealOutput,
-    machineCodeSource: dump.outputFile,
+    asmCase,
     simOutputFileName: simOutputFileNameForCase(item),
     interruptSchedule
   });
   if (!isim?.simResult.ok || !isim.simOut) {
-    return failedCase(item, 'isim', '测试中止：ISim 运行失败', dump.outputFile, mars.outputFile);
+    return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, mars.outputFile, asmCase);
   }
 
   const marsText = await readTextFile(mars.outputFile);
@@ -677,10 +723,11 @@ async function runCourseTraceCase(
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
+      ...caseResultFields(asmCase),
       status: 'error',
       stage: 'compare',
       message: '某一端没有可解析的 Trace 事件',
-      machineCode: dump.outputFile.fsPath,
+      machineCode: asmCase.machineCode.fsPath,
       marsOut: mars.outputFile.fsPath,
       simOut: isim.simOut.fsPath,
       marsEvents: marsEvents.length,
@@ -693,10 +740,11 @@ async function runCourseTraceCase(
   return {
     asm: asm.fsPath,
     stdin: item.stdin?.fsPath,
+    ...caseResultFields(asmCase),
     status: diff.matched ? 'passed' : 'failed',
     stage: 'compare',
     message: diffMessage(diff),
-    machineCode: dump.outputFile.fsPath,
+    machineCode: asmCase.machineCode.fsPath,
     marsOut: mars.outputFile.fsPath,
     simOut: isim.simOut.fsPath,
     firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
@@ -936,12 +984,11 @@ async function runBuiltinGeneratorAndCollectAsms(
   options: CourseTraceRunOptions = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
-  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'generated'));
-  await ensureDirectory(outDir);
   const modes: Array<P7StressMode | undefined> = setup.profile === 'P7'
     ? (setup.p7StressMode === 'hybrid' ? ['anchor', 'probe'] : [setup.p7StressMode])
     : [undefined];
   const asms: vscode.Uri[] = [];
+  const asmCases: AsmCase[] = [];
   const generatedCases: ReturnType<typeof generateBuiltinAsmTestCase>[] = [];
   try {
     for (const mode of modes) {
@@ -957,18 +1004,30 @@ async function runBuiltinGeneratorAndCollectAsms(
         timerIntensity: setup.timerIntensity,
         probeScenarioCount: setup.probeScenarioCount,
         exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
-        exceptionTypes: setup.exceptionTypes
+          exceptionTypes: setup.exceptionTypes
       });
-      const asm = vscode.Uri.file(path.join(outDir.fsPath, builtinAsmFileName(generated.profile, generatedAt, generated.mode)));
-      await writeTextFile(asm, generated.text);
-      await writeCaseMetadata(asm, {
-        profile: generated.profile,
+      const fileName = builtinAsmFileName(generated.profile, generatedAt, generated.mode);
+      const asmCase = await createAsmCaseFromText(fileName, generated.text, {
+        resource: setup.resource,
+        source: {
+          kind: 'builtin',
+          generator: 'builtin:random-asm',
+          commandLine: generatorCommandLine(setup),
+          cwd: generatorCwd(setup)
+        },
+        createdAt: generatedAt,
+        p7: {
+          interruptSchedule: generated.interruptSchedule,
+          probe: generated.probe
+        }
+      });
+      await updateAsmCaseArtifacts(asmCase, 'source', {
+        generatedName: fileName,
         seed: generated.seed,
-        mode: generated.mode ?? mode,
-        interruptSchedule: generated.interruptSchedule,
-        probe: generated.probe
+        mode: generated.mode ?? mode ?? 'default'
       });
-      asms.push(asm);
+      asms.push(asmCase.sourceAsm);
+      asmCases.push(asmCase);
       generatedCases.push(generated);
     }
   } catch (error) {
@@ -1005,20 +1064,23 @@ async function runBuiltinGeneratorAndCollectAsms(
 
   return {
     asms,
-    source: generatorSource(setup, asms)
+    source: generatorSource(setup, asms),
+    asmCases
   };
 }
 
-function expandTraceCases(asms: vscode.Uri[]): CourseTraceCaseInput[] {
+function expandTraceCases(asms: vscode.Uri[], asmCases?: AsmCase[]): CourseTraceCaseInput[] {
+  const caseByAsm = new Map((asmCases ?? []).map((asmCase) => [normalizePathKey(asmCase.sourceAsm.fsPath), asmCase]));
   const cases: CourseTraceCaseInput[] = [];
   for (const asm of asms) {
+    const asmCase = caseByAsm.get(normalizePathKey(asm.fsPath));
     const stdinFiles = findStdinCandidatesForAsm(asm);
     if (!stdinFiles.length) {
-      cases.push({ asm });
+      cases.push({ asm, asmCase });
       continue;
     }
     for (const stdin of stdinFiles) {
-      cases.push({ asm, stdin });
+      cases.push({ asm, stdin, asmCase });
     }
   }
   return cases;
@@ -1039,6 +1101,11 @@ function traceOutputStem(item: CourseTraceCaseInput): string {
 
 function sanitizeTraceFileStem(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';
+}
+
+function normalizePathKey(file: string): string {
+  const normalized = path.normalize(file);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 async function resolveActiveGeneratorInput(): Promise<vscode.Uri | undefined> {
@@ -1069,7 +1136,7 @@ function generatorCommandLine(setup: GeneratorRunSetup): string {
 }
 
 function generatorCwd(setup: GeneratorRunSetup): string {
-  return setup.kind === 'external' ? setup.invocation.cwd : path.join(setup.folder.uri.fsPath, '.co', 'generated');
+  return setup.kind === 'external' ? setup.invocation.cwd : path.join(setup.folder.uri.fsPath, '.co', 'cases');
 }
 
 function generatorSource(
@@ -1289,17 +1356,68 @@ function failedCase(
   stage: CourseTraceStage,
   message: string,
   machineCode?: vscode.Uri,
-  marsOut?: vscode.Uri
+  marsOut?: vscode.Uri,
+  asmCase?: AsmCase
 ): CourseTraceCaseResult {
   return {
     asm: item.asm.fsPath,
     stdin: item.stdin?.fsPath,
+    ...(asmCase ? caseResultFields(asmCase) : {}),
     status: 'error',
     stage,
     message,
     machineCode: machineCode?.fsPath,
     marsOut: marsOut?.fsPath
   };
+}
+
+function asmCaseSourceFromBatchSource(source: CourseTraceBatchSource): AsmCaseSource {
+  if (source.kind === 'generator') {
+    return {
+      kind: source.generator === 'builtin:random-asm' ? 'builtin' : 'generator',
+      generator: source.generator,
+      commandLine: source.commandLine,
+      cwd: source.cwd
+    };
+  }
+  return { kind: 'selected' };
+}
+
+function caseResultFields(asmCase: AsmCase): Pick<CourseTraceCaseResult, 'caseId' | 'caseManifest' | 'asmSnapshot'> {
+  return {
+    caseId: asmCase.id,
+    caseManifest: asmCase.manifestUri.fsPath,
+    asmSnapshot: asmCase.asm.fsPath
+  };
+}
+
+function generatedCaseInputs(generated: GeneratedAsmBatch): CourseTraceCaseInput[] {
+  if (generated.asmCases?.length) {
+    return generated.asmCases.map((asmCase) => ({
+      asm: asmCase.sourceAsm,
+      asmCase
+    }));
+  }
+  return generated.asms.map((asm) => ({ asm }));
+}
+
+function resolveCaseInterruptScheduleFromCase(asmCase: AsmCase): number[] | undefined {
+  const schedule = asmCase.manifest.p7?.interruptSchedule;
+  return Array.isArray(schedule) && schedule.length ? schedule : undefined;
+}
+
+function resolveCaseProbeMetadataFromCase(asmCase: AsmCase): P7ProbeMetadata | undefined {
+  const probe = asmCase.manifest.p7?.probe;
+  return isProbeMetadata(probe) ? probe : undefined;
+}
+
+function p7MetadataFromSidecar(asm: vscode.Uri): { interruptSchedule?: number[]; probe?: P7ProbeMetadata } | undefined {
+  const data = readCaseMetadata(asm);
+  const interruptSchedule = Array.isArray(data.interruptSchedule)
+    ? data.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+    : undefined;
+  const probe = isProbeMetadata(data.probe) ? data.probe : undefined;
+  return interruptSchedule?.length || probe ? { interruptSchedule, probe } : undefined;
 }
 
 async function generateAsmTests(services: AppServices): Promise<void> {
@@ -1329,35 +1447,24 @@ async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
     return;
   }
 
-  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'out'));
-  await ensureDirectory(outDir);
   let dumped = 0;
-  for (const asm of generated.asms) {
-    const dumpFile = generatedMachineCodeDumpFile(setup.folder, outDir, asm);
-    const dump = await runMarsFile(services, asm, 'dumpText', {
-      showMessages: false,
-      dumpOutputFile: dumpFile
+  for (const item of generatedCaseInputs(generated)) {
+    const asmCase = item.asmCase ?? await createAsmCaseFromAsm(item.asm, {
+      source: asmCaseSourceFromBatchSource(generated.source),
+      resource: item.asm,
+      p7: p7MetadataFromSidecar(item.asm)
     });
+    const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
     if (!dump?.result.ok || !dump.outputFile) {
       const detail = marsStageFailureMessage('MARS 导出机器码失败', dump?.result);
       vscode.window.showErrorMessage(detail);
       return;
     }
     dumped++;
-    services.output.appendLine(`机器码: ${dump.outputFile.fsPath}`);
+    services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
   }
   await vscode.window.showTextDocument(generated.asms[0], { preview: false });
   vscode.window.showInformationMessage(`已生成 ${generated.asms.length} 个 ASM 测试点，并 dump ${dumped} 个机器码文件`);
-}
-
-function generatedMachineCodeDumpFile(
-  folder: vscode.WorkspaceFolder,
-  outDir: vscode.Uri,
-  asm: vscode.Uri
-): vscode.Uri {
-  const relative = path.relative(folder.uri.fsPath, asm.fsPath);
-  const stem = sanitizeTraceFileStem(relative.replace(/\.[^.\\/]+$/, ''));
-  return vscode.Uri.file(path.join(outDir.fsPath, `${stem}.code.txt`));
 }
 
 function interruptScheduleSidecarUri(asm: vscode.Uri): vscode.Uri {
@@ -1374,14 +1481,15 @@ interface CourseCaseMetadata {
   probe?: P7ProbeMetadata;
 }
 
-async function writeCaseMetadata(asm: vscode.Uri, metadata: CourseCaseMetadata): Promise<void> {
-  await writeTextFile(
-    interruptScheduleSidecarUri(asm),
-    JSON.stringify(metadata, null, 2) + '\n'
-  );
-}
-
 function readCaseMetadata(asm: vscode.Uri): CourseCaseMetadata {
+  const manifest = readAsmCaseManifestForAsm(asm);
+  if (manifest?.p7) {
+    return {
+      profile: manifest.profile,
+      interruptSchedule: manifest.p7.interruptSchedule,
+      probe: isProbeMetadata(manifest.p7.probe) ? manifest.p7.probe : undefined
+    };
+  }
   try {
     const uri = interruptScheduleSidecarUri(asm);
     if (!fs.existsSync(uri.fsPath)) {
@@ -1736,6 +1844,7 @@ function renderBatchTraceReport(
   const rows = results.map((item, index) => `<tr class="${item.status}">
     <td>${index + 1}</td>
     <td>${item.status.toUpperCase()}</td>
+    <td>${item.caseId ? `<code>${escapeHtml(item.caseId)}</code>` : ''}</td>
     <td>${escapeHtml(path.basename(item.asm))}</td>
     <td>${item.stdin ? escapeHtml(path.basename(item.stdin)) : ''}</td>
     <td>${escapeHtml(item.stage)}</td>
@@ -1821,7 +1930,7 @@ function renderBatchTraceReport(
   <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
   <table>
     <thead>
-      <tr><th>#</th><th>状态</th><th>ASM</th><th>输入</th><th>阶段</th><th>首个差异</th><th>首个差异详情</th><th>事件</th><th>消息</th></tr>
+      <tr><th>#</th><th>状态</th><th>Case</th><th>ASM</th><th>输入</th><th>阶段</th><th>首个差异</th><th>首个差异详情</th><th>事件</th><th>消息</th></tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
@@ -1840,6 +1949,7 @@ function renderLogisimPrepareReport(
   const rows = results.map((item, index) => `<tr class="${item.status}">
     <td>${index + 1}</td>
     <td>${item.status.toUpperCase()}</td>
+    <td>${item.caseId ? `<code>${escapeHtml(item.caseId)}</code>` : ''}</td>
     <td>${escapeHtml(path.basename(item.asm))}</td>
     <td>${item.wordCount ?? ''}</td>
     <td>${item.circuit ? `<code>${escapeHtml(item.circuit)}</code>` : ''}</td>
@@ -1924,7 +2034,7 @@ function renderLogisimPrepareReport(
   </div>
   <table>
     <thead>
-      <tr><th>#</th><th>状态</th><th>ASM</th><th>字数</th><th>已准备电路</th><th>消息</th></tr>
+      <tr><th>#</th><th>状态</th><th>Case</th><th>ASM</th><th>字数</th><th>已准备电路</th><th>消息</th></tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
@@ -1946,6 +2056,50 @@ function renderBatchSource(source: CourseTraceBatchSource | undefined): string {
     ${source.commandLine ? `<div>命令: <code>${escapeHtml(source.commandLine)}</code></div>` : ''}
     ${source.cwd ? `<div>工作目录: <code>${escapeHtml(source.cwd)}</code></div>` : ''}
   </div>`;
+}
+
+function renderAsmCaseIndex(cases: Awaited<ReturnType<typeof listAsmCaseManifests>>): string {
+  const rows = cases.map(({ manifest, uri }) => {
+    const artifacts = Object.entries(manifest.artifacts ?? {})
+      .flatMap(([kind, items]) => Object.entries(items ?? {}).map(([name, value]) => `${kind}.${name}: ${value}`))
+      .slice(0, 6);
+    return `<tr>
+      <td><code>${escapeHtml(manifest.caseId)}</code></td>
+      <td>${escapeHtml(manifest.createdAt)}</td>
+      <td>${escapeHtml(manifest.profile)}</td>
+      <td>${escapeHtml(manifest.source.kind)}</td>
+      <td><code>${escapeHtml(manifest.originalAsmPath)}</code></td>
+      <td><code>${escapeHtml(manifest.asmSnapshot.path)}</code></td>
+      <td>${manifest.machineCode ? `<code>${escapeHtml(manifest.machineCode.path)}</code>` : ''}</td>
+      <td>${artifacts.map((item) => `<div><code>${escapeHtml(item)}</code></div>`).join('')}</td>
+      <td><code>${escapeHtml(uri.fsPath)}</code></td>
+    </tr>`;
+  }).join('\n');
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: var(--vscode-font-family); padding: 20px; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+    h1 { font-size: 22px; margin: 0 0 16px; }
+    .summary { margin: 0 0 16px; color: var(--vscode-descriptionForeground); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--vscode-panel-border); padding: 7px; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: var(--vscode-editor-background); }
+    code { background: var(--vscode-textCodeBlock-background); padding: 2px 4px; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <h1>CO ASM 用例记录</h1>
+  <div class="summary">共 ${cases.length} 个 case，按创建时间倒序排列。</div>
+  <table>
+    <thead>
+      <tr><th>Case</th><th>时间</th><th>Profile</th><th>来源</th><th>原始 ASM</th><th>ASM 快照</th><th>机器码</th><th>Artifacts</th><th>Manifest</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
 }
 
 function batchSummary(results: CourseTraceCaseResult[]): CourseTraceBatchSummary {
