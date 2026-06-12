@@ -96,6 +96,12 @@ export function getConfiguredProjectProfile(resource?: vscode.Uri): ConfiguredPr
 
 export function getProfileResolution(resource?: vscode.Uri): ProfileResolution {
   const configured = getConfiguredProjectProfile(resource);
+  if (isConcreteProjectProfile(configured.profile)) {
+    return resolveProjectProfile({
+      configuredProfile: configured.profile,
+      configuredSource: configured.source
+    });
+  }
   return resolveProjectProfile({
     ...(profileInferenceProvider?.(resource) ?? {}),
     configuredProfile: configured.profile,
@@ -109,9 +115,19 @@ export function getProfile(resource?: vscode.Uri): ProjectProfile {
   return resolution.effectiveProfile ?? resolution.configuredProfile;
 }
 
+export async function persistInferredProfile(resource?: vscode.Uri): Promise<ConcreteProjectProfile | undefined> {
+  const resolution = getProfileResolution(resource);
+  if (resolution.configuredProfile !== 'auto' || resolution.source !== 'inferred' || !resolution.effectiveProfile) {
+    return resolution.effectiveProfile;
+  }
+  await vscode.workspace.getConfiguration('co', resource).update('project.profile', resolution.effectiveProfile, vscode.ConfigurationTarget.Workspace);
+  return resolution.effectiveProfile;
+}
+
 export async function ensureConcreteProfile(resource?: vscode.Uri, detail?: string): Promise<ConcreteProjectProfile | undefined> {
   const resolution = getProfileResolution(resource);
   if (resolution.effectiveProfile) {
+    await persistInferredProfile(resource);
     return resolution.effectiveProfile;
   }
   const picked = await vscode.window.showQuickPick(

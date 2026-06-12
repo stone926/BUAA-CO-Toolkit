@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getProfileResolution, setProfileInferenceProvider } from './config';
+import { getProfileResolution, persistInferredProfile, setProfileInferenceProvider } from './config';
 import {
   diagnosticCodeKey,
   diagnosticFileCodeKey,
@@ -56,21 +56,19 @@ export function activate(context: vscode.ExtensionContext): void {
     clearProfileInferenceCache();
     invalidateToolchainCache();
     sidebarProvider.refresh();
-    updateStatus(statusBar, getToolchainStatus);
+    refreshProjectUi();
   });
   configWatcher.onDidCreate(() => {
     clearProjectConfigCache();
     clearProfileInferenceCache();
     invalidateToolchainCache();
-    sidebarProvider.refresh();
-    updateStatus(statusBar, getToolchainStatus);
+    refreshProjectUi();
   });
   configWatcher.onDidDelete(() => {
     clearProjectConfigCache();
     clearProfileInferenceCache();
     invalidateToolchainCache();
-    sidebarProvider.refresh();
-    updateStatus(statusBar, getToolchainStatus);
+    refreshProjectUi();
   });
   context.subscriptions.push(configWatcher);
 
@@ -91,8 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(moduleRegistry);
   context.subscriptions.push(moduleRegistry.onDidChange(() => {
     invalidateToolchainCache();
-    sidebarProvider.refresh();
-    updateStatus(statusBar, getToolchainStatus);
+    refreshProjectUi();
   }));
   // 监听文件保存事件，增量更新注册表
   context.subscriptions.push(
@@ -127,20 +124,17 @@ export function activate(context: vscode.ExtensionContext): void {
     profileWatcher.onDidCreate(() => {
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      sidebarProvider.refresh();
-      updateStatus(statusBar, getToolchainStatus);
+      refreshProjectUi();
     }),
     profileWatcher.onDidChange(() => {
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      sidebarProvider.refresh();
-      updateStatus(statusBar, getToolchainStatus);
+      refreshProjectUi();
     }),
     profileWatcher.onDidDelete(() => {
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      sidebarProvider.refresh();
-      updateStatus(statusBar, getToolchainStatus);
+      refreshProjectUi();
     })
   );
 
@@ -153,17 +147,14 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCourseTest(context, services);
   registerCourseLinks(context);
 
-  async function getToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): Promise<ToolDetection[]> {
+  function cachedToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): ToolDetection[] | undefined {
     const now = Date.now();
     const key = toolchainCacheKey(resource);
     const cached = toolchainCache.get(key);
     if (cached && now - cached.timestamp < TOOLCHAIN_CACHE_TTL) {
       return cached.checks;
     }
-    const checks = await checkToolchain(output, resource);
-    toolchainCache.set(key, { checks, timestamp: now });
-    sidebarProvider.refresh();
-    return checks;
+    return undefined;
   }
 
   function invalidateToolchainCache(): void {
@@ -171,30 +162,40 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.checkToolchain', () => showToolchainReport(output)),
+    vscode.commands.registerCommand('co.checkToolchain', async () => {
+      const resource = vscode.window.activeTextEditor?.document.uri;
+      const checks = await showToolchainReport(output);
+      toolchainCache.set(toolchainCacheKey(resource), { checks, timestamp: Date.now() });
+      refreshProjectUi(resource);
+    }),
     vscode.commands.registerCommand('co.selectProjectProfile', () => selectProjectProfile()),
     vscode.commands.registerCommand('co.projectWizard', () => runProjectWizard()),
     vscode.window.onDidChangeActiveTextEditor(() => {
-      sidebarProvider.refresh();
-      updateStatus(statusBar, getToolchainStatus);
+      refreshProjectUi();
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('co.project.profile') || event.affectsConfiguration('co.toolchain')) {
         invalidateToolchainCache();
-        updateStatus(statusBar, getToolchainStatus);
-        sidebarProvider.refresh();
+        refreshProjectUi();
       }
     })
   );
 
-  updateStatus(statusBar, getToolchainStatus);
+  function refreshProjectUi(resource = vscode.window.activeTextEditor?.document.uri): void {
+    void persistInferredProfile(resource).finally(() => {
+      sidebarProvider.refresh();
+      updateStatus(statusBar, cachedToolchainStatus);
+    }).catch(() => undefined);
+  }
+
+  refreshProjectUi();
 }
 
 export async function deactivate(): Promise<void> {
   await stopLanguageServer();
 }
 
-async function showToolchainReport(output: vscode.OutputChannel): Promise<void> {
+async function showToolchainReport(output: vscode.OutputChannel): Promise<ToolDetection[]> {
   output.appendLine('正在检查 CO 工具链...');
   const resource = vscode.window.activeTextEditor?.document.uri;
   const checks = await checkToolchain(output, resource, { promptForProfile: true });
@@ -210,6 +211,7 @@ async function showToolchainReport(output: vscode.OutputChannel): Promise<void> 
     enableScripts: false
   });
   panel.webview.html = renderToolchainReport(checks);
+  return checks;
 }
 
 async function selectProjectProfile(): Promise<void> {
@@ -257,19 +259,16 @@ async function disableDiagnosticCode(languageId?: string, code?: string, documen
   vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalizedCode} 诊断`);
 }
 
-function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => Promise<ToolDetection[]>): void {
+function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => ToolDetection[] | undefined): void {
   const resource = vscode.window.activeTextEditor?.document.uri;
   const profileText = statusProfileText(resource);
   statusBar.text = `CO: ${profileText}`;
   statusBar.tooltip = 'BUAA CO Toolkit - 点击检查工具链';
   statusBar.show();
 
-  // Update with toolchain info asynchronously
   if (getToolchainStatus) {
-    getToolchainStatus(resource).then((checks) => {
-      if (!sameResource(resource, vscode.window.activeTextEditor?.document.uri)) {
-        return;
-      }
+    const checks = getToolchainStatus(resource);
+    if (checks && sameResource(resource, vscode.window.activeTextEditor?.document.uri)) {
       const toolStatus = checks
         .filter((check) => ['MARS', 'ISE fuse', 'Logisim'].includes(check.name))
         .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
@@ -277,9 +276,7 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
       if (toolStatus) {
         statusBar.text = `CO: ${profileText} | ${toolStatus}`;
       }
-    }).catch(() => {
-      // Keep the basic status if toolchain check fails
-    });
+    }
   }
 }
 

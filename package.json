@@ -844,7 +844,7 @@
               "P6",
               "P7"
             ],
-            "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P；无法推断时会要求手动选择并保存"
+            "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法推断时会要求手动选择并保存"
           },
           "co.course.tutorialRoot": {
             "type": "string",
