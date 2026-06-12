@@ -10,6 +10,7 @@ dist/
 fuse.log
 isim.log
 CLAUDE.md
+AGENTS.md
 doc
 .claude
 *.class
