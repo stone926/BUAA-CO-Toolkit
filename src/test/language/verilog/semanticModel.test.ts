@@ -82,4 +82,46 @@ describe('Verilog AST and semantic model', () => {
     // the connected expression `(clk)` IS a use of top's signal clk.
     expect(has(text.indexOf('(clk)') + 1)).toBe(true);
   });
+
+  it('keeps block-local declarations in the nearest scope', () => {
+    const text = [
+      'module scoped(input clk);',
+      '    reg i;',
+      '    always @(posedge clk) begin',
+      '        integer i;',
+      '        i = 1;',
+      '    end',
+      '    assign i = 0;',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const moduleSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.kind === 'module');
+    const blockSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.kind === 'block');
+    expect(moduleSymbol).toBeDefined();
+    expect(blockSymbol).toBeDefined();
+
+    const blockUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i = 1')));
+    const moduleUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i = 0')));
+    expect(blockUse?.symbol).toBe(blockSymbol);
+    expect(moduleUse?.symbol).toBe(moduleSymbol);
+  });
+
+  it('binds for-loop declarations without leaking them to module scope', () => {
+    const text = [
+      'module loop(input clk);',
+      '    always @(posedge clk) begin',
+      '        for (integer i = 0; i < 4; i = i + 1) begin',
+      '        end',
+      '    end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const loopIndexSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.kind === 'block');
+    expect(loopIndexSymbol).toBeDefined();
+    expect(result.semantic.moduleScopes[0].symbols.get('i')).toBeUndefined();
+    const use = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i < 4')));
+    expect(use?.symbol).toBe(loopIndexSymbol);
+  });
 });

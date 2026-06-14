@@ -877,7 +877,7 @@ function mapSemanticResolution(
   if (symbol.kind === 'module' && symbol.module) {
     return { kind: 'module', module: symbol.module };
   }
-  if ((symbol.kind === 'signal' || symbol.kind === 'port' || symbol.kind === 'parameter') && symbol.decl && symbol.module) {
+  if ((symbol.kind === 'signal' || symbol.kind === 'port' || symbol.kind === 'parameter' || symbol.kind === 'task') && symbol.decl && symbol.module) {
     return { kind: 'decl', decl: symbol.decl, module: symbol.module };
   }
   if (symbol.kind === 'instance' && symbol.instance && symbol.module) {

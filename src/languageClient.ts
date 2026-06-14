@@ -49,3 +49,14 @@ export async function stopLanguageServer(): Promise<void> {
   client = undefined;
   await current.stop();
 }
+
+export async function executeLanguageServerCommand(command: string, args: unknown[] = []): Promise<unknown> {
+  if (!client) {
+    return undefined;
+  }
+  await client.start();
+  return await client.sendRequest('workspace/executeCommand', {
+    command,
+    arguments: args
+  });
+}

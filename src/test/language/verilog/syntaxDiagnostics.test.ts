@@ -59,6 +59,46 @@ endmodule
     expect(result).toContain('syntax-missing-semicolon');
   });
 
+  it('reports malformed procedural assignments and controls', () => {
+    const result = codes(`
+module broken(input clk, input a, output reg y);
+    always @(posedge clk begin
+        if a) begin
+            y <= ;
+        end
+    end
+endmodule
+`.trim());
+    expect(result).toContain('syntax-malformed-event-control');
+    expect(result).toContain('syntax-malformed-if');
+    expect(result).toContain('syntax-malformed-assignment');
+  });
+
+  it('reports malformed instance connections and number literals', () => {
+    const result = codes(`
+module child(input a); endmodule
+module broken(input a);
+    child u(.a a);
+    wire [3:0] x = 4'b1020;
+endmodule
+`.trim());
+    expect(result).toContain('syntax-malformed-instance');
+    expect(result).toContain('syntax-malformed-number');
+  });
+
+  it('reports orphan procedural keywords', () => {
+    const result = codes(`
+module broken(input a);
+    always @(*) begin
+        else a = 1'b0;
+        default: a = 1'b1;
+    end
+endmodule
+`.trim());
+    expect(result).toContain('syntax-orphan-else');
+    expect(result).toContain('syntax-orphan-default');
+  });
+
   it('reports lexical syntax errors before structural checks', () => {
     expect(codes('module broken; initial $display("oops); endmodule')).toContain('syntax-unclosed-string');
     expect(codes('module broken; /* unterminated comment')).toContain('syntax-unclosed-comment');

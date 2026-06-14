@@ -6,6 +6,8 @@ import { cleanupCoTmp, coTmpDir } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
 import { ToolDetection } from './types';
+export { buildIseEnvironment, findFuse, findIsimGui } from './iseCommon';
+import { findFuse, findIsimGui } from './iseCommon';
 
 export async function checkToolchain(output: vscode.OutputChannel, resource?: vscode.Uri, options: { promptForProfile?: boolean } = {}): Promise<ToolDetection[]> {
   const checks: ToolDetection[] = [];
@@ -215,43 +217,6 @@ function hazardDirCheck(dir: string): ToolDetection {
 
 function normalizeToolName(name: string): string {
   return name.trim().toLowerCase();
-}
-
-export function findFuse(isePath: string): string {
-  const candidates = [
-    path.join(isePath, 'bin', 'nt64', 'fuse.exe'),
-    path.join(isePath, 'bin', 'nt', 'fuse.exe'),
-    path.join(isePath, 'bin', 'lin64', 'fuse'),
-    path.join(isePath, 'bin', 'lin', 'fuse')
-  ];
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
-}
-
-export function findIsimGui(isePath: string): string {
-  const candidates = [
-    path.join(isePath, 'bin', 'nt64', 'isimgui.exe'),
-    path.join(isePath, 'bin', 'nt', 'isimgui.exe'),
-    path.join(isePath, 'bin', 'lin64', 'isimgui'),
-    path.join(isePath, 'bin', 'lin', 'isimgui')
-  ];
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
-}
-
-export function buildIseEnvironment(isePath: string, baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const fuse = findFuse(isePath);
-  const binDir = path.dirname(fuse);
-  const platform = path.basename(binDir);
-  const pathKey = Object.keys(baseEnv).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
-  const entries = [
-    binDir,
-    path.join(binDir, 'unwrapped'),
-    path.join(isePath, 'lib', platform),
-    baseEnv[pathKey] ?? ''
-  ].filter(Boolean);
-  return {
-    XILINX: isePath,
-    [pathKey]: entries.join(path.delimiter)
-  };
 }
 
 function firstLine(text: string): string {

@@ -78,6 +78,7 @@ import {
   getVerilogSemanticTokens,
   getVerilogSignatureHelp
 } from './language/verilog/service';
+import { runIseSyntaxCheck } from './language/verilog/iseSyntaxCheck';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 
@@ -159,6 +160,11 @@ let globalSettings: CoSettings = defaultCoSettings;
 const documentSettings = new Map<string, Thenable<CoSettings>>();
 const updatedDocumentVersions = new Map<string, number>();
 const contentChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const verilogIseDiagnostics = new Map<string, Diagnostic[]>();
+const verilogIseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let verilogIseRunSequence = 0;
+let notifiedMissingIseToolchain = false;
+const verilogIseCommand = 'co.internal.verilog.checkSyntaxWithIse';
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
@@ -188,7 +194,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       inlayHintProvider: true,
       executeCommandProvider: {
-        commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand]
+        commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand, verilogIseCommand]
       },
       semanticTokensProvider: {
         legend: {
@@ -252,10 +258,7 @@ documents.onDidChangeContent((event) => {
 });
 
 documents.onDidSave((event) => {
-  if (updatedDocumentVersions.get(event.document.uri) === event.document.version) {
-    return;
-  }
-  void updateIndexAndValidate(event.document);
+  void handleDocumentSaved(event.document);
 });
 
 documents.onDidClose((event) => {
@@ -266,6 +269,7 @@ documents.onDidClose((event) => {
   }
   documentSettings.delete(event.document.uri);
   updatedDocumentVersions.delete(event.document.uri);
+  verilogIseDiagnostics.delete(event.document.uri);
   serviceForDocument(event.document)?.removeDocument?.(event.document.uri);
   connection.sendDiagnostics({
     uri: event.document.uri,
@@ -350,8 +354,23 @@ connection.onExecuteCommand(async (params) => {
   } else if (params.command === mipsIgnorePseudoMnemonicCommand && typeof params.arguments?.[0] === 'string') {
     mipsState.ignoredPseudoInstructionMnemonics.add(params.arguments[0].toLowerCase());
     await validateDocuments(isMipsDocument);
+  } else if (params.command === verilogIseCommand) {
+    const uri = typeof params.arguments?.[0] === 'string'
+      ? params.arguments[0]
+      : documents.all().find((document) => document.languageId === 'verilog')?.uri;
+    if (uri) {
+      await runVerilogIseSyntaxCheck(uri, await settingsForUri(uri), true);
+    }
   }
 });
+
+async function handleDocumentSaved(document: TextDocument): Promise<void> {
+  if (updatedDocumentVersions.get(document.uri) !== document.version) {
+    await updateIndexAndValidate(document);
+  }
+  const settings = effectiveSettingsForDocument(document, await getDocumentSettings(document.uri));
+  scheduleVerilogIseSyntaxCheck(document, settings);
+}
 
 async function updateIndexAndValidate(document: TextDocument): Promise<void> {
   const settings = await getDocumentSettings(document.uri);
@@ -363,9 +382,10 @@ async function updateIndexAndValidate(document: TextDocument): Promise<void> {
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
   const resolvedSettings = effectiveSettingsForDocument(document, settings ?? await getDocumentSettings(document.uri));
   const diagnosticLanguageId = serviceKeyForDocument(document);
+  const serviceDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [];
   const diagnostics = filterDisabledDiagnostics(
     diagnosticLanguageId,
-    serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [],
+    mergeExternalDiagnostics(document, serviceDiagnostics),
     resolvedSettings,
     document.uri
   );
@@ -373,6 +393,98 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
     uri: document.uri,
     diagnostics
   });
+}
+
+function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnostic[]): Diagnostic[] {
+  if (document.languageId !== 'verilog') {
+    return diagnostics;
+  }
+  const iseDiagnostics = verilogIseDiagnostics.get(document.uri) ?? [];
+  if (!iseDiagnostics.length) {
+    return diagnostics;
+  }
+  const iseLines = new Set(iseDiagnostics.map((diagnostic) => diagnostic.range.start.line));
+  const filtered = diagnostics.filter((diagnostic) => {
+    const code = typeof diagnostic.code === 'string' ? diagnostic.code : '';
+    return !(code.startsWith('syntax-') && iseLines.has(diagnostic.range.start.line));
+  });
+  return [...filtered, ...iseDiagnostics];
+}
+
+function scheduleVerilogIseSyntaxCheck(document: TextDocument, settings: CoSettings): void {
+  if (document.languageId !== 'verilog') {
+    return;
+  }
+  const ise = settings.verilog.syntax.ise;
+  if (!ise.enabled || ise.mode !== 'onSave') {
+    return;
+  }
+  const localDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, settings) ?? [];
+  if (localDiagnostics.some((diagnostic) => diagnostic.severity === 1 && typeof diagnostic.code === 'string' && diagnostic.code.startsWith('syntax-'))) {
+    verilogIseDiagnostics.delete(document.uri);
+    void validateDocument(document, settings);
+    return;
+  }
+  const key = workspaceKeyForUri(document.uri);
+  const existing = verilogIseTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  verilogIseTimers.set(key, setTimeout(() => {
+    verilogIseTimers.delete(key);
+    void runVerilogIseSyntaxCheck(document.uri, settings, false);
+  }, 500));
+}
+
+async function runVerilogIseSyntaxCheck(uri: string, settings: CoSettings, manual: boolean): Promise<void> {
+  const ise = settings.verilog.syntax.ise;
+  if (!ise.enabled || ise.mode === 'off') {
+    return;
+  }
+  if (!manual && ise.mode !== 'onSave') {
+    return;
+  }
+  const runId = ++verilogIseRunSequence;
+  const configuredTop = settings.project.topModule.trim();
+  const fallbackTop = verilogIndex.indexedModules()[0]?.name;
+  const topModule = configuredTop && verilogIndex.getModule(configuredTop)
+    ? configuredTop
+    : fallbackTop ?? configuredTop;
+  const result = await runIseSyntaxCheck({
+    workspaceFolders,
+    triggerUri: uri,
+    isePath: settings.toolchain.isePath,
+    topModule,
+    fallbackTopModule: fallbackTop,
+    timeoutMs: ise.timeoutMs > 0 ? ise.timeoutMs : settings.run.timeoutMs
+  });
+  if (runId !== verilogIseRunSequence) {
+    return;
+  }
+  if (result.skipped === 'missing-toolchain') {
+    verilogIseDiagnostics.clear();
+    if (!notifiedMissingIseToolchain) {
+      notifiedMissingIseToolchain = true;
+      void connection.window.showInformationMessage('ISE fuse 未配置或不可用，Verilog 语法检查已回退到内置检查。');
+    }
+    await validateOpenVerilogDocuments();
+    return;
+  }
+  if (result.skipped) {
+    verilogIseDiagnostics.clear();
+    await validateOpenVerilogDocuments();
+    return;
+  }
+  notifiedMissingIseToolchain = false;
+  verilogIseDiagnostics.clear();
+  for (const [diagnosticUri, diagnostics] of result.diagnosticsByUri) {
+    verilogIseDiagnostics.set(diagnosticUri, diagnostics);
+  }
+  await validateOpenVerilogDocuments();
+}
+
+async function validateOpenVerilogDocuments(): Promise<void> {
+  await validateDocuments((document) => document.languageId === 'verilog');
 }
 
 function getCodeActions(
@@ -432,6 +544,30 @@ function fsPathFromUri(uri: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function workspaceKeyForUri(uri: string): string {
+  const file = fsPathFromUri(uri);
+  const folder = workspaceFolders
+    ?.map((candidate) => ({ uri: candidate.uri, path: fsPathFromUri(candidate.uri) }))
+    .filter((candidate): candidate is { uri: string; path: string } => Boolean(candidate.path))
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((candidate) => file ? isInsideDirectory(file, candidate.path) : false);
+  return folder?.uri ?? uri;
+}
+
+function isInsideDirectory(file: string, dir: string): boolean {
+  const relative = pathRelative(dir, file);
+  return relative === '' || (!relative.startsWith('..') && !/^[A-Za-z]:/.test(relative) && !relative.startsWith('/'));
+}
+
+function pathRelative(from: string, to: string): string {
+  const normalizedFrom = from.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normalizedTo = to.replace(/\\/g, '/');
+  if (normalizedTo.toLowerCase().startsWith(`${normalizedFrom.toLowerCase()}/`) || normalizedTo.toLowerCase() === normalizedFrom.toLowerCase()) {
+    return normalizedTo.slice(normalizedFrom.length).replace(/^\/+/, '');
+  }
+  return '..';
 }
 
 async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<string>> {
@@ -494,6 +630,20 @@ async function getDocumentSettings(resource: string): Promise<CoSettings> {
     documentSettings.set(resource, result);
   }
   return result;
+}
+
+async function settingsForUri(uri: string): Promise<CoSettings> {
+  const document = documents.get(uri);
+  if (document) {
+    return effectiveSettingsForDocument(document, await getDocumentSettings(uri));
+  }
+  return applyResolvedProfile(await getDocumentSettings(uri), {
+    activeLanguageId: uri.toLowerCase().endsWith('.v') ? 'verilog' : '',
+    activeFilePath: fsPathFromUri(uri),
+    files: indexedProfileFiles(TextDocument.create(uri, uri.toLowerCase().endsWith('.v') ? 'verilog' : '', 0, '')),
+    modules: verilogIndex.allModules(),
+    verilogTexts: verilogIndex.allFiles().map((file) => file.text)
+  });
 }
 
 documents.listen(connection);

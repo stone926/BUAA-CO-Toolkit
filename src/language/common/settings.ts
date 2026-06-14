@@ -15,12 +15,25 @@ export interface CoSettings {
     machineCode: string;
     simTime: string;
   };
+  toolchain: {
+    isePath: string;
+  };
+  run: {
+    timeoutMs: number;
+  };
   mips: {
     warnPseudoInstruction: boolean;
     instructionColorMode: 'realVsPseudo' | 'same' | 'byType';
     warnMissingExitSyscall: boolean;
   };
   verilog: {
+    syntax: {
+      ise: {
+        enabled: boolean;
+        mode: 'off' | 'onSave' | 'commandOnly';
+        timeoutMs: number;
+      };
+    };
     implicitNet: {
       diagnostic: 'off' | 'hint' | 'warning' | 'error';
       ignorePatterns: string[];
@@ -54,12 +67,25 @@ export const defaultCoSettings: CoSettings = {
     machineCode: 'code.txt',
     simTime: '200us'
   },
+  toolchain: {
+    isePath: ''
+  },
+  run: {
+    timeoutMs: 120000
+  },
   mips: {
     warnPseudoInstruction: true,
     instructionColorMode: 'realVsPseudo',
     warnMissingExitSyscall: true
   },
   verilog: {
+    syntax: {
+      ise: {
+        enabled: true,
+        mode: 'onSave',
+        timeoutMs: 0
+      }
+    },
     implicitNet: {
       diagnostic: 'warning',
       ignorePatterns: ['^uut\\.', '^tb\\.']
@@ -94,11 +120,22 @@ export function mergeCoSettings(value: unknown): CoSettings {
       ...defaultCoSettings.project,
       ...(candidate.project ?? {})
     },
+    toolchain: {
+      ...defaultCoSettings.toolchain,
+      ...(candidate.toolchain ?? {}),
+      isePath: typeof candidate.toolchain?.isePath === 'string' ? candidate.toolchain.isePath.trim() : defaultCoSettings.toolchain.isePath
+    },
+    run: {
+      ...defaultCoSettings.run,
+      ...(candidate.run ?? {}),
+      timeoutMs: normalizeInteger(candidate.run?.timeoutMs, defaultCoSettings.run.timeoutMs, 1000, 600000)
+    },
     mips: {
       ...defaultCoSettings.mips,
       ...(candidate.mips ?? {})
     },
     verilog: {
+      syntax: normalizeVerilogSyntax(candidate.verilog?.syntax),
       implicitNet: {
         ...defaultCoSettings.verilog.implicitNet,
         ...(candidate.verilog?.implicitNet ?? {})
@@ -109,6 +146,25 @@ export function mergeCoSettings(value: unknown): CoSettings {
         disabledRules: normalizeDisabledRules(candidate.verilog?.lint?.disabledRules)
       },
       format: normalizeVerilogFormat(candidate.verilog?.format)
+    }
+  };
+}
+
+function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax'] {
+  const candidate = typeof value === 'object' && value !== null
+    ? value as Partial<CoSettings['verilog']['syntax']>
+    : {};
+  const iseCandidate = typeof candidate.ise === 'object' && candidate.ise !== null
+    ? candidate.ise as Partial<CoSettings['verilog']['syntax']['ise']>
+    : {};
+  const mode = iseCandidate.mode === 'off' || iseCandidate.mode === 'commandOnly' || iseCandidate.mode === 'onSave'
+    ? iseCandidate.mode
+    : defaultCoSettings.verilog.syntax.ise.mode;
+  return {
+    ise: {
+      enabled: typeof iseCandidate.enabled === 'boolean' ? iseCandidate.enabled : defaultCoSettings.verilog.syntax.ise.enabled,
+      mode,
+      timeoutMs: normalizeInteger(iseCandidate.timeoutMs, defaultCoSettings.verilog.syntax.ise.timeoutMs, 0, 600000)
     }
   };
 }

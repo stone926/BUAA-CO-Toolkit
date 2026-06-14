@@ -4,6 +4,7 @@ import { makeDiagnostic, rangeAtOffset } from '../common/lsp';
 import { VerilogModule } from './model';
 import { VerilogToken } from './lexer';
 import { VerilogCstDocument } from './cst';
+import { parseVerilogSyntax } from './syntaxParser';
 
 type BlockToken = 'begin' | 'case' | 'generate' | 'function' | 'task';
 
@@ -75,6 +76,26 @@ export function collectSyntaxDiagnostics(
   collectDelimiterDiagnostics(document, cst.codeTokens, diagnostics);
   collectBlockBalanceDiagnostics(document, cst.codeTokens, diagnostics);
   collectStatementTerminatorDiagnostics(document, cst.codeTokens, modules, diagnostics);
+  for (const diagnostic of parseVerilogSyntax(document, cst, modules).diagnostics) {
+    pushUniqueDiagnostic(diagnostics, diagnostic);
+  }
+}
+
+function pushUniqueDiagnostic(diagnostics: Diagnostic[], diagnostic: Diagnostic): void {
+  const key = diagnosticKey(diagnostic);
+  if (diagnostics.some((item) => diagnosticKey(item) === key)) {
+    return;
+  }
+  diagnostics.push(diagnostic);
+}
+
+function diagnosticKey(diagnostic: Diagnostic): string {
+  return [
+    diagnostic.code,
+    diagnostic.range.start.line,
+    diagnostic.range.start.character,
+    diagnostic.message
+  ].join(':');
 }
 
 function collectMalformedModuleDiagnostics(

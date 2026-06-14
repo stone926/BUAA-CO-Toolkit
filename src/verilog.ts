@@ -8,6 +8,7 @@ import {
   getMachineCode,
   getIsePath,
   getProfile,
+  getRunTimeout,
   getSimTime,
   getTestbench,
   getTopModule
@@ -24,6 +25,7 @@ import { launchTool, revealOutputChannel, runTool } from './process';
 import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
 import { P7ProbeMetadata } from './courseTesting/builtinAsmGenerator';
+import { executeLanguageServerCommand } from './languageClient';
 import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
 import {
   AsmCase,
@@ -119,10 +121,22 @@ export function registerVerilog(context: vscode.ExtensionContext, services: AppS
     vscode.commands.registerCommand('co.verilog.disableLintRule', (rule?: string) => disableLintRule(rule)),
     vscode.commands.registerCommand('co.verilog.generateTestbench', () => generateTestbench(moduleRegistry)),
     vscode.commands.registerCommand('co.verilog.generateIseProject', () => generateIseProject(services)),
+    vscode.commands.registerCommand('co.verilog.checkSyntaxWithIse', () => checkSyntaxWithIse()),
     vscode.commands.registerCommand('co.verilog.runIsim', () => runIsim(services, { moduleRegistry })),
     vscode.commands.registerCommand('co.verilog.openIsimWaveform', () => openIsimWaveform(services, moduleRegistry)),
     vscode.commands.registerCommand('co.verilog.exportVcd', () => exportVcdWaveform(services, moduleRegistry))
   );
+}
+
+async function checkSyntaxWithIse(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.languageId !== 'verilog') {
+    vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
+    return;
+  }
+  await editor.document.save();
+  await executeLanguageServerCommand('co.internal.verilog.checkSyntaxWithIse', [editor.document.uri.toString()]);
+  vscode.window.showInformationMessage('已触发 ISE 语法检查，结果会显示在问题面板');
 }
 
 async function disableLintRule(rule?: string): Promise<void> {
@@ -1104,7 +1118,20 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
       testbench: getTestbench(uri),
       simTime: getSimTime(uri)
     },
+    toolchain: {
+      isePath: getIsePath(uri)
+    },
+    run: {
+      timeoutMs: getRunTimeout(uri)
+    },
     verilog: {
+      syntax: {
+        ise: {
+          enabled: config<boolean>('verilog.syntax.ise.enabled', defaultCoSettings.verilog.syntax.ise.enabled, uri),
+          mode: config<CoSettings['verilog']['syntax']['ise']['mode']>('verilog.syntax.ise.mode', defaultCoSettings.verilog.syntax.ise.mode, uri),
+          timeoutMs: config<number>('verilog.syntax.ise.timeoutMs', defaultCoSettings.verilog.syntax.ise.timeoutMs, uri)
+        }
+      },
       implicitNet: {
         diagnostic: config<CoSettings['verilog']['implicitNet']['diagnostic']>('verilog.implicitNet.diagnostic', defaultCoSettings.verilog.implicitNet.diagnostic, uri),
         ignorePatterns: config<string[]>('verilog.implicitNet.ignorePatterns', defaultCoSettings.verilog.implicitNet.ignorePatterns, uri)

@@ -53,6 +53,31 @@ const declModifiers = new Set([
   'supply0',
   'supply1'
 ]);
+const instanceExcludedFirstTokens = new Set([
+  'module',
+  'endmodule',
+  'assign',
+  'always',
+  'initial',
+  'begin',
+  'end',
+  'if',
+  'else',
+  'case',
+  'casex',
+  'casez',
+  'endcase',
+  'for',
+  'forever',
+  'repeat',
+  'while',
+  'task',
+  'endtask',
+  'function',
+  'endfunction',
+  'generate',
+  'endgenerate'
+]);
 
 export function parseModulesFromCst(
   document: TextDocument,
@@ -401,6 +426,9 @@ function parseInstances(document: TextDocument, text: string, tokens: VerilogTok
   for (const statement of statementSlices(tokens)) {
     const first = statement[0];
     if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName) {
+      continue;
+    }
+    if (instanceExcludedFirstTokens.has(first.value)) {
       continue;
     }
     // 拒绝将声明关键字（reg, wire, input 等）误认为模块名来实例化

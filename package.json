@@ -48,6 +48,7 @@
     "onCommand:co.mips.dumpKernelText",
     "onCommand:co.verilog.generateTestbench",
     "onCommand:co.verilog.generateIseProject",
+    "onCommand:co.verilog.checkSyntaxWithIse",
     "onCommand:co.verilog.runIsim",
     "onCommand:co.verilog.openIsimWaveform",
     "onCommand:co.verilog.exportVcd",
@@ -542,6 +543,11 @@
         "title": "CO: Verilog 生成 ISE 工程"
       },
       {
+        "command": "co.verilog.checkSyntaxWithIse",
+        "title": "CO: Verilog 使用 ISE 检查语法",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "co.verilog.runIsim",
         "title": "CO: Verilog 运行 ISim",
         "icon": {
@@ -754,6 +760,9 @@
         },
         {
           "command": "co.verilog.generateIseProject"
+        },
+        {
+          "command": "co.verilog.checkSyntaxWithIse"
         },
         {
           "command": "co.verilog.runIsim"
@@ -1001,6 +1010,32 @@
               "error"
             ],
             "description": "Verilog 隐式连线诊断的严重级别"
+          },
+          "co.verilog.syntax.ise.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "默认启用保存后 ISE fuse 语法检查。ISE 不可用时自动回退到内置 Verilog 检查"
+          },
+          "co.verilog.syntax.ise.mode": {
+            "type": "string",
+            "default": "onSave",
+            "enum": [
+              "off",
+              "onSave",
+              "commandOnly"
+            ],
+            "enumDescriptions": [
+              "禁用 ISE 语法检查",
+              "保存 Verilog 文件时自动运行 ISE 检查",
+              "只在运行 CO: Verilog 使用 ISE 检查语法 命令时检查"
+            ],
+            "description": "控制 ISE fuse 语法检查触发时机"
+          },
+          "co.verilog.syntax.ise.timeoutMs": {
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "description": "ISE 语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs"
           },
           "co.verilog.implicitNet.ignorePatterns": {
             "type": "array",
