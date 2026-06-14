@@ -1243,7 +1243,7 @@
           "co.test.logisim.mainCircuit": {
             "type": "string",
             "default": "main",
-            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露 pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData 输出 pin"
+            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要按教程端口顺序暴露 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData 输出；端口 label 仅用于辅助识别，不强制要求"
           },
           "co.test.p7.interrupt": {
             "type": "boolean",

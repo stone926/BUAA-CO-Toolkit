@@ -60,6 +60,70 @@ function projectWithMainPins(): string {
 </project>`;
 }
 
+function projectWithOrderedUnlabeledPorts(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project source="2.7.1" version="1.0">
+  <main name="main"/>
+  <circuit name="main">
+    <appear>
+      <circ-port height="8" pin="60,30" width="8" x="46" y="86"/>
+      <circ-port height="10" pin="240,60" width="10" x="75" y="65"/>
+      <circ-port height="10" pin="1130,60" width="10" x="75" y="75"/>
+      <circ-port height="10" pin="1130,110" width="10" x="75" y="85"/>
+      <circ-port height="10" pin="1130,170" width="10" x="75" y="95"/>
+      <circ-port height="10" pin="1130,230" width="10" x="75" y="105"/>
+      <circ-port height="10" pin="1140,290" width="10" x="75" y="115"/>
+      <circ-port height="10" pin="240,290" width="10" x="75" y="55"/>
+      <circ-port height="10" pin="1140,380" width="10" x="75" y="125"/>
+    </appear>
+    <comp lib="0" loc="(60,30)" name="Pin">
+      <a name="label" val="reset"/>
+    </comp>
+    <comp lib="0" loc="(240,60)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+      <a name="label" val="pc"/>
+    </comp>
+    <comp lib="0" loc="(1130,60)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="label" val="RegWrite"/>
+    </comp>
+    <comp lib="0" loc="(1130,110)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="5"/>
+    </comp>
+    <comp lib="0" loc="(1130,170)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(1130,230)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+    </comp>
+    <comp lib="0" loc="(240,290)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+      <a name="label" val="Instr"/>
+    </comp>
+    <comp lib="0" loc="(1140,290)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(1140,380)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+  </circuit>
+</project>`;
+}
+
 describe('Logisim trace helpers', () => {
   it('orders output pins by position, ignores extra columns, and excludes halt', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
@@ -77,6 +141,34 @@ describe('Logisim trace helpers', () => {
     ]);
     expect(spec.required.pc.index).toBe(1);
     expect(spec.required.memdata.index).toBe(7);
+  });
+
+  it('uses appearance port order when P3 trace labels are omitted', () => {
+    const spec = parseLogisimTraceSpec(projectWithOrderedUnlabeledPorts(), 'main');
+
+    expect(spec.columns.map((column) => column.label)).toEqual([
+      'Instr',
+      'pc',
+      'RegWrite',
+      '',
+      '',
+      '',
+      '',
+      ''
+    ]);
+    expect(spec.required.pc.index).toBe(1);
+    expect(spec.required.regaddr.index).toBe(3);
+    expect(spec.required.memwrite.index).toBe(5);
+    expect(spec.required.memdata.index).toBe(7);
+
+    const parsed = parseLogisimTraceOutput(
+      '34010001\t00003000\t1\t00001\t00000001\t0\txxxxxxxx\txxxxxxxx',
+      spec
+    );
+
+    expect(parsed.events.map((event) => event.raw)).toEqual([
+      '@00003000: $1 <= 00000001'
+    ]);
   });
 
   it('parses table rows and converts Logisim writes into CPU trace events', () => {

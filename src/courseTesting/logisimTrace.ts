@@ -66,9 +66,34 @@ const requiredLabels: LogisimTraceRequiredLabel[] = [
   'memdata'
 ];
 
+const p3OrderedLabels = [
+  'instr',
+  'pc',
+  'regwrite',
+  'regaddr',
+  'regdata',
+  'memwrite',
+  'memaddr',
+  'memdata'
+] as const;
+
+const p3OrderedLabelSet = new Set<string>(p3OrderedLabels);
+
+const p3OrderedWidths: Record<typeof p3OrderedLabels[number], number> = {
+  instr: 32,
+  pc: 32,
+  regwrite: 1,
+  regaddr: 5,
+  regdata: 32,
+  memwrite: 1,
+  memaddr: 32,
+  memdata: 32
+};
+
 const circuitPattern = /<circuit\b[^>]*\bname="([^"]+)"[^>]*>[\s\S]*?<\/circuit>/g;
 const pinPattern = /<comp\b[^>]*\bname="Pin"[^>]*(?:\/>|>[\s\S]*?<\/comp>)/g;
 const attrPattern = /<a\b[^>]*>/g;
+const circPortPattern = /<circ-port\b[^>]*\/>/g;
 
 export function parseLogisimTraceSpec(circuitText: string, circuitName = defaultLogisimTraceCircuit): LogisimTraceSpec {
   const circuit = findCircuitBlock(circuitText, circuitName);
@@ -77,7 +102,7 @@ export function parseLogisimTraceSpec(circuitText: string, circuitName = default
   }
 
   const outputs = findOutputPins(circuit)
-    .sort((left, right) => left.y - right.y || left.x - right.x);
+    .sort((left, right) => left.orderY - right.orderY || left.orderX - right.orderX || left.y - right.y || left.x - right.x);
   const columns: LogisimTraceOutputColumn[] = [];
   let hasHalt = false;
 
@@ -87,33 +112,23 @@ export function parseLogisimTraceSpec(circuitText: string, circuitName = default
       hasHalt = true;
       continue;
     }
+    const { x, y, label, width } = output;
     columns.push({
-      ...output,
+      x,
+      y,
+      label,
+      width,
       canonicalLabel,
       index: columns.length
     });
   }
 
-  const byLabel = new Map<string, LogisimTraceOutputColumn>();
-  for (const column of columns) {
-    if (!column.canonicalLabel) {
-      continue;
-    }
-    if (byLabel.has(column.canonicalLabel)) {
-      throw new Error(`Logisim trace circuit "${circuitName}" has duplicate output label "${column.label}".`);
-    }
-    byLabel.set(column.canonicalLabel, column);
-  }
-
-  const missing = requiredLabels.filter((label) => !byLabel.has(label));
-  if (missing.length) {
-    throw new Error(`Logisim trace circuit "${circuitName}" is missing output pin(s): ${missing.join(', ')}.`);
-  }
+  const required = resolveRequiredColumns(columns, circuitName);
 
   return {
     circuitName,
     columns,
-    required: Object.fromEntries(requiredLabels.map((label) => [label, byLabel.get(label)])) as Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn>,
+    required,
     hasHalt
   };
 }
@@ -253,8 +268,14 @@ function findCircuitBlock(circuitText: string, circuitName: string): string | un
   return undefined;
 }
 
-function findOutputPins(circuitBlock: string): Array<Omit<LogisimTraceOutputColumn, 'index' | 'canonicalLabel'>> {
-  const pins: Array<Omit<LogisimTraceOutputColumn, 'index' | 'canonicalLabel'>> = [];
+interface LogisimOutputPin extends Omit<LogisimTraceOutputColumn, 'index' | 'canonicalLabel'> {
+  orderX: number;
+  orderY: number;
+}
+
+function findOutputPins(circuitBlock: string): LogisimOutputPin[] {
+  const pins: LogisimOutputPin[] = [];
+  const appearanceOrder = findAppearancePortOrder(circuitBlock);
   pinPattern.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pinPattern.exec(circuitBlock))) {
@@ -266,14 +287,99 @@ function findOutputPins(circuitBlock: string): Array<Omit<LogisimTraceOutputColu
     if (!loc) {
       continue;
     }
+    const x = Number(loc[1]);
+    const y = Number(loc[2]);
+    const order = appearanceOrder.get(`${x},${y}`);
     pins.push({
-      x: Number(loc[1]),
-      y: Number(loc[2]),
+      x,
+      y,
+      orderX: order?.x ?? x,
+      orderY: order?.y ?? y,
       label: attributeValue(block, 'label') ?? '',
       width: numericAttributeValue(block, 'width') ?? 1
     });
   }
   return pins;
+}
+
+function findAppearancePortOrder(circuitBlock: string): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  const appear = circuitBlock.match(/<appear\b[^>]*>[\s\S]*?<\/appear>/)?.[0];
+  if (!appear) {
+    return result;
+  }
+
+  circPortPattern.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = circPortPattern.exec(appear))) {
+    const tag = match[0];
+    const pin = tagAttributeValue(tag, 'pin');
+    const x = numericTagAttributeValue(tag, 'x');
+    const y = numericTagAttributeValue(tag, 'y');
+    if (!pin || x === undefined || y === undefined) {
+      continue;
+    }
+    result.set(pin, { x, y });
+  }
+  return result;
+}
+
+function resolveRequiredColumns(
+  columns: readonly LogisimTraceOutputColumn[],
+  circuitName: string
+): Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn> {
+  const ordered = resolveP3OrderedColumns(columns);
+  if (ordered) {
+    return ordered;
+  }
+
+  const byLabel = new Map<string, LogisimTraceOutputColumn>();
+  for (const column of columns) {
+    if (!column.canonicalLabel) {
+      continue;
+    }
+    if (byLabel.has(column.canonicalLabel)) {
+      throw new Error(`Logisim trace circuit "${circuitName}" has duplicate output label "${column.label}".`);
+    }
+    byLabel.set(column.canonicalLabel, column);
+  }
+
+  const missing = requiredLabels.filter((label) => !byLabel.has(label));
+  if (missing.length) {
+    throw new Error(`Logisim trace circuit "${circuitName}" cannot identify P3 trace output pins by order or labels. Expected ordered outputs: Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData. Missing output label(s): ${missing.join(', ')}.`);
+  }
+
+  return Object.fromEntries(requiredLabels.map((label) => [label, byLabel.get(label)])) as Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn>;
+}
+
+function resolveP3OrderedColumns(
+  columns: readonly LogisimTraceOutputColumn[]
+): Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn> | undefined {
+  if (columns.length < p3OrderedLabels.length) {
+    return undefined;
+  }
+
+  const ordered = columns.slice(0, p3OrderedLabels.length);
+  for (let i = 0; i < ordered.length; i++) {
+    const expected = p3OrderedLabels[i];
+    const actual = ordered[i].canonicalLabel;
+    if (actual && p3OrderedLabelSet.has(actual) && actual !== expected) {
+      return undefined;
+    }
+    if (ordered[i].width !== p3OrderedWidths[expected]) {
+      return undefined;
+    }
+  }
+
+  return {
+    pc: ordered[1],
+    regwrite: ordered[2],
+    regaddr: ordered[3],
+    regdata: ordered[4],
+    memwrite: ordered[5],
+    memaddr: ordered[6],
+    memdata: ordered[7]
+  };
 }
 
 function parseLogisimTraceValue(rawValue: string, width: number): LogisimTraceValue {
@@ -352,6 +458,20 @@ function attributeValue(block: string, name: string): string | undefined {
   return undefined;
 }
 
+function tagAttributeValue(tag: string, name: string): string | undefined {
+  const escapedName = escapeRegExp(name);
+  const match = tag.match(new RegExp(`\\b${escapedName}="([^"]*)"`));
+  return match ? decodeXmlAttribute(match[1]) : undefined;
+}
+
+function numericTagAttributeValue(tag: string, name: string): number | undefined {
+  const value = tagAttributeValue(tag, name);
+  if (!value || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+  return Number(value);
+}
+
 function numericAttributeValue(block: string, name: string): number | undefined {
   const value = attributeValue(block, name);
   if (!value || !/^\d+$/.test(value)) {
@@ -391,6 +511,10 @@ function escapeXmlAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function decodeXmlAttribute(value: string): string {
