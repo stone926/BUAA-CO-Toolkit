@@ -162,6 +162,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
 - `CO: Logisim 生成 ROM 文件`、`CO: Logisim 注入 ROM 到电路`、`CO: Logisim 日志转 CSV`、`CO: Logisim 打开当前电路`；
+- P3 Trace 对拍读取顶层 `main`（可用 `co.test.logisim.mainCircuit` 改）中的 `Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData`。Logisim CLI 的 stdout 列序按源码实际 Pin 位置输出，插件会优先用标准 label 映射；label 不完整时按教程外观端口从上到下、从左到右推断语义列；P3 电路应当只有一个 32 位 ROM；
 - 批量：`CO: 准备 Logisim 电路用例` / `CO: 准备生成的 Logisim 电路用例`（把机器码注入 `.circ` 副本，写到 `.co/cases/<caseId>/logisim/`）。
 
 ### 流水线冲突分析（P5/P6/P7）

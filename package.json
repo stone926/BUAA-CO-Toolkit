@@ -1214,7 +1214,7 @@
             "default": 4000,
             "minimum": 1,
             "maximum": 4000,
-            "description": "内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P7 下此设置被忽略，P7 使用 co.test.builtinGenerator.p7InstructionCount"
+            "description": "内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P3-P6 使用此设置；P7 下此设置被忽略，P7 使用 co.test.builtinGenerator.p7InstructionCount"
           },
           "co.test.builtinGenerator.p7InstructionCount": {
             "type": "number",
@@ -1243,7 +1243,7 @@
           "co.test.logisim.mainCircuit": {
             "type": "string",
             "default": "main",
-            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要按教程端口顺序暴露 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData 输出；端口 label 仅用于辅助识别，不强制要求"
+            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露教程 Trace 输出 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData；可用标准 label 识别，未完整标注时按外观端口顺序推断"
           },
           "co.test.p7.interrupt": {
             "type": "boolean",

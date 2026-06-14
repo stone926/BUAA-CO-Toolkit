@@ -61,13 +61,13 @@ import {
 } from './courseTesting/logisimPrep';
 import {
   defaultLogisimTraceCircuit,
+  createLogisimPcProgressState,
   formatLogisimTraceEvents,
-  logisimRowPcHex,
+  inspectLogisimPcProgress,
   LogisimTraceSpec,
   parseLogisimTraceOutput,
   parseLogisimTraceSpec,
   p3LogisimMaxWords,
-  p3LogisimMaxProgramWords,
   P3LogisimMachineCode,
   prepareP3LogisimMachineCode,
   setLogisimMainCircuit
@@ -213,6 +213,7 @@ interface LogisimCliTraceRun {
   stderr: string;
   rowsSeen: number;
   haltedByPc: boolean;
+  pcError?: string;
 }
 
 interface LogisimPrepareReport {
@@ -933,7 +934,14 @@ async function runP3LogisimTraceCase(
   }
   await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
 
-  const logisimRun = await runLogisimTraceCli(services, setup, preparedCircuit, logisimCode.haltPcHex, asm);
+  const logisimRun = await runLogisimTraceCli(
+    services,
+    setup,
+    preparedCircuit,
+    logisimCode.haltPcHex,
+    asm,
+    options.revealOutput !== false
+  );
   const outDir = courseTraceOutputDirectory(asm);
   await ensureDirectory(outDir);
   const rawOut = vscode.Uri.file(path.join(outDir.fsPath, logisimRawOutputFileNameForCase(item)));
@@ -1399,8 +1407,7 @@ function builtinInstructionCountForProfile(profile: ProjectProfile, resource: vs
   if (profile === 'P7') {
     return getBuiltinGeneratorP7InstructionCount(resource);
   }
-  const count = getBuiltinGeneratorInstructionCount(resource);
-  return profile === 'P3' ? Math.min(count, p3LogisimMaxProgramWords) : count;
+  return getBuiltinGeneratorInstructionCount(resource);
 }
 
 function generatorLabel(setup: GeneratorRunSetup): string {
@@ -1546,6 +1553,24 @@ async function resolveLogisimRomTarget(circuitText: string): Promise<LogisimRomT
   return picked?.target;
 }
 
+function resolveSingleP3LogisimRomTarget(
+  services: AppServices,
+  circuitText: string
+): LogisimRomTarget | undefined {
+  const candidates = findLogisimRomTargets(circuitText)
+    .filter((target) => target.dataWidth === undefined || target.dataWidth === 32);
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  const message = candidates.length === 0
+    ? 'P3 Logisim Trace 电路中未找到唯一的 32 位 ROM 组件'
+    : `P3 Logisim Trace 电路应当只有一个 32 位 ROM 组件，当前找到 ${candidates.length} 个`;
+  services.output.appendLine(message);
+  vscode.window.showErrorMessage(message);
+  return undefined;
+}
+
 async function resolveP3LogisimTraceSetup(
   services: AppServices,
   resource: vscode.Uri
@@ -1570,7 +1595,7 @@ async function resolveP3LogisimTraceSetup(
     return undefined;
   }
 
-  const romTarget = await resolveLogisimRomTarget(circuitText);
+  const romTarget = resolveSingleP3LogisimRomTarget(services, circuitText);
   if (!romTarget) {
     return undefined;
   }
@@ -1623,7 +1648,8 @@ async function runLogisimTraceCli(
   setup: P3LogisimTraceSetup,
   circuit: vscode.Uri,
   haltPcHex: string,
-  resource: vscode.Uri
+  resource: vscode.Uri,
+  streamOutput = true
 ): Promise<LogisimCliTraceRun> {
   const java = getJava(resource);
   const logisim = getLogisimJar(resource);
@@ -1663,6 +1689,8 @@ async function runLogisimTraceCli(
     let settled = false;
     let timedOut = false;
     let haltedByPc = false;
+    let pcError: string | undefined;
+    const pcProgress = createLogisimPcProgressState();
 
     const child = spawn(java, args, {
       cwd,
@@ -1672,18 +1700,29 @@ async function runLogisimTraceCli(
     });
 
     const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
+      if (lineBuffer) {
+        inspectLine(lineBuffer);
+        lineBuffer = '';
+      }
+      if (!haltedByPc && !pcError) {
+        timedOut = true;
+        child.kill();
+      }
     }, timeoutMs);
 
     const inspectLine = (line: string): void => {
       try {
-        const pc = logisimRowPcHex(line, setup.traceSpec);
-        if (!pc) {
+        const progress = inspectLogisimPcProgress(line, setup.traceSpec, pcProgress, haltPcHex);
+        rowsSeen = pcProgress.rowsSeen;
+        if (!progress.rowSeen) {
           return;
         }
-        rowsSeen++;
-        if (!haltedByPc && pc === haltPcHex) {
+        if (progress.error) {
+          pcError = progress.error;
+          child.kill();
+          return;
+        }
+        if (!haltedByPc && progress.halted) {
           haltedByPc = true;
           child.kill();
         }
@@ -1694,7 +1733,9 @@ async function runLogisimTraceCli(
 
     const appendStdout = (text: string): void => {
       stdout += text;
-      services.output.append(text);
+      if (streamOutput) {
+        services.output.append(text);
+      }
       lineBuffer += text;
       const lines = lineBuffer.split(/\r?\n/);
       lineBuffer = lines.pop() ?? '';
@@ -1754,20 +1795,27 @@ async function runLogisimTraceCli(
       if (haltedByPc) {
         services.output.appendLine(`Logisim 已到达停机 PC 0x${haltPcHex}，结束命令行仿真`);
       }
+      if (pcError) {
+        services.output.appendLine(pcError);
+      }
+      const finalStderr = pcError
+        ? [stderr.trimEnd(), pcError].filter(Boolean).join('\n')
+        : stderr;
       resolve({
         result: {
-          ok: !timedOut && (code === 0 || haltedByPc),
+          ok: haltedByPc || (!timedOut && !pcError && code === 0),
           exitCode: code,
           commandLine: display,
           cwd,
           stdout,
-          stderr,
-          timedOut
+          stderr: finalStderr,
+          timedOut: timedOut && !haltedByPc
         },
         stdout,
-        stderr,
+        stderr: finalStderr,
         rowsSeen,
-        haltedByPc
+        haltedByPc,
+        pcError
       });
     });
   });

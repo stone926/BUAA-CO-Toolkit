@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createLogisimPcProgressState,
   formatLogisimTraceEvents,
+  inspectLogisimPcProgress,
   logisimRowPcHex,
   parseLogisimTraceOutput,
   parseLogisimTraceSpec,
@@ -65,6 +67,56 @@ function projectWithOrderedUnlabeledPorts(): string {
 <project source="2.7.1" version="1.0">
   <main name="main"/>
   <circuit name="main">
+    <comp lib="0" loc="(60,30)" name="Pin">
+      <a name="label" val="reset"/>
+    </comp>
+    <comp lib="0" loc="(240,40)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(240,90)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(240,140)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+    </comp>
+    <comp lib="0" loc="(240,190)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="5"/>
+    </comp>
+    <comp lib="0" loc="(240,240)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(240,290)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+    </comp>
+    <comp lib="0" loc="(240,340)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(240,390)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="width" val="32"/>
+    </comp>
+  </circuit>
+</project>`;
+}
+
+function projectWithAppearanceOrderedPorts(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project source="2.7.1" version="1.0">
+  <main name="main"/>
+  <circuit name="main">
     <appear>
       <circ-port height="8" pin="60,30" width="8" x="46" y="86"/>
       <circ-port height="10" pin="240,60" width="10" x="75" y="65"/>
@@ -80,48 +132,44 @@ function projectWithOrderedUnlabeledPorts(): string {
       <a name="label" val="reset"/>
     </comp>
     <comp lib="0" loc="(240,60)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
       <a name="label" val="pc"/>
     </comp>
     <comp lib="0" loc="(1130,60)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="label" val="RegWrite"/>
     </comp>
     <comp lib="0" loc="(1130,110)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="width" val="5"/>
     </comp>
     <comp lib="0" loc="(1130,170)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
     </comp>
     <comp lib="0" loc="(1130,230)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
     </comp>
     <comp lib="0" loc="(240,290)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
       <a name="label" val="Instr"/>
     </comp>
     <comp lib="0" loc="(1140,290)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
     </comp>
     <comp lib="0" loc="(1140,380)" name="Pin">
-      <a name="facing" val="west"/>
       <a name="output" val="true"/>
       <a name="width" val="32"/>
     </comp>
   </circuit>
 </project>`;
+}
+
+function projectWithoutUsableOrder(): string {
+  return projectWithAppearanceOrderedPorts().replace(/    <appear>[\s\S]*?    <\/appear>\n/, '');
 }
 
 describe('Logisim trace helpers', () => {
@@ -143,13 +191,13 @@ describe('Logisim trace helpers', () => {
     expect(spec.required.memdata.index).toBe(7);
   });
 
-  it('uses appearance port order when P3 trace labels are omitted', () => {
+  it('uses tutorial output pin order when P3 trace labels are omitted', () => {
     const spec = parseLogisimTraceSpec(projectWithOrderedUnlabeledPorts(), 'main');
 
     expect(spec.columns.map((column) => column.label)).toEqual([
-      'Instr',
-      'pc',
-      'RegWrite',
+      '',
+      '',
+      '',
       '',
       '',
       '',
@@ -169,6 +217,42 @@ describe('Logisim trace helpers', () => {
     expect(parsed.events.map((event) => event.raw)).toEqual([
       '@00003000: $1 <= 00000001'
     ]);
+  });
+
+  it('uses appearance order to infer P3 semantics while preserving Logisim CLI column indexes', () => {
+    const spec = parseLogisimTraceSpec(projectWithAppearanceOrderedPorts(), 'main');
+
+    expect(spec.columns.map((column) => column.label)).toEqual([
+      'pc',
+      'RegWrite',
+      '',
+      '',
+      '',
+      'Instr',
+      '',
+      ''
+    ]);
+    expect(spec.required.pc.index).toBe(0);
+    expect(spec.required.regwrite.index).toBe(1);
+    expect(spec.required.regaddr.index).toBe(2);
+    expect(spec.required.regdata.index).toBe(3);
+    expect(spec.required.memwrite.index).toBe(4);
+    expect(spec.required.memaddr.index).toBe(6);
+    expect(spec.required.memdata.index).toBe(7);
+
+    const parsed = parseLogisimTraceOutput(
+      '00003000\t0\t1 0010\t0000005c\t1\tac12005c\t0000005c\t00000000',
+      spec
+    );
+
+    expect(parsed.events.map((event) => event.raw)).toEqual([
+      '@00003000: *0000005C <= 00000000'
+    ]);
+  });
+
+  it('reports circuits that cannot be mapped by labels, appearance order, or pin position order', () => {
+    expect(() => parseLogisimTraceSpec(projectWithoutUsableOrder(), 'main'))
+      .toThrow('cannot identify P3 trace output pins');
   });
 
   it('parses table rows and converts Logisim writes into CPU trace events', () => {
@@ -237,5 +321,32 @@ describe('Logisim trace helpers', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
     expect(logisimRowPcHex('00000000\t00003008\t0\t0 0000\t00000000\t0\t00000000\t00000000', spec)).toBe('00003008');
     expect(logisimRowPcHex('halted due to halt pin', spec)).toBeUndefined();
+  });
+
+  it('reports P3 Logisim PC values outside the generated text range', () => {
+    const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
+    const state = createLogisimPcProgressState();
+    const result = inspectLogisimPcProgress(
+      '00000000\t00000000\t0\t0 0000\t00000000\t0\t00000000\t00000000',
+      spec,
+      state,
+      '00003010'
+    );
+
+    expect(result.error).toContain('PC=0x00000000');
+    expect(state.rowsSeen).toBe(1);
+  });
+
+  it('reports a stuck non-halt PC before waiting for the process timeout', () => {
+    const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
+    const state = createLogisimPcProgressState();
+    const line = '00000000\t00003004\t0\t0 0000\t00000000\t0\t00000000\t00000000';
+
+    expect(inspectLogisimPcProgress(line, spec, state, '00003010', 3).error).toBeUndefined();
+    expect(inspectLogisimPcProgress(line, spec, state, '00003010', 3).error).toBeUndefined();
+    const result = inspectLogisimPcProgress(line, spec, state, '00003010', 3);
+
+    expect(result.error).toContain('连续 3 行停在 0x00003004');
+    expect(state.rowsSeen).toBe(3);
   });
 });
