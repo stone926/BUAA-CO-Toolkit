@@ -879,6 +879,14 @@
             "type": "string",
             "default": "200us",
             "description": "ISim TCL 运行时长，格式为 `run <值>; exit`。默认为课程的 200us"
+          },
+          "co.project.simBackend": {
+            "type": "string",
+            "default": "isim",
+            "enum": [
+              "isim"
+            ],
+            "description": "Verilog 仿真后端。当前版本仅支持 ISim"
           }
         }
       },
@@ -1199,7 +1207,7 @@
           "co.test.builtinGenerator.instructions": {
             "type": "string",
             "default": "",
-            "description": "内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 P3-P7 Profile 默认值"
+            "description": "内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 Profile 默认值：P3=add, sub, ori, lw, sw, beq, lui, nop；P4=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P5=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P6=add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr；P7=nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall"
           },
           "co.test.builtinGenerator.instructionCount": {
             "type": "number",
@@ -1231,6 +1239,11 @@
             "type": "boolean",
             "default": true,
             "description": "当持续测试中测试点 WA 或非法样例时，停止持续测试"
+          },
+          "co.test.logisim.mainCircuit": {
+            "type": "string",
+            "default": "main",
+            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露 pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData 输出 pin"
           },
           "co.test.p7.interrupt": {
             "type": "boolean",

@@ -10,7 +10,7 @@ function baseContext(overrides: Partial<SidebarModelContext> = {}): SidebarModel
     profile: 'P7',
     workspaceName: 'hlc-mips-cpu',
     workspacePath: 'E:\\VSCode\\BUAA-CO\\hlc-mips-cpu',
-    configSource: '.co/config.json',
+    configSource: 'VS Code settings',
     topModule: 'mips',
     testbench: 'mips_tb',
     machineCode: 'code.txt',
@@ -115,6 +115,7 @@ describe('sidebar model', () => {
     }));
 
     const core = section(model, '核心操作');
+    expect(hasCommand(core.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
     expect(hasCommand(core.children, 'co.test.prepareLogisimCases')).toBe(true);
     expect(hasCommand(core.children, 'co.logisim.openCurrentCircuit')).toBe(true);
     const inject = findCommand(core.children ?? [], 'co.logisim.injectRomIntoCircuit');

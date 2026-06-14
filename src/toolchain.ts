@@ -9,7 +9,11 @@ import { ToolDetection } from './types';
 export { buildIseEnvironment, findFuse, findIsimGui } from './iseCommon';
 import { findFuse, findIsimGui } from './iseCommon';
 
-export async function checkToolchain(output: vscode.OutputChannel, resource?: vscode.Uri, options: { promptForProfile?: boolean } = {}): Promise<ToolDetection[]> {
+export async function checkToolchain(
+  output: vscode.OutputChannel,
+  resource?: vscode.Uri,
+  options: { promptForProfile?: boolean; tools?: string[] } = {}
+): Promise<ToolDetection[]> {
   const checks: ToolDetection[] = [];
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
   let profile = getProfile(resource);
@@ -24,7 +28,10 @@ export async function checkToolchain(output: vscode.OutputChannel, resource?: vs
       suggestion: '请运行 CO: 选择项目 Profile'
     }];
   }
-  const requiredTools = new Set(getProfileRequiredTools(profile).map(normalizeToolName));
+  const requiredTools = new Set([
+    ...getProfileRequiredTools(profile).map(normalizeToolName),
+    ...(options.tools ?? []).map(normalizeToolName)
+  ]);
   const checkAll = requiredTools.size === 0;
 
   if (checkAll || requiredTools.has('java')) {

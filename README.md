@@ -1,6 +1,6 @@
 # BUAA CO 工具箱（VSCode 插件）
 
-面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → MARS 黄金模型 → 仿真 → 自动对拍 → 报告，循环进行）。
+面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → MARS 黄金模型 → Logisim/ISim 仿真 → 自动对拍 → 报告，循环进行）。
 
 ---
 
@@ -13,9 +13,9 @@
 | MARS 运行 / dump 机器码（Java） | ✅ | ✅ | ✅ |
 | 流水线冲突分析（Java + Python） | ✅ | ✅ | ✅ |
 | **ISim 仿真（依赖 Xilinx ISE）** | ✅ | ⚠️ | ❌ |
-| **一键随机对拍（P3–P7，依赖 ISim）** | ✅ | ⚠️ | ❌ |
+| **一键随机对拍（P3 依赖 Logisim；P4–P7 依赖 ISim）** | ✅ | ⚠️ | P3 ✅ / P4–P7 ❌ |
 
-- **ISim 仿真与一键对拍依赖 Xilinx ISE**，而 ISE 只发布过 Windows 与 Linux 版本：**macOS 无法运行 Verilog 仿真**，P1 / P4 / P5 / P6 / P7 的仿真与自动对拍均不可用（语言特性、Logisim、MARS、冲突分析仍可正常使用）。
+- **ISim 仿真与 P4–P7 Verilog 自动对拍依赖 Xilinx ISE**，而 ISE 只发布过 Windows 与 Linux 版本：**macOS 无法运行 Verilog 仿真**，P1 / P4 / P5 / P6 / P7 的仿真与自动对拍均不可用；P3 Logisim 对拍不依赖 ISE（语言特性、Logisim、MARS、冲突分析仍可正常使用）。
 - Linux（⚠️）：ISE 14.7 可用，但在现代 64 位发行版上通常需按照指导书自行处理兼容性问题
 - 其余功能为 TS / Java / Python 实现，三平台通用。`co.toolchain.python` 留空时会自动检测（macOS / Linux 优先 `python3`，Windows 优先 `python` / `py`）。
 
@@ -49,15 +49,15 @@
 
 ### 第二步：告诉插件当前是哪个 Profile
 
-- 用命令 **`CO: 选择项目 Profile`**（P0–P7），或在工程根目录建 `.co/config.json` 写 `{"profile": "P7"}`。
-- 也可设 `co.project.profile`。`auto` 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法唯一推断时会要求手动选择并保存。
+- 用命令 **`CO: 选择项目 Profile`**（P0–P7），或在 VS Code 用户/工作区设置中设置 `co.project.profile`。
+- `auto` 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法唯一推断时会要求手动选择并保存。
 
 ### 第三步：一键跑测试
 
 打开侧边栏「**BUAA CO Toolkit**」面板 →「操作」区，点：
 
-- **持续生成测试**（P4–P7）
-  → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
+- **持续生成测试**（P3–P7）
+  → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → Logisim/ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
 
 P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`）。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
 
@@ -98,6 +98,16 @@ P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`�
 - 按 Profile 选用合适的默认指令集（也可用 `co.test.builtinGenerator.instructions` 自定义，逗号或空格分隔，只接受真实指令）；
 - 在内部**建模 CPU 状态**（寄存器、HI/LO、内存、CP0），从而生成**合法、确定**的测试点：避免除零、避免非预期的地址错/溢出、正确处理延迟槽与乘除部件占用窗口、在跳转后插入“毒化”指令检验控制流；
 - 生成数量由 `co.test.builtinGenerator.instructionCount`（P3–P6）/ `co.test.builtinGenerator.p7InstructionCount`（P7，默认/上限 1118）控制。
+
+默认指令集：
+
+| Profile | 默认指令 |
+|---|---|
+| P3 | `add, sub, ori, lw, sw, beq, lui, nop` |
+| P4 | `add, sub, ori, lw, sw, beq, lui, jal, jr, nop` |
+| P5 | `add, sub, ori, lw, sw, beq, lui, jal, jr, nop` |
+| P6 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr` |
+| P7 | `nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall` |
 
 > 也可以用**外部生成器**：打开你的 `.py/.js/.jar/.bat/.cmd/.exe/.ps1` 生成器文件再触发测试，或关掉 `co.test.builtinGenerator.enabled`。用 `co.test.generatorArgs` 传种子/数量等参数。
 
@@ -152,7 +162,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
 - `CO: Logisim 生成 ROM 文件`、`CO: Logisim 注入 ROM 到电路`、`CO: Logisim 日志转 CSV`、`CO: Logisim 打开当前电路`；
-- 批量：`CO: 准备 Logisim 电路用例` / `CO: 准备生成的 Logisim 电路用例`（把机器码注入 `.circ` 副本，写到 `.co/logisim/`）。
+- 批量：`CO: 准备 Logisim 电路用例` / `CO: 准备生成的 Logisim 电路用例`（把机器码注入 `.circ` 副本，写到 `.co/cases/<caseId>/logisim/`）。
 
 ### 流水线冲突分析（P5/P6/P7）
 - `CO: 分析流水线冲突`、`CO: 打开冲突报告`（需配置 `co.toolchain.hazardCalculator`）。
@@ -164,7 +174,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ## 4. 配置项（按常用程度排序）
 
-> 优先级：VSCode 设置 `co.*` → 工程内 `.co/config.json` → 默认值。
+> 优先级：VS Code 用户/工作区设置 `co.*` → 默认值。工作区设置可写在 `.vscode/settings.json`。
 
 ### 最常用
 
@@ -184,7 +194,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.test.builtinGenerator.enabled` | `true` | 使用内置随机生成器 |
 | `co.test.builtinGenerator.instructionCount` | `4000` | P3–P6 主程序指令数 |
 | `co.test.builtinGenerator.p7InstructionCount` | `1118` | P7 主程序指令数（上限 1118，0x4180 之前） |
-| `co.test.builtinGenerator.instructions` | `""` | 自定义指令集（空=用 Profile 默认） |
+| `co.test.builtinGenerator.instructions` | `""` | 自定义指令集（空=用当前 Profile 默认；默认集见“内置随机生成器”） |
 | `co.test.p7.stressMode` | `"anchor"` | P7 压测模式：`anchor` 精确对拍、`probe` 黑盒性质检查、`hybrid` 两者都跑、`off` 关闭中断/Timer 压测 |
 | `co.test.p7.interrupt` | `true` | P7 是否生成外部中断场景；关掉后 anchor/probe 都不会注入外部中断 |
 | `co.test.p7.timerInterrupt` | `false` | probe/hybrid 的 probe 用例是否生成 Timer0/Timer1 中断场景 |
@@ -212,7 +222,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ### 工程 / 工具链（其余）
 
-`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
+`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
 
 ### Verilog 诊断 / 格式化（细项，按需调整）
 
@@ -243,7 +253,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 | 路径 | 内容 |
 |---|---|
-| `.co/config.json` | 工程级配置（profile、toolchain、simulation、mips、test） |
+| `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
 | `.co/generated/*.asm` + `*.co-meta.json` | 内置生成器产出的测试点及其元数据（含中断调度 / probe 场景） |
 | `.co/out/*.mars.out` / `*.sim.out` | MARS / ISim 输出 |
 | `.co/out/trace-batch-report.json` | 批量测试报告（含命令、生成文件、首个差异） |

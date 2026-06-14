@@ -50,7 +50,7 @@ export interface SidebarModelContext {
   profile: ProjectProfile;
   workspaceName?: string;
   workspacePath?: string;
-  configSource: '.co/config.json' | 'VS Code settings';
+  configSource: 'VS Code settings';
   topModule: string;
   testbench: string;
   machineCode: string;
@@ -61,7 +61,7 @@ export interface SidebarModelContext {
   tutorials: SidebarTutorialModel[];
 }
 
-const traceProfiles = new Set<ProjectProfile>(['P4', 'P5', 'P6', 'P7']);
+const traceProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
 const verilogProfiles = new Set<ProjectProfile>(['P1', 'P4', 'P5', 'P6', 'P7']);
 const mipsProfiles = new Set<ProjectProfile>(['P2', 'P4', 'P5', 'P6', 'P7']);
 const asmGenerationProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
@@ -103,8 +103,8 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
       '项目向导',
       'co.projectWizard',
       'new-folder',
-      '创建结构 / 写入 .co/config.json',
-      workspaceTooltip(context, '项目向导会在当前工作区创建课程目录和默认配置。')
+      '创建结构 / 写入工作区设置',
+      workspaceTooltip(context, '项目向导会在当前工作区创建课程目录，并写入 VS Code 工作区设置。')
     ),
     actionItem(
       'project.selectProfile',
@@ -112,7 +112,7 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
       'co.selectProjectProfile',
       'settings-gear',
       context.profile === 'auto' ? '无法自动推断' : `当前 ${context.profile}`,
-      '切换 co.project.profile。项目级 .co/config.json 存在时会优先作为配置来源；auto 无法推断时会要求手动选择。'
+      '切换 co.project.profile；auto 无法推断时会要求手动选择。'
     ),
     actionItem(
       'project.checkToolchain',
@@ -156,11 +156,11 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
   if (isVerilogFile(active)) {
     return sectionItem('context', '当前上下文', true, [
       infoItem('context.verilog', '当前 Verilog', active.basename, active.fsPath, 'file-code'),
-      infoItem('context.top', 'Top', context.topModule, 'co.project.topModule 或 .co/config.json', 'symbol-class'),
-      infoItem('context.tb', 'TB', context.testbench, 'co.project.testbench 或 .co/config.json', 'beaker'),
+      infoItem('context.top', 'Top', context.topModule, 'co.project.topModule', 'symbol-class'),
+      infoItem('context.tb', 'TB', context.testbench, 'co.project.testbench', 'beaker'),
       infoItem('context.machineCode', '机器码名', context.machineCode, '仿真前会复制到 .co/isim/<machineCode>', 'file-binary'),
-      infoItem('context.simTime', '仿真时长', context.simTime, 'co.project.simTime 或 .co/config.json', 'watch'),
-      infoItem('context.backend', '仿真后端', context.simBackend, '.co/config.json: simulation.backend', 'circuit-board')
+      infoItem('context.simTime', '仿真时长', context.simTime, 'co.project.simTime', 'watch'),
+      infoItem('context.backend', '仿真后端', context.simBackend, 'co.project.simBackend', 'circuit-board')
     ]);
   }
 
@@ -192,7 +192,7 @@ function coreActionsSection(context: SidebarModelContext): SidebarNodeModel {
         '持续生成测试',
         'co.test.startContinuousGeneratedTraceTests',
         'rocket',
-        '生成 ASM -> case -> dump -> ISim -> 对拍',
+        `生成 ASM -> case -> dump -> ${traceBackendName(context.profile)} -> 对拍`,
         `自动生成或导入 ASM，并为每次运行写入 .co/cases/<caseId>。\n报告和输出保留在 .co/out。`
       ),
       actionItem(
@@ -379,7 +379,7 @@ function manualWorkflowSection(context: SidebarModelContext): SidebarNodeModel {
         'co.test.runFullTest',
         'run-all',
         '运行时选择 ASM',
-        '选择 ASM 后创建 case，dump 机器码，分别运行 MARS/ISim 并对拍。'
+        `选择 ASM 后创建 case，dump 机器码，分别运行 MARS/${traceBackendName(context.profile)} 并对拍。`
       ),
       actionItem(
         'manual.batchTrace',
@@ -387,7 +387,7 @@ function manualWorkflowSection(context: SidebarModelContext): SidebarNodeModel {
         'co.test.runBatchTraceTests',
         'list-selection',
         '运行时选择多个 ASM',
-        '每个 ASM 都会创建独立 .co/cases/<caseId>，批量报告写入 .co/out。'
+        `每个 ASM 都会创建独立 .co/cases/<caseId>，通过 MARS/${traceBackendName(context.profile)} 对拍，批量报告写入 .co/out。`
       ),
       actionItem(
         'manual.generatedBatchTrace',
@@ -395,7 +395,7 @@ function manualWorkflowSection(context: SidebarModelContext): SidebarNodeModel {
         'co.test.runGeneratedTraceTests',
         'beaker',
         '生成 ASM -> 批量对拍',
-        '适合一次性生成固定数量测试点；持续压力测试请优先使用核心操作。'
+        `生成 ASM 后通过 MARS/${traceBackendName(context.profile)} 批量对拍；持续压力测试请优先使用核心操作。`
       )
     );
   }
@@ -655,6 +655,10 @@ function shouldShowTraceActions(profile: ProjectProfile): boolean {
 
 function shouldShowAsmGenerationActions(profile: ProjectProfile): boolean {
   return asmGenerationProfiles.has(profile);
+}
+
+function traceBackendName(profile: ProjectProfile): string {
+  return profile === 'P3' ? 'Logisim' : 'ISim';
 }
 
 function profileDescription(profile: ProjectProfile): string {

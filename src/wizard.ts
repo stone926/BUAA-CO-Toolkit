@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from './types';
-import { CoProjectConfig, saveProjectConfig } from './projectConfig';
 import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
 import {
   getProfileDescription,
@@ -14,6 +13,16 @@ import {
 } from './courseConfig';
 import { defaultCoSettings } from './language/common/settings';
 import { buildTestbench, parseVerilog } from './language/verilog/service';
+
+interface ToolchainSettings {
+  mars?: string;
+  marsP7?: string;
+  isePath?: string;
+  logisim?: string;
+  java?: string;
+  python?: string;
+  hazardCalculator?: string;
+}
 
 export async function runProjectWizard(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -71,7 +80,7 @@ export async function runProjectWizard(): Promise<void> {
     }
   );
 
-  let toolchainConfig: CoProjectConfig['toolchain'] = {};
+  let toolchainConfig: ToolchainSettings = {};
 
   if (configureToolchain?.value) {
     toolchainConfig = await configureToolchainPaths(profile);
@@ -96,11 +105,9 @@ export async function runProjectWizard(): Promise<void> {
   const rootPath = workspaceFolder.uri.fsPath;
   try {
     if (createStructure.value) {
-      await createProjectStructure(rootPath, profile, projectName, toolchainConfig);
-    } else {
-      await saveProjectConfig(projectConfigDefaults(profile, projectName, toolchainConfig));
+      await createProjectStructure(rootPath, profile);
     }
-    await updateProjectSettings(profile);
+    await updateProjectSettings(profile, toolchainConfig);
     vscode.window.showInformationMessage(createStructure.value
       ? `CO 项目 '${projectName}' (${profile}) 创建成功！`
       : `CO 项目 '${projectName}' (${profile}) 设置已更新`);
@@ -113,8 +120,8 @@ function profileDescription(profile: ProjectProfile): string {
   return getProfileName(profile) || getProfileDescription(profile);
 }
 
-async function configureToolchainPaths(profile: ProjectProfile): Promise<CoProjectConfig['toolchain']> {
-  const toolchain: CoProjectConfig['toolchain'] = {};
+async function configureToolchainPaths(profile: ProjectProfile): Promise<ToolchainSettings> {
+  const toolchain: ToolchainSettings = {};
   const requiredTools = new Set(getProfileRequiredTools(profile));
 
   if (requiredTools.has('java')) {
@@ -182,9 +189,7 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<CoProje
 
 async function createProjectStructure(
   rootPath: string,
-  profile: ProjectProfile,
-  projectName: string,
-  toolchainConfig: CoProjectConfig['toolchain']
+  profile: ProjectProfile
 ): Promise<void> {
   const dirs = getDirectoriesForProfile(profile);
 
@@ -195,29 +200,7 @@ async function createProjectStructure(
     }
   }
 
-  await saveProjectConfig(projectConfigDefaults(profile, projectName, toolchainConfig));
-
   await createTemplateFiles(rootPath, profile);
-}
-
-function projectConfigDefaults(
-  profile: ProjectProfile,
-  projectName: string,
-  toolchainConfig: CoProjectConfig['toolchain']
-): CoProjectConfig {
-  const topModule = defaultTopModuleForProfile(profile);
-  return {
-    name: projectName,
-    profile,
-    toolchain: toolchainConfig,
-    simulation: {
-      backend: 'isim',
-      top: topModule,
-      testbench: topModule ? `${topModule}_tb` : undefined,
-      time: '200us',
-      machineCode: 'code.txt'
-    }
-  };
 }
 
 function getDirectoriesForProfile(profile: ProjectProfile): string[] {
@@ -352,7 +335,20 @@ endmodule
 `;
 }
 
-async function updateProjectSettings(profile: ProjectProfile): Promise<void> {
+async function updateProjectSettings(profile: ProjectProfile, toolchainConfig: ToolchainSettings): Promise<void> {
   const config = vscode.workspace.getConfiguration('co');
+  const topModule = defaultTopModuleForProfile(profile);
   await config.update('project.profile', profile, vscode.ConfigurationTarget.Workspace);
+  if (topModule) {
+    await config.update('project.topModule', topModule, vscode.ConfigurationTarget.Workspace);
+    await config.update('project.testbench', `${topModule}_tb`, vscode.ConfigurationTarget.Workspace);
+  }
+  await config.update('project.machineCode', 'code.txt', vscode.ConfigurationTarget.Workspace);
+  await config.update('project.simTime', '200us', vscode.ConfigurationTarget.Workspace);
+  await config.update('project.simBackend', 'isim', vscode.ConfigurationTarget.Workspace);
+  for (const [key, value] of Object.entries(toolchainConfig)) {
+    if (typeof value === 'string' && value.trim()) {
+      await config.update(`toolchain.${key}`, value.trim(), vscode.ConfigurationTarget.Workspace);
+    }
+  }
 }

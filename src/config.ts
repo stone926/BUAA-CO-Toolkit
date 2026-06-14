@@ -6,14 +6,6 @@ import {
   isConcreteProjectProfile
 } from './projectProfile';
 import { getProfileName } from './courseConfig';
-import {
-  getProjectConfig,
-  getProjectProfileFromConfig,
-  getToolchainFromConfig,
-  getSimulationFromConfig,
-  getTestFromConfig,
-  getMipsFromConfig
-} from './projectConfig';
 import { commandResponds, defaultPythonCommand, firstWorkingCommand, pythonCandidates } from './python';
 import {
   ProfileConfiguredSource,
@@ -25,8 +17,7 @@ import {
 /**
  * 配置读取优先级：
  * 1. VSCode Settings (co.*)
- * 2. .co/config.json
- * 3. 默认值
+ * 2. 默认值
  */
 
 export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
@@ -46,22 +37,16 @@ export function setProfileInferenceProvider(provider: ProfileInferenceProvider |
 }
 
 /**
- * 三层字符串配置读取：VSCode Settings → .co/config.json → 默认值。
- * 消除各 getter 中重复的 "读 VSCode → trim → 判断 → 读 config.json → 返回默认值" 模式。
+ * 字符串配置读取：VSCode Settings → 默认值。
  */
 function layeredGetString(
   vsKey: string,
-  configFallback: (() => string | undefined) | undefined,
   defaultValue: string,
   resource?: vscode.Uri
 ): string {
   const vsValue = inspectedValue<string>(vsKey, resource);
   if (vsValue && vsValue.trim()) {
     return vsValue.trim();
-  }
-  const configValue = configFallback?.();
-  if (configValue) {
-    return configValue;
   }
   return defaultValue;
 }
@@ -78,15 +63,8 @@ export function getConfiguredProjectProfile(resource?: vscode.Uri): ConfiguredPr
     ?? inspected?.workspaceValue
     ?? inspected?.globalValue
   );
-  const projectValue = normalizeProjectProfile(getProjectProfileFromConfig(resource));
   if (isConcreteProjectProfile(vsValue)) {
     return { profile: vsValue, source: 'settings' };
-  }
-  if (isConcreteProjectProfile(projectValue)) {
-    return { profile: projectValue, source: '.co/config.json' };
-  }
-  if (projectValue === 'auto') {
-    return { profile: 'auto', source: '.co/config.json' };
   }
   if (vsValue === 'auto') {
     return { profile: 'auto', source: 'settings' };
@@ -150,23 +128,23 @@ export async function ensureConcreteProfile(resource?: vscode.Uri, detail?: stri
 }
 
 export function getTopModule(resource?: vscode.Uri): string {
-  return layeredGetString('project.topModule', () => getSimulationFromConfig(resource)?.top, 'mips', resource);
+  return layeredGetString('project.topModule', 'mips', resource);
 }
 
 export function getTestbench(resource?: vscode.Uri): string {
-  return layeredGetString('project.testbench', () => getSimulationFromConfig(resource)?.testbench, 'mips_tb', resource);
+  return layeredGetString('project.testbench', 'mips_tb', resource);
 }
 
 export function getMachineCode(resource?: vscode.Uri): string {
-  return layeredGetString('project.machineCode', () => getSimulationFromConfig(resource)?.machineCode, 'code.txt', resource);
+  return layeredGetString('project.machineCode', 'code.txt', resource);
 }
 
 export function getSimTime(resource?: vscode.Uri): string {
-  return layeredGetString('project.simTime', () => getSimulationFromConfig(resource)?.time, '200us', resource);
+  return layeredGetString('project.simTime', '200us', resource);
 }
 
 export function getSimBackend(resource?: vscode.Uri): string {
-  return layeredGetString('project.simBackend', () => getSimulationFromConfig(resource)?.backend, 'isim', resource);
+  return layeredGetString('project.simBackend', 'isim', resource);
 }
 
 export function useDelayedBranching(resource?: vscode.Uri): boolean {
@@ -178,21 +156,17 @@ export function useDelayedBranching(resource?: vscode.Uri): boolean {
 }
 
 export function getJava(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.java', () => getToolchainFromConfig(resource)?.java, 'java', resource);
+  return layeredGetString('toolchain.java', 'java', resource);
 }
 
 /**
- * 用户显式配置的 Python 命令（VSCode 设置或 .co/config.json）。未显式配置时返回
+ * 用户显式配置的 Python 命令（VSCode 设置）。未显式配置时返回
  * undefined，交给 {@link resolvePython} 按平台探测兜底。
  */
 export function getConfiguredPython(resource?: vscode.Uri): string | undefined {
   const vsValue = inspectedValue<string>('toolchain.python', resource)?.trim();
   if (vsValue) {
     return vsValue;
-  }
-  const configValue = getToolchainFromConfig(resource)?.python?.trim();
-  if (configValue) {
-    return configValue;
   }
   return undefined;
 }
@@ -235,26 +209,26 @@ export async function resolvePython(resource?: vscode.Uri): Promise<string> {
 export function getMarsJar(resource?: vscode.Uri): string {
   const profile = getProfile(resource);
   if (profile === 'P7') {
-    const p7 = layeredGetString('toolchain.marsP7', () => getToolchainFromConfig(resource)?.marsP7, '', resource);
+    const p7 = layeredGetString('toolchain.marsP7', '', resource);
     if (p7) { return p7; }
   }
-  return layeredGetString('toolchain.mars', () => getToolchainFromConfig(resource)?.mars, '', resource);
+  return layeredGetString('toolchain.mars', '', resource);
 }
 
 export function getLogisimJar(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.logisim', () => getToolchainFromConfig(resource)?.logisim, '', resource);
+  return layeredGetString('toolchain.logisim', '', resource);
 }
 
 export function getIsePath(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.isePath', () => getToolchainFromConfig(resource)?.isePath, '', resource);
+  return layeredGetString('toolchain.isePath', '', resource);
 }
 
 export function getHazardCalculator(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.hazardCalculator', () => getToolchainFromConfig(resource)?.hazardCalculator, '', resource);
+  return layeredGetString('toolchain.hazardCalculator', '', resource);
 }
 
 export function getTutorialRoot(resource?: vscode.Uri): string {
-  return layeredGetString('course.tutorialRoot', undefined, '', resource);
+  return layeredGetString('course.tutorialRoot', '', resource);
 }
 
 export function getRunTimeout(resource?: vscode.Uri): number {
@@ -286,29 +260,21 @@ function configuredMemoryConfiguration(resource?: vscode.Uri): string | undefine
   if (vsValue && vsValue.toLowerCase() !== 'auto') {
     return vsValue;
   }
-  const configValue = getMipsFromConfig(resource)?.memoryConfiguration?.trim();
-  if (configValue && configValue.toLowerCase() !== 'auto') {
-    return configValue;
-  }
   return undefined;
 }
 
 export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('mips.extraArgs', () => getMipsFromConfig(resource)?.extraArgs, [], resource);
+  return layeredGetArray('mips.extraArgs', [], resource);
 }
 
 export function getGeneratorArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('test.generatorArgs', () => getTestFromConfig(resource)?.generatorArgs, [], resource);
+  return layeredGetArray('test.generatorArgs', [], resource);
 }
 
 export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
   const configured = inspectedValue<number>('test.generatedAsmLimit', resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
-  }
-  const projectValue = getTestFromConfig(resource)?.generatedAsmLimit;
-  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
-    return Math.floor(projectValue);
   }
   return 100;
 }
@@ -318,17 +284,12 @@ export function useBuiltinTestGenerator(resource?: vscode.Uri): boolean {
   if (typeof configured === 'boolean') {
     return configured;
   }
-  const projectValue = getTestFromConfig(resource)?.builtinGenerator?.enabled;
-  if (typeof projectValue === 'boolean') {
-    return projectValue;
-  }
   return true;
 }
 
 export function getBuiltinGeneratorInstructions(resource?: vscode.Uri): string {
   return layeredGetString(
     'test.builtinGenerator.instructions',
-    () => getTestFromConfig(resource)?.builtinGenerator?.instructions,
     '',
     resource
   );
@@ -339,10 +300,6 @@ export function getBuiltinGeneratorInstructionCount(resource?: vscode.Uri): numb
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
   }
-  const projectValue = getTestFromConfig(resource)?.builtinGenerator?.instructionCount;
-  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
-    return Math.floor(projectValue);
-  }
   return 1000;
 }
 
@@ -350,10 +307,6 @@ export function getBuiltinGeneratorP7InstructionCount(resource?: vscode.Uri): nu
   const configured = inspectedValue<number>('test.builtinGenerator.p7InstructionCount', resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.min(Math.floor(configured), 1118);
-  }
-  const projectValue = getTestFromConfig(resource)?.builtinGenerator?.p7InstructionCount;
-  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
-    return Math.min(Math.floor(projectValue), 1118);
   }
   return 1118;
 }
@@ -370,6 +323,14 @@ export function getContinuousStopOnFailure(resource?: vscode.Uri): boolean {
   return config<boolean>('test.continuousStopOnFailure', true, resource);
 }
 
+export function getLogisimTraceMainCircuit(resource?: vscode.Uri): string {
+  return layeredGetString(
+    'test.logisim.mainCircuit',
+    'main',
+    resource
+  );
+}
+
 /**
  * P7 自动对拍是否注入外部中断（macroscopic_pc == target_pc 触发）。
  * 关闭时退化为纯异常/正常数据通路对拍（完全确定性）。
@@ -378,10 +339,6 @@ export function getP7InterruptEnabled(resource?: vscode.Uri): boolean {
   const configured = inspectedValue<boolean>('test.p7.interrupt', resource);
   if (typeof configured === 'boolean') {
     return configured;
-  }
-  const projectValue = getTestFromConfig(resource)?.p7?.interrupt;
-  if (typeof projectValue === 'boolean') {
-    return projectValue;
   }
   return true;
 }
@@ -396,7 +353,6 @@ export function getP7StressMode(resource?: vscode.Uri): P7StressMode {
       : undefined;
   };
   return normalize(inspectedValue<string>('test.p7.stressMode', resource))
-    ?? normalize(getTestFromConfig(resource)?.p7?.stressMode)
     ?? 'anchor';
 }
 
@@ -405,19 +361,15 @@ export function getP7TimerInterruptEnabled(resource?: vscode.Uri): boolean {
   if (typeof configured === 'boolean') {
     return configured;
   }
-  const projectValue = getTestFromConfig(resource)?.p7?.timerInterrupt;
-  if (typeof projectValue === 'boolean') {
-    return projectValue;
-  }
   return false;
 }
 
 export function getP7ExternalInterruptIntensity(resource?: vscode.Uri): number {
-  return p7UnitIntervalConfig('test.p7.externalInterruptIntensity', () => getTestFromConfig(resource)?.p7?.externalInterruptIntensity, 0.25, resource);
+  return p7UnitIntervalConfig('test.p7.externalInterruptIntensity', 0.25, resource);
 }
 
 export function getP7TimerIntensity(resource?: vscode.Uri): number {
-  return p7UnitIntervalConfig('test.p7.timerIntensity', () => getTestFromConfig(resource)?.p7?.timerIntensity, 0.2, resource);
+  return p7UnitIntervalConfig('test.p7.timerIntensity', 0.2, resource);
 }
 
 export function getP7ProbeScenarioCount(resource?: vscode.Uri): number {
@@ -425,10 +377,6 @@ export function getP7ProbeScenarioCount(resource?: vscode.Uri): number {
   const configured = inspectedValue<number>('test.p7.probeScenarioCount', resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return normalize(configured);
-  }
-  const projectValue = getTestFromConfig(resource)?.p7?.probeScenarioCount;
-  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue > 0) {
-    return normalize(projectValue);
   }
   return 32;
 }
@@ -441,17 +389,12 @@ export function getP7ExceptionRate(resource?: vscode.Uri): number {
   if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
     return Math.min(1, configured);
   }
-  const projectValue = getTestFromConfig(resource)?.p7?.exceptionRate;
-  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue >= 0) {
-    return Math.min(1, projectValue);
-  }
   return 0.08;
 }
 
 export function getP7ExceptionTypes(resource?: vscode.Uri): string[] {
   return layeredGetArray(
     'test.p7.exceptionTypes',
-    () => getTestFromConfig(resource)?.p7?.exceptionTypes,
     ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov'],
     resource
   );
@@ -459,17 +402,12 @@ export function getP7ExceptionTypes(resource?: vscode.Uri): string[] {
 
 function layeredGetArray(
   vsKey: string,
-  configFallback: (() => string[] | undefined) | undefined,
   defaultValue: string[],
   resource?: vscode.Uri
 ): string[] {
   const configured = inspectedValue<string[]>(vsKey, resource);
   if (Array.isArray(configured)) {
     return configured.map((item) => String(item)).filter(Boolean);
-  }
-  const configValue = configFallback?.();
-  if (Array.isArray(configValue)) {
-    return configValue.map((item) => String(item)).filter(Boolean);
   }
   return [...defaultValue];
 }
@@ -497,17 +435,12 @@ function nonNegativeIntegerConfig(key: string, fallback: number, resource?: vsco
 
 function p7UnitIntervalConfig(
   key: string,
-  projectFallback: () => number | undefined,
   fallback: number,
   resource?: vscode.Uri
 ): number {
   const configured = inspectedValue<number>(key, resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
     return Math.min(1, configured);
-  }
-  const projectValue = projectFallback();
-  if (typeof projectValue === 'number' && Number.isFinite(projectValue) && projectValue >= 0) {
-    return Math.min(1, projectValue);
   }
   return fallback;
 }

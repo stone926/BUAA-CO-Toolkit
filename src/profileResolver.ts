@@ -4,7 +4,7 @@ import {
   isConcreteProjectProfile
 } from './projectProfile';
 
-export type ProfileConfiguredSource = 'settings' | '.co/config.json' | 'default';
+export type ProfileConfiguredSource = 'settings' | 'default';
 export type ProfileResolutionSource = ProfileConfiguredSource | 'inferred' | 'manualFallback';
 export type ProfileInferenceConfidence = 'explicit' | 'strong' | 'weak' | 'none';
 

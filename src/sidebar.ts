@@ -19,7 +19,6 @@ import {
   getProfileTutorialLink,
   getToolTutorialLinksForProfile
 } from './courseLinks';
-import { getProjectConfig } from './projectConfig';
 import {
   buildSidebarModel,
   SidebarActiveFileModel,
@@ -61,13 +60,12 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     const resource = activeDocument?.uri;
     const profile = getProfile(resource);
     const folder = this.workspaceFolder(resource);
-    const coConfig = getProjectConfig(resource);
 
     return {
       profile,
       workspaceName: folder?.name,
       workspacePath: folder?.uri.fsPath,
-      configSource: coConfig ? '.co/config.json' as const : 'VS Code settings' as const,
+      configSource: 'VS Code settings' as const,
       topModule: getTopModule(resource),
       testbench: getTestbench(resource),
       machineCode: getMachineCode(resource),

@@ -10,7 +10,6 @@ import {
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
-import { clearProjectConfigCache } from './projectConfig';
 import { CoSidebarProvider } from './sidebar';
 import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
@@ -45,32 +44,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const sidebarView = vscode.window.registerTreeDataProvider('coSidebar', sidebarProvider);
   context.subscriptions.push(sidebarView);
 
-  // Cache toolchain status per resource so multi-root and .co/config.json overrides do not leak across projects.
+  // Cache toolchain status per resource so multi-root settings do not leak across projects.
   const toolchainCache = new Map<string, { checks: ToolDetection[]; timestamp: number }>();
   const TOOLCHAIN_CACHE_TTL = 60000; // 1 minute
-
-  // Watch .co/config.json changes
-  const configWatcher = vscode.workspace.createFileSystemWatcher('**/.co/config.json');
-  configWatcher.onDidChange(() => {
-    clearProjectConfigCache();
-    clearProfileInferenceCache();
-    invalidateToolchainCache();
-    sidebarProvider.refresh();
-    refreshProjectUi();
-  });
-  configWatcher.onDidCreate(() => {
-    clearProjectConfigCache();
-    clearProfileInferenceCache();
-    invalidateToolchainCache();
-    refreshProjectUi();
-  });
-  configWatcher.onDidDelete(() => {
-    clearProjectConfigCache();
-    clearProfileInferenceCache();
-    invalidateToolchainCache();
-    refreshProjectUi();
-  });
-  context.subscriptions.push(configWatcher);
 
   // Register refresh command for sidebar
   context.subscriptions.push(
@@ -174,7 +150,8 @@ export function activate(context: vscode.ExtensionContext): void {
       refreshProjectUi();
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('co.project.profile') || event.affectsConfiguration('co.toolchain')) {
+      if (event.affectsConfiguration('co')) {
+        clearProfileInferenceCache();
         invalidateToolchainCache();
         refreshProjectUi();
       }
