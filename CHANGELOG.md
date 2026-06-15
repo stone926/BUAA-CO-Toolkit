@@ -2,6 +2,16 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [0.4.0] - 2026-06-15
+
+- fix: 精简暴露给用户的接口 (5336529)
+- fix: P3 测试 现在按画布上的端口顺序识别输出 (8cf02e1)
+- fix: P3 测试 现在按 <appear><circ-port ... x/y> 的端口外观顺序识别输出 (dc1b333)
+- feat: p3测试对拍 (609d0de)
+- 语法检查引入ise (5ead08d)
+- feat: profile auto优化 (955cc6b)
+- feat: profile auto优化 (8e9e5c6)
+
 ## [0.3.0] - 2026-06-12
 
 - ignore AGENTS.md (1e73e23)
