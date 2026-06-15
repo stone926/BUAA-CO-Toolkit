@@ -23,6 +23,7 @@ import { registerCourseTest } from './courseTest';
 import { registerCourseLinks } from './courseLinks';
 import { registerSemanticColorDefaults } from './semanticColors';
 import { buildProfileInferenceInput, clearProfileInferenceCache } from './profileInference';
+import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -122,6 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerTraceCompare(context, services);
   registerCourseTest(context, services);
   registerCourseLinks(context);
+  registerAdvancedTools(context);
 
   function cachedToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): ToolDetection[] | undefined {
     const now = Date.now();
@@ -160,12 +162,29 @@ export function activate(context: vscode.ExtensionContext): void {
 
   function refreshProjectUi(resource = vscode.window.activeTextEditor?.document.uri): void {
     void persistInferredProfile(resource).finally(() => {
+      updateCoContext(resource);
       sidebarProvider.refresh();
       updateStatus(statusBar, cachedToolchainStatus);
     }).catch(() => undefined);
   }
 
   refreshProjectUi();
+}
+
+function updateCoContext(resource?: vscode.Uri): void {
+  const resolution = getProfileResolution(resource);
+  const profile = resolution.effectiveProfile ?? resolution.configuredProfile;
+  const rawActiveKind = activeKindForDocument(vscode.window.activeTextEditor?.document);
+  const hasConcreteProfile = Boolean(resolution.effectiveProfile);
+  const hasTraceProfile = ['P3', 'P4', 'P5', 'P6', 'P7'].includes(profile);
+  const hasVerilogProfile = ['P1', 'P4', 'P5', 'P6', 'P7'].includes(profile);
+  const activeKind = rawActiveKind === 'verilog' && !hasVerilogProfile ? 'other' : rawActiveKind;
+  void vscode.commands.executeCommand('setContext', 'co.profile', profile);
+  void vscode.commands.executeCommand('setContext', 'co.hasConcreteProfile', hasConcreteProfile);
+  void vscode.commands.executeCommand('setContext', 'co.hasTraceProfile', hasTraceProfile);
+  void vscode.commands.executeCommand('setContext', 'co.hasVerilogProfile', hasVerilogProfile);
+  void vscode.commands.executeCommand('setContext', 'co.activeCoKind', activeKind);
+  void vscode.commands.executeCommand('setContext', 'co.verilogSignalVisible', activeKind === 'verilog');
 }
 
 export async function deactivate(): Promise<void> {

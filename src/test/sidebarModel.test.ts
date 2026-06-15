@@ -45,8 +45,12 @@ function hasCommand(nodes: SidebarNodeModel[] | undefined, command: string): boo
   return Boolean(findCommand(nodes ?? [], command));
 }
 
+function childLabels(node: SidebarNodeModel): string[] {
+  return node.children?.map((child) => child.label) ?? [];
+}
+
 describe('sidebar model', () => {
-  it('keeps continuous testing prominent for P7 Verilog and moves TB generation to manual workflow', () => {
+  it('keeps only focused P7 Verilog actions in the main operation section', () => {
     const model = buildSidebarModel(baseContext({
       activeFile: {
         languageId: 'verilog',
@@ -56,13 +60,14 @@ describe('sidebar model', () => {
       }
     }));
 
-    const core = section(model, '核心操作');
-    const manual = section(model, '手动流程');
-    expect(hasCommand(core.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
-    expect(hasCommand(core.children, 'co.verilog.generateTestbench')).toBe(false);
-    expect(hasCommand(manual.children, 'co.verilog.generateTestbench')).toBe(true);
+    expect(model.map((node) => node.label)).toEqual(['项目', '当前上下文', '操作']);
+    const actions = section(model, '操作');
+    expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.verilog.generateTestbench')).toBe(false);
+    expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
+    expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
 
-    const runIsim = findCommand(core.children ?? [], 'co.verilog.runIsim');
+    const runIsim = findCommand(actions.children ?? [], 'co.verilog.runIsim');
     expect(runIsim?.description).toContain('Top/TB');
     expect(runIsim?.description).toContain('ASM 运行时选择');
     expect(runIsim?.tooltip).toContain('.co/cases/<caseId>');
@@ -74,8 +79,9 @@ describe('sidebar model', () => {
       activeFile: undefined
     }));
 
-    const core = section(model, '核心操作');
-    expect(hasCommand(core.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    const actions = section(model, '操作');
+    expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
     expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
     expect(findCommand(model, 'co.verilog.generateTestbench')).toBeUndefined();
     expect(findCommand(model, 'co.sidebar.refresh')).toBeUndefined();
@@ -100,6 +106,8 @@ describe('sidebar model', () => {
     const runAsm = findCommand(model, 'co.mips.runCurrentFile');
     expect(runAsm?.description).toContain('matrix.asm');
     expect(runAsm?.tooltip).toContain(asmPath);
+    expect(findCommand(model, 'co.mips.runWithStdinFile')).toBeUndefined();
+    expect(findCommand(model, 'co.tools.openAdvanced')).toBeDefined();
   });
 
   it('shows Logisim circuit operations with runtime ASM visibility', () => {
@@ -114,16 +122,17 @@ describe('sidebar model', () => {
       }
     }));
 
-    const core = section(model, '核心操作');
-    expect(hasCommand(core.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
-    expect(hasCommand(core.children, 'co.test.prepareLogisimCases')).toBe(true);
-    expect(hasCommand(core.children, 'co.logisim.openCurrentCircuit')).toBe(true);
-    const inject = findCommand(core.children ?? [], 'co.logisim.injectRomIntoCircuit');
+    const actions = section(model, '操作');
+    expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.test.prepareLogisimCases')).toBe(false);
+    expect(hasCommand(actions.children, 'co.logisim.openCurrentCircuit')).toBe(true);
+    expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
+    const inject = findCommand(actions.children ?? [], 'co.logisim.injectRomIntoCircuit');
     expect(inject?.description).toContain('运行时选择 ASM');
     expect(inject?.tooltip).toContain(circuitPath);
   });
 
-  it('keeps P1 Testbench generation in core actions with visible target name', () => {
+  it('keeps P1 Verilog testbench generation out of the main action list', () => {
     const model = buildSidebarModel(baseContext({
       profile: 'P1',
       activeFile: {
@@ -134,10 +143,50 @@ describe('sidebar model', () => {
       }
     }));
 
-    const core = section(model, '核心操作');
-    const tb = findCommand(core.children ?? [], 'co.verilog.generateTestbench');
-    expect(tb?.description).toContain('mips_tb.v');
-    expect(tb?.tooltip).toContain('Top: mips');
+    const actions = section(model, '操作');
+    const context = section(model, '当前上下文');
+    expect(childLabels(context)).toEqual(['当前 Verilog', '仿真模式']);
+    expect(context.children?.find((item) => item.label === '仿真模式')?.description).toBe('独立模块');
+    expect(findCommand(actions.children ?? [], 'co.verilog.generateTestbench')).toBeUndefined();
+    expect(hasCommand(actions.children, 'co.verilog.runIsim')).toBe(true);
+    expect(findCommand(actions.children ?? [], 'co.verilog.runIsim')?.description).toContain('当前模块/testbench');
+    expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
+    expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
+  });
+
+  it('treats a Verilog file as a normal file under non-Verilog profiles', () => {
+    const model = buildSidebarModel(baseContext({
+      profile: 'P2',
+      activeFile: {
+        languageId: 'verilog',
+        fsPath: 'E:\\VSCode\\BUAA-CO\\p2\\splitter.v',
+        basename: 'splitter.v',
+        isLogisimCircuit: false
+      }
+    }));
+
+    const context = section(model, '当前上下文');
+    expect(childLabels(context)).toEqual(['当前文件']);
+    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
+    expect(findCommand(model, 'co.verilog.openIsimWaveform')).toBeUndefined();
+    expect(findCommand(model, 'co.tools.openAdvanced')).toBeDefined();
+  });
+
+  it('does not expose Verilog context for Logisim profiles', () => {
+    const model = buildSidebarModel(baseContext({
+      profile: 'P3',
+      activeFile: {
+        languageId: 'verilog',
+        fsPath: 'E:\\VSCode\\BUAA-CO\\p3\\splitter.v',
+        basename: 'splitter.v',
+        isLogisimCircuit: false
+      }
+    }));
+
+    const context = section(model, '当前上下文');
+    expect(childLabels(context)).toEqual(['当前文件']);
+    expect(findCommand(model, 'co.verilog.inspectSignal')).toBeUndefined();
+    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
   });
 
   it('does not expose course actions while auto remains unresolved', () => {

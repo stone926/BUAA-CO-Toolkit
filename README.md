@@ -59,6 +59,8 @@
 - **持续生成测试**（P3–P7）
   → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → Logisim/ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
 
+低频入口（单次/批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等）统一放在侧边栏 **更多工具...** 或命令面板 **`CO: 更多工具`**。
+
 P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`）。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
 
 就这么简单。下面是细节。
@@ -76,18 +78,16 @@ P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`�
                           你的 CPU（ISim/Logisim 仿真）┘
 ```
 
-### 怎么触发（侧边栏按钮 / 命令面板均可）
+### 怎么触发（侧边栏 / 更多工具）
 
-| 我想…… | 按钮 / 命令 |
+| 我想…… | 入口 |
 |---|---|
-| **一直循环跑，直到出错或我手动停**（推荐） | `CO: 启动持续生成的课程 Trace 测试`（侧栏：持续生成测试 / **P7 一键测试**） |
-| 生成一批测试点并各跑一次对拍 | `CO: 运行生成的课程 Trace 测试`（侧栏：生成并批量测试） |
-| 只测当前打开 / 选定的单个 ASM | `CO: 运行完整课程 Trace 测试`（侧栏：单 ASM 测试） |
-| 批量测多个手选 ASM | `CO: 运行批量课程 Trace 测试` |
-| 停止持续测试 | `CO: 停止持续课程测试` |
-| 只生成测试点（不对拍） | `CO: 生成 ASM 测试点` / `CO: 生成并导出机器码` |
-| 手动选两个输出文件对拍 / 对拍最近一次输出 | `CO: 比较 Trace 输出文件` / `CO: 比较最近的 MARS/ISim 输出` |
-| 打开上次批量测试报告 | `CO: 打开批量 Trace 报告` |
+| **一直循环跑，直到出错或我手动停**（推荐） | 侧边栏「操作」→「持续生成测试」，命令面板也保留同名入口 |
+| 停止持续测试 | 侧边栏「操作」→「停止持续测试」，命令面板也保留同名入口 |
+| 查看历史 ASM case | 侧边栏「操作」→「查看 ASM 用例记录」，命令面板也保留同名入口 |
+| 单次/批量/生成后对拍 | 侧边栏「操作」→「更多工具...」 |
+| 只生成测试点或只 dump 机器码 | 侧边栏「操作」→「更多工具...」 |
+| 手动比较 trace 输出 / 打开批量报告 | 侧边栏「操作」→「更多工具...」 |
 
 持续测试会打开一个**实时监控面板**，并把每轮结果写到 `.co/out/continuous-trace-report.json`（即使关掉 VSCode 也能看）。默认遇到第一个失败/异常就停（可用 `co.test.continuousStopOnFailure: false` 关闭）。
 
@@ -147,12 +147,14 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ### MIPS 汇编
 语法高亮、补全、悬浮提示、标签/定义跳转、诊断、格式化；以及：
-- `CO: MARS 运行当前文件`、`CO: MARS 带标准输入运行`、`CO: MARS 在终端中运行`（交互输入）、`CO: ASM 导出文本段`、`CO: ASM 导出内核文本段`。
+- 侧边栏「操作」只放常用的 ASM 运行和文本段导出；
+- 带标准输入运行、终端运行和 P7 内核段导出放在「更多工具...」，编辑器标题栏仍保留终端运行和文本段导出的快捷按钮。
 
 ### Verilog
 高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
-- `CO: Verilog 生成 Testbench`（P7 自动生成官方接口 testbench）、`CO: Verilog 生成 ISE 工程`、`CO: Verilog 运行 ISim`。
-- **信号连线面板**（侧边栏「信号连线」）：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。也可用命令 `CO: 查看 Verilog 信号连线` 或右键触发。
+- 侧边栏「操作」保留 ISim 运行、波形查看和信号连线；
+- 生成 Testbench、ISE 语法检查在 Verilog 右键菜单；ISE 工程生成和 VCD 导出放在「更多工具...」。
+- **信号连线面板**：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。该面板默认只在 Verilog 上下文或执行“查看信号连线”后出现。
 
 ### 语义着色与主题适配
 插件默认对 MIPS ASM 和 Verilog 开启 semantic highlighting，并根据当前 VS Code 主题明暗自动应用 CO 自定义 token 配色。MIPS 指令类型、CP0 寄存器、Verilog 模块/端口等语义分类仍会输出；若你手动改过某个 token 颜色，插件不会覆盖该 token。
@@ -161,23 +163,27 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
-- `CO: Logisim 生成 ROM 文件`、`CO: Logisim 注入 ROM 到电路`、`CO: Logisim 日志转 CSV`、`CO: Logisim 打开当前电路`；
-- P3 Trace 对拍读取顶层 `main`（可用 `co.test.logisim.mainCircuit` 改）中的 `Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData`。Logisim CLI 的 stdout 列序按源码实际 Pin 位置输出，插件会优先用标准 label 映射；label 不完整时按教程外观端口从上到下、从左到右推断语义列；P3 电路应当只有一个 32 位 ROM；
-- 批量：`CO: 准备 Logisim 电路用例` / `CO: 准备生成的 Logisim 电路用例`（把机器码注入 `.circ` 副本，写到 `.co/cases/<caseId>/logisim/`）。
+- 侧边栏「操作」在当前 `.circ` 文件上提供打开电路和注入 ROM；
+- 生成 ROM、日志转 CSV、P3 trace 电路诊断、批量准备电路用例放在「更多工具...」；
+- P3 Trace 对拍读取顶层 `main`（可用 `co.test.logisim.mainCircuit` 改）中的 `Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData`。Logisim CLI 的 stdout 列序按 Logisim 2.7.1 源码规则解析：先收集 appearance ports，再按实际 Pin 坐标从上到下、从左到右输出；插件优先用标准 label 映射，label 不完整时按教程外观/Pin 顺序推断，也可用 `co.test.logisim.traceColumns` 显式指定 stdout 列号；
+- P3 Logisim 对拍不要求电路提供 `halt` pin。插件会给 ROM 末尾追加停机自环，并在 `pc` 到达注入的 halt PC 时结束仿真；若暴露 `Instr`，插件会额外检查 `Instr` 与当前 PC 对应机器码是否一致；
+- P3 trace 电路诊断可在运行前输出 circuit、ROM、output pin、位宽、坐标、appearance 顺序和最终语义映射；P3 电路应当只有一个 32 位 ROM；
+- 批量准备会把机器码注入 `.circ` 副本，并写到 `.co/cases/<caseId>/logisim/`。
 
 ### 流水线冲突分析（P5/P6/P7）
-- `CO: 分析流水线冲突`、`CO: 打开冲突报告`（需配置 `co.toolchain.hazardCalculator`）。
+- 在「更多工具...」中提供冲突分析和打开报告（需配置 `co.toolchain.hazardCalculator`）。
 
 ### 项目辅助
-- `CO: 项目向导`、`CO: 选择项目 Profile`、`CO: 检查工具链`、`CO: 刷新侧边栏`、`CO: 打开课程教程` / `CO: 打开当前 Profile 教程`。
+- 命令面板只保留 `CO: 项目向导`、`CO: 选择项目 Profile`、`CO: 检查工具链`、`CO: 打开课程教程`、持续测试启动/停止、ASM 用例记录和 `CO: 更多工具`。
 
 ---
 
-## 4. 配置项（按常用程度排序）
+## 4. 配置项（按 Settings UI 分组）
 
 > 优先级：VS Code 用户/工作区设置 `co.*` → 默认值。工作区设置可写在 `.vscode/settings.json`。
+> 设置 UI 保留完整细项，但只分成四组：`BUAA CO: 基础`、`BUAA CO: 工具链`、`BUAA CO: 运行与测试`、`BUAA CO: 编辑器与诊断`。
 
-### 最常用
+### BUAA CO: 基础 / 工具链
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
@@ -188,7 +194,9 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.toolchain.logisim` | — | Logisim jar |
 | `co.project.simTime` | `200us` | ISim 运行时长（写入 TCL `run <值>; exit`） |
 
-### 测试 / 对拍
+其余基础/工具链项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
+
+### BUAA CO: 运行与测试
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
@@ -209,8 +217,14 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
 | `co.test.generatorArgs` | `[]` | 传给外部生成器的额外参数 |
 | `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
+| `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
+| `co.test.logisim.traceColumns` | `{}` | P3 Logisim Trace stdout 显式列映射，零基列号 |
 
-### MIPS / MARS 行为
+运行细项也在本组：`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.revealOutput`(`false`，运行外部工具时是否自动弹出「输出」面板；默认不弹，仅静默写入)、`co.run.timeoutMs`(`120000`)。
+
+### BUAA CO: 编辑器与诊断
+
+MIPS / MARS 行为：
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
@@ -221,17 +235,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
 | `co.mips.instructionColorMode` | `realVsPseudo` | 指令着色方式 |
 
-### 工程 / 工具链（其余）
-
-`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
-
-### Verilog 诊断 / 格式化（细项，按需调整）
-
-`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（风格、续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
-
-### 运行细项
-
-`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.revealOutput`(`false`，运行外部工具时是否自动弹出「输出」面板；默认不弹，仅静默写入)、`co.run.timeoutMs`(`120000`)。
+同组还包含：`co.semanticColors.preset`、`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（风格、续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
 
 ---
 

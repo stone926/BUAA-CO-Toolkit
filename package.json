@@ -35,6 +35,7 @@
     "onCommand:co.selectProjectProfile",
     "onCommand:co.sidebar.refresh",
     "onCommand:co.projectWizard",
+    "onCommand:co.tools.openAdvanced",
     "onCommand:co.course.openTutorial",
     "onCommand:co.course.openProfileTutorial",
     "onCommand:co.course.openTutorialLink",
@@ -69,6 +70,7 @@
     "onCommand:co.test.generateAndDumpAsmTests",
     "onCommand:co.test.stopContinuousTests",
     "onCommand:co.test.prepareLogisimCases",
+    "onCommand:co.test.diagnoseP3LogisimTraceCircuit",
     "onCommand:co.test.prepareGeneratedLogisimCases",
     "onCommand:co.test.openBatchTraceReport",
     "onCommand:co.test.openAsmCaseIndex",
@@ -97,7 +99,8 @@
           "id": "coVerilogSignal",
           "name": "信号连线",
           "icon": "$(circuit-board)",
-          "contextualTitle": "BUAA CO Toolkit"
+          "contextualTitle": "BUAA CO Toolkit",
+          "when": "co.activeCoKind == verilog || co.verilogSignalVisible"
         }
       ]
     },
@@ -498,6 +501,11 @@
         "icon": "$(book)"
       },
       {
+        "command": "co.tools.openAdvanced",
+        "title": "CO: 更多工具",
+        "icon": "$(tools)"
+      },
+      {
         "command": "co.course.openProfileTutorial",
         "title": "CO: 打开当前 Profile 教程",
         "icon": "$(symbol-class)"
@@ -639,6 +647,10 @@
         "title": "CO: 准备 Logisim 电路用例"
       },
       {
+        "command": "co.test.diagnoseP3LogisimTraceCircuit",
+        "title": "CO: 诊断 P3 Logisim Trace 电路"
+      },
+      {
         "command": "co.test.prepareGeneratedLogisimCases",
         "title": "CO: 准备生成的 Logisim 电路用例"
       },
@@ -672,7 +684,7 @@
         },
         {
           "command": "co.verilog.runIsim",
-          "when": "resourceLangId == verilog",
+          "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
           "group": "navigation@10"
         },
         {
@@ -683,161 +695,184 @@
       ],
       "editor/context": [
         {
-          "command": "co.logisim.generateRom",
-          "when": "resourceLangId == mipsasm || resourceExtname == .circ",
-          "group": "co@10"
-        },
-        {
           "command": "co.logisim.injectRomIntoCircuit",
           "when": "resourceExtname == .circ || resourceLangId == mipsasm",
-          "group": "co@11"
+          "group": "co@10"
         },
         {
           "command": "co.verilog.generateTestbench",
-          "when": "resourceLangId == verilog",
+          "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
           "group": "co@10"
         },
         {
-          "command": "co.verilog.generateIseProject",
-          "when": "resourceLangId == verilog",
+          "command": "co.verilog.checkSyntaxWithIse",
+          "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
           "group": "co@11"
         },
         {
-          "command": "co.verilog.openIsimWaveform",
-          "when": "resourceLangId == verilog",
-          "group": "co@12"
-        },
-        {
-          "command": "co.verilog.exportVcd",
-          "when": "resourceLangId == verilog",
-          "group": "co@13"
-        },
-        {
           "command": "co.verilog.inspectSignal",
-          "when": "resourceLangId == verilog",
-          "group": "co@14"
+          "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
+          "group": "co@12"
         }
       ],
       "commandPalette": [
         {
-          "command": "co.checkToolchain"
+          "command": "co.projectWizard"
         },
         {
           "command": "co.selectProjectProfile"
         },
         {
-          "command": "co.sidebar.refresh"
-        },
-        {
-          "command": "co.projectWizard"
+          "command": "co.checkToolchain"
         },
         {
           "command": "co.course.openTutorial"
         },
         {
-          "command": "co.course.openProfileTutorial"
-        },
-        {
-          "command": "co.mips.runCurrentFile"
-        },
-        {
-          "command": "co.mips.runAndCapture"
-        },
-        {
-          "command": "co.mips.runWithStdinFile"
-        },
-        {
-          "command": "co.mips.runInTerminal"
-        },
-        {
-          "command": "co.mips.dumpText"
-        },
-        {
-          "command": "co.mips.dumpKernelText"
-        },
-        {
-          "command": "co.verilog.generateTestbench"
-        },
-        {
-          "command": "co.verilog.generateIseProject"
-        },
-        {
-          "command": "co.verilog.checkSyntaxWithIse"
-        },
-        {
-          "command": "co.verilog.runIsim"
-        },
-        {
-          "command": "co.verilog.openIsimWaveform"
-        },
-        {
-          "command": "co.verilog.exportVcd"
-        },
-        {
-          "command": "co.verilog.inspectSignal"
-        },
-        {
-          "command": "co.logisim.generateRom"
-        },
-        {
-          "command": "co.logisim.injectRomIntoCircuit"
-        },
-        {
-          "command": "co.logisim.convertLogToCsv"
-        },
-        {
-          "command": "co.logisim.openCurrentCircuit"
-        },
-        {
-          "command": "co.hazard.analyzeCurrentMachineCode"
-        },
-        {
-          "command": "co.hazard.openReport"
-        },
-        {
-          "command": "co.test.compareTraceFiles"
-        },
-        {
-          "command": "co.test.compareLatestOutputs"
-        },
-        {
-          "command": "co.test.runFullTest"
-        },
-        {
-          "command": "co.test.runBatchTraceTests"
-        },
-        {
-          "command": "co.test.runGeneratedTraceTests"
-        },
-        {
           "command": "co.test.startContinuousGeneratedTraceTests"
-        },
-        {
-          "command": "co.test.generateAsmTests"
-        },
-        {
-          "command": "co.test.generateAndDumpAsmTests"
         },
         {
           "command": "co.test.stopContinuousTests"
         },
         {
-          "command": "co.test.prepareLogisimCases"
-        },
-        {
-          "command": "co.test.prepareGeneratedLogisimCases"
-        },
-        {
-          "command": "co.test.openBatchTraceReport"
-        },
-        {
           "command": "co.test.openAsmCaseIndex"
+        },
+        {
+          "command": "co.tools.openAdvanced"
+        },
+        {
+          "command": "co.sidebar.refresh",
+          "when": "false"
+        },
+        {
+          "command": "co.course.openProfileTutorial",
+          "when": "false"
+        },
+        {
+          "command": "co.mips.runCurrentFile",
+          "when": "false"
+        },
+        {
+          "command": "co.mips.runAndCapture",
+          "when": "false"
+        },
+        {
+          "command": "co.mips.runWithStdinFile",
+          "when": "false"
+        },
+        {
+          "command": "co.mips.runInTerminal",
+          "when": "false"
+        },
+        {
+          "command": "co.mips.dumpText",
+          "when": "false"
+        },
+        {
+          "command": "co.mips.dumpKernelText",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.generateTestbench",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.generateIseProject",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.checkSyntaxWithIse",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.runIsim",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.openIsimWaveform",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.exportVcd",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.inspectSignal",
+          "when": "false"
+        },
+        {
+          "command": "co.logisim.generateRom",
+          "when": "false"
+        },
+        {
+          "command": "co.logisim.injectRomIntoCircuit",
+          "when": "false"
+        },
+        {
+          "command": "co.logisim.convertLogToCsv",
+          "when": "false"
+        },
+        {
+          "command": "co.logisim.openCurrentCircuit",
+          "when": "false"
+        },
+        {
+          "command": "co.hazard.analyzeCurrentMachineCode",
+          "when": "false"
+        },
+        {
+          "command": "co.hazard.openReport",
+          "when": "false"
+        },
+        {
+          "command": "co.test.compareTraceFiles",
+          "when": "false"
+        },
+        {
+          "command": "co.test.compareLatestOutputs",
+          "when": "false"
+        },
+        {
+          "command": "co.test.runFullTest",
+          "when": "false"
+        },
+        {
+          "command": "co.test.runBatchTraceTests",
+          "when": "false"
+        },
+        {
+          "command": "co.test.runGeneratedTraceTests",
+          "when": "false"
+        },
+        {
+          "command": "co.test.generateAsmTests",
+          "when": "false"
+        },
+        {
+          "command": "co.test.generateAndDumpAsmTests",
+          "when": "false"
+        },
+        {
+          "command": "co.test.prepareLogisimCases",
+          "when": "false"
+        },
+        {
+          "command": "co.test.diagnoseP3LogisimTraceCircuit",
+          "when": "false"
+        },
+        {
+          "command": "co.test.prepareGeneratedLogisimCases",
+          "when": "false"
+        },
+        {
+          "command": "co.test.openBatchTraceReport",
+          "when": "false"
         }
       ]
     },
     "configuration": [
       {
-        "title": "项目与课程",
+        "title": "BUAA CO: 基础",
         "properties": {
           "co.project.profile": {
             "type": "string",
@@ -891,29 +926,7 @@
         }
       },
       {
-        "title": "编辑器外观",
-        "properties": {
-          "co.semanticColors.preset": {
-            "type": "string",
-            "default": "auto",
-            "enum": [
-              "auto",
-              "dark",
-              "light",
-              "off"
-            ],
-            "enumDescriptions": [
-              "根据当前 VS Code 主题明暗自动选择 CO 语义着色预设",
-              "始终使用深色主题语义着色预设",
-              "始终使用浅色主题语义着色预设",
-              "不自动写入 CO 语义着色预设；保留用户和主题自己的规则"
-            ],
-            "description": "控制 CO 自定义语义 token 的默认配色。auto 会按当前主题明暗切换，同时不覆盖用户已手动修改的 token 规则。"
-          }
-        }
-      },
-      {
-        "title": "工具链",
+        "title": "BUAA CO: 工具链",
         "properties": {
           "co.toolchain.java": {
             "type": "string",
@@ -953,8 +966,184 @@
         }
       },
       {
-        "title": "MIPS 汇编",
+        "title": "BUAA CO: 运行与测试",
         "properties": {
+          "co.run.showCommandBeforeRun": {
+            "type": "boolean",
+            "default": false,
+            "description": "运行前显示完整的外部命令"
+          },
+          "co.run.revealOutput": {
+            "type": "boolean",
+            "default": false,
+            "description": "运行外部工具（MARS/ISim/对拍等）时自动弹出「输出」面板。默认关闭，仅静默写入输出，可手动从输出面板查看"
+          },
+          "co.run.timeoutMs": {
+            "type": "number",
+            "default": 120000,
+            "description": "外部工具运行超时时间（毫秒）"
+          },
+          "co.test.generatorArgs": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "向内置随机 ASM 测试生成器追加的命令行参数"
+          },
+          "co.test.generatedAsmLimit": {
+            "type": "number",
+            "default": 100,
+            "minimum": 1,
+            "description": "批量测试时，插件获取的新建或修改 ASM 文件的最大数量"
+          },
+          "co.test.builtinGenerator.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "默认使用内置 ASM 生成器。打开外部生成器文件或禁用此项可使用外部生成器"
+          },
+          "co.test.builtinGenerator.instructions": {
+            "type": "string",
+            "default": "",
+            "description": "内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 Profile 默认值：P3=add, sub, ori, lw, sw, beq, lui, nop；P4=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P5=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P6=add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr；P7=nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall"
+          },
+          "co.test.builtinGenerator.instructionCount": {
+            "type": "number",
+            "default": 4000,
+            "minimum": 1,
+            "maximum": 4000,
+            "description": "内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P3-P6 使用此设置；P7 下此设置被忽略，P7 使用 co.test.builtinGenerator.p7InstructionCount"
+          },
+          "co.test.builtinGenerator.p7InstructionCount": {
+            "type": "number",
+            "default": 1118,
+            "minimum": 1,
+            "maximum": 1118,
+            "description": "P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。课程异常入口固定在 0x4180，因此最大为 1118 条，以保留停机自环并避免覆盖处理程序"
+          },
+          "co.test.continuousIntervalMs": {
+            "type": "number",
+            "default": 1000,
+            "minimum": 1,
+            "description": "两轮持续测试之间的时间间隔"
+          },
+          "co.test.continuousMaxIterations": {
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "description": "持续测试轮数。0 表示运行到手动停止或失败策略触发"
+          },
+          "co.test.continuousStopOnFailure": {
+            "type": "boolean",
+            "default": true,
+            "description": "当持续测试中测试点 WA 或非法样例时，停止持续测试"
+          },
+          "co.test.logisim.mainCircuit": {
+            "type": "string",
+            "default": "main",
+            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露教程 Trace 输出 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData；可用标准 label 识别，未完整标注时按外观端口顺序推断"
+          },
+          "co.test.logisim.traceColumns": {
+            "type": "object",
+            "default": {},
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0
+            },
+            "description": "P3 Logisim Trace stdout 显式列映射（零基，halt pin 不计入）。可配置 instr、pc、regwrite、regaddr、regdata、memwrite、memaddr、memdata，用于非标准 label/外观顺序的电路"
+          },
+          "co.test.p7.interrupt": {
+            "type": "boolean",
+            "default": true,
+            "description": "P7 自动对拍是否注入外部中断（在生成器选定的安全 PC 处，testbench 与 MARS 同步触发）。若你的流水线时序导致中断点假阳性，可关闭此项退化为纯异常/正常数据通路对拍（完全确定性）"
+          },
+          "co.test.p7.stressMode": {
+            "type": "string",
+            "default": "anchor",
+            "enum": [
+              "anchor",
+              "probe",
+              "hybrid",
+              "off"
+            ],
+            "description": "P7 中断/Timer 压测模式。anchor 保持原精确对拍；probe 使用黑盒 probe 性质检查；hybrid 同时生成 anchor 与 probe；off 关闭中断/Timer 压测"
+          },
+          "co.test.p7.timerInterrupt": {
+            "type": "boolean",
+            "default": false,
+            "description": "P7 probe 模式是否生成 Timer0/Timer1 中断场景"
+          },
+          "co.test.p7.externalInterruptIntensity": {
+            "type": "number",
+            "default": 0.25,
+            "minimum": 0,
+            "maximum": 1,
+            "description": "P7 probe 模式生成外部中断场景的强度（0~1）"
+          },
+          "co.test.p7.timerIntensity": {
+            "type": "number",
+            "default": 0.2,
+            "minimum": 0,
+            "maximum": 1,
+            "description": "P7 probe 模式生成 Timer 中断场景的强度（0~1）"
+          },
+          "co.test.p7.probeScenarioCount": {
+            "type": "number",
+            "default": 32,
+            "minimum": 1,
+            "maximum": 64,
+            "description": "P7 probe 模式每个 ASM 生成的场景数量，最多 64 条以保持 probe log 在 DM 范围内"
+          },
+          "co.test.p7.exceptionRate": {
+            "type": "number",
+            "default": 0.08,
+            "minimum": 0,
+            "maximum": 1,
+            "description": "P7 生成器主动制造内部异常（AdEL、AdES、Syscall、RI、Ov）的比例（0~1）。0 表示不主动制造内部异常"
+          },
+          "co.test.p7.exceptionTypes": {
+            "type": "array",
+            "default": [
+              "AdEL",
+              "AdES",
+              "Syscall",
+              "RI",
+              "Ov"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "AdEL",
+                "AdES",
+                "Syscall",
+                "RI",
+                "Ov"
+              ]
+            },
+            "description": "P7 内置 ASM 生成器主动覆盖的异常类型。Syscall 关闭时也不会在用户态随机生成 syscall；RI 需要支持 cl 额外指令加载的 P7 修改版 MARS"
+          }
+        }
+      },
+      {
+        "title": "BUAA CO: 编辑器与诊断",
+        "properties": {
+          "co.semanticColors.preset": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "auto",
+              "dark",
+              "light",
+              "off"
+            ],
+            "enumDescriptions": [
+              "根据当前 VS Code 主题明暗自动选择 CO 语义着色预设",
+              "始终使用深色主题语义着色预设",
+              "始终使用浅色主题语义着色预设",
+              "不自动写入 CO 语义着色预设；保留用户和主题自己的规则"
+            ],
+            "description": "控制 CO 自定义语义 token 的默认配色。auto 会按当前主题明暗切换，同时不覆盖用户已手动修改的 token 规则。"
+          },
           "co.mips.delayedBranching": {
             "type": "string",
             "default": "profile",
@@ -1002,12 +1191,7 @@
             "type": "boolean",
             "default": true,
             "description": "在 P2 Profile 下，当文件没有 syscall 指令时发出警告"
-          }
-        }
-      },
-      {
-        "title": "Verilog",
-        "properties": {
+          },
           "co.verilog.implicitNet.diagnostic": {
             "type": "string",
             "default": "warning",
@@ -1073,8 +1257,6 @@
               "vc-003",
               "vc-004",
               "vc-008",
-              "vc-014",
-              "vc-017",
               "vc-021"
             ],
             "items": {
@@ -1159,167 +1341,7 @@
             "minimum": 0,
             "maximum": 3,
             "description": "Verilog 格式化器保留的最大连续空行数"
-          }
-        }
-      },
-      {
-        "title": "运行与输出",
-        "properties": {
-          "co.run.showCommandBeforeRun": {
-            "type": "boolean",
-            "default": false,
-            "description": "运行前显示完整的外部命令"
           },
-          "co.run.revealOutput": {
-            "type": "boolean",
-            "default": false,
-            "description": "运行外部工具（MARS/ISim/对拍等）时自动弹出「输出」面板。默认关闭，仅静默写入输出，可手动从输出面板查看"
-          },
-          "co.run.timeoutMs": {
-            "type": "number",
-            "default": 120000,
-            "description": "外部工具运行超时时间（毫秒）"
-          }
-        }
-      },
-      {
-        "title": "课程测试",
-        "properties": {
-          "co.test.generatorArgs": {
-            "type": "array",
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "description": "向内置随机 ASM 测试生成器追加的命令行参数"
-          },
-          "co.test.generatedAsmLimit": {
-            "type": "number",
-            "default": 100,
-            "minimum": 1,
-            "description": "批量测试时，插件获取的新建或修改 ASM 文件的最大数量"
-          },
-          "co.test.builtinGenerator.enabled": {
-            "type": "boolean",
-            "default": true,
-            "description": "默认使用内置 ASM 生成器。打开外部生成器文件或禁用此项可使用外部生成器"
-          },
-          "co.test.builtinGenerator.instructions": {
-            "type": "string",
-            "default": "",
-            "description": "内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 Profile 默认值：P3=add, sub, ori, lw, sw, beq, lui, nop；P4=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P5=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P6=add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr；P7=nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall"
-          },
-          "co.test.builtinGenerator.instructionCount": {
-            "type": "number",
-            "default": 4000,
-            "minimum": 1,
-            "maximum": 4000,
-            "description": "内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P3-P6 使用此设置；P7 下此设置被忽略，P7 使用 co.test.builtinGenerator.p7InstructionCount"
-          },
-          "co.test.builtinGenerator.p7InstructionCount": {
-            "type": "number",
-            "default": 1118,
-            "minimum": 1,
-            "maximum": 1118,
-            "description": "P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。课程异常入口固定在 0x4180，因此最大为 1118 条，以保留停机自环并避免覆盖处理程序"
-          },
-          "co.test.continuousIntervalMs": {
-            "type": "number",
-            "default": 1000,
-            "minimum": 1,
-            "description": "两轮持续测试之间的时间间隔"
-          },
-          "co.test.continuousMaxIterations": {
-            "type": "number",
-            "default": 0,
-            "minimum": 0,
-            "description": "持续测试轮数。0 表示运行到手动停止或失败策略触发"
-          },
-          "co.test.continuousStopOnFailure": {
-            "type": "boolean",
-            "default": true,
-            "description": "当持续测试中测试点 WA 或非法样例时，停止持续测试"
-          },
-          "co.test.logisim.mainCircuit": {
-            "type": "string",
-            "default": "main",
-            "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露教程 Trace 输出 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData；可用标准 label 识别，未完整标注时按外观端口顺序推断"
-          },
-          "co.test.p7.interrupt": {
-            "type": "boolean",
-            "default": true,
-            "description": "P7 自动对拍是否注入外部中断（在生成器选定的安全 PC 处，testbench 与 MARS 同步触发）。若你的流水线时序导致中断点假阳性，可关闭此项退化为纯异常/正常数据通路对拍（完全确定性）"
-          },
-          "co.test.p7.stressMode": {
-            "type": "string",
-            "default": "hybrid",
-            "enum": [
-              "anchor",
-              "probe",
-              "hybrid",
-              "off"
-            ],
-            "description": "P7 中断/Timer 压测模式。anchor 保持原精确对拍；probe 使用黑盒 probe 性质检查；hybrid 同时生成 anchor 与 probe；off 关闭中断/Timer 压测"
-          },
-          "co.test.p7.timerInterrupt": {
-            "type": "boolean",
-            "default": false,
-            "description": "P7 probe 模式是否生成 Timer0/Timer1 中断场景"
-          },
-          "co.test.p7.externalInterruptIntensity": {
-            "type": "number",
-            "default": 0.25,
-            "minimum": 0,
-            "maximum": 1,
-            "description": "P7 probe 模式生成外部中断场景的强度（0~1）"
-          },
-          "co.test.p7.timerIntensity": {
-            "type": "number",
-            "default": 0.2,
-            "minimum": 0,
-            "maximum": 1,
-            "description": "P7 probe 模式生成 Timer 中断场景的强度（0~1）"
-          },
-          "co.test.p7.probeScenarioCount": {
-            "type": "number",
-            "default": 64,
-            "minimum": 1,
-            "maximum": 64,
-            "description": "P7 probe 模式每个 ASM 生成的场景数量，最多 64 条以保持 probe log 在 DM 范围内"
-          },
-          "co.test.p7.exceptionRate": {
-            "type": "number",
-            "default": 0.08,
-            "minimum": 0,
-            "maximum": 1,
-            "description": "P7 生成器主动制造内部异常（AdEL、AdES、Syscall、RI、Ov）的比例（0~1）。0 表示不主动制造内部异常"
-          },
-          "co.test.p7.exceptionTypes": {
-            "type": "array",
-            "default": [
-              "AdEL",
-              "AdES",
-              "Syscall",
-              "RI",
-              "Ov"
-            ],
-            "items": {
-              "type": "string",
-              "enum": [
-                "AdEL",
-                "AdES",
-                "Syscall",
-                "RI",
-                "Ov"
-              ]
-            },
-            "description": "P7 内置 ASM 生成器主动覆盖的异常类型。Syscall 关闭时也不会在用户态随机生成 syscall；RI 需要支持 cl 额外指令加载的 P7 修改版 MARS"
-          }
-        }
-      },
-      {
-        "title": "诊断过滤",
-        "properties": {
           "co.diagnostics.disabledCodes": {
             "type": "array",
             "default": [],

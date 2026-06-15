@@ -163,6 +163,7 @@ export function registerVerilogSignalView(context: vscode.ExtensionContext, modu
 
   context.subscriptions.push(
     vscode.commands.registerCommand('co.verilog.inspectSignal', () => {
+      void vscode.commands.executeCommand('setContext', 'co.verilogSignalVisible', true);
       refresh();
       void vscode.commands.executeCommand('coVerilogSignal.focus');
     }),

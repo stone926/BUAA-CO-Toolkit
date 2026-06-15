@@ -13,6 +13,7 @@ import {
   getGeneratorArgs,
   getJava,
   getLogisimJar,
+  getLogisimTraceColumns,
   getLogisimTraceMainCircuit,
   getMemoryConfiguration,
   getP7ExceptionRate,
@@ -61,16 +62,20 @@ import {
 } from './courseTesting/logisimPrep';
 import {
   defaultLogisimTraceCircuit,
+  analyzeP3LogisimTraceCircuit,
   createLogisimPcProgressState,
+  formatP3LogisimTraceDiagnostic,
   formatLogisimTraceEvents,
   inspectLogisimPcProgress,
+  LogisimTraceColumnMap,
   LogisimTraceSpec,
   parseLogisimTraceOutput,
   parseLogisimTraceSpec,
   p3LogisimMaxWords,
   P3LogisimMachineCode,
   prepareP3LogisimMachineCode,
-  setLogisimMainCircuit
+  setLogisimMainCircuit,
+  validateP3LogisimFetchTrace
 } from './courseTesting/logisimTrace';
 import {
   compareTraces,
@@ -81,7 +86,7 @@ import {
 } from './language/mips/traceCompare';
 import { parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
-import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
+import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget, parseMachineCodeWords } from './language/logisim/rom';
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { checkToolchain } from './toolchain';
@@ -204,6 +209,8 @@ interface P3LogisimTraceSetup {
   circuitText: string;
   traceCircuit: string;
   traceSpec: LogisimTraceSpec;
+  traceDiagnostic: string;
+  traceColumns?: LogisimTraceColumnMap;
   romTarget: LogisimRomTarget;
 }
 
@@ -276,6 +283,7 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
     vscode.commands.registerCommand('co.test.generateAndDumpAsmTests', () => generateAndDumpAsmTests(services)),
     vscode.commands.registerCommand('co.test.stopContinuousTests', () => stopContinuousTests()),
     vscode.commands.registerCommand('co.test.prepareLogisimCases', () => prepareLogisimCases(services)),
+    vscode.commands.registerCommand('co.test.diagnoseP3LogisimTraceCircuit', () => diagnoseP3LogisimTraceCircuit(services)),
     vscode.commands.registerCommand('co.test.prepareGeneratedLogisimCases', () => prepareGeneratedLogisimCases(services)),
     vscode.commands.registerCommand('co.test.openBatchTraceReport', () => openBatchTraceReport()),
     vscode.commands.registerCommand('co.test.openAsmCaseIndex', () => openAsmCaseIndex())
@@ -335,6 +343,27 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
   }
 
   await runCourseTraceBatch(services, expandTraceCases(generated.asms, generated.asmCases), generated.source);
+}
+
+async function diagnoseP3LogisimTraceCircuit(services: AppServices): Promise<void> {
+  await vscode.workspace.saveAll(false);
+  const circuit = await resolveLogisimCircuitInput();
+  if (!circuit) {
+    return;
+  }
+  const circuitText = await readTextFile(circuit);
+  const traceCircuit = getLogisimTraceMainCircuit(circuit) || defaultLogisimTraceCircuit;
+  const traceColumns = getLogisimTraceColumns(circuit) as LogisimTraceColumnMap | undefined;
+  const report = analyzeP3LogisimTraceCircuit(circuitText, traceCircuit, { traceColumns });
+  const diagnostic = formatP3LogisimTraceDiagnostic(report);
+  revealOutputChannel(services.output, circuit);
+  services.output.appendLine('');
+  services.output.appendLine(diagnostic);
+  if (report.spec) {
+    vscode.window.showInformationMessage('P3 Logisim Trace 电路诊断通过，详见输出面板');
+  } else {
+    vscode.window.showErrorMessage(`P3 Logisim Trace 电路诊断失败：${report.errors[0] ?? '无法解析 trace 端口'}`);
+  }
 }
 
 async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
@@ -869,6 +898,7 @@ async function runP3LogisimTraceCase(
   services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
   services.output.appendLine(`Logisim 电路: ${setup.circuit.fsPath}`);
   services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
+  await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-diagnostic.txt', setup.traceDiagnostic, 'traceDiagnostic');
 
   const dump = await prepareAsmCaseMachineCode(services, asmCase, {
     showMessages: false,
@@ -966,10 +996,14 @@ async function runP3LogisimTraceCase(
   let parsedLogisim;
   try {
     parsedLogisim = parseLogisimTraceOutput(logisimRun.stdout, setup.traceSpec);
-    const firstPc = parsedLogisim.rows[0]?.values.pc;
-    if (!firstPc || firstPc.unknown || firstPc.hex !== '00003000') {
-      const actual = firstPc && !firstPc.unknown ? `0x${firstPc.hex}` : '(unknown)';
-      throw new Error(`Logisim CLI 初始 PC 应为 0x00003000，实际为 ${actual}。请提供无需人工 reset 的测试顶层。`);
+    const fetchValidation = validateP3LogisimFetchTrace(
+      parsedLogisim.rows,
+      setup.traceSpec,
+      parseMachineCodeWords(logisimCode.text),
+      logisimCode.haltPcHex
+    );
+    for (const warning of fetchValidation.warnings) {
+      services.output.appendLine(`Logisim fetch check: ${warning}`);
     }
   } catch (error) {
     return {
@@ -993,6 +1027,26 @@ async function runP3LogisimTraceCase(
   const marsText = await readTextFile(mars.outputFile);
   const marsEvents = parseMarsOutput(marsText);
   const diff = compareTraces(marsEvents, parsedLogisim.events, { compareCycles: defaultTraceCompareMode.compareCycles });
+
+  if (!marsEvents.length && !parsedLogisim.events.length) {
+    return {
+      asm: asm.fsPath,
+      ...caseResultFields(asmCase),
+      status: 'passed',
+      stage: 'compare',
+      message: 'PC/Instr 校验通过，双方没有可见 GRF/DM 写事件',
+      machineCode: asmCase.machineCode.fsPath,
+      marsOut: mars.outputFile.fsPath,
+      simOut: simTrace.fsPath,
+      logisimOut: rawOut.fsPath,
+      logisimCircuit: preparedCircuit.fsPath,
+      logisimRows: parsedLogisim.rows.length,
+      marsEvents: 0,
+      simEvents: 0,
+      matchedEvents: 0,
+      diffEvents: 0
+    };
+  }
 
   if (!marsEvents.length || !parsedLogisim.events.length) {
     return {
@@ -1585,13 +1639,21 @@ async function resolveP3LogisimTraceSetup(
   }
   const circuitText = await readTextFile(circuit);
   const traceCircuit = getLogisimTraceMainCircuit(circuit) || defaultLogisimTraceCircuit;
+  const traceColumns = getLogisimTraceColumns(circuit) as LogisimTraceColumnMap | undefined;
+  const traceReport = analyzeP3LogisimTraceCircuit(circuitText, traceCircuit, { traceColumns });
+  const traceDiagnostic = formatP3LogisimTraceDiagnostic(traceReport);
   let traceSpec: LogisimTraceSpec;
   try {
-    traceSpec = parseLogisimTraceSpec(circuitText, traceCircuit);
+    traceSpec = traceReport.spec ?? parseLogisimTraceSpec(circuitText, traceCircuit, { traceColumns });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    vscode.window.showErrorMessage(`P3 Logisim Trace 顶层不可用：${message}`);
-    services.output.appendLine(message);
+    vscode.window.showErrorMessage(`P3 Logisim Trace 顶层不可用：${traceReport.errors[0] ?? message}`);
+    services.output.appendLine(traceDiagnostic);
+    return undefined;
+  }
+  if (!traceReport.spec) {
+    vscode.window.showErrorMessage(`P3 Logisim Trace 顶层不可用：${traceReport.errors[0] ?? '无法解析 trace 端口'}`);
+    services.output.appendLine(traceDiagnostic);
     return undefined;
   }
 
@@ -1605,7 +1667,8 @@ async function resolveP3LogisimTraceSetup(
   services.output.appendLine('P3 Logisim Trace 设置');
   services.output.appendLine(`电路: ${circuit.fsPath}`);
   services.output.appendLine(`Trace 顶层: ${traceCircuit}`);
-  services.output.appendLine(`Trace 输出列: ${traceSpec.columns.map((column) => column.label || `(col ${column.index})`).join(', ')}`);
+  services.output.appendLine(`Trace 输出列: ${traceSpec.columns.map((column) => column.logisimLabel || `(col ${column.index})`).join(', ')}`);
+  services.output.appendLine(traceDiagnostic);
   services.output.appendLine(`ROM: ${romTarget.label ?? 'ROM'}${romTarget.loc ? ` ${romTarget.loc}` : ''}`);
 
   return {
@@ -1613,6 +1676,8 @@ async function resolveP3LogisimTraceSetup(
     circuitText,
     traceCircuit,
     traceSpec,
+    traceDiagnostic,
+    traceColumns,
     romTarget
   };
 }

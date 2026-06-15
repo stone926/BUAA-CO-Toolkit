@@ -63,18 +63,15 @@ export interface SidebarModelContext {
 
 const traceProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
 const verilogProfiles = new Set<ProjectProfile>(['P1', 'P4', 'P5', 'P6', 'P7']);
+const configuredVerilogProjectProfiles = new Set<ProjectProfile>(['P4', 'P5', 'P6', 'P7']);
 const mipsProfiles = new Set<ProjectProfile>(['P2', 'P4', 'P5', 'P6', 'P7']);
-const asmGenerationProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
 const logisimProfiles = new Set<ProjectProfile>(['P0', 'P3']);
-const hazardProfiles = new Set<ProjectProfile>(['P5', 'P6', 'P7']);
 
 export function buildSidebarModel(context: SidebarModelContext): SidebarNodeModel[] {
   return [
     projectSection(context),
     contextSection(context),
-    coreActionsSection(context),
-    manualWorkflowSection(context),
-    reportsSection(context),
+    actionsSection(context),
     materialsSection(context)
   ].filter(hasVisibleChildren);
 }
@@ -134,7 +131,7 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
         'context.none',
         '未绑定当前文件',
         '打开 ASM / Verilog / .circ 后显示文件操作',
-        '当前没有可用于 CO 操作的 active editor。依赖当前文件的命令不会出现在核心操作中。',
+        '当前没有可用于 CO 操作的 active editor。依赖当前文件的命令不会出现在操作区中。',
         'info'
       )
     ]);
@@ -153,15 +150,28 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
     ]);
   }
 
-  if (isVerilogFile(active)) {
-    return sectionItem('context', '当前上下文', true, [
-      infoItem('context.verilog', '当前 Verilog', active.basename, active.fsPath, 'file-code'),
+  if (isVerilogFile(active) && usesVerilogProfile(context.profile)) {
+    const children: SidebarNodeModel[] = [
+      infoItem('context.verilog', '当前 Verilog', active.basename, active.fsPath, 'file-code')
+    ];
+    if (usesConfiguredVerilogProject(context.profile)) {
+      children.push(
       infoItem('context.top', 'Top', context.topModule, 'co.project.topModule', 'symbol-class'),
       infoItem('context.tb', 'TB', context.testbench, 'co.project.testbench', 'beaker'),
       infoItem('context.machineCode', '机器码名', context.machineCode, '仿真前会复制到 .co/isim/<machineCode>', 'file-binary'),
       infoItem('context.simTime', '仿真时长', context.simTime, 'co.project.simTime', 'watch'),
       infoItem('context.backend', '仿真后端', context.simBackend, 'co.project.simBackend', 'circuit-board')
-    ]);
+      );
+    } else if (context.profile === 'P1') {
+      children.push(infoItem(
+        'context.verilogMode',
+        '仿真模式',
+        '独立模块',
+        'P1 Verilog 练习没有统一顶层。运行 ISim 时会优先使用当前 testbench；否则为当前模块生成临时 testbench。',
+        'beaker'
+      ));
+    }
+    return sectionItem('context', '当前上下文', true, children);
   }
 
   if (isLogisimCircuitFile(active)) {
@@ -175,13 +185,13 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
       'context.file',
       '当前文件',
       active.basename,
-      `${active.fsPath}\n当前文件类型未绑定 CO 核心操作。`,
+      `${active.fsPath}\n当前文件类型未绑定 CO 操作。`,
       'file'
     )
   ]);
 }
 
-function coreActionsSection(context: SidebarModelContext): SidebarNodeModel {
+function actionsSection(context: SidebarModelContext): SidebarNodeModel {
   const children: SidebarNodeModel[] = [];
   const active = context.activeFile;
 
@@ -215,24 +225,26 @@ function coreActionsSection(context: SidebarModelContext): SidebarNodeModel {
   }
 
   if (shouldShowLogisimActions(context.profile, active)) {
-    children.push(
-      actionItem(
-        'core.prepareLogisimCases',
-        '准备 Logisim 用例',
-        'co.test.prepareLogisimCases',
-        'file-submodule',
-        '选择 ASM -> case -> 注入电路',
-        '选择 ASM 并生成可用于 Logisim 的用例。机器码和派生电路写入对应 ASM case。'
-      ),
-      actionItem(
-        'core.prepareGeneratedLogisimCases',
-        '生成 Logisim 用例',
-        'co.test.prepareGeneratedLogisimCases',
-        'files',
-        '生成 ASM -> case -> 注入电路',
-        '使用生成器生成 ASM，并把 Logisim 派生物记录到 .co/cases/<caseId>/logisim。'
-      )
-    );
+    if (active && isLogisimCircuitFile(active)) {
+      children.push(
+        actionItem(
+          'core.openCircuit',
+          '打开 Logisim 电路',
+          'co.logisim.openCurrentCircuit',
+          'circuit-board',
+          `使用当前电路: ${active.basename}`,
+          active.fsPath
+        ),
+        actionItem(
+          'core.injectCircuit',
+          'Logisim 注入 ROM',
+          'co.logisim.injectRomIntoCircuit',
+          'circuit-board',
+          '当前 .circ + 运行时选择 ASM',
+          `电路:\n${active.fsPath}\n\nASM 会在执行时选择，并导入 .co/cases/<caseId>。`
+        )
+      );
+    }
   }
 
   if (active && isMipsFile(active) && shouldShowMipsActions(context.profile, active.languageId)) {
@@ -246,14 +258,6 @@ function coreActionsSection(context: SidebarModelContext): SidebarNodeModel {
         active.fsPath
       ),
       actionItem(
-        'core.asmRunStdin',
-        'ASM 带输入运行',
-        'co.mips.runWithStdinFile',
-        'terminal',
-        '当前 ASM + 运行时选择 stdin',
-        `ASM:\n${active.fsPath}\n\nstdin 会在执行时弹出选择器。`
-      ),
-      actionItem(
         'core.asmDumpText',
         'ASM 导出文本段',
         'co.mips.dumpText',
@@ -265,18 +269,6 @@ function coreActionsSection(context: SidebarModelContext): SidebarNodeModel {
   }
 
   if (active && isVerilogFile(active) && shouldShowVerilogActions(context.profile, active.languageId)) {
-    if (context.profile === 'P1') {
-      children.push(
-        actionItem(
-          'core.verilogTb',
-          '生成 Testbench',
-          'co.verilog.generateTestbench',
-          'file-code',
-          `当前光标模块，Top 时为 ${context.testbench}.v`,
-          verilogTestbenchTooltip(context, active)
-        )
-      );
-    }
     children.push(
       actionItem(
         'core.runIsim',
@@ -293,238 +285,30 @@ function coreActionsSection(context: SidebarModelContext): SidebarNodeModel {
         'pulse',
         verilogSimulationDescription(context),
         `${verilogSimulationTooltip(context, active)}\n\nGUI 启动后执行 wave add -r /。`
-      )
-    );
-  }
-
-  if (active && isLogisimCircuitFile(active) && shouldShowLogisimActions(context.profile, active)) {
-    children.push(
+      ),
       actionItem(
-        'core.openCircuit',
-        '打开 Logisim 电路',
-        'co.logisim.openCurrentCircuit',
+        'core.inspectSignal',
+        '查看信号连线',
+        'co.verilog.inspectSignal',
         'circuit-board',
-        `使用当前电路: ${active.basename}`,
-        active.fsPath
-      ),
-      actionItem(
-        'core.injectCircuit',
-        'Logisim 注入 ROM',
-        'co.logisim.injectRomIntoCircuit',
-        'circuit-board',
-        '当前 .circ + 运行时选择 ASM',
-        `电路:\n${active.fsPath}\n\nASM 会在执行时选择，并导入 .co/cases/<caseId>。`
+        `使用当前 Verilog: ${active.basename}`,
+        '将光标放在任一信号上，侧边栏会显示声明、驱动和读取位置。'
       )
     );
   }
 
-  return sectionItem('core', '核心操作', true, children);
-}
+  children.push(
+    actionItem(
+      'core.moreTools',
+      '更多工具...',
+      'co.tools.openAdvanced',
+      'tools',
+      '按当前 Profile 显示低频工具',
+      '打开高级工具选择器，包含批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等低频入口。'
+    )
+  );
 
-function manualWorkflowSection(context: SidebarModelContext): SidebarNodeModel {
-  const children: SidebarNodeModel[] = [];
-  const active = context.activeFile;
-
-  if (active && isMipsFile(active) && shouldShowMipsActions(context.profile, active.languageId)) {
-    children.push(
-      actionItem(
-        'manual.asmTerminal',
-        'ASM 终端运行',
-        'co.mips.runInTerminal',
-        'terminal-powershell',
-        `使用当前 ASM: ${active.basename}`,
-        active.fsPath
-      )
-    );
-    if (context.profile === 'P7') {
-      children.push(
-        actionItem(
-          'manual.asmDumpKernel',
-          'ASM 导出内核段',
-          'co.mips.dumpKernelText',
-          'export',
-          'P7 内核文本段',
-          `ASM:\n${active.fsPath}\n\n默认输出在 ASM 同目录。`
-        )
-      );
-    }
-  }
-
-  if (shouldShowAsmGenerationActions(context.profile)) {
-    children.push(
-      actionItem(
-        'manual.generateAsm',
-        '生成 ASM 测试点',
-        'co.test.generateAsmTests',
-        'file-code',
-        '生成并保留 ASM case',
-        '生成器输出会导入 .co/cases/<caseId>，并打开第一个 ASM 快照。'
-      ),
-      actionItem(
-        'manual.generateAndDumpAsm',
-        '生成并导出机器码',
-        'co.test.generateAndDumpAsmTests',
-        'export',
-        '生成 ASM -> case -> code.txt',
-        '生成 ASM 后通过 MARS dump，机器码写入 .co/cases/<caseId>/code.txt。'
-      )
-    );
-  }
-
-  if (shouldShowTraceActions(context.profile)) {
-    children.push(
-      actionItem(
-        'manual.singleTrace',
-        '单 ASM 测试',
-        'co.test.runFullTest',
-        'run-all',
-        '运行时选择 ASM',
-        `选择 ASM 后创建 case，dump 机器码，分别运行 MARS/${traceBackendName(context.profile)} 并对拍。`
-      ),
-      actionItem(
-        'manual.batchTrace',
-        '多 ASM 批量测试',
-        'co.test.runBatchTraceTests',
-        'list-selection',
-        '运行时选择多个 ASM',
-        `每个 ASM 都会创建独立 .co/cases/<caseId>，通过 MARS/${traceBackendName(context.profile)} 对拍，批量报告写入 .co/out。`
-      ),
-      actionItem(
-        'manual.generatedBatchTrace',
-        '生成并批量测试',
-        'co.test.runGeneratedTraceTests',
-        'beaker',
-        '生成 ASM -> 批量对拍',
-        `生成 ASM 后通过 MARS/${traceBackendName(context.profile)} 批量对拍；持续压力测试请优先使用核心操作。`
-      )
-    );
-  }
-
-  if (active && isVerilogFile(active) && shouldShowVerilogActions(context.profile, active.languageId)) {
-    if (context.profile !== 'P1') {
-      children.push(
-        actionItem(
-          'manual.verilogTb',
-          'Verilog Testbench',
-          'co.verilog.generateTestbench',
-          'file-code',
-          `当前光标模块，Top 时为 ${context.testbench}.v`,
-          verilogTestbenchTooltip(context, active)
-        )
-      );
-    }
-    children.push(
-      actionItem(
-        'manual.iseProject',
-        'Verilog ISE 工程',
-        'co.verilog.generateIseProject',
-        'project',
-        '生成 .co/isim PRJ/TCL',
-        verilogConfigTooltip(context, active)
-      ),
-      actionItem(
-        'manual.exportVcd',
-        '导出 VCD 波形',
-        'co.verilog.exportVcd',
-        'save',
-        '批量运行并写入 .co/out',
-        `${verilogSimulationTooltip(context, active)}\n\nVCD 输出到 .co/out。`
-      )
-    );
-  }
-
-  if (shouldShowLogisimActions(context.profile, active)) {
-    children.push(
-      actionItem(
-        'manual.logisimRom',
-        'Logisim ROM',
-        'co.logisim.generateRom',
-        'file-binary',
-        '运行时选择 ASM',
-        '选择 ASM 后创建 case，ROM 文本写入 .co/cases/<caseId>/logisim。'
-      )
-    );
-    if (!active || !isLogisimCircuitFile(active)) {
-      children.push(
-        actionItem(
-          'manual.logisimInject',
-          'Logisim 注入 ROM',
-          'co.logisim.injectRomIntoCircuit',
-          'circuit-board',
-          '运行时选择 .circ 和 ASM',
-          '电路和 ASM 都会在执行时选择；注入后的电路写入对应 ASM case。'
-        )
-      );
-    }
-    children.push(
-      actionItem(
-        'manual.logisimCsv',
-        'Logisim Logging 转 CSV',
-        'co.logisim.convertLogToCsv',
-        'table',
-        '运行时选择日志文本',
-        '将 Logisim logging 文本转换为同目录 CSV。'
-      )
-    );
-  }
-
-  return sectionItem('manual', '手动流程', false, children);
-}
-
-function reportsSection(context: SidebarModelContext): SidebarNodeModel {
-  const children: SidebarNodeModel[] = [];
-
-  if (shouldShowTraceActions(context.profile)) {
-    children.push(
-      actionItem(
-        'reports.compareTraceFiles',
-        '手动选择输出对拍',
-        'co.test.compareTraceFiles',
-        'compare-changes',
-        '运行时选择两个输出',
-        '适合手动比较 MARS/ISim 或历史输出文件。'
-      ),
-      actionItem(
-        'reports.compareLatest',
-        '最近输出对拍',
-        'co.test.compareLatestOutputs',
-        'diff',
-        '使用 .co/out 最近输出',
-        '自动寻找最近的仿真/黄金模型输出并比较。'
-      ),
-      actionItem(
-        'reports.batchReport',
-        '打开批量测试报告',
-        'co.test.openBatchTraceReport',
-        'preview',
-        '.co/out 报告',
-        '打开最近的批量 Trace 测试报告。'
-      )
-    );
-  }
-
-  if (hazardProfiles.has(context.profile)) {
-    children.push(
-      actionItem(
-        'reports.hazardAnalyze',
-        'Hazard 分析',
-        'co.hazard.analyzeCurrentMachineCode',
-        'pulse',
-        '当前 ASM 或运行时选择机器码',
-        '若当前文件是 ASM，会先 dump 机器码；否则使用配置的 machineCode 或弹出选择器。输出写入 .co/hazard。'
-      ),
-      actionItem(
-        'reports.hazardReport',
-        '打开 Hazard 报告',
-        'co.hazard.openReport',
-        'json',
-        '.co/hazard/result',
-        '打开最近一次 Hazard 分析统计报告。'
-      )
-    );
-  }
-
-  return sectionItem('reports', '报告与诊断', false, children);
+  return sectionItem('actions', '操作', true, children);
 }
 
 function materialsSection(context: SidebarModelContext): SidebarNodeModel {
@@ -642,7 +426,7 @@ function shouldShowMipsActions(profile: ProjectProfile, language?: string): bool
 }
 
 function shouldShowVerilogActions(profile: ProjectProfile, language?: string): boolean {
-  return profile !== 'auto' && (language === 'verilog' || verilogProfiles.has(profile));
+  return language === 'verilog' && usesVerilogProfile(profile);
 }
 
 function shouldShowLogisimActions(profile: ProjectProfile, active?: SidebarActiveFileModel): boolean {
@@ -653,8 +437,12 @@ function shouldShowTraceActions(profile: ProjectProfile): boolean {
   return traceProfiles.has(profile);
 }
 
-function shouldShowAsmGenerationActions(profile: ProjectProfile): boolean {
-  return asmGenerationProfiles.has(profile);
+function usesConfiguredVerilogProject(profile: ProjectProfile): boolean {
+  return configuredVerilogProjectProfiles.has(profile);
+}
+
+function usesVerilogProfile(profile: ProjectProfile): boolean {
+  return verilogProfiles.has(profile);
 }
 
 function traceBackendName(profile: ProjectProfile): string {
@@ -684,13 +472,18 @@ function summarizeTools(tools: SidebarToolModel[]): { description: string; toolt
 }
 
 function configSourceTooltip(context: SidebarModelContext): string {
-  return [
+  const lines = [
     `当前配置来源: ${context.configSource}`,
-    `Profile: ${context.profile}`,
-    `Top: ${context.topModule}`,
-    `TB: ${context.testbench}`,
-    `machineCode: ${context.machineCode}`
-  ].join('\n');
+    `Profile: ${context.profile}`
+  ];
+  if (usesConfiguredVerilogProject(context.profile)) {
+    lines.push(
+      `Top: ${context.topModule}`,
+      `TB: ${context.testbench}`,
+      `machineCode: ${context.machineCode}`
+    );
+  }
+  return lines.join('\n');
 }
 
 function workspaceTooltip(context: SidebarModelContext, detail: string): string {
@@ -710,23 +503,25 @@ function verilogConfigTooltip(context: SidebarModelContext, active: SidebarActiv
   ].join('\n');
 }
 
-function verilogTestbenchTooltip(context: SidebarModelContext, active: SidebarActiveFileModel): string {
-  return [
-    verilogConfigTooltip(context, active),
-    '',
-    `生成 Testbench 时会解析当前光标所在模块。`,
-    `若光标模块是 Top，则目标 TB 名为 ${context.testbench}.v；否则使用 <module>_tb.v。`
-  ].join('\n');
-}
-
 function verilogSimulationDescription(context: SidebarModelContext): string {
-  if (context.profile === 'P1') {
-    return 'Top/TB 来自配置，无 ASM';
+  if (!usesConfiguredVerilogProject(context.profile)) {
+    return '当前模块/testbench，无 ASM';
   }
   return 'Top/TB 来自配置，ASM 运行时选择';
 }
 
 function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarActiveFileModel): string {
+  if (!usesConfiguredVerilogProject(context.profile)) {
+    return [
+      `当前 Verilog:\n${active.fsPath}`,
+      '',
+      'P1/独立模块没有统一 Top/TB。',
+      '运行时会优先使用当前 testbench；否则为当前模块生成临时 <module>_tb。',
+      `仿真工作目录: .co/isim`,
+      `仿真输出: .co/out`
+    ].join('\n');
+  }
+
   const lines = [
     verilogConfigTooltip(context, active),
     '',

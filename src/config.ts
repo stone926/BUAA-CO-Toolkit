@@ -300,7 +300,7 @@ export function getBuiltinGeneratorInstructionCount(resource?: vscode.Uri): numb
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
   }
-  return 1000;
+  return 4000;
 }
 
 export function getBuiltinGeneratorP7InstructionCount(resource?: vscode.Uri): number {
@@ -329,6 +329,20 @@ export function getLogisimTraceMainCircuit(resource?: vscode.Uri): string {
     'main',
     resource
   );
+}
+
+export function getLogisimTraceColumns(resource?: vscode.Uri): Record<string, number> | undefined {
+  const configured = inspectedValue<Record<string, unknown>>('test.logisim.traceColumns', resource);
+  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
+    return undefined;
+  }
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(configured)) {
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+      result[key.trim().toLowerCase()] = value;
+    }
+  }
+  return Object.keys(result).length ? result : undefined;
 }
 
 /**

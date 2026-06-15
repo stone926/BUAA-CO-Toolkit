@@ -10,13 +10,14 @@ interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
+    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
     menus?: Record<string, Array<{ command: string; when?: string }>>;
     semanticTokenScopes?: Array<{ scopes?: Record<string, string[]> }>;
     semanticTokenTypes?: Array<{ id: string; superType?: string }>;
-    views?: Record<string, Array<{ id: string }>>;
+    views?: Record<string, Array<{ id: string; when?: string }>>;
   };
 }
 
@@ -45,23 +46,58 @@ describe('package manifest', () => {
     expect(activationEvents.has('onView:coSidebar')).toBe(true);
   });
 
-  it('keeps every contributed command visible from the command palette', () => {
+  it('keeps only the public command allowlist visible from the command palette', () => {
     const pkg = readPackage();
-    const commandPalette = new Set((pkg.contributes?.menus?.commandPalette ?? []).map((item) => item.command));
+    const commandPalette = pkg.contributes?.menus?.commandPalette ?? [];
+    const visible = commandPalette
+      .filter((item) => item.when !== 'false')
+      .map((item) => item.command);
+
+    expect(visible).toEqual([
+      'co.projectWizard',
+      'co.selectProjectProfile',
+      'co.checkToolchain',
+      'co.course.openTutorial',
+      'co.test.startContinuousGeneratedTraceTests',
+      'co.test.stopContinuousTests',
+      'co.test.openAsmCaseIndex',
+      'co.tools.openAdvanced'
+    ]);
+
+    const paletteByCommand = new Map(commandPalette.map((item) => [item.command, item]));
     for (const command of pkg.contributes?.commands ?? []) {
-      expect(commandPalette.has(command.command), command.command).toBe(true);
+      expect(paletteByCommand.has(command.command), command.command).toBe(true);
+      if (!visible.includes(command.command)) {
+        expect(paletteByCommand.get(command.command)?.when, command.command).toBe('false');
+      }
     }
   });
 
-  it('contributes Verilog waveform commands', () => {
+  it('keeps low-frequency Verilog waveform commands out of editor context and command palette', () => {
     const pkg = readPackage();
     const commands = new Set((pkg.contributes?.commands ?? []).map((command) => command.command));
     const contextCommands = new Set((pkg.contributes?.menus?.['editor/context'] ?? []).map((item) => item.command));
+    const palette = new Map((pkg.contributes?.menus?.commandPalette ?? []).map((item) => [item.command, item]));
 
     expect(commands.has('co.verilog.openIsimWaveform')).toBe(true);
     expect(commands.has('co.verilog.exportVcd')).toBe(true);
-    expect(contextCommands.has('co.verilog.openIsimWaveform')).toBe(true);
-    expect(contextCommands.has('co.verilog.exportVcd')).toBe(true);
+    expect(contextCommands.has('co.verilog.openIsimWaveform')).toBe(false);
+    expect(contextCommands.has('co.verilog.exportVcd')).toBe(false);
+    expect(palette.get('co.verilog.openIsimWaveform')?.when).toBe('false');
+    expect(palette.get('co.verilog.exportVcd')?.when).toBe('false');
+  });
+
+  it('gates Verilog editor menus by Verilog profiles', () => {
+    const pkg = readPackage();
+    const menuItems = [
+      ...(pkg.contributes?.menus?.['editor/title'] ?? []),
+      ...(pkg.contributes?.menus?.['editor/context'] ?? [])
+    ].filter((item) => item.command.startsWith('co.verilog.'));
+
+    expect(menuItems.length).toBeGreaterThan(0);
+    for (const item of menuItems) {
+      expect(item.when, item.command).toContain('co.hasVerilogProfile');
+    }
   });
 
   it('contributes the ASM case index command', () => {
@@ -73,6 +109,34 @@ describe('package manifest', () => {
     expect(commands.has('co.test.openAsmCaseIndex')).toBe(true);
     expect(commandPalette.has('co.test.openAsmCaseIndex')).toBe(true);
     expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(true);
+  });
+
+  it('hides the Verilog signal view outside Verilog signal contexts', () => {
+    const pkg = readPackage();
+    const signalView = Object.values(pkg.contributes?.views ?? {})
+      .flat()
+      .find((view) => view.id === 'coVerilogSignal');
+
+    expect(signalView?.when).toContain('co.activeCoKind == verilog');
+    expect(signalView?.when).toContain('co.verilogSignalVisible');
+  });
+
+  it('keeps CO settings grouped and aligned with runtime defaults', () => {
+    const pkg = readPackage();
+    const groups = pkg.contributes?.configuration ?? [];
+    const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
+
+    expect(groups.map((group) => group.title)).toEqual([
+      'BUAA CO: 基础',
+      'BUAA CO: 工具链',
+      'BUAA CO: 运行与测试',
+      'BUAA CO: 编辑器与诊断'
+    ]);
+    expect(Object.keys(properties)).toHaveLength(60);
+    expect(properties['co.test.builtinGenerator.instructionCount'].default).toBe(4000);
+    expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
+    expect(properties['co.test.p7.probeScenarioCount'].default).toBe(32);
+    expect(properties['co.verilog.lint.disabledRules'].default).toEqual(['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-021']);
   });
 
   it('does not provide XML editor support for Logisim .circ files', () => {
