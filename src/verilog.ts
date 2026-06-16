@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -20,7 +19,7 @@ import {
   parseVerilog,
   VerilogModule
 } from './language/verilog/service';
-import { ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, isFile, pathExists, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { launchTool, revealOutputChannel, runTool } from './process';
 import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
@@ -185,7 +184,7 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
     return;
   }
   const tbUri = await defaultUserTestbenchUri(editor.document.uri, tbName, isConfiguredTop);
-  if (fs.existsSync(tbUri.fsPath)) {
+  if (await pathExists(tbUri.fsPath)) {
     const choice = await vscode.window.showWarningMessage(`${path.basename(tbUri.fsPath)} 已存在`, '打开', '覆盖');
     if (choice === '打开') {
       await vscode.window.showTextDocument(tbUri);
@@ -353,7 +352,7 @@ async function exportVcdWaveform(services: AppServices, moduleRegistry?: Mutable
     resource: activeUri,
     env: iseEnv
   });
-  if (result.ok && fs.existsSync(vcd.fsPath)) {
+  if (result.ok && await pathExists(vcd.fsPath)) {
     if (compiled.asmCase) {
       await copyAsmCaseArtifact(compiled.asmCase, 'verilog', vcd, path.basename(vcd.fsPath), 'vcd');
     }
@@ -381,7 +380,7 @@ async function compileIsim(
   }
   const fuse = findFuse(isePath);
   const iseEnv = buildIseEnvironment(isePath);
-  if (!fs.existsSync(fuse)) {
+  if (!await isFile(fuse)) {
     vscode.window.showErrorMessage(`未找到 fuse 可执行文件：${fuse}`);
     return undefined;
   }
@@ -721,7 +720,7 @@ async function testbenchCandidates(
 ): Promise<Array<{ module: VerilogModule; uri: vscode.Uri }>> {
   const seen = new Set<string>();
   const candidates: Array<{ module: VerilogModule; uri: vscode.Uri }> = [];
-  const add = (module: VerilogModule): void => {
+  const add = async (module: VerilogModule): Promise<void> => {
     if (module.name !== tbName) {
       return;
     }
@@ -729,7 +728,7 @@ async function testbenchCandidates(
     if (!uri || isCoPath(uri.fsPath)) {
       return;
     }
-    if (!safeIsFile(uri.fsPath)) {
+    if (!await isFile(uri.fsPath)) {
       moduleRegistry?.removeUri(uri);
       return;
     }
@@ -743,14 +742,14 @@ async function testbenchCandidates(
 
   const active = await activeModuleDefinition(resource);
   if (active) {
-    add(active.module);
+    await add(active.module);
   }
   for (const module of moduleRegistry?.getModules(tbName) ?? []) {
-    add(module);
+    await add(module);
   }
   if (!moduleRegistry) {
     for (const module of await scanWorkspaceModulesByName(resource, tbName)) {
-      add(module);
+      await add(module);
     }
   }
   return candidates;
@@ -815,7 +814,7 @@ async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: Testbench
 }
 
 async function writeGeneratedRuntimeTestbench(uri: vscode.Uri, testbenchText: string): Promise<boolean> {
-  if (fs.existsSync(uri.fsPath)) {
+  if (await pathExists(uri.fsPath)) {
     const existing = await readTextFileSafe(uri);
     if (!isGeneratedRuntimeTestbench(existing)) {
       vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
@@ -964,7 +963,7 @@ async function resolveMachineCodeSource(resource: vscode.Uri | undefined, outDir
   }
 
   for (const candidate of dedupePaths(candidates)) {
-    if (safeIsFile(candidate) && !samePath(candidate, target)) {
+    if (await isFile(candidate) && !samePath(candidate, target)) {
       return vscode.Uri.file(candidate);
     }
   }
@@ -977,10 +976,13 @@ async function resolveMachineCodeSource(resource: vscode.Uri | undefined, outDir
     '**/{node_modules,out,.git,.co}/**',
     50
   );
-  return matches
-    .filter((uri) => safeIsFile(uri.fsPath) && !samePath(uri.fsPath, target))
-    .sort((left, right) => machineCodeCandidateRank(left.fsPath, resource, folder) - machineCodeCandidateRank(right.fsPath, resource, folder))
-    [0];
+  const existing: vscode.Uri[] = [];
+  for (const uri of matches) {
+    if (await isFile(uri.fsPath) && !samePath(uri.fsPath, target)) {
+      existing.push(uri);
+    }
+  }
+  return existing.sort((left, right) => machineCodeCandidateRank(left.fsPath, resource, folder) - machineCodeCandidateRank(right.fsPath, resource, folder))[0];
 }
 
 function machineCodeCandidateRank(file: string, resource: vscode.Uri | undefined, folder: vscode.WorkspaceFolder): number {
@@ -1026,15 +1028,6 @@ function dedupeUris(files: vscode.Uri[]): vscode.Uri[] {
     result.push(uri);
   }
   return result;
-}
-
-function safeIsFile(file: string): boolean {
-  try {
-    return fs.statSync(file).isFile();
-  } catch {
-    // 文件不存在或无权限时按非文件处理
-    return false;
-  }
 }
 
 function uriForVerilogModule(module: VerilogModule): vscode.Uri | undefined {
