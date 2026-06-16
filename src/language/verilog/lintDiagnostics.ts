@@ -21,6 +21,7 @@ import {
   VerilogProceduralBlockAst
 } from './blockAst';
 import { collectNamingDiagnostics } from './lintNamingRules';
+import { collectInstantiationStyleDiagnostics } from './lintInstantiationRules';
 
 export function collectAssignmentDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
@@ -369,24 +370,6 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
     if (isVerilogLintRuleEnabled(settings, 'vc-005') && blockIndexes.size > 1) {
       const decl = module.declarations.get(name);
       diagnostics.push(makeDiagnostic(decl?.selectionRange ?? module.selectionRange, `VC-005: signal '${name}' is assigned in multiple always blocks.`, DiagnosticSeverity.Warning, 'vc-005-multiple-always'));
-    }
-  }
-}
-
-function collectInstantiationStyleDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
-  if (!isVerilogLintRuleEnabled(settings, 'vc-017')) {
-    return;
-  }
-  for (const instance of module.instances) {
-    if (instance.portConnections.some((connection) => !connection.name)) {
-      diagnostics.push(makeDiagnostic(instance.selectionRange, `Testbench/VC-017: instance '${instance.instanceName}' should use named port mapping.`, DiagnosticSeverity.Information, 'vc-017-named-ports'));
-    }
-    if (instance.portConnections.length > 1 && instance.range.start.line === instance.range.end.line) {
-      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should use multi-line formatting with one port connection per line.`, DiagnosticSeverity.Information, 'vc-017-multiline-instance'));
-    }
-    const lines = new Set(instance.portConnections.map((connection) => connection.range.start.line));
-    if (lines.size < instance.portConnections.length) {
-      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should place each port connection on a separate line.`, DiagnosticSeverity.Information, 'vc-017-one-port-per-line'));
     }
   }
 }
