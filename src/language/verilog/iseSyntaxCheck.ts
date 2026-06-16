@@ -37,7 +37,7 @@ const defaultTimeoutMs = 120000;
 export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise<IseSyntaxCheckResult> {
   const isePath = options.isePath.trim();
   const fuse = isePath ? findFuse(isePath) : '';
-  if (!fuse || !safeIsFile(fuse)) {
+  if (!fuse || !await safeIsFile(fuse)) {
     return emptyResult(false, 'missing-toolchain');
   }
 
@@ -45,7 +45,7 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
   if (!root) {
     return emptyResult(false, 'no-files');
   }
-  const files = scanVerilogFiles(root, 5000);
+  const files = await scanVerilogFiles(root, 5000);
   if (!files.length) {
     return emptyResult(false, 'no-files');
   }
@@ -184,7 +184,7 @@ function runProcess(
   });
 }
 
-function scanVerilogFiles(root: string, limit: number): string[] {
+async function scanVerilogFiles(root: string, limit: number): Promise<string[]> {
   const result: string[] = [];
   const stack = [root];
   while (stack.length && result.length < limit) {
@@ -194,8 +194,9 @@ function scanVerilogFiles(root: string, limit: number): string[] {
     }
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
     } catch {
+      // 无法读取的目录不参与 ISE 临时工程
       continue;
     }
     for (const entry of entries) {
@@ -213,6 +214,7 @@ function scanVerilogFiles(root: string, limit: number): string[] {
         }
       }
     }
+    await yieldEventLoop();
   }
   return result.sort();
 }
@@ -260,12 +262,17 @@ function isInsideDirectory(file: string, dir: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function safeIsFile(file: string): boolean {
+async function safeIsFile(file: string): Promise<boolean> {
   try {
-    return fs.statSync(file).isFile();
+    return (await fs.promises.stat(file)).isFile();
   } catch {
+    // 文件不存在或无权限时按不可用处理
     return false;
   }
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function addDiagnostic(map: Map<string, Diagnostic[]>, uri: string, diagnostic: Diagnostic): void {
