@@ -22,6 +22,10 @@ import {
 } from './blockAst';
 import { collectNamingDiagnostics } from './lintNamingRules';
 import { collectInstantiationStyleDiagnostics } from './lintInstantiationRules';
+import {
+  collectExplicitWidthDiagnostics,
+  collectInoutDiagnostics
+} from './lintDeclarationRules';
 
 export function collectAssignmentDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
@@ -374,20 +378,6 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
   }
 }
 
-function collectExplicitWidthDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
-  if (!isVerilogLintRuleEnabled(settings, 'vc-021')) {
-    return;
-  }
-  for (const decl of module.declarations.values()) {
-    if (decl.kind === 'parameter' || decl.kind === 'localparam' || decl.kind === 'integer' || decl.kind === 'genvar') {
-      continue;
-    }
-    if (!decl.width && !['clk', 'clock', 'reset', 'rst'].includes(decl.name.toLowerCase())) {
-      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-021: signal '${decl.name}' should declare an explicit width, even if it is 1 bit.`, DiagnosticSeverity.Information, 'vc-021-explicit-width'));
-    }
-  }
-}
-
 function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSettings, text: string, module: VerilogModule, cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   if (!isVerilogLintRuleEnabled(settings, 'vc-004')) {
     return;
@@ -408,21 +398,6 @@ function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSetti
       continue;
     }
     diagnostics.push(makeDiagnostic(tokenRange(document, token), 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
-  }
-}
-
-function collectInoutDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
-  if (!isVerilogLintRuleEnabled(settings, 'vc-015')) {
-    return;
-  }
-  const topName = settings.project.topModule.trim() || 'mips';
-  if (module.name === topName) {
-    return;
-  }
-  for (const port of module.ports) {
-    if (port.direction === 'inout') {
-      diagnostics.push(makeDiagnostic(port.selectionRange, `VC-015: internal module '${module.name}' should not use inout port '${port.name}'.`, DiagnosticSeverity.Warning, 'vc-015-inout'));
-    }
   }
 }
 
