@@ -13,6 +13,7 @@ import {
 } from './courseConfig';
 import { defaultCoSettings } from './language/common/settings';
 import { buildTestbench, parseVerilog } from './language/verilog/service';
+import { pathExists } from './fsUtil';
 
 interface ToolchainSettings {
   mars?: string;
@@ -195,9 +196,7 @@ async function createProjectStructure(
 
   for (const dir of dirs) {
     const dirPath = path.join(rootPath, dir);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
+    await fs.promises.mkdir(dirPath, { recursive: true });
   }
 
   await createTemplateFiles(rootPath, profile);
@@ -210,21 +209,21 @@ function getDirectoriesForProfile(profile: ProjectProfile): string[] {
 async function createTemplateFiles(rootPath: string, profile: ProjectProfile): Promise<void> {
   switch (profile) {
     case 'P2':
-      createMipsTemplate(rootPath);
+      await createMipsTemplate(rootPath);
       break;
     case 'P1':
     case 'P4':
     case 'P5':
     case 'P6':
     case 'P7':
-      createVerilogTemplate(rootPath, profile);
+      await createVerilogTemplate(rootPath, profile);
       break;
   }
 }
 
-function createMipsTemplate(rootPath: string): void {
+async function createMipsTemplate(rootPath: string): Promise<void> {
   const mainPath = path.join(rootPath, 'src', 'main.asm');
-  if (!fs.existsSync(mainPath)) {
+  if (!await pathExists(mainPath)) {
     const template = `# BUAA CO P2 MIPS Assembly
 # Author: Your Name
 # Date: ${new Date().toISOString().split('T')[0]}
@@ -241,16 +240,16 @@ main:
     li $v0, 10
     syscall
 `;
-    fs.writeFileSync(mainPath, template, 'utf8');
+    await fs.promises.writeFile(mainPath, template, 'utf8');
   }
 }
 
-function createVerilogTemplate(rootPath: string, profile: ProjectProfile): void {
+async function createVerilogTemplate(rootPath: string, profile: ProjectProfile): Promise<void> {
   const topModule = defaultTopModuleForProfile(profile) ?? 'main';
   const topPath = path.join(rootPath, 'src', `${topModule}.v`);
   let topText: string;
 
-  if (!fs.existsSync(topPath)) {
+  if (!await pathExists(topPath)) {
     const ports = getVerilogPorts(profile);
     topText = `// BUAA CO ${profile} Verilog
 // Author: Your Name
@@ -263,16 +262,16 @@ ${ports}
 
 endmodule
 `;
-    fs.writeFileSync(topPath, topText, 'utf8');
+    await fs.promises.writeFile(topPath, topText, 'utf8');
   } else {
-    topText = fs.readFileSync(topPath, 'utf8');
+    topText = await fs.promises.readFile(topPath, 'utf8');
   }
 
   // 创建 testbench
   const tbPath = path.join(rootPath, 'test', `${topModule}_tb.v`);
-  if (!fs.existsSync(tbPath)) {
+  if (!await pathExists(tbPath)) {
     const tbTemplate = buildWizardTestbench(topText, topPath, topModule, `${topModule}_tb`, profile);
-    fs.writeFileSync(tbPath, tbTemplate, 'utf8');
+    await fs.promises.writeFile(tbPath, tbTemplate, 'utf8');
   }
 }
 
