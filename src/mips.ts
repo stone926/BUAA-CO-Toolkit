@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -11,7 +10,7 @@ import {
   useDelayedBranching,
   ensureConcreteProfile
 } from './config';
-import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, isFile, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { appendHaltLoop } from './courseTesting/mipsUtil';
 import { AppServices, ProjectProfile, RunResult } from './types';
@@ -138,7 +137,7 @@ export async function runMarsFile(
   const java = getJava(asmUri);
   const cwd = dirname(asmUri);
   const memoryConfiguration = getMemoryConfiguration(asmUri);
-  const p7RiInstruction = options.p7RiInstruction ?? p7RiInstructionNeeded(asmUri);
+  const p7RiInstruction = options.p7RiInstruction ?? await p7RiInstructionNeeded(asmUri);
   const effectiveOptions: MarsRunOptions = { ...options, p7RiInstruction };
   const args = buildMarsArgs(asmUri, mars, mode, effectiveOptions, memoryConfiguration);
 
@@ -153,7 +152,7 @@ export async function runMarsFile(
     args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', outputFile.fsPath, asmUri.fsPath);
   }
 
-  const setupError = marsRunSetupError(asmUri, mode, effectiveOptions, memoryConfiguration);
+  const setupError = await marsRunSetupError(asmUri, mode, effectiveOptions, memoryConfiguration);
   if (setupError) {
     services.output.appendLine(setupError);
     const result = localMarsRunFailure(java, args, cwd, setupError);
@@ -216,15 +215,15 @@ function localMarsRunFailure(command: string, args: readonly string[], cwd: stri
   };
 }
 
-function marsRunSetupError(
+async function marsRunSetupError(
   asmUri: vscode.Uri,
   mode: MarsRunMode,
   options: MarsRunOptions,
   memoryConfiguration: string
-): string | undefined {
+): Promise<string | undefined> {
   const profile = getProfile(asmUri);
   if (profile === 'P7') {
-    if (options.p7RiInstruction && !fs.existsSync(p7InternalUnknownInstructionClassPath())) {
+    if (options.p7RiInstruction && !await isFile(p7InternalUnknownInstructionClassPath())) {
       return `P7 RI 异常测试需要内部 MARS 额外指令 class，但文件不存在: ${p7InternalUnknownInstructionClassPath()}`;
     }
     if ((mode === 'dumpText' || mode === 'dumpKernel' || isCourseTraceMarsRun(mode, options)) && memoryConfiguration !== p7CourseMemoryConfiguration) {
@@ -462,12 +461,12 @@ function buildMarsArgs(
   return args;
 }
 
-function p7RiInstructionNeeded(asmUri: vscode.Uri): boolean {
+async function p7RiInstructionNeeded(asmUri: vscode.Uri): Promise<boolean> {
   if (getProfile(asmUri) !== 'P7') {
     return false;
   }
   try {
-    return fs.readFileSync(asmUri.fsPath, 'utf8').includes(p7InternalUnknownInstructionMnemonic);
+    return (await readTextFile(asmUri)).includes(p7InternalUnknownInstructionMnemonic);
   } catch {
     return false;
   }
