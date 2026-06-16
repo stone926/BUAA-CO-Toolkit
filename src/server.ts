@@ -633,7 +633,7 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<stri
     if (openDocument) {
       verilogIndex.updateDocument(openDocument, settings);
     } else {
-      verilogIndex.updateFile(change.uri, settings);
+      await verilogIndex.updateFileAsync(change.uri, settings);
     }
   }
   return affectedLanguageIds;

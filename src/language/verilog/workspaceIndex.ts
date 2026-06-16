@@ -47,11 +47,11 @@ export class VerilogWorkspaceIndex {
     }
     for (const folder of workspaceFolders) {
       const folderPath = URI.parse(folder.uri).fsPath;
-      for (const file of scanVerilogFiles(folderPath, this.maxFiles - this.files.size)) {
+      for await (const file of scanVerilogFiles(folderPath, this.maxFiles - this.files.size)) {
         if (this.files.size >= this.maxFiles) {
           return;
         }
-        this.updateFile(URI.file(file).toString(), settings);
+        await this.updateFileAsync(URI.file(file).toString(), settings);
       }
     }
   }
@@ -67,10 +67,23 @@ export class VerilogWorkspaceIndex {
         return;
       }
       const text = fs.readFileSync(filePath, 'utf8');
-      const document = TextDocument.create(uri, 'verilog', 0, text);
-      this.updateDocument(document, settings);
+      this.updateFileText(uri, text, settings);
     } catch {
       // 单文件解析失败不影响整体索引
+      this.remove(uri);
+    }
+  }
+
+  async updateFileAsync(uri: string, settings: CoSettings): Promise<void> {
+    if (!isVerilogUri(uri)) {
+      return;
+    }
+    try {
+      const filePath = URI.parse(uri).fsPath;
+      const text = await fs.promises.readFile(filePath, 'utf8');
+      this.updateFileText(uri, text, settings);
+    } catch {
+      // 单文件读取或解析失败不影响整体索引
       this.remove(uri);
     }
   }
@@ -104,6 +117,11 @@ export class VerilogWorkspaceIndex {
       this.macros.set(macro.name, list);
     }
     this.invalidateCaches();
+  }
+
+  private updateFileText(uri: string, text: string, settings: CoSettings): void {
+    const document = TextDocument.create(uri, 'verilog', 0, text);
+    this.updateDocument(document, settings);
   }
 
   remove(uri: string): void {
@@ -215,20 +233,20 @@ function removeByUri<T>(map: Map<string, T[]>, key: string, uri: string, getUri:
   }
 }
 
-function scanVerilogFiles(root: string, limit: number): string[] {
-  const files: string[] = [];
+async function* scanVerilogFiles(root: string, limit: number): AsyncGenerator<string> {
   if (limit <= 0) {
-    return files;
+    return;
   }
+  let files = 0;
   const stack = [root];
-  while (stack.length && files.length < limit) {
+  while (stack.length && files < limit) {
     const current = stack.pop();
     if (!current) {
       continue;
     }
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
     } catch {
       // 无法读取的目录不参与工作区索引
       continue;
@@ -241,14 +259,19 @@ function scanVerilogFiles(root: string, limit: number): string[] {
       if (entry.isDirectory()) {
         stack.push(fullPath);
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.v')) {
-        files.push(fullPath);
-        if (files.length >= limit) {
+        yield fullPath;
+        files++;
+        if (files >= limit) {
           break;
         }
       }
     }
+    await yieldEventLoop();
   }
-  return files;
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function shouldSkipDirectory(name: string): boolean {
