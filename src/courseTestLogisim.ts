@@ -21,13 +21,34 @@ import {
   p3LogisimMaxWords,
   parseLogisimTraceSpec
 } from './courseTesting/logisimTrace';
-import { readTextFile } from './fsUtil';
-import { findLogisimRomTargets, LogisimRomTarget } from './language/logisim/rom';
+import {
+  logisimPrepSummary,
+  LogisimPrepareCaseResult,
+  preparedCircuitFileName
+} from './courseTesting/logisimPrep';
+import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
 import { commandLine, revealOutputChannel } from './process';
 import { checkToolchain } from './toolchain';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
+import {
+  copyAsmCaseArtifact,
+  createAsmCaseFromAsm,
+  prepareAsmCaseMachineCode,
+  updateAsmCaseArtifacts
+} from './asmCaseStore';
+import {
+  CourseTraceBatchSource,
+  LogisimPrepareReport,
+  showLogisimPrepareReport
+} from './courseTestReport';
+import {
+  asmCaseSourceFromBatchSource,
+  caseResultFields,
+  CourseTraceCaseInput
+} from './courseTestCases';
 
 export interface P3LogisimTraceSetup {
   circuit: vscode.Uri;
@@ -66,6 +87,93 @@ export async function diagnoseP3LogisimTraceCircuit(services: AppServices): Prom
     vscode.window.showInformationMessage('P3 Logisim Trace 电路诊断通过，详见输出面板');
   } else {
     vscode.window.showErrorMessage(`P3 Logisim Trace 电路诊断失败：${report.errors[0] ?? '无法解析 trace 端口'}`);
+  }
+}
+
+export async function runLogisimPrepareBatch(
+  services: AppServices,
+  cases: CourseTraceCaseInput[],
+  source: CourseTraceBatchSource
+): Promise<void> {
+  const circuit = await resolveLogisimCircuitInput();
+  if (!circuit) {
+    return;
+  }
+
+  const circuitText = await readTextFile(circuit);
+  const target = await resolveLogisimRomTarget(circuitText);
+  if (!target) {
+    return;
+  }
+
+  const folder = workspaceFolderFor(circuit) ?? workspaceFolderFor(cases[0]?.asm) ?? vscode.workspace.workspaceFolders?.[0];
+  const baseDir = folder?.uri.fsPath ?? path.dirname(circuit.fsPath);
+  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'logisim'));
+  await ensureDirectory(outDir);
+
+  revealOutputChannel(services.output, circuit);
+  services.output.appendLine('');
+  services.output.appendLine(`准备 Logisim 电路用例: ${cases.length} 个用例`);
+  services.output.appendLine(`电路: ${circuit.fsPath}`);
+  services.output.appendLine(`ROM: ${target.label ?? 'ROM'}${target.loc ? ` ${target.loc}` : ''}`);
+
+  const results: LogisimPrepareCaseResult[] = [];
+  for (let i = 0; i < cases.length; i++) {
+    const item = cases[i];
+    const asm = item.asm;
+    services.output.appendLine('');
+    services.output.appendLine(`[${i + 1}/${cases.length}] ${asm.fsPath}`);
+
+    try {
+      const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
+        source: asmCaseSourceFromBatchSource(source),
+        resource: circuit
+      });
+      const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+      if (!dump?.result.ok || !dump.outputFile) {
+        results.push({
+          asm: asm.fsPath,
+          ...caseResultFields(asmCase),
+          status: 'error',
+          message: 'MARS 导出机器码失败'
+        });
+        continue;
+      }
+
+      const machineCodeText = await readTextFile(asmCase.machineCode);
+      const injected = injectMachineCodeIntoLogisimRom(circuitText, machineCodeText, target.index);
+      const outFile = vscode.Uri.file(path.join(outDir.fsPath, preparedCircuitFileName(circuit.fsPath, asm.fsPath, baseDir)));
+      await writeTextFile(outFile, injected.text);
+      await copyAsmCaseArtifact(asmCase, 'logisim', outFile, path.basename(outFile.fsPath), 'preparedCircuit');
+      await updateAsmCaseArtifacts(asmCase, 'logisim', { circuitTemplate: circuit.fsPath });
+      results.push({
+        asm: asm.fsPath,
+        ...caseResultFields(asmCase),
+        status: 'prepared',
+        message: `已注入 ${injected.wordCount} 个机器码`,
+        machineCode: asmCase.machineCode.fsPath,
+        circuit: outFile.fsPath,
+        wordCount: injected.wordCount
+      });
+      services.output.appendLine(`已准备电路: ${outFile.fsPath}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({
+        asm: asm.fsPath,
+        status: 'error',
+        message
+      });
+    }
+  }
+
+  const report = await writeLogisimPrepareReport(circuit, target, results, source, outDir);
+  showLogisimPrepareReport(report, results, source, circuit, target);
+  const summary = logisimPrepSummary(results);
+  const message = `Logisim 用例准备完成: ${summary.prepared} 已准备, ${summary.errors} 错误`;
+  if (summary.errors) {
+    vscode.window.showWarningMessage(message);
+  } else {
+    vscode.window.showInformationMessage(message);
   }
 }
 
@@ -397,6 +505,32 @@ export function p3LogisimRomCapacityError(target: LogisimRomTarget, wordCount: n
     return `所选 Logisim ROM 地址宽度为 ${target.addrWidth}，容量 ${capacity} words，小于本用例 ${wordCount} words`;
   }
   return undefined;
+}
+
+async function writeLogisimPrepareReport(
+  circuit: vscode.Uri,
+  target: LogisimRomTarget,
+  results: LogisimPrepareCaseResult[],
+  source: CourseTraceBatchSource,
+  outDir: vscode.Uri
+): Promise<vscode.Uri> {
+  const report = vscode.Uri.file(path.join(outDir.fsPath, 'logisim-prep-report.json'));
+  const data: LogisimPrepareReport = {
+    generatedAt: new Date().toISOString(),
+    source,
+    circuitTemplate: circuit.fsPath,
+    romTarget: {
+      index: target.index,
+      label: target.label,
+      loc: target.loc,
+      addrWidth: target.addrWidth,
+      dataWidth: target.dataWidth
+    },
+    summary: logisimPrepSummary(results),
+    results
+  };
+  await writeTextFile(report, JSON.stringify(data, null, 2) + '\n');
+  return report;
 }
 
 function isLogisimCircuitFile(uri: vscode.Uri): boolean {

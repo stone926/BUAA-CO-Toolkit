@@ -39,11 +39,7 @@ import {
   isSupportedGeneratorFile,
   snapshotAsmFiles
 } from './courseTesting/generator';
-import {
-  logisimPrepSummary,
-  LogisimPrepareCaseResult,
-  preparedCircuitFileName
-} from './courseTesting/logisimPrep';
+import { preparedCircuitFileName } from './courseTesting/logisimPrep';
 import {
   formatLogisimTraceEvents,
   parseLogisimTraceOutput,
@@ -59,7 +55,7 @@ import {
 } from './language/mips/traceCompare';
 import { parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
-import { injectMachineCodeIntoLogisimRom, LogisimRomTarget, parseMachineCodeWords } from './language/logisim/rom';
+import { injectMachineCodeIntoLogisimRom, parseMachineCodeWords } from './language/logisim/rom';
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { runIsim } from './verilog';
@@ -78,12 +74,10 @@ import {
   updateAsmCaseArtifacts,
   writeAsmCaseArtifact
 } from './asmCaseStore';
-import { AsmCaseSource } from './asmCaseStoreCore';
 import {
   batchSummary,
   renderAsmCaseIndex,
-  showBatchTraceReport,
-  showLogisimPrepareReport
+  showBatchTraceReport
 } from './courseTestReport';
 import {
   startContinuousGeneratedTraceTests,
@@ -94,27 +88,25 @@ import {
   diagnoseP3LogisimTraceCircuit,
   p3LogisimRomCapacityError,
   resolveLogisimCircuitInput,
-  resolveLogisimRomTarget,
   resolveP3LogisimTraceSetup,
+  runLogisimPrepareBatch,
   runLogisimTraceCli
 } from './courseTestLogisim';
 import type { P3LogisimTraceSetup } from './courseTestLogisim';
+import {
+  asmCaseSourceFromBatchSource,
+  caseResultFields,
+  failedCase
+} from './courseTestCases';
+import type { CourseTraceCaseInput } from './courseTestCases';
 import type {
   CourseTraceBatchReport,
   CourseTraceBatchSource,
-  CourseTraceCaseResult,
-  CourseTraceStage,
-  LogisimPrepareReport
+  CourseTraceCaseResult
 } from './courseTestReport';
 
 const stdinExtensions = ['.in', '.input', '.stdin', '.dat'];
 const stdinSubdirectories = ['input', 'inputs', 'test', 'tests', 'data'];
-
-interface CourseTraceCaseInput {
-  asm: vscode.Uri;
-  stdin?: vscode.Uri;
-  asmCase?: AsmCase;
-}
 
 interface CourseTraceRunOptions {
   revealOutput?: boolean;
@@ -333,93 +325,6 @@ async function prepareGeneratedLogisimCases(services: AppServices): Promise<void
     return;
   }
   await runLogisimPrepareBatch(services, generatedCaseInputs(generated), generated.source);
-}
-
-async function runLogisimPrepareBatch(
-  services: AppServices,
-  cases: CourseTraceCaseInput[],
-  source: CourseTraceBatchSource
-): Promise<void> {
-  const circuit = await resolveLogisimCircuitInput();
-  if (!circuit) {
-    return;
-  }
-
-  const circuitText = await readTextFile(circuit);
-  const target = await resolveLogisimRomTarget(circuitText);
-  if (!target) {
-    return;
-  }
-
-  const folder = workspaceFolderFor(circuit) ?? workspaceFolderFor(cases[0]?.asm) ?? vscode.workspace.workspaceFolders?.[0];
-  const baseDir = folder?.uri.fsPath ?? path.dirname(circuit.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'logisim'));
-  await ensureDirectory(outDir);
-
-  revealOutputChannel(services.output, circuit);
-  services.output.appendLine('');
-  services.output.appendLine(`准备 Logisim 电路用例: ${cases.length} 个用例`);
-  services.output.appendLine(`电路: ${circuit.fsPath}`);
-  services.output.appendLine(`ROM: ${target.label ?? 'ROM'}${target.loc ? ` ${target.loc}` : ''}`);
-
-  const results: LogisimPrepareCaseResult[] = [];
-  for (let i = 0; i < cases.length; i++) {
-    const item = cases[i];
-    const asm = item.asm;
-    services.output.appendLine('');
-    services.output.appendLine(`[${i + 1}/${cases.length}] ${asm.fsPath}`);
-
-    try {
-      const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
-        source: asmCaseSourceFromBatchSource(source),
-        resource: circuit
-      });
-      const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
-      if (!dump?.result.ok || !dump.outputFile) {
-        results.push({
-          asm: asm.fsPath,
-          ...caseResultFields(asmCase),
-          status: 'error',
-          message: 'MARS 导出机器码失败'
-        });
-        continue;
-      }
-
-      const machineCodeText = await readTextFile(asmCase.machineCode);
-      const injected = injectMachineCodeIntoLogisimRom(circuitText, machineCodeText, target.index);
-      const outFile = vscode.Uri.file(path.join(outDir.fsPath, preparedCircuitFileName(circuit.fsPath, asm.fsPath, baseDir)));
-      await writeTextFile(outFile, injected.text);
-      await copyAsmCaseArtifact(asmCase, 'logisim', outFile, path.basename(outFile.fsPath), 'preparedCircuit');
-      await updateAsmCaseArtifacts(asmCase, 'logisim', { circuitTemplate: circuit.fsPath });
-      results.push({
-        asm: asm.fsPath,
-        ...caseResultFields(asmCase),
-        status: 'prepared',
-        message: `已注入 ${injected.wordCount} 个机器码`,
-        machineCode: asmCase.machineCode.fsPath,
-        circuit: outFile.fsPath,
-        wordCount: injected.wordCount
-      });
-      services.output.appendLine(`已准备电路: ${outFile.fsPath}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      results.push({
-        asm: asm.fsPath,
-        status: 'error',
-        message
-      });
-    }
-  }
-
-  const report = await writeLogisimPrepareReport(circuit, target, results, source, outDir);
-  showLogisimPrepareReport(report, results, source, circuit, target);
-  const summary = logisimPrepSummary(results);
-  const message = `Logisim 用例准备完成: ${summary.prepared} 已准备, ${summary.errors} 错误`;
-  if (summary.errors) {
-    vscode.window.showWarningMessage(message);
-  } else {
-    vscode.window.showInformationMessage(message);
-  }
 }
 
 async function openBatchTraceReport(): Promise<void> {
@@ -1362,46 +1267,6 @@ async function safeIsDirectory(directory: string): Promise<boolean> {
   }
 }
 
-function failedCase(
-  item: CourseTraceCaseInput,
-  stage: CourseTraceStage,
-  message: string,
-  machineCode?: vscode.Uri,
-  marsOut?: vscode.Uri,
-  asmCase?: AsmCase
-): CourseTraceCaseResult {
-  return {
-    asm: item.asm.fsPath,
-    stdin: item.stdin?.fsPath,
-    ...(asmCase ? caseResultFields(asmCase) : {}),
-    status: 'error',
-    stage,
-    message,
-    machineCode: machineCode?.fsPath,
-    marsOut: marsOut?.fsPath
-  };
-}
-
-function asmCaseSourceFromBatchSource(source: CourseTraceBatchSource): AsmCaseSource {
-  if (source.kind === 'generator') {
-    return {
-      kind: source.generator === 'builtin:random-asm' ? 'builtin' : 'generator',
-      generator: source.generator,
-      commandLine: source.commandLine,
-      cwd: source.cwd
-    };
-  }
-  return { kind: 'selected' };
-}
-
-function caseResultFields(asmCase: AsmCase): Pick<CourseTraceCaseResult, 'caseId' | 'caseManifest' | 'asmSnapshot'> {
-  return {
-    caseId: asmCase.id,
-    caseManifest: asmCase.manifestUri.fsPath,
-    asmSnapshot: asmCase.asm.fsPath
-  };
-}
-
 function generatedCaseInputs(generated: GeneratedAsmBatch): CourseTraceCaseInput[] {
   if (generated.asmCases?.length) {
     return generated.asmCases.map((asmCase) => ({
@@ -1586,32 +1451,6 @@ async function writeBatchTraceReport(
     summary: batchSummary(results),
     results
   }, null, 2) + '\n');
-  return report;
-}
-
-async function writeLogisimPrepareReport(
-  circuit: vscode.Uri,
-  target: LogisimRomTarget,
-  results: LogisimPrepareCaseResult[],
-  source: CourseTraceBatchSource,
-  outDir: vscode.Uri
-): Promise<vscode.Uri> {
-  const report = vscode.Uri.file(path.join(outDir.fsPath, 'logisim-prep-report.json'));
-  const data: LogisimPrepareReport = {
-    generatedAt: new Date().toISOString(),
-    source,
-    circuitTemplate: circuit.fsPath,
-    romTarget: {
-      index: target.index,
-      label: target.label,
-      loc: target.loc,
-      addrWidth: target.addrWidth,
-      dataWidth: target.dataWidth
-    },
-    summary: logisimPrepSummary(results),
-    results
-  };
-  await writeTextFile(report, JSON.stringify(data, null, 2) + '\n');
   return report;
 }
 
