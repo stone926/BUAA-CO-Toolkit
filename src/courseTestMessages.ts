@@ -8,10 +8,10 @@ export function marsStageFailureMessage(prefix: string, result?: RunResult): str
 
 export function diffMessage(diff: TraceDiffResult): string {
   if (diff.matched) {
-    return `${diff.summary.matchedEvents} events matched.`;
+    return `${diff.summary.matchedEvents} 个事件匹配`;
   }
   const first = diff.entries[diff.firstDiffIndex];
-  return `First difference at event #${diff.firstDiffIndex + 1}: ${first.reason ?? first.status}.`;
+  return `第 ${diff.firstDiffIndex + 1} 个事件首次出现差异：${first.reason ?? first.status}`;
 }
 
 function firstNonEmptyLine(text?: string): string | undefined {

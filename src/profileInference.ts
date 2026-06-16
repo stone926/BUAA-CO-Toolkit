@@ -52,6 +52,7 @@ function collectProfileFiles(root: string): ProfileResolverFile[] {
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
+      // 无法读取的目录不参与 Profile 推断
       continue;
     }
     for (const entry of entries) {

@@ -230,6 +230,7 @@ function scanVerilogFiles(root: string, limit: number): string[] {
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
+      // 无法读取的目录不参与工作区索引
       continue;
     }
     for (const entry of entries) {
@@ -266,6 +267,7 @@ export function isVerilogUri(uri: string): boolean {
   try {
     return URI.parse(uri).fsPath.toLowerCase().endsWith('.v');
   } catch {
+    // URI 格式异常时按非 Verilog 文件处理
     return false;
   }
 }

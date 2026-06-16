@@ -831,6 +831,7 @@ async function readTextFileSafe(uri: vscode.Uri): Promise<string> {
     const bytes = await vscode.workspace.fs.readFile(uri);
     return Buffer.from(bytes).toString('utf8');
   } catch {
+    // 读取失败时按空文件处理，调用方只用它做生成标记检查
     return '';
   }
 }
@@ -883,6 +884,7 @@ async function verilogDocumentForUri(uri: vscode.Uri): Promise<TextDocument | un
     const bytes = await vscode.workspace.fs.readFile(uri);
     return TextDocument.create(uri.toString(), 'verilog', 1, Buffer.from(bytes).toString('utf8'));
   } catch {
+    // 文件不可读时跳过该 Verilog 候选
     return undefined;
   }
 }
@@ -1030,6 +1032,7 @@ function safeIsFile(file: string): boolean {
   try {
     return fs.statSync(file).isFile();
   } catch {
+    // 文件不存在或无权限时按非文件处理
     return false;
   }
 }
@@ -1038,6 +1041,7 @@ function uriForVerilogModule(module: VerilogModule): vscode.Uri | undefined {
   try {
     return vscode.Uri.parse(module.uri);
   } catch {
+    // 索引里的 URI 异常时跳过该模块位置
     return undefined;
   }
 }
@@ -1050,6 +1054,7 @@ async function fileSha256(uri: vscode.Uri | undefined): Promise<string | undefin
     const bytes = await vscode.workspace.fs.readFile(uri);
     return sha256Bytes(bytes);
   } catch {
+    // 哈希只用于记录生成物版本，读取失败时留空
     return undefined;
   }
 }
