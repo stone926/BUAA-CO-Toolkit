@@ -5,6 +5,7 @@ import { VerilogCstDocument } from './cst';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { VerilogModule, verilogKeywords } from './model';
 import { splitVerilogModuleItems } from './statementUtils';
+import { validateContinuousAssign } from './syntaxAssignmentValidation';
 import { declarationKeywords } from './syntaxDeclarationKeywords';
 import { validateDeclarationLikeStatement } from './syntaxDeclarationValidation';
 import {
@@ -121,7 +122,7 @@ function collectModuleItemDiagnostics(
     }
     if (first.value === 'assign') {
       moduleNode.children.push(nodeFromTokens(document, 'continuousAssign', item));
-      validateContinuousAssign(document, item, diagnostics);
+      validateContinuousAssign(document, item, diagnostics, { reportMissingSemicolon });
       continue;
     }
     if (first.value === 'always' || first.value === 'initial') {
@@ -158,42 +159,6 @@ function collectModuleItemDiagnostics(
       'syntax-unexpected-token'
     ));
   }
-}
-
-function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
-  if (!hasTrailingSemicolon(tokens)) {
-    reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
-  }
-  const semicolon = firstTopLevelToken(tokens, ';', 1);
-  const limit = semicolon >= 0 ? semicolon : tokens.length;
-  const operator = firstTopLevelAssignmentOperator(tokens, 1, limit);
-  if (operator < 0) {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[0]),
-      'Syntax error: continuous assign is missing an assignment operator.',
-      DiagnosticSeverity.Error,
-      'syntax-malformed-assignment'
-    ));
-    return;
-  }
-  if (tokens.slice(1, operator).filter(isExpressionOperandToken).length === 0) {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[operator]),
-      'Syntax error: assignment is missing a left-hand side.',
-      DiagnosticSeverity.Error,
-      'syntax-malformed-assignment'
-    ));
-  }
-  validateExpressionSyntax(document, tokens.slice(1, operator), diagnostics, 'syntax-malformed-assignment');
-  if (tokens.slice(operator + 1, limit).filter(isExpressionOperandToken).length === 0) {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[operator]),
-      'Syntax error: assignment is missing a right-hand side.',
-      DiagnosticSeverity.Error,
-      'syntax-malformed-assignment'
-    ));
-  }
-  validateExpressionSyntax(document, tokens.slice(operator + 1, limit), diagnostics, 'syntax-malformed-assignment');
 }
 
 function validateInstanceStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
