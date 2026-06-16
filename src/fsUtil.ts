@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+export { fileMtimeMs, isDirectory, isFile, pathExists, yieldEventLoop } from './nodeFs';
 
 export function workspaceFolderFor(uri?: vscode.Uri): vscode.WorkspaceFolder | undefined {
   if (uri) {

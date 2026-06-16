@@ -5,6 +5,7 @@ import { Diagnostic, DiagnosticSeverity, Range, WorkspaceFolder } from 'vscode-l
 import { URI } from 'vscode-uri';
 import { buildIseEnvironment, findFuse } from '../../iseCommon';
 import { buildIseProjectText } from '../../verilogSimulationFiles';
+import { isFile, yieldEventLoop } from '../../nodeFs';
 
 export interface IseSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -37,7 +38,7 @@ const defaultTimeoutMs = 120000;
 export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise<IseSyntaxCheckResult> {
   const isePath = options.isePath.trim();
   const fuse = isePath ? findFuse(isePath) : '';
-  if (!fuse || !await safeIsFile(fuse)) {
+  if (!fuse || !await isFile(fuse)) {
     return emptyResult(false, 'missing-toolchain');
   }
 
@@ -260,19 +261,6 @@ function fsPathFromUri(uri: string): string | undefined {
 function isInsideDirectory(file: string, dir: string): boolean {
   const relative = path.relative(dir, file);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-async function safeIsFile(file: string): Promise<boolean> {
-  try {
-    return (await fs.promises.stat(file)).isFile();
-  } catch {
-    // 文件不存在或无权限时按不可用处理
-    return false;
-  }
-}
-
-function yieldEventLoop(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function addDiagnostic(map: Map<string, Diagnostic[]>, uri: string, diagnostic: Diagnostic): void {

@@ -8,6 +8,7 @@ import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse }
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
 import { VerilogCstDocument } from './cst';
 import { VerilogSemanticModel } from './semanticModel';
+import { yieldEventLoop } from '../../nodeFs';
 
 export interface VerilogIndexedFile {
   uri: string;
@@ -302,10 +303,6 @@ async function* scanVerilogFiles(root: string, limit: number): AsyncGenerator<st
     }
     await yieldEventLoop();
   }
-}
-
-function yieldEventLoop(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function shouldSkipDirectory(name: string): boolean {

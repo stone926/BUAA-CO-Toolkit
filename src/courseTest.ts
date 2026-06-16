@@ -49,7 +49,7 @@ import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { runIsim } from './verilog';
 import { AppServices, ProjectProfile } from './types';
-import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, isDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
 import {
@@ -954,7 +954,7 @@ async function stdinSearchDirectories(asmDir: string): Promise<Array<{ path: str
   const directories = [{ path: asmDir, rank: 0 }];
   for (let i = 0; i < stdinSubdirectories.length; i++) {
     const candidate = path.join(asmDir, stdinSubdirectories[i]);
-    if (await safeIsDirectory(candidate)) {
+    if (await isDirectory(candidate)) {
       directories.push({ path: candidate, rank: (i + 1) * 100 });
     }
   }
@@ -990,15 +990,6 @@ async function safeReadDirectory(directory: string): Promise<fs.Dirent[]> {
   } catch {
     // 目录不存在或无权限时按无标准输入候选处理
     return [];
-  }
-}
-
-async function safeIsDirectory(directory: string): Promise<boolean> {
-  try {
-    return (await fs.promises.stat(directory)).isDirectory();
-  } catch {
-    // 目录不存在或无权限时跳过该候选目录
-    return false;
   }
 }
 

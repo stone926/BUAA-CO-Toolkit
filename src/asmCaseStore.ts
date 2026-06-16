@@ -3,7 +3,7 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
-import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, pathExists, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { runMarsFile, MarsRunOptions, MarsRunOutput } from './mips';
 import { AppServices } from './types';
 import {
@@ -318,16 +318,6 @@ async function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string):
     }
   }
   return asmCasePaths(root, asmCaseId(new Date(), `${asmHash}${randomBytes(4).toString('hex')}`));
-}
-
-async function pathExists(file: string): Promise<boolean> {
-  try {
-    await fs.promises.access(file);
-    return true;
-  } catch {
-    // 不存在或无权限时都视为不可用路径
-    return false;
-  }
 }
 
 function caseWorkspaceRoot(resource?: vscode.Uri): string {

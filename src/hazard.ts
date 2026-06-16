@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ensureConcreteProfile, getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
-import { ensureDirectory, readTextFile, workspaceFolderFor } from './fsUtil';
+import { ensureDirectory, fileMtimeMs, isDirectory, isFile, readTextFile, workspaceFolderFor } from './fsUtil';
 import { runMarsFile } from './mips';
 import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
@@ -77,11 +77,11 @@ async function resolveHazardDir(resource?: vscode.Uri): Promise<HazardToolPaths 
   }
   const jar = path.join(dir, 'Hazard-Calculator.jar');
   const analyzer = path.join(dir, 'analyzer.py');
-  if (!await safeIsFile(jar)) {
+  if (!await isFile(jar)) {
     vscode.window.showErrorMessage(`未找到 Hazard-Calculator.jar：${dir}`);
     return undefined;
   }
-  if (!await safeIsFile(analyzer)) {
+  if (!await isFile(analyzer)) {
     vscode.window.showErrorMessage(`未找到 analyzer.py：${dir}`);
     return undefined;
   }
@@ -183,7 +183,7 @@ async function resolveMachineCodeForHazard(
   candidates.push(path.resolve(folder.uri.fsPath, configured));
 
   for (const candidate of dedupePaths(candidates)) {
-    if (await safeIsFile(candidate)) {
+    if (await isFile(candidate)) {
       return vscode.Uri.file(candidate);
     }
   }
@@ -294,7 +294,7 @@ async function openHazardReport(): Promise<void> {
 }
 
 async function findHazardReportIn(directory: string): Promise<string | undefined> {
-  if (!await safeIsDirectory(directory)) {
+  if (!await isDirectory(directory)) {
     return undefined;
   }
   const statisticReports = await hazardStatisticReports(directory);
@@ -304,7 +304,7 @@ async function findHazardReportIn(directory: string): Promise<string | undefined
     path.join(directory, 'hazard.json')
   ];
   for (const file of candidates) {
-    if (await safeIsFile(file)) {
+    if (await isFile(file)) {
       return file;
     }
   }
@@ -782,7 +782,7 @@ async function hazardStatisticReports(directory: string): Promise<string[]> {
       .filter((file) => file.endsWith('_statistic_hazard.json'))
       .map(async (file) => {
         const fullPath = path.join(directory, file);
-        const mtimeMs = await safeMtimeMs(fullPath);
+        const mtimeMs = await fileMtimeMs(fullPath);
         return mtimeMs === undefined ? undefined : { file: fullPath, mtimeMs };
       })
   );
@@ -790,33 +790,6 @@ async function hazardStatisticReports(directory: string): Promise<string[]> {
     .filter((item): item is { file: string; mtimeMs: number } => Boolean(item))
     .sort((left, right) => right.mtimeMs - left.mtimeMs)
     .map((item) => item.file);
-}
-
-async function safeMtimeMs(file: string): Promise<number | undefined> {
-  try {
-    return (await fs.promises.stat(file)).mtimeMs;
-  } catch {
-    // 报告文件可能在枚举后被删除
-    return undefined;
-  }
-}
-
-async function safeIsDirectory(directory: string): Promise<boolean> {
-  try {
-    return (await fs.promises.stat(directory)).isDirectory();
-  } catch {
-    // 目录不存在或无权限时按无报告处理
-    return false;
-  }
-}
-
-async function safeIsFile(file: string): Promise<boolean> {
-  try {
-    return (await fs.promises.stat(file)).isFile();
-  } catch {
-    // 文件不存在或无权限时按不可用处理
-    return false;
-  }
 }
 
 function samePath(left: string, right: string): boolean {

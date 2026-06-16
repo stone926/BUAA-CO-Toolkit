@@ -5,6 +5,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseModules } from './moduleParser';
 import { VerilogModule } from './model';
 import type { MutableVerilogModuleProvider } from './moduleProvider';
+import { yieldEventLoop } from '../../nodeFs';
 
 /**
  * 扩展宿主侧的工作空间模块注册表。
@@ -237,10 +238,6 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       // 初始扫描中读取或解析失败的文件直接跳过
     }
   }
-}
-
-function yieldEventLoop(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function shouldSkipDirectory(name: string): boolean {

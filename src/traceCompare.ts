@@ -1,9 +1,8 @@
-import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { compareTraces, TraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
 import { CpuTraceEvent, parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
-import { readTextFile, workspaceFolderFor } from './fsUtil';
+import { fileMtimeMs, readTextFile, workspaceFolderFor } from './fsUtil';
 import { revealOutputChannel } from './process';
 import { AppServices } from './types';
 import { pickOneFile } from './workflowInputs';
@@ -138,21 +137,12 @@ async function findLatestTracePair(folder: vscode.WorkspaceFolder): Promise<Trac
 async function findLatestFile(folder: vscode.WorkspaceFolder, pattern: string): Promise<vscode.Uri | undefined> {
   const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, pattern), undefined, 100);
   const existing = (await Promise.all(files.map(async (uri) => {
-    const mtime = await safeMtimeMs(uri.fsPath);
+    const mtime = await fileMtimeMs(uri.fsPath);
     return mtime === undefined ? undefined : { uri, mtime };
   })))
     .filter((item): item is { uri: vscode.Uri; mtime: number } => Boolean(item))
     .sort((left, right) => right.mtime - left.mtime);
   return existing[0]?.uri;
-}
-
-async function safeMtimeMs(file: string): Promise<number | undefined> {
-  try {
-    return (await fs.promises.stat(file)).mtimeMs;
-  } catch {
-    // 文件可能在 VSCode 搜索返回后被删除
-    return undefined;
-  }
 }
 
 function showTraceCompareReport(
