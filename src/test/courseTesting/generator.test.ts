@@ -64,7 +64,7 @@ describe('course test generator helpers', () => {
     expect(changed).toEqual(['/work/new.asm', '/work/old.asm']);
   });
 
-  it('snapshots ASM files while ignoring generated tool directories', () => {
+  it('snapshots ASM files while ignoring generated tool directories', async () => {
     const root = makeTempDir();
     fs.writeFileSync(path.join(root, 'case.asm'), '.text\n');
     fs.mkdirSync(path.join(root, '.co', 'generated'), { recursive: true });
@@ -76,7 +76,7 @@ describe('course test generator helpers', () => {
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });
     fs.writeFileSync(path.join(root, 'src', 'case.s'), '.text\n');
 
-    const files = snapshotAsmFiles(root).map((entry) => path.relative(root, entry.file).replace(/\\/g, '/'));
+    const files = (await snapshotAsmFiles(root)).map((entry) => path.relative(root, entry.file).replace(/\\/g, '/'));
 
     expect(files).toEqual(['.co/generated/old-generated.asm', 'case.asm', 'src/case.s']);
   });

@@ -684,7 +684,7 @@ async function runGeneratorAndCollectAsms(
     return await runBuiltinGeneratorAndCollectAsms(services, setup, options);
   }
 
-  const before = snapshotAsmFiles(setup.folder.uri.fsPath);
+  const before = await snapshotAsmFiles(setup.folder.uri.fsPath);
   if (options.revealOutput !== false) {
     revealOutputChannel(services.output, setup.generator);
   }
@@ -700,7 +700,7 @@ async function runGeneratorAndCollectAsms(
     return undefined;
   }
 
-  const after = snapshotAsmFiles(setup.folder.uri.fsPath);
+  const after = await snapshotAsmFiles(setup.folder.uri.fsPath);
   const generated = changedAsmFiles(before, after, getGeneratedAsmLimit(setup.generator)).map((file) => vscode.Uri.file(file));
   const source: CourseTraceBatchSource = generatorSource(setup, generated, result.commandLine, result.cwd);
   if (generated.length) {

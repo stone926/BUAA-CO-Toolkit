@@ -82,9 +82,9 @@ export function buildGeneratorInvocation(
   return undefined;
 }
 
-export function snapshotAsmFiles(root: string, maxFiles = 5000): AsmSnapshotEntry[] {
+export async function snapshotAsmFiles(root: string, maxFiles = 5000): Promise<AsmSnapshotEntry[]> {
   const results: AsmSnapshotEntry[] = [];
-  walk(root, results, maxFiles);
+  await walk(root, results, maxFiles);
   return results.sort((left, right) => left.file.localeCompare(right.file));
 }
 
@@ -104,15 +104,16 @@ export function changedAsmFiles(
     .map((entry) => entry.file);
 }
 
-function walk(directory: string, results: AsmSnapshotEntry[], maxFiles: number): void {
+async function walk(directory: string, results: AsmSnapshotEntry[], maxFiles: number): Promise<void> {
   if (results.length >= maxFiles || ignoredDirectories.has(path.basename(directory))) {
     return;
   }
 
   let entries: fs.Dirent[];
   try {
-    entries = fs.readdirSync(directory, { withFileTypes: true });
+    entries = await fs.promises.readdir(directory, { withFileTypes: true });
   } catch {
+    // 无法读取的目录不参与生成器输出快照
     return;
   }
 
@@ -125,16 +126,17 @@ function walk(directory: string, results: AsmSnapshotEntry[], maxFiles: number):
       if (path.basename(directory) === '.co' && ignoredCoDirectories.has(entry.name.toLowerCase())) {
         continue;
       }
-      walk(file, results, maxFiles);
+      await walk(file, results, maxFiles);
       continue;
     }
     if (!entry.isFile() || !asmExtensions.has(path.extname(entry.name).toLowerCase())) {
       continue;
     }
     try {
+      const stat = await fs.promises.stat(file);
       results.push({
         file,
-        mtimeMs: fs.statSync(file).mtimeMs
+        mtimeMs: stat.mtimeMs
       });
     } catch {
       // Ignore files that disappear while the generator is running.
