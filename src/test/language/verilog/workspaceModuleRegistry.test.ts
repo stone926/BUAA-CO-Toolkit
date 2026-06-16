@@ -38,7 +38,8 @@ const vscodeMock = vi.hoisted(() => {
     MockEventEmitter,
     state: {
       activeTextEditor: undefined as { document: { uri: InstanceType<typeof MockUri> } } | undefined,
-      textDocuments: [] as Array<{ uri: InstanceType<typeof MockUri>; languageId: string }>
+      textDocuments: [] as Array<{ uri: InstanceType<typeof MockUri>; languageId: string }>,
+      workspaceFolders: [] as Array<{ uri: InstanceType<typeof MockUri> }>
     }
   };
 });
@@ -51,7 +52,7 @@ vi.mock('vscode', () => ({
       return vscodeMock.state.textDocuments;
     },
     get workspaceFolders() {
-      return [];
+      return vscodeMock.state.workspaceFolders;
     }
   },
   window: {
@@ -68,6 +69,7 @@ const tempDirs: string[] = [];
 afterEach(() => {
   vscodeMock.state.activeTextEditor = undefined;
   vscodeMock.state.textDocuments.splice(0);
+  vscodeMock.state.workspaceFolders.splice(0);
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -142,6 +144,20 @@ describe('WorkspaceModuleRegistry', () => {
 
     expect(changes).toBe(2);
   });
+
+  it('indexes workspace files during asynchronous activation', async () => {
+    const root = makeTempDir();
+    const file = writeVerilog(root, 'src/top.v', 'module mips; endmodule\n');
+    writeVerilog(root, 'node_modules/ignored.v', 'module ignored; endmodule\n');
+    vscodeMock.state.workspaceFolders.push({ uri: vscodeMock.MockUri.file(root) });
+    const registry = new WorkspaceModuleRegistry();
+
+    registry.activate();
+    await waitFor(() => !registry.scanning);
+
+    expect(normalize(registry.getModule('mips')?.uri ?? '')).toBe(normalize(file));
+    expect(registry.getModule('ignored')).toBeUndefined();
+  });
 });
 
 function makeTempDir(): string {
@@ -159,4 +175,14 @@ function writeVerilog(root: string, relative: string, text: string): string {
 
 function normalize(value: string): string {
   return path.resolve(value).split(path.sep).join('/');
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const started = Date.now();
+  while (!predicate()) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error('condition was not met in time');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }

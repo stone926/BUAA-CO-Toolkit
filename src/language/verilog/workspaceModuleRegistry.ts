@@ -163,21 +163,30 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       }
     }
 
-    // 收集所有 .v 文件
-    const files = this.collectVerilogFiles(folders);
-    // 过滤已解析的，分批异步处理以避免阻塞 UI
-    const remaining = files.filter((f) => !indexedUris.has(vscode.Uri.file(f).toString()));
-
-    for (let i = 0; i < remaining.length; i += 20) {
+    const batch: string[] = [];
+    for await (const file of this.iterVerilogFiles(folders)) {
       if (this._disposed) {
         break;
       }
-      const batch = remaining.slice(i, i + 20);
+      if (indexedUris.has(vscode.Uri.file(file).toString())) {
+        continue;
+      }
+      batch.push(file);
+      if (batch.length < 20) {
+        continue;
+      }
       for (const file of batch) {
         this.indexFile(file);
       }
-      // 每批处理后让出事件循环
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      batch.length = 0;
+      await yieldEventLoop();
+    }
+
+    if (!this._disposed && batch.length) {
+      for (const file of batch) {
+        this.indexFile(file);
+      }
+      await yieldEventLoop();
     }
     this._scanning = false;
     this.fireDidChange();
@@ -189,8 +198,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     }
   }
 
-  private collectVerilogFiles(folders: string[]): string[] {
-    const files: string[] = [];
+  private async *iterVerilogFiles(folders: string[]): AsyncGenerator<string> {
     const stack = [...folders];
     while (stack.length) {
       const current = stack.pop();
@@ -199,20 +207,25 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       }
       let entries: fs.Dirent[];
       try {
-        entries = fs.readdirSync(current, { withFileTypes: true });
+        entries = await fs.promises.readdir(current, { withFileTypes: true });
       } catch {
+        // 无法读取的目录不参与模块注册表扫描
         continue;
       }
       for (const entry of entries) {
         if (entry.isDirectory() && !shouldSkipDirectory(entry.name)) {
           stack.push(path.join(current, entry.name));
         } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.v')) {
-          files.push(path.join(current, entry.name));
+          yield path.join(current, entry.name);
         }
       }
+      await yieldEventLoop();
     }
-    return files;
   }
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function shouldSkipDirectory(name: string): boolean {
