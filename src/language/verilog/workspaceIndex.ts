@@ -70,6 +70,7 @@ export class VerilogWorkspaceIndex {
       const document = TextDocument.create(uri, 'verilog', 0, text);
       this.updateDocument(document, settings);
     } catch {
+      // 单文件解析失败不影响整体索引
       this.remove(uri);
     }
   }

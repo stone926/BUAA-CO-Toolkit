@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
@@ -315,7 +316,7 @@ function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): Retur
       return paths;
     }
   }
-  return asmCasePaths(root, asmCaseId(new Date(), `${asmHash}${Math.random().toString(16).slice(2)}`));
+  return asmCasePaths(root, asmCaseId(new Date(), `${asmHash}${randomBytes(4).toString('hex')}`));
 }
 
 function caseWorkspaceRoot(resource?: vscode.Uri): string {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rangeKey, escapeRegExp, createMipsTokenRegex } from '../../../language/common/util';
+import { rangeKey, escapeHtml, escapeRegExp, createMipsTokenRegex } from '../../../language/common/util';
 
 describe('rangeKey', () => {
   it('produces a deterministic key for the same range', () => {
@@ -67,6 +67,19 @@ describe('escapeRegExp', () => {
     const escaped = escapeRegExp(specials);
     const regex = new RegExp(escaped);
     expect(regex.test(specials)).toBe(true);
+  });
+});
+
+describe('escapeHtml', () => {
+  it('escapes HTML-sensitive characters', () => {
+    expect(escapeHtml('&<>"')).toBe('&amp;&lt;&gt;&quot;');
+    expect(escapeHtml('a < b && c > "d"')).toBe('a &lt; b &amp;&amp; c &gt; &quot;d&quot;');
+  });
+
+  it('stringifies non-string values before escaping', () => {
+    expect(escapeHtml(42)).toBe('42');
+    expect(escapeHtml(null)).toBe('null');
+    expect(escapeHtml(undefined)).toBe('undefined');
   });
 });
 

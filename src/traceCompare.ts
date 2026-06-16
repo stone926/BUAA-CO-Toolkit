@@ -7,6 +7,7 @@ import { readTextFile, workspaceFolderFor } from './fsUtil';
 import { revealOutputChannel } from './process';
 import { AppServices } from './types';
 import { pickOneFile } from './workflowInputs';
+import { escapeHtml } from './language/common/util';
 
 export interface CompareMode {
   label: string;
@@ -302,12 +303,4 @@ function renderEvent(event?: CpuTraceEvent): string {
   const target = event.kind === 'grf' ? `$${event.target}` : `*${event.target}`;
   const normalized = `${cycle}pc=${event.pc} ${target} <= ${event.value}`;
   return `<div><code>${escapeHtml(event.raw)}</code></div><div class="muted">${escapeHtml(normalized)}; line ${event.lineNumber}</div>`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

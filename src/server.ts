@@ -1,27 +1,39 @@
 import {
   CodeAction,
   CodeActionKind,
+  CodeActionParams,
   CompletionItem,
+  CompletionParams,
   createConnection,
+  DefinitionParams,
   DidChangeConfigurationNotification,
   Diagnostic,
+  DocumentFormattingParams,
   DocumentFormattingRequest,
+  DocumentSymbolParams,
   DocumentSymbol,
   FileChangeType,
   FileEvent,
   FoldingRange,
+  FoldingRangeParams,
   FormattingOptions,
   Hover,
+  HoverParams,
   InlayHint,
+  InlayHintParams,
   InitializeParams,
   InitializeResult,
   Location,
   Position,
+  PrepareRenameParams,
   ProposedFeatures,
   Range,
   ReferenceParams,
+  RenameParams,
   SemanticTokens,
+  SemanticTokensParams,
   SignatureHelp,
+  SignatureHelpParams,
   TextEdit,
   TextDocumentSyncKind,
   TextDocuments,
@@ -153,23 +165,39 @@ const languageServices = new Map<string, CoLanguageService>([
   }]
 ]);
 
-let hasConfigurationCapability = false;
-let hasFormattingDynamicRegistration = false;
-let workspaceFolders: WorkspaceFolder[] | null | undefined;
-let globalSettings: CoSettings = defaultCoSettings;
-const documentSettings = new Map<string, Thenable<CoSettings>>();
-const updatedDocumentVersions = new Map<string, number>();
-const contentChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const verilogIseDiagnostics = new Map<string, Diagnostic[]>();
-const verilogIseTimers = new Map<string, ReturnType<typeof setTimeout>>();
-let verilogIseRunSequence = 0;
-let notifiedMissingIseToolchain = false;
+interface ServerState {
+  hasConfigurationCapability: boolean;
+  hasFormattingDynamicRegistration: boolean;
+  workspaceFolders: WorkspaceFolder[] | null | undefined;
+  globalSettings: CoSettings;
+  documentSettings: Map<string, Thenable<CoSettings>>;
+  updatedDocumentVersions: Map<string, number>;
+  contentChangeTimers: Map<string, ReturnType<typeof setTimeout>>;
+  verilogIseDiagnostics: Map<string, Diagnostic[]>;
+  verilogIseTimers: Map<string, ReturnType<typeof setTimeout>>;
+  verilogIseRunSequence: number;
+  notifiedMissingIseToolchain: boolean;
+}
+
+const state: ServerState = {
+  hasConfigurationCapability: false,
+  hasFormattingDynamicRegistration: false,
+  workspaceFolders: undefined,
+  globalSettings: defaultCoSettings,
+  documentSettings: new Map(),
+  updatedDocumentVersions: new Map(),
+  contentChangeTimers: new Map(),
+  verilogIseDiagnostics: new Map(),
+  verilogIseTimers: new Map(),
+  verilogIseRunSequence: 0,
+  notifiedMissingIseToolchain: false
+};
 const verilogIseCommand = 'co.internal.verilog.checkSyntaxWithIse';
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
-  hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
-  hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
-  workspaceFolders = params.workspaceFolders;
+  state.hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
+  state.hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
+  state.workspaceFolders = params.workspaceFolders;
 
   return {
     capabilities: {
@@ -211,10 +239,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 });
 
 connection.onInitialized(() => {
-  if (hasConfigurationCapability) {
+  if (state.hasConfigurationCapability) {
     void connection.client.register(DidChangeConfigurationNotification.type, undefined);
   }
-  if (hasFormattingDynamicRegistration) {
+  if (state.hasFormattingDynamicRegistration) {
     void connection.client.register(DocumentFormattingRequest.type, {
       documentSelector: [
         { scheme: 'file', language: 'mipsasm' },
@@ -226,10 +254,10 @@ connection.onInitialized(() => {
 });
 
 connection.onDidChangeConfiguration((change) => {
-  if (hasConfigurationCapability) {
-    documentSettings.clear();
+  if (state.hasConfigurationCapability) {
+    state.documentSettings.clear();
   } else {
-    globalSettings = mergeCoSettings(change.settings?.co);
+    state.globalSettings = mergeCoSettings(change.settings?.co);
   }
   void rebuildVerilogIndex();
   void validateAllDocuments();
@@ -247,12 +275,12 @@ documents.onDidOpen((event) => {
 
 // 防抖：快速连续输入时合并为一次解析+验证，避免每次按键都重新计算
 documents.onDidChangeContent((event) => {
-  const existing = contentChangeTimers.get(event.document.uri);
+  const existing = state.contentChangeTimers.get(event.document.uri);
   if (existing) {
     clearTimeout(existing);
   }
-  contentChangeTimers.set(event.document.uri, setTimeout(() => {
-    contentChangeTimers.delete(event.document.uri);
+  state.contentChangeTimers.set(event.document.uri, setTimeout(() => {
+    state.contentChangeTimers.delete(event.document.uri);
     void updateIndexAndValidate(event.document);
   }, 250));
 });
@@ -262,14 +290,14 @@ documents.onDidSave((event) => {
 });
 
 documents.onDidClose((event) => {
-  const timer = contentChangeTimers.get(event.document.uri);
+  const timer = state.contentChangeTimers.get(event.document.uri);
   if (timer) {
     clearTimeout(timer);
-    contentChangeTimers.delete(event.document.uri);
+    state.contentChangeTimers.delete(event.document.uri);
   }
-  documentSettings.delete(event.document.uri);
-  updatedDocumentVersions.delete(event.document.uri);
-  verilogIseDiagnostics.delete(event.document.uri);
+  state.documentSettings.delete(event.document.uri);
+  state.updatedDocumentVersions.delete(event.document.uri);
+  state.verilogIseDiagnostics.delete(event.document.uri);
   serviceForDocument(event.document)?.removeDocument?.(event.document.uri);
   connection.sendDiagnostics({
     uri: event.document.uri,
@@ -277,10 +305,16 @@ documents.onDidClose((event) => {
   });
 });
 
-function withDocument<R>(
-  handler: (doc: TextDocument, params: any, settings: CoSettings, svc: CoLanguageService) => R | undefined,
+interface DocumentRequestParams {
+  textDocument: {
+    uri: string;
+  };
+}
+
+function withDocument<P extends DocumentRequestParams, R>(
+  handler: (doc: TextDocument, params: P, settings: CoSettings, svc: CoLanguageService) => R | undefined,
   fallback: R
-): (params: any) => Promise<R> {
+): (params: P) => Promise<R> {
   return async (params) => {
     try {
       const document = documents.get(params.textDocument.uri);
@@ -296,55 +330,55 @@ function withDocument<R>(
 }
 
 connection.onCompletion(withDocument(
-  (doc, params, _settings, svc) => svc.getCompletions?.(doc, params.position, _settings), []
+  (doc, params: CompletionParams, _settings, svc) => svc.getCompletions?.(doc, params.position, _settings), [] as CompletionItem[]
 ));
 
 connection.onHover(withDocument(
-  (doc, params, settings, svc) => svc.getHover?.(doc, params.position, settings), undefined
+  (doc, params: HoverParams, settings, svc) => svc.getHover?.(doc, params.position, settings), undefined as Hover | undefined
 ));
 
 connection.onDefinition(withDocument(
-  (doc, params, settings, svc) => svc.getDefinition?.(doc, params.position, settings), undefined
+  (doc, params: DefinitionParams, settings, svc) => svc.getDefinition?.(doc, params.position, settings), undefined as Location | undefined
 ));
 
 connection.onReferences(withDocument(
-  (doc, params, settings, svc) => svc.getReferences?.(doc, params, settings), []
+  (doc, params: ReferenceParams, settings, svc) => svc.getReferences?.(doc, params, settings), [] as Location[]
 ));
 
 connection.onDocumentSymbol(withDocument(
-  (doc, _params, settings, svc) => svc.getDocumentSymbols?.(doc, settings), []
+  (doc, _params: DocumentSymbolParams, settings, svc) => svc.getDocumentSymbols?.(doc, settings), [] as DocumentSymbol[]
 ));
 
 connection.onCodeAction(withDocument(
-  (doc, params, settings, svc) => getCodeActions(doc, params.range, params.context.diagnostics, settings, svc), []
+  (doc, params: CodeActionParams, settings, svc) => getCodeActions(doc, params.range, params.context.diagnostics, settings, svc), [] as CodeAction[]
 ));
 
 connection.onDocumentFormatting(withDocument(
-  (doc, params, settings, svc) => svc.getFormattingEdits?.(doc, settings, params.options), []
+  (doc, params: DocumentFormattingParams, settings, svc) => svc.getFormattingEdits?.(doc, settings, params.options), [] as TextEdit[]
 ));
 
 connection.languages.inlayHint.on(withDocument(
-  (doc, params, settings, svc) => svc.getInlayHints?.(doc, params.range, settings), [] as InlayHint[]
+  (doc, params: InlayHintParams, settings, svc) => svc.getInlayHints?.(doc, params.range, settings), [] as InlayHint[]
 ));
 
 connection.languages.semanticTokens.on(withDocument(
-  (doc, _params, settings, svc) => svc.getSemanticTokens?.(doc, settings), { data: [] } as SemanticTokens
+  (doc, _params: SemanticTokensParams, settings, svc) => svc.getSemanticTokens?.(doc, settings), { data: [] } as SemanticTokens
 ));
 
 connection.onFoldingRanges(withDocument(
-  (doc, _params, settings, svc) => svc.getFoldingRanges?.(doc, settings), [] as FoldingRange[]
+  (doc, _params: FoldingRangeParams, settings, svc) => svc.getFoldingRanges?.(doc, settings), [] as FoldingRange[]
 ));
 
 connection.onSignatureHelp(withDocument(
-  (doc, params, settings, svc) => svc.getSignatureHelp?.(doc, params.position, settings), undefined
+  (doc, params: SignatureHelpParams, settings, svc) => svc.getSignatureHelp?.(doc, params.position, settings), undefined as SignatureHelp | undefined
 ));
 
 connection.onRenameRequest(withDocument(
-  (doc, params, settings, svc) => svc.getRenameEdits?.(doc, params.position, params.newName, settings), undefined
+  (doc, params: RenameParams, settings, svc) => svc.getRenameEdits?.(doc, params.position, params.newName, settings), undefined as WorkspaceEdit | undefined
 ));
 
 connection.onPrepareRename(withDocument(
-  (doc, params, settings, svc) => svc.getRenamePrepare?.(doc, params.position, settings), undefined
+  (doc, params: PrepareRenameParams, settings, svc) => svc.getRenamePrepare?.(doc, params.position, settings), undefined as Range | undefined
 ));
 
 connection.onExecuteCommand(async (params) => {
@@ -365,7 +399,7 @@ connection.onExecuteCommand(async (params) => {
 });
 
 async function handleDocumentSaved(document: TextDocument): Promise<void> {
-  if (updatedDocumentVersions.get(document.uri) !== document.version) {
+  if (state.updatedDocumentVersions.get(document.uri) !== document.version) {
     await updateIndexAndValidate(document);
   }
   const settings = effectiveSettingsForDocument(document, await getDocumentSettings(document.uri));
@@ -376,7 +410,7 @@ async function updateIndexAndValidate(document: TextDocument): Promise<void> {
   const settings = await getDocumentSettings(document.uri);
   serviceForDocument(document)?.updateDocument?.(document, settings);
   await validateDocument(document, settings);
-  updatedDocumentVersions.set(document.uri, document.version);
+  state.updatedDocumentVersions.set(document.uri, document.version);
 }
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
@@ -399,7 +433,7 @@ function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnosti
   if (document.languageId !== 'verilog') {
     return diagnostics;
   }
-  const iseDiagnostics = verilogIseDiagnostics.get(document.uri) ?? [];
+  const iseDiagnostics = state.verilogIseDiagnostics.get(document.uri) ?? [];
   if (!iseDiagnostics.length) {
     return diagnostics;
   }
@@ -421,17 +455,17 @@ function scheduleVerilogIseSyntaxCheck(document: TextDocument, settings: CoSetti
   }
   const localDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, settings) ?? [];
   if (localDiagnostics.some((diagnostic) => diagnostic.severity === 1 && typeof diagnostic.code === 'string' && diagnostic.code.startsWith('syntax-'))) {
-    verilogIseDiagnostics.delete(document.uri);
+    state.verilogIseDiagnostics.delete(document.uri);
     void validateDocument(document, settings);
     return;
   }
   const key = workspaceKeyForUri(document.uri);
-  const existing = verilogIseTimers.get(key);
+  const existing = state.verilogIseTimers.get(key);
   if (existing) {
     clearTimeout(existing);
   }
-  verilogIseTimers.set(key, setTimeout(() => {
-    verilogIseTimers.delete(key);
+  state.verilogIseTimers.set(key, setTimeout(() => {
+    state.verilogIseTimers.delete(key);
     void runVerilogIseSyntaxCheck(document.uri, settings, false);
   }, 500));
 }
@@ -444,41 +478,41 @@ async function runVerilogIseSyntaxCheck(uri: string, settings: CoSettings, manua
   if (!manual && ise.mode !== 'onSave') {
     return;
   }
-  const runId = ++verilogIseRunSequence;
+  const runId = ++state.verilogIseRunSequence;
   const configuredTop = settings.project.topModule.trim();
   const fallbackTop = verilogIndex.indexedModules()[0]?.name;
   const topModule = configuredTop && verilogIndex.getModule(configuredTop)
     ? configuredTop
     : fallbackTop ?? configuredTop;
   const result = await runIseSyntaxCheck({
-    workspaceFolders,
+    workspaceFolders: state.workspaceFolders,
     triggerUri: uri,
     isePath: settings.toolchain.isePath,
     topModule,
     fallbackTopModule: fallbackTop,
     timeoutMs: ise.timeoutMs > 0 ? ise.timeoutMs : settings.run.timeoutMs
   });
-  if (runId !== verilogIseRunSequence) {
+  if (runId !== state.verilogIseRunSequence) {
     return;
   }
   if (result.skipped === 'missing-toolchain') {
-    verilogIseDiagnostics.clear();
-    if (!notifiedMissingIseToolchain) {
-      notifiedMissingIseToolchain = true;
+    state.verilogIseDiagnostics.clear();
+    if (!state.notifiedMissingIseToolchain) {
+      state.notifiedMissingIseToolchain = true;
       void connection.window.showInformationMessage('ISE fuse 未配置或不可用，Verilog 语法检查已回退到内置检查。');
     }
     await validateOpenVerilogDocuments();
     return;
   }
   if (result.skipped) {
-    verilogIseDiagnostics.clear();
+    state.verilogIseDiagnostics.clear();
     await validateOpenVerilogDocuments();
     return;
   }
-  notifiedMissingIseToolchain = false;
-  verilogIseDiagnostics.clear();
+  state.notifiedMissingIseToolchain = false;
+  state.verilogIseDiagnostics.clear();
   for (const [diagnosticUri, diagnostics] of result.diagnosticsByUri) {
-    verilogIseDiagnostics.set(diagnosticUri, diagnostics);
+    state.verilogIseDiagnostics.set(diagnosticUri, diagnostics);
   }
   await validateOpenVerilogDocuments();
 }
@@ -505,13 +539,19 @@ async function validateAllDocuments(): Promise<void> {
   await validateDocuments(() => true);
 }
 
+const validationBatchSize = 5;
+
 async function validateDocuments(predicate: (document: TextDocument) => boolean): Promise<void> {
-  await Promise.all(documents.all().filter(predicate).map((document) => validateDocument(document)));
+  const pendingDocuments = documents.all().filter(predicate);
+  for (let i = 0; i < pendingDocuments.length; i += validationBatchSize) {
+    const batch = pendingDocuments.slice(i, i + validationBatchSize);
+    await Promise.all(batch.map((document) => validateDocument(document)));
+  }
 }
 
 async function rebuildVerilogIndex(): Promise<void> {
   const settings = await getDocumentSettings('');
-  await verilogIndex.rebuild(workspaceFolders, settings);
+  await verilogIndex.rebuild(state.workspaceFolders, settings);
   for (const document of documents.all()) {
     serviceForDocument(document)?.updateDocument?.(document, settings);
   }
@@ -542,13 +582,14 @@ function fsPathFromUri(uri: string): string | undefined {
   try {
     return URI.parse(uri).fsPath;
   } catch {
+    // URI 格式异常时回退到 undefined，由调用方处理
     return undefined;
   }
 }
 
 function workspaceKeyForUri(uri: string): string {
   const file = fsPathFromUri(uri);
-  const folder = workspaceFolders
+  const folder = state.workspaceFolders
     ?.map((candidate) => ({ uri: candidate.uri, path: fsPathFromUri(candidate.uri) }))
     .filter((candidate): candidate is { uri: string; path: string } => Boolean(candidate.path))
     .sort((left, right) => right.path.length - left.path.length)
@@ -618,16 +659,16 @@ function isLogisimCircuitUri(uri: string): boolean {
 }
 
 async function getDocumentSettings(resource: string): Promise<CoSettings> {
-  if (!hasConfigurationCapability) {
-    return globalSettings;
+  if (!state.hasConfigurationCapability) {
+    return state.globalSettings;
   }
-  let result = documentSettings.get(resource);
+  let result = state.documentSettings.get(resource);
   if (!result) {
     result = connection.workspace.getConfiguration({
       scopeUri: resource || undefined,
       section: 'co'
     }).then(mergeCoSettings);
-    documentSettings.set(resource, result);
+    state.documentSettings.set(resource, result);
   }
   return result;
 }

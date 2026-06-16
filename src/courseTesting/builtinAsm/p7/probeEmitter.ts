@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { ProjectProfile } from '../../../projectProfile';
 import { Random, hashSeed } from '../../random';
 import {
@@ -83,7 +84,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
 
   const seed = options.seed && options.seed.trim()
     ? options.seed.trim()
-    : `${Date.now()}-${Math.floor(Math.random() * 0xffffffff).toString(16)}`;
+    : `${Date.now()}-${randomBytes(4).toString('hex')}`;
   const scenarioCount = clampProbeScenarioCount(options.probeScenarioCount ?? p7ProbeDefaultScenarioCount);
   const rng = new Random(hashSeed(`P7:probe:v2:${seed}:${scenarioCount}`));
   const exceptionTypes = normalizeP7ExceptionTypes(options.exceptionTypes);

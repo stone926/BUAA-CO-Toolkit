@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { ProjectProfile } from '../../projectProfile';
 import {
   instructions,
@@ -223,7 +224,7 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
   validateBuiltinGeneratorRequest(instructionSet, count, { interrupt, exceptionRate, exceptionTypes });
   const seed = options.seed && options.seed.trim()
     ? options.seed.trim()
-    : `${Date.now()}-${Math.floor(Math.random() * 0xffffffff).toString(16)}`;
+    : `${Date.now()}-${randomBytes(4).toString('hex')}`;
   const generator = new ProgramGenerator(
     instructionSet.profile,
     instructionSet.mnemonics,

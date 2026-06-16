@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import {
   getBuiltinGeneratorInstructionCount,
@@ -93,6 +94,7 @@ import { checkToolchain } from './toolchain';
 import { runIsim } from './verilog';
 import { AppServices, ProjectProfile, RunResult, ToolDetection } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { escapeHtml } from './language/common/util';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
 import {
@@ -342,7 +344,7 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
     return;
   }
 
-  await runCourseTraceBatch(services, expandTraceCases(generated.asms, generated.asmCases), generated.source);
+  await runCourseTraceBatch(services, await expandTraceCases(generated.asms, generated.asmCases), generated.source);
 }
 
 async function diagnoseP3LogisimTraceCircuit(services: AppServices): Promise<void> {
@@ -446,11 +448,11 @@ async function startContinuousGeneratedTraceTests(services: AppServices): Promis
         const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
         if (!generated?.asms.length) {
           iteration.status = 'error';
-          iteration.message = 'Generator finished but no new or modified ASM files were detected.';
+          iteration.message = '生成器已完成，但未检测到新建或修改的 ASM 文件';
           services.output.appendLine(iteration.message);
         } else {
           iteration.source = generated.source;
-          const cases = expandTraceCases(generated.asms, generated.asmCases);
+          const cases = await expandTraceCases(generated.asms, generated.asmCases);
           for (let i = 0; i < cases.length; i++) {
             if (session.stopRequested) {
               break;
@@ -1155,7 +1157,7 @@ async function resolveAsmBatchInputs(): Promise<vscode.Uri[]> {
 }
 
 async function resolveSingleStdinInput(asm: vscode.Uri): Promise<vscode.Uri | undefined> {
-  const candidates = findStdinCandidatesForAsm(asm);
+  const candidates = await findStdinCandidatesForAsm(asm);
   if (!candidates.length) {
     return undefined;
   }
@@ -1403,12 +1405,12 @@ async function runBuiltinGeneratorAndCollectAsms(
   };
 }
 
-function expandTraceCases(asms: vscode.Uri[], asmCases?: AsmCase[]): CourseTraceCaseInput[] {
+async function expandTraceCases(asms: vscode.Uri[], asmCases?: AsmCase[]): Promise<CourseTraceCaseInput[]> {
   const caseByAsm = new Map((asmCases ?? []).map((asmCase) => [normalizePathKey(asmCase.sourceAsm.fsPath), asmCase]));
   const cases: CourseTraceCaseInput[] = [];
   for (const asm of asms) {
     const asmCase = caseByAsm.get(normalizePathKey(asm.fsPath));
-    const stdinFiles = findStdinCandidatesForAsm(asm);
+    const stdinFiles = await findStdinCandidatesForAsm(asm);
     if (!stdinFiles.length) {
       cases.push({ asm, asmCase });
       continue;
@@ -1497,7 +1499,7 @@ function generatorSource(
 
 function builtinAsmFileName(profile: string, generatedAt: Date, mode?: string): string {
   const timestamp = generatedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-  const suffix = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+  const suffix = randomBytes(3).toString('hex');
   const modePart = mode ? `-${mode}` : '';
   return `builtin-${profile.toLowerCase()}${modePart}-${timestamp}-${suffix}.asm`;
 }
@@ -1910,13 +1912,13 @@ function logisimRawOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.logisim.out`;
 }
 
-function findStdinCandidatesForAsm(asm: vscode.Uri): vscode.Uri[] {
+async function findStdinCandidatesForAsm(asm: vscode.Uri): Promise<vscode.Uri[]> {
   const asmDir = path.dirname(asm.fsPath);
   const asmStem = path.basename(asm.fsPath, path.extname(asm.fsPath)).toLowerCase();
   const candidates: { file: string; rank: number }[] = [];
 
-  for (const directory of stdinSearchDirectories(asmDir)) {
-    for (const entry of safeReadDirectory(directory.path)) {
+  for (const directory of await stdinSearchDirectories(asmDir)) {
+    for (const entry of await safeReadDirectory(directory.path)) {
       if (!entry.isFile()) {
         continue;
       }
@@ -1945,11 +1947,11 @@ function findStdinCandidatesForAsm(asm: vscode.Uri): vscode.Uri[] {
     .map((item) => vscode.Uri.file(item.file));
 }
 
-function stdinSearchDirectories(asmDir: string): Array<{ path: string; rank: number }> {
+async function stdinSearchDirectories(asmDir: string): Promise<Array<{ path: string; rank: number }>> {
   const directories = [{ path: asmDir, rank: 0 }];
   for (let i = 0; i < stdinSubdirectories.length; i++) {
     const candidate = path.join(asmDir, stdinSubdirectories[i]);
-    if (safeIsDirectory(candidate)) {
+    if (await safeIsDirectory(candidate)) {
       directories.push({ path: candidate, rank: (i + 1) * 100 });
     }
   }
@@ -1979,18 +1981,20 @@ function stdinNameRank(fileName: string, asmStem: string): number {
   return -1;
 }
 
-function safeReadDirectory(directory: string): fs.Dirent[] {
+async function safeReadDirectory(directory: string): Promise<fs.Dirent[]> {
   try {
-    return fs.readdirSync(directory, { withFileTypes: true });
+    return await fs.promises.readdir(directory, { withFileTypes: true });
   } catch {
+    // 目录不存在或无权限时按无标准输入候选处理
     return [];
   }
 }
 
-function safeIsDirectory(directory: string): boolean {
+async function safeIsDirectory(directory: string): Promise<boolean> {
   try {
-    return fs.statSync(directory).isDirectory();
+    return (await fs.promises.stat(directory)).isDirectory();
   } catch {
+    // 目录不存在或无权限时跳过该候选目录
     return false;
   }
 }
@@ -2142,6 +2146,7 @@ function readCaseMetadata(asm: vscode.Uri): CourseCaseMetadata {
     const data = JSON.parse(fs.readFileSync(uri.fsPath, 'utf8')) as CourseCaseMetadata;
     return data && typeof data === 'object' ? data : {};
   } catch {
+    // 元数据文件不存在或格式异常时返回空对象
     return {};
   }
 }
@@ -2310,6 +2315,7 @@ async function updateContinuousTraceMonitor(session: ContinuousTraceSession): Pr
   try {
     session.panel.webview.html = renderContinuousTraceMonitor(session.report, session.reportFile);
   } catch {
+    // Webview 已关闭或不可更新时停止持续测试会话
     session.stopRequested = true;
   }
 }
@@ -2805,13 +2811,6 @@ function traceEventSummary(event: TraceEventSnapshot | undefined): string {
   return `${cycle}${event.pc}: ${target} <= ${event.value} (line ${event.lineNumber})`;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 function isAsmFile(uri: vscode.Uri): boolean {
   const ext = path.extname(uri.fsPath).toLowerCase();

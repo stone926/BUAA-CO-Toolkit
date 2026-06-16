@@ -7,6 +7,7 @@ import { runMarsFile } from './mips';
 import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
 import { pickOneFile } from './workflowInputs';
+import { escapeHtml } from './language/common/util';
 
 interface HazardToolPaths {
   dir: string;
@@ -786,12 +787,4 @@ function normalizePathKey(file: string): string {
 
 function sanitizeFileStem(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'case';
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

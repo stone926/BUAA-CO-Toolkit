@@ -430,6 +430,7 @@ function minimalBitsForDecimal(text: string): number {
     }
     return value.toString(2).length;
   } catch {
+    // 溢出时回退到 32 位宽度
     return 32;
   }
 }

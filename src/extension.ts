@@ -24,6 +24,7 @@ import { registerCourseLinks } from './courseLinks';
 import { registerSemanticColorDefaults } from './semanticColors';
 import { buildProfileInferenceInput, clearProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
+import { escapeHtml } from './language/common/util';
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -48,10 +49,18 @@ export function activate(context: vscode.ExtensionContext): void {
   // Cache toolchain status per resource so multi-root settings do not leak across projects.
   const toolchainCache = new Map<string, { checks: ToolDetection[]; timestamp: number }>();
   const TOOLCHAIN_CACHE_TTL = 60000; // 1 minute
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  context.subscriptions.push({
+    dispose: () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+    }
+  });
 
   // Register refresh command for sidebar
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.sidebar.refresh', () => sidebarProvider.refresh())
+    vscode.commands.registerCommand('co.sidebar.refresh', () => scheduleRefreshProjectUi())
   );
 
   context.subscriptions.push(
@@ -66,7 +75,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(moduleRegistry);
   context.subscriptions.push(moduleRegistry.onDidChange(() => {
     invalidateToolchainCache();
-    refreshProjectUi();
+    scheduleRefreshProjectUi();
   }));
   // 监听文件保存事件，增量更新注册表
   context.subscriptions.push(
@@ -101,17 +110,17 @@ export function activate(context: vscode.ExtensionContext): void {
     profileWatcher.onDidCreate(() => {
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      refreshProjectUi();
+      scheduleRefreshProjectUi();
     }),
     profileWatcher.onDidChange(() => {
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      refreshProjectUi();
+      scheduleRefreshProjectUi();
     }),
     profileWatcher.onDidDelete(() => {
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      refreshProjectUi();
+      scheduleRefreshProjectUi();
     })
   );
 
@@ -144,28 +153,37 @@ export function activate(context: vscode.ExtensionContext): void {
       const resource = vscode.window.activeTextEditor?.document.uri;
       const checks = await showToolchainReport(output);
       toolchainCache.set(toolchainCacheKey(resource), { checks, timestamp: Date.now() });
-      refreshProjectUi(resource);
+      scheduleRefreshProjectUi(resource);
     }),
     vscode.commands.registerCommand('co.selectProjectProfile', () => selectProjectProfile()),
     vscode.commands.registerCommand('co.projectWizard', () => runProjectWizard()),
     vscode.window.onDidChangeActiveTextEditor(() => {
-      refreshProjectUi();
+      scheduleRefreshProjectUi();
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('co')) {
         clearProfileInferenceCache();
         invalidateToolchainCache();
-        refreshProjectUi();
+        scheduleRefreshProjectUi();
       }
     })
   );
 
+  function scheduleRefreshProjectUi(resource = vscode.window.activeTextEditor?.document.uri): void {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      refreshProjectUi(resource);
+    }, 300);
+  }
+
   function refreshProjectUi(resource = vscode.window.activeTextEditor?.document.uri): void {
-    void persistInferredProfile(resource).finally(() => {
-      updateCoContext(resource);
-      sidebarProvider.refresh();
-      updateStatus(statusBar, cachedToolchainStatus);
-    }).catch(() => undefined);
+    updateCoContext(resource);
+    sidebarProvider.refresh();
+    updateStatus(statusBar, cachedToolchainStatus);
+    void persistInferredProfile(resource).catch(() => undefined);
   }
 
   refreshProjectUi();
@@ -382,12 +400,4 @@ function renderToolchainReport(checks: ToolDetection[]): string {
   </table>
 </body>
 </html>`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

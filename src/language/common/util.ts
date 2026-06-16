@@ -1,4 +1,4 @@
-import { Range } from 'vscode-languageserver/node';
+import type { Range } from 'vscode-languageserver/node';
 
 /**
  * 生成 Range 的唯一字符串键，用于 Set/Map 去重。
@@ -14,6 +14,17 @@ export function rangeKey(range: Range): string {
  */
 export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 转义 Webview HTML 文本，避免报告渲染时把外部输出当作标签插入。
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /**
