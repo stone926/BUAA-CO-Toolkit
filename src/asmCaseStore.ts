@@ -94,14 +94,14 @@ export async function createAsmCaseFromAsm(
   const asmHash = sha256Bytes(asmBytes);
   const root = caseWorkspaceRoot(options.resource ?? asm);
   const createdAt = options.createdAt ?? new Date();
-  const paths = nextAsmCasePaths(root, createdAt, asmHash);
+  const paths = await nextAsmCasePaths(root, createdAt, asmHash);
   const caseDir = vscode.Uri.file(paths.caseDir);
   await ensureDirectory(caseDir);
 
   const caseAsm = vscode.Uri.file(paths.asm);
   await vscode.workspace.fs.writeFile(caseAsm, asmBytes);
 
-  const sidecar = readCaseSidecar(asm);
+  const sidecar = await readCaseSidecar(asm);
   const p7 = mergeP7Metadata(options.p7, sidecar.metadata, sidecar.path);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
 
@@ -144,7 +144,7 @@ export async function createAsmCaseFromText(
   const asmHash = sha256Bytes(bytes);
   const root = caseWorkspaceRoot(options.resource);
   const createdAt = options.createdAt ?? new Date();
-  const paths = nextAsmCasePaths(root, createdAt, asmHash);
+  const paths = await nextAsmCasePaths(root, createdAt, asmHash);
   const caseDir = vscode.Uri.file(paths.caseDir);
   await ensureDirectory(caseDir);
 
@@ -286,15 +286,16 @@ export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array
   return manifests.sort((left, right) => right.manifest.createdAt.localeCompare(left.manifest.createdAt));
 }
 
-export function readAsmCaseManifestForAsm(asm: vscode.Uri): AsmCaseManifest | undefined {
+export async function readAsmCaseManifestForAsm(asm: vscode.Uri): Promise<AsmCaseManifest | undefined> {
   if (path.basename(asm.fsPath).toLowerCase() !== 'program.asm') {
     return undefined;
   }
   const manifestPath = path.join(path.dirname(asm.fsPath), 'case.json');
   try {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as AsmCaseManifest;
+    const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as AsmCaseManifest;
     return manifest?.version === asmCaseManifestVersion ? manifest : undefined;
   } catch {
+    // 元数据文件不存在或格式异常时按普通 ASM 处理
     return undefined;
   }
 }
@@ -308,15 +309,25 @@ export function isAsmFile(uri: vscode.Uri): boolean {
 
 const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/isim,.co/logisim,.co/tmp}/**';
 
-function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): ReturnType<typeof asmCasePaths> {
+async function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): Promise<ReturnType<typeof asmCasePaths>> {
   for (let attempt = 0; attempt < 100; attempt++) {
     const candidateDate = attempt === 0 ? createdAt : new Date(createdAt.getTime() + attempt);
     const paths = asmCasePaths(root, asmCaseId(candidateDate, asmHash));
-    if (!fs.existsSync(paths.caseDir)) {
+    if (!await pathExists(paths.caseDir)) {
       return paths;
     }
   }
   return asmCasePaths(root, asmCaseId(new Date(), `${asmHash}${randomBytes(4).toString('hex')}`));
+}
+
+async function pathExists(file: string): Promise<boolean> {
+  try {
+    await fs.promises.access(file);
+    return true;
+  } catch {
+    // 不存在或无权限时都视为不可用路径
+    return false;
+  }
 }
 
 function caseWorkspaceRoot(resource?: vscode.Uri): string {
@@ -349,12 +360,12 @@ async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<{
   };
 }
 
-function readCaseSidecar(asm: vscode.Uri): { path?: string; metadata?: AsmCaseP7Metadata } {
+async function readCaseSidecar(asm: vscode.Uri): Promise<{ path?: string; metadata?: AsmCaseP7Metadata }> {
   const dir = path.dirname(asm.fsPath);
   const stem = path.basename(asm.fsPath, path.extname(asm.fsPath));
   const sidecar = path.join(dir, `${stem}.co-meta.json`);
   try {
-    const parsed = JSON.parse(fs.readFileSync(sidecar, 'utf8')) as Record<string, unknown>;
+    const parsed = JSON.parse(await fs.promises.readFile(sidecar, 'utf8')) as Record<string, unknown>;
     return {
       path: sidecar,
       metadata: {
@@ -365,6 +376,7 @@ function readCaseSidecar(asm: vscode.Uri): { path?: string; metadata?: AsmCaseP7
       }
     };
   } catch {
+    // sidecar 缺失或格式异常时忽略附加元数据
     return {};
   }
 }

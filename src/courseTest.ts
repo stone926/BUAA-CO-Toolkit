@@ -368,7 +368,7 @@ async function runCourseTraceCase(
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     stdin: item.stdin,
     resource: asm,
-    p7: p7MetadataFromSidecar(asm)
+    p7: await p7MetadataFromSidecar(asm)
   });
   services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
 
@@ -382,11 +382,11 @@ async function runCourseTraceCase(
   }
   services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
 
-  const interruptSchedule = resolveCaseInterruptScheduleFromCase(asmCase) ?? resolveCaseInterruptSchedule(asm);
+  const interruptSchedule = resolveCaseInterruptScheduleFromCase(asmCase) ?? await resolveCaseInterruptSchedule(asm);
   if (interruptSchedule) {
     services.output.appendLine(`外部中断目标 PC: ${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
   }
-  const probe = resolveCaseProbeMetadataFromCase(asmCase) ?? resolveCaseProbeMetadata(asm);
+  const probe = resolveCaseProbeMetadataFromCase(asmCase) ?? await resolveCaseProbeMetadata(asm);
   if (probe) {
     services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
     const isim = await runIsim(services, {
@@ -1022,8 +1022,8 @@ function resolveCaseProbeMetadataFromCase(asmCase: AsmCase): P7ProbeMetadata | u
   return isProbeMetadata(probe) ? probe : undefined;
 }
 
-function p7MetadataFromSidecar(asm: vscode.Uri): { interruptSchedule?: number[]; probe?: P7ProbeMetadata } | undefined {
-  const data = readCaseMetadata(asm);
+async function p7MetadataFromSidecar(asm: vscode.Uri): Promise<{ interruptSchedule?: number[]; probe?: P7ProbeMetadata } | undefined> {
+  const data = await readCaseMetadata(asm);
   const interruptSchedule = Array.isArray(data.interruptSchedule)
     ? data.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value))
     : undefined;
@@ -1063,7 +1063,7 @@ async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
     const asmCase = item.asmCase ?? await createAsmCaseFromAsm(item.asm, {
       source: asmCaseSourceFromBatchSource(generated.source),
       resource: item.asm,
-      p7: p7MetadataFromSidecar(item.asm)
+      p7: await p7MetadataFromSidecar(item.asm)
     });
     const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
     if (!dump?.result.ok || !dump.outputFile) {
@@ -1092,8 +1092,8 @@ interface CourseCaseMetadata {
   probe?: P7ProbeMetadata;
 }
 
-function readCaseMetadata(asm: vscode.Uri): CourseCaseMetadata {
-  const manifest = readAsmCaseManifestForAsm(asm);
+async function readCaseMetadata(asm: vscode.Uri): Promise<CourseCaseMetadata> {
+  const manifest = await readAsmCaseManifestForAsm(asm);
   if (manifest?.p7) {
     return {
       profile: manifest.profile,
@@ -1103,10 +1103,7 @@ function readCaseMetadata(asm: vscode.Uri): CourseCaseMetadata {
   }
   try {
     const uri = interruptScheduleSidecarUri(asm);
-    if (!fs.existsSync(uri.fsPath)) {
-      return {};
-    }
-    const data = JSON.parse(fs.readFileSync(uri.fsPath, 'utf8')) as CourseCaseMetadata;
+    const data = JSON.parse(await fs.promises.readFile(uri.fsPath, 'utf8')) as CourseCaseMetadata;
     return data && typeof data === 'object' ? data : {};
   } catch {
     // 元数据文件不存在或格式异常时返回空对象
@@ -1114,19 +1111,19 @@ function readCaseMetadata(asm: vscode.Uri): CourseCaseMetadata {
   }
 }
 
-function readInterruptScheduleSidecar(asm: vscode.Uri): number[] {
-  const data = readCaseMetadata(asm);
+async function readInterruptScheduleSidecar(asm: vscode.Uri): Promise<number[]> {
+  const data = await readCaseMetadata(asm);
   if (!Array.isArray(data.interruptSchedule)) {
     return [];
   }
   return data.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value));
 }
 
-function resolveCaseProbeMetadata(asm: vscode.Uri): P7ProbeMetadata | undefined {
+async function resolveCaseProbeMetadata(asm: vscode.Uri): Promise<P7ProbeMetadata | undefined> {
   if (getProfile(asm) !== 'P7') {
     return undefined;
   }
-  const data = readCaseMetadata(asm);
+  const data = await readCaseMetadata(asm);
   return data.mode === 'probe' && isProbeMetadata(data.probe) ? data.probe : undefined;
 }
 
@@ -1145,11 +1142,11 @@ function isProbeMetadata(value: unknown): value is P7ProbeMetadata {
  * P7 external-interrupt target PCs for a case (from the generator sidecar), or undefined when the
  * case is not P7, interrupts are disabled, or no schedule was recorded.
  */
-function resolveCaseInterruptSchedule(asm: vscode.Uri): number[] | undefined {
+async function resolveCaseInterruptSchedule(asm: vscode.Uri): Promise<number[] | undefined> {
   if (getProfile(asm) !== 'P7' || !getP7InterruptEnabled(asm)) {
     return undefined;
   }
-  const schedule = readInterruptScheduleSidecar(asm);
+  const schedule = await readInterruptScheduleSidecar(asm);
   return schedule.length ? schedule : undefined;
 }
 
