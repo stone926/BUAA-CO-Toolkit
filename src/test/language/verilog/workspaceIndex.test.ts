@@ -19,6 +19,7 @@ describe('VerilogWorkspaceIndex', () => {
   it('skips generated and dependency directories while rebuilding', async () => {
     const root = makeTempRoot();
     writeFile(root, 'src/a.v', 'module A; endmodule\n');
+    writeFile(root, 'src/b.v', 'module B; endmodule\n');
     writeFile(root, '.co/generated.v', 'module Generated; endmodule\n');
     writeFile(root, 'node_modules/pkg/dep.v', 'module Dependency; endmodule\n');
     writeFile(root, 'build/out.v', 'module BuildOutput; endmodule\n');
@@ -27,6 +28,7 @@ describe('VerilogWorkspaceIndex', () => {
     await index.rebuild([folder(root)], defaultCoSettings);
 
     expect(index.getModule('A')).toBeDefined();
+    expect(index.getModule('B')).toBeDefined();
     expect(index.getModule('Generated')).toBeUndefined();
     expect(index.getModule('Dependency')).toBeUndefined();
     expect(index.getModule('BuildOutput')).toBeUndefined();

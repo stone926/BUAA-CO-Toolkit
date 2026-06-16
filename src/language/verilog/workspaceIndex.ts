@@ -32,67 +32,89 @@ export class VerilogWorkspaceIndex {
   private macroListCache: VerilogMacro[] | undefined;
   private caseInsensitiveModuleCache = new Map<string, VerilogModule | undefined>();
   private caseInsensitiveInstanceCache = new Map<string, boolean>();
+  private rebuildSequence = 0;
 
   constructor(options: { maxFiles?: number } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
   }
 
   async rebuild(workspaceFolders: WorkspaceFolder[] | null | undefined, settings: CoSettings): Promise<void> {
-    this.files.clear();
-    this.modules.clear();
-    this.macros.clear();
-    this.invalidateCaches();
+    const sequence = ++this.rebuildSequence;
+    this.clear();
     if (!workspaceFolders?.length) {
       return;
     }
     for (const folder of workspaceFolders) {
       const folderPath = URI.parse(folder.uri).fsPath;
       for await (const file of scanVerilogFiles(folderPath, this.maxFiles - this.files.size)) {
+        if (sequence !== this.rebuildSequence) {
+          return;
+        }
         if (this.files.size >= this.maxFiles) {
           return;
         }
-        await this.updateFileAsync(URI.file(file).toString(), settings);
+        await this.updateFileFromDiskAsync(URI.file(file).toString(), settings, sequence);
       }
     }
   }
 
   updateFile(uri: string, settings: CoSettings): void {
+    this.rebuildSequence++;
+    this.updateFileFromDisk(uri, settings);
+  }
+
+  async updateFileAsync(uri: string, settings: CoSettings): Promise<void> {
+    this.rebuildSequence++;
+    await this.updateFileFromDiskAsync(uri, settings);
+  }
+
+  updateDocument(document: TextDocument, settings: CoSettings): void {
+    this.rebuildSequence++;
+    this.updateDocumentIndexed(document, settings);
+  }
+
+  private updateFileFromDisk(uri: string, settings: CoSettings): void {
     if (!isVerilogUri(uri)) {
       return;
     }
     try {
       const filePath = URI.parse(uri).fsPath;
       if (!fs.existsSync(filePath)) {
-        this.remove(uri);
+        this.removeIndexed(uri);
         return;
       }
       const text = fs.readFileSync(filePath, 'utf8');
       this.updateFileText(uri, text, settings);
     } catch {
       // 单文件解析失败不影响整体索引
-      this.remove(uri);
+      this.removeIndexed(uri);
     }
   }
 
-  async updateFileAsync(uri: string, settings: CoSettings): Promise<void> {
+  private async updateFileFromDiskAsync(uri: string, settings: CoSettings, rebuildSequence?: number): Promise<void> {
     if (!isVerilogUri(uri)) {
       return;
     }
     try {
       const filePath = URI.parse(uri).fsPath;
       const text = await fs.promises.readFile(filePath, 'utf8');
+      if (rebuildSequence !== undefined && rebuildSequence !== this.rebuildSequence) {
+        return;
+      }
       this.updateFileText(uri, text, settings);
     } catch {
       // 单文件读取或解析失败不影响整体索引
-      this.remove(uri);
+      if (rebuildSequence === undefined || rebuildSequence === this.rebuildSequence) {
+        this.removeIndexed(uri);
+      }
     }
   }
 
-  updateDocument(document: TextDocument, settings: CoSettings): void {
+  private updateDocumentIndexed(document: TextDocument, settings: CoSettings): void {
     if (document.languageId !== 'verilog') {
       return;
     }
-    this.remove(document.uri);
+    this.removeIndexed(document.uri);
     const parsed = getCachedVerilogParse(document, settings, false);
     const file: VerilogIndexedFile = {
       uri: document.uri,
@@ -121,10 +143,15 @@ export class VerilogWorkspaceIndex {
 
   private updateFileText(uri: string, text: string, settings: CoSettings): void {
     const document = TextDocument.create(uri, 'verilog', 0, text);
-    this.updateDocument(document, settings);
+    this.updateDocumentIndexed(document, settings);
   }
 
   remove(uri: string): void {
+    this.rebuildSequence++;
+    this.removeIndexed(uri);
+  }
+
+  private removeIndexed(uri: string): void {
     const existing = this.files.get(uri);
     if (!existing) {
       clearCachedVerilogParse(uri);
@@ -217,6 +244,13 @@ export class VerilogWorkspaceIndex {
     this.macroListCache = undefined;
     this.caseInsensitiveModuleCache.clear();
     this.caseInsensitiveInstanceCache.clear();
+  }
+
+  private clear(): void {
+    this.files.clear();
+    this.modules.clear();
+    this.macros.clear();
+    this.invalidateCaches();
   }
 }
 
