@@ -26,7 +26,7 @@ import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
 import { P7ProbeMetadata } from './courseTesting/builtinAsmGenerator';
 import { executeLanguageServerCommand } from './languageClient';
-import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
+import type { MutableVerilogModuleProvider } from './language/verilog/moduleProvider';
 import {
   AsmCase,
   copyAsmCaseArtifact,
@@ -68,7 +68,7 @@ export interface IseProjectOptions {
 export interface IsimRunOptions extends IseProjectOptions {
   machineCodeSource?: vscode.Uri;
   asmCase?: AsmCase;
-  moduleRegistry?: WorkspaceModuleRegistry;
+  moduleRegistry?: MutableVerilogModuleProvider;
   simOutputFileName?: string;
   /** P7: external-interrupt target PCs; when set, a dedicated interrupt testbench is generated. */
   interruptSchedule?: number[];
@@ -113,9 +113,9 @@ interface CompileIsimOptions extends IsimRunOptions {
   tclText?: string;
 }
 
-let sharedModuleRegistry: WorkspaceModuleRegistry | undefined;
+let sharedModuleRegistry: MutableVerilogModuleProvider | undefined;
 
-export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: WorkspaceModuleRegistry): void {
+export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
   sharedModuleRegistry = moduleRegistry;
   context.subscriptions.push(
     vscode.commands.registerCommand('co.verilog.disableLintRule', (rule?: string) => disableLintRule(rule)),
@@ -152,7 +152,7 @@ async function disableLintRule(rule?: string): Promise<void> {
   vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalized.toUpperCase()}`);
 }
 
-async function generateTestbench(moduleRegistry?: WorkspaceModuleRegistry): Promise<void> {
+async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.languageId !== 'verilog') {
     vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
@@ -290,7 +290,7 @@ export async function runIsim(
   return { generated: compiled.generated, fuseResult: compiled.fuseResult, simResult, simOut };
 }
 
-async function openIsimWaveform(services: AppServices, moduleRegistry?: WorkspaceModuleRegistry): Promise<void> {
+async function openIsimWaveform(services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): Promise<void> {
   const activeUri = vscode.window.activeTextEditor?.document.uri;
   const simTime = getSimTime(activeUri);
   const compiled = await compileIsim(services, {
@@ -324,7 +324,7 @@ async function openIsimWaveform(services: AppServices, moduleRegistry?: Workspac
   }
 }
 
-async function exportVcdWaveform(services: AppServices, moduleRegistry?: WorkspaceModuleRegistry): Promise<void> {
+async function exportVcdWaveform(services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): Promise<void> {
   const activeUri = vscode.window.activeTextEditor?.document.uri;
   const simTime = getSimTime(activeUri);
   const simOutDir = await simulationOutputDirectory(activeUri, vscode.Uri.file(path.join(workspaceFolderFor(activeUri)?.uri.fsPath ?? process.cwd(), '.co', 'isim')));
@@ -569,7 +569,7 @@ async function ensureRunnableTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
   showMessages: boolean,
-  moduleRegistry?: WorkspaceModuleRegistry
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<TestbenchResolution | undefined> {
   const configuredTestbench = getTestbench(resource);
   const activeTestbench = await activeTestbenchModuleName(resource, configuredTestbench);
@@ -622,7 +622,7 @@ async function ensureActiveModuleTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
   showMessages: boolean,
-  moduleRegistry?: WorkspaceModuleRegistry
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<TestbenchResolution | undefined> {
   const definition = await activeModuleDefinition(resource);
   if (!definition) {
@@ -662,7 +662,7 @@ async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string):
 async function resolveNamedTestbench(
   testbenchName: string,
   resource: vscode.Uri | undefined,
-  moduleRegistry?: WorkspaceModuleRegistry
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<TestbenchResolution | undefined> {
   const existing = resource
     ? await findExistingTestbenchResolution(resource, testbenchName, moduleRegistry)
@@ -681,7 +681,7 @@ interface ExistingTestbenchSearchResult {
 async function findExistingTestbenchResolution(
   resource: vscode.Uri,
   tbName: string,
-  moduleRegistry?: WorkspaceModuleRegistry
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<ExistingTestbenchSearchResult> {
   const candidates = await testbenchCandidates(resource, tbName, moduleRegistry);
   if (!candidates.length) {
@@ -717,7 +717,7 @@ async function findExistingTestbenchResolution(
 async function testbenchCandidates(
   resource: vscode.Uri,
   tbName: string,
-  moduleRegistry?: WorkspaceModuleRegistry
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<Array<{ module: VerilogModule; uri: vscode.Uri }>> {
   const seen = new Set<string>();
   const candidates: Array<{ module: VerilogModule; uri: vscode.Uri }> = [];
@@ -895,7 +895,7 @@ function isTestbenchModule(module: { name: string; ports: unknown[] }, configure
 async function findTopModuleDefinition(
   resource: vscode.Uri | undefined,
   topName: string,
-  moduleRegistry?: WorkspaceModuleRegistry
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<VerilogModuleDefinition | undefined> {
   if (!topName.trim()) {
     return undefined;

@@ -3,7 +3,7 @@ import { Range as LspRange } from 'vscode-languageserver/node';
 import { parseVerilog } from './language/verilog/service';
 import { analyzeSignalWiring, SignalWiringEntry, SignalWiringEntryKind } from './language/verilog/signalWiring';
 import { coSettingsForUri, toTextDocument } from './verilog';
-import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
+import type { VerilogModuleProvider } from './language/verilog/moduleProvider';
 
 const placeholderMessage = '将光标放在 Verilog 信号上以查看其连线';
 
@@ -34,7 +34,7 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
   private cacheKey: string | undefined;
   private cacheParsed: ReturnType<typeof parseVerilog> | undefined;
 
-  constructor(private readonly moduleRegistry: WorkspaceModuleRegistry) {}
+  constructor(private readonly moduleRegistry: VerilogModuleProvider) {}
 
   update(editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor): void {
     this.compute(editor);
@@ -150,7 +150,7 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
   }
 }
 
-export function registerVerilogSignalView(context: vscode.ExtensionContext, moduleRegistry: WorkspaceModuleRegistry): void {
+export function registerVerilogSignalView(context: vscode.ExtensionContext, moduleRegistry: VerilogModuleProvider): void {
   const provider = new VerilogSignalWiringProvider(moduleRegistry);
   const treeView = vscode.window.createTreeView('coVerilogSignal', { treeDataProvider: provider });
   context.subscriptions.push(treeView);

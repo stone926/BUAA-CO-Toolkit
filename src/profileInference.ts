@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ProfileResolverFile, ProfileResolverInput } from './profileResolver';
-import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
+import type { VerilogModuleProvider } from './language/verilog/moduleProvider';
 
 const scanTtlMs = 2000;
 const maxProfileFiles = 3000;
@@ -10,7 +10,7 @@ const scanCache = new Map<string, { timestamp: number; files: ProfileResolverFil
 
 export function buildProfileInferenceInput(
   resource: vscode.Uri | undefined,
-  moduleRegistry: WorkspaceModuleRegistry
+  moduleRegistry: VerilogModuleProvider
 ): Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'> {
   const activeResource = resource ?? currentTextDocument()?.uri;
   const activeDocument = documentFor(activeResource);

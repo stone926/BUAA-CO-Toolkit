@@ -4,13 +4,14 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseModules } from './moduleParser';
 import { VerilogModule } from './model';
+import type { MutableVerilogModuleProvider } from './moduleProvider';
 
 /**
  * 扩展宿主侧的工作空间模块注册表。
  * 后台扫描工作空间文件夹中所有 .v 文件，提取模块声明信息（模块名、端口名及方向）。
  * 供 sidebar 连线分析等跨文件模块查找使用。
  */
-export class WorkspaceModuleRegistry {
+export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private readonly modules = new Map<string, VerilogModule[]>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private _scanning = true;
