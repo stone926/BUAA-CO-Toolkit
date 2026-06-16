@@ -153,7 +153,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 ### Verilog
 高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
 - 侧边栏「操作」保留 ISim 运行、波形查看和信号连线；
-- 生成 Testbench、ISE 语法检查在 Verilog 右键菜单；ISE 工程生成和 VCD 导出放在「更多工具...」。
+- 生成 Testbench、ISE 语法检查、信号连线在 Verilog 右键菜单；ISE 工程生成和 VCD 导出放在「更多工具...」。
 - **信号连线面板**：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。该面板默认只在 Verilog 上下文或执行“查看信号连线”后出现。
 
 ### 语义着色与主题适配
@@ -174,7 +174,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 - 在「更多工具...」中提供冲突分析和打开报告（需配置 `co.toolchain.hazardCalculator`）。
 
 ### 项目辅助
-- 命令面板只保留 `CO: 项目向导`、`CO: 选择项目 Profile`、`CO: 检查工具链`、`CO: 打开课程教程`、持续测试启动/停止、ASM 用例记录和 `CO: 更多工具`。
+- 命令面板只保留 `CO: 项目向导`、`CO: 选择项目 Profile`、`CO: 检查工具链`、`CO: 打开课程教程`、持续测试启动/停止、ASM 用例记录和 `CO: 更多工具`。其余命令仅通过侧边栏或编辑器上下文菜单触发，不出现在命令面板中。
 
 ---
 
@@ -215,7 +215,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.test.continuousIntervalMs` | `1000` | 持续测试两轮间隔（毫秒） |
 | `co.test.continuousMaxIterations` | `0` | 持续测试最大轮数（0=不限） |
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
-| `co.test.generatorArgs` | `[]` | 传给外部生成器的额外参数 |
+| `co.test.generatorArgs` | `[]` | 传给内置/外部生成器的额外参数（如种子、数量） |
 | `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
 | `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
 | `co.test.logisim.traceColumns` | `{}` | P3 Logisim Trace stdout 显式列映射，零基列号 |
@@ -336,7 +336,7 @@ Mars 的 `coL1` 输出被本插件自动解析和对拍。`anchor` 精确对拍�
 | $0 写入 | **不输出**（与 testbench `$0` 过滤一致） |
 | hi/lo 写入 | **不输出**（MDU 内部寄存器，testbench 不追踪） |
 | CP0 写入 | **不输出**（`mtc0` 不可见于 `$display` trace） |
-| MMIO 写入 | **不输出**（Timer `0x7F00~0x7F1B`、中断响应 `0x7F20`，与 testbench 一致） |
+| MMIO 写入 | **不输出**（Timer0 `0x7F00~0x7F08`、Timer1 `0x7F10~0x7F18`、中断响应 `0x7F20`，与 testbench 一致） |
 | 内存地址 | 字对齐（`addr & ~0x3`），与 testbench `fixed_addr = m_data_addr & 32'hfffffffc` 一致 |
 
 ### 插件端参数映射
