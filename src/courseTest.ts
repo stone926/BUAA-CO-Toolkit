@@ -7,9 +7,6 @@ import {
   getBuiltinGeneratorInstructionCount,
   getBuiltinGeneratorP7InstructionCount,
   getBuiltinGeneratorInstructions,
-  getContinuousIntervalMs,
-  getContinuousMaxIterations,
-  getContinuousStopOnFailure,
   getGeneratedAsmLimit,
   getGeneratorArgs,
   getJava,
@@ -38,14 +35,7 @@ import {
   generateBuiltinAsmTestCase,
   P7ProbeMetadata
 } from './courseTesting/builtinAsmGenerator';
-import {
-  checkP7Probe
-} from './courseTesting/p7ProbeCheck';
-import {
-  continuousCounts,
-  continuousStatus,
-  shouldStopAfterIteration
-} from './courseTesting/continuous';
+import { checkP7Probe } from './courseTesting/p7ProbeCheck';
 import {
   buildGeneratorInvocation,
   changedAsmFiles,
@@ -87,7 +77,7 @@ import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { checkToolchain } from './toolchain';
 import { runIsim } from './verilog';
-import { AppServices, ProjectProfile, RunResult, ToolDetection } from './types';
+import { AppServices, ProjectProfile, RunResult } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
@@ -106,13 +96,16 @@ import { AsmCaseSource } from './asmCaseStoreCore';
 import {
   batchSummary,
   renderAsmCaseIndex,
-  renderContinuousTraceMonitor,
   showBatchTraceReport,
   showLogisimPrepareReport
 } from './courseTestReport';
+import {
+  startContinuousGeneratedTraceTests,
+  stopContinuousTests
+} from './courseTestContinuous';
+import type { ContinuousGeneratedTraceDependencies } from './courseTestContinuous';
+import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
 import type {
-  ContinuousTraceIteration,
-  ContinuousTraceReport,
   CourseTraceBatchReport,
   CourseTraceBatchSource,
   CourseTraceCaseResult,
@@ -186,21 +179,13 @@ interface LogisimCliTraceRun {
   pcError?: string;
 }
 
-interface ContinuousTraceSession {
-  stopRequested: boolean;
-  report: ContinuousTraceReport;
-  reportFile: vscode.Uri;
-  panel: vscode.WebviewPanel;
-}
-
-let activeContinuousTraceSession: ContinuousTraceSession | undefined;
-
 export function registerCourseTest(context: vscode.ExtensionContext, services: AppServices): void {
+  const continuousTraceDependencies = createContinuousTraceDependencies();
   context.subscriptions.push(
     vscode.commands.registerCommand('co.test.runFullTest', () => runFullCourseTraceTest(services)),
     vscode.commands.registerCommand('co.test.runBatchTraceTests', () => runBatchCourseTraceTests(services)),
     vscode.commands.registerCommand('co.test.runGeneratedTraceTests', () => runGeneratedCourseTraceTests(services)),
-    vscode.commands.registerCommand('co.test.startContinuousGeneratedTraceTests', () => startContinuousGeneratedTraceTests(services)),
+    vscode.commands.registerCommand('co.test.startContinuousGeneratedTraceTests', () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand('co.test.generateAsmTests', () => generateAsmTests(services)),
     vscode.commands.registerCommand('co.test.generateAndDumpAsmTests', () => generateAndDumpAsmTests(services)),
     vscode.commands.registerCommand('co.test.stopContinuousTests', () => stopContinuousTests()),
@@ -210,6 +195,21 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
     vscode.commands.registerCommand('co.test.openBatchTraceReport', () => openBatchTraceReport()),
     vscode.commands.registerCommand('co.test.openAsmCaseIndex', () => openAsmCaseIndex())
   );
+}
+
+function createContinuousTraceDependencies(): ContinuousGeneratedTraceDependencies<GeneratorRunSetup, CourseTraceCaseInput, AsmCase, CourseTraceRunOptions> {
+  return {
+    resolveGeneratorRunSetup,
+    generatorResource,
+    generatorFolder: (setup) => setup.folder,
+    generatorLabel,
+    generatorCommandLine,
+    generatorCwd,
+    resolveCourseTraceRunOptions,
+    runGeneratorAndCollectAsms,
+    expandTraceCases,
+    runCourseTraceCase
+  };
 }
 
 async function runFullCourseTraceTest(services: AppServices): Promise<void> {
@@ -286,157 +286,6 @@ async function diagnoseP3LogisimTraceCircuit(services: AppServices): Promise<voi
   } else {
     vscode.window.showErrorMessage(`P3 Logisim Trace 电路诊断失败：${report.errors[0] ?? '无法解析 trace 端口'}`);
   }
-}
-
-async function startContinuousGeneratedTraceTests(services: AppServices): Promise<void> {
-  if (activeContinuousTraceSession) {
-    vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行');
-    return;
-  }
-
-  await vscode.workspace.saveAll(false);
-  const setup = await resolveGeneratorRunSetup();
-  if (!setup) {
-    return;
-  }
-  if (!await ensureContinuousTraceToolchainReady(services, generatorResource(setup))) {
-    return;
-  }
-  const baseRunOptions = await resolveCourseTraceRunOptions(services, generatorResource(setup), { revealOutput: false });
-  if (!baseRunOptions) {
-    return;
-  }
-
-  const intervalMs = getContinuousIntervalMs(generatorResource(setup));
-  const maxIterations = getContinuousMaxIterations(generatorResource(setup));
-  const stopOnFailure = getContinuousStopOnFailure(generatorResource(setup));
-  const outDir = vscode.Uri.file(path.join(setup.folder.uri.fsPath, '.co', 'out'));
-  await ensureDirectory(outDir);
-  const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
-  const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
-    enableScripts: false,
-    retainContextWhenHidden: true
-  });
-  const session: ContinuousTraceSession = {
-    stopRequested: false,
-    reportFile,
-    panel,
-    report: {
-      generatedAt: new Date().toISOString(),
-      running: true,
-      stopRequested: false,
-      generator: generatorLabel(setup),
-      commandLine: generatorCommandLine(setup),
-      cwd: generatorCwd(setup),
-      options: {
-        intervalMs,
-        maxIterations,
-        stopOnFailure
-      },
-      iterations: []
-    }
-  };
-  activeContinuousTraceSession = session;
-  panel.onDidDispose(() => {
-    session.stopRequested = true;
-  });
-
-  services.output.appendLine('');
-  services.output.appendLine('正在启动持续生成 Trace 测试');
-  services.output.appendLine(`生成器: ${generatorLabel(setup)}`);
-  services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大轮数: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
-
-  try {
-    await updateContinuousTraceMonitor(session);
-    let index = 0;
-    while (!session.stopRequested && (maxIterations === 0 || index < maxIterations)) {
-      index++;
-      services.statusBar.text = `CO: Continuous #${index}`;
-      const iteration: ContinuousTraceIteration = {
-        index,
-        status: 'running',
-        startedAt: new Date().toISOString(),
-        summary: continuousCounts([]),
-        results: []
-      };
-      session.report.iterations.unshift(iteration);
-      await updateContinuousTraceMonitor(session);
-
-      services.output.appendLine('');
-      services.output.appendLine(`Continuous iteration #${index}`);
-      try {
-        const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
-        if (!generated?.asms.length) {
-          iteration.status = 'error';
-          iteration.message = '生成器已完成，但未检测到新建或修改的 ASM 文件';
-          services.output.appendLine(iteration.message);
-        } else {
-          iteration.source = generated.source;
-          const cases = await expandTraceCases(generated.asms, generated.asmCases);
-          for (let i = 0; i < cases.length; i++) {
-            if (session.stopRequested) {
-              break;
-            }
-            const item = cases[i];
-            services.output.appendLine(`[iteration ${index}, case ${i + 1}/${cases.length}] ${item.asm.fsPath}`);
-            try {
-              iteration.results.push(await runCourseTraceCase(services, item, {
-                ...baseRunOptions,
-                revealOutput: false,
-                source: generated.source
-              }));
-            } catch (error) {
-              iteration.results.push({
-                asm: item.asm.fsPath,
-                stdin: item.stdin?.fsPath,
-                status: 'error',
-                stage: 'compare',
-                message: error instanceof Error ? error.message : String(error)
-              });
-            }
-            iteration.summary = continuousCounts(iteration.results);
-            iteration.status = continuousStatus(iteration.results, true, session.stopRequested);
-            await updateContinuousTraceMonitor(session);
-          }
-          iteration.summary = continuousCounts(iteration.results);
-          iteration.status = continuousStatus(iteration.results, false, session.stopRequested);
-        }
-      } catch (error) {
-        iteration.status = 'error';
-        iteration.message = error instanceof Error ? error.message : String(error);
-      }
-
-      iteration.finishedAt = new Date().toISOString();
-      iteration.summary = continuousCounts(iteration.results);
-      if (iteration.status === 'running') {
-        iteration.status = continuousStatus(iteration.results, false, session.stopRequested);
-      }
-      await updateContinuousTraceMonitor(session);
-
-      if (session.stopRequested || shouldStopAfterIteration(iteration.results, stopOnFailure) || iteration.status === 'error') {
-        break;
-      }
-      await delay(intervalMs);
-    }
-  } finally {
-    session.report.running = false;
-    session.report.stopRequested = session.stopRequested;
-    services.statusBar.text = 'CO: Continuous stopped';
-    await updateContinuousTraceMonitor(session);
-    if (activeContinuousTraceSession === session) {
-      activeContinuousTraceSession = undefined;
-    }
-  }
-}
-
-function stopContinuousTests(): void {
-  if (!activeContinuousTraceSession) {
-    vscode.window.showInformationMessage('当前没有正在运行的持续测试');
-    return;
-  }
-  activeContinuousTraceSession.stopRequested = true;
-  activeContinuousTraceSession.report.stopRequested = true;
-  vscode.window.showInformationMessage('将在当前工具运行完成后停止持续测试');
 }
 
 async function runCourseTraceBatch(
@@ -2110,62 +1959,6 @@ function resolveCaseInterruptSchedule(asm: vscode.Uri): number[] | undefined {
   return schedule.length ? schedule : undefined;
 }
 
-async function ensureContinuousTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {
-  revealOutputChannel(services.output, resource);
-  services.output.appendLine('');
-  services.output.appendLine('正在检查持续生成 Trace 测试工具链');
-
-  const profile = await ensureConcreteProfile(resource, '持续生成 Trace 测试需要先确定项目 Profile');
-  if (!profile) {
-    return false;
-  }
-  const memoryConfiguration = getMemoryConfiguration(resource);
-  const configurationError = courseTraceMemoryConfigurationError(profile, memoryConfiguration);
-  if (configurationError) {
-    services.output.appendLine(configurationError);
-    vscode.window.showErrorMessage(configurationError);
-    return false;
-  }
-
-  const checks = await checkToolchain(services.output, resource, profile === 'P3' ? { tools: ['java', 'mars', 'logisim'] } : {});
-  const required = requiredContinuousTraceChecks(profile, memoryConfiguration);
-  const failed = checks.filter((check) => required.has(check.name) && !check.ok);
-  if (!failed.length) {
-    return true;
-  }
-
-  const message = `持续生成测试工具链检查失败：${failed.map(formatToolchainFailure).join('；')}`;
-  services.output.appendLine(message);
-  vscode.window.showErrorMessage(message);
-  return false;
-}
-
-function courseTraceMemoryConfigurationError(profile: ProjectProfile, memoryConfiguration: string): string | undefined {
-  if (profile === 'P7') {
-    return memoryConfiguration === 'CompactLargeText'
-      ? undefined
-      : `P7 持续生成测试必须使用 CompactLargeText，当前为 ${memoryConfiguration}`;
-  }
-  return memoryConfiguration === 'FixedCompactLargeText' || memoryConfiguration === 'CompactLargeText'
-    ? undefined
-    : `非 P7 Trace 测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 ${memoryConfiguration}`;
-}
-
-function requiredContinuousTraceChecks(profile: ProjectProfile, memoryConfiguration: string): Set<string> {
-  if (profile === 'P3') {
-    return new Set(['Java', 'MARS', 'MARS coL1', 'Logisim', `MARS ${memoryConfiguration}`]);
-  }
-  const names = new Set(['Java', 'MARS', 'MARS coL1', 'ISE fuse']);
-  if (profile !== 'P7') {
-    names.add(`MARS ${memoryConfiguration}`);
-  }
-  return names;
-}
-
-function formatToolchainFailure(check: ToolDetection): string {
-  return `${check.name} ${check.detail}${check.suggestion ? `（${check.suggestion}）` : ''}`;
-}
-
 function marsStageFailureMessage(prefix: string, result?: RunResult): string {
   const detail = firstNonEmptyLine(result?.stderr) ?? firstNonEmptyLine(result?.stdout);
   return detail ? `${prefix}: ${detail}` : prefix;
@@ -2228,18 +2021,6 @@ async function writeLogisimPrepareReport(
   return report;
 }
 
-async function updateContinuousTraceMonitor(session: ContinuousTraceSession): Promise<void> {
-  session.report.stopRequested = session.stopRequested;
-  session.report.generatedAt = new Date().toISOString();
-  await writeTextFile(session.reportFile, JSON.stringify(session.report, null, 2) + '\n');
-  try {
-    session.panel.webview.html = renderContinuousTraceMonitor(session.report, session.reportFile);
-  } catch {
-    // Webview 已关闭或不可更新时停止持续测试会话
-    session.stopRequested = true;
-  }
-}
-
 async function resolveBatchTraceReport(): Promise<vscode.Uri | undefined> {
   const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
   if (folder) {
@@ -2275,8 +2056,4 @@ async function resolveBatchTraceReport(): Promise<vscode.Uri | undefined> {
 function isAsmFile(uri: vscode.Uri): boolean {
   const ext = path.extname(uri.fsPath).toLowerCase();
   return ext === '.asm' || ext === '.s' || ext === '.mips';
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
 }
