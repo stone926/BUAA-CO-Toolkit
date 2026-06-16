@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, resolvePython } from './config';
-import { cleanupCoTmp, coTmpDir } from './fsUtil';
+import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
 import { ToolDetection } from './types';
@@ -68,7 +68,7 @@ export async function checkToolchain(
 
   if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
     const mars = getMarsJar(resource);
-    const marsFile = fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactLargeText dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
+    const marsFile = await fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactLargeText dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
     checks.push(marsFile);
     if (marsFile.ok) {
       checks.push(...await marsCapabilityChecks(output, resource, cwd, mars, profile));
@@ -77,15 +77,15 @@ export async function checkToolchain(
 
   if (checkAll || requiredTools.has('logisim')) {
     const logisim = getLogisimJar(resource);
-    checks.push(fileCheck('Logisim', logisim, '请设置 co.toolchain.logisim'));
+    checks.push(await fileCheck('Logisim', logisim, '请设置 co.toolchain.logisim'));
   }
 
   if (checkAll || requiredTools.has('ise')) {
     const ise = getIsePath(resource);
     const fuse = ise ? findFuse(ise) : '';
     const isimGui = ise ? findIsimGui(ise) : '';
-    const fuseOk = Boolean(fuse && fs.existsSync(fuse));
-    const isimGuiOk = Boolean(isimGui && fs.existsSync(isimGui));
+    const fuseOk = Boolean(fuse && await isFile(fuse));
+    const isimGuiOk = Boolean(isimGui && await isFile(isimGui));
     checks.push({
       name: 'ISE fuse',
       ok: fuseOk,
@@ -102,7 +102,7 @@ export async function checkToolchain(
 
   const hazardDir = getHazardCalculator(resource);
   if (hazardDir || profile === 'P5' || profile === 'P6' || profile === 'P7') {
-    checks.push(hazardDirCheck(hazardDir));
+    checks.push(await hazardDirCheck(hazardDir));
   }
 
   return checks;
@@ -118,7 +118,7 @@ async function marsCapabilityChecks(
   const tempDir = coTmpDir(resource, 'co-mars-check-');
   try {
     const asm = path.join(tempDir, 'capability.asm');
-    fs.writeFileSync(asm, '.text\nori $1, $0, 1\nsw $1, 0($0)\n', 'utf8');
+    await fs.promises.writeFile(asm, '.text\nori $1, $0, 1\nsw $1, 0($0)\n', 'utf8');
     const java = getJava(resource);
     if (profile === 'P7') {
       return [
@@ -171,7 +171,7 @@ async function memoryConfigurationCapabilityCheck(
   });
   const combined = `${result.stdout}\n${result.stderr}`;
   const unsupported = /Invalid memory configuration/i.test(combined);
-  const dumped = fs.existsSync(outFile) && fs.readFileSync(outFile, 'utf8').trim().length > 0;
+  const dumped = await fileHasText(outFile);
   return {
     name: `MARS ${memoryConfiguration}`,
     ok: result.ok && !unsupported && dumped,
@@ -180,7 +180,7 @@ async function memoryConfigurationCapabilityCheck(
   };
 }
 
-function fileCheck(name: string, file: string, suggestion: string): ToolDetection {
+async function fileCheck(name: string, file: string, suggestion: string): Promise<ToolDetection> {
   if (!file) {
     return {
       name,
@@ -189,7 +189,7 @@ function fileCheck(name: string, file: string, suggestion: string): ToolDetectio
       suggestion
     };
   }
-  const exists = fs.existsSync(file);
+  const exists = await isFile(file);
   return {
     name,
     ok: exists,
@@ -198,7 +198,15 @@ function fileCheck(name: string, file: string, suggestion: string): ToolDetectio
   };
 }
 
-function hazardDirCheck(dir: string): ToolDetection {
+async function fileHasText(file: string): Promise<boolean> {
+  try {
+    return (await fs.promises.readFile(file, 'utf8')).trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function hazardDirCheck(dir: string): Promise<ToolDetection> {
   if (!dir) {
     return {
       name: '冲突分析',
@@ -207,8 +215,8 @@ function hazardDirCheck(dir: string): ToolDetection {
       suggestion: '请设置 co.toolchain.hazardCalculator 为 hazard_analysis 目录'
     };
   }
-  const jarExists = fs.existsSync(path.join(dir, 'Hazard-Calculator.jar'));
-  const analyzerExists = fs.existsSync(path.join(dir, 'analyzer.py'));
+  const jarExists = await isFile(path.join(dir, 'Hazard-Calculator.jar'));
+  const analyzerExists = await isFile(path.join(dir, 'analyzer.py'));
   const ok = jarExists && analyzerExists;
   const missing = [
     !jarExists && 'Hazard-Calculator.jar',
