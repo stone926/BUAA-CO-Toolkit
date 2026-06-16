@@ -67,7 +67,7 @@ export function registerHazard(context: vscode.ExtensionContext, services: AppSe
   );
 }
 
-function resolveHazardDir(resource?: vscode.Uri): HazardToolPaths | undefined {
+async function resolveHazardDir(resource?: vscode.Uri): Promise<HazardToolPaths | undefined> {
   const dir = getHazardCalculator(resource);
   if (!dir) {
     vscode.window.showErrorMessage(
@@ -77,11 +77,11 @@ function resolveHazardDir(resource?: vscode.Uri): HazardToolPaths | undefined {
   }
   const jar = path.join(dir, 'Hazard-Calculator.jar');
   const analyzer = path.join(dir, 'analyzer.py');
-  if (!fs.existsSync(jar)) {
+  if (!await safeIsFile(jar)) {
     vscode.window.showErrorMessage(`未找到 Hazard-Calculator.jar：${dir}`);
     return undefined;
   }
-  if (!fs.existsSync(analyzer)) {
+  if (!await safeIsFile(analyzer)) {
     vscode.window.showErrorMessage(`未找到 analyzer.py：${dir}`);
     return undefined;
   }
@@ -105,7 +105,7 @@ async function runHazardAnalysis(services: AppServices): Promise<void> {
     return;
   }
 
-  const setup = resolveHazardDir(resource ?? folder.uri);
+  const setup = await resolveHazardDir(resource ?? folder.uri);
   if (!setup) {
     return;
   }
@@ -142,7 +142,7 @@ async function runHazardAnalysis(services: AppServices): Promise<void> {
     return;
   }
 
-  const report = findHazardReportIn(prepared.resultDir);
+  const report = await findHazardReportIn(prepared.resultDir);
   if (!report) {
     vscode.window.showWarningMessage('冲突分析完成，但未找到统计报告 JSON');
     return;
@@ -183,7 +183,7 @@ async function resolveMachineCodeForHazard(
   candidates.push(path.resolve(folder.uri.fsPath, configured));
 
   for (const candidate of dedupePaths(candidates)) {
-    if (safeIsFile(candidate)) {
+    if (await safeIsFile(candidate)) {
       return vscode.Uri.file(candidate);
     }
   }
@@ -279,7 +279,7 @@ async function copyFileIfDifferent(src: string, dst: string): Promise<void> {
 async function openHazardReport(): Promise<void> {
   const folder = findWorkspaceFolder(vscode.window.activeTextEditor?.document.uri);
   const reportDir = folder ? path.join(folder.uri.fsPath, '.co', 'hazard', 'result') : undefined;
-  const report = reportDir ? findHazardReportIn(reportDir) : undefined;
+  const report = reportDir ? await findHazardReportIn(reportDir) : undefined;
   if (report) {
     await showHazardReportWebview(vscode.Uri.file(report));
     return;
@@ -293,21 +293,22 @@ async function openHazardReport(): Promise<void> {
   }
 }
 
-function findHazardReportIn(directory: string): string | undefined {
-  if (!fs.existsSync(directory)) {
+async function findHazardReportIn(directory: string): Promise<string | undefined> {
+  if (!await safeIsDirectory(directory)) {
     return undefined;
   }
-  const statisticReports = fs.readdirSync(directory)
-    .filter((file) => file.endsWith('_statistic_hazard.json'))
-    .map((file) => path.join(directory, file))
-    .filter((file) => fs.existsSync(file))
-    .sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs);
+  const statisticReports = await hazardStatisticReports(directory);
   const candidates = [
     ...statisticReports,
     path.join(directory, 'hazard_statistic.json'),
     path.join(directory, 'hazard.json')
   ];
-  return candidates.find((file) => fs.existsSync(file));
+  for (const file of candidates) {
+    if (await safeIsFile(file)) {
+      return file;
+    }
+  }
+  return undefined;
 }
 
 async function showHazardReportWebview(report: vscode.Uri, prepared?: PreparedHazardRun): Promise<void> {
@@ -768,10 +769,52 @@ function dedupePaths(files: string[]): string[] {
   return result;
 }
 
-function safeIsFile(file: string): boolean {
+async function hazardStatisticReports(directory: string): Promise<string[]> {
+  let entries: string[];
   try {
-    return fs.statSync(file).isFile();
+    entries = await fs.promises.readdir(directory);
   } catch {
+    // 报告目录不可读时交给调用方回退到手动选择
+    return [];
+  }
+  const reports = await Promise.all(
+    entries
+      .filter((file) => file.endsWith('_statistic_hazard.json'))
+      .map(async (file) => {
+        const fullPath = path.join(directory, file);
+        const mtimeMs = await safeMtimeMs(fullPath);
+        return mtimeMs === undefined ? undefined : { file: fullPath, mtimeMs };
+      })
+  );
+  return reports
+    .filter((item): item is { file: string; mtimeMs: number } => Boolean(item))
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .map((item) => item.file);
+}
+
+async function safeMtimeMs(file: string): Promise<number | undefined> {
+  try {
+    return (await fs.promises.stat(file)).mtimeMs;
+  } catch {
+    // 报告文件可能在枚举后被删除
+    return undefined;
+  }
+}
+
+async function safeIsDirectory(directory: string): Promise<boolean> {
+  try {
+    return (await fs.promises.stat(directory)).isDirectory();
+  } catch {
+    // 目录不存在或无权限时按无报告处理
+    return false;
+  }
+}
+
+async function safeIsFile(file: string): Promise<boolean> {
+  try {
+    return (await fs.promises.stat(file)).isFile();
+  } catch {
+    // 文件不存在或无权限时按不可用处理
     return false;
   }
 }
