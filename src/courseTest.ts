@@ -39,27 +39,16 @@ import {
   isSupportedGeneratorFile,
   snapshotAsmFiles
 } from './courseTesting/generator';
-import { preparedCircuitFileName } from './courseTesting/logisimPrep';
-import {
-  formatLogisimTraceEvents,
-  parseLogisimTraceOutput,
-  P3LogisimMachineCode,
-  prepareP3LogisimMachineCode,
-  setLogisimMainCircuit,
-  validateP3LogisimFetchTrace
-} from './courseTesting/logisimTrace';
 import {
   compareTraces,
-  firstTraceDiffSnapshot,
-  TraceDiffResult
+  firstTraceDiffSnapshot
 } from './language/mips/traceCompare';
 import { parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
-import { injectMachineCodeIntoLogisimRom, parseMachineCodeWords } from './language/logisim/rom';
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { runIsim } from './verilog';
-import { AppServices, ProjectProfile, RunResult } from './types';
+import { AppServices, ProjectProfile } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
@@ -86,11 +75,10 @@ import {
 import type { ContinuousGeneratedTraceDependencies } from './courseTestContinuous';
 import {
   diagnoseP3LogisimTraceCircuit,
-  p3LogisimRomCapacityError,
   resolveLogisimCircuitInput,
   resolveP3LogisimTraceSetup,
   runLogisimPrepareBatch,
-  runLogisimTraceCli
+  runP3LogisimTraceCase
 } from './courseTestLogisim';
 import type { P3LogisimTraceSetup } from './courseTestLogisim';
 import {
@@ -104,6 +92,11 @@ import type {
   CourseTraceBatchSource,
   CourseTraceCaseResult
 } from './courseTestReport';
+import {
+  normalizePathKey,
+  simOutputFileNameForCase
+} from './courseTestTraceFiles';
+import { diffMessage, marsStageFailureMessage } from './courseTestMessages';
 
 const stdinExtensions = ['.in', '.input', '.stdin', '.dat'];
 const stdinSubdirectories = ['input', 'inputs', 'test', 'tests', 'data'];
@@ -493,232 +486,6 @@ async function runCourseTraceCase(
   };
 }
 
-async function runP3LogisimTraceCase(
-  services: AppServices,
-  item: CourseTraceCaseInput,
-  options: CourseTraceRunOptions = {}
-): Promise<CourseTraceCaseResult> {
-  const asm = item.asm;
-  services.output.appendLine('P3 Logisim Trace 测试');
-  services.output.appendLine(`ASM: ${asm.fsPath}`);
-  if (item.stdin) {
-    return {
-      asm: asm.fsPath,
-      stdin: item.stdin.fsPath,
-      status: 'error',
-      stage: 'logisim',
-      message: 'P3 Logisim Trace 对拍不支持标准输入用例'
-    };
-  }
-
-  const setup = options.logisim ?? await resolveP3LogisimTraceSetup(services, asm);
-  if (!setup) {
-    return {
-      asm: asm.fsPath,
-      status: 'error',
-      stage: 'logisim',
-      message: '测试中止：未准备 Logisim Trace 电路'
-    };
-  }
-
-  const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
-    source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
-    resource: setup.circuit
-  });
-  services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
-  services.output.appendLine(`Logisim 电路: ${setup.circuit.fsPath}`);
-  services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
-  await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-diagnostic.txt', setup.traceDiagnostic, 'traceDiagnostic');
-
-  const dump = await prepareAsmCaseMachineCode(services, asmCase, {
-    showMessages: false,
-    revealOutput: options.revealOutput,
-    courseTrace: true
-  });
-  if (!dump?.result.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.result), undefined, undefined, asmCase);
-  }
-  services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
-
-  let logisimCode: P3LogisimMachineCode;
-  try {
-    logisimCode = prepareP3LogisimMachineCode(await readTextFile(asmCase.machineCode));
-    const capacityError = p3LogisimRomCapacityError(setup.romTarget, logisimCode.terminatedWordCount);
-    if (capacityError) {
-      return failedCase(item, 'logisim', capacityError, asmCase.machineCode, undefined, asmCase);
-    }
-  } catch (error) {
-    return failedCase(
-      item,
-      'logisim',
-      error instanceof Error ? error.message : String(error),
-      asmCase.machineCode,
-      undefined,
-      asmCase
-    );
-  }
-  services.output.appendLine(`Logisim 停机 PC: 0x${logisimCode.haltPcHex}`);
-
-  let preparedCircuit: vscode.Uri;
-  try {
-    const injected = injectMachineCodeIntoLogisimRom(setup.circuitText, logisimCode.text, setup.romTarget.index);
-    const derivedText = setLogisimMainCircuit(injected.text, setup.traceCircuit);
-    const folder = workspaceFolderFor(setup.circuit) ?? workspaceFolderFor(asm);
-    const baseDir = folder?.uri.fsPath ?? path.dirname(setup.circuit.fsPath);
-    const circuitName = preparedCircuitFileName(setup.circuit.fsPath, asm.fsPath, baseDir);
-    preparedCircuit = await writeAsmCaseArtifact(asmCase, 'logisim', circuitName, derivedText, 'preparedCircuit');
-    await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-code.txt', logisimCode.text, 'machineCodeWithHalt');
-    await updateAsmCaseArtifacts(asmCase, 'logisim', {
-      circuitTemplate: setup.circuit.fsPath,
-      traceCircuit: setup.traceCircuit,
-      haltPc: logisimCode.haltPcHex
-    });
-  } catch (error) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      stage: 'logisim',
-      message: error instanceof Error ? error.message : String(error),
-      machineCode: asmCase.machineCode.fsPath
-    };
-  }
-
-  const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
-    showMessages: false,
-    revealOutput: options.revealOutput,
-    traceOutput: true
-  });
-  if (!mars?.result.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), asmCase.machineCode, undefined, asmCase);
-  }
-  await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
-
-  const logisimRun = await runLogisimTraceCli(
-    services,
-    setup,
-    preparedCircuit,
-    logisimCode.haltPcHex,
-    asm,
-    options.revealOutput !== false
-  );
-  const outDir = courseTraceOutputDirectory(asm);
-  await ensureDirectory(outDir);
-  const rawOut = vscode.Uri.file(path.join(outDir.fsPath, logisimRawOutputFileNameForCase(item)));
-  await writeTextFile(rawOut, logisimRun.stdout);
-  await copyAsmCaseArtifact(asmCase, 'logisim', rawOut, path.basename(rawOut.fsPath), 'logisimOut');
-
-  if (!logisimRun.result.ok) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      stage: 'logisim',
-      message: marsStageFailureMessage('测试中止：Logisim 命令行运行失败', logisimRun.result),
-      machineCode: asmCase.machineCode.fsPath,
-      marsOut: mars.outputFile.fsPath,
-      logisimOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: logisimRun.rowsSeen
-    };
-  }
-
-  let parsedLogisim;
-  try {
-    parsedLogisim = parseLogisimTraceOutput(logisimRun.stdout, setup.traceSpec);
-    const fetchValidation = validateP3LogisimFetchTrace(
-      parsedLogisim.rows,
-      setup.traceSpec,
-      parseMachineCodeWords(logisimCode.text),
-      logisimCode.haltPcHex
-    );
-    for (const warning of fetchValidation.warnings) {
-      services.output.appendLine(`Logisim fetch check: ${warning}`);
-    }
-  } catch (error) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      stage: 'logisim',
-      message: error instanceof Error ? error.message : String(error),
-      machineCode: asmCase.machineCode.fsPath,
-      marsOut: mars.outputFile.fsPath,
-      logisimOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: logisimRun.rowsSeen
-    };
-  }
-
-  const simTrace = vscode.Uri.file(path.join(outDir.fsPath, simOutputFileNameForCase(item)));
-  await writeTextFile(simTrace, formatLogisimTraceEvents(parsedLogisim.events));
-  await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
-
-  const marsText = await readTextFile(mars.outputFile);
-  const marsEvents = parseMarsOutput(marsText);
-  const diff = compareTraces(marsEvents, parsedLogisim.events, { compareCycles: defaultTraceCompareMode.compareCycles });
-
-  if (!marsEvents.length && !parsedLogisim.events.length) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'passed',
-      stage: 'compare',
-      message: 'PC/Instr 校验通过，双方没有可见 GRF/DM 写事件',
-      machineCode: asmCase.machineCode.fsPath,
-      marsOut: mars.outputFile.fsPath,
-      simOut: simTrace.fsPath,
-      logisimOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: parsedLogisim.rows.length,
-      marsEvents: 0,
-      simEvents: 0,
-      matchedEvents: 0,
-      diffEvents: 0
-    };
-  }
-
-  if (!marsEvents.length || !parsedLogisim.events.length) {
-    return {
-      asm: asm.fsPath,
-      ...caseResultFields(asmCase),
-      status: 'error',
-      stage: 'compare',
-      message: '某一端没有可解析的 Trace 事件',
-      machineCode: asmCase.machineCode.fsPath,
-      marsOut: mars.outputFile.fsPath,
-      simOut: simTrace.fsPath,
-      logisimOut: rawOut.fsPath,
-      logisimCircuit: preparedCircuit.fsPath,
-      logisimRows: parsedLogisim.rows.length,
-      marsEvents: marsEvents.length,
-      simEvents: parsedLogisim.events.length,
-      matchedEvents: diff.summary.matchedEvents,
-      diffEvents: diff.summary.diffEvents
-    };
-  }
-
-  return {
-    asm: asm.fsPath,
-    ...caseResultFields(asmCase),
-    status: diff.matched ? 'passed' : 'failed',
-    stage: 'compare',
-    message: diffMessage(diff),
-    machineCode: asmCase.machineCode.fsPath,
-    marsOut: mars.outputFile.fsPath,
-    simOut: simTrace.fsPath,
-    logisimOut: rawOut.fsPath,
-    logisimCircuit: preparedCircuit.fsPath,
-    logisimRows: parsedLogisim.rows.length,
-    firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
-    firstDiff: firstTraceDiffSnapshot(diff),
-    marsEvents: diff.summary.marsEvents,
-    simEvents: diff.summary.simEvents,
-    matchedEvents: diff.summary.matchedEvents,
-    diffEvents: diff.summary.diffEvents
-  };
-}
-
 async function resolveAsmInput(): Promise<vscode.Uri | undefined> {
   const editor = vscode.window.activeTextEditor;
   if (editor && editor.document.uri.scheme === 'file' && isAsmFile(editor.document.uri)) {
@@ -1050,28 +817,6 @@ async function expandTraceCases(asms: vscode.Uri[], asmCases?: AsmCase[]): Promi
   return cases;
 }
 
-function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
-  return `${traceOutputStem(item)}.sim.out`;
-}
-
-function traceOutputStem(item: CourseTraceCaseInput): string {
-  const asmName = path.basename(item.asm.fsPath, path.extname(item.asm.fsPath));
-  if (!item.stdin) {
-    return asmName;
-  }
-  const stdinName = path.basename(item.stdin.fsPath, path.extname(item.stdin.fsPath));
-  return `${asmName}.${sanitizeTraceFileStem(stdinName)}`;
-}
-
-function sanitizeTraceFileStem(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';
-}
-
-function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-}
-
 async function resolveActiveGeneratorInput(): Promise<vscode.Uri | undefined> {
   const editor = vscode.window.activeTextEditor;
   if (editor && editor.document.uri.scheme === 'file' && isSupportedGeneratorFile(editor.document.uri.fsPath)) {
@@ -1168,16 +913,6 @@ async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vs
     Generator: ['py', 'js', 'mjs', 'cjs', 'jar', 'bat', 'cmd', 'exe', 'ps1'],
     All: ['*']
   });
-}
-
-function courseTraceOutputDirectory(resource: vscode.Uri): vscode.Uri {
-  const folder = workspaceFolderFor(resource);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
-  return vscode.Uri.file(path.join(baseDir, '.co', 'out'));
-}
-
-function logisimRawOutputFileNameForCase(item: CourseTraceCaseInput): string {
-  return `${traceOutputStem(item)}.logisim.out`;
 }
 
 async function findStdinCandidatesForAsm(asm: vscode.Uri): Promise<vscode.Uri[]> {
@@ -1416,23 +1151,6 @@ function resolveCaseInterruptSchedule(asm: vscode.Uri): number[] | undefined {
   }
   const schedule = readInterruptScheduleSidecar(asm);
   return schedule.length ? schedule : undefined;
-}
-
-function marsStageFailureMessage(prefix: string, result?: RunResult): string {
-  const detail = firstNonEmptyLine(result?.stderr) ?? firstNonEmptyLine(result?.stdout);
-  return detail ? `${prefix}: ${detail}` : prefix;
-}
-
-function firstNonEmptyLine(text?: string): string | undefined {
-  return text?.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
-}
-
-function diffMessage(diff: TraceDiffResult): string {
-  if (diff.matched) {
-    return `${diff.summary.matchedEvents} events matched.`;
-  }
-  const first = diff.entries[diff.firstDiffIndex];
-  return `First difference at event #${diff.firstDiffIndex + 1}: ${first.reason ?? first.status}.`;
 }
 
 async function writeBatchTraceReport(
