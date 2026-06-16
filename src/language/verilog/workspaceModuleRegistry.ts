@@ -112,11 +112,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private indexDocument(document: vscode.TextDocument): void {
     try {
       const text = document.getText();
-      const parsed = parseModules(
-        TextDocument.create(document.uri.toString(), 'verilog', document.version, text),
-        text
-      );
-      this.addModules(parsed);
+      this.indexFileText(document.uri.toString(), text, document.version);
     } catch {
       // 解析失败则跳过该文件
     }
@@ -133,16 +129,20 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     }
     try {
       const text = fs.readFileSync(filePath, 'utf8');
-      const parsed = parseModules(
-        TextDocument.create(uri, 'verilog', 0, text),
-        text
-      );
-      // 清除该文件的旧条目后再添加
-      this.removeDocument(uri);
-      this.addModules(parsed);
+      this.indexFileText(uri, text, 0);
     } catch {
       // 读取失败或解析失败则跳过
     }
+  }
+
+  private indexFileText(uri: string, text: string, version: number): void {
+    const parsed = parseModules(
+      TextDocument.create(uri, 'verilog', version, text),
+      text
+    );
+    // 清除该文件的旧条目后再添加
+    this.removeDocument(uri);
+    this.addModules(parsed);
   }
 
   private addModules(modules: VerilogModule[]): void {
@@ -175,17 +175,13 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       if (batch.length < 20) {
         continue;
       }
-      for (const file of batch) {
-        this.indexFile(file);
-      }
+      await this.indexFileBatch(batch);
       batch.length = 0;
       await yieldEventLoop();
     }
 
     if (!this._disposed && batch.length) {
-      for (const file of batch) {
-        this.indexFile(file);
-      }
+      await this.indexFileBatch(batch);
       await yieldEventLoop();
     }
     this._scanning = false;
@@ -220,6 +216,25 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
         }
       }
       await yieldEventLoop();
+    }
+  }
+
+  private async indexFileBatch(files: readonly string[]): Promise<void> {
+    await Promise.all(files.map((file) => this.indexFileAsync(file)));
+  }
+
+  private async indexFileAsync(filePath: string): Promise<void> {
+    if (this._disposed) {
+      return;
+    }
+    const uri = vscode.Uri.file(filePath).toString();
+    try {
+      const text = await fs.promises.readFile(filePath, 'utf8');
+      if (!this._disposed) {
+        this.indexFileText(uri, text, 0);
+      }
+    } catch {
+      // 初始扫描中读取或解析失败的文件直接跳过
     }
   }
 }
