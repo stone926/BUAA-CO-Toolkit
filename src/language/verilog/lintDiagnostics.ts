@@ -1,4 +1,4 @@
-import { Diagnostic, DiagnosticSeverity } from 'vscode-languageserver/node';
+import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
@@ -10,26 +10,16 @@ import {
   safeRegExp,
 } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
-import { collectNamingDiagnostics } from './lintNamingRules';
-import { collectInstantiationStyleDiagnostics } from './lintInstantiationRules';
 import {
-  collectExplicitWidthDiagnostics,
-  collectInoutDiagnostics
-} from './lintDeclarationRules';
-import {
-  findTopLevelToken,
-  nextToken,
-  previousToken,
-  tokenRange,
-  trimStatementTokens
-} from './lintUtils';
-import { collectMagicNumberDiagnostics } from './lintMagicNumberRules';
-import { collectAlwaysStyleDiagnostics } from './lintAlwaysRules';
-import { isClockSignalName } from './lintSignalNames';
-import {
-  collectTestbenchDiagnostics,
-  isTestbenchModule
-} from './lintTestbenchRules';
+  assignmentRhsContainsIdentifier,
+  collectAlwaysBlocksFromCst,
+  collectProceduralBlocksFromCst,
+  edgeSignalsFromSensitivity,
+  hasAnyTokenValue,
+  hasTokenValue,
+  isOffsetInsideForControl,
+  VerilogProceduralBlockAst
+} from './blockAst';
 
 export function collectAssignmentDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
@@ -317,6 +307,315 @@ function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument):
   return false;
 }
 
+function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, cst: VerilogCstDocument, module: VerilogModule, diagnostics: Diagnostic[]): void {
+  const blocks = collectAlwaysBlocksFromCst(document, cst, module);
+  const assignedBlocks = new Map<string, Set<number>>();
+  for (let index = 0; index < blocks.length; index++) {
+    const block = blocks[index];
+    const blockCst = cstFromTokenRange(cst, block.bodyStart, block.bodyEnd);
+    if (block.combinational) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
+      }
+      if (isVerilogLintRuleEnabled(settings, 'vc-007') && hasTokenValue(block.bodyTokens, '<=')) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-007: combinational always blocks should use blocking assignments (=), not nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-007-comb-nonblocking'));
+      }
+      if (isVerilogLintRuleEnabled(settings, 'vc-008') && hasTokenValue(block.bodyTokens, 'if') && !hasTokenValue(block.bodyTokens, 'else')) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-008: combinational if statements should cover every branch to avoid inferred latches.', DiagnosticSeverity.Information, 'vc-008-comb-branch'));
+      }
+      if (isVerilogLintRuleEnabled(settings, 'vc-008') && hasAnyTokenValue(block.bodyTokens, new Set(['case', 'casex', 'casez'])) && !hasTokenValue(block.bodyTokens, 'default')) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-008: combinational case statements should include default assignments to avoid inferred latches.', DiagnosticSeverity.Information, 'vc-008-case-default'));
+      }
+    }
+
+    if (block.sequential) {
+      const edgeSignals = edgeSignalsFromSensitivity(block.sensitivityTokens);
+      if (isVerilogLintRuleEnabled(settings, 'vc-009') && !hasPosedgeSignal(block.sensitivityTokens)) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-009: sequential logic should be implemented in always @(posedge clock) blocks.', DiagnosticSeverity.Warning, 'vc-009-seq-posedge'));
+      }
+      if (isVerilogLintRuleEnabled(settings, 'vc-011') && hasTokenValue(block.sensitivityTokens, 'negedge')) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-011: avoid negedge-triggered logic unless a protocol explicitly requires it.', DiagnosticSeverity.Warning, 'vc-011-negedge'));
+      }
+      for (const signal of edgeSignals) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-012') && !isClockOrResetSignal(signal)) {
+          diagnostics.push(makeDiagnostic(block.headerRange, `VC-012: edge trigger on '${signal}' is not a clock/reset signal.`, DiagnosticSeverity.Warning, 'vc-012-edge-signal'));
+        }
+      }
+      if (isVerilogLintRuleEnabled(settings, 'vc-014') && edgeSignals.length > 1) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', DiagnosticSeverity.Information, 'vc-014-sync-reset'));
+      }
+      const assignments = collectAssignmentsFromTokens(document, blockCst, 0, index);
+      for (const assignment of assignments) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=' && !isOffsetInsideForControl(block.bodyTokens, document.offsetAt(assignment.range.start))) {
+          diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-010-seq-blocking'));
+        }
+      }
+      const clockSignals = edgeSignals.filter(isClockSignalName);
+      for (const clock of clockSignals) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-013') && assignmentRhsContainsIdentifier(block.bodyTokens, clock)) {
+          diagnostics.push(makeDiagnostic(block.headerRange, `VC-013: clock signal '${clock}' should not be used as data inside sequential logic.`, DiagnosticSeverity.Information, 'vc-013-clock-data'));
+        }
+      }
+    }
+
+    for (const assignment of collectAssignmentsFromTokens(document, blockCst, 0, index)) {
+      const set = assignedBlocks.get(assignment.name) ?? new Set<number>();
+      set.add(index);
+      assignedBlocks.set(assignment.name, set);
+    }
+  }
+  for (const [name, blockIndexes] of assignedBlocks) {
+    if (isVerilogLintRuleEnabled(settings, 'vc-005') && blockIndexes.size > 1) {
+      const decl = module.declarations.get(name);
+      diagnostics.push(makeDiagnostic(decl?.selectionRange ?? module.selectionRange, `VC-005: signal '${name}' is assigned in multiple always blocks.`, DiagnosticSeverity.Warning, 'vc-005-multiple-always'));
+    }
+  }
+}
+
+function collectNamingDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
+  const styleCounts = new Map<string, number>();
+  for (const decl of module.declarations.values()) {
+    const style = identifierStyle(decl.name);
+    if (!style) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-001')) {
+        diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-001: signal '${decl.name}' should use snake_case, camelCase, or PascalCase.`, DiagnosticSeverity.Information, 'vc-001-name-style'));
+      }
+    } else {
+      styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
+    }
+    if (isVerilogLintRuleEnabled(settings, 'vc-002') && looksLowActiveWithoutSuffix(decl.name)) {
+      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-002: low-active signal '${decl.name}' should use the _n suffix.`, DiagnosticSeverity.Information, 'vc-002-low-active-suffix'));
+    }
+    if (isVerilogLintRuleEnabled(settings, 'vc-003') && /mux/i.test(decl.name) && !/\d/.test(decl.name)) {
+      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-003: multiplexer signal '${decl.name}' should reflect its width or input count.`, DiagnosticSeverity.Information, 'vc-003-mux-name'));
+    }
+  }
+  if (isVerilogLintRuleEnabled(settings, 'vc-001') && styleCounts.size > 1) {
+    diagnostics.push(makeDiagnostic(module.selectionRange, 'VC-001: this module mixes signal naming styles; keep one of snake_case, camelCase, or PascalCase consistently.', DiagnosticSeverity.Information, 'vc-001-mixed-name-style'));
+  }
+}
+
+function collectInstantiationStyleDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
+  if (!isVerilogLintRuleEnabled(settings, 'vc-017')) {
+    return;
+  }
+  for (const instance of module.instances) {
+    if (instance.portConnections.some((connection) => !connection.name)) {
+      diagnostics.push(makeDiagnostic(instance.selectionRange, `Testbench/VC-017: instance '${instance.instanceName}' should use named port mapping.`, DiagnosticSeverity.Information, 'vc-017-named-ports'));
+    }
+    if (instance.portConnections.length > 1 && instance.range.start.line === instance.range.end.line) {
+      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should use multi-line formatting with one port connection per line.`, DiagnosticSeverity.Information, 'vc-017-multiline-instance'));
+    }
+    const lines = new Set(instance.portConnections.map((connection) => connection.range.start.line));
+    if (lines.size < instance.portConnections.length) {
+      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should place each port connection on a separate line.`, DiagnosticSeverity.Information, 'vc-017-one-port-per-line'));
+    }
+  }
+}
+
+function collectExplicitWidthDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
+  if (!isVerilogLintRuleEnabled(settings, 'vc-021')) {
+    return;
+  }
+  for (const decl of module.declarations.values()) {
+    if (decl.kind === 'parameter' || decl.kind === 'localparam' || decl.kind === 'integer' || decl.kind === 'genvar') {
+      continue;
+    }
+    if (!decl.width && !['clk', 'clock', 'reset', 'rst'].includes(decl.name.toLowerCase())) {
+      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-021: signal '${decl.name}' should declare an explicit width, even if it is 1 bit.`, DiagnosticSeverity.Information, 'vc-021-explicit-width'));
+    }
+  }
+}
+
+function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSettings, text: string, module: VerilogModule, cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+  if (!isVerilogLintRuleEnabled(settings, 'vc-004')) {
+    return;
+  }
+  const bodyStart = document.offsetAt(module.headerEnd);
+  const bodyEnd = document.offsetAt(module.range.end);
+  for (const token of cst.codeTokens) {
+    if (token.kind !== 'number' || token.start < bodyStart || token.start >= bodyEnd) {
+      continue;
+    }
+    const statement = cst.statements.find((item) => token.start >= item.start && token.start < item.end);
+    const statementTokens = statement ? trimStatementTokens(statement.tokens) : [];
+    if (
+      statementTokens.some((item) => item.value === 'parameter' || item.value === 'localparam' || item.value === '`define') ||
+      isTrivialLiteralToken(token.value) ||
+      isInsideBracketRangeTokens(statementTokens, token)
+    ) {
+      continue;
+    }
+    diagnostics.push(makeDiagnostic(tokenRange(document, token), 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
+  }
+}
+
+function collectInoutDiagnostics(settings: CoSettings, module: VerilogModule, diagnostics: Diagnostic[]): void {
+  if (!isVerilogLintRuleEnabled(settings, 'vc-015')) {
+    return;
+  }
+  const topName = settings.project.topModule.trim() || 'mips';
+  if (module.name === topName) {
+    return;
+  }
+  for (const port of module.ports) {
+    if (port.direction === 'inout') {
+      diagnostics.push(makeDiagnostic(port.selectionRange, `VC-015: internal module '${module.name}' should not use inout port '${port.name}'.`, DiagnosticSeverity.Warning, 'vc-015-inout'));
+    }
+  }
+}
+
+function collectTestbenchDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+  for (const module of modules) {
+    if (!isTestbenchModule(module, settings)) {
+      continue;
+    }
+    const bodyStart = document.offsetAt(module.headerEnd);
+    const bodyEnd = document.offsetAt(module.range.end);
+    const body = text.slice(bodyStart, bodyEnd);
+    const proceduralBlocks = collectProceduralBlocksFromCst(document, cst, module);
+    if (!/`timescale\s+1ns\s*\/\s*1ps/.test(text)) {
+      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: standard course testbenches should use `timescale 1ns / 1ps.', DiagnosticSeverity.Information, 'tb-timescale'));
+    }
+    if (!hasTestbenchClockGeneration(module, proceduralBlocks)) {
+      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: include clk generation logic.', DiagnosticSeverity.Information, 'tb-clock'));
+    }
+    if (!/\breset\b/.test(body)) {
+      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: include reset generation logic.', DiagnosticSeverity.Information, 'tb-reset'));
+    }
+    if (!/\$readmemh\s*\(\s*"code\.txt"/.test(body)) {
+      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: use $readmemh("code.txt", im) to load machine code when simulating CPU projects.', DiagnosticSeverity.Information, 'tb-readmemh'));
+    }
+  }
+}
+
+function hasTestbenchClockGeneration(module: VerilogModule, blocks: VerilogProceduralBlockAst[]): boolean {
+  const clockNames = declaredClockNames(module);
+  if (!clockNames.size) {
+    return false;
+  }
+  for (const block of blocks) {
+    if (block.kind === 'always') {
+      if (block.controlKind === 'event') {
+        continue;
+      }
+      if (block.controlKind === 'delay' && findClockToggleAssignment(block.bodyTokens, clockNames) >= 0) {
+        return true;
+      }
+      if (block.controlKind === 'none' && hasDelayBeforeClockToggle(block.bodyTokens, clockNames)) {
+        return true;
+      }
+      continue;
+    }
+    if (block.kind === 'initial' && hasForeverDelayClockToggle(block.bodyTokens, clockNames)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function declaredClockNames(module: VerilogModule): Set<string> {
+  return new Set([...module.declarations.keys()].filter(isClockSignalName));
+}
+
+function hasForeverDelayClockToggle(tokens: VerilogToken[], clockNames: Set<string>): boolean {
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].value !== 'forever') {
+      continue;
+    }
+    const end = proceduralStatementWindowEnd(tokens, index + 1);
+    if (end <= index) {
+      continue;
+    }
+    if (hasDelayBeforeClockToggle(tokens.slice(index, end + 1), clockNames)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasDelayBeforeClockToggle(tokens: VerilogToken[], clockNames: Set<string>): boolean {
+  const assignmentIndex = findClockToggleAssignment(tokens, clockNames);
+  if (assignmentIndex < 0) {
+    return false;
+  }
+  const prefix = tokens.slice(0, assignmentIndex);
+  return prefix.some((token) => token.value === '#') && !prefix.some((token) => token.value === '@' || token.value === 'wait');
+}
+
+function findClockToggleAssignment(tokens: VerilogToken[], clockNames: Set<string>): number {
+  for (let index = 0; index <= tokens.length - 4; index++) {
+    const target = tokens[index];
+    if (target.kind !== 'identifier' || !clockNames.has(target.value)) {
+      continue;
+    }
+    const operator = tokens[index + 1];
+    const inverter = tokens[index + 2];
+    const source = tokens[index + 3];
+    if (
+      (operator.value === '=' || operator.value === '<=') &&
+      (inverter.value === '~' || inverter.value === '!') &&
+      source.kind === 'identifier' &&
+      source.value === target.value
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function proceduralStatementWindowEnd(tokens: VerilogToken[], start: number): number {
+  for (let index = start; index < tokens.length; index++) {
+    if (tokens[index].value === 'begin') {
+      const end = findMatchingBeginEndToken(tokens, index);
+      return end >= 0 ? end : index;
+    }
+    if (tokens[index].value === ';') {
+      return index;
+    }
+  }
+  return tokens.length - 1;
+}
+
+function findMatchingBeginEndToken(tokens: VerilogToken[], beginIndex: number): number {
+  let depth = 0;
+  for (let index = beginIndex; index < tokens.length; index++) {
+    if (tokens[index].value === 'begin') {
+      depth++;
+    } else if (tokens[index].value === 'end') {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function tokenRange(document: TextDocument, token: VerilogToken): Range {
+  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
+}
+
+function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
+  const result = tokens.filter((token) => token.kind !== 'eof');
+  return result[result.length - 1]?.value === ';' ? result.slice(0, -1) : result;
+}
+
+function previousToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
+  for (let current = index - 1; current >= 0; current--) {
+    if (tokens[current].kind !== 'eof') {
+      return tokens[current];
+    }
+  }
+  return undefined;
+}
+
+function isTestbenchModule(module: VerilogModule, settings: CoSettings): boolean {
+  const configured = settings.project.testbench.trim().toLowerCase();
+  const name = module.name.toLowerCase();
+  return name.includes('tb') || (configured !== '' && name === configured);
+}
+
 function isMduModule(module: VerilogModule): boolean {
   return module.name.toLowerCase() === 'mdu';
 }
@@ -360,6 +659,103 @@ function hasDirectiveBeforeOnLine(document: TextDocument, tokens: VerilogToken[]
   return false;
 }
 
+function nextToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
+  for (let current = index + 1; current < tokens.length; current++) {
+    if (tokens[current].kind !== 'eof') {
+      return tokens[current];
+    }
+  }
+  return undefined;
+}
+
+function findTopLevelToken(tokens: VerilogToken[], value: string): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isTrivialLiteralToken(value: string): boolean {
+  const parsed = parseVerilogLiteral(value);
+  return parsed !== undefined && (parsed === 0n || parsed === 1n);
+}
+
+function isInsideBracketRangeTokens(tokens: VerilogToken[], target: VerilogToken): boolean {
+  const index = tokens.indexOf(target);
+  if (index < 0) {
+    return false;
+  }
+  let left = index - 1;
+  while (left >= 0 && tokens[left].value !== '[' && tokens[left].value !== ';') {
+    if (tokens[left].value === ']') {
+      return false;
+    }
+    left--;
+  }
+  if (tokens[left]?.value !== '[') {
+    return false;
+  }
+  let right = index + 1;
+  while (right < tokens.length && tokens[right].value !== ']' && tokens[right].value !== ';') {
+    right++;
+  }
+  return tokens[right]?.value === ']';
+}
+
+function parseVerilogLiteral(value: string): bigint | undefined {
+  const apostrophe = value.indexOf("'");
+  if (apostrophe < 0) {
+    return parseDecimalBigInt(value);
+  }
+  const sizeAndBase = value.slice(apostrophe + 1).split('_').join('');
+  const baseChar = [...sizeAndBase].find((char) => {
+    const lower = char.toLowerCase();
+    return lower === 'b' || lower === 'o' || lower === 'd' || lower === 'h';
+  });
+  if (!baseChar) {
+    return undefined;
+  }
+  const digits = sizeAndBase.slice(sizeAndBase.indexOf(baseChar) + 1);
+  if (!digits || [...digits].some((char) => char === 'x' || char === 'X' || char === 'z' || char === 'Z' || char === '?')) {
+    return undefined;
+  }
+  const radix = baseChar.toLowerCase() === 'b' ? 2 : baseChar.toLowerCase() === 'o' ? 8 : baseChar.toLowerCase() === 'd' ? 10 : 16;
+  let result = 0n;
+  for (const char of digits) {
+    const digit = parseInt(char, radix);
+    if (!Number.isInteger(digit) || digit < 0 || digit >= radix) {
+      return undefined;
+    }
+    result = result * BigInt(radix) + BigInt(digit);
+  }
+  return result;
+}
+
+function parseDecimalBigInt(value: string): bigint | undefined {
+  if (![...value].every((char) => char === '_' || (char >= '0' && char <= '9'))) {
+    return undefined;
+  }
+  return BigInt(value.split('_').join(''));
+}
+
 function cstWithStatements(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
   return cstFromStatements(cst, cst.statements.filter((statement) => statement.end > start && statement.start < end));
 }
@@ -369,6 +765,65 @@ function cstFromStatements(cst: VerilogCstDocument, statements: VerilogCstStatem
     ...cst,
     statements
   };
+}
+
+function cstFromTokenRange(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
+  return cstFromStatements(
+    cst,
+    cst.statements
+      .map((statement) => {
+        const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
+        if (!tokens.length) {
+          return undefined;
+        }
+        return {
+          ...statement,
+          tokens,
+          start: tokens[0].start,
+          end: tokens[tokens.length - 1].end
+        };
+      })
+      .filter((statement): statement is VerilogCstStatement => Boolean(statement))
+  );
+}
+
+function hasPosedgeSignal(tokens: VerilogToken[]): boolean {
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].value !== 'posedge') {
+      continue;
+    }
+    if (tokens.slice(index + 1).some((token) => token.kind === 'identifier')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function identifierStyle(name: string): 'snake' | 'camel' | 'pascal' | undefined {
+  if (/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name)) {
+    return 'snake';
+  }
+  if (/^[a-z][A-Za-z0-9]*$/.test(name)) {
+    return 'camel';
+  }
+  if (/^[A-Z][A-Za-z0-9]*$/.test(name)) {
+    return 'pascal';
+  }
+  return undefined;
+}
+
+function looksLowActiveWithoutSuffix(name: string): boolean {
+  const lower = name.toLowerCase();
+  return !lower.endsWith('_n') && /(?:^|_)(?:nreset|nrst|rstn|resetn|wen|webar|enbar)(?:_|$)/.test(lower);
+}
+
+function isClockOrResetSignal(name: string): boolean {
+  return /(?:^|_)(?:clk|clock|rst|reset|clr|clear)(?:_n)?(?:_|$)/i.test(name);
+}
+
+function isClockSignalName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.includes('clk') || lower.includes('clock');
 }
 
 function isTrivialLiteral(value: string): boolean {

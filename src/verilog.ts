@@ -20,7 +20,7 @@ import {
   VerilogModule
 } from './language/verilog/service';
 import { ensureDirectory, isFile, pathExists, workspaceFolderFor, writeTextFile } from './fsUtil';
-import { launchTool, revealOutputChannel, runTool } from './process';
+import { revealOutputChannel, runTool } from './process';
 import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
 import { P7ProbeMetadata } from './courseTesting/builtinAsmGenerator';
@@ -38,8 +38,6 @@ import {
 import {
   buildIseProjectText,
   buildIsimRunTcl,
-  buildIsimVcdTcl,
-  buildIsimWaveTcl,
   generatedRuntimeTestbenchText,
   isGeneratedRuntimeTestbench,
   p7AutoRuntimeTestbenchName,
@@ -47,6 +45,16 @@ import {
   verilogProjectExcludeGlob
 } from './verilogSimulationFiles';
 import { sha256Bytes } from './asmCaseStoreCore';
+import {
+  exportVcdWaveform,
+  openIsimWaveform
+} from './verilogWaveform';
+import {
+  isimOutputFileName,
+  normalizePathKey,
+  samePath,
+  simulationOutputDirectory
+} from './verilogIsimOutput';
 
 export interface IseProjectFiles {
   prj: vscode.Uri;
@@ -122,8 +130,8 @@ export function registerVerilog(context: vscode.ExtensionContext, services: AppS
     vscode.commands.registerCommand('co.verilog.generateIseProject', () => generateIseProject(services)),
     vscode.commands.registerCommand('co.verilog.checkSyntaxWithIse', () => checkSyntaxWithIse()),
     vscode.commands.registerCommand('co.verilog.runIsim', () => runIsim(services, { moduleRegistry })),
-    vscode.commands.registerCommand('co.verilog.openIsimWaveform', () => openIsimWaveform(services, moduleRegistry)),
-    vscode.commands.registerCommand('co.verilog.exportVcd', () => exportVcdWaveform(services, moduleRegistry))
+    vscode.commands.registerCommand('co.verilog.openIsimWaveform', () => openIsimWaveform(services, { compileIsim, moduleRegistry })),
+    vscode.commands.registerCommand('co.verilog.exportVcd', () => exportVcdWaveform(services, { compileIsim, moduleRegistry }))
   );
 }
 
@@ -289,80 +297,6 @@ export async function runIsim(
   return { generated: compiled.generated, fuseResult: compiled.fuseResult, simResult, simOut };
 }
 
-async function openIsimWaveform(services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): Promise<void> {
-  const activeUri = vscode.window.activeTextEditor?.document.uri;
-  const simTime = getSimTime(activeUri);
-  const compiled = await compileIsim(services, {
-    resource: activeUri,
-    moduleRegistry,
-    debug: true,
-    tclFileName: 'co_wave.tcl',
-    tclText: buildIsimWaveTcl(simTime)
-  });
-  if (!compiled) {
-    return;
-  }
-  const isePath = getIsePath(activeUri);
-  const iseEnv = buildIseEnvironment(isePath);
-  const result = await launchTool(compiled.exePath, ['-gui', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
-    cwd: compiled.generated.outDir.fsPath,
-    output: services.output,
-    resource: activeUri,
-    env: iseEnv
-  });
-  if (result.ok) {
-    if (compiled.asmCase) {
-      await updateAsmCaseArtifacts(compiled.asmCase, 'verilog', {
-        waveTcl: compiled.generated.tcl.fsPath,
-        isimExecutable: compiled.exePath
-      });
-    }
-    vscode.window.showInformationMessage('已启动 ISim 波形窗口');
-  } else {
-    vscode.window.showErrorMessage('启动 ISim 波形窗口失败。请查看插件输出面板');
-  }
-}
-
-async function exportVcdWaveform(services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): Promise<void> {
-  const activeUri = vscode.window.activeTextEditor?.document.uri;
-  const simTime = getSimTime(activeUri);
-  const simOutDir = await simulationOutputDirectory(activeUri, vscode.Uri.file(path.join(workspaceFolderFor(activeUri)?.uri.fsPath ?? process.cwd(), '.co', 'isim')));
-  const preliminaryTestbenchName = getTestbench(activeUri);
-  const preliminaryVcd = vscode.Uri.file(path.join(simOutDir.fsPath, `${preliminaryTestbenchName}.vcd`));
-  const compiled = await compileIsim(services, {
-    resource: activeUri,
-    moduleRegistry,
-    debug: true,
-    tclFileName: 'co_vcd.tcl',
-    tclText: buildIsimVcdTcl(preliminaryVcd.fsPath, preliminaryTestbenchName, simTime)
-  });
-  if (!compiled) {
-    return;
-  }
-
-  const vcd = vscode.Uri.file(path.join(simOutDir.fsPath, `${compiled.testbenchName}.vcd`));
-  if (!samePath(vcd.fsPath, preliminaryVcd.fsPath)) {
-    await writeTextFile(compiled.generated.tcl, buildIsimVcdTcl(vcd.fsPath, compiled.testbenchName, simTime));
-  }
-  const isePath = getIsePath(activeUri);
-  const iseEnv = buildIseEnvironment(isePath);
-  const result = await runTool(compiled.exePath, ['-nolog', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
-    cwd: compiled.generated.outDir.fsPath,
-    output: services.output,
-    resource: activeUri,
-    env: iseEnv
-  });
-  if (result.ok && await pathExists(vcd.fsPath)) {
-    if (compiled.asmCase) {
-      await copyAsmCaseArtifact(compiled.asmCase, 'verilog', vcd, path.basename(vcd.fsPath), 'vcd');
-    }
-    await vscode.commands.executeCommand('revealFileInOS', vcd);
-    vscode.window.showInformationMessage(`已导出 VCD 波形：${path.basename(vcd.fsPath)}`);
-  } else {
-    vscode.window.showErrorMessage('导出 VCD 波形失败。请查看插件输出面板');
-  }
-}
-
 async function compileIsim(
   services: AppServices,
   options: CompileIsimOptions = {}
@@ -502,19 +436,6 @@ async function ensureSimulationAsmCase(
 
 function requiresAsmCase(resource: vscode.Uri | undefined): boolean {
   return new Set(['P4', 'P5', 'P6', 'P7']).has(getProfile(resource));
-}
-
-function isimOutputFileName(top: string, configured?: string): string {
-  const trimmed = configured?.trim();
-  return trimmed ? path.basename(trimmed) : `${top}.sim.out`;
-}
-
-async function simulationOutputDirectory(resource: vscode.Uri | undefined, isimDir: vscode.Uri): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(isimDir) ?? vscode.workspace.workspaceFolders?.[0];
-  const baseDir = folder?.uri.fsPath ?? path.dirname(path.dirname(isimDir.fsPath));
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'out'));
-  await ensureDirectory(outDir);
-  return outDir;
 }
 
 /**
@@ -1064,15 +985,6 @@ async function copyMachineCodeToSimDirectory(
   await ensureDirectory(vscode.Uri.file(path.dirname(target.fsPath)));
   const content = await vscode.workspace.fs.readFile(source);
   await vscode.workspace.fs.writeFile(target, content);
-}
-
-function samePath(left: string, right: string): boolean {
-  return normalizePathKey(left) === normalizePathKey(right);
-}
-
-function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 function isCoPath(file: string): boolean {
