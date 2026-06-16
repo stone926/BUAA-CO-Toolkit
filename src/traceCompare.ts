@@ -137,14 +137,22 @@ async function findLatestTracePair(folder: vscode.WorkspaceFolder): Promise<Trac
 
 async function findLatestFile(folder: vscode.WorkspaceFolder, pattern: string): Promise<vscode.Uri | undefined> {
   const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, pattern), undefined, 100);
-  const existing = files
-    .filter((uri) => fs.existsSync(uri.fsPath))
-    .map((uri) => ({
-      uri,
-      mtime: fs.statSync(uri.fsPath).mtimeMs
-    }))
+  const existing = (await Promise.all(files.map(async (uri) => {
+    const mtime = await safeMtimeMs(uri.fsPath);
+    return mtime === undefined ? undefined : { uri, mtime };
+  })))
+    .filter((item): item is { uri: vscode.Uri; mtime: number } => Boolean(item))
     .sort((left, right) => right.mtime - left.mtime);
   return existing[0]?.uri;
+}
+
+async function safeMtimeMs(file: string): Promise<number | undefined> {
+  try {
+    return (await fs.promises.stat(file)).mtimeMs;
+  } catch {
+    // 文件可能在 VSCode 搜索返回后被删除
+    return undefined;
+  }
 }
 
 function showTraceCompareReport(
