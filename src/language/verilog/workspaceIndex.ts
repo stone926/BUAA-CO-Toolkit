@@ -3,11 +3,12 @@ import * as path from 'path';
 import { WorkspaceFolder } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
+import { rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
 import { VerilogCstDocument } from './cst';
-import { VerilogSemanticModel } from './semanticModel';
+import { VerilogSemanticModel, VerilogSemanticSymbol, VerilogSemanticSymbolKind } from './semanticModel';
 import { yieldEventLoop } from '../../nodeFs';
 
 export interface VerilogIndexedFile {
@@ -197,8 +198,40 @@ export class VerilogWorkspaceIndex {
     return [...this.indexedFiles()];
   }
 
+  allSymbols(): VerilogSemanticSymbol[] {
+    return this.indexedFiles().flatMap((file) => file.semantic.symbols);
+  }
+
   getFile(uri: string): VerilogIndexedFile | undefined {
     return this.files.get(uri);
+  }
+
+  getSemantic(uri: string): VerilogSemanticModel | undefined {
+    return this.files.get(uri)?.semantic;
+  }
+
+  getModuleSemantic(module: VerilogModule): VerilogSemanticModel | undefined {
+    return this.getSemantic(module.uri);
+  }
+
+  getModuleSymbols(module: VerilogModule): VerilogSemanticSymbol[] {
+    const semantic = this.getModuleSemantic(module);
+    if (!semantic) {
+      return [];
+    }
+    return semantic.symbols.filter((symbol) => sameModuleIdentity(symbol.module, module));
+  }
+
+  findModuleSymbol(
+    module: VerilogModule,
+    name: string,
+    kinds?: readonly VerilogSemanticSymbolKind[]
+  ): VerilogSemanticSymbol | undefined {
+    const kindSet = kinds ? new Set(kinds) : undefined;
+    return this.getModuleSymbols(module).find((symbol) =>
+      symbol.name === name &&
+      (!kindSet || kindSet.has(symbol.kind))
+    );
   }
 
   indexedFiles(): readonly VerilogIndexedFile[] {
@@ -266,6 +299,14 @@ function removeByUri<T>(map: Map<string, T[]>, key: string, uri: string, getUri:
   } else {
     map.delete(key);
   }
+}
+
+function sameModuleIdentity(left: VerilogModule | undefined, right: VerilogModule): boolean {
+  if (!left) {
+    return false;
+  }
+  return left === right ||
+    (left.uri === right.uri && left.name === right.name && rangesEqual(left.selectionRange, right.selectionRange));
 }
 
 async function* scanVerilogFiles(root: string, limit: number): AsyncGenerator<string> {

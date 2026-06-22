@@ -66,7 +66,8 @@ import {
   verilogSemanticReferenceRanges,
   verilogSemanticTargetFromSymbol,
   VerilogSemanticModel,
-  VerilogSemanticResolution
+  VerilogSemanticResolution,
+  VerilogSemanticSymbol
 } from './semanticModel';
 
 export { buildTestbench, parseVerilog, moduleAtPosition };
@@ -100,6 +101,8 @@ interface ResolvedPortConnection {
   connection: VerilogPortConnection;
   targetModule: VerilogModule;
   targetPort: VerilogDecl;
+  targetSymbol?: VerilogSemanticSymbol;
+  listKind: VerilogConnectionListKind;
 }
 
 interface ResolvedMacro {
@@ -113,6 +116,8 @@ interface ResolvedInclude {
   kind: 'include';
   include: VerilogInclude;
 }
+
+type VerilogConnectionListKind = 'ports' | 'parameters';
 
 interface VerilogExpressionActionContext extends VerilogExpressionMatch {
   statement: VerilogStatementAst;
@@ -130,9 +135,21 @@ interface InstanceContext {
   module: VerilogModule;
   instance: VerilogInstance;
   targetModule?: VerilogModule;
-  listKind: 'ports' | 'parameters';
+  listKind: VerilogConnectionListKind;
   listRange: Range;
   connections: VerilogPortConnection[];
+}
+
+interface NamedInstanceConnection {
+  connection: VerilogPortConnection;
+  listKind: VerilogConnectionListKind;
+}
+
+interface InstanceConnectionTarget {
+  targetModule: VerilogModule;
+  targetPort: VerilogDecl;
+  targetSymbol?: VerilogSemanticSymbol;
+  listKind: VerilogConnectionListKind;
 }
 
 export function getVerilogDiagnostics(document: TextDocument, settings: CoSettings, index?: VerilogWorkspaceIndex): Diagnostic[] {
@@ -350,8 +367,10 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
       return markdownHover(`Instance \`${resolved.instance.instanceName}\` of module \`${resolved.instance.moduleName}\`.`, hoverRange);
     case 'module':
       return markdownHover(moduleMarkdown(resolved.module), hoverRange);
-    case 'portConnection':
-      return markdownHover(`Port \`${resolved.targetPort.name}\` on module \`${resolved.targetModule.name}\`\n\n\`${declDetail(resolved.targetPort)}\``, hoverRange);
+    case 'portConnection': {
+      const label = resolved.listKind === 'parameters' ? 'Parameter' : 'Port';
+      return markdownHover(`${label} \`${resolved.targetPort.name}\` on module \`${resolved.targetModule.name}\`\n\n\`${declDetail(resolved.targetPort)}\``, hoverRange);
+    }
     case 'macro': {
       const macroDef = resolved.macro ?? index.getMacro(resolved.name);
       const bodyMd = macroDef?.body ? `\n\n\`\`\`verilog\n${macroDef.body}\n\`\`\`` : '';
@@ -430,7 +449,7 @@ export function getVerilogDefinition(document: TextDocument, position: Position,
     case 'module':
       return Location.create(resolved.module.uri, resolved.module.selectionRange);
     case 'portConnection':
-      return Location.create(resolved.targetModule.uri, resolved.targetPort.selectionRange);
+      return Location.create(resolved.targetSymbol?.uri ?? resolved.targetModule.uri, resolved.targetSymbol?.selectionRange ?? resolved.targetPort.selectionRange);
     case 'macro': {
       const macro = resolved.macro ?? index.getMacro(resolved.name);
       return macro ? Location.create(macroUri(index, macro, document.uri), macro.selectionRange) : undefined;
@@ -450,8 +469,9 @@ export function getVerilogReferences(document: TextDocument, params: ReferencePa
   switch (resolved.kind) {
     case 'decl': {
       const locations = collectSemanticSymbolReferences(document.uri, parsed.semantic, resolved.module, resolved.decl.name, resolved.decl.selectionRange, includeDeclaration);
-      if (resolved.decl.direction) {
-        locations.push(...collectPortConnectionReferences(index, resolved.module.name, resolved.decl.name));
+      const connectionKind = connectionListKindForModuleDecl(resolved.module, resolved.decl);
+      if (connectionKind) {
+        locations.push(...collectInterfaceConnectionReferences(index, resolved.module, resolved.decl.name, connectionKind));
       }
       return dedupeLocations(locations);
     }
@@ -460,8 +480,15 @@ export function getVerilogReferences(document: TextDocument, params: ReferencePa
     case 'module':
       return collectModuleReferences(index, resolved.module, includeDeclaration);
     case 'portConnection': {
-      const locations = collectSignalReferencesForIndexedModule(index, resolved.targetModule, resolved.targetPort.name, resolved.targetPort.selectionRange, includeDeclaration);
-      locations.push(...collectPortConnectionReferences(index, resolved.targetModule.name, resolved.targetPort.name));
+      const locations = collectSignalReferencesForIndexedModule(
+        index,
+        resolved.targetModule,
+        resolved.targetPort.name,
+        resolved.targetPort.selectionRange,
+        includeDeclaration,
+        resolved.targetSymbol
+      );
+      locations.push(...collectInterfaceConnectionReferences(index, resolved.targetModule, resolved.targetPort.name, resolved.listKind));
       return dedupeLocations(locations);
     }
     case 'macro':
@@ -887,7 +914,7 @@ export function getVerilogInlayHints(document: TextDocument, range: Range, setti
   const parsed = getCachedVerilogParse(document, settings, false);
   for (const module of parsed.modules) {
     for (const instance of module.instances) {
-      const target = index.getModule(instance.moduleName);
+      const target = resolveInstanceTargetModule(index, parsed.modules, instance);
       if (!target) {
         continue;
       }
@@ -1073,7 +1100,7 @@ function findInstanceForRange(modules: VerilogModule[], range: Range, index: Ver
   return {
     module,
     instance,
-    targetModule: index.getModule(instance.moduleName) ?? modules.find((item) => item.name === instance.moduleName),
+    targetModule: resolveInstanceTargetModule(index, modules, instance),
     listKind: 'ports',
     listRange: instance.portListRange ?? instance.selectionRange,
     connections: instance.portConnections
@@ -1195,18 +1222,17 @@ function resolveVerilogSymbol(document: TextDocument, position: Position, settin
     }
     for (const instance of currentModule.instances) {
       if (rangesEqual(instance.moduleSelectionRange, wordRange)) {
-        const target = index.getModule(instance.moduleName) ?? parsed.modules.find((item) => item.name === instance.moduleName);
+        const target = resolveInstanceTargetModule(index, parsed.modules, instance);
         return target ? { kind: 'module', module: target } : undefined;
       }
       if (rangesEqual(instance.selectionRange, wordRange)) {
         return { kind: 'instance', module: currentModule, instance };
       }
-      const connection = instance.portConnections.find((item) => item.nameRange && containsPosition(item.nameRange, position));
-      if (connection?.name) {
-        const targetModule = index.getModule(instance.moduleName) ?? parsed.modules.find((item) => item.name === instance.moduleName);
-        const targetPort = targetModule?.ports.find((port) => port.name === connection.name);
-        if (targetModule && targetPort) {
-          return { kind: 'portConnection', module: currentModule, instance, connection, targetModule, targetPort };
+      const namedConnection = findNamedInstanceConnectionAtPosition(instance, position);
+      if (namedConnection) {
+        const target = resolveInstanceConnectionTarget(index, parsed.modules, instance, namedConnection.connection, namedConnection.listKind);
+        if (target) {
+          return { kind: 'portConnection', module: currentModule, instance, connection: namedConnection.connection, ...target };
         }
       }
     }
@@ -1250,17 +1276,15 @@ function mapSemanticResolution(
 ): ResolvedVerilogSymbol | undefined {
   const reference = resolved.reference;
   if (reference?.kind === 'portConnection' && reference.module && reference.instance && reference.portConnection?.name) {
-    const targetModule = index.getModule(reference.instance.moduleName) ?? modules.find((item) => item.name === reference.instance?.moduleName);
-    const targetPort = targetModule?.ports.find((port) => port.name === reference.portConnection?.name)
-      ?? targetModule?.parameters.find((param) => param.name === reference.portConnection?.name);
-    if (targetModule && targetPort) {
+    const listKind = connectionListKindForInstanceConnection(reference.instance, reference.portConnection);
+    const target = resolveInstanceConnectionTarget(index, modules, reference.instance, reference.portConnection, listKind);
+    if (target) {
       return {
         kind: 'portConnection',
         module: reference.module,
         instance: reference.instance,
         connection: reference.portConnection,
-        targetModule,
-        targetPort
+        ...target
       };
     }
   }
@@ -1302,10 +1326,100 @@ function mapSemanticResolution(
   return undefined;
 }
 
-function collectSignalReferencesForIndexedModule(index: VerilogWorkspaceIndex, module: VerilogModule, name: string, declarationRange: Range | undefined, includeDeclaration: boolean): Location[] {
+function resolveInstanceTargetModule(index: VerilogWorkspaceIndex, modules: VerilogModule[], instance: VerilogInstance): VerilogModule | undefined {
+  return index.getModule(instance.moduleName) ?? modules.find((item) => item.name === instance.moduleName);
+}
+
+function resolveInstanceConnectionTarget(
+  index: VerilogWorkspaceIndex,
+  modules: VerilogModule[],
+  instance: VerilogInstance,
+  connection: VerilogPortConnection,
+  preferredListKind?: VerilogConnectionListKind
+): InstanceConnectionTarget | undefined {
+  if (!connection.name) {
+    return undefined;
+  }
+  const targetModule = resolveInstanceTargetModule(index, modules, instance);
+  if (!targetModule) {
+    return undefined;
+  }
+  const listKinds = preferredListKind ? [preferredListKind] : (['ports', 'parameters'] as const);
+  for (const listKind of listKinds) {
+    const targetSymbol = index.findModuleSymbol(targetModule, connection.name, semanticKindsForConnectionList(listKind));
+    const targetPort = targetSymbol?.decl ?? declarationsForConnectionList(targetModule, listKind).find((decl) => decl.name === connection.name);
+    if (targetPort) {
+      return {
+        targetModule,
+        targetPort,
+        targetSymbol,
+        listKind
+      };
+    }
+  }
+  return undefined;
+}
+
+function findNamedInstanceConnectionAtPosition(instance: VerilogInstance, position: Position): NamedInstanceConnection | undefined {
+  for (const connection of instance.parameterConnections) {
+    if (connection.nameRange && containsPosition(connection.nameRange, position)) {
+      return { connection, listKind: 'parameters' };
+    }
+  }
+  for (const connection of instance.portConnections) {
+    if (connection.nameRange && containsPosition(connection.nameRange, position)) {
+      return { connection, listKind: 'ports' };
+    }
+  }
+  return undefined;
+}
+
+function connectionListKindForInstanceConnection(instance: VerilogInstance, connection: VerilogPortConnection): VerilogConnectionListKind | undefined {
+  if (instance.parameterConnections.includes(connection)) {
+    return 'parameters';
+  }
+  if (instance.portConnections.includes(connection)) {
+    return 'ports';
+  }
+  return undefined;
+}
+
+function connectionListKindForModuleDecl(module: VerilogModule, decl: VerilogDecl): VerilogConnectionListKind | undefined {
+  if (module.ports.some((port) => sameDeclarationIdentity(port, decl))) {
+    return 'ports';
+  }
+  if (module.parameters.some((param) => sameDeclarationIdentity(param, decl))) {
+    return 'parameters';
+  }
+  return undefined;
+}
+
+function declarationsForConnectionList(module: VerilogModule, listKind: VerilogConnectionListKind): VerilogDecl[] {
+  return listKind === 'parameters' ? module.parameters : module.ports;
+}
+
+function semanticKindsForConnectionList(listKind: VerilogConnectionListKind): readonly ('parameter' | 'port')[] {
+  return listKind === 'parameters' ? ['parameter'] : ['port'];
+}
+
+function sameDeclarationIdentity(left: VerilogDecl, right: VerilogDecl): boolean {
+  return left === right || (left.name === right.name && rangesEqual(left.selectionRange, right.selectionRange));
+}
+
+function collectSignalReferencesForIndexedModule(
+  index: VerilogWorkspaceIndex,
+  module: VerilogModule,
+  name: string,
+  declarationRange: Range | undefined,
+  includeDeclaration: boolean,
+  targetSymbol?: VerilogSemanticSymbol
+): Location[] {
   const file = index.getFile(module.uri);
   if (!file) {
     return includeDeclaration && declarationRange ? [Location.create(module.uri, declarationRange)] : [];
+  }
+  if (targetSymbol) {
+    return collectSemanticSymbolReferenceLocations(file.uri, file.semantic, targetSymbol, includeDeclaration);
   }
   return collectSemanticSymbolReferences(file.uri, file.semantic, module, name, declarationRange, includeDeclaration);
 }
@@ -1319,6 +1433,10 @@ function collectSemanticSymbolReferences(uri: string, semantic: VerilogSemanticM
   if (!symbol) {
     return includeDeclaration && declarationRange ? [Location.create(uri, declarationRange)] : [];
   }
+  return collectSemanticSymbolReferenceLocations(uri, semantic, symbol, includeDeclaration);
+}
+
+function collectSemanticSymbolReferenceLocations(uri: string, semantic: VerilogSemanticModel, symbol: VerilogSemanticSymbol, includeDeclaration: boolean): Location[] {
   return verilogSemanticReferenceRanges(semantic, verilogSemanticTargetFromSymbol(symbol), includeDeclaration)
     .map((range) => Location.create(uri, range));
 }
@@ -1340,16 +1458,21 @@ function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogMo
   return dedupeLocations(locations);
 }
 
-function collectPortConnectionReferences(index: VerilogWorkspaceIndex, moduleName: string, portName: string): Location[] {
+function collectInterfaceConnectionReferences(
+  index: VerilogWorkspaceIndex,
+  targetModule: VerilogModule,
+  name: string,
+  listKind: VerilogConnectionListKind
+): Location[] {
   const locations: Location[] = [];
   for (const file of index.indexedFiles()) {
     for (const module of file.modules) {
       for (const instance of module.instances) {
-        if (instance.moduleName !== moduleName) {
+        if (instance.moduleName !== targetModule.name) {
           continue;
         }
-        for (const connection of instance.portConnections) {
-          if (connection.name === portName && connection.nameRange) {
+        for (const connection of connectionsForListKind(instance, listKind)) {
+          if (connection.name === name && connection.nameRange) {
             locations.push(Location.create(file.uri, connection.nameRange));
           }
         }
@@ -1357,6 +1480,10 @@ function collectPortConnectionReferences(index: VerilogWorkspaceIndex, moduleNam
     }
   }
   return locations;
+}
+
+function connectionsForListKind(instance: VerilogInstance, listKind: VerilogConnectionListKind): VerilogPortConnection[] {
+  return listKind === 'parameters' ? instance.parameterConnections : instance.portConnections;
 }
 
 function collectMacroReferences(index: VerilogWorkspaceIndex, name: string, macro: VerilogMacro | undefined, includeDeclaration: boolean, fallbackUri: string): Location[] {
@@ -1387,7 +1514,7 @@ function findInstanceContext(modules: VerilogModule[], position: Position, index
       return {
         module,
         instance,
-        targetModule: index.getModule(instance.moduleName) ?? modules.find((item) => item.name === instance.moduleName),
+        targetModule: resolveInstanceTargetModule(index, modules, instance),
         listKind: 'parameters',
         listRange: instance.parameterListRange,
         connections: instance.parameterConnections
@@ -1397,7 +1524,7 @@ function findInstanceContext(modules: VerilogModule[], position: Position, index
       return {
         module,
         instance,
-        targetModule: index.getModule(instance.moduleName) ?? modules.find((item) => item.name === instance.moduleName),
+        targetModule: resolveInstanceTargetModule(index, modules, instance),
         listKind: 'ports',
         listRange: instance.portListRange,
         connections: instance.portConnections
