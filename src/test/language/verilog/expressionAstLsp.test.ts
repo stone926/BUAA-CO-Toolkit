@@ -104,6 +104,40 @@ endmodule
     expect(fold?.edit?.changes?.[document.uri]?.[0].newText).toBe('10');
   });
 
+  it('extracts a constant RHS expression to a localparam', () => {
+    const text = `
+module m(output [7:0] y);
+    localparam WIDTH = 4;
+    assign y = (WIDTH + 1) * 2;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '*');
+    const extract = actions.find((action) => action.title === 'Extract constant expression to localparam EXPR_CONST');
+    const edits = extract?.edit?.changes?.[document.uri] ?? [];
+
+    expect(extract?.kind).toBe('refactor.extract');
+    expect(edits.some((edit) => edit.newText === '    localparam EXPR_CONST = (WIDTH + 1) * 2;\n')).toBe(true);
+    expect(edits.some((edit) => edit.newText === 'EXPR_CONST')).toBe(true);
+  });
+
+  it('uses a unique localparam name when extracting constant expressions', () => {
+    const text = `
+module m(output [7:0] y);
+    localparam EXPR_CONST = 1;
+    localparam WIDTH = 4;
+    assign y = (WIDTH + 1) * 2;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '*');
+    const extract = actions.find((action) => action.title === 'Extract constant expression to localparam EXPR_CONST_1');
+    const edits = extract?.edit?.changes?.[document.uri] ?? [];
+
+    expect(edits.some((edit) => edit.newText === '    localparam EXPR_CONST_1 = (WIDTH + 1) * 2;\n')).toBe(true);
+    expect(edits.some((edit) => edit.newText === 'EXPR_CONST_1')).toBe(true);
+  });
+
   it('offers a safe redundant parentheses code action', () => {
     const text = `
 module m(input a, output y);

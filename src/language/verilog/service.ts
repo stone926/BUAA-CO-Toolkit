@@ -54,7 +54,9 @@ import { preprocessorDirectives } from './preprocessor';
 import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import type { VerilogExpressionAst } from './exprAst';
+import type { VerilogModuleAst, VerilogStatementAst } from './ast';
 import { findSmallestVerilogExpressionAtOffset, findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
+import type { VerilogExpressionMatch } from './exprAstUtils';
 import {
   verilogWordRangeAtPosition
 } from './tokenNavigation';
@@ -110,6 +112,10 @@ interface ResolvedMacro {
 interface ResolvedInclude {
   kind: 'include';
   include: VerilogInclude;
+}
+
+interface VerilogExpressionActionContext extends VerilogExpressionMatch {
+  statement: VerilogStatementAst;
 }
 
 type ResolvedVerilogSymbol =
@@ -554,18 +560,30 @@ function getVerilogExpressionCodeActions(document: TextDocument, range: Range, s
     return [];
   }
 
-  const match = findSmallestVerilogExpressionMatchAtOffset(
-    moduleAst.items.flatMap((item) => item.expressions),
-    document.offsetAt(range.start)
-  );
-  if (!match) {
+  const context = findExpressionActionContextAtOffset(moduleAst, document.offsetAt(range.start));
+  if (!context) {
     return [];
   }
 
   return [
-    makeFoldConstantExpressionAction(document, match.expression, module),
-    makeRemoveRedundantParenthesesAction(document, match.expression, match.parent)
+    makeFoldConstantExpressionAction(document, context.expression, module),
+    makeExtractConstantLocalparamAction(document, context, module),
+    makeRemoveRedundantParenthesesAction(document, context.expression, context.parent)
   ].filter((action): action is CodeAction => Boolean(action));
+}
+
+function findExpressionActionContextAtOffset(moduleAst: VerilogModuleAst, offset: number): VerilogExpressionActionContext | undefined {
+  let best: VerilogExpressionActionContext | undefined;
+  for (const statement of moduleAst.items) {
+    const match = findSmallestVerilogExpressionMatchAtOffset(statement.expressions, offset);
+    if (!match) {
+      continue;
+    }
+    if (!best || expressionSize(match.expression) < expressionSize(best.expression)) {
+      best = { ...match, statement };
+    }
+  }
+  return best;
 }
 
 function makeFoldConstantExpressionAction(document: TextDocument, expression: VerilogExpressionAst, module: VerilogModule): CodeAction | undefined {
@@ -588,6 +606,47 @@ function makeFoldConstantExpressionAction(document: TextDocument, expression: Ve
     edit: {
       changes: {
         [document.uri]: [TextEdit.replace(expressionRange, replacement)]
+      }
+    }
+  };
+}
+
+function makeExtractConstantLocalparamAction(
+  document: TextDocument,
+  context: VerilogExpressionActionContext,
+  module: VerilogModule
+): CodeAction | undefined {
+  const { expression, statement } = context;
+  if (statement.kind !== 'continuousAssign' || expression.kind === 'numberLiteral' || expression.kind === 'identifier') {
+    return undefined;
+  }
+  const assignment = statement.assignment;
+  if (!assignment || !containsExpression(assignment.rhs, expression)) {
+    return undefined;
+  }
+  if (evalExpressionAstConstant(expression, module) === undefined) {
+    return undefined;
+  }
+  const expressionRange = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
+  const source = document.getText(expressionRange).trim();
+  if (!source || /[\r\n]/.test(source)) {
+    return undefined;
+  }
+  const name = uniqueDeclarationName(module, 'EXPR_CONST');
+  const indent = lineAt(document, statement.range.start.line).text.match(/^\s*/)?.[0] ?? '';
+  const insert = TextEdit.insert(
+    Position.create(statement.range.start.line, 0),
+    `${indent}localparam ${name} = ${source};\n`
+  );
+  return {
+    title: `Extract constant expression to localparam ${name}`,
+    kind: CodeActionKind.RefactorExtract,
+    edit: {
+      changes: {
+        [document.uri]: [
+          insert,
+          TextEdit.replace(expressionRange, name)
+        ]
       }
     }
   };
@@ -644,6 +703,25 @@ function isPrimaryExpression(expression: VerilogExpressionAst): boolean {
     default:
       return false;
   }
+}
+
+function containsExpression(outer: VerilogExpressionAst, inner: VerilogExpressionAst): boolean {
+  return inner.start >= outer.start && inner.end <= outer.end;
+}
+
+function uniqueDeclarationName(module: VerilogModule, baseName: string): string {
+  if (!module.declarations.has(baseName)) {
+    return baseName;
+  }
+  let index = 1;
+  while (module.declarations.has(`${baseName}_${index}`)) {
+    index++;
+  }
+  return `${baseName}_${index}`;
+}
+
+function expressionSize(expression: VerilogExpressionAst): number {
+  return expression.end - expression.start;
 }
 
 function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
