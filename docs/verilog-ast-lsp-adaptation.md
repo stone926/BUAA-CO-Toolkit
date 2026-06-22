@@ -27,6 +27,7 @@ VSCode document
    - `parameter/localparam` initializer 会保存到声明模型中。
    - 常量求值支持参数依赖，例如 `WIDTH - 1`。
    - 本文件和跨文件端口宽度检查可以解析 `[WIDTH-1:0]`。
+   - 连续赋值和过程块内赋值复用 `VerilogStatementAst.assignment`，声明初始化也使用 AST width inference。
 
 3. 声明 hover 增强
    - 参数声明 hover 除了显示声明详情和宽度，还能显示已求值的常量值。
@@ -41,10 +42,6 @@ VSCode document
    - Code action 可以基于 AST 做精确范围替换，而不用重新猜运算符优先级。
 
 ## 适合继续基于 AST 推进的功能
-
-短期最适合落地：
-
-- 过程块内赋值位宽检查：复用 `VerilogStatementAst.assignment` 和 width inference。
 
 中期可做：
 

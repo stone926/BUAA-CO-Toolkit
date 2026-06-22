@@ -218,4 +218,41 @@ endmodule
 `.trim());
     expect(result).toContain('width-mismatch');
   });
+
+  it('reports procedural assignment width mismatch after an if prefix', () => {
+    const result = codes(`
+module m(input sel, input [7:0] a, output reg [3:0] y);
+    always @(*) begin
+        if (sel) y = a;
+        else y = 4'h0;
+    end
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
+
+  it('reports procedural assignment width mismatch after a case item label', () => {
+    const result = codes(`
+module m(input sel, input [7:0] a, output reg [3:0] y);
+    always @(*) begin
+        case (sel)
+            1'b0: y = a;
+            default: y = 4'h0;
+        endcase
+    end
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
+
+  it('does not duplicate simple procedural assignment width diagnostics', () => {
+    const result = codes(`
+module m(input [7:0] a, output reg [3:0] y);
+    always @(*) begin
+        y = a;
+    end
+endmodule
+`.trim());
+    expect(result.filter((code) => code === 'width-mismatch')).toHaveLength(1);
+  });
 });

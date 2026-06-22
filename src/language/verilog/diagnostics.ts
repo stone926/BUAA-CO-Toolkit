@@ -6,8 +6,9 @@ import { URI } from 'vscode-uri';
 import { ProjectProfile } from '../../projectProfile';
 import { lineAt, makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import { shouldReportWidthMismatch, widthOfDecl, widthOfExpression } from './expressions';
+import { shouldReportWidthMismatch, widthOfDecl, widthOfExpression, widthOfExpressionAst } from './expressions';
 import { findAssignmentOperator } from './assignmentAnalysis';
+import type { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst } from './ast';
 import {
   expectedPorts,
   VerilogInclude,
@@ -34,6 +35,7 @@ export function collectVerilogDiagnostics(
   modules: VerilogModule[],
   includes: VerilogInclude[],
   cst: VerilogCstDocument,
+  ast: VerilogAstDocument,
   semantic?: VerilogSemanticModel
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
@@ -41,7 +43,7 @@ export function collectVerilogDiagnostics(
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(modules, diagnostics);
-  collectWidthDiagnostics(document, text, modules, cst, diagnostics);
+  collectWidthDiagnostics(document, text, modules, cst, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
     collectAssignmentDiagnostics(document, settings, text, modules, cst, diagnostics);
@@ -123,9 +125,10 @@ function collectInstancePortDiagnostics(modules: VerilogModule[], diagnostics: D
   }
 }
 
-function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   const modulesByName = new Map(modules.map((module) => [module.name, module]));
   for (const module of modules) {
+    const moduleAst = ast.modules.find((item) => item.module === module);
     const bodyStart = document.offsetAt(module.headerEnd);
     const bodyEnd = document.offsetAt(module.range.end);
     for (const statement of cst.statements) {
@@ -137,30 +140,9 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
         collectDeclarationInitializerWidthDiagnostics(document, text, module, tokens, diagnostics);
         continue;
       }
-      if (tokens[0] && proceduralKeywords.has(tokens[0].value)) {
-        continue; // 过程性语句（always / if / case 等），不在此分析
-      }
-      const operatorIndex = findAssignmentOperator(tokens);
-      if (operatorIndex < 0) {
-        continue;
-      }
-      const lhsTokens = lhsTokensForAssignment(tokens, operatorIndex);
-      const rhsTokens = tokens.slice(operatorIndex + 1);
-      if (!lhsTokens.length || !rhsTokens.length) {
-        continue;
-      }
-      const lhsText = tokenText(text, lhsTokens).trim();
-      const rhsText = tokenText(text, rhsTokens).trim();
-      const lhs = widthOfExpression(lhsText, module);
-      const rhs = widthOfExpression(rhsText, module);
-      if (shouldReportWidthMismatch(lhs, rhs)) {
-        diagnostics.push(makeDiagnostic(
-          tokenRange(document, rhsTokens),
-          `Width mismatch: '${lhsText}' is ${lhs.width} bit(s), but this expression is ${rhs.width} bit(s).`,
-          DiagnosticSeverity.Warning,
-          'width-mismatch'
-        ));
-      }
+    }
+    if (moduleAst) {
+      collectAssignmentWidthDiagnostics(document, moduleAst, diagnostics);
     }
 
     for (const instance of module.instances) {
@@ -190,30 +172,39 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
   }
 }
 
-/** 过程性关键词：出现在 always/initial 块内，不参与赋值位宽检测 */
-const proceduralKeywords = new Set([
-  'always',
-  'initial',
-  'if',
-  'else',
-  'case',
-  'casex',
-  'casez',
-  'for',
-  'while',
-  'repeat',
-  'forever',
-  'fork',
-  'begin',
-  'end',
-  'endcase',
-  'endfunction',
-  'endmodule',
-  'endtask',
-  'join',
-  'join_any',
-  'join_none'
-]);
+function collectAssignmentWidthDiagnostics(document: TextDocument, moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
+  for (const statement of moduleAst.items) {
+    if (statement.kind === 'declaration') {
+      continue;
+    }
+    collectStatementAssignmentWidthDiagnostic(document, moduleAst.module, statement, diagnostics);
+  }
+}
+
+function collectStatementAssignmentWidthDiagnostic(
+  document: TextDocument,
+  module: VerilogModule,
+  statement: VerilogStatementAst,
+  diagnostics: Diagnostic[]
+): void {
+  const assignment = statement.assignment;
+  if (!assignment) {
+    return;
+  }
+  const lhs = widthOfExpressionAst(assignment.lhs, module);
+  const rhs = widthOfExpressionAst(assignment.rhs, module);
+  if (!shouldReportWidthMismatch(lhs, rhs)) {
+    return;
+  }
+  const lhsRange = Range.create(document.positionAt(assignment.lhs.start), document.positionAt(assignment.lhs.end));
+  const rhsRange = Range.create(document.positionAt(assignment.rhs.start), document.positionAt(assignment.rhs.end));
+  diagnostics.push(makeDiagnostic(
+    rhsRange,
+    `Width mismatch: '${document.getText(lhsRange).trim()}' is ${lhs.width} bit(s), but this expression is ${rhs.width} bit(s).`,
+    DiagnosticSeverity.Warning,
+    'width-mismatch'
+  ));
+}
 
 const declarationStatementKeywords = new Set([
   'input',
@@ -356,10 +347,6 @@ function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
 
 function isDeclarationStatement(tokens: VerilogToken[]): boolean {
   return Boolean(tokens[0] && declarationStatementKeywords.has(tokens[0].value));
-}
-
-function lhsTokensForAssignment(tokens: VerilogToken[], operatorIndex: number): VerilogToken[] {
-  return tokens[0]?.value === 'assign' ? tokens.slice(1, operatorIndex) : tokens.slice(0, operatorIndex);
 }
 
 function tokenText(text: string, tokens: VerilogToken[]): string {

@@ -44,7 +44,7 @@ export function addVerilogDiagnostics(
   parsed: VerilogParseResult,
   text = document.getText()
 ): VerilogParseResult {
-  const diagnostics = collectVerilogDiagnostics(document, settings, text, parsed.modules, parsed.includes, parsed.cst, parsed.semantic);
+  const diagnostics = collectVerilogDiagnostics(document, settings, text, parsed.modules, parsed.includes, parsed.cst, parsed.ast, parsed.semantic);
   return {
     ...parsed,
     diagnostics,
