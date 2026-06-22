@@ -6,9 +6,12 @@ import { URI } from 'vscode-uri';
 import { ProjectProfile } from '../../projectProfile';
 import { lineAt, makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import { shouldReportWidthMismatch, widthOfDecl, widthOfExpression, widthOfExpressionAst } from './expressions';
+import { evalExpressionAstConstant, shouldReportWidthMismatch, widthOfDecl, widthOfExpression, widthOfExpressionAst } from './expressions';
 import { findAssignmentOperator } from './assignmentAnalysis';
 import type { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst } from './ast';
+import { parseVerilogExpression } from './exprAst';
+import type { VerilogExpressionAst } from './exprAst';
+import { walkVerilogExpression } from './exprAstUtils';
 import {
   expectedPorts,
   VerilogInclude,
@@ -44,6 +47,7 @@ export function collectVerilogDiagnostics(
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(modules, diagnostics);
   collectWidthDiagnostics(document, text, modules, cst, ast, diagnostics);
+  collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
     collectAssignmentDiagnostics(document, settings, text, modules, cst, diagnostics);
@@ -123,6 +127,90 @@ function collectInstancePortDiagnostics(modules: VerilogModule[], diagnostics: D
       }
     }
   }
+}
+
+function collectConstantDivisorDiagnostics(document: TextDocument, modules: VerilogModule[], ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+  for (const module of modules) {
+    const moduleAst = ast.modules.find((item) => item.module === module);
+    if (moduleAst) {
+      for (const statement of moduleAst.items) {
+        for (const expression of statement.expressions) {
+          collectConstantDivisorDiagnosticsForExpression(document, module, expression, 0, diagnostics);
+        }
+      }
+    }
+
+    for (const decl of module.declarations.values()) {
+      if (!decl.initializer || !decl.initializerRange) {
+        continue;
+      }
+      const expression = parseVerilogExpression(decl.initializer);
+      if (!expression) {
+        continue;
+      }
+      collectConstantDivisorDiagnosticsForExpression(
+        document,
+        module,
+        expression,
+        expressionBaseOffset(document, decl.initializerRange, decl.initializer),
+        diagnostics
+      );
+    }
+
+    for (const instance of module.instances) {
+      for (const connection of [...instance.parameterConnections, ...instance.portConnections]) {
+        if (!connection.expression.trim()) {
+          continue;
+        }
+        const expression = parseVerilogExpression(connection.expression);
+        if (!expression) {
+          continue;
+        }
+        collectConstantDivisorDiagnosticsForExpression(
+          document,
+          module,
+          expression,
+          expressionBaseOffset(document, connection.expressionRange, connection.expression),
+          diagnostics
+        );
+      }
+    }
+  }
+}
+
+function collectConstantDivisorDiagnosticsForExpression(
+  document: TextDocument,
+  module: VerilogModule,
+  expression: VerilogExpressionAst,
+  baseOffset: number,
+  diagnostics: Diagnostic[]
+): void {
+  walkVerilogExpression(expression, (candidate) => {
+    if (candidate.kind !== 'binaryExpression' || (candidate.operator !== '/' && candidate.operator !== '%')) {
+      return;
+    }
+    const divisor = evalExpressionAstConstant(candidate.right, module);
+    if (divisor !== 0n) {
+      return;
+    }
+    diagnostics.push(makeDiagnostic(
+      expressionRangeAtBase(document, candidate.right, baseOffset),
+      `Constant ${candidate.operator === '/' ? 'division' : 'modulo'} by zero.`,
+      DiagnosticSeverity.Warning,
+      'constant-division-by-zero'
+    ));
+  });
+}
+
+function expressionBaseOffset(document: TextDocument, range: Range, expressionText: string): number {
+  const rangeStart = document.offsetAt(range.start);
+  const rangeText = document.getText(range);
+  const index = rangeText.indexOf(expressionText);
+  return rangeStart + Math.max(0, index);
+}
+
+function expressionRangeAtBase(document: TextDocument, expression: VerilogExpressionAst, baseOffset: number): Range {
+  return Range.create(document.positionAt(baseOffset + expression.start), document.positionAt(baseOffset + expression.end));
 }
 
 function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
