@@ -124,4 +124,40 @@ describe('Verilog AST and semantic model', () => {
     const use = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i < 4')));
     expect(use?.symbol).toBe(loopIndexSymbol);
   });
+
+  it('collects expression AST references without duplicating token fallback references', () => {
+    const text = [
+      'module expr_refs(input [7:0] a, output [7:0] y);',
+      "    assign y = {$signed(a[3:0]), a[7:4]};",
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const aReferences = result.semantic.references.filter((reference) => reference.name === 'a');
+
+    expect(aReferences).toHaveLength(2);
+    expect(result.semantic.unresolvedReferences.some((reference) => reference.name === '$signed')).toBe(false);
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('a[3:0]')))?.symbol?.name).toBe('a');
+  });
+
+  it('collects expression AST references in declaration initializers and instance connections', () => {
+    const text = [
+      'module child #(parameter W = 1)(input [W-1:0] din);',
+      'endmodule',
+      'module top(input [3:0] a);',
+      '    localparam W2 = 4;',
+      '    wire [3:0] tmp = a;',
+      '    child #(.W(W2)) u_child(.din(tmp));',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const initializerUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('= a') + 2));
+    const parameterConnectionUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('W2))')));
+    const portConnectionUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('tmp))')));
+
+    expect(initializerUse?.symbol?.name).toBe('a');
+    expect(parameterConnectionUse?.symbol?.name).toBe('W2');
+    expect(portConnectionUse?.symbol?.name).toBe('tmp');
+  });
 });

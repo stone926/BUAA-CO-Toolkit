@@ -35,13 +35,17 @@ VSCode document
 3. 声明 hover 增强
    - 参数声明 hover 除了显示声明详情和宽度，还能显示已求值的常量值。
 
-4. 表达式重构 code action
+4. AST 驱动引用收集
+   - 语义模型会通过 expression walker 收集 module item、声明初始化和实例连接表达式中的标识符引用。
+   - token 扫描仍作为不完整表达式和过程控制条件的兜底路径。
+
+5. 表达式重构 code action
    - 可求值且非平凡的表达式可以折叠为常量值。
    - 连续赋值 RHS 中的可求值常量表达式可以提取为唯一命名的 `localparam`。
    - 对 `(a)`、`(bus[0])`、`((a))` 这类语义明确安全的场景提供去除冗余括号动作。
    - 对 `(a + b) * c` 这类依赖括号保持优先级的表达式保持静默。
 
-5. 后续重构基础
+6. 后续重构基础
    - 已有 AST 节点包含一元、二元、三目、拼接、重复拼接、选择、调用和成员访问。
    - Code action 可以基于 AST 做精确范围替换，而不用重新猜运算符优先级。
 
@@ -49,7 +53,6 @@ VSCode document
 
 中期可做：
 
-- AST 驱动引用收集：semantic model 逐步从 token 扫描迁移到 expression walker。
 - 表达式 refactor：提取表达式为 wire/localparam、转换有序连接中的复杂表达式。
 
 ## 设计边界
