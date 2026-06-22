@@ -58,6 +58,7 @@ export interface VerilogMacro {
   name: string;
   range: Range;
   selectionRange: Range;
+  body?: string;
 }
 
 export interface VerilogMacroUse {

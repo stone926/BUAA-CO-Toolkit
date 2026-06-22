@@ -20,6 +20,7 @@ import {
   TextEdit,
   WorkspaceEdit
 } from 'vscode-languageserver/node';
+import * as fs from 'fs';
 import * as path from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
@@ -36,8 +37,7 @@ import {
   VerilogMacro,
   VerilogMacroUse,
   VerilogModule,
-  VerilogPortConnection,
-  verilogKeywords
+  VerilogPortConnection
 } from './model';
 import {
   buildTestbench,
@@ -47,9 +47,12 @@ import {
   splitTopLevelCommaSpans
 } from './parser';
 import { getCachedVerilogParse } from './parseCache';
-import { getVerilogLiteralCodeActions } from './numericLiterals';
+import { getVerilogLiteralCodeActions, numericLiteralAt, formatNumericLiteralHover } from './numericLiterals';
 import { addVerilogWorkspaceDiagnostics } from './workspaceDiagnostics';
+import { widthOfDecl } from './expressions';
+import { preprocessorDirectives } from './preprocessor';
 import { VerilogCstDocument } from './cst';
+import { VerilogToken } from './lexer';
 import {
   verilogWordRangeAtPosition
 } from './tokenNavigation';
@@ -132,6 +135,13 @@ export function getVerilogDiagnostics(document: TextDocument, settings: CoSettin
 
 export function getVerilogCompletions(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): CompletionItem[] {
   const parsed = getCachedVerilogParse(document, settings, false);
+
+  const offset = document.offsetAt(position);
+  const cursorToken = tokenAtOffset(parsed.cst.codeTokens, offset);
+  if (cursorToken && (cursorToken.kind === 'comment' || cursorToken.kind === 'string')) {
+    return [];
+  }
+
   const connectionContext = findInstanceContext(parsed.modules, position, index);
   if (connectionContext?.targetModule) {
     const connected = new Set(connectionContext.connections.map((connection) => connection.name).filter((name): name is string => Boolean(name)));
@@ -152,6 +162,42 @@ export function getVerilogCompletions(document: TextDocument, position: Position
   }
 
   const items: CompletionItem[] = [];
+
+  const charBefore = position.character > 0
+    ? document.getText(Range.create(position.line, position.character - 1, position.line, position.character))
+    : '';
+  if (charBefore === '`') {
+    for (const name of preprocessorDirectives) {
+      items.push({
+        label: `\`${name}`,
+        kind: CompletionItemKind.Keyword,
+        detail: 'Verilog preprocessor directive',
+        insertText: name
+      });
+    }
+    return dedupeCompletionItems(items);
+  }
+
+  const lineText = document.getText(Range.create(position.line, 0, position.line, position.character));
+  const apostropheMatch = lineText.match(/(\d+)\s*'\s*$/);
+  if (apostropheMatch) {
+    const bases = [
+      { label: 'b', detail: 'Binary (base 2)' },
+      { label: 'o', detail: 'Octal (base 8)' },
+      { label: 'd', detail: 'Decimal (base 10)' },
+      { label: 'h', detail: 'Hexadecimal (base 16)' }
+    ];
+    for (const base of bases) {
+      items.push({
+        label: `'${base.label}`,
+        kind: CompletionItemKind.Keyword,
+        detail: base.detail,
+        insertText: base.label
+      });
+    }
+    return dedupeCompletionItems(items);
+  }
+
   const currentModule = moduleAtPosition(parsed.modules, position);
   if (currentModule) {
     for (const decl of currentModule.declarations.values()) {
@@ -192,7 +238,33 @@ export function getVerilogCompletions(document: TextDocument, position: Position
     items.push(moduleCompletionItem(module));
   }
 
-  for (const keyword of verilogKeywords) {
+  const textBefore = document.getText(Range.create(
+    document.positionAt(Math.max(0, document.offsetAt(position) - 200)),
+    position
+  ));
+  const sensitivityMatch = /@\s*\([^)]*$/s.exec(textBefore);
+  if (sensitivityMatch) {
+    items.push(
+      { label: 'posedge', kind: CompletionItemKind.Keyword, detail: 'Positive edge trigger' },
+      { label: 'negedge', kind: CompletionItemKind.Keyword, detail: 'Negative edge trigger' },
+      { label: '*', kind: CompletionItemKind.Operator, detail: 'All signals (combinational)' }
+    );
+    if (currentModule) {
+      for (const [name, decl] of currentModule.declarations) {
+        if (decl.direction || decl.kind === 'wire' || decl.kind === 'reg') {
+          items.push({
+            label: name,
+            kind: CompletionItemKind.Variable,
+            detail: declDetail(decl)
+          });
+        }
+      }
+    }
+    return dedupeCompletionItems(items);
+  }
+
+  const contextKeywords = keywordsForContext(parsed.modules, position);
+  for (const keyword of contextKeywords) {
     items.push({
       label: keyword,
       kind: CompletionItemKind.Keyword
@@ -213,12 +285,30 @@ export function getVerilogCompletions(document: TextDocument, position: Position
   items.push(snippetItem('include', '`include "${1:file.v}"', 'Verilog include directive'));
   items.push(snippetItem('default_nettype_none', '`default_nettype none', 'Disable implicit nets'));
   items.push(snippetItem('display_p5_grf', '$display("%d@%h: $%d <= %h", $time, ${1:WPC}, ${2:Waddr}, ${3:WData});', 'BUAA CO P5 GRF display'));
+
+  items.push(snippetItem('if_else', 'if (${1:condition}) begin\n    ${2}\nend else begin\n    ${3}\nend', 'If-else statement'));
+  items.push(snippetItem('if_block', 'if (${1:condition}) begin\n    ${0}\nend', 'If statement'));
+  items.push(snippetItem('for_loop', 'for (${1:i} = 0; ${1:i} < ${2:N}; ${1:i} = ${1:i} + 1) begin\n    ${0}\nend', 'For loop'));
+  items.push(snippetItem('always_pos', 'always @(posedge ${1:clk}) begin\n    ${0}\nend', 'Always block: posedge clock'));
+  items.push(snippetItem('always_neg', 'always @(negedge ${1:clk}) begin\n    ${0}\nend', 'Always block: negedge clock'));
+  items.push(snippetItem('assign_wire', 'assign ${1:signal} = ${2:expression};', 'Continuous assignment'));
+  items.push(snippetItem('wire_decl', 'wire ${1:name};', 'Wire declaration'));
+  items.push(snippetItem('reg_decl', 'reg ${1:name};', 'Reg declaration'));
+  items.push(snippetItem('wire_bus', 'wire [${1:MSB}:${2:LSB}] ${3:name};', 'Bus wire declaration'));
+  items.push(snippetItem('initial_begin', 'initial begin\n    ${0}\nend', 'Initial block'));
+  items.push(snippetItem('parameter_decl', 'parameter ${1:NAME} = ${2:value};', 'Parameter declaration'));
+  items.push(snippetItem('generate_for', 'generate\n    for (${1:i} = 0; ${1:i} < ${2:N}; ${1:i} = ${1:i} + 1) begin : ${3:gen_label}\n        ${0}\n    end\nendgenerate', 'Generate for loop'));
+
   return dedupeCompletionItems(items);
 }
 
 export function getVerilogHover(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): Hover | undefined {
   const resolved = resolveVerilogSymbol(document, position, settings, index);
   if (!resolved) {
+    const literal = numericLiteralAt(document, position);
+    if (literal) {
+      return markdownHover(formatNumericLiteralHover(literal), literal.range);
+    }
     return undefined;
   }
   const parsed = getCachedVerilogParse(document, settings, false);
@@ -226,18 +316,49 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
     ? resolved.include.pathRange
     : getVerilogWordRange(document, position, parsed.cst) ?? resolvedRange(resolved);
   switch (resolved.kind) {
-    case 'decl':
-      return markdownHover(`\`${declDetail(resolved.decl)}\``, hoverRange);
+    case 'decl': {
+      const detail = declDetail(resolved.decl);
+      const widthInfo = widthOfDecl(resolved.decl);
+      let widthLine = '';
+      if (widthInfo.width !== undefined) {
+        widthLine = `\n\nInferred width: \`${widthInfo.width}\``;
+        if (widthInfo.minWidth !== undefined && widthInfo.minWidth !== widthInfo.width) {
+          widthLine += ` (min: \`${widthInfo.minWidth}\`)`;
+        }
+        if (widthInfo.flexible) {
+          widthLine += ' *(flexible)*';
+        }
+      }
+      return markdownHover(`\`${detail}\`${widthLine}`, hoverRange);
+    }
     case 'instance':
       return markdownHover(`Instance \`${resolved.instance.instanceName}\` of module \`${resolved.instance.moduleName}\`.`, hoverRange);
     case 'module':
       return markdownHover(moduleMarkdown(resolved.module), hoverRange);
     case 'portConnection':
       return markdownHover(`Port \`${resolved.targetPort.name}\` on module \`${resolved.targetModule.name}\`\n\n\`${declDetail(resolved.targetPort)}\``, hoverRange);
-    case 'macro':
-      return markdownHover(`Verilog macro \`${resolved.name}\``, hoverRange);
-    case 'include':
-      return markdownHover(`Included file \`${resolved.include.path}\``, hoverRange);
+    case 'macro': {
+      const macroDef = resolved.macro ?? index.getMacro(resolved.name);
+      const bodyMd = macroDef?.body ? `\n\n\`\`\`verilog\n${macroDef.body}\n\`\`\`` : '';
+      return markdownHover(`Verilog macro \`${resolved.name}\`${bodyMd}`, hoverRange);
+    }
+    case 'include': {
+      let status = '';
+      if (!document.uri.startsWith('untitled:')) {
+        try {
+          const currentPath = URI.parse(document.uri).fsPath;
+          const resolvedPath = path.resolve(path.dirname(currentPath), resolved.include.path);
+          if (fs.existsSync(resolvedPath)) {
+            status = `\n\nResolved: \`${resolvedPath}\``;
+          } else {
+            status = '\n\n**Unresolved**';
+          }
+        } catch {
+          status = '\n\n**Unresolved**';
+        }
+      }
+      return markdownHover(`Included file \`${resolved.include.path}\`${status}`, hoverRange);
+    }
   }
 }
 
@@ -1099,6 +1220,27 @@ function lineInRange(line: number, range: Range): boolean {
   return line >= range.start.line && line <= range.end.line;
 }
 
+function keywordsForContext(modules: VerilogModule[], position: Position): Set<string> {
+  const currentModule = moduleAtPosition(modules, position);
+  if (!currentModule) {
+    return new Set(['module', 'endmodule', 'always', 'assign', 'initial']);
+  }
+  const afterHeader = position.line > currentModule.headerEnd.line ||
+    (position.line === currentModule.headerEnd.line && position.character >= currentModule.headerEnd.character);
+  if (!afterHeader) {
+    return new Set(['input', 'output', 'inout', 'wire', 'reg', 'signed', 'integer', 'parameter', 'localparam']);
+  }
+  return new Set([
+    'always', 'assign', 'initial', 'begin', 'end', 'if', 'else', 'case', 'casex', 'casez',
+    'endcase', 'for', 'forever', 'repeat', 'while', 'fork', 'join',
+    'wire', 'reg', 'integer', 'parameter', 'localparam', 'genvar',
+    'task', 'endtask', 'function', 'endfunction',
+    'input', 'output', 'inout',
+    'generate', 'endgenerate', 'posedge', 'negedge', 'or',
+    'default', 'signed', 'module', 'endmodule'
+  ]);
+}
+
 function dedupeCompletionItems(items: CompletionItem[]): CompletionItem[] {
   const seen = new Set<string>();
   const result: CompletionItem[] = [];
@@ -1110,6 +1252,23 @@ function dedupeCompletionItems(items: CompletionItem[]): CompletionItem[] {
     result.push(item);
   }
   return result;
+}
+
+function tokenAtOffset(tokens: VerilogToken[], offset: number): VerilogToken | undefined {
+  let low = 0;
+  let high = tokens.length - 1;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const token = tokens[mid];
+    if (offset < token.start) {
+      high = mid - 1;
+    } else if (offset > token.end) {
+      low = mid + 1;
+    } else {
+      return token;
+    }
+  }
+  return undefined;
 }
 
 function dedupeLocations(locations: Location[]): Location[] {

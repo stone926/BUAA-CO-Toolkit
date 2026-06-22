@@ -10,7 +10,7 @@ import {
   VerilogMacroUse
 } from './model';
 
-const preprocessorDirectives = new Set([
+export const preprocessorDirectives = new Set([
   'define',
   'undef',
   'ifdef',
@@ -41,10 +41,16 @@ export function parseMacros(document: TextDocument, text: string, cst: VerilogCs
     if (!name || name.kind !== 'identifier') {
       continue;
     }
+    const nameEnd = document.positionAt(name.end);
+    const lineEnd = document.positionAt(token.end).line;
+    const lineText = lineAt(document, lineEnd).text;
+    const bodyStart = nameEnd.character;
+    const body = lineText.slice(bodyStart).trim();
     macros.push({
       name: name.value,
       range: lineAt(document, document.positionAt(token.start).line).range,
-      selectionRange: tokenRange(document, name)
+      selectionRange: tokenRange(document, name),
+      body: body || undefined
     });
   }
   return macros;

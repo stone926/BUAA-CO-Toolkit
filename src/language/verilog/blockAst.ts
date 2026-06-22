@@ -31,13 +31,16 @@ export interface VerilogProceduralBlockAst {
   bodyEnd: number;
 }
 
-const blockOpeners = new Set(['begin', 'case', 'casex', 'casez', 'generate', 'function', 'task']);
+const blockOpeners = new Set(['begin', 'case', 'casex', 'casez', 'generate', 'function', 'task', 'fork']);
 const blockClosers = new Map([
   ['end', 'begin'],
   ['endcase', 'case'],
   ['endgenerate', 'generate'],
   ['endfunction', 'function'],
-  ['endtask', 'task']
+  ['endtask', 'task'],
+  ['join', 'fork'],
+  ['join_any', 'fork'],
+  ['join_none', 'fork']
 ]);
 const instanceExcludedFirstTokens = new Set([
   'module',
@@ -78,6 +81,73 @@ export function collectVerilogFoldingRangesFromCst(document: TextDocument, cst: 
     closeFoldStack(document, stack, expected, token, ranges);
   }
   ranges.push(...collectPortListFoldingRanges(document, cst));
+  return ranges;
+}
+
+export function collectModuleBodyFoldingRanges(document: TextDocument, cst: VerilogCstDocument): FoldingRange[] {
+  const ranges: FoldingRange[] = [];
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    if (token.value !== 'module') {
+      continue;
+    }
+    const nameToken = cst.codeTokens[index + 1];
+    if (!nameToken || nameToken.kind !== 'identifier') {
+      continue;
+    }
+
+    let cursor = index + 2;
+    if (cst.codeTokens[cursor]?.value === '#') {
+      if (cst.codeTokens[cursor + 1]?.value === '(') {
+        const close = findMatchingForward(cst.codeTokens, cursor + 1, '(', ')');
+        if (close < 0) {
+          continue;
+        }
+        cursor = close + 1;
+      }
+    }
+    if (cst.codeTokens[cursor]?.value !== '(') {
+      continue;
+    }
+    const portClose = findMatchingForward(cst.codeTokens, cursor, '(', ')');
+    if (portClose < 0) {
+      continue;
+    }
+    if (cst.codeTokens[portClose + 1]?.value !== ';') {
+      continue;
+    }
+    const headerEndIndex = portClose + 1;
+    const headerEndToken = cst.codeTokens[headerEndIndex];
+
+    let endmoduleIndex = -1;
+    let moduleDepth = 0;
+    for (let scan = index; scan < cst.codeTokens.length; scan++) {
+      const scanToken = cst.codeTokens[scan];
+      if (scanToken.value === 'module' && scanToken.kind === 'keyword') {
+        moduleDepth++;
+      } else if (scanToken.value === 'endmodule' && scanToken.kind === 'keyword') {
+        moduleDepth--;
+        if (moduleDepth === 0) {
+          endmoduleIndex = scan;
+          break;
+        }
+      }
+    }
+    if (endmoduleIndex < 0) {
+      continue;
+    }
+
+    const bodyStartLine = document.positionAt(headerEndToken.end).line;
+    const bodyEndLine = document.positionAt(cst.codeTokens[endmoduleIndex].start).line;
+    if (bodyEndLine > bodyStartLine) {
+      ranges.push({
+        startLine: bodyStartLine,
+        endLine: bodyEndLine,
+        kind: FoldingRangeKind.Region
+      });
+    }
+    index = endmoduleIndex;
+  }
   return ranges;
 }
 

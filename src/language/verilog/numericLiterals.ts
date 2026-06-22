@@ -8,7 +8,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 
-interface NumericLiteralInfo {
+export interface NumericLiteralInfo {
   range: Range;
   size?: number;
   base: 'b' | 'o' | 'd' | 'h';
@@ -37,7 +37,36 @@ export function getVerilogLiteralCodeActions(document: TextDocument, range: Rang
   }));
 }
 
-function numericLiteralAt(document: TextDocument, position: Position): NumericLiteralInfo | undefined {
+export function formatNumericLiteralHover(literal: NumericLiteralInfo): string {
+  const value = literal.value;
+  const lines: string[] = [];
+  const sizeLabel = literal.size !== undefined ? `${literal.size}'${literal.base}` : 'decimal';
+
+  lines.push(`**Verilog number literal** \`${sizeLabel}\``);
+  lines.push('');
+
+  const dec = value.toString(10);
+  lines.push(`| Decimal | \`${dec}\` |`);
+
+  const bin = value.toString(2);
+  const grouped = bin.padStart(Math.ceil(bin.length / 4) * 4, '0')
+    .replace(/(.{4})/g, '$1_').replace(/_$/, '');
+  lines.push(`| Binary | \`${grouped}\` |`);
+
+  const hex = value.toString(16).toUpperCase();
+  lines.push(`| Hex | \`${hex}\` |`);
+
+  const oct = value.toString(8);
+  lines.push(`| Octal | \`${oct}\` |`);
+
+  if (literal.size !== undefined) {
+    lines.push('', `Bit width: \`${literal.size}\` bits`);
+  }
+
+  return lines.join('\n');
+}
+
+export function numericLiteralAt(document: TextDocument, position: Position): NumericLiteralInfo | undefined {
   const text = lineAt(document, position.line).text;
   const regex = /(?:\b\d+\s*'\s*[sS]?\s*[bBoOdDhH]\s*[0-9a-fA-F_xXzZ?]+\b)|(?:\b\d+\b)/g;
   let match: RegExpExecArray | null;

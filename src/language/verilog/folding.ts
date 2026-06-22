@@ -5,13 +5,14 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import { collectVerilogFoldingRangesFromCst } from './blockAst';
+import { collectVerilogFoldingRangesFromCst, collectModuleBodyFoldingRanges } from './blockAst';
 import { getCachedVerilogParse } from './parseCache';
 
 export function getVerilogFoldingRanges(document: TextDocument, settings: CoSettings): FoldingRange[] {
   const parsed = getCachedVerilogParse(document, settings, false);
   const ranges: FoldingRange[] = [];
   ranges.push(...collectVerilogFoldingRangesFromCst(document, parsed.cst));
+  ranges.push(...collectModuleBodyFoldingRanges(document, parsed.cst));
   ranges.push(...regionFoldingRanges(document));
   return ranges;
 }
