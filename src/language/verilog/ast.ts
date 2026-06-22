@@ -14,6 +14,8 @@ import {
   VerilogModule
 } from './model';
 import { collectAlwaysBlocksFromCst, VerilogAlwaysBlockAst } from './blockAst';
+import { findAssignmentOperator } from './assignmentAnalysis';
+import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 
 export interface VerilogAstDocument {
   kind: 'sourceFile';
@@ -101,8 +103,16 @@ export interface VerilogStatementAst {
   kind: VerilogStatementKind;
   range: Range;
   tokens: VerilogToken[];
+  expressions: VerilogExpressionAst[];
+  assignment?: VerilogAssignmentExpressionAst;
   statement: VerilogCstStatement;
   module?: VerilogModule;
+}
+
+export interface VerilogAssignmentExpressionAst {
+  operator: '=' | '<=';
+  lhs: VerilogExpressionAst;
+  rhs: VerilogExpressionAst;
 }
 
 const declarationKeywords = new Set([
@@ -208,13 +218,33 @@ function declAst(decl: VerilogDecl): VerilogDeclAst {
 }
 
 function buildStatementAst(statement: VerilogCstStatement, module?: VerilogModule): VerilogStatementAst {
+  const assignment = assignmentExpressionAst(statement.tokens);
   return {
     kind: classifyStatement(statement, module),
     range: statement.range,
     tokens: statement.tokens,
+    expressions: assignment ? [assignment.lhs, assignment.rhs] : [],
+    assignment,
     statement,
     module
   };
+}
+
+function assignmentExpressionAst(rawTokens: VerilogToken[]): VerilogAssignmentExpressionAst | undefined {
+  const tokens = trimTrailingSemicolon(rawTokens.filter((token) => token.kind !== 'eof'));
+  const operatorIndex = findAssignmentOperator(tokens);
+  if (operatorIndex < 0) {
+    return undefined;
+  }
+  const operator = tokens[operatorIndex].value;
+  if (operator !== '=' && operator !== '<=') {
+    return undefined;
+  }
+  const lhsTokens = tokens[0]?.value === 'assign' ? tokens.slice(1, operatorIndex) : tokens.slice(0, operatorIndex);
+  const rhsTokens = tokens.slice(operatorIndex + 1);
+  const lhs = parseVerilogExpressionTokens(lhsTokens);
+  const rhs = parseVerilogExpressionTokens(rhsTokens);
+  return lhs && rhs ? { operator, lhs, rhs } : undefined;
 }
 
 function classifyStatement(statement: VerilogCstStatement, module?: VerilogModule): VerilogStatementKind {
@@ -258,4 +288,8 @@ function documentRange(document: TextDocument): Range {
   const lines = document.getText().split(/\r?\n/);
   const lastLine = Math.max(0, lines.length - 1);
   return Range.create(0, 0, lastLine, lines[lastLine]?.length ?? 0);
+}
+
+function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {
+  return tokens[tokens.length - 1]?.value === ';' ? tokens.slice(0, -1) : tokens;
 }

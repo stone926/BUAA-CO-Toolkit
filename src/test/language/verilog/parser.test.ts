@@ -9,6 +9,8 @@ import {
   widthOfDecl,
   shouldReportWidthMismatch,
   widthOfExpression,
+  parseVerilogExpression,
+  parseVerilog,
   parseModules,
   parseMacros,
   parseMacroUses,
@@ -17,6 +19,7 @@ import {
   buildTestbench
 } from '../../../language/verilog/parser';
 import { VerilogDecl, VerilogModule } from '../../../language/verilog/model';
+import { mergeCoSettings } from '../../../language/common/settings';
 
 function doc(text: string): TextDocument {
   return TextDocument.create('test://test.v', 'verilog', 1, text);
@@ -246,6 +249,10 @@ describe('widthOfDecl', () => {
   it('handles reversed bit ranges', () => {
     expect(widthOfDecl(makeDecl({ width: '[0:31]' }))).toEqual({ width: 32 });
   });
+
+  it('evaluates constant expressions in bit ranges', () => {
+    expect(widthOfDecl(makeDecl({ width: '[8-1:0]' }))).toEqual({ width: 8 });
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -402,6 +409,63 @@ describe('widthOfExpression', () => {
       ])
     });
     expect(widthOfExpression('cond ? a : b', module).width).toBe(32);
+  });
+
+  it('handles constant expressions in indexed part-select widths', () => {
+    const module = makeModule({
+      declarations: new Map([['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })]])
+    });
+    expect(widthOfExpression('a[3 +: 2 + 2]', module)).toEqual({ width: 4 });
+  });
+});
+
+describe('parseVerilogExpression', () => {
+  it('builds an AST that preserves binary operator precedence', () => {
+    const ast = parseVerilogExpression('a + b * c');
+    expect(ast?.kind).toBe('binaryExpression');
+    if (ast?.kind !== 'binaryExpression') {
+      return;
+    }
+    expect(ast.operator).toBe('+');
+    expect(ast.right.kind).toBe('binaryExpression');
+    if (ast.right.kind === 'binaryExpression') {
+      expect(ast.right.operator).toBe('*');
+    }
+  });
+
+  it('builds right-nested conditional expressions', () => {
+    const ast = parseVerilogExpression('add ? ADD : sub ? SUB : NOP');
+    expect(ast?.kind).toBe('conditionalExpression');
+    if (ast?.kind !== 'conditionalExpression') {
+      return;
+    }
+    expect(ast.whenFalse.kind).toBe('conditionalExpression');
+  });
+
+  it('builds concatenation, replication and select nodes', () => {
+    const ast = parseVerilogExpression("{{14{imm16[15]}}, imm16, 2'b00}");
+    expect(ast?.kind).toBe('concatenation');
+    if (ast?.kind !== 'concatenation') {
+      return;
+    }
+    expect(ast.elements[0].kind).toBe('multipleConcatenation');
+    if (ast.elements[0].kind === 'multipleConcatenation') {
+      expect(ast.elements[0].elements[0].kind).toBe('selectExpression');
+    }
+  });
+
+  it('attaches assignment expression ASTs to parsed statements', () => {
+    const text = `
+module m(input [3:0] a, input [3:0] b, input [3:0] c, output [7:0] y);
+    assign y = a + b * c;
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const statement = parsed.ast.modules[0].items.find((item) => item.kind === 'continuousAssign');
+    expect(statement?.assignment?.rhs.kind).toBe('binaryExpression');
+    if (statement?.assignment?.rhs.kind === 'binaryExpression') {
+      expect(statement.assignment.rhs.operator).toBe('+');
+    }
   });
 });
 
@@ -576,6 +640,8 @@ describe('widthOfExpression — edge cases', () => {
     });
     expect(widthOfExpression('a[3 +: 4]', module)).toEqual({ width: 4 });
     expect(widthOfExpression('a[7 -: 8]', module)).toEqual({ width: 8 });
+    expect(widthOfExpression('a[3 + : 4]', module)).toEqual({ width: 4 });
+    expect(widthOfExpression('a[7 - : 8]', module)).toEqual({ width: 8 });
   });
 
   it('handles $signed and $unsigned pass-through width', () => {

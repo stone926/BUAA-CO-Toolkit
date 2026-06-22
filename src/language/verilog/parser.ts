@@ -82,6 +82,20 @@ export type {
 } from './expressions';
 
 export {
+  parseVerilogExpression,
+  parseVerilogExpressionTokens
+} from './exprAst';
+
+export type {
+  ParsedVerilogNumberLiteral,
+  VerilogExpressionAst
+} from './exprAst';
+
+export type {
+  VerilogAssignmentExpressionAst
+} from './ast';
+
+export {
   normalizeWidth,
   splitTopLevelCommas,
   splitTopLevelCommaSpans,
