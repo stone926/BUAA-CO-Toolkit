@@ -138,6 +138,51 @@ endmodule
     expect(edits.some((edit) => edit.newText === 'EXPR_CONST_1')).toBe(true);
   });
 
+  it('extracts a non-constant RHS expression to a wire', () => {
+    const text = `
+module m(input [7:0] a, input [7:0] b, output [7:0] y);
+    assign y = a + b;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '+');
+    const extract = actions.find((action) => action.title === 'Extract expression to wire EXPR_WIRE');
+    const edits = extract?.edit?.changes?.[document.uri] ?? [];
+
+    expect(extract?.kind).toBe('refactor.extract');
+    expect(edits.some((edit) => edit.newText === '    wire [7:0] EXPR_WIRE;\n    assign EXPR_WIRE = a + b;\n')).toBe(true);
+    expect(edits.some((edit) => edit.newText === 'EXPR_WIRE')).toBe(true);
+  });
+
+  it('uses a unique wire name when extracting non-constant expressions', () => {
+    const text = `
+module m(input [7:0] a, input [7:0] b, output [7:0] y);
+    wire [7:0] EXPR_WIRE;
+    assign y = a + b;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '+');
+    const extract = actions.find((action) => action.title === 'Extract expression to wire EXPR_WIRE_1');
+    const edits = extract?.edit?.changes?.[document.uri] ?? [];
+
+    expect(edits.some((edit) => edit.newText === '    wire [7:0] EXPR_WIRE_1;\n    assign EXPR_WIRE_1 = a + b;\n')).toBe(true);
+    expect(edits.some((edit) => edit.newText === 'EXPR_WIRE_1')).toBe(true);
+  });
+
+  it('does not extract constant expressions to wires', () => {
+    const text = `
+module m(output [7:0] y);
+    localparam WIDTH = 4;
+    assign y = (WIDTH + 1) * 2;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '*');
+
+    expect(actions.map((action) => action.title)).not.toContain('Extract expression to wire EXPR_WIRE');
+  });
+
   it('offers a safe redundant parentheses code action', () => {
     const text = `
 module m(input a, output y);

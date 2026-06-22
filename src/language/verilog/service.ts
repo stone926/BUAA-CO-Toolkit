@@ -568,6 +568,7 @@ function getVerilogExpressionCodeActions(document: TextDocument, range: Range, s
   return [
     makeFoldConstantExpressionAction(document, context.expression, module),
     makeExtractConstantLocalparamAction(document, context, module),
+    makeExtractWireAction(document, context, module),
     makeRemoveRedundantParenthesesAction(document, context.expression, context.parent)
   ].filter((action): action is CodeAction => Boolean(action));
 }
@@ -652,6 +653,51 @@ function makeExtractConstantLocalparamAction(
   };
 }
 
+function makeExtractWireAction(
+  document: TextDocument,
+  context: VerilogExpressionActionContext,
+  module: VerilogModule
+): CodeAction | undefined {
+  const { expression, statement } = context;
+  if (statement.kind !== 'continuousAssign' || expression.kind === 'numberLiteral' || expression.kind === 'identifier' || expression.kind === 'stringLiteral') {
+    return undefined;
+  }
+  const assignment = statement.assignment;
+  if (!assignment || !containsExpression(assignment.rhs, expression)) {
+    return undefined;
+  }
+  if (evalExpressionAstConstant(expression, module) !== undefined) {
+    return undefined;
+  }
+  const width = extractWireWidth(expression, assignment.rhs, assignment.lhs, module);
+  if (width === undefined || width < 1) {
+    return undefined;
+  }
+  const expressionRange = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
+  const source = document.getText(expressionRange).trim();
+  if (!source || /[\r\n]/.test(source)) {
+    return undefined;
+  }
+  const name = uniqueDeclarationName(module, 'EXPR_WIRE');
+  const indent = lineAt(document, statement.range.start.line).text.match(/^\s*/)?.[0] ?? '';
+  const insert = TextEdit.insert(
+    Position.create(statement.range.start.line, 0),
+    `${indent}wire ${wireRangeText(width)}${name};\n${indent}assign ${name} = ${source};\n`
+  );
+  return {
+    title: `Extract expression to wire ${name}`,
+    kind: CodeActionKind.RefactorExtract,
+    edit: {
+      changes: {
+        [document.uri]: [
+          insert,
+          TextEdit.replace(expressionRange, name)
+        ]
+      }
+    }
+  };
+}
+
 function makeRemoveRedundantParenthesesAction(
   document: TextDocument,
   expression: VerilogExpressionAst,
@@ -707,6 +753,21 @@ function isPrimaryExpression(expression: VerilogExpressionAst): boolean {
 
 function containsExpression(outer: VerilogExpressionAst, inner: VerilogExpressionAst): boolean {
   return inner.start >= outer.start && inner.end <= outer.end;
+}
+
+function extractWireWidth(expression: VerilogExpressionAst, rhs: VerilogExpressionAst, lhs: VerilogExpressionAst, module: VerilogModule): number | undefined {
+  const expressionWidth = widthOfExpressionAst(expression, module);
+  if (expression === rhs) {
+    return widthOfExpressionAst(lhs, module).width ?? expressionWidth.width;
+  }
+  if (expressionWidth.flexible) {
+    return undefined;
+  }
+  return expressionWidth.width;
+}
+
+function wireRangeText(width: number): string {
+  return width <= 1 ? '' : `[${width - 1}:0] `;
 }
 
 function uniqueDeclarationName(module: VerilogModule, baseName: string): string {
