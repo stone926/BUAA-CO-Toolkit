@@ -31,7 +31,12 @@ VSCode document
 3. 声明 hover 增强
    - 参数声明 hover 除了显示声明详情和宽度，还能显示已求值的常量值。
 
-4. 后续重构基础
+4. 表达式重构 code action
+   - 可求值且非平凡的表达式可以折叠为常量值。
+   - 对 `(a)`、`(bus[0])`、`((a))` 这类语义明确安全的场景提供去除冗余括号动作。
+   - 对 `(a + b) * c` 这类依赖括号保持优先级的表达式保持静默。
+
+5. 后续重构基础
    - 已有 AST 节点包含一元、二元、三目、拼接、重复拼接、选择、调用和成员访问。
    - Code action 可以基于 AST 做精确范围替换，而不用重新猜运算符优先级。
 
@@ -39,10 +44,6 @@ VSCode document
 
 短期最适合落地：
 
-- 常量折叠 preview：对可求值表达式提供 hover 或 code action。
-- 去除多余括号：基于 AST 和优先级判断是否安全。
-- 德摩根律转换：识别 `!(a && b)` / `!(a || b)` / `~(a & b)` / `~(a | b)`。
-- 三目链可读性检查：识别过深的 right-nested conditional。
 - 过程块内赋值位宽检查：复用 `VerilogStatementAst.assignment` 和 width inference。
 
 中期可做：

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
 import {
+  getVerilogCodeActions,
   getVerilogDiagnostics,
   getVerilogHover
 } from '../../../language/verilog/service';
@@ -22,6 +24,17 @@ function positionOf(document: TextDocument, text: string, offset = 0) {
 function hoverText(hover: ReturnType<typeof getVerilogHover>): string {
   const contents = hover?.contents;
   return typeof contents === 'object' && 'value' in contents ? contents.value : '';
+}
+
+function codeActionsAt(document: TextDocument, text: string, offset = 0) {
+  const position = positionOf(document, text, offset);
+  return getVerilogCodeActions(
+    document,
+    Range.create(position, position),
+    [],
+    mergeCoSettings({}),
+    new VerilogWorkspaceIndex()
+  );
 }
 
 describe('Verilog expression AST LSP integration', () => {
@@ -74,5 +87,46 @@ endmodule
     const diagnostics = getVerilogDiagnostics(doc(text), mergeCoSettings({}), new VerilogWorkspaceIndex());
 
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain('port-width-mismatch');
+  });
+
+  it('offers an AST constant fold code action', () => {
+    const text = `
+module m(output [7:0] y);
+    localparam WIDTH = 4;
+    assign y = (WIDTH + 1) * 2;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '*');
+    const fold = actions.find((action) => action.title === 'Fold constant expression to 10');
+
+    expect(fold?.kind).toBe('refactor.rewrite');
+    expect(fold?.edit?.changes?.[document.uri]?.[0].newText).toBe('10');
+  });
+
+  it('offers a safe redundant parentheses code action', () => {
+    const text = `
+module m(input a, output y);
+    assign y = (a);
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '(a)');
+    const remove = actions.find((action) => action.title === 'Remove redundant parentheses');
+
+    expect(remove?.kind).toBe('refactor.rewrite');
+    expect(remove?.edit?.changes?.[document.uri]?.[0].newText).toBe('a');
+  });
+
+  it('does not remove parentheses required by operator precedence', () => {
+    const text = `
+module m(input a, input b, input c, output y);
+    assign y = (a + b) * c;
+endmodule
+`.trim();
+    const document = doc(text);
+    const actions = codeActionsAt(document, '(a + b)');
+
+    expect(actions.map((action) => action.title)).not.toContain('Remove redundant parentheses');
   });
 });

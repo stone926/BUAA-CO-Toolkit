@@ -1,5 +1,10 @@
 import { VerilogExpressionAst } from './exprAst';
 
+export interface VerilogExpressionMatch {
+  expression: VerilogExpressionAst;
+  parent?: VerilogExpressionAst;
+}
+
 export function childrenOfVerilogExpression(expression: VerilogExpressionAst): VerilogExpressionAst[] {
   switch (expression.kind) {
     case 'parenthesizedExpression':
@@ -43,18 +48,36 @@ export function walkVerilogExpression(
   }
 }
 
+export function walkVerilogExpressionWithParent(
+  expression: VerilogExpressionAst,
+  visit: (expression: VerilogExpressionAst, parent?: VerilogExpressionAst) => void,
+  parent?: VerilogExpressionAst
+): void {
+  visit(expression, parent);
+  for (const child of childrenOfVerilogExpression(expression)) {
+    walkVerilogExpressionWithParent(child, visit, expression);
+  }
+}
+
 export function findSmallestVerilogExpressionAtOffset(
   expressions: VerilogExpressionAst[],
   offset: number
 ): VerilogExpressionAst | undefined {
-  let best: VerilogExpressionAst | undefined;
+  return findSmallestVerilogExpressionMatchAtOffset(expressions, offset)?.expression;
+}
+
+export function findSmallestVerilogExpressionMatchAtOffset(
+  expressions: VerilogExpressionAst[],
+  offset: number
+): VerilogExpressionMatch | undefined {
+  let best: VerilogExpressionMatch | undefined;
   for (const expression of expressions) {
-    walkVerilogExpression(expression, (candidate) => {
+    walkVerilogExpressionWithParent(expression, (candidate, parent) => {
       if (offset < candidate.start || offset > candidate.end) {
         return;
       }
-      if (!best || expressionSize(candidate) < expressionSize(best)) {
-        best = candidate;
+      if (!best || expressionSize(candidate) < expressionSize(best.expression)) {
+        best = { expression: candidate, parent };
       }
     });
   }

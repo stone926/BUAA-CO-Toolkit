@@ -53,7 +53,8 @@ import { evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './
 import { preprocessorDirectives } from './preprocessor';
 import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
-import { findSmallestVerilogExpressionAtOffset } from './exprAstUtils';
+import type { VerilogExpressionAst } from './exprAst';
+import { findSmallestVerilogExpressionAtOffset, findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
 import {
   verilogWordRangeAtPosition
 } from './tokenNavigation';
@@ -539,9 +540,110 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
   actions.push(...getWidthMismatchCodeActions(document, diagnostics, settings));
   actions.push(...getVerilogLintRuleCodeActions(diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
+  actions.push(...getVerilogExpressionCodeActions(document, range, settings));
   actions.push(...getVerilogLiteralCodeActions(document, range));
 
   return actions;
+}
+
+function getVerilogExpressionCodeActions(document: TextDocument, range: Range, settings: CoSettings): CodeAction[] {
+  const parsed = getCachedVerilogParse(document, settings, false);
+  const module = moduleAtPosition(parsed.modules, range.start);
+  const moduleAst = module ? parsed.ast.modules.find((item) => item.module === module) : undefined;
+  if (!module || !moduleAst) {
+    return [];
+  }
+
+  const match = findSmallestVerilogExpressionMatchAtOffset(
+    moduleAst.items.flatMap((item) => item.expressions),
+    document.offsetAt(range.start)
+  );
+  if (!match) {
+    return [];
+  }
+
+  return [
+    makeFoldConstantExpressionAction(document, match.expression, module),
+    makeRemoveRedundantParenthesesAction(document, match.expression, match.parent)
+  ].filter((action): action is CodeAction => Boolean(action));
+}
+
+function makeFoldConstantExpressionAction(document: TextDocument, expression: VerilogExpressionAst, module: VerilogModule): CodeAction | undefined {
+  if (expression.kind === 'numberLiteral' || expression.kind === 'identifier') {
+    return undefined;
+  }
+  const value = evalExpressionAstConstant(expression, module);
+  if (value === undefined) {
+    return undefined;
+  }
+  const expressionRange = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
+  const source = document.getText(expressionRange).trim();
+  const replacement = value.toString();
+  if (!source || source === replacement) {
+    return undefined;
+  }
+  return {
+    title: `Fold constant expression to ${replacement}`,
+    kind: CodeActionKind.RefactorRewrite,
+    edit: {
+      changes: {
+        [document.uri]: [TextEdit.replace(expressionRange, replacement)]
+      }
+    }
+  };
+}
+
+function makeRemoveRedundantParenthesesAction(
+  document: TextDocument,
+  expression: VerilogExpressionAst,
+  parent: VerilogExpressionAst | undefined
+): CodeAction | undefined {
+  if (expression.kind !== 'parenthesizedExpression' || !canRemoveParentheses(expression, parent)) {
+    return undefined;
+  }
+  const outerRange = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
+  const innerRange = Range.create(document.positionAt(expression.expression.start), document.positionAt(expression.expression.end));
+  const outer = document.getText(outerRange).trim();
+  const inner = document.getText(innerRange);
+  if (!outer.startsWith('(') || !outer.endsWith(')') || !inner.trim()) {
+    return undefined;
+  }
+  return {
+    title: 'Remove redundant parentheses',
+    kind: CodeActionKind.RefactorRewrite,
+    edit: {
+      changes: {
+        [document.uri]: [TextEdit.replace(outerRange, inner)]
+      }
+    }
+  };
+}
+
+function canRemoveParentheses(
+  expression: Extract<VerilogExpressionAst, { kind: 'parenthesizedExpression' }>,
+  parent: VerilogExpressionAst | undefined
+): boolean {
+  const inner = expression.expression;
+  if (inner.kind === 'parenthesizedExpression' || isPrimaryExpression(inner)) {
+    return true;
+  }
+  return parent === undefined;
+}
+
+function isPrimaryExpression(expression: VerilogExpressionAst): boolean {
+  switch (expression.kind) {
+    case 'numberLiteral':
+    case 'stringLiteral':
+    case 'identifier':
+    case 'selectExpression':
+    case 'callExpression':
+    case 'memberExpression':
+    case 'concatenation':
+    case 'multipleConcatenation':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
