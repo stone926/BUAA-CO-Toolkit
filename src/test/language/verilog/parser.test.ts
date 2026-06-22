@@ -740,6 +740,22 @@ endmodule
     expect(widthOfExpression('add ? ADD : sub ? SUB : NOP', module).width).toBe(6);
   });
 
+  it('evaluates dependent parameter constants for declaration widths', () => {
+    const text = `
+module test;
+    parameter WIDTH = 8;
+    localparam BUS_MSB = WIDTH - 1;
+    wire [BUS_MSB:0] data;
+endmodule
+`.trim();
+    const d = doc(text);
+    const module = parseModules(d, text)[0];
+
+    expect(module.declarations.get('WIDTH')?.constantValue).toBe(8n);
+    expect(module.declarations.get('BUS_MSB')?.constantValue).toBe(7n);
+    expect(widthOfDecl(module.declarations.get('data')!, module)).toEqual({ width: 8 });
+  });
+
   it('treats unsized parameter literals as fixed-width (IEEE strict)', () => {
     const text = `
 module test(input add, output [5:0] type);

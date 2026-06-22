@@ -72,9 +72,12 @@ export {
 } from './moduleUtils';
 
 export {
+  evalExpressionAstConstant,
+  evalExpressionConstant,
   shouldReportWidthMismatch,
   widthOfDecl,
-  widthOfExpression
+  widthOfExpression,
+  widthOfExpressionAst
 } from './expressions';
 
 export type {
@@ -94,6 +97,12 @@ export type {
 export type {
   VerilogAssignmentExpressionAst
 } from './ast';
+
+export {
+  childrenOfVerilogExpression,
+  findSmallestVerilogExpressionAtOffset,
+  walkVerilogExpression
+} from './exprAstUtils';
 
 export {
   normalizeWidth,

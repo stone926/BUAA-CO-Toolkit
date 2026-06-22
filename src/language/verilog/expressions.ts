@@ -2,6 +2,7 @@ import {
   evalVerilogIntegerConstant,
   parseVerilogExpression,
   ParsedVerilogNumberLiteral,
+  VerilogConstantResolver,
   VerilogExpressionAst
 } from './exprAst';
 import { VerilogDecl, VerilogModule } from './model';
@@ -12,8 +13,8 @@ export interface WidthInfo {
   flexible?: boolean;
 }
 
-export function widthOfDecl(decl: VerilogDecl): WidthInfo {
-  const rangeWidth = widthFromRange(decl.width);
+export function widthOfDecl(decl: VerilogDecl, module?: VerilogModule): WidthInfo {
+  const rangeWidth = widthFromRange(decl.width, module);
   if (rangeWidth !== undefined) {
     return { width: rangeWidth };
   }
@@ -51,28 +52,7 @@ export function shouldReportWidthMismatch(expected: WidthInfo, actual: WidthInfo
   return actualMinimum > expected.width;
 }
 
-function widthFromRange(width?: string): number | undefined {
-  if (!width) {
-    return undefined;
-  }
-  const inner = bracketContents(width);
-  if (inner === undefined) {
-    return undefined;
-  }
-  const separator = topLevelRangeColon(inner);
-  if (separator < 0) {
-    return undefined;
-  }
-  const left = parseVerilogExpression(inner.slice(0, separator));
-  const right = parseVerilogExpression(inner.slice(separator + 1));
-  const leftValue = constNumber(left);
-  const rightValue = constNumber(right);
-  return leftValue === undefined || rightValue === undefined
-    ? undefined
-    : Math.abs(leftValue - rightValue) + 1;
-}
-
-function widthOfExpressionAst(expression: VerilogExpressionAst | undefined, module: VerilogModule | undefined): WidthInfo {
+export function widthOfExpressionAst(expression: VerilogExpressionAst | undefined, module: VerilogModule | undefined): WidthInfo {
   if (!expression) {
     return {};
   }
@@ -123,9 +103,41 @@ function widthOfExpressionAst(expression: VerilogExpressionAst | undefined, modu
   }
 }
 
+export function evalExpressionConstant(expression: string, module?: VerilogModule): bigint | undefined {
+  return evalExpressionAstConstant(parseVerilogExpression(expression), module);
+}
+
+export function evalExpressionAstConstant(expression: VerilogExpressionAst | undefined, module?: VerilogModule): bigint | undefined {
+  if (!expression) {
+    return undefined;
+  }
+  return evalVerilogIntegerConstant(expression, module ? constantResolverForModule(module) : undefined);
+}
+
+function widthFromRange(width: string | undefined, module?: VerilogModule): number | undefined {
+  if (!width) {
+    return undefined;
+  }
+  const inner = bracketContents(width);
+  if (inner === undefined) {
+    return undefined;
+  }
+  const separator = topLevelRangeColon(inner);
+  if (separator < 0) {
+    return undefined;
+  }
+  const left = parseVerilogExpression(inner.slice(0, separator));
+  const right = parseVerilogExpression(inner.slice(separator + 1));
+  const leftValue = constNumber(left, module);
+  const rightValue = constNumber(right, module);
+  return leftValue === undefined || rightValue === undefined
+    ? undefined
+    : Math.abs(leftValue - rightValue) + 1;
+}
+
 function widthOfIdentifier(name: string, module: VerilogModule): WidthInfo {
   const decl = module.declarations.get(name);
-  return decl ? widthOfDecl(decl) : {};
+  return decl ? widthOfDecl(decl, module) : {};
 }
 
 function widthOfCall(expression: Extract<VerilogExpressionAst, { kind: 'callExpression' }>, module: VerilogModule | undefined): WidthInfo {
@@ -140,12 +152,12 @@ function widthOfSelect(expression: Extract<VerilogExpressionAst, { kind: 'select
     case 'bitSelect':
       return { width: 1 };
     case 'rangeSelect': {
-      const left = constNumber(expression.select.left);
-      const right = constNumber(expression.select.right);
+      const left = constNumber(expression.select.left, module);
+      const right = constNumber(expression.select.right, module);
       return left === undefined || right === undefined ? {} : { width: Math.abs(left - right) + 1 };
     }
     case 'indexedPartSelect': {
-      const width = constNumber(expression.select.width);
+      const width = constNumber(expression.select.width, module);
       return width === undefined ? {} : { width };
     }
     default:
@@ -169,7 +181,7 @@ function widthOfMultipleConcatenation(
   expression: Extract<VerilogExpressionAst, { kind: 'multipleConcatenation' }>,
   module: VerilogModule | undefined
 ): WidthInfo {
-  const repeat = constNumber(expression.repeat);
+  const repeat = constNumber(expression.repeat, module);
   if (repeat === undefined || repeat < 0) {
     return {};
   }
@@ -192,14 +204,18 @@ function literalWidth(parsed: ParsedVerilogNumberLiteral | undefined): WidthInfo
   return { width: Math.max(32, minWidth), minWidth };
 }
 
-function constNumber(expression: VerilogExpressionAst | undefined): number | undefined {
+function constNumber(expression: VerilogExpressionAst | undefined, module?: VerilogModule): number | undefined {
   if (!expression) {
     return undefined;
   }
-  const value = evalVerilogIntegerConstant(expression);
+  const value = evalExpressionAstConstant(expression, module);
   return value !== undefined && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
     ? Number(value)
     : undefined;
+}
+
+function constantResolverForModule(module: VerilogModule): VerilogConstantResolver {
+  return (name) => module.declarations.get(name)?.constantValue;
 }
 
 function bracketContents(width: string): string | undefined {

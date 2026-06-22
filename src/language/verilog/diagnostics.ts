@@ -175,7 +175,7 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
         if (!targetPort || !connection.expression.trim()) {
           continue;
         }
-        const expected = widthOfDecl(targetPort);
+        const expected = widthOfDecl(targetPort, target);
         const actual = widthOfExpression(connection.expression, module);
         if (shouldReportWidthMismatch(expected, actual)) {
           diagnostics.push(makeDiagnostic(
@@ -271,7 +271,7 @@ function collectDeclarationInitializerWidthDiagnostics(
     if (!initTokens.length) {
       continue;
     }
-    const expected = widthOfDecl(decl);
+    const expected = widthOfDecl(decl, module);
     const actual = widthOfExpression(tokenText(text, initTokens).trim(), module);
     if (shouldReportWidthMismatch(expected, actual)) {
       diagnostics.push(makeDiagnostic(

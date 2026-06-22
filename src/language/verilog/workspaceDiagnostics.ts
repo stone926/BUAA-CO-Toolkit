@@ -70,7 +70,7 @@ function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSet
         if (!targetPort || !connection.expression.trim()) {
           continue;
         }
-        const expected = widthOfDecl(targetPort);
+        const expected = widthOfDecl(targetPort, target);
         const actual = widthOfExpression(connection.expression, module);
         if (shouldReportWidthMismatch(expected, actual)) {
           diagnostics.push(makeDiagnostic(

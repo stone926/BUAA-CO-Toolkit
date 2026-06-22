@@ -13,7 +13,8 @@ import {
   VerilogPortConnection,
   verilogKeywords
 } from './model';
-import { widthOfConstantInitializer, WidthInfo } from './expressions';
+import { widthOfConstantInitializer, widthOfExpression, WidthInfo } from './expressions';
+import { evalVerilogIntegerConstant, parseVerilogExpression } from './exprAst';
 import { normalizeWidth } from './textUtils';
 
 interface ModuleHeaderInfo {
@@ -165,6 +166,7 @@ export function parseModulesFromCst(
         module.declarations.set(decl.name, decl);
       }
     }
+    inferModuleParameterConstants(module);
     modules.push(module);
     index = header.nextIndex;
   }
@@ -275,13 +277,16 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
       if (!nameToken) {
         continue;
       }
+      const initializer = declarationInitializerInfo(document, text, part);
       const inferred = (kind === 'parameter' || kind === 'localparam')
-        ? inferredWidthOfDeclarationInitializer(text, part)
+        ? initializer
         : {};
       declarations.push({
         name: nameToken.value,
         kind,
         width,
+        initializer: initializer.initializer,
+        initializerRange: initializer.initializerRange,
         inferredWidth: inferred.width,
         inferredMinWidth: inferred.minWidth,
         inferredFlexible: inferred.flexible,
@@ -351,6 +356,52 @@ function subroutineArgumentDeclarations(document: TextDocument, text: string, to
   return result;
 }
 
+function inferModuleParameterConstants(module: VerilogModule): void {
+  const evaluating = new Set<string>();
+  const resolve = (name: string): bigint | undefined => {
+    const decl = module.declarations.get(name);
+    if (!decl || !isConstantDecl(decl)) {
+      return undefined;
+    }
+    if (decl.constantValue !== undefined) {
+      return decl.constantValue;
+    }
+    if (!decl.initializer || evaluating.has(decl.name)) {
+      return undefined;
+    }
+    evaluating.add(decl.name);
+    try {
+      const ast = parseVerilogExpression(decl.initializer);
+      const value = ast ? evalVerilogIntegerConstant(ast, resolve) : undefined;
+      if (value !== undefined) {
+        decl.constantValue = value;
+      }
+      return value;
+    } finally {
+      evaluating.delete(decl.name);
+    }
+  };
+
+  for (const decl of module.parameters) {
+    resolve(decl.name);
+  }
+  for (const decl of module.parameters) {
+    if (!decl.initializer) {
+      continue;
+    }
+    const inferred = widthOfExpression(decl.initializer, module);
+    if (inferred.width !== undefined) {
+      decl.inferredWidth = inferred.width;
+      decl.inferredMinWidth = inferred.minWidth;
+      decl.inferredFlexible = inferred.flexible;
+    }
+  }
+}
+
+function isConstantDecl(decl: VerilogDecl): boolean {
+  return decl.kind === 'parameter' || decl.kind === 'localparam';
+}
+
 function topLevelIndexOfValue(tokens: VerilogToken[], value: string, from: number, to: number): number {
   let paren = 0;
   let bracket = 0;
@@ -405,14 +456,17 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   const direction = firstTokenValue(cleaned, portKinds) as 'input' | 'output' | 'inout' | undefined;
   const explicitKind = firstTokenValue(cleaned, declKinds) as VerilogDeclKind | undefined;
   const kind = (direction ?? explicitKind ?? fallbackKind) as VerilogDeclKind;
+  const initializer = declarationInitializerInfo(document, text, cleaned);
   const inferred = (kind === 'parameter' || kind === 'localparam')
-    ? inferredWidthOfDeclarationInitializer(text, cleaned)
+    ? initializer
     : {};
   return {
     name: nameToken.value,
     kind,
     direction,
     width: firstRangeText(text, cleaned),
+    initializer: initializer.initializer,
+    initializerRange: initializer.initializerRange,
     inferredWidth: inferred.width,
     inferredMinWidth: inferred.minWidth,
     inferredFlexible: inferred.flexible,
@@ -604,12 +658,27 @@ function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined 
   return index >= 0 ? tokens[index] : undefined;
 }
 
-function inferredWidthOfDeclarationInitializer(text: string, tokens: VerilogToken[]): WidthInfo {
+interface DeclarationInitializerInfo extends WidthInfo {
+  initializer?: string;
+  initializerRange?: Range;
+}
+
+function declarationInitializerInfo(document: TextDocument, text: string, tokens: VerilogToken[]): DeclarationInitializerInfo {
   const equal = findTopLevelToken(tokens, '=');
   if (equal < 0) {
     return {};
   }
-  return widthOfConstantInitializer(text.slice(tokens[equal].end, tokens[tokens.length - 1].end).trim());
+  const expressionTokens = tokens.slice(equal + 1).filter((token) => token.kind !== 'eof');
+  if (!expressionTokens.length) {
+    return {};
+  }
+  const initializer = tokenText(text, expressionTokens).trim();
+  const width = widthOfConstantInitializer(initializer);
+  return {
+    ...width,
+    initializer,
+    initializerRange: tokensRange(document, expressionTokens, tokens[equal].end, tokens[tokens.length - 1].end)
+  };
 }
 
 function findTopLevelToken(tokens: VerilogToken[], value: string): number {
@@ -711,6 +780,13 @@ function tokensRange(document: TextDocument, tokens: VerilogToken[], fallbackSta
     return rangeAtOffset(document, fallbackStart, Math.max(0, fallbackEnd - fallbackStart));
   }
   return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
+}
+
+function tokenText(text: string, tokens: VerilogToken[]): string {
+  if (!tokens.length) {
+    return '';
+  }
+  return text.slice(tokens[0].start, tokens[tokens.length - 1].end);
 }
 
 function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {

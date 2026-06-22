@@ -9,6 +9,9 @@ export interface VerilogDecl {
   name: string;
   kind: VerilogDeclKind;
   width?: string;
+  initializer?: string;
+  initializerRange?: Range;
+  constantValue?: bigint;
   inferredWidth?: number;
   inferredMinWidth?: number;
   inferredFlexible?: boolean;

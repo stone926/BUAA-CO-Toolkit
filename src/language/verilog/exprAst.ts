@@ -123,6 +123,8 @@ export type ParsedVerilogNumberLiteral =
       value?: bigint;
     };
 
+export type VerilogConstantResolver = (name: string) => bigint | undefined;
+
 const prefixOperators = new Set(['!', '~', '&', '|', '^', '+', '-', '~&', '~|', '~^', '^~']);
 
 interface BinaryBindingPower {
@@ -214,26 +216,28 @@ export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLit
   };
 }
 
-export function evalVerilogIntegerConstant(expression: VerilogExpressionAst): bigint | undefined {
+export function evalVerilogIntegerConstant(expression: VerilogExpressionAst, resolveIdentifier?: VerilogConstantResolver): bigint | undefined {
   switch (expression.kind) {
     case 'numberLiteral':
       return expression.parsed?.value;
+    case 'identifier':
+      return resolveIdentifier?.(expression.name);
     case 'parenthesizedExpression':
-      return evalVerilogIntegerConstant(expression.expression);
+      return evalVerilogIntegerConstant(expression.expression, resolveIdentifier);
     case 'unaryExpression':
-      return evalUnaryConstant(expression.operator, evalVerilogIntegerConstant(expression.argument));
+      return evalUnaryConstant(expression.operator, evalVerilogIntegerConstant(expression.argument, resolveIdentifier));
     case 'binaryExpression':
       return evalBinaryConstant(
         expression.operator,
-        evalVerilogIntegerConstant(expression.left),
-        evalVerilogIntegerConstant(expression.right)
+        evalVerilogIntegerConstant(expression.left, resolveIdentifier),
+        evalVerilogIntegerConstant(expression.right, resolveIdentifier)
       );
     case 'conditionalExpression': {
-      const condition = evalVerilogIntegerConstant(expression.condition);
+      const condition = evalVerilogIntegerConstant(expression.condition, resolveIdentifier);
       if (condition === undefined) {
         return undefined;
       }
-      return evalVerilogIntegerConstant(condition === 0n ? expression.whenFalse : expression.whenTrue);
+      return evalVerilogIntegerConstant(condition === 0n ? expression.whenFalse : expression.whenTrue, resolveIdentifier);
     }
     default:
       return undefined;
