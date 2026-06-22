@@ -14,6 +14,7 @@ import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import {
   expectedPorts,
+  VerilogDecl,
   VerilogInclude,
   VerilogModule,
   VerilogPortConnection
@@ -49,6 +50,7 @@ export function collectVerilogDiagnostics(
   collectInstancePortDiagnostics(modules, diagnostics);
   collectWidthDiagnostics(document, text, modules, cst, ast, diagnostics);
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
+  collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
     collectAssignmentDiagnostics(document, settings, text, modules, cst, diagnostics);
@@ -203,6 +205,225 @@ function collectConstantDivisorDiagnosticsForExpression(
   });
 }
 
+function collectSelectBoundsDiagnostics(document: TextDocument, modules: VerilogModule[], ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+  for (const module of modules) {
+    const moduleAst = ast.modules.find((item) => item.module === module);
+    if (moduleAst) {
+      for (const statement of moduleAst.items) {
+        for (const expression of statement.expressions) {
+          collectSelectBoundsDiagnosticsForExpression(document, module, expression, 0, diagnostics);
+        }
+      }
+    }
+
+    for (const decl of module.declarations.values()) {
+      if (!decl.initializer || !decl.initializerRange) {
+        continue;
+      }
+      const expression = parseVerilogExpression(decl.initializer);
+      if (!expression) {
+        continue;
+      }
+      collectSelectBoundsDiagnosticsForExpression(
+        document,
+        module,
+        expression,
+        expressionBaseOffset(document, decl.initializerRange, decl.initializer),
+        diagnostics
+      );
+    }
+
+    for (const instance of module.instances) {
+      for (const connection of [...instance.parameterConnections, ...instance.portConnections]) {
+        if (!connection.expression.trim()) {
+          continue;
+        }
+        const expression = parseVerilogExpression(connection.expression);
+        if (!expression) {
+          continue;
+        }
+        collectSelectBoundsDiagnosticsForExpression(
+          document,
+          module,
+          expression,
+          expressionBaseOffset(document, connection.expressionRange, connection.expression),
+          diagnostics
+        );
+      }
+    }
+  }
+}
+
+function collectSelectBoundsDiagnosticsForExpression(
+  document: TextDocument,
+  module: VerilogModule,
+  expression: VerilogExpressionAst,
+  baseOffset: number,
+  diagnostics: Diagnostic[]
+): void {
+  walkVerilogExpression(expression, (candidate) => {
+    if (candidate.kind !== 'selectExpression') {
+      return;
+    }
+    const targetName = selectedTargetIdentifier(candidate.target);
+    if (!targetName) {
+      return;
+    }
+    const decl = module.declarations.get(targetName);
+    const bounds = decl ? declarationIndexBounds(document, decl, module) : undefined;
+    if (!bounds) {
+      return;
+    }
+    switch (candidate.select.kind) {
+      case 'bitSelect': {
+        const index = evalExpressionAstConstant(candidate.select.index, module);
+        if (index !== undefined && !indexInsideBounds(index, bounds)) {
+          diagnostics.push(makeDiagnostic(
+            expressionRangeAtBase(document, candidate.select.index, baseOffset),
+            `Select index ${index} is outside '${targetName}' index range ${formatBounds(bounds)}.`,
+            DiagnosticSeverity.Warning,
+            'select-out-of-range'
+          ));
+        }
+        break;
+      }
+      case 'rangeSelect': {
+        const left = evalExpressionAstConstant(candidate.select.left, module);
+        const right = evalExpressionAstConstant(candidate.select.right, module);
+        if (left === undefined || right === undefined) {
+          break;
+        }
+        const selected = orderedBounds(left, right);
+        if (!rangeInsideBounds(selected, bounds)) {
+          diagnostics.push(makeDiagnostic(
+            offsetRangeAtBase(document, candidate.select.start, candidate.select.end, baseOffset),
+            `Select range ${formatBounds(selected)} is outside '${targetName}' index range ${formatBounds(bounds)}.`,
+            DiagnosticSeverity.Warning,
+            'select-out-of-range'
+          ));
+        }
+        break;
+      }
+      case 'indexedPartSelect': {
+        const base = evalExpressionAstConstant(candidate.select.base, module);
+        const width = evalExpressionAstConstant(candidate.select.width, module);
+        if (base === undefined || width === undefined || width <= 0n) {
+          break;
+        }
+        const selected = candidate.select.direction === '+:'
+          ? orderedBounds(base, base + width - 1n)
+          : orderedBounds(base - width + 1n, base);
+        if (!rangeInsideBounds(selected, bounds)) {
+          diagnostics.push(makeDiagnostic(
+            offsetRangeAtBase(document, candidate.select.start, candidate.select.end, baseOffset),
+            `Indexed part-select range ${formatBounds(selected)} is outside '${targetName}' index range ${formatBounds(bounds)}.`,
+            DiagnosticSeverity.Warning,
+            'select-out-of-range'
+          ));
+        }
+        break;
+      }
+    }
+  });
+}
+
+interface IndexBounds {
+  low: bigint;
+  high: bigint;
+}
+
+function selectedTargetIdentifier(expression: VerilogExpressionAst): string | undefined {
+  return expression.kind === 'identifier' ? expression.name : undefined;
+}
+
+function declarationIndexBounds(document: TextDocument, decl: VerilogDecl, module: VerilogModule): IndexBounds | undefined {
+  if (declarationHasUnpackedDimension(document, decl)) {
+    return undefined;
+  }
+  const explicit = explicitDeclarationIndexBounds(decl, module);
+  if (explicit) {
+    return explicit;
+  }
+  const width = widthOfDecl(decl, module).width;
+  return width === undefined || width < 1 ? undefined : { low: 0n, high: BigInt(width - 1) };
+}
+
+function explicitDeclarationIndexBounds(decl: VerilogDecl, module: VerilogModule): IndexBounds | undefined {
+  const inner = bracketContents(decl.width);
+  if (inner === undefined) {
+    return undefined;
+  }
+  const separator = topLevelRangeColon(inner);
+  if (separator < 0) {
+    return undefined;
+  }
+  const left = evalExpressionAstConstant(parseVerilogExpression(inner.slice(0, separator)), module);
+  const right = evalExpressionAstConstant(parseVerilogExpression(inner.slice(separator + 1)), module);
+  return left === undefined || right === undefined ? undefined : orderedBounds(left, right);
+}
+
+function declarationHasUnpackedDimension(document: TextDocument, decl: VerilogDecl): boolean {
+  const afterName = document.getText(Range.create(decl.selectionRange.end, decl.range.end));
+  return /^\s*\[/.test(afterName);
+}
+
+function bracketContents(width: string | undefined): string | undefined {
+  const trimmed = width?.trim();
+  return trimmed?.startsWith('[') && trimmed.endsWith(']') ? trimmed.slice(1, -1) : undefined;
+}
+
+function topLevelRangeColon(text: string): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  let nestedTernary = 0;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (char === '(') {
+      paren++;
+    } else if (char === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (char === '[') {
+      bracket++;
+    } else if (char === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (char === '{') {
+      brace++;
+    } else if (char === '}') {
+      brace = Math.max(0, brace - 1);
+    }
+    if (paren !== 0 || bracket !== 0 || brace !== 0) {
+      continue;
+    }
+    if (char === '?') {
+      nestedTernary++;
+    } else if (char === ':') {
+      if (nestedTernary > 0) {
+        nestedTernary--;
+      } else {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function orderedBounds(left: bigint, right: bigint): IndexBounds {
+  return left <= right ? { low: left, high: right } : { low: right, high: left };
+}
+
+function indexInsideBounds(index: bigint, bounds: IndexBounds): boolean {
+  return index >= bounds.low && index <= bounds.high;
+}
+
+function rangeInsideBounds(selected: IndexBounds, bounds: IndexBounds): boolean {
+  return selected.low >= bounds.low && selected.high <= bounds.high;
+}
+
+function formatBounds(bounds: IndexBounds): string {
+  return `${bounds.low}..${bounds.high}`;
+}
+
 function expressionBaseOffset(document: TextDocument, range: Range, expressionText: string): number {
   const rangeStart = document.offsetAt(range.start);
   const rangeText = document.getText(range);
@@ -211,7 +432,11 @@ function expressionBaseOffset(document: TextDocument, range: Range, expressionTe
 }
 
 function expressionRangeAtBase(document: TextDocument, expression: VerilogExpressionAst, baseOffset: number): Range {
-  return Range.create(document.positionAt(baseOffset + expression.start), document.positionAt(baseOffset + expression.end));
+  return offsetRangeAtBase(document, expression.start, expression.end, baseOffset);
+}
+
+function offsetRangeAtBase(document: TextDocument, start: number, end: number, baseOffset: number): Range {
+  return Range.create(document.positionAt(baseOffset + start), document.positionAt(baseOffset + end));
 }
 
 function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
