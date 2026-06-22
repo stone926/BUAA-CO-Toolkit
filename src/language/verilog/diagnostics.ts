@@ -21,6 +21,7 @@ import {
 import { VerilogCstDocument, verilogTokenRange } from './cst';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
+import { parameterOverridesForInstance } from './parameterOverrides';
 import {
   collectAssignmentDiagnostics,
   collectCourseStyleDiagnostics,
@@ -245,7 +246,7 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
         if (!targetPort || !connection.expression.trim()) {
           continue;
         }
-        const expected = widthOfDecl(targetPort, target);
+        const expected = widthOfDecl(targetPort, target, parameterOverridesForInstance(instance, module, target));
         const actual = widthOfExpression(connection.expression, module);
         if (shouldReportWidthMismatch(expected, actual)) {
           diagnostics.push(makeDiagnostic(

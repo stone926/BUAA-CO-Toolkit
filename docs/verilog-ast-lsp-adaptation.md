@@ -29,6 +29,7 @@ VSCode document
    - 本文件和跨文件端口宽度检查可以解析 `[WIDTH-1:0]`。
    - 连续赋值和过程块内赋值复用 `VerilogStatementAst.assignment`，声明初始化也使用 AST width inference。
    - 赋值、声明初始化和实例连接中的常量除零/取模零会通过 AST walker 诊断。
+   - 实例 `#(...)` 参数 override 会参与同文件和跨文件端口宽度推断，并重新求值依赖参数的 `localparam`。
 
 3. 声明 hover 增强
    - 参数声明 hover 除了显示声明详情和宽度，还能显示已求值的常量值。
@@ -47,7 +48,6 @@ VSCode document
 
 中期可做：
 
-- 参数 override 传播：实例 `#(.WIDTH(32))` 影响目标模块端口宽度。
 - AST 驱动引用收集：semantic model 逐步从 token 扫描迁移到 expression walker。
 - 表达式 refactor：提取表达式为 wire/localparam、转换有序连接中的复杂表达式。
 
