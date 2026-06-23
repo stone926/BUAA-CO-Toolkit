@@ -2,7 +2,7 @@ import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/nod
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
-import { collectAssignmentsFromTokens } from './assignmentAnalysis';
+import { collectAssignmentsFromStatements } from './assignmentAnalysis';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import { VerilogCstDocument, VerilogCstStatement } from './cst';
 import { VerilogToken } from './lexer';
@@ -12,8 +12,6 @@ import {
 import type { VerilogSemanticModel } from './semanticModel';
 import {
   assignmentRhsContainsIdentifier,
-  collectAlwaysBlocksFromCst,
-  collectProceduralBlocksFromCst,
   edgeSignalsFromSensitivity,
   hasTokenValue,
   isOffsetInsideForControl,
@@ -21,14 +19,19 @@ import {
 } from './blockAst';
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
+import type { VerilogAstDocument, VerilogModuleAst } from './ast';
 
-export function collectAssignmentDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
-  for (const module of modules) {
-    const bodyStart = document.offsetAt(module.headerEnd);
-    const bodyEnd = document.offsetAt(module.range.end);
+export function collectAssignmentDiagnostics(
+  document: TextDocument,
+  settings: CoSettings,
+  ast: VerilogAstDocument,
+  diagnostics: Diagnostic[]
+): void {
+  for (const moduleAst of ast.modules) {
+    const module = moduleAst.module;
     const assignmentKinds = new Map<string, Set<string>>();
     const isTestbench = isTestbenchModule(module, settings);
-    for (const assignment of collectAssignmentsFromTokens(document, cstWithStatements(cst, bodyStart, bodyEnd), 0, -1)) {
+    for (const assignment of collectAssignmentsFromStatements(document, moduleAst.items.map((item) => item.statement), 0, -1)) {
       if (!assignmentKinds.has(assignment.name)) {
         assignmentKinds.set(assignment.name, new Set());
       }
@@ -45,7 +48,7 @@ export function collectAssignmentDiagnostics(document: TextDocument, settings: C
       }
     }
   }
-  collectContinuousProceduralDriverDiagnostics(document, modules, cst, diagnostics);
+  collectContinuousProceduralDriverDiagnostics(document, ast, diagnostics);
 }
 
 export function collectCourseStyleDiagnostics(
@@ -54,17 +57,19 @@ export function collectCourseStyleDiagnostics(
   text: string,
   modules: VerilogModule[],
   cst: VerilogCstDocument,
+  ast: VerilogAstDocument,
   diagnostics: Diagnostic[]
 ): void {
-  for (const module of modules) {
+  for (const moduleAst of ast.modules) {
+    const module = moduleAst.module;
     collectNamingDiagnostics(settings, module, diagnostics);
-    collectAlwaysStyleDiagnostics(document, settings, cst, module, diagnostics);
+    collectAlwaysStyleDiagnostics(document, settings, moduleAst, diagnostics);
     collectInstantiationStyleDiagnostics(settings, module, diagnostics);
     collectExplicitWidthDiagnostics(settings, module, diagnostics);
     collectMagicNumberDiagnostics(document, settings, text, module, cst, diagnostics);
     collectInoutDiagnostics(settings, module, diagnostics);
   }
-  collectTestbenchDiagnostics(document, settings, text, modules, cst, diagnostics);
+  collectTestbenchDiagnostics(document, settings, text, ast, diagnostics);
 }
 
 export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
@@ -309,12 +314,18 @@ function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument):
   return false;
 }
 
-function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, cst: VerilogCstDocument, module: VerilogModule, diagnostics: Diagnostic[]): void {
-  const blocks = collectAlwaysBlocksFromCst(document, cst, module);
+function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
+  const module = moduleAst.module;
+  const blocks = moduleAst.alwaysBlocks;
   const assignedBlocks = new Map<string, Set<number>>();
   for (let index = 0; index < blocks.length; index++) {
     const block = blocks[index];
-    const blockCst = cstFromTokenRange(cst, block.bodyStart, block.bodyEnd);
+    const blockAssignments = collectAssignmentsFromStatements(
+      document,
+      statementsInTokenRange(moduleAst, block.bodyStart, block.bodyEnd),
+      0,
+      index
+    );
     if (block.combinational) {
       if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
@@ -341,8 +352,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       if (isVerilogLintRuleEnabled(settings, 'vc-014') && edgeSignals.length > 1) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', DiagnosticSeverity.Information, 'vc-014-sync-reset'));
       }
-      const assignments = collectAssignmentsFromTokens(document, blockCst, 0, index);
-      for (const assignment of assignments) {
+      for (const assignment of blockAssignments) {
         if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=' && !isOffsetInsideForControl(block.bodyTokens, document.offsetAt(assignment.range.start))) {
           diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-010-seq-blocking'));
         }
@@ -355,7 +365,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       }
     }
 
-    for (const assignment of collectAssignmentsFromTokens(document, blockCst, 0, index)) {
+    for (const assignment of blockAssignments) {
       const set = assignedBlocks.get(assignment.name) ?? new Set<number>();
       set.add(index);
       assignedBlocks.set(assignment.name, set);
@@ -462,19 +472,19 @@ function collectInoutDiagnostics(settings: CoSettings, module: VerilogModule, di
   }
 }
 
-function collectTestbenchDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
-  for (const module of modules) {
+function collectTestbenchDiagnostics(document: TextDocument, settings: CoSettings, text: string, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+  for (const moduleAst of ast.modules) {
+    const module = moduleAst.module;
     if (!isTestbenchModule(module, settings)) {
       continue;
     }
     const bodyStart = document.offsetAt(module.headerEnd);
     const bodyEnd = document.offsetAt(module.range.end);
     const body = text.slice(bodyStart, bodyEnd);
-    const proceduralBlocks = collectProceduralBlocksFromCst(document, cst, module);
     if (!/`timescale\s+1ns\s*\/\s*1ps/.test(text)) {
       diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: standard course testbenches should use `timescale 1ns / 1ps.', DiagnosticSeverity.Information, 'tb-timescale'));
     }
-    if (!hasTestbenchClockGeneration(module, proceduralBlocks)) {
+    if (!hasTestbenchClockGeneration(module, moduleAst.proceduralBlocks)) {
       diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: include clk generation logic.', DiagnosticSeverity.Information, 'tb-clock'));
     }
     if (!/\breset\b/.test(body)) {
@@ -753,35 +763,21 @@ function parseDecimalBigInt(value: string): bigint | undefined {
   return BigInt(value.split('_').join(''));
 }
 
-function cstWithStatements(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
-  return cstFromStatements(cst, cst.statements.filter((statement) => statement.end > start && statement.start < end));
-}
-
-function cstFromStatements(cst: VerilogCstDocument, statements: VerilogCstStatement[]): VerilogCstDocument {
-  return {
-    ...cst,
-    statements
-  };
-}
-
-function cstFromTokenRange(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
-  return cstFromStatements(
-    cst,
-    cst.statements
-      .map((statement) => {
-        const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
-        if (!tokens.length) {
-          return undefined;
-        }
-        return {
-          ...statement,
-          tokens,
-          start: tokens[0].start,
-          end: tokens[tokens.length - 1].end
-        };
-      })
-      .filter((statement): statement is VerilogCstStatement => Boolean(statement))
-  );
+function statementsInTokenRange(moduleAst: VerilogModuleAst, start: number, end: number): VerilogCstStatement[] {
+  return moduleAst.items
+    .map((statement) => {
+      const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
+      if (!tokens.length) {
+        return undefined;
+      }
+      return {
+        ...statement.statement,
+        tokens,
+        start: tokens[0].start,
+        end: tokens[tokens.length - 1].end
+      };
+    })
+    .filter((statement): statement is VerilogCstStatement => Boolean(statement));
 }
 
 function hasPosedgeSignal(tokens: VerilogToken[]): boolean {

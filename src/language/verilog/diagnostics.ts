@@ -53,8 +53,8 @@ export function collectVerilogDiagnostics(
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
-    collectAssignmentDiagnostics(document, settings, text, modules, cst, diagnostics);
-    collectCourseStyleDiagnostics(document, settings, text, modules, cst, diagnostics);
+    collectAssignmentDiagnostics(document, settings, ast, diagnostics);
+    collectCourseStyleDiagnostics(document, settings, text, modules, cst, ast, diagnostics);
   }
   if (settings.verilog.lint.synthesizableHints) {
     collectSynthesizableHintDiagnostics(document, settings, text, modules, cst, diagnostics);

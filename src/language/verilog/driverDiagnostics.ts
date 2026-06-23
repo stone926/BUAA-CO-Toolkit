@@ -5,15 +5,12 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
-import { collectProceduralBlocksFromCst } from './blockAst';
 import {
   AssignmentUse,
-  collectAssignmentsFromTokens
+  collectAssignmentsFromStatements
 } from './assignmentAnalysis';
-import {
-  VerilogCstDocument,
-  VerilogCstStatement
-} from './cst';
+import type { VerilogAstDocument, VerilogModuleAst } from './ast';
+import { VerilogCstStatement } from './cst';
 import { parseVerilogExpression } from './exprAst';
 import {
   VerilogDecl,
@@ -32,12 +29,12 @@ interface DriverBuckets {
 
 export function collectContinuousProceduralDriverDiagnostics(
   document: TextDocument,
-  modules: VerilogModule[],
-  cst: VerilogCstDocument,
+  ast: VerilogAstDocument,
   diagnostics: Diagnostic[]
 ): void {
-  for (const module of modules) {
-    const buckets = collectAssignmentDriverBuckets(document, module, cst);
+  for (const moduleAst of ast.modules) {
+    const module = moduleAst.module;
+    const buckets = collectAssignmentDriverBuckets(document, moduleAst);
     for (const [name, drivers] of buckets) {
       if (drivers.continuous.length > 1) {
         diagnostics.push(makeDiagnostic(
@@ -65,8 +62,9 @@ export function collectWorkspaceDriverDiagnostics(
   index: VerilogWorkspaceIndex
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  for (const module of parsed.modules) {
-    const buckets = collectAssignmentDriverBuckets(document, module, parsed.cst);
+  for (const moduleAst of parsed.ast.modules) {
+    const module = moduleAst.module;
+    const buckets = collectAssignmentDriverBuckets(document, moduleAst);
     addInstanceOutputDrivers(module, parsed.modules, index, buckets);
     for (const [name, drivers] of buckets) {
       if (!drivers.instanceOutputs.length) {
@@ -95,30 +93,30 @@ export function collectWorkspaceDriverDiagnostics(
 
 function collectAssignmentDriverBuckets(
   document: TextDocument,
-  module: VerilogModule,
-  cst: VerilogCstDocument
+  moduleAst: VerilogModuleAst
 ): Map<string, DriverBuckets> {
   const buckets = new Map<string, DriverBuckets>();
-  for (const assignment of collectContinuousAssignments(document, module, cst)) {
+  for (const assignment of collectContinuousAssignments(document, moduleAst)) {
     bucketFor(buckets, assignment.name).continuous.push(assignment);
   }
-  for (const assignment of collectProceduralAssignments(document, module, cst)) {
+  for (const assignment of collectProceduralAssignments(document, moduleAst)) {
     bucketFor(buckets, assignment.name).procedural.push(assignment);
   }
   return buckets;
 }
 
-function collectContinuousAssignments(document: TextDocument, module: VerilogModule, cst: VerilogCstDocument): AssignmentUse[] {
-  const statements = moduleStatements(document, module, cst)
-    .filter((statement) => firstCodeToken(statement)?.value === 'assign');
-  return collectAssignmentsFromTokens(document, cstFromStatements(cst, statements), 0, -1);
+function collectContinuousAssignments(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
+  const statements = moduleAst.items
+    .filter((statement) => statement.kind === 'continuousAssign')
+    .map((statement) => statement.statement);
+  return collectAssignmentsFromStatements(document, statements, 0, -1);
 }
 
-function collectProceduralAssignments(document: TextDocument, module: VerilogModule, cst: VerilogCstDocument): AssignmentUse[] {
+function collectProceduralAssignments(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
   const result: AssignmentUse[] = [];
-  const blocks = collectProceduralBlocksFromCst(document, cst, module);
-  for (let index = 0; index < blocks.length; index++) {
-    result.push(...collectAssignmentsFromTokens(document, cstFromTokenRange(cst, blocks[index].bodyStart, blocks[index].bodyEnd), 0, index));
+  for (let index = 0; index < moduleAst.proceduralBlocks.length; index++) {
+    const block = moduleAst.proceduralBlocks[index];
+    result.push(...collectAssignmentsFromStatements(document, statementsInTokenRange(moduleAst, block.bodyStart, block.bodyEnd), 0, index));
   }
   return result;
 }
@@ -181,39 +179,19 @@ function driverDiagnosticRange(module: VerilogModule, name: string, fallback: Ra
   return module.declarations.get(name)?.selectionRange ?? fallback;
 }
 
-function moduleStatements(document: TextDocument, module: VerilogModule, cst: VerilogCstDocument): VerilogCstStatement[] {
-  const start = document.offsetAt(module.headerEnd);
-  const end = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-  return cst.statements.filter((statement) => statement.end > start && statement.start < end);
-}
-
-function firstCodeToken(statement: VerilogCstStatement) {
-  return statement.tokens.find((token) => token.kind !== 'eof');
-}
-
-function cstFromStatements(cst: VerilogCstDocument, statements: VerilogCstStatement[]): VerilogCstDocument {
-  return {
-    ...cst,
-    statements
-  };
-}
-
-function cstFromTokenRange(cst: VerilogCstDocument, start: number, end: number): VerilogCstDocument {
-  return cstFromStatements(
-    cst,
-    cst.statements
-      .map((statement) => {
-        const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
-        if (!tokens.length) {
-          return undefined;
-        }
-        return {
-          ...statement,
-          tokens,
-          start: tokens[0].start,
-          end: tokens[tokens.length - 1].end
-        };
-      })
-      .filter((statement): statement is VerilogCstStatement => Boolean(statement))
-  );
+function statementsInTokenRange(moduleAst: VerilogModuleAst, start: number, end: number): VerilogCstStatement[] {
+  return moduleAst.items
+    .map((statement) => {
+      const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
+      if (!tokens.length) {
+        return undefined;
+      }
+      return {
+        ...statement.statement,
+        tokens,
+        start: tokens[0].start,
+        end: tokens[tokens.length - 1].end
+      };
+    })
+    .filter((statement): statement is VerilogCstStatement => Boolean(statement));
 }

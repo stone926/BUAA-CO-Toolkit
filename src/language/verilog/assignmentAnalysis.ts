@@ -1,6 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { parseVerilogCst, VerilogCstDocument } from './cst';
+import { parseVerilogCst, VerilogCstDocument, VerilogCstStatement } from './cst';
 import { VerilogToken } from './lexer';
 import { verilogKeywords } from './model';
 import {
@@ -55,8 +55,17 @@ export function collectAssignmentsInText(document: TextDocument, text: string, o
 }
 
 export function collectAssignmentsFromTokens(document: TextDocument, cst: VerilogCstDocument, offset: number, blockIndex: number): AssignmentUse[] {
+  return collectAssignmentsFromStatements(document, cst.statements, offset, blockIndex);
+}
+
+export function collectAssignmentsFromStatements(
+  document: TextDocument,
+  statements: readonly VerilogCstStatement[],
+  offset: number,
+  blockIndex: number
+): AssignmentUse[] {
   const assignments: AssignmentUse[] = [];
-  for (const statement of cst.statements) {
+  for (const statement of statements) {
     const parsed = parseAssignmentTokens(statement.tokens);
     if (!parsed) {
       continue;
