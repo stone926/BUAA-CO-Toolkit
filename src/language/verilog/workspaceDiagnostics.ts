@@ -27,7 +27,7 @@ export function addVerilogWorkspaceDiagnostics(
 ): Diagnostic[] {
   const diagnostics = filterWorkspaceAwareDiagnostics(baseDiagnostics, settings, index);
   const resolved = parsed ?? getCachedVerilogParse(document, settings, false);
-  diagnostics.push(...getWorkspaceModuleDiagnostics(document, settings, index, resolved));
+  diagnostics.push(...getWorkspaceModuleDiagnostics(settings, index, resolved));
   diagnostics.push(...getWorkspaceInstanceDiagnostics(document, settings, index, resolved));
   if (settings.verilog.lint.courseRules) {
     diagnostics.push(...collectWorkspaceDriverDiagnostics(document, resolved, index));
@@ -59,7 +59,7 @@ function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSet
   return diagnostics;
 }
 
-function getWorkspaceModuleDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
+function getWorkspaceModuleDiagnostics(settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const topName = settings.project.topModule.trim() || 'mips';
   const testbenchName = settings.project.testbench.trim();
@@ -88,18 +88,6 @@ function getWorkspaceModuleDiagnostics(document: TextDocument, settings: CoSetti
     }
   }
 
-  for (const module of parsed.modules) {
-    for (const instance of module.instances) {
-      if (!resolveInstanceTarget(index, parsed.modules, instance) && !isBuiltinPrimitive(instance.moduleName)) {
-        diagnostics.push(makeDiagnostic(
-          instance.moduleSelectionRange,
-          `Module '${instance.moduleName}' is not defined in the workspace.`,
-          DiagnosticSeverity.Error,
-          'unresolved-module'
-        ));
-      }
-    }
-  }
   return diagnostics;
 }
 
@@ -123,39 +111,6 @@ function formatUri(uri: string): string {
   } catch {
     return uri;
   }
-}
-
-const builtinPrimitives = new Set([
-  'and',
-  'nand',
-  'or',
-  'nor',
-  'xor',
-  'xnor',
-  'buf',
-  'not',
-  'bufif0',
-  'bufif1',
-  'notif0',
-  'notif1',
-  'pulldown',
-  'pullup',
-  'nmos',
-  'pmos',
-  'rnmos',
-  'rpmos',
-  'cmos',
-  'rcmos',
-  'tran',
-  'rtran',
-  'tranif0',
-  'tranif1',
-  'rtranif0',
-  'rtranif1'
-]);
-
-function isBuiltinPrimitive(name: string): boolean {
-  return builtinPrimitives.has(name);
 }
 
 function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {

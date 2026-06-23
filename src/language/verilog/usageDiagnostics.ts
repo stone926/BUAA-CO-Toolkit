@@ -54,10 +54,6 @@ export function collectWorkspaceUsageDiagnostics(
       const entry = usage.get(decl.name) ?? { reads: [], writes: [] };
       if (!entry.reads.length && !entry.writes.length) {
         diagnostics.push(makeDiagnostic(decl.selectionRange, `Signal '${decl.name}' is declared but never used.`, DiagnosticSeverity.Information, 'unused-signal'));
-      } else if (!entry.reads.length && entry.writes.length) {
-        diagnostics.push(makeDiagnostic(decl.selectionRange, `Signal '${decl.name}' is written but never read.`, DiagnosticSeverity.Information, 'write-only-signal'));
-      } else if (entry.reads.length && !entry.writes.length) {
-        diagnostics.push(makeDiagnostic(decl.selectionRange, `Signal '${decl.name}' is read but never driven.`, DiagnosticSeverity.Warning, 'read-only-signal'));
       }
     }
   }

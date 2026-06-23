@@ -27,7 +27,7 @@ function codes(current: TextDocument, indexed: TextDocument[] = [current]): stri
 }
 
 describe('Verilog usage diagnostics', () => {
-  it('reports unused, write-only, read-only signals and unused parameters', () => {
+  it('reports unused signals and parameters without read/write-only noise', () => {
     const top = doc('top', `
 module top(input a);
     parameter USED = 1;
@@ -45,8 +45,8 @@ endmodule
 
     const result = codes(top);
     expect(result).toContain('unused-signal');
-    expect(result).toContain('write-only-signal');
-    expect(result).toContain('read-only-signal');
+    expect(result).not.toContain('write-only-signal');
+    expect(result).not.toContain('read-only-signal');
     expect(result).toContain('unused-parameter');
     expect(diagnostics(top).some((diagnostic) => diagnostic.code === 'unused-parameter' && top.getText(diagnostic.range) === 'USED')).toBe(false);
   });

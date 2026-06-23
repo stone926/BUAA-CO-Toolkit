@@ -27,14 +27,14 @@ function codes(current: TextDocument, indexed: TextDocument[], settingsValue: un
 }
 
 describe('Verilog workspace diagnostics', () => {
-  it('reports unresolved instance module names', () => {
+  it('does not report unresolved instance module names from incomplete workspace indexes', () => {
     const top = doc('top', `
 module top;
     MissingModule u_missing();
 endmodule
 `);
 
-    expect(codes(top, [top], { project: { topModule: 'top' } })).toContain('unresolved-module');
+    expect(codes(top, [top], { project: { topModule: 'top' } })).not.toContain('unresolved-module');
   });
 
   it('reports duplicate modules across indexed files', () => {
