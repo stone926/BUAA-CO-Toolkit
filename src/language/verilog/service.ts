@@ -155,6 +155,13 @@ interface InstanceConnectionTarget {
   listKind: VerilogConnectionListKind;
 }
 
+interface WorkspaceCompletionCacheEntry {
+  version: number;
+  items: CompletionItem[];
+}
+
+const workspaceCompletionCache = new WeakMap<VerilogWorkspaceIndex, WorkspaceCompletionCacheEntry>();
+
 export function getVerilogDiagnostics(document: TextDocument, settings: CoSettings, index?: VerilogWorkspaceIndex): Diagnostic[] {
   const parsed = getCachedVerilogParse(document, settings, true);
   const diagnostics = index ? addVerilogWorkspaceDiagnostics(document, settings, index, parsed.diagnostics, parsed) : parsed.diagnostics;
@@ -253,18 +260,7 @@ export function getVerilogCompletions(document: TextDocument, position: Position
     });
   }
 
-  for (const macro of index.indexedMacros()) {
-    items.push({
-      label: macro.name,
-      kind: CompletionItemKind.Constant,
-      detail: 'Verilog macro',
-      insertText: macro.name
-    });
-  }
-
-  for (const module of index.indexedModules()) {
-    items.push(moduleCompletionItem(module));
-  }
+  items.push(...workspaceCompletionItems(index));
 
   const textBefore = document.getText(Range.create(
     document.positionAt(Math.max(0, document.offsetAt(position) - 200)),
@@ -456,7 +452,12 @@ export function getVerilogDefinition(document: TextDocument, position: Position,
       return Location.create(resolved.targetSymbol?.uri ?? resolved.targetModule.uri, resolved.targetSymbol?.selectionRange ?? resolved.targetPort.selectionRange);
     case 'macro': {
       const macro = resolved.macro ?? index.getMacro(resolved.name);
-      return macro ? Location.create(macroUri(index, macro, document.uri), macro.selectionRange) : undefined;
+      if (!macro) {
+        return undefined;
+      }
+      return index.macroDefinitionLocations(macro.name)
+        .find((location) => rangesEqual(location.range, macro.selectionRange))
+        ?? Location.create(document.uri, macro.selectionRange);
     }
     case 'include':
       return includeLocation(document, resolved.include);
@@ -1336,6 +1337,30 @@ function moduleCompletionItem(module: VerilogModule): CompletionItem {
   };
 }
 
+function workspaceCompletionItems(index: VerilogWorkspaceIndex): CompletionItem[] {
+  const cached = workspaceCompletionCache.get(index);
+  if (cached?.version === index.version) {
+    return cached.items;
+  }
+  const items: CompletionItem[] = [];
+  for (const macro of index.indexedMacros()) {
+    items.push({
+      label: macro.name,
+      kind: CompletionItemKind.Constant,
+      detail: 'Verilog macro',
+      insertText: macro.name
+    });
+  }
+  for (const module of index.indexedModules()) {
+    items.push(moduleCompletionItem(module));
+  }
+  workspaceCompletionCache.set(index, {
+    version: index.version,
+    items
+  });
+  return items;
+}
+
 function resolveVerilogSymbol(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): ResolvedVerilogSymbol | undefined {
   const parsed = getCachedVerilogParse(document, settings, false);
   const semanticResolved = resolvedVerilogSymbolFromSemantic(parsed, position, index);
@@ -1582,15 +1607,7 @@ function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogMo
   if (includeDeclaration) {
     locations.push(Location.create(target.uri, target.selectionRange));
   }
-  for (const file of index.indexedFiles()) {
-    for (const module of file.modules) {
-      for (const instance of module.instances) {
-        if (instance.moduleName === target.name) {
-          locations.push(Location.create(file.uri, instance.moduleSelectionRange));
-        }
-      }
-    }
-  }
+  locations.push(...index.moduleReferenceLocations(target.name));
   return dedupeLocations(locations);
 }
 
@@ -1600,43 +1617,22 @@ function collectInterfaceConnectionReferences(
   name: string,
   listKind: VerilogConnectionListKind
 ): Location[] {
-  const locations: Location[] = [];
-  for (const file of index.indexedFiles()) {
-    for (const module of file.modules) {
-      for (const instance of module.instances) {
-        if (instance.moduleName !== targetModule.name) {
-          continue;
-        }
-        for (const connection of connectionsForListKind(instance, listKind)) {
-          if (connection.name === name && connection.nameRange) {
-            locations.push(Location.create(file.uri, connection.nameRange));
-          }
-        }
-      }
-    }
-  }
-  return locations;
-}
-
-function connectionsForListKind(instance: VerilogInstance, listKind: VerilogConnectionListKind): VerilogPortConnection[] {
-  return listKind === 'parameters' ? instance.parameterConnections : instance.portConnections;
+  return [...index.interfaceConnectionLocations(targetModule.name, name, listKind)];
 }
 
 function collectMacroReferences(index: VerilogWorkspaceIndex, name: string, macro: VerilogMacro | undefined, includeDeclaration: boolean, fallbackUri: string): Location[] {
   const locations: Location[] = [];
   if (includeDeclaration) {
-    const definitions = macro ? [macro] : index.getMacros(name);
-    for (const definition of definitions) {
-      locations.push(Location.create(macroUri(index, definition, fallbackUri), definition.selectionRange));
+    const definitions = macro
+      ? index.macroDefinitionLocations(name).filter((location) => rangesEqual(location.range, macro.selectionRange))
+      : index.macroDefinitionLocations(name);
+    if (macro && !definitions.length) {
+      locations.push(Location.create(fallbackUri, macro.selectionRange));
+    } else {
+      locations.push(...definitions);
     }
   }
-  for (const file of index.indexedFiles()) {
-    for (const use of file.macroUses) {
-      if (use.name === name) {
-        locations.push(Location.create(file.uri, use.selectionRange));
-      }
-    }
-  }
+  locations.push(...index.macroUseLocations(name));
   return dedupeLocations(locations);
 }
 
@@ -1703,15 +1699,6 @@ function includeLocation(document: TextDocument, include: VerilogInclude): Locat
   } catch {
     return undefined;
   }
-}
-
-function macroUri(index: VerilogWorkspaceIndex, macro: VerilogMacro, fallbackUri: string): string {
-  for (const file of index.indexedFiles()) {
-    if (file.macros.some((item) => rangesEqual(item.selectionRange, macro.selectionRange) && item.name === macro.name)) {
-      return file.uri;
-    }
-  }
-  return fallbackUri;
 }
 
 function resolvedRange(resolved: ResolvedVerilogSymbol): Range | undefined {

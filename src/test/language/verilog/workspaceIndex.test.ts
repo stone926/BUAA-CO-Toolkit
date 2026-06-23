@@ -64,6 +64,51 @@ describe('VerilogWorkspaceIndex', () => {
     expect(index.getModule('NewTop')).toBeUndefined();
   });
 
+  it('advances its version when indexed content changes', () => {
+    const root = makeTempRoot();
+    const file = writeFile(root, 'src/top.v', 'module OldTop; endmodule\n');
+    const uri = URI.file(file).toString();
+    const index = new VerilogWorkspaceIndex();
+    const initialVersion = index.version;
+
+    index.updateFile(uri, defaultCoSettings);
+    const indexedVersion = index.version;
+    expect(indexedVersion).toBeGreaterThan(initialVersion);
+
+    fs.writeFileSync(file, 'module NewTop; endmodule\n', 'utf8');
+    index.updateFile(uri, defaultCoSettings);
+    expect(index.version).toBeGreaterThan(indexedVersion);
+  });
+
+  it('caches display trace formats for profile inference', () => {
+    const root = makeTempRoot();
+    const file = writeFile(root, 'src/top.v', 'module mips(input clk, input reset); initial $display("%0d@%08h: $%0d <= %08h", $time, pc, addr, data); endmodule\n');
+    const index = new VerilogWorkspaceIndex();
+
+    index.updateFile(URI.file(file).toString(), defaultCoSettings);
+
+    expect(index.indexedDisplayFormats()).toContain('%0d@%08h: $%0d <= %08h');
+  });
+
+  it('updates inverted reference indexes when a file changes', () => {
+    const root = makeTempRoot();
+    const file = writeFile(root, 'src/top.v', 'module top; OldChild u_old(.a(sig)); endmodule\n');
+    const uri = URI.file(file).toString();
+    const index = new VerilogWorkspaceIndex();
+
+    index.updateFile(uri, defaultCoSettings);
+    expect(index.moduleReferenceLocations('OldChild')).toHaveLength(1);
+    expect(index.interfaceConnectionLocations('OldChild', 'a', 'ports')).toHaveLength(1);
+
+    fs.writeFileSync(file, 'module top; NewChild u_new(.b(sig)); endmodule\n', 'utf8');
+    index.updateFile(uri, defaultCoSettings);
+
+    expect(index.moduleReferenceLocations('OldChild')).toHaveLength(0);
+    expect(index.interfaceConnectionLocations('OldChild', 'a', 'ports')).toHaveLength(0);
+    expect(index.moduleReferenceLocations('NewChild')).toHaveLength(1);
+    expect(index.interfaceConnectionLocations('NewChild', 'b', 'ports')).toHaveLength(1);
+  });
+
   it('recognizes Verilog file URIs case-insensitively', () => {
     expect(isVerilogUri(URI.file(path.join('C:', 'work', 'CPU.V')).toString())).toBe(true);
     expect(isVerilogUri(URI.file(path.join('C:', 'work', 'CPU.sv')).toString())).toBe(false);

@@ -1,15 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { WorkspaceFolder } from 'vscode-languageserver/node';
+import { Location, WorkspaceFolder } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { rangesEqual } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
-import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule } from './model';
+import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule, VerilogPortConnection } from './model';
 import { VerilogCstDocument } from './cst';
 import { VerilogSemanticModel, VerilogSemanticSymbol, VerilogSemanticSymbolKind } from './semanticModel';
 import { yieldEventLoop } from '../../nodeFs';
+import { extractVerilogDisplayFormats } from './displayFormats';
+
+export type VerilogConnectionListKind = 'ports' | 'parameters';
 
 export interface VerilogIndexedFile {
   uri: string;
@@ -20,6 +23,7 @@ export interface VerilogIndexedFile {
   macros: VerilogMacro[];
   macroUses: VerilogMacroUse[];
   includes: VerilogInclude[];
+  displayFormats: string[];
   cst: VerilogCstDocument;
   semantic: VerilogSemanticModel;
 }
@@ -28,16 +32,27 @@ export class VerilogWorkspaceIndex {
   private readonly files = new Map<string, VerilogIndexedFile>();
   private readonly modules = new Map<string, VerilogModule[]>();
   private readonly macros = new Map<string, VerilogMacro[]>();
+  private readonly moduleReferenceIndex = new Map<string, Location[]>();
+  private readonly interfaceConnectionReferenceIndex = new Map<string, Location[]>();
+  private readonly macroUseReferenceIndex = new Map<string, Location[]>();
+  private readonly macroDefinitionIndex = new Map<string, Location[]>();
+  private readonly referenceIndexKeysByUri = new Map<string, Array<{ index: Map<string, Location[]>; key: string }>>();
   private readonly maxFiles: number;
   private fileListCache: VerilogIndexedFile[] | undefined;
   private moduleListCache: VerilogModule[] | undefined;
   private macroListCache: VerilogMacro[] | undefined;
+  private displayFormatListCache: string[] | undefined;
   private caseInsensitiveModuleCache = new Map<string, VerilogModule | undefined>();
   private caseInsensitiveInstanceCache = new Map<string, boolean>();
   private rebuildSequence = 0;
+  private revision = 0;
 
   constructor(options: { maxFiles?: number } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
+  }
+
+  get version(): number {
+    return this.revision;
   }
 
   async rebuild(workspaceFolders: WorkspaceFolder[] | null | undefined, settings: CoSettings): Promise<void> {
@@ -126,6 +141,7 @@ export class VerilogWorkspaceIndex {
       macros: parsed.macros,
       macroUses: parsed.macroUses,
       includes: parsed.includes,
+      displayFormats: extractVerilogDisplayFormats(document.getText()),
       cst: parsed.cst,
       semantic: parsed.semantic
     };
@@ -140,6 +156,7 @@ export class VerilogWorkspaceIndex {
       list.push(macro);
       this.macros.set(macro.name, list);
     }
+    this.addReferenceIndexEntries(file);
     this.invalidateCaches();
   }
 
@@ -161,6 +178,7 @@ export class VerilogWorkspaceIndex {
     }
     clearCachedVerilogParse(uri);
     this.files.delete(uri);
+    this.removeReferenceIndexEntries(uri);
     for (const module of existing.modules) {
       removeByUri(this.modules, module.name, uri, (item) => item.uri);
     }
@@ -249,6 +267,31 @@ export class VerilogWorkspaceIndex {
     return this.macroListCache;
   }
 
+  indexedDisplayFormats(): readonly string[] {
+    this.displayFormatListCache ??= this.indexedFiles().flatMap((file) => file.displayFormats);
+    return this.displayFormatListCache;
+  }
+
+  moduleReferenceLocations(moduleName: string): readonly Location[] {
+    return this.moduleReferenceIndex.get(moduleName) ?? [];
+  }
+
+  interfaceConnectionLocations(
+    moduleName: string,
+    connectionName: string,
+    listKind: VerilogConnectionListKind
+  ): readonly Location[] {
+    return this.interfaceConnectionReferenceIndex.get(interfaceConnectionKey(moduleName, connectionName, listKind)) ?? [];
+  }
+
+  macroUseLocations(name: string): readonly Location[] {
+    return this.macroUseReferenceIndex.get(name) ?? [];
+  }
+
+  macroDefinitionLocations(name: string): readonly Location[] {
+    return this.macroDefinitionIndex.get(name) ?? [];
+  }
+
   findModuleCaseInsensitive(name: string): VerilogModule | undefined {
     const lower = name.toLowerCase();
     if (this.caseInsensitiveModuleCache.has(lower)) {
@@ -273,9 +316,11 @@ export class VerilogWorkspaceIndex {
   }
 
   private invalidateCaches(): void {
+    this.revision++;
     this.fileListCache = undefined;
     this.moduleListCache = undefined;
     this.macroListCache = undefined;
+    this.displayFormatListCache = undefined;
     this.caseInsensitiveModuleCache.clear();
     this.caseInsensitiveInstanceCache.clear();
   }
@@ -284,7 +329,72 @@ export class VerilogWorkspaceIndex {
     this.files.clear();
     this.modules.clear();
     this.macros.clear();
+    this.moduleReferenceIndex.clear();
+    this.interfaceConnectionReferenceIndex.clear();
+    this.macroUseReferenceIndex.clear();
+    this.macroDefinitionIndex.clear();
+    this.referenceIndexKeysByUri.clear();
     this.invalidateCaches();
+  }
+
+  private addReferenceIndexEntries(file: VerilogIndexedFile): void {
+    for (const macro of file.macros) {
+      this.addIndexedLocation(this.macroDefinitionIndex, macro.name, Location.create(file.uri, macro.selectionRange), file.uri);
+    }
+    for (const macroUse of file.macroUses) {
+      this.addIndexedLocation(this.macroUseReferenceIndex, macroUse.name, Location.create(file.uri, macroUse.selectionRange), file.uri);
+    }
+    for (const module of file.modules) {
+      for (const instance of module.instances) {
+        this.addIndexedLocation(this.moduleReferenceIndex, instance.moduleName, Location.create(file.uri, instance.moduleSelectionRange), file.uri);
+        this.addConnectionReferences(file.uri, instance.moduleName, instance.portConnections, 'ports');
+        this.addConnectionReferences(file.uri, instance.moduleName, instance.parameterConnections, 'parameters');
+      }
+    }
+  }
+
+  private addConnectionReferences(
+    uri: string,
+    moduleName: string,
+    connections: readonly VerilogPortConnection[],
+    listKind: VerilogConnectionListKind
+  ): void {
+    for (const connection of connections) {
+      if (connection.name && connection.nameRange) {
+        this.addIndexedLocation(
+          this.interfaceConnectionReferenceIndex,
+          interfaceConnectionKey(moduleName, connection.name, listKind),
+          Location.create(uri, connection.nameRange),
+          uri
+        );
+      }
+    }
+  }
+
+  private addIndexedLocation(index: Map<string, Location[]>, key: string, location: Location, uri: string): void {
+    const locations = index.get(key) ?? [];
+    locations.push(location);
+    index.set(key, locations);
+    const keys = this.referenceIndexKeysByUri.get(uri) ?? [];
+    keys.push({ index, key });
+    this.referenceIndexKeysByUri.set(uri, keys);
+  }
+
+  private removeReferenceIndexEntries(uri: string): void {
+    const keys = this.referenceIndexKeysByUri.get(uri);
+    if (!keys) {
+      return;
+    }
+    this.referenceIndexKeysByUri.delete(uri);
+    const seen = new Set<string>();
+    for (const { index, key } of keys) {
+      const seenKey = `${mapIdentity(index)}\u0000${key}`;
+      if (seen.has(seenKey)) {
+        continue;
+      }
+      seen.add(seenKey);
+      removeLocationsByUri(index, key, uri);
+    }
   }
 }
 
@@ -299,6 +409,27 @@ function removeByUri<T>(map: Map<string, T[]>, key: string, uri: string, getUri:
   } else {
     map.delete(key);
   }
+}
+
+function removeLocationsByUri(map: Map<string, Location[]>, key: string, uri: string): void {
+  removeByUri(map, key, uri, (location) => location.uri);
+}
+
+function interfaceConnectionKey(moduleName: string, connectionName: string, listKind: VerilogConnectionListKind): string {
+  return `${moduleName}\u0000${listKind}\u0000${connectionName}`;
+}
+
+function mapIdentity(map: Map<string, Location[]>): string {
+  return String(mapIdentityIds.get(map) ?? assignMapIdentity(map));
+}
+
+const mapIdentityIds = new WeakMap<Map<string, Location[]>, number>();
+let nextMapIdentity = 1;
+
+function assignMapIdentity(map: Map<string, Location[]>): number {
+  const id = nextMapIdentity++;
+  mapIdentityIds.set(map, id);
+  return id;
 }
 
 function sameModuleIdentity(left: VerilogModule | undefined, right: VerilogModule): boolean {

@@ -3,6 +3,7 @@ import {
   ProjectProfile,
   isConcreteProjectProfile
 } from './projectProfile';
+import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
 
 export type ProfileConfiguredSource = 'settings' | 'default';
 export type ProfileResolutionSource = ProfileConfiguredSource | 'inferred' | 'manualFallback';
@@ -47,6 +48,7 @@ export interface ProfileResolverInput {
   files?: ProfileResolverFile[];
   modules?: ProfileResolverModule[];
   verilogTexts?: string[];
+  verilogDisplayFormats?: string[];
 }
 
 export interface ProfileResolution {
@@ -227,12 +229,11 @@ function inferCandidates(input: ProfileResolverInput): Candidate[] {
 }
 
 function inferP4P5FromTraceFormats(input: ProfileResolverInput, top: ProfileResolverModule): Candidate | undefined {
-  const texts = [
+  const formats = input.verilogDisplayFormats ?? [
     top.bodyText ?? '',
     ...(input.verilogTexts ?? []),
     ...(input.modules ?? []).map((module) => module.bodyText ?? '')
-  ].filter(Boolean);
-  const formats = texts.flatMap(displayFormats);
+  ].filter(Boolean).flatMap(extractVerilogDisplayFormats);
   const hasP4 = formats.some(looksLikeP4TraceFormat);
   const hasP5 = formats.some(looksLikeP5TraceFormat);
   if (hasP4 === hasP5) {
@@ -292,17 +293,6 @@ function hasAnyDeclaration(module: ProfileResolverModule, names: readonly string
   return false;
 }
 
-function displayFormats(text: string): string[] {
-  const clean = stripVerilogComments(text);
-  const formats: string[] = [];
-  const display = /\$display\s*\(\s*"((?:\\.|[^"\\])*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = display.exec(clean)) !== null) {
-    formats.push(unescapeVerilogString(match[1]));
-  }
-  return formats;
-}
-
 function looksLikeP5TraceFormat(format: string): boolean {
   const normalized = normalizeTraceFormat(format);
   return /%0?\d*d@%0?\d*h:(?:\$%0?\d*d<=%0?\d*h|\*%0?\d*h<=%0?\d*h)/i.test(normalized);
@@ -316,42 +306,6 @@ function looksLikeP4TraceFormat(format: string): boolean {
 
 function normalizeTraceFormat(format: string): string {
   return format.replace(/\s+/g, '').toLowerCase();
-}
-
-function unescapeVerilogString(value: string): string {
-  return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-}
-
-function stripVerilogComments(text: string): string {
-  let result = '';
-  let index = 0;
-  while (index < text.length) {
-    const char = text[index];
-    const next = text[index + 1];
-    if (char === '/' && next === '/') {
-      while (index < text.length && text[index] !== '\n') {
-        result += ' ';
-        index++;
-      }
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      result += '  ';
-      index += 2;
-      while (index < text.length && !(text[index] === '*' && text[index + 1] === '/')) {
-        result += text[index] === '\n' ? '\n' : ' ';
-        index++;
-      }
-      if (index < text.length) {
-        result += '  ';
-        index += 2;
-      }
-      continue;
-    }
-    result += char;
-    index++;
-  }
-  return result;
 }
 
 function uniqueProfiles(candidates: Candidate[]): ConcreteProjectProfile[] {

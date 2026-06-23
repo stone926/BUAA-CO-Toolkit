@@ -43,7 +43,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { defaultCoSettings, mergeCoSettings, CoSettings } from './language/common/settings';
-import { applyResolvedProfile } from './profileResolver';
+import { applyResolvedProfile, ProfileResolverInput } from './profileResolver';
 import {
   filterDisabledDiagnostics,
   getDiagnosticSuppressActions
@@ -93,6 +93,7 @@ import {
 import { runIseSyntaxCheck } from './language/verilog/iseSyntaxCheck';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
+import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -177,6 +178,16 @@ interface ServerState {
   verilogIseTimers: Map<string, ReturnType<typeof setTimeout>>;
   verilogIseRunSequence: number;
   notifiedMissingIseToolchain: boolean;
+  configurationVersion: number;
+  effectiveSettingsCache: Map<string, CoSettings>;
+  verilogProfileSnapshot?: VerilogProfileSnapshot;
+}
+
+interface VerilogProfileSnapshot {
+  indexVersion: number;
+  files: Array<{ path: string; languageId?: string }>;
+  modules: NonNullable<ProfileResolverInput['modules']>;
+  verilogDisplayFormatsByUri: Map<string, string[]>;
 }
 
 const state: ServerState = {
@@ -190,9 +201,12 @@ const state: ServerState = {
   verilogIseDiagnostics: new Map(),
   verilogIseTimers: new Map(),
   verilogIseRunSequence: 0,
-  notifiedMissingIseToolchain: false
+  notifiedMissingIseToolchain: false,
+  configurationVersion: 0,
+  effectiveSettingsCache: new Map()
 };
 const verilogIseCommand = 'co.internal.verilog.checkSyntaxWithIse';
+const maxEffectiveSettingsCacheEntries = 200;
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   state.hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
@@ -259,6 +273,9 @@ connection.onDidChangeConfiguration((change) => {
   } else {
     state.globalSettings = mergeCoSettings(change.settings?.co);
   }
+  state.configurationVersion++;
+  state.effectiveSettingsCache.clear();
+  state.verilogProfileSnapshot = undefined;
   void rebuildVerilogIndex();
   void validateAllDocuments();
 });
@@ -561,24 +578,95 @@ function effectiveSettingsForDocument(document: TextDocument, settings: CoSettin
   if (!needsProfileInference(settings)) {
     return settings;
   }
-  return applyResolvedProfile(settings, {
-    activeLanguageId: serviceKeyForDocument(document),
-    activeFilePath: fsPathFromUri(document.uri),
-    files: indexedProfileFiles(document),
-    modules: verilogIndex.allModules(),
-    verilogTexts: verilogIndex.allFiles().map((file) => file.text)
+  return cachedEffectiveSettings(effectiveSettingsCacheKey(document.uri, document.version), () => {
+    const snapshot = verilogProfileSnapshot();
+    return applyResolvedProfile(settings, {
+      activeLanguageId: serviceKeyForDocument(document),
+      activeFilePath: fsPathFromUri(document.uri),
+      files: profileFilesWithActive(snapshot.files, document.uri, serviceKeyForDocument(document)),
+      modules: snapshot.modules,
+      verilogDisplayFormats: verilogDisplayFormatsWithActive(snapshot, document)
+    });
   });
 }
 
-function indexedProfileFiles(document: TextDocument): Array<{ path: string; languageId?: string }> {
-  const files = verilogIndex.allFiles()
+function verilogProfileSnapshot(): VerilogProfileSnapshot {
+  if (state.verilogProfileSnapshot?.indexVersion === verilogIndex.version) {
+    return state.verilogProfileSnapshot;
+  }
+  const files = verilogIndex.indexedFiles()
     .map((file) => ({ path: fsPathFromUri(file.uri), languageId: 'verilog' }))
     .filter((file): file is { path: string; languageId: string } => Boolean(file.path));
-  const activePath = fsPathFromUri(document.uri);
-  if (activePath) {
-    files.push({ path: activePath, languageId: serviceKeyForDocument(document) });
+  const snapshot: VerilogProfileSnapshot = {
+    indexVersion: verilogIndex.version,
+    files,
+    modules: verilogIndex.allModules(),
+    verilogDisplayFormatsByUri: new Map(verilogIndex.indexedFiles().map((file) => [file.uri, file.displayFormats]))
+  };
+  state.verilogProfileSnapshot = snapshot;
+  return snapshot;
+}
+
+function verilogDisplayFormatsWithActive(snapshot: VerilogProfileSnapshot, document?: TextDocument): string[] {
+  const formats: string[] = [];
+  for (const [uri, fileFormats] of snapshot.verilogDisplayFormatsByUri) {
+    if (document?.languageId === 'verilog' && uri === document.uri) {
+      continue;
+    }
+    formats.push(...fileFormats);
   }
-  return files;
+  if (document?.languageId === 'verilog') {
+    formats.push(...extractVerilogDisplayFormats(document.getText()));
+  }
+  return formats;
+}
+
+function profileFilesWithActive(
+  files: Array<{ path: string; languageId?: string }>,
+  uri: string,
+  languageId: string
+): Array<{ path: string; languageId?: string }> {
+  const activePath = fsPathFromUri(uri);
+  if (!activePath || files.some((file) => samePathKey(file.path, activePath))) {
+    return files;
+  }
+  return [...files, { path: activePath, languageId }];
+}
+
+function cachedEffectiveSettings(key: string, resolve: () => CoSettings): CoSettings {
+  const cached = state.effectiveSettingsCache.get(key);
+  if (cached) {
+    state.effectiveSettingsCache.delete(key);
+    state.effectiveSettingsCache.set(key, cached);
+    return cached;
+  }
+  const resolved = resolve();
+  state.effectiveSettingsCache.set(key, resolved);
+  while (state.effectiveSettingsCache.size > maxEffectiveSettingsCacheEntries) {
+    const oldest = state.effectiveSettingsCache.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    state.effectiveSettingsCache.delete(oldest);
+  }
+  return resolved;
+}
+
+function effectiveSettingsCacheKey(uri: string, documentVersion: number): string {
+  return [
+    uri,
+    documentVersion,
+    state.configurationVersion,
+    verilogIndex.version
+  ].join('\u0000');
+}
+
+function samePathKey(left: string, right: string): boolean {
+  return normalizePathKey(left) === normalizePathKey(right);
+}
+
+function normalizePathKey(filePath: string): string {
+  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }
 
 function fsPathFromUri(uri: string): string | undefined {
@@ -685,12 +773,16 @@ async function settingsForUri(uri: string): Promise<CoSettings> {
   if (!needsProfileInference(settings)) {
     return settings;
   }
-  return applyResolvedProfile(settings, {
-    activeLanguageId: uri.toLowerCase().endsWith('.v') ? 'verilog' : '',
-    activeFilePath: fsPathFromUri(uri),
-    files: indexedProfileFiles(TextDocument.create(uri, uri.toLowerCase().endsWith('.v') ? 'verilog' : '', 0, '')),
-    modules: verilogIndex.allModules(),
-    verilogTexts: verilogIndex.allFiles().map((file) => file.text)
+  return cachedEffectiveSettings(effectiveSettingsCacheKey(uri, 0), () => {
+    const languageId = uri.toLowerCase().endsWith('.v') ? 'verilog' : '';
+    const snapshot = verilogProfileSnapshot();
+    return applyResolvedProfile(settings, {
+      activeLanguageId: languageId,
+      activeFilePath: fsPathFromUri(uri),
+      files: profileFilesWithActive(snapshot.files, uri, languageId),
+      modules: snapshot.modules,
+      verilogDisplayFormats: verilogDisplayFormatsWithActive(snapshot)
+    });
   });
 }
 

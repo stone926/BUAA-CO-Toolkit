@@ -4,7 +4,8 @@ import { ReferenceParams } from 'vscode-languageserver/node';
 import { mergeCoSettings } from '../../../language/common/settings';
 import {
   getVerilogDefinition,
-  getVerilogReferences
+  getVerilogReferences,
+  getVerilogRenameEdits
 } from '../../../language/verilog/service';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
@@ -88,5 +89,34 @@ endmodule
     const widthReferences = referencesAt(child, 'WIDTH =', index);
     expect(widthReferences.some((location) => location.uri === top.uri && top.getText(location.range) === 'WIDTH')).toBe(true);
     expect(widthReferences.some((location) => location.uri === child.uri && child.getText(location.range) === 'WIDTH')).toBe(true);
+  });
+
+  it('uses indexed module references for cross-file rename', () => {
+    const child = doc('test://workspace/rename-child.v', 'module child(input a); endmodule');
+    const top = doc('test://workspace/rename-top.v', 'module top; child u_child(.a(1)); endmodule');
+    const index = new VerilogWorkspaceIndex();
+    const settings = mergeCoSettings({});
+    index.updateDocument(child, settings);
+    index.updateDocument(top, settings);
+
+    const edit = getVerilogRenameEdits(child, positionOf(child, 'child'), 'renamed_child', settings, index);
+    const edits = edit?.changes ?? {};
+
+    expect(edits[child.uri]?.some((item) => child.getText(item.range) === 'child')).toBe(true);
+    expect(edits[top.uri]?.some((item) => top.getText(item.range) === 'child')).toBe(true);
+  });
+
+  it('includes indexed macro definitions and uses in references', () => {
+    const defs = doc('test://workspace/macros.v', '`define WIDTH 8');
+    const user = doc('test://workspace/use-macro.v', 'module top; wire [`WIDTH-1:0] data; endmodule');
+    const index = new VerilogWorkspaceIndex();
+    const settings = mergeCoSettings({});
+    index.updateDocument(defs, settings);
+    index.updateDocument(user, settings);
+
+    const refs = referencesAt(user, 'WIDTH', index);
+
+    expect(refs.some((location) => location.uri === defs.uri && defs.getText(location.range) === 'WIDTH')).toBe(true);
+    expect(refs.some((location) => location.uri === user.uri && user.getText(location.range) === 'WIDTH')).toBe(true);
   });
 });

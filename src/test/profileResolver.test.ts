@@ -64,6 +64,17 @@ describe('profile resolver', () => {
     expect(result.effectiveProfile).toBe('P5');
   });
 
+  it('uses precomputed Verilog display formats without requiring full source text', () => {
+    const result = resolveProjectProfile({
+      configuredProfile: 'auto',
+      topModule: 'mips',
+      modules: [module('mips', ['clk', 'reset'])],
+      verilogDisplayFormats: ['%0d@%08h: $%0d <= %08h']
+    });
+
+    expect(result.effectiveProfile).toBe('P5');
+  });
+
   it('does not guess P4 or P5 when clk/reset top has no trace display', () => {
     const result = resolveProjectProfile({
       configuredProfile: 'auto',
