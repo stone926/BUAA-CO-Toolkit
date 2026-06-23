@@ -151,4 +151,28 @@ endmodule
 
     expect(result).not.toContain('mixed-assignment');
   });
+
+  it('reports signals driven by both continuous and procedural assignments', () => {
+    const result = codes(`
+module demo(input a, output reg y);
+    assign y = a;
+    always @(*) begin
+        y = ~a;
+    end
+endmodule
+`.trim());
+
+    expect(result).toContain('multi-driver');
+  });
+
+  it('reports multiple continuous assignments to the same signal', () => {
+    const result = codes(`
+module demo(input a, output y);
+    assign y = a;
+    assign y = ~a;
+endmodule
+`.trim());
+
+    expect(result).toContain('multi-driver');
+  });
 });

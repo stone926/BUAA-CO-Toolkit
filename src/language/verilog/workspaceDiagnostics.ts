@@ -3,22 +3,20 @@ import {
   DiagnosticSeverity
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { URI } from 'vscode-uri';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
+  VerilogInstance,
   VerilogModule,
-  VerilogPortConnection,
   VerilogParseResult
 } from './model';
-import {
-  shouldReportWidthMismatch,
-  widthOfDecl,
-  widthOfExpression
-} from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { VerilogToken } from './lexer';
-import { parameterOverridesForInstance } from './parameterOverrides';
+import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
+import { collectWorkspaceDriverDiagnostics } from './driverDiagnostics';
+import { collectWorkspaceUsageDiagnostics } from './usageDiagnostics';
 
 export function addVerilogWorkspaceDiagnostics(
   document: TextDocument,
@@ -29,7 +27,12 @@ export function addVerilogWorkspaceDiagnostics(
 ): Diagnostic[] {
   const diagnostics = filterWorkspaceAwareDiagnostics(baseDiagnostics, settings, index);
   const resolved = parsed ?? getCachedVerilogParse(document, settings, false);
+  diagnostics.push(...getWorkspaceModuleDiagnostics(document, settings, index, resolved));
   diagnostics.push(...getWorkspaceInstanceDiagnostics(document, settings, index, resolved));
+  if (settings.verilog.lint.courseRules) {
+    diagnostics.push(...collectWorkspaceDriverDiagnostics(document, resolved, index));
+    diagnostics.push(...collectWorkspaceUsageDiagnostics(document, settings, resolved, index));
+  }
   diagnostics.push(...getWorkspaceProjectDiagnostics(document, settings, index, resolved));
   return diagnostics;
 }
@@ -46,52 +49,113 @@ function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSet
   const diagnostics: Diagnostic[] = [];
   for (const module of parsed.modules) {
     for (const instance of module.instances) {
-      const target = index.getModule(instance.moduleName);
+      const target = resolveInstanceTarget(index, parsed.modules, instance);
       if (!target || target.uri === document.uri) {
         continue;
       }
-      const targetPorts = new Map(target.ports.map((port) => [port.name, port]));
-      const seenConnections = new Map<string, VerilogPortConnection>();
-      for (const connection of instance.portConnections) {
-        const targetPort = connection.name
-          ? targetPorts.get(connection.name)
-          : target.ports[connection.positionalIndex];
-        if (connection.name) {
-          const previous = seenConnections.get(connection.name);
-          if (previous) {
-            diagnostics.push(makeDiagnostic(connection.nameRange ?? connection.range, `Port '${connection.name}' is connected more than once.`, DiagnosticSeverity.Warning, 'duplicate-port-connection'));
-            continue;
-          }
-          seenConnections.set(connection.name, connection);
-          if (!targetPort) {
-            diagnostics.push(makeDiagnostic(connection.nameRange ?? connection.range, `Module '${target.name}' has no port named '${connection.name}'.`, DiagnosticSeverity.Error, 'unknown-port'));
-            continue;
-          }
-        }
-        if (!targetPort || !connection.expression.trim()) {
-          continue;
-        }
-        const expected = widthOfDecl(targetPort, target, parameterOverridesForInstance(instance, module, target));
-        const actual = widthOfExpression(connection.expression, module);
-        if (shouldReportWidthMismatch(expected, actual)) {
-          diagnostics.push(makeDiagnostic(
-            connection.expressionRange,
-            `Port '${targetPort.name}' is ${expected.width} bit(s), but this connection is ${actual.width} bit(s).`,
-            DiagnosticSeverity.Warning,
-            'port-width-mismatch'
-          ));
-        }
-      }
-      if (instance.portConnections.some((connection) => connection.name)) {
-        for (const port of target.ports) {
-          if (!seenConnections.has(port.name)) {
-            diagnostics.push(makeDiagnostic(instance.selectionRange, `Instance '${instance.instanceName}' does not connect port '${port.name}'.`, DiagnosticSeverity.Information, `missing-port:${port.name}`));
-          }
-        }
+      collectInstanceConnectionDiagnostics(document, module, instance, target, diagnostics);
+    }
+  }
+  return diagnostics;
+}
+
+function getWorkspaceModuleDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const topName = settings.project.topModule.trim() || 'mips';
+  const testbenchName = settings.project.testbench.trim();
+  for (const module of parsed.modules) {
+    const duplicates = index.getModules(module.name).filter((candidate) => candidate.uri !== module.uri);
+    if (duplicates.length) {
+      diagnostics.push(makeDiagnostic(
+        module.selectionRange,
+        `Duplicate module '${module.name}'. Another definition exists in ${formatModuleLocation(duplicates[0])}.`,
+        DiagnosticSeverity.Error,
+        'duplicate-module'
+      ));
+    }
+    if (
+      settings.verilog.lint.courseRules &&
+      module.name !== topName &&
+      module.name !== testbenchName &&
+      !hasInstanceOfModule(index, parsed.modules, module.name)
+    ) {
+      diagnostics.push(makeDiagnostic(
+        module.selectionRange,
+        `Module '${module.name}' is not instantiated by any indexed module.`,
+        DiagnosticSeverity.Information,
+        'uninstantiated-module'
+      ));
+    }
+  }
+
+  for (const module of parsed.modules) {
+    for (const instance of module.instances) {
+      if (!resolveInstanceTarget(index, parsed.modules, instance) && !isBuiltinPrimitive(instance.moduleName)) {
+        diagnostics.push(makeDiagnostic(
+          instance.moduleSelectionRange,
+          `Module '${instance.moduleName}' is not defined in the workspace.`,
+          DiagnosticSeverity.Error,
+          'unresolved-module'
+        ));
       }
     }
   }
   return diagnostics;
+}
+
+function resolveInstanceTarget(index: VerilogWorkspaceIndex, localModules: VerilogModule[], instance: VerilogInstance): VerilogModule | undefined {
+  return index.getModule(instance.moduleName) ?? localModules.find((module) => module.name === instance.moduleName);
+}
+
+function hasInstanceOfModule(index: VerilogWorkspaceIndex, localModules: VerilogModule[], moduleName: string): boolean {
+  return [...index.indexedModules(), ...localModules].some((module) =>
+    module.instances.some((instance) => instance.moduleName === moduleName)
+  );
+}
+
+function formatModuleLocation(module: VerilogModule): string {
+  return `${formatUri(module.uri)}:${module.selectionRange.start.line + 1}`;
+}
+
+function formatUri(uri: string): string {
+  try {
+    return URI.parse(uri).fsPath || uri;
+  } catch {
+    return uri;
+  }
+}
+
+const builtinPrimitives = new Set([
+  'and',
+  'nand',
+  'or',
+  'nor',
+  'xor',
+  'xnor',
+  'buf',
+  'not',
+  'bufif0',
+  'bufif1',
+  'notif0',
+  'notif1',
+  'pulldown',
+  'pullup',
+  'nmos',
+  'pmos',
+  'rnmos',
+  'rpmos',
+  'cmos',
+  'rcmos',
+  'tran',
+  'rtran',
+  'tranif0',
+  'tranif1',
+  'rtranif0',
+  'rtranif1'
+]);
+
+function isBuiltinPrimitive(name: string): boolean {
+  return builtinPrimitives.has(name);
 }
 
 function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {

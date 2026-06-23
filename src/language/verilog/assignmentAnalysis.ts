@@ -62,6 +62,15 @@ export function collectAssignmentsFromTokens(document: TextDocument, cst: Verilo
   return assignments;
 }
 
+export function assignmentTargetNamesFromTokens(tokens: VerilogToken[]): string[] {
+  const trimmed = trimSemicolon(tokens);
+  const operatorIndex = findAssignmentOperator(trimmed);
+  if (operatorIndex < 0 || isDeclarationStatement(trimmed)) {
+    return [];
+  }
+  return assignmentTargetsFromLeftHandSide(trimmed.slice(0, operatorIndex)).map((target) => target.name);
+}
+
 export function findAssignmentOperator(tokens: VerilogToken[]): number {
   let paren = 0;
   let bracket = 0;

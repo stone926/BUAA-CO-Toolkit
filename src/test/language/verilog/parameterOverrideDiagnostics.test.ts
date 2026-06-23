@@ -95,4 +95,45 @@ endmodule
 
     expect(workspaceCodes(top, [child])).not.toContain('port-width-mismatch');
   });
+
+  it('reports unknown, duplicate, and out-of-range parameter overrides', () => {
+    const result = codes(`
+module child #(parameter WIDTH = 4)();
+endmodule
+
+module top;
+    child #(.DEPTH(1), .WIDTH(2), .WIDTH(3), 4, 5) u_child();
+endmodule
+`.trim());
+
+    expect(result).toContain('unknown-parameter');
+    expect(result).toContain('duplicate-parameter-connection');
+    expect(result).toContain('parameter-index-out-of-range');
+  });
+
+  it('reports non-constant parameter override expressions', () => {
+    const result = codes(`
+module child #(parameter WIDTH = 4)();
+endmodule
+
+module top(input [7:0] runtime_width);
+    child #(.WIDTH(runtime_width)) u_child();
+endmodule
+`.trim());
+
+    expect(result).toContain('parameter-not-constant');
+  });
+
+  it('reports parameter override truncation against explicitly sized parameters', () => {
+    const result = codes(`
+module child #(parameter [3:0] MODE = 0)();
+endmodule
+
+module top;
+    child #(.MODE(8'hff)) u_child();
+endmodule
+`.trim());
+
+    expect(result).toContain('parameter-width-mismatch');
+  });
 });

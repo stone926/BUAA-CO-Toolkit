@@ -15,11 +15,12 @@ import {
   collectAlwaysBlocksFromCst,
   collectProceduralBlocksFromCst,
   edgeSignalsFromSensitivity,
-  hasAnyTokenValue,
   hasTokenValue,
   isOffsetInsideForControl,
   VerilogProceduralBlockAst
 } from './blockAst';
+import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
+import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
 
 export function collectAssignmentDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
@@ -44,6 +45,7 @@ export function collectAssignmentDiagnostics(document: TextDocument, settings: C
       }
     }
   }
+  collectContinuousProceduralDriverDiagnostics(document, modules, cst, diagnostics);
 }
 
 export function collectCourseStyleDiagnostics(
@@ -320,12 +322,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       if (isVerilogLintRuleEnabled(settings, 'vc-007') && hasTokenValue(block.bodyTokens, '<=')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-007: combinational always blocks should use blocking assignments (=), not nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-007-comb-nonblocking'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-008') && hasTokenValue(block.bodyTokens, 'if') && !hasTokenValue(block.bodyTokens, 'else')) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-008: combinational if statements should cover every branch to avoid inferred latches.', DiagnosticSeverity.Information, 'vc-008-comb-branch'));
-      }
-      if (isVerilogLintRuleEnabled(settings, 'vc-008') && hasAnyTokenValue(block.bodyTokens, new Set(['case', 'casex', 'casez'])) && !hasTokenValue(block.bodyTokens, 'default')) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-008: combinational case statements should include default assignments to avoid inferred latches.', DiagnosticSeverity.Information, 'vc-008-case-default'));
-      }
+      collectCombinationalDataflowDiagnostics(document, settings, module, block, diagnostics);
     }
 
     if (block.sequential) {

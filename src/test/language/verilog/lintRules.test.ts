@@ -340,4 +340,68 @@ endmodule
     expect(edit?.newText).toBe('    wire missing;\n');
     expect(edit?.range.start).toEqual({ line: 1, character: 0 });
   });
+
+  it('reports combinational assignments that are missing on some if paths', () => {
+    const text = `
+module demo(input a, input b, output reg y);
+    always @(*) begin
+        if (a) begin
+            y = b;
+        end
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text, []);
+    expect(codes).toContain('vc-008-comb-branch');
+    expect(codes).toContain('vc-008-comb-incomplete-assignment');
+  });
+
+  it('accepts default assignments before partial if branches', () => {
+    const text = `
+module demo(input a, input b, output reg y);
+    always @(*) begin
+        y = 1'b0;
+        if (a) begin
+            y = b;
+        end
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text, []);
+    expect(codes).not.toContain('vc-008-comb-branch');
+    expect(codes).not.toContain('vc-008-comb-incomplete-assignment');
+  });
+
+  it('accepts fully covered small constant case statements without default', () => {
+    const text = `
+module demo(input [1:0] sel, output reg y);
+    always @(*) begin
+        case (sel)
+            2'b00: y = 1'b0;
+            2'b01: y = 1'b0;
+            2'b10: y = 1'b1;
+            2'b11: y = 1'b1;
+        endcase
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text, []);
+    expect(codes).not.toContain('vc-008-case-default');
+    expect(codes).not.toContain('vc-008-comb-incomplete-assignment');
+  });
+
+  it('reports case assignments that lack default or full coverage', () => {
+    const text = `
+module demo(input sel, output reg y);
+    always @(*) begin
+        case (sel)
+            1'b0: y = 1'b0;
+        endcase
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text, []);
+    expect(codes).toContain('vc-008-case-default');
+    expect(codes).toContain('vc-008-comb-incomplete-assignment');
+  });
 });

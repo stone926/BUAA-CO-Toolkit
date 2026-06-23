@@ -16,13 +16,13 @@ import {
   expectedPorts,
   VerilogDecl,
   VerilogInclude,
-  VerilogModule,
-  VerilogPortConnection
+  VerilogModule
 } from './model';
 import { VerilogCstDocument, verilogTokenRange } from './cst';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import { parameterOverridesForInstance } from './parameterOverrides';
+import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
 import {
   collectAssignmentDiagnostics,
   collectCourseStyleDiagnostics,
@@ -47,7 +47,7 @@ export function collectVerilogDiagnostics(
   collectSyntaxDiagnostics(document, cst, modules, diagnostics);
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
-  collectInstancePortDiagnostics(modules, diagnostics);
+  collectInstancePortDiagnostics(document, modules, diagnostics);
   collectWidthDiagnostics(document, text, modules, cst, ast, diagnostics);
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
@@ -97,7 +97,7 @@ function collectIncludeDiagnostics(document: TextDocument, includes: VerilogIncl
   }
 }
 
-function collectInstancePortDiagnostics(modules: VerilogModule[], diagnostics: Diagnostic[]): void {
+function collectInstancePortDiagnostics(document: TextDocument, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
   const modulesByName = new Map(modules.map((module) => [module.name, module]));
   for (const module of modules) {
     for (const instance of module.instances) {
@@ -105,29 +105,9 @@ function collectInstancePortDiagnostics(modules: VerilogModule[], diagnostics: D
       if (!target) {
         continue;
       }
-      const targetPorts = new Map(target.ports.map((port) => [port.name, port]));
-      const seenConnections = new Map<string, VerilogPortConnection>();
-      for (const connection of instance.portConnections) {
-        if (!connection.name) {
-          continue;
-        }
-        const previous = seenConnections.get(connection.name);
-        if (previous) {
-          diagnostics.push(makeDiagnostic(connection.nameRange ?? connection.range, `Port '${connection.name}' is connected more than once.`, DiagnosticSeverity.Warning, 'duplicate-port-connection'));
-          continue;
-        }
-        seenConnections.set(connection.name, connection);
-        if (!targetPorts.has(connection.name)) {
-          diagnostics.push(makeDiagnostic(connection.nameRange ?? connection.range, `Module '${target.name}' has no port named '${connection.name}'.`, DiagnosticSeverity.Error, 'unknown-port'));
-        }
-      }
-      if (instance.portConnections.some((connection) => connection.name)) {
-        for (const port of target.ports) {
-          if (!seenConnections.has(port.name)) {
-            diagnostics.push(makeDiagnostic(instance.selectionRange, `Instance '${instance.instanceName}' does not connect port '${port.name}'.`, DiagnosticSeverity.Information, `missing-port:${port.name}`));
-          }
-        }
-      }
+      collectInstanceConnectionDiagnostics(document, module, instance, target, diagnostics, {
+        checkPortWidths: false
+      });
     }
   }
 }
