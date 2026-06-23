@@ -338,19 +338,20 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     instructions: instructionsSeen,
     diagnostics
   };
+  const semantic = buildMipsSemanticModel({
+    document,
+    ast,
+    labels,
+    dataSymbols,
+    eqvSymbols,
+    macros,
+    instructions: instructionsSeen,
+    diagnostics
+  });
   const parsedForQueries: MipsParseResult = {
     ...parsed,
     ast,
-    semantic: buildMipsSemanticModel({
-      document,
-      ast,
-      labels,
-      dataSymbols,
-      eqvSymbols,
-      macros,
-      instructions: instructionsSeen,
-      diagnostics
-    })
+    semantic
   };
   const missingLabelRanges = new Set<string>();
   for (const reference of labelReferences) {
@@ -372,16 +373,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   return {
     ...parsed,
     ast,
-    semantic: buildMipsSemanticModel({
-      document,
-      ast,
-      labels,
-      dataSymbols,
-      eqvSymbols,
-      macros,
-      instructions: instructionsSeen,
-      diagnostics: resultDiagnostics
-    }),
+    semantic: includeDiagnostics ? semantic : { ...semantic, diagnostics: resultDiagnostics },
     diagnostics: resultDiagnostics
   };
 }

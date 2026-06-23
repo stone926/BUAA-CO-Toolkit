@@ -12,19 +12,24 @@ interface CacheEntry {
   parsed: MipsParseResult;
 }
 
-let entry: CacheEntry | undefined;
+const MAX_CACHE_ENTRIES = 16;
+const entries = new Map<string, CacheEntry>();
 
 export function getCachedMipsParse(document: TextDocument, settings: CoSettings, state: MipsServerState): MipsParseResult {
-  const key = cacheKey(settings, state);
+  const settingKey = cacheKey(settings, state);
   const text = document.getText();
+  const key = documentCacheKey(document.uri, document.version, settingKey);
   let currentTextKey: string | undefined;
-  if (entry && entry.uri === document.uri && entry.version === document.version && entry.key === key) {
-    if (entry.text === text) {
-      return entry.parsed;
+  const cached = entries.get(key);
+  if (cached) {
+    if (cached.text === text) {
+      touchCacheEntry(key, cached);
+      return cached.parsed;
     }
     currentTextKey = textKey(text);
-    if (entry.textKey === currentTextKey) {
-      return entry.parsed;
+    if (cached.textKey === currentTextKey) {
+      touchCacheEntry(key, cached);
+      return cached.parsed;
     }
   }
 
@@ -33,20 +38,26 @@ export function getCachedMipsParse(document: TextDocument, settings: CoSettings,
     ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
   };
   const parsed = parseMips(document, settings, options);
-  entry = {
+  storeCacheEntry(key, {
     uri: document.uri,
     version: document.version,
     text,
     textKey: currentTextKey ?? textKey(text),
-    key,
+    key: settingKey,
     parsed
-  };
+  });
   return parsed;
 }
 
 export function clearCachedMipsParse(uri?: string): void {
-  if (!uri || entry?.uri === uri) {
-    entry = undefined;
+  if (!uri) {
+    entries.clear();
+    return;
+  }
+  for (const [key, cached] of entries) {
+    if (cached.uri === uri) {
+      entries.delete(key);
+    }
   }
 }
 
@@ -65,4 +76,27 @@ function textKey(text: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return `${text.length}:${hash >>> 0}`;
+}
+
+function documentCacheKey(uri: string, version: number, settings: string): string {
+  return `${uri}\u0000${version}\u0000${settings}`;
+}
+
+function storeCacheEntry(key: string, value: CacheEntry): void {
+  if (entries.has(key)) {
+    entries.delete(key);
+  }
+  entries.set(key, value);
+  while (entries.size > MAX_CACHE_ENTRIES) {
+    const oldest = entries.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    entries.delete(oldest);
+  }
+}
+
+function touchCacheEntry(key: string, value: CacheEntry): void {
+  entries.delete(key);
+  entries.set(key, value);
 }
