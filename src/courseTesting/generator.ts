@@ -22,6 +22,7 @@ export interface AsmSnapshotEntry {
   mtimeMs: number;
 }
 
+const snapshotStatBatchSize = 32;
 const generatorExtensions = new Set(['.py', '.js', '.mjs', '.cjs', '.jar', '.bat', '.cmd', '.exe', '.ps1']);
 const asmExtensions = new Set(['.asm', '.s', '.mips']);
 const ignoredDirectories = new Set(['.git', 'node_modules', 'out', '.vscode-test']);
@@ -84,7 +85,9 @@ export function buildGeneratorInvocation(
 
 export async function snapshotAsmFiles(root: string, maxFiles = 5000): Promise<AsmSnapshotEntry[]> {
   const results: AsmSnapshotEntry[] = [];
-  await walk(root, results, maxFiles);
+  const pending: string[] = [];
+  await walk(root, results, pending, maxFiles);
+  await flushAsmStats(pending, results, maxFiles);
   return results.sort((left, right) => left.file.localeCompare(right.file));
 }
 
@@ -104,7 +107,7 @@ export function changedAsmFiles(
     .map((entry) => entry.file);
 }
 
-async function walk(directory: string, results: AsmSnapshotEntry[], maxFiles: number): Promise<void> {
+async function walk(directory: string, results: AsmSnapshotEntry[], pending: string[], maxFiles: number): Promise<void> {
   if (results.length >= maxFiles || ignoredDirectories.has(path.basename(directory))) {
     return;
   }
@@ -123,24 +126,50 @@ async function walk(directory: string, results: AsmSnapshotEntry[], maxFiles: nu
     }
     const file = path.join(directory, entry.name);
     if (entry.isDirectory()) {
+      await flushAsmStats(pending, results, maxFiles);
       if (path.basename(directory) === '.co' && ignoredCoDirectories.has(entry.name.toLowerCase())) {
         continue;
       }
-      await walk(file, results, maxFiles);
+      await walk(file, results, pending, maxFiles);
       continue;
     }
     if (!entry.isFile() || !asmExtensions.has(path.extname(entry.name).toLowerCase())) {
       continue;
     }
-    try {
-      const stat = await fs.promises.stat(file);
-      results.push({
-        file,
-        mtimeMs: stat.mtimeMs
-      });
-    } catch {
-      // Ignore files that disappear while the generator is running.
+    pending.push(file);
+    if (pending.length >= snapshotStatBatchSize) {
+      await flushAsmStats(pending, results, maxFiles);
     }
+  }
+}
+
+async function flushAsmStats(pending: string[], results: AsmSnapshotEntry[], maxFiles: number): Promise<void> {
+  if (!pending.length || results.length >= maxFiles) {
+    pending.length = 0;
+    return;
+  }
+  const files = pending.splice(0);
+  const stats = await Promise.all(files.map(statAsmFile));
+  for (const entry of stats) {
+    if (results.length >= maxFiles) {
+      return;
+    }
+    if (entry) {
+      results.push(entry);
+    }
+  }
+}
+
+async function statAsmFile(file: string): Promise<AsmSnapshotEntry | undefined> {
+  try {
+    const stat = await fs.promises.stat(file);
+    return {
+      file,
+      mtimeMs: stat.mtimeMs
+    };
+  } catch {
+    // Ignore files that disappear while the generator is running.
+    return undefined;
   }
 }
 
