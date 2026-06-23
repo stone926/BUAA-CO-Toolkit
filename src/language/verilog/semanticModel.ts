@@ -19,6 +19,12 @@ import { VerilogAstDocument } from './ast';
 import { parseVerilogExpression } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
+import {
+  findMatchingTokenForward as findMatchingToken,
+  findTopLevelToken as firstTopLevelToken,
+  splitTopLevelTokens as splitTopLevel,
+  trimTrailingSemicolonTokens
+} from './tokenUtils';
 
 export type VerilogSemanticSymbolKind =
   | 'module'
@@ -522,35 +528,6 @@ function splitBySemicolon(tokens: VerilogToken[]): VerilogToken[][] {
   return result.filter((part) => part.length > 0);
 }
 
-function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const result: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      result.push(tokens.slice(start, index).filter((item) => item.kind !== 'eof'));
-      start = index + 1;
-    }
-  }
-  result.push(tokens.slice(start).filter((item) => item.kind !== 'eof'));
-  return result.filter((part) => part.length > 0);
-}
-
 function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined {
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
@@ -597,21 +574,6 @@ function nextTokenValue(tokens: VerilogToken[], start: number, value: string): n
   return -1;
 }
 
-function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
-  let depth = 0;
-  for (let index = openIndex; index < tokens.length; index++) {
-    if (tokens[index].value === openValue) {
-      depth++;
-    } else if (tokens[index].value === closeValue) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
 function findStatementSemicolon(tokens: VerilogToken[], start: number): number {
   let paren = 0;
   let bracket = 0;
@@ -631,31 +593,6 @@ function findStatementSemicolon(tokens: VerilogToken[], start: number): number {
     } else if (token.value === '}') {
       brace = Math.max(0, brace - 1);
     } else if (token.value === ';' && paren === 0 && bracket === 0 && brace === 0) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function firstTopLevelToken(tokens: VerilogToken[], value: string): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
       return index;
     }
   }
@@ -922,7 +859,7 @@ function collectReferencesFromExpressionTokens(
   module: VerilogModule,
   tokens: VerilogToken[]
 ): void {
-  const expressionTokens = trimExpressionTokens(tokens);
+  const expressionTokens = trimTrailingSemicolonTokens(tokens);
   if (!expressionTokens.length) {
     return;
   }
@@ -935,11 +872,6 @@ function collectReferencesFromExpressionTokens(
     return;
   }
   collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, expressionTokens[0].start);
-}
-
-function trimExpressionTokens(tokens: VerilogToken[]): VerilogToken[] {
-  const trimmed = tokens.filter((token) => token.kind !== 'eof');
-  return trimmed[trimmed.length - 1]?.value === ';' ? trimmed.slice(0, -1) : trimmed;
 }
 
 function collectReferencesFromExpressionText(
