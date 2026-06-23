@@ -13,8 +13,8 @@ import {
   VerilogPortConnection,
   verilogKeywords
 } from './model';
-import { widthOfConstantInitializer, widthOfExpression, WidthInfo } from './expressions';
-import { evalVerilogIntegerConstant, parseVerilogExpression } from './exprAst';
+import { widthOfExpressionAst, WidthInfo } from './expressions';
+import { evalVerilogIntegerConstant, parseVerilogExpression, parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { normalizeWidth } from './textUtils';
 
 interface ModuleHeaderInfo {
@@ -287,6 +287,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
         width,
         initializer: initializer.initializer,
         initializerRange: initializer.initializerRange,
+        initializerAst: initializer.initializerAst,
         inferredWidth: inferred.width,
         inferredMinWidth: inferred.minWidth,
         inferredFlexible: inferred.flexible,
@@ -371,7 +372,7 @@ function inferModuleParameterConstants(module: VerilogModule): void {
     }
     evaluating.add(decl.name);
     try {
-      const ast = parseVerilogExpression(decl.initializer);
+      const ast = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
       const value = ast ? evalVerilogIntegerConstant(ast, resolve) : undefined;
       if (value !== undefined) {
         decl.constantValue = value;
@@ -389,7 +390,7 @@ function inferModuleParameterConstants(module: VerilogModule): void {
     if (!decl.initializer) {
       continue;
     }
-    const inferred = widthOfExpression(decl.initializer, module);
+    const inferred = widthOfExpressionAst(decl.initializerAst ?? parseVerilogExpression(decl.initializer), module);
     if (inferred.width !== undefined) {
       decl.inferredWidth = inferred.width;
       decl.inferredMinWidth = inferred.minWidth;
@@ -467,6 +468,7 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
     width: firstRangeText(text, cleaned),
     initializer: initializer.initializer,
     initializerRange: initializer.initializerRange,
+    initializerAst: initializer.initializerAst,
     inferredWidth: inferred.width,
     inferredMinWidth: inferred.minWidth,
     inferredFlexible: inferred.flexible,
@@ -568,6 +570,7 @@ function parseConnectionList(document: TextDocument, text: string, tokens: Veril
             nameRange: tokenRange(document, nameToken),
             expression: text.slice(document.offsetAt(expressionRange.start), document.offsetAt(expressionRange.end)),
             expressionRange,
+            expressionAst: parseVerilogExpressionTokens(expressionTokens),
             range: Range.create(document.positionAt(first.start), document.positionAt(part[part.length - 1].end)),
             positionalIndex
           });
@@ -589,6 +592,7 @@ function parseConnectionList(document: TextDocument, text: string, tokens: Veril
       connections.push({
         expression: text.slice(document.offsetAt(expressionRange.start), document.offsetAt(expressionRange.end)).trim(),
         expressionRange,
+        expressionAst: parseVerilogExpressionTokens(part),
         range: expressionRange,
         positionalIndex
       });
@@ -661,6 +665,7 @@ function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined 
 interface DeclarationInitializerInfo extends WidthInfo {
   initializer?: string;
   initializerRange?: Range;
+  initializerAst?: VerilogExpressionAst;
 }
 
 function declarationInitializerInfo(document: TextDocument, text: string, tokens: VerilogToken[]): DeclarationInitializerInfo {
@@ -673,10 +678,12 @@ function declarationInitializerInfo(document: TextDocument, text: string, tokens
     return {};
   }
   const initializer = tokenText(text, expressionTokens).trim();
-  const width = widthOfConstantInitializer(initializer);
+  const initializerAst = parseVerilogExpressionTokens(expressionTokens);
+  const width = widthOfExpressionAst(initializerAst, undefined);
   return {
     ...width,
     initializer,
+    initializerAst,
     initializerRange: tokensRange(document, expressionTokens, tokens[equal].end, tokens[tokens.length - 1].end)
   };
 }

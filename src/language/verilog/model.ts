@@ -2,6 +2,7 @@ import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
 import type { VerilogAstDocument } from './ast';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogCstDocument } from './cst';
+import type { VerilogExpressionAst } from './exprAst';
 
 export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar' | 'task' | 'function';
 
@@ -11,6 +12,7 @@ export interface VerilogDecl {
   width?: string;
   initializer?: string;
   initializerRange?: Range;
+  initializerAst?: VerilogExpressionAst;
   constantValue?: bigint;
   inferredWidth?: number;
   inferredMinWidth?: number;
@@ -37,6 +39,7 @@ export interface VerilogPortConnection {
   nameRange?: Range;
   expression: string;
   expressionRange: Range;
+  expressionAst?: VerilogExpressionAst;
   range: Range;
   positionalIndex: number;
   shorthand?: boolean;

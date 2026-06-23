@@ -127,7 +127,7 @@ function collectConstantDivisorDiagnostics(document: TextDocument, modules: Veri
       if (!decl.initializer || !decl.initializerRange) {
         continue;
       }
-      const expression = parseVerilogExpression(decl.initializer);
+      const expression = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
       if (!expression) {
         continue;
       }
@@ -135,7 +135,7 @@ function collectConstantDivisorDiagnostics(document: TextDocument, modules: Veri
         document,
         module,
         expression,
-        expressionBaseOffset(document, decl.initializerRange, decl.initializer),
+        decl.initializerAst ? 0 : expressionBaseOffset(document, decl.initializerRange, decl.initializer),
         diagnostics
       );
     }
@@ -145,7 +145,7 @@ function collectConstantDivisorDiagnostics(document: TextDocument, modules: Veri
         if (!connection.expression.trim()) {
           continue;
         }
-        const expression = parseVerilogExpression(connection.expression);
+        const expression = connection.expressionAst ?? parseVerilogExpression(connection.expression);
         if (!expression) {
           continue;
         }
@@ -153,7 +153,7 @@ function collectConstantDivisorDiagnostics(document: TextDocument, modules: Veri
           document,
           module,
           expression,
-          expressionBaseOffset(document, connection.expressionRange, connection.expression),
+          connection.expressionAst ? 0 : expressionBaseOffset(document, connection.expressionRange, connection.expression),
           diagnostics
         );
       }
@@ -200,7 +200,7 @@ function collectSelectBoundsDiagnostics(document: TextDocument, modules: Verilog
       if (!decl.initializer || !decl.initializerRange) {
         continue;
       }
-      const expression = parseVerilogExpression(decl.initializer);
+      const expression = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
       if (!expression) {
         continue;
       }
@@ -208,7 +208,7 @@ function collectSelectBoundsDiagnostics(document: TextDocument, modules: Verilog
         document,
         module,
         expression,
-        expressionBaseOffset(document, decl.initializerRange, decl.initializer),
+        decl.initializerAst ? 0 : expressionBaseOffset(document, decl.initializerRange, decl.initializer),
         diagnostics
       );
     }
@@ -218,7 +218,7 @@ function collectSelectBoundsDiagnostics(document: TextDocument, modules: Verilog
         if (!connection.expression.trim()) {
           continue;
         }
-        const expression = parseVerilogExpression(connection.expression);
+        const expression = connection.expressionAst ?? parseVerilogExpression(connection.expression);
         if (!expression) {
           continue;
         }
@@ -226,7 +226,7 @@ function collectSelectBoundsDiagnostics(document: TextDocument, modules: Verilog
           document,
           module,
           expression,
-          expressionBaseOffset(document, connection.expressionRange, connection.expression),
+          connection.expressionAst ? 0 : expressionBaseOffset(document, connection.expressionRange, connection.expression),
           diagnostics
         );
       }
@@ -452,7 +452,9 @@ function collectWidthDiagnostics(document: TextDocument, text: string, modules: 
           continue;
         }
         const expected = widthOfDecl(targetPort, target, parameterOverridesForInstance(instance, module, target));
-        const actual = widthOfExpression(connection.expression, module);
+        const actual = connection.expressionAst
+          ? widthOfExpressionAst(connection.expressionAst, module)
+          : widthOfExpression(connection.expression, module);
         if (shouldReportWidthMismatch(expected, actual)) {
           diagnostics.push(makeDiagnostic(
             connection.expressionRange,
@@ -557,7 +559,9 @@ function collectDeclarationInitializerWidthDiagnostics(
       continue;
     }
     const expected = widthOfDecl(decl, module);
-    const actual = widthOfExpression(tokenText(text, initTokens).trim(), module);
+    const actual = decl.initializerAst
+      ? widthOfExpressionAst(decl.initializerAst, module)
+      : widthOfExpression(tokenText(text, initTokens).trim(), module);
     if (shouldReportWidthMismatch(expected, actual)) {
       diagnostics.push(makeDiagnostic(
         tokenRange(document, initTokens),

@@ -328,8 +328,7 @@ function collectReferences(
       for (const connection of [...instance.portConnections, ...instance.parameterConnections]) {
         const connectionScope = scopeAtPosition(scope, blockScopes, connection.expressionRange.start);
         if (!connection.name || !connection.nameRange) {
-          collectReferencesFromExpressionText(document, references, declarationRangeKeys, connectionScope, module, connection.expression, connection.expressionRange);
-          collectReferencesFromRange(document, source, references, declarationRangeKeys, connectionScope, module, connection.expressionRange);
+          collectReferencesFromConnectionExpression(document, source, references, declarationRangeKeys, connectionScope, module, connection);
           continue;
         }
         references.push({
@@ -342,8 +341,20 @@ function collectReferences(
           instance,
           portConnection: connection
         });
-        collectReferencesFromExpressionText(document, references, declarationRangeKeys, connectionScope, module, connection.expression, connection.expressionRange);
-        collectReferencesFromRange(document, source, references, declarationRangeKeys, connectionScope, module, connection.expressionRange);
+        collectReferencesFromConnectionExpression(document, source, references, declarationRangeKeys, connectionScope, module, connection);
+      }
+    }
+
+    for (const decl of module.declarations.values()) {
+      if (!decl.initializer || !decl.initializerRange) {
+        continue;
+      }
+      const initScope = scopeAtPosition(scope, blockScopes, decl.initializerRange.start);
+      if (decl.initializerAst) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, initScope, module, decl.initializerAst, 0);
+      } else {
+        collectReferencesFromExpressionText(document, references, declarationRangeKeys, initScope, module, decl.initializer, decl.initializerRange);
+        collectReferencesFromRange(document, source, references, declarationRangeKeys, initScope, module, decl.initializerRange);
       }
     }
 
@@ -866,6 +877,26 @@ function collectAstDrivenModuleReferences(
     }
     collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, tokens);
   }
+}
+
+function collectReferencesFromConnectionExpression(
+  document: TextDocument,
+  source: VerilogSemanticSource,
+  references: VerilogSemanticReference[],
+  declarationRangeKeys: Set<string>,
+  scope: VerilogSemanticScope,
+  module: VerilogModule,
+  connection: VerilogPortConnection
+): void {
+  if (!connection.expression.trim()) {
+    return;
+  }
+  if (connection.expressionAst) {
+    collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, connection.expressionAst, 0);
+    return;
+  }
+  collectReferencesFromExpressionText(document, references, declarationRangeKeys, scope, module, connection.expression, connection.expressionRange);
+  collectReferencesFromRange(document, source, references, declarationRangeKeys, scope, module, connection.expressionRange);
 }
 
 function collectReferencesFromRange(

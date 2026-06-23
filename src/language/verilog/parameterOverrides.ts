@@ -1,4 +1,4 @@
-import { evalExpressionConstant } from './expressions';
+import { evalExpressionAstConstant, evalExpressionConstant } from './expressions';
 import type { VerilogConstantOverrides } from './expressions';
 import type { VerilogInstance, VerilogModule, VerilogPortConnection } from './model';
 
@@ -16,7 +16,9 @@ export function parameterOverridesForInstance(
     if (!target || !connection.expression.trim()) {
       continue;
     }
-    const value = evalExpressionConstant(connection.expression, parentModule);
+    const value = connection.expressionAst
+      ? evalExpressionAstConstant(connection.expressionAst, parentModule)
+      : evalExpressionConstant(connection.expression, parentModule);
     if (value !== undefined) {
       overrides.set(target.name, value);
     }

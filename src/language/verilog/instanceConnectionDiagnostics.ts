@@ -6,9 +6,11 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import {
   evalExpressionConstant,
+  evalExpressionAstConstant,
   shouldReportWidthMismatch,
   widthOfDecl,
-  widthOfExpression
+  widthOfExpression,
+  widthOfExpressionAst
 } from './expressions';
 import {
   VerilogDecl,
@@ -83,7 +85,9 @@ function collectPortConnectionDiagnostics(
       continue;
     }
     const expected = widthOfDecl(targetPort, targetModule, parameterOverridesForInstance(instance, parentModule, targetModule));
-    const actual = widthOfExpression(connection.expression, parentModule);
+    const actual = connection.expressionAst
+      ? widthOfExpressionAst(connection.expressionAst, parentModule)
+      : widthOfExpression(connection.expression, parentModule);
     if (shouldReportWidthMismatch(expected, actual)) {
       diagnostics.push(makeDiagnostic(
         connection.expressionRange,
@@ -134,7 +138,10 @@ function collectParameterConnectionDiagnostics(
     if (!targetParameter || !connection.expression.trim()) {
       continue;
     }
-    if (evalExpressionConstant(connection.expression, parentModule) === undefined) {
+    const value = connection.expressionAst
+      ? evalExpressionAstConstant(connection.expressionAst, parentModule)
+      : evalExpressionConstant(connection.expression, parentModule);
+    if (value === undefined) {
       diagnostics.push(makeDiagnostic(
         connection.expressionRange,
         `Parameter '${targetParameter.name}' override must be a constant expression.`,
@@ -146,7 +153,9 @@ function collectParameterConnectionDiagnostics(
       continue;
     }
     const expected = widthOfDecl(targetParameter, targetModule);
-    const actual = widthOfExpression(connection.expression, parentModule);
+    const actual = connection.expressionAst
+      ? widthOfExpressionAst(connection.expressionAst, parentModule)
+      : widthOfExpression(connection.expression, parentModule);
     if (shouldReportWidthMismatch(expected, actual)) {
       diagnostics.push(makeDiagnostic(
         connection.expressionRange,

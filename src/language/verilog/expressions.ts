@@ -235,7 +235,7 @@ function constantResolverForModule(module: VerilogModule, overrides?: VerilogCon
       return decl.constantValue;
     }
     evaluating.add(name);
-    const expression = parseVerilogExpression(decl.initializer);
+    const expression = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
     const value = expression ? evalVerilogIntegerConstant(expression, resolve) : undefined;
     evaluating.delete(name);
     return value ?? decl.constantValue;

@@ -517,6 +517,54 @@ endmodule
       expect(initialBlock.statementTree.statements[0].body.kind).toBe('assignment');
     }
   });
+
+  it('attaches expression ASTs to declaration initializers and instance connections', () => {
+    const text = `
+module child #(parameter WIDTH = 8)(input [WIDTH-1:0] din, output dout);
+endmodule
+module top(input [3:0] a, output y);
+    localparam W = 2 + 2;
+    wire [W-1:0] data = a + W;
+    child #(.WIDTH(W)) u_child(.din(data[W-1:0]), .dout(y));
+endmodule
+`.trim();
+    const document = doc(text);
+    const parsed = parseVerilog(document, mergeCoSettings({}), false);
+    const child = parsed.modules.find((module) => module.name === 'child');
+    const top = parsed.modules.find((module) => module.name === 'top');
+    expect(child?.declarations.get('WIDTH')?.initializerAst?.kind).toBe('numberLiteral');
+
+    const localparam = top?.declarations.get('W');
+    expect(localparam?.initializerAst?.kind).toBe('binaryExpression');
+    if (localparam?.initializerAst) {
+      const rangeText = document.getText({
+        start: document.positionAt(localparam.initializerAst.start),
+        end: document.positionAt(localparam.initializerAst.end)
+      });
+      expect(rangeText).toBe('2 + 2');
+    }
+
+    const data = top?.declarations.get('data');
+    expect(data?.initializerAst?.kind).toBe('binaryExpression');
+    if (data?.initializerAst) {
+      const rangeText = document.getText({
+        start: document.positionAt(data.initializerAst.start),
+        end: document.positionAt(data.initializerAst.end)
+      });
+      expect(rangeText).toBe('a + W');
+    }
+
+    const instance = top?.instances[0];
+    expect(instance?.parameterConnections[0].expressionAst?.kind).toBe('identifier');
+    expect(instance?.portConnections[0].expressionAst?.kind).toBe('selectExpression');
+    if (instance?.portConnections[0].expressionAst) {
+      const rangeText = document.getText({
+        start: document.positionAt(instance.portConnections[0].expressionAst.start),
+        end: document.positionAt(instance.portConnections[0].expressionAst.end)
+      });
+      expect(rangeText).toBe('data[W-1:0]');
+    }
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
