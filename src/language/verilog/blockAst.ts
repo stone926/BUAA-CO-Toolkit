@@ -3,12 +3,14 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { VerilogCstDocument, VerilogCstStatement } from './cst';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { VerilogModule } from './model';
+import { parseVerilogProceduralBlockBody, VerilogBlockStatementAst } from './proceduralAst';
 
 export interface VerilogAlwaysBlockAst {
   headerRange: Range;
   range: Range;
   sensitivityTokens: VerilogToken[];
   bodyTokens: VerilogToken[];
+  statementTree: VerilogBlockStatementAst;
   statements: VerilogCstStatement[];
   bodyStart: number;
   bodyEnd: number;
@@ -26,6 +28,7 @@ export interface VerilogProceduralBlockAst {
   controlKind: VerilogProceduralControlKind;
   controlTokens: VerilogToken[];
   bodyTokens: VerilogToken[];
+  statementTree: VerilogBlockStatementAst;
   statements: VerilogCstStatement[];
   bodyStart: number;
   bodyEnd: number;
@@ -294,6 +297,7 @@ function parseAlwaysBlockAt(document: TextDocument, cst: VerilogCstDocument, alw
     range: Range.create(document.positionAt(always.start), document.positionAt(bodyEnd)),
     sensitivityTokens,
     bodyTokens,
+    statementTree: parseVerilogProceduralBlockBody(document, bodyTokens),
     statements: cst.statements.filter((statement) => statement.end > bodyStart && statement.start < bodyEnd),
     bodyStart,
     bodyEnd,
@@ -352,6 +356,7 @@ function parseProceduralBlockAt(document: TextDocument, cst: VerilogCstDocument,
     controlKind,
     controlTokens,
     bodyTokens: tokens.slice(cursor, endIndex + 1),
+    statementTree: parseVerilogProceduralBlockBody(document, tokens.slice(cursor, endIndex + 1)),
     statements: cst.statements.filter((statement) => statement.end > bodyStart && statement.start < bodyEnd),
     bodyStart,
     bodyEnd

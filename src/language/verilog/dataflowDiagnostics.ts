@@ -6,67 +6,11 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
-import { assignmentTargetNamesFromTokens } from './assignmentAnalysis';
 import { VerilogAlwaysBlockAst } from './blockAst';
 import { evalExpressionAstConstant, widthOfExpressionAst } from './expressions';
-import {
-  parseVerilogExpressionTokens,
-  VerilogExpressionAst
-} from './exprAst';
-import { VerilogToken } from './lexer';
+import { VerilogExpressionAst } from './exprAst';
 import { VerilogModule } from './model';
-
-type FlowNode =
-  | BlockNode
-  | AssignmentNode
-  | IfNode
-  | CaseNode
-  | LoopNode
-  | OtherNode;
-
-interface BlockNode {
-  kind: 'block';
-  statements: FlowNode[];
-  range: Range;
-}
-
-interface AssignmentNode {
-  kind: 'assignment';
-  targets: string[];
-  range: Range;
-}
-
-interface IfNode {
-  kind: 'if';
-  consequent: FlowNode;
-  alternate?: FlowNode;
-  range: Range;
-}
-
-interface CaseNode {
-  kind: 'case';
-  caseKind: string;
-  expression?: VerilogExpressionAst;
-  items: CaseItemNode[];
-  range: Range;
-}
-
-interface CaseItemNode {
-  labels: VerilogExpressionAst[];
-  defaultItem: boolean;
-  body: FlowNode;
-}
-
-interface LoopNode {
-  kind: 'loop';
-  body: FlowNode;
-  range: Range;
-}
-
-interface OtherNode {
-  kind: 'other';
-  range: Range;
-}
+import { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 
 interface FlowResult {
   definite: Set<string>;
@@ -91,9 +35,7 @@ export function collectCombinationalDataflowDiagnostics(
     return;
   }
 
-  const parser = new FlowParser(document, block.bodyTokens);
-  const root = parser.parseRoot();
-  const result = analyzeFlow(root, new Set(), module);
+  const result = analyzeFlow(block.statementTree, new Set(), module);
   const reported = new Set<string>();
   for (const issue of result.issues) {
     const key = `${issue.code}:${issue.range.start.line}:${issue.range.start.character}`;
@@ -117,263 +59,7 @@ export function collectCombinationalDataflowDiagnostics(
   }
 }
 
-class FlowParser {
-  private cursor = 0;
-
-  constructor(
-    private readonly document: TextDocument,
-    private readonly tokens: VerilogToken[]
-  ) {}
-
-  parseRoot(): FlowNode {
-    const statements = this.parseSequence(new Set());
-    return {
-      kind: 'block',
-      statements,
-      range: tokensRange(this.document, this.tokens)
-    };
-  }
-
-  private parseSequence(stopValues: Set<string>): FlowNode[] {
-    const statements: FlowNode[] = [];
-    while (this.cursor < this.tokens.length) {
-      const token = this.current();
-      if (!token || token.kind === 'eof') {
-        break;
-      }
-      if (stopValues.has(token.value)) {
-        break;
-      }
-      const before = this.cursor;
-      const statement = this.parseStatement(stopValues);
-      statements.push(statement);
-      if (this.cursor <= before) {
-        this.cursor = before + 1;
-      }
-    }
-    return statements;
-  }
-
-  private parseStatement(stopValues: Set<string>): FlowNode {
-    const token = this.current();
-    if (!token || token.kind === 'eof') {
-      return this.makeOther(this.cursor, this.cursor);
-    }
-    if (token.value === 'begin') {
-      return this.parseBeginEndBlock();
-    }
-    if (token.value === 'if') {
-      return this.parseIfStatement();
-    }
-    if (token.value === 'case' || token.value === 'casex' || token.value === 'casez') {
-      return this.parseCaseStatement();
-    }
-    if (token.value === 'for' || token.value === 'while' || token.value === 'repeat') {
-      return this.parseLoopStatement();
-    }
-    if (stopValues.has(token.value)) {
-      return this.makeOther(this.cursor, this.cursor);
-    }
-    return this.parseSimpleStatement();
-  }
-
-  private parseBeginEndBlock(): FlowNode {
-    const start = this.cursor;
-    this.cursor++;
-    const statements = this.parseSequence(new Set(['end']));
-    const end = this.current()?.value === 'end' ? this.cursor++ : Math.max(start, this.cursor - 1);
-    return {
-      kind: 'block',
-      statements,
-      range: tokenIndexRange(this.document, this.tokens, start, end)
-    };
-  }
-
-  private parseIfStatement(): FlowNode {
-    const start = this.cursor;
-    this.cursor++;
-    this.skipParenthesizedControl();
-    const consequent = this.parseStatement(new Set(['else']));
-    let alternate: FlowNode | undefined;
-    if (this.current()?.value === 'else') {
-      this.cursor++;
-      alternate = this.parseStatement(new Set());
-    }
-    return {
-      kind: 'if',
-      consequent,
-      alternate,
-      range: Range.create(this.document.positionAt(this.tokens[start].start), (alternate ?? consequent).range.end)
-    };
-  }
-
-  private parseCaseStatement(): FlowNode {
-    const start = this.cursor;
-    const caseKind = this.tokens[start].value;
-    this.cursor++;
-    const expression = this.parseParenthesizedExpression();
-    const items: CaseItemNode[] = [];
-    while (this.cursor < this.tokens.length && this.current()?.value !== 'endcase') {
-      const labelStart = this.cursor;
-      const colon = this.findTopLevelValue(':', this.cursor);
-      if (colon < 0) {
-        break;
-      }
-      const labelTokens = this.tokens.slice(labelStart, colon).filter((token) => token.kind !== 'eof');
-      this.cursor = colon + 1;
-      const defaultItem = labelTokens.some((token) => token.value === 'default');
-      const labels = defaultItem ? [] : splitTopLevel(labelTokens, ',')
-        .map(parseVerilogExpressionTokens)
-        .filter((item): item is VerilogExpressionAst => Boolean(item));
-      const body = this.parseStatement(new Set(['endcase']));
-      items.push({
-        labels,
-        defaultItem,
-        body
-      });
-    }
-    const end = this.current()?.value === 'endcase' ? this.cursor++ : Math.max(start, this.cursor - 1);
-    return {
-      kind: 'case',
-      caseKind,
-      expression,
-      items,
-      range: tokenIndexRange(this.document, this.tokens, start, end)
-    };
-  }
-
-  private parseLoopStatement(): FlowNode {
-    const start = this.cursor;
-    this.cursor++;
-    this.skipParenthesizedControl();
-    const body = this.parseStatement(new Set());
-    return {
-      kind: 'loop',
-      body,
-      range: Range.create(this.document.positionAt(this.tokens[start].start), body.range.end)
-    };
-  }
-
-  private parseSimpleStatement(): FlowNode {
-    const start = this.cursor;
-    const end = this.findStatementEnd(this.cursor);
-    this.cursor = Math.min(this.tokens.length, end + 1);
-    const tokens = this.tokens.slice(start, end + 1);
-    const targets = assignmentTargetNamesFromTokens(tokens);
-    return targets.length
-      ? {
-        kind: 'assignment',
-        targets,
-        range: tokenIndexRange(this.document, this.tokens, start, end)
-      }
-      : this.makeOther(start, end);
-  }
-
-  private parseParenthesizedExpression(): VerilogExpressionAst | undefined {
-    if (this.current()?.value !== '(') {
-      return undefined;
-    }
-    const open = this.cursor;
-    const close = this.findMatchingForward(open, '(', ')');
-    if (close < 0) {
-      return undefined;
-    }
-    const expression = parseVerilogExpressionTokens(this.tokens.slice(open + 1, close));
-    this.cursor = close + 1;
-    return expression;
-  }
-
-  private skipParenthesizedControl(): void {
-    if (this.current()?.value !== '(') {
-      return;
-    }
-    const close = this.findMatchingForward(this.cursor, '(', ')');
-    this.cursor = close >= 0 ? close + 1 : this.cursor + 1;
-  }
-
-  private findTopLevelValue(value: string, start: number): number {
-    let paren = 0;
-    let bracket = 0;
-    let brace = 0;
-    for (let index = start; index < this.tokens.length; index++) {
-      const token = this.tokens[index];
-      if (token.value === 'endcase') {
-        return -1;
-      }
-      if (token.value === '(') {
-        paren++;
-      } else if (token.value === ')') {
-        paren = Math.max(0, paren - 1);
-      } else if (token.value === '[') {
-        bracket++;
-      } else if (token.value === ']') {
-        bracket = Math.max(0, bracket - 1);
-      } else if (token.value === '{') {
-        brace++;
-      } else if (token.value === '}') {
-        brace = Math.max(0, brace - 1);
-      } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-        return index;
-      }
-    }
-    return -1;
-  }
-
-  private findStatementEnd(start: number): number {
-    let paren = 0;
-    let bracket = 0;
-    let brace = 0;
-    for (let index = start; index < this.tokens.length; index++) {
-      const token = this.tokens[index];
-      if (token.value === '(') {
-        paren++;
-      } else if (token.value === ')') {
-        paren = Math.max(0, paren - 1);
-      } else if (token.value === '[') {
-        bracket++;
-      } else if (token.value === ']') {
-        bracket = Math.max(0, bracket - 1);
-      } else if (token.value === '{') {
-        brace++;
-      } else if (token.value === '}') {
-        brace = Math.max(0, brace - 1);
-      } else if (token.value === ';' && paren === 0 && bracket === 0 && brace === 0) {
-        return index;
-      } else if ((token.value === 'end' || token.value === 'endcase' || token.value === 'else') && paren === 0 && bracket === 0 && brace === 0) {
-        return Math.max(start, index - 1);
-      }
-    }
-    return this.tokens.length - 1;
-  }
-
-  private findMatchingForward(openIndex: number, open: string, close: string): number {
-    let depth = 0;
-    for (let index = openIndex; index < this.tokens.length; index++) {
-      if (this.tokens[index].value === open) {
-        depth++;
-      } else if (this.tokens[index].value === close) {
-        depth--;
-        if (depth === 0) {
-          return index;
-        }
-      }
-    }
-    return -1;
-  }
-
-  private current(): VerilogToken | undefined {
-    return this.tokens[this.cursor];
-  }
-
-  private makeOther(start: number, end: number): OtherNode {
-    return {
-      kind: 'other',
-      range: tokenIndexRange(this.document, this.tokens, start, Math.max(start, end))
-    };
-  }
-}
-
-function analyzeFlow(node: FlowNode, before: Set<string>, module: VerilogModule): FlowResult {
+function analyzeFlow(node: VerilogProceduralStatementAst, before: Set<string>, module: VerilogModule): FlowResult {
   switch (node.kind) {
     case 'block':
       return analyzeBlock(node, before, module);
@@ -396,6 +82,7 @@ function analyzeFlow(node: FlowNode, before: Set<string>, module: VerilogModule)
       };
     }
     case 'other':
+    case 'declaration':
       return {
         definite: new Set(before),
         assigned: new Set(),
@@ -404,7 +91,7 @@ function analyzeFlow(node: FlowNode, before: Set<string>, module: VerilogModule)
   }
 }
 
-function analyzeBlock(node: BlockNode, before: Set<string>, module: VerilogModule): FlowResult {
+function analyzeBlock(node: Extract<VerilogProceduralStatementAst, { kind: 'block' }>, before: Set<string>, module: VerilogModule): FlowResult {
   let definite = new Set(before);
   const assigned = new Set<string>();
   const issues: DataflowIssue[] = [];
@@ -421,7 +108,7 @@ function analyzeBlock(node: BlockNode, before: Set<string>, module: VerilogModul
   };
 }
 
-function analyzeIf(node: IfNode, before: Set<string>, module: VerilogModule): FlowResult {
+function analyzeIf(node: Extract<VerilogProceduralStatementAst, { kind: 'if' }>, before: Set<string>, module: VerilogModule): FlowResult {
   const consequent = analyzeFlow(node.consequent, new Set(before), module);
   const assigned = new Set(consequent.assigned);
   const issues = [...consequent.issues];
@@ -450,7 +137,7 @@ function analyzeIf(node: IfNode, before: Set<string>, module: VerilogModule): Fl
   };
 }
 
-function analyzeCase(node: CaseNode, before: Set<string>, module: VerilogModule): FlowResult {
+function analyzeCase(node: VerilogCaseStatementAst, before: Set<string>, module: VerilogModule): FlowResult {
   const itemResults = node.items.map((item) => analyzeFlow(item.body, new Set(before), module));
   const assigned = new Set<string>();
   const issues: DataflowIssue[] = [];
@@ -485,7 +172,7 @@ function analyzeCase(node: CaseNode, before: Set<string>, module: VerilogModule)
   };
 }
 
-function caseCoversEveryValue(node: CaseNode, module: VerilogModule): boolean {
+function caseCoversEveryValue(node: VerilogCaseStatementAst, module: VerilogModule): boolean {
   if (node.items.some((item) => item.defaultItem)) {
     return true;
   }
@@ -506,48 +193,6 @@ function caseCoversEveryValue(node: CaseNode, module: VerilogModule): boolean {
     }
   }
   return values.size >= 2 ** width;
-}
-
-function tokenIndexRange(document: TextDocument, tokens: VerilogToken[], start: number, end: number): Range {
-  const safeStart = Math.min(Math.max(0, start), Math.max(0, tokens.length - 1));
-  const safeEnd = Math.min(Math.max(safeStart, end), Math.max(0, tokens.length - 1));
-  return Range.create(document.positionAt(tokens[safeStart]?.start ?? 0), document.positionAt(tokens[safeEnd]?.end ?? tokens[safeStart]?.end ?? 0));
-}
-
-function tokensRange(document: TextDocument, tokens: VerilogToken[]): Range {
-  if (!tokens.length) {
-    return Range.create(0, 0, 0, 0);
-  }
-  return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
-}
-
-function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const result: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      result.push(tokens.slice(start, index));
-      start = index + 1;
-    }
-  }
-  result.push(tokens.slice(start));
-  return result.map((part) => part.filter((token) => token.kind !== 'eof')).filter((part) => part.length > 0);
 }
 
 function union<T>(left: Set<T>, right: Set<T>): Set<T> {

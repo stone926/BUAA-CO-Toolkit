@@ -13,7 +13,12 @@ import {
   VerilogMacroUse,
   VerilogModule
 } from './model';
-import { collectAlwaysBlocksFromCst, VerilogAlwaysBlockAst } from './blockAst';
+import {
+  collectAlwaysBlocksFromCst,
+  collectProceduralBlocksFromCst,
+  VerilogAlwaysBlockAst,
+  VerilogProceduralBlockAst
+} from './blockAst';
 import { findAssignmentOperator } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 
@@ -68,6 +73,7 @@ export interface VerilogModuleAst {
   declarations: VerilogDeclAst[];
   instances: VerilogInstanceAst[];
   alwaysBlocks: VerilogAlwaysBlockAst[];
+  proceduralBlocks: VerilogProceduralBlockAst[];
   items: VerilogStatementAst[];
   module: VerilogModule;
 }
@@ -202,6 +208,7 @@ function buildModuleAst(document: TextDocument, cst: VerilogCstDocument, module:
       instance
     })),
     alwaysBlocks: collectAlwaysBlocksFromCst(document, cst, module),
+    proceduralBlocks: collectProceduralBlocksFromCst(document, cst, module),
     items,
     module
   };

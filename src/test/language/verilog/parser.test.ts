@@ -467,6 +467,56 @@ endmodule
       expect(statement.assignment.rhs.operator).toBe('+');
     }
   });
+
+  it('attaches procedural statement trees to parsed blocks', () => {
+    const text = `
+module m(input sel, input [1:0] op, input a, input b, input c, output reg y);
+    integer i;
+    always @(*) begin
+        if (sel) begin
+            y = a;
+        end else begin
+            case (op)
+                2'b00: y = b;
+                default: y = c;
+            endcase
+        end
+    end
+    initial begin
+        for (i = 0; i < 4; i = i + 1) y = y;
+    end
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const moduleAst = parsed.ast.modules[0];
+    expect(moduleAst.proceduralBlocks).toHaveLength(2);
+
+    const alwaysTree = moduleAst.alwaysBlocks[0].statementTree;
+    expect(alwaysTree.statements[0]?.kind).toBe('if');
+    const ifStatement = alwaysTree.statements[0];
+    if (ifStatement?.kind !== 'if') {
+      return;
+    }
+    expect(ifStatement.condition?.kind).toBe('identifier');
+    expect(ifStatement.consequent.kind).toBe('block');
+    expect(ifStatement.alternate?.kind).toBe('block');
+    if (ifStatement.alternate?.kind === 'block') {
+      const caseStatement = ifStatement.alternate.statements[0];
+      expect(caseStatement?.kind).toBe('case');
+      if (caseStatement?.kind === 'case') {
+        expect(caseStatement.expression?.kind).toBe('identifier');
+        expect(caseStatement.items).toHaveLength(2);
+        expect(caseStatement.items[0].body.kind).toBe('assignment');
+      }
+    }
+
+    const initialBlock = moduleAst.proceduralBlocks.find((block) => block.kind === 'initial');
+    expect(initialBlock?.statementTree.statements[0]?.kind).toBe('loop');
+    if (initialBlock?.statementTree.statements[0]?.kind === 'loop') {
+      expect(initialBlock.statementTree.statements[0].loopKind).toBe('for');
+      expect(initialBlock.statementTree.statements[0].body.kind).toBe('assignment');
+    }
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
