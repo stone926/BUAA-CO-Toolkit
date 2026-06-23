@@ -5,7 +5,8 @@ import { mergeCoSettings } from '../../../language/common/settings';
 import {
   getVerilogCodeActions,
   getVerilogDiagnostics,
-  getVerilogHover
+  getVerilogHover,
+  getVerilogInlayHints
 } from '../../../language/verilog/service';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
@@ -35,6 +36,15 @@ function codeActionsAt(document: TextDocument, text: string, offset = 0) {
     mergeCoSettings({}),
     new VerilogWorkspaceIndex()
   );
+}
+
+function inlayLabels(document: TextDocument): string[] {
+  return getVerilogInlayHints(
+    document,
+    Range.create(0, 0, document.lineCount, 0),
+    mergeCoSettings({}),
+    new VerilogWorkspaceIndex()
+  ).map((hint) => typeof hint.label === 'string' ? hint.label : hint.label.map((part) => part.value).join(''));
 }
 
 describe('Verilog expression AST LSP integration', () => {
@@ -87,6 +97,47 @@ endmodule
     const diagnostics = getVerilogDiagnostics(doc(text), mergeCoSettings({}), new VerilogWorkspaceIndex());
 
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain('port-width-mismatch');
+  });
+
+  it('shows effective instance parameters and port widths in hover and inlay hints', () => {
+    const text = `
+module child #(parameter WIDTH = 4, parameter DEPTH = 16)(
+    input [WIDTH-1:0] din,
+    output [DEPTH-1:0] dout
+);
+endmodule
+
+module top(input [7:0] a, output [15:0] y);
+    child #(.WIDTH(8), .DEPTH(16)) u_child(.din(a), .dout(y));
+    child #(8, 16) u_ordered(a, y);
+endmodule
+`.trim();
+    const document = doc(text);
+    const settings = mergeCoSettings({});
+    const index = new VerilogWorkspaceIndex();
+
+    const instanceHover = getVerilogHover(document, positionOf(document, 'u_child'), settings, index);
+    expect(hoverText(instanceHover)).toContain('WIDTH = 8 (0x8) // override');
+    expect(hoverText(instanceHover)).toContain('DEPTH = 16 (0x10) // override');
+
+    const parameterHover = getVerilogHover(document, positionOf(document, '.WIDTH', 1), settings, index);
+    expect(hoverText(parameterHover)).toContain('Parameter `WIDTH` on module `child`');
+    expect(hoverText(parameterHover)).toContain('Effective value: `8 (0x8)`');
+
+    const portHover = getVerilogHover(document, positionOf(document, '.din', 1), settings, index);
+    expect(hoverText(portHover)).toContain('Port `din` on module `child`');
+    expect(hoverText(portHover)).toContain('Effective width: `8`');
+    expect(hoverText(portHover)).toContain('Connection width: `8`');
+
+    expect(inlayLabels(document)).toEqual(expect.arrayContaining([
+      ': param',
+      ': in[8]',
+      ': out[16]',
+      '.WIDTH=',
+      '.DEPTH=',
+      '.din: in[8]=',
+      '.dout: out[16]='
+    ]));
   });
 
   it('offers an AST constant fold code action', () => {

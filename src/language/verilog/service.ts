@@ -50,6 +50,8 @@ import { getCachedVerilogParse } from './parseCache';
 import { getVerilogLiteralCodeActions, numericLiteralAt, formatNumericLiteralHover } from './numericLiterals';
 import { addVerilogWorkspaceDiagnostics } from './workspaceDiagnostics';
 import { evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './expressions';
+import type { VerilogConstantOverrides, WidthInfo } from './expressions';
+import { parameterOverridesForInstance } from './parameterOverrides';
 import { preprocessorDirectives } from './preprocessor';
 import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
@@ -363,13 +365,14 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
         : '';
       return markdownHover(`\`${detail}\`${widthLine}${valueLine}`, hoverRange);
     }
-    case 'instance':
-      return markdownHover(`Instance \`${resolved.instance.instanceName}\` of module \`${resolved.instance.moduleName}\`.`, hoverRange);
+    case 'instance': {
+      const target = resolveInstanceTargetModule(index, parsed.modules, resolved.instance);
+      return markdownHover(instanceMarkdown(resolved.instance, resolved.module, target), hoverRange);
+    }
     case 'module':
       return markdownHover(moduleMarkdown(resolved.module), hoverRange);
     case 'portConnection': {
-      const label = resolved.listKind === 'parameters' ? 'Parameter' : 'Port';
-      return markdownHover(`${label} \`${resolved.targetPort.name}\` on module \`${resolved.targetModule.name}\`\n\n\`${declDetail(resolved.targetPort)}\``, hoverRange);
+      return markdownHover(connectionMarkdown(resolved), hoverRange);
     }
     case 'macro': {
       const macroDef = resolved.macro ?? index.getMacro(resolved.name);
@@ -925,15 +928,18 @@ export function getVerilogInlayHints(document: TextDocument, range: Range, setti
         if (!port) {
           continue;
         }
+        const overrides = parameterOverridesForInstance(instance, module, target);
         const direction = portDirectionLabel(port);
+        const effectiveWidth = widthOfDecl(port, target, overrides).width;
+        const labelSuffix = effectiveWidth && effectiveWidth > 1 ? `${direction}[${effectiveWidth}]` : direction;
         const tooltip = {
           kind: MarkupKind.Markdown,
-          value: `\`${declDetail(port)}\``
+          value: portConnectionTooltip(module, instance, target, port, connection)
         };
         if (connection.nameRange && lineInRange(connection.nameRange.start.line, range)) {
           hints.push({
             position: connection.nameRange.end,
-            label: `: ${direction}`,
+            label: `: ${labelSuffix}`,
             kind: InlayHintKind.Type,
             tooltip,
             paddingLeft: true
@@ -941,7 +947,36 @@ export function getVerilogInlayHints(document: TextDocument, range: Range, setti
         } else if (!connection.name && lineInRange(connection.expressionRange.start.line, range)) {
           hints.push({
             position: connection.expressionRange.start,
-            label: `.${port.name}: ${direction}=`,
+            label: `.${port.name}: ${labelSuffix}=`,
+            kind: InlayHintKind.Parameter,
+            tooltip,
+            paddingRight: true
+          });
+        }
+      }
+      for (const connection of instance.parameterConnections) {
+        const parameter = connection.name
+          ? target.parameters.find((item) => item.name === connection.name)
+          : target.parameters[connection.positionalIndex];
+        if (!parameter) {
+          continue;
+        }
+        const tooltip = {
+          kind: MarkupKind.Markdown,
+          value: parameterConnectionTooltip(module, instance, target, parameter, connection)
+        };
+        if (connection.nameRange && lineInRange(connection.nameRange.start.line, range)) {
+          hints.push({
+            position: connection.nameRange.end,
+            label: ': param',
+            kind: InlayHintKind.Type,
+            tooltip,
+            paddingLeft: true
+          });
+        } else if (!connection.name && lineInRange(connection.expressionRange.start.line, range)) {
+          hints.push({
+            position: connection.expressionRange.start,
+            label: `.${parameter.name}=`,
             kind: InlayHintKind.Parameter,
             tooltip,
             paddingRight: true
@@ -1607,6 +1642,137 @@ function markdownHover(value: string, range?: Range): Hover {
     },
     range
   };
+}
+
+function instanceMarkdown(instance: VerilogInstance, parentModule: VerilogModule, targetModule: VerilogModule | undefined): string {
+  const lines = [`Instance \`${instance.instanceName}\` of module \`${instance.moduleName}\`.`];
+  if (!targetModule) {
+    return lines.join('\n');
+  }
+  const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
+  const parameterLines = effectiveParameterLines(targetModule, overrides);
+  if (parameterLines.length) {
+    lines.push('', 'Effective parameters:', '```verilog', ...parameterLines, '```');
+  }
+  return lines.join('\n');
+}
+
+function connectionMarkdown(resolved: ResolvedPortConnection): string {
+  return resolved.listKind === 'parameters'
+    ? parameterConnectionMarkdown(resolved.module, resolved.instance, resolved.targetModule, resolved.targetPort, resolved.connection)
+    : portConnectionMarkdown(resolved.module, resolved.instance, resolved.targetModule, resolved.targetPort, resolved.connection);
+}
+
+function portConnectionMarkdown(
+  parentModule: VerilogModule,
+  instance: VerilogInstance,
+  targetModule: VerilogModule,
+  port: VerilogDecl,
+  connection: VerilogPortConnection
+): string {
+  const lines = [
+    `Port \`${port.name}\` on module \`${targetModule.name}\``,
+    '',
+    `\`${declDetail(port)}\``
+  ];
+  const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
+  const expected = widthOfDecl(port, targetModule, overrides);
+  const actual = connection.expressionAst ? widthOfExpressionAst(connection.expressionAst, parentModule) : undefined;
+  lines.push(...widthMarkdownLines('Effective width', expected));
+  if (actual) {
+    lines.push(...widthMarkdownLines('Connection width', actual));
+  }
+  return lines.join('\n');
+}
+
+function parameterConnectionMarkdown(
+  parentModule: VerilogModule,
+  instance: VerilogInstance,
+  targetModule: VerilogModule,
+  parameter: VerilogDecl,
+  connection: VerilogPortConnection
+): string {
+  const lines = [
+    `Parameter \`${parameter.name}\` on module \`${targetModule.name}\``,
+    '',
+    `\`${declDetail(parameter)}\``
+  ];
+  const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
+  const effective = effectiveParameterValue(parameter, targetModule, overrides);
+  if (effective !== undefined) {
+    lines.push('', `Effective value: \`${formatBigInt(effective)}\``);
+  }
+  const supplied = connection.expressionAst
+    ? evalExpressionAstConstant(connection.expressionAst, parentModule)
+    : undefined;
+  if (supplied !== undefined) {
+    lines.push(`Connection value: \`${formatBigInt(supplied)}\``);
+  }
+  const width = widthOfDecl(parameter, targetModule, overrides);
+  lines.push(...widthMarkdownLines('Parameter width', width));
+  return lines.join('\n');
+}
+
+function portConnectionTooltip(
+  parentModule: VerilogModule,
+  instance: VerilogInstance,
+  targetModule: VerilogModule,
+  port: VerilogDecl,
+  connection: VerilogPortConnection
+): string {
+  return portConnectionMarkdown(parentModule, instance, targetModule, port, connection);
+}
+
+function parameterConnectionTooltip(
+  parentModule: VerilogModule,
+  instance: VerilogInstance,
+  targetModule: VerilogModule,
+  parameter: VerilogDecl,
+  connection: VerilogPortConnection
+): string {
+  return parameterConnectionMarkdown(parentModule, instance, targetModule, parameter, connection);
+}
+
+function effectiveParameterLines(module: VerilogModule, overrides?: VerilogConstantOverrides): string[] {
+  return module.parameters
+    .map((parameter) => {
+      const value = effectiveParameterValue(parameter, module, overrides);
+      if (value === undefined) {
+        return undefined;
+      }
+      const source = overrides?.has(parameter.name) ? ' // override' : '';
+      return `${parameter.name} = ${formatBigInt(value)}${source}`;
+    })
+    .filter((line): line is string => Boolean(line));
+}
+
+function effectiveParameterValue(
+  parameter: VerilogDecl,
+  module: VerilogModule,
+  overrides?: VerilogConstantOverrides
+): bigint | undefined {
+  const override = overrides?.get(parameter.name);
+  if (override !== undefined) {
+    return override;
+  }
+  if (parameter.initializerAst) {
+    return evalExpressionAstConstant(parameter.initializerAst, module, overrides);
+  }
+  return parameter.constantValue;
+}
+
+function widthMarkdownLines(label: string, info: WidthInfo): string[] {
+  if (info.width === undefined) {
+    return [];
+  }
+  let text = `${label}: \`${info.width}\``;
+  if (info.minWidth !== undefined && info.minWidth !== info.width) {
+    text += ` (min: \`${info.minWidth}\`)`;
+  }
+  if (info.flexible) {
+    text += ' *(flexible)*';
+  }
+  return ['', text];
 }
 
 function formatBigInt(value: bigint): string {
