@@ -40,10 +40,10 @@ import {
   snapshotAsmFiles
 } from './courseTesting/generator';
 import {
-  compareTraces,
+  compareTraceIterables,
   firstTraceDiffSnapshot
 } from './language/mips/traceCompare';
-import { parseMarsOutput } from './language/mips/traceParser';
+import { iterCpuTraceEvents } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
@@ -101,6 +101,8 @@ import {
   findStdinCandidatesForAsm,
   resolveSingleStdinInput
 } from './courseTestStdin';
+
+const batchTraceCompareRetainedEntries = 1;
 
 interface CourseTraceRunOptions {
   revealOutput?: boolean;
@@ -446,11 +448,12 @@ async function runCourseTraceCase(
 
   const marsText = await readTextFile(mars.outputFile);
   const simText = await readTextFile(isim.simOut);
-  const marsEvents = parseMarsOutput(marsText);
-  const simEvents = parseSimOutput(simText);
-  const diff = compareTraces(marsEvents, simEvents, { compareCycles: defaultTraceCompareMode.compareCycles });
+  const diff = compareTraceIterables(iterCpuTraceEvents(marsText), iterCpuTraceEvents(simText), {
+    compareCycles: defaultTraceCompareMode.compareCycles,
+    retainedEntryLimit: batchTraceCompareRetainedEntries
+  });
 
-  if (!marsEvents.length || !simEvents.length) {
+  if (!diff.summary.marsEvents || !diff.summary.simEvents) {
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
@@ -461,8 +464,8 @@ async function runCourseTraceCase(
       machineCode: asmCase.machineCode.fsPath,
       marsOut: mars.outputFile.fsPath,
       simOut: isim.simOut.fsPath,
-      marsEvents: marsEvents.length,
-      simEvents: simEvents.length,
+      marsEvents: diff.summary.marsEvents,
+      simEvents: diff.summary.simEvents,
       matchedEvents: diff.summary.matchedEvents,
       diffEvents: diff.summary.diffEvents
     };

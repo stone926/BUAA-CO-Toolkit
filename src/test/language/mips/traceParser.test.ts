@@ -64,4 +64,16 @@ MARS 4.5
     expect(event).toBeDefined();
     expect(formatTraceEvent(event!)).toBe('@00003000: $3 <= 0000000A');
   });
+
+  it('parses the final trace line and preserves line numbers through ignored output', () => {
+    const events = parseMarsOutput('log header\r\n@00003000: $1 <= 00000001\r\nignored\n@00003004: $2 <= 00000002');
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.lineNumber)).toEqual([2, 4]);
+    expect(events[1]).toMatchObject({
+      pc: '00003004',
+      target: '2',
+      value: '00000002'
+    });
+  });
 });

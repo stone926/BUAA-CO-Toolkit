@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { compareTraces, TraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
+import { compareTraces, firstTraceDiffEntry, TraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
 import { CpuTraceEvent, parseMarsOutput } from './language/mips/traceParser';
 import { parseSimOutput } from './language/verilog/traceParser';
 import { fileMtimeMs, readTextFile, workspaceFolderFor } from './fsUtil';
@@ -94,8 +94,8 @@ export async function compareTracePair(
   services.output.appendLine(`模式: ${selectedMode.label}`);
   services.output.appendLine(`事件: MARS ${diff.summary.marsEvents}, SIM ${diff.summary.simEvents}, 匹配 ${diff.summary.matchedEvents}, 差异 ${diff.summary.diffEvents}`);
   if (diff.firstDiffIndex >= 0) {
-    const first = diff.entries[diff.firstDiffIndex];
-    services.output.appendLine(`首个差异位于事件 #${diff.firstDiffIndex + 1}: ${first.reason ?? first.status}`);
+    const first = firstTraceDiffEntry(diff);
+    services.output.appendLine(`首个差异位于事件 #${diff.firstDiffIndex + 1}: ${first?.reason ?? first?.status ?? 'unknown diff'}`);
   }
 
   showTraceCompareReport(pair, diff, selectedMode, marsEvents, simEvents);
@@ -169,7 +169,7 @@ function renderTraceCompareReport(
   const rows = visible.entries.map(renderDiffRow).join('\n');
   const firstDiff = diff.firstDiffIndex >= 0 ? `#${diff.firstDiffIndex + 1}` : '无';
   const hiddenNote = visible.hidden
-    ? `<p class="muted">显示首个差异附近的 ${visible.entries.length} / ${diff.entries.length} 个事件。</p>`
+    ? `<p class="muted">显示首个差异附近的 ${visible.entries.length} / ${totalEntryCount(diff)} 个事件。</p>`
     : '';
   const parseWarning = !marsEvents.length || !simEvents.length
     ? '<p class="warn-text">其中一侧没有可解析的 Trace 事件。请检查输出是否包含类似 <code>@00003000: $3 &lt;= 00000000</code> 或 <code>100@00003000: *00001004 &lt;= 00000000</code> 的行。</p>'
@@ -272,6 +272,13 @@ function renderTraceCompareReport(
 }
 
 function visibleEntries(diff: TraceDiffResult): { entries: TraceDiffEntry[]; hidden: boolean } {
+  if (diff.entriesTruncated) {
+    const first = firstTraceDiffEntry(diff);
+    if (first && !diff.entries.some((entry) => entry.index === first.index)) {
+      return { entries: [...diff.entries.slice(0, 249), first], hidden: true };
+    }
+    return { entries: diff.entries, hidden: true };
+  }
   if (diff.entries.length <= 250) {
     return { entries: diff.entries, hidden: false };
   }
@@ -281,6 +288,10 @@ function visibleEntries(diff: TraceDiffResult): { entries: TraceDiffEntry[]; hid
   const start = Math.max(0, diff.firstDiffIndex - 80);
   const end = Math.min(diff.entries.length, diff.firstDiffIndex + 81);
   return { entries: diff.entries.slice(start, end), hidden: true };
+}
+
+function totalEntryCount(diff: TraceDiffResult): number {
+  return Math.max(diff.summary.marsEvents, diff.summary.simEvents);
 }
 
 function renderDiffRow(entry: TraceDiffEntry): string {

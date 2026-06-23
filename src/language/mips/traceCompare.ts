@@ -4,6 +4,7 @@ export type TraceDiffStatus = 'ok' | 'diff' | 'cycle-diff' | 'mars-only' | 'sim-
 
 export interface TraceCompareOptions {
   compareCycles?: boolean;
+  retainedEntryLimit?: number;
 }
 
 export interface TraceDiffEntry {
@@ -35,6 +36,8 @@ export interface TraceDiffSnapshot {
 export interface TraceDiffResult {
   matched: boolean;
   firstDiffIndex: number;
+  firstDiffEntry?: TraceDiffEntry;
+  entriesTruncated?: boolean;
   entries: TraceDiffEntry[];
   summary: {
     marsEvents: number;
@@ -45,10 +48,14 @@ export interface TraceDiffResult {
 }
 
 export function firstTraceDiffSnapshot(diff: TraceDiffResult): TraceDiffSnapshot | undefined {
+  return traceDiffSnapshot(firstTraceDiffEntry(diff));
+}
+
+export function firstTraceDiffEntry(diff: TraceDiffResult): TraceDiffEntry | undefined {
   if (diff.firstDiffIndex < 0) {
     return undefined;
   }
-  return traceDiffSnapshot(diff.entries[diff.firstDiffIndex]);
+  return diff.firstDiffEntry ?? diff.entries.find((entry) => entry.index === diff.firstDiffIndex);
 }
 
 export function traceDiffSnapshot(entry: TraceDiffEntry | undefined): TraceDiffSnapshot | undefined {
@@ -69,64 +76,176 @@ export function compareTraces(
   simEvents: readonly CpuTraceEvent[],
   options: TraceCompareOptions = {}
 ): TraceDiffResult {
+  return compareTraceIterables(marsEvents, simEvents, options);
+}
+
+export function compareTraceIterables(
+  marsEvents: Iterable<CpuTraceEvent>,
+  simEvents: Iterable<CpuTraceEvent>,
+  options: TraceCompareOptions = {}
+): TraceDiffResult {
+  const marsState = iteratorState(marsEvents);
+  const simState = iteratorState(simEvents);
   const entries: TraceDiffEntry[] = [];
-  const maxLength = Math.max(marsEvents.length, simEvents.length);
+  const retainedEntryLimit = normalizedRetainedEntryLimit(options.retainedEntryLimit);
   let firstDiffIndex = -1;
+  let firstDiffEntry: TraceDiffEntry | undefined;
+  let entriesTruncated = false;
   let matchedEvents = 0;
   let diffEvents = 0;
+  let index = 0;
 
-  for (let i = 0; i < maxLength; i++) {
-    const mars = marsEvents[i];
-    const sim = simEvents[i];
-    const entry = compareAtIndex(i, mars, sim, options);
+  while (true) {
+    const mars = currentIteratorEvent(marsState);
+    const sim = currentIteratorEvent(simState);
+    if (!mars && !sim) {
+      break;
+    }
+    const entry = compareAtIndex(index, mars, sim, options);
 
     if (entry.status !== 'ok') {
-      const swapped = compareAdjacentSwap(i, marsEvents, simEvents, options);
+      const swapped = compareAdjacentSwapAt(
+        index,
+        mars,
+        nextIteratorEvent(marsState),
+        sim,
+        nextIteratorEvent(simState),
+        options
+      );
       if (swapped) {
         for (const swappedEntry of swapped) {
-          entries.push(swappedEntry);
+          entriesTruncated = retainEntry(entries, swappedEntry, retainedEntryLimit) || entriesTruncated;
           matchedEvents++;
         }
-        i++;
+        advanceIteratorState(marsState, 2);
+        advanceIteratorState(simState, 2);
+        index += 2;
         continue;
       }
     }
 
-    entries.push(entry);
+    entriesTruncated = retainEntry(entries, entry, retainedEntryLimit) || entriesTruncated;
 
     if (entry.status === 'ok') {
       matchedEvents++;
     } else {
       diffEvents++;
       if (firstDiffIndex < 0) {
-        firstDiffIndex = i;
+        firstDiffIndex = index;
+        firstDiffEntry = entry;
       }
     }
+    advanceIteratorState(marsState, 1);
+    advanceIteratorState(simState, 1);
+    index++;
   }
 
   return {
     matched: firstDiffIndex < 0,
     firstDiffIndex,
+    firstDiffEntry,
+    entriesTruncated,
     entries,
     summary: {
-      marsEvents: marsEvents.length,
-      simEvents: simEvents.length,
+      marsEvents: marsState.seen,
+      simEvents: simState.seen,
       matchedEvents,
       diffEvents
     }
   };
 }
 
-function compareAdjacentSwap(
+interface IteratorState {
+  iterator: Iterator<CpuTraceEvent>;
+  current?: CpuTraceEvent;
+  next?: CpuTraceEvent;
+  hasCurrent: boolean;
+  hasNext: boolean;
+  done: boolean;
+  seen: number;
+}
+
+function iteratorState(events: Iterable<CpuTraceEvent>): IteratorState {
+  return {
+    iterator: events[Symbol.iterator](),
+    hasCurrent: false,
+    hasNext: false,
+    done: false,
+    seen: 0
+  };
+}
+
+function currentIteratorEvent(state: IteratorState): CpuTraceEvent | undefined {
+  if (!state.hasCurrent) {
+    const value = readIteratorEvent(state);
+    state.current = value;
+    state.hasCurrent = true;
+  }
+  return state.current;
+}
+
+function nextIteratorEvent(state: IteratorState): CpuTraceEvent | undefined {
+  currentIteratorEvent(state);
+  if (!state.hasNext) {
+    const value = readIteratorEvent(state);
+    state.next = value;
+    state.hasNext = true;
+  }
+  return state.next;
+}
+
+function advanceIteratorState(state: IteratorState, count: 1 | 2): void {
+  if (count === 1 && state.hasNext) {
+    state.current = state.next;
+    state.hasCurrent = true;
+    state.next = undefined;
+    state.hasNext = false;
+    return;
+  }
+  state.current = undefined;
+  state.hasCurrent = false;
+  if (count === 2) {
+    state.next = undefined;
+    state.hasNext = false;
+  }
+}
+
+function readIteratorEvent(state: IteratorState): CpuTraceEvent | undefined {
+  if (state.done) {
+    return undefined;
+  }
+  const next = state.iterator.next();
+  if (next.done) {
+    state.done = true;
+    return undefined;
+  }
+  state.seen++;
+  return next.value;
+}
+
+function normalizedRetainedEntryLimit(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+
+function retainEntry(entries: TraceDiffEntry[], entry: TraceDiffEntry, limit: number | undefined): boolean {
+  if (limit === undefined || entries.length < limit) {
+    entries.push(entry);
+    return false;
+  }
+  return true;
+}
+
+function compareAdjacentSwapAt(
   index: number,
-  marsEvents: readonly CpuTraceEvent[],
-  simEvents: readonly CpuTraceEvent[],
+  mars: CpuTraceEvent | undefined,
+  marsNext: CpuTraceEvent | undefined,
+  sim: CpuTraceEvent | undefined,
+  simNext: CpuTraceEvent | undefined,
   options: TraceCompareOptions
 ): [TraceDiffEntry, TraceDiffEntry] | undefined {
-  const mars = marsEvents[index];
-  const marsNext = marsEvents[index + 1];
-  const sim = simEvents[index];
-  const simNext = simEvents[index + 1];
   if (!mars || !marsNext || !sim || !simNext) {
     return undefined;
   }

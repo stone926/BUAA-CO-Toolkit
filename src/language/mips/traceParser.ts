@@ -18,14 +18,29 @@ export function parseMarsOutput(text: string): CpuTraceEvent[] {
 
 export function parseCpuTraceOutput(text: string): CpuTraceEvent[] {
   const events: CpuTraceEvent[] = [];
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const event = parseCpuTraceLine(lines[i], i + 1);
+  for (const event of iterCpuTraceEvents(text)) {
     if (event) {
       events.push(event);
     }
   }
   return events;
+}
+
+export function* iterCpuTraceEvents(text: string): IterableIterator<CpuTraceEvent> {
+  let lineStart = 0;
+  let lineNumber = 1;
+  for (let index = 0; index <= text.length; index++) {
+    if (index < text.length && text[index] !== '\n') {
+      continue;
+    }
+    const lineEnd = index > lineStart && text[index - 1] === '\r' ? index - 1 : index;
+    const event = parseCpuTraceLine(text.slice(lineStart, lineEnd), lineNumber);
+    if (event) {
+      yield event;
+    }
+    lineStart = index + 1;
+    lineNumber++;
+  }
 }
 
 export function parseCpuTraceLine(line: string, lineNumber = 1): CpuTraceEvent | undefined {

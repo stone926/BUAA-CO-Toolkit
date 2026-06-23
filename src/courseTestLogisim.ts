@@ -39,8 +39,8 @@ import {
   LogisimRomTarget,
   parseMachineCodeWords
 } from './language/logisim/rom';
-import { compareTraces, firstTraceDiffSnapshot } from './language/mips/traceCompare';
-import { parseMarsOutput } from './language/mips/traceParser';
+import { compareTraceIterables, firstTraceDiffSnapshot } from './language/mips/traceCompare';
+import { iterCpuTraceEvents } from './language/mips/traceParser';
 import { commandLine, revealOutputChannel } from './process';
 import { checkToolchain } from './toolchain';
 import { AppServices, RunResult } from './types';
@@ -73,6 +73,8 @@ import {
   simOutputFileNameForCase
 } from './courseTestTraceFiles';
 import { diffMessage, marsStageFailureMessage } from './courseTestMessages';
+
+const batchTraceCompareRetainedEntries = 1;
 
 export interface P3LogisimTraceSetup {
   circuit: vscode.Uri;
@@ -369,10 +371,12 @@ export async function runP3LogisimTraceCase(
   await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
 
   const marsText = await readTextFile(mars.outputFile);
-  const marsEvents = parseMarsOutput(marsText);
-  const diff = compareTraces(marsEvents, parsedLogisim.events, { compareCycles: defaultTraceCompareMode.compareCycles });
+  const diff = compareTraceIterables(iterCpuTraceEvents(marsText), parsedLogisim.events, {
+    compareCycles: defaultTraceCompareMode.compareCycles,
+    retainedEntryLimit: batchTraceCompareRetainedEntries
+  });
 
-  if (!marsEvents.length && !parsedLogisim.events.length) {
+  if (!diff.summary.marsEvents && !parsedLogisim.events.length) {
     return {
       asm: asm.fsPath,
       ...caseResultFields(asmCase),
@@ -392,7 +396,7 @@ export async function runP3LogisimTraceCase(
     };
   }
 
-  if (!marsEvents.length || !parsedLogisim.events.length) {
+  if (!diff.summary.marsEvents || !parsedLogisim.events.length) {
     return {
       asm: asm.fsPath,
       ...caseResultFields(asmCase),
@@ -405,7 +409,7 @@ export async function runP3LogisimTraceCase(
       logisimOut: rawOut.fsPath,
       logisimCircuit: preparedCircuit.fsPath,
       logisimRows: parsedLogisim.rows.length,
-      marsEvents: marsEvents.length,
+      marsEvents: diff.summary.marsEvents,
       simEvents: parsedLogisim.events.length,
       matchedEvents: diff.summary.matchedEvents,
       diffEvents: diff.summary.diffEvents

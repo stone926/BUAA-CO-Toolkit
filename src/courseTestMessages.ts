@@ -1,4 +1,4 @@
-import { TraceDiffResult } from './language/mips/traceCompare';
+import { firstTraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
 import { RunResult } from './types';
 
 export function marsStageFailureMessage(prefix: string, result?: RunResult): string {
@@ -10,8 +10,8 @@ export function diffMessage(diff: TraceDiffResult): string {
   if (diff.matched) {
     return `${diff.summary.matchedEvents} 个事件匹配`;
   }
-  const first = diff.entries[diff.firstDiffIndex];
-  return `第 ${diff.firstDiffIndex + 1} 个事件首次出现差异：${first.reason ?? first.status}`;
+  const first = firstTraceDiffEntry(diff);
+  return `第 ${diff.firstDiffIndex + 1} 个事件首次出现差异：${first?.reason ?? first?.status ?? 'unknown diff'}`;
 }
 
 function firstNonEmptyLine(text?: string): string | undefined {

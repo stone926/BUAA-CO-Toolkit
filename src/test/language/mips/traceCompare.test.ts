@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareTraces, firstTraceDiffSnapshot } from '../../../language/mips/traceCompare';
+import { compareTraceIterables, compareTraces, firstTraceDiffEntry, firstTraceDiffSnapshot } from '../../../language/mips/traceCompare';
 import { parseMarsOutput } from '../../../language/mips/traceParser';
 
 describe('CPU trace compare', () => {
@@ -129,5 +129,62 @@ describe('CPU trace compare', () => {
     const sim = parseMarsOutput('@00003000: $1 <= 00000001\n');
 
     expect(firstTraceDiffSnapshot(compareTraces(mars, sim))).toBeUndefined();
+  });
+
+  it('can retain only bounded entries while preserving summaries and first diff details', () => {
+    const mars = parseMarsOutput([
+      '@00003000: $1 <= 00000001',
+      '@00003004: $2 <= 00000002',
+      '@00003008: $3 <= 00000003'
+    ].join('\n'));
+    const sim = parseMarsOutput([
+      '@00003000: $1 <= 00000001',
+      '@00003004: $2 <= 00000002',
+      '@00003008: $3 <= 00000004'
+    ].join('\n'));
+
+    const result = compareTraces(mars, sim, { retainedEntryLimit: 1 });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entriesTruncated).toBe(true);
+    expect(result.summary).toMatchObject({
+      marsEvents: 3,
+      simEvents: 3,
+      matchedEvents: 2,
+      diffEvents: 1
+    });
+    expect(result.firstDiffIndex).toBe(2);
+    expect(firstTraceDiffEntry(result)).toMatchObject({
+      index: 2,
+      status: 'diff',
+      reason: 'Write value differs.'
+    });
+    expect(firstTraceDiffSnapshot(result)).toMatchObject({
+      index: 2,
+      mars: { value: '00000003' },
+      sim: { value: '00000004' }
+    });
+  });
+
+  it('compares non-array trace iterables without retaining full entries', () => {
+    function* events(text: string) {
+      yield* parseMarsOutput(text);
+    }
+
+    const result = compareTraceIterables(
+      events('@00003000: $1 <= 00000001\n@00003004: $2 <= 00000002'),
+      events('@00003000: $1 <= 00000001\n@00003004: $2 <= 00000002'),
+      { retainedEntryLimit: 0 }
+    );
+
+    expect(result.matched).toBe(true);
+    expect(result.entries).toEqual([]);
+    expect(result.entriesTruncated).toBe(true);
+    expect(result.summary).toMatchObject({
+      marsEvents: 2,
+      simEvents: 2,
+      matchedEvents: 2,
+      diffEvents: 0
+    });
   });
 });
