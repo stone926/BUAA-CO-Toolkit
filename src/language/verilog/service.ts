@@ -57,6 +57,7 @@ import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import type { VerilogExpressionAst } from './exprAst';
 import type { VerilogModuleAst, VerilogStatementAst } from './ast';
+import type { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 import { findSmallestVerilogExpressionAtOffset, findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
 import type { VerilogExpressionMatch } from './exprAstUtils';
 import {
@@ -574,6 +575,7 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
   }
 
   actions.push(...getWidthMismatchCodeActions(document, diagnostics, settings));
+  actions.push(...getVerilogDataflowCodeActions(document, diagnostics, settings));
   actions.push(...getVerilogLintRuleCodeActions(diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogExpressionCodeActions(document, range, settings));
@@ -852,6 +854,105 @@ function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagno
     });
   }
   return actions;
+}
+
+function getVerilogDataflowCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
+  const actions: CodeAction[] = [];
+  const parsed = getCachedVerilogParse(document, settings, false);
+  const seen = new Set<string>();
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code !== 'vc-008-case-default') {
+      continue;
+    }
+    const key = rangeKey(diagnostic.range);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const caseStatement = findCaseStatementForRange(parsed.ast.modules, diagnostic.range);
+    const edit = caseStatement ? addDefaultCaseItemEdit(document, caseStatement) : undefined;
+    if (!edit) {
+      continue;
+    }
+    actions.push({
+      title: 'Add default case item',
+      kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
+      edit: {
+        changes: {
+          [document.uri]: [edit]
+        }
+      }
+    });
+  }
+  return actions;
+}
+
+function findCaseStatementForRange(modules: VerilogModuleAst[], range: Range): VerilogCaseStatementAst | undefined {
+  for (const moduleAst of modules) {
+    for (const block of moduleAst.alwaysBlocks) {
+      const found = findCaseStatementInProceduralAst(block.statementTree, range);
+      if (found) {
+        return found;
+      }
+    }
+    for (const block of moduleAst.proceduralBlocks) {
+      const found = findCaseStatementInProceduralAst(block.statementTree, range);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+}
+
+function findCaseStatementInProceduralAst(node: VerilogProceduralStatementAst, range: Range): VerilogCaseStatementAst | undefined {
+  if (node.kind === 'case' && rangesEqual(node.range, range)) {
+    return node;
+  }
+  for (const child of proceduralStatementChildren(node)) {
+    const found = findCaseStatementInProceduralAst(child, range);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+function proceduralStatementChildren(node: VerilogProceduralStatementAst): VerilogProceduralStatementAst[] {
+  switch (node.kind) {
+    case 'block':
+      return node.statements;
+    case 'if':
+      return [node.consequent, ...(node.alternate ? [node.alternate] : [])];
+    case 'case':
+      return node.items.map((item) => item.body);
+    case 'loop':
+      return [node.body];
+    default:
+      return [];
+  }
+}
+
+function addDefaultCaseItemEdit(document: TextDocument, statement: VerilogCaseStatementAst): TextEdit | undefined {
+  if (statement.items.some((item) => item.defaultItem)) {
+    return undefined;
+  }
+  const endcase = [...statement.tokens].reverse().find((token) => token.value === 'endcase');
+  if (!endcase) {
+    return undefined;
+  }
+  const indent = defaultCaseIndent(document, statement);
+  return TextEdit.insert(Position.create(document.positionAt(endcase.start).line, 0), `${indent}default: ;\n`);
+}
+
+function defaultCaseIndent(document: TextDocument, statement: VerilogCaseStatementAst): string {
+  const firstItem = statement.items[0];
+  if (firstItem) {
+    return lineAt(document, firstItem.labelRange.start.line).text.match(/^\s*/)?.[0] ?? '';
+  }
+  const caseIndent = lineAt(document, statement.range.start.line).text.match(/^\s*/)?.[0] ?? '';
+  return `${caseIndent}    `;
 }
 
 function getVerilogLintRuleCodeActions(diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {

@@ -404,4 +404,28 @@ endmodule
     expect(codes).toContain('vc-008-case-default');
     expect(codes).toContain('vc-008-comb-incomplete-assignment');
   });
+
+  it('offers a quick fix to add a default case item', () => {
+    const text = `
+module demo(input sel, output reg y);
+    always @(*) begin
+        case (sel)
+            1'b0: y = 1'b0;
+        endcase
+    end
+endmodule
+`.trim();
+    const document = doc(text);
+    const settings = mergeCoSettings({ verilog: { lint: { disabledRules: [] } } });
+    const diagnostics = getVerilogDiagnostics(document, settings);
+    const missingDefault = diagnostics.find((diagnostic) => diagnostic.code === 'vc-008-case-default');
+    expect(missingDefault).toBeDefined();
+
+    const actions = getVerilogCodeActions(document, missingDefault!.range, [missingDefault!], settings, new VerilogWorkspaceIndex());
+    const action = actions.find((candidate) => candidate.title === 'Add default case item');
+    const edit = action?.edit?.changes?.[document.uri]?.[0];
+    expect(action?.kind).toBe('quickfix');
+    expect(edit?.newText).toBe('            default: ;\n');
+    expect(edit?.range.start).toEqual({ line: 4, character: 0 });
+  });
 });
