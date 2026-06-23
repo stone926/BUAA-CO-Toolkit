@@ -127,7 +127,12 @@ export function collectImplicitNetDiagnostics(
   if (semantic) {
     const reported = new Set<string>();
     for (const reference of semantic.unresolvedReferences) {
-      if (ignorePatterns.some((pattern) => pattern.test(reference.name))) {
+      // Filter out keywords, system tasks, and ignore patterns
+      if (
+        verilogKeywords.has(reference.name) ||
+        systemTasks.has(reference.name) ||
+        ignorePatterns.some((pattern) => pattern.test(reference.name))
+      ) {
         continue;
       }
       const key = `${reference.name}:${reference.range.start.line}:${reference.range.start.character}`;

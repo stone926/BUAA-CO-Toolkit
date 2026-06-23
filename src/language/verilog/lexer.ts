@@ -311,7 +311,7 @@ function readIdentifierToken(text: string, start: number): VerilogToken {
 }
 
 export function isIdentifierLike(kind: VerilogTokenKind): boolean {
-  return kind === 'identifier' || kind === 'keyword';
+  return kind === 'identifier' || kind === 'keyword' || kind === 'directive';
 }
 
 function isIdentifierStart(char: string): boolean {
