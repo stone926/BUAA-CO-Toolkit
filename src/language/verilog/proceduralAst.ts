@@ -3,6 +3,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
+import { findMatchingTokenForward, splitTopLevelTokens, trimEofTokens } from './tokenUtils';
 
 export type VerilogProceduralStatementAst =
   | VerilogBlockStatementAst
@@ -91,7 +92,7 @@ export function parseVerilogProceduralBlockBody(
   document: TextDocument,
   tokens: VerilogToken[]
 ): VerilogBlockStatementAst {
-  return new ProceduralStatementParser(document, trimTokenList(tokens)).parseRoot();
+  return new ProceduralStatementParser(document, trimEofTokens(tokens)).parseRoot();
 }
 
 class ProceduralStatementParser {
@@ -223,7 +224,7 @@ class ProceduralStatementParser {
       const defaultItem = labelTokens.some((token) => token.value === 'default');
       const labels = defaultItem
         ? []
-        : splitTopLevel(labelTokens, ',')
+        : splitTopLevelTokens(labelTokens, ',')
           .map(parseVerilogExpressionTokens)
           .filter((item): item is VerilogExpressionAst => Boolean(item));
       const body = this.parseStatement(new Set(['endcase']));
@@ -310,7 +311,7 @@ class ProceduralStatementParser {
       return [];
     }
     const open = this.cursor;
-    const close = this.findMatchingForward(open, '(', ')');
+    const close = findMatchingTokenForward(this.tokens, open, '(', ')');
     if (close < 0) {
       this.cursor++;
       return [];
@@ -387,21 +388,6 @@ class ProceduralStatementParser {
     return this.tokens.length - 1;
   }
 
-  private findMatchingForward(openIndex: number, open: string, close: string): number {
-    let depth = 0;
-    for (let index = openIndex; index < this.tokens.length; index++) {
-      if (this.tokens[index].value === open) {
-        depth++;
-      } else if (this.tokens[index].value === close) {
-        depth--;
-        if (depth === 0) {
-          return index;
-        }
-      }
-    }
-    return -1;
-  }
-
   private indexAtOrBeforePosition(position: { line: number; character: number }): number {
     const offset = this.document.offsetAt(position);
     for (let index = this.tokens.length - 1; index >= 0; index--) {
@@ -439,38 +425,4 @@ function tokensRange(document: TextDocument, tokens: VerilogToken[]): Range {
     return Range.create(0, 0, 0, 0);
   }
   return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
-}
-
-function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const parts: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    }
-    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      parts.push(trimTokenList(tokens.slice(start, index)));
-      start = index + 1;
-    }
-  }
-  parts.push(trimTokenList(tokens.slice(start)));
-  return parts.filter((part) => part.length > 0);
-}
-
-function trimTokenList(tokens: VerilogToken[]): VerilogToken[] {
-  return tokens.filter((token) => token.kind !== 'eof');
 }

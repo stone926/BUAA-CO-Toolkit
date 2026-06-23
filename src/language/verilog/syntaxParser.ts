@@ -8,6 +8,14 @@ import { childrenOfVerilogExpression } from './exprAstUtils';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import { splitVerilogModuleItems } from './statementUtils';
+import {
+  findMatchingTokenForward as findMatchingToken,
+  findTopLevelToken as firstTopLevelToken,
+  findTopLevelTokenIndexes as topLevelIndexes,
+  nextSignificantTokenIndex,
+  splitTopLevelTokens as splitTopLevel,
+  trimTrailingSemicolonTokens as trimTrailingSemicolon
+} from './tokenUtils';
 
 export type VerilogSyntaxNodeKind =
   | 'sourceFile'
@@ -1032,10 +1040,6 @@ function hasTrailingSemicolon(tokens: VerilogToken[]): boolean {
   return tokens[tokens.length - 1]?.value === ';';
 }
 
-function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {
-  return hasTrailingSemicolon(tokens) ? tokens.slice(0, -1) : tokens;
-}
-
 function reportMissingSemicolon(
   document: TextDocument,
   anchor: VerilogToken,
@@ -1050,117 +1054,12 @@ function reportMissingSemicolon(
   ));
 }
 
-function firstTopLevelToken(tokens: VerilogToken[], value: string, from: number): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = from; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const result: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      result.push(tokens.slice(start, index).filter((item) => item.kind !== 'eof'));
-      start = index + 1;
-    }
-  }
-  result.push(tokens.slice(start).filter((item) => item.kind !== 'eof'));
-  return result.filter((part) => part.length > 0);
-}
-
-function topLevelIndexes(tokens: VerilogToken[], predicate: (token: VerilogToken) => boolean): number[] {
-  const result: number[] = [];
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (predicate(token) && paren === 0 && bracket === 0 && brace === 0) {
-      result.push(index);
-    }
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    }
-  }
-  return result;
-}
-
 function skipDelayControl(tokens: VerilogToken[], hashIndex: number): number {
   if (tokens[hashIndex + 1]?.value === '(') {
     const close = findMatchingToken(tokens, hashIndex + 1, '(', ')');
     return close >= 0 ? close + 1 : hashIndex + 2;
   }
   return Math.min(tokens.length, hashIndex + 2);
-}
-
-function nextSignificantTokenIndex(tokens: VerilogToken[], start: number): number {
-  for (let index = start; index < tokens.length; index++) {
-    if (tokens[index].kind !== 'eof') {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
-  let depth = 0;
-  for (let index = openIndex; index < tokens.length; index++) {
-    if (tokens[index].value === openValue) {
-      depth++;
-    } else if (tokens[index].value === closeValue) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
 }
 
 function isInsideDelimitedControl(tokens: VerilogToken[], index: number): boolean {

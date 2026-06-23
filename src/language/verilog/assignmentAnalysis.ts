@@ -3,6 +3,14 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseVerilogCst, VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import { verilogKeywords } from './model';
+import {
+  findLastTopLevelToken,
+  findMatchingTokenBackward,
+  findMatchingTokenForward,
+  splitTopLevelTokens,
+  trimEofTokens,
+  trimTrailingSemicolonTokens
+} from './tokenUtils';
 
 export interface AssignmentUse {
   name: string;
@@ -73,7 +81,7 @@ export function assignmentTargetNamesFromTokens(tokens: VerilogToken[]): string[
 }
 
 export function parseAssignmentTokens(rawTokens: VerilogToken[]): ParsedAssignmentTokens | undefined {
-  const tokens = trimSemicolon(rawTokens);
+  const tokens = trimTrailingSemicolonTokens(rawTokens);
   const operatorIndex = findAssignmentOperator(tokens);
   if (operatorIndex < 0 || isDeclarationStatement(tokens)) {
     return undefined;
@@ -83,8 +91,8 @@ export function parseAssignmentTokens(rawTokens: VerilogToken[]): ParsedAssignme
     return undefined;
   }
   const lhsStart = assignmentLeftHandSideStart(tokens, operatorIndex);
-  const lhsTokens = trimTokenList(tokens.slice(lhsStart, operatorIndex));
-  const rhsTokens = trimTokenList(tokens.slice(operatorIndex + 1));
+  const lhsTokens = trimEofTokens(tokens.slice(lhsStart, operatorIndex));
+  const rhsTokens = trimEofTokens(tokens.slice(operatorIndex + 1));
   return {
     operator,
     operatorIndex,
@@ -125,13 +133,13 @@ export function findAssignmentOperator(tokens: VerilogToken[]): number {
 }
 
 function assignmentTargetsFromLeftHandSide(tokens: VerilogToken[]): AssignmentTarget[] {
-  const trimmed = trimTokenList(tokens);
+  const trimmed = trimEofTokens(tokens);
   if (!trimmed.length) {
     return [];
   }
   const concat = trailingConcatenation(trimmed);
   if (concat) {
-    return splitTopLevel(concat.slice(1, -1), ',').flatMap(assignmentTargetsFromLeftHandSide);
+    return splitTopLevelTokens(concat.slice(1, -1), ',').flatMap(assignmentTargetsFromLeftHandSide);
   }
   const target = trailingScalarTarget(trimmed);
   return target ? [target] : [];
@@ -190,7 +198,7 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
     break;
   }
 
-  const label = lastTopLevelToken(tokens, ':', start, operatorIndex);
+  const label = findLastTopLevelToken(tokens, ':', start, operatorIndex);
   if (label >= 0) {
     start = label + 1;
   }
@@ -218,92 +226,6 @@ function trailingConcatenation(tokens: VerilogToken[]): VerilogToken[] | undefin
   return open >= 0 ? tokens.slice(open, tokens.length) : undefined;
 }
 
-function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const parts: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    }
-    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      parts.push(trimTokenList(tokens.slice(start, index)));
-      start = index + 1;
-    }
-  }
-  parts.push(trimTokenList(tokens.slice(start)));
-  return parts.filter((part) => part.length > 0);
-}
-
-function findMatchingTokenBackward(tokens: VerilogToken[], closeIndex: number, openValue: string, closeValue: string): number {
-  let depth = 0;
-  for (let index = closeIndex; index >= 0; index--) {
-    if (tokens[index].value === closeValue) {
-      depth++;
-    } else if (tokens[index].value === openValue) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function findMatchingTokenForward(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
-  let depth = 0;
-  for (let index = openIndex; index < tokens.length; index++) {
-    if (tokens[index].value === openValue) {
-      depth++;
-    } else if (tokens[index].value === closeValue) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function lastTopLevelToken(tokens: VerilogToken[], value: string, from: number, to: number): number {
-  let result = -1;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = from; index < to; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-      result = index;
-    }
-  }
-  return result;
-}
-
 function skipDelayControl(tokens: VerilogToken[], hashIndex: number): number {
   if (tokens[hashIndex + 1]?.value === '(') {
     const close = findMatchingTokenForward(tokens, hashIndex + 1, '(', ')');
@@ -319,13 +241,4 @@ function nextTokenIndex(tokens: VerilogToken[], start: number, value: string): n
     }
   }
   return -1;
-}
-
-function trimSemicolon(tokens: VerilogToken[]): VerilogToken[] {
-  const trimmed = trimTokenList(tokens);
-  return trimmed[trimmed.length - 1]?.value === ';' ? trimmed.slice(0, -1) : trimmed;
-}
-
-function trimTokenList(tokens: VerilogToken[]): VerilogToken[] {
-  return tokens.filter((token) => token.kind !== 'eof');
 }
