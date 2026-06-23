@@ -156,19 +156,36 @@ export function registerVerilogSignalView(context: vscode.ExtensionContext, modu
   context.subscriptions.push(treeView);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const refresh = (editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor): void => {
+  context.subscriptions.push({
+    dispose: () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  });
+
+  const refresh = (editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor, force = false): void => {
+    if (!force && !treeView.visible) {
+      return;
+    }
     provider.update(editor);
     treeView.message = provider.message;
   };
+  treeView.message = provider.message;
 
   context.subscriptions.push(
     vscode.commands.registerCommand('co.verilog.inspectSignal', () => {
       void vscode.commands.executeCommand('setContext', 'co.verilogSignalVisible', true);
-      refresh();
+      refresh(undefined, true);
       void vscode.commands.executeCommand('coVerilogSignal.focus');
     }),
+    treeView.onDidChangeVisibility((event) => {
+      if (event.visible) {
+        refresh(undefined, true);
+      }
+    }),
     vscode.window.onDidChangeTextEditorSelection((event) => {
-      if (event.textEditor.document.languageId !== 'verilog') {
+      if (!treeView.visible || event.textEditor.document.languageId !== 'verilog') {
         return;
       }
       if (timer) {
@@ -178,8 +195,6 @@ export function registerVerilogSignalView(context: vscode.ExtensionContext, modu
     }),
     vscode.window.onDidChangeActiveTextEditor(() => refresh())
   );
-
-  refresh();
 }
 
 function toVscodeRange(range: LspRange): vscode.Range {

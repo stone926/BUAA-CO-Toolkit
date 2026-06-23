@@ -1,12 +1,16 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ProfileResolverFile, ProfileResolverInput } from './profileResolver';
 import type { VerilogModuleProvider } from './language/verilog/moduleProvider';
 
-const scanTtlMs = 2000;
+const scanTtlMs = 30000;
 const maxProfileFiles = 3000;
-const scanCache = new Map<string, { timestamp: number; files: ProfileResolverFile[] }>();
+const profileFileExcludeGlob = '**/{.git,.co,.vscode,.vscode-test,node_modules,out,dist,build,coverage}/**';
+const scanCache = new Map<string, { timestamp: number; files: ProfileResolverFile[]; pending?: Promise<void> }>();
+const onDidChangeEmitter = new vscode.EventEmitter<void>();
+let scanGeneration = 0;
+
+export const onDidChangeProfileInferenceCache = onDidChangeEmitter.event;
 
 export function buildProfileInferenceInput(
   resource: vscode.Uri | undefined,
@@ -19,7 +23,7 @@ export function buildProfileInferenceInput(
   return {
     activeLanguageId: activeDocument?.languageId ?? languageIdForPath(activeResource?.fsPath),
     activeFilePath: activeResource?.fsPath,
-    files: folder ? workspaceProfileFiles(folder.uri.fsPath) : activeResource ? [{ path: activeResource.fsPath }] : [],
+    files: folder ? workspaceProfileFiles(folder.uri.fsPath, activeResource) : activeResource ? profileFileForUri(activeResource) : [],
     modules,
     verilogTexts: modules.map((module) => module.bodyText).filter(Boolean)
   };
@@ -27,57 +31,119 @@ export function buildProfileInferenceInput(
 
 export function clearProfileInferenceCache(): void {
   scanCache.clear();
+  scanGeneration++;
 }
 
-function workspaceProfileFiles(root: string): ProfileResolverFile[] {
+function workspaceProfileFiles(root: string, activeResource?: vscode.Uri): ProfileResolverFile[] {
   const cached = scanCache.get(root);
   const now = Date.now();
   if (cached && now - cached.timestamp < scanTtlMs) {
-    return cached.files;
+    return withActiveProfileFile(cached.files, activeResource);
   }
-  const files = collectProfileFiles(root);
-  scanCache.set(root, { timestamp: now, files });
-  return files;
+  const entry = cached ?? {
+    timestamp: 0,
+    files: visibleProfileFiles(root, activeResource)
+  };
+  if (!cached) {
+    scanCache.set(root, entry);
+  }
+  scheduleProfileFileScan(root, entry);
+  return withActiveProfileFile(entry.files, activeResource);
 }
 
-function collectProfileFiles(root: string): ProfileResolverFile[] {
-  const files: ProfileResolverFile[] = [];
-  const stack = [root];
-  while (stack.length && files.length < maxProfileFiles) {
-    const current = stack.pop();
-    if (!current) {
-      continue;
+function scheduleProfileFileScan(
+  root: string,
+  entry: { timestamp: number; files: ProfileResolverFile[]; pending?: Promise<void> }
+): void {
+  if (entry.pending) {
+    return;
+  }
+  const generation = scanGeneration;
+  entry.pending = scanWorkspaceProfileFiles(root)
+    .then((files) => {
+      if (generation !== scanGeneration || scanCache.get(root) !== entry) {
+        return;
+      }
+      entry.files = files;
+      entry.timestamp = Date.now();
+      onDidChangeEmitter.fire();
+    })
+    .finally(() => {
+      if (scanCache.get(root) === entry) {
+        entry.pending = undefined;
+      }
+    });
+}
+
+async function scanWorkspaceProfileFiles(root: string): Promise<ProfileResolverFile[]> {
+  const result: ProfileResolverFile[] = [];
+  const append = (uri: vscode.Uri): void => {
+    if (result.length >= maxProfileFiles || shouldSkipPath(uri.fsPath)) {
+      return;
     }
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      // 无法读取的目录不参与 Profile 推断
-      continue;
+    const file = profileFileForUri(uri);
+    if (file.length) {
+      result.push(file[0]);
     }
-    for (const entry of entries) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (!shouldSkipDirectory(entry.name)) {
-          stack.push(fullPath);
-        }
-        continue;
-      }
-      if (!entry.isFile()) {
-        continue;
-      }
-      if (isProfileRelevantFile(entry.name)) {
-        files.push({
-          path: fullPath,
-          languageId: languageIdForPath(fullPath)
-        });
-        if (files.length >= maxProfileFiles) {
-          break;
-        }
-      }
+  };
+
+  try {
+    const sourceFiles = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(root, '**/*.{v,asm,s,mips,circ}'),
+      profileFileExcludeGlob,
+      maxProfileFiles
+    );
+    sourceFiles.forEach(append);
+    if (result.length < maxProfileFiles) {
+      const codeFiles = await vscode.workspace.findFiles(
+        new vscode.RelativePattern(root, '**/code.txt'),
+        profileFileExcludeGlob,
+        maxProfileFiles - result.length
+      );
+      codeFiles.forEach(append);
+    }
+  } catch {
+    // Workspace file search can fail on virtual or partially unavailable folders.
+  }
+  return dedupeProfileFiles(result);
+}
+
+function visibleProfileFiles(root: string, activeResource?: vscode.Uri): ProfileResolverFile[] {
+  const files = vscode.workspace.textDocuments
+    .filter((document) => document.uri.scheme === 'file')
+    .filter((document) => isInsideDirectory(document.uri.fsPath, root))
+    .flatMap((document) => profileFileForUri(document.uri, document.languageId));
+  return withActiveProfileFile(files, activeResource);
+}
+
+function withActiveProfileFile(files: ProfileResolverFile[], activeResource?: vscode.Uri): ProfileResolverFile[] {
+  return dedupeProfileFiles([
+    ...files,
+    ...(activeResource ? profileFileForUri(activeResource) : [])
+  ]);
+}
+
+function profileFileForUri(uri: vscode.Uri, languageId = languageIdForPath(uri.fsPath)): ProfileResolverFile[] {
+  if (uri.scheme !== 'file' || !isProfileRelevantFile(path.basename(uri.fsPath))) {
+    return [];
+  }
+  return [{
+    path: uri.fsPath,
+    languageId
+  }];
+}
+
+function dedupeProfileFiles(files: ProfileResolverFile[]): ProfileResolverFile[] {
+  const seen = new Set<string>();
+  const result: ProfileResolverFile[] = [];
+  for (const file of files) {
+    const key = normalizePathKey(file.path);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(file);
     }
   }
-  return files;
+  return result;
 }
 
 function currentTextDocument(): vscode.TextDocument | undefined {
@@ -143,4 +209,17 @@ function shouldSkipDirectory(name: string): boolean {
     || name === 'dist'
     || name === 'build'
     || name === 'coverage';
+}
+
+function shouldSkipPath(filePath: string): boolean {
+  return filePath.split(/[\\/]+/).some(shouldSkipDirectory);
+}
+
+function isInsideDirectory(file: string, dir: string): boolean {
+  const relative = path.relative(dir, file);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function normalizePathKey(filePath: string): string {
+  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }

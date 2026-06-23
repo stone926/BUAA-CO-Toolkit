@@ -119,6 +119,8 @@ export interface VerilogSemanticSource {
   diagnostics: Diagnostic[];
 }
 
+const collectedReferenceRangeKeys = new WeakMap<VerilogSemanticReference[], Set<string>>();
+
 export function buildVerilogSemanticModel(source: VerilogSemanticSource): VerilogSemanticModel {
   const fileScope: VerilogSemanticScope = {
     kind: 'file',
@@ -954,10 +956,16 @@ function addIdentifierReference(
   range: Range,
   token?: VerilogToken
 ): void {
-  if (declarationRangeKeys.has(rangeKey(range)) || references.some((reference) => rangesEqual(reference.range, range))) {
+  const key = rangeKey(range);
+  if (declarationRangeKeys.has(key)) {
+    return;
+  }
+  const referenceRangeKeys = rangeKeysForReferences(references);
+  if (referenceRangeKeys.has(key)) {
     return;
   }
   const symbol = resolveIdentifierInScope(scope, name);
+  referenceRangeKeys.add(key);
   references.push({
     name,
     kind: referenceKindForSymbol(symbol),
@@ -968,6 +976,15 @@ function addIdentifierReference(
     symbol,
     module
   });
+}
+
+function rangeKeysForReferences(references: VerilogSemanticReference[]): Set<string> {
+  let keys = collectedReferenceRangeKeys.get(references);
+  if (!keys) {
+    keys = new Set(references.map((reference) => rangeKey(reference.range)));
+    collectedReferenceRangeKeys.set(references, keys);
+  }
+  return keys;
 }
 
 function expressionBaseOffset(document: TextDocument, range: Range, expressionText: string): number {

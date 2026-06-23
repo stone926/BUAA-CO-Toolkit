@@ -8,6 +8,7 @@ interface CacheEntry {
   version: number;
   settingsKey: string;
   text: string;
+  textKey: string;
   hasDiagnostics: boolean;
   parsed: VerilogParseResult;
   strippedText: string;
@@ -26,13 +27,13 @@ function settingsKey(settings: CoSettings): string {
 export function getCachedVerilogParse(document: TextDocument, settings: CoSettings, includeDiagnostics: boolean): VerilogParseResult {
   const settingKey = settingsKey(settings);
   const text = document.getText();
-  const key = documentCacheKey(document.uri, document.version, settingKey, textKey(text));
+  const key = documentCacheKey(document.uri, document.version, settingKey);
   const cached = entries.get(key);
-  if (cached && (!includeDiagnostics || cached.hasDiagnostics)) {
+  if (cached && cachedMatchesText(cached, text) && (!includeDiagnostics || cached.hasDiagnostics)) {
     touchCacheEntry(key, cached);
     return cached.parsed;
   }
-  if (cached && includeDiagnostics && !cached.hasDiagnostics) {
+  if (cached && cachedMatchesText(cached, text) && includeDiagnostics && !cached.hasDiagnostics) {
     const parsed = addVerilogDiagnostics(document, settings, cached.parsed, text);
     const upgraded: CacheEntry = {
       ...cached,
@@ -50,6 +51,7 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
     version: document.version,
     settingsKey: settingKey,
     text,
+    textKey: textKey(text),
     hasDiagnostics: includeDiagnostics,
     parsed,
     strippedText
@@ -63,14 +65,16 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
  */
 export function getCachedStrippedText(document: TextDocument, settings: CoSettings): string {
   const settingKey = settingsKey(settings);
-  const key = documentCacheKey(document.uri, document.version, settingKey, textKey(document.getText()));
+  const text = document.getText();
+  const key = documentCacheKey(document.uri, document.version, settingKey);
   const cached = entries.get(key);
-  if (cached) {
+  if (cached && cachedMatchesText(cached, text)) {
     touchCacheEntry(key, cached);
     return cached.strippedText;
   }
   getCachedVerilogParse(document, settings, false);
-  return entries.get(key)?.strippedText ?? stripCommentsAndStrings(document.getText());
+  const reparsed = entries.get(key);
+  return reparsed && cachedMatchesText(reparsed, text) ? reparsed.strippedText : stripCommentsAndStrings(text);
 }
 
 export function clearCachedVerilogParse(uri?: string): void {
@@ -85,12 +89,16 @@ export function clearCachedVerilogParse(uri?: string): void {
   }
 }
 
-function documentCacheKey(uri: string, version: number, settings: string, text: string): string {
-  return `${uri}\u0000${version}\u0000${settings}\u0000${text}`;
+function documentCacheKey(uri: string, version: number, settings: string): string {
+  return `${uri}\u0000${version}\u0000${settings}`;
 }
 
 function textKey(text: string): string {
   return `${text.length}:${hashText(text)}`;
+}
+
+function cachedMatchesText(cached: CacheEntry, text: string): boolean {
+  return cached.text === text || cached.text.length === text.length && cached.textKey === textKey(text);
 }
 
 function hashText(text: string): number {

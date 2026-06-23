@@ -14,6 +14,7 @@ import { yieldEventLoop } from '../../nodeFs';
  */
 export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private readonly modules = new Map<string, VerilogModule[]>();
+  private readonly modulesByUri = new Map<string, VerilogModule[]>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private _scanning = true;
   private _disposed = false;
@@ -93,13 +94,13 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
 
   /** 移除某个文件的所有模块 */
   removeDocument(uri: string): void {
-    for (const [name, list] of this.modules) {
-      const filtered = list.filter((m) => m.uri !== uri);
-      if (filtered.length) {
-        this.modules.set(name, filtered);
-      } else {
-        this.modules.delete(name);
-      }
+    const existing = this.modulesByUri.get(uri);
+    if (!existing) {
+      return;
+    }
+    this.modulesByUri.delete(uri);
+    for (const module of existing) {
+      removeModuleByUri(this.modules, module.name, uri);
     }
   }
 
@@ -107,6 +108,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     this._disposed = true;
     this._onDidChange.dispose();
     this.modules.clear();
+    this.modulesByUri.clear();
     this._scanning = false;
   }
 
@@ -143,10 +145,15 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     );
     // 清除该文件的旧条目后再添加
     this.removeDocument(uri);
-    this.addModules(parsed);
+    this.addModules(uri, parsed);
   }
 
-  private addModules(modules: VerilogModule[]): void {
+  private addModules(uri: string, modules: VerilogModule[]): void {
+    if (!modules.length) {
+      this.modulesByUri.delete(uri);
+      return;
+    }
+    this.modulesByUri.set(uri, modules);
     for (const mod of modules) {
       const list = this.modules.get(mod.name) ?? [];
       list.push(mod);
@@ -256,6 +263,19 @@ function shouldSkipDirectory(name: string): boolean {
 
 function shouldSkipPath(filePath: string): boolean {
   return filePath.split(/[\\/]+/).some(shouldSkipDirectory);
+}
+
+function removeModuleByUri(map: Map<string, VerilogModule[]>, name: string, uri: string): void {
+  const list = map.get(name);
+  if (!list) {
+    return;
+  }
+  const filtered = list.filter((module) => module.uri !== uri);
+  if (filtered.length) {
+    map.set(name, filtered);
+  } else {
+    map.delete(name);
+  }
 }
 
 function sortedModules(modules: VerilogModule[]): VerilogModule[] {

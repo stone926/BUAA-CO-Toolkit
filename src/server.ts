@@ -558,6 +558,9 @@ async function rebuildVerilogIndex(): Promise<void> {
 }
 
 function effectiveSettingsForDocument(document: TextDocument, settings: CoSettings): CoSettings {
+  if (!needsProfileInference(settings)) {
+    return settings;
+  }
   return applyResolvedProfile(settings, {
     activeLanguageId: serviceKeyForDocument(document),
     activeFilePath: fsPathFromUri(document.uri),
@@ -674,17 +677,25 @@ async function getDocumentSettings(resource: string): Promise<CoSettings> {
 }
 
 async function settingsForUri(uri: string): Promise<CoSettings> {
+  const settings = await getDocumentSettings(uri);
   const document = documents.get(uri);
   if (document) {
-    return effectiveSettingsForDocument(document, await getDocumentSettings(uri));
+    return effectiveSettingsForDocument(document, settings);
   }
-  return applyResolvedProfile(await getDocumentSettings(uri), {
+  if (!needsProfileInference(settings)) {
+    return settings;
+  }
+  return applyResolvedProfile(settings, {
     activeLanguageId: uri.toLowerCase().endsWith('.v') ? 'verilog' : '',
     activeFilePath: fsPathFromUri(uri),
     files: indexedProfileFiles(TextDocument.create(uri, uri.toLowerCase().endsWith('.v') ? 'verilog' : '', 0, '')),
     modules: verilogIndex.allModules(),
     verilogTexts: verilogIndex.allFiles().map((file) => file.text)
   });
+}
+
+function needsProfileInference(settings: CoSettings): boolean {
+  return settings.project.profile === 'auto';
 }
 
 documents.listen(connection);

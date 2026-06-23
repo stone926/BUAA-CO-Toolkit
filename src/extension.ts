@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getProfileResolution, persistInferredProfile, setProfileInferenceProvider } from './config';
+import { getProfileResolution, setProfileInferenceProvider } from './config';
 import {
   diagnosticCodeKey,
   diagnosticFileCodeKey,
@@ -22,7 +22,7 @@ import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
 import { registerCourseLinks } from './courseLinks';
 import { registerSemanticColorDefaults } from './semanticColors';
-import { buildProfileInferenceInput, clearProfileInferenceCache } from './profileInference';
+import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 import { escapeHtml } from './language/common/util';
 
@@ -75,6 +75,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(moduleRegistry);
   context.subscriptions.push(moduleRegistry.onDidChange(() => {
     invalidateToolchainCache();
+    scheduleRefreshProjectUi();
+  }));
+  context.subscriptions.push(onDidChangeProfileInferenceCache(() => {
     scheduleRefreshProjectUi();
   }));
   // 监听文件保存事件，增量更新注册表
@@ -183,7 +186,6 @@ export function activate(context: vscode.ExtensionContext): void {
     updateCoContext(resource);
     sidebarProvider.refresh();
     updateStatus(statusBar, cachedToolchainStatus);
-    void persistInferredProfile(resource).catch(() => undefined);
   }
 
   refreshProjectUi();

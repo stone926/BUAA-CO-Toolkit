@@ -29,7 +29,6 @@
   "activationEvents": [
     "onLanguage:mipsasm",
     "onLanguage:verilog",
-    "onLanguage:xml",
     "workspaceContains:**/*.circ",
     "onCommand:co.checkToolchain",
     "onCommand:co.selectProjectProfile",
