@@ -30,6 +30,7 @@ interface ContinuousTraceSession {
   report: ContinuousTraceReport;
   reportFile: vscode.Uri;
   panel: vscode.WebviewPanel;
+  lastMonitorFlushMs: number;
 }
 
 interface ContinuousTraceCaseLike {
@@ -74,6 +75,7 @@ export interface ContinuousGeneratedTraceDependencies<TSetup, TCase extends Cont
 }
 
 let activeContinuousTraceSession: ContinuousTraceSession | undefined;
+const continuousMonitorFlushIntervalMs = 1000;
 
 export async function startContinuousGeneratedTraceTests<TSetup, TCase extends ContinuousTraceCaseLike, TAsmCase, TRunOptions extends object>(
   services: AppServices,
@@ -112,6 +114,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
     stopRequested: false,
     reportFile,
     panel,
+    lastMonitorFlushMs: 0,
     report: {
       generatedAt: new Date().toISOString(),
       running: true,
@@ -138,7 +141,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
   services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大轮数: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
 
   try {
-    await updateContinuousTraceMonitor(session);
+    await updateContinuousTraceMonitor(session, { force: true });
     let index = 0;
     while (!session.stopRequested && (maxIterations === 0 || index < maxIterations)) {
       index++;
@@ -151,7 +154,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
         results: []
       };
       session.report.iterations.unshift(iteration);
-      await updateContinuousTraceMonitor(session);
+      await updateContinuousTraceMonitor(session, { force: true });
 
       services.output.appendLine('');
       services.output.appendLine(`Continuous iteration #${index}`);
@@ -202,7 +205,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       if (iteration.status === 'running') {
         iteration.status = continuousStatus(iteration.results, false, session.stopRequested);
       }
-      await updateContinuousTraceMonitor(session);
+      await updateContinuousTraceMonitor(session, { force: true });
 
       if (session.stopRequested || shouldStopAfterIteration(iteration.results, stopOnFailure) || iteration.status === 'error') {
         break;
@@ -213,7 +216,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
     session.report.running = false;
     session.report.stopRequested = session.stopRequested;
     services.statusBar.text = 'CO: Continuous stopped';
-    await updateContinuousTraceMonitor(session);
+    await updateContinuousTraceMonitor(session, { force: true });
     if (activeContinuousTraceSession === session) {
       activeContinuousTraceSession = undefined;
     }
@@ -271,9 +274,14 @@ function requiredContinuousTraceChecks(profile: ProjectProfile, memoryConfigurat
   return names;
 }
 
-async function updateContinuousTraceMonitor(session: ContinuousTraceSession): Promise<void> {
+async function updateContinuousTraceMonitor(session: ContinuousTraceSession, options: { force?: boolean } = {}): Promise<void> {
   session.report.stopRequested = session.stopRequested;
   session.report.generatedAt = new Date().toISOString();
+  const now = Date.now();
+  if (!options.force && now - session.lastMonitorFlushMs < continuousMonitorFlushIntervalMs) {
+    return;
+  }
+  session.lastMonitorFlushMs = now;
   await writeTextFile(session.reportFile, JSON.stringify(session.report, null, 2) + '\n');
   try {
     session.panel.webview.html = renderContinuousTraceMonitor(session.report, session.reportFile);

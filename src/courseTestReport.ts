@@ -103,6 +103,8 @@ export interface AsmCaseManifestEntry {
   uri: vscode.Uri;
 }
 
+export const continuousTraceMonitorMaxRows = 100;
+
 export function showLogisimPrepareReport(
   report: vscode.Uri,
   results: LogisimPrepareCaseResult[],
@@ -131,7 +133,9 @@ export function showBatchTraceReport(
 export function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile: vscode.Uri): string {
   const latest = report.iterations[0];
   const latestSummary = latest?.summary ?? continuousCounts([]);
-  const rows = report.iterations.map((iteration) => {
+  const visibleIterations = report.iterations.slice(0, continuousTraceMonitorMaxRows);
+  const hiddenIterations = Math.max(0, report.iterations.length - visibleIterations.length);
+  const rows = visibleIterations.map((iteration) => {
     const firstProblem = iteration.results.find((item) => item.status !== 'passed');
     return `<tr class="${iteration.status}">
       <td>${iteration.index}</td>
@@ -146,6 +150,9 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
       <td>${firstProblem ? escapeHtml(firstProblem.message) : escapeHtml(iteration.message ?? '')}</td>
     </tr>`;
   }).join('\n');
+  const hiddenNote = hiddenIterations
+    ? `<p class="muted">仅显示最近 ${visibleIterations.length} / ${report.iterations.length} 轮，完整历史保存在 JSON 报告中。</p>`
+    : '';
   const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
 
   return `<!doctype html>
@@ -179,6 +186,9 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
     }
     .paths {
       margin: 0 0 16px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .muted {
       color: var(--vscode-descriptionForeground);
     }
     table {
@@ -231,6 +241,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
     <div>选项: 间隔 ${report.options.intervalMs} 毫秒, 最大 ${report.options.maxIterations || '无限制'}, 失败时停止 ${report.options.stopOnFailure}</div>
     <div>JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
   </div>
+  ${hiddenNote}
   <table>
     <thead>
       <tr><th>#</th><th>状态</th><th>开始</th><th>结束</th><th>总数</th><th>通过</th><th>失败</th><th>错误</th><th>首个问题</th><th>消息</th></tr>
