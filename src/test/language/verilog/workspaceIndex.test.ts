@@ -4,7 +4,7 @@ import * as path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorkspaceFolder } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
-import { defaultCoSettings } from '../../../language/common/settings';
+import { defaultCoSettings, mergeCoSettings } from '../../../language/common/settings';
 import { isVerilogUri, VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
 const tempRoots: string[] = [];
@@ -78,6 +78,33 @@ describe('VerilogWorkspaceIndex', () => {
     fs.writeFileSync(file, 'module NewTop; endmodule\n', 'utf8');
     index.updateFile(uri, defaultCoSettings);
     expect(index.version).toBeGreaterThan(indexedVersion);
+  });
+
+  it('does not advance its version when indexed text is unchanged', () => {
+    const root = makeTempRoot();
+    const file = writeFile(root, 'src/top.v', 'module Top; endmodule\n');
+    const uri = URI.file(file).toString();
+    const index = new VerilogWorkspaceIndex();
+
+    index.updateFile(uri, defaultCoSettings);
+    const version = index.version;
+    index.updateFile(uri, defaultCoSettings);
+
+    expect(index.version).toBe(version);
+  });
+
+  it('does not reindex unchanged structure when only diagnostic settings change', () => {
+    const root = makeTempRoot();
+    const file = writeFile(root, 'src/top.v', 'module Top; endmodule\n');
+    const uri = URI.file(file).toString();
+    const index = new VerilogWorkspaceIndex();
+
+    index.updateFile(uri, defaultCoSettings);
+    const version = index.version;
+    index.updateFile(uri, mergeCoSettings({ verilog: { lint: { courseRules: false } } }));
+
+    expect(index.version).toBe(version);
+    expect(index.getModule('Top')).toBeDefined();
   });
 
   it('caches display trace formats for profile inference', () => {

@@ -1,15 +1,20 @@
 import { FoldingRange, FoldingRangeKind } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
+import { DocumentResultCache } from '../common/documentResultCache';
 import { CoSettings } from '../common/settings';
 import { getCachedMipsParse } from './parseCache';
 import { MipsServerState } from './state';
-import { stripComment } from './syntax';
 
 export function getMipsFoldingRanges(document: TextDocument, settings: CoSettings, state: MipsServerState): FoldingRange[] {
+  return foldingCache.getOrCreate(document, 'mips-folding', () => buildMipsFoldingRanges(document, settings, state));
+}
+
+const foldingCache = new DocumentResultCache<FoldingRange[]>();
+
+function buildMipsFoldingRanges(document: TextDocument, settings: CoSettings, state: MipsServerState): FoldingRange[] {
   const ranges: FoldingRange[] = [];
 
-  // 1. Macro body folding (.macro line to .end_macro line)
   const parsed = getCachedMipsParse(document, settings, state);
   for (const macro of parsed.semantic.macros) {
     if (macro.bodyEndLine !== undefined && macro.bodyEndLine > macro.bodyStartLine - 1) {
@@ -21,38 +26,54 @@ export function getMipsFoldingRanges(document: TextDocument, settings: CoSetting
     }
   }
 
-  // 2. Region markers (# region / # endregion)
+  ranges.push(...regionFoldingRanges(document));
+  return ranges;
+}
+
+function regionFoldingRanges(document: TextDocument): FoldingRange[] {
+  const ranges: FoldingRange[] = [];
+  const stack: number[] = [];
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
     const text = lineAt(document, lineNumber).text;
-    const stripped = stripComment(text).trim();
-    if (/^#?\s*region\b/i.test(stripped)) {
-      const endLine = findMatchingRegionEnd(document, lineNumber + 1);
-      if (endLine !== undefined) {
+    if (isRegionStart(text)) {
+      stack.push(lineNumber);
+    } else if (isRegionEnd(text)) {
+      const startLine = stack.pop();
+      if (startLine !== undefined && lineNumber > startLine) {
         ranges.push({
-          startLine: lineNumber,
-          endLine,
+          startLine,
+          endLine: lineNumber,
           kind: FoldingRangeKind.Region
         });
       }
     }
   }
-
   return ranges;
 }
 
-function findMatchingRegionEnd(document: TextDocument, startLine: number): number | undefined {
-  let depth = 1;
-  for (let lineNumber = startLine; lineNumber < document.lineCount; lineNumber++) {
-    const text = lineAt(document, lineNumber).text;
-    const stripped = stripComment(text).trim();
-    if (/^#?\s*region\b/i.test(stripped)) {
-      depth++;
-    } else if (/^#?\s*endregion\b/i.test(stripped)) {
-      depth--;
-      if (depth === 0) {
-        return lineNumber;
-      }
+function isRegionStart(text: string): boolean {
+  return startsWithRegionDirective(text, 'region');
+}
+
+function isRegionEnd(text: string): boolean {
+  return startsWithRegionDirective(text, 'endregion');
+}
+
+function startsWithRegionDirective(text: string, directive: string): boolean {
+  let index = 0;
+  while (text[index] === ' ' || text[index] === '\t') {
+    index++;
+  }
+  if (text[index] === '#') {
+    index++;
+    while (text[index] === ' ' || text[index] === '\t') {
+      index++;
     }
   }
-  return undefined;
+  return text.slice(index, index + directive.length).toLowerCase() === directive &&
+    !isIdentifierPart(text[index + directive.length] ?? '');
+}
+
+function isIdentifierPart(char: string): boolean {
+  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char === '_';
 }

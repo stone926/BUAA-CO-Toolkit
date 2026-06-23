@@ -4,12 +4,19 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
-import { CoSettings } from '../common/settings';
+import { DocumentResultCache } from '../common/documentResultCache';
+import { CoSettings, defaultCoSettings } from '../common/settings';
 import { collectVerilogFoldingRangesFromCst, collectModuleBodyFoldingRanges } from './blockAst';
 import { getCachedVerilogParse } from './parseCache';
 
-export function getVerilogFoldingRanges(document: TextDocument, settings: CoSettings): FoldingRange[] {
-  const parsed = getCachedVerilogParse(document, settings, false);
+const foldingCache = new DocumentResultCache<FoldingRange[]>();
+
+export function getVerilogFoldingRanges(document: TextDocument, _settings: CoSettings): FoldingRange[] {
+  return foldingCache.getOrCreate(document, 'verilog-folding', () => buildVerilogFoldingRanges(document));
+}
+
+function buildVerilogFoldingRanges(document: TextDocument): FoldingRange[] {
+  const parsed = getCachedVerilogParse(document, defaultCoSettings, false);
   const ranges: FoldingRange[] = [];
   ranges.push(...collectVerilogFoldingRangesFromCst(document, parsed.cst));
   ranges.push(...collectModuleBodyFoldingRanges(document, parsed.cst));

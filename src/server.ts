@@ -276,7 +276,6 @@ connection.onDidChangeConfiguration((change) => {
   state.configurationVersion++;
   state.effectiveSettingsCache.clear();
   state.verilogProfileSnapshot = undefined;
-  void rebuildVerilogIndex();
   void validateAllDocuments();
 });
 

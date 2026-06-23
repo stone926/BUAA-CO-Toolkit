@@ -4,7 +4,7 @@ import {
   SemanticTokensBuilder
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { rangesEqual } from '../common/lsp';
+import { DocumentResultCache } from '../common/documentResultCache';
 import { CoSettings } from '../common/settings';
 import { rangeKey } from '../common/util';
 import { cp0RegisterAtPosition } from './display';
@@ -32,12 +32,22 @@ interface MipsSemanticTokenCandidate {
 
 const tokenTypeIndex = new Map(mipsSemanticTokenTypes.map((type, index) => [type, index] as const));
 const tokenModifierIndex = new Map<string, number>([['declaration', 0]]);
+const semanticTokenCache = new DocumentResultCache<SemanticTokens>();
 
 export function getMipsSemanticTokens(document: TextDocument, settings: CoSettings, state: MipsServerState): SemanticTokens {
+  return semanticTokenCache.getOrCreate(
+    document,
+    `mips-semantic:${settings.mips.instructionColorMode}`,
+    () => buildMipsSemanticTokens(document, settings, state)
+  );
+}
+
+function buildMipsSemanticTokens(document: TextDocument, settings: CoSettings, state: MipsServerState): SemanticTokens {
   const parsed = getCachedMipsParse(document, settings, state);
   const tokens: MipsSemanticTokenCandidate[] = [];
   const builder = new SemanticTokensBuilder();
   const semanticReferences = new Map(parsed.semantic.references.map((reference) => [rangeKey(reference.range), reference]));
+  const instructionByRange = new Map(parsed.instructions.map((line) => [rangeKey(line.range), line]));
 
   for (const declaration of parsed.semantic.declarations) {
     const tokenType = declaration.macro
@@ -73,7 +83,8 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
       if (cstToken.kind !== 'identifier' && cstToken.kind !== 'directive' && cstToken.kind !== 'register' && cstToken.kind !== 'macroParameter') {
         continue;
       }
-      if (parsed.semantic.declarationRangeKeys.has(rangeKey(range))) {
+      const key = rangeKey(range);
+      if (parsed.semantic.declarationRangeKeys.has(key)) {
         continue;
       }
 
@@ -82,14 +93,14 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
       } else if (token.startsWith('$') && (isRegister(token) || isFloatingPointRegister(token))) {
         pushSemanticToken(tokens, range, 'mipsRegister');
       } else {
-        const reference = semanticReferences.get(rangeKey(range));
+        const reference = semanticReferences.get(key);
         const tokenType = reference ? semanticReferenceTokenType(reference.kind) : undefined;
         if (tokenType) {
           pushSemanticToken(tokens, range, tokenType);
         } else if (token.startsWith('.') && directives.has(token.toLowerCase())) {
           pushSemanticToken(tokens, range, 'mipsDirective');
         } else if (instructions[token.toLowerCase()]) {
-          const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, range));
+          const parsedInstruction = instructionByRange.get(key);
           pushSemanticToken(tokens, range, instructionSemanticTokenType(instructions[token.toLowerCase()], settings, parsedInstruction?.usesPseudoForm));
         }
       }

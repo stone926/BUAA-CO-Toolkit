@@ -4,7 +4,8 @@ import {
   SemanticTokensBuilder
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { CoSettings } from '../common/settings';
+import { DocumentResultCache } from '../common/documentResultCache';
+import { CoSettings, defaultCoSettings } from '../common/settings';
 import { rangeKey } from '../common/util';
 import { mipsSemanticTokenTypes } from '../mips/resources';
 import {
@@ -26,12 +27,25 @@ interface SemanticTokenCandidate {
 
 const verilogTokenTypeIndex = new Map(verilogSemanticTokenTypes.map((type, index) => [type, mipsSemanticTokenTypes.length + index] as const));
 const tokenModifierIndex = new Map<string, number>([['declaration', 0]]);
+const semanticTokenCache = new DocumentResultCache<SemanticTokens>();
 
-export function getVerilogSemanticTokens(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex): SemanticTokens {
-  const parsed = getCachedVerilogParse(document, settings, false);
+export function getVerilogSemanticTokens(document: TextDocument, _settings: CoSettings, index: VerilogWorkspaceIndex): SemanticTokens {
+  return semanticTokenCache.getOrCreate(
+    document,
+    `verilog-semantic:${index.version}`,
+    () => buildVerilogSemanticTokens(document, index)
+  );
+}
+
+function buildVerilogSemanticTokens(document: TextDocument, index: VerilogWorkspaceIndex): SemanticTokens {
+  const parsed = getCachedVerilogParse(document, defaultCoSettings, false);
   const tokens: SemanticTokenCandidate[] = [];
   const pushed = new Set<string>();
   const builder = new SemanticTokensBuilder();
+  const context: VerilogSemanticTokenContext = {
+    index,
+    portConnectionTypes: new Map()
+  };
 
   for (const symbol of parsed.semantic.symbols) {
     const tokenType = semanticSymbolTokenType(symbol);
@@ -40,7 +54,7 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
     }
   }
   for (const reference of parsed.semantic.references) {
-    const tokenType = semanticReferenceTokenType(reference, index);
+    const tokenType = semanticReferenceTokenType(reference, context);
     if (tokenType) {
       pushSemanticToken(tokens, pushed, reference.macroUse?.range ?? reference.range, tokenType);
     }
@@ -112,6 +126,11 @@ export function getVerilogSemanticTokens(document: TextDocument, settings: CoSet
   return builder.build();
 }
 
+interface VerilogSemanticTokenContext {
+  index: VerilogWorkspaceIndex;
+  portConnectionTypes: Map<string, VerilogSemanticTokenType | undefined>;
+}
+
 function semanticSymbolTokenType(symbol: VerilogSemanticSymbol): VerilogSemanticTokenType | undefined {
   switch (symbol.kind) {
     case 'module':
@@ -131,15 +150,23 @@ function semanticSymbolTokenType(symbol: VerilogSemanticSymbol): VerilogSemantic
   }
 }
 
-function semanticReferenceTokenType(reference: VerilogSemanticReference, index: VerilogWorkspaceIndex): VerilogSemanticTokenType | undefined {
+function semanticReferenceTokenType(reference: VerilogSemanticReference, context: VerilogSemanticTokenContext): VerilogSemanticTokenType | undefined {
   if (reference.kind === 'portConnection') {
-    const targetModule = reference.instance ? index.getModule(reference.instance.moduleName) : undefined;
+    if (!reference.instance) {
+      return 'verilogSignal';
+    }
+    const cacheKey = `${reference.instance.moduleName}\u0000${reference.name}`;
+    if (context.portConnectionTypes.has(cacheKey)) {
+      return context.portConnectionTypes.get(cacheKey);
+    }
+    const targetModule = context.index.getModule(reference.instance.moduleName);
     const target = targetModule?.ports.find((port) => port.name === reference.name)
       ?? targetModule?.parameters.find((param) => param.name === reference.name);
-    if (target?.kind === 'parameter' || target?.kind === 'localparam') {
-      return 'verilogParameter';
-    }
-    return target ? 'verilogPort' : 'verilogSignal';
+    const tokenType = target?.kind === 'parameter' || target?.kind === 'localparam'
+      ? 'verilogParameter'
+      : target ? 'verilogPort' : 'verilogSignal';
+    context.portConnectionTypes.set(cacheKey, tokenType);
+    return tokenType;
   }
   if (reference.kind === 'macro') {
     return 'verilogMacro';

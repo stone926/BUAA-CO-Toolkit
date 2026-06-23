@@ -4,7 +4,7 @@ import { Location, WorkspaceFolder } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { rangesEqual } from '../common/lsp';
-import { CoSettings } from '../common/settings';
+import { CoSettings, defaultCoSettings } from '../common/settings';
 import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule, VerilogPortConnection } from './model';
 import { VerilogCstDocument } from './cst';
@@ -17,6 +17,7 @@ export type VerilogConnectionListKind = 'ports' | 'parameters';
 export interface VerilogIndexedFile {
   uri: string;
   text: string;
+  textKey: string;
   /** 去除注释和字符串后的文本，避免下游重复计算 */
   strippedText: string;
   modules: VerilogModule[];
@@ -127,21 +128,28 @@ export class VerilogWorkspaceIndex {
     }
   }
 
-  private updateDocumentIndexed(document: TextDocument, settings: CoSettings): void {
+  private updateDocumentIndexed(document: TextDocument, _settings: CoSettings): void {
     if (document.languageId !== 'verilog') {
       return;
     }
+    const text = document.getText();
+    const key = textKey(text);
+    const existing = this.files.get(document.uri);
+    if (existing && existing.textKey === key && existing.text === text) {
+      return;
+    }
     this.removeIndexed(document.uri);
-    const parsed = getCachedVerilogParse(document, settings, false);
+    const parsed = getCachedVerilogParse(document, defaultCoSettings, false);
     const file: VerilogIndexedFile = {
       uri: document.uri,
-      text: document.getText(),
-      strippedText: getCachedStrippedText(document, settings),
+      text,
+      textKey: key,
+      strippedText: getCachedStrippedText(document, defaultCoSettings),
       modules: parsed.modules,
       macros: parsed.macros,
       macroUses: parsed.macroUses,
       includes: parsed.includes,
-      displayFormats: extractVerilogDisplayFormats(document.getText()),
+      displayFormats: extractVerilogDisplayFormats(text),
       cst: parsed.cst,
       semantic: parsed.semantic
     };
@@ -430,6 +438,15 @@ function assignMapIdentity(map: Map<string, Location[]>): number {
   const id = nextMapIdentity++;
   mapIdentityIds.set(map, id);
   return id;
+}
+
+function textKey(text: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${text.length}:${hash >>> 0}`;
 }
 
 function sameModuleIdentity(left: VerilogModule | undefined, right: VerilogModule): boolean {
