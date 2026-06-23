@@ -359,6 +359,7 @@ function subroutineArgumentDeclarations(document: TextDocument, text: string, to
 
 function inferModuleParameterConstants(module: VerilogModule): void {
   const evaluating = new Set<string>();
+  const resolveWidth = (expression: VerilogExpressionAst): number | undefined => widthOfExpressionAst(expression, module).width;
   const resolve = (name: string): bigint | undefined => {
     const decl = module.declarations.get(name);
     if (!decl || !isConstantDecl(decl)) {
@@ -373,7 +374,7 @@ function inferModuleParameterConstants(module: VerilogModule): void {
     evaluating.add(decl.name);
     try {
       const ast = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
-      const value = ast ? evalVerilogIntegerConstant(ast, resolve) : undefined;
+      const value = ast ? evalVerilogIntegerConstant(ast, resolve, resolveWidth) : undefined;
       if (value !== undefined) {
         decl.constantValue = value;
       }

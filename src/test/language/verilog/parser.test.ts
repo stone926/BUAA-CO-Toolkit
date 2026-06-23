@@ -9,6 +9,7 @@ import {
   widthOfDecl,
   shouldReportWidthMismatch,
   widthOfExpression,
+  evalExpressionConstant,
   parseVerilogExpression,
   parseVerilog,
   parseModules,
@@ -334,6 +335,10 @@ describe('widthOfExpression', () => {
     expect(result).toEqual({ width: 32 });
   });
 
+  it('returns integer width for clog2', () => {
+    expect(widthOfExpression('$clog2(17)', makeModule())).toEqual({ width: 32 });
+  });
+
   it('returns 1 for comparison operators', () => {
     const module = makeModule({
       declarations: new Map([
@@ -416,6 +421,19 @@ describe('widthOfExpression', () => {
       declarations: new Map([['a', makeDecl({ name: 'a', kind: 'wire', width: '[31:0]' })]])
     });
     expect(widthOfExpression('a[3 +: 2 + 2]', module)).toEqual({ width: 4 });
+  });
+});
+
+describe('evalExpressionConstant', () => {
+  it('evaluates system functions, concatenations, selects, and reductions', () => {
+    const module = makeModule();
+    expect(evalExpressionConstant('$clog2(17)', module)).toBe(5n);
+    expect(evalExpressionConstant("{4'hA, 4'h5}", module)).toBe(0xA5n);
+    expect(evalExpressionConstant("{2{2'b10}}", module)).toBe(0b1010n);
+    expect(evalExpressionConstant("8'hA5[3:0]", module)).toBe(0x5n);
+    expect(evalExpressionConstant("8'hA5[7:4]", module)).toBe(0xAn);
+    expect(evalExpressionConstant('&4\'b1111', module)).toBe(1n);
+    expect(evalExpressionConstant('^4\'b1011', module)).toBe(1n);
   });
 });
 
@@ -852,6 +870,29 @@ endmodule
     expect(module.declarations.get('WIDTH')?.constantValue).toBe(8n);
     expect(module.declarations.get('BUS_MSB')?.constantValue).toBe(7n);
     expect(widthOfDecl(module.declarations.get('data')!, module)).toEqual({ width: 8 });
+  });
+
+  it('evaluates clog2, concatenation, and selects in parameter constants', () => {
+    const text = `
+module test;
+    parameter DEPTH = 17;
+    parameter A = 4'hA, B = 4'h5;
+    localparam AW = $clog2(DEPTH);
+    localparam PACK = {A, B};
+    localparam LOW = PACK[3:0];
+    localparam REPL = {2{2'b10}};
+    wire [AW-1:0] addr;
+    wire [LOW:0] low_bus;
+endmodule
+`.trim();
+    const module = parseModules(doc(text), text)[0];
+
+    expect(module.declarations.get('AW')?.constantValue).toBe(5n);
+    expect(module.declarations.get('PACK')?.constantValue).toBe(0xA5n);
+    expect(module.declarations.get('LOW')?.constantValue).toBe(5n);
+    expect(module.declarations.get('REPL')?.constantValue).toBe(0b1010n);
+    expect(widthOfDecl(module.declarations.get('addr')!, module)).toEqual({ width: 5 });
+    expect(widthOfDecl(module.declarations.get('low_bus')!, module)).toEqual({ width: 6 });
   });
 
   it('treats unsized parameter literals as fixed-width (IEEE strict)', () => {

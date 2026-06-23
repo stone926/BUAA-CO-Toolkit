@@ -3,6 +3,7 @@ import {
   parseVerilogExpression,
   ParsedVerilogNumberLiteral,
   VerilogConstantResolver,
+  VerilogConstantWidthResolver,
   VerilogExpressionAst
 } from './exprAst';
 import { VerilogDecl, VerilogModule } from './model';
@@ -113,7 +114,14 @@ export function evalExpressionAstConstant(expression: VerilogExpressionAst | und
   if (!expression) {
     return undefined;
   }
-  return evalVerilogIntegerConstant(expression, module ? constantResolverForModule(module, overrides) : undefined);
+  if (!module) {
+    return evalVerilogIntegerConstant(expression);
+  }
+  return evalVerilogIntegerConstant(
+    expression,
+    constantResolverForModule(module, overrides),
+    constantWidthResolverForModule(module, overrides)
+  );
 }
 
 function widthFromRange(width: string | undefined, module?: VerilogModule, overrides?: VerilogConstantOverrides): number | undefined {
@@ -145,6 +153,9 @@ function widthOfIdentifier(name: string, module: VerilogModule, overrides?: Veri
 function widthOfCall(expression: Extract<VerilogExpressionAst, { kind: 'callExpression' }>, module: VerilogModule | undefined, overrides?: VerilogConstantOverrides): WidthInfo {
   if (passThroughSystemFunction(expression.callee) && expression.args.length === 1) {
     return widthOfExpressionAst(expression.args[0], module, overrides);
+  }
+  if (integerSystemFunction(expression.callee)) {
+    return { width: 32 };
   }
   return {};
 }
@@ -219,6 +230,7 @@ function constNumber(expression: VerilogExpressionAst | undefined, module?: Veri
 
 function constantResolverForModule(module: VerilogModule, overrides?: VerilogConstantOverrides): VerilogConstantResolver {
   const evaluating = new Set<string>();
+  const resolveWidth = constantWidthResolverForModule(module, overrides);
   const resolve: VerilogConstantResolver = (name) => {
     const override = overrides?.get(name);
     if (override !== undefined) {
@@ -236,11 +248,15 @@ function constantResolverForModule(module: VerilogModule, overrides?: VerilogCon
     }
     evaluating.add(name);
     const expression = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
-    const value = expression ? evalVerilogIntegerConstant(expression, resolve) : undefined;
+    const value = expression ? evalVerilogIntegerConstant(expression, resolve, resolveWidth) : undefined;
     evaluating.delete(name);
     return value ?? decl.constantValue;
   };
   return resolve;
+}
+
+function constantWidthResolverForModule(module: VerilogModule, overrides?: VerilogConstantOverrides): VerilogConstantWidthResolver {
+  return (expression) => widthOfExpressionAst(expression, module, overrides).width;
 }
 
 function bracketContents(width: string): string | undefined {
@@ -335,6 +351,10 @@ function isOneBitBinaryOperator(operator: string): boolean {
 
 function passThroughSystemFunction(value: string): boolean {
   return value === '$signed' || value === '$unsigned';
+}
+
+function integerSystemFunction(value: string): boolean {
+  return value === '$clog2';
 }
 
 // Verilog arithmetic/bitwise/shift results are context-sized in assignments. Treat them as
