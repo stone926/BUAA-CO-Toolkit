@@ -359,6 +359,22 @@ describe('Logisim trace helpers', () => {
     ].join('\n'));
   });
 
+  it('parses final table rows without a trailing newline and preserves source line numbers', () => {
+    const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
+    const parsed = parseLogisimTraceOutput([
+      'Logisim startup',
+      '0011 0100 0000 0001 0000 0000 0000 0001\t0000 0000 0000 0000 0011 0000 0000 0000\t1\t0 0001\t0000 0000 0000 0000 0000 0000 0000 0001\t0\txxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx\txxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx',
+      'halted due to halt pin',
+      '1010 1100 0000 0001 0000 0000 0000 0100\t0000 0000 0000 0000 0011 0000 0000 0100\t0\t0 0001\txxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx\t1\t0000 0000 0000 0000 0000 0000 0000 0100\t0000 0000 0000 0000 0000 0000 0000 0010'
+    ].join('\r\n'), spec);
+
+    expect(parsed.rows.map((row) => row.lineNumber)).toEqual([2, 4]);
+    expect(parsed.events.map((event) => event.raw)).toEqual([
+      '@00003000: $1 <= 00000001',
+      '@00003004: *00000004 <= 00000002'
+    ]);
+  });
+
   it('skips register zero writes and no-write rows with unused unknown data fields', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
     const text = [

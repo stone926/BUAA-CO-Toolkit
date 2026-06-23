@@ -336,16 +336,17 @@ export function prepareP3LogisimMachineCode(machineCodeText: string): P3LogisimM
 
 export function parseLogisimTraceOutput(text: string, spec: LogisimTraceSpec): { rows: LogisimTraceRow[]; events: CpuTraceEvent[] } {
   const rows: LogisimTraceRow[] = [];
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const row = parseLogisimTraceLine(lines[i], spec, i + 1, rows.length + 1);
+  const events: CpuTraceEvent[] = [];
+  for (const { line, lineNumber } of iterTextLines(text)) {
+    const row = parseLogisimTraceLine(line, spec, lineNumber, rows.length + 1);
     if (row) {
       rows.push(row);
+      events.push(...logisimRowToTraceEvents(row));
     }
   }
   return {
     rows,
-    events: logisimRowsToTraceEvents(rows)
+    events
   };
 }
 
@@ -384,33 +385,56 @@ export function parseLogisimTraceLine(
   };
 }
 
+function* iterTextLines(text: string): IterableIterator<{ line: string; lineNumber: number }> {
+  let lineStart = 0;
+  let lineNumber = 1;
+  for (let index = 0; index <= text.length; index++) {
+    if (index < text.length && text[index] !== '\n') {
+      continue;
+    }
+    const lineEnd = index > lineStart && text[index - 1] === '\r' ? index - 1 : index;
+    yield {
+      line: text.slice(lineStart, lineEnd),
+      lineNumber
+    };
+    lineStart = index + 1;
+    lineNumber++;
+  }
+}
+
 export function logisimRowsToTraceEvents(rows: readonly LogisimTraceRow[]): CpuTraceEvent[] {
   const events: CpuTraceEvent[] = [];
   for (const row of rows) {
-    const pc = requiredKnown(row, 'pc');
-    const regWrite = requiredKnown(row, 'regwrite').numeric;
-    const memWrite = requiredKnown(row, 'memwrite').numeric;
+    events.push(...logisimRowToTraceEvents(row));
+  }
+  return events;
+}
 
-    if (regWrite === undefined || memWrite === undefined) {
-      throw new Error(`Logisim row ${row.lineNumber} has non-numeric write-enable value.`);
-    }
+function logisimRowToTraceEvents(row: LogisimTraceRow): CpuTraceEvent[] {
+  const events: CpuTraceEvent[] = [];
+  const pc = requiredKnown(row, 'pc');
+  const regWrite = requiredKnown(row, 'regwrite').numeric;
+  const memWrite = requiredKnown(row, 'memwrite').numeric;
 
-    if (regWrite !== 0) {
-      const reg = requiredKnown(row, 'regaddr');
-      const value = requiredKnown(row, 'regdata');
-      if (reg.numeric === undefined) {
-        throw new Error(`Logisim row ${row.lineNumber} has non-numeric register address.`);
-      }
-      if (reg.numeric !== 0) {
-        events.push(makeTraceEvent(row, pc.hex, 'grf', String(reg.numeric), value.hex));
-      }
-    }
+  if (regWrite === undefined || memWrite === undefined) {
+    throw new Error(`Logisim row ${row.lineNumber} has non-numeric write-enable value.`);
+  }
 
-    if (memWrite !== 0) {
-      const addr = requiredKnown(row, 'memaddr');
-      const value = requiredKnown(row, 'memdata');
-      events.push(makeTraceEvent(row, pc.hex, 'dm', addr.hex, value.hex));
+  if (regWrite !== 0) {
+    const reg = requiredKnown(row, 'regaddr');
+    const value = requiredKnown(row, 'regdata');
+    if (reg.numeric === undefined) {
+      throw new Error(`Logisim row ${row.lineNumber} has non-numeric register address.`);
     }
+    if (reg.numeric !== 0) {
+      events.push(makeTraceEvent(row, pc.hex, 'grf', String(reg.numeric), value.hex));
+    }
+  }
+
+  if (memWrite !== 0) {
+    const addr = requiredKnown(row, 'memaddr');
+    const value = requiredKnown(row, 'memdata');
+    events.push(makeTraceEvent(row, pc.hex, 'dm', addr.hex, value.hex));
   }
   return events;
 }
