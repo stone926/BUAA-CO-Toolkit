@@ -33,6 +33,8 @@ export function childrenOfVerilogExpression(expression: VerilogExpressionAst): V
       return expression.args;
     case 'memberExpression':
       return [expression.target];
+    case 'errorExpression':
+      return expression.children;
     default:
       return [];
   }

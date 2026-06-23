@@ -67,6 +67,25 @@ endmodule
     expect(hoverText(hover)).toContain('Width: `32`');
   });
 
+  it('keeps hover on parsed subexpressions when an assignment is incomplete', () => {
+    const text = `
+module m(input [3:0] a, input [3:0] b, output [7:0] y);
+    assign y = (a + b) *;
+endmodule
+`.trim();
+    const document = doc(text);
+    const hover = getVerilogHover(
+      document,
+      positionOf(document, '+'),
+      mergeCoSettings({}),
+      new VerilogWorkspaceIndex()
+    );
+
+    expect(hoverText(hover)).toContain('Expression `a + b`');
+    expect(hoverText(hover)).toContain('AST: `binaryExpression`');
+    expect(hoverText(hover)).toContain('Width: `4`');
+  });
+
   it('includes evaluated parameter constants in declaration hover', () => {
     const text = `
 module m;

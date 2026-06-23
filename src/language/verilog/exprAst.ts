@@ -12,11 +12,26 @@ export type VerilogExpressionAst =
   | VerilogSelectExpressionAst
   | VerilogCallExpressionAst
   | VerilogMemberExpressionAst
-  | VerilogParenthesizedExpressionAst;
+  | VerilogParenthesizedExpressionAst
+  | VerilogErrorExpressionAst;
 
 export interface VerilogExpressionBase {
   start: number;
   end: number;
+  missing?: VerilogMissingTokenAst[];
+}
+
+export interface VerilogMissingTokenAst extends VerilogExpressionBase {
+  kind: 'missingToken';
+  expected: string;
+  message: string;
+}
+
+export interface VerilogErrorExpressionAst extends VerilogExpressionBase {
+  kind: 'errorExpression';
+  message: string;
+  children: VerilogExpressionAst[];
+  unexpectedToken?: string;
 }
 
 export interface VerilogNumberLiteralAst extends VerilogExpressionBase {
@@ -175,7 +190,57 @@ export function parseVerilogExpressionTokens(rawTokens: VerilogToken[]): Verilog
   }
   const parser = new ExpressionParser(tokens);
   const expression = parser.parseExpression(0, new Set());
-  return expression && parser.isAtEnd(new Set()) ? expression : undefined;
+  if (!expression) {
+    return undefined;
+  }
+  return parser.isAtEnd(new Set()) ? expression : parser.wrapUnexpectedTrailingTokens(expression);
+}
+
+export function verilogExpressionHasError(expression: VerilogExpressionAst | undefined): boolean {
+  if (!expression) {
+    return false;
+  }
+  if (expression.kind === 'errorExpression' || expression.missing?.length) {
+    return true;
+  }
+  switch (expression.kind) {
+    case 'parenthesizedExpression':
+      return verilogExpressionHasError(expression.expression);
+    case 'unaryExpression':
+      return verilogExpressionHasError(expression.argument);
+    case 'binaryExpression':
+      return verilogExpressionHasError(expression.left) || verilogExpressionHasError(expression.right);
+    case 'conditionalExpression':
+      return verilogExpressionHasError(expression.condition) ||
+        verilogExpressionHasError(expression.whenTrue) ||
+        verilogExpressionHasError(expression.whenFalse);
+    case 'concatenation':
+      return expression.elements.some(verilogExpressionHasError);
+    case 'multipleConcatenation':
+      return verilogExpressionHasError(expression.repeat) || expression.elements.some(verilogExpressionHasError);
+    case 'selectExpression': {
+      if (verilogExpressionHasError(expression.target)) {
+        return true;
+      }
+      const select = expression.select;
+      if (select.missing?.length) {
+        return true;
+      }
+      if (select.kind === 'bitSelect') {
+        return verilogExpressionHasError(select.index);
+      }
+      if (select.kind === 'rangeSelect') {
+        return verilogExpressionHasError(select.left) || verilogExpressionHasError(select.right);
+      }
+      return verilogExpressionHasError(select.base) || verilogExpressionHasError(select.width);
+    }
+    case 'callExpression':
+      return expression.args.some(verilogExpressionHasError);
+    case 'memberExpression':
+      return verilogExpressionHasError(expression.target);
+    default:
+      return false;
+  }
 }
 
 export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLiteral | undefined {
@@ -256,6 +321,8 @@ export function evalVerilogIntegerConstant(
       return evalMultipleConcatenationConstant(expression, resolveIdentifier, resolveWidth);
     case 'selectExpression':
       return evalSelectConstant(expression, resolveIdentifier, resolveWidth);
+    case 'errorExpression':
+      return undefined;
     default:
       return undefined;
   }
@@ -272,12 +339,12 @@ class ExpressionParser {
 
   parseExpression(minBindingPower: number, stopValues: Set<string>): VerilogExpressionAst | undefined {
     if (this.isAtEnd(stopValues)) {
-      return undefined;
+      return this.missingExpression('expression');
     }
 
     let left = this.parsePrefix(stopValues);
     if (!left) {
-      return undefined;
+      return this.missingExpression('expression');
     }
     left = this.parsePostfix(left);
 
@@ -296,21 +363,21 @@ class ExpressionParser {
         }
         this.consume();
         const whenTrue = this.parseExpression(0, withStop(stopValues, ':'));
-        if (!whenTrue || this.peek()?.value !== ':') {
-          return undefined;
+        const missing: VerilogMissingTokenAst[] = [];
+        if (this.peek()?.value === ':') {
+          this.consume();
+        } else {
+          missing.push(this.missingToken(':', whenTrue?.end ?? left.end));
         }
-        this.consume();
         const whenFalse = this.parseExpression(conditionalBindingPower, stopValues);
-        if (!whenFalse) {
-          return undefined;
-        }
         left = {
           kind: 'conditionalExpression',
           condition: left,
-          whenTrue,
-          whenFalse,
+          whenTrue: whenTrue ?? this.missingExpression('expression'),
+          whenFalse: whenFalse ?? this.missingExpression('expression'),
           start: left.start,
-          end: whenFalse.end
+          end: (whenFalse ?? whenTrue ?? left).end,
+          missing: missing.length ? missing : undefined
         };
         continue;
       }
@@ -321,16 +388,13 @@ class ExpressionParser {
       }
       this.consume();
       const right = this.parseExpression(binding.right, stopValues);
-      if (!right) {
-        return undefined;
-      }
       left = {
         kind: 'binaryExpression',
         operator: token.value,
         left,
-        right,
+        right: right ?? this.missingExpression('expression'),
         start: left.start,
-        end: right.end
+        end: (right ?? token).end
       };
     }
 
@@ -350,15 +414,13 @@ class ExpressionParser {
     if (prefixOperators.has(token.value)) {
       this.consume();
       const argument = this.parseExpression(prefixBindingPower, stopValues);
-      return argument
-        ? {
-            kind: 'unaryExpression',
-            operator: token.value,
-            argument,
-            start: token.start,
-            end: argument.end
-          }
-        : undefined;
+      return {
+        kind: 'unaryExpression',
+        operator: token.value,
+        argument: argument ?? this.missingExpression('expression'),
+        start: token.start,
+        end: (argument ?? token).end
+      };
     }
     return this.parsePrimary(stopValues);
   }
@@ -411,7 +473,8 @@ class ExpressionParser {
       return this.parseConcatenation();
     }
 
-    return undefined;
+    this.consume();
+    return this.errorExpression(`Unexpected token '${token.value}' in expression.`, token.start, token.end, [], token.value);
   }
 
   private parsePostfix(expression: VerilogExpressionAst): VerilogExpressionAst {
@@ -444,15 +507,17 @@ class ExpressionParser {
   private parseParenthesized(): VerilogExpressionAst | undefined {
     const open = this.consume();
     const expression = this.parseExpression(0, new Set([')']));
-    if (!open || !expression || this.peek()?.value !== ')') {
+    if (!open) {
       return undefined;
     }
-    const close = this.consume();
+    const close = this.peek()?.value === ')' ? this.consume() : undefined;
+    const missing = close ? undefined : [this.missingToken(')', expression?.end ?? open.end)];
     return {
       kind: 'parenthesizedExpression',
-      expression,
+      expression: expression ?? this.missingExpression('expression'),
       start: open.start,
-      end: close?.end ?? expression.end
+      end: close?.end ?? expression?.end ?? open.end,
+      missing
     };
   }
 
@@ -464,27 +529,25 @@ class ExpressionParser {
     const args: VerilogExpressionAst[] = [];
     while (this.peek() && this.peek()?.value !== ')') {
       const arg = this.parseExpression(0, new Set([',', ')']));
-      if (!arg) {
-        return undefined;
+      if (arg) {
+        args.push(arg);
       }
-      args.push(arg);
       if (this.peek()?.value === ',') {
         this.consume();
         continue;
       }
       break;
     }
-    if (this.peek()?.value !== ')') {
-      return undefined;
-    }
-    const close = this.consume();
+    const close = this.peek()?.value === ')' ? this.consume() : undefined;
+    const missing = close ? undefined : [this.missingToken(')', args[args.length - 1]?.end ?? open.end)];
     return {
       kind: 'callExpression',
       callee: callee.value,
       system: callee.kind === 'systemIdentifier',
       args,
       start: callee.start,
-      end: close?.end ?? callee.end
+      end: close?.end ?? args[args.length - 1]?.end ?? open.end,
+      missing
     };
   }
 
@@ -493,28 +556,25 @@ class ExpressionParser {
     if (!open || open.value !== '{') {
       return undefined;
     }
-    const first = this.parseExpression(0, new Set([',', '}']));
-    if (!first) {
-      return undefined;
-    }
+    const first = this.parseExpression(0, new Set([',', '}'])) ?? this.missingExpression('expression');
 
     if (this.peek()?.value === '{') {
       this.consume();
       const elements = this.parseExpressionList('}');
-      if (!elements || this.peek()?.value !== '}') {
-        return undefined;
-      }
-      const innerClose = this.consume();
-      if (!innerClose || this.peek()?.value !== '}') {
-        return undefined;
-      }
-      const close = this.consume();
+      const innerClose = this.peek()?.value === '}' ? this.consume() : undefined;
+      const outerClose = this.peek()?.value === '}' ? this.consume() : undefined;
+      const lastEnd = innerClose?.end ?? elements?.[elements.length - 1]?.end ?? first.end;
+      const missing = [
+        ...(innerClose ? [] : [this.missingToken('}', lastEnd)]),
+        ...(outerClose ? [] : [this.missingToken('}', lastEnd)])
+      ];
       return {
         kind: 'multipleConcatenation',
         repeat: first,
-        elements,
+        elements: elements ?? [this.missingExpression('expression')],
         start: open.start,
-        end: close?.end ?? innerClose.end
+        end: outerClose?.end ?? innerClose?.end ?? lastEnd,
+        missing: missing.length ? missing : undefined
       };
     }
 
@@ -522,20 +582,16 @@ class ExpressionParser {
     while (this.peek()?.value === ',') {
       this.consume();
       const element = this.parseExpression(0, new Set([',', '}']));
-      if (!element) {
-        return undefined;
-      }
-      elements.push(element);
+      elements.push(element ?? this.missingExpression('expression'));
     }
-    if (this.peek()?.value !== '}') {
-      return undefined;
-    }
-    const close = this.consume();
+    const close = this.peek()?.value === '}' ? this.consume() : undefined;
+    const missing = close ? undefined : [this.missingToken('}', elements[elements.length - 1].end)];
     return {
       kind: 'concatenation',
       elements,
       start: open.start,
-      end: close?.end ?? elements[elements.length - 1].end
+      end: close?.end ?? elements[elements.length - 1].end,
+      missing
     };
   }
 
@@ -543,10 +599,9 @@ class ExpressionParser {
     const elements: VerilogExpressionAst[] = [];
     while (this.peek() && this.peek()?.value !== closeValue) {
       const element = this.parseExpression(0, new Set([',', closeValue]));
-      if (!element) {
-        return undefined;
+      if (element) {
+        elements.push(element);
       }
-      elements.push(element);
       if (this.peek()?.value === ',') {
         this.consume();
         continue;
@@ -561,10 +616,7 @@ class ExpressionParser {
     if (!open || open.value !== '[') {
       return undefined;
     }
-    const first = this.parseExpression(0, new Set([']', ':', '+:', '-:']));
-    if (!first) {
-      return undefined;
-    }
+    const first = this.parseExpression(0, new Set([']', ':', '+:', '-:'])) ?? this.missingExpression('expression');
 
     const separator = this.peek();
     if (separator?.value === ']') {
@@ -585,11 +637,9 @@ class ExpressionParser {
 
     if (separator?.value === ':') {
       this.consume();
-      const right = this.parseExpression(0, new Set([']']));
-      if (!right || this.peek()?.value !== ']') {
-        return undefined;
-      }
-      const close = this.consume();
+      const right = this.parseExpression(0, new Set([']'])) ?? this.missingExpression('expression');
+      const close = this.peek()?.value === ']' ? this.consume() : undefined;
+      const missing = close ? undefined : [this.missingToken(']', right.end)];
       return {
         kind: 'selectExpression',
         target,
@@ -598,20 +648,20 @@ class ExpressionParser {
           left: first,
           right,
           start: open.start,
-          end: close?.end ?? right.end
+          end: close?.end ?? right.end,
+          missing
         },
         start: target.start,
-        end: close?.end ?? right.end
+        end: close?.end ?? right.end,
+        missing
       };
     }
 
     const direction = this.readIndexedPartSelectDirection();
     if (direction) {
-      const width = this.parseExpression(0, new Set([']']));
-      if (!width || this.peek()?.value !== ']') {
-        return undefined;
-      }
-      const close = this.consume();
+      const width = this.parseExpression(0, new Set([']'])) ?? this.missingExpression('expression');
+      const close = this.peek()?.value === ']' ? this.consume() : undefined;
+      const missing = close ? undefined : [this.missingToken(']', width.end)];
       return {
         kind: 'selectExpression',
         target,
@@ -621,21 +671,37 @@ class ExpressionParser {
           direction,
           width,
           start: open.start,
-          end: close?.end ?? width.end
+          end: close?.end ?? width.end,
+          missing
         },
         start: target.start,
-        end: close?.end ?? width.end
+        end: close?.end ?? width.end,
+        missing
       };
     }
 
-    return undefined;
+    const missing = [this.missingToken(']', first.end)];
+    return {
+      kind: 'selectExpression',
+      target,
+      select: {
+        kind: 'bitSelect',
+        index: first,
+        start: open.start,
+        end: first.end,
+        missing
+      },
+      start: target.start,
+      end: first.end,
+      missing
+    };
   }
 
   private parseMember(target: VerilogExpressionAst): VerilogExpressionAst | undefined {
-    this.consume();
+    const dot = this.consume();
     const member = this.peek();
     if (!member || !isIdentifierLike(member.kind)) {
-      return undefined;
+      return this.errorExpression('Expected member name after dot.', target.start, dot?.end ?? target.end, [target]);
     }
     this.consume();
     return {
@@ -674,6 +740,60 @@ class ExpressionParser {
   private consume(): VerilogToken | undefined {
     return this.tokens[this.index++];
   }
+
+  wrapUnexpectedTrailingTokens(expression: VerilogExpressionAst): VerilogExpressionAst {
+    const token = this.peek();
+    if (!token) {
+      return expression;
+    }
+    return this.errorExpression(`Unexpected token '${token.value}' after expression.`, expression.start, lastToken(this.tokens).end, [expression], token.value);
+  }
+
+  private missingExpression(expected: string): VerilogErrorExpressionAst {
+    const token = this.peek();
+    if (token) {
+      return this.errorExpression(`Expected ${expected}.`, token.start, token.start, [], undefined, [this.missingToken(expected, token.start)]);
+    }
+    const offset = this.currentOffset();
+    return this.errorExpression(`Expected ${expected}.`, offset, offset, [], undefined, [this.missingToken(expected, offset)]);
+  }
+
+  private missingToken(expected: string, offset: number): VerilogMissingTokenAst {
+    return {
+      kind: 'missingToken',
+      expected,
+      message: `Missing token '${expected}'.`,
+      start: offset,
+      end: offset
+    };
+  }
+
+  private errorExpression(
+    message: string,
+    start: number,
+    end: number,
+    children: VerilogExpressionAst[],
+    unexpectedToken?: string,
+    missing?: VerilogMissingTokenAst[]
+  ): VerilogErrorExpressionAst {
+    return {
+      kind: 'errorExpression',
+      message,
+      children,
+      unexpectedToken,
+      missing,
+      start,
+      end
+    };
+  }
+
+  private currentOffset(): number {
+    return this.peek()?.start ?? this.tokens[this.index - 1]?.end ?? this.tokens[0]?.start ?? 0;
+  }
+}
+
+function lastToken(tokens: VerilogToken[]): VerilogToken {
+  return tokens[tokens.length - 1];
 }
 
 function leftAssociative(power: number): BinaryBindingPower {
@@ -985,6 +1105,8 @@ function constantWidth(
         constantWidth(expression.left, resolveIdentifier, resolveWidth),
         constantWidth(expression.right, resolveIdentifier, resolveWidth)
       );
+    case 'errorExpression':
+      return undefined;
     default:
       return undefined;
   }

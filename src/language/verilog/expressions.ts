@@ -4,7 +4,8 @@ import {
   ParsedVerilogNumberLiteral,
   VerilogConstantResolver,
   VerilogConstantWidthResolver,
-  VerilogExpressionAst
+  VerilogExpressionAst,
+  verilogExpressionHasError
 } from './exprAst';
 import { VerilogDecl, VerilogModule } from './model';
 
@@ -56,7 +57,7 @@ export function shouldReportWidthMismatch(expected: WidthInfo, actual: WidthInfo
 }
 
 export function widthOfExpressionAst(expression: VerilogExpressionAst | undefined, module: VerilogModule | undefined, overrides?: VerilogConstantOverrides): WidthInfo {
-  if (!expression) {
+  if (!expression || verilogExpressionHasError(expression)) {
     return {};
   }
   switch (expression.kind) {
@@ -111,7 +112,7 @@ export function evalExpressionConstant(expression: string, module?: VerilogModul
 }
 
 export function evalExpressionAstConstant(expression: VerilogExpressionAst | undefined, module?: VerilogModule, overrides?: VerilogConstantOverrides): bigint | undefined {
-  if (!expression) {
+  if (!expression || verilogExpressionHasError(expression)) {
     return undefined;
   }
   if (!module) {

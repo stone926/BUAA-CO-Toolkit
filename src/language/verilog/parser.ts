@@ -86,12 +86,15 @@ export type {
 
 export {
   parseVerilogExpression,
-  parseVerilogExpressionTokens
+  parseVerilogExpressionTokens,
+  verilogExpressionHasError
 } from './exprAst';
 
 export type {
   ParsedVerilogNumberLiteral,
-  VerilogExpressionAst
+  VerilogErrorExpressionAst,
+  VerilogExpressionAst,
+  VerilogMissingTokenAst
 } from './exprAst';
 
 export type {

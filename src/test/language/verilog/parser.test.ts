@@ -11,13 +11,15 @@ import {
   widthOfExpression,
   evalExpressionConstant,
   parseVerilogExpression,
+  verilogExpressionHasError,
   parseVerilog,
   parseModules,
   parseMacros,
   parseMacroUses,
   parseIncludes,
   moduleAtPosition,
-  buildTestbench
+  buildTestbench,
+  walkVerilogExpression
 } from '../../../language/verilog/parser';
 import { VerilogDecl, VerilogModule } from '../../../language/verilog/model';
 import { mergeCoSettings } from '../../../language/common/settings';
@@ -470,6 +472,39 @@ describe('parseVerilogExpression', () => {
     if (ast.elements[0].kind === 'multipleConcatenation') {
       expect(ast.elements[0].elements[0].kind).toBe('selectExpression');
     }
+  });
+
+  it('keeps recoverable subtrees when an expression is missing the right operand', () => {
+    const ast = parseVerilogExpression('a +');
+    expect(ast?.kind).toBe('binaryExpression');
+    expect(verilogExpressionHasError(ast)).toBe(true);
+
+    if (ast?.kind !== 'binaryExpression') {
+      return;
+    }
+    expect(ast.left.kind).toBe('identifier');
+    expect(ast.right.kind).toBe('errorExpression');
+    expect(ast.right.missing?.[0]?.kind).toBe('missingToken');
+
+    const identifiers: string[] = [];
+    walkVerilogExpression(ast, (expression) => {
+      if (expression.kind === 'identifier') {
+        identifiers.push(expression.name);
+      }
+    });
+    expect(identifiers).toContain('a');
+  });
+
+  it('records missing delimiters without dropping the inner expression tree', () => {
+    const ast = parseVerilogExpression('(a + b');
+    expect(ast?.kind).toBe('parenthesizedExpression');
+    expect(verilogExpressionHasError(ast)).toBe(true);
+
+    if (ast?.kind !== 'parenthesizedExpression') {
+      return;
+    }
+    expect(ast.missing?.[0]?.expected).toBe(')');
+    expect(ast.expression.kind).toBe('binaryExpression');
   });
 
   it('attaches assignment expression ASTs to parsed statements', () => {
