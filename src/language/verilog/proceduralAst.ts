@@ -1,6 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { assignmentTargetNamesFromTokens, findAssignmentOperator } from './assignmentAnalysis';
+import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
 
@@ -285,16 +285,14 @@ class ProceduralStatementParser {
       };
     }
 
-    const operatorIndex = findAssignmentOperator(tokens);
-    if (operatorIndex >= 0 && (tokens[operatorIndex].value === '=' || tokens[operatorIndex].value === '<=')) {
-      const lhsTokens = trimStatementLabel(tokens.slice(0, operatorIndex));
-      const rhsTokens = trimTrailingSemicolon(tokens.slice(operatorIndex + 1));
+    const assignment = parseAssignmentTokens(tokens);
+    if (assignment) {
       return {
         kind: 'assignment',
-        operator: tokens[operatorIndex].value as '=' | '<=',
-        targets: assignmentTargetNamesFromTokens(tokens),
-        lhs: parseVerilogExpressionTokens(lhsTokens),
-        rhs: parseVerilogExpressionTokens(rhsTokens),
+        operator: assignment.operator,
+        targets: assignment.targets.map((target) => target.name),
+        lhs: parseVerilogExpressionTokens(assignment.lhsTokens),
+        rhs: parseVerilogExpressionTokens(assignment.rhsTokens),
         range: tokenIndexRange(this.document, this.tokens, start, end),
         tokens
       };
@@ -443,37 +441,6 @@ function tokensRange(document: TextDocument, tokens: VerilogToken[]): Range {
   return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
 }
 
-function trimStatementLabel(tokens: VerilogToken[]): VerilogToken[] {
-  const colon = lastTopLevelToken(tokens, ':');
-  return colon >= 0 ? trimTokenList(tokens.slice(colon + 1)) : trimTokenList(tokens);
-}
-
-function lastTopLevelToken(tokens: VerilogToken[], value: string): number {
-  let result = -1;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-      result = index;
-    }
-  }
-  return result;
-}
-
 function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
   const parts: VerilogToken[][] = [];
   let start = 0;
@@ -502,11 +469,6 @@ function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[
   }
   parts.push(trimTokenList(tokens.slice(start)));
   return parts.filter((part) => part.length > 0);
-}
-
-function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {
-  const trimmed = trimTokenList(tokens);
-  return trimmed[trimmed.length - 1]?.value === ';' ? trimmed.slice(0, -1) : trimmed;
 }
 
 function trimTokenList(tokens: VerilogToken[]): VerilogToken[] {

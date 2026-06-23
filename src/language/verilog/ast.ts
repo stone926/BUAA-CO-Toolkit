@@ -19,7 +19,7 @@ import {
   VerilogAlwaysBlockAst,
   VerilogProceduralBlockAst
 } from './blockAst';
-import { findAssignmentOperator } from './assignmentAnalysis';
+import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 
 export interface VerilogAstDocument {
@@ -238,133 +238,13 @@ function buildStatementAst(statement: VerilogCstStatement, module?: VerilogModul
 }
 
 function assignmentExpressionAst(rawTokens: VerilogToken[]): VerilogAssignmentExpressionAst | undefined {
-  const tokens = trimTrailingSemicolon(rawTokens.filter((token) => token.kind !== 'eof'));
-  const operatorIndex = findAssignmentOperator(tokens);
-  if (operatorIndex < 0 || isDeclarationStatement(tokens)) {
+  const parsed = parseAssignmentTokens(rawTokens);
+  if (!parsed) {
     return undefined;
   }
-  const operator = tokens[operatorIndex].value;
-  if (operator !== '=' && operator !== '<=') {
-    return undefined;
-  }
-  const lhsStart = assignmentLhsStart(tokens, operatorIndex);
-  const lhsTokens = tokens.slice(lhsStart, operatorIndex);
-  const rhsTokens = tokens.slice(operatorIndex + 1);
-  const lhs = parseVerilogExpressionTokens(lhsTokens);
-  const rhs = parseVerilogExpressionTokens(rhsTokens);
-  return lhs && rhs ? { operator, lhs, rhs } : undefined;
-}
-
-function assignmentLhsStart(tokens: VerilogToken[], operatorIndex: number): number {
-  if (tokens[0]?.value === 'assign') {
-    return 1;
-  }
-  let start = 0;
-  while (start < operatorIndex) {
-    const token = tokens[start];
-    if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for') {
-      const open = nextTokenIndex(tokens, start + 1, '(');
-      if (open < 0) {
-        return start;
-      }
-      const close = findMatchingToken(tokens, open, '(', ')');
-      if (close < 0 || close >= operatorIndex) {
-        return start;
-      }
-      start = close + 1;
-      continue;
-    }
-    if (token.value === 'forever') {
-      start++;
-      continue;
-    }
-    if (token.value === '#') {
-      const next = skipDelayControl(tokens, start);
-      if (next <= start || next > operatorIndex) {
-        return start;
-      }
-      start = next;
-      continue;
-    }
-    break;
-  }
-
-  const label = lastTopLevelToken(tokens, ':', start, operatorIndex);
-  if (label >= 0) {
-    start = label + 1;
-  }
-
-  while (tokens[start]?.value === '#') {
-    const next = skipDelayControl(tokens, start);
-    if (next <= start || next > operatorIndex) {
-      break;
-    }
-    start = next;
-  }
-  return start;
-}
-
-function isDeclarationStatement(tokens: VerilogToken[]): boolean {
-  const first = tokens.find((token) => token.kind !== 'eof');
-  return Boolean(first && declarationKeywords.has(first.value));
-}
-
-function skipDelayControl(tokens: VerilogToken[], hashIndex: number): number {
-  if (tokens[hashIndex + 1]?.value === '(') {
-    const close = findMatchingToken(tokens, hashIndex + 1, '(', ')');
-    return close >= 0 ? close + 1 : hashIndex + 2;
-  }
-  return Math.min(tokens.length, hashIndex + 2);
-}
-
-function nextTokenIndex(tokens: VerilogToken[], start: number, value: string): number {
-  for (let index = start; index < tokens.length; index++) {
-    if (tokens[index].value === value) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
-  let depth = 0;
-  for (let index = openIndex; index < tokens.length; index++) {
-    if (tokens[index].value === openValue) {
-      depth++;
-    } else if (tokens[index].value === closeValue) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function lastTopLevelToken(tokens: VerilogToken[], value: string, from: number, to: number): number {
-  let result = -1;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = from; index < to; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-      result = index;
-    }
-  }
-  return result;
+  const lhs = parseVerilogExpressionTokens(parsed.lhsTokens);
+  const rhs = parseVerilogExpressionTokens(parsed.rhsTokens);
+  return lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined;
 }
 
 function classifyStatement(statement: VerilogCstStatement, module?: VerilogModule): VerilogStatementKind {
@@ -408,8 +288,4 @@ function documentRange(document: TextDocument): Range {
   const lines = document.getText().split(/\r?\n/);
   const lastLine = Math.max(0, lines.length - 1);
   return Range.create(0, 0, lastLine, lines[lastLine]?.length ?? 0);
-}
-
-function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {
-  return tokens[tokens.length - 1]?.value === ';' ? tokens.slice(0, -1) : tokens;
 }

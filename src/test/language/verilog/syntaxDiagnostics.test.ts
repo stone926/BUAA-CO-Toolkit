@@ -221,6 +221,16 @@ endmodule
     expect(result).not.toContain('syntax-malformed-declaration');
   });
 
+  it('does not treat comparison operators in assignment RHS as assignments', () => {
+    const result = syntaxCodes(`
+module ok(input a, input b, output reg y);
+    assign y = a <= b;
+    always @(*) y = a <= b;
+endmodule
+`.trim());
+    expect(result).not.toContain('syntax-malformed-assignment');
+  });
+
   it('reports missing operands inside delimited expressions', () => {
     const result = syntaxLines(`
 module broken(input a, output y);

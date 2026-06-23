@@ -571,6 +571,41 @@ endmodule
     }
   });
 
+  it('parses procedural assignment lhs after delay controls and statement labels', () => {
+    const text = `
+module m(output reg clk, output reg y);
+    initial begin
+        forever #5 clk = ~clk;
+        named: y <= clk;
+    end
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const tree = parsed.ast.modules[0].proceduralBlocks[0].statementTree;
+    const loop = tree.statements[0];
+    expect(loop?.kind).toBe('loop');
+    if (loop?.kind === 'loop') {
+      expect(loop.body.kind).toBe('assignment');
+      if (loop.body.kind === 'assignment') {
+        expect(loop.body.targets).toEqual(['clk']);
+        expect(loop.body.lhs?.kind).toBe('identifier');
+        if (loop.body.lhs?.kind === 'identifier') {
+          expect(loop.body.lhs.name).toBe('clk');
+        }
+      }
+    }
+
+    const labeled = tree.statements[1];
+    expect(labeled?.kind).toBe('assignment');
+    if (labeled?.kind === 'assignment') {
+      expect(labeled.targets).toEqual(['y']);
+      expect(labeled.lhs?.kind).toBe('identifier');
+      if (labeled.lhs?.kind === 'identifier') {
+        expect(labeled.lhs.name).toBe('y');
+      }
+    }
+  });
+
   it('attaches expression ASTs to declaration initializers and instance connections', () => {
     const text = `
 module child #(parameter WIDTH = 8)(input [WIDTH-1:0] din, output dout);

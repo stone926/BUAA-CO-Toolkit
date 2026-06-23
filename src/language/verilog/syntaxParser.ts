@@ -1,6 +1,7 @@
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
+import { parseAssignmentTokens } from './assignmentAnalysis';
 import { VerilogCstDocument } from './cst';
 import { parseVerilogExpressionTokens, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
 import { childrenOfVerilogExpression } from './exprAstUtils';
@@ -478,8 +479,8 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
   }
   const semicolon = firstTopLevelToken(tokens, ';', 1);
   const limit = semicolon >= 0 ? semicolon : tokens.length;
-  const operator = firstTopLevelAssignmentOperator(tokens, 1, limit);
-  if (operator < 0) {
+  const assignment = parseAssignmentTokens(tokens.slice(0, limit));
+  if (!assignment) {
     diagnostics.push(makeDiagnostic(
       tokenRange(document, tokens[0]),
       'Syntax error: continuous assign is missing an assignment operator.',
@@ -488,24 +489,24 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
     ));
     return;
   }
-  if (tokens.slice(1, operator).filter(isExpressionOperandToken).length === 0) {
+  if (assignment.lhsTokens.filter(isExpressionOperandToken).length === 0) {
     diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[operator]),
+      tokenRange(document, tokens[assignment.operatorIndex]),
       'Syntax error: assignment is missing a left-hand side.',
       DiagnosticSeverity.Error,
       'syntax-malformed-assignment'
     ));
   }
-  validateExpressionSyntax(document, tokens.slice(1, operator), diagnostics, 'syntax-malformed-assignment');
-  if (tokens.slice(operator + 1, limit).filter(isExpressionOperandToken).length === 0) {
+  validateExpressionSyntax(document, assignment.lhsTokens, diagnostics, 'syntax-malformed-assignment');
+  if (assignment.rhsTokens.filter(isExpressionOperandToken).length === 0) {
     diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[operator]),
+      tokenRange(document, tokens[assignment.operatorIndex]),
       'Syntax error: assignment is missing a right-hand side.',
       DiagnosticSeverity.Error,
       'syntax-malformed-assignment'
     ));
   }
-  validateExpressionSyntax(document, tokens.slice(operator + 1, limit), diagnostics, 'syntax-malformed-assignment');
+  validateExpressionSyntax(document, assignment.rhsTokens, diagnostics, 'syntax-malformed-assignment');
 }
 
 function validateExpressionSyntax(
@@ -918,14 +919,11 @@ function validateProceduralAssignments(document: TextDocument, tokens: VerilogTo
     const start = statementStart(tokens, index);
     const end = statementEnd(tokens, index);
     const statement = tokens.slice(start, end);
-    if (statement.some((item, itemIndex) => itemIndex === 0 && declarationKeywords.has(item.value))) {
+    const assignment = parseAssignmentTokens(statement);
+    if (!assignment || assignment.operatorIndex !== index - start) {
       continue;
     }
-    const relativeOperator = index - start;
-    const lhsStart = proceduralAssignmentLhsStart(statement, relativeOperator);
-    const lhs = statement.slice(lhsStart, relativeOperator);
-    const rhs = statement.slice(relativeOperator + 1);
-    if (lhs.filter(isExpressionOperandToken).length === 0) {
+    if (assignment.lhsTokens.filter(isExpressionOperandToken).length === 0) {
       diagnostics.push(makeDiagnostic(
         tokenRange(document, token),
         'Syntax error: assignment is missing a left-hand side.',
@@ -933,9 +931,9 @@ function validateProceduralAssignments(document: TextDocument, tokens: VerilogTo
         'syntax-malformed-assignment'
       ));
     } else {
-      validateExpressionSyntax(document, lhs, diagnostics, 'syntax-malformed-assignment');
+      validateExpressionSyntax(document, assignment.lhsTokens, diagnostics, 'syntax-malformed-assignment');
     }
-    if (rhs.filter(isExpressionOperandToken).length === 0) {
+    if (assignment.rhsTokens.filter(isExpressionOperandToken).length === 0) {
       diagnostics.push(makeDiagnostic(
         tokenRange(document, token),
         'Syntax error: assignment is missing a right-hand side.',
@@ -943,58 +941,12 @@ function validateProceduralAssignments(document: TextDocument, tokens: VerilogTo
         'syntax-malformed-assignment'
       ));
     } else {
-      validateExpressionSyntax(document, rhs, diagnostics, 'syntax-malformed-assignment');
+      validateExpressionSyntax(document, assignment.rhsTokens, diagnostics, 'syntax-malformed-assignment');
     }
     if (tokens[end]?.value !== ';' && tokens[index - 1]?.value !== '<' && tokens[index - 1]?.value !== '>') {
       reportMissingSemicolon(document, statement[0] ?? token, statement, diagnostics);
     }
   }
-}
-
-function proceduralAssignmentLhsStart(statement: VerilogToken[], operatorIndex: number): number {
-  let start = 0;
-  while (start < operatorIndex) {
-    const token = statement[start];
-    if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for') {
-      const open = nextSignificantTokenIndex(statement, start + 1);
-      if (open < 0 || statement[open].value !== '(') {
-        return start;
-      }
-      const close = findMatchingToken(statement, open, '(', ')');
-      if (close < 0 || close >= operatorIndex) {
-        return start;
-      }
-      start = close + 1;
-      continue;
-    }
-    if (token.value === 'forever') {
-      start++;
-      continue;
-    }
-    if (token.value === '#') {
-      const next = skipDelayControl(statement, start);
-      if (next <= start || next > operatorIndex) {
-        return start;
-      }
-      start = next;
-      continue;
-    }
-    break;
-  }
-
-  const label = lastTopLevelToken(statement, ':', start, operatorIndex);
-  if (label >= 0) {
-    start = label + 1;
-  }
-
-  while (statement[start]?.value === '#') {
-    const next = skipDelayControl(statement, start);
-    if (next <= start || next > operatorIndex) {
-      break;
-    }
-    start = next;
-  }
-  return start;
 }
 
 function collectNumberLiteralDiagnostics(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
@@ -1098,31 +1050,6 @@ function reportMissingSemicolon(
   ));
 }
 
-function firstTopLevelAssignmentOperator(tokens: VerilogToken[], from: number, to: number): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = from; index < to; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if ((token.value === '=' || token.value === '<=') && paren === 0 && bracket === 0 && brace === 0) {
-      return index;
-    }
-  }
-  return -1;
-}
-
 function firstTopLevelToken(tokens: VerilogToken[], value: string, from: number): number {
   let paren = 0;
   let bracket = 0;
@@ -1146,32 +1073,6 @@ function firstTopLevelToken(tokens: VerilogToken[], value: string, from: number)
     }
   }
   return -1;
-}
-
-function lastTopLevelToken(tokens: VerilogToken[], value: string, from: number, to: number): number {
-  let result = -1;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = from; index < to; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-      result = index;
-    }
-  }
-  return result;
 }
 
 function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
