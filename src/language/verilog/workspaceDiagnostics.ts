@@ -18,6 +18,15 @@ import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagno
 import { collectWorkspaceDriverDiagnostics } from './driverDiagnostics';
 import { collectWorkspaceUsageDiagnostics } from './usageDiagnostics';
 
+interface WorkspaceDiagnosticSummary {
+  version: number;
+  numericValues: Set<bigint>;
+  memoryDepths: Set<number>;
+  instanceModuleNamesLower: Set<string>;
+}
+
+const workspaceSummaryCache = new WeakMap<VerilogWorkspaceIndex, WorkspaceDiagnosticSummary>();
+
 export function addVerilogWorkspaceDiagnostics(
   document: TextDocument,
   settings: CoSettings,
@@ -33,7 +42,7 @@ export function addVerilogWorkspaceDiagnostics(
     diagnostics.push(...collectWorkspaceDriverDiagnostics(document, resolved, index));
     diagnostics.push(...collectWorkspaceUsageDiagnostics(document, settings, resolved, index));
   }
-  diagnostics.push(...getWorkspaceProjectDiagnostics(document, settings, index, resolved));
+  diagnostics.push(...getWorkspaceProjectDiagnostics(settings, index, resolved, workspaceDiagnosticSummary(index)));
   return diagnostics;
 }
 
@@ -96,7 +105,7 @@ function resolveInstanceTarget(index: VerilogWorkspaceIndex, localModules: Veril
 }
 
 function hasInstanceOfModule(index: VerilogWorkspaceIndex, localModules: VerilogModule[], moduleName: string): boolean {
-  return [...index.indexedModules(), ...localModules].some((module) =>
+  return index.moduleReferenceLocations(moduleName).length > 0 || localModules.some((module) =>
     module.instances.some((instance) => instance.moduleName === moduleName)
   );
 }
@@ -113,7 +122,12 @@ function formatUri(uri: string): string {
   }
 }
 
-function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
+function getWorkspaceProjectDiagnostics(
+  settings: CoSettings,
+  index: VerilogWorkspaceIndex,
+  parsed: VerilogParseResult,
+  summary: WorkspaceDiagnosticSummary
+): Diagnostic[] {
   if (!settings.verilog.lint.courseRules) {
     return [];
   }
@@ -132,13 +146,13 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
   const topRange = top.selectionRange;
 
   if (profile === 'P4' || profile === 'P5') {
-    if (!hasWorkspaceNumericValue(index, 0x3000)) {
+    if (!hasWorkspaceNumericValue(summary, 0x3000)) {
       diagnostics.push(makeDiagnostic(topRange, `${profile}: PC should reset to 0x00003000; no obvious 0x3000 reset constant was found in the workspace.`, DiagnosticSeverity.Information, 'project-pc-reset'));
     }
-    if (!hasMemoryDepth(index, 4096)) {
+    if (!hasMemoryDepth(summary, 4096)) {
       diagnostics.push(makeDiagnostic(topRange, `${profile}: IM is expected to be 16 KiB (4096 32-bit words).`, DiagnosticSeverity.Information, 'project-im-size'));
     }
-    if (!hasMemoryDepth(index, 3072)) {
+    if (!hasMemoryDepth(summary, 3072)) {
       diagnostics.push(makeDiagnostic(topRange, `${profile}: DM is expected to be 12 KiB (3072 32-bit words).`, DiagnosticSeverity.Information, 'project-dm-size'));
     }
   }
@@ -147,7 +161,7 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
     for (const required of ['CPU', 'Bridge', 'TC']) {
       if (!hasModuleCaseInsensitive(index, required)) {
         diagnostics.push(makeDiagnostic(topRange, `P7: workspace should contain module '${required}'.`, DiagnosticSeverity.Warning, `p7-module-${required.toLowerCase()}`));
-      } else if (!hasInstanceOfModuleCaseInsensitive(index, required) && required.toLowerCase() !== top.name.toLowerCase()) {
+      } else if (!hasInstanceOfModuleCaseInsensitive(summary, parsed.modules, required) && required.toLowerCase() !== top.name.toLowerCase()) {
         diagnostics.push(makeDiagnostic(topRange, `P7: module '${required}' exists but is not obviously instantiated in the design hierarchy.`, DiagnosticSeverity.Information, `p7-instance-${required.toLowerCase()}`));
       }
     }
@@ -161,7 +175,7 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
         }
       }
     }
-    if (!hasWorkspaceNumericValue(index, 0x4180)) {
+    if (!hasWorkspaceNumericValue(summary, 0x4180)) {
       diagnostics.push(makeDiagnostic(topRange, 'P7: exception entry address should be 0x00004180; no obvious 0x4180 constant was found in the workspace.', DiagnosticSeverity.Warning, 'p7-exception-entry'));
     }
   }
@@ -169,40 +183,72 @@ function getWorkspaceProjectDiagnostics(document: TextDocument, settings: CoSett
   return diagnostics;
 }
 
-function hasWorkspaceNumericValue(index: VerilogWorkspaceIndex, expected: number): boolean {
-  for (const file of index.indexedFiles()) {
-    for (const token of file.cst.codeTokens) {
-      if (token.kind === 'number' && numericTokenValue(token) === BigInt(expected)) {
-        return true;
-      }
+function workspaceDiagnosticSummary(index: VerilogWorkspaceIndex): WorkspaceDiagnosticSummary {
+  const cached = workspaceSummaryCache.get(index);
+  if (cached?.version === index.version) {
+    return cached;
+  }
+  const summary: WorkspaceDiagnosticSummary = {
+    version: index.version,
+    numericValues: new Set(),
+    memoryDepths: new Set(),
+    instanceModuleNamesLower: new Set()
+  };
+  for (const module of index.indexedModules()) {
+    for (const instance of module.instances) {
+      summary.instanceModuleNamesLower.add(instance.moduleName.toLowerCase());
     }
   }
-  return false;
-}
-
-function hasMemoryDepth(index: VerilogWorkspaceIndex, depth: number): boolean {
-  const last = depth - 1;
   for (const file of index.indexedFiles()) {
     const tokens = file.cst.codeTokens;
-    for (let index = 0; index + 4 < tokens.length; index++) {
+    for (const token of tokens) {
+      const value = numericTokenValue(token);
+      if (value !== undefined) {
+        summary.numericValues.add(value);
+      }
+    }
+    for (let tokenIndex = 0; tokenIndex + 4 < tokens.length; tokenIndex++) {
       if (
-        tokens[index].value === '[' &&
-        tokens[index + 2].value === ':' &&
-        tokens[index + 4].value === ']' &&
-        bracketBoundsMatch(tokens[index + 1], tokens[index + 3], last)
+        tokens[tokenIndex].value === '[' &&
+        tokens[tokenIndex + 2].value === ':' &&
+        tokens[tokenIndex + 4].value === ']'
       ) {
-        return true;
+        const depth = memoryDepthFromBounds(tokens[tokenIndex + 1], tokens[tokenIndex + 3]);
+        if (depth !== undefined) {
+          summary.memoryDepths.add(depth);
+        }
       }
     }
   }
-  return false;
+  workspaceSummaryCache.set(index, summary);
+  return summary;
 }
 
-function bracketBoundsMatch(left: VerilogToken, right: VerilogToken, last: number): boolean {
+function hasWorkspaceNumericValue(summary: WorkspaceDiagnosticSummary, expected: number): boolean {
+  return summary.numericValues.has(BigInt(expected));
+}
+
+function hasMemoryDepth(summary: WorkspaceDiagnosticSummary, depth: number): boolean {
+  return summary.memoryDepths.has(depth);
+}
+
+function memoryDepthFromBounds(left: VerilogToken, right: VerilogToken): number | undefined {
   const leftValue = numericTokenValue(left);
   const rightValue = numericTokenValue(right);
-  return (leftValue === 0n && rightValue === BigInt(last)) ||
-    (leftValue === BigInt(last) && rightValue === 0n);
+  if (leftValue === 0n) {
+    return safeDepthFromLastIndex(rightValue);
+  }
+  if (rightValue === 0n) {
+    return safeDepthFromLastIndex(leftValue);
+  }
+  return undefined;
+}
+
+function safeDepthFromLastIndex(value: bigint | undefined): number | undefined {
+  if (value === undefined || value < 0n || value >= BigInt(Number.MAX_SAFE_INTEGER)) {
+    return undefined;
+  }
+  return Number(value + 1n);
 }
 
 function numericTokenValue(token: VerilogToken): bigint | undefined {
@@ -278,8 +324,11 @@ function findModuleCaseInsensitive(index: VerilogWorkspaceIndex, name: string): 
   return index.findModuleCaseInsensitive(name);
 }
 
-function hasInstanceOfModuleCaseInsensitive(index: VerilogWorkspaceIndex, moduleName: string): boolean {
-  return index.hasInstanceOfModuleCaseInsensitive(moduleName);
+function hasInstanceOfModuleCaseInsensitive(summary: WorkspaceDiagnosticSummary, localModules: VerilogModule[], moduleName: string): boolean {
+  const lower = moduleName.toLowerCase();
+  return summary.instanceModuleNamesLower.has(lower) || localModules.some((module) =>
+    module.instances.some((instance) => instance.moduleName.toLowerCase() === lower)
+  );
 }
 
 function hasDeclarationCaseInsensitive(module: VerilogModule, name: string): boolean {

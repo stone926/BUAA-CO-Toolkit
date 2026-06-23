@@ -89,4 +89,34 @@ endmodule
 
     expect(codes(top, [child, top], { project: { topModule: 'top' } })).toContain('multi-driver');
   });
+
+  it('invalidates cached workspace project summaries when the index changes', () => {
+    const settings = mergeCoSettings({ project: { profile: 'P4', topModule: 'mips' } });
+    const uri = 'test://workspace-diagnostics/project-summary/mips.v';
+    const index = new VerilogWorkspaceIndex();
+    const incomplete = TextDocument.create(uri, 'verilog', 1, 'module mips; endmodule');
+    index.updateDocument(incomplete, settings);
+
+    const firstCodes = getVerilogDiagnostics(incomplete, settings, index)
+      .map((diagnostic) => diagnostic.code);
+    expect(firstCodes).toContain('project-pc-reset');
+    expect(firstCodes).toContain('project-im-size');
+    expect(firstCodes).toContain('project-dm-size');
+
+    const complete = TextDocument.create(uri, 'verilog', 2, `
+module mips;
+    reg [31:0] pc;
+    reg [31:0] im [0:4095];
+    reg [31:0] dm [3071:0];
+    initial pc = 32'h00003000;
+endmodule
+`);
+    index.updateDocument(complete, settings);
+
+    const secondCodes = getVerilogDiagnostics(complete, settings, index)
+      .map((diagnostic) => diagnostic.code);
+    expect(secondCodes).not.toContain('project-pc-reset');
+    expect(secondCodes).not.toContain('project-im-size');
+    expect(secondCodes).not.toContain('project-dm-size');
+  });
 });
