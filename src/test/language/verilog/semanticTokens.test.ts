@@ -103,4 +103,21 @@ describe('Verilog semantic tokens', () => {
       expect(tokens).toContainEqual(token);
     }
   });
+
+  it('highlights syntax tokens from AST statements', () => {
+    const text = [
+      'module m;',
+      "    assign y = 4'hf;",
+      'endmodule'
+    ].join('\n');
+    const tokens = decode(getVerilogSemanticTokens(doc(text), mergeCoSettings({}), new VerilogWorkspaceIndex()).data);
+    const keywordType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogKeyword');
+    const numberType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogNumber');
+    const punctuationType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogPunctuation');
+
+    expect(tokens).toContainEqual({ line: 0, character: 0, length: 6, type: keywordType });
+    expect(tokens).toContainEqual({ line: 0, character: 8, length: 1, type: punctuationType });
+    expect(tokens).toContainEqual({ line: 1, character: 15, length: 4, type: numberType });
+    expect(tokens).toContainEqual({ line: 1, character: 19, length: 1, type: punctuationType });
+  });
 });

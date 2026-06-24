@@ -17,7 +17,8 @@ import {
 import { getCachedVerilogParse } from './parseCache';
 import { VerilogSemanticReference, VerilogSemanticSymbol } from './semanticModel';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
-import { verilogTokenRange } from './cst';
+import type { VerilogAstDocument, VerilogStatementAst } from './ast';
+import type { VerilogToken } from './lexer';
 
 interface SemanticTokenCandidate {
   range: Range;
@@ -60,11 +61,20 @@ function buildVerilogSemanticTokens(document: TextDocument, index: VerilogWorksp
     }
   }
 
-  for (const tokenNode of parsed.cst.tokens) {
+  for (const trivia of parsed.ast.trivia) {
+    const text = document.getText(trivia.range);
+    if (trivia.kind === 'comment') {
+      pushTokenText(tokens, pushed, trivia.range, text, 'verilogComment');
+    } else {
+      pushStringTokenParts(tokens, pushed, trivia.range, text);
+    }
+  }
+
+  for (const tokenNode of astTokens(parsed.ast)) {
     if (tokenNode.kind === 'eof') {
       continue;
     }
-    const range = verilogTokenRange(document, tokenNode);
+    const range = tokenRange(document, tokenNode);
     const token = tokenNode.value;
     if (tokenNode.kind === 'comment') {
       pushTokenText(tokens, pushed, range, token, 'verilogComment');
@@ -124,6 +134,27 @@ function buildVerilogSemanticTokens(document: TextDocument, index: VerilogWorksp
     );
   }
   return builder.build();
+}
+
+function astTokens(ast: VerilogAstDocument): VerilogToken[] {
+  const tokens: VerilogToken[] = [];
+  for (const statement of ast.topLevelStatements) {
+    tokens.push(...statementTokens(statement));
+  }
+  for (const moduleAst of ast.modules) {
+    for (const statement of moduleAst.items) {
+      tokens.push(...statementTokens(statement));
+    }
+  }
+  return tokens;
+}
+
+function statementTokens(statement: VerilogStatementAst): VerilogToken[] {
+  return statement.tokens;
+}
+
+function tokenRange(document: TextDocument, token: VerilogToken): Range {
+  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }
 
 interface VerilogSemanticTokenContext {
