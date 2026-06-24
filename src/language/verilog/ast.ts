@@ -28,9 +28,15 @@ export interface VerilogAstDocument {
   uri: string;
   range: Range;
   cst: VerilogCstDocument;
+  trivia: VerilogTriviaAst[];
   preprocessor: VerilogPreprocessorAst[];
   modules: VerilogModuleAst[];
   topLevelStatements: VerilogStatementAst[];
+}
+
+export interface VerilogTriviaAst {
+  kind: 'comment' | 'string';
+  range: Range;
 }
 
 export type VerilogPreprocessorAst =
@@ -165,6 +171,12 @@ export function buildVerilogAst(
     uri: document.uri,
     range: documentRange(document),
     cst,
+    trivia: cst.tokens
+      .filter((token): token is VerilogToken & { kind: 'comment' | 'string' } => token.kind === 'comment' || token.kind === 'string')
+      .map((token): VerilogTriviaAst => ({
+        kind: token.kind,
+        range: Range.create(document.positionAt(token.start), document.positionAt(token.end))
+      })),
     preprocessor: [
       ...macros.map((macro): VerilogMacroDefinitionAst => ({
         kind: 'macroDefinition',

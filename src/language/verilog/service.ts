@@ -53,7 +53,6 @@ import { evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './
 import type { VerilogConstantOverrides, WidthInfo } from './expressions';
 import { parameterOverridesForInstance } from './parameterOverrides';
 import { preprocessorDirectives } from './preprocessor';
-import { VerilogToken } from './lexer';
 import type { VerilogExpressionAst } from './exprAst';
 import type { VerilogModuleAst, VerilogStatementAst } from './ast';
 import type { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
@@ -168,9 +167,7 @@ export function getVerilogDiagnostics(document: TextDocument, settings: CoSettin
 export function getVerilogCompletions(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): CompletionItem[] {
   const parsed = getCachedVerilogParse(document, settings, false);
 
-  const offset = document.offsetAt(position);
-  const cursorToken = tokenAtOffset(parsed.cst.codeTokens, offset);
-  if (cursorToken && (cursorToken.kind === 'comment' || cursorToken.kind === 'string')) {
+  if (triviaAtPosition(parsed.ast, position)) {
     return [];
   }
 
@@ -1922,21 +1919,8 @@ function dedupeCompletionItems(items: CompletionItem[]): CompletionItem[] {
   return result;
 }
 
-function tokenAtOffset(tokens: VerilogToken[], offset: number): VerilogToken | undefined {
-  let low = 0;
-  let high = tokens.length - 1;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const token = tokens[mid];
-    if (offset < token.start) {
-      high = mid - 1;
-    } else if (offset > token.end) {
-      low = mid + 1;
-    } else {
-      return token;
-    }
-  }
-  return undefined;
+function triviaAtPosition(ast: ReturnType<typeof getCachedVerilogParse>['ast'], position: Position): boolean {
+  return ast.trivia.some((item) => containsPosition(item.range, position));
 }
 
 function dedupeLocations(locations: Location[]): Location[] {

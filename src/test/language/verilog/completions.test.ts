@@ -17,6 +17,14 @@ describe('Verilog completions', () => {
     completions = getVerilogCompletions(current, { line: 1, character: 2 }, defaultCoSettings, index);
     expect(completions.some((item) => item.label === 'Other')).toBe(true);
   });
+
+  it('does not offer completions inside comments or string literals', () => {
+    const index = new VerilogWorkspaceIndex();
+    const current = doc('file:///top.v', 'module top;\n  // wir\n  initial $display("wir");\nendmodule\n');
+
+    expect(getVerilogCompletions(current, { line: 1, character: 7 }, defaultCoSettings, index)).toHaveLength(0);
+    expect(getVerilogCompletions(current, { line: 2, character: 22 }, defaultCoSettings, index)).toHaveLength(0);
+  });
 });
 
 function doc(uri: string, text: string): TextDocument {
