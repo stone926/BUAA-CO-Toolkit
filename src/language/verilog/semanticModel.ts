@@ -20,7 +20,6 @@ import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
 import {
-  findMatchingTokenForward as findMatchingToken,
   trimTrailingSemicolonTokens,
   verilogTokenRange
 } from './tokenUtils';
@@ -475,53 +474,6 @@ function dedupeDecls(declarations: VerilogDecl[]): VerilogDecl[] {
   return result;
 }
 
-function looksLikeInstanceStatement(module: VerilogModule, tokens: VerilogToken[]): boolean {
-  const first = tokens[0];
-  if (!first || !isIdentifierToken(first) || first.value === module.name) {
-    return false;
-  }
-  if (declarationKinds.has(first.value) || proceduralKeywords.has(first.value)) {
-    return false;
-  }
-  let index = 1;
-  if (tokens[index]?.value === '#') {
-    if (tokens[index + 1]?.value !== '(') {
-      return false;
-    }
-    const close = findMatchingToken(tokens, index + 1, '(', ')');
-    if (close < 0) {
-      return false;
-    }
-    index = close + 1;
-  }
-  return Boolean(isIdentifierToken(tokens[index]) && (tokens[index + 1]?.value === '(' || tokens[index + 1]?.value === ';'));
-}
-
-const proceduralKeywords = new Set([
-  'always',
-  'initial',
-  'begin',
-  'end',
-  'if',
-  'else',
-  'case',
-  'casex',
-  'casez',
-  'endcase',
-  'for',
-  'forever',
-  'repeat',
-  'while',
-  'task',
-  'endtask',
-  'function',
-  'endfunction'
-]);
-
-function isIdentifierToken(token: VerilogToken | undefined): token is VerilogToken {
-  return Boolean(token && token.kind === 'identifier');
-}
-
 function referenceKindForSymbol(symbol: VerilogSemanticSymbol | undefined): VerilogSemanticReferenceKind {
   if (!symbol) {
     return 'unresolved';
@@ -655,7 +607,7 @@ function collectAstDrivenModuleReferences(
     if (declarationKinds.has(first.value)) {
       continue;
     }
-    if (looksLikeInstanceStatement(module, tokens)) {
+    if (statementAst.kind === 'instance') {
       continue;
     }
     const scope = scopeAtPosition(moduleScope, blockScopes, statementAst.range.start);

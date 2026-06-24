@@ -1,5 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { rangesEqual } from '../common/lsp';
 import { VerilogLexDiagnostic, VerilogToken } from './lexer';
 import {
   VerilogDecl,
@@ -283,7 +284,7 @@ function declAst(decl: VerilogDecl): VerilogDeclAst {
 function buildStatementAst(statement: VerilogStatementSource, module?: VerilogModule): VerilogStatementAst {
   const assignment = assignmentExpressionAst(statement.tokens);
   return {
-    kind: classifyStatement(statement.tokens, module),
+    kind: classifyStatement(statement, module),
     range: statement.range,
     start: statement.start,
     end: statement.end,
@@ -402,10 +403,14 @@ function subroutineName(tokens: VerilogToken[], start: number, end: number): str
   return undefined;
 }
 
-function classifyStatement(tokens: VerilogToken[], module?: VerilogModule): VerilogStatementKind {
+function classifyStatement(statement: VerilogStatementSource, module?: VerilogModule): VerilogStatementKind {
+  const tokens = statement.tokens;
   const first = tokens.find((token) => token.kind !== 'eof');
   if (!first) {
     return 'other';
+  }
+  if (module && module.instances.some((instance) => rangesEqual(instance.range, statement.range))) {
+    return 'instance';
   }
   if (first.kind === 'directive') {
     return 'preprocessor';
@@ -421,9 +426,6 @@ function classifyStatement(tokens: VerilogToken[], module?: VerilogModule): Veri
   }
   if (first.value === 'always' || first.value === 'initial') {
     return 'proceduralBlock';
-  }
-  if (module && first.kind === 'identifier' && first.value !== module.name) {
-    return 'instance';
   }
   return 'other';
 }

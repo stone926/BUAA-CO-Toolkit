@@ -522,6 +522,26 @@ endmodule
     }
   });
 
+  it('classifies module item instances from parsed instance ranges', () => {
+    const text = `
+module child(input a);
+endmodule
+module top(input a);
+    wire foo;
+    child u_child(.a(a));
+    foo = a;
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const topAst = parsed.ast.modules.find((module) => module.name === 'top');
+    const instanceStatement = topAst?.items.find((item) => item.tokens.some((token) => token.value === 'u_child'));
+    const bareAssignmentStatement = topAst?.items.find((item) => item.tokens[0]?.value === 'foo');
+
+    expect(instanceStatement?.kind).toBe('instance');
+    expect(bareAssignmentStatement?.kind).toBe('other');
+    expect(bareAssignmentStatement?.assignment?.rhs.kind).toBe('identifier');
+  });
+
   it('attaches procedural statement trees to parsed blocks', () => {
     const text = `
 module m(input sel, input [1:0] op, input a, input b, input c, output reg y);

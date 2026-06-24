@@ -83,6 +83,22 @@ describe('Verilog AST and semantic model', () => {
     expect(has(text.indexOf('(clk)') + 1)).toBe(true);
   });
 
+  it('uses AST statement kind instead of instance token heuristics for module item references', () => {
+    const text = [
+      'module top(input a);',
+      '    wire foo;',
+      '    foo = a;',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const lhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('foo =')));
+    const rhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('= a') + 2));
+
+    expect(lhsUse?.symbol?.name).toBe('foo');
+    expect(rhsUse?.symbol?.name).toBe('a');
+  });
+
   it('keeps block-local declarations in the nearest scope', () => {
     const text = [
       'module scoped(input clk, input [3:0] src);',
