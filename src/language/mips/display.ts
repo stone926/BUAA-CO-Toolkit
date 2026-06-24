@@ -183,12 +183,12 @@ export function cp0Markdown(register: MipsCp0RegisterInfo): string {
   return lines.join('\n');
 }
 
-export function syscallByOperand(operand: string | MipsOperandAst): MipsSyscallInfo | undefined {
+export function syscallByOperand(operand: MipsOperandAst): MipsSyscallInfo | undefined {
   const value = operandIntegerValue(operand);
   return value === undefined ? undefined : syscallsByCode.get(value);
 }
 
-export function cp0ByOperand(operand: string | MipsOperandAst): MipsCp0RegisterInfo | undefined {
+export function cp0ByOperand(operand: MipsOperandAst): MipsCp0RegisterInfo | undefined {
   const value = operandIntegerValue(operand, true);
   return value === undefined ? undefined : cp0RegistersByNumber.get(value);
 }
@@ -417,11 +417,11 @@ function parseIntegerOrCharLiteral(operand: string): number | undefined {
   return charValue === undefined ? parseIntegerLiteral(operand) : charValue;
 }
 
-function operandIntegerValue(operand: string | MipsOperandAst, stripRegisterPrefix = false): number | undefined {
-  if (typeof operand !== 'string' && operand.kind === 'integer') {
+function operandIntegerValue(operand: MipsOperandAst, stripRegisterPrefix = false): number | undefined {
+  if (operand.kind === 'integer') {
     return operand.value;
   }
-  const text = typeof operand === 'string' ? operand : operand.text;
+  const text = operand.text;
   return parseIntegerOrCharLiteral(stripRegisterPrefix && text.startsWith('$') ? text.slice(1) : text);
 }
 

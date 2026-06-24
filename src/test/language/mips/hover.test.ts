@@ -122,10 +122,6 @@ describe('getMipsHover instruction markdown', () => {
 
 describe('syscallByOperand', () => {
   it('resolves character literal service numbers', () => {
-    expect(syscallByOperand("'\\n'")?.code).toBe(10);
-  });
-
-  it('resolves service numbers from AST integer operands', () => {
     const parsed = parseMips(doc("li $v0, '\\n'"), defaultCoSettings);
     const operand = parsed.ast.statements[0].executable?.operands[1];
 
