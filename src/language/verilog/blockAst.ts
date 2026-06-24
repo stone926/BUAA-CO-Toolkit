@@ -1,5 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
 import { VerilogModule } from './model';
 import { parseVerilogProceduralBlockBody, VerilogBlockStatementAst } from './proceduralAst';
@@ -32,12 +33,41 @@ export interface VerilogSensitivityEventAst {
 export type VerilogProceduralBlockKind = 'always' | 'initial';
 export type VerilogProceduralControlKind = 'none' | 'event' | 'delay';
 
+export type VerilogProceduralControlAst =
+  | VerilogNoProceduralControlAst
+  | VerilogEventProceduralControlAst
+  | VerilogDelayProceduralControlAst;
+
+export interface VerilogNoProceduralControlAst {
+  kind: 'none';
+  range: Range;
+}
+
+export interface VerilogEventProceduralControlAst {
+  kind: 'event';
+  range: Range;
+  wildcard: boolean;
+  events: VerilogProceduralControlEventAst[];
+}
+
+export interface VerilogProceduralControlEventAst {
+  edge?: 'posedge' | 'negedge';
+  expression?: VerilogExpressionAst;
+}
+
+export interface VerilogDelayProceduralControlAst {
+  kind: 'delay';
+  range: Range;
+  expression?: VerilogExpressionAst;
+}
+
 export interface VerilogProceduralBlockAst {
   kind: VerilogProceduralBlockKind;
   headerRange: Range;
   range: Range;
   controlKind: VerilogProceduralControlKind;
   controlTokens: VerilogToken[];
+  control: VerilogProceduralControlAst;
   bodyTokens: VerilogToken[];
   statementTree: VerilogBlockStatementAst;
   bodyStart: number;
@@ -172,6 +202,10 @@ function parseProceduralBlockAt(document: TextDocument, tokens: VerilogToken[], 
   let cursor = keywordIndex + 1;
   let controlKind: VerilogProceduralControlKind = 'none';
   let controlTokens: VerilogToken[] = [];
+  let control: VerilogProceduralControlAst = {
+    kind: 'none',
+    range: Range.create(document.positionAt(keyword.end), document.positionAt(keyword.end))
+  };
   if (tokens[cursor]?.value === '@') {
     const end = parseEventControlEnd(tokens, cursor);
     if (end < 0) {
@@ -179,11 +213,13 @@ function parseProceduralBlockAt(document: TextDocument, tokens: VerilogToken[], 
     }
     controlKind = 'event';
     controlTokens = tokens.slice(cursor, end);
+    control = parseProceduralControl(document, controlKind, controlTokens);
     cursor = end;
   } else if (tokens[cursor]?.value === '#') {
     const end = parseDelayControlEnd(tokens, cursor);
     controlKind = 'delay';
     controlTokens = tokens.slice(cursor, end);
+    control = parseProceduralControl(document, controlKind, controlTokens);
     cursor = end;
   }
 
@@ -211,6 +247,7 @@ function parseProceduralBlockAt(document: TextDocument, tokens: VerilogToken[], 
     range: Range.create(document.positionAt(keyword.start), document.positionAt(bodyEnd)),
     controlKind,
     controlTokens,
+    control,
     bodyTokens: tokens.slice(cursor, endIndex + 1),
     statementTree: parseVerilogProceduralBlockBody(document, tokens.slice(cursor, endIndex + 1)),
     bodyStart,
@@ -234,6 +271,98 @@ function parseDelayControlEnd(tokens: VerilogToken[], hashIndex: number): number
     return close >= 0 ? close + 1 : cursor + 1;
   }
   return tokens[cursor] ? cursor + 1 : cursor;
+}
+
+function parseProceduralControl(document: TextDocument, kind: VerilogProceduralControlKind, tokens: VerilogToken[]): VerilogProceduralControlAst {
+  const range = tokensRange(document, tokens);
+  if (kind === 'event') {
+    const items = eventControlItems(tokens);
+    return {
+      kind: 'event',
+      range,
+      wildcard: items.some((item) => item.tokens.some((token) => token.value === '*')),
+      events: items
+        .map((item) => parseProceduralControlEvent(item.tokens))
+        .filter((item): item is VerilogProceduralControlEventAst => Boolean(item))
+    };
+  }
+  if (kind === 'delay') {
+    return {
+      kind: 'delay',
+      range,
+      expression: parseVerilogExpressionTokens(delayControlExpressionTokens(tokens))
+    };
+  }
+  return { kind: 'none', range };
+}
+
+function eventControlItems(tokens: VerilogToken[]): Array<{ tokens: VerilogToken[] }> {
+  const body = eventControlBodyTokens(tokens);
+  const items: Array<{ tokens: VerilogToken[] }> = [];
+  let start = 0;
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < body.length; index++) {
+    const token = body[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if ((token.value === 'or' || token.value === ',') && paren === 0 && bracket === 0 && brace === 0) {
+      pushControlItem(items, body.slice(start, index));
+      start = index + 1;
+    }
+  }
+  pushControlItem(items, body.slice(start));
+  return items;
+}
+
+function pushControlItem(items: Array<{ tokens: VerilogToken[] }>, tokens: VerilogToken[]): void {
+  const trimmed = tokens.filter((token) => token.kind !== 'eof');
+  if (trimmed.length) {
+    items.push({ tokens: trimmed });
+  }
+}
+
+function eventControlBodyTokens(tokens: VerilogToken[]): VerilogToken[] {
+  if (tokens[0]?.value !== '@') {
+    return tokens;
+  }
+  if (tokens[1]?.value === '(' && tokens[tokens.length - 1]?.value === ')') {
+    return tokens.slice(2, -1);
+  }
+  return tokens.slice(1);
+}
+
+function parseProceduralControlEvent(tokens: VerilogToken[]): VerilogProceduralControlEventAst | undefined {
+  if (!tokens.length || tokens.some((token) => token.value === '*')) {
+    return undefined;
+  }
+  const edge = tokens[0]?.value === 'posedge' || tokens[0]?.value === 'negedge'
+    ? tokens[0].value
+    : undefined;
+  const expressionTokens = edge ? tokens.slice(1) : tokens;
+  const expression = parseVerilogExpressionTokens(expressionTokens);
+  return expression ? { edge, expression } : undefined;
+}
+
+function delayControlExpressionTokens(tokens: VerilogToken[]): VerilogToken[] {
+  if (tokens[0]?.value !== '#') {
+    return tokens;
+  }
+  if (tokens[1]?.value === '(' && tokens[tokens.length - 1]?.value === ')') {
+    return tokens.slice(2, -1);
+  }
+  return tokens.slice(1);
 }
 
 function findMatchingForward(tokens: VerilogToken[], openIndex: number, open: string, close: string): number {
@@ -302,4 +431,11 @@ function nextIdentifierIndex(tokens: VerilogToken[], start: number): number {
     }
   }
   return -1;
+}
+
+function tokensRange(document: TextDocument, tokens: VerilogToken[]): Range {
+  if (!tokens.length) {
+    return Range.create(0, 0, 0, 0);
+  }
+  return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
 }

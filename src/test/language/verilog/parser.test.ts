@@ -593,10 +593,17 @@ endmodule
       { edge: 'posedge', signal: 'clk' },
       { edge: 'negedge', signal: 'reset' }
     ]);
+    const sequentialControl = parsed.ast.modules[0].proceduralBlocks[0].control;
+    expect(sequentialControl.kind).toBe('event');
+    if (sequentialControl.kind === 'event') {
+      expect(sequentialControl.events.map((event) => event.edge)).toEqual(['posedge', 'negedge']);
+      expect(sequentialControl.events.map((event) => event.expression?.kind)).toEqual(['identifier', 'identifier']);
+    }
 
     expect(combinational.sensitivity.wildcard).toBe(true);
     expect(combinational.sensitivity.hasPosedgeSignal).toBe(false);
     expect(combinational.sensitivity.hasNegedge).toBe(false);
+    expect(parsed.ast.modules[0].proceduralBlocks[1].control.kind).toBe('event');
   });
 
   it('parses procedural assignment lhs after delay controls and statement labels', () => {

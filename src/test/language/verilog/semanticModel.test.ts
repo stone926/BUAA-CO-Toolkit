@@ -247,8 +247,11 @@ describe('Verilog AST and semantic model', () => {
 
   it('collects procedural AST references in controls, conditions, and assignments', () => {
     const text = [
-      'module proc(input clk, input a, input [1:0] sel, output reg y);',
-      '    always @(posedge clk) begin',
+      'module proc #(parameter DELAY = 1)(input clk, input rst, input a, input [1:0] sel, output reg y);',
+      '    initial #(DELAY) begin',
+      '        y = clk;',
+      '    end',
+      '    always @(posedge clk or negedge rst) begin',
       '        if (a) begin',
       '            y <= sel[0];',
       '        end else begin',
@@ -260,11 +263,15 @@ describe('Verilog AST and semantic model', () => {
     const document = doc(text);
     const result = parseVerilog(document, defaultCoSettings, false);
 
-    const clockUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('clk) begin')));
+    const delayUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('DELAY)')));
+    const clockUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('posedge clk') + 'posedge '.length));
+    const resetUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('rst) begin')));
     const conditionUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('if (a)') + 4));
     const rhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('sel[0]')));
 
+    expect(delayUse?.symbol?.name).toBe('DELAY');
     expect(clockUse?.symbol?.name).toBe('clk');
+    expect(resetUse?.symbol?.name).toBe('rst');
     expect(conditionUse?.symbol?.name).toBe('a');
     expect(rhsUse?.symbol?.name).toBe('sel');
   });

@@ -15,7 +15,7 @@ import {
   verilogKeywords
 } from './model';
 import { VerilogAstDocument, VerilogModuleAst, VerilogSubroutineAst } from './ast';
-import type { VerilogProceduralBlockAst } from './blockAst';
+import type { VerilogProceduralBlockAst, VerilogProceduralControlAst } from './blockAst';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
@@ -713,8 +713,31 @@ function collectReferencesFromProceduralBlockAst(
   block: VerilogProceduralBlockAst
 ): void {
   const controlScope = scopeAtPosition(moduleScope, blockScopes, block.headerRange.start);
-  collectReferencesFromTokens(document, source, references, declarationRangeKeys, controlScope, module, block.controlTokens);
+  collectReferencesFromProceduralControlAst(document, references, declarationRangeKeys, controlScope, module, block.control);
   collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block.statementTree);
+}
+
+function collectReferencesFromProceduralControlAst(
+  document: TextDocument,
+  references: VerilogSemanticReference[],
+  declarationRangeKeys: Set<string>,
+  scope: VerilogSemanticScope,
+  module: VerilogModule,
+  control: VerilogProceduralControlAst
+): void {
+  if (control.kind === 'delay') {
+    if (control.expression) {
+      collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, control.expression, 0);
+    }
+    return;
+  }
+  if (control.kind === 'event') {
+    for (const event of control.events) {
+      if (event.expression) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, event.expression, 0);
+      }
+    }
+  }
 }
 
 function collectReferencesFromProceduralStatementAst(
