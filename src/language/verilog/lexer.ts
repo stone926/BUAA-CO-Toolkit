@@ -78,8 +78,12 @@ export function lexVerilog(text: string): VerilogLexResult {
   };
 }
 
-export function lexVerilogCst(text: string): VerilogLexResult {
+export function lexVerilogWithTrivia(text: string): VerilogLexResult {
   return scanVerilog(text, true);
+}
+
+export function lexVerilogCst(text: string): VerilogLexResult {
+  return lexVerilogWithTrivia(text);
 }
 
 function scanVerilog(text: string, includeComments: boolean): VerilogLexResult {
