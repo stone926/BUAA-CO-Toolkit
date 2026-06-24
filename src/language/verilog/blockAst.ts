@@ -1,6 +1,5 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { VerilogCstDocument, VerilogCstStatement } from './cst';
 import { VerilogToken } from './lexer';
 import { VerilogModule } from './model';
 import { parseVerilogProceduralBlockBody, VerilogBlockStatementAst } from './proceduralAst';
@@ -11,7 +10,6 @@ export interface VerilogAlwaysBlockAst {
   sensitivityTokens: VerilogToken[];
   bodyTokens: VerilogToken[];
   statementTree: VerilogBlockStatementAst;
-  statements: VerilogCstStatement[];
   bodyStart: number;
   bodyEnd: number;
   sequential: boolean;
@@ -29,22 +27,20 @@ export interface VerilogProceduralBlockAst {
   controlTokens: VerilogToken[];
   bodyTokens: VerilogToken[];
   statementTree: VerilogBlockStatementAst;
-  statements: VerilogCstStatement[];
   bodyStart: number;
   bodyEnd: number;
 }
 
-export function collectAlwaysBlocksFromCst(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule): VerilogAlwaysBlockAst[] {
+export function collectAlwaysBlocksFromTokens(document: TextDocument, tokens: VerilogToken[], module: VerilogModule): VerilogAlwaysBlockAst[] {
   const moduleStart = document.offsetAt(module.headerEnd);
   const moduleEnd = document.offsetAt(module.range.end);
-  const tokens = cst.codeTokens;
   const blocks: VerilogAlwaysBlockAst[] = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (token.start < moduleStart || token.end > moduleEnd || token.value !== 'always') {
       continue;
     }
-    const parsed = parseAlwaysBlockAt(document, cst, index, moduleEnd);
+    const parsed = parseAlwaysBlockAt(document, tokens, index, moduleEnd);
     if (parsed) {
       blocks.push(parsed);
     }
@@ -52,17 +48,16 @@ export function collectAlwaysBlocksFromCst(document: TextDocument, cst: VerilogC
   return blocks;
 }
 
-export function collectProceduralBlocksFromCst(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule): VerilogProceduralBlockAst[] {
+export function collectProceduralBlocksFromTokens(document: TextDocument, tokens: VerilogToken[], module: VerilogModule): VerilogProceduralBlockAst[] {
   const moduleStart = document.offsetAt(module.headerEnd);
   const moduleEnd = document.offsetAt(module.range.end);
-  const tokens = cst.codeTokens;
   const blocks: VerilogProceduralBlockAst[] = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (token.start < moduleStart || token.end > moduleEnd || (token.value !== 'always' && token.value !== 'initial')) {
       continue;
     }
-    const parsed = parseProceduralBlockAt(document, cst, index, moduleEnd);
+    const parsed = parseProceduralBlockAt(document, tokens, index, moduleEnd);
     if (parsed) {
       blocks.push(parsed);
     }
@@ -130,8 +125,7 @@ export function isOffsetInsideForControl(tokens: VerilogToken[], offset: number)
   return false;
 }
 
-function parseAlwaysBlockAt(document: TextDocument, cst: VerilogCstDocument, alwaysIndex: number, moduleEnd: number): VerilogAlwaysBlockAst | undefined {
-  const tokens = cst.codeTokens;
+function parseAlwaysBlockAt(document: TextDocument, tokens: VerilogToken[], alwaysIndex: number, moduleEnd: number): VerilogAlwaysBlockAst | undefined {
   const always = tokens[alwaysIndex];
   let cursor = alwaysIndex + 1;
   if (tokens[cursor]?.value !== '@') {
@@ -178,7 +172,6 @@ function parseAlwaysBlockAt(document: TextDocument, cst: VerilogCstDocument, alw
     sensitivityTokens,
     bodyTokens,
     statementTree: parseVerilogProceduralBlockBody(document, bodyTokens),
-    statements: cst.statements.filter((statement) => statement.end > bodyStart && statement.start < bodyEnd),
     bodyStart,
     bodyEnd,
     sequential,
@@ -186,8 +179,7 @@ function parseAlwaysBlockAt(document: TextDocument, cst: VerilogCstDocument, alw
   };
 }
 
-function parseProceduralBlockAt(document: TextDocument, cst: VerilogCstDocument, keywordIndex: number, moduleEnd: number): VerilogProceduralBlockAst | undefined {
-  const tokens = cst.codeTokens;
+function parseProceduralBlockAt(document: TextDocument, tokens: VerilogToken[], keywordIndex: number, moduleEnd: number): VerilogProceduralBlockAst | undefined {
   const keyword = tokens[keywordIndex];
   if (keyword.value !== 'always' && keyword.value !== 'initial') {
     return undefined;
@@ -237,7 +229,6 @@ function parseProceduralBlockAt(document: TextDocument, cst: VerilogCstDocument,
     controlTokens,
     bodyTokens: tokens.slice(cursor, endIndex + 1),
     statementTree: parseVerilogProceduralBlockBody(document, tokens.slice(cursor, endIndex + 1)),
-    statements: cst.statements.filter((statement) => statement.end > bodyStart && statement.start < bodyEnd),
     bodyStart,
     bodyEnd
   };

@@ -15,8 +15,8 @@ import {
   VerilogModule
 } from './model';
 import {
-  collectAlwaysBlocksFromCst,
-  collectProceduralBlocksFromCst,
+  collectAlwaysBlocksFromTokens,
+  collectProceduralBlocksFromTokens,
   VerilogAlwaysBlockAst,
   VerilogProceduralBlockAst
 } from './blockAst';
@@ -166,14 +166,15 @@ export function buildVerilogAst(
   includes: VerilogInclude[],
   directives: VerilogDirective[]
 ): VerilogAstDocument {
-  const moduleAsts = modules.map((module) => buildModuleAst(document, cst, module));
+  const codeTokens = cst.codeTokens;
+  const moduleAsts = modules.map((module) => buildModuleAst(document, cst, codeTokens, module));
   const moduleRanges = moduleAsts.map((module) => module.range);
   return {
     kind: 'sourceFile',
     uri: document.uri,
     range: documentRange(document),
     cst,
-    tokens: cst.codeTokens,
+    tokens: codeTokens,
     lexicalDiagnostics: cst.diagnostics,
     trivia: cst.tokens
       .filter((token): token is VerilogToken & { kind: 'comment' | 'string' } => token.kind === 'comment' || token.kind === 'string')
@@ -220,7 +221,7 @@ export function buildVerilogAst(
   };
 }
 
-function buildModuleAst(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule): VerilogModuleAst {
+function buildModuleAst(document: TextDocument, cst: VerilogCstDocument, tokens: VerilogToken[], module: VerilogModule): VerilogModuleAst {
   const headerRange = Range.create(module.range.start, module.headerEnd);
   const bodyRange = Range.create(module.headerEnd, module.endmoduleRange?.start ?? module.range.end);
   const items = cst.statements
@@ -245,8 +246,8 @@ function buildModuleAst(document: TextDocument, cst: VerilogCstDocument, module:
       selectionRange: instance.selectionRange,
       instance
     })),
-    alwaysBlocks: collectAlwaysBlocksFromCst(document, cst, module),
-    proceduralBlocks: collectProceduralBlocksFromCst(document, cst, module),
+    alwaysBlocks: collectAlwaysBlocksFromTokens(document, tokens, module),
+    proceduralBlocks: collectProceduralBlocksFromTokens(document, tokens, module),
     items,
     module
   };
