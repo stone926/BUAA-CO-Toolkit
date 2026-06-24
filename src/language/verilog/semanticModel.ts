@@ -267,7 +267,8 @@ function collectSymbols(
         instance
       }));
     }
-    for (const decl of collectBlockLocalDeclarations(source.document, source.ast.cst.codeTokens, module, blockScopes)) {
+    const moduleAst = source.ast.modules.find((item) => item.module === module);
+    for (const decl of collectBlockLocalDeclarations(source.document, moduleAst, source.ast.cst.codeTokens, module, blockScopes)) {
       const declScope = declarationScopeFor(module, scope, blockScopes, decl);
       if (declScope.symbols.get(decl.name)?.some((symbol) => rangesEqual(symbol.selectionRange, decl.selectionRange))) {
         continue;
@@ -704,13 +705,60 @@ function scopeAtPosition(
 
 function collectBlockLocalDeclarations(
   document: TextDocument,
+  moduleAst: VerilogModuleAst | undefined,
   tokens: VerilogToken[],
   module: VerilogModule,
   blockScopes: VerilogSemanticScope[]
 ): VerilogDecl[] {
   const result: VerilogDecl[] = [];
-  const moduleBlockScopes = blockScopes.filter((scope) => scope.module === module);
-  for (const scope of moduleBlockScopes) {
+  if (moduleAst) {
+    for (const block of moduleAst.proceduralBlocks) {
+      result.push(...collectProceduralLocalDeclarations(document, block.statementTree));
+    }
+  }
+  result.push(...collectSubroutineLocalDeclarations(document, tokens, module, blockScopes));
+  return dedupeDecls(result);
+}
+
+function collectProceduralLocalDeclarations(document: TextDocument, statement: VerilogProceduralStatementAst): VerilogDecl[] {
+  switch (statement.kind) {
+    case 'block':
+      return statement.statements.flatMap((child) => collectProceduralLocalDeclarations(document, child));
+    case 'declaration':
+      return localDeclarationsFromTokens(document, statement.tokens);
+    case 'loop':
+      return [
+        ...forControlDeclarationsFromControlTokens(document, statement.controlTokens),
+        ...collectProceduralLocalDeclarations(document, statement.body)
+      ];
+    case 'if':
+      return [
+        ...collectProceduralLocalDeclarations(document, statement.consequent),
+        ...(statement.alternate ? collectProceduralLocalDeclarations(document, statement.alternate) : [])
+      ];
+    case 'case':
+      return statement.items.flatMap((item) => collectProceduralLocalDeclarations(document, item.body));
+    case 'assignment':
+    case 'other':
+      return [];
+  }
+}
+
+function forControlDeclarationsFromControlTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDecl[] {
+  const semicolon = tokens.findIndex((token) => token.value === ';');
+  const initTokens = semicolon >= 0 ? tokens.slice(0, semicolon) : tokens;
+  return localDeclarationsFromTokens(document, initTokens);
+}
+
+function collectSubroutineLocalDeclarations(
+  document: TextDocument,
+  tokens: VerilogToken[],
+  module: VerilogModule,
+  blockScopes: VerilogSemanticScope[]
+): VerilogDecl[] {
+  const result: VerilogDecl[] = [];
+  const subroutineScopes = blockScopes.filter((scope) => scope.module === module && (scope.name === 'task' || scope.name === 'function'));
+  for (const scope of subroutineScopes) {
     const start = document.offsetAt(scope.range.start);
     const end = document.offsetAt(scope.range.end);
     const scopeTokens = tokens.filter((token) => token.start >= start && token.end <= end && token.kind !== 'eof');
@@ -723,7 +771,7 @@ function collectBlockLocalDeclarations(
       result.push(...forControlDeclarations(document, statement));
     }
   }
-  return dedupeDecls(result);
+  return result;
 }
 
 function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDecl[] {
