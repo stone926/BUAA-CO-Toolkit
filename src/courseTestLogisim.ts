@@ -43,6 +43,7 @@ import { compareTraceIterables, firstTraceDiffSnapshot } from './language/mips/t
 import { iterCpuTraceEvents } from './language/mips/traceParser';
 import { commandLine, revealOutputChannel } from './process';
 import { checkToolchain } from './toolchain';
+import { LineChunkScanner, TextChunkAccumulator } from './textChunks';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
@@ -614,9 +615,8 @@ export async function runLogisimTraceCli(
   }
 
   return await new Promise<LogisimCliTraceRun>((resolve) => {
-    let stdout = '';
-    let stderr = '';
-    let lineBuffer = '';
+    const stdout = new TextChunkAccumulator();
+    const stderr = new TextChunkAccumulator();
     let rowsSeen = 0;
     let settled = false;
     let timedOut = false;
@@ -630,17 +630,6 @@ export async function runLogisimTraceCli(
       shell: false,
       windowsHide: true
     });
-
-    const timer = setTimeout(() => {
-      if (lineBuffer) {
-        inspectLine(lineBuffer);
-        lineBuffer = '';
-      }
-      if (!haltedByPc && !pcError) {
-        timedOut = true;
-        child.kill();
-      }
-    }, timeoutMs);
 
     const inspectLine = (line: string): void => {
       try {
@@ -662,18 +651,22 @@ export async function runLogisimTraceCli(
         // Full parser will report malformed table rows after the process exits.
       }
     };
+    const stdoutLines = new LineChunkScanner(inspectLine);
+
+    const timer = setTimeout(() => {
+      stdoutLines.flush();
+      if (!haltedByPc && !pcError) {
+        timedOut = true;
+        child.kill();
+      }
+    }, timeoutMs);
 
     const appendStdout = (text: string): void => {
-      stdout += text;
+      stdout.append(text);
       if (streamOutput) {
         services.output.append(text);
       }
-      lineBuffer += text;
-      const lines = lineBuffer.split(/\r?\n/);
-      lineBuffer = lines.pop() ?? '';
-      for (const line of lines) {
-        inspectLine(line);
-      }
+      stdoutLines.append(text);
     };
 
     child.stdout.on('data', (chunk: Buffer) => {
@@ -682,7 +675,7 @@ export async function runLogisimTraceCli(
 
     child.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      stderr += text;
+      stderr.append(text);
       services.output.append(text);
     });
 
@@ -692,20 +685,22 @@ export async function runLogisimTraceCli(
       }
       settled = true;
       clearTimeout(timer);
-      stderr += error.message;
+      stderr.append(error.message);
       services.output.appendLine(error.message);
+      const finalStdout = stdout.toString();
+      const finalStderr = stderr.toString();
       resolve({
         result: {
           ok: false,
           exitCode: null,
           commandLine: display,
           cwd,
-          stdout,
-          stderr,
+          stdout: finalStdout,
+          stderr: finalStderr,
           timedOut
         },
-        stdout,
-        stderr,
+        stdout: finalStdout,
+        stderr: finalStderr,
         rowsSeen,
         haltedByPc
       });
@@ -717,10 +712,7 @@ export async function runLogisimTraceCli(
       }
       settled = true;
       clearTimeout(timer);
-      if (lineBuffer) {
-        inspectLine(lineBuffer);
-        lineBuffer = '';
-      }
+      stdoutLines.flush();
       if (timedOut) {
         services.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
       }
@@ -730,20 +722,22 @@ export async function runLogisimTraceCli(
       if (pcError) {
         services.output.appendLine(pcError);
       }
+      const finalStdout = stdout.toString();
+      const rawStderr = stderr.toString();
       const finalStderr = pcError
-        ? [stderr.trimEnd(), pcError].filter(Boolean).join('\n')
-        : stderr;
+        ? [rawStderr.trimEnd(), pcError].filter(Boolean).join('\n')
+        : rawStderr;
       resolve({
         result: {
           ok: haltedByPc || (!timedOut && !pcError && code === 0),
           exitCode: code,
           commandLine: display,
           cwd,
-          stdout,
+          stdout: finalStdout,
           stderr: finalStderr,
           timedOut: timedOut && !haltedByPc
         },
-        stdout,
+        stdout: finalStdout,
         stderr: finalStderr,
         rowsSeen,
         haltedByPc,

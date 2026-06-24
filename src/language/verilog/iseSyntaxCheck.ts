@@ -6,6 +6,7 @@ import { URI } from 'vscode-uri';
 import { buildIseEnvironment, findFuse } from '../../iseCommon';
 import { buildIseProjectText } from '../../verilogSimulationFiles';
 import { isFile, yieldEventLoop } from '../../nodeFs';
+import { TextChunkAccumulator } from '../../textChunks';
 
 export interface IseSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -142,8 +143,8 @@ function runProcess(
   options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number }
 ): Promise<RunProcessResult> {
   return new Promise((resolve) => {
-    let stdout = '';
-    let stderr = '';
+    const stdout = new TextChunkAccumulator();
+    const stderr = new TextChunkAccumulator();
     let settled = false;
     let timedOut = false;
     const child = spawn(command, args, {
@@ -160,10 +161,10 @@ function runProcess(
       child.kill();
     }, options.timeoutMs);
     child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
+      stdout.append(chunk.toString());
     });
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
+      stderr.append(chunk.toString());
     });
     child.on('error', (error: Error) => {
       if (settled) {
@@ -171,8 +172,14 @@ function runProcess(
       }
       settled = true;
       clearTimeout(timer);
-      stderr += error.message;
-      resolve({ ok: false, exitCode: null, stdout, stderr, timedOut });
+      stderr.append(error.message);
+      resolve({
+        ok: false,
+        exitCode: null,
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+        timedOut
+      });
     });
     child.on('close', (code: number | null) => {
       if (settled) {
@@ -180,7 +187,13 @@ function runProcess(
       }
       settled = true;
       clearTimeout(timer);
-      resolve({ ok: code === 0 && !timedOut, exitCode: code, stdout, stderr, timedOut });
+      resolve({
+        ok: code === 0 && !timedOut,
+        exitCode: code,
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+        timedOut
+      });
     });
   });
 }

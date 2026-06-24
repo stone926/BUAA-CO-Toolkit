@@ -8,9 +8,10 @@ import {
   getMemoryConfiguration
 } from './config';
 import {
-  continuousCounts,
-  continuousStatus,
-  shouldStopAfterIteration
+  addContinuousResult,
+  continuousStatusFromCounts,
+  createContinuousCounts,
+  shouldStopAfterIterationCounts
 } from './courseTesting/continuous';
 import { ensureDirectory, writeTextFile } from './fsUtil';
 import { revealOutputChannel } from './process';
@@ -150,7 +151,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
         index,
         status: 'running',
         startedAt: new Date().toISOString(),
-        summary: continuousCounts([]),
+        summary: createContinuousCounts(),
         results: []
       };
       session.report.iterations.unshift(iteration);
@@ -173,27 +174,28 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
             }
             const item = cases[i];
             services.output.appendLine(`[iteration ${index}, case ${i + 1}/${cases.length}] ${item.asm.fsPath}`);
+            let result: CourseTraceCaseResult;
             try {
-              iteration.results.push(await deps.runCourseTraceCase(services, item, {
+              result = await deps.runCourseTraceCase(services, item, {
                 ...baseRunOptions,
                 revealOutput: false,
                 source: generated.source
-              }));
+              });
             } catch (error) {
-              iteration.results.push({
+              result = {
                 asm: item.asm.fsPath,
                 stdin: item.stdin?.fsPath,
                 status: 'error',
                 stage: 'compare',
                 message: error instanceof Error ? error.message : String(error)
-              });
+              };
             }
-            iteration.summary = continuousCounts(iteration.results);
-            iteration.status = continuousStatus(iteration.results, true, session.stopRequested);
+            iteration.results.push(result);
+            addContinuousResult(iteration.summary, result);
+            iteration.status = continuousStatusFromCounts(iteration.summary, true, session.stopRequested);
             await updateContinuousTraceMonitor(session);
           }
-          iteration.summary = continuousCounts(iteration.results);
-          iteration.status = continuousStatus(iteration.results, false, session.stopRequested);
+          iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
         }
       } catch (error) {
         iteration.status = 'error';
@@ -201,13 +203,12 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       }
 
       iteration.finishedAt = new Date().toISOString();
-      iteration.summary = continuousCounts(iteration.results);
       if (iteration.status === 'running') {
-        iteration.status = continuousStatus(iteration.results, false, session.stopRequested);
+        iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
       }
       await updateContinuousTraceMonitor(session, { force: true });
 
-      if (session.stopRequested || shouldStopAfterIteration(iteration.results, stopOnFailure) || iteration.status === 'error') {
+      if (session.stopRequested || shouldStopAfterIterationCounts(iteration.summary, stopOnFailure) || iteration.status === 'error') {
         break;
       }
       await delay(intervalMs);

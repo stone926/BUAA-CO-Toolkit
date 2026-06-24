@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import { getRunTimeout, shouldRevealOutput, showCommandBeforeRun } from './config';
+import { TextChunkAccumulator } from './textChunks';
 import { RunResult } from './types';
 
 /**
@@ -57,8 +58,8 @@ export async function runTool(command: string, args: string[], options: RunToolO
   }
 
   return await new Promise<RunResult>((resolve) => {
-    let stdout = '';
-    let stderr = '';
+    const stdout = new TextChunkAccumulator();
+    const stderr = new TextChunkAccumulator();
     let settled = false;
     let timedOut = false;
 
@@ -79,13 +80,13 @@ export async function runTool(command: string, args: string[], options: RunToolO
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      stdout += text;
+      stdout.append(text);
       options.output.append(text);
     });
 
     child.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      stderr += text;
+      stderr.append(text);
       options.output.append(text);
     });
 
@@ -95,15 +96,17 @@ export async function runTool(command: string, args: string[], options: RunToolO
       }
       settled = true;
       clearTimeout(timer);
-      stderr += error.message;
+      stderr.append(error.message);
       options.output.appendLine(error.message);
+      const finalStdout = stdout.toString();
+      const finalStderr = stderr.toString();
       resolve({
         ok: false,
         exitCode: null,
         commandLine: display,
         cwd,
-        stdout,
-        stderr,
+        stdout: finalStdout,
+        stderr: finalStderr,
         timedOut
       });
     });
@@ -117,13 +120,15 @@ export async function runTool(command: string, args: string[], options: RunToolO
       if (timedOut) {
         options.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
       }
+      const finalStdout = stdout.toString();
+      const finalStderr = stderr.toString();
       resolve({
         ok: code === 0 && !timedOut,
         exitCode: code,
         commandLine: display,
         cwd,
-        stdout,
-        stderr,
+        stdout: finalStdout,
+        stderr: finalStderr,
         timedOut
       });
     });

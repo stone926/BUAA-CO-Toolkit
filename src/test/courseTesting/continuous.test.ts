@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addContinuousResult,
   continuousCounts,
+  continuousStatusFromCounts,
+  createContinuousCounts,
+  shouldStopAfterIterationCounts,
   continuousStatus,
   shouldStopAfterIteration
 } from '../../courseTesting/continuous';
@@ -18,6 +22,21 @@ describe('continuous course test helpers', () => {
       failed: 1,
       errors: 1
     });
+  });
+
+  it('updates counts incrementally for continuous case streams', () => {
+    const counts = createContinuousCounts();
+    expect(addContinuousResult(counts, { status: 'passed' })).toBe(counts);
+    addContinuousResult(counts, { status: 'failed' });
+    addContinuousResult(counts, { status: 'error' });
+    expect(counts).toEqual({
+      total: 3,
+      passed: 1,
+      failed: 1,
+      errors: 1
+    });
+    expect(continuousStatusFromCounts(counts, false, false)).toBe('error');
+    expect(shouldStopAfterIterationCounts(counts, true)).toBe(true);
   });
 
   it('derives monitor status from results and running state', () => {
