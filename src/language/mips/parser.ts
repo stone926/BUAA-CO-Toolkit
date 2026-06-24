@@ -92,7 +92,7 @@ const SECTION_ADDRESS_RANGES = new Map<string, { min: number; max: number; label
 
 export function parseMips(document: TextDocument, settings: CoSettings, options: MipsParseOptions = {}): MipsParseResult {
   const cst = parseMipsCstDocument(document.getText());
-  const ast = buildMipsAst(document, cst);
+  const ast = buildMipsAst(document, cst.lines);
   const labels = new Map<string, MipsSymbol>();
   const dataSymbols = new Map<string, MipsSymbol>();
   const eqvSymbols = new Map<string, MipsSymbol>();

@@ -2,7 +2,6 @@ import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   CstRange,
-  MipsCstDocument,
   MipsCstExecutable,
   MipsCstLine,
   MipsCstOperand,
@@ -157,16 +156,16 @@ export interface MipsMacroParameterAst {
 
 export function buildMipsAst(
   document: TextDocument,
-  cst: MipsCstDocument = parseMipsCstDocument(document.getText())
+  lines: MipsCstLine[] = parseMipsCstDocument(document.getText()).lines
 ): MipsAstDocument {
-  const lines = cst.lines.map((line) => buildLineAst(line));
-  const statements = lines.filter((line): line is MipsStatementAst => line.kind === 'statement');
+  const astLines = lines.map((line) => buildLineAst(line));
+  const statements = astLines.filter((line): line is MipsStatementAst => line.kind === 'statement');
   const macros = collectMacroDefinitions(document, statements);
   return {
     kind: 'program',
     uri: document.uri,
     range: documentRange(document),
-    lines,
+    lines: astLines,
     statements,
     macros
   };
