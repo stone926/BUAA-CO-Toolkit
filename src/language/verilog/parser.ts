@@ -17,7 +17,20 @@ export function parseVerilog(document: TextDocument, settings: CoSettings, inclu
   const macroUses = parseMacroUsesFromTokens(document, macros, tokens);
   const includes = parseIncludesFromTokens(document, tokens);
   const directives = parseDirectivesFromTokens(document, tokens);
-  const ast = buildVerilogAst(document, cst, modules, macros, macroUses, includes, directives);
+  const ast = buildVerilogAst(
+    document,
+    {
+      tokens,
+      allTokens: cst.tokens,
+      lexicalDiagnostics: cst.diagnostics,
+      statements: cst.statements
+    },
+    modules,
+    macros,
+    macroUses,
+    includes,
+    directives
+  );
   const semantic = buildVerilogSemanticModel({
     document,
     ast,

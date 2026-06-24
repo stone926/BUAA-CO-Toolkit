@@ -1,9 +1,5 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import {
-  VerilogCstDocument,
-  VerilogCstStatement
-} from './cst';
 import { VerilogLexDiagnostic, VerilogToken } from './lexer';
 import {
   VerilogDecl,
@@ -33,6 +29,20 @@ export interface VerilogAstDocument {
   preprocessor: VerilogPreprocessorAst[];
   modules: VerilogModuleAst[];
   topLevelStatements: VerilogStatementAst[];
+}
+
+export interface VerilogAstSource {
+  tokens: VerilogToken[];
+  allTokens: VerilogToken[];
+  lexicalDiagnostics: VerilogLexDiagnostic[];
+  statements: VerilogStatementSource[];
+}
+
+export interface VerilogStatementSource {
+  tokens: VerilogToken[];
+  start: number;
+  end: number;
+  range: Range;
 }
 
 export interface VerilogTriviaAst {
@@ -159,23 +169,22 @@ const declarationKeywords = new Set([
 
 export function buildVerilogAst(
   document: TextDocument,
-  cst: VerilogCstDocument,
+  source: VerilogAstSource,
   modules: VerilogModule[],
   macros: VerilogMacro[],
   macroUses: VerilogMacroUse[],
   includes: VerilogInclude[],
   directives: VerilogDirective[]
 ): VerilogAstDocument {
-  const codeTokens = cst.codeTokens;
-  const moduleAsts = modules.map((module) => buildModuleAst(document, cst, codeTokens, module));
+  const moduleAsts = modules.map((module) => buildModuleAst(document, source.statements, source.tokens, module));
   const moduleRanges = moduleAsts.map((module) => module.range);
   return {
     kind: 'sourceFile',
     uri: document.uri,
     range: documentRange(document),
-    tokens: codeTokens,
-    lexicalDiagnostics: cst.diagnostics,
-    trivia: cst.tokens
+    tokens: source.tokens,
+    lexicalDiagnostics: source.lexicalDiagnostics,
+    trivia: source.allTokens
       .filter((token): token is VerilogToken & { kind: 'comment' | 'string' } => token.kind === 'comment' || token.kind === 'string')
       .map((token): VerilogTriviaAst => ({
         kind: token.kind,
@@ -214,16 +223,16 @@ export function buildVerilogAst(
       }))
     ],
     modules: moduleAsts,
-    topLevelStatements: cst.statements
+    topLevelStatements: source.statements
       .filter((statement) => !moduleRanges.some((range) => containsRange(range, statement.range)))
       .map((statement) => buildStatementAst(statement))
   };
 }
 
-function buildModuleAst(document: TextDocument, cst: VerilogCstDocument, tokens: VerilogToken[], module: VerilogModule): VerilogModuleAst {
+function buildModuleAst(document: TextDocument, statements: VerilogStatementSource[], tokens: VerilogToken[], module: VerilogModule): VerilogModuleAst {
   const headerRange = Range.create(module.range.start, module.headerEnd);
   const bodyRange = Range.create(module.headerEnd, module.endmoduleRange?.start ?? module.range.end);
-  const items = cst.statements
+  const items = statements
     .filter((statement) => containsRange(module.range, statement.range))
     .map((statement) => buildStatementAst(statement, module));
   return {
@@ -262,7 +271,7 @@ function declAst(decl: VerilogDecl): VerilogDeclAst {
   };
 }
 
-function buildStatementAst(statement: VerilogCstStatement, module?: VerilogModule): VerilogStatementAst {
+function buildStatementAst(statement: VerilogStatementSource, module?: VerilogModule): VerilogStatementAst {
   const assignment = assignmentExpressionAst(statement.tokens);
   return {
     kind: classifyStatement(statement.tokens, module),
