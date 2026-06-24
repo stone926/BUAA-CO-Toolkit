@@ -35,13 +35,12 @@ import {
   prefixedCompletionReplaceRange,
   suffixCompletionReplaceRange
 } from './text';
-import { MipsCstExecutable, parseMipsCstLine } from './syntax';
+import { buildMipsAst, MipsExecutableAst } from './ast';
 
 export function getMipsCompletions(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): CompletionItem[] {
   const parsed = getCachedMipsParse(document, settings, state);
   const linePrefix = lineAt(document, position.line).text.slice(0, position.character);
-  const prefixLine = parseMipsCstLine(linePrefix, position.line);
-  const prefixExecutable = prefixLine.kind === 'statement' ? prefixLine.executable : undefined;
+  const prefixExecutable = parsePrefixExecutableAst(linePrefix);
   const items: CompletionItem[] = [];
   const directiveReplaceRange = directiveCompletionReplaceRange(linePrefix, position);
 
@@ -156,7 +155,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   return items;
 }
 
-function syscallCompletionItems(executable: MipsCstExecutable | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
+function syscallCompletionItems(executable: MipsExecutableAst | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
   if (!executable || executable.lowerMnemonic !== 'li' || executable.operands[0]?.text !== '$v0' || operandSlotAtPosition(executable, position.character) !== 1) {
     return undefined;
   }
@@ -173,7 +172,7 @@ function syscallCompletionItems(executable: MipsCstExecutable | undefined, lineP
   }));
 }
 
-function cp0CompletionItems(executable: MipsCstExecutable | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
+function cp0CompletionItems(executable: MipsExecutableAst | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
   if (!executable || (executable.lowerMnemonic !== 'mfc0' && executable.lowerMnemonic !== 'mtc0') || !executable.operands[0] || operandSlotAtPosition(executable, position.character) !== 1) {
     return undefined;
   }
@@ -190,11 +189,17 @@ function cp0CompletionItems(executable: MipsCstExecutable | undefined, linePrefi
   }));
 }
 
-function operandSlotAtPosition(executable: MipsCstExecutable, character: number): number | undefined {
-  if (!executable.operandRange || character < executable.operandRange.start) {
+function parsePrefixExecutableAst(linePrefix: string): MipsExecutableAst | undefined {
+  const document = TextDocument.create('mips-prefix://completion.s', 'mipsasm', 0, linePrefix);
+  const line = buildMipsAst(document).lines[0];
+  return line?.kind === 'statement' ? line.executable : undefined;
+}
+
+function operandSlotAtPosition(executable: MipsExecutableAst, character: number): number | undefined {
+  if (!executable.operandRange || character < executable.operandRange.start.character) {
     return undefined;
   }
-  const relativeEnd = Math.max(0, Math.min(character - executable.operandRange.start, executable.operandText.length));
+  const relativeEnd = Math.max(0, Math.min(character - executable.operandRange.start.character, executable.operandText.length));
   let slot = 0;
   let depth = 0;
   let inString = false;

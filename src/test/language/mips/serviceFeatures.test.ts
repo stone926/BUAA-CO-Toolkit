@@ -84,4 +84,15 @@ describe('MIPS instruction-backed language features', () => {
       type: cp0RegisterType
     });
   });
+
+  it('uses prefix AST context for syscall and CP0 operand completions', () => {
+    const settings = mergeCoSettings({});
+    const syscallDocument = doc('li $v0, ');
+    const syscallCompletions = getMipsCompletions(syscallDocument, { line: 0, character: syscallDocument.getText().length }, settings, state());
+    expect(syscallCompletions.some((item) => item.label === '10' && item.detail?.includes('exit'))).toBe(true);
+
+    const cp0Document = doc('mfc0 $t0, ');
+    const cp0Completions = getMipsCompletions(cp0Document, { line: 0, character: cp0Document.getText().length }, settings, state());
+    expect(cp0Completions.some((item) => item.label === '$12' && item.detail?.includes('SR'))).toBe(true);
+  });
 });
