@@ -37,6 +37,7 @@ export class VerilogWorkspaceIndex {
   private readonly macroDefinitionIndex = new Map<string, Location[]>();
   private readonly referenceIndexKeysByUri = new Map<string, Array<{ index: Map<string, Location[]>; key: string }>>();
   private readonly maxFiles: number;
+  private readonly openDocumentUris = new Set<string>();
   private fileListCache: VerilogIndexedFile[] | undefined;
   private moduleListCache: VerilogModule[] | undefined;
   private macroListCache: VerilogMacro[] | undefined;
@@ -45,19 +46,27 @@ export class VerilogWorkspaceIndex {
   private caseInsensitiveInstanceCache = new Map<string, boolean>();
   private rebuildSequence = 0;
   private revision = 0;
+  private workspaceComplete: boolean;
 
-  constructor(options: { maxFiles?: number } = {}) {
+  constructor(options: { maxFiles?: number; workspaceComplete?: boolean } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
+    this.workspaceComplete = options.workspaceComplete ?? true;
   }
 
   get version(): number {
     return this.revision;
   }
 
+  get complete(): boolean {
+    return this.workspaceComplete;
+  }
+
   async rebuild(workspaceFolders: WorkspaceFolder[] | null | undefined, settings: CoSettings): Promise<void> {
     const sequence = ++this.rebuildSequence;
+    this.setWorkspaceComplete(false);
     this.clear();
     if (!workspaceFolders?.length) {
+      this.markRebuildComplete(sequence);
       return;
     }
     for (const folder of workspaceFolders) {
@@ -67,26 +76,38 @@ export class VerilogWorkspaceIndex {
           return;
         }
         if (this.files.size >= this.maxFiles) {
+          this.markRebuildComplete(sequence);
           return;
         }
-        await this.updateFileFromDiskAsync(URI.file(file).toString(), settings, sequence);
+        await this.updateFileFromDiskAsync(URI.file(file).toString(), settings, {
+          rebuildSequence: sequence,
+          skipOpenDocuments: true
+        });
       }
     }
+    this.markRebuildComplete(sequence);
   }
 
   updateFile(uri: string, settings: CoSettings): void {
-    this.rebuildSequence++;
     this.updateFileFromDisk(uri, settings);
   }
 
   async updateFileAsync(uri: string, settings: CoSettings): Promise<void> {
-    this.rebuildSequence++;
     await this.updateFileFromDiskAsync(uri, settings);
   }
 
   updateDocument(document: TextDocument, settings: CoSettings): void {
-    this.rebuildSequence++;
+    this.openDocumentUris.add(document.uri);
     this.updateDocumentIndexed(document, settings);
+  }
+
+  async closeDocument(uri: string, settings: CoSettings): Promise<void> {
+    this.openDocumentUris.delete(uri);
+    if (!isVerilogUri(uri)) {
+      this.removeIndexed(uri);
+      return;
+    }
+    await this.updateFileAsync(uri, settings);
   }
 
   private updateFileFromDisk(uri: string, settings: CoSettings): void {
@@ -107,20 +128,30 @@ export class VerilogWorkspaceIndex {
     }
   }
 
-  private async updateFileFromDiskAsync(uri: string, settings: CoSettings, rebuildSequence?: number): Promise<void> {
+  private async updateFileFromDiskAsync(
+    uri: string,
+    settings: CoSettings,
+    options: { rebuildSequence?: number; skipOpenDocuments?: boolean } = {}
+  ): Promise<void> {
     if (!isVerilogUri(uri)) {
+      return;
+    }
+    if (options.skipOpenDocuments && this.openDocumentUris.has(uri)) {
       return;
     }
     try {
       const filePath = URI.parse(uri).fsPath;
       const text = await fs.promises.readFile(filePath, 'utf8');
-      if (rebuildSequence !== undefined && rebuildSequence !== this.rebuildSequence) {
+      if (options.rebuildSequence !== undefined && options.rebuildSequence !== this.rebuildSequence) {
+        return;
+      }
+      if (options.skipOpenDocuments && this.openDocumentUris.has(uri)) {
         return;
       }
       this.updateFileText(uri, text, settings);
     } catch {
       // 单文件读取或解析失败不影响整体索引
-      if (rebuildSequence === undefined || rebuildSequence === this.rebuildSequence) {
+      if (options.rebuildSequence === undefined || options.rebuildSequence === this.rebuildSequence) {
         this.removeIndexed(uri);
       }
     }
@@ -171,7 +202,7 @@ export class VerilogWorkspaceIndex {
   }
 
   remove(uri: string): void {
-    this.rebuildSequence++;
+    this.openDocumentUris.delete(uri);
     this.removeIndexed(uri);
   }
 
@@ -328,6 +359,20 @@ export class VerilogWorkspaceIndex {
     this.displayFormatListCache = undefined;
     this.caseInsensitiveModuleCache.clear();
     this.caseInsensitiveInstanceCache.clear();
+  }
+
+  private markRebuildComplete(sequence: number): void {
+    if (sequence === this.rebuildSequence) {
+      this.setWorkspaceComplete(true);
+    }
+  }
+
+  private setWorkspaceComplete(value: boolean): void {
+    if (this.workspaceComplete === value) {
+      return;
+    }
+    this.workspaceComplete = value;
+    this.invalidateCaches();
   }
 
   private clear(): void {

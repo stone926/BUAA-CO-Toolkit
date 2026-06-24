@@ -56,6 +56,20 @@ endmodule
     expect(codes(top, [top], { project: { topModule: 'top' } })).toContain('uninstantiated-module');
   });
 
+  it('defers global hierarchy diagnostics while the workspace index is incomplete', () => {
+    const child = doc('child', 'module child; endmodule');
+    const settings = mergeCoSettings({ project: { profile: 'P7', topModule: 'mips' } });
+    const index = new VerilogWorkspaceIndex({ workspaceComplete: false });
+    index.updateDocument(child, settings);
+
+    const result = getVerilogDiagnostics(child, settings, index)
+      .map((diagnostic) => diagnostic.code);
+
+    expect(result).not.toContain('missing-top');
+    expect(result).not.toContain('uninstantiated-module');
+    expect(result).not.toContain('p7-module-cpu');
+  });
+
   it('reports instance output drivers that conflict with assignments', () => {
     const child = doc('child', `
 module child(output y);
@@ -145,5 +159,26 @@ endmodule
     expect(secondCodes).not.toContain('project-pc-reset');
     expect(secondCodes).not.toContain('project-im-size');
     expect(secondCodes).not.toContain('project-dm-size');
+  });
+
+  it('does not require a visible 0x4180 constant for P7 projects', () => {
+    const top = doc('p7_top', `
+module CPU; endmodule
+module Bridge; endmodule
+module TC; endmodule
+module CP0;
+    reg SR;
+    reg CAUSE;
+    reg EPC;
+endmodule
+module mips;
+    CPU u_cpu();
+    Bridge u_bridge();
+    TC u_tc();
+    CP0 u_cp0();
+endmodule
+`);
+
+    expect(codes(top, [top], { project: { profile: 'P7', topModule: 'mips' } })).not.toContain('p7-exception-entry');
   });
 });

@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorkspaceFolder } from 'vscode-languageserver/node';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { defaultCoSettings, mergeCoSettings } from '../../../language/common/settings';
 import { isVerilogUri, VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
@@ -43,6 +44,40 @@ describe('VerilogWorkspaceIndex', () => {
     await index.rebuild([folder(root)], defaultCoSettings);
 
     expect(index.allFiles()).toHaveLength(1);
+  });
+
+  it('continues rebuilding when an open document updates during the scan', async () => {
+    const root = makeTempRoot();
+    const openFile = writeFile(root, 'src/open.v', 'module DiskOpen; endmodule\n');
+    writeFile(root, 'src/other.v', 'module Other; endmodule\n');
+    const openUri = URI.file(openFile).toString();
+    const index = new VerilogWorkspaceIndex({ workspaceComplete: false });
+
+    const rebuild = index.rebuild([folder(root)], defaultCoSettings);
+    index.updateDocument(TextDocument.create(openUri, 'verilog', 2, 'module OpenEdited; endmodule\n'), defaultCoSettings);
+    await rebuild;
+
+    expect(index.complete).toBe(true);
+    expect(index.getModule('OpenEdited')).toBeDefined();
+    expect(index.getModule('DiskOpen')).toBeUndefined();
+    expect(index.getModule('Other')).toBeDefined();
+  });
+
+  it('restores the on-disk index when an open document closes', async () => {
+    const root = makeTempRoot();
+    const file = writeFile(root, 'src/top.v', 'module DiskTop; endmodule\n');
+    const uri = URI.file(file).toString();
+    const index = new VerilogWorkspaceIndex();
+
+    index.updateFile(uri, defaultCoSettings);
+    index.updateDocument(TextDocument.create(uri, 'verilog', 2, 'module UnsavedTop; endmodule\n'), defaultCoSettings);
+    expect(index.getModule('DiskTop')).toBeUndefined();
+    expect(index.getModule('UnsavedTop')).toBeDefined();
+
+    await index.closeDocument(uri, defaultCoSettings);
+
+    expect(index.getModule('DiskTop')).toBeDefined();
+    expect(index.getModule('UnsavedTop')).toBeUndefined();
   });
 
   it('updates and removes a single file without rebuilding the workspace', () => {

@@ -97,7 +97,7 @@ import { extractVerilogDisplayFormats } from './language/verilog/displayFormats'
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
-const verilogIndex = new VerilogWorkspaceIndex();
+const verilogIndex = new VerilogWorkspaceIndex({ workspaceComplete: false });
 const logisimLanguageId = 'logisim-circ';
 const mipsState: MipsServerState = {
   ignoredPseudoInstructionFiles: new Set(),
@@ -120,7 +120,7 @@ interface CoLanguageService {
   getRenameEdits?: (document: TextDocument, position: Position, newName: string, settings: CoSettings) => WorkspaceEdit | undefined;
   getRenamePrepare?: (document: TextDocument, position: Position, settings: CoSettings) => Range | undefined;
   updateDocument?: (document: TextDocument, settings: CoSettings) => void;
-  removeDocument?: (uri: string) => void;
+  removeDocument?: (uri: string, settings: CoSettings) => void | Promise<void>;
 }
 
 const languageServices = new Map<string, CoLanguageService>([
@@ -157,7 +157,7 @@ const languageServices = new Map<string, CoLanguageService>([
     getRenameEdits: (document, position, newName, settings) => getVerilogRenameEdits(document, position, newName, settings, verilogIndex),
     getRenamePrepare: (document, position, settings) => getVerilogRenamePrepare(document, position, settings, verilogIndex),
     updateDocument: (document, settings) => verilogIndex.updateDocument(document, settings),
-    removeDocument: (uri) => verilogIndex.remove(uri)
+    removeDocument: closeVerilogDocument
   }],
   [logisimLanguageId, {
     getDiagnostics: (document) => getLogisimDiagnostics(document),
@@ -306,20 +306,36 @@ documents.onDidSave((event) => {
 });
 
 documents.onDidClose((event) => {
-  const timer = state.contentChangeTimers.get(event.document.uri);
+  void handleDocumentClosed(event.document);
+});
+
+async function handleDocumentClosed(document: TextDocument): Promise<void> {
+  const timer = state.contentChangeTimers.get(document.uri);
   if (timer) {
     clearTimeout(timer);
-    state.contentChangeTimers.delete(event.document.uri);
+    state.contentChangeTimers.delete(document.uri);
   }
-  state.documentSettings.delete(event.document.uri);
-  state.updatedDocumentVersions.delete(event.document.uri);
-  state.verilogIseDiagnostics.delete(event.document.uri);
-  serviceForDocument(event.document)?.removeDocument?.(event.document.uri);
+  const settings = await getDocumentSettings(document.uri);
+  state.documentSettings.delete(document.uri);
+  state.updatedDocumentVersions.delete(document.uri);
+  state.verilogIseDiagnostics.delete(document.uri);
+  await serviceForDocument(document)?.removeDocument?.(document.uri, settings);
   connection.sendDiagnostics({
-    uri: event.document.uri,
+    uri: document.uri,
     diagnostics: []
   });
-});
+  if (document.languageId === 'verilog') {
+    await validateOpenVerilogDocuments();
+  }
+}
+
+async function closeVerilogDocument(uri: string, settings: CoSettings): Promise<void> {
+  if (isWorkspaceVerilogUri(uri)) {
+    await verilogIndex.closeDocument(uri, settings);
+  } else {
+    verilogIndex.remove(uri);
+  }
+}
 
 interface DocumentRequestParams {
   textDocument: {
@@ -571,6 +587,7 @@ async function rebuildVerilogIndex(): Promise<void> {
   for (const document of documents.all()) {
     serviceForDocument(document)?.updateDocument?.(document, settings);
   }
+  await validateOpenVerilogDocuments();
 }
 
 function effectiveSettingsForDocument(document: TextDocument, settings: CoSettings): CoSettings {
@@ -685,6 +702,20 @@ function workspaceKeyForUri(uri: string): string {
     .sort((left, right) => right.path.length - left.path.length)
     .find((candidate) => file ? isInsideDirectory(file, candidate.path) : false);
   return folder?.uri ?? uri;
+}
+
+function isWorkspaceVerilogUri(uri: string): boolean {
+  if (!isVerilogUri(uri)) {
+    return false;
+  }
+  const file = fsPathFromUri(uri);
+  if (!file) {
+    return false;
+  }
+  return Boolean(state.workspaceFolders
+    ?.map((folder) => fsPathFromUri(folder.uri))
+    .filter((folderPath): folderPath is string => Boolean(folderPath))
+    .some((folderPath) => isInsideDirectory(file, folderPath)));
 }
 
 function isInsideDirectory(file: string, dir: string): boolean {

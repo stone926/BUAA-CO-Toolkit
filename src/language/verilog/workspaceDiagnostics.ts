@@ -39,10 +39,13 @@ export function addVerilogWorkspaceDiagnostics(
   baseDiagnostics: Diagnostic[],
   parsed?: VerilogParseResult
 ): Diagnostic[] {
-  const diagnostics = filterWorkspaceAwareDiagnostics(baseDiagnostics, settings, index);
   const resolved = parsed ?? getCachedVerilogParse(document, settings, false);
+  const diagnostics = filterWorkspaceAwareDiagnostics(baseDiagnostics, settings, index, resolved);
   diagnostics.push(...getWorkspaceModuleDiagnostics(settings, index, resolved));
   diagnostics.push(...getWorkspaceInstanceDiagnostics(document, settings, index, resolved));
+  if (!index.complete) {
+    return diagnostics;
+  }
   if (settings.verilog.lint.courseRules) {
     diagnostics.push(...collectWorkspaceDriverDiagnostics(document, resolved, index));
     diagnostics.push(...collectWorkspaceUsageDiagnostics(document, settings, resolved, index));
@@ -51,9 +54,14 @@ export function addVerilogWorkspaceDiagnostics(
   return diagnostics;
 }
 
-function filterWorkspaceAwareDiagnostics(diagnostics: Diagnostic[], settings: CoSettings, index: VerilogWorkspaceIndex): Diagnostic[] {
+function filterWorkspaceAwareDiagnostics(
+  diagnostics: Diagnostic[],
+  settings: CoSettings,
+  index: VerilogWorkspaceIndex,
+  parsed: VerilogParseResult
+): Diagnostic[] {
   const topName = settings.project.topModule.trim() || 'mips';
-  if (!index.getModule(topName)) {
+  if (index.complete && !index.getModule(topName) && !parsed.modules.some((module) => module.name === topName)) {
     return diagnostics;
   }
   return diagnostics.filter((diagnostic) => diagnostic.code !== 'missing-top');
@@ -89,6 +97,7 @@ function getWorkspaceModuleDiagnostics(settings: CoSettings, index: VerilogWorks
     }
     if (
       settings.verilog.lint.courseRules &&
+      index.complete &&
       module.name !== topName &&
       module.name !== testbenchName &&
       !hasInstanceOfModule(index, parsed.modules, module.name)
@@ -179,9 +188,6 @@ function getWorkspaceProjectDiagnostics(
           diagnostics.push(makeDiagnostic(topRange, `P7: CP0 should implement register '${registerName}'.`, DiagnosticSeverity.Warning, `p7-cp0-${registerName.toLowerCase()}`));
         }
       }
-    }
-    if (!hasWorkspaceNumericValue(summary, 0x4180)) {
-      diagnostics.push(makeDiagnostic(topRange, 'P7: exception entry address should be 0x00004180; no obvious 0x4180 constant was found in the workspace.', DiagnosticSeverity.Warning, 'p7-exception-entry'));
     }
   }
 
