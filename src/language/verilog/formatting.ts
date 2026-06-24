@@ -5,8 +5,7 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
-import { parseVerilogCst } from './cst';
-import { VerilogToken } from './lexer';
+import { lexVerilog, VerilogToken } from './lexer';
 
 interface VerilogFormattingStyle {
   continuationIndent: number;
@@ -707,8 +706,7 @@ function formattingTokens(line: string): VerilogToken[] {
   if (!code) {
     return [];
   }
-  const document = TextDocument.create('format://line', 'verilog', 0, code);
-  return parseVerilogCst(document, code).codeTokens.filter((token) => token.kind !== 'eof' && token.kind !== 'comment');
+  return lexVerilog(code).tokens.filter((token) => token.kind !== 'eof' && token.kind !== 'comment');
 }
 
 function closingBlockKindFromTokens(tokens: VerilogToken[]): VerilogBlockKind | undefined {
