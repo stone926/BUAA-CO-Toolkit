@@ -98,6 +98,11 @@ describe('Verilog AST and semantic model', () => {
     const result = parseVerilog(document, defaultCoSettings, false);
     const moduleSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.kind === 'module');
     const blockSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.kind === 'block');
+    const declaration = result.ast.modules[0].proceduralBlocks[0].statementTree.statements.find((statement) => statement.kind === 'declaration');
+    expect(declaration?.kind).toBe('declaration');
+    if (declaration?.kind === 'declaration') {
+      expect(declaration.declarations.map((item) => item.declaration.name)).toEqual(['i']);
+    }
     expect(moduleSymbol).toBeDefined();
     expect(blockSymbol).toBeDefined();
 
@@ -119,6 +124,11 @@ describe('Verilog AST and semantic model', () => {
     const document = doc(text);
     const result = parseVerilog(document, defaultCoSettings, false);
     const loopIndexSymbol = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.kind === 'block');
+    const loop = result.ast.modules[0].proceduralBlocks[0].statementTree.statements.find((statement) => statement.kind === 'loop');
+    expect(loop?.kind).toBe('loop');
+    if (loop?.kind === 'loop') {
+      expect(loop.initDeclarations.map((item) => item.declaration.name)).toEqual(['i']);
+    }
     expect(loopIndexSymbol).toBeDefined();
     expect(result.semantic.moduleScopes[0].symbols.get('i')).toBeUndefined();
     const use = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i < 4')));

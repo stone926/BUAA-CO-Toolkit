@@ -3,6 +3,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
+import type { VerilogDecl } from './model';
 import { findMatchingTokenForward, splitTopLevelTokens, trimEofTokens, trimTrailingSemicolonTokens } from './tokenUtils';
 
 export type VerilogProceduralStatementAst =
@@ -63,12 +64,20 @@ export interface VerilogLoopStatementAst extends VerilogProceduralStatementBase 
   kind: 'loop';
   loopKind: 'for' | 'while' | 'repeat' | 'forever';
   controlTokens: VerilogToken[];
+  initDeclarations: VerilogLocalDeclarationAst[];
   condition?: VerilogExpressionAst;
   body: VerilogProceduralStatementAst;
 }
 
 export interface VerilogDeclarationStatementAst extends VerilogProceduralStatementBase {
   kind: 'declaration';
+  declarations: VerilogLocalDeclarationAst[];
+}
+
+export interface VerilogLocalDeclarationAst {
+  kind: 'localDeclaration';
+  declaration: VerilogDecl;
+  tokens: VerilogToken[];
 }
 
 export interface VerilogOtherProceduralStatementAst extends VerilogProceduralStatementBase {
@@ -266,12 +275,14 @@ class ProceduralStatementParser {
     const condition = loopKind === 'while' || loopKind === 'repeat'
       ? parseVerilogExpressionTokens(controlTokens)
       : undefined;
+    const initDeclarations = loopKind === 'for' ? forControlDeclarations(this.document, controlTokens) : [];
     const body = this.parseStatement(new Set());
     const end = Math.max(start, this.indexAtOrBeforePosition(body.range.end));
     return {
       kind: 'loop',
       loopKind,
       controlTokens,
+      initDeclarations,
       condition,
       body,
       range: Range.create(this.document.positionAt(this.tokens[start].start), body.range.end),
@@ -289,7 +300,8 @@ class ProceduralStatementParser {
       return {
         kind: 'declaration',
         range: tokenIndexRange(this.document, this.tokens, start, end),
-        tokens
+        tokens,
+        declarations: localDeclarationsFromTokens(this.document, tokens)
       };
     }
 
@@ -429,6 +441,67 @@ function proceduralControlFlags(tokens: VerilogToken[]): { hasDelayControl: bool
     hasEventControl: tokens.some((token) => token.value === '@'),
     hasWaitControl: tokens.some((token) => token.value === 'wait')
   };
+}
+
+const declarationModifiers = new Set([
+  'automatic',
+  'signed',
+  'unsigned',
+  'wire',
+  'reg',
+  'logic'
+]);
+
+function forControlDeclarations(document: TextDocument, tokens: VerilogToken[]): VerilogLocalDeclarationAst[] {
+  const semicolon = tokens.findIndex((token) => token.value === ';');
+  const initTokens = semicolon >= 0 ? tokens.slice(0, semicolon) : tokens;
+  return localDeclarationsFromTokens(document, initTokens);
+}
+
+function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogLocalDeclarationAst[] {
+  const first = tokens[0];
+  if (!first || !declarationKeywords.has(first.value)) {
+    return [];
+  }
+  const kind = first.value as VerilogDecl['kind'];
+  const declarations: VerilogLocalDeclarationAst[] = [];
+  for (const part of splitTopLevelTokens(tokens.slice(1), ',')) {
+    const name = declarationNameToken(part);
+    if (!name) {
+      continue;
+    }
+    declarations.push({
+      kind: 'localDeclaration',
+      declaration: {
+        name: name.value,
+        kind,
+        range: tokensRange(document, tokens),
+        selectionRange: Range.create(document.positionAt(name.start), document.positionAt(name.end))
+      },
+      tokens: part
+    });
+  }
+  return declarations;
+}
+
+function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined {
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '[') {
+      const close = findMatchingTokenForward(tokens, index, '[', ']');
+      if (close >= 0) {
+        index = close;
+        continue;
+      }
+    }
+    if (declarationKeywords.has(token.value) || declarationModifiers.has(token.value)) {
+      continue;
+    }
+    if (token.kind === 'identifier') {
+      return token;
+    }
+  }
+  return undefined;
 }
 
 function tokenIndexRange(document: TextDocument, tokens: VerilogToken[], start: number, end: number): Range {

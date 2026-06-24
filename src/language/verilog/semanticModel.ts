@@ -23,7 +23,6 @@ import type { VerilogProceduralStatementAst } from './proceduralAst';
 import {
   findMatchingTokenForward as findMatchingToken,
   findTopLevelToken as firstTopLevelToken,
-  splitTopLevelTokens as splitTopLevel,
   trimTrailingSemicolonTokens,
   verilogTokenRange
 } from './tokenUtils';
@@ -464,35 +463,6 @@ const declarationKinds = new Set([
   'genvar'
 ]);
 
-const declarationModifiers = new Set([
-  'automatic',
-  'signed',
-  'unsigned',
-  'wire',
-  'reg',
-  'logic'
-]);
-
-function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined {
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '[') {
-      const close = findMatchingToken(tokens, index, '[', ']');
-      if (close >= 0) {
-        index = close;
-        continue;
-      }
-    }
-    if (declarationKinds.has(token.value) || declarationModifiers.has(token.value)) {
-      continue;
-    }
-    if (token.kind === 'identifier') {
-      return token;
-    }
-  }
-  return undefined;
-}
-
 function dedupeDecls(declarations: VerilogDecl[]): VerilogDecl[] {
   const seen = new Set<string>();
   const result: VerilogDecl[] = [];
@@ -628,10 +598,10 @@ function collectProceduralLocalDeclarations(document: TextDocument, statement: V
     case 'block':
       return statement.statements.flatMap((child) => collectProceduralLocalDeclarations(document, child));
     case 'declaration':
-      return localDeclarationsFromTokens(document, statement.tokens);
+      return statement.declarations.map((declaration) => declaration.declaration);
     case 'loop':
       return [
-        ...forControlDeclarationsFromControlTokens(document, statement.controlTokens),
+        ...statement.initDeclarations.map((declaration) => declaration.declaration),
         ...collectProceduralLocalDeclarations(document, statement.body)
       ];
     case 'if':
@@ -645,34 +615,6 @@ function collectProceduralLocalDeclarations(document: TextDocument, statement: V
     case 'other':
       return [];
   }
-}
-
-function forControlDeclarationsFromControlTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDecl[] {
-  const semicolon = tokens.findIndex((token) => token.value === ';');
-  const initTokens = semicolon >= 0 ? tokens.slice(0, semicolon) : tokens;
-  return localDeclarationsFromTokens(document, initTokens);
-}
-
-function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDecl[] {
-  const first = tokens[0];
-  if (!first || !declarationKinds.has(first.value)) {
-    return [];
-  }
-  const kind = first.value as VerilogDecl['kind'];
-  const declarations: VerilogDecl[] = [];
-  for (const part of splitTopLevel(tokens.slice(1), ',')) {
-    const name = declarationNameToken(part);
-    if (!name) {
-      continue;
-    }
-    declarations.push({
-      name: name.value,
-      kind,
-      range: Range.create(document.positionAt(first.start), document.positionAt(tokens[tokens.length - 1].end)),
-      selectionRange: verilogTokenRange(document, name)
-    });
-  }
-  return declarations;
 }
 
 function collectAstDrivenModuleReferences(
