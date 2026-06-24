@@ -2,7 +2,7 @@ import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { rangeKey } from '../common/util';
-import { parseVerilogCst, VerilogCstDocument } from './cst';
+import { parseVerilogCst } from './cst';
 import { VerilogToken } from './lexer';
 import {
   VerilogDirective,
@@ -31,8 +31,8 @@ export const preprocessorDirectives = new Set([
   'pragma'
 ]);
 
-export function parseMacros(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogMacro[] {
-  return parseMacrosFromTokens(document, cst.codeTokens);
+export function parseMacros(document: TextDocument, text: string): VerilogMacro[] {
+  return parseMacrosFromTokens(document, parseVerilogCst(document, text).codeTokens);
 }
 
 export function parseMacrosFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogMacro[] {
@@ -64,10 +64,9 @@ export function parseMacrosFromTokens(document: TextDocument, tokens: VerilogTok
 export function parseMacroUses(
   document: TextDocument,
   text: string,
-  macros: VerilogMacro[] = parseMacros(document, text),
-  cst: VerilogCstDocument = parseVerilogCst(document, text)
+  macros: VerilogMacro[] = parseMacros(document, text)
 ): VerilogMacroUse[] {
-  return parseMacroUsesFromTokens(document, macros, cst.codeTokens);
+  return parseMacroUsesFromTokens(document, macros, parseVerilogCst(document, text).codeTokens);
 }
 
 export function parseMacroUsesFromTokens(
@@ -98,8 +97,8 @@ export function parseMacroUsesFromTokens(
   return uses;
 }
 
-export function parseIncludes(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogInclude[] {
-  return parseIncludesFromTokens(document, cst.codeTokens);
+export function parseIncludes(document: TextDocument, text: string): VerilogInclude[] {
+  return parseIncludesFromTokens(document, parseVerilogCst(document, text).codeTokens);
 }
 
 export function parseIncludesFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogInclude[] {
@@ -122,8 +121,8 @@ export function parseIncludesFromTokens(document: TextDocument, tokens: VerilogT
   return includes;
 }
 
-export function parseDirectives(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogDirective[] {
-  return parseDirectivesFromTokens(document, cst.codeTokens);
+export function parseDirectives(document: TextDocument, text: string): VerilogDirective[] {
+  return parseDirectivesFromTokens(document, parseVerilogCst(document, text).codeTokens);
 }
 
 export function parseDirectivesFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDirective[] {
