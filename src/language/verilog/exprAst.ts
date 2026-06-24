@@ -1,4 +1,4 @@
-import { isIdentifierLike, lexVerilogCst, VerilogToken } from './lexer';
+import { isIdentifierLike, lexVerilog, VerilogToken } from './lexer';
 
 export type VerilogExpressionAst =
   | VerilogNumberLiteralAst
@@ -331,7 +331,7 @@ export function evalVerilogIntegerConstant(
 }
 
 function tokenizeExpression(text: string): VerilogToken[] {
-  return lexVerilogCst(text).tokens.filter((token) => token.kind !== 'comment' && token.kind !== 'eof');
+  return lexVerilog(text).tokens.filter((token) => token.kind !== 'comment' && token.kind !== 'eof');
 }
 
 class ExpressionParser {
