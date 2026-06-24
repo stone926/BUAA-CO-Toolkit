@@ -106,6 +106,18 @@ endmodule
     expect(disableAction?.command?.arguments).toEqual(['vc-007']);
   });
 
+  it('does not treat <= comparisons as combinational nonblocking assignments', () => {
+    const text = `
+module demo(input [3:0] a, input [3:0] b, output reg y);
+    always @(*) begin
+        y = a <= b;
+    end
+endmodule
+`.trim();
+    const codes = diagnosticCodes(text);
+    expect(codes).not.toContain('vc-007-comb-nonblocking');
+  });
+
   it('does not report synth-mul-div for sensitivity wildcards, attributes, or timescale directives', () => {
     const text = `
 \`timescale 1ns / 1ps

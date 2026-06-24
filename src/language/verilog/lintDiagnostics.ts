@@ -272,7 +272,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-007') && hasTokenValue(block.bodyTokens, '<=')) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-007') && blockAssignments.some((assignment) => assignment.operator === '<=')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-007: combinational always blocks should use blocking assignments (=), not nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-007-comb-nonblocking'));
       }
       collectCombinationalDataflowDiagnostics(document, settings, module, block, diagnostics);
