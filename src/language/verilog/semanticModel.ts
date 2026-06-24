@@ -582,7 +582,7 @@ function collectAstDrivenModuleReferences(
   }
   const proceduralBlocks = moduleAst.proceduralBlocks;
   for (const subroutine of moduleAst.subroutines) {
-    collectReferencesFromSubroutineAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine);
+    collectReferencesFromSubroutineAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine);
   }
   for (const statementAst of moduleAst.items) {
     if (isInsideSubroutine(document, statementAst.start, statementAst.end, moduleAst.subroutines)) {
@@ -590,7 +590,7 @@ function collectAstDrivenModuleReferences(
     }
     const block = proceduralBlockForStatement(document, statementAst.start, proceduralBlocks);
     if (block) {
-      collectReferencesFromProceduralBlockAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block);
+      collectReferencesFromProceduralBlockAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, block);
       continue;
     }
     if (isInsideProceduralBlockBody(document, statementAst.start, statementAst.end, proceduralBlocks)) {
@@ -643,7 +643,6 @@ function isInsideSubroutine(document: TextDocument, start: number, end: number, 
 
 function collectReferencesFromSubroutineAst(
   document: TextDocument,
-  source: VerilogSemanticSource,
   references: VerilogSemanticReference[],
   declarationRangeKeys: Set<string>,
   module: VerilogModule,
@@ -651,12 +650,11 @@ function collectReferencesFromSubroutineAst(
   blockScopes: VerilogSemanticScope[],
   subroutine: VerilogSubroutineAst
 ): void {
-  collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine.statementTree);
+  collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine.statementTree);
 }
 
 function collectReferencesFromProceduralBlockAst(
   document: TextDocument,
-  source: VerilogSemanticSource,
   references: VerilogSemanticReference[],
   declarationRangeKeys: Set<string>,
   module: VerilogModule,
@@ -666,7 +664,7 @@ function collectReferencesFromProceduralBlockAst(
 ): void {
   const controlScope = scopeAtPosition(moduleScope, blockScopes, block.headerRange.start);
   collectReferencesFromProceduralControlAst(document, references, declarationRangeKeys, controlScope, module, block.control);
-  collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block.statementTree);
+  collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, block.statementTree);
 }
 
 function collectReferencesFromProceduralControlAst(
@@ -694,7 +692,6 @@ function collectReferencesFromProceduralControlAst(
 
 function collectReferencesFromProceduralStatementAst(
   document: TextDocument,
-  source: VerilogSemanticSource,
   references: VerilogSemanticReference[],
   declarationRangeKeys: Set<string>,
   module: VerilogModule,
@@ -706,7 +703,7 @@ function collectReferencesFromProceduralStatementAst(
   switch (statement.kind) {
     case 'block':
       for (const child of statement.statements) {
-        collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, child);
+        collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, child);
       }
       return;
     case 'assignment':
@@ -721,9 +718,9 @@ function collectReferencesFromProceduralStatementAst(
       if (statement.condition) {
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.condition, 0);
       }
-      collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.consequent);
+      collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.consequent);
       if (statement.alternate) {
-        collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.alternate);
+        collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.alternate);
       }
       return;
     case 'case':
@@ -734,14 +731,14 @@ function collectReferencesFromProceduralStatementAst(
         for (const label of item.labels) {
           collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, label, 0);
         }
-        collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, item.body);
+        collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, item.body);
       }
       return;
     case 'loop':
       for (const expression of statement.controlExpressions) {
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
       }
-      collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
+      collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
       return;
     case 'declaration':
       for (const declaration of statement.declarations) {
@@ -756,9 +753,7 @@ function collectReferencesFromProceduralStatementAst(
     case 'other':
       if (statement.expression) {
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.expression, 0);
-        return;
       }
-      collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
       return;
   }
 }

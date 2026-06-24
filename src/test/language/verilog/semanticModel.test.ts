@@ -281,6 +281,23 @@ describe('Verilog AST and semantic model', () => {
     expect(rhsUse?.symbol?.name).toBe('a');
   });
 
+  it('collects procedural other statement references from expression AST only', () => {
+    const text = [
+      'module other_refs(input [3:0] a);',
+      '    initial begin',
+      '        $display("%h", a);',
+      '        ;',
+      '    end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const displayUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('a);')));
+
+    expect(displayUse?.symbol?.name).toBe('a');
+    expect(result.semantic.unresolvedReferences.some((reference) => reference.name === '$display')).toBe(false);
+  });
+
   it('collects declaration width AST references in ports and body declarations', () => {
     const text = [
       'module widths #(parameter W = 4)(input [W-1:0] in, output out);',
