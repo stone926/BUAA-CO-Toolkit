@@ -84,6 +84,7 @@ export interface MipsExecutableBaseAst {
 export interface MipsDirectiveAst extends MipsExecutableBaseAst {
   kind: 'directive';
   eqv?: MipsEqvDirectiveAst;
+  macroHeader?: MipsMacroHeaderAst;
 }
 
 export interface MipsOperationAst extends MipsExecutableBaseAst {
@@ -96,6 +97,13 @@ export interface MipsEqvDirectiveAst {
   nameRange: Range;
   replacementText: string;
   replacementRange?: Range;
+}
+
+export interface MipsMacroHeaderAst {
+  kind: 'macroHeader';
+  name: string;
+  nameRange: Range;
+  params: MipsMacroParameterAst[];
 }
 
 export type MipsOperandAst =
@@ -257,7 +265,8 @@ function buildExecutableAst(line: number, executable: MipsParsedExecutable): Mip
     return {
       kind: 'directive',
       ...base,
-      eqv: executable.lowerMnemonic === '.eqv' ? parseEqvDirectiveAst(line, executable) : undefined
+      eqv: executable.lowerMnemonic === '.eqv' ? parseEqvDirectiveAst(line, executable) : undefined,
+      macroHeader: executable.lowerMnemonic === '.macro' ? parseMacroHeaderAst(line, executable) : undefined
     };
   }
   return { kind: 'operation', ...base };
@@ -284,6 +293,59 @@ function parseEqvDirectiveAst(line: number, executable: MipsParsedExecutable): M
     nameRange: mipsParsedRange(line, { start: base + nameStart, end: base + offset }),
     replacementText: hasReplacement ? text.slice(replacementStart, replacementEnd) : '',
     replacementRange: hasReplacement ? mipsParsedRange(line, { start: base + replacementStart, end: base + replacementEnd }) : undefined
+  };
+}
+
+function parseMacroHeaderAst(line: number, executable: MipsParsedExecutable): MipsMacroHeaderAst | undefined {
+  const base = executable.operandRange?.start ?? executable.range.end;
+  const text = executable.operandText;
+  let offset = skipAsciiWhitespace(text, 0);
+  const nameStart = offset;
+  if (!isMipsSymbolStart(text[offset] ?? '')) {
+    return undefined;
+  }
+  offset++;
+  while (offset < text.length && isMipsSymbolPart(text[offset])) {
+    offset++;
+  }
+  const name = text.slice(nameStart, offset);
+  let restStart = skipAsciiWhitespace(text, offset);
+  let restEnd = trimRightIndex(text, text.length);
+  if (restStart < restEnd && text[restStart] === '(' && text[restEnd - 1] === ')') {
+    restStart++;
+    restEnd--;
+  }
+
+  const params: MipsMacroParameterAst[] = [];
+  let paramStart = restStart;
+  let index = restStart;
+  while (index <= restEnd) {
+    const atEnd = index === restEnd;
+    const char = atEnd ? '' : text[index];
+    if (!atEnd && char !== ',' && !isAsciiWhitespace(char)) {
+      index++;
+      continue;
+    }
+    const rawStart = skipAsciiWhitespace(text, paramStart);
+    const rawEnd = trimRightIndex(text, index);
+    if (rawStart < rawEnd) {
+      const raw = text.slice(rawStart, rawEnd);
+      const normalized = raw.startsWith('%') || raw.startsWith('$') ? raw : `%${raw}`;
+      params.push({
+        kind: 'macroParameterDeclaration',
+        name: normalized,
+        range: mipsParsedRange(line, { start: base + rawStart, end: base + rawEnd })
+      });
+    }
+    paramStart = index + 1;
+    index++;
+  }
+
+  return {
+    kind: 'macroHeader',
+    name,
+    nameRange: mipsParsedRange(line, { start: base + nameStart, end: base + offset }),
+    params
   };
 }
 
@@ -361,7 +423,7 @@ function collectMacroDefinitions(document: TextDocument, statements: MipsStateme
     }
 
     if (executable.lowerMnemonic === '.macro') {
-      const header = parseMacroHeader(executable);
+      const header = executable.macroHeader;
       const macro: MipsMacroDefinitionAst = {
         kind: 'macroDefinition',
         name: header?.name ?? '',
@@ -395,68 +457,6 @@ function collectMacroDefinitions(document: TextDocument, statements: MipsStateme
     active.range = Range.create(active.range.start, documentRange(document).end);
   }
   return macros;
-}
-
-function parseMacroHeader(executable: MipsExecutableAst): { name: string; nameRange: Range; params: MipsMacroParameterAst[] } | undefined {
-  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
-  const text = executable.operandText;
-  let offset = skipAsciiWhitespace(text, 0);
-  const nameStart = offset;
-  if (!isMipsSymbolStart(text[offset] ?? '')) {
-    return undefined;
-  }
-  offset++;
-  while (offset < text.length && isMipsSymbolPart(text[offset])) {
-    offset++;
-  }
-  const name = text.slice(nameStart, offset);
-  let restStart = skipAsciiWhitespace(text, offset);
-  let restEnd = trimRightIndex(text, text.length);
-  if (restStart < restEnd && text[restStart] === '(' && text[restEnd - 1] === ')') {
-    restStart++;
-    restEnd--;
-  }
-
-  const params: MipsMacroParameterAst[] = [];
-  let paramStart = restStart;
-  let index = restStart;
-  while (index <= restEnd) {
-    const atEnd = index === restEnd;
-    const char = atEnd ? '' : text[index];
-    if (!atEnd && char !== ',' && !isAsciiWhitespace(char)) {
-      index++;
-      continue;
-    }
-    const rawStart = skipAsciiWhitespace(text, paramStart);
-    const rawEnd = trimRightIndex(text, index);
-    if (rawStart < rawEnd) {
-      const raw = text.slice(rawStart, rawEnd);
-      const normalized = raw.startsWith('%') || raw.startsWith('$') ? raw : `%${raw}`;
-      params.push({
-        kind: 'macroParameterDeclaration',
-        name: normalized,
-        range: Range.create(
-          executable.range.start.line,
-          base + rawStart,
-          executable.range.start.line,
-          base + rawEnd
-        )
-      });
-    }
-    paramStart = index + 1;
-    index++;
-  }
-
-  return {
-    name,
-    nameRange: Range.create(
-      executable.range.start.line,
-      base + nameStart,
-      executable.range.start.line,
-      base + offset
-    ),
-    params
-  };
 }
 
 function matchingMemoryOpenParen(text: string): number {

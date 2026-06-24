@@ -260,6 +260,12 @@ describe('parseMips', () => {
       const overloads = result.macros.get('my_macro')!;
       expect(overloads).toHaveLength(1);
       expect(overloads[0].params).toEqual(['%a', '%b']);
+      const directive = result.ast.statements[0].executable;
+      expect(directive?.kind).toBe('directive');
+      if (directive?.kind === 'directive') {
+        expect(directive.macroHeader?.name).toBe('my_macro');
+        expect(directive.macroHeader?.params.map((param) => param.name)).toEqual(['%a', '%b']);
+      }
     });
 
     it('reports error for missing .end_macro', () => {

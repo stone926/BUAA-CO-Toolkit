@@ -177,7 +177,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       section = targetSection as MipsSection;
     }
 
-    const macroStart = executableAst.lowerMnemonic === '.macro' ? parseMacroDefinition(executableAst) : undefined;
+    const macroStart = executableAst.kind === 'directive' && executableAst.lowerMnemonic === '.macro' ? executableAst.macroHeader : undefined;
     if (macroStart) {
       const name = macroStart.name;
       const params = macroStart.params.map((param) => param.name);
@@ -377,71 +377,6 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   };
 }
 
-interface ParsedMacroDefinition {
-  name: string;
-  nameRange: Range;
-  params: Array<{ name: string; range: Range }>;
-}
-
-function parseMacroDefinition(executable: MipsExecutableAst): ParsedMacroDefinition | undefined {
-  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
-  const text = executable.operandText;
-  let offset = skipAsciiWhitespace(text, 0);
-  const nameStart = offset;
-  if (!isMipsSymbolStart(text[offset] ?? '')) {
-    return undefined;
-  }
-  offset++;
-  while (offset < text.length && isMipsSymbolPart(text[offset])) {
-    offset++;
-  }
-  const name = text.slice(nameStart, offset);
-  let restStart = skipAsciiWhitespace(text, offset);
-  let restEnd = trimRightIndex(text, text.length);
-  if (restStart < restEnd && text[restStart] === '(' && text[restEnd - 1] === ')') {
-    restStart++;
-    restEnd--;
-  }
-  const params: ParsedMacroDefinition['params'] = [];
-  let paramStart = restStart;
-  let index = restStart;
-  while (index <= restEnd) {
-    const atEnd = index === restEnd;
-    const char = atEnd ? '' : text[index];
-    if (!atEnd && char !== ',' && !isAsciiWhitespace(char)) {
-      index++;
-      continue;
-    }
-    const rawStart = skipAsciiWhitespace(text, paramStart);
-    const rawEnd = trimRightIndex(text, index);
-    if (rawStart < rawEnd) {
-      const raw = text.slice(rawStart, rawEnd);
-      const normalized = raw.startsWith('%') || raw.startsWith('$') ? raw : `%${raw}`;
-      params.push({
-        name: normalized,
-        range: Range.create(
-          executable.range.start.line,
-          base + rawStart,
-          executable.range.start.line,
-          base + rawEnd
-        )
-      });
-    }
-    paramStart = index + 1;
-    index++;
-  }
-  return {
-    name,
-    nameRange: Range.create(
-      executable.range.start.line,
-      base + nameStart,
-      executable.range.start.line,
-      base + offset
-    ),
-    params
-  };
-}
-
 function validateDirective(
   document: TextDocument,
   lineNumber: number,
@@ -586,7 +521,7 @@ function validateMacroHeader(document: TextDocument, lineNumber: number, name: s
 }
 
 function validateMacroDirectiveSyntax(document: TextDocument, lineNumber: number, executable: MipsExecutableAst, diagnostics: Diagnostic[]): void {
-  if (!parseMacroDefinition(executable)) {
+  if (executable.kind !== 'directive' || !executable.macroHeader) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, '.macro'), '.macro expects a macro name and optional formal parameters.', DiagnosticSeverity.Error, 'macro-header'));
   }
 }
