@@ -373,9 +373,7 @@ function collectReferences(
       }
     }
 
-    const moduleStart = document.offsetAt(module.range.start);
-    const moduleEnd = document.offsetAt(module.range.end);
-    collectAstDrivenModuleReferences(document, source, references, declarationRangeKeys, module, scope, blockScopes, moduleStart, moduleEnd);
+    collectAstDrivenModuleReferences(document, source, references, declarationRangeKeys, module, scope, blockScopes);
   }
 
   return references;
@@ -825,25 +823,23 @@ function collectAstDrivenModuleReferences(
   declarationRangeKeys: Set<string>,
   module: VerilogModule,
   moduleScope: VerilogSemanticScope,
-  blockScopes: VerilogSemanticScope[],
-  moduleStart: number,
-  moduleEnd: number
+  blockScopes: VerilogSemanticScope[]
 ): void {
   const moduleAst = source.ast.modules.find((item) => item.module === module);
-  const proceduralBlocks = moduleAst?.proceduralBlocks ?? [];
-  for (const statement of source.ast.cst.statements) {
-    if (statement.start < moduleStart || statement.end > moduleEnd) {
-      continue;
-    }
-    const block = moduleAst ? proceduralBlockForStatement(document, statement.start, proceduralBlocks) : undefined;
+  if (!moduleAst) {
+    return;
+  }
+  const proceduralBlocks = moduleAst.proceduralBlocks;
+  for (const statementAst of moduleAst.items) {
+    const block = proceduralBlockForStatement(document, statementAst.statement.start, proceduralBlocks);
     if (block) {
       collectReferencesFromProceduralBlockAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block);
       continue;
     }
-    if (isInsideProceduralBlockBody(document, statement.start, statement.end, proceduralBlocks)) {
+    if (isInsideProceduralBlockBody(document, statementAst.statement.start, statementAst.statement.end, proceduralBlocks)) {
       continue;
     }
-    const tokens = statement.tokens.filter((token) => token.kind !== 'eof');
+    const tokens = statementAst.tokens.filter((token) => token.kind !== 'eof');
     const first = tokens[0];
     if (!first) {
       continue;
@@ -854,7 +850,7 @@ function collectAstDrivenModuleReferences(
     if (declarationKinds.has(first.value)) {
       const equal = firstTopLevelToken(tokens, '=');
       if (equal >= 0) {
-        const scope = scopeAtPosition(moduleScope, blockScopes, statement.range.start);
+        const scope = scopeAtPosition(moduleScope, blockScopes, statementAst.range.start);
         const expressionTokens = tokens.slice(equal + 1);
         collectReferencesFromExpressionTokens(document, references, declarationRangeKeys, scope, module, expressionTokens);
         collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, expressionTokens);
@@ -864,15 +860,12 @@ function collectAstDrivenModuleReferences(
     if (looksLikeInstanceStatement(module, tokens)) {
       continue;
     }
-    const scope = scopeAtPosition(moduleScope, blockScopes, statement.range.start);
-    const statementAst = moduleAst?.items.find((item) => item.statement === statement);
-    if (statementAst) {
-      for (const expression of statementAst.expressions) {
-        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
-      }
-      if (statementAst.expressions.length > 0) {
-        continue;
-      }
+    const scope = scopeAtPosition(moduleScope, blockScopes, statementAst.range.start);
+    for (const expression of statementAst.expressions) {
+      collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
+    }
+    if (statementAst.expressions.length > 0) {
+      continue;
     }
     collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, tokens);
   }
