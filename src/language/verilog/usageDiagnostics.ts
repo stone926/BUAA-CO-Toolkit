@@ -42,7 +42,7 @@ export function collectWorkspaceUsageDiagnostics(
     const usage = collectModuleUsage(document, parsed, index, module);
     for (const decl of module.declarations.values()) {
       if (shouldCheckParameterUsage(decl)) {
-        const parameterReads = parameterReadRanges(document, parsed.cst, parsed.semantic, module, decl);
+        const parameterReads = parameterReadRanges(parsed.semantic, module, decl);
         if (!parameterReads.length) {
           diagnostics.push(makeDiagnostic(decl.selectionRange, `Parameter '${decl.name}' is declared but never used.`, DiagnosticSeverity.Information, 'unused-parameter'));
         }
@@ -95,13 +95,7 @@ function collectModuleUsage(
   return usage;
 }
 
-function parameterReadRanges(
-  document: TextDocument,
-  cst: VerilogCstDocument,
-  semantic: VerilogSemanticModel,
-  module: VerilogModule,
-  decl: VerilogDecl
-): Range[] {
+function parameterReadRanges(semantic: VerilogSemanticModel, module: VerilogModule, decl: VerilogDecl): Range[] {
   const ranges: Range[] = [];
   const seen = new Set<string>();
   const add = (range: Range): void => {
@@ -118,20 +112,6 @@ function parameterReadRanges(
     if (referenceBelongsToModule(reference, module) && reference.name === decl.name && reference.kind !== 'portConnection') {
       add(reference.range);
     }
-  }
-
-  const moduleStart = document.offsetAt(module.range.start);
-  const moduleEnd = document.offsetAt(module.range.end);
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
-    if (token.start < moduleStart || token.end > moduleEnd || token.value !== decl.name) {
-      continue;
-    }
-    const previous = previousSignificantToken(cst.codeTokens, index);
-    if (previous?.value === '.') {
-      continue;
-    }
-    add(Range.create(document.positionAt(token.start), document.positionAt(token.end)));
   }
   return ranges;
 }
@@ -219,15 +199,6 @@ function cstForModule(document: TextDocument, cst: VerilogCstDocument, module: V
     ...cst,
     statements: cst.statements.filter((statement) => statement.end > start && statement.start < end)
   };
-}
-
-function previousSignificantToken(tokens: VerilogCstDocument['codeTokens'], index: number) {
-  for (let cursor = index - 1; cursor >= 0; cursor--) {
-    if (tokens[cursor].kind !== 'comment' && tokens[cursor].kind !== 'eof') {
-      return tokens[cursor];
-    }
-  }
-  return undefined;
 }
 
 function referenceBelongsToModule(reference: VerilogSemanticReference, module: VerilogModule): boolean {

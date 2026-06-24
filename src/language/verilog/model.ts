@@ -10,6 +10,8 @@ export interface VerilogDecl {
   name: string;
   kind: VerilogDeclKind;
   width?: string;
+  widthRange?: Range;
+  widthAst?: VerilogExpressionAst[];
   initializer?: string;
   initializerRange?: Range;
   initializerAst?: VerilogExpressionAst;

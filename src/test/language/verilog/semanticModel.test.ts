@@ -161,6 +161,26 @@ describe('Verilog AST and semantic model', () => {
     expect(portConnectionUse?.symbol?.name).toBe('tmp');
   });
 
+  it('collects declaration width AST references in ports and body declarations', () => {
+    const text = [
+      'module widths #(parameter W = 4)(input [W-1:0] in, output out);',
+      '    localparam LAST = W - 1;',
+      '    wire [LAST:0] bus = in;',
+      '    assign out = bus[LAST];',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const module = result.modules[0];
+    const inDecl = module.declarations.get('in');
+    const busDecl = module.declarations.get('bus');
+
+    expect(inDecl?.widthAst).toHaveLength(2);
+    expect(busDecl?.widthAst).toHaveLength(2);
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('[W-1:0]') + 1))?.symbol?.kind).toBe('parameter');
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('[LAST:0]') + 1))?.symbol?.name).toBe('LAST');
+  });
+
   it('collects procedural AST references in controls, conditions, and assignments', () => {
     const text = [
       'module proc(input clk, input a, input [1:0] sel, output reg y);',

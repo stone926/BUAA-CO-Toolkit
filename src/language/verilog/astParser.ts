@@ -225,25 +225,25 @@ function readModuleHeader(tokens: VerilogToken[], moduleIndex: number, text: str
 function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
   const ports: VerilogDecl[] = [];
   let inheritedDirection: 'input' | 'output' | 'inout' | undefined;
-  let inheritedWidth: string | undefined;
+  let inheritedWidth: DeclarationWidthInfo | undefined;
   for (const part of splitTopLevel(tokens, ',')) {
     const port = parseDeclFragment(document, text, part, 'wire');
     if (!port) {
       continue;
     }
     const direction = firstTokenValue(part, portKinds) as 'input' | 'output' | 'inout' | undefined;
-    const width = firstRangeText(text, part);
+    const width = firstRangeInfo(document, text, part);
     if (direction) {
       port.direction = direction;
       port.kind = direction;
-      port.width = width ?? port.width;
+      applyDeclarationWidth(port, width);
       inheritedDirection = direction;
       inheritedWidth = width;
     } else if (inheritedDirection) {
       port.direction = inheritedDirection;
       port.kind = inheritedDirection;
       if (!port.width && inheritedWidth) {
-        port.width = inheritedWidth;
+        applyDeclarationWidth(port, inheritedWidth);
       }
     }
     ports.push(port);
@@ -271,7 +271,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
     }
     const prefix = semicolonTrimmed.slice(0, firstName);
     const kind = first.value as VerilogDeclKind;
-    const width = lastRangeText(text, prefix);
+    const width = lastRangeInfo(document, text, prefix);
     for (const part of splitTopLevel(semicolonTrimmed.slice(firstName), ',')) {
       const nameToken = declarationNameToken(part);
       if (!nameToken) {
@@ -284,7 +284,9 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
       declarations.push({
         name: nameToken.value,
         kind,
-        width,
+        width: width?.width,
+        widthRange: width?.widthRange,
+        widthAst: width?.widthAst,
         initializer: initializer.initializer,
         initializerRange: initializer.initializerRange,
         initializerAst: initializer.initializerAst,
@@ -346,10 +348,13 @@ function subroutineArgumentDeclarations(document: TextDocument, text: string, to
       continue;
     }
     // Arguments are task/function locals, not module ports — keep them as a non-port kind.
+    const width = firstRangeInfo(document, text, part);
     result.push({
       name: nameToken.value,
       kind: 'reg',
-      width: firstRangeText(text, part),
+      width: width?.width,
+      widthRange: width?.widthRange,
+      widthAst: width?.widthAst,
       range: Range.create(document.positionAt(part[0].start), document.positionAt(part[part.length - 1].end)),
       selectionRange: tokenRange(document, nameToken)
     });
@@ -459,6 +464,7 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   const explicitKind = firstTokenValue(cleaned, declKinds) as VerilogDeclKind | undefined;
   const kind = (direction ?? explicitKind ?? fallbackKind) as VerilogDeclKind;
   const initializer = declarationInitializerInfo(document, text, cleaned);
+  const width = firstRangeInfo(document, text, cleaned);
   const inferred = (kind === 'parameter' || kind === 'localparam')
     ? initializer
     : {};
@@ -466,7 +472,9 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
     name: nameToken.value,
     kind,
     direction,
-    width: firstRangeText(text, cleaned),
+    width: width?.width,
+    widthRange: width?.widthRange,
+    widthAst: width?.widthAst,
     initializer: initializer.initializer,
     initializerRange: initializer.initializerRange,
     initializerAst: initializer.initializerAst,
@@ -669,6 +677,12 @@ interface DeclarationInitializerInfo extends WidthInfo {
   initializerAst?: VerilogExpressionAst;
 }
 
+interface DeclarationWidthInfo {
+  width: string;
+  widthRange: Range;
+  widthAst: VerilogExpressionAst[];
+}
+
 function declarationInitializerInfo(document: TextDocument, text: string, tokens: VerilogToken[]): DeclarationInitializerInfo {
   const equal = findTopLevelToken(tokens, '=');
   if (equal < 0) {
@@ -714,28 +728,66 @@ function findTopLevelToken(tokens: VerilogToken[], value: string): number {
   return -1;
 }
 
-function firstRangeText(text: string, tokens: VerilogToken[]): string | undefined {
+function applyDeclarationWidth(decl: VerilogDecl, width: DeclarationWidthInfo | undefined): void {
+  if (!width) {
+    return;
+  }
+  decl.width = width.width;
+  decl.widthRange = width.widthRange;
+  decl.widthAst = width.widthAst;
+}
+
+function firstRangeInfo(document: TextDocument, text: string, tokens: VerilogToken[]): DeclarationWidthInfo | undefined {
   const open = tokens.findIndex((token) => token.value === '[');
   if (open < 0) {
     return undefined;
   }
   const close = findMatchingToken(tokens, open, '[', ']');
-  return close >= 0 ? normalizeWidth(text.slice(tokens[open].start, tokens[close].end)) : undefined;
+  return close >= 0 ? declarationWidthInfo(document, text, tokens, open, close) : undefined;
 }
 
-function lastRangeText(text: string, tokens: VerilogToken[]): string | undefined {
-  let result: string | undefined;
+function lastRangeInfo(document: TextDocument, text: string, tokens: VerilogToken[]): DeclarationWidthInfo | undefined {
+  let result: DeclarationWidthInfo | undefined;
   for (let index = 0; index < tokens.length; index++) {
     if (tokens[index].value !== '[') {
       continue;
     }
     const close = findMatchingToken(tokens, index, '[', ']');
     if (close >= 0) {
-      result = normalizeWidth(text.slice(tokens[index].start, tokens[close].end));
+      result = declarationWidthInfo(document, text, tokens, index, close);
       index = close;
     }
   }
   return result;
+}
+
+function declarationWidthInfo(
+  document: TextDocument,
+  text: string,
+  tokens: VerilogToken[],
+  open: number,
+  close: number
+): DeclarationWidthInfo {
+  const widthTokens = tokens.slice(open, close + 1);
+  const contentTokens = tokens.slice(open + 1, close);
+  const widthText = text.slice(tokens[open].start, tokens[close].end);
+  return {
+    width: normalizeWidth(widthText) ?? widthText.trim(),
+    widthRange: tokensRange(document, widthTokens, tokens[open].start, tokens[close].end),
+    widthAst: parseWidthExpressionAsts(contentTokens)
+  };
+}
+
+function parseWidthExpressionAsts(tokens: VerilogToken[]): VerilogExpressionAst[] {
+  const separator = topLevelIndexOfValue(tokens, ':', 0, tokens.length);
+  if (separator < 0) {
+    const expression = parseVerilogExpressionTokens(tokens);
+    return expression ? [expression] : [];
+  }
+  return [
+    parseVerilogExpressionTokens(tokens.slice(0, separator)),
+    parseVerilogExpressionTokens(tokens.slice(separator + 1))
+  ].filter((expression): expression is VerilogExpressionAst => Boolean(expression));
 }
 
 function firstTokenValue(tokens: VerilogToken[], values: Set<string>): string | undefined {

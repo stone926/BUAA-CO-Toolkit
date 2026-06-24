@@ -356,6 +356,10 @@ function collectReferences(
     }
 
     for (const decl of module.declarations.values()) {
+      for (const widthExpression of decl.widthAst ?? []) {
+        const widthScope = scopeAtPosition(scope, blockScopes, decl.widthRange?.start ?? decl.range.start);
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, widthScope, module, widthExpression, 0);
+      }
       if (!decl.initializer || !decl.initializerRange) {
         continue;
       }
