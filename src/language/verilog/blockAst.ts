@@ -8,12 +8,25 @@ export interface VerilogAlwaysBlockAst {
   headerRange: Range;
   range: Range;
   sensitivityTokens: VerilogToken[];
+  sensitivity: VerilogSensitivityAst;
   bodyTokens: VerilogToken[];
   statementTree: VerilogBlockStatementAst;
   bodyStart: number;
   bodyEnd: number;
   sequential: boolean;
   combinational: boolean;
+}
+
+export interface VerilogSensitivityAst {
+  wildcard: boolean;
+  events: VerilogSensitivityEventAst[];
+  hasPosedgeSignal: boolean;
+  hasNegedge: boolean;
+}
+
+export interface VerilogSensitivityEventAst {
+  edge?: 'posedge' | 'negedge';
+  signal?: string;
 }
 
 export type VerilogProceduralBlockKind = 'always' | 'initial';
@@ -65,36 +78,6 @@ export function collectProceduralBlocksFromTokens(document: TextDocument, tokens
   return blocks;
 }
 
-export function edgeSignalsFromSensitivity(tokens: VerilogToken[]): string[] {
-  const signals: string[] = [];
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value !== 'posedge' && token.value !== 'negedge') {
-      continue;
-    }
-    const signal = nextIdentifier(tokens, index + 1);
-    if (signal) {
-      signals.push(signal.value);
-    }
-  }
-  return signals;
-}
-
-export function hasTokenValue(tokens: VerilogToken[], value: string): boolean {
-  return tokens.some((token) => token.value === value);
-}
-
-export function hasAnyTokenValue(tokens: VerilogToken[], values: Set<string>): boolean {
-  return tokens.some((token) => values.has(token.value));
-}
-
-export function tokenListText(source: string, tokens: VerilogToken[]): string {
-  if (!tokens.length) {
-    return '';
-  }
-  return source.slice(tokens[0].start, tokens[tokens.length - 1].end);
-}
-
 function parseAlwaysBlockAt(document: TextDocument, tokens: VerilogToken[], alwaysIndex: number, moduleEnd: number): VerilogAlwaysBlockAst | undefined {
   const always = tokens[alwaysIndex];
   let cursor = alwaysIndex + 1;
@@ -135,17 +118,48 @@ function parseAlwaysBlockAt(document: TextDocument, tokens: VerilogToken[], alwa
   const bodyStart = bodyStartToken.start;
   const bodyEnd = bodyEndToken?.end ?? bodyStartToken.end;
   const bodyTokens = tokens.slice(cursor, endIndex + 1);
-  const sequential = sensitivityTokens.some((token) => token.value === 'posedge' || token.value === 'negedge');
+  const sensitivity = parseSensitivity(sensitivityTokens);
+  const sequential = sensitivity.events.some((event) => event.edge === 'posedge' || event.edge === 'negedge');
   return {
     headerRange: Range.create(document.positionAt(always.start), document.positionAt(bodyStartToken.start)),
     range: Range.create(document.positionAt(always.start), document.positionAt(bodyEnd)),
     sensitivityTokens,
+    sensitivity,
     bodyTokens,
     statementTree: parseVerilogProceduralBlockBody(document, bodyTokens),
     bodyStart,
     bodyEnd,
     sequential,
     combinational: !sequential
+  };
+}
+
+function parseSensitivity(tokens: VerilogToken[]): VerilogSensitivityAst {
+  const events: VerilogSensitivityEventAst[] = [];
+  let wildcard = false;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '*') {
+      wildcard = true;
+      continue;
+    }
+    if (token.value === 'posedge' || token.value === 'negedge') {
+      const signalIndex = nextIdentifierIndex(tokens, index + 1);
+      events.push({ edge: token.value, signal: signalIndex >= 0 ? tokens[signalIndex].value : undefined });
+      if (signalIndex >= 0) {
+        index = signalIndex;
+      }
+      continue;
+    }
+    if (token.kind === 'identifier') {
+      events.push({ signal: token.value });
+    }
+  }
+  return {
+    wildcard,
+    events,
+    hasPosedgeSignal: events.some((event) => event.edge === 'posedge' && Boolean(event.signal)),
+    hasNegedge: events.some((event) => event.edge === 'negedge')
   };
 }
 
@@ -278,14 +292,14 @@ function findStatementSemicolon(tokens: VerilogToken[], start: number): number {
   return tokens.length - 1;
 }
 
-function nextIdentifier(tokens: VerilogToken[], start: number): VerilogToken | undefined {
+function nextIdentifierIndex(tokens: VerilogToken[], start: number): number {
   for (let index = start; index < tokens.length; index++) {
     if (tokens[index].kind === 'identifier') {
-      return tokens[index];
+      return index;
     }
     if (tokens[index].value === 'or' || tokens[index].value === ',' || tokens[index].value === ')') {
-      return undefined;
+      return -1;
     }
   }
-  return undefined;
+  return -1;
 }

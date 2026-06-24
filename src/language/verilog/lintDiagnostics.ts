@@ -7,18 +7,13 @@ import {
   collectAssignmentUsesFromProceduralStatementAst
 } from './assignmentAst';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
-import type { VerilogToken } from './lexer';
 import {
   safeRegExp,
 } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
-import {
-  edgeSignalsFromSensitivity,
-  hasTokenValue,
-  VerilogProceduralBlockAst
-} from './blockAst';
+import { VerilogProceduralBlockAst } from './blockAst';
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
@@ -268,7 +263,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
     const block = blocks[index];
     const blockAssignments = collectAssignmentUsesFromProceduralStatementAst(document, block.statementTree, index);
     if (block.combinational) {
-      if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-006') && !block.sensitivity.wildcard) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
       }
       if (isVerilogLintRuleEnabled(settings, 'vc-007') && blockAssignments.some((assignment) => assignment.operator === '<=')) {
@@ -278,11 +273,13 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
     }
 
     if (block.sequential) {
-      const edgeSignals = edgeSignalsFromSensitivity(block.sensitivityTokens);
-      if (isVerilogLintRuleEnabled(settings, 'vc-009') && !hasPosedgeSignal(block.sensitivityTokens)) {
+      const edgeSignals = block.sensitivity.events
+        .filter((event) => event.edge === 'posedge' || event.edge === 'negedge')
+        .flatMap((event) => event.signal ? [event.signal] : []);
+      if (isVerilogLintRuleEnabled(settings, 'vc-009') && !block.sensitivity.hasPosedgeSignal) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-009: sequential logic should be implemented in always @(posedge clock) blocks.', DiagnosticSeverity.Warning, 'vc-009-seq-posedge'));
       }
-      if (isVerilogLintRuleEnabled(settings, 'vc-011') && hasTokenValue(block.sensitivityTokens, 'negedge')) {
+      if (isVerilogLintRuleEnabled(settings, 'vc-011') && block.sensitivity.hasNegedge) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-011: avoid negedge-triggered logic unless a protocol explicitly requires it.', DiagnosticSeverity.Warning, 'vc-011-negedge'));
       }
       for (const signal of edgeSignals) {
@@ -748,18 +745,6 @@ function parseDecimalBigInt(value: string): bigint | undefined {
     return undefined;
   }
   return BigInt(value.split('_').join(''));
-}
-
-function hasPosedgeSignal(tokens: VerilogToken[]): boolean {
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].value !== 'posedge') {
-      continue;
-    }
-    if (tokens.slice(index + 1).some((token) => token.kind === 'identifier')) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function identifierStyle(name: string): 'snake' | 'camel' | 'pascal' | undefined {

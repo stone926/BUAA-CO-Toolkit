@@ -572,6 +572,33 @@ endmodule
     }
   });
 
+  it('attaches structured sensitivity lists to always blocks', () => {
+    const text = `
+module m(input clk, input reset, input a, output reg y);
+    always @(posedge clk or negedge reset) begin
+        y <= a;
+    end
+    always @(*) begin
+        y = a;
+    end
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const [sequential, combinational] = parsed.ast.modules[0].alwaysBlocks;
+
+    expect(sequential.sensitivity.hasPosedgeSignal).toBe(true);
+    expect(sequential.sensitivity.hasNegedge).toBe(true);
+    expect(sequential.sensitivity.wildcard).toBe(false);
+    expect(sequential.sensitivity.events).toEqual([
+      { edge: 'posedge', signal: 'clk' },
+      { edge: 'negedge', signal: 'reset' }
+    ]);
+
+    expect(combinational.sensitivity.wildcard).toBe(true);
+    expect(combinational.sensitivity.hasPosedgeSignal).toBe(false);
+    expect(combinational.sensitivity.hasNegedge).toBe(false);
+  });
+
   it('parses procedural assignment lhs after delay controls and statement labels', () => {
     const text = `
 module m(output reg clk, output reg y);
