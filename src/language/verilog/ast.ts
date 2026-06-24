@@ -27,7 +27,6 @@ export interface VerilogAstDocument {
   kind: 'sourceFile';
   uri: string;
   range: Range;
-  cst: VerilogCstDocument;
   tokens: VerilogToken[];
   lexicalDiagnostics: VerilogLexDiagnostic[];
   trivia: VerilogTriviaAst[];
@@ -128,10 +127,11 @@ export type VerilogStatementKind =
 export interface VerilogStatementAst {
   kind: VerilogStatementKind;
   range: Range;
+  start: number;
+  end: number;
   tokens: VerilogToken[];
   expressions: VerilogExpressionAst[];
   assignment?: VerilogAssignmentExpressionAst;
-  statement: VerilogCstStatement;
   module?: VerilogModule;
 }
 
@@ -173,7 +173,6 @@ export function buildVerilogAst(
     kind: 'sourceFile',
     uri: document.uri,
     range: documentRange(document),
-    cst,
     tokens: codeTokens,
     lexicalDiagnostics: cst.diagnostics,
     trivia: cst.tokens
@@ -266,12 +265,13 @@ function declAst(decl: VerilogDecl): VerilogDeclAst {
 function buildStatementAst(statement: VerilogCstStatement, module?: VerilogModule): VerilogStatementAst {
   const assignment = assignmentExpressionAst(statement.tokens);
   return {
-    kind: classifyStatement(statement, module),
+    kind: classifyStatement(statement.tokens, module),
     range: statement.range,
+    start: statement.start,
+    end: statement.end,
     tokens: statement.tokens,
     expressions: assignment ? [assignment.lhs, assignment.rhs] : [],
     assignment,
-    statement,
     module
   };
 }
@@ -286,8 +286,8 @@ function assignmentExpressionAst(rawTokens: VerilogToken[]): VerilogAssignmentEx
   return lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined;
 }
 
-function classifyStatement(statement: VerilogCstStatement, module?: VerilogModule): VerilogStatementKind {
-  const first = statement.tokens.find((token) => token.kind !== 'eof');
+function classifyStatement(tokens: VerilogToken[], module?: VerilogModule): VerilogStatementKind {
+  const first = tokens.find((token) => token.kind !== 'eof');
   if (!first) {
     return 'other';
   }

@@ -831,12 +831,12 @@ function collectAstDrivenModuleReferences(
   }
   const proceduralBlocks = moduleAst.proceduralBlocks;
   for (const statementAst of moduleAst.items) {
-    const block = proceduralBlockForStatement(document, statementAst.statement.start, proceduralBlocks);
+    const block = proceduralBlockForStatement(document, statementAst.start, proceduralBlocks);
     if (block) {
       collectReferencesFromProceduralBlockAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block);
       continue;
     }
-    if (isInsideProceduralBlockBody(document, statementAst.statement.start, statementAst.statement.end, proceduralBlocks)) {
+    if (isInsideProceduralBlockBody(document, statementAst.start, statementAst.end, proceduralBlocks)) {
       continue;
     }
     const tokens = statementAst.tokens.filter((token) => token.kind !== 'eof');
