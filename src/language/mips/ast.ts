@@ -11,6 +11,7 @@ import {
   parseCharLiteral,
   parseIntegerLiteral,
   parseMacroArgumentNodes,
+  parseMipsOperandNodes,
   parseMipsSourceDocument
 } from './syntax';
 import { isMipsStringLiteralText, parseMipsMemoryOperand } from './operandAst';
@@ -49,6 +50,7 @@ export interface MipsStatementAst extends MipsBaseLineAst {
   kind: 'statement';
   labels: MipsLabelAst[];
   executable?: MipsExecutableAst;
+  dataContinuation?: MipsDataDirectiveContinuationAst;
   comment?: MipsCommentAst;
 }
 
@@ -63,6 +65,13 @@ export interface MipsCommentAst {
   kind: 'comment';
   text: string;
   range: Range;
+}
+
+export interface MipsDataDirectiveContinuationAst {
+  kind: 'dataDirectiveContinuation';
+  text: string;
+  range: Range;
+  operands: MipsOperandAst[];
 }
 
 export type MipsExecutableAst =
@@ -220,18 +229,20 @@ function buildLineAst(line: MipsParsedLine): MipsAstLine {
       }
     };
   }
+  const labels = line.labels.map((label) => ({
+    kind: 'label' as const,
+    name: label.name,
+    range: mipsParsedRange(line.line, label.range),
+    colonRange: mipsParsedRange(line.line, label.colonRange)
+  }));
   return {
     kind: 'statement',
     line: line.line,
     text: line.text,
     range,
-    labels: line.labels.map((label) => ({
-      kind: 'label',
-      name: label.name,
-      range: mipsParsedRange(line.line, label.range),
-      colonRange: mipsParsedRange(line.line, label.colonRange)
-    })),
+    labels,
     executable: line.executable ? buildExecutableAst(line.line, line.executable) : undefined,
+    dataContinuation: buildDataDirectiveContinuationAst(line, labels),
     comment: line.comment
       ? {
         kind: 'comment',
@@ -239,6 +250,24 @@ function buildLineAst(line: MipsParsedLine): MipsAstLine {
         range: Range.create(line.line, line.comment.start, line.line, line.comment.end)
       }
       : undefined
+  };
+}
+
+function buildDataDirectiveContinuationAst(line: MipsParsedLine, labels: MipsLabelAst[]): MipsDataDirectiveContinuationAst | undefined {
+  const start = labels.length
+    ? skipAsciiWhitespace(line.text, labels[labels.length - 1].colonRange.end.character)
+    : skipAsciiWhitespace(line.text, 0);
+  const codeEnd = line.comment?.start ?? line.text.length;
+  const end = trimRightIndex(line.text, codeEnd);
+  if (start >= end) {
+    return undefined;
+  }
+  const text = line.text.slice(start, end);
+  return {
+    kind: 'dataDirectiveContinuation',
+    text,
+    range: Range.create(line.line, start, line.line, end),
+    operands: parseMipsOperandNodes(text, start).map((operand) => buildOperandAst(line.line, operand))
   };
 }
 

@@ -330,7 +330,7 @@ function makeExecutable(code: string, lineNumber: number, mnemonic: TextSpan): M
   };
 }
 
-function parseMipsOperandNodes(text: string, baseOffset: number): MipsParsedOperand[] {
+export function parseMipsOperandNodes(text: string, baseOffset: number): MipsParsedOperand[] {
   const leading = leadingWhitespaceLength(text);
   const trailingEnd = trimRightIndex(text, text.length);
   let normalized = text.slice(leading, trailingEnd);

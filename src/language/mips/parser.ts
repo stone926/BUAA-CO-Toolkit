@@ -9,7 +9,7 @@ import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp'
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { buildMipsAst } from './ast';
-import type { MipsDirectiveAst, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
+import type { MipsDataDirectiveContinuationAst, MipsDirectiveAst, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
 import {
   instructionWritesRegister,
   isMacroArgumentToken,
@@ -32,8 +32,7 @@ import {
   isSymbolLike,
   parseCharLiteral,
   parseMipsSourceDocument,
-  parseIntegerLiteral,
-  parseOperands
+  parseIntegerLiteral
 } from './syntax';
 import {
   buildMipsSemanticModel,
@@ -142,9 +141,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
     const executableAst = statement.executable;
     if (!executableAst) {
-      const continuationText = dataDirectiveContinuationText(statement);
-      if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
-        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
+      const continuation = statement.dataContinuation;
+      if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuation)) {
+        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
         directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
       }
       continue;
@@ -257,9 +256,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     const instruction = instructions[mnemonic];
     const macroOverloads = macros.get(executableAst.mnemonic);
     if (!instruction && !macroOverloads?.length) {
-      const continuationText = dataDirectiveContinuationText(statement);
-      if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
-        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
+      const continuation = statement.dataContinuation;
+      if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuation)) {
+        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
         directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
         continue;
       }
@@ -469,42 +468,38 @@ function isAllowedCourseSectionAddress(directive: string, operand: MipsOperandAs
   return address === 0x4180;
 }
 
-function validateDirectiveContinuation(document: TextDocument, lineNumber: number, directive: string, operandText: string, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+function validateDirectiveContinuation(document: TextDocument, lineNumber: number, directive: string, continuation: MipsDataDirectiveContinuationAst, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
   switch (directive) {
     case '.byte':
     case '.half':
-      validateStorageNumberList(document, lineNumber, directive, directiveOperandsFromText(document, lineNumber, operandText), false, activeMacro, diagnostics);
+      validateStorageNumberList(document, lineNumber, directive, continuation.operands, false, activeMacro, diagnostics);
       return;
     case '.word':
-      validateWordDirective(document, lineNumber, directiveOperandsFromText(document, lineNumber, operandText), activeMacro, diagnostics);
+      validateWordDirective(document, lineNumber, continuation.operands, activeMacro, diagnostics);
       return;
     case '.float':
     case '.double':
-      validateFloatList(document, lineNumber, directive, directiveOperandsFromText(document, lineNumber, operandText), activeMacro, diagnostics);
+      validateFloatList(document, lineNumber, directive, continuation.operands, activeMacro, diagnostics);
       return;
     case '.ascii':
     case '.asciiz':
-      validateStringList(document, lineNumber, directive, directiveOperandsFromText(document, lineNumber, operandText), activeMacro, diagnostics);
+      validateStringList(document, lineNumber, directive, continuation.operands, activeMacro, diagnostics);
       return;
   }
 }
 
-function shouldTreatAsDataDirectiveContinuation(section: MipsSection, directive: string | undefined, activeMacro: MipsMacro | undefined, operandText: string): boolean {
+function shouldTreatAsDataDirectiveContinuation(
+  section: MipsSection,
+  directive: string | undefined,
+  activeMacro: MipsMacro | undefined,
+  continuation: MipsDataDirectiveContinuationAst | undefined
+): continuation is MipsDataDirectiveContinuationAst {
   return section === 'data'
     && !activeMacro
     && directive !== undefined
     && CONTINUABLE_DATA_DIRECTIVES.has(directive)
-    && operandText.trim().length > 0;
-}
-
-function dataDirectiveContinuationText(line: MipsStatementAst): string {
-  const code = line.text;
-  const start = line.labels.length
-    ? skipAsciiWhitespace(code, line.labels[line.labels.length - 1].colonRange.end.character)
-    : 0;
-  const codeEnd = line.comment?.range.start.character ?? code.length;
-  const end = trimRightIndex(code, codeEnd);
-  return start < end ? code.slice(start, end) : '';
+    && continuation !== undefined
+    && continuation.text.trim().length > 0;
 }
 
 function validateMacroHeader(document: TextDocument, lineNumber: number, name: string, params: string[], selectionRange: Range, diagnostics: Diagnostic[]): void {
@@ -532,22 +527,6 @@ function validateDirectiveOperandCount(document: TextDocument, lineNumber: numbe
     return false;
   }
   return true;
-}
-
-function directiveOperandsFromText(document: TextDocument, lineNumber: number, operandText: string): MipsOperandAst[] {
-  const lineText = lineAt(document, lineNumber).text;
-  let cursor = Math.max(0, lineText.indexOf(operandText));
-  return parseOperands(operandText).map<MipsOperandAst>((text) => {
-    const start = lineText.indexOf(text, cursor);
-    const safeStart = start >= 0 ? start : cursor;
-    const end = safeStart + text.length;
-    cursor = end;
-    return {
-      kind: 'expression',
-      text,
-      range: Range.create(lineNumber, safeStart, lineNumber, end)
-    };
-  });
 }
 
 function validateSectionAddressRange(directive: string, operand: MipsOperandAst | undefined, diagnostics: Diagnostic[]): void {
@@ -894,9 +873,10 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
     if (shouldSkipUndeclaredCheckForDirective(executable)) {
       continue;
     }
+    const continuation = continuationDirective ? statement.dataContinuation : undefined;
     const firstContinuationWordOperand = continuationDirective === '.word';
     const macroCall = macroCallAtStatement(parsed, statement);
-    for (const reference of undeclaredSymbolReferences(statement, firstContinuationWordOperand)) {
+    for (const reference of undeclaredSymbolReferences(statement, firstContinuationWordOperand, continuation)) {
       const token = reference.text;
       const range = reference.range;
       const key = rangeKey(range);
@@ -945,8 +925,18 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
   }
 }
 
-function undeclaredSymbolReferences(statement: MipsStatementAst, includeMnemonic: boolean): MipsOperandReferenceCandidate[] {
+function undeclaredSymbolReferences(
+  statement: MipsStatementAst,
+  includeMnemonic: boolean,
+  continuation?: MipsDataDirectiveContinuationAst
+): MipsOperandReferenceCandidate[] {
   const references: MipsOperandReferenceCandidate[] = [];
+  if (continuation) {
+    for (const operand of continuation.operands) {
+      references.push(...collectMipsOperandReferences(operand));
+    }
+    return references;
+  }
   const executable = statement.executable;
   if (!executable) {
     return references;

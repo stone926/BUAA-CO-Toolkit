@@ -181,6 +181,8 @@ describe('parseMips', () => {
       const result = parseMips(doc(text), settings());
       const errors = result.diagnostics.filter((d) => d.severity === 1);
       expect(errors).toHaveLength(0);
+      const continuation = result.ast.statements.find((statement) => statement.text.includes("2, 'a'"))?.dataContinuation;
+      expect(continuation?.operands.map((operand) => operand.text)).toEqual(['2', "'a'"]);
     });
   });
 
@@ -363,6 +365,12 @@ describe('parseMips', () => {
 
     it('reports undeclared symbols inside memory offset expressions', () => {
       const text = '    lw $t0, missing_label+4($sp)';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('undeclared-symbol');
+    });
+
+    it('reports undeclared labels from .word continuation operands', () => {
+      const text = '.data\narr: .word\n    missing_label';
       const result = parseMips(doc(text), settings());
       expect(diagCodes(result)).toContain('undeclared-symbol');
     });
