@@ -7,16 +7,21 @@ import { URI } from 'vscode-uri';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import {
+  VerilogDeclDimension,
   VerilogInstance,
   VerilogModule,
   VerilogParseResult
 } from './model';
 import { getCachedVerilogParse } from './parseCache';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
-import { VerilogToken } from './lexer';
 import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
 import { collectWorkspaceDriverDiagnostics } from './driverDiagnostics';
 import { collectWorkspaceUsageDiagnostics } from './usageDiagnostics';
+import { evalExpressionAstConstant } from './expressions';
+import { parseVerilogExpression, VerilogExpressionAst } from './exprAst';
+import { walkVerilogExpression } from './exprAstUtils';
+import type { VerilogAstDocument } from './ast';
+import type { VerilogProceduralStatementAst } from './proceduralAst';
 
 interface WorkspaceDiagnosticSummary {
   version: number;
@@ -200,25 +205,7 @@ function workspaceDiagnosticSummary(index: VerilogWorkspaceIndex): WorkspaceDiag
     }
   }
   for (const file of index.indexedFiles()) {
-    const tokens = file.cst.codeTokens;
-    for (const token of tokens) {
-      const value = numericTokenValue(token);
-      if (value !== undefined) {
-        summary.numericValues.add(value);
-      }
-    }
-    for (let tokenIndex = 0; tokenIndex + 4 < tokens.length; tokenIndex++) {
-      if (
-        tokens[tokenIndex].value === '[' &&
-        tokens[tokenIndex + 2].value === ':' &&
-        tokens[tokenIndex + 4].value === ']'
-      ) {
-        const depth = memoryDepthFromBounds(tokens[tokenIndex + 1], tokens[tokenIndex + 3]);
-        if (depth !== undefined) {
-          summary.memoryDepths.add(depth);
-        }
-      }
-    }
+    collectWorkspaceSummaryFromAst(file.semantic.ast, summary);
   }
   workspaceSummaryCache.set(index, summary);
   return summary;
@@ -232,9 +219,104 @@ function hasMemoryDepth(summary: WorkspaceDiagnosticSummary, depth: number): boo
   return summary.memoryDepths.has(depth);
 }
 
-function memoryDepthFromBounds(left: VerilogToken, right: VerilogToken): number | undefined {
-  const leftValue = numericTokenValue(left);
-  const rightValue = numericTokenValue(right);
+function collectWorkspaceSummaryFromAst(ast: VerilogAstDocument, summary: WorkspaceDiagnosticSummary): void {
+  const addExpression = (expression: VerilogExpressionAst | undefined): void => {
+    if (!expression) {
+      return;
+    }
+    walkVerilogExpression(expression, (candidate) => {
+      if (candidate.kind === 'numberLiteral' && candidate.parsed?.value !== undefined) {
+        summary.numericValues.add(candidate.parsed.value);
+      }
+    });
+  };
+
+  for (const item of ast.preprocessor) {
+    if (item.kind === 'macroDefinition' && item.macro.body) {
+      addExpression(parseVerilogExpression(item.macro.body));
+    }
+  }
+
+  for (const moduleAst of ast.modules) {
+    for (const statement of moduleAst.items) {
+      for (const expression of statement.expressions) {
+        addExpression(expression);
+      }
+    }
+    for (const decl of moduleAst.module.declarations.values()) {
+      for (const expression of decl.widthAst ?? []) {
+        addExpression(expression);
+      }
+      addExpression(decl.initializerAst);
+      for (const dimension of decl.unpackedDimensions ?? []) {
+        for (const expression of dimension.expressions) {
+          addExpression(expression);
+        }
+        const depth = memoryDepthFromDimension(dimension, moduleAst.module);
+        if (depth !== undefined) {
+          summary.memoryDepths.add(depth);
+        }
+      }
+    }
+    for (const instance of moduleAst.module.instances) {
+      for (const connection of [...instance.parameterConnections, ...instance.portConnections]) {
+        addExpression(connection.expressionAst);
+      }
+    }
+    for (const block of moduleAst.proceduralBlocks) {
+      visitProceduralStatementExpressions(block.statementTree, addExpression);
+    }
+  }
+}
+
+function visitProceduralStatementExpressions(
+  statement: VerilogProceduralStatementAst,
+  visitExpression: (expression: VerilogExpressionAst | undefined) => void
+): void {
+  switch (statement.kind) {
+    case 'block':
+      for (const child of statement.statements) {
+        visitProceduralStatementExpressions(child, visitExpression);
+      }
+      return;
+    case 'assignment':
+      visitExpression(statement.lhs);
+      visitExpression(statement.rhs);
+      return;
+    case 'if':
+      visitExpression(statement.condition);
+      visitProceduralStatementExpressions(statement.consequent, visitExpression);
+      if (statement.alternate) {
+        visitProceduralStatementExpressions(statement.alternate, visitExpression);
+      }
+      return;
+    case 'case':
+      visitExpression(statement.expression);
+      for (const item of statement.items) {
+        for (const label of item.labels) {
+          visitExpression(label);
+        }
+        visitProceduralStatementExpressions(item.body, visitExpression);
+      }
+      return;
+    case 'loop':
+      visitExpression(statement.condition);
+      visitProceduralStatementExpressions(statement.body, visitExpression);
+      return;
+    case 'other':
+      visitExpression(statement.expression);
+      return;
+    case 'declaration':
+      return;
+  }
+}
+
+function memoryDepthFromDimension(dimension: VerilogDeclDimension, module: VerilogModule): number | undefined {
+  if (dimension.expressions.length !== 2) {
+    return undefined;
+  }
+  const leftValue = evalExpressionAstConstant(dimension.expressions[0], module);
+  const rightValue = evalExpressionAstConstant(dimension.expressions[1], module);
   if (leftValue === 0n) {
     return safeDepthFromLastIndex(rightValue);
   }
@@ -249,71 +331,6 @@ function safeDepthFromLastIndex(value: bigint | undefined): number | undefined {
     return undefined;
   }
   return Number(value + 1n);
-}
-
-function numericTokenValue(token: VerilogToken): bigint | undefined {
-  if (token.kind !== 'number') {
-    return undefined;
-  }
-  const parsed = parseVerilogNumber(token.value);
-  if (!parsed) {
-    return undefined;
-  }
-  const radix = parsed.base === 'b' ? 2n : parsed.base === 'o' ? 8n : parsed.base === 'h' ? 16n : 10n;
-  let value = 0n;
-  for (const char of parsed.digits) {
-    if (char === '_') {
-      continue;
-    }
-    const digit = digitValue(char);
-    if (digit === undefined || BigInt(digit) >= radix) {
-      return undefined;
-    }
-    value = value * radix + BigInt(digit);
-  }
-  return value;
-}
-
-function parseVerilogNumber(value: string): { base: 'b' | 'o' | 'd' | 'h'; digits: string } | undefined {
-  const apostrophe = value.indexOf("'");
-  if (apostrophe < 0) {
-    return allDecimalDigits(value) ? { base: 'd', digits: value } : undefined;
-  }
-  let index = apostrophe + 1;
-  if (value[index] === 's' || value[index] === 'S') {
-    index++;
-  }
-  const base = value[index]?.toLowerCase();
-  if (base !== 'b' && base !== 'o' && base !== 'd' && base !== 'h') {
-    return undefined;
-  }
-  const digits = value.slice(index + 1);
-  return digits ? { base, digits } : undefined;
-}
-
-function allDecimalDigits(value: string): boolean {
-  let sawDigit = false;
-  for (const char of value) {
-    if (char === '_') {
-      continue;
-    }
-    if (char < '0' || char > '9') {
-      return false;
-    }
-    sawDigit = true;
-  }
-  return sawDigit;
-}
-
-function digitValue(char: string): number | undefined {
-  if (char >= '0' && char <= '9') {
-    return char.charCodeAt(0) - '0'.charCodeAt(0);
-  }
-  const lower = char.toLowerCase();
-  if (lower >= 'a' && lower <= 'f') {
-    return lower.charCodeAt(0) - 'a'.charCodeAt(0) + 10;
-  }
-  return undefined;
 }
 
 function hasModuleCaseInsensitive(index: VerilogWorkspaceIndex, name: string): boolean {

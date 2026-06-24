@@ -12,6 +12,7 @@ export interface VerilogDecl {
   width?: string;
   widthRange?: Range;
   widthAst?: VerilogExpressionAst[];
+  unpackedDimensions?: VerilogDeclDimension[];
   initializer?: string;
   initializerRange?: Range;
   initializerAst?: VerilogExpressionAst;
@@ -24,6 +25,11 @@ export interface VerilogDecl {
   direction?: 'input' | 'output' | 'inout';
   directionRange?: Range;
   explicitPortNetType?: boolean;
+}
+
+export interface VerilogDeclDimension {
+  range: Range;
+  expressions: VerilogExpressionAst[];
 }
 
 export interface VerilogInstance {

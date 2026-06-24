@@ -7,6 +7,7 @@ import { splitVerilogModuleItems } from './statementUtils';
 import {
   systemTasks,
   VerilogDecl,
+  VerilogDeclDimension,
   VerilogDeclKind,
   VerilogInstance,
   VerilogModule,
@@ -304,6 +305,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
         continue;
       }
       const initializer = declarationInitializerInfo(document, text, part);
+      const unpackedDimensions = declarationDimensionInfos(document, text, part, nameToken);
       const inferred = (kind === 'parameter' || kind === 'localparam')
         ? initializer
         : {};
@@ -314,6 +316,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
         width: width?.width,
         widthRange: width?.widthRange,
         widthAst: width?.widthAst,
+        unpackedDimensions: unpackedDimensions.length ? unpackedDimensions : undefined,
         initializer: initializer.initializer,
         initializerRange: initializer.initializerRange,
         initializerAst: initializer.initializerAst,
@@ -494,6 +497,7 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   const explicitKind = firstTokenValue(cleaned, declKinds) as VerilogDeclKind | undefined;
   const kind = (direction ?? explicitKind ?? fallbackKind) as VerilogDeclKind;
   const initializer = declarationInitializerInfo(document, text, cleaned);
+  const unpackedDimensions = declarationDimensionInfos(document, text, cleaned, nameToken);
   const width = firstRangeInfo(document, text, cleaned);
   const inferred = (kind === 'parameter' || kind === 'localparam')
     ? initializer
@@ -505,6 +509,7 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
     width: width?.width,
     widthRange: width?.widthRange,
     widthAst: width?.widthAst,
+    unpackedDimensions: unpackedDimensions.length ? unpackedDimensions : undefined,
     initializer: initializer.initializer,
     initializerRange: initializer.initializerRange,
     initializerAst: initializer.initializerAst,
@@ -733,6 +738,38 @@ function declarationInitializerInfo(document: TextDocument, text: string, tokens
     initializerAst,
     initializerRange: tokensRange(document, expressionTokens, tokens[equal].end, tokens[tokens.length - 1].end)
   };
+}
+
+function declarationDimensionInfos(
+  document: TextDocument,
+  text: string,
+  tokens: VerilogToken[],
+  nameToken: VerilogToken
+): VerilogDeclDimension[] {
+  const dimensions: VerilogDeclDimension[] = [];
+  const nameIndex = tokens.indexOf(nameToken);
+  if (nameIndex < 0) {
+    return dimensions;
+  }
+  for (let index = nameIndex + 1; index < tokens.length; index++) {
+    if (tokens[index].value === '=') {
+      break;
+    }
+    if (tokens[index].value !== '[') {
+      continue;
+    }
+    const close = findMatchingToken(tokens, index, '[', ']');
+    if (close < 0) {
+      continue;
+    }
+    const dimension = declarationWidthInfo(document, text, tokens, index, close);
+    dimensions.push({
+      range: dimension.widthRange,
+      expressions: dimension.widthAst
+    });
+    index = close;
+  }
+  return dimensions;
 }
 
 function findTopLevelToken(tokens: VerilogToken[], value: string): number {
