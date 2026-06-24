@@ -32,13 +32,17 @@ export const preprocessorDirectives = new Set([
 ]);
 
 export function parseMacros(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogMacro[] {
+  return parseMacrosFromTokens(document, cst.codeTokens);
+}
+
+export function parseMacrosFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogMacro[] {
   const macros: VerilogMacro[] = [];
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
     if (!isDirective(token, 'define')) {
       continue;
     }
-    const name = nextTokenOnLine(document, cst.codeTokens, index + 1, token);
+    const name = nextTokenOnLine(document, tokens, index + 1, token);
     if (!name || name.kind !== 'identifier') {
       continue;
     }
@@ -63,9 +67,17 @@ export function parseMacroUses(
   macros: VerilogMacro[] = parseMacros(document, text),
   cst: VerilogCstDocument = parseVerilogCst(document, text)
 ): VerilogMacroUse[] {
+  return parseMacroUsesFromTokens(document, macros, cst.codeTokens);
+}
+
+export function parseMacroUsesFromTokens(
+  document: TextDocument,
+  macros: VerilogMacro[],
+  tokens: VerilogToken[]
+): VerilogMacroUse[] {
   const uses: VerilogMacroUse[] = [];
   const declarationRanges = new Set(macros.map((macro) => rangeKey(macro.selectionRange)));
-  for (const token of cst.codeTokens) {
+  for (const token of tokens) {
     if (token.kind !== 'directive') {
       continue;
     }
@@ -87,13 +99,17 @@ export function parseMacroUses(
 }
 
 export function parseIncludes(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogInclude[] {
+  return parseIncludesFromTokens(document, cst.codeTokens);
+}
+
+export function parseIncludesFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogInclude[] {
   const includes: VerilogInclude[] = [];
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
     if (!isDirective(token, 'include')) {
       continue;
     }
-    const path = nextTokenOnLine(document, cst.codeTokens, index + 1, token);
+    const path = nextTokenOnLine(document, tokens, index + 1, token);
     if (!path || path.kind !== 'string' || path.value.length < 2) {
       continue;
     }
@@ -107,14 +123,18 @@ export function parseIncludes(document: TextDocument, text: string, cst: Verilog
 }
 
 export function parseDirectives(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogDirective[] {
+  return parseDirectivesFromTokens(document, cst.codeTokens);
+}
+
+export function parseDirectivesFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDirective[] {
   const directives: VerilogDirective[] = [];
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
     const name = directiveName(token);
     if (!name || !preprocessorDirectives.has(name)) {
       continue;
     }
-    const argument = nextTokenOnLine(document, cst.codeTokens, index + 1, token);
+    const argument = nextTokenOnLine(document, tokens, index + 1, token);
     directives.push({
       name,
       argument: argument?.value,

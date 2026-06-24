@@ -3,7 +3,7 @@ import { CoSettings } from '../common/settings';
 import { collectVerilogDiagnostics } from './diagnostics';
 import { buildVerilogAst } from './ast';
 import { parseModules } from './moduleParser';
-import { parseDirectives, parseIncludes, parseMacros, parseMacroUses } from './preprocessor';
+import { parseDirectivesFromTokens, parseIncludesFromTokens, parseMacrosFromTokens, parseMacroUsesFromTokens } from './preprocessor';
 import { VerilogParseResult } from './model';
 import { parseVerilogCst } from './cst';
 import { buildVerilogSemanticModel } from './semanticModel';
@@ -11,11 +11,12 @@ import { buildVerilogSemanticModel } from './semanticModel';
 export function parseVerilog(document: TextDocument, settings: CoSettings, includeDiagnostics: boolean): VerilogParseResult {
   const text = document.getText();
   const cst = parseVerilogCst(document, text);
+  const tokens = cst.codeTokens;
   const modules = parseModules(document, text, cst);
-  const macros = parseMacros(document, text, cst);
-  const macroUses = parseMacroUses(document, text, macros, cst);
-  const includes = parseIncludes(document, text, cst);
-  const directives = parseDirectives(document, text, cst);
+  const macros = parseMacrosFromTokens(document, tokens);
+  const macroUses = parseMacroUsesFromTokens(document, macros, tokens);
+  const includes = parseIncludesFromTokens(document, tokens);
+  const directives = parseDirectivesFromTokens(document, tokens);
   const ast = buildVerilogAst(document, cst, modules, macros, macroUses, includes, directives);
   const semantic = buildVerilogSemanticModel({
     document,
@@ -61,9 +62,13 @@ export {
 
 export {
   parseDirectives,
+  parseDirectivesFromTokens,
   parseIncludes,
+  parseIncludesFromTokens,
   parseMacros,
-  parseMacroUses
+  parseMacrosFromTokens,
+  parseMacroUses,
+  parseMacroUsesFromTokens
 } from './preprocessor';
 
 export {
