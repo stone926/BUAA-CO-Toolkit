@@ -2,13 +2,13 @@ import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/nod
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { parseAssignmentTokens } from './assignmentAnalysis';
-import { VerilogAstDocument, VerilogModuleAst } from './ast';
+import { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst, VerilogSubroutineAst } from './ast';
 import { verilogAstCodeTokens } from './astTokens';
+import { VerilogProceduralBlockAst } from './blockAst';
 import { parseVerilogExpressionTokens, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
 import { childrenOfVerilogExpression } from './exprAstUtils';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
-import { splitVerilogModuleItems } from './statementUtils';
 import {
   findMatchingTokenForward as findMatchingToken,
   findTopLevelToken as firstTopLevelToken,
@@ -113,7 +113,7 @@ export function parseVerilogSyntax(
     };
     root.children.push(moduleNode);
     collectModuleHeaderDiagnostics(document, tokens, moduleAst, diagnostics);
-    collectModuleItemDiagnostics(document, tokens, moduleAst, moduleNode, diagnostics);
+    collectModuleItemDiagnostics(document, moduleAst, moduleNode, diagnostics);
   }
 
   collectOrphanControlDiagnostics(document, tokens, diagnostics);
@@ -302,18 +302,35 @@ function looksLikeInheritedPortDeclarator(tokens: VerilogToken[]): boolean {
 
 function collectModuleItemDiagnostics(
   document: TextDocument,
-  tokens: VerilogToken[],
   moduleAst: VerilogModuleAst,
   moduleNode: VerilogSyntaxNode,
   diagnostics: Diagnostic[]
 ): void {
-  const module = moduleAst.module;
-  const bodyStart = document.offsetAt(module.headerEnd);
-  const bodyEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-  const bodyTokens = tokens
-    .filter((token) => token.start >= bodyStart && token.start < bodyEnd && token.kind !== 'eof')
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-  for (const item of splitVerilogModuleItems(bodyTokens)) {
+  const visitedSubroutines = new Set<VerilogSubroutineAst>();
+  for (const statement of [...moduleAst.items].sort((left, right) => left.start - right.start || left.end - right.end)) {
+    const subroutine = subroutineForStatement(statement, moduleAst.subroutines);
+    if (subroutine) {
+      if (!visitedSubroutines.has(subroutine) && statementStartsAt(document, statement, subroutine.range)) {
+        visitedSubroutines.add(subroutine);
+        moduleNode.children.push(nodeFromRange('task', subroutine.range));
+        validateSubroutine(document, subroutine.tokens, diagnostics);
+      }
+      continue;
+    }
+    if (statement.kind === 'moduleHeader' || isEndmoduleStatement(statement)) {
+      continue;
+    }
+    const block = proceduralBlockForStatement(statement, moduleAst.proceduralBlocks);
+    if (block && statementStartsAt(document, statement, block.range)) {
+      const item = proceduralBlockTokens(statement, block);
+      moduleNode.children.push(nodeFromRange('proceduralBlock', block.range));
+      validateProceduralBlock(document, item, diagnostics);
+      continue;
+    }
+    if (isInsideProceduralBlockBody(statement, moduleAst.proceduralBlocks)) {
+      continue;
+    }
+    const item = statement.tokens.filter((token) => token.kind !== 'eof');
     const first = item[0];
     if (!first) {
       continue;
@@ -322,23 +339,13 @@ function collectModuleItemDiagnostics(
       continue;
     }
     if (declarationKeywords.has(first.value)) {
-      moduleNode.children.push(nodeFromTokens(document, 'declaration', item));
+      moduleNode.children.push(nodeFromRange('declaration', statement.range));
       validateDeclarationLikeStatement(document, item, diagnostics);
       continue;
     }
     if (first.value === 'assign') {
-      moduleNode.children.push(nodeFromTokens(document, 'continuousAssign', item));
+      moduleNode.children.push(nodeFromRange('continuousAssign', statement.range));
       validateContinuousAssign(document, item, diagnostics);
-      continue;
-    }
-    if (first.value === 'always' || first.value === 'initial') {
-      moduleNode.children.push(nodeFromTokens(document, 'proceduralBlock', item));
-      validateProceduralBlock(document, item, diagnostics);
-      continue;
-    }
-    if (first.value === 'task' || first.value === 'function') {
-      moduleNode.children.push(nodeFromTokens(document, 'task', item));
-      validateSubroutine(document, item, diagnostics);
       continue;
     }
     if (first.value === 'else' || first.value === 'default' || first.value === 'endcase') {
@@ -351,7 +358,7 @@ function collectModuleItemDiagnostics(
       continue;
     }
     if (isIdentifierLike(first.kind) && !verilogKeywords.has(first.value)) {
-      moduleNode.children.push(nodeFromTokens(document, 'instance', item));
+      moduleNode.children.push(nodeFromRange('instance', statement.range));
       validateInstanceStatement(document, item, diagnostics);
       continue;
     }
@@ -365,6 +372,58 @@ function collectModuleItemDiagnostics(
       'syntax-unexpected-token'
     ));
   }
+  for (const subroutine of moduleAst.subroutines) {
+    if (visitedSubroutines.has(subroutine)) {
+      continue;
+    }
+    moduleNode.children.push(nodeFromRange('task', subroutine.range));
+    validateSubroutine(document, subroutine.tokens, diagnostics);
+  }
+}
+
+function subroutineForStatement(
+  statement: VerilogStatementAst,
+  subroutines: VerilogSubroutineAst[]
+): VerilogSubroutineAst | undefined {
+  return subroutines.find((subroutine) => containsRange(subroutine.range, statement.range));
+}
+
+function proceduralBlockForStatement(
+  statement: VerilogStatementAst,
+  blocks: VerilogProceduralBlockAst[]
+): VerilogProceduralBlockAst | undefined {
+  return blocks.find((block) => containsRange(block.range, statement.range));
+}
+
+function isInsideProceduralBlockBody(statement: VerilogStatementAst, blocks: VerilogProceduralBlockAst[]): boolean {
+  return blocks.some((block) => statement.start >= block.bodyStart && statement.end <= block.bodyEnd);
+}
+
+function statementStartsAt(document: TextDocument, statement: VerilogStatementAst, range: Range): boolean {
+  return statement.start === document.offsetAt(range.start);
+}
+
+function proceduralBlockTokens(statement: VerilogStatementAst, block: VerilogProceduralBlockAst): VerilogToken[] {
+  const tokens = statement.tokens.filter((token) => token.kind !== 'eof');
+  if (statement.end >= block.bodyEnd) {
+    return tokens;
+  }
+  return [...tokens, ...block.bodyTokens.filter((token) => token.kind !== 'eof')];
+}
+
+function isEndmoduleStatement(statement: VerilogStatementAst): boolean {
+  return statement.tokens.find((token) => token.kind !== 'eof')?.value === 'endmodule';
+}
+
+function containsRange(outer: Range, inner: Range): boolean {
+  return comparePosition(outer.start, inner.start) <= 0 && comparePosition(outer.end, inner.end) >= 0;
+}
+
+function comparePosition(left: { line: number; character: number }, right: { line: number; character: number }): number {
+  if (left.line !== right.line) {
+    return left.line - right.line;
+  }
+  return left.character - right.character;
 }
 
 function validateDeclarationLikeStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
@@ -1187,12 +1246,10 @@ function tokenRange(document: TextDocument, token: VerilogToken): Range {
   return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }
 
-function nodeFromTokens(document: TextDocument, kind: VerilogSyntaxNodeKind, tokens: VerilogToken[]): VerilogSyntaxNode {
-  const first = tokens[0];
-  const last = tokens[tokens.length - 1] ?? first;
+function nodeFromRange(kind: VerilogSyntaxNodeKind, range: Range): VerilogSyntaxNode {
   return {
     kind,
-    range: Range.create(document.positionAt(first.start), document.positionAt(last.end)),
+    range,
     children: []
   };
 }
