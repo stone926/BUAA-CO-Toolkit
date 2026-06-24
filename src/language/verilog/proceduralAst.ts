@@ -65,6 +65,7 @@ export interface VerilogLoopStatementAst extends VerilogProceduralStatementBase 
   loopKind: 'for' | 'while' | 'repeat' | 'forever';
   controlTokens: VerilogToken[];
   initDeclarations: VerilogLocalDeclarationAst[];
+  controlExpressions: VerilogExpressionAst[];
   condition?: VerilogExpressionAst;
   body: VerilogProceduralStatementAst;
 }
@@ -276,6 +277,9 @@ class ProceduralStatementParser {
       ? parseVerilogExpressionTokens(controlTokens)
       : undefined;
     const initDeclarations = loopKind === 'for' ? forControlDeclarations(this.document, controlTokens) : [];
+    const controlExpressions = loopKind === 'for'
+      ? forControlExpressions(controlTokens)
+      : condition ? [condition] : [];
     const body = this.parseStatement(new Set());
     const end = Math.max(start, this.indexAtOrBeforePosition(body.range.end));
     return {
@@ -283,6 +287,7 @@ class ProceduralStatementParser {
       loopKind,
       controlTokens,
       initDeclarations,
+      controlExpressions,
       condition,
       body,
       range: Range.create(this.document.positionAt(this.tokens[start].start), body.range.end),
@@ -456,6 +461,99 @@ function forControlDeclarations(document: TextDocument, tokens: VerilogToken[]):
   const semicolon = tokens.findIndex((token) => token.value === ';');
   const initTokens = semicolon >= 0 ? tokens.slice(0, semicolon) : tokens;
   return localDeclarationsFromTokens(document, initTokens);
+}
+
+function forControlExpressions(tokens: VerilogToken[]): VerilogExpressionAst[] {
+  const [init = [], condition = [], step = []] = splitForControlSegments(tokens);
+  return [
+    ...forInitControlExpressions(init),
+    parseVerilogExpressionTokens(condition),
+    ...assignmentOrExpressionAsts(step)
+  ].filter((item): item is VerilogExpressionAst => Boolean(item));
+}
+
+function splitForControlSegments(tokens: VerilogToken[]): VerilogToken[][] {
+  const segments: VerilogToken[][] = [];
+  let start = 0;
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if (token.value === ';' && paren === 0 && bracket === 0 && brace === 0) {
+      segments.push(tokens.slice(start, index));
+      start = index + 1;
+    }
+  }
+  segments.push(tokens.slice(start));
+  return segments;
+}
+
+function forInitControlExpressions(tokens: VerilogToken[]): VerilogExpressionAst[] {
+  if (!tokens.length) {
+    return [];
+  }
+  if (!declarationKeywords.has(tokens[0].value)) {
+    return assignmentOrExpressionAsts(tokens);
+  }
+  return splitTopLevelTokens(tokens.slice(1), ',')
+    .map((part) => {
+      const equal = topLevelTokenIndex(part, '=');
+      return equal >= 0 ? parseVerilogExpressionTokens(part.slice(equal + 1)) : undefined;
+    })
+    .filter((item): item is VerilogExpressionAst => Boolean(item));
+}
+
+function assignmentOrExpressionAsts(tokens: VerilogToken[]): VerilogExpressionAst[] {
+  if (!tokens.length) {
+    return [];
+  }
+  const assignment = parseAssignmentTokens(tokens);
+  if (assignment) {
+    return [
+      parseVerilogExpressionTokens(assignment.lhsTokens),
+      parseVerilogExpressionTokens(assignment.rhsTokens)
+    ].filter((item): item is VerilogExpressionAst => Boolean(item));
+  }
+  const expression = parseVerilogExpressionTokens(tokens);
+  return expression ? [expression] : [];
+}
+
+function topLevelTokenIndex(tokens: VerilogToken[], value: string): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogLocalDeclarationAst[] {

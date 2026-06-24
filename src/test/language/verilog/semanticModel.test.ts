@@ -114,9 +114,9 @@ describe('Verilog AST and semantic model', () => {
 
   it('binds for-loop declarations without leaking them to module scope', () => {
     const text = [
-      'module loop(input clk);',
+      'module loop(input clk, input [3:0] start);',
       '    always @(posedge clk) begin',
-      '        for (integer i = 0; i < 4; i = i + 1) begin',
+      '        for (integer i = start; i < 4; i = i + 1) begin',
       '        end',
       '    end',
       'endmodule'
@@ -128,11 +128,16 @@ describe('Verilog AST and semantic model', () => {
     expect(loop?.kind).toBe('loop');
     if (loop?.kind === 'loop') {
       expect(loop.initDeclarations.map((item) => item.declaration.name)).toEqual(['i']);
+      expect(loop.controlExpressions.length).toBeGreaterThanOrEqual(4);
     }
     expect(loopIndexSymbol).toBeDefined();
     expect(result.semantic.moduleScopes[0].symbols.get('i')).toBeUndefined();
+    const initUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('start;')));
     const use = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i < 4')));
+    const stepUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.lastIndexOf('i = i + 1')));
+    expect(initUse?.symbol?.name).toBe('start');
     expect(use?.symbol).toBe(loopIndexSymbol);
+    expect(stepUse?.symbol).toBe(loopIndexSymbol);
   });
 
   it('models subroutine bodies as AST-backed semantic scopes', () => {

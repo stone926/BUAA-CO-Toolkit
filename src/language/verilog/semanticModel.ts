@@ -786,10 +786,8 @@ function collectReferencesFromProceduralStatementAst(
       }
       return;
     case 'loop':
-      if (statement.condition) {
-        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.condition, 0);
-      } else if (statement.controlTokens.length) {
-        collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.controlTokens);
+      for (const expression of statement.controlExpressions) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
       }
       collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
       return;
