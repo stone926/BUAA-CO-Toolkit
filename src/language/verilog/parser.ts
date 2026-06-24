@@ -5,13 +5,14 @@ import { buildVerilogAst } from './ast';
 import { parseModulesFromTokens } from './moduleParser';
 import { parseDirectivesFromTokens, parseIncludesFromTokens, parseMacrosFromTokens, parseMacroUsesFromTokens } from './preprocessor';
 import { VerilogParseResult } from './model';
-import { parseVerilogCst } from './cst';
+import { lexVerilogCst } from './lexer';
+import { collectVerilogStatementSources } from './statementParser';
 import { buildVerilogSemanticModel } from './semanticModel';
 
 export function parseVerilog(document: TextDocument, settings: CoSettings, includeDiagnostics: boolean): VerilogParseResult {
   const text = document.getText();
-  const cst = parseVerilogCst(document, text);
-  const tokens = cst.codeTokens;
+  const lexed = lexVerilogCst(text);
+  const tokens = lexed.tokens.filter((token) => token.kind !== 'comment');
   const modules = parseModulesFromTokens(document, text, tokens);
   const macros = parseMacrosFromTokens(document, tokens);
   const macroUses = parseMacroUsesFromTokens(document, macros, tokens);
@@ -21,9 +22,9 @@ export function parseVerilog(document: TextDocument, settings: CoSettings, inclu
     document,
     {
       tokens,
-      allTokens: cst.tokens,
-      lexicalDiagnostics: cst.diagnostics,
-      statements: cst.statements
+      allTokens: lexed.tokens,
+      lexicalDiagnostics: lexed.diagnostics,
+      statements: collectVerilogStatementSources(document, tokens)
     },
     modules,
     macros,

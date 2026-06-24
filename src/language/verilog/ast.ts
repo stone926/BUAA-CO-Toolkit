@@ -18,6 +18,7 @@ import {
 } from './blockAst';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
+import type { VerilogStatementSource } from './statementParser';
 
 export interface VerilogAstDocument {
   kind: 'sourceFile';
@@ -36,13 +37,6 @@ export interface VerilogAstSource {
   allTokens: VerilogToken[];
   lexicalDiagnostics: VerilogLexDiagnostic[];
   statements: VerilogStatementSource[];
-}
-
-export interface VerilogStatementSource {
-  tokens: VerilogToken[];
-  start: number;
-  end: number;
-  range: Range;
 }
 
 export interface VerilogTriviaAst {
