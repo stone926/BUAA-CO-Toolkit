@@ -228,6 +228,12 @@ describe('parseMips', () => {
       const text = '.eqv MY_CONST 42\n    li $v0, MY_CONST';
       const result = parseMips(doc(text), settings());
       expect(result.eqvSymbols.has('MY_CONST')).toBe(true);
+      const directive = result.ast.statements[0].executable;
+      expect(directive?.kind).toBe('directive');
+      if (directive?.kind === 'directive') {
+        expect(directive.eqv?.name).toBe('MY_CONST');
+        expect(directive.eqv?.replacementText).toBe('42');
+      }
       // No errors (pseudo-instruction info-level diagnostics are acceptable)
       const errors = result.diagnostics.filter((d) => d.severity === 1);
       expect(errors).toHaveLength(0);

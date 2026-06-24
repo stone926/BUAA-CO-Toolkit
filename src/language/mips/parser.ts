@@ -9,7 +9,7 @@ import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp'
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { buildMipsAst } from './ast';
-import type { MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
+import type { MipsDirectiveAst, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
 import {
   instructionWritesRegister,
   isMacroArgumentToken,
@@ -151,10 +151,10 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     if (executableAst.lowerMnemonic === '.eqv') {
-      const eqvName = firstDirectiveSymbolOperand(executableAst);
-      if (eqvName) {
-        const name = eqvName.text;
-        const selectionRange = eqvName.range;
+      const eqv = executableAst.kind === 'directive' ? executableAst.eqv : undefined;
+      if (eqv) {
+        const name = eqv.name;
+        const selectionRange = eqv.nameRange;
         const symbol: MipsSymbol = {
           name,
           kind: 'eqv',
@@ -383,36 +383,6 @@ interface ParsedMacroDefinition {
   params: Array<{ name: string; range: Range }>;
 }
 
-interface ParsedSymbolOperand {
-  text: string;
-  range: Range;
-}
-
-function firstDirectiveSymbolOperand(executable: MipsExecutableAst): ParsedSymbolOperand | undefined {
-  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
-  let offset = 0;
-  while (offset < executable.operandText.length && isAsciiWhitespace(executable.operandText[offset])) {
-    offset++;
-  }
-  const start = offset;
-  if (!isMipsSymbolStart(executable.operandText[start] ?? '')) {
-    return undefined;
-  }
-  offset++;
-  while (offset < executable.operandText.length && isMipsSymbolPart(executable.operandText[offset])) {
-    offset++;
-  }
-  return {
-    text: executable.operandText.slice(start, offset),
-    range: Range.create(
-      executable.range.start.line,
-      base + start,
-      executable.range.start.line,
-      base + offset
-    )
-  };
-}
-
 function parseMacroDefinition(executable: MipsExecutableAst): ParsedMacroDefinition | undefined {
   const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
   const text = executable.operandText;
@@ -472,26 +442,6 @@ function parseMacroDefinition(executable: MipsExecutableAst): ParsedMacroDefinit
   };
 }
 
-function skipOperandSeparator(text: string, offset: number): number {
-  let index = offset;
-  let sawSeparator = false;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === ',') {
-      sawSeparator = true;
-      index++;
-      continue;
-    }
-    if (isAsciiWhitespace(char)) {
-      sawSeparator = true;
-      index++;
-      continue;
-    }
-    break;
-  }
-  return sawSeparator ? index : -1;
-}
-
 function validateDirective(
   document: TextDocument,
   lineNumber: number,
@@ -502,7 +452,7 @@ function validateDirective(
   diagnostics: Diagnostic[]
 ): void {
   const executable = statement.executable;
-  if (!executable) {
+  if (!executable || executable.kind !== 'directive') {
     return;
   }
   const directive = executable.lowerMnemonic;
@@ -795,16 +745,14 @@ function validateExternDirective(document: TextDocument, lineNumber: number, ope
   }
 }
 
-function validateEqvDirective(document: TextDocument, lineNumber: number, executable: MipsExecutableAst, diagnostics: Diagnostic[]): void {
-  const operand = firstDirectiveSymbolOperand(executable);
-  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
-  const replacementStart = operand ? skipOperandSeparator(executable.operandText, operand.range.end.character - base) : -1;
-  if (!operand || replacementStart < 0 || replacementStart >= executable.operandText.length) {
+function validateEqvDirective(document: TextDocument, lineNumber: number, executable: MipsDirectiveAst, diagnostics: Diagnostic[]): void {
+  const eqv = executable.eqv;
+  if (!eqv || !eqv.replacementRange) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, '.eqv'), '.eqv expects an identifier and a replacement sequence.', DiagnosticSeverity.Error, 'directive-operand'));
     return;
   }
-  if (isReservedIdentifier(operand.text)) {
-    diagnostics.push(makeDiagnostic(operand.range, `.eqv identifier '${operand.text}' conflicts with a reserved MIPS word.`, DiagnosticSeverity.Error, 'reserved-symbol'));
+  if (isReservedIdentifier(eqv.name)) {
+    diagnostics.push(makeDiagnostic(eqv.nameRange, `.eqv identifier '${eqv.name}' conflicts with a reserved MIPS word.`, DiagnosticSeverity.Error, 'reserved-symbol'));
   }
 }
 

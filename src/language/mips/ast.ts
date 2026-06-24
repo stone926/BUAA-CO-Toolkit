@@ -83,10 +83,19 @@ export interface MipsExecutableBaseAst {
 
 export interface MipsDirectiveAst extends MipsExecutableBaseAst {
   kind: 'directive';
+  eqv?: MipsEqvDirectiveAst;
 }
 
 export interface MipsOperationAst extends MipsExecutableBaseAst {
   kind: 'operation';
+}
+
+export interface MipsEqvDirectiveAst {
+  kind: 'eqvDirective';
+  name: string;
+  nameRange: Range;
+  replacementText: string;
+  replacementRange?: Range;
 }
 
 export type MipsOperandAst =
@@ -244,9 +253,38 @@ function buildExecutableAst(line: number, executable: MipsParsedExecutable): Mip
       }))
       : []
   };
-  return executable.kind === 'directive'
-    ? { kind: 'directive', ...base }
-    : { kind: 'operation', ...base };
+  if (executable.kind === 'directive') {
+    return {
+      kind: 'directive',
+      ...base,
+      eqv: executable.lowerMnemonic === '.eqv' ? parseEqvDirectiveAst(line, executable) : undefined
+    };
+  }
+  return { kind: 'operation', ...base };
+}
+
+function parseEqvDirectiveAst(line: number, executable: MipsParsedExecutable): MipsEqvDirectiveAst | undefined {
+  const base = executable.operandRange?.start ?? executable.range.end;
+  const text = executable.operandText;
+  let offset = skipAsciiWhitespace(text, 0);
+  const nameStart = offset;
+  if (!isMipsSymbolStart(text[offset] ?? '')) {
+    return undefined;
+  }
+  offset++;
+  while (offset < text.length && isMipsSymbolPart(text[offset])) {
+    offset++;
+  }
+  const replacementStart = skipOperandSeparator(text, offset);
+  const replacementEnd = trimRightIndex(text, text.length);
+  const hasReplacement = replacementStart >= 0 && replacementStart < replacementEnd;
+  return {
+    kind: 'eqvDirective',
+    name: text.slice(nameStart, offset),
+    nameRange: mipsParsedRange(line, { start: base + nameStart, end: base + offset }),
+    replacementText: hasReplacement ? text.slice(replacementStart, replacementEnd) : '',
+    replacementRange: hasReplacement ? mipsParsedRange(line, { start: base + replacementStart, end: base + replacementEnd }) : undefined
+  };
 }
 
 function buildOperandAst(line: number, operand: MipsParsedOperand): MipsOperandAst {
@@ -491,6 +529,26 @@ function trimRightIndex(text: string, end: number): number {
     index--;
   }
   return index;
+}
+
+function skipOperandSeparator(text: string, offset: number): number {
+  let index = offset;
+  let sawSeparator = false;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === ',') {
+      sawSeparator = true;
+      index++;
+      continue;
+    }
+    if (isAsciiWhitespace(char)) {
+      sawSeparator = true;
+      index++;
+      continue;
+    }
+    break;
+  }
+  return sawSeparator ? index : -1;
 }
 
 function isMipsSymbolStart(char: string): boolean {

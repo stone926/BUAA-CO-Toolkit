@@ -262,16 +262,14 @@ export function cp0RegisterAtPosition(parsed: MipsParseResult, word: string, pos
 export function eqvReplacementText(parsed: MipsParseResult, lineNumber: number, name: string): string | undefined {
   const line = parsed.ast.lines[lineNumber];
   const executable = line?.kind === 'statement' ? line.executable : undefined;
-  if (!line || line.kind !== 'statement' || !executable || executable.lowerMnemonic !== '.eqv' || !executable.operandRange) {
+  if (!line || line.kind !== 'statement' || !executable || executable.kind !== 'directive' || executable.lowerMnemonic !== '.eqv') {
     return undefined;
   }
-  const nameOperand = firstDirectiveSymbolOperand(executable);
-  if (!nameOperand || nameOperand.text !== name) {
+  const eqv = executable.eqv;
+  if (!eqv || eqv.name !== name) {
     return undefined;
   }
-  const replacementStart = skipEqvSeparator(line.text, nameOperand.range.end.character);
-  const replacement = line.text.slice(replacementStart, executable.operandRange.end.character).trim();
-  return replacement || undefined;
+  return eqv.replacementText || undefined;
 }
 
 interface TextReplacement {
@@ -387,62 +385,10 @@ function textSpansOverlap(left: { start: number; end: number }, right: { start: 
   return left.start < right.end && right.start < left.end;
 }
 
-function firstDirectiveSymbolOperand(executable: MipsExecutableAst): { text: string; range: Range } | undefined {
-  const operandRange = executable.operandRange;
-  const base = operandRange?.start.character ?? executable.mnemonicRange.end.character;
-  const text = executable.operandText;
-  let offset = skipAsciiWhitespace(text, 0);
-  const start = offset;
-  if (!isMipsSymbolStart(text[start] ?? '')) {
-    return undefined;
-  }
-  offset++;
-  while (offset < text.length && isMipsSymbolPart(text[offset])) {
-    offset++;
-  }
-  return {
-    text: text.slice(start, offset),
-    range: Range.create(
-      executable.range.start.line,
-      base + start,
-      executable.range.start.line,
-      base + offset
-    )
-  };
-}
-
 function rangesOverlap(left: Range, right: Range): boolean {
   return left.start.line === right.start.line
     && right.start.character <= left.end.character
     && left.start.character <= right.end.character;
-}
-
-function skipEqvSeparator(text: string, start: number): number {
-  let index = skipAsciiWhitespace(text, start);
-  if (text[index] === ',') {
-    index = skipAsciiWhitespace(text, index + 1);
-  }
-  return index;
-}
-
-function skipAsciiWhitespace(text: string, start: number): number {
-  let index = start;
-  while (index < text.length && isAsciiWhitespace(text[index])) {
-    index++;
-  }
-  return index;
-}
-
-function isAsciiWhitespace(char: string): boolean {
-  return char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === '\f' || char === '\v';
-}
-
-function isMipsSymbolStart(char: string): boolean {
-  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || char === '_' || char === '.' || char === '$';
-}
-
-function isMipsSymbolPart(char: string): boolean {
-  return isMipsSymbolStart(char) || (char >= '0' && char <= '9');
 }
 
 function isMacroParameterPart(char: string): boolean {
