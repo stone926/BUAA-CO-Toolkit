@@ -30,7 +30,35 @@ describe('MIPS AST and semantic model', () => {
     expect(memory?.kind).toBe('memory');
     if (memory?.kind === 'memory') {
       expect(memory.offset.kind).toBe('integer');
+      if (memory.offset.kind === 'integer') {
+        expect(memory.offset.value).toBe(4);
+      }
       expect(memory.base.kind).toBe('register');
+    }
+  });
+
+  it('stores parsed integer values on typed AST operands', () => {
+    const result = parseMips(doc([
+      'li $v0, 0x2a',
+      "addi $t0, $t0, '\\n'",
+      'lw $t1, 8($sp)'
+    ].join('\n')), defaultCoSettings);
+
+    const liImmediate = result.ast.statements[0].executable?.operands[1];
+    const addiImmediate = result.ast.statements[1].executable?.operands[2];
+    const memory = result.ast.statements[2].executable?.operands[1];
+
+    expect(liImmediate?.kind).toBe('integer');
+    if (liImmediate?.kind === 'integer') {
+      expect(liImmediate.value).toBe(42);
+    }
+    expect(addiImmediate?.kind).toBe('integer');
+    if (addiImmediate?.kind === 'integer') {
+      expect(addiImmediate.value).toBe(10);
+    }
+    expect(memory?.kind).toBe('memory');
+    if (memory?.kind === 'memory' && memory.offset.kind === 'integer') {
+      expect(memory.offset.value).toBe(8);
     }
   });
 

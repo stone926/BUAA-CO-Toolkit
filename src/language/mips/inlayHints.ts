@@ -62,7 +62,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
         }
         currentSyscall = syscall;
       }
-    } else if (instructionWritesRegister(executable.lowerMnemonic, executable.operands.map((operand) => operand.text), '$v0')) {
+    } else if (instructionWritesRegister(executable.lowerMnemonic, executable.operands, '$v0')) {
       currentSyscall = undefined;
     }
 

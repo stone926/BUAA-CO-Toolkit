@@ -235,7 +235,7 @@ export function syscallServiceBeforeLine(parsed: MipsParseResult, targetLine: nu
       service = undefined;
       continue;
     }
-    if (instructionWritesRegister(executable.lowerMnemonic, executable.operands.map((operand) => operand.text), '$v0')) {
+    if (instructionWritesRegister(executable.lowerMnemonic, executable.operands, '$v0')) {
       service = undefined;
     }
   }

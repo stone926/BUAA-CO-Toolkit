@@ -5,11 +5,11 @@ import {
   MipsParsedLine,
   MipsParsedOperand,
   MipsParsedRange,
-  isCharLiteral,
   isFloatLiteral,
-  isIntegerLiteral,
   isSymbolLike,
   mipsParsedRange,
+  parseCharLiteral,
+  parseIntegerLiteral,
   parseMipsSourceDocument
 } from './syntax';
 import { isMipsStringLiteralText, parseMipsMemoryOperand } from './operandAst';
@@ -113,6 +113,7 @@ export interface MipsMacroParameterOperandAst extends MipsOperandBaseAst {
 
 export interface MipsIntegerOperandAst extends MipsOperandBaseAst {
   kind: 'integer';
+  value: number;
 }
 
 export interface MipsFloatOperandAst extends MipsOperandBaseAst {
@@ -273,10 +274,11 @@ function classifyOperand(
   if (text.startsWith('%')) {
     return { kind: 'macroParameter', text, range };
   }
-  if (isIntegerLiteral(text) || isCharLiteral(text)) {
-    return { kind: 'integer', text, range };
+  const integerValue = parseIntegerOperandValue(text);
+  if (integerValue !== undefined) {
+    return { kind: 'integer', text, range, value: integerValue };
   }
-  if (isFloatLiteral(text) && !isIntegerLiteral(text) && !isCharLiteral(text)) {
+  if (isFloatLiteral(text)) {
     return { kind: 'float', text, range };
   }
   if (isMipsStringLiteralText(text)) {
@@ -286,6 +288,11 @@ function classifyOperand(
     return { kind: 'symbol', text, range };
   }
   return { kind: 'expression', text, range };
+}
+
+function parseIntegerOperandValue(text: string): number | undefined {
+  const charValue = parseCharLiteral(text);
+  return charValue === undefined ? parseIntegerLiteral(text) : charValue;
 }
 
 function collectMacroDefinitions(document: TextDocument, statements: MipsStatementAst[]): MipsMacroDefinitionAst[] {

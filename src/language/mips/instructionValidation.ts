@@ -301,8 +301,8 @@ function constantMemoryOffset(operand: MipsInstructionOperand, activeMacro: Mips
   if (!offsetText) {
     return undefined;
   }
-  const parsed = parseIntegerOrCharLiteral(offsetText);
-  return parsed === undefined ? undefined : signed32ImmediateValue(parsed);
+  const value = integerOperandValue(offset);
+  return value === undefined ? undefined : signed32ImmediateValue(value);
 }
 
 function validateCp0Access(
@@ -421,7 +421,9 @@ function cp0RegisterNumber(operand: MipsInstructionOperand, activeMacro: MipsMac
   if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return undefined;
   }
-  const value = parseIntegerOrCharLiteral(stripLeadingDollar(operandText(operand)));
+  const value = isAstOperand(operand) && operand.kind === 'integer'
+    ? operand.value
+    : parseIntegerOrCharLiteral(stripLeadingDollar(operandText(operand)));
   return value !== undefined && cp0RegistersByNumber.has(value) ? value : undefined;
 }
 
@@ -432,7 +434,7 @@ function isImmediateOperand(operand: MipsInstructionOperand, activeMacro: MipsMa
   if (isAstOperand(operand) && operand.kind !== 'integer') {
     return false;
   }
-  const value = parseIntegerOrCharLiteral(operandText(operand));
+  const value = integerOperandValue(operand);
   return value !== undefined && integerFitsImmediateKind(value, kind);
 }
 
@@ -443,7 +445,7 @@ function isShiftAmountOperand(operand: MipsInstructionOperand, activeMacro: Mips
   if (isAstOperand(operand) && operand.kind !== 'integer') {
     return false;
   }
-  const value = parseIntegerOrCharLiteral(operandText(operand));
+  const value = integerOperandValue(operand);
   return value !== undefined && integerFitsRange(value, 0, 31);
 }
 
@@ -458,7 +460,7 @@ function isBitSizeOperand(operand: MipsInstructionOperand, activeMacro: MipsMacr
   if (isAstOperand(operand) && operand.kind !== 'integer') {
     return false;
   }
-  const value = parseIntegerOrCharLiteral(operandText(operand));
+  const value = integerOperandValue(operand);
   return value !== undefined && value >= 1 && value <= 32;
 }
 
@@ -553,6 +555,13 @@ function integerFitsImmediateKind(value: number, kind: ImmediateKind): boolean {
 function parseIntegerOrCharLiteral(operand: string): number | undefined {
   const charValue = parseCharLiteral(operand);
   return charValue === undefined ? parseIntegerLiteral(operand) : charValue;
+}
+
+function integerOperandValue(operand: MipsInstructionOperand): number | undefined {
+  if (isAstOperand(operand)) {
+    return operand.kind === 'integer' ? operand.value : undefined;
+  }
+  return parseIntegerOrCharLiteral(operand);
 }
 
 function operandText(operand: MipsInstructionOperand | undefined): string {
