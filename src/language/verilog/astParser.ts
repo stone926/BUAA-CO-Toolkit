@@ -526,74 +526,128 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
 function parseInstances(document: TextDocument, text: string, tokens: VerilogToken[], currentModuleName: string): VerilogInstance[] {
   const instances: VerilogInstance[] = [];
   for (const statement of statementSlices(tokens)) {
-    const first = statement[0];
-    if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName) {
+    const instance = parseInstanceStatement(document, text, statement, currentModuleName);
+    if (instance) {
+      instances.push(instance);
       continue;
     }
-    if (instanceExcludedFirstTokens.has(first.value)) {
-      continue;
+    const nested = nestedGenerateInstanceTokens(statement);
+    if (nested.length > 0 && nested.length < statement.length) {
+      instances.push(...parseInstances(document, text, nested, currentModuleName));
     }
-    // 拒绝将声明关键字（reg, wire, input 等）误认为模块名来实例化
-    if (first.kind === 'keyword' && declKinds.has(first.value)) {
-      continue;
+  }
+  return instances;
+}
+
+function parseInstanceStatement(document: TextDocument, text: string, statement: VerilogToken[], currentModuleName: string): VerilogInstance | undefined {
+  const first = statement[0];
+  if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName) {
+    return undefined;
+  }
+  if (instanceExcludedFirstTokens.has(first.value)) {
+    return undefined;
+  }
+  // 拒绝将声明关键字（reg, wire, input 等）误认为模块名来实例化
+  if (first.kind === 'keyword' && declKinds.has(first.value)) {
+    return undefined;
+  }
+  let index = 1;
+  let parameterConnections: VerilogPortConnection[] = [];
+  let parameterListRange: Range | undefined;
+  if (statement[index]?.value === '#') {
+    if (statement[index + 1]?.value !== '(') {
+      return undefined;
     }
-    let index = 1;
-    let parameterConnections: VerilogPortConnection[] = [];
-    let parameterListRange: Range | undefined;
-    if (statement[index]?.value === '#') {
-      if (statement[index + 1]?.value !== '(') {
-        continue;
-      }
-      const close = findMatchingToken(statement, index + 1, '(', ')');
-      if (close < 0) {
-        continue;
-      }
-      const content = statement.slice(index + 2, close);
-      parameterConnections = parseConnectionList(document, text, content);
-      parameterListRange = listRange(document, statement[index + 1], statement[close]);
-      index = close + 1;
+    const close = findMatchingToken(statement, index + 1, '(', ')');
+    if (close < 0) {
+      return undefined;
     }
-    const instanceToken = statement[index];
-    if (!instanceToken || !isIdentifierLike(instanceToken.kind)) {
-      continue;
-    }
-    index++;
-    const moduleSelectionRange = tokenRange(document, first);
-    const selectionRange = tokenRange(document, instanceToken);
-    if (statement[index]?.value === ';') {
-      instances.push({
-        moduleName: first.value,
-        instanceName: instanceToken.value,
-        range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
-        moduleSelectionRange,
-        selectionRange,
-        parameterListRange,
-        portConnections: [],
-        parameterConnections
-      });
-      continue;
-    }
-    if (statement[index]?.value !== '(') {
-      continue;
-    }
-    const close = findMatchingToken(statement, index, '(', ')');
-    if (close < 0 || statement[close + 1]?.value !== ';') {
-      continue;
-    }
-    const content = statement.slice(index + 1, close);
-    instances.push({
+    const content = statement.slice(index + 2, close);
+    parameterConnections = parseConnectionList(document, text, content);
+    parameterListRange = listRange(document, statement[index + 1], statement[close]);
+    index = close + 1;
+  }
+  const instanceToken = statement[index];
+  if (!instanceToken || !isIdentifierLike(instanceToken.kind)) {
+    return undefined;
+  }
+  index++;
+  const moduleSelectionRange = tokenRange(document, first);
+  const selectionRange = tokenRange(document, instanceToken);
+  if (statement[index]?.value === ';') {
+    return {
       moduleName: first.value,
       instanceName: instanceToken.value,
       range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
       moduleSelectionRange,
       selectionRange,
-      portListRange: content.length ? Range.create(document.positionAt(content[0].start), document.positionAt(content[content.length - 1].end)) : Range.create(document.positionAt(statement[index].end), document.positionAt(statement[index].end)),
       parameterListRange,
-      portConnections: parseConnectionList(document, text, content),
+      portConnections: [],
       parameterConnections
-    });
+    };
   }
-  return instances;
+  if (statement[index]?.value !== '(') {
+    return undefined;
+  }
+  const close = findMatchingToken(statement, index, '(', ')');
+  if (close < 0 || statement[close + 1]?.value !== ';') {
+    return undefined;
+  }
+  const content = statement.slice(index + 1, close);
+  return {
+    moduleName: first.value,
+    instanceName: instanceToken.value,
+    range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
+    moduleSelectionRange,
+    selectionRange,
+    portListRange: content.length ? Range.create(document.positionAt(content[0].start), document.positionAt(content[content.length - 1].end)) : Range.create(document.positionAt(statement[index].end), document.positionAt(statement[index].end)),
+    parameterListRange,
+    portConnections: parseConnectionList(document, text, content),
+    parameterConnections
+  };
+}
+
+function nestedGenerateInstanceTokens(statement: VerilogToken[]): VerilogToken[] {
+  const first = statement[0];
+  if (!first) {
+    return [];
+  }
+  if (first.value === 'generate') {
+    return blockBodyTokens(statement, 0, 'generate', 'endgenerate');
+  }
+  if (first.value === 'begin') {
+    return beginBodyTokens(statement, 0);
+  }
+  if (first.value === 'if' || first.value === 'for') {
+    return controlTailTokens(statement, 0);
+  }
+  if (first.value === 'else') {
+    return statement.slice(1);
+  }
+  return [];
+}
+
+function controlTailTokens(statement: VerilogToken[], keywordIndex: number): VerilogToken[] {
+  const open = indexOfValueFrom(statement, '(', keywordIndex + 1);
+  if (open < 0) {
+    return statement.slice(keywordIndex + 1);
+  }
+  const close = findMatchingToken(statement, open, '(', ')');
+  return close >= 0 ? statement.slice(close + 1) : statement.slice(open + 1);
+}
+
+function beginBodyTokens(statement: VerilogToken[], beginIndex: number): VerilogToken[] {
+  let start = beginIndex + 1;
+  if (statement[start]?.value === ':' && statement[start + 1] && isIdentifierLike(statement[start + 1].kind)) {
+    start += 2;
+  }
+  const end = findMatchingToken(statement, beginIndex, 'begin', 'end');
+  return end > start ? statement.slice(start, end) : statement.slice(start);
+}
+
+function blockBodyTokens(statement: VerilogToken[], startIndex: number, openValue: string, closeValue: string): VerilogToken[] {
+  const end = findMatchingToken(statement, startIndex, openValue, closeValue);
+  return end > startIndex ? statement.slice(startIndex + 1, end) : statement.slice(startIndex + 1);
 }
 
 function parseConnectionList(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogPortConnection[] {

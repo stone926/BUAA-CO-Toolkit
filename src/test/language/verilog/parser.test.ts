@@ -1091,6 +1091,23 @@ endmodule
     expect(modules[0].instances).toHaveLength(1);
     expect(modules[0].instances[0].moduleName).toBe('small');
   });
+
+  it('parses instances nested inside generate blocks', () => {
+    const text = [
+      'module top;',
+      '  generate',
+      '    if (USE) begin : g',
+      '      sub u_sub(.a(a));',
+      '    end',
+      '  endgenerate',
+      'endmodule'
+    ].join('\n');
+    const d = doc(text);
+    const modules = parseModules(d, text);
+    expect(modules[0].instances).toHaveLength(1);
+    expect(modules[0].instances[0].moduleName).toBe('sub');
+    expect(modules[0].instances[0].instanceName).toBe('u_sub');
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
