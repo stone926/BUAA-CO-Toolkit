@@ -7,7 +7,7 @@ import {
   collectAssignmentUsesFromProceduralStatementAst
 } from './assignmentAst';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
-import { VerilogToken } from './lexer';
+import type { VerilogToken } from './lexer';
 import {
   safeRegExp,
 } from './textUtils';
@@ -24,7 +24,7 @@ import {
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
-import type { VerilogProceduralStatementAst } from './proceduralAst';
+import type { VerilogAssignmentStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 
 export function collectAssignmentDiagnostics(
   document: TextDocument,
@@ -538,15 +538,15 @@ function hasTestbenchClockGeneration(module: VerilogModule, blocks: VerilogProce
       if (block.controlKind === 'event') {
         continue;
       }
-      if (block.controlKind === 'delay' && findClockToggleAssignment(block.bodyTokens, clockNames) >= 0) {
+      if (block.controlKind === 'delay' && proceduralTreeHasClockToggle(block.statementTree, clockNames)) {
         return true;
       }
-      if (block.controlKind === 'none' && hasDelayBeforeClockToggle(block.bodyTokens, clockNames)) {
+      if (block.controlKind === 'none' && proceduralTreeHasDelayedClockToggle(block.statementTree, clockNames)) {
         return true;
       }
       continue;
     }
-    if (block.kind === 'initial' && hasForeverDelayClockToggle(block.bodyTokens, clockNames)) {
+    if (block.kind === 'initial' && proceduralTreeHasForeverDelayedClockToggle(block.statementTree, clockNames)) {
       return true;
     }
   }
@@ -557,82 +557,116 @@ function declaredClockNames(module: VerilogModule): Set<string> {
   return new Set([...module.declarations.keys()].filter(isClockSignalName));
 }
 
-function hasForeverDelayClockToggle(tokens: VerilogToken[], clockNames: Set<string>): boolean {
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].value !== 'forever') {
-      continue;
-    }
-    const end = proceduralStatementWindowEnd(tokens, index + 1);
-    if (end <= index) {
-      continue;
-    }
-    if (hasDelayBeforeClockToggle(tokens.slice(index, end + 1), clockNames)) {
-      return true;
-    }
-  }
-  return false;
+function proceduralTreeHasClockToggle(statement: VerilogProceduralStatementAst, clockNames: Set<string>): boolean {
+  return visitProceduralClockStatements(statement, clockNames, { requireDelay: false, requireForever: false });
 }
 
-function hasDelayBeforeClockToggle(tokens: VerilogToken[], clockNames: Set<string>): boolean {
-  const assignmentIndex = findClockToggleAssignment(tokens, clockNames);
-  if (assignmentIndex < 0) {
+function proceduralTreeHasDelayedClockToggle(statement: VerilogProceduralStatementAst, clockNames: Set<string>): boolean {
+  return visitProceduralClockStatements(statement, clockNames, { requireDelay: true, requireForever: false });
+}
+
+function proceduralTreeHasForeverDelayedClockToggle(statement: VerilogProceduralStatementAst, clockNames: Set<string>): boolean {
+  return visitProceduralClockStatements(statement, clockNames, { requireDelay: true, requireForever: true });
+}
+
+function visitProceduralClockStatements(
+  statement: VerilogProceduralStatementAst,
+  clockNames: Set<string>,
+  options: { requireDelay: boolean; requireForever: boolean },
+  state: { blockedByEventOrWait: boolean; delaySeen: boolean } = { blockedByEventOrWait: false, delaySeen: false }
+): boolean {
+  switch (statement.kind) {
+    case 'block': {
+      let blockedByEventOrWait = state.blockedByEventOrWait;
+      let delaySeen = state.delaySeen;
+      for (const child of statement.statements) {
+        if (visitProceduralClockStatements(child, clockNames, options, { blockedByEventOrWait, delaySeen })) {
+          return true;
+        }
+        blockedByEventOrWait ||= statementContainsEventOrWait(child);
+        delaySeen ||= statementContainsDelayControl(child);
+      }
+      return false;
+    }
+    case 'loop':
+      if (statement.loopKind === 'forever') {
+        return visitProceduralClockStatements(statement.body, clockNames, { ...options, requireForever: false }, state);
+      }
+      return visitProceduralClockStatements(statement.body, clockNames, options, state);
+    case 'if':
+      return visitProceduralClockStatements(statement.consequent, clockNames, options, state)
+        || Boolean(statement.alternate && visitProceduralClockStatements(statement.alternate, clockNames, options, state));
+    case 'case':
+      return statement.items.some((item) => visitProceduralClockStatements(item.body, clockNames, options, state));
+    case 'assignment':
+      return !state.blockedByEventOrWait
+        && !statement.hasEventControl
+        && !statement.hasWaitControl
+        && !options.requireForever
+        && (!options.requireDelay || state.delaySeen || statement.hasDelayControl)
+        && isClockToggleAssignment(statement, clockNames);
+    case 'declaration':
+    case 'other':
+      return false;
+  }
+}
+
+function statementContainsEventOrWait(statement: VerilogProceduralStatementAst): boolean {
+  switch (statement.kind) {
+    case 'assignment':
+    case 'other':
+      return statement.hasEventControl || statement.hasWaitControl;
+    case 'block':
+      return statement.statements.some(statementContainsEventOrWait);
+    case 'loop':
+      return statementContainsEventOrWait(statement.body);
+    case 'if':
+      return statementContainsEventOrWait(statement.consequent) ||
+        Boolean(statement.alternate && statementContainsEventOrWait(statement.alternate));
+    case 'case':
+      return statement.items.some((item) => statementContainsEventOrWait(item.body));
+    case 'declaration':
+      return false;
+  }
+}
+
+function statementContainsDelayControl(statement: VerilogProceduralStatementAst): boolean {
+  switch (statement.kind) {
+    case 'assignment':
+    case 'other':
+      return statement.hasDelayControl;
+    case 'block':
+      return statement.statements.some(statementContainsDelayControl);
+    case 'loop':
+      return statementContainsDelayControl(statement.body);
+    case 'if':
+      return statementContainsDelayControl(statement.consequent) ||
+        Boolean(statement.alternate && statementContainsDelayControl(statement.alternate));
+    case 'case':
+      return statement.items.some((item) => statementContainsDelayControl(item.body));
+    case 'declaration':
+      return false;
+  }
+}
+
+function isClockToggleAssignment(statement: VerilogAssignmentStatementAst, clockNames: Set<string>): boolean {
+  return statement.targets.some((target) =>
+    clockNames.has(target) &&
+    expressionIsInvertedIdentifier(statement.rhs, target)
+  );
+}
+
+function expressionIsInvertedIdentifier(expression: VerilogExpressionAst | undefined, name: string): boolean {
+  if (!expression) {
     return false;
   }
-  const prefix = tokens.slice(0, assignmentIndex);
-  return prefix.some((token) => token.value === '#') && !prefix.some((token) => token.value === '@' || token.value === 'wait');
-}
-
-function findClockToggleAssignment(tokens: VerilogToken[], clockNames: Set<string>): number {
-  for (let index = 0; index <= tokens.length - 4; index++) {
-    const target = tokens[index];
-    if (target.kind !== 'identifier' || !clockNames.has(target.value)) {
-      continue;
-    }
-    const operator = tokens[index + 1];
-    const inverter = tokens[index + 2];
-    const source = tokens[index + 3];
-    if (
-      (operator.value === '=' || operator.value === '<=') &&
-      (inverter.value === '~' || inverter.value === '!') &&
-      source.kind === 'identifier' &&
-      source.value === target.value
-    ) {
-      return index;
-    }
+  if (expression.kind === 'parenthesizedExpression') {
+    return expressionIsInvertedIdentifier(expression.expression, name);
   }
-  return -1;
-}
-
-function proceduralStatementWindowEnd(tokens: VerilogToken[], start: number): number {
-  for (let index = start; index < tokens.length; index++) {
-    if (tokens[index].value === 'begin') {
-      const end = findMatchingBeginEndToken(tokens, index);
-      return end >= 0 ? end : index;
-    }
-    if (tokens[index].value === ';') {
-      return index;
-    }
-  }
-  return tokens.length - 1;
-}
-
-function findMatchingBeginEndToken(tokens: VerilogToken[], beginIndex: number): number {
-  let depth = 0;
-  for (let index = beginIndex; index < tokens.length; index++) {
-    if (tokens[index].value === 'begin') {
-      depth++;
-    } else if (tokens[index].value === 'end') {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function tokenRange(document: TextDocument, token: VerilogToken): Range {
-  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
+  return expression.kind === 'unaryExpression' &&
+    (expression.operator === '~' || expression.operator === '!') &&
+    expression.argument.kind === 'identifier' &&
+    expression.argument.name === name;
 }
 
 function isTestbenchModule(module: VerilogModule, settings: CoSettings): boolean {

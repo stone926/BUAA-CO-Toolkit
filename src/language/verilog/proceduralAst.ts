@@ -30,6 +30,9 @@ export interface VerilogAssignmentStatementAst extends VerilogProceduralStatemen
   kind: 'assignment';
   operator: '=' | '<=';
   targets: string[];
+  hasDelayControl: boolean;
+  hasEventControl: boolean;
+  hasWaitControl: boolean;
   lhs?: VerilogExpressionAst;
   rhs?: VerilogExpressionAst;
 }
@@ -70,6 +73,9 @@ export interface VerilogDeclarationStatementAst extends VerilogProceduralStateme
 
 export interface VerilogOtherProceduralStatementAst extends VerilogProceduralStatementBase {
   kind: 'other';
+  hasDelayControl: boolean;
+  hasEventControl: boolean;
+  hasWaitControl: boolean;
   expression?: VerilogExpressionAst;
 }
 
@@ -289,10 +295,12 @@ class ProceduralStatementParser {
 
     const assignment = parseAssignmentTokens(tokens);
     if (assignment) {
+      const controls = proceduralControlFlags(tokens.slice(0, Math.max(assignment.lhsStart, assignment.operatorIndex)));
       return {
         kind: 'assignment',
         operator: assignment.operator,
         targets: assignment.targets.map((target) => target.name),
+        ...controls,
         lhs: parseVerilogExpressionTokens(assignment.lhsTokens),
         rhs: parseVerilogExpressionTokens(assignment.rhsTokens),
         range: tokenIndexRange(this.document, this.tokens, start, end),
@@ -409,9 +417,18 @@ class ProceduralStatementParser {
       kind: 'other',
       range: tokenIndexRange(this.document, this.tokens, start, Math.max(start, end)),
       tokens,
+      ...proceduralControlFlags(tokens),
       expression: parseVerilogExpressionTokens(trimTrailingSemicolonTokens(tokens))
     };
   }
+}
+
+function proceduralControlFlags(tokens: VerilogToken[]): { hasDelayControl: boolean; hasEventControl: boolean; hasWaitControl: boolean } {
+  return {
+    hasDelayControl: tokens.some((token) => token.value === '#'),
+    hasEventControl: tokens.some((token) => token.value === '@'),
+    hasWaitControl: tokens.some((token) => token.value === 'wait')
+  };
 }
 
 function tokenIndexRange(document: TextDocument, tokens: VerilogToken[], start: number, end: number): Range {

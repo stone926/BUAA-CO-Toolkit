@@ -187,7 +187,9 @@ endmodule
     const clockGenerators = [
       'always #2 clk <= ~clk;',
       'always begin #2 clk = ~clk; end',
-      'initial begin forever #5 clk = ~clk; end'
+      'always begin #2; clk = ~clk; end',
+      'initial begin forever #5 clk = ~clk; end',
+      'initial begin forever begin #5; clk = ~clk; end end'
     ];
 
     for (const clockGenerator of clockGenerators) {
@@ -241,6 +243,17 @@ endmodule
       `
     always begin
         @(posedge reset);
+        #2 clk <= ~clk;
+    end`,
+      `
+    always begin
+        @(posedge reset) #2 clk <= ~clk;
+    end`,
+      `
+    always begin
+        if (reset) begin
+            @(posedge reset);
+        end
         #2 clk <= ~clk;
     end`
     ];

@@ -589,6 +589,8 @@ endmodule
       expect(loop.body.kind).toBe('assignment');
       if (loop.body.kind === 'assignment') {
         expect(loop.body.targets).toEqual(['clk']);
+        expect(loop.body.hasDelayControl).toBe(true);
+        expect(loop.body.hasEventControl).toBe(false);
         expect(loop.body.lhs?.kind).toBe('identifier');
         if (loop.body.lhs?.kind === 'identifier') {
           expect(loop.body.lhs.name).toBe('clk');
@@ -600,6 +602,8 @@ endmodule
     expect(labeled?.kind).toBe('assignment');
     if (labeled?.kind === 'assignment') {
       expect(labeled.targets).toEqual(['y']);
+      expect(labeled.hasDelayControl).toBe(false);
+      expect(labeled.hasEventControl).toBe(false);
       expect(labeled.lhs?.kind).toBe('identifier');
       if (labeled.lhs?.kind === 'identifier') {
         expect(labeled.lhs.name).toBe('y');
