@@ -17,7 +17,6 @@ import { walkVerilogExpression } from './exprAstUtils';
 import {
   edgeSignalsFromSensitivity,
   hasTokenValue,
-  isOffsetInsideForControl,
   VerilogProceduralBlockAst
 } from './blockAst';
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
@@ -295,7 +294,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', DiagnosticSeverity.Information, 'vc-014-sync-reset'));
       }
       for (const assignment of blockAssignments) {
-        if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=' && !isOffsetInsideForControl(block.bodyTokens, document.offsetAt(assignment.range.start))) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=') {
           diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-010-seq-blocking'));
         }
       }

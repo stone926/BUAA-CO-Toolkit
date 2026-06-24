@@ -95,23 +95,6 @@ export function tokenListText(source: string, tokens: VerilogToken[]): string {
   return source.slice(tokens[0].start, tokens[tokens.length - 1].end);
 }
 
-export function isOffsetInsideForControl(tokens: VerilogToken[], offset: number): boolean {
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].value !== 'for') {
-      continue;
-    }
-    const open = nextTokenValue(tokens, index + 1, '(');
-    if (open < 0) {
-      continue;
-    }
-    const close = findMatchingForward(tokens, open, '(', ')');
-    if (close >= 0 && tokens[open].start <= offset && offset <= tokens[close].end) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function parseAlwaysBlockAt(document: TextDocument, tokens: VerilogToken[], alwaysIndex: number, moduleEnd: number): VerilogAlwaysBlockAst | undefined {
   const always = tokens[alwaysIndex];
   let cursor = alwaysIndex + 1;
@@ -305,16 +288,4 @@ function nextIdentifier(tokens: VerilogToken[], start: number): VerilogToken | u
     }
   }
   return undefined;
-}
-
-function nextTokenValue(tokens: VerilogToken[], start: number, value: string): number {
-  for (let index = start; index < tokens.length; index++) {
-    if (tokens[index].value === value) {
-      return index;
-    }
-    if (tokens[index].value !== 'automatic') {
-      return -1;
-    }
-  }
-  return -1;
 }
