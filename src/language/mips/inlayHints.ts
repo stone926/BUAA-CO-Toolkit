@@ -49,7 +49,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
 
     if (executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
       const operand = executable.operands[1];
-      const syscall = syscallByOperand(operand.text);
+      const syscall = syscallByOperand(operand);
       if (syscall) {
         if (inRequestedRange) {
           hints.push({
@@ -81,7 +81,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
 
     if ((executable.lowerMnemonic === 'mfc0' || executable.lowerMnemonic === 'mtc0') && executable.operands[1] && inRequestedRange) {
       const operand = executable.operands[1];
-      const register = cp0ByOperand(operand.text);
+      const register = cp0ByOperand(operand);
       if (register) {
         hints.push({
           position: operand.range.end,

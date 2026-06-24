@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { defaultCoSettings } from '../../../language/common/settings';
-import { pseudoExpansionPreview, syscallByOperand } from '../../../language/mips/display';
+import { cp0ByOperand, pseudoExpansionPreview, syscallByOperand } from '../../../language/mips/display';
 import { getMipsHover } from '../../../language/mips/hover';
+import { parseMips } from '../../../language/mips/parser';
 import { MipsServerState } from '../../../language/mips/state';
 
 function doc(text: string): TextDocument {
@@ -122,6 +123,24 @@ describe('getMipsHover instruction markdown', () => {
 describe('syscallByOperand', () => {
   it('resolves character literal service numbers', () => {
     expect(syscallByOperand("'\\n'")?.code).toBe(10);
+  });
+
+  it('resolves service numbers from AST integer operands', () => {
+    const parsed = parseMips(doc("li $v0, '\\n'"), defaultCoSettings);
+    const operand = parsed.ast.statements[0].executable?.operands[1];
+
+    expect(operand?.kind).toBe('integer');
+    expect(operand ? syscallByOperand(operand)?.code : undefined).toBe(10);
+  });
+});
+
+describe('cp0ByOperand', () => {
+  it('resolves CP0 registers from AST operands', () => {
+    const parsed = parseMips(doc('mtc0 $t0, $12'), defaultCoSettings);
+    const operand = parsed.ast.statements[0].executable?.operands[1];
+
+    expect(operand?.kind).toBe('register');
+    expect(operand ? cp0ByOperand(operand)?.number : undefined).toBe(12);
   });
 });
 

@@ -4,7 +4,7 @@ import { lineAt } from '../common/lsp';
 import { MipsMacro, MipsParseResult } from './model';
 import { instructionWritesRegister } from './instructionValidation';
 import { macroCallArgumentsAtPosition } from './queries';
-import type { MipsAstLine, MipsExecutableAst, MipsStatementAst } from './ast';
+import type { MipsAstLine, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
 import { collectMipsOperandReferences } from './operandReferences';
 import {
   cp0RegistersByNumber,
@@ -183,13 +183,13 @@ export function cp0Markdown(register: MipsCp0RegisterInfo): string {
   return lines.join('\n');
 }
 
-export function syscallByOperand(operand: string): MipsSyscallInfo | undefined {
-  const value = parseIntegerOrCharLiteral(operand);
+export function syscallByOperand(operand: string | MipsOperandAst): MipsSyscallInfo | undefined {
+  const value = operandIntegerValue(operand);
   return value === undefined ? undefined : syscallsByCode.get(value);
 }
 
-export function cp0ByOperand(operand: string): MipsCp0RegisterInfo | undefined {
-  const value = parseIntegerOrCharLiteral(operand.startsWith('$') ? operand.slice(1) : operand);
+export function cp0ByOperand(operand: string | MipsOperandAst): MipsCp0RegisterInfo | undefined {
+  const value = operandIntegerValue(operand, true);
   return value === undefined ? undefined : cp0RegistersByNumber.get(value);
 }
 
@@ -203,7 +203,7 @@ export function syscallAtLiV0Operand(parsed: MipsParseResult, wordRange: Range) 
   if (!target || !serviceOperand || target.text !== '$v0' || !rangesOverlap(wordRange, serviceOperand.range)) {
     return undefined;
   }
-  return syscallByOperand(serviceOperand.text);
+  return syscallByOperand(serviceOperand);
 }
 
 export function syscallServiceBeforeLine(parsed: MipsParseResult, targetLine: number): MipsSyscallInfo | undefined {
@@ -228,7 +228,7 @@ export function syscallServiceBeforeLine(parsed: MipsParseResult, targetLine: nu
     }
 
     if (executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
-      service = syscallByOperand(executable.operands[1].text);
+      service = syscallByOperand(executable.operands[1]);
       continue;
     }
     if (executable.lowerMnemonic === 'syscall') {
@@ -252,7 +252,7 @@ export function cp0RegisterAtPosition(parsed: MipsParseResult, word: string, pos
   if (!operand || operand.text !== word || position.character < operand.range.start.character || position.character > operand.range.end.character) {
     return undefined;
   }
-  const register = cp0ByOperand(operand.text);
+  const register = cp0ByOperand(operand);
   if (!register) {
     return undefined;
   }
@@ -469,6 +469,14 @@ function parseImmediate(operand: string): ImmediateInfo | undefined {
 function parseIntegerOrCharLiteral(operand: string): number | undefined {
   const charValue = parseCharLiteral(operand);
   return charValue === undefined ? parseIntegerLiteral(operand) : charValue;
+}
+
+function operandIntegerValue(operand: string | MipsOperandAst, stripRegisterPrefix = false): number | undefined {
+  if (typeof operand !== 'string' && operand.kind === 'integer') {
+    return operand.value;
+  }
+  const text = typeof operand === 'string' ? operand : operand.text;
+  return parseIntegerOrCharLiteral(stripRegisterPrefix && text.startsWith('$') ? text.slice(1) : text);
 }
 
 function expandLoadImmediate(register: string, operand: string): string[] | undefined {
