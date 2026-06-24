@@ -513,7 +513,7 @@ function validateDirective(
     case '.data':
     case '.ktext':
     case '.kdata':
-      validateDirectiveOperandCount(document, lineNumber, directive, executable.operands.map((operand) => operand.text), 0, 1, diagnostics);
+      validateDirectiveOperandCount(document, lineNumber, directive, executable.operands, 0, 1, diagnostics);
       if (operandText && !isIntegerOrCharLiteral(operandText)) {
         diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operandText), `${directive} address must be an integer literal.`, DiagnosticSeverity.Error, 'directive-operand'));
       }
@@ -634,7 +634,7 @@ function validateMacroDirectiveSyntax(document: TextDocument, lineNumber: number
   }
 }
 
-function validateDirectiveOperandCount(document: TextDocument, lineNumber: number, directive: string, operands: string[], min: number, max: number, diagnostics: Diagnostic[]): boolean {
+function validateDirectiveOperandCount(document: TextDocument, lineNumber: number, directive: string, operands: readonly unknown[], min: number, max: number, diagnostics: Diagnostic[]): boolean {
   if (operands.length < min || operands.length > max) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, directive), `${directive} expects ${min === max ? min : `${min}-${max}`} operand(s), got ${operands.length}.`, DiagnosticSeverity.Error, 'directive-operand-count'));
     return false;
@@ -1059,8 +1059,7 @@ function macroLabelParameters(parsed: MipsParseResult, macro: MipsMacro): Set<st
     if (!instruction) {
       continue;
     }
-    const operands = executable.operands.map((operand) => operand.text);
-    const target = labelOperand(instruction, operands);
+    const target = labelOperand(instruction, executable.operands);
     if (target?.startsWith('%') && macro.params.includes(target)) {
       labelParams.add(target);
     }
