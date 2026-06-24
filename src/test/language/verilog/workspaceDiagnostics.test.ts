@@ -90,6 +90,33 @@ endmodule
     expect(codes(top, [child, top], { project: { topModule: 'top' } })).toContain('multi-driver');
   });
 
+  it('does not report intentionally unconnected output ports as missing', () => {
+    const controller = doc('controller', `
+module Controller(
+    input [31:0] instr,
+    input flush,
+    output RegWrite,
+    output MemWrite,
+    output Branch
+);
+endmodule
+`);
+    const top = doc('top_outputs', `
+module top(input [31:0] instr);
+    wire reg_write;
+    Controller ctrl(
+        .instr(instr),
+        .RegWrite(reg_write)
+    );
+endmodule
+`);
+
+    const result = codes(top, [controller, top], { project: { topModule: 'top' } });
+    expect(result).toContain('missing-port:flush');
+    expect(result).not.toContain('missing-port:MemWrite');
+    expect(result).not.toContain('missing-port:Branch');
+  });
+
   it('invalidates cached workspace project summaries when the index changes', () => {
     const settings = mergeCoSettings({ project: { profile: 'P4', topModule: 'mips' } });
     const uri = 'test://workspace-diagnostics/project-summary/mips.v';

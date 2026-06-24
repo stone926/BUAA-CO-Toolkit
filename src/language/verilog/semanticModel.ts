@@ -17,6 +17,7 @@ import type { VerilogProceduralBlockAst, VerilogProceduralControlAst } from './b
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
+import { verilogDeclarationKeywords } from './declarations';
 
 export type VerilogSemanticSymbolKind =
   | 'module'
@@ -438,22 +439,6 @@ function collectSubroutineBlockScopes(moduleAst: VerilogModuleAst, moduleScope: 
   return result;
 }
 
-const declarationKinds = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
-
 function dedupeDecls(declarations: VerilogDecl[]): VerilogDecl[] {
   const seen = new Set<string>();
   const result: VerilogDecl[] = [];
@@ -598,7 +583,7 @@ function collectAstDrivenModuleReferences(
     if (first.value === 'module' || first.value === 'endmodule') {
       continue;
     }
-    if (declarationKinds.has(first.value)) {
+    if (verilogDeclarationKeywords.has(first.value)) {
       continue;
     }
     if (statementAst.kind === 'instance') {

@@ -6,6 +6,7 @@ import { VerilogToken } from './lexer';
 import { parseVerilogSyntax } from './syntaxParser';
 import { VerilogAstDocument } from './ast';
 import { verilogAstCodeTokens } from './astTokens';
+import { verilogDeclarationKeywords } from './declarations';
 
 type BlockToken = 'begin' | 'case' | 'generate' | 'function' | 'task';
 
@@ -19,23 +20,6 @@ const closingToOpening = new Map<string, string>([
   [')', '('],
   [']', '['],
   ['}', '{']
-]);
-
-const declarationKeywords = new Set([
-  'assign',
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'localparam',
-  'parameter',
-  'genvar',
-  'real',
-  'realtime',
-  'time'
 ]);
 
 const bodyBoundaryKeywords = new Set([
@@ -55,8 +39,9 @@ const bodyBoundaryKeywords = new Set([
   'endfunction',
   'task',
   'endtask',
-  ...declarationKeywords
+  ...verilogDeclarationKeywords
 ]);
+const statementTerminatorKeywords = new Set(['assign', ...verilogDeclarationKeywords]);
 
 export function collectSyntaxDiagnostics(
   document: TextDocument,
@@ -226,7 +211,7 @@ function collectStatementTerminatorDiagnostics(
     const bodyEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
     for (let index = 0; index < tokens.length; index++) {
       const token = tokens[index];
-      if (token.start < bodyStart || token.start >= bodyEnd || !declarationKeywords.has(token.value)) {
+      if (token.start < bodyStart || token.start >= bodyEnd || !statementTerminatorKeywords.has(token.value)) {
         continue;
       }
       if (isInsidePortDeclarationList(tokens, index)) {

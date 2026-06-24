@@ -52,7 +52,7 @@ export function shouldReportWidthMismatch(expected: WidthInfo, actual: WidthInfo
   }
   // Only flag truncation: assigning a narrower value to a wider target is normal
   // zero/sign-extension. Flexible arithmetic widths compare by their meaningful minimum.
-  const actualMinimum = actual.flexible ? (actual.minWidth ?? actual.width) : actual.width;
+  const actualMinimum = actual.minWidth ?? actual.width;
   return actualMinimum > expected.width;
 }
 
@@ -164,6 +164,9 @@ function widthOfCall(expression: Extract<VerilogExpressionAst, { kind: 'callExpr
 function widthOfSelect(expression: Extract<VerilogExpressionAst, { kind: 'selectExpression' }>, module: VerilogModule | undefined, overrides?: VerilogConstantOverrides): WidthInfo {
   switch (expression.select.kind) {
     case 'bitSelect':
+      if (isUnpackedArrayElementSelect(expression, module)) {
+        return widthOfExpressionAst(expression.target, module, overrides);
+      }
       return { width: 1 };
     case 'rangeSelect': {
       const left = constNumber(expression.select.left, module, overrides);
@@ -177,6 +180,16 @@ function widthOfSelect(expression: Extract<VerilogExpressionAst, { kind: 'select
     default:
       return widthOfExpressionAst(expression.target, module, overrides);
   }
+}
+
+function isUnpackedArrayElementSelect(
+  expression: Extract<VerilogExpressionAst, { kind: 'selectExpression' }>,
+  module: VerilogModule | undefined
+): boolean {
+  if (!module || expression.target.kind !== 'identifier') {
+    return false;
+  }
+  return Boolean(module.declarations.get(expression.target.name)?.unpackedDimensions?.length);
 }
 
 function widthOfConcatenation(elements: VerilogExpressionAst[], module: VerilogModule | undefined, overrides?: VerilogConstantOverrides): WidthInfo {

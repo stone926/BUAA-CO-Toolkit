@@ -130,6 +130,46 @@ endmodule
     expect(result).toContain('width-mismatch');
   });
 
+  it('reports an unsized decimal literal that does not fit its target', () => {
+    const result = codes(`
+module m;
+    reg [3:0] small = 42;
+endmodule
+`.trim());
+    expect(result).toContain('width-mismatch');
+  });
+
+  it('does not flag unsized 0/1 assignments to one-bit testbench registers', () => {
+    const result = codes(`
+module tb;
+    reg clk;
+    reg reset;
+    initial begin
+        clk = 0;
+        reset = 1;
+        reset = 0;
+        $finish;
+    end
+    always #1 clk = ~clk;
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('uses packed element width for unpacked memory assignments', () => {
+    const result = codes(`
+module TC(input clk, input [31:0] din);
+    reg [31:0] mem [2:0];
+    integer i;
+    always @(posedge clk) begin
+        for (i = 0; i < 3; i = i + 1) mem[i] <= 0;
+        mem[1] <= din;
+    end
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
   it('does not flag case equality operators (===, !==)', () => {
     const result = codes(`
 module m(input [31:0] a, input [31:0] b, output eq, output neq);

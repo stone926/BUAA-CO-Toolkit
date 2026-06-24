@@ -100,11 +100,15 @@ function collectPortConnectionDiagnostics(
 
   if (checkMissing && instance.portConnections.some((connection) => connection.name)) {
     for (const port of targetModule.ports) {
-      if (!seenConnections.has(port.name)) {
+      if (!seenConnections.has(port.name) && shouldReportMissingPort(port)) {
         diagnostics.push(makeDiagnostic(instance.selectionRange, `Instance '${instance.instanceName}' does not connect port '${port.name}'.`, DiagnosticSeverity.Information, `missing-port:${port.name}`));
       }
     }
   }
+}
+
+function shouldReportMissingPort(port: VerilogDecl): boolean {
+  return port.direction !== 'output' && port.direction !== 'inout';
 }
 
 function collectParameterConnectionDiagnostics(

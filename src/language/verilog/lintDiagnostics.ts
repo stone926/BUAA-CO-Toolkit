@@ -237,6 +237,8 @@ export function collectImplicitNetDiagnostics(
     if (
       verilogKeywords.has(reference.name) ||
       systemTasks.has(reference.name) ||
+      isMacroReferenceName(reference.name) ||
+      isSystemTaskReferenceName(reference.name) ||
       ignorePatterns.some((pattern) => pattern.test(reference.name))
     ) {
       continue;
@@ -248,6 +250,14 @@ export function collectImplicitNetDiagnostics(
     reported.add(key);
     diagnostics.push(makeDiagnostic(reference.range, `Implicit net or undeclared identifier '${reference.name}'.`, severity, `implicit-net:${reference.name}`));
   }
+}
+
+function isMacroReferenceName(name: string): boolean {
+  return name.startsWith('`') && name.length > 1;
+}
+
+function isSystemTaskReferenceName(name: string): boolean {
+  return name.startsWith('$') && systemTasks.has(name.slice(1));
 }
 
 export function collectExplicitPortNetTypeDiagnostics(

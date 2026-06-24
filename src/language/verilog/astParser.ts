@@ -17,6 +17,15 @@ import {
 import { widthOfExpressionAst, WidthInfo } from './expressions';
 import { evalVerilogIntegerConstant, parseVerilogExpression, parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { normalizeWidth } from './textUtils';
+import {
+  normalizeVerilogDeclKind,
+  skipVerilogStrengthGroup,
+  verilogDeclarationKeywords,
+  verilogDeclarationModifiers,
+  verilogExplicitPortNetTypes,
+  verilogPortDeclarationTypes,
+  verilogPortDirections
+} from './declarations';
 
 interface ModuleHeaderInfo {
   moduleToken: VerilogToken;
@@ -29,52 +38,6 @@ interface ModuleHeaderInfo {
   nextIndex: number;
 }
 
-const portKinds = new Set(['input', 'output', 'inout']);
-const declKinds = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
-const declModifiers = new Set([
-  'automatic',
-  'signed',
-  'unsigned',
-  'tri',
-  'tri0',
-  'tri1',
-  'supply0',
-  'supply1'
-]);
-const explicitPortNetTypes = new Set([
-  'wire',
-  'tri',
-  'tri0',
-  'tri1',
-  'triand',
-  'trior',
-  'trireg',
-  'wand',
-  'wor',
-  'supply0',
-  'supply1',
-  'reg',
-  'logic',
-  'integer',
-  'time',
-  'real',
-  'realtime'
-]);
-const portDeclarationModifiers = new Set(['automatic', 'signed', 'unsigned', 'scalared', 'vectored']);
 const instanceExcludedFirstTokens = new Set([
   'module',
   'endmodule',
@@ -253,7 +216,7 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
     if (!port) {
       continue;
     }
-    const direction = firstTokenValue(part, portKinds) as 'input' | 'output' | 'inout' | undefined;
+    const direction = firstTokenValue(part, verilogPortDirections) as 'input' | 'output' | 'inout' | undefined;
     const width = firstRangeInfo(document, text, part);
     if (direction) {
       port.direction = direction;
@@ -287,7 +250,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
   const declarations: VerilogDecl[] = [];
   for (const statement of statementSlices(tokens)) {
     const first = statement[0];
-    if (!first || !declKinds.has(first.value)) {
+    if (!first || !verilogDeclarationKeywords.has(first.value)) {
       continue;
     }
     const semicolonTrimmed = trimTrailingSemicolon(statement);
@@ -296,7 +259,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
       continue;
     }
     const prefix = semicolonTrimmed.slice(0, firstName);
-    const kind = first.value as VerilogDeclKind;
+    const kind = normalizeVerilogDeclKind(first.value);
     const width = lastRangeInfo(document, text, prefix);
     for (const part of splitTopLevel(semicolonTrimmed.slice(firstName), ',')) {
       const nameToken = declarationNameToken(part);
@@ -491,10 +454,10 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   if (!nameToken) {
     return undefined;
   }
-  const directionToken = firstToken(cleaned, portKinds);
+  const directionToken = firstToken(cleaned, verilogPortDirections);
   const direction = directionToken?.value as 'input' | 'output' | 'inout' | undefined;
-  const explicitKind = firstTokenValue(cleaned, declKinds) as VerilogDeclKind | undefined;
-  const kind = (direction ?? explicitKind ?? fallbackKind) as VerilogDeclKind;
+  const explicitKind = firstTokenValue(cleaned, verilogDeclarationKeywords);
+  const kind = direction ?? (explicitKind ? normalizeVerilogDeclKind(explicitKind) : fallbackKind);
   const initializer = declarationInitializerInfo(document, text, cleaned);
   const unpackedDimensions = declarationDimensionInfos(document, text, cleaned, nameToken);
   const width = firstRangeInfo(document, text, cleaned);
@@ -547,7 +510,7 @@ function parseInstanceStatement(document: TextDocument, text: string, statement:
     return undefined;
   }
   // 拒绝将声明关键字（reg, wire, input 等）误认为模块名来实例化
-  if (first.kind === 'keyword' && declKinds.has(first.value)) {
+  if (first.kind === 'keyword' && verilogDeclarationKeywords.has(first.value)) {
     return undefined;
   }
   let index = 1;
@@ -739,6 +702,11 @@ function firstDeclaratorIndex(tokens: VerilogToken[], from: number): number {
   let index = from;
   while (index < tokens.length) {
     const token = tokens[index];
+    const afterStrength = skipVerilogStrengthGroup(tokens, index);
+    if (afterStrength !== index) {
+      index = afterStrength;
+      continue;
+    }
     if (token.value === '[') {
       const close = findMatchingToken(tokens, index, '[', ']');
       if (close < 0) {
@@ -747,7 +715,7 @@ function firstDeclaratorIndex(tokens: VerilogToken[], from: number): number {
       index = close + 1;
       continue;
     }
-    if (token.kind === 'keyword' && (declKinds.has(token.value) || declModifiers.has(token.value))) {
+    if (token.kind === 'keyword' && (verilogDeclarationKeywords.has(token.value) || verilogDeclarationModifiers.has(token.value))) {
       index++;
       continue;
     }
@@ -927,10 +895,10 @@ function hasExplicitPortNetTypeInTokens(tokens: VerilogToken[], directionIndex: 
     if (token.value === ',' || token.value === ';' || token.value === ')') {
       return false;
     }
-    if (explicitPortNetTypes.has(token.value)) {
+    if (verilogExplicitPortNetTypes.has(token.value)) {
       return true;
     }
-    if (portDeclarationModifiers.has(token.value)) {
+    if (verilogDeclarationModifiers.has(token.value) || verilogPortDeclarationTypes.has(token.value)) {
       index++;
       continue;
     }

@@ -322,6 +322,29 @@ describe('parseMips', () => {
       expect(result.diagnostics.filter((d) => d.code === 'duplicate-macro')).toHaveLength(0);
     });
 
+    it('keeps data labels scoped to their containing macro', () => {
+      const text = `
+.macro print(%str)
+  .data
+    _str: .asciiz %str
+  .text
+    la $a0, _str
+.end_macro
+
+.macro put_int(%int, %sep)
+  .data
+    _str: .asciiz %sep
+  .text
+    la $a0, _str
+.end_macro
+`.trim();
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('duplicate-symbol');
+      expect(result.macros.get('print')?.[0].dataSymbols.has('_str')).toBe(true);
+      expect(result.macros.get('put_int')?.[0].dataSymbols.has('_str')).toBe(true);
+      expect(result.dataSymbols.has('_str')).toBe(false);
+    });
+
     it('detects wrong number of macro arguments', () => {
       const text = '.macro foo(%a, %b)\n.end_macro\nfoo($t0)';
       const result = parseMips(doc(text), settings());

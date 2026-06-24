@@ -1114,6 +1114,21 @@ endmodule
     expect(modules[0].declarations.get('b')?.width).toBe('[7:0]');
   });
 
+  it('parses net declarations with Verilog strength syntax', () => {
+    const text = `
+module glbl();
+    tri1 p_up_tmp;
+    tri (weak1, strong0) PLL_LOCKG = p_up_tmp;
+endmodule
+`.trim();
+    const d = doc(text);
+    const modules = parseModules(d, text);
+    expect(modules[0].declarations.get('p_up_tmp')?.kind).toBe('wire');
+    const pllLock = modules[0].declarations.get('PLL_LOCKG');
+    expect(pllLock?.kind).toBe('wire');
+    expect(pllLock?.initializer).toBe('p_up_tmp');
+  });
+
   it('parses declarations that follow procedural blocks', () => {
     const text = `
 module test(input clk, input reset, input w_grf_we, input [4:0] w_grf_addr, input [31:0] w_inst_addr, input [31:0] w_grf_wdata);

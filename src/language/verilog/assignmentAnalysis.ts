@@ -8,6 +8,7 @@ import {
   trimEofTokens,
   trimTrailingSemicolonTokens
 } from './tokenUtils';
+import { skipVerilogStrengthGroup, verilogDeclarationKeywords } from './declarations';
 
 export interface AssignmentTarget {
   name: string;
@@ -22,22 +23,6 @@ export interface ParsedAssignmentTokens {
   rhsTokens: VerilogToken[];
   targets: AssignmentTarget[];
 }
-
-const declarationKeywords = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
 
 export function parseAssignmentTokens(rawTokens: VerilogToken[]): ParsedAssignmentTokens | undefined {
   const tokens = trimTrailingSemicolonTokens(rawTokens);
@@ -125,7 +110,15 @@ function trailingScalarTarget(tokens: VerilogToken[]): AssignmentTarget | undefi
 
 function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: number): number {
   if (tokens[0]?.value === 'assign') {
-    return 1;
+    let start = skipVerilogStrengthGroup(tokens, 1);
+    while (tokens[start]?.value === '#') {
+      const next = skipDelayControl(tokens, start);
+      if (next <= start || next > operatorIndex) {
+        break;
+      }
+      start = next;
+    }
+    return start;
   }
   let start = 0;
   while (start < operatorIndex) {
@@ -174,7 +167,7 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
 
 function isDeclarationStatement(tokens: VerilogToken[]): boolean {
   const first = tokens.find((token) => token.kind !== 'eof');
-  return Boolean(first && declarationKeywords.has(first.value));
+  return Boolean(first && verilogDeclarationKeywords.has(first.value));
 }
 
 function trailingConcatenation(tokens: VerilogToken[]): VerilogToken[] | undefined {

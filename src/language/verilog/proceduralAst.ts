@@ -4,6 +4,13 @@ import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
 import type { VerilogDecl } from './model';
+import {
+  normalizeVerilogDeclKind,
+  skipVerilogStrengthGroup,
+  verilogDeclarationKeywords,
+  verilogDeclarationModifiers,
+  verilogPortDeclarationTypes
+} from './declarations';
 import { findMatchingTokenForward, splitTopLevelTokens, trimEofTokens, trimTrailingSemicolonTokens } from './tokenUtils';
 
 export type VerilogProceduralStatementAst =
@@ -90,22 +97,6 @@ export interface VerilogOtherProceduralStatementAst extends VerilogProceduralSta
   hasWaitControl: boolean;
   expression?: VerilogExpressionAst;
 }
-
-const declarationKeywords = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
 
 export function parseVerilogProceduralBlockBody(
   document: TextDocument,
@@ -303,7 +294,7 @@ class ProceduralStatementParser {
     this.cursor = Math.min(this.tokens.length, end + 1);
     const tokens = this.tokens.slice(start, end + 1);
     const first = tokens[0];
-    if (first && declarationKeywords.has(first.value)) {
+    if (first && verilogDeclarationKeywords.has(first.value)) {
       return {
         kind: 'declaration',
         range: tokenIndexRange(this.document, this.tokens, start, end),
@@ -450,15 +441,6 @@ function proceduralControlFlags(tokens: VerilogToken[]): { hasDelayControl: bool
   };
 }
 
-const declarationModifiers = new Set([
-  'automatic',
-  'signed',
-  'unsigned',
-  'wire',
-  'reg',
-  'logic'
-]);
-
 function forControlDeclarations(document: TextDocument, tokens: VerilogToken[]): VerilogLocalDeclarationAst[] {
   const semicolon = tokens.findIndex((token) => token.value === ';');
   const initTokens = semicolon >= 0 ? tokens.slice(0, semicolon) : tokens;
@@ -507,7 +489,7 @@ function forInitControlExpressions(tokens: VerilogToken[]): VerilogExpressionAst
   if (!tokens.length) {
     return [];
   }
-  if (!declarationKeywords.has(tokens[0].value)) {
+  if (!verilogDeclarationKeywords.has(tokens[0].value)) {
     return assignmentOrExpressionAsts(tokens);
   }
   return splitTopLevelTokens(tokens.slice(1), ',')
@@ -560,10 +542,10 @@ function topLevelTokenIndex(tokens: VerilogToken[], value: string): number {
 
 function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogLocalDeclarationAst[] {
   const first = tokens[0];
-  if (!first || !declarationKeywords.has(first.value)) {
+  if (!first || !verilogDeclarationKeywords.has(first.value)) {
     return [];
   }
-  const kind = first.value as VerilogDecl['kind'];
+  const kind = normalizeVerilogDeclKind(first.value);
   const declarationTokens = trimTrailingSemicolonTokens(tokens);
   const declarations: VerilogLocalDeclarationAst[] = [];
   for (const part of splitTopLevelTokens(declarationTokens.slice(1), ',')) {
@@ -599,7 +581,16 @@ function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined 
         continue;
       }
     }
-    if (declarationKeywords.has(token.value) || declarationModifiers.has(token.value)) {
+    const afterStrength = skipVerilogStrengthGroup(tokens, index);
+    if (afterStrength !== index) {
+      index = afterStrength - 1;
+      continue;
+    }
+    if (
+      verilogDeclarationKeywords.has(token.value) ||
+      verilogDeclarationModifiers.has(token.value) ||
+      verilogPortDeclarationTypes.has(token.value)
+    ) {
       continue;
     }
     if (token.kind === 'identifier') {

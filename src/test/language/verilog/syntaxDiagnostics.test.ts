@@ -133,6 +133,16 @@ endmodule
     expect(result).toContain('syntax-malformed-number');
   });
 
+  it('accepts based literals with x, z, question marks, and underscores', () => {
+    const result = syntaxCodes(`
+module ok(output [31:0] y);
+    assign y = {6'bzzzzzz, 4'b10x1, 4'b10?1, 32'h0000_7f00};
+endmodule
+`.trim());
+    expect(result).not.toContain('syntax-malformed-number');
+    expect(result).not.toContain('syntax-malformed-assignment');
+  });
+
   it('reports malformed instance port list expressions and missing commas', () => {
     const result = codes(`
 module child(input a, input b); endmodule
@@ -190,6 +200,20 @@ endmodule
 `.trim());
     expect(result).not.toContain('syntax-unexpected-token');
     expect(result).not.toContain('syntax-malformed-gate-primitive');
+  });
+
+  it('accepts Xilinx netgen net declarations and drive-strength assigns', () => {
+    const result = syntaxCodes(`
+module glbl();
+    wire GSR_int;
+    tri1 p_up_tmp;
+    tri (weak1, strong0) PLL_LOCKG = p_up_tmp;
+    assign (weak1, weak0) GSR = GSR_int;
+endmodule
+`.trim());
+    expect(result).not.toContain('syntax-unexpected-token');
+    expect(result).not.toContain('syntax-malformed-declaration');
+    expect(result).not.toContain('syntax-malformed-assignment');
   });
 
   it('reports illegal declaration keyword sequences without rejecting common port types', () => {

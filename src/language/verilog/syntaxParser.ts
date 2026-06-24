@@ -11,6 +11,15 @@ import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import {
+  skipVerilogStrengthGroup,
+  verilogDeclarationKeywords,
+  verilogDeclarationModifiers,
+  verilogDeclarationPrefixKeywords,
+  verilogParameterTypeKeywords,
+  verilogPortDeclarationTypes,
+  verilogPortDirections
+} from './declarations';
+import {
   findMatchingTokenForward as findMatchingToken,
   findTopLevelToken as firstTopLevelToken,
   findTopLevelTokenIndexes as topLevelIndexes,
@@ -44,40 +53,6 @@ export interface VerilogSyntaxParseResult {
   root: VerilogSyntaxNode;
   diagnostics: Diagnostic[];
 }
-
-const declarationKeywords = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
-
-const portDirectionKeywords = new Set(['input', 'output', 'inout']);
-const portDeclarationTypes = new Set(['wire', 'reg', 'logic']);
-const parameterDeclarationTypes = new Set(['integer', 'real', 'realtime', 'time']);
-const declarationModifiers = new Set([
-  'automatic',
-  'signed',
-  'unsigned',
-  'scalared',
-  'vectored'
-]);
-const declarationPrefixKeywords = new Set([
-  ...declarationKeywords,
-  ...portDirectionKeywords,
-  ...portDeclarationTypes,
-  ...parameterDeclarationTypes,
-  ...declarationModifiers
-]);
 
 const unsupportedConstructs = new Set([
   'generate',
@@ -240,7 +215,12 @@ function modulePortDeclaratorStart(
       index = close + 1;
       continue;
     }
-    if (declarationModifiers.has(token.value)) {
+    const afterStrength = skipVerilogStrengthGroup(tokens, index);
+    if (afterStrength !== index) {
+      index = afterStrength;
+      continue;
+    }
+    if (verilogDeclarationModifiers.has(token.value)) {
       index++;
       continue;
     }
@@ -249,7 +229,7 @@ function modulePortDeclaratorStart(
       index++;
       continue;
     }
-    if (token.kind === 'keyword' && declarationPrefixKeywords.has(token.value)) {
+    if (token.kind === 'keyword' && verilogDeclarationPrefixKeywords.has(token.value)) {
       diagnostics.push(makeDiagnostic(
         tokenRange(document, token),
         `Syntax error: unexpected declaration keyword '${token.value}' in module port declaration.`,
@@ -295,7 +275,7 @@ function validateModulePortDeclarator(document: TextDocument, tokens: VerilogTok
 }
 
 function topLevelPortDirectionIndexes(tokens: VerilogToken[]): number[] {
-  return topLevelIndexes(tokens, (token) => portDirectionKeywords.has(token.value));
+  return topLevelIndexes(tokens, (token) => verilogPortDirections.has(token.value));
 }
 
 function looksLikeInheritedPortDeclarator(tokens: VerilogToken[]): boolean {
@@ -340,7 +320,7 @@ function collectModuleItemDiagnostics(
     if (first.kind === 'directive') {
       continue;
     }
-    if (declarationKeywords.has(first.value)) {
+    if (verilogDeclarationKeywords.has(first.value)) {
       moduleNode.children.push(nodeFromRange('declaration', statement.range));
       validateDeclarationLikeStatement(document, item, diagnostics);
       continue;
@@ -554,7 +534,12 @@ function declarationDeclaratorStart(
       index = close + 1;
       continue;
     }
-    if (declarationModifiers.has(token.value)) {
+    const afterStrength = skipVerilogStrengthGroup(tokens, index);
+    if (afterStrength !== index) {
+      index = afterStrength;
+      continue;
+    }
+    if (verilogDeclarationModifiers.has(token.value)) {
       index++;
       continue;
     }
@@ -563,7 +548,7 @@ function declarationDeclaratorStart(
       index++;
       continue;
     }
-    if (token.kind === 'keyword' && declarationPrefixKeywords.has(token.value)) {
+    if (token.kind === 'keyword' && verilogDeclarationPrefixKeywords.has(token.value)) {
       diagnostics.push(makeDiagnostic(
         tokenRange(document, token),
         `Syntax error: unexpected declaration keyword '${token.value}' after '${tokens[0].value}'.`,
@@ -578,11 +563,11 @@ function declarationDeclaratorStart(
 }
 
 function isAllowedDeclarationType(firstKeyword: string, value: string): boolean {
-  if (portDirectionKeywords.has(firstKeyword)) {
-    return portDeclarationTypes.has(value);
+  if (verilogPortDirections.has(firstKeyword)) {
+    return verilogPortDeclarationTypes.has(value);
   }
   if (firstKeyword === 'parameter' || firstKeyword === 'localparam') {
-    return parameterDeclarationTypes.has(value);
+    return verilogParameterTypeKeywords.has(value);
   }
   return false;
 }

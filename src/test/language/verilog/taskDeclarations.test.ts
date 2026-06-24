@@ -69,4 +69,47 @@ endmodule
     expect(names).not.toContain('add_one');
     expect(names).not.toContain('value');
   });
+
+  it('does not report system tasks used without argument parentheses as implicit nets', () => {
+    const names = implicitNetNames(`
+module tb;
+    integer file_handle;
+    initial begin
+        $finish;
+        $stop;
+        $fclose(file_handle);
+    end
+endmodule
+`);
+    expect(names).not.toContain('$finish');
+    expect(names).not.toContain('$stop');
+    expect(names).not.toContain('$fclose');
+    expect(names).toHaveLength(0);
+  });
+
+  it('does not report macro aliases used as expressions or assignment targets as implicit nets', () => {
+    const names = implicitNetNames(`
+\`define IDLE 2'b00
+\`define LOAD 2'b01
+\`define ctrl mem[0]
+\`define preset mem[1]
+\`define count mem[2]
+module TC(input clk, output IRQ);
+    reg [1:0] state;
+    reg [31:0] mem [2:0];
+    assign IRQ = \`ctrl[3];
+    always @(posedge clk) begin
+        case (state)
+            \`IDLE: state <= \`LOAD;
+            \`LOAD: \`count <= \`preset;
+        endcase
+    end
+endmodule
+`);
+    expect(names).not.toContain('`ctrl');
+    expect(names).not.toContain('`count');
+    expect(names).not.toContain('`preset');
+    expect(names).not.toContain('`IDLE');
+    expect(names).not.toContain('`LOAD');
+  });
 });

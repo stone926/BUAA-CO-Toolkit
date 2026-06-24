@@ -27,6 +27,7 @@ import {
   splitTopLevelTokens,
   trimTrailingSemicolonTokens
 } from './tokenUtils';
+import { verilogDeclarationKeywords } from './declarations';
 
 export interface VerilogAstDocument {
   kind: 'sourceFile';
@@ -166,22 +167,6 @@ export interface VerilogAssignmentExpressionAst {
   lhs: VerilogExpressionAst;
   rhs: VerilogExpressionAst;
 }
-
-const declarationKeywords = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
 
 export function buildVerilogAst(
   document: TextDocument,
@@ -474,7 +459,7 @@ function classifyStatement(statement: VerilogStatementSource, module?: VerilogMo
   if (first.value === 'module') {
     return 'moduleHeader';
   }
-  if (declarationKeywords.has(first.value)) {
+  if (verilogDeclarationKeywords.has(first.value)) {
     return 'declaration';
   }
   if (first.value === 'assign') {
