@@ -1,17 +1,35 @@
 import { Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { lineAt } from '../common/lsp';
-import { findCommentIndex, parseMipsCstLine } from './syntax';
+import { buildMipsAst } from './ast';
+import type { MipsAstDocument, MipsOperandAst } from './ast';
+import { getNumericLikeRanges, isCharLiteral } from './literals';
+import { collectMipsOperandReferences } from './operandReferences';
+import { findCommentIndex } from './syntax';
 
-export function getMipsWordRange(document: TextDocument, position: Position): Range | undefined {
-  const text = lineAt(document, position.line).text;
-  const line = parseMipsCstLine(text, position.line);
-  for (const token of line.tokens) {
-    if (!isMipsWordToken(token.kind)) {
-      continue;
+export function getMipsWordRange(document: TextDocument, position: Position, ast: MipsAstDocument = buildMipsAst(document)): Range | undefined {
+  const line = ast.lines[position.line];
+  if (!line || line.kind !== 'statement') {
+    return undefined;
+  }
+  if (line.comment && containsWordPosition(line.comment.range, position)) {
+    return undefined;
+  }
+  for (const label of line.labels) {
+    if (containsWordPosition(label.range, position)) {
+      return label.range;
     }
-    if (position.character >= token.start && position.character <= token.end) {
-      return Range.create(position.line, token.start, position.line, token.end);
+  }
+  const executable = line.executable;
+  if (!executable) {
+    return undefined;
+  }
+  if (containsWordPosition(executable.mnemonicRange, position)) {
+    return executable.mnemonicRange;
+  }
+  for (const operand of executable.operands) {
+    const range = wordRangeInOperand(operand, position);
+    if (range) {
+      return range;
     }
   }
   return undefined;
@@ -73,12 +91,103 @@ export function isIntegerLiteralPart(char: string, index: number, text: string):
   return (char >= 'A' && char <= 'F') || (char >= 'a' && char <= 'f');
 }
 
-function isMipsWordToken(kind: string): boolean {
-  return kind === 'identifier'
-    || kind === 'directive'
-    || kind === 'register'
-    || kind === 'macroParameter'
-    || kind === 'number';
+function wordRangeInOperand(operand: MipsOperandAst, position: Position): Range | undefined {
+  if (!containsWordPosition(operand.range, position)) {
+    return undefined;
+  }
+  if (operand.kind === 'memory') {
+    return wordRangeInOperand(operand.offset, position) ?? wordRangeInOperand(operand.base, position);
+  }
+  if (operand.kind === 'expression') {
+    return wordRangeInExpressionOperand(operand, position);
+  }
+  if (operand.kind === 'string') {
+    return undefined;
+  }
+  return containsWordPosition(operand.range, position) ? operand.range : undefined;
+}
+
+function wordRangeInExpressionOperand(operand: MipsOperandAst, position: Position): Range | undefined {
+  for (const reference of collectMipsOperandReferences(operand, { includeRegisters: true })) {
+    if (containsWordPosition(reference.range, position)) {
+      return reference.range;
+    }
+  }
+
+  const quotedRanges = quotedLiteralRanges(operand.text, '"');
+  const charLiteralRanges = quotedLiteralRanges(operand.text, '\'');
+  for (const charRange of charLiteralRanges) {
+    const text = operand.text.slice(charRange.start, charRange.end);
+    if (isCharLiteral(text) && containsRelativeRange(operand.range, charRange, position)) {
+      return relativeRange(operand.range, charRange);
+    }
+  }
+
+  const ignoredRanges = [...quotedRanges, ...charLiteralRanges];
+  for (const numericRange of getNumericLikeRanges(operand.text)) {
+    if (ignoredRanges.some((range) => rangesOverlap(range, numericRange))) {
+      continue;
+    }
+    if (containsRelativeRange(operand.range, numericRange, position)) {
+      return relativeRange(operand.range, numericRange);
+    }
+  }
+  return undefined;
+}
+
+function containsWordPosition(range: Range, position: Position): boolean {
+  return range.start.line === position.line
+    && range.end.line === position.line
+    && range.start.character < range.end.character
+    && position.character >= range.start.character
+    && position.character <= range.end.character;
+}
+
+function containsRelativeRange(base: Range, span: { start: number; end: number }, position: Position): boolean {
+  return containsWordPosition(relativeRange(base, span), position);
+}
+
+function relativeRange(base: Range, span: { start: number; end: number }): Range {
+  return Range.create(
+    base.start.line,
+    base.start.character + span.start,
+    base.start.line,
+    base.start.character + span.end
+  );
+}
+
+function quotedLiteralRanges(text: string, quote: '"' | '\''): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  let start: number | undefined;
+  let escaped = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (start === undefined) {
+      if (char === quote) {
+        start = index;
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === quote && !escaped) {
+      ranges.push({ start, end: index + 1 });
+      start = undefined;
+      escaped = false;
+      continue;
+    }
+    escaped = char === '\\' && !escaped;
+    if (char !== '\\') {
+      escaped = false;
+    }
+  }
+  if (start !== undefined) {
+    ranges.push({ start, end: text.length });
+  }
+  return ranges;
+}
+
+function rangesOverlap(left: { start: number; end: number }, right: { start: number; end: number }): boolean {
+  return left.start < right.end && right.start < left.end;
 }
 
 function scanPrefixStart(text: string, end: number, isPart: (char: string, index: number, text: string) => boolean): number {

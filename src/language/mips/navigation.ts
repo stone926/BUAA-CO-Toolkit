@@ -13,24 +13,24 @@ import { MipsServerState } from './state';
 import { getMipsWordRange } from './text';
 
 export function getMipsDefinition(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): Location | undefined {
-  const wordRange = getMipsWordRange(document, position);
+  const parsed = getCachedMipsParse(document, settings, state);
+  const wordRange = getMipsWordRange(document, position, parsed.ast);
   if (!wordRange) {
     return undefined;
   }
   const word = document.getText(wordRange);
-  const parsed = getCachedMipsParse(document, settings, state);
   const target = resolveMipsSemanticTarget(parsed.semantic, word, wordRange, position);
   return target ? Location.create(document.uri, target.declarationRange) : undefined;
 }
 
 export function getMipsReferences(document: TextDocument, params: ReferenceParams, settings: CoSettings, state: MipsServerState): Location[] {
   const position = params.position;
-  const wordRange = getMipsWordRange(document, position);
+  const parsed = getCachedMipsParse(document, settings, state);
+  const wordRange = getMipsWordRange(document, position, parsed.ast);
   if (!wordRange) {
     return [];
   }
   const word = document.getText(wordRange);
-  const parsed = getCachedMipsParse(document, settings, state);
   const target = resolveMipsSemanticTarget(parsed.semantic, word, wordRange, position);
   return target
     ? mipsSemanticReferenceRanges(parsed.semantic, target, params.context.includeDeclaration)
