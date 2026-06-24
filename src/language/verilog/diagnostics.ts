@@ -51,14 +51,14 @@ export function collectVerilogDiagnostics(
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
-    collectCourseDiagnostics(document, settings, modules, cst, ast, diagnostics);
+    collectCourseDiagnostics(document, settings, modules, ast, diagnostics);
     collectAssignmentDiagnostics(document, settings, ast, diagnostics);
     collectCourseStyleDiagnostics(document, settings, text, ast, diagnostics);
   }
   if (settings.verilog.lint.synthesizableHints) {
     collectSynthesizableHintDiagnostics(document, settings, ast, diagnostics);
   }
-  collectExplicitPortNetTypeDiagnostics(document, modules, cst, diagnostics);
+  collectExplicitPortNetTypeDiagnostics(ast, diagnostics);
   collectImplicitNetDiagnostics(settings, diagnostics, semantic);
   return diagnostics;
 }
@@ -520,7 +520,7 @@ function collectDeclarationInitializerWidthDiagnostics(
   }
 }
 
-function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   const profile = settings.project.profile;
   const topName = settings.project.topModule.trim() || 'mips';
   const top = modules.find((module) => module.name === topName);
@@ -544,7 +544,7 @@ function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, 
     validateDisplayFormats(document, ast, profile, diagnostics);
   }
 
-  if (!hasDefaultNettypeNone(document, cst)) {
+  if (!hasDefaultNettypeNone(ast)) {
     const firstLine = lineAt(document, 0).text;
     diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, firstLine.length)), 'Consider adding `default_nettype none to catch implicit wires early.', DiagnosticSeverity.Information, 'default-nettype-none'));
   }
@@ -657,18 +657,12 @@ function callCalleeRange(document: TextDocument, call: VerilogCallExpressionAst)
   return Range.create(document.positionAt(call.start), document.positionAt(call.start + call.callee.length));
 }
 
-function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument): boolean {
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
-    if (token.kind !== 'directive' || token.value !== '`default_nettype') {
-      continue;
-    }
-    const next = cst.codeTokens[index + 1];
-    if (next && document.positionAt(next.start).line === document.positionAt(token.start).line && next.value === 'none') {
-      return true;
-    }
-  }
-  return false;
+function hasDefaultNettypeNone(ast: VerilogAstDocument): boolean {
+  return ast.preprocessor.some((item) =>
+    item.kind === 'directive' &&
+    item.name === 'default_nettype' &&
+    item.argument === 'none'
+  );
 }
 
 function traceFormatLooksOk(format: string, profile: ProjectProfile): boolean {

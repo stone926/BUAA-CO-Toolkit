@@ -17,6 +17,7 @@ import {
   parseMacros,
   parseMacroUses,
   parseIncludes,
+  parseDirectives,
   moduleAtPosition,
   buildTestbench,
   walkVerilogExpression
@@ -1168,6 +1169,20 @@ describe('parseIncludes', () => {
     expect(includes).toHaveLength(1);
     expect(includes[0].path).toBe('defines.v');
     expect(d.getText(includes[0].pathRange)).toBe('defines.v');
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// parseDirectives
+// ────────────────────────────────────────────────────────────────────────────────
+describe('parseDirectives', () => {
+  it('parses preprocessor directive arguments and ranges', () => {
+    const text = '`default_nettype none\nmodule demo; endmodule';
+    const d = doc(text);
+    const directives = parseDirectives(d, text);
+    const defaultNettype = directives.find((directive) => directive.name === 'default_nettype');
+    expect(defaultNettype?.argument).toBe('none');
+    expect(defaultNettype?.argumentRange ? d.getText(defaultNettype.argumentRange) : undefined).toBe('none');
   });
 });
 

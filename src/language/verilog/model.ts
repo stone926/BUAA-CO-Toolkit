@@ -83,6 +83,14 @@ export interface VerilogInclude {
   pathRange: Range;
 }
 
+export interface VerilogDirective {
+  name: string;
+  argument?: string;
+  range: Range;
+  selectionRange: Range;
+  argumentRange?: Range;
+}
+
 export interface VerilogParseResult {
   ast: VerilogAstDocument;
   semantic: VerilogSemanticModel;

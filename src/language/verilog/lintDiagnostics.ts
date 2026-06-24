@@ -7,7 +7,6 @@ import {
   collectAssignmentUsesFromProceduralStatementAst
 } from './assignmentAst';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
-import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import {
   safeRegExp,
@@ -223,18 +222,16 @@ export function collectImplicitNetDiagnostics(
 }
 
 export function collectExplicitPortNetTypeDiagnostics(
-  document: TextDocument,
-  modules: VerilogModule[],
-  cst: VerilogCstDocument,
+  ast: VerilogAstDocument,
   diagnostics: Diagnostic[]
 ): void {
-  if (!hasDefaultNettypeNone(document, cst)) {
+  if (!hasDefaultNettypeNone(ast)) {
     return;
   }
 
-  for (const module of modules) {
+  for (const moduleAst of ast.modules) {
     const reported = new Set<string>();
-    for (const port of module.ports) {
+    for (const port of moduleAst.module.ports) {
       if (!port.direction || port.explicitPortNetType !== false || !port.directionRange) {
         continue;
       }
@@ -257,18 +254,12 @@ function makeExplicitPortNetDiagnostic(range: Range): Diagnostic {
   );
 }
 
-function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument): boolean {
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
-    if (token.kind !== 'directive' || token.value !== '`default_nettype') {
-      continue;
-    }
-    const next = cst.codeTokens[index + 1];
-    if (next && document.positionAt(next.start).line === document.positionAt(token.start).line && next.value === 'none') {
-      return true;
-    }
-  }
-  return false;
+function hasDefaultNettypeNone(ast: VerilogAstDocument): boolean {
+  return ast.preprocessor.some((item) =>
+    item.kind === 'directive' &&
+    item.name === 'default_nettype' &&
+    item.argument === 'none'
+  );
 }
 
 function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSettings, moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {

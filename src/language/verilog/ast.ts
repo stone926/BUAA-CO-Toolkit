@@ -7,6 +7,7 @@ import {
 import { VerilogToken } from './lexer';
 import {
   VerilogDecl,
+  VerilogDirective,
   VerilogInclude,
   VerilogInstance,
   VerilogMacro,
@@ -35,7 +36,8 @@ export interface VerilogAstDocument {
 export type VerilogPreprocessorAst =
   | VerilogMacroDefinitionAst
   | VerilogMacroUseAst
-  | VerilogIncludeAst;
+  | VerilogIncludeAst
+  | VerilogDirectiveAst;
 
 export interface VerilogMacroDefinitionAst {
   kind: 'macroDefinition';
@@ -59,6 +61,16 @@ export interface VerilogIncludeAst {
   range: Range;
   pathRange: Range;
   include: VerilogInclude;
+}
+
+export interface VerilogDirectiveAst {
+  kind: 'directive';
+  name: string;
+  argument?: string;
+  range: Range;
+  selectionRange: Range;
+  argumentRange?: Range;
+  directive: VerilogDirective;
 }
 
 export interface VerilogModuleAst {
@@ -143,7 +155,8 @@ export function buildVerilogAst(
   modules: VerilogModule[],
   macros: VerilogMacro[],
   macroUses: VerilogMacroUse[],
-  includes: VerilogInclude[]
+  includes: VerilogInclude[],
+  directives: VerilogDirective[]
 ): VerilogAstDocument {
   const moduleAsts = modules.map((module) => buildModuleAst(document, cst, module));
   const moduleRanges = moduleAsts.map((module) => module.range);
@@ -173,6 +186,15 @@ export function buildVerilogAst(
         range: include.range,
         pathRange: include.pathRange,
         include
+      })),
+      ...directives.map((directive): VerilogDirectiveAst => ({
+        kind: 'directive',
+        name: directive.name,
+        argument: directive.argument,
+        range: directive.range,
+        selectionRange: directive.selectionRange,
+        argumentRange: directive.argumentRange,
+        directive
       }))
     ],
     modules: moduleAsts,

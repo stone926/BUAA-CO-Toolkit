@@ -5,6 +5,7 @@ import { rangeKey } from '../common/util';
 import { parseVerilogCst, VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import {
+  VerilogDirective,
   VerilogInclude,
   VerilogMacro,
   VerilogMacroUse
@@ -103,6 +104,26 @@ export function parseIncludes(document: TextDocument, text: string, cst: Verilog
     });
   }
   return includes;
+}
+
+export function parseDirectives(document: TextDocument, text: string, cst: VerilogCstDocument = parseVerilogCst(document, text)): VerilogDirective[] {
+  const directives: VerilogDirective[] = [];
+  for (let index = 0; index < cst.codeTokens.length; index++) {
+    const token = cst.codeTokens[index];
+    const name = directiveName(token);
+    if (!name || !preprocessorDirectives.has(name)) {
+      continue;
+    }
+    const argument = nextTokenOnLine(document, cst.codeTokens, index + 1, token);
+    directives.push({
+      name,
+      argument: argument?.value,
+      range: lineAt(document, document.positionAt(token.start).line).range,
+      selectionRange: Range.create(document.positionAt(token.start + 1), document.positionAt(token.end)),
+      argumentRange: argument ? tokenRange(document, argument) : undefined
+    });
+  }
+  return directives;
 }
 
 function nextTokenOnLine(document: TextDocument, tokens: VerilogToken[], start: number, anchor: VerilogToken): VerilogToken | undefined {
