@@ -48,6 +48,7 @@ import { parseSimOutput } from './language/verilog/traceParser';
 import { runMarsFile } from './mips';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { runIsim } from './verilog';
+import { createIsimCompileCache, IsimCompileCache } from './verilogIsimCache';
 import { AppServices, ProjectProfile } from './types';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
@@ -108,6 +109,7 @@ interface CourseTraceRunOptions {
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
+  isimCompileCache?: IsimCompileCache;
 }
 
 type GeneratorRunSetup = ExternalGeneratorRunSetup | BuiltinGeneratorRunSetup;
@@ -295,6 +297,8 @@ async function resolveCourseTraceRunOptions(
       return undefined;
     }
     options.logisim = logisim;
+  } else {
+    options.isimCompileCache ??= createIsimCompileCache();
   }
   return options;
 }
@@ -398,7 +402,8 @@ async function runCourseTraceCase(
       revealOutput: options.revealOutput,
       asmCase,
       simOutputFileName: simOutputFileNameForCase(item),
-      p7Probe: probe
+      p7Probe: probe,
+      compileCache: options.isimCompileCache
     });
     if (!isim?.simResult.ok || !isim.simOut) {
       return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, undefined, asmCase);
@@ -440,7 +445,8 @@ async function runCourseTraceCase(
     revealOutput: options.revealOutput,
     asmCase,
     simOutputFileName: simOutputFileNameForCase(item),
-    interruptSchedule
+    interruptSchedule,
+    compileCache: options.isimCompileCache
   });
   if (!isim?.simResult.ok || !isim.simOut) {
     return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, mars.outputFile, asmCase);

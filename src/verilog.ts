@@ -55,6 +55,11 @@ import {
   samePath,
   simulationOutputDirectory
 } from './verilogIsimOutput';
+import {
+  IsimCompileCache,
+  isimCompileArtifactStem,
+  isimCompileCacheKey
+} from './verilogIsimCache';
 
 export interface IseProjectFiles {
   prj: vscode.Uri;
@@ -67,7 +72,9 @@ export interface IseProjectOptions {
   showMessages?: boolean;
   revealOutput?: boolean;
   testbenchName?: string;
+  projectFileBaseName?: string;
   extraVerilogFiles?: vscode.Uri[];
+  projectFiles?: vscode.Uri[];
   tclFileName?: string;
   tclText?: string;
 }
@@ -81,6 +88,7 @@ export interface IsimRunOptions extends IseProjectOptions {
   interruptSchedule?: number[];
   /** P7: black-box probe metadata; when set, a dedicated probe testbench is generated. */
   p7Probe?: P7ProbeMetadata;
+  compileCache?: IsimCompileCache;
 }
 
 export interface IsimRunOutput {
@@ -110,7 +118,6 @@ interface CompiledIsimOutput {
   fuseResult: RunResult;
   testbenchName: string;
   exePath: string;
-  asmCase?: AsmCase;
   testbench: TestbenchResolution;
 }
 
@@ -236,9 +243,9 @@ export async function generateIseProject(
   }
   const top = getTestbench(activeUri);
   const testbenchName = options.testbenchName ?? top;
+  const projectFileBaseName = options.projectFileBaseName ?? testbenchName;
   const simTime = getSimTime(activeUri);
-  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), verilogProjectExcludeGlob, 5000);
-  const projectFiles = dedupeUris([...files, ...(options.extraVerilogFiles ?? [])]);
+  const projectFiles = options.projectFiles ?? await resolveIseProjectFiles(folder, options.extraVerilogFiles);
   if (!projectFiles.length) {
     vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
     return undefined;
@@ -246,8 +253,8 @@ export async function generateIseProject(
 
   const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, '.co', 'isim'));
   await ensureDirectory(outDir);
-  const prj = vscode.Uri.file(path.join(outDir.fsPath, `${testbenchName}.prj`));
-  const tcl = vscode.Uri.file(path.join(outDir.fsPath, options.tclFileName ?? `${testbenchName}.tcl`));
+  const prj = vscode.Uri.file(path.join(outDir.fsPath, `${projectFileBaseName}.prj`));
+  const tcl = vscode.Uri.file(path.join(outDir.fsPath, options.tclFileName ?? `${projectFileBaseName}.tcl`));
   const prjText = buildIseProjectText(projectFiles.map((uri) => uri.fsPath));
   const tclText = options.tclText ?? buildIsimRunTcl(simTime);
   await writeTextFile(prj, prjText);
@@ -260,16 +267,49 @@ export async function generateIseProject(
   return { prj, tcl, outDir };
 }
 
+async function resolveIseProjectFiles(
+  folder: vscode.WorkspaceFolder,
+  extraVerilogFiles: readonly vscode.Uri[] | undefined
+): Promise<vscode.Uri[]> {
+  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), verilogProjectExcludeGlob, 5000);
+  return dedupeUris([...files, ...(extraVerilogFiles ?? [])]);
+}
+
+async function verilogProjectSignature(files: readonly vscode.Uri[], contentSignatures = new Map<string, string>()): Promise<string> {
+  const entries: string[] = [];
+  const sorted = [...files].sort((left, right) => normalizePathKey(left.fsPath).localeCompare(normalizePathKey(right.fsPath)));
+  for (const uri of sorted) {
+    const key = normalizePathKey(uri.fsPath);
+    const contentSignature = contentSignatures.get(key);
+    if (contentSignature) {
+      entries.push(`${key}:sha:${contentSignature}`);
+      continue;
+    }
+    try {
+      const stat = await vscode.workspace.fs.stat(uri);
+      entries.push(`${key}:${stat.size}:${Math.trunc(stat.mtime)}`);
+    } catch {
+      entries.push(`${key}:missing`);
+    }
+  }
+  return entries.join('|');
+}
+
 export async function runIsim(
   services: AppServices,
   options: IsimRunOptions = {}
 ): Promise<IsimRunOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = options.showMessages !== false;
+  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, showMessages);
+  if (requiresAsmCase(activeUri) && !asmCase) {
+    return undefined;
+  }
   const compiled = await compileIsim(services, options);
   if (!compiled) {
     return;
   }
+  await prepareIsimRunInputs(services, activeUri, compiled, options, asmCase, showMessages);
   const isePath = getIsePath(activeUri);
   const iseEnv = buildIseEnvironment(isePath);
   const simResult = await runTool(compiled.exePath, ['-nolog', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
@@ -283,8 +323,8 @@ export async function runIsim(
     const simOutDir = await simulationOutputDirectory(activeUri, compiled.generated.outDir);
     simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(compiled.testbenchName, options.simOutputFileName)));
     await writeTextFile(simOut, simResult.stdout);
-    if (compiled.asmCase) {
-      await writeAsmCaseArtifact(compiled.asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
+    if (asmCase) {
+      await writeAsmCaseArtifact(asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
     }
     if (showMessages) {
       vscode.window.showInformationMessage('ISim 运行完成，输出见.co/out');
@@ -306,7 +346,9 @@ async function compileIsim(
   if (!await ensureConcreteProfile(activeUri, '运行 ISim 需要先确定项目 Profile')) {
     return undefined;
   }
-  await vscode.workspace.saveAll(false);
+  if (!options.compileCache) {
+    await vscode.workspace.saveAll(false);
+  }
   const isePath = getIsePath(activeUri);
   if (!isePath) {
     vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath');
@@ -318,6 +360,11 @@ async function compileIsim(
     vscode.window.showErrorMessage(`未找到 fuse 可执行文件：${fuse}`);
     return undefined;
   }
+  const folder = workspaceFolderFor(activeUri);
+  if (!folder) {
+    vscode.window.showErrorMessage('运行 ISim 前请先打开一个工作区文件夹');
+    return undefined;
+  }
 
   const moduleRegistry = options.moduleRegistry ?? sharedModuleRegistry;
   const resolved = options.testbenchName
@@ -327,49 +374,55 @@ async function compileIsim(
   if (!resolved?.moduleName) {
     return undefined;
   }
+  const extraVerilogFiles = dedupeUris([
+    ...(options.extraVerilogFiles ?? []),
+    ...(resolved.generatedUri ? [resolved.generatedUri] : [])
+  ]);
+  const projectFiles = await resolveIseProjectFiles(folder, extraVerilogFiles);
+  if (!projectFiles.length) {
+    vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
+    return undefined;
+  }
+  const tclText = options.tclText ?? buildIsimRunTcl(getSimTime(activeUri));
+  const generatedFileSignatures = new Map<string, string>();
+  if (resolved.generatedUri && resolved.sha256) {
+    generatedFileSignatures.set(normalizePathKey(resolved.generatedUri.fsPath), resolved.sha256);
+  }
+  const projectSignature = await verilogProjectSignature(projectFiles, generatedFileSignatures);
+  const cacheKey = options.compileCache
+    ? isimCompileCacheKey({
+      workspaceRoot: folder.uri.fsPath,
+      isePath,
+      moduleName: resolved.moduleName,
+      testbenchKind: resolved.kind,
+      testbenchSource: resolved.sourceUri?.fsPath ?? resolved.generatedUri?.fsPath,
+      testbenchSha256: resolved.sha256,
+      projectSignature,
+      tclText,
+      debug: Boolean(options.debug)
+    })
+    : undefined;
+  const cached = cacheKey ? options.compileCache?.get(cacheKey) as CompiledIsimOutput | undefined : undefined;
+  if (cached && await isFile(cached.exePath) && await pathExists(cached.generated.tcl.fsPath)) {
+    services.output.appendLine(`复用 ISim 编译: ${cached.exePath}`);
+    return cached;
+  }
+  const artifactStem = cacheKey ? isimCompileArtifactStem(resolved.moduleName, cacheKey) : resolved.moduleName;
 
   const generated = await generateIseProject(services, {
     resource: activeUri,
     showMessages,
     testbenchName: resolved.moduleName,
-    extraVerilogFiles: resolved.generatedUri ? [resolved.generatedUri] : undefined,
-    tclFileName: options.tclFileName,
-    tclText: options.tclText
+    projectFileBaseName: artifactStem,
+    projectFiles,
+    tclFileName: cacheKey ? undefined : options.tclFileName,
+    tclText
   });
   if (!generated) {
     return undefined;
   }
 
-  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, showMessages);
-  if (requiresAsmCase(activeUri) && !asmCase) {
-    return undefined;
-  }
-  const machineCodeExpected = getProfile(activeUri) !== 'P1';
-  const machineCodeSource = machineCodeExpected
-    ? asmCase?.machineCode ?? options.machineCodeSource ?? await resolveMachineCodeSource(activeUri, generated.outDir)
-    : undefined;
-  if (machineCodeSource) {
-    await copyMachineCodeToSimDirectory(machineCodeSource, generated.outDir, activeUri);
-    services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
-    if (asmCase) {
-      await updateAsmCaseArtifacts(asmCase, 'verilog', {
-        machineCodeInSim: path.join(generated.outDir.fsPath, getMachineCode(activeUri)),
-        prj: generated.prj.fsPath,
-        tcl: generated.tcl.fsPath
-      });
-    }
-  } else if (machineCodeExpected) {
-    services.output.appendLine(`未找到可复制到 ${generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
-    if (showMessages) {
-      vscode.window.showWarningMessage(`未找到 ${getMachineCode(activeUri)}。如果设计中调用了 $readmemh("${getMachineCode(activeUri)}")，ISim 可能会失败`);
-    }
-  }
-
-  if (asmCase) {
-    await recordTestbenchForAsmCase(asmCase, resolved);
-  }
-
-  const exeName = process.platform === 'win32' ? `${resolved.moduleName}.exe` : resolved.moduleName;
+  const exeName = process.platform === 'win32' ? `${artifactStem}.exe` : artifactStem;
   if (options.revealOutput !== false) {
     revealOutputChannel(services.output, activeUri);
   }
@@ -394,14 +447,51 @@ async function compileIsim(
     return undefined;
   }
 
-  return {
+  const compiled = {
     generated,
     fuseResult,
     testbenchName: resolved.moduleName,
     exePath: path.join(generated.outDir.fsPath, exeName),
-    asmCase,
     testbench: resolved
   };
+  if (cacheKey) {
+    options.compileCache?.set(cacheKey, compiled);
+  }
+  return compiled;
+}
+
+async function prepareIsimRunInputs(
+  services: AppServices,
+  activeUri: vscode.Uri | undefined,
+  compiled: CompiledIsimOutput,
+  options: IsimRunOptions,
+  asmCase: AsmCase | undefined,
+  showMessages: boolean
+): Promise<void> {
+  const machineCodeExpected = getProfile(activeUri) !== 'P1';
+  const machineCodeSource = machineCodeExpected
+    ? asmCase?.machineCode ?? options.machineCodeSource ?? await resolveMachineCodeSource(activeUri, compiled.generated.outDir)
+    : undefined;
+  if (machineCodeSource) {
+    await copyMachineCodeToSimDirectory(machineCodeSource, compiled.generated.outDir, activeUri);
+    services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
+    if (asmCase) {
+      await updateAsmCaseArtifacts(asmCase, 'verilog', {
+        machineCodeInSim: path.join(compiled.generated.outDir.fsPath, getMachineCode(activeUri)),
+        prj: compiled.generated.prj.fsPath,
+        tcl: compiled.generated.tcl.fsPath
+      });
+    }
+  } else if (machineCodeExpected) {
+    services.output.appendLine(`未找到可复制到 ${compiled.generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
+    if (showMessages) {
+      vscode.window.showWarningMessage(`未找到 ${getMachineCode(activeUri)}。如果设计中调用了 $readmemh("${getMachineCode(activeUri)}")，ISim 可能会失败`);
+    }
+  }
+
+  if (asmCase) {
+    await recordTestbenchForAsmCase(asmCase, compiled.testbench);
+  }
 }
 
 async function ensureSimulationAsmCase(
@@ -735,14 +825,18 @@ async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: Testbench
 }
 
 async function writeGeneratedRuntimeTestbench(uri: vscode.Uri, testbenchText: string): Promise<boolean> {
+  const next = generatedRuntimeTestbenchText(testbenchText);
   if (await pathExists(uri.fsPath)) {
     const existing = await readTextFileSafe(uri);
     if (!isGeneratedRuntimeTestbench(existing)) {
       vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
       return false;
     }
+    if (existing === next) {
+      return true;
+    }
   }
-  await writeTextFile(uri, generatedRuntimeTestbenchText(testbenchText));
+  await writeTextFile(uri, next);
   return true;
 }
 
