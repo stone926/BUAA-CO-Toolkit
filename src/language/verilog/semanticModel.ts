@@ -339,7 +339,7 @@ function collectReferences(
       for (const connection of [...instance.portConnections, ...instance.parameterConnections]) {
         const connectionScope = scopeAtPosition(scope, blockScopes, connection.expressionRange.start);
         if (!connection.name || !connection.nameRange) {
-          collectReferencesFromConnectionExpression(document, source, references, declarationRangeKeys, connectionScope, module, connection);
+          collectReferencesFromConnectionExpression(document, references, declarationRangeKeys, connectionScope, module, connection);
           continue;
         }
         references.push({
@@ -352,7 +352,7 @@ function collectReferences(
           instance,
           portConnection: connection
         });
-        collectReferencesFromConnectionExpression(document, source, references, declarationRangeKeys, connectionScope, module, connection);
+        collectReferencesFromConnectionExpression(document, references, declarationRangeKeys, connectionScope, module, connection);
       }
     }
 
@@ -949,7 +949,13 @@ function collectReferencesFromProceduralStatementAst(
       collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
       return;
     case 'declaration':
+      collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
+      return;
     case 'other':
+      if (statement.expression) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.expression, 0);
+        return;
+      }
       collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
       return;
   }
@@ -957,7 +963,6 @@ function collectReferencesFromProceduralStatementAst(
 
 function collectReferencesFromConnectionExpression(
   document: TextDocument,
-  source: VerilogSemanticSource,
   references: VerilogSemanticReference[],
   declarationRangeKeys: Set<string>,
   scope: VerilogSemanticScope,

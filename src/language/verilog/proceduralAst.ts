@@ -3,7 +3,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
-import { findMatchingTokenForward, splitTopLevelTokens, trimEofTokens } from './tokenUtils';
+import { findMatchingTokenForward, splitTopLevelTokens, trimEofTokens, trimTrailingSemicolonTokens } from './tokenUtils';
 
 export type VerilogProceduralStatementAst =
   | VerilogBlockStatementAst
@@ -70,6 +70,7 @@ export interface VerilogDeclarationStatementAst extends VerilogProceduralStateme
 
 export interface VerilogOtherProceduralStatementAst extends VerilogProceduralStatementBase {
   kind: 'other';
+  expression?: VerilogExpressionAst;
 }
 
 const declarationKeywords = new Set([
@@ -403,10 +404,12 @@ class ProceduralStatementParser {
   }
 
   private makeOther(start: number, end: number): VerilogOtherProceduralStatementAst {
+    const tokens = this.tokens.slice(start, Math.max(start, end) + 1);
     return {
       kind: 'other',
       range: tokenIndexRange(this.document, this.tokens, start, Math.max(start, end)),
-      tokens: this.tokens.slice(start, Math.max(start, end) + 1)
+      tokens,
+      expression: parseVerilogExpressionTokens(trimTrailingSemicolonTokens(tokens))
     };
   }
 }

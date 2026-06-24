@@ -9,16 +9,16 @@ import { CoSettings } from '../common/settings';
 import { evalExpressionAstConstant, shouldReportWidthMismatch, widthOfDecl, widthOfExpression, widthOfExpressionAst } from './expressions';
 import type { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst } from './ast';
 import { parseVerilogExpression } from './exprAst';
-import type { VerilogExpressionAst } from './exprAst';
+import type { VerilogCallExpressionAst, VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
+import type { VerilogProceduralStatementAst } from './proceduralAst';
 import {
   expectedPorts,
   VerilogDecl,
   VerilogInclude,
   VerilogModule
 } from './model';
-import { VerilogCstDocument, verilogTokenRange } from './cst';
-import { VerilogToken } from './lexer';
+import { VerilogCstDocument } from './cst';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import { parameterOverridesForInstance } from './parameterOverrides';
 import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
@@ -51,7 +51,7 @@ export function collectVerilogDiagnostics(
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
-    collectCourseDiagnostics(document, settings, modules, cst, diagnostics);
+    collectCourseDiagnostics(document, settings, modules, cst, ast, diagnostics);
     collectAssignmentDiagnostics(document, settings, ast, diagnostics);
     collectCourseStyleDiagnostics(document, settings, text, modules, cst, ast, diagnostics);
   }
@@ -520,7 +520,7 @@ function collectDeclarationInitializerWidthDiagnostics(
   }
 }
 
-function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   const profile = settings.project.profile;
   const topName = settings.project.topModule.trim() || 'mips';
   const top = modules.find((module) => module.name === topName);
@@ -535,27 +535,19 @@ function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, 
   }
 
   if (top && (profile === 'P6' || profile === 'P7')) {
-    for (const token of cst.codeTokens) {
-      if (token.kind === 'systemIdentifier' && token.value === '$display' && tokenInsideModule(document, token, top)) {
-        diagnostics.push(makeDiagnostic(verilogTokenRange(document, token), `${profile} top-level design should not contain $display; the testbench should monitor external outputs.`, DiagnosticSeverity.Error, `${profile.toLowerCase()}-display`));
-      }
+    for (const call of collectSystemCalls(ast, '$display').filter((hit) => hit.module === top)) {
+      diagnostics.push(makeDiagnostic(callCalleeRange(document, call.expression), `${profile} top-level design should not contain $display; the testbench should monitor external outputs.`, DiagnosticSeverity.Error, `${profile.toLowerCase()}-display`));
     }
   }
 
   if (profile === 'P4' || profile === 'P5') {
-    validateDisplayFormats(document, cst, profile, diagnostics);
+    validateDisplayFormats(document, ast, profile, diagnostics);
   }
 
   if (!hasDefaultNettypeNone(document, cst)) {
     const firstLine = lineAt(document, 0).text;
     diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, firstLine.length)), 'Consider adding `default_nettype none to catch implicit wires early.', DiagnosticSeverity.Information, 'default-nettype-none'));
   }
-}
-
-function tokenInsideModule(document: TextDocument, token: VerilogToken, module: VerilogModule): boolean {
-  const start = document.offsetAt(module.range.start);
-  const end = document.offsetAt(module.range.end);
-  return token.start >= start && token.start < end;
 }
 
 function checkExpectedPorts(module: VerilogModule, profile: ProjectProfile, diagnostics: Diagnostic[]): void {
@@ -576,37 +568,93 @@ function checkExpectedPorts(module: VerilogModule, profile: ProjectProfile, diag
   }
 }
 
-function validateDisplayFormats(document: TextDocument, cst: VerilogCstDocument, profile: ProjectProfile, diagnostics: Diagnostic[]): void {
-  for (let index = 0; index < cst.codeTokens.length; index++) {
-    const token = cst.codeTokens[index];
-    if (token.kind !== 'systemIdentifier' || token.value !== '$display') {
-      continue;
-    }
-    const format = firstDisplayFormatString(cst.codeTokens, index);
+function validateDisplayFormats(document: TextDocument, ast: VerilogAstDocument, profile: ProjectProfile, diagnostics: Diagnostic[]): void {
+  for (const call of collectSystemCalls(ast, '$display')) {
+    const format = firstDisplayFormatString(call.expression);
     if (format !== undefined && !traceFormatLooksOk(format, profile)) {
-      diagnostics.push(makeDiagnostic(verilogTokenRange(document, token), `${profile} $display format does not match the expected CPU trace format.`, DiagnosticSeverity.Warning, 'display-format'));
+      diagnostics.push(makeDiagnostic(callCalleeRange(document, call.expression), `${profile} $display format does not match the expected CPU trace format.`, DiagnosticSeverity.Warning, 'display-format'));
     }
   }
 }
 
-function firstDisplayFormatString(tokens: VerilogToken[], displayIndex: number): string | undefined {
-  const open = nextTokenValue(tokens, displayIndex + 1, '(');
-  if (open < 0) {
-    return undefined;
+function collectSystemCalls(ast: VerilogAstDocument, callee: string): Array<{ module: VerilogModule; expression: VerilogCallExpressionAst }> {
+  const result: Array<{ module: VerilogModule; expression: VerilogCallExpressionAst }> = [];
+  for (const moduleAst of ast.modules) {
+    const addExpression = (expression: VerilogExpressionAst | undefined): void => {
+      if (!expression) {
+        return;
+      }
+      walkVerilogExpression(expression, (candidate) => {
+        if (candidate.kind === 'callExpression' && candidate.system && candidate.callee === callee) {
+          result.push({ module: moduleAst.module, expression: candidate });
+        }
+      });
+    };
+    for (const statement of moduleAst.items) {
+      for (const expression of statement.expressions) {
+        addExpression(expression);
+      }
+    }
+    for (const block of moduleAst.proceduralBlocks) {
+      collectSystemCallsFromProceduralStatement(block.statementTree, addExpression);
+    }
   }
-  for (let index = open + 1; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === ')') {
-      return undefined;
-    }
-    if (token.kind === 'string') {
-      return token.value.length >= 2 ? token.value.slice(1, -1) : '';
-    }
-    if (token.value !== ',') {
-      return undefined;
-    }
+  return result;
+}
+
+function collectSystemCallsFromProceduralStatement(
+  statement: VerilogProceduralStatementAst,
+  addExpression: (expression: VerilogExpressionAst | undefined) => void
+): void {
+  switch (statement.kind) {
+    case 'block':
+      for (const child of statement.statements) {
+        collectSystemCallsFromProceduralStatement(child, addExpression);
+      }
+      return;
+    case 'assignment':
+      addExpression(statement.lhs);
+      addExpression(statement.rhs);
+      return;
+    case 'if':
+      addExpression(statement.condition);
+      collectSystemCallsFromProceduralStatement(statement.consequent, addExpression);
+      if (statement.alternate) {
+        collectSystemCallsFromProceduralStatement(statement.alternate, addExpression);
+      }
+      return;
+    case 'case':
+      addExpression(statement.expression);
+      for (const item of statement.items) {
+        for (const label of item.labels) {
+          addExpression(label);
+        }
+        collectSystemCallsFromProceduralStatement(item.body, addExpression);
+      }
+      return;
+    case 'loop':
+      addExpression(statement.condition);
+      collectSystemCallsFromProceduralStatement(statement.body, addExpression);
+      return;
+    case 'other':
+      addExpression(statement.expression);
+      return;
+    case 'declaration':
+      return;
   }
-  return undefined;
+}
+
+function firstDisplayFormatString(call: VerilogCallExpressionAst): string | undefined {
+  const first = call.args[0];
+  return first?.kind === 'stringLiteral' ? unquoteVerilogString(first.raw) : undefined;
+}
+
+function unquoteVerilogString(raw: string): string {
+  return raw.length >= 2 ? raw.slice(1, -1) : '';
+}
+
+function callCalleeRange(document: TextDocument, call: VerilogCallExpressionAst): Range {
+  return Range.create(document.positionAt(call.start), document.positionAt(call.start + call.callee.length));
 }
 
 function hasDefaultNettypeNone(document: TextDocument, cst: VerilogCstDocument): boolean {
@@ -639,16 +687,4 @@ function removeAsciiWhitespace(text: string): string {
     }
   }
   return result;
-}
-
-function nextTokenValue(tokens: VerilogToken[], start: number, value: string): number {
-  for (let index = start; index < tokens.length; index++) {
-    if (tokens[index].value === value) {
-      return index;
-    }
-    if (tokens[index].kind !== 'comment') {
-      return -1;
-    }
-  }
-  return -1;
 }

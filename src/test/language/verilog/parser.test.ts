@@ -606,6 +606,25 @@ endmodule
     }
   });
 
+  it('attaches expression ASTs to procedural system task statements', () => {
+    const text = `
+module m(input [31:0] pc);
+    initial begin
+        $display("@%h", pc);
+    end
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const statement = parsed.ast.modules[0].proceduralBlocks[0].statementTree.statements[0];
+    expect(statement?.kind).toBe('other');
+    if (statement?.kind === 'other') {
+      expect(statement.expression?.kind).toBe('callExpression');
+      if (statement.expression?.kind === 'callExpression') {
+        expect(statement.expression.callee).toBe('$display');
+      }
+    }
+  });
+
   it('attaches expression ASTs to declaration initializers and instance connections', () => {
     const text = `
 module child #(parameter WIDTH = 8)(input [WIDTH-1:0] din, output dout);
