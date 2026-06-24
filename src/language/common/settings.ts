@@ -1,6 +1,6 @@
 import { ProjectProfile } from '../../projectProfile';
 
-export const defaultDisabledVerilogLintRules = ['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-021'] as const;
+export const defaultDisabledVerilogLintRules = ['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-017', 'vc-021'] as const;
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {

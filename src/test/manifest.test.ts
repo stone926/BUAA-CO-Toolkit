@@ -5,6 +5,7 @@ import {
   semanticColorPresets,
   semanticColorTokenIds
 } from '../semanticColorPresets';
+import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 
 interface PackageJson {
   activationEvents?: string[];
@@ -136,7 +137,7 @@ describe('package manifest', () => {
     expect(properties['co.test.builtinGenerator.instructionCount'].default).toBe(4000);
     expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
     expect(properties['co.test.p7.probeScenarioCount'].default).toBe(32);
-    expect(properties['co.verilog.lint.disabledRules'].default).toEqual(['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-021']);
+    expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
   });
 
   it('does not provide XML editor support for Logisim .circ files', () => {
