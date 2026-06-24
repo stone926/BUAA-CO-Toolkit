@@ -110,5 +110,18 @@ describe('MIPS AST and semantic model', () => {
     const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
     expect(errors).toHaveLength(0);
     expect(result.semantic.references.some((reference) => reference.name === 'arr' && reference.kind === 'data')).toBe(true);
+    const load = result.ast.statements.find((statement) => statement.executable?.lowerMnemonic === 'lw')?.executable;
+    const memory = load?.operands[1];
+    expect(memory?.kind).toBe('memory');
+    if (memory?.kind === 'memory') {
+      expect(memory.offset.kind).toBe('expression');
+      if (memory.offset.kind === 'expression') {
+        expect(memory.offset.labelPlusImmediate?.label.text).toBe('arr');
+        expect(memory.offset.labelPlusImmediate?.immediate.kind).toBe('integer');
+        if (memory.offset.labelPlusImmediate?.immediate.kind === 'integer') {
+          expect(memory.offset.labelPlusImmediate.immediate.value).toBe(4);
+        }
+      }
+    }
   });
 });

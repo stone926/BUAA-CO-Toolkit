@@ -7,7 +7,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from '../../projectProfile';
 import { makeDiagnostic, rangeOfText } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import type { MipsOperandAst } from './ast';
+import type { MipsLabelPlusImmediateAst, MipsOperandAst } from './ast';
 import { MipsMacro, MipsParseOptions, MipsSymbol } from './model';
 import {
   canonicalRegister,
@@ -297,10 +297,6 @@ function constantMemoryOffset(operand: MipsInstructionOperand, activeMacro: Mips
   if (isMacroOrEqvOperand(offset, activeMacro, eqvSymbols) || isSymbolOperand(offset)) {
     return undefined;
   }
-  const offsetText = operandText(offset).trim();
-  if (!offsetText) {
-    return undefined;
-  }
   const value = integerOperandValue(offset);
   return value === undefined ? undefined : signed32ImmediateValue(value);
 }
@@ -467,7 +463,7 @@ function isBitSizeOperand(operand: MipsInstructionOperand, activeMacro: MipsMacr
 function isMemoryOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind = 'simm16'): boolean {
   const memory = memoryOperand(operand);
   if (memory) {
-    return (operandText(memory.offset) === '0' || isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) || isSymbolOperand(memory.offset)) &&
+    return (isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) || isSymbolOperand(memory.offset)) &&
       isRegisterOperand(memory.base, activeMacro, eqvSymbols);
   }
   return isSymbolOperand(operand) || isImmediateOperand(operand, activeMacro, eqvSymbols, offsetKind);
@@ -475,7 +471,7 @@ function isMemoryOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro
 
 function isZeroOffsetMemoryOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
   const memory = memoryOperand(operand);
-  return Boolean(memory && operandText(memory.offset) === '0' && isRegisterOperand(memory.base, activeMacro, eqvSymbols));
+  return Boolean(memory && isZeroIntegerOperand(memory.offset) && isRegisterOperand(memory.base, activeMacro, eqvSymbols));
 }
 
 function isMemoryOperandWithImmediateOffset(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind): boolean {
@@ -511,7 +507,7 @@ function isMemoryOperandWithPseudoOffset(operand: MipsInstructionOperand, active
     return isImmediateOperand(operand, activeMacro, eqvSymbols, 'imm32') &&
       !isImmediateOperand(operand, activeMacro, eqvSymbols, 'simm16');
   }
-  if (operandText(memory.offset) === '0' || isMacroOrEqvOperand(memory.offset, activeMacro, eqvSymbols) || isSymbolOperand(memory.offset)) {
+  if (isZeroIntegerOperand(memory.offset) || isMacroOrEqvOperand(memory.offset, activeMacro, eqvSymbols) || isSymbolOperand(memory.offset)) {
     return false;
   }
   return isImmediateOperand(memory.offset, activeMacro, eqvSymbols, 'imm32') &&
@@ -522,6 +518,14 @@ function isMemoryOperandWithPseudoOffset(operand: MipsInstructionOperand, active
 function isLabelPlusImmediateOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
   if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return true;
+  }
+  const structured = labelPlusImmediateOperand(operand);
+  if (structured) {
+    return isLabelLikeOperand(structured.label, activeMacro, eqvSymbols) &&
+      isImmediateOperand(structured.immediate, activeMacro, eqvSymbols, 'imm32');
+  }
+  if (isAstOperand(operand)) {
+    return false;
   }
   const text = operandText(operand);
   const plusIndex = text.indexOf('+');
@@ -564,6 +568,10 @@ function integerOperandValue(operand: MipsInstructionOperand): number | undefine
   return parseIntegerOrCharLiteral(operand);
 }
 
+function isZeroIntegerOperand(operand: MipsInstructionOperand): boolean {
+  return integerOperandValue(operand) === 0;
+}
+
 function operandText(operand: MipsInstructionOperand | undefined): string {
   return typeof operand === 'string' ? operand : operand?.text ?? '';
 }
@@ -587,6 +595,10 @@ function memoryOperand(operand: MipsInstructionOperand): MemoryOperandParts | un
       base: parsed.base
     }
     : undefined;
+}
+
+function labelPlusImmediateOperand(operand: MipsInstructionOperand): MipsLabelPlusImmediateAst | undefined {
+  return isAstOperand(operand) && operand.kind === 'expression' ? operand.labelPlusImmediate : undefined;
 }
 
 function isMacroOrEqvOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {

@@ -13,6 +13,10 @@ export function visitMipsOperand(operand: MipsOperandAst, visitor: (operand: Mip
     visitMipsOperand(operand.offset, visitor);
     visitMipsOperand(operand.base, visitor);
   }
+  if (operand.kind === 'expression' && operand.labelPlusImmediate) {
+    visitMipsOperand(operand.labelPlusImmediate.label, visitor);
+    visitMipsOperand(operand.labelPlusImmediate.immediate, visitor);
+  }
 }
 
 export function collectMipsOperandReferences(operand: MipsOperandAst, options: { includeRegisters?: boolean } = {}): MipsOperandReferenceCandidate[] {
@@ -26,7 +30,7 @@ export function collectMipsOperandReferences(operand: MipsOperandAst, options: {
       });
       return;
     }
-    if (candidate.kind === 'expression') {
+    if (candidate.kind === 'expression' && !candidate.labelPlusImmediate) {
       references.push(...symbolReferencesFromExpressionOperand(candidate));
     }
   });

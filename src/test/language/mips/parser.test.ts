@@ -65,6 +65,33 @@ describe('parseMips', () => {
     });
   });
 
+  describe('instruction operand AST validation', () => {
+    it('accepts parenthesized zero-offset memory operands', () => {
+      const text = '.text\nmain: lw $t0, ($sp)';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('operand-type');
+    });
+
+    it('warns for misaligned integer memory offsets', () => {
+      const text = '.text\nmain: lw $t0, 2($sp)';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('memory-alignment');
+    });
+
+    it('accepts label plus signed immediate memory offsets', () => {
+      const text = '.data\narr: .word 0\n.text\nmain: lw $t0, arr+ +4($sp)';
+      const result = parseMips(doc(text), settings());
+      const errors = result.diagnostics.filter((d) => d.severity === 1);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('warns for restricted CP0 writes using integer operands', () => {
+      const text = '.text\nmain: mtc0 $t0, 13';
+      const result = parseMips(doc(text), settings({ project: { profile: 'P7' } }));
+      expect(diagCodes(result)).toContain('cp0-write');
+    });
+  });
+
   describe('directive validation — boundary cases', () => {
     it('allows the P7 fixed exception handler entry', () => {
       const text = '.text\nmain:\n    syscall\n.ktext 0x4180\n    eret';

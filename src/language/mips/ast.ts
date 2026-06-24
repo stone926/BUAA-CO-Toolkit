@@ -158,6 +158,14 @@ export interface MipsSymbolOperandAst extends MipsOperandBaseAst {
 
 export interface MipsExpressionOperandAst extends MipsOperandBaseAst {
   kind: 'expression';
+  labelPlusImmediate?: MipsLabelPlusImmediateAst;
+}
+
+export interface MipsLabelPlusImmediateAst {
+  kind: 'labelPlusImmediate';
+  label: MipsOperandAst;
+  plusRange: Range;
+  immediate: MipsOperandAst;
 }
 
 export interface MipsMemoryOperandAst extends MipsOperandBaseAst {
@@ -431,12 +439,88 @@ function classifyOperand(
   if (isSymbolLike(text)) {
     return { kind: 'symbol', text, range };
   }
-  return { kind: 'expression', text, range };
+  const expression: MipsExpressionOperandAst = { kind: 'expression', text, range };
+  const labelPlusImmediate = parseLabelPlusImmediateExpression(text, range);
+  if (labelPlusImmediate) {
+    expression.labelPlusImmediate = labelPlusImmediate;
+  }
+  return expression;
 }
 
 function parseIntegerOperandValue(text: string): number | undefined {
   const charValue = parseCharLiteral(text);
   return charValue === undefined ? parseIntegerLiteral(text) : charValue;
+}
+
+function parseLabelPlusImmediateExpression(text: string, range: Range): MipsLabelPlusImmediateAst | undefined {
+  const plus = labelPlusImmediatePlusIndex(text);
+  if (plus < 0) {
+    return undefined;
+  }
+  const labelSpan = trimmedSpan(text, 0, plus);
+  const immediateSpan = trimmedSpan(text, plus + 1, text.length);
+  if (labelSpan.start >= labelSpan.end || immediateSpan.start >= immediateSpan.end) {
+    return undefined;
+  }
+
+  const labelText = text.slice(labelSpan.start, labelSpan.end);
+  const immediateText = text.slice(immediateSpan.start, immediateSpan.end);
+  if (!isSymbolLike(labelText) && !isMipsMacroParameterReference(labelText)) {
+    return undefined;
+  }
+
+  return {
+    kind: 'labelPlusImmediate',
+    label: classifyOperand(labelText, relativeOperandRange(range, labelSpan)),
+    plusRange: relativeOperandRange(range, { start: plus, end: plus + 1 }),
+    immediate: classifyOperand(immediateText, relativeOperandRange(range, immediateSpan))
+  };
+}
+
+function labelPlusImmediatePlusIndex(text: string): number {
+  let result = -1;
+  let quote: '"' | '\'' | undefined;
+  let escaped = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (quote) {
+      if (char === quote && !escaped) {
+        quote = undefined;
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = !escaped;
+      } else {
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === '"' || char === '\'') {
+      quote = char;
+      escaped = false;
+      continue;
+    }
+    if (char !== '+') {
+      continue;
+    }
+    if (result >= 0) {
+      const maybeSignedImmediatePrefix = text.slice(result + 1, index);
+      if (!maybeSignedImmediatePrefix.trim() && isAsciiDigit(text[index + 1] ?? '')) {
+        continue;
+      }
+      return -1;
+    }
+    result = index;
+  }
+  return result;
+}
+
+function relativeOperandRange(base: Range, span: MipsParsedRange): Range {
+  return Range.create(
+    base.start.line,
+    base.start.character + span.start,
+    base.start.line,
+    base.start.character + span.end
+  );
 }
 
 function collectMacroDefinitions(document: TextDocument, statements: MipsStatementAst[]): MipsMacroDefinitionAst[] {
@@ -588,6 +672,25 @@ function isMipsSymbolPart(char: string): boolean {
   return isMipsSymbolStart(char) || (char >= '0' && char <= '9');
 }
 
+function isMipsMacroParameterReference(text: string): boolean {
+  if (text.length < 2 || text[0] !== '%') {
+    return false;
+  }
+  if (!isMipsSymbolStart(text[1])) {
+    return false;
+  }
+  for (let index = 2; index < text.length; index++) {
+    if (!isMipsSymbolPart(text[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function isAsciiWhitespace(char: string): boolean {
   return char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === '\f' || char === '\v';
+}
+
+function isAsciiDigit(char: string): boolean {
+  return char >= '0' && char <= '9';
 }

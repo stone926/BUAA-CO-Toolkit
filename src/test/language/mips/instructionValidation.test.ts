@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import { defaultCoSettings } from '../../../language/common/settings';
 import { isMacroArgumentToken, instructionWritesRegister, labelOperand } from '../../../language/mips/instructionValidation';
+import { parseMips } from '../../../language/mips/parser';
 import { instructions } from '../../../language/mips/resources';
+import type { MipsOperandAst } from '../../../language/mips/ast';
+
+function astOperands(text: string): MipsOperandAst[] {
+  const document = TextDocument.create('test://instruction-validation.s', 'mipsasm', 1, text);
+  return parseMips(document, defaultCoSettings).ast.statements[0].executable?.operands ?? [];
+}
 
 // ────────────────────────────────────────────────────────────────────────────────
 // isMacroArgumentToken
@@ -88,6 +97,10 @@ describe('instructionWritesRegister', () => {
     expect(instructionWritesRegister('ori', ['$v0', '$zero', '0x1234'], '$v0')).toBe(true);
   });
 
+  it('detects writes from parsed AST operands', () => {
+    expect(instructionWritesRegister('li', astOperands('li $v0, 10'), '$v0')).toBe(true);
+  });
+
   it('detects $v0 write for subi', () => {
     expect(instructionWritesRegister('subi', ['$v0', '$v0', '1'], '$v0')).toBe(true);
   });
@@ -146,6 +159,14 @@ describe('labelOperand', () => {
     expect(instr).toBeDefined();
     if (instr) {
       expect(labelOperand(instr, ['$t0', '$t1', 'target'])).toBe('target');
+    }
+  });
+
+  it('returns label operands from parsed AST operands', () => {
+    const instr = instructions['beq'];
+    expect(instr).toBeDefined();
+    if (instr) {
+      expect(labelOperand(instr, astOperands('beq $t0, $t1, target'))).toBe('target');
     }
   });
 
