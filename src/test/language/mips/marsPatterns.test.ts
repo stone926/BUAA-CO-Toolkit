@@ -66,6 +66,36 @@ main:
       const result = parseMips(doc(text), settings());
       expect(errorCodes(result)).toHaveLength(0);
     });
+
+    it('marks negative logical immediates as MARS 32-bit pseudo forms', () => {
+      const text = `
+.text
+main:
+    andi $t0, $t0, -1
+    ori $t1, $zero, -1
+    xori $t2, $t2, -32768
+`;
+      const result = parseMips(doc(text), settings({ mips: { warnPseudoInstruction: true } }));
+      expect(errorCodes(result)).toHaveLength(0);
+      expect(infoCodes(result)).toContain('pseudo-instruction:andi');
+      expect(infoCodes(result)).toContain('pseudo-instruction:ori');
+      expect(infoCodes(result)).toContain('pseudo-instruction:xori');
+    });
+
+    it('keeps unsigned 16-bit logical immediates as real instructions', () => {
+      const text = `
+.text
+main:
+    andi $t0, $t0, 65535
+    ori $t1, $zero, 0xffff
+    xori $t2, $t2, 0x8000
+`;
+      const result = parseMips(doc(text), settings({ mips: { warnPseudoInstruction: true } }));
+      expect(errorCodes(result)).toHaveLength(0);
+      expect(infoCodes(result)).not.toContain('pseudo-instruction:andi');
+      expect(infoCodes(result)).not.toContain('pseudo-instruction:ori');
+      expect(infoCodes(result)).not.toContain('pseudo-instruction:xori');
+    });
   });
 
   describe('div/mfhi/mflo pattern (from leap year, GCD)', () => {

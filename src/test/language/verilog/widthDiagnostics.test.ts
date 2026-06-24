@@ -130,6 +130,19 @@ endmodule
     expect(result).toContain('width-mismatch');
   });
 
+  it('does not report sized zero literals that fit after truncation', () => {
+    const result = codes(`
+module m(input clk, input reset);
+    reg [4:0] W_A3;
+    always @(posedge clk) begin
+        if (reset) W_A3 <= 32'b0;
+        else W_A3 <= 5'd31;
+    end
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
   it('reports an unsized decimal literal that does not fit its target', () => {
     const result = codes(`
 module m;
@@ -165,6 +178,17 @@ module TC(input clk, input [31:0] din);
         for (i = 0; i < 3; i = i + 1) mem[i] <= 0;
         mem[1] <= din;
     end
+endmodule
+`.trim());
+    expect(result).not.toContain('width-mismatch');
+  });
+
+  it('uses packed element width for unpacked memory reads and part-selects', () => {
+    const result = codes(`
+module TC(input [1:0] idx, output [31:0] word, output [7:0] byte);
+    reg [31:0] mem [2:0];
+    assign word = mem[idx];
+    assign byte = mem[idx][7:0];
 endmodule
 `.trim());
     expect(result).not.toContain('width-mismatch');

@@ -312,7 +312,7 @@ describe('widthOfExpression', () => {
   });
 
   it('returns width of sized literal', () => {
-    expect(widthOfExpression("32'hFF", makeModule())).toEqual({ width: 32 });
+    expect(widthOfExpression("32'hFF", makeModule())).toEqual({ width: 32, minWidth: 8 });
   });
 
   it('returns width of unsized literal (IEEE: ≥32 bits, no flexibility)', () => {
@@ -1112,21 +1112,6 @@ endmodule
     expect(modules[0].declarations.has('a')).toBe(true);
     expect(modules[0].declarations.has('b')).toBe(true);
     expect(modules[0].declarations.get('b')?.width).toBe('[7:0]');
-  });
-
-  it('parses net declarations with Verilog strength syntax', () => {
-    const text = `
-module glbl();
-    tri1 p_up_tmp;
-    tri (weak1, strong0) PLL_LOCKG = p_up_tmp;
-endmodule
-`.trim();
-    const d = doc(text);
-    const modules = parseModules(d, text);
-    expect(modules[0].declarations.get('p_up_tmp')?.kind).toBe('wire');
-    const pllLock = modules[0].declarations.get('PLL_LOCKG');
-    expect(pllLock?.kind).toBe('wire');
-    expect(pllLock?.initializer).toBe('p_up_tmp');
   });
 
   it('parses declarations that follow procedural blocks', () => {

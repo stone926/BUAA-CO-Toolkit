@@ -6,7 +6,6 @@ import { VerilogToken } from './lexer';
 import type { VerilogDecl } from './model';
 import {
   normalizeVerilogDeclKind,
-  skipVerilogStrengthGroup,
   verilogDeclarationKeywords,
   verilogDeclarationModifiers,
   verilogPortDeclarationTypes
@@ -580,11 +579,6 @@ function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined 
         index = close;
         continue;
       }
-    }
-    const afterStrength = skipVerilogStrengthGroup(tokens, index);
-    if (afterStrength !== index) {
-      index = afterStrength - 1;
-      continue;
     }
     if (
       verilogDeclarationKeywords.has(token.value) ||

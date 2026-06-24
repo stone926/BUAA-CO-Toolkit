@@ -42,6 +42,25 @@ describe('pseudoExpansionPreview', () => {
       'mul $s0, $s1, $at'
     ]);
   });
+
+  it('matches MARS logical immediate pseudo forms for negative values', () => {
+    expect(pseudoExpansionPreview('ori', ['$t0', '$zero', '-1'])).toEqual([
+      'lui $at, 0xffff',
+      'ori $at, $at, 0xffff',
+      'or $t0, $zero, $at'
+    ]);
+    expect(pseudoExpansionPreview('xori', ['$t1', '$t1', '-32768'])).toEqual([
+      'lui $at, 0xffff',
+      'ori $at, $at, 0x8000',
+      'xor $t1, $t1, $at'
+    ]);
+    expect(pseudoExpansionPreview('andi', ['$t2', '-1'])).toEqual([
+      'lui $at, 0xffff',
+      'ori $at, $at, 0xffff',
+      'and $t2, $t2, $at'
+    ]);
+    expect(pseudoExpansionPreview('ori', ['$t0', '$zero', '0xffff'])).toBeUndefined();
+  });
 });
 
 describe('getMipsHover instruction markdown', () => {

@@ -11,7 +11,6 @@ import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import {
-  skipVerilogStrengthGroup,
   verilogDeclarationKeywords,
   verilogDeclarationModifiers,
   verilogDeclarationPrefixKeywords,
@@ -213,11 +212,6 @@ function modulePortDeclaratorStart(
         return -1;
       }
       index = close + 1;
-      continue;
-    }
-    const afterStrength = skipVerilogStrengthGroup(tokens, index);
-    if (afterStrength !== index) {
-      index = afterStrength;
       continue;
     }
     if (verilogDeclarationModifiers.has(token.value)) {
@@ -532,11 +526,6 @@ function declarationDeclaratorStart(
         return -1;
       }
       index = close + 1;
-      continue;
-    }
-    const afterStrength = skipVerilogStrengthGroup(tokens, index);
-    if (afterStrength !== index) {
-      index = afterStrength;
       continue;
     }
     if (verilogDeclarationModifiers.has(token.value)) {

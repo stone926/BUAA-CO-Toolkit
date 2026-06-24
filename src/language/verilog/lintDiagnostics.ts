@@ -1,4 +1,4 @@
-import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
+import { Diagnostic, DiagnosticSeverity, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
@@ -274,6 +274,9 @@ export function collectExplicitPortNetTypeDiagnostics(
       if (!port.direction || port.explicitPortNetType !== false || !port.directionRange) {
         continue;
       }
+      if (isHeaderPortDeclaration(port, moduleAst.module.headerEnd)) {
+        continue;
+      }
       const key = `${port.directionRange.start.line}:${port.directionRange.start.character}:${port.directionRange.end.line}:${port.directionRange.end.character}`;
       if (reported.has(key)) {
         continue;
@@ -282,6 +285,11 @@ export function collectExplicitPortNetTypeDiagnostics(
       diagnostics.push(makeExplicitPortNetDiagnostic(port.directionRange));
     }
   }
+}
+
+function isHeaderPortDeclaration(port: VerilogModule['ports'][number], headerEnd: Position): boolean {
+  return port.range.end.line < headerEnd.line ||
+    (port.range.end.line === headerEnd.line && port.range.end.character <= headerEnd.character);
 }
 
 function makeExplicitPortNetDiagnostic(range: Range): Diagnostic {

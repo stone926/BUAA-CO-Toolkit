@@ -143,6 +143,18 @@ endmodule
     expect(result).not.toContain('syntax-malformed-assignment');
   });
 
+  it('does not silently accept netgen-only net types or drive-strength assigns', () => {
+    const result = syntaxCodes(`
+module glbl();
+    wire GSR_int;
+    tri1 p_up_tmp;
+    assign (weak1, weak0) GSR = GSR_int;
+endmodule
+`.trim());
+    expect(result).toContain('syntax-unexpected-token');
+    expect(result).toContain('syntax-malformed-assignment');
+  });
+
   it('reports malformed instance port list expressions and missing commas', () => {
     const result = codes(`
 module child(input a, input b); endmodule
@@ -200,20 +212,6 @@ endmodule
 `.trim());
     expect(result).not.toContain('syntax-unexpected-token');
     expect(result).not.toContain('syntax-malformed-gate-primitive');
-  });
-
-  it('accepts Xilinx netgen net declarations and drive-strength assigns', () => {
-    const result = syntaxCodes(`
-module glbl();
-    wire GSR_int;
-    tri1 p_up_tmp;
-    tri (weak1, strong0) PLL_LOCKG = p_up_tmp;
-    assign (weak1, weak0) GSR = GSR_int;
-endmodule
-`.trim());
-    expect(result).not.toContain('syntax-unexpected-token');
-    expect(result).not.toContain('syntax-malformed-declaration');
-    expect(result).not.toContain('syntax-malformed-assignment');
   });
 
   it('reports illegal declaration keyword sequences without rejecting common port types', () => {

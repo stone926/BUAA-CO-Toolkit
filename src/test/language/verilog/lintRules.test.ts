@@ -375,7 +375,7 @@ endmodule
     expect(codes).not.toContain('implicit-net:fixed_macroscopic_pc');
   });
 
-  it('reports port declarations that omit wire under default_nettype none', () => {
+  it('does not report ANSI port declarations that omit wire under default_nettype none', () => {
     const text = `
 \`default_nettype none
 module mips(
@@ -388,11 +388,10 @@ endmodule
 `.trim();
     const diagnostics = getVerilogDiagnostics(doc(text), mergeCoSettings({}));
     const explicitWireDiagnostics = diagnostics.filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
-    expect(explicitWireDiagnostics).toHaveLength(2);
-    expect(explicitWireDiagnostics.every((diagnostic) => diagnostic.severity === 1)).toBe(true);
+    expect(explicitWireDiagnostics).toHaveLength(0);
   });
 
-  it('deduplicates inherited ANSI port net type diagnostics by direction', () => {
+  it('does not report inherited ANSI port net types under default_nettype none', () => {
     const text = `
 \`default_nettype none
 module mips(
@@ -405,7 +404,7 @@ endmodule
 `.trim();
     const diagnostics = getVerilogDiagnostics(doc(text), mergeCoSettings({}))
       .filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
-    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics).toHaveLength(0);
   });
 
   it('reports old-style body port declarations that omit wire under default_nettype none', () => {
@@ -423,10 +422,9 @@ endmodule
   it('offers a quick fix to add explicit wire to a port declaration', () => {
     const text = `
 \`default_nettype none
-module mips(
-    input clk,
-    input wire reset
-);
+module mips(clk, reset);
+    input clk;
+    input wire reset;
 endmodule
 `.trim();
     const document = doc(text);

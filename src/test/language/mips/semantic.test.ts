@@ -124,4 +124,33 @@ describe('MIPS AST and semantic model', () => {
       }
     }
   });
+
+  it('binds macro-local data label references to the containing macro scope', () => {
+    const result = parseMips(doc([
+      '.macro print(%str)',
+      '  .data',
+      '    _str: .asciiz %str',
+      '  .text',
+      '    la $a0, _str',
+      '.end_macro',
+      '',
+      '.macro put_int(%int, %sep)',
+      '  .data',
+      '    _str: .asciiz %sep',
+      '  .text',
+      '    la $a0, _str',
+      '.end_macro'
+    ].join('\n')), defaultCoSettings);
+
+    const printScope = result.semantic.macroScopes.find((scope) => scope.name === 'print');
+    const putIntScope = result.semantic.macroScopes.find((scope) => scope.name === 'put_int');
+    const printRef = result.semantic.references.find((reference) => reference.name === '_str' && reference.scope === printScope);
+    const putIntRef = result.semantic.references.find((reference) => reference.name === '_str' && reference.scope === putIntScope);
+
+    expect(result.semantic.unresolvedReferences.some((reference) => reference.name === '_str')).toBe(false);
+    expect(printRef?.kind).toBe('data');
+    expect(printRef?.symbol).toBe(printScope?.dataSymbols.get('_str'));
+    expect(putIntRef?.kind).toBe('data');
+    expect(putIntRef?.symbol).toBe(putIntScope?.dataSymbols.get('_str'));
+  });
 });

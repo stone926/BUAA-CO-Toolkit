@@ -8,7 +8,7 @@ import {
   trimEofTokens,
   trimTrailingSemicolonTokens
 } from './tokenUtils';
-import { skipVerilogStrengthGroup, verilogDeclarationKeywords } from './declarations';
+import { verilogDeclarationKeywords } from './declarations';
 
 export interface AssignmentTarget {
   name: string;
@@ -110,7 +110,7 @@ function trailingScalarTarget(tokens: VerilogToken[]): AssignmentTarget | undefi
 
 function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: number): number {
   if (tokens[0]?.value === 'assign') {
-    let start = skipVerilogStrengthGroup(tokens, 1);
+    let start = 1;
     while (tokens[start]?.value === '#') {
       const next = skipDelayControl(tokens, start);
       if (next <= start || next > operatorIndex) {

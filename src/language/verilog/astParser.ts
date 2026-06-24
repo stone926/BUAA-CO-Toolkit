@@ -19,7 +19,6 @@ import { evalVerilogIntegerConstant, parseVerilogExpression, parseVerilogExpress
 import { normalizeWidth } from './textUtils';
 import {
   normalizeVerilogDeclKind,
-  skipVerilogStrengthGroup,
   verilogDeclarationKeywords,
   verilogDeclarationModifiers,
   verilogExplicitPortNetTypes,
@@ -702,11 +701,6 @@ function firstDeclaratorIndex(tokens: VerilogToken[], from: number): number {
   let index = from;
   while (index < tokens.length) {
     const token = tokens[index];
-    const afterStrength = skipVerilogStrengthGroup(tokens, index);
-    if (afterStrength !== index) {
-      index = afterStrength;
-      continue;
-    }
     if (token.value === '[') {
       const close = findMatchingToken(tokens, index, '[', ']');
       if (close < 0) {

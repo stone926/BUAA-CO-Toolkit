@@ -222,10 +222,12 @@ function literalWidth(parsed: ParsedVerilogNumberLiteral | undefined): WidthInfo
     return {};
   }
   if (parsed.kind === 'based') {
+    const minWidth = parsed.value === undefined
+      ? minWidthOfBasedDigits(parsed.base, parsed.digits)
+      : minimalBitsForInteger(parsed.value);
     if (parsed.size !== undefined) {
-      return { width: parsed.size };
+      return { width: parsed.size, minWidth };
     }
-    const minWidth = minWidthOfBasedDigits(parsed.base, parsed.digits);
     return { width: Math.max(32, minWidth), minWidth };
   }
   const minWidth = minimalBitsForInteger(parsed.value);

@@ -460,11 +460,11 @@ function validateDirective(
 }
 
 function isAllowedCourseSectionAddress(directive: string, operand: MipsOperandAst, profile: CoSettings['project']['profile']): boolean {
-  if (profile !== 'P7' || directive !== '.ktext') {
-    return false;
-  }
   const address = parseIntegerOrCharLiteral(operand.text);
-  return address === 0x4180;
+  if (directive === '.data') {
+    return address === 0;
+  }
+  return profile === 'P7' && directive === '.ktext' && address === 0x4180;
 }
 
 function validateDirectiveContinuation(document: TextDocument, lineNumber: number, directive: string, continuation: MipsDataDirectiveContinuationAst, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {

@@ -105,6 +105,12 @@ describe('parseMips', () => {
       expect(diagCodes(result)).toContain('co-section-address');
     });
 
+    it('allows CompactDataAtZero data segment base used by generated course logs', () => {
+      const text = '.text\nmain: nop\n.data 0x00000000\nlog_buffer: .space 0x2000';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('co-section-address');
+    });
+
     it('accepts .byte with valid values', () => {
       const text = '.data\n    .byte 1, 2, 3';
       const result = parseMips(doc(text), settings());
@@ -340,6 +346,7 @@ describe('parseMips', () => {
 `.trim();
       const result = parseMips(doc(text), settings());
       expect(diagCodes(result)).not.toContain('duplicate-symbol');
+      expect(diagCodes(result)).not.toContain('missing-label');
       expect(result.macros.get('print')?.[0].dataSymbols.has('_str')).toBe(true);
       expect(result.macros.get('put_int')?.[0].dataSymbols.has('_str')).toBe(true);
       expect(result.dataSymbols.has('_str')).toBe(false);
