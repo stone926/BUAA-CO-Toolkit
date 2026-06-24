@@ -70,4 +70,17 @@ describe('MIPS AST and semantic model', () => {
     expect(result.semantic.globalScope.dataSymbols.has('b')).toBe(true);
     expect(result.semantic.references.some((reference) => reference.name === 'b' && reference.kind === 'data')).toBe(true);
   });
+
+  it('binds symbols inside typed memory operand offset expressions', () => {
+    const result = parseMips(doc([
+      '.data',
+      'arr: .word 1',
+      '.text',
+      'main: lw $t0, arr+4($sp)'
+    ].join('\n')), defaultCoSettings);
+
+    const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
+    expect(errors).toHaveLength(0);
+    expect(result.semantic.references.some((reference) => reference.name === 'arr' && reference.kind === 'data')).toBe(true);
+  });
 });

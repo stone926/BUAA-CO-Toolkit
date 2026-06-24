@@ -9,7 +9,7 @@ import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp'
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { buildMipsAst } from './ast';
-import type { MipsStatementAst } from './ast';
+import type { MipsOperandAst, MipsStatementAst } from './ast';
 import {
   instructionWritesRegister,
   isMacroArgumentToken,
@@ -18,6 +18,7 @@ import {
   validateInstruction
 } from './instructionValidation';
 import { isMipsStringLiteralText } from './operandAst';
+import { collectMipsOperandReferences, visitMipsOperand, type MipsOperandReferenceCandidate } from './operandReferences';
 import {
   directives,
   instructions,
@@ -30,7 +31,6 @@ import {
   isFloatLiteral,
   isSymbolLike,
   mipsCstRange,
-  mipsCstTokenRange,
   parseCharLiteral,
   parseMipsCstDocument,
   parseIntegerLiteral,
@@ -113,11 +113,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   let activeDataContinuationDirective: string | undefined;
   const directiveContinuationLines = new Map<number, string>();
 
-  for (const parsedLine of cst.lines) {
-    if (parsedLine.kind !== 'statement') {
-      continue;
-    }
-    const lineNumber = parsedLine.line;
+  for (const statement of ast.statements) {
+    const parsedLine = statement.cst;
+    const lineNumber = statement.line;
 
     for (const label of parsedLine.labels) {
       const name = label.name;
@@ -142,7 +140,8 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     const executable = parsedLine.executable;
-    if (!executable) {
+    const executableAst = statement.executable;
+    if (!executable || !executableAst) {
       const continuationText = dataDirectiveContinuationText(parsedLine);
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
         validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
@@ -241,7 +240,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       continue;
     }
 
-    validateRegisterTokens(lineNumber, parsedLine, activeMacro, diagnostics);
+    validateRegisterOperands(statement, activeMacro, diagnostics);
 
     const mnemonic = executable.lowerMnemonic;
     if (mnemonic.startsWith('.')) {
@@ -292,14 +291,15 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     if (instruction) {
-      const operands = executable.operands.map((operand) => operand.text);
+      const astOperands = executableAst.operands;
+      const operands = astOperands.map((operand) => operand.text);
       if (mnemonic === 'syscall') {
         hasSyscall = true;
         if (profile === 'P2' && !v0Initialized) {
           diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), 'P2 syscall 以 $v0 值为调用号, 但 $v0 自上次 syscall 起未赋值', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
         }
       }
-      const usesPseudoForm = instruction.pseudo || usesMarsPseudoInstructionForm(mnemonic, operands, activeMacro, eqvSymbols);
+      const usesPseudoForm = instruction.pseudo || usesMarsPseudoInstructionForm(mnemonic, astOperands, activeMacro, eqvSymbols);
       instructionsSeen.push({
         line: lineNumber,
         mnemonic,
@@ -307,8 +307,8 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         range: mipsCstRange(lineNumber, executable.range),
         usesPseudoForm
       });
-      validateInstruction(document, lineNumber, instruction, operands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
-      const labelRef = labelOperand(instruction, operands);
+      validateInstruction(document, lineNumber, instruction, astOperands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
+      const labelRef = labelOperand(instruction, astOperands);
       if (labelRef && isSymbolLike(labelRef)) {
         labelReferences.push({
           line: lineNumber,
@@ -318,7 +318,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       }
       if (mnemonic === 'syscall') {
         v0Initialized = false;
-      } else if (instructionWritesRegister(mnemonic, operands, '$v0')) {
+      } else if (instructionWritesRegister(mnemonic, astOperands, '$v0')) {
         v0Initialized = true;
       }
     }
@@ -776,19 +776,28 @@ function validateEqvDirective(document: TextDocument, lineNumber: number, execut
   }
 }
 
-function validateRegisterTokens(lineNumber: number, line: MipsCstStatementLine, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
-  for (const token of line.tokens) {
-    if (token.kind !== 'register') {
-      continue;
-    }
-    const reg = token.value;
+function validateRegisterOperands(statement: MipsStatementAst, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+  for (const operand of registerOperands(statement)) {
+    const reg = operand.text;
     if (activeMacro?.paramSymbols.has(reg)) {
       continue;
     }
     if (!isRegister(reg) && !isFloatingPointRegister(reg)) {
-      diagnostics.push(makeDiagnostic(Range.create(lineNumber, token.start, lineNumber, token.end), `未知的寄存器 '${reg}'`, DiagnosticSeverity.Error, 'unknown-register'));
+      diagnostics.push(makeDiagnostic(operand.range, `未知的寄存器 '${reg}'`, DiagnosticSeverity.Error, 'unknown-register'));
     }
   }
+}
+
+function registerOperands(statement: MipsStatementAst): MipsOperandAst[] {
+  const result: MipsOperandAst[] = [];
+  for (const operand of statement.executable?.operands ?? []) {
+    visitMipsOperand(operand, (candidate) => {
+      if (candidate.kind === 'register') {
+        result.push(candidate);
+      }
+    });
+  }
+  return result;
 }
 
 function splitRepeatOperand(operand: string): [string, string | undefined] {
@@ -821,10 +830,6 @@ function isReservedSymbolName(value: string, kind: MipsSymbol['kind']): boolean 
     return true;
   }
   return kind !== 'data' && instructions[lower] !== undefined;
-}
-
-function isIdentifierLikeToken(kind: string): boolean {
-  return kind === 'identifier' || kind === 'macroParameter';
 }
 
 function isValidMacroParameterName(value: string): boolean {
@@ -908,12 +913,9 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
     }
     const firstContinuationWordOperand = continuationDirective === '.word';
     const macroCall = macroCallAtStatement(parsed, statement);
-    for (const cstToken of statement.tokens) {
-      if (!isIdentifierLikeToken(cstToken.kind)) {
-        continue;
-      }
-      const token = cstToken.value;
-      const range = mipsCstTokenRange(cstToken);
+    for (const reference of undeclaredSymbolReferences(statement, firstContinuationWordOperand)) {
+      const token = reference.text;
+      const range = reference.range;
       const key = rangeKey(range);
       if (
         skippedRanges.has(key) ||
@@ -925,6 +927,9 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
       }
 
       if (token.startsWith('.')) {
+        continue;
+      }
+      if (token.startsWith('$')) {
         continue;
       }
       if (instructions[token.toLowerCase()]) {
@@ -955,6 +960,24 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
       }
     }
   }
+}
+
+function undeclaredSymbolReferences(statement: MipsStatementAst, includeMnemonic: boolean): MipsOperandReferenceCandidate[] {
+  const references: MipsOperandReferenceCandidate[] = [];
+  const executable = statement.executable;
+  if (!executable) {
+    return references;
+  }
+  if (includeMnemonic) {
+    references.push({
+      text: executable.mnemonic,
+      range: executable.mnemonicRange
+    });
+  }
+  for (const operand of executable.operands) {
+    references.push(...collectMipsOperandReferences(operand));
+  }
+  return references;
 }
 
 function isDeclarationRange(parsed: MipsParseResult, range: Range): boolean {

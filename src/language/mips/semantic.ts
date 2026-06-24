@@ -12,6 +12,7 @@ import {
   MipsAstDocument,
   MipsStatementAst
 } from './ast';
+import { collectMipsOperandReferences } from './operandReferences';
 import type {
   MipsLine,
   MipsMacro,
@@ -20,7 +21,6 @@ import type {
 import {
   MipsCstToken,
   isSymbolLike,
-  mipsCstTokenRange,
   parseMacroArguments
 } from './syntax';
 
@@ -60,7 +60,7 @@ export interface MipsSemanticReference {
   name: string;
   kind: MipsSemanticReferenceKind;
   range: Range;
-  token: MipsCstToken;
+  token?: MipsCstToken;
   statement: MipsStatementAst;
   scope: MipsSemanticScope;
   symbol?: MipsSymbol;
@@ -348,20 +348,22 @@ function collectReferences(
   const references: MipsSemanticReference[] = [];
   for (const statement of ast.statements) {
     const scope = macroScopes.find((candidate) => containsPosition(candidate.range, statement.range.start)) ?? globalScope;
-    for (const token of statement.tokens) {
-      if (!isReferenceToken(token)) {
-        continue;
+    if (statement.executable && macros.has(statement.executable.mnemonic)) {
+      const macroReference = classifyReference(statement.executable.mnemonic, statement.executable.mnemonicRange, statement, scope, globalScope, macros);
+      if (macroReference && !declarationRangeKeys.has(rangeKey(macroReference.range))) {
+        references.push(macroReference);
       }
-      const range = mipsCstTokenRange(token);
-      if (declarationRangeKeys.has(rangeKey(range))) {
-        continue;
-      }
-      if (isExecutableMnemonicRange(statement, range) && !macros.has(token.value)) {
-        continue;
-      }
-      const reference = classifyReference(token, range, statement, scope, globalScope, macros);
-      if (reference) {
-        references.push(reference);
+    }
+    for (const operand of statement.executable?.operands ?? []) {
+      for (const candidate of collectMipsOperandReferences(operand, { includeRegisters: true })) {
+        const range = candidate.range;
+        if (declarationRangeKeys.has(rangeKey(range))) {
+          continue;
+        }
+        const reference = classifyReference(candidate.text, range, statement, scope, globalScope, macros);
+        if (reference) {
+          references.push(reference);
+        }
       }
     }
   }
@@ -369,14 +371,13 @@ function collectReferences(
 }
 
 function classifyReference(
-  token: MipsCstToken,
+  name: string,
   range: Range,
   statement: MipsStatementAst,
   scope: MipsSemanticScope,
   globalScope: MipsSemanticScope,
   macros: Map<string, MipsMacro[]>
 ): MipsSemanticReference | undefined {
-  const name = token.value;
   if (name.startsWith('.') && directives.has(name.toLowerCase())) {
     return undefined;
   }
@@ -385,7 +386,6 @@ function classifyReference(
       name,
       kind: 'register',
       range,
-      token,
       statement,
       scope
     };
@@ -396,7 +396,6 @@ function classifyReference(
       name,
       kind: symbol ? 'macroParam' : 'unresolved',
       range,
-      token,
       statement,
       scope,
       symbol
@@ -408,7 +407,6 @@ function classifyReference(
       name,
       kind: 'macro',
       range,
-      token,
       statement,
       scope,
       macro
@@ -420,7 +418,6 @@ function classifyReference(
       name,
       kind: symbol.kind,
       range,
-      token,
       statement,
       scope,
       symbol
@@ -434,7 +431,6 @@ function classifyReference(
       name,
       kind: 'unresolved',
       range,
-      token,
       statement,
       scope
     };
@@ -459,14 +455,6 @@ function resolveMacroReference(name: string, macros: Map<string, MipsMacro[]>, s
   const operandText = statement.executable?.cst.operandText ?? '';
   const argumentCount = parseMacroArguments(operandText).length;
   return overloads.find((macro) => macro.params.length === argumentCount) ?? overloads[0];
-}
-
-function isReferenceToken(token: MipsCstToken): boolean {
-  return token.kind === 'identifier' || token.kind === 'macroParameter' || token.kind === 'register';
-}
-
-function isExecutableMnemonicRange(statement: MipsStatementAst, range: Range): boolean {
-  return Boolean(statement.executable && rangeKey(statement.executable.mnemonicRange) === rangeKey(range));
 }
 
 export function resolveMipsSemanticMacroAtPosition(model: MipsSemanticModel, name: string, position: Position): MipsMacro | undefined {

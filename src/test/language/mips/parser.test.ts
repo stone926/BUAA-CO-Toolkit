@@ -340,6 +340,12 @@ describe('parseMips', () => {
       const result = parseMips(doc(text), settings());
       expect(diagCodes(result)).toContain('undeclared-symbol');
     });
+
+    it('reports undeclared symbols inside memory offset expressions', () => {
+      const text = '    lw $t0, missing_label+4($sp)';
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('undeclared-symbol');
+    });
   });
 
   describe('directive validation', () => {

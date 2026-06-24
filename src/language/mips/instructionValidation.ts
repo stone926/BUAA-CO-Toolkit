@@ -1,11 +1,13 @@
 import {
   Diagnostic,
-  DiagnosticSeverity
+  DiagnosticSeverity,
+  Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from '../../projectProfile';
 import { makeDiagnostic, rangeOfText } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import type { MipsOperandAst } from './ast';
 import { MipsMacro, MipsParseOptions, MipsSymbol } from './model';
 import {
   canonicalRegister,
@@ -39,12 +41,17 @@ const MEMORY_ALIGNMENT = new Map<string, number>(
 );
 
 type ImmediateKind = 'imm32' | 'simm16' | 'uimm16';
+export type MipsInstructionOperand = string | MipsOperandAst;
+interface MemoryOperandParts {
+  offset: MipsInstructionOperand;
+  base: MipsInstructionOperand;
+}
 
 export function validateInstruction(
   document: TextDocument,
   lineNumber: number,
   instruction: MipsInstruction,
-  operands: string[],
+  operands: MipsOperandAst[],
   profile: ProjectProfile,
   settings: CoSettings,
   options: MipsParseOptions,
@@ -101,7 +108,7 @@ export function validateInstruction(
   }
 }
 
-export function usesMarsPseudoInstructionForm(mnemonic: string, operands: string[], activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+export function usesMarsPseudoInstructionForm(mnemonic: string, operands: readonly MipsInstructionOperand[], activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
   if (
     pseudoForms.registerRegisterImmediate.has(mnemonic) &&
     operands.length === 3 &&
@@ -194,7 +201,7 @@ export function usesMarsPseudoInstructionForm(mnemonic: string, operands: string
   return false;
 }
 
-export function instructionWritesRegister(mnemonic: string, operands: string[], register: string): boolean {
+export function instructionWritesRegister(mnemonic: string, operands: readonly MipsInstructionOperand[], register: string): boolean {
   const canonical = canonicalRegister(register);
   if (!operands.length) {
     return false;
@@ -210,15 +217,16 @@ export function instructionWritesRegister(mnemonic: string, operands: string[], 
   return registerOperandMatches(operands[0], canonical);
 }
 
-export function labelOperand(instruction: MipsInstruction, operands: string[]): string | undefined {
+export function labelOperand(instruction: MipsInstruction, operands: readonly MipsInstructionOperand[]): string | undefined {
   if (instruction.labelOperand === 'first') {
-    return operands[0];
+    return operands[0] ? operandText(operands[0]) : undefined;
   }
   if (instruction.labelOperand === 'second') {
-    return operands[1];
+    return operands[1] ? operandText(operands[1]) : undefined;
   }
   if (instruction.labelOperand === 'last') {
-    return operands[operands.length - 1];
+    const operand = operands[operands.length - 1];
+    return operand ? operandText(operand) : undefined;
   }
   return undefined;
 }
@@ -233,7 +241,7 @@ function validateInstructionOperands(
   document: TextDocument,
   lineNumber: number,
   instruction: MipsInstruction,
-  operands: string[],
+  operands: readonly MipsInstructionOperand[],
   activeMacro: MipsMacro | undefined,
   eqvSymbols: Map<string, MipsSymbol>,
   diagnostics: Diagnostic[]
@@ -257,7 +265,7 @@ function validateMemoryAlignment(
   document: TextDocument,
   lineNumber: number,
   mnemonic: string,
-  operands: string[],
+  operands: readonly MipsInstructionOperand[],
   activeMacro: MipsMacro | undefined,
   eqvSymbols: Map<string, MipsSymbol>,
   diagnostics: Diagnostic[]
@@ -272,7 +280,7 @@ function validateMemoryAlignment(
   }
   diagnostics.push(
     makeDiagnostic(
-      rangeOfText(document, lineNumber, operands[1]),
+      operandRange(document, lineNumber, operands[1]),
       `${mnemonic} requires a ${alignment}-byte aligned constant address/offset; ${offset} is not divisible by ${alignment}.`,
       DiagnosticSeverity.Warning,
       'memory-alignment'
@@ -280,13 +288,17 @@ function validateMemoryAlignment(
   );
 }
 
-function constantMemoryOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): number | undefined {
-  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand) || isSymbolLike(operand)) {
+function constantMemoryOffset(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): number | undefined {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols) || isSymbolOperand(operand)) {
     return undefined;
   }
-  const memory = parseMipsMemoryOperand(operand);
-  const offsetText = memory ? memory.offset : operand.trim();
-  if (!offsetText || activeMacro?.paramSymbols.has(offsetText) || eqvSymbols.has(offsetText) || isSymbolLike(offsetText)) {
+  const memory = memoryOperand(operand);
+  const offset = memory?.offset ?? operand;
+  if (isMacroOrEqvOperand(offset, activeMacro, eqvSymbols) || isSymbolOperand(offset)) {
+    return undefined;
+  }
+  const offsetText = operandText(offset).trim();
+  if (!offsetText) {
     return undefined;
   }
   const parsed = parseIntegerOrCharLiteral(offsetText);
@@ -297,7 +309,7 @@ function validateCp0Access(
   document: TextDocument,
   lineNumber: number,
   mnemonic: string,
-  operands: string[],
+  operands: readonly MipsInstructionOperand[],
   activeMacro: MipsMacro | undefined,
   eqvSymbols: Map<string, MipsSymbol>,
   diagnostics: Diagnostic[]
@@ -312,7 +324,7 @@ function validateCp0Access(
   }
   diagnostics.push(
     makeDiagnostic(
-      rangeOfText(document, lineNumber, operands[1]),
+      operandRange(document, lineNumber, operands[1]),
       `BUAA CO 测试不写入 CP0 $${register.number} (${register.name})；${register.description}`,
       DiagnosticSeverity.Warning,
       'cp0-write'
@@ -320,8 +332,9 @@ function validateCp0Access(
   );
 }
 
-function registerOperandMatches(operand: string, canonical: string): boolean {
-  return isRegister(operand) && canonicalRegister(operand) === canonical;
+function registerOperandMatches(operand: MipsInstructionOperand, canonical: string): boolean {
+  const text = operandText(operand);
+  return isRegister(text) && canonicalRegister(text) === canonical;
 }
 
 function instructionPattern(format: string): string[] {
@@ -332,7 +345,7 @@ function instructionPattern(format: string): string[] {
   return parseOperands(split.operands);
 }
 
-function operandMatchesPattern(operand: string, pattern: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+function operandMatchesPattern(operand: MipsInstructionOperand, pattern: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
   if (pattern === '$rd' || pattern === '$rs' || pattern === '$rt' || pattern === '$base') {
     return isRegisterOperand(operand, activeMacro, eqvSymbols);
   }
@@ -390,66 +403,81 @@ function operandMatchesPattern(operand: string, pattern: string, activeMacro: Mi
   return true;
 }
 
-function isRegisterOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  return isRegister(operand) || Boolean(activeMacro?.paramSymbols.has(operand)) || eqvSymbols.has(operand);
+function isRegisterOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
+    return true;
+  }
+  if (isAstOperand(operand) && operand.kind !== 'register') {
+    return false;
+  }
+  return isRegister(operandText(operand));
 }
 
-function isCp0RegisterOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  return activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand) || cp0RegisterNumber(operand, activeMacro, eqvSymbols) !== undefined;
+function isCp0RegisterOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  return isMacroOrEqvOperand(operand, activeMacro, eqvSymbols) || cp0RegisterNumber(operand, activeMacro, eqvSymbols) !== undefined;
 }
 
-function cp0RegisterNumber(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): number | undefined {
-  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
+function cp0RegisterNumber(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): number | undefined {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return undefined;
   }
-  const value = parseIntegerOrCharLiteral(stripLeadingDollar(operand));
+  const value = parseIntegerOrCharLiteral(stripLeadingDollar(operandText(operand)));
   return value !== undefined && cp0RegistersByNumber.has(value) ? value : undefined;
 }
 
-function isImmediateOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, kind: ImmediateKind = 'imm32'): boolean {
-  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
+function isImmediateOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, kind: ImmediateKind = 'imm32'): boolean {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return true;
   }
-  const value = parseIntegerOrCharLiteral(operand);
+  if (isAstOperand(operand) && operand.kind !== 'integer') {
+    return false;
+  }
+  const value = parseIntegerOrCharLiteral(operandText(operand));
   return value !== undefined && integerFitsImmediateKind(value, kind);
 }
 
-function isShiftAmountOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
+function isShiftAmountOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return true;
   }
-  const value = parseIntegerOrCharLiteral(operand);
+  if (isAstOperand(operand) && operand.kind !== 'integer') {
+    return false;
+  }
+  const value = parseIntegerOrCharLiteral(operandText(operand));
   return value !== undefined && integerFitsRange(value, 0, 31);
 }
 
-function isBitPositionOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+function isBitPositionOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
   return isShiftAmountOperand(operand, activeMacro, eqvSymbols);
 }
 
-function isBitSizeOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
+function isBitSizeOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return true;
   }
-  const value = parseIntegerOrCharLiteral(operand);
+  if (isAstOperand(operand) && operand.kind !== 'integer') {
+    return false;
+  }
+  const value = parseIntegerOrCharLiteral(operandText(operand));
   return value !== undefined && value >= 1 && value <= 32;
 }
 
-function isMemoryOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind = 'simm16'): boolean {
-  const memory = parseMipsMemoryOperand(operand);
+function isMemoryOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind = 'simm16'): boolean {
+  const memory = memoryOperand(operand);
   if (memory) {
-    return (memory.offset === '0' || isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) || isSymbolLike(memory.offset)) &&
+    return (operandText(memory.offset) === '0' || isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) || isSymbolOperand(memory.offset)) &&
       isRegisterOperand(memory.base, activeMacro, eqvSymbols);
   }
-  return isSymbolLike(operand) || isImmediateOperand(operand, activeMacro, eqvSymbols, offsetKind);
+  return isSymbolOperand(operand) || isImmediateOperand(operand, activeMacro, eqvSymbols, offsetKind);
 }
 
-function isZeroOffsetMemoryOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  const memory = parseMipsMemoryOperand(operand);
-  return Boolean(memory && memory.offset === '0' && isRegisterOperand(memory.base, activeMacro, eqvSymbols));
+function isZeroOffsetMemoryOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = memoryOperand(operand);
+  return Boolean(memory && operandText(memory.offset) === '0' && isRegisterOperand(memory.base, activeMacro, eqvSymbols));
 }
 
-function isMemoryOperandWithImmediateOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind): boolean {
-  const memory = parseMipsMemoryOperand(operand);
+function isMemoryOperandWithImmediateOffset(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>, offsetKind: ImmediateKind): boolean {
+  const memory = memoryOperand(operand);
   return Boolean(
     memory &&
     isImmediateOperand(memory.offset, activeMacro, eqvSymbols, offsetKind) &&
@@ -457,8 +485,8 @@ function isMemoryOperandWithImmediateOffset(operand: string, activeMacro: MipsMa
   );
 }
 
-function isMemoryOperandWithLabelOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  const memory = parseMipsMemoryOperand(operand);
+function isMemoryOperandWithLabelOffset(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = memoryOperand(operand);
   return Boolean(
     memory &&
     isLabelLikeOperand(memory.offset, activeMacro, eqvSymbols) &&
@@ -466,8 +494,8 @@ function isMemoryOperandWithLabelOffset(operand: string, activeMacro: MipsMacro 
   );
 }
 
-function isMemoryOperandWithLabelPlusImmediateOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  const memory = parseMipsMemoryOperand(operand);
+function isMemoryOperandWithLabelPlusImmediateOffset(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = memoryOperand(operand);
   return Boolean(
     memory &&
     isLabelPlusImmediateOperand(memory.offset, activeMacro, eqvSymbols) &&
@@ -475,13 +503,13 @@ function isMemoryOperandWithLabelPlusImmediateOffset(operand: string, activeMacr
   );
 }
 
-function isMemoryOperandWithPseudoOffset(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  const memory = parseMipsMemoryOperand(operand);
+function isMemoryOperandWithPseudoOffset(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const memory = memoryOperand(operand);
   if (!memory) {
     return isImmediateOperand(operand, activeMacro, eqvSymbols, 'imm32') &&
       !isImmediateOperand(operand, activeMacro, eqvSymbols, 'simm16');
   }
-  if (memory.offset === '0' || activeMacro?.paramSymbols.has(memory.offset) || eqvSymbols.has(memory.offset) || isSymbolLike(memory.offset)) {
+  if (operandText(memory.offset) === '0' || isMacroOrEqvOperand(memory.offset, activeMacro, eqvSymbols) || isSymbolOperand(memory.offset)) {
     return false;
   }
   return isImmediateOperand(memory.offset, activeMacro, eqvSymbols, 'imm32') &&
@@ -489,26 +517,27 @@ function isMemoryOperandWithPseudoOffset(operand: string, activeMacro: MipsMacro
     isRegisterOperand(memory.base, activeMacro, eqvSymbols);
 }
 
-function isLabelPlusImmediateOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  if (activeMacro?.paramSymbols.has(operand) || eqvSymbols.has(operand)) {
+function isLabelPlusImmediateOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) {
     return true;
   }
-  const plusIndex = operand.indexOf('+');
-  if (plusIndex <= 0 || plusIndex === operand.length - 1) {
+  const text = operandText(operand);
+  const plusIndex = text.indexOf('+');
+  if (plusIndex <= 0 || plusIndex === text.length - 1) {
     return false;
   }
-  const label = operand.slice(0, plusIndex).trim();
-  const immediate = operand.slice(plusIndex + 1).trim();
+  const label = text.slice(0, plusIndex).trim();
+  const immediate = text.slice(plusIndex + 1).trim();
   return isLabelLikeOperand(label, activeMacro, eqvSymbols) &&
     isImmediateOperand(immediate, activeMacro, eqvSymbols, 'imm32');
 }
 
-function isLabelLikeOperand(operand: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
-  return isSymbolLike(operand) || Boolean(activeMacro?.paramSymbols.has(operand)) || eqvSymbols.has(operand);
+function isLabelLikeOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  return isSymbolOperand(operand) || isMacroOrEqvOperand(operand, activeMacro, eqvSymbols);
 }
 
-function isLabelOperand(operand: string, activeMacro: MipsMacro | undefined): boolean {
-  return isSymbolLike(operand) || Boolean(activeMacro?.paramSymbols.has(operand));
+function isLabelOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined): boolean {
+  return isSymbolOperand(operand) || Boolean(activeMacro?.paramSymbols.has(operandText(operand)));
 }
 
 function integerFitsImmediateKind(value: number, kind: ImmediateKind): boolean {
@@ -524,4 +553,41 @@ function integerFitsImmediateKind(value: number, kind: ImmediateKind): boolean {
 function parseIntegerOrCharLiteral(operand: string): number | undefined {
   const charValue = parseCharLiteral(operand);
   return charValue === undefined ? parseIntegerLiteral(operand) : charValue;
+}
+
+function operandText(operand: MipsInstructionOperand | undefined): string {
+  return typeof operand === 'string' ? operand : operand?.text ?? '';
+}
+
+function operandRange(document: TextDocument, lineNumber: number, operand: MipsInstructionOperand): Range {
+  return typeof operand === 'string' ? rangeOfText(document, lineNumber, operand) : operand.range;
+}
+
+function isAstOperand(operand: MipsInstructionOperand): operand is MipsOperandAst {
+  return typeof operand !== 'string';
+}
+
+function memoryOperand(operand: MipsInstructionOperand): MemoryOperandParts | undefined {
+  if (isAstOperand(operand)) {
+    return operand.kind === 'memory' ? operand : undefined;
+  }
+  const parsed = parseMipsMemoryOperand(operand);
+  return parsed
+    ? {
+      offset: parsed.offset,
+      base: parsed.base
+    }
+    : undefined;
+}
+
+function isMacroOrEqvOperand(operand: MipsInstructionOperand, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  const text = operandText(operand);
+  return Boolean(activeMacro?.paramSymbols.has(text)) || eqvSymbols.has(text);
+}
+
+function isSymbolOperand(operand: MipsInstructionOperand): boolean {
+  if (isAstOperand(operand)) {
+    return operand.kind === 'symbol';
+  }
+  return isSymbolLike(operand);
 }
