@@ -53,16 +53,12 @@ import { evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './
 import type { VerilogConstantOverrides, WidthInfo } from './expressions';
 import { parameterOverridesForInstance } from './parameterOverrides';
 import { preprocessorDirectives } from './preprocessor';
-import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import type { VerilogExpressionAst } from './exprAst';
 import type { VerilogModuleAst, VerilogStatementAst } from './ast';
 import type { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 import { findSmallestVerilogExpressionAtOffset, findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
 import type { VerilogExpressionMatch } from './exprAstUtils';
-import {
-  verilogWordRangeAtPosition
-} from './tokenNavigation';
 import {
   findVerilogSemanticSymbol,
   resolveVerilogSemanticAtPosition,
@@ -126,13 +122,14 @@ interface VerilogExpressionActionContext extends VerilogExpressionMatch {
   statement: VerilogStatementAst;
 }
 
-type ResolvedVerilogSymbol =
+type ResolvedVerilogSymbol = (
   | ResolvedDecl
   | ResolvedModule
   | ResolvedInstance
   | ResolvedPortConnection
   | ResolvedMacro
-  | ResolvedInclude;
+  | ResolvedInclude
+) & { sourceRange?: Range };
 
 interface InstanceContext {
   module: VerilogModule;
@@ -342,7 +339,7 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
   const parsed = getCachedVerilogParse(document, settings, false);
   const hoverRange = resolved.kind === 'include'
     ? resolved.include.pathRange
-    : getVerilogWordRange(document, position, parsed.cst) ?? resolvedRange(resolved);
+    : resolved.sourceRange ?? resolvedRange(resolved);
   switch (resolved.kind) {
     case 'decl': {
       const detail = declDetail(resolved.decl);
@@ -528,7 +525,7 @@ export function getVerilogRenamePrepare(document: TextDocument, position: Positi
     return undefined;
   }
   const parsed = getCachedVerilogParse(document, settings, false);
-  const range = getVerilogWordRange(document, position, parsed.cst);
+  const range = sourceRangeAtPosition(parsed.semantic, position) ?? resolved.sourceRange ?? resolvedRange(resolved);
   if (!range) {
     return undefined;
   }
@@ -1371,49 +1368,40 @@ function resolveVerilogSymbol(document: TextDocument, position: Position, settin
   if (include) {
     return { kind: 'include', include };
   }
-  const wordRange = getVerilogWordRange(document, position, parsed.cst);
-  if (!wordRange) {
-    return undefined;
-  }
-  const word = document.getText(wordRange);
   const currentModule = moduleAtPosition(parsed.modules, position);
   if (currentModule) {
-    if (rangesEqual(currentModule.selectionRange, wordRange)) {
-      return { kind: 'module', module: currentModule };
+    if (containsPosition(currentModule.selectionRange, position)) {
+      return { kind: 'module', module: currentModule, sourceRange: currentModule.selectionRange };
     }
     for (const instance of currentModule.instances) {
-      if (rangesEqual(instance.moduleSelectionRange, wordRange)) {
+      if (containsPosition(instance.moduleSelectionRange, position)) {
         const target = resolveInstanceTargetModule(index, parsed.modules, instance);
-        return target ? { kind: 'module', module: target } : undefined;
+        return target ? { kind: 'module', module: target, sourceRange: instance.moduleSelectionRange } : undefined;
       }
-      if (rangesEqual(instance.selectionRange, wordRange)) {
-        return { kind: 'instance', module: currentModule, instance };
+      if (containsPosition(instance.selectionRange, position)) {
+        return { kind: 'instance', module: currentModule, instance, sourceRange: instance.selectionRange };
       }
       const namedConnection = findNamedInstanceConnectionAtPosition(instance, position);
       if (namedConnection) {
         const target = resolveInstanceConnectionTarget(index, parsed.modules, instance, namedConnection.connection, namedConnection.listKind);
         if (target) {
-          return { kind: 'portConnection', module: currentModule, instance, connection: namedConnection.connection, ...target };
+          return { kind: 'portConnection', module: currentModule, instance, connection: namedConnection.connection, sourceRange: namedConnection.connection.nameRange, ...target };
         }
       }
     }
-    const decl = currentModule.declarations.get(word);
+    const decl = [...currentModule.declarations.values()].find((item) => containsPosition(item.selectionRange, position));
     if (decl) {
-      return { kind: 'decl', decl, module: currentModule };
+      return { kind: 'decl', decl, module: currentModule, sourceRange: decl.selectionRange };
     }
   }
 
-  const macro = parsed.macros.find((item) => rangesEqual(item.selectionRange, wordRange));
+  const macro = parsed.macros.find((item) => containsPosition(item.selectionRange, position));
   if (macro) {
-    return { kind: 'macro', macro, name: macro.name };
+    return { kind: 'macro', macro, name: macro.name, sourceRange: macro.selectionRange };
   }
-  const macroUse = parsed.macroUses.find((item) => rangesEqual(item.selectionRange, wordRange));
+  const macroUse = parsed.macroUses.find((item) => containsPosition(item.selectionRange, position));
   if (macroUse) {
-    return { kind: 'macro', macro: index.getMacro(macroUse.name), macroUse, name: macroUse.name };
-  }
-  const module = index.getModule(word) ?? parsed.modules.find((item) => item.name === word);
-  if (module) {
-    return { kind: 'module', module };
+    return { kind: 'macro', macro: index.getMacro(macroUse.name), macroUse, name: macroUse.name, sourceRange: macroUse.selectionRange };
   }
   return undefined;
 }
@@ -1445,24 +1433,26 @@ function mapSemanticResolution(
         module: reference.module,
         instance: reference.instance,
         connection: reference.portConnection,
+        sourceRange: reference.range,
         ...target
       };
     }
   }
   if (reference?.kind === 'module') {
     const module = resolved.symbol?.module ?? index.getModule(reference.name) ?? modules.find((item) => item.name === reference.name);
-    return module ? { kind: 'module', module } : undefined;
+    return module ? { kind: 'module', module, sourceRange: reference.range } : undefined;
   }
   if (reference?.kind === 'macro') {
     return {
       kind: 'macro',
       macro: resolved.symbol?.macro ?? index.getMacro(reference.name),
       macroUse: reference.macroUse,
-      name: reference.name
+      name: reference.name,
+      sourceRange: reference.range
     };
   }
   if (reference?.kind === 'include' && reference.include) {
-    return { kind: 'include', include: reference.include };
+    return { kind: 'include', include: reference.include, sourceRange: reference.range };
   }
 
   const symbol = resolved.symbol;
@@ -1470,19 +1460,19 @@ function mapSemanticResolution(
     return undefined;
   }
   if (symbol.kind === 'module' && symbol.module) {
-    return { kind: 'module', module: symbol.module };
+    return { kind: 'module', module: symbol.module, sourceRange: symbol.selectionRange };
   }
   if ((symbol.kind === 'signal' || symbol.kind === 'port' || symbol.kind === 'parameter' || symbol.kind === 'task') && symbol.decl && symbol.module) {
-    return { kind: 'decl', decl: symbol.decl, module: symbol.module };
+    return { kind: 'decl', decl: symbol.decl, module: symbol.module, sourceRange: symbol.selectionRange };
   }
   if (symbol.kind === 'instance' && symbol.instance && symbol.module) {
-    return { kind: 'instance', instance: symbol.instance, module: symbol.module };
+    return { kind: 'instance', instance: symbol.instance, module: symbol.module, sourceRange: symbol.selectionRange };
   }
   if (symbol.kind === 'macro') {
-    return { kind: 'macro', macro: symbol.macro, name: symbol.name };
+    return { kind: 'macro', macro: symbol.macro, name: symbol.name, sourceRange: symbol.selectionRange };
   }
   if (symbol.kind === 'include' && symbol.include) {
-    return { kind: 'include', include: symbol.include };
+    return { kind: 'include', include: symbol.include, sourceRange: symbol.selectionRange };
   }
   return undefined;
 }
@@ -1718,8 +1708,9 @@ function resolvedRange(resolved: ResolvedVerilogSymbol): Range | undefined {
   }
 }
 
-function getVerilogWordRange(document: TextDocument, position: Position, cst: VerilogCstDocument): Range | undefined {
-  return verilogWordRangeAtPosition(document, cst, position);
+function sourceRangeAtPosition(semantic: VerilogSemanticModel, position: Position): Range | undefined {
+  const resolved = resolveVerilogSemanticAtPosition(semantic, position);
+  return resolved?.reference?.range ?? resolved?.symbol?.selectionRange;
 }
 
 function markdownHover(value: string, range?: Range): Hover {
