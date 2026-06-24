@@ -1037,6 +1037,18 @@
             "default": true,
             "description": "当持续测试中测试点 WA 或非法样例时，停止持续测试"
           },
+          "co.test.continuousRetainedPassingCases": {
+            "type": "number",
+            "default": 20,
+            "minimum": 0,
+            "description": "持续测试自动保留的最近通过 ASM case 数量。旧的通过 case 会被清理；失败和异常 case 始终保留。设为 0 表示不保留通过 case 产物"
+          },
+          "co.test.continuousReportRetainedIterations": {
+            "type": "number",
+            "default": 200,
+            "minimum": 0,
+            "description": "持续测试 JSON 报告保留的最近轮数。旧的通过轮会被压缩；失败和异常轮始终保留。设为 0 表示不压缩报告历史"
+          },
           "co.test.logisim.mainCircuit": {
             "type": "string",
             "default": "main",

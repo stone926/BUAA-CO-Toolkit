@@ -84,6 +84,7 @@ export interface IsimRunOptions extends IseProjectOptions {
   asmCase?: AsmCase;
   moduleRegistry?: MutableVerilogModuleProvider;
   simOutputFileName?: string;
+  simOutputUri?: vscode.Uri;
   /** P7: external-interrupt target PCs; when set, a dedicated interrupt testbench is generated. */
   interruptSchedule?: number[];
   /** P7: black-box probe metadata; when set, a dedicated probe testbench is generated. */
@@ -320,11 +321,20 @@ export async function runIsim(
   });
   let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
-    const simOutDir = await simulationOutputDirectory(activeUri, compiled.generated.outDir);
-    simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(compiled.testbenchName, options.simOutputFileName)));
+    if (options.simOutputUri) {
+      simOut = options.simOutputUri;
+      await ensureDirectory(vscode.Uri.file(path.dirname(simOut.fsPath)));
+    } else {
+      const simOutDir = await simulationOutputDirectory(activeUri, compiled.generated.outDir);
+      simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(compiled.testbenchName, options.simOutputFileName)));
+    }
     await writeTextFile(simOut, simResult.stdout);
     if (asmCase) {
-      await writeAsmCaseArtifact(asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
+      if (options.simOutputUri) {
+        await updateAsmCaseArtifacts(asmCase, 'verilog', { simOut: simOut.fsPath });
+      } else {
+        await writeAsmCaseArtifact(asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
+      }
     }
     if (showMessages) {
       vscode.window.showInformationMessage('ISim 运行完成，输出见.co/out');

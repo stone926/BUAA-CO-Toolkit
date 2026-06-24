@@ -48,6 +48,7 @@ import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
 import {
+  asmCaseArtifactUri,
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
@@ -71,6 +72,7 @@ import { defaultTraceCompareMode } from './traceCompare';
 import {
   courseTraceOutputDirectory,
   logisimRawOutputFileNameForCase,
+  marsOutputFileNameForCase,
   simOutputFileNameForCase
 } from './courseTestTraceFiles';
 import { diffMessage, marsStageFailureMessage } from './courseTestMessages';
@@ -100,6 +102,7 @@ export interface P3LogisimTraceRunOptions {
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
+  artifactOutputMode?: 'workspace' | 'case';
 }
 
 export async function diagnoseP3LogisimTraceCircuit(services: AppServices): Promise<void> {
@@ -242,6 +245,7 @@ export async function runP3LogisimTraceCase(
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     resource: setup.circuit
   });
+  const caseOutputMode = options.artifactOutputMode === 'case';
   services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
   services.output.appendLine(`Logisim 电路: ${setup.circuit.fsPath}`);
   services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
@@ -304,12 +308,17 @@ export async function runP3LogisimTraceCase(
   const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
     showMessages: false,
     revealOutput: options.revealOutput,
-    traceOutput: true
+    traceOutput: true,
+    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined
   });
   if (!mars?.result.ok || !mars.outputFile) {
     return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), asmCase.machineCode, undefined, asmCase);
   }
-  await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+  if (caseOutputMode) {
+    await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });
+  } else {
+    await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+  }
 
   const logisimRun = await runLogisimTraceCli(
     services,
@@ -319,11 +328,19 @@ export async function runP3LogisimTraceCase(
     asm,
     options.revealOutput !== false
   );
-  const outDir = courseTraceOutputDirectory(asm);
-  await ensureDirectory(outDir);
-  const rawOut = vscode.Uri.file(path.join(outDir.fsPath, logisimRawOutputFileNameForCase(item)));
+  const outDir = caseOutputMode ? undefined : courseTraceOutputDirectory(asm);
+  if (outDir) {
+    await ensureDirectory(outDir);
+  }
+  const rawOut = caseOutputMode
+    ? asmCaseArtifactUri(asmCase, 'logisim', logisimRawOutputFileNameForCase(item))
+    : vscode.Uri.file(path.join(outDir!.fsPath, logisimRawOutputFileNameForCase(item)));
   await writeTextFile(rawOut, logisimRun.stdout);
-  await copyAsmCaseArtifact(asmCase, 'logisim', rawOut, path.basename(rawOut.fsPath), 'logisimOut');
+  if (caseOutputMode) {
+    await updateAsmCaseArtifacts(asmCase, 'logisim', { logisimOut: rawOut.fsPath });
+  } else {
+    await copyAsmCaseArtifact(asmCase, 'logisim', rawOut, path.basename(rawOut.fsPath), 'logisimOut');
+  }
 
   if (!logisimRun.result.ok) {
     return {
@@ -367,9 +384,15 @@ export async function runP3LogisimTraceCase(
     };
   }
 
-  const simTrace = vscode.Uri.file(path.join(outDir.fsPath, simOutputFileNameForCase(item)));
+  const simTrace = caseOutputMode
+    ? asmCaseArtifactUri(asmCase, 'logisim', simOutputFileNameForCase(item))
+    : vscode.Uri.file(path.join(outDir!.fsPath, simOutputFileNameForCase(item)));
   await writeTextFile(simTrace, formatLogisimTraceEvents(parsedLogisim.events));
-  await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
+  if (caseOutputMode) {
+    await updateAsmCaseArtifacts(asmCase, 'logisim', { traceOut: simTrace.fsPath });
+  } else {
+    await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
+  }
 
   const marsText = await readTextFile(mars.outputFile);
   const diff = compareTraceIterables(iterCpuTraceEvents(marsText), parsedLogisim.events, {

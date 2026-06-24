@@ -7,6 +7,10 @@ export function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.sim.out`;
 }
 
+export function marsOutputFileNameForCase(item: CourseTraceCaseInput): string {
+  return `${traceOutputStem(item)}.mars.out`;
+}
+
 export function logisimRawOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.logisim.out`;
 }

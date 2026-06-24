@@ -323,6 +323,14 @@ export function getContinuousStopOnFailure(resource?: vscode.Uri): boolean {
   return config<boolean>('test.continuousStopOnFailure', true, resource);
 }
 
+export function getContinuousRetainedPassingCases(resource?: vscode.Uri): number {
+  return nonNegativeIntegerConfig('test.continuousRetainedPassingCases', 20, resource);
+}
+
+export function getContinuousReportRetainedIterations(resource?: vscode.Uri): number {
+  return nonNegativeIntegerConfig('test.continuousReportRetainedIterations', 200, resource);
+}
+
 export function getLogisimTraceMainCircuit(resource?: vscode.Uri): string {
   return layeredGetString(
     'test.logisim.mainCircuit',

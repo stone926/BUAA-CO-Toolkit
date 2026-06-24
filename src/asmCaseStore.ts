@@ -240,6 +240,14 @@ export async function writeAsmCaseArtifact(
   return uri;
 }
 
+export function asmCaseArtifactUri(
+  asmCase: AsmCase,
+  kind: 'verilog' | 'logisim' | 'mars',
+  fileName: string
+): vscode.Uri {
+  return vscode.Uri.file(path.join(artifactDirectory(asmCase, kind).fsPath, path.basename(fileName)));
+}
+
 export async function copyAsmCaseArtifact(
   asmCase: AsmCase,
   kind: 'verilog' | 'logisim' | 'mars',

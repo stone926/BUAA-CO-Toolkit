@@ -27,6 +27,7 @@ export interface MarsRunOptions {
   courseTrace?: boolean;
   traceOutput?: boolean;
   dumpOutputFile?: vscode.Uri;
+  runOutputFile?: vscode.Uri;
   interruptSchedule?: number[];
   p7RiInstruction?: boolean;
 }
@@ -177,9 +178,14 @@ export async function runMarsFile(
   }
 
   if (mode === 'run') {
-    const outDir = marsRunOutputDirectory(asmUri);
-    await ensureDirectory(outDir);
-    outputFile = vscode.Uri.file(path.join(outDir.fsPath, marsOutputFileName(asmUri, options.stdinSource)));
+    outputFile = options.runOutputFile;
+    if (!outputFile) {
+      const outDir = marsRunOutputDirectory(asmUri);
+      await ensureDirectory(outDir);
+      outputFile = vscode.Uri.file(path.join(outDir.fsPath, marsOutputFileName(asmUri, options.stdinSource)));
+    } else {
+      await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
+    }
     await writeTextFile(outputFile, result.stdout);
   }
 

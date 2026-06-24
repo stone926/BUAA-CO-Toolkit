@@ -89,7 +89,7 @@ P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`�
 | 只生成测试点或只 dump 机器码 | 侧边栏「操作」→「更多工具...」 |
 | 手动比较 trace 输出 / 打开批量报告 | 侧边栏「操作」→「更多工具...」 |
 
-持续测试会打开一个**实时监控面板**，并把每轮结果写到 `.co/out/continuous-trace-report.json`（即使关掉 VSCode 也能看）。默认遇到第一个失败/异常就停（可用 `co.test.continuousStopOnFailure: false` 关闭）。
+持续测试会打开一个**实时监控面板**，并把每轮结果写到 `.co/out/continuous-trace-report.json`（即使关掉 VSCode 也能看）。默认遇到第一个失败/异常就停（可用 `co.test.continuousStopOnFailure: false` 关闭）。为了避免 `.co` 越跑越乱，持续测试的 trace 输出会直接写入对应 `.co/cases/<caseId>/`，通过 case 默认只保留最近 20 个；失败和异常 case 始终保留用于复现。
 
 ### 内置随机生成器
 
@@ -139,7 +139,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 - `anchor`/普通 trace 对拍失败通常表示 CPU 与 Mars 在某个**可见写事件**上不一致；首个差异不一定就是根因，流水线错误常会在若干周期后才表现为 GRF/DM 写错。
 - `probe` 失败表示某个 P7 性质不满足，报告会给出 scenario、Cause、EPC、期望 IP/ExcCode、缺失的 ack/clear 等信息；它不是 Mars trace mismatch。
 - 通过不等于“完全正确”：随机测试只覆盖已生成样例，trace 只观察 GRF/DM 写，probe 只观察课程规定端口与软件日志。CP0 内部位、未被后续读取的数据、纯时序性能问题、未启用的异常类型都可能需要补充定向测试。
-- 需要复现时优先保留 `.co/generated/*.asm`、对应 `*.co-meta.json`、`.co/out/*.mars.out`/`*.sim.out` 和报告 JSON；这些文件包含 seed、mode、中断/probe 元数据和首个差异。
+- 需要复现时优先保留失败/异常报告中指向的 `.co/cases/<caseId>/` 和 `.co/out/continuous-trace-report.json`；case 目录包含 ASM 快照、机器码、trace 输出、seed、mode、中断/probe 元数据和首个差异。
 
 ---
 
@@ -215,6 +215,8 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.test.continuousIntervalMs` | `1000` | 持续测试两轮间隔（毫秒） |
 | `co.test.continuousMaxIterations` | `0` | 持续测试最大轮数（0=不限） |
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
+| `co.test.continuousRetainedPassingCases` | `20` | 持续测试保留的最近通过 case 数；失败/异常 case 始终保留 |
+| `co.test.continuousReportRetainedIterations` | `200` | 持续测试 JSON 报告保留的最近轮数；失败/异常轮始终保留 |
 | `co.test.generatorArgs` | `[]` | 传给内置/外部生成器的额外参数（如种子、数量） |
 | `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
 | `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
@@ -259,10 +261,10 @@ MIPS / MARS 行为：
 | 路径 | 内容 |
 |---|---|
 | `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
-| `.co/generated/*.asm` + `*.co-meta.json` | 内置生成器产出的测试点及其元数据（含中断调度 / probe 场景） |
-| `.co/out/*.mars.out` / `*.sim.out` | MARS / ISim 输出 |
+| `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、MARS/ISim/Logisim trace 与复现元数据 |
+| `.co/out/*.mars.out` / `*.sim.out` | 手动单次/批量测试的 MARS / ISim 输出；持续测试默认把输出写入对应 case 目录 |
 | `.co/out/trace-batch-report.json` | 批量测试报告（含命令、生成文件、首个差异） |
-| `.co/out/continuous-trace-report.json` | 持续测试报告 |
+| `.co/out/continuous-trace-report.json` | 持续测试报告；旧通过轮会按留存策略压缩，失败/异常轮保留 |
 | `.co/isim/` | ISE `.prj/.tcl`、生成的 testbench、`code.txt` |
 | `.co/logisim/` | 注入机器码后的 `.circ` 副本与报告 |
 

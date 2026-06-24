@@ -133,8 +133,10 @@ describe('package manifest', () => {
       'BUAA CO: 运行与测试',
       'BUAA CO: 编辑器与诊断'
     ]);
-    expect(Object.keys(properties)).toHaveLength(60);
+    expect(Object.keys(properties)).toHaveLength(62);
     expect(properties['co.test.builtinGenerator.instructionCount'].default).toBe(4000);
+    expect(properties['co.test.continuousRetainedPassingCases'].default).toBe(20);
+    expect(properties['co.test.continuousReportRetainedIterations'].default).toBe(200);
     expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
     expect(properties['co.test.p7.probeScenarioCount'].default).toBe(32);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);

@@ -91,3 +91,16 @@ export function shouldStopAfterIterationCounts(
 ): boolean {
   return stopOnFailure && (counts.failed > 0 || counts.errors > 0);
 }
+
+export function pruneContinuousIterations<T extends { status: ContinuousRunStatus }>(
+  iterations: readonly T[],
+  retainedIterations: number
+): T[] {
+  const limit = Math.floor(retainedIterations);
+  if (!Number.isFinite(limit) || limit <= 0 || iterations.length <= limit) {
+    return [...iterations];
+  }
+  const latest = iterations.slice(0, limit);
+  const olderProblems = iterations.slice(limit).filter((iteration) => iteration.status !== 'passed');
+  return [...latest, ...olderProblems];
+}

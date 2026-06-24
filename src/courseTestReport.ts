@@ -17,6 +17,7 @@ export interface CourseTraceCaseResult {
   caseId?: string;
   caseManifest?: string;
   asmSnapshot?: string;
+  artifactsPruned?: boolean;
   status: CourseTraceStatus;
   stage: CourseTraceStage;
   message: string;
@@ -87,6 +88,7 @@ export interface ContinuousTraceReport {
   generatedAt: string;
   running: boolean;
   stopRequested: boolean;
+  totalIterations?: number;
   generator: string;
   commandLine: string;
   cwd: string;
@@ -94,6 +96,11 @@ export interface ContinuousTraceReport {
     intervalMs: number;
     maxIterations: number;
     stopOnFailure: boolean;
+  };
+  retention?: {
+    retainedPassingCases: number;
+    reportRetainedIterations: number;
+    artifactOutputMode: 'workspace' | 'case';
   };
   iterations: ContinuousTraceIteration[];
 }
@@ -133,10 +140,12 @@ export function showBatchTraceReport(
 export function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile: vscode.Uri): string {
   const latest = report.iterations[0];
   const latestSummary = latest?.summary ?? continuousCounts([]);
+  const totalIterations = report.totalIterations ?? report.iterations.length;
   const visibleIterations = report.iterations.slice(0, continuousTraceMonitorMaxRows);
-  const hiddenIterations = Math.max(0, report.iterations.length - visibleIterations.length);
+  const hiddenIterations = Math.max(0, totalIterations - visibleIterations.length);
   const rows = visibleIterations.map((iteration) => {
     const firstProblem = iteration.results.find((item) => item.status !== 'passed');
+    const pruned = !firstProblem && iteration.results.some((item) => item.artifactsPruned);
     return `<tr class="${iteration.status}">
       <td>${iteration.index}</td>
       <td>${iteration.status.toUpperCase()}</td>
@@ -147,11 +156,14 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
       <td>${iteration.summary.failed}</td>
       <td>${iteration.summary.errors}</td>
       <td>${firstProblem ? escapeHtml(path.basename(firstProblem.asm)) : ''}</td>
-      <td>${firstProblem ? escapeHtml(firstProblem.message) : escapeHtml(iteration.message ?? '')}</td>
+      <td>${firstProblem ? escapeHtml(firstProblem.message) : escapeHtml(iteration.message ?? (pruned ? '通过产物已按留存策略清理' : ''))}</td>
     </tr>`;
   }).join('\n');
   const hiddenNote = hiddenIterations
-    ? `<p class="muted">仅显示最近 ${visibleIterations.length} / ${report.iterations.length} 轮，完整历史保存在 JSON 报告中。</p>`
+    ? `<p class="muted">仅显示最近 ${visibleIterations.length} / ${totalIterations} 轮；旧通过轮可能已从 JSON 报告和 case 产物中清理。</p>`
+    : '';
+  const retentionNote = report.retention
+    ? `<div>留存: 通过 case 最近 ${report.retention.retainedPassingCases} 个，报告最近 ${report.retention.reportRetainedIterations || '无限制'} 轮，输出 ${report.retention.artifactOutputMode === 'case' ? '写入 ASM case' : '写入 .co/out'}</div>`
     : '';
   const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
 
@@ -229,7 +241,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
   <h1>持续测试</h1>
   <div class="summary">
     <div class="metric"><span>状态</span><strong>${escapeHtml(state)}</strong></div>
-    <div class="metric"><span>轮数</span><strong>${report.iterations.length}</strong></div>
+    <div class="metric"><span>轮数</span><strong>${totalIterations}</strong></div>
     <div class="metric"><span>最近通过</span><strong>${latestSummary.passed}</strong></div>
     <div class="metric"><span>最近失败</span><strong>${latestSummary.failed}</strong></div>
     <div class="metric"><span>最近错误</span><strong>${latestSummary.errors}</strong></div>
@@ -239,6 +251,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
     <div>命令: <code>${escapeHtml(report.commandLine)}</code></div>
     <div>工作目录: <code>${escapeHtml(report.cwd)}</code></div>
     <div>选项: 间隔 ${report.options.intervalMs} 毫秒, 最大 ${report.options.maxIterations || '无限制'}, 失败时停止 ${report.options.stopOnFailure}</div>
+    ${retentionNote}
     <div>JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
   </div>
   ${hiddenNote}

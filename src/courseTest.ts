@@ -55,6 +55,7 @@ import { commandLine, revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
 import {
   AsmCase,
+  asmCaseArtifactUri,
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   createAsmCaseFromText,
@@ -94,6 +95,7 @@ import type {
   CourseTraceCaseResult
 } from './courseTestReport';
 import {
+  marsOutputFileNameForCase,
   normalizePathKey,
   simOutputFileNameForCase
 } from './courseTestTraceFiles';
@@ -110,6 +112,7 @@ interface CourseTraceRunOptions {
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
   isimCompileCache?: IsimCompileCache;
+  artifactOutputMode?: 'workspace' | 'case';
 }
 
 type GeneratorRunSetup = ExternalGeneratorRunSetup | BuiltinGeneratorRunSetup;
@@ -377,6 +380,7 @@ async function runCourseTraceCase(
     resource: asm,
     p7: await p7MetadataFromSidecar(asm)
   });
+  const caseOutputMode = options.artifactOutputMode === 'case';
   services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
 
   const dump = await prepareAsmCaseMachineCode(services, asmCase, {
@@ -402,6 +406,7 @@ async function runCourseTraceCase(
       revealOutput: options.revealOutput,
       asmCase,
       simOutputFileName: simOutputFileNameForCase(item),
+      simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
       compileCache: options.isimCompileCache
     });
@@ -432,12 +437,17 @@ async function runCourseTraceCase(
     stdin: stdinText,
     stdinSource: item.stdin,
     traceOutput: true,
+    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined,
     interruptSchedule
   });
   if (!mars?.result.ok || !mars.outputFile) {
     return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), asmCase.machineCode, undefined, asmCase);
   }
-  await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+  if (caseOutputMode) {
+    await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });
+  } else {
+    await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+  }
 
   const isim = await runIsim(services, {
     resource: asm,
@@ -445,6 +455,7 @@ async function runCourseTraceCase(
     revealOutput: options.revealOutput,
     asmCase,
     simOutputFileName: simOutputFileNameForCase(item),
+    simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
     compileCache: options.isimCompileCache
   });

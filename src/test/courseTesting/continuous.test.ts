@@ -4,6 +4,7 @@ import {
   continuousCounts,
   continuousStatusFromCounts,
   createContinuousCounts,
+  pruneContinuousIterations,
   shouldStopAfterIterationCounts,
   continuousStatus,
   shouldStopAfterIteration
@@ -52,5 +53,19 @@ describe('continuous course test helpers', () => {
     expect(shouldStopAfterIteration([{ status: 'failed' }], true)).toBe(true);
     expect(shouldStopAfterIteration([{ status: 'error' }], true)).toBe(true);
     expect(shouldStopAfterIteration([{ status: 'failed' }], false)).toBe(false);
+  });
+
+  it('prunes old passed iterations while preserving old problem iterations', () => {
+    const iterations = [
+      { index: 6, status: 'passed' as const },
+      { index: 5, status: 'passed' as const },
+      { index: 4, status: 'failed' as const },
+      { index: 3, status: 'passed' as const },
+      { index: 2, status: 'error' as const },
+      { index: 1, status: 'passed' as const }
+    ];
+
+    expect(pruneContinuousIterations(iterations, 2).map((item) => item.index)).toEqual([6, 5, 4, 2]);
+    expect(pruneContinuousIterations(iterations, 0).map((item) => item.index)).toEqual([6, 5, 4, 3, 2, 1]);
   });
 });
