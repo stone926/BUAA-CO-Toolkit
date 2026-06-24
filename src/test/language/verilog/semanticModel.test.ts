@@ -246,6 +246,24 @@ describe('Verilog AST and semantic model', () => {
     expect(connectionUse?.symbol?.name).toBe('tmp');
   });
 
+  it('collects parsed sides of malformed procedural assignments without token fallback', () => {
+    const text = [
+      'module broken(input a, output reg y);',
+      '    always @(*) begin',
+      '        y = ;',
+      '        = a;',
+      '    end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const lhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('y = ;')));
+    const rhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('= a') + 2));
+
+    expect(lhsUse?.symbol?.name).toBe('y');
+    expect(rhsUse?.symbol?.name).toBe('a');
+  });
+
   it('collects declaration width AST references in ports and body declarations', () => {
     const text = [
       'module widths #(parameter W = 4)(input [W-1:0] in, output out);',

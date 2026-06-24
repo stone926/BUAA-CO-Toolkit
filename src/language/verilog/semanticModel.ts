@@ -758,12 +758,12 @@ function collectReferencesFromProceduralStatementAst(
       }
       return;
     case 'assignment':
-      if (statement.lhs && statement.rhs) {
+      if (statement.lhs) {
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.lhs, 0);
-        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.rhs, 0);
-        return;
       }
-      collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
+      if (statement.rhs) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.rhs, 0);
+      }
       return;
     case 'if':
       if (statement.condition) {
