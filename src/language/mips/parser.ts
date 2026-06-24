@@ -30,7 +30,6 @@ import {
   isCharLiteral,
   isFloatLiteral,
   isSymbolLike,
-  mipsCstRange,
   parseCharLiteral,
   parseMipsCstDocument,
   parseIntegerLiteral,
@@ -42,7 +41,6 @@ import {
   resolveMipsSemanticMacroParamAtPosition,
   resolveMipsSemanticSymbolAtPosition
 } from './semantic';
-import type { MipsCstStatementLine } from './syntax';
 import type {
   MipsLabelReference,
   MipsLine,
@@ -114,12 +112,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   const directiveContinuationLines = new Map<number, string>();
 
   for (const statement of ast.statements) {
-    const parsedLine = statement.cst;
     const lineNumber = statement.line;
 
-    for (const label of parsedLine.labels) {
+    for (const label of statement.labels) {
       const name = label.name;
-      const selectionRange = mipsCstRange(lineNumber, label.range);
+      const selectionRange = label.range;
       const symbol: MipsSymbol = {
         name,
         kind: section === 'data' ? 'data' : 'label',
@@ -139,10 +136,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       }
     }
 
-    const executable = parsedLine.executable;
     const executableAst = statement.executable;
-    if (!executable || !executableAst) {
-      const continuationText = dataDirectiveContinuationText(parsedLine);
+    if (!executableAst) {
+      const continuationText = dataDirectiveContinuationText(statement);
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
         validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
         directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
@@ -172,7 +168,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     // 从资源文件检查段切换指令
-    const targetSection = SECTION_DIRECTIVES.get(executable.lowerMnemonic);
+    const targetSection = SECTION_DIRECTIVES.get(executableAst.lowerMnemonic);
     if (targetSection) {
       section = targetSection as MipsSection;
     }
@@ -225,9 +221,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       continue;
     }
 
-    if (executable.lowerMnemonic === '.end_macro') {
+    if (executableAst.lowerMnemonic === '.end_macro') {
       if (!activeMacro) {
-        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), 'Unexpected .end_macro without a matching .macro.', DiagnosticSeverity.Error, 'macro-end'));
+        diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, 'Unexpected .end_macro without a matching .macro.', DiagnosticSeverity.Error, 'macro-end'));
       } else {
         activeMacro.bodyEndLine = lineNumber - 1;
         activeMacro.range = Range.create(activeMacro.range.start, lineAt(document, lineNumber).range.end);
@@ -242,10 +238,10 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
     validateRegisterOperands(statement, activeMacro, diagnostics);
 
-    const mnemonic = executable.lowerMnemonic;
+    const mnemonic = executableAst.lowerMnemonic;
     if (mnemonic.startsWith('.')) {
       if (!directives.has(mnemonic)) {
-        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令 '${executable.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-directive'));
+        diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `未知的指令 '${executableAst.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-directive'));
       }
       validateDirective(document, lineNumber, statement, section, profile, activeMacro, diagnostics);
       activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
@@ -255,30 +251,30 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     const instruction = instructions[mnemonic];
-    const macroOverloads = macros.get(executable.mnemonic);
+    const macroOverloads = macros.get(executableAst.mnemonic);
     if (!instruction && !macroOverloads?.length) {
-      const continuationText = dataDirectiveContinuationText(parsedLine);
+      const continuationText = dataDirectiveContinuationText(statement);
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuationText)) {
         validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuationText, activeMacro, diagnostics);
         directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
         continue;
       }
-      const eqv = resolveEqvSymbolInScope(executable.mnemonic, activeMacro, eqvSymbols);
+      const eqv = resolveEqvSymbolInScope(executableAst.mnemonic, activeMacro, eqvSymbols);
       if (eqv && isDeclaredBefore(eqv, Range.create(lineNumber, 0, lineNumber, 0).start)) {
         continue;
       }
-      diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令或宏 '${executable.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-instruction'));
+      diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `未知的指令或宏 '${executableAst.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-instruction'));
       continue;
     }
 
     activeDataContinuationDirective = undefined;
 
     if (section === 'data' && instruction) {
-      diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `指令 '${executable.mnemonic}' 不能出现在数据段中。请先切换到 .text`, DiagnosticSeverity.Error, 'instruction-in-data'));
+      diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `指令 '${executableAst.mnemonic}' 不能出现在数据段中。请先切换到 .text`, DiagnosticSeverity.Error, 'instruction-in-data'));
     }
 
     if (!instruction && macroOverloads?.length) {
-      const operands = parseMacroArguments(executable.operandText);
+      const operands = parseMacroArguments(executableAst.operandText);
       for (const operand of operands) {
         if (!isMacroArgumentToken(operand)) {
           diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `宏参数 '${operand}' 必须是单个 MARS 语言元素；内存操作数如 4($t0) 不是有效的宏参数`, DiagnosticSeverity.Error, 'macro-argument'));
@@ -286,7 +282,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       }
       if (!macroOverloads.some((macro) => macro.params.length === operands.length)) {
         const counts = [...new Set(macroOverloads.map((macro) => macro.params.length))].sort((a, b) => a - b).join('/');
-        diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `宏 '${executable.mnemonic}' 期望 ${counts} 个参数，实际得到 ${operands.length} 个`, DiagnosticSeverity.Error, 'macro-argument-count'));
+        diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `宏 '${executableAst.mnemonic}' 期望 ${counts} 个参数，实际得到 ${operands.length} 个`, DiagnosticSeverity.Error, 'macro-argument-count'));
       }
     }
 
@@ -296,7 +292,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       if (mnemonic === 'syscall') {
         hasSyscall = true;
         if (profile === 'P2' && !v0Initialized) {
-          diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), 'P2 syscall 以 $v0 值为调用号, 但 $v0 自上次 syscall 起未赋值', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
+          diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, 'P2 syscall 以 $v0 值为调用号, 但 $v0 自上次 syscall 起未赋值', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
         }
       }
       const usesPseudoForm = instruction.pseudo || usesMarsPseudoInstructionForm(mnemonic, astOperands, activeMacro, eqvSymbols);
@@ -304,7 +300,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         line: lineNumber,
         mnemonic,
         operands,
-        range: mipsCstRange(lineNumber, executable.range),
+        range: executableAst.mnemonicRange,
         usesPseudoForm
       });
       validateInstruction(document, lineNumber, instruction, astOperands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
@@ -609,12 +605,13 @@ function shouldTreatAsDataDirectiveContinuation(section: MipsSection, directive:
     && operandText.trim().length > 0;
 }
 
-function dataDirectiveContinuationText(line: MipsCstStatementLine): string {
-  const code = line.code;
+function dataDirectiveContinuationText(line: MipsStatementAst): string {
+  const code = line.text;
   const start = line.labels.length
-    ? skipAsciiWhitespace(code, line.labels[line.labels.length - 1].colonRange.end)
+    ? skipAsciiWhitespace(code, line.labels[line.labels.length - 1].colonRange.end.character)
     : 0;
-  const end = trimRightIndex(code, code.length);
+  const codeEnd = line.comment?.range.start.character ?? code.length;
+  const end = trimRightIndex(code, codeEnd);
   return start < end ? code.slice(start, end) : '';
 }
 
