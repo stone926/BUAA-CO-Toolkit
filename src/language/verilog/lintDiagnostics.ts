@@ -13,6 +13,8 @@ import {
   safeRegExp,
 } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
+import type { VerilogExpressionAst } from './exprAst';
+import { walkVerilogExpression } from './exprAstUtils';
 import {
   assignmentRhsContainsIdentifier,
   edgeSignalsFromSensitivity,
@@ -23,6 +25,7 @@ import {
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
+import type { VerilogProceduralStatementAst } from './proceduralAst';
 
 export function collectAssignmentDiagnostics(
   document: TextDocument,
@@ -75,26 +78,16 @@ export function collectCourseStyleDiagnostics(
   collectTestbenchDiagnostics(document, settings, text, ast, diagnostics);
 }
 
-export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
-  for (const module of modules) {
-    const moduleStart = document.offsetAt(module.range.start);
-    const moduleEnd = document.offsetAt(module.range.end);
+export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+  for (const moduleAst of ast.modules) {
+    const module = moduleAst.module;
     const isTestbench = isTestbenchModule(module, settings);
     const isMdu = isMduModule(module);
-    for (const token of cst.codeTokens) {
-      if (token.start < moduleStart || token.start >= moduleEnd) {
-        continue;
-      }
-      if (token.value === 'initial' && !isTestbench) {
-        diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
-      }
-      if (
-        !isMdu &&
-        (token.value === '*' || token.value === '/' || token.value === '%') &&
-        shouldReportSynthesizableOperatorToken(document, cst.codeTokens, token)
-      ) {
-        diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
-      }
+    if (!isTestbench) {
+      collectInitialBlockHintDiagnostics(moduleAst, diagnostics);
+    }
+    if (!isMdu) {
+      collectSynthesizableOperatorDiagnostics(document, moduleAst, diagnostics);
     }
     for (const decl of module.declarations.values()) {
       if (registerInitializerKinds.has(decl.kind) && decl.initializerRange) {
@@ -105,6 +98,98 @@ export function collectSynthesizableHintDiagnostics(document: TextDocument, sett
 }
 
 const registerInitializerKinds = new Set(['reg', 'logic', 'integer']);
+const expensiveSynthesizableOperators = new Set(['*', '/', '%']);
+
+function collectInitialBlockHintDiagnostics(moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
+  for (const block of moduleAst.proceduralBlocks) {
+    if (block.kind === 'initial') {
+      diagnostics.push(makeDiagnostic(block.headerRange, 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
+    }
+  }
+}
+
+function collectSynthesizableOperatorDiagnostics(document: TextDocument, moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
+  const reported = new Set<string>();
+  const visitExpression = (expression: VerilogExpressionAst | undefined): void => {
+    if (!expression) {
+      return;
+    }
+    walkVerilogExpression(expression, (candidate) => {
+      if (candidate.kind !== 'binaryExpression' || !expensiveSynthesizableOperators.has(candidate.operator)) {
+        return;
+      }
+      const range = Range.create(document.positionAt(candidate.operatorStart), document.positionAt(candidate.operatorEnd));
+      const key = `${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
+      if (reported.has(key)) {
+        return;
+      }
+      reported.add(key);
+      diagnostics.push(makeDiagnostic(range, 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
+    });
+  };
+
+  for (const statement of moduleAst.items) {
+    for (const expression of statement.expressions) {
+      visitExpression(expression);
+    }
+  }
+  for (const decl of moduleAst.module.declarations.values()) {
+    for (const expression of decl.widthAst ?? []) {
+      visitExpression(expression);
+    }
+    visitExpression(decl.initializerAst);
+  }
+  for (const instance of moduleAst.module.instances) {
+    for (const connection of [...instance.parameterConnections, ...instance.portConnections]) {
+      visitExpression(connection.expressionAst);
+    }
+  }
+  for (const block of moduleAst.proceduralBlocks) {
+    collectSynthesizableOperatorDiagnosticsFromProceduralStatement(block.statementTree, visitExpression);
+  }
+}
+
+function collectSynthesizableOperatorDiagnosticsFromProceduralStatement(
+  statement: VerilogProceduralStatementAst,
+  visitExpression: (expression: VerilogExpressionAst | undefined) => void
+): void {
+  switch (statement.kind) {
+    case 'block':
+      for (const child of statement.statements) {
+        collectSynthesizableOperatorDiagnosticsFromProceduralStatement(child, visitExpression);
+      }
+      return;
+    case 'assignment':
+      visitExpression(statement.lhs);
+      visitExpression(statement.rhs);
+      return;
+    case 'if':
+      visitExpression(statement.condition);
+      collectSynthesizableOperatorDiagnosticsFromProceduralStatement(statement.consequent, visitExpression);
+      if (statement.alternate) {
+        collectSynthesizableOperatorDiagnosticsFromProceduralStatement(statement.alternate, visitExpression);
+      }
+      return;
+    case 'case':
+      visitExpression(statement.expression);
+      for (const item of statement.items) {
+        for (const label of item.labels) {
+          visitExpression(label);
+        }
+        collectSynthesizableOperatorDiagnosticsFromProceduralStatement(item.body, visitExpression);
+      }
+      return;
+    case 'loop':
+      visitExpression(statement.condition);
+      collectSynthesizableOperatorDiagnosticsFromProceduralStatement(statement.body, visitExpression);
+      return;
+    case 'other':
+      visitExpression(statement.expression);
+      return;
+    case 'declaration':
+      return;
+  }
+}
 
 export function collectImplicitNetDiagnostics(
   settings: CoSettings,
@@ -562,15 +647,6 @@ function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
   return result[result.length - 1]?.value === ';' ? result.slice(0, -1) : result;
 }
 
-function previousToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
-  for (let current = index - 1; current >= 0; current--) {
-    if (tokens[current].kind !== 'eof') {
-      return tokens[current];
-    }
-  }
-  return undefined;
-}
-
 function isTestbenchModule(module: VerilogModule, settings: CoSettings): boolean {
   const configured = settings.project.testbench.trim().toLowerCase();
   const name = module.name.toLowerCase();
@@ -579,79 +655,6 @@ function isTestbenchModule(module: VerilogModule, settings: CoSettings): boolean
 
 function isMduModule(module: VerilogModule): boolean {
   return module.name.toLowerCase() === 'mdu';
-}
-
-function shouldReportSynthesizableOperatorToken(document: TextDocument, tokens: VerilogToken[], token: VerilogToken): boolean {
-  if (hasDirectiveBeforeOnLine(document, tokens, token)) {
-    return false;
-  }
-  if (token.value !== '*') {
-    return true;
-  }
-  const index = tokens.indexOf(token);
-  const previous = previousToken(tokens, index);
-  const next = nextToken(tokens, index);
-  if (previous?.value === '@') {
-    return false;
-  }
-  if (previous?.value === '(' || next?.value === ')') {
-    return false;
-  }
-  if (previous?.value !== '(' || next?.value !== ')') {
-    return true;
-  }
-  const beforeOpen = previousToken(tokens, tokens.indexOf(previous));
-  return beforeOpen?.value !== '@';
-}
-
-function hasDirectiveBeforeOnLine(document: TextDocument, tokens: VerilogToken[], token: VerilogToken): boolean {
-  const line = document.positionAt(token.start).line;
-  const tokenIndex = tokens.indexOf(token);
-  for (let index = tokenIndex - 1; index >= 0; index--) {
-    const current = tokens[index];
-    const currentLine = document.positionAt(current.start).line;
-    if (currentLine !== line) {
-      return false;
-    }
-    if (current.kind === 'directive') {
-      return true;
-    }
-  }
-  return false;
-}
-
-function nextToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
-  for (let current = index + 1; current < tokens.length; current++) {
-    if (tokens[current].kind !== 'eof') {
-      return tokens[current];
-    }
-  }
-  return undefined;
-}
-
-function findTopLevelToken(tokens: VerilogToken[], value: string): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-      return index;
-    }
-  }
-  return -1;
 }
 
 function isTrivialLiteralToken(value: string): boolean {
@@ -754,76 +757,4 @@ function isClockOrResetSignal(name: string): boolean {
 function isClockSignalName(name: string): boolean {
   const lower = name.toLowerCase();
   return lower.includes('clk') || lower.includes('clock');
-}
-
-function isTrivialLiteral(value: string): boolean {
-  const normalized = value.replace(/\s+/g, '').toLowerCase();
-  return normalized === '0' || normalized === '1' || /^\d+'[bodh]0+$/.test(normalized) || /^\d+'[bodh]1$/.test(normalized);
-}
-
-function isInsideBracketRange(text: string, index: number): boolean {
-  const lineStart = text.lastIndexOf('\n', index) + 1;
-  const lineEndRaw = text.indexOf('\n', index);
-  const lineEnd = lineEndRaw >= 0 ? lineEndRaw : text.length;
-  const before = text.slice(lineStart, index);
-  const after = text.slice(index, lineEnd);
-  return before.lastIndexOf('[') > before.lastIndexOf(']') && after.includes(']');
-}
-
-function stripPreprocessorDirectives(text: string): string {
-  return text.replace(/^[ \t]*`(?:timescale|default_nettype|include|define|undef|ifdef|ifndef|elsif|else|endif)\b.*$/gm, (match) => ' '.repeat(match.length));
-}
-
-function stripVerilogAttributes(text: string): string {
-  let result = '';
-  let index = 0;
-  while (index < text.length) {
-    if (text[index] !== '(' || text[index + 1] !== '*' || previousNonWhitespace(text, index - 1)?.char === '@') {
-      result += text[index] ?? '';
-      index++;
-      continue;
-    }
-    const end = text.indexOf('*)', index + 2);
-    if (end < 0) {
-      result += text.slice(index);
-      break;
-    }
-    result += ' '.repeat(end + 2 - index);
-    index = end + 2;
-  }
-  return result;
-}
-
-function shouldReportSynthesizableOperator(text: string, index: number): boolean {
-  if (text[index] !== '*') {
-    return true;
-  }
-  const previous = previousNonWhitespace(text, index - 1);
-  const next = nextNonWhitespace(text, index + 1);
-  if (previous?.char === '@') {
-    return false;
-  }
-  if (previous?.char !== '(' || next?.char !== ')') {
-    return true;
-  }
-  const beforeOpen = previousNonWhitespace(text, previous.index - 1);
-  return beforeOpen?.char !== '@';
-}
-
-function previousNonWhitespace(text: string, start: number): { char: string; index: number } | undefined {
-  for (let index = start; index >= 0; index--) {
-    if (!/\s/.test(text[index])) {
-      return { char: text[index], index };
-    }
-  }
-  return undefined;
-}
-
-function nextNonWhitespace(text: string, start: number): { char: string; index: number } | undefined {
-  for (let index = start; index < text.length; index++) {
-    if (!/\s/.test(text[index])) {
-      return { char: text[index], index };
-    }
-  }
-  return undefined;
 }

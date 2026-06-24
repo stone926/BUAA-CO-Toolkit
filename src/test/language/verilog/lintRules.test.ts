@@ -120,6 +120,19 @@ endmodule
     expect(codes.filter((code) => code === 'synth-mul-div')).toHaveLength(3);
   });
 
+  it('reports synthesizable multiply hints on AST operator ranges', () => {
+    const text = `
+module demo(input [3:0] a, input [3:0] b, output [3:0] y);
+    assign y = a * b;
+endmodule
+`.trim();
+    const document = doc(text);
+    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({}))
+      .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
+    expect(diagnostics).toHaveLength(1);
+    expect(document.getText(diagnostics[0].range)).toBe('*');
+  });
+
   it('does not report multiply, divide, or modulo synthesizable hints inside MDU by default', () => {
     const text = `
 module MDU(input [31:0] a, input [31:0] b, output [31:0] y);

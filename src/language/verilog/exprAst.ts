@@ -59,6 +59,8 @@ export interface VerilogUnaryExpressionAst extends VerilogExpressionBase {
 export interface VerilogBinaryExpressionAst extends VerilogExpressionBase {
   kind: 'binaryExpression';
   operator: string;
+  operatorStart: number;
+  operatorEnd: number;
   left: VerilogExpressionAst;
   right: VerilogExpressionAst;
 }
@@ -391,6 +393,8 @@ class ExpressionParser {
       left = {
         kind: 'binaryExpression',
         operator: token.value,
+        operatorStart: token.start,
+        operatorEnd: token.end,
         left,
         right: right ?? this.missingExpression('expression'),
         start: left.start,
