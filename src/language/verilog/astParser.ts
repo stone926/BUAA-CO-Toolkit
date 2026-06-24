@@ -1,7 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
-import { VerilogCstDocument, parseVerilogCst } from './cst';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
 import {
@@ -101,13 +100,12 @@ const instanceExcludedFirstTokens = new Set([
   'endgenerate'
 ]);
 
-export function parseModulesFromCst(
+export function parseModulesFromTokens(
   document: TextDocument,
   text: string,
-  cst: VerilogCstDocument = parseVerilogCst(document, text)
+  tokens: VerilogToken[]
 ): VerilogModule[] {
   const modules: VerilogModule[] = [];
-  const tokens = cst.codeTokens;
   let index = 0;
   while (index < tokens.length) {
     const token = tokens[index];

@@ -2,7 +2,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { collectVerilogDiagnostics } from './diagnostics';
 import { buildVerilogAst } from './ast';
-import { parseModules } from './moduleParser';
+import { parseModulesFromTokens } from './moduleParser';
 import { parseDirectivesFromTokens, parseIncludesFromTokens, parseMacrosFromTokens, parseMacroUsesFromTokens } from './preprocessor';
 import { VerilogParseResult } from './model';
 import { parseVerilogCst } from './cst';
@@ -12,7 +12,7 @@ export function parseVerilog(document: TextDocument, settings: CoSettings, inclu
   const text = document.getText();
   const cst = parseVerilogCst(document, text);
   const tokens = cst.codeTokens;
-  const modules = parseModules(document, text, cst);
+  const modules = parseModulesFromTokens(document, text, tokens);
   const macros = parseMacrosFromTokens(document, tokens);
   const macroUses = parseMacroUsesFromTokens(document, macros, tokens);
   const includes = parseIncludesFromTokens(document, tokens);
@@ -57,7 +57,8 @@ export function addVerilogDiagnostics(
 }
 
 export {
-  parseModules
+  parseModules,
+  parseModulesFromTokens
 } from './moduleParser';
 
 export {
