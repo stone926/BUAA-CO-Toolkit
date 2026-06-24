@@ -44,7 +44,7 @@ export function parseMacroArguments(text: string): string[] {
     .filter(Boolean);
 }
 
-export type MipsCstTokenKind =
+export type MipsParsedTokenKind =
   | 'identifier'
   | 'directive'
   | 'register'
@@ -56,74 +56,81 @@ export type MipsCstTokenKind =
   | 'operator'
   | 'unknown';
 
-export interface MipsCstToken {
-  kind: MipsCstTokenKind;
+export interface MipsParsedToken {
+  kind: MipsParsedTokenKind;
   value: string;
   line: number;
   start: number;
   end: number;
 }
 
-export interface MipsCstLabel {
-  name: string;
-  range: CstRange;
-  colonRange: CstRange;
-}
-
-export interface MipsCstOperand {
-  text: string;
-  range: CstRange;
-}
-
-export interface MipsCstExecutable {
-  kind: 'directive' | 'instructionOrMacro';
-  mnemonic: string;
-  lowerMnemonic: string;
-  range: CstRange;
-  operandText: string;
-  operandRange?: CstRange;
-  operands: MipsCstOperand[];
-}
-
-export interface MipsCstBaseLine {
-  line: number;
-  text: string;
-  tokens: MipsCstToken[];
-  comment?: MipsCstToken;
-}
-
-export interface MipsCstBlankLine extends MipsCstBaseLine {
-  kind: 'blank';
-}
-
-export interface MipsCstCommentLine extends MipsCstBaseLine {
-  kind: 'comment';
-}
-
-export interface MipsCstStatementLine extends MipsCstBaseLine {
-  kind: 'statement';
-  code: string;
-  labels: MipsCstLabel[];
-  executable?: MipsCstExecutable;
-}
-
-export type MipsCstLine = MipsCstBlankLine | MipsCstCommentLine | MipsCstStatementLine;
-
-export interface MipsCstDocument {
-  kind: 'document';
-  lines: MipsCstLine[];
-}
-
-export interface CstRange {
+export interface MipsParsedRange {
   start: number;
   end: number;
 }
 
-export type MipsParsedRange = CstRange;
-export type MipsParsedOperand = MipsCstOperand;
-export type MipsParsedExecutable = MipsCstExecutable;
-export type MipsParsedLine = MipsCstLine;
-export type MipsParsedDocument = MipsCstDocument;
+export interface MipsParsedLabel {
+  name: string;
+  range: MipsParsedRange;
+  colonRange: MipsParsedRange;
+}
+
+export interface MipsParsedOperand {
+  text: string;
+  range: MipsParsedRange;
+}
+
+export interface MipsParsedExecutable {
+  kind: 'directive' | 'instructionOrMacro';
+  mnemonic: string;
+  lowerMnemonic: string;
+  range: MipsParsedRange;
+  operandText: string;
+  operandRange?: MipsParsedRange;
+  operands: MipsParsedOperand[];
+}
+
+export interface MipsParsedBaseLine {
+  line: number;
+  text: string;
+  tokens: MipsParsedToken[];
+  comment?: MipsParsedToken;
+}
+
+export interface MipsParsedBlankLine extends MipsParsedBaseLine {
+  kind: 'blank';
+}
+
+export interface MipsParsedCommentLine extends MipsParsedBaseLine {
+  kind: 'comment';
+}
+
+export interface MipsParsedStatementLine extends MipsParsedBaseLine {
+  kind: 'statement';
+  code: string;
+  labels: MipsParsedLabel[];
+  executable?: MipsParsedExecutable;
+}
+
+export type MipsParsedLine = MipsParsedBlankLine | MipsParsedCommentLine | MipsParsedStatementLine;
+
+export interface MipsParsedDocument {
+  kind: 'document';
+  lines: MipsParsedLine[];
+}
+
+export type CstRange = MipsParsedRange;
+export type MipsCstTokenKind = MipsParsedTokenKind;
+export type MipsCstToken = MipsParsedToken;
+export type MipsCstLabel = MipsParsedLabel;
+export type MipsCstOperand = MipsParsedOperand;
+export type MipsCstExecutable = MipsParsedExecutable;
+export type MipsCstBaseLine = MipsParsedBaseLine;
+export type MipsCstBlankLine = MipsParsedBlankLine;
+export type MipsCstCommentLine = MipsParsedCommentLine;
+export type MipsCstStatementLine = MipsParsedStatementLine;
+export type MipsCstLine = MipsParsedLine;
+export type MipsCstDocument = MipsParsedDocument;
 
 interface TextSpan {
   text: string;
@@ -131,18 +138,18 @@ interface TextSpan {
   end: number;
 }
 
-export function parseMipsCstDocument(text: string): MipsCstDocument {
+export function parseMipsSourceDocument(text: string): MipsParsedDocument {
   return {
     kind: 'document',
-    lines: text.split(/\r?\n/).map((line, lineNumber) => parseMipsCstLine(line, lineNumber))
+    lines: text.split(/\r?\n/).map((line, lineNumber) => parseMipsSourceLine(line, lineNumber))
   };
 }
 
-export function parseMipsSourceDocument(text: string): MipsParsedDocument {
-  return parseMipsCstDocument(text);
+export function parseMipsCstDocument(text: string): MipsCstDocument {
+  return parseMipsSourceDocument(text);
 }
 
-export function parseMipsCstLine(text: string, lineNumber = 0): MipsCstLine {
+export function parseMipsSourceLine(text: string, lineNumber = 0): MipsParsedLine {
   const commentIndex = findCommentIndex(text);
   const code = commentIndex >= 0 ? text.slice(0, commentIndex) : text;
   const comment = commentIndex >= 0
@@ -159,7 +166,7 @@ export function parseMipsCstLine(text: string, lineNumber = 0): MipsCstLine {
   }
 
   let position = skipAsciiWhitespace(code, 0);
-  const labels: MipsCstLabel[] = [];
+  const labels: MipsParsedLabel[] = [];
   while (position < code.length) {
     const label = readMipsSymbol(code, position, true);
     if (!label || code[label.end] !== ':') {
@@ -189,20 +196,28 @@ export function parseMipsCstLine(text: string, lineNumber = 0): MipsCstLine {
   };
 }
 
-export function mipsCstTokenRange(token: MipsCstToken): Range {
+export function parseMipsCstLine(text: string, lineNumber = 0): MipsCstLine {
+  return parseMipsSourceLine(text, lineNumber);
+}
+
+export function mipsParsedTokenRange(token: MipsParsedToken): Range {
   return Range.create(token.line, token.start, token.line, token.end);
 }
 
-export function mipsCstRange(line: number, range: CstRange): Range {
-  return Range.create(line, range.start, line, range.end);
+export function mipsCstTokenRange(token: MipsCstToken): Range {
+  return mipsParsedTokenRange(token);
 }
 
 export function mipsParsedRange(line: number, range: MipsParsedRange): Range {
-  return mipsCstRange(line, range);
+  return Range.create(line, range.start, line, range.end);
 }
 
-function tokenizeMipsCode(code: string, lineNumber: number): MipsCstToken[] {
-  const tokens: MipsCstToken[] = [];
+export function mipsCstRange(line: number, range: CstRange): Range {
+  return mipsParsedRange(line, range);
+}
+
+function tokenizeMipsCode(code: string, lineNumber: number): MipsParsedToken[] {
+  const tokens: MipsParsedToken[] = [];
   let index = 0;
   while (index < code.length) {
     const char = code[index];
@@ -269,7 +284,7 @@ function tokenizeMipsCode(code: string, lineNumber: number): MipsCstToken[] {
   return tokens;
 }
 
-function makeExecutable(code: string, lineNumber: number, mnemonic: TextSpan): MipsCstExecutable {
+function makeExecutable(code: string, lineNumber: number, mnemonic: TextSpan): MipsParsedExecutable {
   const operandStart = skipAsciiWhitespace(code, mnemonic.end);
   const operandEnd = trimRightIndex(code, code.length);
   const operandText = operandStart < operandEnd ? code.slice(operandStart, operandEnd) : '';
@@ -284,7 +299,7 @@ function makeExecutable(code: string, lineNumber: number, mnemonic: TextSpan): M
   };
 }
 
-function parseMipsOperandNodes(text: string, baseOffset: number): MipsCstOperand[] {
+function parseMipsOperandNodes(text: string, baseOffset: number): MipsParsedOperand[] {
   const leading = leadingWhitespaceLength(text);
   const trailingEnd = trimRightIndex(text, text.length);
   let normalized = text.slice(leading, trailingEnd);
@@ -309,7 +324,7 @@ function parseMipsOperandNodes(text: string, baseOffset: number): MipsCstOperand
   }).filter((operand) => operand.text.length > 0);
 }
 
-function makeToken(kind: MipsCstTokenKind, value: string, line: number, start: number, end: number): MipsCstToken {
+function makeToken(kind: MipsParsedTokenKind, value: string, line: number, start: number, end: number): MipsParsedToken {
   return { kind, value, line, start, end };
 }
 
@@ -627,25 +642,25 @@ export function printMipsFormatDocument(ast: MipsFormatDocument, eol = '\n'): st
 }
 
 export function parseMipsFormatLine(line: string): MipsFormatLine {
-  const cst = parseMipsCstLine(line, 0);
-  if (cst.kind === 'blank') {
+  const parsed = parseMipsSourceLine(line, 0);
+  if (parsed.kind === 'blank') {
     return { kind: 'blank' };
   }
-  if (cst.kind === 'comment') {
-    return { kind: 'comment', comment: normalizeMipsComment(cst.comment?.value ?? '') };
+  if (parsed.kind === 'comment') {
+    return { kind: 'comment', comment: normalizeMipsComment(parsed.comment?.value ?? '') };
   }
   return {
     kind: 'statement',
-    labels: cst.labels.map((label) => label.name),
-    executable: cst.executable
+    labels: parsed.labels.map((label) => label.name),
+    executable: parsed.executable
       ? {
-        kind: cst.executable.kind === 'directive' ? 'directive' : 'instruction',
-        mnemonic: cst.executable.mnemonic,
-        operandText: normalizeMipsOperandText(cst.executable.operandText),
-        operands: cst.executable.operands.map((operand) => operand.text)
+        kind: parsed.executable.kind === 'directive' ? 'directive' : 'instruction',
+        mnemonic: parsed.executable.mnemonic,
+        operandText: normalizeMipsOperandText(parsed.executable.operandText),
+        operands: parsed.executable.operands.map((operand) => operand.text)
       }
       : undefined,
-    comment: cst.comment ? normalizeMipsComment(cst.comment.value) : undefined
+    comment: parsed.comment ? normalizeMipsComment(parsed.comment.value) : undefined
   };
 }
 

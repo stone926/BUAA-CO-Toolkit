@@ -4,6 +4,9 @@ import {
   parseOperands,
   parseMacroArguments,
   parseMipsCstDocument,
+  parseMipsCstLine,
+  parseMipsSourceDocument,
+  parseMipsSourceLine,
   formatMipsLine,
   findCommentIndex,
   getStringRanges,
@@ -17,7 +20,9 @@ import {
   isCharLiteral,
   isSymbolLike,
   signed32ImmediateValue,
-  integerFitsRange
+  integerFitsRange,
+  mipsCstRange,
+  mipsParsedRange
 } from '../../../language/mips/syntax';
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -558,6 +563,33 @@ describe('parseMipsCstDocument', () => {
     const charTokens = line.tokens.filter((token) => token.value.startsWith('\''));
     expect(charTokens.map((token) => token.kind)).toEqual(['number', 'number', 'number']);
     expect(line.executable?.operands.map((operand) => operand.text)).toEqual(["'a'", "'\\n'", "'\\377'"]);
+  });
+});
+
+describe('parseMipsSourceDocument', () => {
+  it('captures labels, ranges, operands, strings, and comments through the parsed source API', () => {
+    const parsed = parseMipsSourceDocument('main: loop: add $t0, 4($sp), "a#b" # comment');
+    const line = parsed.lines[0];
+
+    expect(line.kind).toBe('statement');
+    if (line.kind !== 'statement') {
+      return;
+    }
+    expect(line.labels.map((label) => label.name)).toEqual(['main', 'loop']);
+    expect(line.labels[0].range).toEqual({ start: 0, end: 4 });
+    expect(line.executable?.mnemonic).toBe('add');
+    expect(line.executable?.range).toEqual({ start: 12, end: 15 });
+    expect(line.executable?.operands.map((operand) => operand.text)).toEqual(['$t0', '4($sp)', '"a#b"']);
+    expect(line.comment?.value).toBe('# comment');
+    expect(line.tokens.filter((token) => token.kind === 'comment')).toHaveLength(1);
+  });
+
+  it('keeps legacy cst wrappers equivalent to parsed source helpers', () => {
+    const text = 'main: add $t0, $t1, $t2 # comment';
+
+    expect(parseMipsCstDocument(text)).toEqual(parseMipsSourceDocument(text));
+    expect(parseMipsCstLine(text, 3)).toEqual(parseMipsSourceLine(text, 3));
+    expect(mipsCstRange(3, { start: 6, end: 9 })).toEqual(mipsParsedRange(3, { start: 6, end: 9 }));
   });
 });
 
