@@ -1,7 +1,7 @@
-import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lexVerilogCst, VerilogLexDiagnostic, VerilogToken } from './lexer';
 import { collectVerilogStatementSources, VerilogStatementSource } from './statementParser';
+export { verilogTokenRange } from './tokenUtils';
 
 export type VerilogCstStatement = VerilogStatementSource;
 
@@ -21,8 +21,4 @@ export function parseVerilogCst(document: TextDocument, text = document.getText(
     diagnostics: lexed.diagnostics,
     statements: collectVerilogStatementSources(document, codeTokens)
   };
-}
-
-export function verilogTokenRange(document: TextDocument, token: VerilogToken): Range {
-  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }

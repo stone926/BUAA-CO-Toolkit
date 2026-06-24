@@ -1,4 +1,10 @@
+import { Range } from 'vscode-languageserver/node';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { VerilogToken } from './lexer';
+
+export function verilogTokenRange(document: TextDocument, token: VerilogToken): Range {
+  return Range.create(document.positionAt(token.start), document.positionAt(token.end));
+}
 
 export function trimEofTokens(tokens: VerilogToken[]): VerilogToken[] {
   return tokens.filter((token) => token.kind !== 'eof');

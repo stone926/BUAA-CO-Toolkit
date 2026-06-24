@@ -2,7 +2,6 @@ import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
-import { verilogTokenRange } from './cst';
 import { VerilogToken } from './lexer';
 import {
   systemTasks,
@@ -26,7 +25,8 @@ import {
   findMatchingTokenForward as findMatchingToken,
   findTopLevelToken as firstTopLevelToken,
   splitTopLevelTokens as splitTopLevel,
-  trimTrailingSemicolonTokens
+  trimTrailingSemicolonTokens,
+  verilogTokenRange
 } from './tokenUtils';
 
 export type VerilogSemanticSymbolKind =
