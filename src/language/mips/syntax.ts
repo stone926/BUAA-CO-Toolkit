@@ -20,6 +20,11 @@ export function stripComment(line: string): string {
   return idx >= 0 ? line.slice(0, idx) : line;
 }
 
+/**
+ * @deprecated Use `parseMipsSourceDocument` / `parseMipsOperandNodes` and consume
+ * typed `MipsOperandAst` values in language features. This helper is retained
+ * only for legacy callers that need comma-split operand text.
+ */
 export function parseOperands(text: string): string[] {
   if (!text) {
     return [];
@@ -150,17 +155,29 @@ export interface MipsParsedDocument {
   lines: MipsParsedLine[];
 }
 
+/** @deprecated Use `MipsParsedRange`. */
 export type CstRange = MipsParsedRange;
+/** @deprecated Use `MipsParsedTokenKind`. */
 export type MipsCstTokenKind = MipsParsedTokenKind;
+/** @deprecated Use `MipsParsedToken`. */
 export type MipsCstToken = MipsParsedToken;
+/** @deprecated Use `MipsParsedLabel`. */
 export type MipsCstLabel = MipsParsedLabel;
+/** @deprecated Use `MipsParsedOperand`. */
 export type MipsCstOperand = MipsParsedOperand;
+/** @deprecated Use `MipsParsedExecutable`. */
 export type MipsCstExecutable = MipsParsedExecutable;
+/** @deprecated Use `MipsParsedBaseLine`. */
 export type MipsCstBaseLine = MipsParsedBaseLine;
+/** @deprecated Use `MipsParsedBlankLine`. */
 export type MipsCstBlankLine = MipsParsedBlankLine;
+/** @deprecated Use `MipsParsedCommentLine`. */
 export type MipsCstCommentLine = MipsParsedCommentLine;
+/** @deprecated Use `MipsParsedStatementLine`. */
 export type MipsCstStatementLine = MipsParsedStatementLine;
+/** @deprecated Use `MipsParsedLine`. */
 export type MipsCstLine = MipsParsedLine;
+/** @deprecated Use `MipsParsedDocument`. */
 export type MipsCstDocument = MipsParsedDocument;
 
 interface TextSpan {
@@ -176,6 +193,7 @@ export function parseMipsSourceDocument(text: string): MipsParsedDocument {
   };
 }
 
+/** @deprecated Use `parseMipsSourceDocument`. */
 export function parseMipsCstDocument(text: string): MipsCstDocument {
   return parseMipsSourceDocument(text);
 }
@@ -227,6 +245,7 @@ export function parseMipsSourceLine(text: string, lineNumber = 0): MipsParsedLin
   };
 }
 
+/** @deprecated Use `parseMipsSourceLine`. */
 export function parseMipsCstLine(text: string, lineNumber = 0): MipsCstLine {
   return parseMipsSourceLine(text, lineNumber);
 }
@@ -235,6 +254,7 @@ export function mipsParsedTokenRange(token: MipsParsedToken): Range {
   return Range.create(token.line, token.start, token.line, token.end);
 }
 
+/** @deprecated Use `mipsParsedTokenRange`. */
 export function mipsCstTokenRange(token: MipsCstToken): Range {
   return mipsParsedTokenRange(token);
 }
@@ -243,6 +263,7 @@ export function mipsParsedRange(line: number, range: MipsParsedRange): Range {
   return Range.create(line, range.start, line, range.end);
 }
 
+/** @deprecated Use `mipsParsedRange`. */
 export function mipsCstRange(line: number, range: CstRange): Range {
   return mipsParsedRange(line, range);
 }

@@ -3,8 +3,10 @@ import { lexVerilogCst, VerilogLexDiagnostic, VerilogToken } from './lexer';
 import { collectVerilogStatementSources, VerilogStatementSource } from './statementParser';
 export { verilogTokenRange } from './tokenUtils';
 
+/** @deprecated Use `VerilogStatementSource` from `statementParser`. */
 export type VerilogCstStatement = VerilogStatementSource;
 
+/** @deprecated Use `parseVerilog` / `VerilogAstDocument` for language features. */
 export interface VerilogCstDocument {
   tokens: VerilogToken[];
   codeTokens: VerilogToken[];
@@ -12,6 +14,7 @@ export interface VerilogCstDocument {
   statements: VerilogCstStatement[];
 }
 
+/** @deprecated Use `parseVerilog` and consume the AST/model. */
 export function parseVerilogCst(document: TextDocument, text = document.getText()): VerilogCstDocument {
   const lexed = lexVerilogCst(text);
   const codeTokens = lexed.tokens.filter((token) => token.kind !== 'comment');

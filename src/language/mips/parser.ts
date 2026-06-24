@@ -64,7 +64,6 @@ export {
   isInsideAnyRange,
   parseIntegerLiteral,
   parseMacroArguments,
-  parseOperands,
   stripComment
 } from './syntax';
 
