@@ -9,7 +9,7 @@ import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp'
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
 import { buildMipsAst } from './ast';
-import type { MipsOperandAst, MipsStatementAst } from './ast';
+import type { MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
 import {
   instructionWritesRegister,
   isMacroArgumentToken,
@@ -42,7 +42,7 @@ import {
   resolveMipsSemanticMacroParamAtPosition,
   resolveMipsSemanticSymbolAtPosition
 } from './semantic';
-import type { CstRange, MipsCstExecutable, MipsCstStatementLine } from './syntax';
+import type { MipsCstStatementLine } from './syntax';
 import type {
   MipsLabelReference,
   MipsLine,
@@ -150,11 +150,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       continue;
     }
 
-    if (executable.lowerMnemonic === '.eqv') {
-      const eqvName = firstDirectiveSymbolOperand(executable);
+    if (executableAst.lowerMnemonic === '.eqv') {
+      const eqvName = firstDirectiveSymbolOperand(executableAst);
       if (eqvName) {
         const name = eqvName.text;
-        const selectionRange = mipsCstRange(lineNumber, eqvName.range);
+        const selectionRange = eqvName.range;
         const symbol: MipsSymbol = {
           name,
           kind: 'eqv',
@@ -177,11 +177,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       section = targetSection as MipsSection;
     }
 
-    const macroStart = executable.lowerMnemonic === '.macro' ? parseMacroDefinition(executable) : undefined;
+    const macroStart = executableAst.lowerMnemonic === '.macro' ? parseMacroDefinition(executableAst) : undefined;
     if (macroStart) {
       const name = macroStart.name;
       const params = macroStart.params.map((param) => param.name);
-      const selectionRange = mipsCstRange(lineNumber, macroStart.nameRange);
+      const selectionRange = macroStart.nameRange;
       validateMacroHeader(document, lineNumber, name, params, selectionRange, diagnostics);
       const macro: MipsMacro = {
         name,
@@ -211,14 +211,14 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       activeMacro = macro;
       for (const param of macroStart.params) {
         if (macro.paramSymbols.has(param.name)) {
-          diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, param.range), `重复的宏参数 '${param.name}'`, DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
+          diagnostics.push(makeDiagnostic(param.range, `重复的宏参数 '${param.name}'`, DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
           continue;
         }
         macro.paramSymbols.set(param.name, {
           name: param.name,
           kind: 'macroParam',
           range: lineAt(document, lineNumber).range,
-          selectionRange: mipsCstRange(lineNumber, param.range),
+          selectionRange: param.range,
           macroName: macro.name
         });
       }
@@ -247,7 +247,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       if (!directives.has(mnemonic)) {
         diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, executable.range), `未知的指令 '${executable.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-directive'));
       }
-      validateDirective(document, lineNumber, executable, section, profile, activeMacro, diagnostics);
+      validateDirective(document, lineNumber, statement, section, profile, activeMacro, diagnostics);
       activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
         ? mnemonic
         : undefined;
@@ -380,17 +380,17 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
 interface ParsedMacroDefinition {
   name: string;
-  nameRange: CstRange;
-  params: Array<{ name: string; range: CstRange }>;
+  nameRange: Range;
+  params: Array<{ name: string; range: Range }>;
 }
 
 interface ParsedSymbolOperand {
   text: string;
-  range: CstRange;
+  range: Range;
 }
 
-function firstDirectiveSymbolOperand(executable: MipsCstExecutable): ParsedSymbolOperand | undefined {
-  const base = executable.operandRange?.start ?? executable.range.end;
+function firstDirectiveSymbolOperand(executable: MipsExecutableAst): ParsedSymbolOperand | undefined {
+  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
   let offset = 0;
   while (offset < executable.operandText.length && isAsciiWhitespace(executable.operandText[offset])) {
     offset++;
@@ -405,12 +405,17 @@ function firstDirectiveSymbolOperand(executable: MipsCstExecutable): ParsedSymbo
   }
   return {
     text: executable.operandText.slice(start, offset),
-    range: { start: base + start, end: base + offset }
+    range: Range.create(
+      executable.range.start.line,
+      base + start,
+      executable.range.start.line,
+      base + offset
+    )
   };
 }
 
-function parseMacroDefinition(executable: MipsCstExecutable): ParsedMacroDefinition | undefined {
-  const base = executable.operandRange?.start ?? executable.range.end;
+function parseMacroDefinition(executable: MipsExecutableAst): ParsedMacroDefinition | undefined {
+  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
   const text = executable.operandText;
   let offset = skipAsciiWhitespace(text, 0);
   const nameStart = offset;
@@ -445,7 +450,12 @@ function parseMacroDefinition(executable: MipsCstExecutable): ParsedMacroDefinit
       const normalized = raw.startsWith('%') || raw.startsWith('$') ? raw : `%${raw}`;
       params.push({
         name: normalized,
-        range: { start: base + rawStart, end: base + rawEnd }
+        range: Range.create(
+          executable.range.start.line,
+          base + rawStart,
+          executable.range.start.line,
+          base + rawEnd
+        )
       });
     }
     paramStart = index + 1;
@@ -453,7 +463,12 @@ function parseMacroDefinition(executable: MipsCstExecutable): ParsedMacroDefinit
   }
   return {
     name,
-    nameRange: { start: base + nameStart, end: base + offset },
+    nameRange: Range.create(
+      executable.range.start.line,
+      base + nameStart,
+      executable.range.start.line,
+      base + offset
+    ),
     params
   };
 }
@@ -481,15 +496,19 @@ function skipOperandSeparator(text: string, offset: number): number {
 function validateDirective(
   document: TextDocument,
   lineNumber: number,
-  executable: MipsCstExecutable,
+  statement: MipsStatementAst,
   section: MipsSection,
   profile: CoSettings['project']['profile'],
   activeMacro: MipsMacro | undefined,
   diagnostics: Diagnostic[]
 ): void {
+  const executable = statement.executable;
+  if (!executable) {
+    return;
+  }
   const directive = executable.lowerMnemonic;
   const operandText = executable.operandText;
-  const directiveRange = mipsCstRange(lineNumber, executable.range);
+  const directiveRange = executable.mnemonicRange;
   if (STORAGE_DIRECTIVES.has(directive) && section !== 'data') {
     diagnostics.push(makeDiagnostic(directiveRange, `${directive} can only be used in a data segment. Switch to .data first.`, DiagnosticSeverity.Error, 'directive-segment'));
   }
@@ -613,7 +632,7 @@ function validateMacroHeader(document: TextDocument, lineNumber: number, name: s
   }
 }
 
-function validateMacroDirectiveSyntax(document: TextDocument, lineNumber: number, executable: MipsCstExecutable, diagnostics: Diagnostic[]): void {
+function validateMacroDirectiveSyntax(document: TextDocument, lineNumber: number, executable: MipsExecutableAst, diagnostics: Diagnostic[]): void {
   if (!parseMacroDefinition(executable)) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, '.macro'), '.macro expects a macro name and optional formal parameters.', DiagnosticSeverity.Error, 'macro-header'));
   }
@@ -764,15 +783,16 @@ function validateExternDirective(document: TextDocument, lineNumber: number, ope
   }
 }
 
-function validateEqvDirective(document: TextDocument, lineNumber: number, executable: MipsCstExecutable, diagnostics: Diagnostic[]): void {
+function validateEqvDirective(document: TextDocument, lineNumber: number, executable: MipsExecutableAst, diagnostics: Diagnostic[]): void {
   const operand = firstDirectiveSymbolOperand(executable);
-  const replacementStart = operand ? skipOperandSeparator(executable.operandText, operand.range.end - (executable.operandRange?.start ?? 0)) : -1;
+  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
+  const replacementStart = operand ? skipOperandSeparator(executable.operandText, operand.range.end.character - base) : -1;
   if (!operand || replacementStart < 0 || replacementStart >= executable.operandText.length) {
     diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, '.eqv'), '.eqv expects an identifier and a replacement sequence.', DiagnosticSeverity.Error, 'directive-operand'));
     return;
   }
   if (isReservedIdentifier(operand.text)) {
-    diagnostics.push(makeDiagnostic(mipsCstRange(lineNumber, operand.range), `.eqv identifier '${operand.text}' conflicts with a reserved MIPS word.`, DiagnosticSeverity.Error, 'reserved-symbol'));
+    diagnostics.push(makeDiagnostic(operand.range, `.eqv identifier '${operand.text}' conflicts with a reserved MIPS word.`, DiagnosticSeverity.Error, 'reserved-symbol'));
   }
 }
 
