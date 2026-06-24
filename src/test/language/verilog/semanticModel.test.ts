@@ -161,6 +161,24 @@ describe('Verilog AST and semantic model', () => {
     expect(portConnectionUse?.symbol?.name).toBe('tmp');
   });
 
+  it('collects references from malformed expression ASTs without token fallback', () => {
+    const text = [
+      'module child(input a);',
+      'endmodule',
+      'module top(input src);',
+      '    wire tmp = src + ;',
+      '    child u_child(.a(tmp + ));',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const initializerUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('src +')));
+    const connectionUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('tmp +')));
+
+    expect(initializerUse?.symbol?.name).toBe('src');
+    expect(connectionUse?.symbol?.name).toBe('tmp');
+  });
+
   it('collects declaration width AST references in ports and body declarations', () => {
     const text = [
       'module widths #(parameter W = 4)(input [W-1:0] in, output out);',

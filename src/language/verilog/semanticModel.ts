@@ -17,7 +17,7 @@ import {
 } from './model';
 import { VerilogAstDocument, VerilogModuleAst } from './ast';
 import type { VerilogProceduralBlockAst } from './blockAst';
-import { parseVerilogExpression } from './exprAst';
+import { parseVerilogExpressionTokens } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
@@ -367,9 +367,6 @@ function collectReferences(
       const initScope = scopeAtPosition(scope, blockScopes, decl.initializerRange.start);
       if (decl.initializerAst) {
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, initScope, module, decl.initializerAst, 0);
-      } else {
-        collectReferencesFromExpressionText(document, references, declarationRangeKeys, initScope, module, decl.initializer, decl.initializerRange);
-        collectReferencesFromRange(document, source, references, declarationRangeKeys, initScope, module, decl.initializerRange);
       }
     }
 
@@ -972,25 +969,7 @@ function collectReferencesFromConnectionExpression(
   }
   if (connection.expressionAst) {
     collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, connection.expressionAst, 0);
-    return;
   }
-  collectReferencesFromExpressionText(document, references, declarationRangeKeys, scope, module, connection.expression, connection.expressionRange);
-  collectReferencesFromRange(document, source, references, declarationRangeKeys, scope, module, connection.expressionRange);
-}
-
-function collectReferencesFromRange(
-  document: TextDocument,
-  source: VerilogSemanticSource,
-  references: VerilogSemanticReference[],
-  declarationRangeKeys: Set<string>,
-  scope: VerilogSemanticScope,
-  module: VerilogModule,
-  range: Range
-): void {
-  const start = document.offsetAt(range.start);
-  const end = document.offsetAt(range.end);
-  const tokens = source.ast.cst.codeTokens.filter((token) => token.start >= start && token.end <= end);
-  collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, tokens);
 }
 
 function collectReferencesFromExpressionTokens(
@@ -1005,42 +984,11 @@ function collectReferencesFromExpressionTokens(
   if (!expressionTokens.length) {
     return;
   }
-  const text = document.getText(Range.create(
-    document.positionAt(expressionTokens[0].start),
-    document.positionAt(expressionTokens[expressionTokens.length - 1].end)
-  ));
-  const expression = parseVerilogExpression(text);
+  const expression = parseVerilogExpressionTokens(expressionTokens);
   if (!expression) {
     return;
   }
-  collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, expressionTokens[0].start);
-}
-
-function collectReferencesFromExpressionText(
-  document: TextDocument,
-  references: VerilogSemanticReference[],
-  declarationRangeKeys: Set<string>,
-  scope: VerilogSemanticScope,
-  module: VerilogModule,
-  text: string,
-  range: Range
-): void {
-  if (!text.trim()) {
-    return;
-  }
-  const expression = parseVerilogExpression(text);
-  if (!expression) {
-    return;
-  }
-  collectReferencesFromExpressionAst(
-    document,
-    references,
-    declarationRangeKeys,
-    scope,
-    module,
-    expression,
-    expressionBaseOffset(document, range, text)
-  );
+  collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
 }
 
 function collectReferencesFromExpressionAst(
@@ -1127,12 +1075,6 @@ function rangeKeysForReferences(references: VerilogSemanticReference[]): Set<str
   return keys;
 }
 
-function expressionBaseOffset(document: TextDocument, range: Range, expressionText: string): number {
-  const rangeStart = document.offsetAt(range.start);
-  const rangeText = document.getText(range);
-  const index = rangeText.indexOf(expressionText);
-  return rangeStart + Math.max(0, index);
-}
 
 function addSymbol(scope: VerilogSemanticScope, symbol: VerilogSemanticSymbol): VerilogSemanticSymbol {
   const entries = scope.symbols.get(symbol.name) ?? [];
