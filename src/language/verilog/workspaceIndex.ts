@@ -7,7 +7,6 @@ import { rangesEqual } from '../common/lsp';
 import { CoSettings, defaultCoSettings } from '../common/settings';
 import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse } from './parseCache';
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule, VerilogPortConnection } from './model';
-import { VerilogCstDocument } from './cst';
 import { VerilogSemanticModel, VerilogSemanticSymbol, VerilogSemanticSymbolKind } from './semanticModel';
 import { yieldEventLoop } from '../../nodeFs';
 import { extractVerilogDisplayFormats } from './displayFormats';
@@ -25,7 +24,6 @@ export interface VerilogIndexedFile {
   macroUses: VerilogMacroUse[];
   includes: VerilogInclude[];
   displayFormats: string[];
-  cst: VerilogCstDocument;
   semantic: VerilogSemanticModel;
 }
 
@@ -150,7 +148,6 @@ export class VerilogWorkspaceIndex {
       macroUses: parsed.macroUses,
       includes: parsed.includes,
       displayFormats: extractVerilogDisplayFormats(text),
-      cst: parsed.cst,
       semantic: parsed.semantic
     };
     this.files.set(document.uri, file);

@@ -29,7 +29,6 @@ export function parseVerilog(document: TextDocument, settings: CoSettings, inclu
   const parsed: VerilogParseResult = {
     ast,
     semantic,
-    cst,
     modules,
     macros,
     macroUses,

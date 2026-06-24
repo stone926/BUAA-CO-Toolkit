@@ -1,7 +1,6 @@
 import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
 import type { VerilogAstDocument } from './ast';
 import type { VerilogSemanticModel } from './semanticModel';
-import type { VerilogCstDocument } from './cst';
 import type { VerilogExpressionAst } from './exprAst';
 
 export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar' | 'task' | 'function';
@@ -100,7 +99,6 @@ export interface VerilogDirective {
 export interface VerilogParseResult {
   ast: VerilogAstDocument;
   semantic: VerilogSemanticModel;
-  cst: VerilogCstDocument;
   modules: VerilogModule[];
   macros: VerilogMacro[];
   macroUses: VerilogMacroUse[];
