@@ -85,6 +85,25 @@ describe('MIPS instruction-backed language features', () => {
     });
   });
 
+  it('builds semantic tokens from AST ranges for literals, comments, punctuation, and references', () => {
+    const source = [
+      'msg: .asciiz "hi" # comment',
+      'main: lw $t0, msg+4($sp)'
+    ].join('\n');
+    const semantic = decode(getMipsSemanticTokens(doc(source), mergeCoSettings({}), state()).data);
+    const stringType = mipsSemanticTokenTypes.indexOf('mipsString');
+    const commentType = mipsSemanticTokenTypes.indexOf('mipsComment');
+    const punctuationType = mipsSemanticTokenTypes.indexOf('mipsPunctuation');
+    const numberType = mipsSemanticTokenTypes.indexOf('mipsNumber');
+    const labelType = mipsSemanticTokenTypes.indexOf('mipsLabel');
+
+    expect(semantic).toContainEqual({ line: 0, character: 13, length: 4, type: stringType });
+    expect(semantic).toContainEqual({ line: 0, character: 18, length: 9, type: commentType });
+    expect(semantic).toContainEqual({ line: 1, character: 12, length: 1, type: punctuationType });
+    expect(semantic).toContainEqual({ line: 1, character: 17, length: 2, type: numberType });
+    expect(semantic).toContainEqual({ line: 1, character: 14, length: 3, type: labelType });
+  });
+
   it('uses prefix AST context for syscall and CP0 operand completions', () => {
     const settings = mergeCoSettings({});
     const syscallDocument = doc('li $v0, ');
