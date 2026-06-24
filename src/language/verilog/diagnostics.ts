@@ -18,7 +18,6 @@ import {
   VerilogInclude,
   VerilogModule
 } from './model';
-import { VerilogCstDocument } from './cst';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import { parameterOverridesForInstance } from './parameterOverrides';
 import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
@@ -38,12 +37,11 @@ export function collectVerilogDiagnostics(
   text: string,
   modules: VerilogModule[],
   includes: VerilogInclude[],
-  cst: VerilogCstDocument,
   ast: VerilogAstDocument,
   semantic: VerilogSemanticModel
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  collectSyntaxDiagnostics(document, cst, ast, modules, diagnostics);
+  collectSyntaxDiagnostics(document, ast, modules, diagnostics);
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(document, modules, diagnostics);

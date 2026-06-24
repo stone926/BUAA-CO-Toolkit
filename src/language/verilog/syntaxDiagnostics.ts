@@ -3,7 +3,6 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic, rangeAtOffset } from '../common/lsp';
 import { VerilogModule } from './model';
 import { VerilogToken } from './lexer';
-import { VerilogCstDocument } from './cst';
 import { parseVerilogSyntax } from './syntaxParser';
 import { VerilogAstDocument } from './ast';
 import { verilogAstCodeTokens } from './astTokens';
@@ -61,13 +60,12 @@ const bodyBoundaryKeywords = new Set([
 
 export function collectSyntaxDiagnostics(
   document: TextDocument,
-  cst: VerilogCstDocument,
   ast: VerilogAstDocument,
   modules: VerilogModule[],
   diagnostics: Diagnostic[]
 ): void {
   const tokens = verilogAstCodeTokens(ast);
-  for (const diagnostic of cst.diagnostics) {
+  for (const diagnostic of ast.lexicalDiagnostics) {
     diagnostics.push(makeDiagnostic(
       rangeAtOffset(document, diagnostic.start, Math.max(1, diagnostic.end - diagnostic.start)),
       diagnostic.message,

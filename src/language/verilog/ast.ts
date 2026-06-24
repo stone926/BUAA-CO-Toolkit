@@ -4,7 +4,7 @@ import {
   VerilogCstDocument,
   VerilogCstStatement
 } from './cst';
-import { VerilogToken } from './lexer';
+import { VerilogLexDiagnostic, VerilogToken } from './lexer';
 import {
   VerilogDecl,
   VerilogDirective,
@@ -29,6 +29,7 @@ export interface VerilogAstDocument {
   range: Range;
   cst: VerilogCstDocument;
   tokens: VerilogToken[];
+  lexicalDiagnostics: VerilogLexDiagnostic[];
   trivia: VerilogTriviaAst[];
   preprocessor: VerilogPreprocessorAst[];
   modules: VerilogModuleAst[];
@@ -173,6 +174,7 @@ export function buildVerilogAst(
     range: documentRange(document),
     cst,
     tokens: cst.codeTokens,
+    lexicalDiagnostics: cst.diagnostics,
     trivia: cst.tokens
       .filter((token): token is VerilogToken & { kind: 'comment' | 'string' } => token.kind === 'comment' || token.kind === 'string')
       .map((token): VerilogTriviaAst => ({
