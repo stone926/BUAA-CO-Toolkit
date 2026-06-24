@@ -75,7 +75,7 @@ export function collectCourseStyleDiagnostics(
   collectTestbenchDiagnostics(document, settings, text, ast, diagnostics);
 }
 
-export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, text: string, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
   for (const module of modules) {
     const moduleStart = document.offsetAt(module.range.start);
     const moduleEnd = document.offsetAt(module.range.end);
@@ -96,17 +96,15 @@ export function collectSynthesizableHintDiagnostics(document: TextDocument, sett
         diagnostics.push(makeDiagnostic(tokenRange(document, token), 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
       }
     }
-  }
-  for (const statement of cst.statements) {
-    const tokens = trimStatementTokens(statement.tokens);
-    if (!tokens.length || !['reg', 'logic', 'integer'].includes(tokens[0].value)) {
-      continue;
-    }
-    if (findTopLevelToken(tokens, '=') >= 0) {
-      diagnostics.push(makeDiagnostic(tokenRange(document, tokens[0]), 'Synthesizable style: avoid declaration initializers for registers; reset them in clocked logic.', DiagnosticSeverity.Information, 'synth-decl-init'));
+    for (const decl of module.declarations.values()) {
+      if (registerInitializerKinds.has(decl.kind) && decl.initializerRange) {
+        diagnostics.push(makeDiagnostic(decl.selectionRange, 'Synthesizable style: avoid declaration initializers for registers; reset them in clocked logic.', DiagnosticSeverity.Information, 'synth-decl-init'));
+      }
     }
   }
 }
+
+const registerInitializerKinds = new Set(['reg', 'logic', 'integer']);
 
 export function collectImplicitNetDiagnostics(
   settings: CoSettings,

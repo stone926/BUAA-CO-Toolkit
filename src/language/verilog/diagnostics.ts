@@ -56,7 +56,7 @@ export function collectVerilogDiagnostics(
     collectCourseStyleDiagnostics(document, settings, text, modules, cst, ast, diagnostics);
   }
   if (settings.verilog.lint.synthesizableHints) {
-    collectSynthesizableHintDiagnostics(document, settings, text, modules, cst, diagnostics);
+    collectSynthesizableHintDiagnostics(document, settings, modules, cst, diagnostics);
   }
   collectExplicitPortNetTypeDiagnostics(document, modules, cst, diagnostics);
   collectImplicitNetDiagnostics(settings, diagnostics, semantic);
