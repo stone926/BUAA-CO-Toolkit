@@ -160,4 +160,28 @@ describe('Verilog AST and semantic model', () => {
     expect(parameterConnectionUse?.symbol?.name).toBe('W2');
     expect(portConnectionUse?.symbol?.name).toBe('tmp');
   });
+
+  it('collects procedural AST references in controls, conditions, and assignments', () => {
+    const text = [
+      'module proc(input clk, input a, input [1:0] sel, output reg y);',
+      '    always @(posedge clk) begin',
+      '        if (a) begin',
+      '            y <= sel[0];',
+      '        end else begin',
+      '            y <= clk;',
+      '        end',
+      '    end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+
+    const clockUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('clk) begin')));
+    const conditionUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('if (a)') + 4));
+    const rhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('sel[0]')));
+
+    expect(clockUse?.symbol?.name).toBe('clk');
+    expect(conditionUse?.symbol?.name).toBe('a');
+    expect(rhsUse?.symbol?.name).toBe('sel');
+  });
 });

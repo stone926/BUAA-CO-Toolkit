@@ -16,9 +16,11 @@ import {
   verilogKeywords
 } from './model';
 import { VerilogAstDocument } from './ast';
+import type { VerilogProceduralBlockAst } from './blockAst';
 import { parseVerilogExpression } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
+import type { VerilogProceduralStatementAst } from './proceduralAst';
 import {
   findMatchingTokenForward as findMatchingToken,
   findTopLevelToken as firstTopLevelToken,
@@ -782,8 +784,17 @@ function collectAstDrivenModuleReferences(
   moduleEnd: number
 ): void {
   const moduleAst = source.ast.modules.find((item) => item.module === module);
+  const proceduralBlocks = moduleAst?.proceduralBlocks ?? [];
   for (const statement of source.ast.cst.statements) {
     if (statement.start < moduleStart || statement.end > moduleEnd) {
+      continue;
+    }
+    const block = moduleAst ? proceduralBlockForStatement(document, statement.start, proceduralBlocks) : undefined;
+    if (block) {
+      collectReferencesFromProceduralBlockAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block);
+      continue;
+    }
+    if (isInsideProceduralBlockBody(document, statement.start, statement.end, proceduralBlocks)) {
       continue;
     }
     const tokens = statement.tokens.filter((token) => token.kind !== 'eof');
@@ -813,8 +824,98 @@ function collectAstDrivenModuleReferences(
       for (const expression of statementAst.expressions) {
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
       }
+      if (statementAst.expressions.length > 0) {
+        continue;
+      }
     }
     collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, tokens);
+  }
+}
+
+function proceduralBlockForStatement(document: TextDocument, start: number, blocks: VerilogProceduralBlockAst[]): VerilogProceduralBlockAst | undefined {
+  return blocks.find((block) => blockStartsAt(document, block, start));
+}
+
+function isInsideProceduralBlockBody(document: TextDocument, start: number, end: number, blocks: VerilogProceduralBlockAst[]): boolean {
+  return blocks.some((block) => !blockStartsAt(document, block, start) && start >= block.bodyStart && end <= block.bodyEnd);
+}
+
+function blockStartsAt(document: TextDocument, block: VerilogProceduralBlockAst, offset: number): boolean {
+  return document.offsetAt(block.range.start) === offset;
+}
+
+function collectReferencesFromProceduralBlockAst(
+  document: TextDocument,
+  source: VerilogSemanticSource,
+  references: VerilogSemanticReference[],
+  declarationRangeKeys: Set<string>,
+  module: VerilogModule,
+  moduleScope: VerilogSemanticScope,
+  blockScopes: VerilogSemanticScope[],
+  block: VerilogProceduralBlockAst
+): void {
+  const controlScope = scopeAtPosition(moduleScope, blockScopes, block.headerRange.start);
+  collectReferencesFromTokens(document, source, references, declarationRangeKeys, controlScope, module, block.controlTokens);
+  collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block.statementTree);
+}
+
+function collectReferencesFromProceduralStatementAst(
+  document: TextDocument,
+  source: VerilogSemanticSource,
+  references: VerilogSemanticReference[],
+  declarationRangeKeys: Set<string>,
+  module: VerilogModule,
+  moduleScope: VerilogSemanticScope,
+  blockScopes: VerilogSemanticScope[],
+  statement: VerilogProceduralStatementAst
+): void {
+  const scope = scopeAtPosition(moduleScope, blockScopes, statement.range.start);
+  switch (statement.kind) {
+    case 'block':
+      for (const child of statement.statements) {
+        collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, child);
+      }
+      return;
+    case 'assignment':
+      if (statement.lhs && statement.rhs) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.lhs, 0);
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.rhs, 0);
+        return;
+      }
+      collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
+      return;
+    case 'if':
+      if (statement.condition) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.condition, 0);
+      }
+      collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.consequent);
+      if (statement.alternate) {
+        collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.alternate);
+      }
+      return;
+    case 'case':
+      if (statement.expression) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.expression, 0);
+      }
+      for (const item of statement.items) {
+        for (const label of item.labels) {
+          collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, label, 0);
+        }
+        collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, item.body);
+      }
+      return;
+    case 'loop':
+      if (statement.condition) {
+        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.condition, 0);
+      } else if (statement.controlTokens.length) {
+        collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.controlTokens);
+      }
+      collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
+      return;
+    case 'declaration':
+    case 'other':
+      collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
+      return;
   }
 }
 
