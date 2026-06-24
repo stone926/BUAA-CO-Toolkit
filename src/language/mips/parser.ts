@@ -330,7 +330,6 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   }
 
   const parsed: MipsParseCore = {
-    lines: cst.lines,
     labels,
     dataSymbols,
     eqvSymbols,
