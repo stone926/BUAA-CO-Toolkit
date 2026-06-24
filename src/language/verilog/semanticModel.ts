@@ -15,7 +15,7 @@ import {
   VerilogPortConnection,
   verilogKeywords
 } from './model';
-import { VerilogAstDocument } from './ast';
+import { VerilogAstDocument, VerilogModuleAst } from './ast';
 import type { VerilogProceduralBlockAst } from './blockAst';
 import { parseVerilogExpression } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
@@ -140,7 +140,7 @@ export function buildVerilogSemanticModel(source: VerilogSemanticSource): Verilo
     parent: fileScope
   }));
   fileScope.children.push(...moduleScopes);
-  const blockScopes = collectBlockScopes(source.document, source.ast.cst.codeTokens, source.modules, moduleScopes);
+  const blockScopes = collectBlockScopes(source.document, source.ast.modules, source.ast.cst.codeTokens, moduleScopes);
   const symbols = collectSymbols(source, fileScope, moduleScopes, blockScopes);
   const declarationRangeKeys = new Set(symbols.map((symbol) => rangeKey(symbol.selectionRange)));
   const references = collectReferences(source.document, source, fileScope, moduleScopes, blockScopes, declarationRangeKeys);
@@ -382,55 +382,122 @@ function collectReferences(
 
 function collectBlockScopes(
   document: TextDocument,
+  moduleAsts: VerilogModuleAst[],
   tokens: VerilogToken[],
-  modules: VerilogModule[],
   moduleScopes: VerilogSemanticScope[]
 ): VerilogSemanticScope[] {
   const result: VerilogSemanticScope[] = [];
-  for (const module of modules) {
+  for (const moduleAst of moduleAsts) {
+    const module = moduleAst.module;
     const moduleScope = moduleScopes.find((scope) => scope.module === module);
     if (!moduleScope) {
       continue;
     }
-    const moduleStart = document.offsetAt(module.headerEnd);
-    const moduleEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-    const moduleTokens = tokens.filter((token) => token.start >= moduleStart && token.start < moduleEnd && token.kind !== 'eof');
-    const stack: VerilogSemanticScope[] = [];
-    const parentScope = (): VerilogSemanticScope => stack[stack.length - 1] ?? moduleScope;
-    for (let index = 0; index < moduleTokens.length; index++) {
-      const token = moduleTokens[index];
-      if (token.value === 'for') {
-        const end = forScopeEnd(moduleTokens, index, moduleEnd);
-        const scope = makeBlockScope(document, module, parentScope(), token, end);
-        parentScope().children.push(scope);
-        result.push(scope);
-        continue;
+    for (const block of moduleAst.proceduralBlocks) {
+      result.push(...collectProceduralStatementBlockScopes(module, moduleScope, block.statementTree));
+    }
+    result.push(...collectSubroutineBlockScopes(document, tokens, module, moduleScope));
+  }
+  return result;
+}
+
+function collectProceduralStatementBlockScopes(
+  module: VerilogModule,
+  parent: VerilogSemanticScope,
+  statement: VerilogProceduralStatementAst
+): VerilogSemanticScope[] {
+  const result: VerilogSemanticScope[] = [];
+  const pushScope = (name: string, range: Range): VerilogSemanticScope => {
+    const scope = makeBlockScopeFromRange(module, parent, name, range);
+    parent.children.push(scope);
+    result.push(scope);
+    return scope;
+  };
+  switch (statement.kind) {
+    case 'block': {
+      const explicitBegin = statement.tokens[0]?.value === 'begin';
+      const scope = explicitBegin ? pushScope('begin', statement.range) : parent;
+      for (const child of statement.statements) {
+        result.push(...collectProceduralStatementBlockScopes(module, scope, child));
       }
-      const opener = blockScopeOpener(token.value);
-      if (opener) {
-        const scope = makeBlockScope(document, module, parentScope(), token, moduleEnd);
-        scope.name = opener;
-        parentScope().children.push(scope);
-        result.push(scope);
-        stack.push(scope);
-        continue;
+      return result;
+    }
+    case 'case': {
+      const scope = pushScope('case', statement.range);
+      for (const item of statement.items) {
+        result.push(...collectProceduralStatementBlockScopes(module, scope, item.body));
       }
-      const closer = blockScopeCloser(token.value);
-      if (!closer) {
-        continue;
+      return result;
+    }
+    case 'loop': {
+      const scope = statement.loopKind === 'for' ? pushScope('for', statement.range) : parent;
+      result.push(...collectProceduralStatementBlockScopes(module, scope, statement.body));
+      return result;
+    }
+    case 'if':
+      result.push(...collectProceduralStatementBlockScopes(module, parent, statement.consequent));
+      if (statement.alternate) {
+        result.push(...collectProceduralStatementBlockScopes(module, parent, statement.alternate));
       }
-      for (let cursor = stack.length - 1; cursor >= 0; cursor--) {
-        const candidate = stack[cursor];
-        if (candidate.name !== closer && !((closer === 'begin' || closer === 'case') && candidate.name === closer)) {
-          continue;
-        }
-        candidate.range = Range.create(candidate.range.start, document.positionAt(token.end));
-        stack.length = cursor;
-        break;
-      }
+      return result;
+    case 'assignment':
+    case 'declaration':
+    case 'other':
+      return result;
+  }
+}
+
+function collectSubroutineBlockScopes(
+  document: TextDocument,
+  tokens: VerilogToken[],
+  module: VerilogModule,
+  moduleScope: VerilogSemanticScope
+): VerilogSemanticScope[] {
+  const result: VerilogSemanticScope[] = [];
+  const moduleStart = document.offsetAt(module.headerEnd);
+  const moduleEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
+  const moduleTokens = tokens.filter((token) => token.start >= moduleStart && token.start < moduleEnd && token.kind !== 'eof');
+  for (let index = 0; index < moduleTokens.length; index++) {
+    const token = moduleTokens[index];
+    if (token.value !== 'task' && token.value !== 'function') {
+      continue;
+    }
+    const close = findSubroutineEndToken(moduleTokens, index);
+    const end = close >= 0 ? moduleTokens[close].end : moduleEnd;
+    const scope = makeBlockScopeFromRange(
+      module,
+      moduleScope,
+      token.value,
+      Range.create(document.positionAt(token.start), document.positionAt(end))
+    );
+    moduleScope.children.push(scope);
+    result.push(scope);
+    if (close >= 0) {
+      index = close;
     }
   }
   return result;
+}
+
+function findSubroutineEndToken(tokens: VerilogToken[], start: number): number {
+  const opener = tokens[start]?.value;
+  const closer = opener === 'task' ? 'endtask' : opener === 'function' ? 'endfunction' : undefined;
+  if (!closer) {
+    return -1;
+  }
+  let depth = 0;
+  for (let index = start; index < tokens.length; index++) {
+    const value = tokens[index].value;
+    if (value === opener) {
+      depth++;
+    } else if (value === closer) {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
 }
 
 const declarationKinds = new Set([
@@ -457,53 +524,6 @@ const declarationModifiers = new Set([
   'reg',
   'logic'
 ]);
-
-function blockScopeOpener(value: string): 'begin' | 'case' | 'task' | 'function' | undefined {
-  if (value === 'begin') {
-    return 'begin';
-  }
-  if (value === 'case' || value === 'casex' || value === 'casez') {
-    return 'case';
-  }
-  if (value === 'task' || value === 'function') {
-    return value;
-  }
-  return undefined;
-}
-
-function blockScopeCloser(value: string): 'begin' | 'case' | 'task' | 'function' | undefined {
-  if (value === 'end') {
-    return 'begin';
-  }
-  if (value === 'endcase') {
-    return 'case';
-  }
-  if (value === 'endtask') {
-    return 'task';
-  }
-  if (value === 'endfunction') {
-    return 'function';
-  }
-  return undefined;
-}
-
-function forScopeEnd(tokens: VerilogToken[], forIndex: number, moduleEnd: number): number {
-  const open = nextTokenValue(tokens, forIndex + 1, '(');
-  if (open < 0) {
-    return tokens[forIndex].end;
-  }
-  const close = findMatchingToken(tokens, open, '(', ')');
-  if (close < 0) {
-    return tokens[open].end;
-  }
-  const bodyStart = close + 1;
-  if (tokens[bodyStart]?.value === 'begin') {
-    const end = findMatchingToken(tokens, bodyStart, 'begin', 'end');
-    return end >= 0 ? tokens[end].end : moduleEnd;
-  }
-  const semicolon = findStatementSemicolon(tokens, bodyStart);
-  return semicolon >= 0 ? tokens[semicolon].end : tokens[close].end;
-}
 
 function splitBySemicolon(tokens: VerilogToken[]): VerilogToken[][] {
   const result: VerilogToken[][] = [];
@@ -582,31 +602,6 @@ function nextTokenValue(tokens: VerilogToken[], start: number, value: string): n
   return -1;
 }
 
-function findStatementSemicolon(tokens: VerilogToken[], start: number): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = start; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === ';' && paren === 0 && bracket === 0 && brace === 0) {
-      return index;
-    }
-  }
-  return -1;
-}
-
 function looksLikeInstanceStatement(module: VerilogModule, tokens: VerilogToken[]): boolean {
   const first = tokens[0];
   if (!first || !isIdentifierToken(first) || first.value === module.name) {
@@ -667,17 +662,16 @@ function referenceKindForSymbol(symbol: VerilogSemanticSymbol | undefined): Veri
   return 'signal';
 }
 
-function makeBlockScope(
-  document: TextDocument,
+function makeBlockScopeFromRange(
   module: VerilogModule,
   parent: VerilogSemanticScope,
-  open: VerilogToken,
-  endOffset: number
+  name: string,
+  range: Range
 ): VerilogSemanticScope {
   return {
     kind: 'block',
-    name: open.value,
-    range: Range.create(document.positionAt(open.start), document.positionAt(endOffset)),
+    name,
+    range,
     symbols: new Map(),
     children: [],
     module,
