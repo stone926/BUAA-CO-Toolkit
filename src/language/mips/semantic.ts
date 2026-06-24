@@ -19,7 +19,6 @@ import type {
   MipsSymbol
 } from './model';
 import {
-  MipsCstToken,
   isSymbolLike,
   parseMacroArguments
 } from './syntax';
@@ -60,7 +59,6 @@ export interface MipsSemanticReference {
   name: string;
   kind: MipsSemanticReferenceKind;
   range: Range;
-  token?: MipsCstToken;
   statement: MipsStatementAst;
   scope: MipsSemanticScope;
   symbol?: MipsSymbol;
@@ -452,7 +450,7 @@ function resolveMacroReference(name: string, macros: Map<string, MipsMacro[]>, s
   if (!overloads?.length) {
     return undefined;
   }
-  const operandText = statement.executable?.cst.operandText ?? '';
+  const operandText = statement.executable?.operandText ?? '';
   const argumentCount = parseMacroArguments(operandText).length;
   return overloads.find((macro) => macro.params.length === argumentCount) ?? overloads[0];
 }
