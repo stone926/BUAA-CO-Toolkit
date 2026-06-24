@@ -6,8 +6,6 @@ import {
   MipsCstExecutable,
   MipsCstLine,
   MipsCstOperand,
-  MipsCstStatementLine,
-  MipsCstToken,
   isCharLiteral,
   isFloatLiteral,
   isIntegerLiteral,
@@ -21,7 +19,6 @@ export interface MipsAstDocument {
   kind: 'program';
   uri: string;
   range: Range;
-  cst: MipsCstDocument;
   lines: MipsAstLine[];
   statements: MipsStatementAst[];
   macros: MipsMacroDefinitionAst[];
@@ -37,8 +34,6 @@ export interface MipsBaseLineAst {
   line: number;
   text: string;
   range: Range;
-  tokens: MipsCstToken[];
-  cst: MipsCstLine;
 }
 
 export interface MipsBlankLineAst extends MipsBaseLineAst {
@@ -55,7 +50,6 @@ export interface MipsStatementAst extends MipsBaseLineAst {
   labels: MipsLabelAst[];
   executable?: MipsExecutableAst;
   comment?: MipsCommentAst;
-  cst: MipsCstStatementLine;
 }
 
 export interface MipsLabelAst {
@@ -84,7 +78,6 @@ export interface MipsExecutableBaseAst {
   operandText: string;
   operandRange?: Range;
   operands: MipsOperandAst[];
-  cst: MipsCstExecutable;
 }
 
 export interface MipsDirectiveAst extends MipsExecutableBaseAst {
@@ -109,7 +102,6 @@ export interface MipsOperandBaseAst {
   kind: string;
   text: string;
   range: Range;
-  cst: MipsCstOperand;
 }
 
 export interface MipsRegisterOperandAst extends MipsOperandBaseAst {
@@ -174,7 +166,6 @@ export function buildMipsAst(
     kind: 'program',
     uri: document.uri,
     range: documentRange(document),
-    cst,
     lines,
     statements,
     macros
@@ -188,9 +179,7 @@ function buildLineAst(line: MipsCstLine): MipsAstLine {
       kind: 'blankLine',
       line: line.line,
       text: line.text,
-      range,
-      tokens: line.tokens,
-      cst: line
+      range
     };
   }
   if (line.kind === 'comment') {
@@ -199,13 +188,11 @@ function buildLineAst(line: MipsCstLine): MipsAstLine {
       line: line.line,
       text: line.text,
       range,
-      tokens: line.tokens,
       comment: {
         kind: 'comment',
         text: line.comment?.value ?? '',
         range: line.comment ? Range.create(line.line, line.comment.start, line.line, line.comment.end) : range
-      },
-      cst: line
+      }
     };
   }
   return {
@@ -213,7 +200,6 @@ function buildLineAst(line: MipsCstLine): MipsAstLine {
     line: line.line,
     text: line.text,
     range,
-    tokens: line.tokens,
     labels: line.labels.map((label) => ({
       kind: 'label',
       name: label.name,
@@ -227,8 +213,7 @@ function buildLineAst(line: MipsCstLine): MipsAstLine {
         text: line.comment.value,
         range: Range.create(line.line, line.comment.start, line.line, line.comment.end)
       }
-      : undefined,
-    cst: line
+      : undefined
   };
 }
 
@@ -242,8 +227,7 @@ function buildExecutableAst(line: number, executable: MipsCstExecutable): MipsEx
     mnemonicRange: mipsCstRange(line, executable.range),
     operandText: executable.operandText,
     operandRange: executable.operandRange ? mipsCstRange(line, executable.operandRange) : undefined,
-    operands: executable.operands.map((operand) => buildOperandAst(line, operand)),
-    cst: executable
+    operands: executable.operands.map((operand) => buildOperandAst(line, operand))
   };
   return executable.kind === 'directive'
     ? { kind: 'directive', ...base }
@@ -263,55 +247,46 @@ function buildOperandAst(line: number, operand: MipsCstOperand): MipsOperandAst 
       kind: 'memory',
       text,
       range,
-      cst: operand,
-      offset: buildSyntheticOperandAst(line, operand, memory.offset, {
+      offset: buildSyntheticOperandAst(line, memory.offset, {
         start: operand.range.start + offsetSpan.start,
         end: operand.range.start + offsetSpan.end
       }),
-      base: buildSyntheticOperandAst(line, operand, memory.base, {
+      base: buildSyntheticOperandAst(line, memory.base, {
         start: operand.range.start + baseSpan.start,
         end: operand.range.start + baseSpan.end
       })
     };
   }
-  return classifyOperand(line, operand, text, range);
+  return classifyOperand(text, range);
 }
 
-function buildSyntheticOperandAst(line: number, source: MipsCstOperand, text: string, range: CstRange): MipsOperandAst {
-  const synthetic: MipsCstOperand = {
-    text,
-    range
-  };
-  return classifyOperand(line, synthetic, text, mipsCstRange(line, range), source);
+function buildSyntheticOperandAst(line: number, text: string, range: CstRange): MipsOperandAst {
+  return classifyOperand(text, mipsCstRange(line, range));
 }
 
 function classifyOperand(
-  line: number,
-  operand: MipsCstOperand,
   text: string,
-  range: Range,
-  sourceCst: MipsCstOperand = operand
+  range: Range
 ): MipsOperandAst {
-  const cst = sourceCst === operand ? operand : { ...operand, range: sourceCst.range };
   if (text.startsWith('$')) {
-    return { kind: 'register', text, range, cst };
+    return { kind: 'register', text, range };
   }
   if (text.startsWith('%')) {
-    return { kind: 'macroParameter', text, range, cst };
+    return { kind: 'macroParameter', text, range };
   }
   if (isIntegerLiteral(text) || isCharLiteral(text)) {
-    return { kind: 'integer', text, range, cst };
+    return { kind: 'integer', text, range };
   }
   if (isFloatLiteral(text) && !isIntegerLiteral(text) && !isCharLiteral(text)) {
-    return { kind: 'float', text, range, cst };
+    return { kind: 'float', text, range };
   }
   if (isMipsStringLiteralText(text)) {
-    return { kind: 'string', text, range, cst };
+    return { kind: 'string', text, range };
   }
   if (isSymbolLike(text)) {
-    return { kind: 'symbol', text, range, cst };
+    return { kind: 'symbol', text, range };
   }
-  return { kind: 'expression', text, range, cst };
+  return { kind: 'expression', text, range };
 }
 
 function collectMacroDefinitions(document: TextDocument, statements: MipsStatementAst[]): MipsMacroDefinitionAst[] {
@@ -364,7 +339,7 @@ function collectMacroDefinitions(document: TextDocument, statements: MipsStateme
 }
 
 function parseMacroHeader(executable: MipsExecutableAst): { name: string; nameRange: Range; params: MipsMacroParameterAst[] } | undefined {
-  const base = executable.cst.operandRange?.start ?? executable.cst.range.end;
+  const base = executable.operandRange?.start.character ?? executable.mnemonicRange.end.character;
   const text = executable.operandText;
   let offset = skipAsciiWhitespace(text, 0);
   const nameStart = offset;
