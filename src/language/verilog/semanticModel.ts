@@ -16,13 +16,11 @@ import {
 } from './model';
 import { VerilogAstDocument, VerilogModuleAst, VerilogSubroutineAst } from './ast';
 import type { VerilogProceduralBlockAst } from './blockAst';
-import { parseVerilogExpressionTokens } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
 import {
   findMatchingTokenForward as findMatchingToken,
-  findTopLevelToken as firstTopLevelToken,
   trimTrailingSemicolonTokens,
   verilogTokenRange
 } from './tokenUtils';
@@ -655,13 +653,6 @@ function collectAstDrivenModuleReferences(
       continue;
     }
     if (declarationKinds.has(first.value)) {
-      const equal = firstTopLevelToken(tokens, '=');
-      if (equal >= 0) {
-        const scope = scopeAtPosition(moduleScope, blockScopes, statementAst.range.start);
-        const expressionTokens = tokens.slice(equal + 1);
-        collectReferencesFromExpressionTokens(document, references, declarationRangeKeys, scope, module, expressionTokens);
-        collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, expressionTokens);
-      }
       continue;
     }
     if (looksLikeInstanceStatement(module, tokens)) {
@@ -806,25 +797,6 @@ function collectReferencesFromConnectionExpression(
   if (connection.expressionAst) {
     collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, connection.expressionAst, 0);
   }
-}
-
-function collectReferencesFromExpressionTokens(
-  document: TextDocument,
-  references: VerilogSemanticReference[],
-  declarationRangeKeys: Set<string>,
-  scope: VerilogSemanticScope,
-  module: VerilogModule,
-  tokens: VerilogToken[]
-): void {
-  const expressionTokens = trimTrailingSemicolonTokens(tokens);
-  if (!expressionTokens.length) {
-    return;
-  }
-  const expression = parseVerilogExpressionTokens(expressionTokens);
-  if (!expression) {
-    return;
-  }
-  collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
 }
 
 function collectReferencesFromExpressionAst(
