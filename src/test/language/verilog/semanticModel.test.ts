@@ -85,10 +85,13 @@ describe('Verilog AST and semantic model', () => {
 
   it('keeps block-local declarations in the nearest scope', () => {
     const text = [
-      'module scoped(input clk);',
+      'module scoped(input clk, input [3:0] src);',
+      '    localparam W = 4;',
       '    reg i;',
       '    always @(posedge clk) begin',
       '        integer i;',
+      '        reg [W-1:0] tmp = src;',
+      '        i = tmp[0];',
       '        i = 1;',
       '    end',
       '    assign i = 0;',
@@ -103,13 +106,26 @@ describe('Verilog AST and semantic model', () => {
     if (declaration?.kind === 'declaration') {
       expect(declaration.declarations.map((item) => item.declaration.name)).toEqual(['i']);
     }
+    const tmpDeclaration = result.ast.modules[0].proceduralBlocks[0].statementTree.statements.find((statement) => statement.kind === 'declaration' && statement.declarations.some((decl) => decl.declaration.name === 'tmp'));
+    expect(tmpDeclaration?.kind).toBe('declaration');
+    if (tmpDeclaration?.kind === 'declaration') {
+      const tmp = tmpDeclaration.declarations.find((decl) => decl.declaration.name === 'tmp');
+      expect(tmp?.widthExpressions).toHaveLength(2);
+      expect(tmp?.initializer?.kind).toBe('identifier');
+    }
     expect(moduleSymbol).toBeDefined();
     expect(blockSymbol).toBeDefined();
 
     const blockUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i = 1')));
     const moduleUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i = 0')));
+    const widthUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('[W-1:0]') + 1));
+    const initializerUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('= src') + 2));
+    const tmpUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('tmp[0]')));
     expect(blockUse?.symbol).toBe(blockSymbol);
     expect(moduleUse?.symbol).toBe(moduleSymbol);
+    expect(widthUse?.symbol?.name).toBe('W');
+    expect(initializerUse?.symbol?.name).toBe('src');
+    expect(tmpUse?.symbol?.name).toBe('tmp');
   });
 
   it('binds for-loop declarations without leaking them to module scope', () => {

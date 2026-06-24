@@ -79,6 +79,8 @@ export interface VerilogLocalDeclarationAst {
   kind: 'localDeclaration';
   declaration: VerilogDecl;
   tokens: VerilogToken[];
+  widthExpressions: VerilogExpressionAst[];
+  initializer?: VerilogExpressionAst;
 }
 
 export interface VerilogOtherProceduralStatementAst extends VerilogProceduralStatementBase {
@@ -562,12 +564,15 @@ function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToke
     return [];
   }
   const kind = first.value as VerilogDecl['kind'];
+  const declarationTokens = trimTrailingSemicolonTokens(tokens);
   const declarations: VerilogLocalDeclarationAst[] = [];
-  for (const part of splitTopLevelTokens(tokens.slice(1), ',')) {
+  for (const part of splitTopLevelTokens(declarationTokens.slice(1), ',')) {
     const name = declarationNameToken(part);
     if (!name) {
       continue;
     }
+    const equal = topLevelTokenIndex(part, '=');
+    const initializer = equal >= 0 ? parseVerilogExpressionTokens(part.slice(equal + 1)) : undefined;
     declarations.push({
       kind: 'localDeclaration',
       declaration: {
@@ -576,7 +581,9 @@ function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToke
         range: tokensRange(document, tokens),
         selectionRange: Range.create(document.positionAt(name.start), document.positionAt(name.end))
       },
-      tokens: part
+      tokens: part,
+      widthExpressions: declarationWidthExpressions(part, equal >= 0 ? equal : part.length),
+      initializer
     });
   }
   return declarations;
@@ -600,6 +607,27 @@ function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined 
     }
   }
   return undefined;
+}
+
+function declarationWidthExpressions(tokens: VerilogToken[], end: number): VerilogExpressionAst[] {
+  const expressions: VerilogExpressionAst[] = [];
+  for (let index = 0; index < end; index++) {
+    if (tokens[index].value !== '[') {
+      continue;
+    }
+    const close = findMatchingTokenForward(tokens, index, '[', ']');
+    if (close < 0 || close > end) {
+      continue;
+    }
+    for (const part of splitTopLevelTokens(tokens.slice(index + 1, close), ':')) {
+      const expression = parseVerilogExpressionTokens(part);
+      if (expression) {
+        expressions.push(expression);
+      }
+    }
+    index = close;
+  }
+  return expressions;
 }
 
 function tokenIndexRange(document: TextDocument, tokens: VerilogToken[], start: number, end: number): Range {

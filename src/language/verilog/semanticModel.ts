@@ -792,7 +792,14 @@ function collectReferencesFromProceduralStatementAst(
       collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
       return;
     case 'declaration':
-      collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, statement.tokens);
+      for (const declaration of statement.declarations) {
+        for (const widthExpression of declaration.widthExpressions) {
+          collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, widthExpression, 0);
+        }
+        if (declaration.initializer) {
+          collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, declaration.initializer, 0);
+        }
+      }
       return;
     case 'other':
       if (statement.expression) {
