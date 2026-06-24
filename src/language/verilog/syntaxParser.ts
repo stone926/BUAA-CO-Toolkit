@@ -7,6 +7,7 @@ import { verilogAstCodeTokens } from './astTokens';
 import { VerilogProceduralBlockAst } from './blockAst';
 import { parseVerilogExpressionTokens, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
 import { childrenOfVerilogExpression } from './exprAstUtils';
+import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import {
@@ -30,6 +31,7 @@ export type VerilogSyntaxNodeKind =
   | 'for'
   | 'task'
   | 'instance'
+  | 'gatePrimitive'
   | 'expression';
 
 export interface VerilogSyntaxNode {
@@ -348,6 +350,11 @@ function collectModuleItemDiagnostics(
       validateContinuousAssign(document, item, diagnostics);
       continue;
     }
+    if (isVerilogGatePrimitive(first.value)) {
+      moduleNode.children.push(nodeFromRange('gatePrimitive', statement.range));
+      validateGatePrimitiveStatement(document, item, diagnostics);
+      continue;
+    }
     if (first.value === 'else' || first.value === 'default' || first.value === 'endcase') {
       diagnostics.push(makeDiagnostic(
         tokenRange(document, first),
@@ -424,6 +431,90 @@ function comparePosition(left: { line: number; character: number }, right: { lin
     return left.line - right.line;
   }
   return left.character - right.character;
+}
+
+function validateGatePrimitiveStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+  if (!hasTrailingSemicolon(tokens)) {
+    reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
+  }
+  const statement = trimTrailingSemicolon(tokens);
+  const instances = splitTopLevel(statement.slice(1), ',');
+  if (instances.length === 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[0]),
+      `Syntax error: gate primitive '${tokens[0].value}' is missing a port list.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-gate-primitive'
+    ));
+    return;
+  }
+  for (const instance of instances) {
+    validateGatePrimitiveInstance(document, tokens[0].value, instance, diagnostics);
+  }
+}
+
+function validateGatePrimitiveInstance(
+  document: TextDocument,
+  primitiveName: string,
+  tokens: VerilogToken[],
+  diagnostics: Diagnostic[]
+): void {
+  const open = gatePrimitivePortListOpen(tokens);
+  if (open < 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[0]),
+      `Syntax error: gate primitive '${primitiveName}' is missing a parenthesized port list.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-gate-primitive'
+    ));
+    return;
+  }
+  const close = findMatchingToken(tokens, open, '(', ')');
+  if (close < 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[open]),
+      `Syntax error: gate primitive '${primitiveName}' port list is missing a closing parenthesis.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-gate-primitive'
+    ));
+    return;
+  }
+  if (close !== tokens.length - 1) {
+    const extra = tokens[close + 1];
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, extra),
+      `Syntax error: unexpected token '${extra.value}' after gate primitive '${primitiveName}' port list.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-gate-primitive'
+    ));
+    return;
+  }
+  const ports = splitTopLevel(tokens.slice(open + 1, close), ',');
+  if (ports.length === 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[open]),
+      `Syntax error: gate primitive '${primitiveName}' port list is empty.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-gate-primitive'
+    ));
+    return;
+  }
+  for (const port of ports) {
+    validateExpressionSyntax(document, port, diagnostics, 'syntax-malformed-gate-primitive');
+  }
+}
+
+function gatePrimitivePortListOpen(tokens: VerilogToken[]): number {
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].value !== '(') {
+      continue;
+    }
+    const close = findMatchingToken(tokens, index, '(', ')');
+    if (close === tokens.length - 1) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function validateDeclarationLikeStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {

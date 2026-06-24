@@ -89,6 +89,7 @@ describe('Verilog AST and semantic model', () => {
       '    wire foo;',
       '    foo = ;',
       '    = a;',
+      '    stray;',
       'endmodule'
     ].join('\n');
     const document = doc(text);
@@ -98,6 +99,7 @@ describe('Verilog AST and semantic model', () => {
 
     expect(lhsUse?.symbol?.name).toBe('foo');
     expect(rhsUse?.symbol?.name).toBe('a');
+    expect(result.semantic.unresolvedReferences.some((reference) => reference.name === 'stray')).toBe(false);
   });
 
   it('keeps block-local declarations in the nearest scope', () => {
@@ -296,6 +298,24 @@ describe('Verilog AST and semantic model', () => {
 
     expect(displayUse?.symbol?.name).toBe('a');
     expect(result.semantic.unresolvedReferences.some((reference) => reference.name === '$display')).toBe(false);
+  });
+
+  it('collects gate primitive references from AST expressions', () => {
+    const text = [
+      'module gates(input [3:0] x, output y);',
+      '    wire nx0, nx1, a1;',
+      '    not (nx0, x[0]), (nx1, x[1]);',
+      '    and gate_a(a1, x[2], nx0);',
+      '    or (y, a1, nx1);',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+
+    expect(result.ast.modules[0].items.filter((item) => item.kind === 'gatePrimitive')).toHaveLength(3);
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('x[0]')))?.symbol?.name).toBe('x');
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('a1, x[2]')))?.symbol?.name).toBe('a1');
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('nx1);')))?.symbol?.name).toBe('nx1');
   });
 
   it('collects declaration width AST references in ports and body declarations', () => {

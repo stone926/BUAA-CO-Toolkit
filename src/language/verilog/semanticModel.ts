@@ -4,25 +4,19 @@ import { containsPosition, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
 import { VerilogToken } from './lexer';
 import {
-  systemTasks,
   VerilogDecl,
   VerilogInclude,
   VerilogInstance,
   VerilogMacro,
   VerilogMacroUse,
   VerilogModule,
-  VerilogPortConnection,
-  verilogKeywords
+  VerilogPortConnection
 } from './model';
 import { VerilogAstDocument, VerilogModuleAst, VerilogSubroutineAst } from './ast';
 import type { VerilogProceduralBlockAst, VerilogProceduralControlAst } from './blockAst';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
-import {
-  trimTrailingSemicolonTokens,
-  verilogTokenRange
-} from './tokenUtils';
 
 export type VerilogSemanticSymbolKind =
   | 'module'
@@ -366,7 +360,7 @@ function collectReferences(
       }
     }
 
-    collectAstDrivenModuleReferences(document, source, references, declarationRangeKeys, module, scope, blockScopes);
+    collectAstDrivenModuleReferences(document, source.ast, references, declarationRangeKeys, module, scope, blockScopes);
   }
 
   return references;
@@ -569,14 +563,14 @@ function collectProceduralLocalDeclarations(document: TextDocument, statement: V
 
 function collectAstDrivenModuleReferences(
   document: TextDocument,
-  source: VerilogSemanticSource,
+  ast: VerilogAstDocument,
   references: VerilogSemanticReference[],
   declarationRangeKeys: Set<string>,
   module: VerilogModule,
   moduleScope: VerilogSemanticScope,
   blockScopes: VerilogSemanticScope[]
 ): void {
-  const moduleAst = source.ast.modules.find((item) => item.module === module);
+  const moduleAst = ast.modules.find((item) => item.module === module);
   if (!moduleAst) {
     return;
   }
@@ -614,10 +608,6 @@ function collectAstDrivenModuleReferences(
     for (const expression of statementAst.expressions) {
       collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
     }
-    if (statementAst.expressions.length > 0) {
-      continue;
-    }
-    collectReferencesFromTokens(document, source, references, declarationRangeKeys, scope, module, tokens);
   }
 }
 
@@ -795,28 +785,6 @@ function collectReferencesFromExpressionAst(
   });
 }
 
-function collectReferencesFromTokens(
-  document: TextDocument,
-  source: VerilogSemanticSource,
-  references: VerilogSemanticReference[],
-  declarationRangeKeys: Set<string>,
-  scope: VerilogSemanticScope,
-  module: VerilogModule,
-  tokens: VerilogToken[]
-): void {
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.kind !== 'identifier') {
-      continue;
-    }
-    const range = verilogTokenRange(document, token);
-    if (declarationRangeKeys.has(rangeKey(range)) || isNonReferenceIdentifier(tokens, index)) {
-      continue;
-    }
-    addIdentifierReference(document, references, declarationRangeKeys, scope, module, token.value, range, token);
-  }
-}
-
 function addIdentifierReference(
   document: TextDocument,
   references: VerilogSemanticReference[],
@@ -923,32 +891,6 @@ function declSymbolKind(decl: VerilogDecl): VerilogSemanticSymbolKind {
     return 'port';
   }
   return 'signal';
-}
-
-function isNonReferenceIdentifier(tokens: VerilogToken[], index: number): boolean {
-  const token = tokens[index];
-  if (verilogKeywords.has(token.value) || systemTasks.has(token.value)) {
-    return true;
-  }
-  const previous = previousSignificantToken(tokens, index);
-  if (!previous) {
-    return false;
-  }
-  return previous.value === '.'
-    || previous.kind === 'directive'
-    || previous.kind === 'systemIdentifier'
-    || previous.value === "'"
-    || previous.value === '`';
-}
-
-function previousSignificantToken(tokens: VerilogToken[], index: number): VerilogToken | undefined {
-  for (let cursor = index - 1; cursor >= 0; cursor--) {
-    const token = tokens[cursor];
-    if (token.kind !== 'comment') {
-      return token;
-    }
-  }
-  return undefined;
 }
 
 // 未绑定引用只允许这些"裸标识符使用"类别按名字回退匹配。结构化引用——端口/参数连接名

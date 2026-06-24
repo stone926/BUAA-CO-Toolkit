@@ -19,8 +19,14 @@ import {
 } from './blockAst';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
+import { isVerilogGatePrimitive } from './gatePrimitives';
 import { parseVerilogProceduralBlockBody, VerilogBlockStatementAst } from './proceduralAst';
 import type { VerilogStatementSource } from './statementParser';
+import {
+  findMatchingTokenForward,
+  splitTopLevelTokens,
+  trimTrailingSemicolonTokens
+} from './tokenUtils';
 
 export interface VerilogAstDocument {
   kind: 'sourceFile';
@@ -138,6 +144,7 @@ export type VerilogStatementKind =
   | 'declaration'
   | 'continuousAssign'
   | 'proceduralBlock'
+  | 'gatePrimitive'
   | 'instance'
   | 'preprocessor'
   | 'moduleHeader'
@@ -282,9 +289,10 @@ function declAst(decl: VerilogDecl): VerilogDeclAst {
 }
 
 function buildStatementAst(statement: VerilogStatementSource, module?: VerilogModule): VerilogStatementAst {
-  const assignment = assignmentExpressionAsts(statement.tokens);
+  const kind = classifyStatement(statement, module);
+  const assignment = statementExpressionAsts(statement.tokens, kind);
   return {
-    kind: classifyStatement(statement, module),
+    kind,
     range: statement.range,
     start: statement.start,
     end: statement.end,
@@ -295,13 +303,15 @@ function buildStatementAst(statement: VerilogStatementSource, module?: VerilogMo
   };
 }
 
-function assignmentExpressionAsts(rawTokens: VerilogToken[]): {
+function statementExpressionAsts(rawTokens: VerilogToken[], kind: VerilogStatementKind): {
   assignment?: VerilogAssignmentExpressionAst;
   expressions: VerilogExpressionAst[];
 } {
   const parsed = parseAssignmentTokens(rawTokens);
   if (!parsed) {
-    return { expressions: [] };
+    return {
+      expressions: kind === 'gatePrimitive' ? gatePrimitiveExpressionAsts(rawTokens) : []
+    };
   }
   const lhs = parseVerilogExpressionTokens(parsed.lhsTokens);
   const rhs = parseVerilogExpressionTokens(parsed.rhsTokens);
@@ -309,6 +319,43 @@ function assignmentExpressionAsts(rawTokens: VerilogToken[]): {
     assignment: lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined,
     expressions: [lhs, rhs].filter((expression): expression is VerilogExpressionAst => Boolean(expression))
   };
+}
+
+function gatePrimitiveExpressionAsts(rawTokens: VerilogToken[]): VerilogExpressionAst[] {
+  const tokens = trimTrailingSemicolonTokens(rawTokens);
+  const primitive = tokens[0];
+  if (!primitive || !isVerilogGatePrimitive(primitive.value)) {
+    return [];
+  }
+  return splitTopLevelTokens(tokens.slice(1), ',')
+    .flatMap((instanceTokens) => gatePrimitivePortExpressions(instanceTokens));
+}
+
+function gatePrimitivePortExpressions(tokens: VerilogToken[]): VerilogExpressionAst[] {
+  const open = gatePrimitivePortListOpen(tokens);
+  if (open < 0) {
+    return [];
+  }
+  const close = findMatchingTokenForward(tokens, open, '(', ')');
+  if (close < 0) {
+    return [];
+  }
+  return splitTopLevelTokens(tokens.slice(open + 1, close), ',')
+    .map((part) => parseVerilogExpressionTokens(part))
+    .filter((expression): expression is VerilogExpressionAst => Boolean(expression));
+}
+
+function gatePrimitivePortListOpen(tokens: VerilogToken[]): number {
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].value !== '(') {
+      continue;
+    }
+    const close = findMatchingTokenForward(tokens, index, '(', ')');
+    if (close === tokens.length - 1) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function collectSubroutineAsts(document: TextDocument, tokens: VerilogToken[], module: VerilogModule): VerilogSubroutineAst[] {
@@ -415,11 +462,14 @@ function classifyStatement(statement: VerilogStatementSource, module?: VerilogMo
   if (!first) {
     return 'other';
   }
-  if (module && module.instances.some((instance) => rangesEqual(instance.range, statement.range))) {
-    return 'instance';
-  }
   if (first.kind === 'directive') {
     return 'preprocessor';
+  }
+  if (isVerilogGatePrimitive(first.value)) {
+    return 'gatePrimitive';
+  }
+  if (module && module.instances.some((instance) => rangesEqual(instance.range, statement.range))) {
+    return 'instance';
   }
   if (first.value === 'module') {
     return 'moduleHeader';

@@ -548,6 +548,32 @@ endmodule
     expect(missingLhsAssignment?.expressions.map((expression) => expression.kind)).toEqual(['identifier']);
   });
 
+  it('attaches expression ASTs to gate primitive ports', () => {
+    const text = `
+module gates(input [3:0] x, output y);
+    wire nx0, nx1, a1;
+    not (nx0, x[0]), (nx1, x[1]);
+    and gate_a(a1, x[2], nx0);
+    or (y, a1, nx1);
+endmodule
+`.trim();
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+    const primitiveStatements = parsed.ast.modules[0].items.filter((item) => item.kind === 'gatePrimitive');
+
+    expect(primitiveStatements).toHaveLength(3);
+    expect(primitiveStatements[0].expressions.map((expression) => expression.kind)).toEqual([
+      'identifier',
+      'selectExpression',
+      'identifier',
+      'selectExpression'
+    ]);
+    expect(primitiveStatements[1].expressions.map((expression) => expression.kind)).toEqual([
+      'identifier',
+      'selectExpression',
+      'identifier'
+    ]);
+  });
+
   it('attaches procedural statement trees to parsed blocks', () => {
     const text = `
 module m(input sel, input [1:0] op, input a, input b, input c, output reg y);

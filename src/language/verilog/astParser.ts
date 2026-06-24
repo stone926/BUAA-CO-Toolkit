@@ -1,6 +1,7 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
+import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
 import {
@@ -539,7 +540,7 @@ function parseInstances(document: TextDocument, text: string, tokens: VerilogTok
 
 function parseInstanceStatement(document: TextDocument, text: string, statement: VerilogToken[], currentModuleName: string): VerilogInstance | undefined {
   const first = statement[0];
-  if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName) {
+  if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName || isVerilogGatePrimitive(first.value)) {
     return undefined;
   }
   if (instanceExcludedFirstTokens.has(first.value)) {

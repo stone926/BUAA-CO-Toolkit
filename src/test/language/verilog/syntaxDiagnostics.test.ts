@@ -179,6 +179,19 @@ endmodule
     expect(result).toContain('syntax-unexpected-token');
   });
 
+  it('accepts built-in gate primitive module items', () => {
+    const result = syntaxCodes(`
+module gates(input [3:0] x, output y);
+    wire nx0, nx1, a1;
+    not (nx0, x[0]), (nx1, x[1]);
+    and gate_a(a1, x[2], nx0);
+    or (y, a1, nx1);
+endmodule
+`.trim());
+    expect(result).not.toContain('syntax-unexpected-token');
+    expect(result).not.toContain('syntax-malformed-gate-primitive');
+  });
+
   it('reports illegal declaration keyword sequences without rejecting common port types', () => {
     const invalid = syntaxCodes(`
 module broken(input a);
