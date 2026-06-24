@@ -2,6 +2,10 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [0.5.1] - 2026-06-24
+
+- fix(test): compact continuous test artifacts (c3c7048)
+
 ## [0.5.0] - 2026-06-24
 
 - fix(verilog): stabilize workspace module diagnostics (9934b1b)
