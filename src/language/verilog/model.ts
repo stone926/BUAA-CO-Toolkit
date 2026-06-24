@@ -22,6 +22,8 @@ export interface VerilogDecl {
   range: Range;
   selectionRange: Range;
   direction?: 'input' | 'output' | 'inout';
+  directionRange?: Range;
+  explicitPortNetType?: boolean;
 }
 
 export interface VerilogInstance {

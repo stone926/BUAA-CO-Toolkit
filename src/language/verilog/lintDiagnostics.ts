@@ -222,28 +222,6 @@ export function collectImplicitNetDiagnostics(
   }
 }
 
-const portDirections = new Set(['input', 'output', 'inout']);
-const explicitPortNetTypes = new Set([
-  'wire',
-  'tri',
-  'tri0',
-  'tri1',
-  'triand',
-  'trior',
-  'trireg',
-  'wand',
-  'wor',
-  'supply0',
-  'supply1',
-  'reg',
-  'logic',
-  'integer',
-  'time',
-  'real',
-  'realtime'
-]);
-const portDeclarationModifiers = new Set(['automatic', 'signed', 'unsigned', 'scalared', 'vectored']);
-
 export function collectExplicitPortNetTypeDiagnostics(
   document: TextDocument,
   modules: VerilogModule[],
@@ -255,87 +233,24 @@ export function collectExplicitPortNetTypeDiagnostics(
   }
 
   for (const module of modules) {
-    const moduleStart = document.offsetAt(module.range.start);
-    const headerEnd = document.offsetAt(module.headerEnd);
-    const moduleEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-    const headerTokens = cst.codeTokens.filter((token) => token.start >= moduleStart && token.end <= headerEnd);
-    collectImplicitPortNetTypeDiagnosticsFromTokens(document, headerTokens, diagnostics);
-
-    for (const statement of cst.statements) {
-      if (statement.start < headerEnd || statement.start >= moduleEnd) {
+    const reported = new Set<string>();
+    for (const port of module.ports) {
+      if (!port.direction || port.explicitPortNetType !== false || !port.directionRange) {
         continue;
       }
-      const tokens = trimStatementTokens(statement.tokens);
-      if (!tokens.length || !portDirections.has(tokens[0].value)) {
+      const key = `${port.directionRange.start.line}:${port.directionRange.start.character}:${port.directionRange.end.line}:${port.directionRange.end.character}`;
+      if (reported.has(key)) {
         continue;
       }
-      if (!hasExplicitPortNetType(tokens, 0)) {
-        diagnostics.push(makeExplicitPortNetDiagnostic(document, tokens[0]));
-      }
+      reported.add(key);
+      diagnostics.push(makeExplicitPortNetDiagnostic(port.directionRange));
     }
   }
 }
 
-function collectImplicitPortNetTypeDiagnosticsFromTokens(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (!portDirections.has(token.value)) {
-      continue;
-    }
-    if (!hasExplicitPortNetType(tokens, index)) {
-      diagnostics.push(makeExplicitPortNetDiagnostic(document, token));
-    }
-  }
-}
-
-function hasExplicitPortNetType(tokens: VerilogToken[], directionIndex: number): boolean {
-  let index = directionIndex + 1;
-  while (index < tokens.length) {
-    const token = tokens[index];
-    if (token.value === ',' || token.value === ';' || token.value === ')') {
-      return false;
-    }
-    if (explicitPortNetTypes.has(token.value)) {
-      return true;
-    }
-    if (portDeclarationModifiers.has(token.value)) {
-      index++;
-      continue;
-    }
-    if (token.value === '[') {
-      const close = findMatchingToken(tokens, index, '[', ']');
-      if (close < 0) {
-        return false;
-      }
-      index = close + 1;
-      continue;
-    }
-    if (token.kind === 'identifier') {
-      return false;
-    }
-    index++;
-  }
-  return false;
-}
-
-function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
-  let depth = 0;
-  for (let index = openIndex; index < tokens.length; index++) {
-    if (tokens[index].value === openValue) {
-      depth++;
-    } else if (tokens[index].value === closeValue) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function makeExplicitPortNetDiagnostic(document: TextDocument, token: VerilogToken): Diagnostic {
+function makeExplicitPortNetDiagnostic(range: Range): Diagnostic {
   return makeDiagnostic(
-    tokenRange(document, token),
+    range,
     'Port declaration relies on an implicit wire net type while `default_nettype none is active.',
     DiagnosticSeverity.Error,
     'explicit-port-wire'
@@ -727,11 +642,6 @@ function findMatchingBeginEndToken(tokens: VerilogToken[], beginIndex: number): 
 
 function tokenRange(document: TextDocument, token: VerilogToken): Range {
   return Range.create(document.positionAt(token.start), document.positionAt(token.end));
-}
-
-function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
-  const result = tokens.filter((token) => token.kind !== 'eof');
-  return result[result.length - 1]?.value === ';' ? result.slice(0, -1) : result;
 }
 
 function isTestbenchModule(module: VerilogModule, settings: CoSettings): boolean {

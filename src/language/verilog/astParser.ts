@@ -54,6 +54,26 @@ const declModifiers = new Set([
   'supply0',
   'supply1'
 ]);
+const explicitPortNetTypes = new Set([
+  'wire',
+  'tri',
+  'tri0',
+  'tri1',
+  'triand',
+  'trior',
+  'trireg',
+  'wand',
+  'wor',
+  'supply0',
+  'supply1',
+  'reg',
+  'logic',
+  'integer',
+  'time',
+  'real',
+  'realtime'
+]);
+const portDeclarationModifiers = new Set(['automatic', 'signed', 'unsigned', 'scalared', 'vectored']);
 const instanceExcludedFirstTokens = new Set([
   'module',
   'endmodule',
@@ -226,6 +246,8 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
   const ports: VerilogDecl[] = [];
   let inheritedDirection: 'input' | 'output' | 'inout' | undefined;
   let inheritedWidth: DeclarationWidthInfo | undefined;
+  let inheritedExplicitPortNetType: boolean | undefined;
+  let inheritedDirectionRange: Range | undefined;
   for (const part of splitTopLevel(tokens, ',')) {
     const port = parseDeclFragment(document, text, part, 'wire');
     if (!port) {
@@ -239,9 +261,13 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
       applyDeclarationWidth(port, width);
       inheritedDirection = direction;
       inheritedWidth = width;
+      inheritedExplicitPortNetType = port.explicitPortNetType;
+      inheritedDirectionRange = port.directionRange;
     } else if (inheritedDirection) {
       port.direction = inheritedDirection;
       port.kind = inheritedDirection;
+      port.directionRange = inheritedDirectionRange;
+      port.explicitPortNetType = inheritedExplicitPortNetType;
       if (!port.width && inheritedWidth) {
         applyDeclarationWidth(port, inheritedWidth);
       }
@@ -281,6 +307,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
       const inferred = (kind === 'parameter' || kind === 'localparam')
         ? initializer
         : {};
+      const directionRange = isPortKind(kind) ? tokenRange(document, first) : undefined;
       declarations.push({
         name: nameToken.value,
         kind,
@@ -294,6 +321,8 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
         inferredMinWidth: inferred.minWidth,
         inferredFlexible: inferred.flexible,
         direction: isPortKind(kind) ? kind : undefined,
+        directionRange,
+        explicitPortNetType: isPortKind(kind) ? hasExplicitPortNetTypeInTokens(semicolonTrimmed, 0) : undefined,
         range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[statement.length - 1].end)),
         selectionRange: tokenRange(document, nameToken)
       });
@@ -460,7 +489,8 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   if (!nameToken) {
     return undefined;
   }
-  const direction = firstTokenValue(cleaned, portKinds) as 'input' | 'output' | 'inout' | undefined;
+  const directionToken = firstToken(cleaned, portKinds);
+  const direction = directionToken?.value as 'input' | 'output' | 'inout' | undefined;
   const explicitKind = firstTokenValue(cleaned, declKinds) as VerilogDeclKind | undefined;
   const kind = (direction ?? explicitKind ?? fallbackKind) as VerilogDeclKind;
   const initializer = declarationInitializerInfo(document, text, cleaned);
@@ -482,7 +512,9 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
     inferredMinWidth: inferred.minWidth,
     inferredFlexible: inferred.flexible,
     range: tokens.length ? Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end)) : tokenRange(document, nameToken),
-    selectionRange: tokenRange(document, nameToken)
+    selectionRange: tokenRange(document, nameToken),
+    directionRange: directionToken ? tokenRange(document, directionToken) : undefined,
+    explicitPortNetType: directionToken ? hasExplicitPortNetTypeInTokens(cleaned, cleaned.indexOf(directionToken)) : undefined
   };
 }
 
@@ -791,7 +823,41 @@ function parseWidthExpressionAsts(tokens: VerilogToken[]): VerilogExpressionAst[
 }
 
 function firstTokenValue(tokens: VerilogToken[], values: Set<string>): string | undefined {
-  return tokens.find((token) => values.has(token.value))?.value;
+  return firstToken(tokens, values)?.value;
+}
+
+function firstToken(tokens: VerilogToken[], values: Set<string>): VerilogToken | undefined {
+  return tokens.find((token) => values.has(token.value));
+}
+
+function hasExplicitPortNetTypeInTokens(tokens: VerilogToken[], directionIndex: number): boolean {
+  let index = directionIndex + 1;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token.value === ',' || token.value === ';' || token.value === ')') {
+      return false;
+    }
+    if (explicitPortNetTypes.has(token.value)) {
+      return true;
+    }
+    if (portDeclarationModifiers.has(token.value)) {
+      index++;
+      continue;
+    }
+    if (token.value === '[') {
+      const close = findMatchingToken(tokens, index, '[', ']');
+      if (close < 0) {
+        return false;
+      }
+      index = close + 1;
+      continue;
+    }
+    if (token.kind === 'identifier') {
+      return false;
+    }
+    index++;
+  }
+  return false;
 }
 
 function findEndmoduleToken(tokens: VerilogToken[], start: number): number {

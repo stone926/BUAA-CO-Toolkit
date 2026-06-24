@@ -314,6 +314,22 @@ endmodule
     expect(explicitWireDiagnostics.every((diagnostic) => diagnostic.severity === 1)).toBe(true);
   });
 
+  it('deduplicates inherited ANSI port net type diagnostics by direction', () => {
+    const text = `
+\`default_nettype none
+module mips(
+    input clk, reset,
+    input wire enable,
+    output [31:0] instr, pc,
+    output reg done
+);
+endmodule
+`.trim();
+    const diagnostics = getVerilogDiagnostics(doc(text), mergeCoSettings({}))
+      .filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
+    expect(diagnostics).toHaveLength(2);
+  });
+
   it('reports old-style body port declarations that omit wire under default_nettype none', () => {
     const text = `
 \`default_nettype none
