@@ -18,6 +18,7 @@ import {
 } from './blockAst';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
+import { parseVerilogProceduralBlockBody, VerilogBlockStatementAst } from './proceduralAst';
 import type { VerilogStatementSource } from './statementParser';
 
 export interface VerilogAstDocument {
@@ -97,6 +98,7 @@ export interface VerilogModuleAst {
   instances: VerilogInstanceAst[];
   alwaysBlocks: VerilogAlwaysBlockAst[];
   proceduralBlocks: VerilogProceduralBlockAst[];
+  subroutines: VerilogSubroutineAst[];
   items: VerilogStatementAst[];
   module: VerilogModule;
 }
@@ -117,6 +119,18 @@ export interface VerilogInstanceAst {
   moduleSelectionRange: Range;
   selectionRange: Range;
   instance: VerilogInstance;
+}
+
+export interface VerilogSubroutineAst {
+  kind: 'subroutine';
+  subroutineKind: 'task' | 'function';
+  name?: string;
+  range: Range;
+  headerRange: Range;
+  bodyRange: Range;
+  tokens: VerilogToken[];
+  bodyTokens: VerilogToken[];
+  statementTree: VerilogBlockStatementAst;
 }
 
 export type VerilogStatementKind =
@@ -250,6 +264,7 @@ function buildModuleAst(document: TextDocument, statements: VerilogStatementSour
     })),
     alwaysBlocks: collectAlwaysBlocksFromTokens(document, tokens, module),
     proceduralBlocks: collectProceduralBlocksFromTokens(document, tokens, module),
+    subroutines: collectSubroutineAsts(document, tokens, module),
     items,
     module
   };
@@ -287,6 +302,104 @@ function assignmentExpressionAst(rawTokens: VerilogToken[]): VerilogAssignmentEx
   const lhs = parseVerilogExpressionTokens(parsed.lhsTokens);
   const rhs = parseVerilogExpressionTokens(parsed.rhsTokens);
   return lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined;
+}
+
+function collectSubroutineAsts(document: TextDocument, tokens: VerilogToken[], module: VerilogModule): VerilogSubroutineAst[] {
+  const moduleStart = document.offsetAt(module.headerEnd);
+  const moduleEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
+  const moduleTokens = tokens.filter((token) => token.start >= moduleStart && token.start < moduleEnd && token.kind !== 'eof');
+  const subroutines: VerilogSubroutineAst[] = [];
+  for (let index = 0; index < moduleTokens.length; index++) {
+    const token = moduleTokens[index];
+    if (token.value !== 'task' && token.value !== 'function') {
+      continue;
+    }
+    const close = findSubroutineEndToken(moduleTokens, index);
+    const endIndex = close >= 0 ? close : moduleTokens.length - 1;
+    const subroutineTokens = moduleTokens.slice(index, endIndex + 1);
+    const headerEnd = findTopLevelSemicolon(moduleTokens, index + 1, endIndex + 1);
+    const bodyStart = headerEnd >= 0 ? headerEnd + 1 : index + 1;
+    const bodyEnd = close >= 0 ? close : endIndex + 1;
+    const bodyTokens = moduleTokens.slice(bodyStart, bodyEnd);
+    const headerEndOffset = headerEnd >= 0
+      ? moduleTokens[headerEnd].end
+      : (moduleTokens[bodyStart]?.start ?? token.end);
+    const bodyStartOffset = bodyTokens[0]?.start ?? headerEndOffset;
+    const bodyEndOffset = bodyTokens[bodyTokens.length - 1]?.end ?? bodyStartOffset;
+    const endToken = moduleTokens[endIndex] ?? token;
+    subroutines.push({
+      kind: 'subroutine',
+      subroutineKind: token.value,
+      name: subroutineName(moduleTokens, index, headerEnd >= 0 ? headerEnd : endIndex + 1),
+      range: Range.create(document.positionAt(token.start), document.positionAt(endToken.end)),
+      headerRange: Range.create(document.positionAt(token.start), document.positionAt(headerEndOffset)),
+      bodyRange: Range.create(document.positionAt(bodyStartOffset), document.positionAt(bodyEndOffset)),
+      tokens: subroutineTokens,
+      bodyTokens,
+      statementTree: parseVerilogProceduralBlockBody(document, bodyTokens)
+    });
+    if (close >= 0) {
+      index = close;
+    }
+  }
+  return subroutines;
+}
+
+function findSubroutineEndToken(tokens: VerilogToken[], start: number): number {
+  const opener = tokens[start]?.value;
+  const closer = opener === 'task' ? 'endtask' : opener === 'function' ? 'endfunction' : undefined;
+  if (!closer) {
+    return -1;
+  }
+  let depth = 0;
+  for (let index = start; index < tokens.length; index++) {
+    const value = tokens[index].value;
+    if (value === opener) {
+      depth++;
+    } else if (value === closer) {
+      depth--;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function findTopLevelSemicolon(tokens: VerilogToken[], start: number, end: number): number {
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = start; index < end; index++) {
+    const value = tokens[index].value;
+    if (value === '(') {
+      paren++;
+    } else if (value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (value === '[') {
+      bracket++;
+    } else if (value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (value === '{') {
+      brace++;
+    } else if (value === '}') {
+      brace = Math.max(0, brace - 1);
+    } else if (value === ';' && paren === 0 && bracket === 0 && brace === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function subroutineName(tokens: VerilogToken[], start: number, end: number): string | undefined {
+  const paren = tokens.findIndex((token, index) => index > start && index < end && token.value === '(');
+  const limit = paren >= 0 ? paren : end;
+  for (let index = limit - 1; index > start; index--) {
+    if (tokens[index].kind === 'identifier') {
+      return tokens[index].value;
+    }
+  }
+  return undefined;
 }
 
 function classifyStatement(tokens: VerilogToken[], module?: VerilogModule): VerilogStatementKind {

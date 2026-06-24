@@ -14,8 +14,7 @@ import {
   VerilogPortConnection,
   verilogKeywords
 } from './model';
-import { VerilogAstDocument, VerilogModuleAst } from './ast';
-import { verilogAstCodeTokens } from './astTokens';
+import { VerilogAstDocument, VerilogModuleAst, VerilogSubroutineAst } from './ast';
 import type { VerilogProceduralBlockAst } from './blockAst';
 import { parseVerilogExpressionTokens } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
@@ -141,9 +140,8 @@ export function buildVerilogSemanticModel(source: VerilogSemanticSource): Verilo
     parent: fileScope
   }));
   fileScope.children.push(...moduleScopes);
-  const astTokens = verilogAstCodeTokens(source.ast);
-  const blockScopes = collectBlockScopes(source.document, source.ast.modules, astTokens, moduleScopes);
-  const symbols = collectSymbols(source, fileScope, moduleScopes, blockScopes, astTokens);
+  const blockScopes = collectBlockScopes(source.ast.modules, moduleScopes);
+  const symbols = collectSymbols(source, fileScope, moduleScopes, blockScopes);
   const declarationRangeKeys = new Set(symbols.map((symbol) => rangeKey(symbol.selectionRange)));
   const references = collectReferences(source.document, source, fileScope, moduleScopes, blockScopes, declarationRangeKeys);
   return {
@@ -208,8 +206,7 @@ function collectSymbols(
   source: VerilogSemanticSource,
   fileScope: VerilogSemanticScope,
   moduleScopes: VerilogSemanticScope[],
-  blockScopes: VerilogSemanticScope[],
-  astTokens: VerilogToken[]
+  blockScopes: VerilogSemanticScope[]
 ): VerilogSemanticSymbol[] {
   const symbols: VerilogSemanticSymbol[] = [];
   for (const macro of source.macros) {
@@ -271,7 +268,7 @@ function collectSymbols(
       }));
     }
     const moduleAst = source.ast.modules.find((item) => item.module === module);
-    for (const decl of collectBlockLocalDeclarations(source.document, moduleAst, astTokens, module, blockScopes)) {
+    for (const decl of collectBlockLocalDeclarations(source.document, moduleAst)) {
       const declScope = declarationScopeFor(module, scope, blockScopes, decl);
       if (declScope.symbols.get(decl.name)?.some((symbol) => rangesEqual(symbol.selectionRange, decl.selectionRange))) {
         continue;
@@ -379,12 +376,7 @@ function collectReferences(
   return references;
 }
 
-function collectBlockScopes(
-  document: TextDocument,
-  moduleAsts: VerilogModuleAst[],
-  tokens: VerilogToken[],
-  moduleScopes: VerilogSemanticScope[]
-): VerilogSemanticScope[] {
+function collectBlockScopes(moduleAsts: VerilogModuleAst[], moduleScopes: VerilogSemanticScope[]): VerilogSemanticScope[] {
   const result: VerilogSemanticScope[] = [];
   for (const moduleAst of moduleAsts) {
     const module = moduleAst.module;
@@ -395,7 +387,7 @@ function collectBlockScopes(
     for (const block of moduleAst.proceduralBlocks) {
       result.push(...collectProceduralStatementBlockScopes(module, moduleScope, block.statementTree));
     }
-    result.push(...collectSubroutineBlockScopes(document, tokens, module, moduleScope));
+    result.push(...collectSubroutineBlockScopes(moduleAst, moduleScope));
   }
   return result;
 }
@@ -446,57 +438,14 @@ function collectProceduralStatementBlockScopes(
   }
 }
 
-function collectSubroutineBlockScopes(
-  document: TextDocument,
-  tokens: VerilogToken[],
-  module: VerilogModule,
-  moduleScope: VerilogSemanticScope
-): VerilogSemanticScope[] {
+function collectSubroutineBlockScopes(moduleAst: VerilogModuleAst, moduleScope: VerilogSemanticScope): VerilogSemanticScope[] {
   const result: VerilogSemanticScope[] = [];
-  const moduleStart = document.offsetAt(module.headerEnd);
-  const moduleEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-  const moduleTokens = tokens.filter((token) => token.start >= moduleStart && token.start < moduleEnd && token.kind !== 'eof');
-  for (let index = 0; index < moduleTokens.length; index++) {
-    const token = moduleTokens[index];
-    if (token.value !== 'task' && token.value !== 'function') {
-      continue;
-    }
-    const close = findSubroutineEndToken(moduleTokens, index);
-    const end = close >= 0 ? moduleTokens[close].end : moduleEnd;
-    const scope = makeBlockScopeFromRange(
-      module,
-      moduleScope,
-      token.value,
-      Range.create(document.positionAt(token.start), document.positionAt(end))
-    );
+  for (const subroutine of moduleAst.subroutines) {
+    const scope = makeBlockScopeFromRange(moduleAst.module, moduleScope, subroutine.subroutineKind, subroutine.range);
     moduleScope.children.push(scope);
     result.push(scope);
-    if (close >= 0) {
-      index = close;
-    }
   }
   return result;
-}
-
-function findSubroutineEndToken(tokens: VerilogToken[], start: number): number {
-  const opener = tokens[start]?.value;
-  const closer = opener === 'task' ? 'endtask' : opener === 'function' ? 'endfunction' : undefined;
-  if (!closer) {
-    return -1;
-  }
-  let depth = 0;
-  for (let index = start; index < tokens.length; index++) {
-    const value = tokens[index].value;
-    if (value === opener) {
-      depth++;
-    } else if (value === closer) {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
 }
 
 const declarationKinds = new Set([
@@ -523,37 +472,6 @@ const declarationModifiers = new Set([
   'reg',
   'logic'
 ]);
-
-function splitBySemicolon(tokens: VerilogToken[]): VerilogToken[][] {
-  const result: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === ';' && paren === 0 && bracket === 0 && brace === 0) {
-      result.push(tokens.slice(start, index + 1).filter((item) => item.kind !== 'eof'));
-      start = index + 1;
-    }
-  }
-  if (start < tokens.length) {
-    result.push(tokens.slice(start).filter((item) => item.kind !== 'eof'));
-  }
-  return result.filter((part) => part.length > 0);
-}
 
 function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined {
   for (let index = 0; index < tokens.length; index++) {
@@ -587,18 +505,6 @@ function dedupeDecls(declarations: VerilogDecl[]): VerilogDecl[] {
     result.push(decl);
   }
   return result;
-}
-
-function nextTokenValue(tokens: VerilogToken[], start: number, value: string): number {
-  for (let index = start; index < tokens.length; index++) {
-    if (tokens[index].value === value) {
-      return index;
-    }
-    if (tokens[index].value !== 'automatic') {
-      return -1;
-    }
-  }
-  return -1;
 }
 
 function looksLikeInstanceStatement(module: VerilogModule, tokens: VerilogToken[]): boolean {
@@ -703,18 +609,17 @@ function scopeAtPosition(
 
 function collectBlockLocalDeclarations(
   document: TextDocument,
-  moduleAst: VerilogModuleAst | undefined,
-  tokens: VerilogToken[],
-  module: VerilogModule,
-  blockScopes: VerilogSemanticScope[]
+  moduleAst: VerilogModuleAst | undefined
 ): VerilogDecl[] {
   const result: VerilogDecl[] = [];
   if (moduleAst) {
     for (const block of moduleAst.proceduralBlocks) {
       result.push(...collectProceduralLocalDeclarations(document, block.statementTree));
     }
+    for (const subroutine of moduleAst.subroutines) {
+      result.push(...collectProceduralLocalDeclarations(document, subroutine.statementTree));
+    }
   }
-  result.push(...collectSubroutineLocalDeclarations(document, tokens, module, blockScopes));
   return dedupeDecls(result);
 }
 
@@ -748,30 +653,6 @@ function forControlDeclarationsFromControlTokens(document: TextDocument, tokens:
   return localDeclarationsFromTokens(document, initTokens);
 }
 
-function collectSubroutineLocalDeclarations(
-  document: TextDocument,
-  tokens: VerilogToken[],
-  module: VerilogModule,
-  blockScopes: VerilogSemanticScope[]
-): VerilogDecl[] {
-  const result: VerilogDecl[] = [];
-  const subroutineScopes = blockScopes.filter((scope) => scope.module === module && (scope.name === 'task' || scope.name === 'function'));
-  for (const scope of subroutineScopes) {
-    const start = document.offsetAt(scope.range.start);
-    const end = document.offsetAt(scope.range.end);
-    const scopeTokens = tokens.filter((token) => token.start >= start && token.end <= end && token.kind !== 'eof');
-    for (const statement of splitBySemicolon(scopeTokens)) {
-      for (let index = 0; index < statement.length; index++) {
-        if (declarationKinds.has(statement[index].value)) {
-          result.push(...localDeclarationsFromTokens(document, statement.slice(index)));
-        }
-      }
-      result.push(...forControlDeclarations(document, statement));
-    }
-  }
-  return result;
-}
-
 function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDecl[] {
   const first = tokens[0];
   if (!first || !declarationKinds.has(first.value)) {
@@ -794,28 +675,6 @@ function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToke
   return declarations;
 }
 
-function forControlDeclarations(document: TextDocument, tokens: VerilogToken[]): VerilogDecl[] {
-  const result: VerilogDecl[] = [];
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].value !== 'for') {
-      continue;
-    }
-    const open = nextTokenValue(tokens, index + 1, '(');
-    if (open < 0) {
-      continue;
-    }
-    const close = findMatchingToken(tokens, open, '(', ')');
-    if (close < 0) {
-      continue;
-    }
-    const init = tokens.slice(open + 1, close);
-    const semicolon = init.findIndex((token) => token.value === ';');
-    const initTokens = semicolon >= 0 ? init.slice(0, semicolon) : init;
-    result.push(...localDeclarationsFromTokens(document, initTokens));
-  }
-  return result;
-}
-
 function collectAstDrivenModuleReferences(
   document: TextDocument,
   source: VerilogSemanticSource,
@@ -830,7 +689,13 @@ function collectAstDrivenModuleReferences(
     return;
   }
   const proceduralBlocks = moduleAst.proceduralBlocks;
+  for (const subroutine of moduleAst.subroutines) {
+    collectReferencesFromSubroutineAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine);
+  }
   for (const statementAst of moduleAst.items) {
+    if (isInsideSubroutine(document, statementAst.start, statementAst.end, moduleAst.subroutines)) {
+      continue;
+    }
     const block = proceduralBlockForStatement(document, statementAst.start, proceduralBlocks);
     if (block) {
       collectReferencesFromProceduralBlockAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, block);
@@ -881,6 +746,27 @@ function isInsideProceduralBlockBody(document: TextDocument, start: number, end:
 
 function blockStartsAt(document: TextDocument, block: VerilogProceduralBlockAst, offset: number): boolean {
   return document.offsetAt(block.range.start) === offset;
+}
+
+function isInsideSubroutine(document: TextDocument, start: number, end: number, subroutines: VerilogSubroutineAst[]): boolean {
+  return subroutines.some((subroutine) => {
+    const subroutineStart = document.offsetAt(subroutine.range.start);
+    const subroutineEnd = document.offsetAt(subroutine.range.end);
+    return start >= subroutineStart && end <= subroutineEnd;
+  });
+}
+
+function collectReferencesFromSubroutineAst(
+  document: TextDocument,
+  source: VerilogSemanticSource,
+  references: VerilogSemanticReference[],
+  declarationRangeKeys: Set<string>,
+  module: VerilogModule,
+  moduleScope: VerilogSemanticScope,
+  blockScopes: VerilogSemanticScope[],
+  subroutine: VerilogSubroutineAst
+): void {
+  collectReferencesFromProceduralStatementAst(document, source, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine.statementTree);
 }
 
 function collectReferencesFromProceduralBlockAst(

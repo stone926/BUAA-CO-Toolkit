@@ -125,6 +125,42 @@ describe('Verilog AST and semantic model', () => {
     expect(use?.symbol).toBe(loopIndexSymbol);
   });
 
+  it('models subroutine bodies as AST-backed semantic scopes', () => {
+    const text = [
+      'module subroutines(input [7:0] src, output reg [7:0] out);',
+      '    task do_write(input [7:0] value);',
+      '        integer i;',
+      '        begin',
+      '            i = value;',
+      '            out = value;',
+      '        end',
+      '    endtask',
+      '    function [7:0] add_one(input [7:0] arg);',
+      '        begin',
+      '            add_one = arg + 1;',
+      '        end',
+      '    endfunction',
+      '    initial begin',
+      '        do_write(src);',
+      '        out = add_one(src);',
+      '    end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const moduleAst = result.ast.modules[0];
+
+    expect(moduleAst.subroutines.map((subroutine) => subroutine.name)).toEqual(['do_write', 'add_one']);
+    expect(moduleAst.subroutines[0].statementTree.statements.map((statement) => statement.kind)).toEqual(['declaration', 'block']);
+
+    const taskLocal = result.semantic.symbols.find((symbol) => symbol.name === 'i' && symbol.scope.name === 'task');
+    const taskArgument = result.semantic.symbols.find((symbol) => symbol.name === 'value' && symbol.scope.name === 'task');
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i = value')))?.symbol).toBe(taskLocal);
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('i = value') + 'i = '.length))?.symbol).toBe(taskArgument);
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('out = value')))?.symbol?.name).toBe('out');
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('add_one = arg')))?.symbol?.kind).toBe('task');
+  });
+
   it('collects expression AST references without duplicating token fallback references', () => {
     const text = [
       'module expr_refs(input [7:0] a, output [7:0] y);',
