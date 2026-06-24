@@ -31,7 +31,7 @@ import {
   isFloatLiteral,
   isSymbolLike,
   parseCharLiteral,
-  parseMipsCstDocument,
+  parseMipsSourceDocument,
   parseIntegerLiteral,
   parseMacroArguments,
   parseOperands
@@ -91,8 +91,8 @@ const SECTION_ADDRESS_RANGES = new Map<string, { min: number; max: number; label
 ]);
 
 export function parseMips(document: TextDocument, settings: CoSettings, options: MipsParseOptions = {}): MipsParseResult {
-  const cst = parseMipsCstDocument(document.getText());
-  const ast = buildMipsAst(document, cst.lines);
+  const source = parseMipsSourceDocument(document.getText());
+  const ast = buildMipsAst(document, source.lines);
   const labels = new Map<string, MipsSymbol>();
   const dataSymbols = new Map<string, MipsSymbol>();
   const eqvSymbols = new Map<string, MipsSymbol>();

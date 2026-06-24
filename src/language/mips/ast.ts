@@ -1,16 +1,16 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
-  CstRange,
-  MipsCstExecutable,
-  MipsCstLine,
-  MipsCstOperand,
+  MipsParsedExecutable,
+  MipsParsedLine,
+  MipsParsedOperand,
+  MipsParsedRange,
   isCharLiteral,
   isFloatLiteral,
   isIntegerLiteral,
   isSymbolLike,
-  mipsCstRange,
-  parseMipsCstDocument
+  mipsParsedRange,
+  parseMipsSourceDocument
 } from './syntax';
 import { isMipsStringLiteralText, parseMipsMemoryOperand } from './operandAst';
 
@@ -156,7 +156,7 @@ export interface MipsMacroParameterAst {
 
 export function buildMipsAst(
   document: TextDocument,
-  lines: MipsCstLine[] = parseMipsCstDocument(document.getText()).lines
+  lines: MipsParsedLine[] = parseMipsSourceDocument(document.getText()).lines
 ): MipsAstDocument {
   const astLines = lines.map((line) => buildLineAst(line));
   const statements = astLines.filter((line): line is MipsStatementAst => line.kind === 'statement');
@@ -171,7 +171,7 @@ export function buildMipsAst(
   };
 }
 
-function buildLineAst(line: MipsCstLine): MipsAstLine {
+function buildLineAst(line: MipsParsedLine): MipsAstLine {
   const range = Range.create(line.line, 0, line.line, line.text.length);
   if (line.kind === 'blank') {
     return {
@@ -202,8 +202,8 @@ function buildLineAst(line: MipsCstLine): MipsAstLine {
     labels: line.labels.map((label) => ({
       kind: 'label',
       name: label.name,
-      range: mipsCstRange(line.line, label.range),
-      colonRange: mipsCstRange(line.line, label.colonRange)
+      range: mipsParsedRange(line.line, label.range),
+      colonRange: mipsParsedRange(line.line, label.colonRange)
     })),
     executable: line.executable ? buildExecutableAst(line.line, line.executable) : undefined,
     comment: line.comment
@@ -216,16 +216,16 @@ function buildLineAst(line: MipsCstLine): MipsAstLine {
   };
 }
 
-function buildExecutableAst(line: number, executable: MipsCstExecutable): MipsExecutableAst {
+function buildExecutableAst(line: number, executable: MipsParsedExecutable): MipsExecutableAst {
   const base = {
     mnemonic: executable.mnemonic,
     lowerMnemonic: executable.lowerMnemonic,
     range: executable.operandRange
       ? Range.create(line, executable.range.start, line, executable.operandRange.end)
-      : mipsCstRange(line, executable.range),
-    mnemonicRange: mipsCstRange(line, executable.range),
+      : mipsParsedRange(line, executable.range),
+    mnemonicRange: mipsParsedRange(line, executable.range),
     operandText: executable.operandText,
-    operandRange: executable.operandRange ? mipsCstRange(line, executable.operandRange) : undefined,
+    operandRange: executable.operandRange ? mipsParsedRange(line, executable.operandRange) : undefined,
     operands: executable.operands.map((operand) => buildOperandAst(line, operand))
   };
   return executable.kind === 'directive'
@@ -233,8 +233,8 @@ function buildExecutableAst(line: number, executable: MipsCstExecutable): MipsEx
     : { kind: 'operation', ...base };
 }
 
-function buildOperandAst(line: number, operand: MipsCstOperand): MipsOperandAst {
-  const range = mipsCstRange(line, operand.range);
+function buildOperandAst(line: number, operand: MipsParsedOperand): MipsOperandAst {
+  const range = mipsParsedRange(line, operand.range);
   const text = operand.text;
   const memory = parseMipsMemoryOperand(text);
   if (memory) {
@@ -259,8 +259,8 @@ function buildOperandAst(line: number, operand: MipsCstOperand): MipsOperandAst 
   return classifyOperand(text, range);
 }
 
-function buildSyntheticOperandAst(line: number, text: string, range: CstRange): MipsOperandAst {
-  return classifyOperand(text, mipsCstRange(line, range));
+function buildSyntheticOperandAst(line: number, text: string, range: MipsParsedRange): MipsOperandAst {
+  return classifyOperand(text, mipsParsedRange(line, range));
 }
 
 function classifyOperand(
@@ -437,7 +437,7 @@ function matchingMemoryOpenParen(text: string): number {
   return candidate;
 }
 
-function trimmedSpan(text: string, start: number, end: number): CstRange {
+function trimmedSpan(text: string, start: number, end: number): MipsParsedRange {
   let left = Math.max(0, start);
   let right = Math.max(left, end);
   while (left < right && isAsciiWhitespace(text[left])) {

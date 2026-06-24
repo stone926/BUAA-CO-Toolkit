@@ -119,6 +119,12 @@ export interface CstRange {
   end: number;
 }
 
+export type MipsParsedRange = CstRange;
+export type MipsParsedOperand = MipsCstOperand;
+export type MipsParsedExecutable = MipsCstExecutable;
+export type MipsParsedLine = MipsCstLine;
+export type MipsParsedDocument = MipsCstDocument;
+
 interface TextSpan {
   text: string;
   start: number;
@@ -130,6 +136,10 @@ export function parseMipsCstDocument(text: string): MipsCstDocument {
     kind: 'document',
     lines: text.split(/\r?\n/).map((line, lineNumber) => parseMipsCstLine(line, lineNumber))
   };
+}
+
+export function parseMipsSourceDocument(text: string): MipsParsedDocument {
+  return parseMipsCstDocument(text);
 }
 
 export function parseMipsCstLine(text: string, lineNumber = 0): MipsCstLine {
@@ -185,6 +195,10 @@ export function mipsCstTokenRange(token: MipsCstToken): Range {
 
 export function mipsCstRange(line: number, range: CstRange): Range {
   return Range.create(line, range.start, line, range.end);
+}
+
+export function mipsParsedRange(line: number, range: MipsParsedRange): Range {
+  return mipsCstRange(line, range);
 }
 
 function tokenizeMipsCode(code: string, lineNumber: number): MipsCstToken[] {
