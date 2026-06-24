@@ -61,8 +61,6 @@ export function collectCourseStyleDiagnostics(
   document: TextDocument,
   settings: CoSettings,
   text: string,
-  modules: VerilogModule[],
-  cst: VerilogCstDocument,
   ast: VerilogAstDocument,
   diagnostics: Diagnostic[]
 ): void {
@@ -72,7 +70,7 @@ export function collectCourseStyleDiagnostics(
     collectAlwaysStyleDiagnostics(document, settings, moduleAst, diagnostics);
     collectInstantiationStyleDiagnostics(settings, module, diagnostics);
     collectExplicitWidthDiagnostics(settings, module, diagnostics);
-    collectMagicNumberDiagnostics(document, settings, text, module, cst, diagnostics);
+    collectMagicNumberDiagnostics(document, settings, moduleAst, diagnostics);
     collectInoutDiagnostics(settings, module, diagnostics);
   }
   collectTestbenchDiagnostics(document, settings, text, ast, diagnostics);
@@ -145,18 +143,18 @@ function collectSynthesizableOperatorDiagnostics(document: TextDocument, moduleA
     }
   }
   for (const block of moduleAst.proceduralBlocks) {
-    collectSynthesizableOperatorDiagnosticsFromProceduralStatement(block.statementTree, visitExpression);
+    visitProceduralStatementExpressions(block.statementTree, visitExpression);
   }
 }
 
-function collectSynthesizableOperatorDiagnosticsFromProceduralStatement(
+function visitProceduralStatementExpressions(
   statement: VerilogProceduralStatementAst,
   visitExpression: (expression: VerilogExpressionAst | undefined) => void
 ): void {
   switch (statement.kind) {
     case 'block':
       for (const child of statement.statements) {
-        collectSynthesizableOperatorDiagnosticsFromProceduralStatement(child, visitExpression);
+        visitProceduralStatementExpressions(child, visitExpression);
       }
       return;
     case 'assignment':
@@ -165,9 +163,9 @@ function collectSynthesizableOperatorDiagnosticsFromProceduralStatement(
       return;
     case 'if':
       visitExpression(statement.condition);
-      collectSynthesizableOperatorDiagnosticsFromProceduralStatement(statement.consequent, visitExpression);
+      visitProceduralStatementExpressions(statement.consequent, visitExpression);
       if (statement.alternate) {
-        collectSynthesizableOperatorDiagnosticsFromProceduralStatement(statement.alternate, visitExpression);
+        visitProceduralStatementExpressions(statement.alternate, visitExpression);
       }
       return;
     case 'case':
@@ -176,12 +174,12 @@ function collectSynthesizableOperatorDiagnosticsFromProceduralStatement(
         for (const label of item.labels) {
           visitExpression(label);
         }
-        collectSynthesizableOperatorDiagnosticsFromProceduralStatement(item.body, visitExpression);
+        visitProceduralStatementExpressions(item.body, visitExpression);
       }
       return;
     case 'loop':
       visitExpression(statement.condition);
-      collectSynthesizableOperatorDiagnosticsFromProceduralStatement(statement.body, visitExpression);
+      visitProceduralStatementExpressions(statement.body, visitExpression);
       return;
     case 'other':
       visitExpression(statement.expression);
@@ -473,26 +471,115 @@ function collectExplicitWidthDiagnostics(settings: CoSettings, module: VerilogMo
   }
 }
 
-function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSettings, text: string, module: VerilogModule, cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
+function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSettings, moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
   if (!isVerilogLintRuleEnabled(settings, 'vc-004')) {
     return;
   }
-  const bodyStart = document.offsetAt(module.headerEnd);
-  const bodyEnd = document.offsetAt(module.range.end);
-  for (const token of cst.codeTokens) {
-    if (token.kind !== 'number' || token.start < bodyStart || token.start >= bodyEnd) {
+  const reported = new Set<string>();
+  const visitExpression = (expression: VerilogExpressionAst | undefined): void => {
+    if (expression) {
+      collectMagicNumberDiagnosticsFromExpression(document, expression, false, reported, diagnostics);
+    }
+  };
+
+  for (const statement of moduleAst.items) {
+    for (const expression of statement.expressions) {
+      visitExpression(expression);
+    }
+  }
+  for (const decl of moduleAst.module.declarations.values()) {
+    if (decl.kind === 'parameter' || decl.kind === 'localparam') {
       continue;
     }
-    const statement = cst.statements.find((item) => token.start >= item.start && token.start < item.end);
-    const statementTokens = statement ? trimStatementTokens(statement.tokens) : [];
-    if (
-      statementTokens.some((item) => item.value === 'parameter' || item.value === 'localparam' || item.value === '`define') ||
-      isTrivialLiteralToken(token.value) ||
-      isInsideBracketRangeTokens(statementTokens, token)
-    ) {
-      continue;
+    visitExpression(decl.initializerAst);
+  }
+  for (const instance of moduleAst.module.instances) {
+    for (const connection of [...instance.parameterConnections, ...instance.portConnections]) {
+      visitExpression(connection.expressionAst);
     }
-    diagnostics.push(makeDiagnostic(tokenRange(document, token), 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
+  }
+  for (const block of moduleAst.proceduralBlocks) {
+    visitProceduralStatementExpressions(block.statementTree, visitExpression);
+  }
+}
+
+function collectMagicNumberDiagnosticsFromExpression(
+  document: TextDocument,
+  expression: VerilogExpressionAst,
+  insideSelectIndex: boolean,
+  reported: Set<string>,
+  diagnostics: Diagnostic[]
+): void {
+  switch (expression.kind) {
+    case 'numberLiteral': {
+      if (insideSelectIndex || isTrivialLiteralToken(expression.raw)) {
+        return;
+      }
+      const range = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
+      const key = `${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
+      if (reported.has(key)) {
+        return;
+      }
+      reported.add(key);
+      diagnostics.push(makeDiagnostic(range, 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
+      return;
+    }
+    case 'parenthesizedExpression':
+      collectMagicNumberDiagnosticsFromExpression(document, expression.expression, insideSelectIndex, reported, diagnostics);
+      return;
+    case 'unaryExpression':
+      collectMagicNumberDiagnosticsFromExpression(document, expression.argument, insideSelectIndex, reported, diagnostics);
+      return;
+    case 'binaryExpression':
+      collectMagicNumberDiagnosticsFromExpression(document, expression.left, insideSelectIndex, reported, diagnostics);
+      collectMagicNumberDiagnosticsFromExpression(document, expression.right, insideSelectIndex, reported, diagnostics);
+      return;
+    case 'conditionalExpression':
+      collectMagicNumberDiagnosticsFromExpression(document, expression.condition, insideSelectIndex, reported, diagnostics);
+      collectMagicNumberDiagnosticsFromExpression(document, expression.whenTrue, insideSelectIndex, reported, diagnostics);
+      collectMagicNumberDiagnosticsFromExpression(document, expression.whenFalse, insideSelectIndex, reported, diagnostics);
+      return;
+    case 'concatenation':
+      for (const element of expression.elements) {
+        collectMagicNumberDiagnosticsFromExpression(document, element, insideSelectIndex, reported, diagnostics);
+      }
+      return;
+    case 'multipleConcatenation':
+      collectMagicNumberDiagnosticsFromExpression(document, expression.repeat, insideSelectIndex, reported, diagnostics);
+      for (const element of expression.elements) {
+        collectMagicNumberDiagnosticsFromExpression(document, element, insideSelectIndex, reported, diagnostics);
+      }
+      return;
+    case 'selectExpression': {
+      collectMagicNumberDiagnosticsFromExpression(document, expression.target, insideSelectIndex, reported, diagnostics);
+      const select = expression.select;
+      if (select.kind === 'bitSelect') {
+        collectMagicNumberDiagnosticsFromExpression(document, select.index, true, reported, diagnostics);
+      } else if (select.kind === 'rangeSelect') {
+        collectMagicNumberDiagnosticsFromExpression(document, select.left, true, reported, diagnostics);
+        collectMagicNumberDiagnosticsFromExpression(document, select.right, true, reported, diagnostics);
+      } else {
+        collectMagicNumberDiagnosticsFromExpression(document, select.base, true, reported, diagnostics);
+        collectMagicNumberDiagnosticsFromExpression(document, select.width, true, reported, diagnostics);
+      }
+      return;
+    }
+    case 'callExpression':
+      for (const arg of expression.args) {
+        collectMagicNumberDiagnosticsFromExpression(document, arg, insideSelectIndex, reported, diagnostics);
+      }
+      return;
+    case 'memberExpression':
+      collectMagicNumberDiagnosticsFromExpression(document, expression.target, insideSelectIndex, reported, diagnostics);
+      return;
+    case 'errorExpression':
+      for (const child of expression.children) {
+        collectMagicNumberDiagnosticsFromExpression(document, child, insideSelectIndex, reported, diagnostics);
+      }
+      return;
+    case 'identifier':
+    case 'stringLiteral':
+      return;
   }
 }
 
@@ -660,28 +747,6 @@ function isMduModule(module: VerilogModule): boolean {
 function isTrivialLiteralToken(value: string): boolean {
   const parsed = parseVerilogLiteral(value);
   return parsed !== undefined && (parsed === 0n || parsed === 1n);
-}
-
-function isInsideBracketRangeTokens(tokens: VerilogToken[], target: VerilogToken): boolean {
-  const index = tokens.indexOf(target);
-  if (index < 0) {
-    return false;
-  }
-  let left = index - 1;
-  while (left >= 0 && tokens[left].value !== '[' && tokens[left].value !== ';') {
-    if (tokens[left].value === ']') {
-      return false;
-    }
-    left--;
-  }
-  if (tokens[left]?.value !== '[') {
-    return false;
-  }
-  let right = index + 1;
-  while (right < tokens.length && tokens[right].value !== ']' && tokens[right].value !== ';') {
-    right++;
-  }
-  return tokens[right]?.value === ']';
 }
 
 function parseVerilogLiteral(value: string): bigint | undefined {

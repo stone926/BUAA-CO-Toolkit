@@ -60,6 +60,19 @@ endmodule
     expect(codes.some((code) => code.startsWith('vc-021'))).toBe(true);
   });
 
+  it('reports magic numbers from AST expressions but skips parameters and selects', () => {
+    const text = `
+module demo(input [7:0] a, output [7:0] y);
+    parameter P = 42;
+    assign y = a[3:0] + P + 42;
+endmodule
+`.trim();
+    const document = doc(text);
+    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { disabledRules: [] } } }))
+      .filter((diagnostic) => diagnostic.code === 'vc-004-magic-number');
+    expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['42']);
+  });
+
   it('does not emit removed formatting or abstraction rules', () => {
     const text = `
 module huge(input a,output reg y);
