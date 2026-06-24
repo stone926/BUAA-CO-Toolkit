@@ -183,6 +183,25 @@ endmodule
     expect(codes).not.toContain('mixed-assignment');
   });
 
+  it('reports clock signals used as sequential assignment data from AST RHS expressions', () => {
+    const clockData = `
+module demo(input clk, input data, output reg y);
+    always @(posedge clk) begin
+        y <= data ? clk : 1'b0;
+    end
+endmodule
+`.trim();
+    const normalData = `
+module demo(input clk, input data, output reg y);
+    always @(posedge clk) begin
+        y <= data;
+    end
+endmodule
+`.trim();
+    expect(diagnosticCodes(clockData)).toContain('vc-013-clock-data');
+    expect(diagnosticCodes(normalData)).not.toContain('vc-013-clock-data');
+  });
+
   it('recognizes common delayed testbench clock generation forms', () => {
     const clockGenerators = [
       'always #2 clk <= ~clk;',

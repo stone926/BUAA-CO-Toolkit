@@ -95,19 +95,6 @@ export function tokenListText(source: string, tokens: VerilogToken[]): string {
   return source.slice(tokens[0].start, tokens[tokens.length - 1].end);
 }
 
-export function assignmentRhsContainsIdentifier(tokens: VerilogToken[], identifier: string): boolean {
-  for (const statement of splitStatementsBySemicolon(tokens)) {
-    const operatorIndex = topLevelAssignmentOperator(statement);
-    if (operatorIndex < 0) {
-      continue;
-    }
-    if (statement.slice(operatorIndex + 1).some((token) => token.kind === 'identifier' && token.value === identifier)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function isOffsetInsideForControl(tokens: VerilogToken[], offset: number): boolean {
   for (let index = 0; index < tokens.length; index++) {
     if (tokens[index].value !== 'for') {
@@ -327,47 +314,6 @@ function nextTokenValue(tokens: VerilogToken[], start: number, value: string): n
     }
     if (tokens[index].value !== 'automatic') {
       return -1;
-    }
-  }
-  return -1;
-}
-
-function splitStatementsBySemicolon(tokens: VerilogToken[]): VerilogToken[][] {
-  const statements: VerilogToken[][] = [];
-  let start = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    if (tokens[index].value === ';') {
-      statements.push(tokens.slice(start, index + 1));
-      start = index + 1;
-    }
-  }
-  if (start < tokens.length) {
-    statements.push(tokens.slice(start));
-  }
-  return statements;
-}
-
-function topLevelAssignmentOperator(tokens: VerilogToken[]): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    }
-    if (paren === 0 && bracket === 0 && brace === 0 && (token.value === '=' || token.value === '<=')) {
-      return index;
     }
   }
   return -1;

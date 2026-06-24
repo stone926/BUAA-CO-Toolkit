@@ -15,7 +15,6 @@ import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogExpressionAst } from './exprAst';
 import { walkVerilogExpression } from './exprAstUtils';
 import {
-  assignmentRhsContainsIdentifier,
   edgeSignalsFromSensitivity,
   hasTokenValue,
   isOffsetInsideForControl,
@@ -302,7 +301,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       }
       const clockSignals = edgeSignals.filter(isClockSignalName);
       for (const clock of clockSignals) {
-        if (isVerilogLintRuleEnabled(settings, 'vc-013') && assignmentRhsContainsIdentifier(block.bodyTokens, clock)) {
+        if (isVerilogLintRuleEnabled(settings, 'vc-013') && proceduralAssignmentRhsContainsIdentifier(block.statementTree, clock)) {
           diagnostics.push(makeDiagnostic(block.headerRange, `VC-013: clock signal '${clock}' should not be used as data inside sequential logic.`, DiagnosticSeverity.Information, 'vc-013-clock-data'));
         }
       }
@@ -557,6 +556,25 @@ function declaredClockNames(module: VerilogModule): Set<string> {
   return new Set([...module.declarations.keys()].filter(isClockSignalName));
 }
 
+function proceduralAssignmentRhsContainsIdentifier(statement: VerilogProceduralStatementAst, identifier: string): boolean {
+  switch (statement.kind) {
+    case 'assignment':
+      return expressionContainsIdentifier(statement.rhs, identifier);
+    case 'block':
+      return statement.statements.some((child) => proceduralAssignmentRhsContainsIdentifier(child, identifier));
+    case 'loop':
+      return proceduralAssignmentRhsContainsIdentifier(statement.body, identifier);
+    case 'if':
+      return proceduralAssignmentRhsContainsIdentifier(statement.consequent, identifier) ||
+        Boolean(statement.alternate && proceduralAssignmentRhsContainsIdentifier(statement.alternate, identifier));
+    case 'case':
+      return statement.items.some((item) => proceduralAssignmentRhsContainsIdentifier(item.body, identifier));
+    case 'declaration':
+    case 'other':
+      return false;
+  }
+}
+
 function proceduralTreeHasClockToggle(statement: VerilogProceduralStatementAst, clockNames: Set<string>): boolean {
   return visitProceduralClockStatements(statement, clockNames, { requireDelay: false, requireForever: false });
 }
@@ -654,6 +672,19 @@ function isClockToggleAssignment(statement: VerilogAssignmentStatementAst, clock
     clockNames.has(target) &&
     expressionIsInvertedIdentifier(statement.rhs, target)
   );
+}
+
+function expressionContainsIdentifier(expression: VerilogExpressionAst | undefined, identifier: string): boolean {
+  if (!expression) {
+    return false;
+  }
+  let found = false;
+  walkVerilogExpression(expression, (node) => {
+    if (node.kind === 'identifier' && node.name === identifier) {
+      found = true;
+    }
+  });
+  return found;
 }
 
 function expressionIsInvertedIdentifier(expression: VerilogExpressionAst | undefined, name: string): boolean {
