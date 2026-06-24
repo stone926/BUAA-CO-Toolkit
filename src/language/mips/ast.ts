@@ -10,6 +10,7 @@ import {
   mipsParsedRange,
   parseCharLiteral,
   parseIntegerLiteral,
+  parseMacroArgumentNodes,
   parseMipsSourceDocument
 } from './syntax';
 import { isMipsStringLiteralText, parseMipsMemoryOperand } from './operandAst';
@@ -77,6 +78,7 @@ export interface MipsExecutableBaseAst {
   operandText: string;
   operandRange?: Range;
   operands: MipsOperandAst[];
+  macroArguments: MipsMacroArgumentAst[];
 }
 
 export interface MipsDirectiveAst extends MipsExecutableBaseAst {
@@ -136,6 +138,12 @@ export interface MipsMemoryOperandAst extends MipsOperandBaseAst {
   kind: 'memory';
   offset: MipsOperandAst;
   base: MipsOperandAst;
+}
+
+export interface MipsMacroArgumentAst {
+  kind: 'macroArgument';
+  text: string;
+  range: Range;
 }
 
 export interface MipsMacroDefinitionAst {
@@ -227,7 +235,14 @@ function buildExecutableAst(line: number, executable: MipsParsedExecutable): Mip
     mnemonicRange: mipsParsedRange(line, executable.range),
     operandText: executable.operandText,
     operandRange: executable.operandRange ? mipsParsedRange(line, executable.operandRange) : undefined,
-    operands: executable.operands.map((operand) => buildOperandAst(line, operand))
+    operands: executable.operands.map((operand) => buildOperandAst(line, operand)),
+    macroArguments: executable.operandRange
+      ? parseMacroArgumentNodes(executable.operandText, executable.operandRange.start).map((argument) => ({
+        kind: 'macroArgument' as const,
+        text: argument.text,
+        range: mipsParsedRange(line, argument.range)
+      }))
+      : []
   };
   return executable.kind === 'directive'
     ? { kind: 'directive', ...base }

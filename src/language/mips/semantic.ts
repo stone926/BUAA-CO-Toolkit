@@ -19,8 +19,7 @@ import type {
   MipsSymbol
 } from './model';
 import {
-  isSymbolLike,
-  parseMacroArguments
+  isSymbolLike
 } from './syntax';
 
 export type MipsSemanticScopeKind = 'global' | 'macro';
@@ -450,8 +449,8 @@ function resolveMacroReference(name: string, macros: Map<string, MipsMacro[]>, s
   if (!overloads?.length) {
     return undefined;
   }
-  const operandText = statement.executable?.operandText ?? '';
-  const argumentCount = parseMacroArguments(operandText).length;
+  const executable = statement.executable;
+  const argumentCount = executable?.macroArguments.length ?? 0;
   return overloads.find((macro) => macro.params.length === argumentCount) ?? overloads[0];
 }
 

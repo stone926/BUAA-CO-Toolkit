@@ -5,7 +5,6 @@ import {
   resolveMipsSemanticMacroAtPosition
 } from './semantic';
 import { MipsMacro, MipsParseResult } from './model';
-import { parseMacroArguments } from './syntax';
 
 export function findMacroOverloadAtPosition(parsed: MipsParseResult, name: string, position: Position): MipsMacro | undefined {
   const semanticMacro = resolveMipsSemanticMacroAtPosition(parsed.semantic, name, position);
@@ -36,7 +35,7 @@ export function macroCallArgumentsAtPosition(parsed: MipsParseResult, name: stri
   if (!containsPosition(executable.range, position)) {
     return undefined;
   }
-  return parseMacroArguments(executable.operandText);
+  return executable.macroArguments.map((argument) => argument.text);
 }
 
 /**

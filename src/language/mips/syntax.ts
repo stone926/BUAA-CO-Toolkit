@@ -35,13 +35,39 @@ export function parseOperands(text: string): string[] {
 }
 
 export function parseMacroArguments(text: string): string[] {
-  const normalized = stripBalancedOuterParens(text.trim()).trim();
+  return parseMacroArgumentNodes(text).map((arg) => arg.text);
+}
+
+export function parseMacroArgumentNodes(text: string, baseOffset = 0): MipsParsedMacroArgument[] {
+  let normalizedStart = leadingWhitespaceLength(text);
+  let normalizedEnd = trimRightIndex(text, text.length);
+  let normalized = text.slice(normalizedStart, normalizedEnd);
+  if (isBalancedOuterParenText(normalized)) {
+    const innerStart = normalizedStart + 1;
+    const innerEnd = normalizedEnd - 1;
+    const innerText = text.slice(innerStart, innerEnd);
+    const innerLeading = leadingWhitespaceLength(innerText);
+    const innerTrimmedEnd = trimRightIndex(innerText, innerText.length);
+    normalizedStart = innerStart + innerLeading;
+    normalizedEnd = innerStart + innerTrimmedEnd;
+    normalized = text.slice(normalizedStart, normalizedEnd);
+  }
   if (!normalized) {
     return [];
   }
   return splitMipsMacroArgumentSpans(normalized)
-    .map((arg) => arg.text.trim())
-    .filter(Boolean);
+    .map((arg) => {
+      const leading = leadingWhitespaceLength(arg.text);
+      const end = trimRightIndex(arg.text, arg.text.length);
+      return {
+        text: arg.text.slice(leading, end),
+        range: {
+          start: baseOffset + normalizedStart + arg.start + leading,
+          end: baseOffset + normalizedStart + arg.start + end
+        }
+      };
+    })
+    .filter((arg) => arg.text.length > 0);
 }
 
 export type MipsParsedTokenKind =
@@ -76,6 +102,11 @@ export interface MipsParsedLabel {
 }
 
 export interface MipsParsedOperand {
+  text: string;
+  range: MipsParsedRange;
+}
+
+export interface MipsParsedMacroArgument {
   text: string;
   range: MipsParsedRange;
 }
@@ -491,8 +522,12 @@ function splitMipsMacroArgumentSpans(text: string): TextSpan[] {
 }
 
 function stripBalancedOuterParens(text: string): string {
+  return isBalancedOuterParenText(text) ? text.slice(1, -1) : text;
+}
+
+function isBalancedOuterParenText(text: string): boolean {
   if (!text.startsWith('(') || !text.endsWith(')')) {
-    return text;
+    return false;
   }
   let depth = 0;
   let inString = false;
@@ -520,11 +555,11 @@ function stripBalancedOuterParens(text: string): string {
     } else if (char === ')') {
       depth--;
       if (depth === 0 && index !== text.length - 1) {
-        return text;
+        return false;
       }
     }
   }
-  return depth === 0 ? text.slice(1, -1) : text;
+  return depth === 0;
 }
 
 function skipAsciiWhitespace(text: string, start: number): number {

@@ -3,6 +3,7 @@ import {
   stripComment,
   parseOperands,
   parseMacroArguments,
+  parseMacroArgumentNodes,
   parseMipsCstDocument,
   parseMipsCstLine,
   parseMipsSourceDocument,
@@ -531,6 +532,14 @@ describe('parseMacroArguments', () => {
 
   it('trims whitespace', () => {
     expect(parseMacroArguments('  $a  ,  $b  ')).toEqual(['$a', '$b']);
+  });
+
+  it('returns ranges for parsed macro argument nodes', () => {
+    expect(parseMacroArgumentNodes('  ($a, "hello world"  $b)  ', 10)).toEqual([
+      { text: '$a', range: { start: 13, end: 15 } },
+      { text: '"hello world"', range: { start: 17, end: 30 } },
+      { text: '$b', range: { start: 32, end: 34 } }
+    ]);
   });
 });
 

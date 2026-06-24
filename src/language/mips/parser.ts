@@ -33,7 +33,6 @@ import {
   parseCharLiteral,
   parseMipsSourceDocument,
   parseIntegerLiteral,
-  parseMacroArguments,
   parseOperands
 } from './syntax';
 import {
@@ -279,10 +278,10 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     if (!instruction && macroOverloads?.length) {
-      const operands = parseMacroArguments(executableAst.operandText);
+      const operands = executableAst.macroArguments;
       for (const operand of operands) {
-        if (!isMacroArgumentToken(operand)) {
-          diagnostics.push(makeDiagnostic(rangeOfText(document, lineNumber, operand), `宏参数 '${operand}' 必须是单个 MARS 语言元素；内存操作数如 4($t0) 不是有效的宏参数`, DiagnosticSeverity.Error, 'macro-argument'));
+        if (!isMacroArgumentToken(operand.text)) {
+          diagnostics.push(makeDiagnostic(operand.range, `宏参数 '${operand.text}' 必须是单个 MARS 语言元素；内存操作数如 4($t0) 不是有效的宏参数`, DiagnosticSeverity.Error, 'macro-argument'));
         }
       }
       if (!macroOverloads.some((macro) => macro.params.length === operands.length)) {
@@ -1095,7 +1094,7 @@ function macroCallAtStatement(parsed: MipsParseResult, statement: MipsStatementA
   if (!overloads.length) {
     return undefined;
   }
-  const operands = parseMacroArguments(executable.operandText);
+  const operands = executable.macroArguments.map((operand) => operand.text);
   const macro = overloads.find((candidate) => candidate.params.length === operands.length) ?? overloads[0];
   return {
     macro,

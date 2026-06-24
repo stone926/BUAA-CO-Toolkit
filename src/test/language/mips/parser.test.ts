@@ -287,6 +287,13 @@ describe('parseMips', () => {
       expect(diagCodes(result)).toContain('macro-argument-count');
     });
 
+    it('attaches parsed macro arguments to call AST nodes', () => {
+      const text = '.macro foo(%a, %b, %c)\n.end_macro\nfoo($t0 "hello world" $t1)';
+      const result = parseMips(doc(text), settings());
+      const call = result.ast.statements[2].executable;
+      expect(call?.macroArguments.map((argument) => argument.text)).toEqual(['$t0', '"hello world"', '$t1']);
+    });
+
     it('detects duplicate macro parameters', () => {
       const text = '.macro foo(%a, %a)\n.end_macro';
       const result = parseMips(doc(text), settings());
