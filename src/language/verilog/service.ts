@@ -933,12 +933,11 @@ function addDefaultCaseItemEdit(document: TextDocument, statement: VerilogCaseSt
   if (statement.items.some((item) => item.defaultItem)) {
     return undefined;
   }
-  const endcase = [...statement.tokens].reverse().find((token) => token.value === 'endcase');
-  if (!endcase) {
+  if (statement.range.end.line < statement.range.start.line) {
     return undefined;
   }
   const indent = defaultCaseIndent(document, statement);
-  return TextEdit.insert(Position.create(document.positionAt(endcase.start).line, 0), `${indent}default: ;\n`);
+  return TextEdit.insert(Position.create(statement.range.end.line, 0), `${indent}default: ;\n`);
 }
 
 function defaultCaseIndent(document: TextDocument, statement: VerilogCaseStatementAst): string {
