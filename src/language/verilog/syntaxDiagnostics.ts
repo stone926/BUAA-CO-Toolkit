@@ -5,6 +5,8 @@ import { VerilogModule } from './model';
 import { VerilogToken } from './lexer';
 import { VerilogCstDocument } from './cst';
 import { parseVerilogSyntax } from './syntaxParser';
+import { VerilogAstDocument } from './ast';
+import { verilogAstCodeTokens } from './astTokens';
 
 type BlockToken = 'begin' | 'case' | 'generate' | 'function' | 'task';
 
@@ -60,9 +62,11 @@ const bodyBoundaryKeywords = new Set([
 export function collectSyntaxDiagnostics(
   document: TextDocument,
   cst: VerilogCstDocument,
+  ast: VerilogAstDocument,
   modules: VerilogModule[],
   diagnostics: Diagnostic[]
 ): void {
+  const tokens = verilogAstCodeTokens(ast);
   for (const diagnostic of cst.diagnostics) {
     diagnostics.push(makeDiagnostic(
       rangeAtOffset(document, diagnostic.start, Math.max(1, diagnostic.end - diagnostic.start)),
@@ -72,11 +76,11 @@ export function collectSyntaxDiagnostics(
     ));
   }
 
-  collectMalformedModuleDiagnostics(document, cst.codeTokens, modules, diagnostics);
-  collectDelimiterDiagnostics(document, cst.codeTokens, diagnostics);
-  collectBlockBalanceDiagnostics(document, cst.codeTokens, diagnostics);
-  collectStatementTerminatorDiagnostics(document, cst.codeTokens, modules, diagnostics);
-  for (const diagnostic of parseVerilogSyntax(document, cst, modules).diagnostics) {
+  collectMalformedModuleDiagnostics(document, tokens, modules, diagnostics);
+  collectDelimiterDiagnostics(document, tokens, diagnostics);
+  collectBlockBalanceDiagnostics(document, tokens, diagnostics);
+  collectStatementTerminatorDiagnostics(document, tokens, modules, diagnostics);
+  for (const diagnostic of parseVerilogSyntax(document, ast, modules).diagnostics) {
     pushUniqueDiagnostic(diagnostics, diagnostic);
   }
 }

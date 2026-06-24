@@ -28,6 +28,7 @@ export interface VerilogAstDocument {
   uri: string;
   range: Range;
   cst: VerilogCstDocument;
+  tokens: VerilogToken[];
   trivia: VerilogTriviaAst[];
   preprocessor: VerilogPreprocessorAst[];
   modules: VerilogModuleAst[];
@@ -171,6 +172,7 @@ export function buildVerilogAst(
     uri: document.uri,
     range: documentRange(document),
     cst,
+    tokens: cst.codeTokens,
     trivia: cst.tokens
       .filter((token): token is VerilogToken & { kind: 'comment' | 'string' } => token.kind === 'comment' || token.kind === 'string')
       .map((token): VerilogTriviaAst => ({

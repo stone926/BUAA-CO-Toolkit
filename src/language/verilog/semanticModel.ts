@@ -15,7 +15,8 @@ import {
   VerilogPortConnection,
   verilogKeywords
 } from './model';
-import { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst } from './ast';
+import { VerilogAstDocument, VerilogModuleAst } from './ast';
+import { verilogAstCodeTokens } from './astTokens';
 import type { VerilogProceduralBlockAst } from './blockAst';
 import { parseVerilogExpressionTokens } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
@@ -140,7 +141,7 @@ export function buildVerilogSemanticModel(source: VerilogSemanticSource): Verilo
     parent: fileScope
   }));
   fileScope.children.push(...moduleScopes);
-  const astTokens = astCodeTokens(source.ast);
+  const astTokens = verilogAstCodeTokens(source.ast);
   const blockScopes = collectBlockScopes(source.document, source.ast.modules, astTokens, moduleScopes);
   const symbols = collectSymbols(source, fileScope, moduleScopes, blockScopes, astTokens);
   const declarationRangeKeys = new Set(symbols.map((symbol) => rangeKey(symbol.selectionRange)));
@@ -376,25 +377,6 @@ function collectReferences(
   }
 
   return references;
-}
-
-function astCodeTokens(ast: VerilogAstDocument): VerilogToken[] {
-  const tokens: VerilogToken[] = [];
-  for (const statement of ast.topLevelStatements) {
-    tokens.push(...statementTokens(statement));
-  }
-  for (const moduleAst of ast.modules) {
-    for (const statement of moduleAst.items) {
-      tokens.push(...statementTokens(statement));
-    }
-  }
-  return tokens
-    .filter((token) => token.kind !== 'eof')
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-}
-
-function statementTokens(statement: VerilogStatementAst): VerilogToken[] {
-  return statement.tokens;
 }
 
 function collectBlockScopes(

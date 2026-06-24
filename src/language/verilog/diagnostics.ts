@@ -43,7 +43,7 @@ export function collectVerilogDiagnostics(
   semantic: VerilogSemanticModel
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  collectSyntaxDiagnostics(document, cst, modules, diagnostics);
+  collectSyntaxDiagnostics(document, cst, ast, modules, diagnostics);
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(document, modules, diagnostics);

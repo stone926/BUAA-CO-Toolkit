@@ -17,7 +17,7 @@ import {
 import { getCachedVerilogParse } from './parseCache';
 import { VerilogSemanticReference, VerilogSemanticSymbol } from './semanticModel';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
-import type { VerilogAstDocument, VerilogStatementAst } from './ast';
+import { verilogAstCodeTokens } from './astTokens';
 import type { VerilogToken } from './lexer';
 
 interface SemanticTokenCandidate {
@@ -70,10 +70,7 @@ function buildVerilogSemanticTokens(document: TextDocument, index: VerilogWorksp
     }
   }
 
-  for (const tokenNode of astTokens(parsed.ast)) {
-    if (tokenNode.kind === 'eof') {
-      continue;
-    }
+  for (const tokenNode of verilogAstCodeTokens(parsed.ast)) {
     const range = tokenRange(document, tokenNode);
     const token = tokenNode.value;
     if (tokenNode.kind === 'comment') {
@@ -134,23 +131,6 @@ function buildVerilogSemanticTokens(document: TextDocument, index: VerilogWorksp
     );
   }
   return builder.build();
-}
-
-function astTokens(ast: VerilogAstDocument): VerilogToken[] {
-  const tokens: VerilogToken[] = [];
-  for (const statement of ast.topLevelStatements) {
-    tokens.push(...statementTokens(statement));
-  }
-  for (const moduleAst of ast.modules) {
-    for (const statement of moduleAst.items) {
-      tokens.push(...statementTokens(statement));
-    }
-  }
-  return tokens;
-}
-
-function statementTokens(statement: VerilogStatementAst): VerilogToken[] {
-  return statement.tokens;
 }
 
 function tokenRange(document: TextDocument, token: VerilogToken): Range {

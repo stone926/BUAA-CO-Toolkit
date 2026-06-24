@@ -2,7 +2,8 @@ import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/nod
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { parseAssignmentTokens } from './assignmentAnalysis';
-import { VerilogCstDocument } from './cst';
+import { VerilogAstDocument, VerilogModuleAst } from './ast';
+import { verilogAstCodeTokens } from './astTokens';
 import { parseVerilogExpressionTokens, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
 import { childrenOfVerilogExpression } from './exprAstUtils';
 import { isIdentifierLike, VerilogToken } from './lexer';
@@ -87,42 +88,48 @@ const unsupportedConstructs = new Set([
 
 export function parseVerilogSyntax(
   document: TextDocument,
-  cst: VerilogCstDocument,
+  ast: VerilogAstDocument,
   modules: VerilogModule[]
 ): VerilogSyntaxParseResult {
   const diagnostics: Diagnostic[] = [];
+  const tokens = verilogAstCodeTokens(ast);
   const root: VerilogSyntaxNode = {
     kind: 'sourceFile',
     range: documentRange(document),
     children: []
   };
-  collectNumberLiteralDiagnostics(document, cst.codeTokens, diagnostics);
-  collectUnsupportedConstructDiagnostics(document, cst.codeTokens, diagnostics);
+  collectNumberLiteralDiagnostics(document, tokens, diagnostics);
+  collectUnsupportedConstructDiagnostics(document, tokens, diagnostics);
 
   for (const module of modules) {
+    const moduleAst = ast.modules.find((item) => item.module === module);
+    if (!moduleAst) {
+      continue;
+    }
     const moduleNode: VerilogSyntaxNode = {
       kind: 'module',
       range: module.range,
       children: []
     };
     root.children.push(moduleNode);
-    collectModuleHeaderDiagnostics(document, cst, module, diagnostics);
-    collectModuleItemDiagnostics(document, cst, module, moduleNode, diagnostics);
+    collectModuleHeaderDiagnostics(document, tokens, moduleAst, diagnostics);
+    collectModuleItemDiagnostics(document, tokens, moduleAst, moduleNode, diagnostics);
   }
 
-  collectOrphanControlDiagnostics(document, cst.codeTokens, diagnostics);
+  collectOrphanControlDiagnostics(document, tokens, diagnostics);
   return { root, diagnostics: dedupeDiagnostics(diagnostics) };
 }
 
 function collectModuleHeaderDiagnostics(
   document: TextDocument,
-  cst: VerilogCstDocument,
-  module: VerilogModule,
+  tokens: VerilogToken[],
+  moduleAst: VerilogModuleAst,
   diagnostics: Diagnostic[]
 ): void {
+  const module = moduleAst.module;
   const moduleStart = document.offsetAt(module.range.start);
   const headerEnd = document.offsetAt(module.headerEnd);
-  const headerTokens = cst.codeTokens.filter((token) =>
+  const headerTokens = tokens.filter((token) =>
     token.start >= moduleStart &&
     token.end <= headerEnd &&
     token.kind !== 'eof'
@@ -295,14 +302,17 @@ function looksLikeInheritedPortDeclarator(tokens: VerilogToken[]): boolean {
 
 function collectModuleItemDiagnostics(
   document: TextDocument,
-  cst: VerilogCstDocument,
-  module: VerilogModule,
+  tokens: VerilogToken[],
+  moduleAst: VerilogModuleAst,
   moduleNode: VerilogSyntaxNode,
   diagnostics: Diagnostic[]
 ): void {
+  const module = moduleAst.module;
   const bodyStart = document.offsetAt(module.headerEnd);
   const bodyEnd = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-  const bodyTokens = cst.codeTokens.filter((token) => token.start >= bodyStart && token.start < bodyEnd && token.kind !== 'eof');
+  const bodyTokens = tokens
+    .filter((token) => token.start >= bodyStart && token.start < bodyEnd && token.kind !== 'eof')
+    .sort((left, right) => left.start - right.start || left.end - right.end);
   for (const item of splitVerilogModuleItems(bodyTokens)) {
     const first = item[0];
     if (!first) {
