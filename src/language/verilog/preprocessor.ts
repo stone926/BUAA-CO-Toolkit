@@ -2,8 +2,7 @@ import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { rangeKey } from '../common/util';
-import { parseVerilogCst } from './cst';
-import { VerilogToken } from './lexer';
+import { lexVerilog, VerilogToken } from './lexer';
 import {
   VerilogDirective,
   VerilogInclude,
@@ -32,7 +31,7 @@ export const preprocessorDirectives = new Set([
 ]);
 
 export function parseMacros(document: TextDocument, text: string): VerilogMacro[] {
-  return parseMacrosFromTokens(document, parseVerilogCst(document, text).codeTokens);
+  return parseMacrosFromTokens(document, lexVerilog(text).tokens);
 }
 
 export function parseMacrosFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogMacro[] {
@@ -66,7 +65,7 @@ export function parseMacroUses(
   text: string,
   macros: VerilogMacro[] = parseMacros(document, text)
 ): VerilogMacroUse[] {
-  return parseMacroUsesFromTokens(document, macros, parseVerilogCst(document, text).codeTokens);
+  return parseMacroUsesFromTokens(document, macros, lexVerilog(text).tokens);
 }
 
 export function parseMacroUsesFromTokens(
@@ -98,7 +97,7 @@ export function parseMacroUsesFromTokens(
 }
 
 export function parseIncludes(document: TextDocument, text: string): VerilogInclude[] {
-  return parseIncludesFromTokens(document, parseVerilogCst(document, text).codeTokens);
+  return parseIncludesFromTokens(document, lexVerilog(text).tokens);
 }
 
 export function parseIncludesFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogInclude[] {
@@ -122,7 +121,7 @@ export function parseIncludesFromTokens(document: TextDocument, tokens: VerilogT
 }
 
 export function parseDirectives(document: TextDocument, text: string): VerilogDirective[] {
-  return parseDirectivesFromTokens(document, parseVerilogCst(document, text).codeTokens);
+  return parseDirectivesFromTokens(document, lexVerilog(text).tokens);
 }
 
 export function parseDirectivesFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogDirective[] {
