@@ -131,6 +131,7 @@ describe('parseMips', () => {
         '.data',
         "chars: .byte 'a', '\\n', '\\0', '\\377'",
         "words: .word 'a', '\\n'",
+        "colon: .word ':' : 2",
         '.text',
         'main:',
         "    li $t0, 'a'",
