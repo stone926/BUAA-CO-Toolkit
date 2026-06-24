@@ -282,27 +282,33 @@ function declAst(decl: VerilogDecl): VerilogDeclAst {
 }
 
 function buildStatementAst(statement: VerilogStatementSource, module?: VerilogModule): VerilogStatementAst {
-  const assignment = assignmentExpressionAst(statement.tokens);
+  const assignment = assignmentExpressionAsts(statement.tokens);
   return {
     kind: classifyStatement(statement, module),
     range: statement.range,
     start: statement.start,
     end: statement.end,
     tokens: statement.tokens,
-    expressions: assignment ? [assignment.lhs, assignment.rhs] : [],
-    assignment,
+    expressions: assignment.expressions,
+    assignment: assignment.assignment,
     module
   };
 }
 
-function assignmentExpressionAst(rawTokens: VerilogToken[]): VerilogAssignmentExpressionAst | undefined {
+function assignmentExpressionAsts(rawTokens: VerilogToken[]): {
+  assignment?: VerilogAssignmentExpressionAst;
+  expressions: VerilogExpressionAst[];
+} {
   const parsed = parseAssignmentTokens(rawTokens);
   if (!parsed) {
-    return undefined;
+    return { expressions: [] };
   }
   const lhs = parseVerilogExpressionTokens(parsed.lhsTokens);
   const rhs = parseVerilogExpressionTokens(parsed.rhsTokens);
-  return lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined;
+  return {
+    assignment: lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined,
+    expressions: [lhs, rhs].filter((expression): expression is VerilogExpressionAst => Boolean(expression))
+  };
 }
 
 function collectSubroutineAsts(document: TextDocument, tokens: VerilogToken[], module: VerilogModule): VerilogSubroutineAst[] {

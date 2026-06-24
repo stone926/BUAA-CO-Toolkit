@@ -529,17 +529,23 @@ endmodule
 module top(input a);
     wire foo;
     child u_child(.a(a));
-    foo = a;
+    foo = ;
+    = a;
 endmodule
 `.trim();
     const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
     const topAst = parsed.ast.modules.find((module) => module.name === 'top');
     const instanceStatement = topAst?.items.find((item) => item.tokens.some((token) => token.value === 'u_child'));
-    const bareAssignmentStatement = topAst?.items.find((item) => item.tokens[0]?.value === 'foo');
+    const missingRhsAssignment = topAst?.items.find((item) => item.tokens[0]?.value === 'foo');
+    const missingLhsAssignment = topAst?.items.find((item) => item.tokens[0]?.value === '=');
 
     expect(instanceStatement?.kind).toBe('instance');
-    expect(bareAssignmentStatement?.kind).toBe('other');
-    expect(bareAssignmentStatement?.assignment?.rhs.kind).toBe('identifier');
+    expect(missingRhsAssignment?.kind).toBe('other');
+    expect(missingRhsAssignment?.assignment).toBeUndefined();
+    expect(missingRhsAssignment?.expressions.map((expression) => expression.kind)).toEqual(['identifier']);
+    expect(missingLhsAssignment?.kind).toBe('other');
+    expect(missingLhsAssignment?.assignment).toBeUndefined();
+    expect(missingLhsAssignment?.expressions.map((expression) => expression.kind)).toEqual(['identifier']);
   });
 
   it('attaches procedural statement trees to parsed blocks', () => {

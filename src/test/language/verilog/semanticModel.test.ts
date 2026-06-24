@@ -87,12 +87,13 @@ describe('Verilog AST and semantic model', () => {
     const text = [
       'module top(input a);',
       '    wire foo;',
-      '    foo = a;',
+      '    foo = ;',
+      '    = a;',
       'endmodule'
     ].join('\n');
     const document = doc(text);
     const result = parseVerilog(document, defaultCoSettings, false);
-    const lhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('foo =')));
+    const lhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('foo = ;')));
     const rhsUse = resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('= a') + 2));
 
     expect(lhsUse?.symbol?.name).toBe('foo');
