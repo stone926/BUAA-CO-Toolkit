@@ -7,7 +7,6 @@ import { ProjectProfile } from '../../projectProfile';
 import { lineAt, makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import { evalExpressionAstConstant, shouldReportWidthMismatch, widthOfDecl, widthOfExpression, widthOfExpressionAst } from './expressions';
-import { findAssignmentOperator } from './assignmentAnalysis';
 import type { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst } from './ast';
 import { parseVerilogExpression } from './exprAst';
 import type { VerilogExpressionAst } from './exprAst';
@@ -19,7 +18,7 @@ import {
   VerilogModule
 } from './model';
 import { VerilogCstDocument, verilogTokenRange } from './cst';
-import { isIdentifierLike, VerilogToken } from './lexer';
+import { VerilogToken } from './lexer';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import { parameterOverridesForInstance } from './parameterOverrides';
 import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
@@ -48,7 +47,7 @@ export function collectVerilogDiagnostics(
   collectStructuralDiagnostics(document, modules, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(document, modules, diagnostics);
-  collectWidthDiagnostics(document, text, modules, cst, ast, diagnostics);
+  collectWidthDiagnostics(document, modules, ast, diagnostics);
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
@@ -419,22 +418,11 @@ function offsetRangeAtBase(document: TextDocument, start: number, end: number, b
   return Range.create(document.positionAt(baseOffset + start), document.positionAt(baseOffset + end));
 }
 
-function collectWidthDiagnostics(document: TextDocument, text: string, modules: VerilogModule[], cst: VerilogCstDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+function collectWidthDiagnostics(document: TextDocument, modules: VerilogModule[], ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   const modulesByName = new Map(modules.map((module) => [module.name, module]));
   for (const module of modules) {
     const moduleAst = ast.modules.find((item) => item.module === module);
-    const bodyStart = document.offsetAt(module.headerEnd);
-    const bodyEnd = document.offsetAt(module.range.end);
-    for (const statement of cst.statements) {
-      if (statement.start < bodyStart || statement.start >= bodyEnd) {
-        continue;
-      }
-      const tokens = trimStatementTokens(statement.tokens);
-      if (isDeclarationStatement(tokens)) {
-        collectDeclarationInitializerWidthDiagnostics(document, text, module, tokens, diagnostics);
-        continue;
-      }
-    }
+    collectDeclarationInitializerWidthDiagnostics(module, diagnostics);
     if (moduleAst) {
       collectAssignmentWidthDiagnostics(document, moduleAst, diagnostics);
     }
@@ -502,27 +490,6 @@ function collectStatementAssignmentWidthDiagnostic(
   ));
 }
 
-const declarationStatementKeywords = new Set([
-  'input',
-  'output',
-  'inout',
-  'wire',
-  'reg',
-  'logic',
-  'integer',
-  'real',
-  'realtime',
-  'time',
-  'parameter',
-  'localparam',
-  'genvar'
-]);
-
-const declarationModifierKeywords = new Set([
-  'signed', 'unsigned', 'automatic', 'scalared', 'vectored',
-  'tri', 'tri0', 'tri1', 'supply0', 'supply1', 'wand', 'wor'
-]);
-
 // parameter/localparam widths are inferred FROM their initializer, so checking them is circular;
 // genvar is a loop index, not a sized net.
 const initializerWidthCheckedKinds = new Set(['wire', 'reg', 'logic', 'integer', 'time', 'input', 'output', 'inout']);
@@ -531,131 +498,26 @@ const initializerWidthCheckedKinds = new Set(['wire', 'reg', 'logic', 'integer',
 // loop skips declarations, so initializer width is checked here. Each declarator `name = expr` is
 // compared against the declared width; only truncation is reported (see shouldReportWidthMismatch).
 function collectDeclarationInitializerWidthDiagnostics(
-  document: TextDocument,
-  text: string,
   module: VerilogModule,
-  tokens: VerilogToken[],
   diagnostics: Diagnostic[]
 ): void {
-  const start = firstDeclaratorIndex(tokens);
-  if (start < 0) {
-    return;
-  }
-  for (const declarator of splitTopLevelByComma(tokens.slice(start))) {
-    const operatorIndex = findAssignmentOperator(declarator);
-    if (operatorIndex <= 0 || declarator[operatorIndex].value !== '=') {
-      continue;
-    }
-    const nameToken = declarator[0];
-    if (!nameToken || !isIdentifierLike(nameToken.kind)) {
-      continue;
-    }
-    const decl = module.declarations.get(nameToken.value);
-    if (!decl || !initializerWidthCheckedKinds.has(decl.kind)) {
-      continue;
-    }
-    const initTokens = declarator.slice(operatorIndex + 1);
-    if (!initTokens.length) {
+  for (const decl of module.declarations.values()) {
+    if (!decl.initializer || !decl.initializerRange || !initializerWidthCheckedKinds.has(decl.kind)) {
       continue;
     }
     const expected = widthOfDecl(decl, module);
     const actual = decl.initializerAst
       ? widthOfExpressionAst(decl.initializerAst, module)
-      : widthOfExpression(tokenText(text, initTokens).trim(), module);
+      : widthOfExpression(decl.initializer, module);
     if (shouldReportWidthMismatch(expected, actual)) {
       diagnostics.push(makeDiagnostic(
-        tokenRange(document, initTokens),
-        `Width mismatch: '${nameToken.value}' is ${expected.width} bit(s), but its initializer is ${actual.width} bit(s).`,
+        decl.initializerRange,
+        `Width mismatch: '${decl.name}' is ${expected.width} bit(s), but its initializer is ${actual.width} bit(s).`,
         DiagnosticSeverity.Warning,
         'width-mismatch'
       ));
     }
   }
-}
-
-function firstDeclaratorIndex(tokens: VerilogToken[]): number {
-  let index = 0;
-  while (index < tokens.length) {
-    const token = tokens[index];
-    if (token.value === '[') {
-      const close = matchingBracket(tokens, index);
-      if (close < 0) {
-        return -1;
-      }
-      index = close + 1;
-      continue;
-    }
-    if (token.kind === 'keyword' && (declarationStatementKeywords.has(token.value) || declarationModifierKeywords.has(token.value))) {
-      index++;
-      continue;
-    }
-    return isIdentifierLike(token.kind) ? index : -1;
-  }
-  return -1;
-}
-
-function matchingBracket(tokens: VerilogToken[], openIndex: number): number {
-  let depth = 0;
-  for (let index = openIndex; index < tokens.length; index++) {
-    if (tokens[index].value === '[') {
-      depth++;
-    } else if (tokens[index].value === ']') {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function splitTopLevelByComma(tokens: VerilogToken[]): VerilogToken[][] {
-  const parts: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const value = tokens[index].value;
-    if (value === '(') {
-      paren++;
-    } else if (value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (value === '[') {
-      bracket++;
-    } else if (value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (value === '{') {
-      brace++;
-    } else if (value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (value === ',' && paren === 0 && bracket === 0 && brace === 0) {
-      parts.push(tokens.slice(start, index));
-      start = index + 1;
-    }
-  }
-  parts.push(tokens.slice(start));
-  return parts.filter((part) => part.length > 0);
-}
-
-function trimStatementTokens(tokens: VerilogToken[]): VerilogToken[] {
-  const result = tokens.filter((token) => token.kind !== 'eof');
-  return result[result.length - 1]?.value === ';' ? result.slice(0, -1) : result;
-}
-
-function isDeclarationStatement(tokens: VerilogToken[]): boolean {
-  return Boolean(tokens[0] && declarationStatementKeywords.has(tokens[0].value));
-}
-
-function tokenText(text: string, tokens: VerilogToken[]): string {
-  if (!tokens.length) {
-    return '';
-  }
-  return text.slice(tokens[0].start, tokens[tokens.length - 1].end);
-}
-
-function tokenRange(document: TextDocument, tokens: VerilogToken[]): Range {
-  return Range.create(document.positionAt(tokens[0].start), document.positionAt(tokens[tokens.length - 1].end));
 }
 
 function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, modules: VerilogModule[], cst: VerilogCstDocument, diagnostics: Diagnostic[]): void {
