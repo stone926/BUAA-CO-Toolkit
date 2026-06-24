@@ -4,6 +4,8 @@ import { lineAt } from '../common/lsp';
 import { MipsMacro, MipsParseResult } from './model';
 import { instructionWritesRegister } from './instructionValidation';
 import { macroCallArgumentsAtPosition } from './queries';
+import type { MipsAstLine, MipsExecutableAst, MipsStatementAst } from './ast';
+import { collectMipsOperandReferences } from './operandReferences';
 import {
   cp0RegistersByNumber,
   directives,
@@ -57,7 +59,7 @@ export function macroExpansionPreview(document: TextDocument, parsed: MipsParseR
   const lines: string[] = [];
   for (let lineNumber = macro.bodyStartLine; lineNumber <= (macro.bodyEndLine ?? macro.bodyStartLine - 1); lineNumber++) {
     const line = parsed.ast.lines[lineNumber];
-    lines.push(line ? expandMacroBodyLine(line.text, line.tokens, replacements) : lineAt(document, lineNumber).text);
+    lines.push(line ? expandMacroBodyLine(line, replacements) : lineAt(document, lineNumber).text);
   }
   return lines.join('\n');
 }
@@ -260,37 +262,153 @@ export function cp0RegisterAtPosition(parsed: MipsParseResult, word: string, pos
 export function eqvReplacementText(parsed: MipsParseResult, lineNumber: number, name: string): string | undefined {
   const line = parsed.ast.lines[lineNumber];
   const executable = line?.kind === 'statement' ? line.executable : undefined;
-  if (!line || line.kind !== 'statement' || !executable || executable.lowerMnemonic !== '.eqv' || !executable.cst.operandRange) {
+  if (!line || line.kind !== 'statement' || !executable || executable.lowerMnemonic !== '.eqv' || !executable.operandRange) {
     return undefined;
   }
-  const nameToken = line.tokens.find((token) =>
-    token.start >= executable.cst.operandRange!.start
-    && token.end <= executable.cst.operandRange!.end
-    && token.value === name
-  );
-  if (!nameToken) {
+  const nameOperand = firstDirectiveSymbolOperand(executable);
+  if (!nameOperand || nameOperand.text !== name) {
     return undefined;
   }
-  const replacementStart = skipEqvSeparator(line.cst.code, nameToken.end);
-  const replacement = line.cst.code.slice(replacementStart).trim();
+  const replacementStart = skipEqvSeparator(line.text, nameOperand.range.end.character);
+  const replacement = line.text.slice(replacementStart, executable.operandRange.end.character).trim();
   return replacement || undefined;
 }
 
-function expandMacroBodyLine(text: string, tokens: Array<{ kind: string; value: string; start: number; end: number }>, replacements: Map<string, string>): string {
+interface TextReplacement {
+  start: number;
+  end: number;
+  value: string;
+}
+
+function expandMacroBodyLine(line: MipsAstLine, replacements: Map<string, string>): string {
+  if (line.kind !== 'statement') {
+    return line.text;
+  }
+  const spans = macroReplacementSpans(line, replacements).sort((a, b) => a.start - b.start || a.end - b.end);
   let cursor = 0;
   let output = '';
-  for (const token of tokens) {
-    const replacement = token.kind === 'string' || token.kind === 'comment'
-      ? undefined
-      : replacements.get(token.value);
-    if (replacement === undefined) {
+  for (const span of spans) {
+    if (span.start < cursor) {
       continue;
     }
-    output += text.slice(cursor, token.start);
-    output += replacement;
-    cursor = token.end;
+    output += line.text.slice(cursor, span.start);
+    output += span.value;
+    cursor = span.end;
   }
-  return output + text.slice(cursor);
+  return output + line.text.slice(cursor);
+}
+
+function macroReplacementSpans(line: MipsStatementAst, replacements: Map<string, string>): TextReplacement[] {
+  const spans: TextReplacement[] = [];
+  for (const label of line.labels) {
+    pushReplacementSpan(spans, label.name, label.range, replacements);
+  }
+  const executable = line.executable;
+  if (executable) {
+    pushReplacementSpan(spans, executable.mnemonic, executable.mnemonicRange, replacements);
+    for (const operand of executable.operands) {
+      for (const reference of collectMipsOperandReferences(operand, { includeRegisters: true })) {
+        pushReplacementSpan(spans, reference.text, reference.range, replacements);
+      }
+    }
+  }
+  spans.push(...rawMacroParameterSpans(line, replacements, spans));
+  return spans;
+}
+
+function pushReplacementSpan(spans: TextReplacement[], text: string, range: Range, replacements: Map<string, string>): void {
+  const value = replacements.get(text);
+  if (value === undefined || range.start.line !== range.end.line || range.start.character >= range.end.character) {
+    return;
+  }
+  spans.push({
+    start: range.start.character,
+    end: range.end.character,
+    value
+  });
+}
+
+function rawMacroParameterSpans(line: MipsStatementAst, replacements: Map<string, string>, existing: TextReplacement[]): TextReplacement[] {
+  const keys = [...replacements.keys()].sort((a, b) => b.length - a.length);
+  const spans: TextReplacement[] = [];
+  const codeEnd = line.comment?.range.start.character ?? line.text.length;
+  let quote: '"' | '\'' | undefined;
+  let escaped = false;
+  let index = 0;
+  while (index < codeEnd) {
+    const char = line.text[index];
+    if (quote) {
+      if (char === quote && !escaped) {
+        quote = undefined;
+        escaped = false;
+      } else if (char !== '\\') {
+        escaped = false;
+      } else {
+        escaped = !escaped;
+      }
+      index++;
+      continue;
+    }
+    if (char === '"' || char === '\'') {
+      quote = char;
+      escaped = false;
+      index++;
+      continue;
+    }
+
+    const key = keys.find((candidate) => macroParameterMatches(line.text, index, candidate));
+    if (!key) {
+      index++;
+      continue;
+    }
+    const span = {
+      start: index,
+      end: index + key.length,
+      value: replacements.get(key)!
+    };
+    if (!existing.some((item) => textSpansOverlap(item, span)) && !spans.some((item) => textSpansOverlap(item, span))) {
+      spans.push(span);
+    }
+    index = span.end;
+  }
+  return spans;
+}
+
+function macroParameterMatches(text: string, index: number, candidate: string): boolean {
+  if (!candidate || (candidate[0] !== '%' && candidate[0] !== '$') || !text.startsWith(candidate, index)) {
+    return false;
+  }
+  const before = text[index - 1] ?? '';
+  const after = text[index + candidate.length] ?? '';
+  return !isMacroParameterPart(before) && !isMacroParameterPart(after);
+}
+
+function textSpansOverlap(left: { start: number; end: number }, right: { start: number; end: number }): boolean {
+  return left.start < right.end && right.start < left.end;
+}
+
+function firstDirectiveSymbolOperand(executable: MipsExecutableAst): { text: string; range: Range } | undefined {
+  const operandRange = executable.operandRange;
+  const base = operandRange?.start.character ?? executable.mnemonicRange.end.character;
+  const text = executable.operandText;
+  let offset = skipAsciiWhitespace(text, 0);
+  const start = offset;
+  if (!isMipsSymbolStart(text[start] ?? '')) {
+    return undefined;
+  }
+  offset++;
+  while (offset < text.length && isMipsSymbolPart(text[offset])) {
+    offset++;
+  }
+  return {
+    text: text.slice(start, offset),
+    range: Range.create(
+      executable.range.start.line,
+      base + start,
+      executable.range.start.line,
+      base + offset
+    )
+  };
 }
 
 function rangesOverlap(left: Range, right: Range): boolean {
@@ -317,6 +435,18 @@ function skipAsciiWhitespace(text: string, start: number): number {
 
 function isAsciiWhitespace(char: string): boolean {
   return char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === '\f' || char === '\v';
+}
+
+function isMipsSymbolStart(char: string): boolean {
+  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || char === '_' || char === '.' || char === '$';
+}
+
+function isMipsSymbolPart(char: string): boolean {
+  return isMipsSymbolStart(char) || (char >= '0' && char <= '9');
+}
+
+function isMacroParameterPart(char: string): boolean {
+  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char === '_';
 }
 
 interface ImmediateInfo {

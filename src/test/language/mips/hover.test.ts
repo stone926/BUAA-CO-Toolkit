@@ -90,6 +90,33 @@ describe('getMipsHover instruction markdown', () => {
     expect(branch).toContain('**b**');
     expect(branch).toContain('Unconditional branch');
   });
+
+  it('shows .eqv replacement text from AST ranges', () => {
+    const source = [
+      '.eqv SYS_EXIT 10 # keep comment out of replacement',
+      '    li $v0, SYS_EXIT'
+    ].join('\n');
+
+    const text = hoverText(source, 1, 13);
+    expect(text).toContain('.eqv 符号');
+    expect(text).toContain('替换为：`10`');
+    expect(text).not.toContain('keep comment');
+  });
+
+  it('previews macro expansion from AST ranges without replacing strings or comments', () => {
+    const source = [
+      '.macro emit(%reg, %label)',
+      '    .asciiz "%reg"',
+      '%label: sw %reg, 4($sp) # %reg',
+      '.end_macro',
+      'emit($t0, done)'
+    ].join('\n');
+
+    const text = hoverText(source, 4, 1);
+    expect(text).toContain('展开预览');
+    expect(text).toContain('    .asciiz "%reg"');
+    expect(text).toContain('done: sw $t0, 4($sp) # %reg');
+  });
 });
 
 describe('syscallByOperand', () => {
