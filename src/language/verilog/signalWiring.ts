@@ -2,7 +2,7 @@ import { Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition } from '../common/lsp';
 import { rangeKey } from '../common/util';
-import { collectAssignmentsFromTokens } from './assignmentAnalysis';
+import { collectAssignmentUsesFromModuleAst } from './assignmentAst';
 import { declDetail } from './moduleUtils';
 import { VerilogModule, VerilogParseResult } from './model';
 import {
@@ -100,10 +100,14 @@ export function analyzeSignalWiring(
   // 本模块内对该信号的写目标（assign / always LHS），含赋值运算符。
   const writes: SignalWiringEntry[] = [];
   const writeKeys = new Set<string>();
-  for (const assignment of collectAssignmentsFromTokens(document, parsed.cst, 0, -1)) {
-    if (assignment.name === name && containsPosition(module.range, assignment.range.start)) {
+  const moduleAst = parsed.ast.modules.find((candidate) => candidate.module === module);
+  if (moduleAst) {
+    for (const assignment of collectAssignmentUsesFromModuleAst(document, moduleAst)) {
+      if (assignment.name !== name) {
+        continue;
+      }
       writes.push({
-        kind: assignment.operator === '<=' ? 'always' : 'assign',
+        kind: assignment.blockIndex >= 0 ? 'always' : 'assign',
         range: assignment.range,
         operator: assignment.operator
       });

@@ -7,10 +7,10 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import {
   AssignmentUse,
-  collectAssignmentsFromStatements
-} from './assignmentAnalysis';
+  collectContinuousAssignmentUsesFromAst,
+  collectProceduralAssignmentUsesFromAst
+} from './assignmentAst';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
-import { VerilogCstStatement } from './cst';
 import { parseVerilogExpression } from './exprAst';
 import {
   VerilogDecl,
@@ -106,19 +106,11 @@ function collectAssignmentDriverBuckets(
 }
 
 function collectContinuousAssignments(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
-  const statements = moduleAst.items
-    .filter((statement) => statement.kind === 'continuousAssign')
-    .map((statement) => statement.statement);
-  return collectAssignmentsFromStatements(document, statements, 0, -1);
+  return collectContinuousAssignmentUsesFromAst(document, moduleAst);
 }
 
 function collectProceduralAssignments(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
-  const result: AssignmentUse[] = [];
-  for (let index = 0; index < moduleAst.proceduralBlocks.length; index++) {
-    const block = moduleAst.proceduralBlocks[index];
-    result.push(...collectAssignmentsFromStatements(document, statementsInTokenRange(moduleAst, block.bodyStart, block.bodyEnd), 0, index));
-  }
-  return result;
+  return collectProceduralAssignmentUsesFromAst(document, moduleAst);
 }
 
 function addInstanceOutputDrivers(
@@ -177,21 +169,4 @@ function bucketFor(buckets: Map<string, DriverBuckets>, name: string): DriverBuc
 
 function driverDiagnosticRange(module: VerilogModule, name: string, fallback: Range): Range {
   return module.declarations.get(name)?.selectionRange ?? fallback;
-}
-
-function statementsInTokenRange(moduleAst: VerilogModuleAst, start: number, end: number): VerilogCstStatement[] {
-  return moduleAst.items
-    .map((statement) => {
-      const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
-      if (!tokens.length) {
-        return undefined;
-      }
-      return {
-        ...statement.statement,
-        tokens,
-        start: tokens[0].start,
-        end: tokens[tokens.length - 1].end
-      };
-    })
-    .filter((statement): statement is VerilogCstStatement => Boolean(statement));
 }

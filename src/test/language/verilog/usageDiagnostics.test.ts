@@ -33,6 +33,7 @@ module top(input a);
     parameter USED = 1;
     localparam UNUSED_PARAM = 2;
     wire [USED-1:0] bus;
+    reg procedural_write;
     wire never;
     wire write_only;
     wire read_only;
@@ -40,15 +41,22 @@ module top(input a);
 
     assign write_only = a;
     assign sink = read_only;
+    always @(*) begin
+        procedural_write = a;
+    end
 endmodule
 `);
 
-    const result = codes(top);
+    const allDiagnostics = diagnostics(top);
+    const result = allDiagnostics
+      .map((diagnostic) => diagnostic.code)
+      .filter((code): code is string => typeof code === 'string');
     expect(result).toContain('unused-signal');
     expect(result).not.toContain('write-only-signal');
     expect(result).not.toContain('read-only-signal');
     expect(result).toContain('unused-parameter');
-    expect(diagnostics(top).some((diagnostic) => diagnostic.code === 'unused-parameter' && top.getText(diagnostic.range) === 'USED')).toBe(false);
+    expect(allDiagnostics.some((diagnostic) => diagnostic.code === 'unused-parameter' && top.getText(diagnostic.range) === 'USED')).toBe(false);
+    expect(allDiagnostics.some((diagnostic) => diagnostic.code === 'unused-signal' && top.getText(diagnostic.range) === 'procedural_write')).toBe(false);
   });
 
   it('treats resolved instance output connections as signal writes', () => {

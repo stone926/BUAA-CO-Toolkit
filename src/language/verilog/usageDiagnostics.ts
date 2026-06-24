@@ -6,8 +6,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
-import { collectAssignmentsFromTokens } from './assignmentAnalysis';
-import { VerilogCstDocument } from './cst';
+import { collectAssignmentUsesFromModuleAst } from './assignmentAst';
 import { parseVerilogExpression } from './exprAst';
 import {
   VerilogDecl,
@@ -68,8 +67,11 @@ function collectModuleUsage(
 ): Map<string, UsageBuckets> {
   const usage = new Map<string, UsageBuckets>();
   const writeRangeKeys = new Set<string>();
-  for (const assignment of collectAssignmentsFromTokens(document, cstForModule(document, parsed.cst, module), 0, -1)) {
-    addWrite(usage, writeRangeKeys, assignment.name, assignment.range);
+  const moduleAst = parsed.ast.modules.find((candidate) => candidate.module === module);
+  if (moduleAst) {
+    for (const assignment of collectAssignmentUsesFromModuleAst(document, moduleAst)) {
+      addWrite(usage, writeRangeKeys, assignment.name, assignment.range);
+    }
   }
   for (const decl of module.declarations.values()) {
     if (decl.initializerRange && shouldCheckSignalUsage(decl)) {
@@ -190,15 +192,6 @@ function bucketFor(usage: Map<string, UsageBuckets>, name: string): UsageBuckets
   };
   usage.set(name, created);
   return created;
-}
-
-function cstForModule(document: TextDocument, cst: VerilogCstDocument, module: VerilogModule): VerilogCstDocument {
-  const start = document.offsetAt(module.headerEnd);
-  const end = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
-  return {
-    ...cst,
-    statements: cst.statements.filter((statement) => statement.end > start && statement.start < end)
-  };
 }
 
 function referenceBelongsToModule(reference: VerilogSemanticReference, module: VerilogModule): boolean {

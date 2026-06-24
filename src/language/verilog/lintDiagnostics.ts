@@ -2,9 +2,12 @@ import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/nod
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
-import { collectAssignmentsFromStatements } from './assignmentAnalysis';
+import {
+  collectAssignmentUsesFromModuleAst,
+  collectAssignmentUsesFromProceduralStatementAst
+} from './assignmentAst';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
-import { VerilogCstDocument, VerilogCstStatement } from './cst';
+import { VerilogCstDocument } from './cst';
 import { VerilogToken } from './lexer';
 import {
   safeRegExp,
@@ -31,7 +34,7 @@ export function collectAssignmentDiagnostics(
     const module = moduleAst.module;
     const assignmentKinds = new Map<string, Set<string>>();
     const isTestbench = isTestbenchModule(module, settings);
-    for (const assignment of collectAssignmentsFromStatements(document, moduleAst.items.map((item) => item.statement), 0, -1)) {
+    for (const assignment of collectAssignmentUsesFromModuleAst(document, moduleAst)) {
       if (!assignmentKinds.has(assignment.name)) {
         assignmentKinds.set(assignment.name, new Set());
       }
@@ -278,12 +281,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
   const assignedBlocks = new Map<string, Set<number>>();
   for (let index = 0; index < blocks.length; index++) {
     const block = blocks[index];
-    const blockAssignments = collectAssignmentsFromStatements(
-      document,
-      statementsInTokenRange(moduleAst, block.bodyStart, block.bodyEnd),
-      0,
-      index
-    );
+    const blockAssignments = collectAssignmentUsesFromProceduralStatementAst(document, block.statementTree, index);
     if (block.combinational) {
       if (isVerilogLintRuleEnabled(settings, 'vc-006') && !hasTokenValue(block.sensitivityTokens, '*')) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
@@ -719,23 +717,6 @@ function parseDecimalBigInt(value: string): bigint | undefined {
     return undefined;
   }
   return BigInt(value.split('_').join(''));
-}
-
-function statementsInTokenRange(moduleAst: VerilogModuleAst, start: number, end: number): VerilogCstStatement[] {
-  return moduleAst.items
-    .map((statement) => {
-      const tokens = statement.tokens.filter((token) => token.start >= start && token.end <= end);
-      if (!tokens.length) {
-        return undefined;
-      }
-      return {
-        ...statement.statement,
-        tokens,
-        start: tokens[0].start,
-        end: tokens[tokens.length - 1].end
-      };
-    })
-    .filter((statement): statement is VerilogCstStatement => Boolean(statement));
 }
 
 function hasPosedgeSignal(tokens: VerilogToken[]): boolean {

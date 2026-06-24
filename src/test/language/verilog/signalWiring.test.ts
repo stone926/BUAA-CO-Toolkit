@@ -76,6 +76,21 @@ describe('analyzeSignalWiring', () => {
     const report = analyzeSignalWiring(parsed, document, document.positionAt(source.indexOf('always')));
     expect(report).toBeUndefined();
   });
+
+  it('classifies blocking assignments inside always blocks as always drivers', () => {
+    const text = [
+      'module top(input a, output reg y);',
+      '    always @(*) y = a;',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const parsed = parseVerilog(document, defaultCoSettings, false);
+    const report = analyzeSignalWiring(parsed, document, document.positionAt(text.indexOf('output reg y') + 'output reg '.length));
+
+    expect(report?.drivers).toHaveLength(1);
+    expect(report?.drivers[0].kind).toBe('always');
+    expect(report?.drivers[0].operator).toBe('=');
+  });
 });
 
 const portText = [

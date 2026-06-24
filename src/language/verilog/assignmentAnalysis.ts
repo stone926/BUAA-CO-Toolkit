@@ -1,6 +1,3 @@
-import { Range } from 'vscode-languageserver/node';
-import { TextDocument } from 'vscode-languageserver-textdocument';
-import { parseVerilogCst, VerilogCstDocument, VerilogCstStatement } from './cst';
 import { VerilogToken } from './lexer';
 import { verilogKeywords } from './model';
 import {
@@ -11,13 +8,6 @@ import {
   trimEofTokens,
   trimTrailingSemicolonTokens
 } from './tokenUtils';
-
-export interface AssignmentUse {
-  name: string;
-  operator: '=' | '<=';
-  range: Range;
-  blockIndex: number;
-}
 
 export interface AssignmentTarget {
   name: string;
@@ -48,46 +38,6 @@ const declarationKeywords = new Set([
   'localparam',
   'genvar'
 ]);
-
-export function collectAssignmentsInText(document: TextDocument, text: string, offset: number, blockIndex: number): AssignmentUse[] {
-  const cst = parseVerilogCst(TextDocument.create(`${document.uri}#assignment`, 'verilog', document.version, text), text);
-  return collectAssignmentsFromTokens(document, cst, offset, blockIndex);
-}
-
-export function collectAssignmentsFromTokens(document: TextDocument, cst: VerilogCstDocument, offset: number, blockIndex: number): AssignmentUse[] {
-  return collectAssignmentsFromStatements(document, cst.statements, offset, blockIndex);
-}
-
-export function collectAssignmentsFromStatements(
-  document: TextDocument,
-  statements: readonly VerilogCstStatement[],
-  offset: number,
-  blockIndex: number
-): AssignmentUse[] {
-  const assignments: AssignmentUse[] = [];
-  for (const statement of statements) {
-    const parsed = parseAssignmentTokens(statement.tokens);
-    if (!parsed) {
-      continue;
-    }
-    for (const target of parsed.targets) {
-      assignments.push({
-        name: target.name,
-        operator: parsed.operator,
-        range: Range.create(
-          document.positionAt(offset + target.token.start),
-          document.positionAt(offset + target.token.end)
-        ),
-        blockIndex
-      });
-    }
-  }
-  return assignments;
-}
-
-export function assignmentTargetNamesFromTokens(tokens: VerilogToken[]): string[] {
-  return parseAssignmentTokens(tokens)?.targets.map((target) => target.name) ?? [];
-}
 
 export function parseAssignmentTokens(rawTokens: VerilogToken[]): ParsedAssignmentTokens | undefined {
   const tokens = trimTrailingSemicolonTokens(rawTokens);
