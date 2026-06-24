@@ -41,7 +41,7 @@ export function collectVerilogDiagnostics(
   includes: VerilogInclude[],
   cst: VerilogCstDocument,
   ast: VerilogAstDocument,
-  semantic?: VerilogSemanticModel
+  semantic: VerilogSemanticModel
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   collectSyntaxDiagnostics(document, cst, modules, diagnostics);
@@ -60,7 +60,7 @@ export function collectVerilogDiagnostics(
     collectSynthesizableHintDiagnostics(document, settings, text, modules, cst, diagnostics);
   }
   collectExplicitPortNetTypeDiagnostics(document, modules, cst, diagnostics);
-  collectImplicitNetDiagnostics(document, settings, text, modules, cst, diagnostics, semantic);
+  collectImplicitNetDiagnostics(settings, diagnostics, semantic);
   return diagnostics;
 }
 

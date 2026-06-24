@@ -106,13 +106,9 @@ export function collectSynthesizableHintDiagnostics(document: TextDocument, sett
 }
 
 export function collectImplicitNetDiagnostics(
-  document: TextDocument,
   settings: CoSettings,
-  text: string,
-  modules: VerilogModule[],
-  cst: VerilogCstDocument,
   diagnostics: Diagnostic[],
-  semantic?: VerilogSemanticModel
+  semantic: VerilogSemanticModel
 ): void {
   const severityMode = settings.verilog.implicitNet.diagnostic;
   if (severityMode === 'off') {
@@ -124,64 +120,21 @@ export function collectImplicitNetDiagnostics(
       ? DiagnosticSeverity.Hint
       : DiagnosticSeverity.Warning;
   const ignorePatterns = settings.verilog.implicitNet.ignorePatterns.map((pattern) => safeRegExp(pattern)).filter((item): item is RegExp => Boolean(item));
-  if (semantic) {
-    const reported = new Set<string>();
-    for (const reference of semantic.unresolvedReferences) {
-      // Filter out keywords, system tasks, and ignore patterns
-      if (
-        verilogKeywords.has(reference.name) ||
-        systemTasks.has(reference.name) ||
-        ignorePatterns.some((pattern) => pattern.test(reference.name))
-      ) {
-        continue;
-      }
-      const key = `${reference.name}:${reference.range.start.line}:${reference.range.start.character}`;
-      if (reported.has(key)) {
-        continue;
-      }
-      reported.add(key);
-      diagnostics.push(makeDiagnostic(reference.range, `Implicit net or undeclared identifier '${reference.name}'.`, severity, `implicit-net:${reference.name}`));
+  const reported = new Set<string>();
+  for (const reference of semantic.unresolvedReferences) {
+    if (
+      verilogKeywords.has(reference.name) ||
+      systemTasks.has(reference.name) ||
+      ignorePatterns.some((pattern) => pattern.test(reference.name))
+    ) {
+      continue;
     }
-    return;
-  }
-
-  for (const module of modules) {
-    const declared = new Set<string>([module.name]);
-    for (const decl of module.declarations.values()) {
-      declared.add(decl.name);
+    const key = `${reference.name}:${reference.range.start.line}:${reference.range.start.character}`;
+    if (reported.has(key)) {
+      continue;
     }
-    for (const instance of module.instances) {
-      declared.add(instance.instanceName);
-      declared.add(instance.moduleName);
-    }
-    const bodyStart = document.offsetAt(module.headerEnd);
-    const bodyEnd = document.offsetAt(module.range.end);
-    const reported = new Set<string>();
-    const bodyTokens = cst.codeTokens.filter((token) => token.start >= bodyStart && token.start < bodyEnd);
-    for (let index = 0; index < bodyTokens.length; index++) {
-      const token = bodyTokens[index];
-      if (token.kind !== 'identifier') {
-        continue;
-      }
-      const name = token.value;
-      const previous = previousToken(bodyTokens, index);
-      if (
-        declared.has(name) ||
-        reported.has(name) ||
-        verilogKeywords.has(name) ||
-        systemTasks.has(name) ||
-        previous?.value === '.' ||
-        previous?.kind === 'directive' ||
-        previous?.kind === 'systemIdentifier'
-      ) {
-        continue;
-      }
-      if (ignorePatterns.some((pattern) => pattern.test(name))) {
-        continue;
-      }
-      reported.add(name);
-      diagnostics.push(makeDiagnostic(tokenRange(document, token), `Implicit net or undeclared identifier '${name}'.`, severity, `implicit-net:${name}`));
-    }
+    reported.add(key);
+    diagnostics.push(makeDiagnostic(reference.range, `Implicit net or undeclared identifier '${reference.name}'.`, severity, `implicit-net:${reference.name}`));
   }
 }
 
