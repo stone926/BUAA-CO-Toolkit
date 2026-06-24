@@ -17,7 +17,7 @@ import { VerilogProceduralBlockAst } from './blockAst';
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
-import type { VerilogAssignmentStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
+import type { VerilogAssignmentStatementAst, VerilogLocalDeclarationAst, VerilogProceduralStatementAst } from './proceduralAst';
 
 export function collectAssignmentDiagnostics(
   document: TextDocument,
@@ -119,6 +119,9 @@ function collectSynthesizableOperatorDiagnostics(document: TextDocument, moduleA
   };
 
   for (const statement of moduleAst.items) {
+    if (statement.kind === 'proceduralBlock') {
+      continue;
+    }
     for (const expression of statement.expressions) {
       visitExpression(expression);
     }
@@ -141,12 +144,13 @@ function collectSynthesizableOperatorDiagnostics(document: TextDocument, moduleA
 
 function visitProceduralStatementExpressions(
   statement: VerilogProceduralStatementAst,
-  visitExpression: (expression: VerilogExpressionAst | undefined) => void
+  visitExpression: (expression: VerilogExpressionAst | undefined) => void,
+  options: ProceduralExpressionVisitOptions = {}
 ): void {
   switch (statement.kind) {
     case 'block':
       for (const child of statement.statements) {
-        visitProceduralStatementExpressions(child, visitExpression);
+        visitProceduralStatementExpressions(child, visitExpression, options);
       }
       return;
     case 'assignment':
@@ -155,9 +159,9 @@ function visitProceduralStatementExpressions(
       return;
     case 'if':
       visitExpression(statement.condition);
-      visitProceduralStatementExpressions(statement.consequent, visitExpression);
+      visitProceduralStatementExpressions(statement.consequent, visitExpression, options);
       if (statement.alternate) {
-        visitProceduralStatementExpressions(statement.alternate, visitExpression);
+        visitProceduralStatementExpressions(statement.alternate, visitExpression, options);
       }
       return;
     case 'case':
@@ -166,19 +170,51 @@ function visitProceduralStatementExpressions(
         for (const label of item.labels) {
           visitExpression(label);
         }
-        visitProceduralStatementExpressions(item.body, visitExpression);
+        visitProceduralStatementExpressions(item.body, visitExpression, options);
       }
       return;
     case 'loop':
-      visitExpression(statement.condition);
-      visitProceduralStatementExpressions(statement.body, visitExpression);
+      for (const declaration of statement.initDeclarations) {
+        visitLocalDeclarationExpressions(declaration, visitExpression, options);
+      }
+      for (const expression of statement.controlExpressions) {
+        visitExpression(expression);
+      }
+      visitProceduralStatementExpressions(statement.body, visitExpression, options);
       return;
     case 'other':
       visitExpression(statement.expression);
       return;
     case 'declaration':
+      for (const declaration of statement.declarations) {
+        visitLocalDeclarationExpressions(declaration, visitExpression, options);
+      }
       return;
   }
+}
+
+interface ProceduralExpressionVisitOptions {
+  visitDeclarationWidthExpressions?: boolean;
+  visitParameterDeclarationInitializers?: boolean;
+}
+
+function visitLocalDeclarationExpressions(
+  declaration: VerilogLocalDeclarationAst,
+  visitExpression: (expression: VerilogExpressionAst | undefined) => void,
+  options: ProceduralExpressionVisitOptions
+): void {
+  if (options.visitDeclarationWidthExpressions !== false) {
+    for (const widthExpression of declaration.widthExpressions) {
+      visitExpression(widthExpression);
+    }
+  }
+  if (
+    options.visitParameterDeclarationInitializers === false &&
+    (declaration.declaration.kind === 'parameter' || declaration.declaration.kind === 'localparam')
+  ) {
+    return;
+  }
+  visitExpression(declaration.initializer);
 }
 
 export function collectImplicitNetDiagnostics(
@@ -384,6 +420,9 @@ function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSetti
   };
 
   for (const statement of moduleAst.items) {
+    if (statement.kind === 'proceduralBlock') {
+      continue;
+    }
     for (const expression of statement.expressions) {
       visitExpression(expression);
     }
@@ -400,7 +439,10 @@ function collectMagicNumberDiagnostics(document: TextDocument, settings: CoSetti
     }
   }
   for (const block of moduleAst.proceduralBlocks) {
-    visitProceduralStatementExpressions(block.statementTree, visitExpression);
+    visitProceduralStatementExpressions(block.statementTree, visitExpression, {
+      visitDeclarationWidthExpressions: false,
+      visitParameterDeclarationInitializers: false
+    });
   }
 }
 

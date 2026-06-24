@@ -73,6 +73,22 @@ endmodule
     expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['42']);
   });
 
+  it('reports magic numbers in procedural local initializers without flagging localparams or widths', () => {
+    const text = `
+module demo(input [7:0] a, output reg [7:0] y);
+    always @(*) begin
+        localparam LIMIT = 99;
+        reg [7:0] tmp = 42;
+        y = tmp + LIMIT + a;
+    end
+endmodule
+`.trim();
+    const document = doc(text);
+    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { disabledRules: [] } } }))
+      .filter((diagnostic) => diagnostic.code === 'vc-004-magic-number');
+    expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['42']);
+  });
+
   it('does not emit removed formatting or abstraction rules', () => {
     const text = `
 module huge(input a,output reg y);
@@ -156,6 +172,24 @@ endmodule
       .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
     expect(diagnostics).toHaveLength(1);
     expect(document.getText(diagnostics[0].range)).toBe('*');
+  });
+
+  it('reports synthesizable operators in procedural declaration and loop AST expressions', () => {
+    const text = `
+module demo #(parameter W = 2, parameter H = 2)(input [3:0] a, input [3:0] b, output reg [3:0] y);
+    always @(*) begin
+        reg [W*H:0] tmp = a * b;
+        integer i;
+        for (i = 1; i < 4; i = i * 2) begin
+            y = tmp;
+        end
+    end
+endmodule
+`.trim();
+    const document = doc(text);
+    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({}))
+      .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
+    expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['*', '*', '*']);
   });
 
   it('does not report multiply, divide, or modulo synthesizable hints inside MDU by default', () => {
