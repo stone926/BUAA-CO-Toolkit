@@ -1,24 +1,78 @@
+# Source and local development state.
 .git/**
 .gitignore
+.vscodeignore
 .github/**
 .vscode/**
+.agents/**
+.claude/**
 src/**
 scripts/**
 dist/**
-**/*.map
+docs/**
+additional/**
+memory/**
+.co/**
+.vscode-test/**
+
+# Build/test configuration and local release artifacts.
 tsconfig.json
-tutorial_toolchain_vscode_plugin_analysis.md
-CO-Extension设计文档.md
-prompt.md
-AGENTS.md
-MIPS迭代建议.md
-CLAUDE.md
-doc
-.claude
-out/test/**          # 测试编译产物，不必随插件分发
-memory/**            # 开发用记忆文件
-.co/**               # 运行时产物
-**/*.test.*
-vitest.config.ts
 tsconfig.test.json
+vitest.config.ts
+package-lock.json
+*.vsix
+coverage/**
+fuse.log
+isim.log
+
+# Development documentation that is not part of the shipped extension.
+AGENTS.md
+ARCHITECTURE_REVIEW.md
+CLAUDE.md
+CO_SUBSET_SYNTAX_COVERAGE_PLAN.md
+
+# Generated debug/test output.
+**/*.map
+**/*.test.*
+out/test/**
+
+# Stale compiled files from previous source layouts.
+out/projectConfig.js
+out/projectWizard.js
+out/courseTesting/logisimRunner.js
+out/courseTesting/p7Testbench.js
+out/language/logisim/folding.js
+out/language/verilog/analysis.js
+out/language/verilog/instanceParser.js
+out/language/verilog/lintAlwaysRules.js
+out/language/verilog/lintDeclarationRules.js
+out/language/verilog/lintInstantiationRules.js
+out/language/verilog/lintMagicNumberRules.js
+out/language/verilog/lintNamingRules.js
+out/language/verilog/lintSignalNames.js
+out/language/verilog/lintTestbenchRules.js
+out/language/verilog/lintUtils.js
+out/language/verilog/statementValidator.js
+out/language/verilog/syntaxAssignmentValidation.js
+out/language/verilog/syntaxDeclarationKeywords.js
+out/language/verilog/syntaxDeclarationValidation.js
+out/language/verilog/syntaxExpressionValidation.js
+out/language/verilog/syntaxInstanceValidation.js
+out/language/verilog/syntaxModuleHeaderValidation.js
+out/language/verilog/syntaxParserUtils.js
+out/language/verilog/syntaxProceduralValidation.js
+out/language/verilog/tokenNavigation.js
+
+# Runtime uses the compiled class only.
 resources/mars/_co_internal_unknown_instruction.java
+
+# Dependency files that are useful for development but not runtime.
+node_modules/**/*.d.ts
+node_modules/**/*.map
+node_modules/**/README*
+node_modules/**/CHANGELOG*
+node_modules/**/changelog*
+node_modules/**/SECURITY*
+node_modules/**/.github/**
+node_modules/**/test/**
+node_modules/**/tests/**
