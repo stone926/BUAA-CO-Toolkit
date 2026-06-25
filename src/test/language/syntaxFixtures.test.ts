@@ -52,6 +52,16 @@ describe('syntax fixtures', () => {
       expectDiagnostics(verilogDiagnostics(fixture), readExpectation(fixture));
     });
   }
+
+  for (const fixture of fixtureFiles(path.join(fixtureRoot, 'verilog', 'course-out'), ['.v'])) {
+    it(`classifies course-out Verilog fixture ${path.basename(fixture)}`, () => {
+      const diagnostics = verilogDiagnostics(fixture);
+      expectDiagnostics(diagnostics, readExpectation(fixture));
+      const codes = diagnostics.map(codeOf);
+      expect(codes).not.toContain('syntax-unexpected-token');
+      expect(codes).not.toContain('syntax-malformed-assignment');
+    });
+  }
 });
 
 function fixtureFiles(root: string, extensions: string[]): string[] {

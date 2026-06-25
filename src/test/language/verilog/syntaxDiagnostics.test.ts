@@ -121,6 +121,34 @@ endmodule
     expect(result).not.toContain('syntax-malformed-assignment');
   });
 
+  it('validates loop control syntax inside procedural blocks', () => {
+    const result = codes(`
+module loops(input clk, output reg y);
+    integer i;
+    always @(posedge clk) begin
+        for (i = ; i < 4; i = i + 1) y <= 1'b0;
+        while y) y <= 1'b1;
+        repeat () y <= 1'b0;
+    end
+endmodule
+`.trim());
+    expect(result).toContain('syntax-malformed-for');
+    expect(result).toContain('syntax-malformed-while');
+    expect(result).toContain('syntax-malformed-repeat');
+  });
+
+  it('allows empty for-loop conditions as legal Verilog', () => {
+    const result = syntaxCodes(`
+module loops(output reg y);
+    integer i;
+    always @(*) begin
+        for (i = 0; ; i = i + 1) y = ~y;
+    end
+endmodule
+`.trim());
+    expect(result).not.toContain('syntax-malformed-for');
+  });
+
   it('reports malformed instance connections and number literals', () => {
     const result = codes(`
 module child(input a); endmodule
@@ -144,15 +172,47 @@ endmodule
   });
 
   it('does not silently accept netgen-only net types or drive-strength assigns', () => {
-    const result = syntaxCodes(`
+    const result = codes(`
 module glbl();
     wire GSR_int;
     tri1 p_up_tmp;
     assign (weak1, weak0) GSR = GSR_int;
 endmodule
 `.trim());
-    expect(result).toContain('syntax-unexpected-token');
-    expect(result).toContain('syntax-malformed-assignment');
+    expect(result).toContain('syntax-unsupported-construct');
+    expect(result).not.toContain('syntax-unexpected-token');
+    expect(result).not.toContain('syntax-malformed-assignment');
+  });
+
+  it('accepts course generate-for blocks with named begin labels', () => {
+    const result = codes(`
+module gen_ok(input [3:0] a, output [3:0] y);
+    genvar i;
+    generate
+        for (i = 0; i < 4; i = i + 1) begin : gen_bits
+            assign y[i] = a[i];
+        end
+    endgenerate
+endmodule
+`.trim());
+    expect(result).not.toContain('syntax-unsupported-construct');
+    expect(result).not.toContain('syntax-unexpected-token');
+    expect(result).not.toContain('syntax-malformed-generate');
+    expect(result).not.toContain('implicit-net:gen_bits');
+  });
+
+  it('reports generate-for blocks without a named begin label', () => {
+    const result = codes(`
+module gen_bad(input [3:0] a, output [3:0] y);
+    genvar i;
+    generate
+        for (i = 0; i < 4; i = i + 1) begin
+            assign y[i] = a[i];
+        end
+    endgenerate
+endmodule
+`.trim());
+    expect(result).toContain('syntax-malformed-generate');
   });
 
   it('reports malformed instance port list expressions and missing commas', () => {

@@ -1,0 +1,6 @@
+{
+  "diagnostics": [
+    { "code": "syntax-unsupported-construct", "line": 3 },
+    { "code": "syntax-unsupported-construct", "line": 4 }
+  ]
+}

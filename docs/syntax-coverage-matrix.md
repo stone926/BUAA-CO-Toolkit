@@ -69,19 +69,19 @@ This matrix freezes the supported course subset for local diagnostics. It intent
 | declarations | `input/output/inout/wire/reg/logic/integer/time/real/realtime/genvar/parameter/localparam` | `syntax-malformed-declaration` |
 | assign | continuous and procedural blocking/nonblocking | `syntax-malformed-assignment`, `syntax-missing-semicolon` |
 | expressions | unary, binary, ternary, concat, repeat concat, calls, system calls, selects | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance` |
-| procedural control | `always`, `initial`, event/delay controls, `if/else`, `case`, `for/while/repeat/forever` | `syntax-malformed-event-control`, `syntax-malformed-if`, `syntax-malformed-for`, `syntax-orphan-*` |
+| procedural control | `always`, `initial`, event/delay controls, `if/else`, `case`, `for/while/repeat/forever`; for-loop init/condition/step are checked structurally | `syntax-malformed-event-control`, `syntax-malformed-if`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-orphan-*` |
 | blocks | `begin/end`, `case/endcase`, `generate/endgenerate`, `function/endfunction`, `task/endtask` | `syntax-unclosed-*`, `syntax-unmatched-*` |
 | instances | named/positional ports, parameter overrides, common gate primitives | `syntax-malformed-instance`, `syntax-malformed-gate-primitive` |
 | preprocessor | static ``include``, ``define``, ``default_nettype`` recognition | `missing-include`, implicit-net diagnostics |
-| generate | common generate-for with named begin block | `syntax-malformed-for`, `syntax-unclosed-generate` where applicable |
+| generate | common generate-for with named begin block; generate-if bodies are recognized enough to avoid module-scope false positives | `syntax-malformed-for`, `syntax-malformed-generate`, `syntax-unclosed-generate` where applicable |
 | task/function | common headers, declarations, procedural body | `syntax-malformed-procedural-block`, `syntax-unclosed-*` |
 
 ### Course-out Classification
 
 | Construct | Behavior | Rationale |
 | --- | --- | --- |
-| `tri`, `tri1`, `supply0`, `supply1`, `wand`, `wor` | course-out warning/info or unsupported construct; should not masquerade as ordinary unknown identifier | legal Verilog, uncommon in CO projects |
-| drive-strength assign | course-out warning/info or malformed assignment when parser cannot preserve structure | legal Verilog but outside course subset |
+| `tri`, `tri1`, `supply0`, `supply1`, `wand`, `wor` | parsed as wire-like declarations and reported as `syntax-unsupported-construct` information | legal Verilog, uncommon in CO projects |
+| drive-strength assign | parsed after stripping the strength tuple and reported as `syntax-unsupported-construct` information | legal Verilog but outside course subset |
 | `specify`, `primitive`, `table` | `syntax-unsupported-construct` | simulator/library modeling, not course subset |
 | `defparam` | `syntax-unsupported-construct` | prefer parameter override in instances |
 | `fork/join`, `event` | `syntax-unsupported-construct` | behavioral simulation-only constructs |

@@ -11,6 +11,7 @@ import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import {
+  verilogCourseOutNetDeclarationTypes,
   verilogDeclarationKeywords,
   verilogDeclarationModifiers,
   verilogDeclarationPrefixKeywords,
@@ -24,6 +25,7 @@ import {
   findTopLevelTokenIndexes as topLevelIndexes,
   nextSignificantTokenIndex,
   splitTopLevelTokens as splitTopLevel,
+  stripLeadingGenerateBlockLabelTokens,
   trimTrailingSemicolonTokens as trimTrailingSemicolon
 } from './tokenUtils';
 
@@ -37,6 +39,7 @@ export type VerilogSyntaxNodeKind =
   | 'if'
   | 'case'
   | 'for'
+  | 'generate'
   | 'task'
   | 'instance'
   | 'gatePrimitive'
@@ -54,13 +57,37 @@ export interface VerilogSyntaxParseResult {
 }
 
 const unsupportedConstructs = new Set([
-  'generate',
   'specify',
   'primitive',
   'defparam',
   'fork',
   'event'
 ]);
+
+const driveStrengthKeywords = new Set([
+  'supply0',
+  'supply1',
+  'strong0',
+  'strong1',
+  'pull0',
+  'pull1',
+  'weak0',
+  'weak1',
+  'highz0',
+  'highz1'
+]);
+
+const courseOutConstructs = new Set([
+  ...unsupportedConstructs,
+  ...verilogCourseOutNetDeclarationTypes,
+  ...driveStrengthKeywords
+]);
+
+interface GenerateBlockRange {
+  start: number;
+  end: number;
+  tokens: VerilogToken[];
+}
 
 export function parseVerilogSyntax(
   document: TextDocument,
@@ -89,7 +116,7 @@ export function parseVerilogSyntax(
     };
     root.children.push(moduleNode);
     collectModuleHeaderDiagnostics(document, tokens, moduleAst, diagnostics);
-    collectModuleItemDiagnostics(document, moduleAst, moduleNode, diagnostics);
+    collectModuleItemDiagnostics(document, tokens, moduleAst, moduleNode, diagnostics);
   }
 
   collectOrphanControlDiagnostics(document, tokens, diagnostics);
@@ -278,12 +305,26 @@ function looksLikeInheritedPortDeclarator(tokens: VerilogToken[]): boolean {
 
 function collectModuleItemDiagnostics(
   document: TextDocument,
+  tokens: VerilogToken[],
   moduleAst: VerilogModuleAst,
   moduleNode: VerilogSyntaxNode,
   diagnostics: Diagnostic[]
 ): void {
   const visitedSubroutines = new Set<VerilogSubroutineAst>();
+  const generateBlocks = collectGenerateBlocks(document, tokens, moduleAst);
+  const visitedGenerateBlocks = new Set<GenerateBlockRange>();
   for (const statement of [...moduleAst.items].sort((left, right) => left.start - right.start || left.end - right.end)) {
+    const generateBlock = generateBlockForStatement(statement, generateBlocks);
+    if (generateBlock) {
+      if (!visitedGenerateBlocks.has(generateBlock) && statement.start === generateBlock.start) {
+        visitedGenerateBlocks.add(generateBlock);
+        moduleNode.children.push(nodeFromRange('generate', rangeFromOffsets(document, generateBlock.start, generateBlock.end)));
+        validateGenerateBlock(document, generateBlock.tokens, diagnostics);
+      }
+      if (isGenerateControlStatement(statement)) {
+        continue;
+      }
+    }
     const subroutine = subroutineForStatement(statement, moduleAst.subroutines);
     if (subroutine) {
       if (!visitedSubroutines.has(subroutine) && statementStartsAt(document, statement, subroutine.range)) {
@@ -306,7 +347,7 @@ function collectModuleItemDiagnostics(
     if (isInsideProceduralBlockBody(statement, moduleAst.proceduralBlocks)) {
       continue;
     }
-    const item = statement.tokens.filter((token) => token.kind !== 'eof');
+    const item = stripLeadingGenerateBlockLabelTokens(statement.tokens.filter((token) => token.kind !== 'eof'));
     const first = item[0];
     if (!first) {
       continue;
@@ -362,6 +403,103 @@ function collectModuleItemDiagnostics(
   }
 }
 
+function collectGenerateBlocks(document: TextDocument, tokens: VerilogToken[], moduleAst: VerilogModuleAst): GenerateBlockRange[] {
+  const bodyStart = document.offsetAt(moduleAst.bodyRange.start);
+  const bodyEnd = document.offsetAt(moduleAst.bodyRange.end);
+  const moduleTokens = tokens.filter((token) =>
+    token.kind !== 'eof' &&
+    token.start >= bodyStart &&
+    token.start < bodyEnd
+  );
+  const blocks: GenerateBlockRange[] = [];
+  for (let index = 0; index < moduleTokens.length; index++) {
+    if (moduleTokens[index].value !== 'generate') {
+      continue;
+    }
+    let depth = 1;
+    let endIndex = -1;
+    for (let cursor = index + 1; cursor < moduleTokens.length; cursor++) {
+      if (moduleTokens[cursor].value === 'generate') {
+        depth++;
+      } else if (moduleTokens[cursor].value === 'endgenerate') {
+        depth--;
+        if (depth === 0) {
+          endIndex = cursor;
+          break;
+        }
+      }
+    }
+    const end = endIndex >= 0 ? moduleTokens[endIndex].end : bodyEnd;
+    const blockTokens = moduleTokens.slice(index, endIndex >= 0 ? endIndex + 1 : moduleTokens.length);
+    blocks.push({
+      start: moduleTokens[index].start,
+      end,
+      tokens: blockTokens
+    });
+    if (endIndex >= 0) {
+      index = endIndex;
+    }
+  }
+  return blocks;
+}
+
+function generateBlockForStatement(statement: VerilogStatementAst, blocks: GenerateBlockRange[]): GenerateBlockRange | undefined {
+  return blocks.find((block) => statement.start >= block.start && statement.end <= block.end);
+}
+
+function isGenerateControlStatement(statement: VerilogStatementAst): boolean {
+  const tokens = statement.tokens.filter((token) => token.kind !== 'eof');
+  const stripped = stripLeadingGenerateBlockLabelTokens(tokens);
+  if (stripped.length === 0) {
+    return true;
+  }
+  const first = stripped[0]?.value;
+  return first === 'generate' ||
+    first === 'endgenerate' ||
+    first === 'for' ||
+    first === 'if' ||
+    first === 'else' ||
+    first === 'begin' ||
+    first === 'end';
+}
+
+function validateGenerateBlock(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+  const forIndex = tokens.findIndex((token) => token.value === 'for');
+  if (forIndex < 0) {
+    return;
+  }
+  validateForStatement(document, tokens, forIndex, diagnostics);
+
+  const open = nextSignificantTokenIndex(tokens, forIndex + 1);
+  if (open < 0 || tokens[open].value !== '(') {
+    return;
+  }
+  const close = findMatchingToken(tokens, open, '(', ')');
+  if (close < 0) {
+    return;
+  }
+  const begin = nextSignificantTokenIndex(tokens, close + 1);
+  if (begin < 0 || tokens[begin].value !== 'begin') {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[forIndex]),
+      "Syntax error: generate-for must use a named 'begin : name' block in the CO course subset.",
+      DiagnosticSeverity.Error,
+      'syntax-malformed-generate'
+    ));
+    return;
+  }
+  const colon = nextSignificantTokenIndex(tokens, begin + 1);
+  const name = colon >= 0 ? nextSignificantTokenIndex(tokens, colon + 1) : -1;
+  if (colon < 0 || tokens[colon].value !== ':' || name < 0 || tokens[name].kind !== 'identifier') {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[begin]),
+      "Syntax error: generate-for begin block must be named as 'begin : name'.",
+      DiagnosticSeverity.Error,
+      'syntax-malformed-generate'
+    ));
+  }
+}
+
 function subroutineForStatement(
   statement: VerilogStatementAst,
   subroutines: VerilogSubroutineAst[]
@@ -398,6 +536,10 @@ function isEndmoduleStatement(statement: VerilogStatementAst): boolean {
 
 function containsRange(outer: Range, inner: Range): boolean {
   return comparePosition(outer.start, inner.start) <= 0 && comparePosition(outer.end, inner.end) >= 0;
+}
+
+function rangeFromOffsets(document: TextDocument, start: number, end: number): Range {
+  return Range.create(document.positionAt(start), document.positionAt(end));
 }
 
 function comparePosition(left: { line: number; character: number }, right: { line: number; character: number }): number {
@@ -619,12 +761,13 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
   if (!hasTrailingSemicolon(tokens)) {
     reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
   }
-  const semicolon = firstTopLevelToken(tokens, ';', 1);
-  const limit = semicolon >= 0 ? semicolon : tokens.length;
-  const assignment = parseAssignmentTokens(tokens.slice(0, limit));
+  const normalizedTokens = stripContinuousAssignDriveStrength(document, tokens, diagnostics);
+  const semicolon = firstTopLevelToken(normalizedTokens, ';', 1);
+  const limit = semicolon >= 0 ? semicolon : normalizedTokens.length;
+  const assignment = parseAssignmentTokens(normalizedTokens.slice(0, limit));
   if (!assignment) {
     diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[0]),
+      tokenRange(document, normalizedTokens[0] ?? tokens[0]),
       'Syntax error: continuous assign is missing an assignment operator.',
       DiagnosticSeverity.Error,
       'syntax-malformed-assignment'
@@ -633,7 +776,7 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
   }
   if (assignment.lhsTokens.filter(isExpressionOperandToken).length === 0) {
     diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[assignment.operatorIndex]),
+      tokenRange(document, normalizedTokens[assignment.operatorIndex]),
       'Syntax error: assignment is missing a left-hand side.',
       DiagnosticSeverity.Error,
       'syntax-malformed-assignment'
@@ -642,13 +785,38 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
   validateExpressionSyntax(document, assignment.lhsTokens, diagnostics, 'syntax-malformed-assignment');
   if (assignment.rhsTokens.filter(isExpressionOperandToken).length === 0) {
     diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[assignment.operatorIndex]),
+      tokenRange(document, normalizedTokens[assignment.operatorIndex]),
       'Syntax error: assignment is missing a right-hand side.',
       DiagnosticSeverity.Error,
       'syntax-malformed-assignment'
     ));
   }
   validateExpressionSyntax(document, assignment.rhsTokens, diagnostics, 'syntax-malformed-assignment');
+}
+
+function stripContinuousAssignDriveStrength(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): VerilogToken[] {
+  if (tokens[0]?.value !== 'assign' || tokens[1]?.value !== '(') {
+    return tokens;
+  }
+  const close = findMatchingToken(tokens, 1, '(', ')');
+  if (close < 0 || !isDriveStrengthList(tokens.slice(2, close))) {
+    return tokens;
+  }
+  diagnostics.push(makeDiagnostic(
+    Range.create(document.positionAt(tokens[1].start), document.positionAt(tokens[close].end)),
+    'Drive-strength continuous assignments are legal Verilog but outside the supported CO course subset.',
+    DiagnosticSeverity.Information,
+    'syntax-unsupported-construct'
+  ));
+  return [tokens[0], ...tokens.slice(close + 1)];
+}
+
+function isDriveStrengthList(tokens: VerilogToken[]): boolean {
+  const parts = splitTopLevel(tokens, ',');
+  return parts.length > 0 && parts.every((part) =>
+    part.length === 1 &&
+    driveStrengthKeywords.has(part[0].value)
+  );
 }
 
 function validateExpressionSyntax(
@@ -985,6 +1153,10 @@ function validateProceduralStatements(document: TextDocument, tokens: VerilogTok
       validateForStatement(document, tokens, index, diagnostics);
       continue;
     }
+    if (token.value === 'while' || token.value === 'repeat') {
+      validateParenthesizedLoopControl(document, tokens, index, token.value, diagnostics);
+      continue;
+    }
   }
   validateProceduralAssignments(document, tokens, diagnostics);
 }
@@ -1038,15 +1210,133 @@ function validateForStatement(document: TextDocument, tokens: VerilogToken[], fo
     ));
     return;
   }
-  const semicolons = tokens.slice(open + 1, close).filter((token) => token.value === ';');
-  if (semicolons.length !== 2) {
+  const control = tokens.slice(open + 1, close);
+  const parts = splitTopLevelPreserveEmpty(control, ';');
+  if (parts.length !== 3) {
     diagnostics.push(makeDiagnostic(
       tokenRange(document, tokens[forIndex]),
       "Syntax error: 'for' control expression must contain init, condition, and step sections.",
       DiagnosticSeverity.Error,
       'syntax-malformed-for'
     ));
+    return;
   }
+  validateForAssignmentSection(document, parts[0], 'init', diagnostics);
+  validateForConditionSection(document, parts[1], diagnostics);
+  validateForAssignmentSection(document, parts[2], 'step', diagnostics);
+}
+
+function splitTopLevelPreserveEmpty(tokens: VerilogToken[], separator: string): VerilogToken[][] {
+  const parts: VerilogToken[][] = [];
+  let start = 0;
+  let paren = 0;
+  let bracket = 0;
+  let brace = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.value === '(') {
+      paren++;
+    } else if (token.value === ')') {
+      paren = Math.max(0, paren - 1);
+    } else if (token.value === '[') {
+      bracket++;
+    } else if (token.value === ']') {
+      bracket = Math.max(0, bracket - 1);
+    } else if (token.value === '{') {
+      brace++;
+    } else if (token.value === '}') {
+      brace = Math.max(0, brace - 1);
+    }
+    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
+      parts.push(tokens.slice(start, index).filter((item) => item.kind !== 'eof'));
+      start = index + 1;
+    }
+  }
+  parts.push(tokens.slice(start).filter((item) => item.kind !== 'eof'));
+  return parts;
+}
+
+function validateForAssignmentSection(
+  document: TextDocument,
+  tokens: VerilogToken[],
+  section: 'init' | 'step',
+  diagnostics: Diagnostic[]
+): void {
+  if (tokens.length === 0) {
+    return;
+  }
+  const assignment = parseAssignmentTokens(tokens);
+  if (!assignment) {
+    validateExpressionSyntax(document, tokens, diagnostics, 'syntax-malformed-for');
+    return;
+  }
+  if (assignment.lhsTokens.filter(isExpressionOperandToken).length === 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[assignment.operatorIndex]),
+      `Syntax error: 'for' ${section} assignment is missing a left-hand side.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-for'
+    ));
+  } else {
+    validateExpressionSyntax(document, assignment.lhsTokens, diagnostics, 'syntax-malformed-for');
+  }
+  if (assignment.rhsTokens.filter(isExpressionOperandToken).length === 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[assignment.operatorIndex]),
+      `Syntax error: 'for' ${section} assignment is missing a right-hand side.`,
+      DiagnosticSeverity.Error,
+      'syntax-malformed-for'
+    ));
+  } else {
+    validateExpressionSyntax(document, assignment.rhsTokens, diagnostics, 'syntax-malformed-for');
+  }
+}
+
+function validateForConditionSection(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+  if (tokens.length === 0) {
+    return;
+  }
+  validateExpressionSyntax(document, tokens, diagnostics, 'syntax-malformed-for');
+}
+
+function validateParenthesizedLoopControl(
+  document: TextDocument,
+  tokens: VerilogToken[],
+  keywordIndex: number,
+  kind: 'while' | 'repeat',
+  diagnostics: Diagnostic[]
+): void {
+  const open = nextSignificantTokenIndex(tokens, keywordIndex + 1);
+  if (open < 0 || tokens[open].value !== '(') {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[keywordIndex]),
+      `Syntax error: '${kind}' is missing a parenthesized expression.`,
+      DiagnosticSeverity.Error,
+      `syntax-malformed-${kind}`
+    ));
+    return;
+  }
+  const close = findMatchingToken(tokens, open, '(', ')');
+  if (close < 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[open]),
+      `Syntax error: '${kind}' expression is missing a closing parenthesis.`,
+      DiagnosticSeverity.Error,
+      `syntax-malformed-${kind}`
+    ));
+    return;
+  }
+  const expression = tokens.slice(open + 1, close);
+  if (expression.filter(isExpressionOperandToken).length === 0) {
+    diagnostics.push(makeDiagnostic(
+      tokenRange(document, tokens[open]),
+      `Syntax error: '${kind}' expression is empty.`,
+      DiagnosticSeverity.Error,
+      `syntax-malformed-${kind}`
+    ));
+    return;
+  }
+  validateExpressionSyntax(document, expression, diagnostics, `syntax-malformed-${kind}`);
 }
 
 function validateProceduralAssignments(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
@@ -1112,7 +1402,7 @@ function collectNumberLiteralDiagnostics(document: TextDocument, tokens: Verilog
 function collectUnsupportedConstructDiagnostics(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
   const reported = new Set<string>();
   for (const token of tokens) {
-    if (!unsupportedConstructs.has(token.value) || reported.has(token.value)) {
+    if (!courseOutConstructs.has(token.value) || reported.has(token.value)) {
       continue;
     }
     reported.add(token.value);

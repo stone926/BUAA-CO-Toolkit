@@ -210,7 +210,7 @@ src/test/fixtures/syntax/
   verilog/
     valid/      # Verilog samples that must not produce syntax-* diagnostics
     invalid/    # Verilog samples with JSON code/line expectations
-    course-out/ # Course-out Verilog samples, wired once course-out classification is complete
+    course-out/ # Course-out Verilog samples asserting info-level classification, not syntax errors
     real-project/ # Larger real project patterns
 
 ## Key Architectural Patterns

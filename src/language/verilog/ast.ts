@@ -25,6 +25,7 @@ import type { VerilogStatementSource } from './statementParser';
 import {
   findMatchingTokenForward,
   splitTopLevelTokens,
+  stripLeadingGenerateBlockLabelTokens,
   trimTrailingSemicolonTokens
 } from './tokenUtils';
 import { verilogDeclarationKeywords } from './declarations';
@@ -292,10 +293,11 @@ function statementExpressionAsts(rawTokens: VerilogToken[], kind: VerilogStateme
   assignment?: VerilogAssignmentExpressionAst;
   expressions: VerilogExpressionAst[];
 } {
-  const parsed = parseAssignmentTokens(rawTokens);
+  const tokens = stripLeadingGenerateBlockLabelTokens(rawTokens);
+  const parsed = parseAssignmentTokens(tokens);
   if (!parsed) {
     return {
-      expressions: kind === 'gatePrimitive' ? gatePrimitiveExpressionAsts(rawTokens) : []
+      expressions: kind === 'gatePrimitive' ? gatePrimitiveExpressionAsts(tokens) : []
     };
   }
   const lhs = parseVerilogExpressionTokens(parsed.lhsTokens);

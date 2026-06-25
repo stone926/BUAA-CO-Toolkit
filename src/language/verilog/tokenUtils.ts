@@ -15,6 +15,12 @@ export function trimTrailingSemicolonTokens(tokens: VerilogToken[]): VerilogToke
   return trimmed[trimmed.length - 1]?.value === ';' ? trimmed.slice(0, -1) : trimmed;
 }
 
+export function stripLeadingGenerateBlockLabelTokens(tokens: VerilogToken[]): VerilogToken[] {
+  return tokens[0]?.value === ':' && tokens[1]?.kind === 'identifier'
+    ? tokens.slice(2)
+    : tokens;
+}
+
 export function splitTopLevelTokens(tokens: VerilogToken[], separator: string): VerilogToken[][] {
   const parts: VerilogToken[][] = [];
   let start = 0;

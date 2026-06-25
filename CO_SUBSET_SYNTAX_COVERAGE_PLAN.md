@@ -346,6 +346,8 @@ Verilog：
 
 ### 6.15 Verilog-Procedural-001：过程语句 grammar
 
+状态：✅ 已完成（`if/case/default` 保持结构诊断；`for` 三段控制现在验证赋值/表达式形态，`for (i = ; ...)` 稳定报 `syntax-malformed-for`；`while/repeat` 缺括号或空表达式分别报 `syntax-malformed-while/repeat`；空 for condition 按合法 Verilog 放行）
+
 目标：
 
 - 对 `if/else`、`case/default`、`for/while/repeat/forever` 从浅 token 检查升级为结构检查。
@@ -372,6 +374,8 @@ Verilog：
 - 第二个 module 仍能被解析并继续诊断。
 
 ### 6.17 Verilog-Generate-001：课程常见 generate 支持
+
+状态：✅ 已完成（`generate_for` snippet 已新增；syntax parser 识别 generate block 范围，generate-for 正例不再产生 module-scope syntax error，缺 named block 报 `syntax-malformed-generate`，内部 assign/instance 继续复用原有 AST/语法路径）
 
 目标：
 
@@ -426,6 +430,8 @@ Verilog：
 
 ### 6.21 Verilog-CourseOut-001：课程外合法构造分类
 
+状态：✅ 已完成（`tri/tri0/tri1/supply0/supply1/wand/wor/triand/trior/trireg` 按 wire-like declaration 解析并报 `syntax-unsupported-construct` 信息；drive-strength assign 降级为 course-out 信息，不再混成普通 malformed assignment）
+
 目标：
 
 - 建立课程外 Verilog 构造清单，决定每类行为：
@@ -462,6 +468,8 @@ Verilog：
 - 用户已有 `co.diagnostics.disabledCodes` 不被破坏。
 
 ### 6.23 Shared-Test-001：课程语法样例库
+
+状态：✅ 已完成（新增 `src/test/fixtures/syntax/...` 与 `src/test/language/syntaxFixtures.test.ts`；valid/invalid/course-out 样例分别断言无 syntax 阻塞、具体 code/行号、course-out 不混为 syntax error）
 
 目标：
 

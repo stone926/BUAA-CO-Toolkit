@@ -75,10 +75,13 @@ This catalog records stable diagnostic codes used by the built-in MIPS and Veril
 | `syntax-malformed-event-control` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `always @(posedge clk` |
 | `syntax-malformed-if` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `if a)` |
 | `syntax-malformed-for` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `for (i = ; i < 4; i = i + 1)` |
+| `syntax-malformed-while` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `while a)` |
+| `syntax-malformed-repeat` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `repeat ()` |
+| `syntax-malformed-generate` | Error | Parse | `src/language/verilog/syntaxParser.ts` | generate-for without `begin : name` |
 | `syntax-orphan-else` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `else y = 1;` |
 | `syntax-orphan-default` | Error | Parse | `src/language/verilog/syntaxParser.ts` | `default: y = 1;` outside case |
 | `syntax-unexpected-token` | Error | Parse | `src/language/verilog/syntaxParser.ts` | unsupported token at module scope |
-| `syntax-unsupported-construct` | Information | Course-out | `src/language/verilog/syntaxParser.ts` | `specify`, `primitive`, `fork` |
+| `syntax-unsupported-construct` | Information | Course-out | `src/language/verilog/syntaxParser.ts` | `specify`, `primitive`, `fork`, `tri1`, drive strength |
 | `missing-endmodule` | Error | Structural | `src/language/verilog/diagnostics.ts` | module without `endmodule` |
 | `duplicate-module` | Error | Structural | `src/language/verilog/diagnostics.ts` | repeated module name |
 | `missing-include` | Warning | Preprocess | `src/language/verilog/diagnostics.ts` | ``include "missing.v"` |

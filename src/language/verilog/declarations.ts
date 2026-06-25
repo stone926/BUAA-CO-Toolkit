@@ -2,7 +2,20 @@ import type { VerilogDeclKind } from './model';
 
 export const verilogPortDirections = new Set(['input', 'output', 'inout']);
 
-export const verilogNetDeclarationTypes = new Set(['wire']);
+export const verilogCourseOutNetDeclarationTypes = new Set([
+  'tri',
+  'tri0',
+  'tri1',
+  'supply0',
+  'supply1',
+  'wand',
+  'wor',
+  'triand',
+  'trior',
+  'trireg'
+]);
+
+export const verilogNetDeclarationTypes = new Set(['wire', ...verilogCourseOutNetDeclarationTypes]);
 
 export const verilogVariableDeclarationTypes = new Set([
   'reg',
