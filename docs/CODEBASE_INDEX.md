@@ -202,6 +202,7 @@ CO_SUBSET_SYNTAX_COVERAGE_PLAN.md # Long-running implementation checklist and co
 
 ### Fixture Tests
 src/test/language/syntaxFixtures.test.ts # Fixture runner for valid/invalid syntax samples
+src/test/language/verilog/performance.test.ts # 2000+ line Verilog local diagnostic performance baseline and parse cache reuse regression
 src/test/fixtures/syntax/
   mips/
     valid/      # MIPS samples that must not produce syntax-blocking diagnostics

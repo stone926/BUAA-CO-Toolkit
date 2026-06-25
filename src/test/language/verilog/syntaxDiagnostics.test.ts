@@ -161,6 +161,54 @@ endmodule
     expect(result).toContain('syntax-malformed-number');
   });
 
+  it('covers lexical boundaries for escaped identifiers, system identifiers, directives, and based literals', () => {
+    const invalid = codes(`
+module bad;
+    wire [3:0] x = 4'b1020;
+endmodule
+`.trim());
+    expect(invalid).toContain('syntax-malformed-number');
+
+    const valid = syntaxCodes(`
+module ok;
+    wire \\escaped.name ;
+    wire [3:0] hx = 4'hxxzz;
+    wire [7:0] unsized = 'hff;
+    wire [31:0] word = 32'h0000_7f00;
+    initial $display("%h", $signed(word));
+endmodule
+`.trim());
+    expect(valid).not.toContain('syntax-malformed-number');
+    expect(valid).not.toContain('syntax-unexpected-token');
+  });
+
+  it('recognizes the static preprocessor subset used by course projects', () => {
+    const defaultNettype = codes([
+      '`default_nettype none',
+      'module top(input a, output y);',
+      '    assign y = missing;',
+      'endmodule'
+    ].join('\n'));
+    expect(defaultNettype).not.toContain('default-nettype-none');
+    expect(defaultNettype).toContain('implicit-net:missing');
+
+    const include = codes([
+      '`include "missing.v"',
+      'module top;',
+      'endmodule'
+    ].join('\n'));
+    expect(include).toContain('missing-include');
+
+    const macroWidth = syntaxCodes([
+      '`define WIDTH 32',
+      'module top(output [`WIDTH-1:0] y);',
+      "    assign y = 32'h0;",
+      'endmodule'
+    ].join('\n'));
+    expect(macroWidth).not.toContain('syntax-malformed-declaration');
+    expect(macroWidth).not.toContain('syntax-malformed-assignment');
+  });
+
   it('accepts based literals with x, z, question marks, and underscores', () => {
     const result = syntaxCodes(`
 module ok(output [31:0] y);

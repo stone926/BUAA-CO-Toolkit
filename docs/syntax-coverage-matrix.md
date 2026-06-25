@@ -88,6 +88,15 @@ This matrix freezes the supported course subset for local diagnostics. It intent
 | `fork/join`, `event` | `syntax-unsupported-construct` | behavioral simulation-only constructs |
 | SystemVerilog (`always_ff`, interfaces, packages, typedef/enum/struct`) | unsupported construct or syntax error depending on recoverability | outside Verilog course subset |
 
+### Performance Baseline
+
+| Scenario | Coverage | Test |
+| --- | --- | --- |
+| 2000+ line course-style Verilog file | `getVerilogDiagnostics` must complete without external tools, produce no `syntax-*` diagnostics for the generated valid design, and stay under the default 4000ms budget | `src/test/language/verilog/performance.test.ts` |
+| repeated diagnostics on same URI/version/text | parse result must be reused from `getCachedVerilogParse` instead of reparsing | `src/test/language/verilog/performance.test.ts` |
+
+The timing budget can be overridden for slower CI hosts with `CO_VERILOG_PERF_BUDGET_MS`.
+
 ## Fixture Layout
 
 ```text

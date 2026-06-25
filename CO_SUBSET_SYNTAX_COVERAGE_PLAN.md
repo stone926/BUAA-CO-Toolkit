@@ -270,6 +270,8 @@ Verilog：
 
 ### 6.9 Verilog-Lex-001：词法稳定性
 
+状态：✅ 已完成（`syntaxDiagnostics.test.ts` 补充 escaped identifier、system identifier、directive、based literal 边界；`4'b1020` 稳定报 `syntax-malformed-number`，`4'hxxzz`、`'hff`、`32'h0000_7f00` 通过）
+
 目标：
 
 - 保持并扩展未闭合注释、未闭合字符串、异常字符、坏数字诊断。
@@ -281,6 +283,8 @@ Verilog：
 - 未闭合字符串不会吞掉后续整文件诊断。
 
 ### 6.10 Verilog-Preproc-001：预处理课程子集
+
+状态：✅ 已完成（`syntaxDiagnostics.test.ts` 覆盖 ``default_nettype none``、``include "missing.v"``、``define WIDTH 32`` 与 ``WIDTH-1:0``；默认线网、缺 include warning、宏宽度表达式均按静态子集处理）
 
 目标：
 
@@ -294,6 +298,8 @@ Verilog：
 - 常见 ``define WIDTH 32``、``WIDTH-1:0`` 不误报表达式语法错误。
 
 ### 6.11 Verilog-Module-001：模块头完整性
+
+状态：✅ 已完成（现有 parser/syntax 测试覆盖空端口、legacy、ANSI、参数化模块头；`syntaxDiagnostics.test.ts` 覆盖缺分号、缺逗号、端口缺名、参数化 header 正例）
 
 目标：
 
@@ -310,6 +316,8 @@ Verilog：
 
 ### 6.12 Verilog-Decl-001：声明语法矩阵
 
+状态：✅ 已完成（module/procedural 声明已有 parser/syntax 入口覆盖；`wire reg foo`、`input output bar` 稳定报 `syntax-malformed-declaration`；`tri/tri1/wand/wor` 等课程外 net type 降级为 wire-like declaration + course-out 信息）
+
 目标：
 
 - 覆盖 module scope 和 procedural scope 的声明。
@@ -322,6 +330,8 @@ Verilog：
 - `tri1` 等合法但课程外 net type 不应伪装成“未知 token”；应按策略提示课程外或降级忽略。
 
 ### 6.13 Verilog-Expr-001：表达式完整性
+
+状态：✅ 已完成（expression AST 已接入 assign、initializer、width/select、case label、event/loop control、instance/gate 入口；`syntaxDiagnostics.test.ts` 覆盖缺 operand、空括号、坏 select、坏三元、额外 token 与函数/系统函数正例）
 
 目标：
 
@@ -339,6 +349,8 @@ Verilog：
 以上均有稳定语法错误。
 
 ### 6.14 Verilog-Assign-001：赋值语句完整性
+
+状态：✅ 已完成（continuous/procedural assign 共用 assignment parser；缺 lhs/rhs、缺分号、额外 token、比较运算符边界均由 `syntaxDiagnostics.test.ts` 覆盖，drive-strength assign 进入 course-out 降级路径）
 
 目标：
 
@@ -371,6 +383,8 @@ Verilog：
 
 ### 6.16 Verilog-Block-001：块和分隔符恢复
 
+状态：✅ 已完成（begin/end、case/endcase、generate/endgenerate、function/endfunction、task/endtask 均由 syntax/task/function/generate 测试覆盖；缺失或多余 block token 使用稳定 range 并保持后续模块解析）
+
 目标：
 
 - 统一 begin/end、case/endcase、generate/endgenerate、function/endfunction、task/endtask 的配对逻辑。
@@ -400,6 +414,8 @@ Verilog：
 
 ### 6.18 Verilog-Instance-001：实例化完整性
 
+状态：✅ 已完成（`syntaxDiagnostics.test.ts` 覆盖 named/positional/empty connection、参数化实例、缺逗号、`.a a` 等 malformed connection；AST/workspace 测试继续覆盖实例连接语义）
+
 目标：
 
 - 覆盖普通实例、参数化实例、多个实例、named/positional 混用策略、空连接、缺逗号。
@@ -413,6 +429,8 @@ Verilog：
 
 ### 6.19 Verilog-Gate-001：门级 primitive
 
+状态：✅ 已完成（gate primitive helper 已被 AST 和 syntax diagnostics 共享；`syntaxDiagnostics.test.ts`/parser 测试覆盖 primitive 多实例、端口列表缺失/不闭合、端口表达式 AST）
+
 目标：
 
 - 保持 `and/or/not/nand/nor/xor/xnor/buf` 等 primitive 支持。
@@ -424,6 +442,8 @@ Verilog：
 - 缺端口列表、端口列表不闭合、端口表达式坏语法报错。
 
 ### 6.20 Verilog-TaskFunc-001：task/function 子集
+
+状态：✅ 已完成（`taskDeclarations.test.ts`、`semanticModel.test.ts` 和 `syntaxDiagnostics.test.ts` 覆盖 task/function 声明、参数/局部符号、调用解析、`zero()` 函数调用和 block 配对）
 
 目标：
 
@@ -492,6 +512,8 @@ Verilog：
 
 ### 6.24 Shared-Perf-001：性能保护
 
+状态：✅ 已完成（新增 `src/test/language/verilog/performance.test.ts`，生成 2000+ 行课程常见 Verilog 设计，走 `getVerilogDiagnostics` 真实入口并验证无 syntax 误报、默认 4000ms 性能预算和同版本 parse cache 复用；预算可用 `CO_VERILOG_PERF_BUDGET_MS` 覆盖）
+
 目标：
 
 - 为大文件、连续输入、workspace 多文件索引建立性能基线。
@@ -556,59 +578,67 @@ Verilog：
 
 ### 阶段 3：Verilog 语法 catalog 和回归样例
 
+状态：✅ 已完成
+
 任务：
 
-- 整理当前 `syntax-*` code。
-- 将已有 26 个 syntax diagnostics 测试扩成 fixture 矩阵。
-- 标注课程外合法构造的期望行为。
+- [x] 整理当前 `syntax-*` code。
+- [x] 将已有 syntax diagnostics 测试扩成 fixture 矩阵。
+- [x] 标注课程外合法构造的期望行为。
 
 交付：
 
-- Verilog syntax coverage matrix。
-- valid/invalid/course-out 样例初版。
+- [x] Verilog syntax coverage matrix。
+- [x] valid/invalid/course-out 样例初版。
 
 ### 阶段 4：Verilog 表达式、assign、过程语句补强
 
+状态：✅ 已完成
+
 任务：
 
-- expression AST 入口补齐。
-- continuous/procedural assignment 统一错误处理。
-- `for/while/repeat/forever` 深化检查。
-- `if/case/default` 错误恢复补强。
+- [x] expression AST 入口补齐。
+- [x] continuous/procedural assignment 统一错误处理。
+- [x] `for/while/repeat/forever` 深化检查。
+- [x] `if/case/default` 错误恢复补强。
 
 交付：
 
-- 常见误写完整覆盖第一版。
-- `for (i = ; ...)` 等当前漏报修复。
+- [x] 常见误写完整覆盖第一版。
+- [x] `for (i = ; ...)` 等当前漏报修复。
 
 ### 阶段 5：Verilog generate、task/function、课程外分类
 
+状态：✅ 已完成
+
 任务：
 
-- generate-for 结构识别和诊断。
-- generate 内 assign/instance 收集。
-- task/function header/body 诊断补齐。
-- 课程外合法构造从 syntax error 降级到稳定提示。
+- [x] generate-for 结构识别和诊断。
+- [x] generate 内 assign/instance 收集。
+- [x] task/function header/body 诊断补齐。
+- [x] 课程外合法构造从 syntax error 降级到稳定提示。
 
 交付：
 
-- 插件 snippet `generate_for` 生成代码不报 syntax error。
-- `tri1`、drive strength 等按策略处理。
+- [x] 插件 snippet `generate_for` 生成代码不报 syntax error。
+- [x] `tri1`、drive strength 等按策略处理。
 
 ### 阶段 6：集成、性能和用户体验
 
+状态：✅ 已完成
+
 任务：
 
-- 错误码 catalog 与禁用配置联动检查。
-- Range 精度回归。
-- 大文件性能测试。
-- README 或 docs 中补充“内置诊断覆盖边界”。
+- [x] 错误码 catalog 与禁用配置联动检查。
+- [x] Range 精度回归。
+- [x] 大文件性能测试。
+- [x] README 或 docs 中补充“内置诊断覆盖边界”。
 
 交付：
 
-- 覆盖边界文档。
-- 全量测试通过。
-- 性能基线记录。
+- [x] 覆盖边界文档。
+- [x] 全量测试通过。
+- [x] 性能基线记录。
 
 ## 8. 测试策略
 
