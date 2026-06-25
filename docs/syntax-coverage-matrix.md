@@ -35,6 +35,7 @@ This matrix freezes the supported course subset for local diagnostics. It intent
 - Current resource count: 114 instructions.
 - Operand pattern source: `resources/mips/instructionMeta.json`.
 - Instruction validation is table-backed through `src/language/mips/instructionValidation.ts`.
+- Test coverage: `src/test/language/mips/instructionValidation.test.ts` generates concrete positive examples from every declared resource format and representative negative examples for each operand family.
 
 | Operand Family | Patterns | Valid Example | Invalid Example |
 | --- | --- | --- | --- |

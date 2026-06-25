@@ -213,6 +213,8 @@ Verilog：
 
 ### 6.5 MIPS-Directive-002：directive 参数矩阵
 
+状态：✅ 已完成（`parser.test.ts` 新增 20 条 directive 的参数矩阵正/反例；`.include/.extern/.globl/.align/.space` 均有边界覆盖）
+
 目标：
 
 - 为 20 条 directive 建立参数数量、类型、允许 section、课程约束矩阵
@@ -224,6 +226,8 @@ Verilog：
 - `.include`、`.extern`、`.globl`、`.align`、`.space` 有边界测试
 
 ### 6.6 MIPS-Instruction-001：全 instruction 格式覆盖
+
+状态：✅ 已完成（`instructionValidation.test.ts` 从 `resources/mips/instructions.json` 自动生成 114 条 instruction 至少一个正例，并覆盖所有声明 format；寄存器/立即数/label/memory/shamt/CP0 常见错误有稳定负例）
 
 目标：
 
@@ -238,6 +242,8 @@ Verilog：
 
 ### 6.7 MIPS-Macro-001：宏完整性
 
+状态：✅ 已完成（现有 parser/semantic/real-project 测试覆盖 `.macro` header、参数、重复参数、嵌套宏、缺 `.end_macro`、实参数量、宏参数 operand、宏局部 label/data label 作用域与非法 memory 实参）
+
 目标：
 
 - 覆盖 `.macro` header、参数命名、重复参数、嵌套宏、缺 `.end_macro`、调用实参数量和非法实参。
@@ -249,6 +255,8 @@ Verilog：
 - 非法 memory operand 作为宏参数时按 MARS 规则提示。
 
 ### 6.8 MIPS-Semantic-001：符号解析边界
+
+状态：✅ 已完成（parser/semantic 测试覆盖 label、data symbol、`.eqv`、宏局部符号、forward reference、label+immediate、memory offset 符号解析，并验证坏字符 literal 不派生 undeclared symbol 噪音）
 
 目标：
 
@@ -532,17 +540,19 @@ Verilog：
 
 ### 阶段 2：MIPS 全资源格式覆盖
 
+状态：✅ 已完成
+
 任务：
 
-- 生成或补全 114 条 instruction 正例。
-- 为 operand pattern 建负例。
-- 补齐 20 条 directive 参数测试。
-- 清理坏语法派生的二次噪音。
+- [x] 生成或补全 114 条 instruction 正例。
+- [x] 为 operand pattern 建负例。
+- [x] 补齐 20 条 directive 参数测试。
+- [x] 清理坏语法派生的二次噪音。
 
 交付：
 
-- MIPS instruction/directive 覆盖矩阵基本完成。
-- `npm test -- src/test/language/mips` 通过。
+- [x] MIPS instruction/directive 覆盖矩阵基本完成。
+- [x] `npm test -- src/test/language/mips` 通过。
 
 ### 阶段 3：Verilog 语法 catalog 和回归样例
 

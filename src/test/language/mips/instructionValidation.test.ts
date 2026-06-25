@@ -11,6 +11,102 @@ function astOperands(text: string): MipsOperandAst[] {
   return parseMips(document, defaultCoSettings).ast.statements[0].executable?.operands ?? [];
 }
 
+function parseInstructionLines(lines: string[]) {
+  const text = ['.text', 'main:', ...lines.map((line) => `    ${line}`), 'target: nop'].join('\n');
+  return parseMips(TextDocument.create('test://instruction-matrix.s', 'mipsasm', 1, text), defaultCoSettings);
+}
+
+function concreteInstructionFormat(format: string): string {
+  const firstSpace = format.indexOf(' ');
+  if (firstSpace < 0) {
+    return format;
+  }
+  const mnemonic = format.slice(0, firstSpace);
+  const operands = format.slice(firstSpace + 1)
+    .split(',')
+    .map((operand) => concreteOperand(operand.trim()));
+  return `${mnemonic} ${operands.join(', ')}`;
+}
+
+function concreteOperand(pattern: string): string {
+  switch (pattern) {
+    case '$rd':
+      return '$t0';
+    case '$rs':
+      return '$t1';
+    case '$rt':
+      return '$t2';
+    case '$base':
+      return '$sp';
+    case '($base)':
+      return '($sp)';
+    case 'cp0':
+      return '$12';
+    case 'imm32':
+      return '42';
+    case 'simm16':
+      return '-1';
+    case 'uimm16':
+      return '0xffff';
+    case 'shamt':
+      return '4';
+    case 'code16':
+      return '1';
+    case 'label':
+      return 'target';
+    case 'offset($base)':
+      return '4($sp)';
+    case 'imm32($base)':
+      return '42($sp)';
+    case 'uimm16($base)':
+      return '4($sp)';
+    case 'label($base)':
+      return 'target($sp)';
+    case 'label+imm32':
+      return 'target+4';
+    case 'label+imm32($base)':
+      return 'target+4($sp)';
+    default:
+      throw new Error(`Unhandled MIPS instruction operand pattern: ${pattern}`);
+  }
+}
+
+describe('instruction resource format matrix', () => {
+  it('accepts at least one concrete format for every instruction', () => {
+    const lines = Object.values(instructions).map((instruction) => concreteInstructionFormat(instruction.formats[0] ?? instruction.mnemonic));
+    const result = parseInstructionLines(lines);
+    const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
+
+    expect(Object.keys(instructions)).toHaveLength(114);
+    expect(errors).toEqual([]);
+  });
+
+  it('accepts every declared instruction format from the resource table', () => {
+    const lines = Object.values(instructions).flatMap((instruction) =>
+      (instruction.formats.length ? instruction.formats : [instruction.mnemonic]).map(concreteInstructionFormat)
+    );
+    const result = parseInstructionLines(lines);
+    const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
+
+    expect(errors).toEqual([]);
+  });
+
+  it('reports stable operand diagnostics for common operand family mistakes', () => {
+    const result = parseInstructionLines([
+      'add 1, $t1, $t2',
+      'addi $t0, $t1, target',
+      'beq $t0, $t1, 4($sp)',
+      'lw $t0, target',
+      'sll $t0, $t1, 40',
+      'mfc0 $t0, $bad'
+    ]);
+    const codes = result.diagnostics.map((diagnostic) => diagnostic.code);
+
+    expect(codes).toContain('operand-type');
+    expect(codes).toContain('unknown-register');
+  });
+});
+
 // ────────────────────────────────────────────────────────────────────────────────
 // isMacroArgumentToken
 // ────────────────────────────────────────────────────────────────────────────────

@@ -25,6 +25,36 @@ function diagCodes(result: ReturnType<typeof parseMips>): string[] {
   return result.diagnostics.map((d) => d.code as string);
 }
 
+interface DirectiveMatrixCase {
+  directive: string;
+  valid: string;
+  invalid?: string;
+  invalidCode?: string;
+}
+
+const directiveMatrix: DirectiveMatrixCase[] = [
+  { directive: '.data', valid: '.data 0', invalid: '.data label', invalidCode: 'directive-operand' },
+  { directive: '.text', valid: '.text', invalid: '.text label', invalidCode: 'directive-operand' },
+  { directive: '.kdata', valid: '.kdata 0', invalid: '.kdata label', invalidCode: 'directive-operand' },
+  { directive: '.ktext', valid: '.ktext 0x4180', invalid: '.ktext label', invalidCode: 'directive-operand' },
+  { directive: '.word', valid: '.data\nx: .word 1, target\ntarget: .word 0', invalid: '.data\nx: .word "bad"', invalidCode: 'directive-operand' },
+  { directive: '.half', valid: '.data\nx: .half 1', invalid: '.data\nx: .half "bad"', invalidCode: 'directive-operand' },
+  { directive: '.byte', valid: ".data\nx: .byte 'a'", invalid: '.data\nx: .byte "bad"', invalidCode: 'directive-operand' },
+  { directive: '.float', valid: '.data\nx: .float 1.0', invalid: '.data\nx: .float label', invalidCode: 'directive-operand' },
+  { directive: '.double', valid: '.data\nx: .double 1.0', invalid: '.data\nx: .double label', invalidCode: 'directive-operand' },
+  { directive: '.space', valid: '.data\nx: .space 4', invalid: '.data\nx: .space -1', invalidCode: 'directive-operand' },
+  { directive: '.ascii', valid: '.data\nx: .ascii "a"', invalid: '.data\nx: .ascii 1', invalidCode: 'directive-operand' },
+  { directive: '.asciiz', valid: '.data\nx: .asciiz "a"', invalid: '.data\nx: .asciiz 1', invalidCode: 'directive-operand' },
+  { directive: '.align', valid: '.data\n.align 2', invalid: '.data\n.align label', invalidCode: 'directive-operand' },
+  { directive: '.globl', valid: '.globl main\nmain: nop', invalid: '.globl 1', invalidCode: 'directive-operand' },
+  { directive: '.extern', valid: '.extern ext_label, 4', invalid: '.extern ext_label', invalidCode: 'directive-operand-count' },
+  { directive: '.set', valid: '.set noreorder' },
+  { directive: '.eqv', valid: '.eqv VALUE 1\nli $t0, VALUE', invalid: '.eqv', invalidCode: 'directive-operand' },
+  { directive: '.macro', valid: '.macro m(%a)\nadd $t0, %a, $zero\n.end_macro', invalid: '.macro', invalidCode: 'macro-header' },
+  { directive: '.end_macro', valid: '.macro m\n.end_macro', invalid: '.end_macro', invalidCode: 'macro-end' },
+  { directive: '.include', valid: '.include "lib.asm"', invalid: '.include lib.asm', invalidCode: 'directive-operand' }
+];
+
 // ────────────────────────────────────────────────────────────────────────────────
 // parseMips — basic parsing
 // ────────────────────────────────────────────────────────────────────────────────
@@ -93,6 +123,42 @@ describe('parseMips', () => {
   });
 
   describe('directive validation — boundary cases', () => {
+    it('covers the directive parameter matrix with valid and invalid examples', () => {
+      expect(directiveMatrix.map((item) => item.directive).sort()).toEqual([
+        '.align',
+        '.ascii',
+        '.asciiz',
+        '.byte',
+        '.data',
+        '.double',
+        '.end_macro',
+        '.eqv',
+        '.extern',
+        '.float',
+        '.globl',
+        '.half',
+        '.include',
+        '.kdata',
+        '.ktext',
+        '.macro',
+        '.set',
+        '.space',
+        '.text',
+        '.word'
+      ]);
+
+      for (const item of directiveMatrix) {
+        const valid = parseMips(doc(item.valid), settings({ mips: { warnMissingExitSyscall: false } }));
+        expect(valid.diagnostics.filter((diagnostic) => diagnostic.severity === 1), item.directive).toEqual([]);
+
+        if (!item.invalid || !item.invalidCode) {
+          continue;
+        }
+        const invalid = parseMips(doc(item.invalid), settings({ mips: { warnMissingExitSyscall: false } }));
+        expect(diagCodes(invalid), item.directive).toContain(item.invalidCode);
+      }
+    });
+
     it('reports lexical unknown tokens while continuing later diagnostics', () => {
       const text = [
         '.text',
