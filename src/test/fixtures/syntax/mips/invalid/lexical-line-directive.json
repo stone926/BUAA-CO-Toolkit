@@ -1,0 +1,8 @@
+{
+  "diagnostics": [
+    { "code": "mips-lex-unknown-token", "line": 2 },
+    { "code": "mips-syntax-line", "line": 3 },
+    { "code": "mips-syntax-line", "line": 4 },
+    { "code": "directive-operand-count", "line": 6 }
+  ]
+}

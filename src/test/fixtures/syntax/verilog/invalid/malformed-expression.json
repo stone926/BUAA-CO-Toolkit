@@ -1,0 +1,5 @@
+{
+  "diagnostics": [
+    { "code": "syntax-malformed-assignment", "line": 2 }
+  ]
+}

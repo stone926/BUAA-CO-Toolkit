@@ -93,6 +93,52 @@ describe('parseMips', () => {
   });
 
   describe('directive validation — boundary cases', () => {
+    it('reports lexical unknown tokens while continuing later diagnostics', () => {
+      const text = [
+        '.text',
+        '@',
+        '`',
+        '$',
+        'main: nop'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const codes = diagCodes(result);
+
+      expect(codes.filter((code) => code === 'mips-lex-unknown-token')).toHaveLength(3);
+      expect(result.instructions.some((instruction) => instruction.mnemonic === 'nop')).toBe(true);
+    });
+
+    it('does not report lexical errors for registers, macro parameters, or string contents', () => {
+      const text = [
+        '.macro use(%arg)',
+        '    add $t0, %arg, $zero',
+        '    .asciiz "@`%$"',
+        '.end_macro'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const codes = diagCodes(result);
+
+      expect(codes.some((code) => code.startsWith('mips-lex-'))).toBe(false);
+    });
+
+    it('reports malformed statement lines that have no executable', () => {
+      const text = [
+        '.text',
+        ':',
+        '1bad: nop',
+        'a:: nop',
+        '$t0:',
+        'a: b: nop'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const syntaxLineDiagnostics = result.diagnostics.filter((diagnostic) => diagnostic.code === 'mips-syntax-line');
+
+      expect(syntaxLineDiagnostics.length).toBeGreaterThanOrEqual(4);
+      expect(result.labels.has('a')).toBe(true);
+      expect(result.labels.has('b')).toBe(true);
+      expect(result.instructions.some((instruction) => instruction.mnemonic === 'nop')).toBe(true);
+    });
+
     it('allows the P7 fixed exception handler entry', () => {
       const text = '.text\nmain:\n    syscall\n.ktext 0x4180\n    eret';
       const result = parseMips(doc(text), settings({ project: { profile: 'P7' } }));
@@ -178,8 +224,34 @@ describe('parseMips', () => {
     it('reports malformed character literals without leaking inner undeclared symbols', () => {
       const text = ".data\nbad: .word '\\x'";
       const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).toContain('mips-lex-char-literal');
       expect(diagCodes(result)).toContain('directive-operand');
       expect(diagCodes(result)).not.toContain('undeclared-symbol');
+    });
+
+    it('reports unclosed strings and malformed character literal shapes', () => {
+      const text = [
+        '.data',
+        'msg: .asciiz "abc',
+        "empty: .byte ''",
+        "wide: .byte 'ab'",
+        "tail: .byte '\\"
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      const codes = diagCodes(result);
+
+      expect(codes).toContain('mips-lex-unclosed-string');
+      expect(codes.filter((code) => code === 'mips-lex-char-literal')).toHaveLength(2);
+      expect(codes).toContain('mips-lex-unclosed-char');
+    });
+
+    it('reports illegal MIPS string escapes without flagging escaped backslash comments', () => {
+      const bad = parseMips(doc('.data\nmsg: .asciiz "\\q"'), settings());
+      expect(diagCodes(bad)).toContain('mips-lex-string-escape');
+
+      const ok = parseMips(doc('.data\nmsg: .asciiz "\\\\"# comment'), settings());
+      expect(diagCodes(ok)).not.toContain('mips-lex-string-escape');
+      expect(diagCodes(ok)).not.toContain('directive-operand');
     });
 
     it('handles comments after strings ending with an escaped backslash', () => {
@@ -216,6 +288,27 @@ describe('parseMips', () => {
       expect(errors).toHaveLength(0);
       const continuation = result.ast.statements.find((statement) => statement.text.includes("2, 'a'"))?.dataContinuation;
       expect(continuation?.operands.map((operand) => operand.text)).toEqual(['2', "'a'"]);
+    });
+
+    it('reports empty data directives when no continuation follows', () => {
+      const eof = parseMips(doc('.data\narr: .word'), settings());
+      expect(diagCodes(eof)).toContain('directive-operand-count');
+
+      const terminated = parseMips(doc('.data\narr: .asciiz\nnext: .byte 1'), settings());
+      expect(diagCodes(terminated)).toContain('directive-operand-count');
+    });
+
+    it('allows empty data directive heads when a continuation line follows', () => {
+      const text = [
+        '.data',
+        'arr: .word',
+        '    1, 2',
+        'msg: .asciiz',
+        '    "ok"'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+
+      expect(diagCodes(result)).not.toContain('directive-operand-count');
     });
   });
 

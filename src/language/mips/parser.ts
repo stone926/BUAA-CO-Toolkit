@@ -29,11 +29,14 @@ import {
 import {
   isCharLiteral,
   isFloatLiteral,
+  mipsParsedRange,
+  mipsParsedTokenRange,
   isSymbolLike,
   parseCharLiteral,
   parseMipsSourceDocument,
   parseIntegerLiteral
 } from './syntax';
+import type { MipsParsedLine, MipsParsedToken } from './syntax';
 import {
   buildMipsSemanticModel,
   resolveMipsSemanticMacroParamAtPosition,
@@ -82,6 +85,12 @@ interface MipsSymbolScope {
 
 type MipsParseCore = Omit<MipsParseResult, 'ast' | 'semantic'>;
 
+interface PendingEmptyDataDirective {
+  directive: string;
+  line: number;
+  range: Range;
+}
+
 // 从资源文件加载指令元数据
 const STORAGE_DIRECTIVES = new Set(instructionMeta.storageDirectives);
 const CONTINUABLE_DATA_DIRECTIVES = new Set(['.byte', '.half', '.word', '.float', '.double', '.ascii', '.asciiz']);
@@ -111,12 +120,19 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   let hasSyscall = false;
   let v0Initialized = false;
   let activeDataContinuationDirective: string | undefined;
+  let pendingEmptyDataDirective: PendingEmptyDataDirective | undefined;
   const directiveContinuationLines = new Map<number, string>();
+
+  collectMipsSourceDiagnostics(source.lines, diagnostics);
 
   for (const statement of ast.statements) {
     const lineNumber = statement.line;
+    const executableAst = statement.executable;
 
     for (const label of statement.labels) {
+      if (isRegister(label.name)) {
+        diagnostics.push(makeDiagnostic(label.range, `寄存器 '${label.name}' 不能作为标签名`, DiagnosticSeverity.Error, 'mips-syntax-line'));
+      }
       const name = label.name;
       const selectionRange = label.range;
       const symbol: MipsSymbol = {
@@ -138,14 +154,24 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       }
     }
 
-    const executableAst = statement.executable;
     if (!executableAst) {
       const continuation = statement.dataContinuation;
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuation)) {
+        pendingEmptyDataDirective = undefined;
         validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
         directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+      } else if (pendingEmptyDataDirective && statementTerminatesDataContinuation(statement)) {
+        reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+        pendingEmptyDataDirective = undefined;
+      } else if (isMalformedStatementLine(statement)) {
+        diagnostics.push(makeDiagnostic(statement.dataContinuation?.range ?? statement.range, '无法解析的 MIPS 语句。请检查标签、冒号或助记符位置', DiagnosticSeverity.Error, 'mips-syntax-line'));
       }
       continue;
+    }
+
+    if (pendingEmptyDataDirective && statementTerminatesDataContinuation(statement)) {
+      reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+      pendingEmptyDataDirective = undefined;
     }
 
     if (executableAst.lowerMnemonic === '.eqv') {
@@ -249,6 +275,13 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
         ? mnemonic
         : undefined;
+      pendingEmptyDataDirective = activeDataContinuationDirective && executableAst.operands.length === 0
+        ? {
+          directive: mnemonic,
+          line: lineNumber,
+          range: executableAst.mnemonicRange
+        }
+        : undefined;
       continue;
     }
 
@@ -257,6 +290,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     if (!instruction && !macroOverloads?.length) {
       const continuation = statement.dataContinuation;
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuation)) {
+        pendingEmptyDataDirective = undefined;
         validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
         directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
         continue;
@@ -326,6 +360,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     activeMacro.range = Range.create(activeMacro.range.start, lineAt(document, document.lineCount - 1).range.end);
     diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `宏 '${activeMacro.name}' 缺少 .end_macro`, DiagnosticSeverity.Error, 'macro-unclosed'));
   }
+  if (pendingEmptyDataDirective) {
+    reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+  }
 
   const parsed: MipsParseCore = {
     labels,
@@ -373,6 +410,144 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     semantic: includeDiagnostics ? semantic : { ...semantic, diagnostics: resultDiagnostics },
     diagnostics: resultDiagnostics
   };
+}
+
+function collectMipsSourceDiagnostics(lines: MipsParsedLine[], diagnostics: Diagnostic[]): void {
+  for (const line of lines) {
+    for (const token of line.tokens) {
+      if (token.kind === 'unknown') {
+        diagnostics.push(malformedTokenDiagnostic(token));
+      } else if (token.kind === 'string') {
+        const stringDiagnostic = malformedStringTokenDiagnostic(token);
+        if (stringDiagnostic) {
+          diagnostics.push(stringDiagnostic);
+        }
+      }
+    }
+  }
+}
+
+function malformedTokenDiagnostic(token: MipsParsedToken): Diagnostic {
+  if (token.value.startsWith('\'')) {
+    const unclosed = token.value.length < 2 || !token.value.endsWith('\'');
+    return makeDiagnostic(
+      mipsParsedTokenRange(token),
+      unclosed ? '未闭合的 MIPS 字符字面量' : '非法的 MIPS 字符字面量',
+      DiagnosticSeverity.Error,
+      unclosed ? 'mips-lex-unclosed-char' : 'mips-lex-char-literal'
+    );
+  }
+  return makeDiagnostic(
+    mipsParsedTokenRange(token),
+    `非法的 MIPS 字符 '${token.value}'`,
+    DiagnosticSeverity.Error,
+    'mips-lex-unknown-token'
+  );
+}
+
+function malformedStringTokenDiagnostic(token: MipsParsedToken): Diagnostic | undefined {
+  if (!hasClosingMipsStringQuote(token.value)) {
+    return makeDiagnostic(mipsParsedTokenRange(token), '未闭合的 MIPS 字符串字面量', DiagnosticSeverity.Error, 'mips-lex-unclosed-string');
+  }
+  const invalidEscape = invalidMipsStringEscapeOffset(token.value);
+  if (invalidEscape === undefined) {
+    return undefined;
+  }
+  return makeDiagnostic(
+    mipsParsedRange(token.line, { start: token.start + invalidEscape, end: token.start + invalidEscape + 2 }),
+    '非法的 MIPS 字符串转义序列',
+    DiagnosticSeverity.Error,
+    'mips-lex-string-escape'
+  );
+}
+
+function hasClosingMipsStringQuote(text: string): boolean {
+  if (text.length < 2 || text[0] !== '"') {
+    return false;
+  }
+  let escaped = false;
+  for (let index = 1; index < text.length; index++) {
+    const char = text[index];
+    if (char === '"' && !escaped) {
+      return index === text.length - 1;
+    }
+    if (char === '\\') {
+      escaped = !escaped;
+    } else {
+      escaped = false;
+    }
+  }
+  return false;
+}
+
+function invalidMipsStringEscapeOffset(text: string): number | undefined {
+  for (let index = 1; index < text.length - 1; index++) {
+    if (text[index] !== '\\') {
+      continue;
+    }
+    const next = text[index + 1];
+    if (next === undefined) {
+      return index;
+    }
+    if (isMipsSimpleEscape(next)) {
+      index++;
+      continue;
+    }
+    if (isOctalDigit(next)) {
+      let cursor = index + 1;
+      let digits = 0;
+      while (cursor < text.length - 1 && digits < 3 && isOctalDigit(text[cursor])) {
+        cursor++;
+        digits++;
+      }
+      index = cursor - 1;
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function isMipsSimpleEscape(char: string): boolean {
+  return char === '\''
+    || char === '"'
+    || char === '\\'
+    || char === 'n'
+    || char === 't'
+    || char === 'b'
+    || char === 'r'
+    || char === 'f'
+    || char === '0';
+}
+
+function statementTerminatesDataContinuation(statement: MipsStatementAst): boolean {
+  if (statement.labels.length > 0) {
+    return true;
+  }
+  const executable = statement.executable;
+  if (!executable) {
+    return false;
+  }
+  return executable.kind === 'directive' || instructions[executable.lowerMnemonic] !== undefined;
+}
+
+function isMalformedStatementLine(statement: MipsStatementAst): boolean {
+  if (statement.executable) {
+    return false;
+  }
+  if (statement.labels.length > 0 && !statement.dataContinuation) {
+    return false;
+  }
+  return statement.text.trim().length > 0;
+}
+
+function reportMissingDataDirectiveOperands(pending: PendingEmptyDataDirective, diagnostics: Diagnostic[]): void {
+  diagnostics.push(makeDiagnostic(
+    pending.range,
+    `${pending.directive} expects at least one operand or a continuation line before the next statement.`,
+    DiagnosticSeverity.Error,
+    'directive-operand-count'
+  ));
 }
 
 function validateDirective(
@@ -854,6 +1029,10 @@ function isMipsSymbolPart(char: string): boolean {
 
 function isAsciiWhitespace(char: string): boolean {
   return char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === '\f' || char === '\v';
+}
+
+function isOctalDigit(char: string): boolean {
+  return char >= '0' && char <= '7';
 }
 
 function resolveEqvSymbolInScope(name: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): MipsSymbol | undefined {

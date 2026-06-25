@@ -298,7 +298,7 @@ function tokenizeMipsCode(code: string, lineNumber: number): MipsParsedToken[] {
     }
     if (char === '$') {
       const end = readRegisterEnd(code, index + 1);
-      tokens.push(makeToken('register', code.slice(index, end), lineNumber, index, end));
+      tokens.push(makeToken(end > index + 1 ? 'register' : 'unknown', code.slice(index, end), lineNumber, index, end));
       index = end;
       continue;
     }
@@ -628,7 +628,8 @@ function isNumberPart(char: string): boolean {
     || char === 'X'
     || char === 'b'
     || char === 'B'
-    || char === '_';
+    || char === '_'
+    || char === '.';
 }
 
 function isAsciiDigit(char: string): boolean {
