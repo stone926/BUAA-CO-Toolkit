@@ -2,6 +2,14 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [0.6.0] - 2026-06-25
+
+- chore: tighten VSIX package ignore rules (170a777)
+- test(verilog): cover syntax boundaries and performance (ff4d27e)
+- test(mips): cover instruction and directive syntax matrix (96946b9)
+- fix(verilog): support generate and course-out syntax diagnostics (868d648)
+- fix(mips): report lexical and malformed line diagnostics (14be7a8)
+
 ## [0.5.1] - 2026-06-24
 
 - fix(test): compact continuous test artifacts (c3c7048)
