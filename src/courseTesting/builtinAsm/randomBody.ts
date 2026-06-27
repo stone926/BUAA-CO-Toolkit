@@ -12,6 +12,7 @@ import {
   p7ExceptionHandlerAddress,
   p7ExternalInterruptAckAddress
 } from './p7/constants';
+import { renderP7ExceptionHandler, renderP7ExceptionHandlerUnified } from './asmTemplates';
 import {
   CpuProfile,
   MduReadProbeMode,
@@ -102,7 +103,6 @@ const p7HandlerRequiredMnemonics = ['mfc0', 'mtc0', 'eret'] as const;
 // SR value the prologue installs: IE=1 (bit0) + external interrupt mask IM[2]=1 (bit12).
 // Uses 0x1001 (IE + IM[2] only), not the full course mask (0x1c01).
 const p7StatusEnableInterrupts = 0x1001;
-const p7IntAckAddress = p7ExternalInterruptAckAddress;
 const p7ExceptionFlushShadowSlots = 2;
 const p7InterruptAnchorInstructionCount = 2;
 export const p7InternalUnknownInstructionMnemonic = '_co_internal_unknown_instruction';
@@ -423,21 +423,7 @@ class ProgramGenerator {
       // entry is the external interrupt. Avoid reading full Cause there: MARS leaves IP clear for
       // p7irq while many course CPUs expose HWInt[2] in Cause.IP, and that implementation detail
       // would otherwise appear as a trace-visible $k0 write.
-      return [
-        '.ktext 0x4180',
-        '_co_excep:',
-        '    bne $k1, $0, _co_excep_skip',
-        '    nop',
-        '    ori $k1, $0, 1',
-        `    ori $k0, $0, 0x${p7IntAckAddress.toString(16)}`,
-        '    sb $0, 0($k0)',
-        '    eret',
-        '_co_excep_skip:',
-        '    mfc0 $k0, $14',
-        '    addi $k0, $k0, 4',
-        '    mtc0 $k0, $14',
-        '    eret'
-      ];
+      return renderP7ExceptionHandler(p7ExternalInterruptAckAddress);
     }
     // Unified P7 handler at 0x4180.
     // 1. Read Cause first and branch on ExcCode. Only an external interrupt (ExcCode == 0)
@@ -446,22 +432,7 @@ class ProgramGenerator {
     //    the external interrupt generator: a pending interrupt may have arrived while EXL was set.
     // Only $k0/$k1 ($26/$27) are touched; generated user code never reads them, so the handler
     // is transparent to user-visible state. eret has no delay slot.
-    return [
-      '.ktext 0x4180',
-      '_co_excep:',
-      '    mfc0 $k0, $13',
-      '    andi $k1, $k0, 0x7c',
-      '    bne $k1, $0, _co_excep_skip',
-      '    nop',
-      `    ori $k0, $0, 0x${p7IntAckAddress.toString(16)}`,
-      '    sb $0, 0($k0)',
-      '    eret',
-      '_co_excep_skip:',
-      '    mfc0 $k0, $14',
-      '    addi $k0, $k0, 4',
-      '    mtc0 $k0, $14',
-      '    eret'
-    ];
+    return renderP7ExceptionHandlerUnified(p7ExternalInterruptAckAddress);
   }
 
   private emitP7Prologue(): void {
