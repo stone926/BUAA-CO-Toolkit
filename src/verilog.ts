@@ -2,6 +2,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { ASM_NEEDED_VERILOG_PROFILES } from './constants';
 import {
   config,
   ensureConcreteProfile,
@@ -536,7 +537,7 @@ async function ensureSimulationAsmCase(
 }
 
 function requiresAsmCase(resource: vscode.Uri | undefined): boolean {
-  return new Set(['P4', 'P5', 'P6', 'P7']).has(getProfile(resource));
+  return ASM_NEEDED_VERILOG_PROFILES.has(getProfile(resource));
 }
 
 /**

@@ -1,5 +1,12 @@
 // @index sidebar-model — 纯函数式数据模型，四段结构
 import * as path from 'path';
+import {
+  ASM_NEEDED_VERILOG_PROFILES,
+  LOGISIM_PROFILES,
+  MIPS_PROFILES,
+  TRACE_PROFILES,
+  VERILOG_PROFILES
+} from './constants';
 import { ProjectProfile } from './projectProfile';
 
 export type SidebarNodeKind = 'section' | 'info' | 'action' | 'tool' | 'tutorial';
@@ -62,11 +69,11 @@ export interface SidebarModelContext {
   tutorials: SidebarTutorialModel[];
 }
 
-const traceProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
-const verilogProfiles = new Set<ProjectProfile>(['P1', 'P4', 'P5', 'P6', 'P7']);
-const configuredVerilogProjectProfiles = new Set<ProjectProfile>(['P4', 'P5', 'P6', 'P7']);
-const mipsProfiles = new Set<ProjectProfile>(['P2', 'P4', 'P5', 'P6', 'P7']);
-const logisimProfiles = new Set<ProjectProfile>(['P0', 'P3']);
+const traceProfiles = TRACE_PROFILES;
+const verilogProfiles = VERILOG_PROFILES;
+const configuredVerilogProjectProfiles = ASM_NEEDED_VERILOG_PROFILES;
+const mipsProfiles = MIPS_PROFILES;
+const logisimProfiles = LOGISIM_PROFILES;
 
 export function buildSidebarModel(context: SidebarModelContext): SidebarNodeModel[] {
   return [

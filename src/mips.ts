@@ -22,6 +22,7 @@ import {
   p7RiInstructionNeeded,
   P7_COURSE_MEMORY_CONFIG
 } from './language/mips/marsArgs';
+import { CPU_HALT_PROFILES } from './constants';
 
 // Re-export for testability
 export { buildMarsArgs } from './language/mips/marsArgs';
@@ -381,7 +382,7 @@ function machineCodeLines(text: string): string[] {
  * 这些工具会在执行完最后一条指令后继续向指令存储器末尾之外取指，触发取指 AdEL。P7 由
  * mergeP7KernelTextDump 自带停机自环，这里覆盖 P4/P5/P6。
  */
-const cpuHaltProfiles = new Set<ProjectProfile>(['P4', 'P5', 'P6']);
+const cpuHaltProfiles = CPU_HALT_PROFILES;
 
 /**
  * 给 dump 出的机器码追加停机自环（与 P7 一致）。仅改 code.txt，不改源 ASM，所以 MARS 黄金 trace

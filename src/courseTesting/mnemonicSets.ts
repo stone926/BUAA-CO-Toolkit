@@ -1,3 +1,4 @@
+import { TRACE_PROFILES } from '../constants';
 import { ProjectProfile } from '../projectProfile';
 
 export type CpuProfile = 'P3' | 'P4' | 'P5' | 'P6' | 'P7';
@@ -17,7 +18,7 @@ export type ControlMnemonic =
   | 'jr'
   | 'jalr';
 
-export const cpuProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
+export const cpuProfiles = TRACE_PROFILES;
 
 export const defaultInstructionSets: Record<CpuProfile, string[]> = {
   P3: ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'nop'],

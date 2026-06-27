@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { CONCRETE_PROFILES } from './constants';
 import { ProjectProfile } from './types';
 import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
 import {
@@ -33,7 +34,7 @@ export async function runProjectWizard(): Promise<void> {
   }
 
   // Step 1: 选择 Profile
-  const profiles: ProjectProfile[] = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'];
+  const profiles: ProjectProfile[] = [...CONCRETE_PROFILES];
   const profilePick = await vscode.window.showQuickPick(
     profiles.map((p) => ({
       label: p,

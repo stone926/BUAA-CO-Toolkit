@@ -1,5 +1,6 @@
 // @index config — co.*设置读取，分层取值+值域裁剪+Python探测缓存
 import * as vscode from 'vscode';
+import { DELAYED_BRANCHING_PROFILES } from './constants';
 import {
   ConcreteProjectProfile,
   ProjectProfile,
@@ -153,7 +154,7 @@ export function useDelayedBranching(resource?: vscode.Uri): boolean {
   if (mode === 'on') { return true; }
   if (mode === 'off') { return false; }
   const profile = getProfile(resource);
-  return profile === 'P5' || profile === 'P6' || profile === 'P7';
+  return DELAYED_BRANCHING_PROFILES.has(profile);
 }
 
 export function getJava(resource?: vscode.Uri): string {

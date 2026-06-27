@@ -1,5 +1,10 @@
 // @index entry — activate()入口，注册全部命令/UI/FileWatcher
 import * as vscode from 'vscode';
+import {
+  ALL_PROFILES,
+  TRACE_CONTEXT_PROFILES,
+  VERILOG_CONTEXT_PROFILES
+} from './constants';
 import { getProfileResolution, setProfileInferenceProvider } from './config';
 import {
   diagnosticCodeKey,
@@ -197,8 +202,8 @@ function updateCoContext(resource?: vscode.Uri): void {
   const profile = resolution.effectiveProfile ?? resolution.configuredProfile;
   const rawActiveKind = activeKindForDocument(vscode.window.activeTextEditor?.document);
   const hasConcreteProfile = Boolean(resolution.effectiveProfile);
-  const hasTraceProfile = ['P3', 'P4', 'P5', 'P6', 'P7'].includes(profile);
-  const hasVerilogProfile = ['P1', 'P4', 'P5', 'P6', 'P7'].includes(profile);
+  const hasTraceProfile = TRACE_CONTEXT_PROFILES.has(profile);
+  const hasVerilogProfile = VERILOG_CONTEXT_PROFILES.has(profile);
   const activeKind = rawActiveKind === 'verilog' && !hasVerilogProfile ? 'other' : rawActiveKind;
   void vscode.commands.executeCommand('setContext', 'co.profile', profile);
   void vscode.commands.executeCommand('setContext', 'co.hasConcreteProfile', hasConcreteProfile);
@@ -232,7 +237,7 @@ async function showToolchainReport(output: vscode.OutputChannel): Promise<ToolDe
 }
 
 async function selectProjectProfile(): Promise<void> {
-  const profiles: ProjectProfile[] = ['auto', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'];
+  const profiles: ProjectProfile[] = [...ALL_PROFILES];
   const resolution = getProfileResolution(vscode.window.activeTextEditor?.document.uri);
   const current = resolution.configuredProfile;
   const picked = await vscode.window.showQuickPick(

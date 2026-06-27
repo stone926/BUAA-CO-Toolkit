@@ -1,3 +1,10 @@
+import {
+  HAZARD_PROFILES,
+  LOGISIM_PROFILES,
+  MIPS_PROFILES,
+  TRACE_PROFILES,
+  VERILOG_PROFILES
+} from './constants';
 import { ProjectProfile } from './projectProfile';
 
 export type CoActiveKind = 'mips' | 'verilog' | 'logisim' | 'other' | 'none';
@@ -16,11 +23,11 @@ export interface AdvancedToolItemModel {
   command: string;
 }
 
-const traceProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
-const verilogProfiles = new Set<ProjectProfile>(['P1', 'P4', 'P5', 'P6', 'P7']);
-const mipsProfiles = new Set<ProjectProfile>(['P2', 'P4', 'P5', 'P6', 'P7']);
-const logisimProfiles = new Set<ProjectProfile>(['P0', 'P3']);
-const hazardProfiles = new Set<ProjectProfile>(['P5', 'P6', 'P7']);
+const traceProfiles = TRACE_PROFILES;
+const verilogProfiles = VERILOG_PROFILES;
+const mipsProfiles = MIPS_PROFILES;
+const logisimProfiles = LOGISIM_PROFILES;
+const hazardProfiles = HAZARD_PROFILES;
 
 export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedToolItemModel[] {
   const items: AdvancedToolItemModel[] = [];
