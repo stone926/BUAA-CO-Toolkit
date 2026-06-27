@@ -32,3 +32,21 @@ describe('appendHaltLoop', () => {
     expect(appendHaltLoop('\n\n')).toBe('\n\n');
   });
 });
+
+describe('MIPS hex constants', () => {
+  it('NOP hex is sll $0, $0, 0', () => {
+    expect(MIPS_NOP_HEX).toBe('00000000');
+    // Verify it's 8 hex digits (32-bit word)
+    expect(MIPS_NOP_HEX).toMatch(/^[0-9a-f]{8}$/i);
+  });
+
+  it('self-branch hex is beq $0, $0, -1', () => {
+    expect(MIPS_SELF_BRANCH_HEX).toBe('1000ffff');
+    // Verify it's 8 hex digits (32-bit word)
+    expect(MIPS_SELF_BRANCH_HEX).toMatch(/^[0-9a-f]{8}$/i);
+  });
+
+  it('NOP and self-branch are distinct', () => {
+    expect(MIPS_NOP_HEX).not.toBe(MIPS_SELF_BRANCH_HEX);
+  });
+});

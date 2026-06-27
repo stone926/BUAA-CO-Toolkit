@@ -427,7 +427,7 @@ const largeTextMemoryConfigurations = new Set(['FixedCompactLargeText', 'Compact
 const mipsNopHex = '00000000';
 const mipsSelfBranchHex = '1000ffff';
 
-function buildMarsArgs(
+export function buildMarsArgs(
   asmUri: vscode.Uri,
   mars: string,
   mode: MarsRunMode,
