@@ -26,6 +26,7 @@ export interface CourseConfig {
   memoryLayout: Record<string, Record<string, MemoryRange>>;
   profiles: Record<string, ProfileConfig>;
   verilogPorts: Record<string, PortConfig[]>;
+  traceFormatPatterns: Record<string, string[]>;
   directiveDescriptions: Record<string, string>;
   directiveDetails: Record<string, { description: string; commonValues?: Record<string, string> }>;
   tutorial?: {
@@ -91,6 +92,24 @@ export function getProfileRequiredTools(profile: string): string[] {
 
 export function getVerilogPorts(profile: string): PortConfig[] {
   return loadCourseConfig().verilogPorts[profile] ?? [];
+}
+
+/**
+ * 从 courseConfig.json 推导 expectedPorts（Verilog 端口期望定义）。
+ * 单比特端口（width === 1）→ undefined（仅检查存在，不检查宽度）；
+ * 多比特端口 → Verilog range 格式 `[N-1:0]`。
+ */
+export function buildExpectedPorts(profile: string): Record<string, string | undefined> {
+  const ports = getVerilogPorts(profile);
+  const result: Record<string, string | undefined> = {};
+  for (const port of ports) {
+    result[port.name] = port.width > 1 ? `[${port.width - 1}:0]` : undefined;
+  }
+  return result;
+}
+
+export function getTraceFormatPatterns(profile: string): string[] {
+  return loadCourseConfig().traceFormatPatterns[profile] ?? [];
 }
 
 export function getMemoryRange(section: string): MemoryRange | undefined {

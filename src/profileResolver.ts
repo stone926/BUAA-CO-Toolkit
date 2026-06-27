@@ -5,6 +5,7 @@ import {
   isConcreteProjectProfile
 } from './projectProfile';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
+import { getTraceFormatPatterns } from './courseConfig';
 
 export type ProfileConfiguredSource = 'settings' | 'default';
 export type ProfileResolutionSource = ProfileConfiguredSource | 'inferred' | 'manualFallback';
@@ -294,15 +295,25 @@ function hasAnyDeclaration(module: ProfileResolverModule, names: readonly string
   return false;
 }
 
+const tracePatternCache = new Map<string, RegExp[]>();
+
+function getTracePatterns(profile: string): RegExp[] {
+  const cached = tracePatternCache.get(profile);
+  if (cached) { return cached; }
+  const patterns = getTraceFormatPatterns(profile).map((s) => new RegExp(s, 'i'));
+  tracePatternCache.set(profile, patterns);
+  return patterns;
+}
+
 function looksLikeP5TraceFormat(format: string): boolean {
   const normalized = normalizeTraceFormat(format);
-  return /%0?\d*d@%0?\d*h:(?:\$%0?\d*d<=%0?\d*h|\*%0?\d*h<=%0?\d*h)/i.test(normalized);
+  return getTracePatterns('P5').some((re) => re.test(normalized));
 }
 
 function looksLikeP4TraceFormat(format: string): boolean {
   const normalized = normalizeTraceFormat(format);
   return !looksLikeP5TraceFormat(format)
-    && /@%0?\d*h:(?:\$%0?\d*d<=%0?\d*h|\*%0?\d*h<=%0?\d*h)/i.test(normalized);
+    && getTracePatterns('P4').some((re) => re.test(normalized));
 }
 
 function normalizeTraceFormat(format: string): string {

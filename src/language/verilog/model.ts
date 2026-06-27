@@ -277,47 +277,20 @@ export const systemTasks = new Set([
   'time'
 ]);
 
-export const expectedPorts: Record<string, Record<string, string | undefined>> = {
-  P4: {
-    clk: undefined,
-    reset: undefined
-  },
-  P5: {
-    clk: undefined,
-    reset: undefined
-  },
-  P6: {
-    clk: undefined,
-    reset: undefined,
-    i_inst_rdata: '[31:0]',
-    m_data_rdata: '[31:0]',
-    i_inst_addr: '[31:0]',
-    m_data_addr: '[31:0]',
-    m_data_wdata: '[31:0]',
-    m_data_byteen: '[3:0]',
-    m_inst_addr: '[31:0]',
-    w_grf_we: undefined,
-    w_grf_addr: '[4:0]',
-    w_grf_wdata: '[31:0]',
-    w_inst_addr: '[31:0]'
-  },
-  P7: {
-    clk: undefined,
-    reset: undefined,
-    interrupt: undefined,
-    macroscopic_pc: '[31:0]',
-    i_inst_addr: '[31:0]',
-    i_inst_rdata: '[31:0]',
-    m_data_addr: '[31:0]',
-    m_data_rdata: '[31:0]',
-    m_data_wdata: '[31:0]',
-    m_data_byteen: '[3:0]',
-    m_int_addr: '[31:0]',
-    m_int_byteen: '[3:0]',
-    m_inst_addr: '[31:0]',
-    w_grf_we: undefined,
-    w_grf_addr: '[4:0]',
-    w_grf_wdata: '[31:0]',
-    w_inst_addr: '[31:0]'
-  }
-};
+import { buildExpectedPorts } from '../../courseConfig';
+
+/**
+ * 期望的 Verilog 顶层端口定义（按 Profile）。
+ * 数据来源为 resources/co/courseConfig.json 的 verilogPorts，
+ * 通过 courseConfig.buildExpectedPorts() 转换为 expectedPorts 格式。
+ */
+export function getExpectedPorts(profile: string): Record<string, string | undefined> {
+  return buildExpectedPorts(profile);
+}
+
+// 保留旧对象形态供直接读取（向后兼容已加载的模块）
+const _expected: Record<string, Record<string, string | undefined>> = {};
+for (const p of ['P4', 'P5', 'P6', 'P7']) {
+  _expected[p] = buildExpectedPorts(p);
+}
+export const expectedPorts: Record<string, Record<string, string | undefined>> = _expected;
