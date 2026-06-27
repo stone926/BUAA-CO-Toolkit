@@ -2,7 +2,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { ASM_NEEDED_VERILOG_PROFILES } from './constants';
+import { Commands, ASM_NEEDED_VERILOG_PROFILES } from './constants';
 import {
   config,
   ensureConcreteProfile,
@@ -135,13 +135,13 @@ let sharedModuleRegistry: MutableVerilogModuleProvider | undefined;
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
   sharedModuleRegistry = moduleRegistry;
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.verilog.disableLintRule', (rule?: string) => disableLintRule(rule)),
-    vscode.commands.registerCommand('co.verilog.generateTestbench', () => generateTestbench(moduleRegistry)),
-    vscode.commands.registerCommand('co.verilog.generateIseProject', () => generateIseProject(services)),
-    vscode.commands.registerCommand('co.verilog.checkSyntaxWithIse', () => checkSyntaxWithIse()),
-    vscode.commands.registerCommand('co.verilog.runIsim', () => runIsim(services, { moduleRegistry })),
-    vscode.commands.registerCommand('co.verilog.openIsimWaveform', () => openIsimWaveform(services, { compileIsim, moduleRegistry })),
-    vscode.commands.registerCommand('co.verilog.exportVcd', () => exportVcdWaveform(services, { compileIsim, moduleRegistry }))
+    vscode.commands.registerCommand(Commands.Verilog.DisableLintRule, (rule?: string) => disableLintRule(rule)),
+    vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
+    vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => generateIseProject(services)),
+    vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkSyntaxWithIse()),
+    vscode.commands.registerCommand(Commands.Verilog.RunIsim, () => runIsim(services, { moduleRegistry })),
+    vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => openIsimWaveform(services, { compileIsim, moduleRegistry })),
+    vscode.commands.registerCommand(Commands.Verilog.ExportVcd, () => exportVcdWaveform(services, { compileIsim, moduleRegistry }))
   );
 }
 
@@ -152,7 +152,7 @@ async function checkSyntaxWithIse(): Promise<void> {
     return;
   }
   await editor.document.save();
-  await executeLanguageServerCommand('co.internal.verilog.checkSyntaxWithIse', [editor.document.uri.toString()]);
+  await executeLanguageServerCommand(Commands.Server.InternalVerilogCheckSyntaxWithIse, [editor.document.uri.toString()]);
   vscode.window.showInformationMessage('已触发 ISE 语法检查，结果会显示在问题面板');
 }
 

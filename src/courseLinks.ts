@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -11,9 +12,9 @@ import { ProjectProfile } from './projectProfile';
 
 export function registerCourseLinks(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.course.openTutorial', () => openCourseTutorial()),
-    vscode.commands.registerCommand('co.course.openProfileTutorial', (profile?: ProjectProfile) => openProfileTutorial(profile)),
-    vscode.commands.registerCommand('co.course.openTutorialLink', (link?: CourseTutorialLink) => openTutorialLink(link))
+    vscode.commands.registerCommand(Commands.Course.OpenTutorial, () => openCourseTutorial()),
+    vscode.commands.registerCommand(Commands.Course.OpenProfileTutorial, (profile?: ProjectProfile) => openProfileTutorial(profile)),
+    vscode.commands.registerCommand(Commands.Course.OpenTutorialLink, (link?: CourseTutorialLink) => openTutorialLink(link))
   );
 }
 

@@ -1,6 +1,7 @@
 // @index entry — activate()入口，注册全部命令/UI/FileWatcher
 import * as vscode from 'vscode';
 import {
+  Commands,
   ALL_PROFILES,
   TRACE_CONTEXT_PROFILES,
   VERILOG_CONTEXT_PROFILES
@@ -37,7 +38,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const output = vscode.window.createOutputChannel('BUAA CO Toolkit');
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  statusBar.command = 'co.checkToolchain';
+  statusBar.command = Commands.CheckToolchain;
   context.subscriptions.push(output, statusBar);
 
   const services: AppServices = {
@@ -66,7 +67,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Register refresh command for sidebar
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.sidebar.refresh', () => scheduleRefreshProjectUi())
+    vscode.commands.registerCommand(Commands.SidebarRefresh, () => scheduleRefreshProjectUi())
   );
 
   context.subscriptions.push(
@@ -158,14 +159,14 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.checkToolchain', async () => {
+    vscode.commands.registerCommand(Commands.CheckToolchain, async () => {
       const resource = vscode.window.activeTextEditor?.document.uri;
       const checks = await showToolchainReport(output);
       toolchainCache.set(toolchainCacheKey(resource), { checks, timestamp: Date.now() });
       scheduleRefreshProjectUi(resource);
     }),
-    vscode.commands.registerCommand('co.selectProjectProfile', () => selectProjectProfile()),
-    vscode.commands.registerCommand('co.projectWizard', () => runProjectWizard()),
+    vscode.commands.registerCommand(Commands.SelectProjectProfile, () => selectProjectProfile()),
+    vscode.commands.registerCommand(Commands.ProjectWizard, () => runProjectWizard()),
     vscode.window.onDidChangeActiveTextEditor(() => {
       scheduleRefreshProjectUi();
     }),

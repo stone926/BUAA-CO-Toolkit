@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 import * as vscode from 'vscode';
 import { Range as LspRange } from 'vscode-languageserver/node';
 import { parseVerilog } from './language/verilog/service';
@@ -174,7 +175,7 @@ export function registerVerilogSignalView(context: vscode.ExtensionContext, modu
   treeView.message = provider.message;
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.verilog.inspectSignal', () => {
+    vscode.commands.registerCommand(Commands.Verilog.InspectSignal, () => {
       void vscode.commands.executeCommand('setContext', 'co.verilogSignalVisible', true);
       refresh(undefined, true);
       void vscode.commands.executeCommand('coVerilogSignal.focus');

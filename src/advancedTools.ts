@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getProfile } from './config';
@@ -11,7 +12,7 @@ export { buildAdvancedToolItems };
 
 export function registerAdvancedTools(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.tools.openAdvanced', async () => {
+    vscode.commands.registerCommand(Commands.ToolsOpenAdvanced, async () => {
       const items = buildAdvancedToolItems(contextFromActiveEditor());
       if (!items.length) {
         vscode.window.showInformationMessage('当前上下文没有可用的 CO 高级工具。请先选择 Profile 或打开 ASM / Verilog / .circ 文件。');

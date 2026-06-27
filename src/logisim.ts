@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { Commands } from './constants';
 import { getJava, getLogisimJar } from './config';
 import { dirname, readTextFile, writeTextFile } from './fsUtil';
 import { findLogisimRomTargets, injectMachineCodeIntoLogisimRom, LogisimRomTarget } from './language/logisim/rom';
@@ -17,10 +18,10 @@ import {
 
 export function registerLogisim(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.logisim.generateRom', () => generateLogisimRom(services)),
-    vscode.commands.registerCommand('co.logisim.injectRomIntoCircuit', () => injectRomIntoCircuit(services)),
-    vscode.commands.registerCommand('co.logisim.convertLogToCsv', () => convertLogToCsv()),
-    vscode.commands.registerCommand('co.logisim.openCurrentCircuit', () => openCurrentCircuit(services))
+    vscode.commands.registerCommand(Commands.Logisim.GenerateRom, () => generateLogisimRom(services)),
+    vscode.commands.registerCommand(Commands.Logisim.InjectRomIntoCircuit, () => injectRomIntoCircuit(services)),
+    vscode.commands.registerCommand(Commands.Logisim.ConvertLogToCsv, () => convertLogToCsv()),
+    vscode.commands.registerCommand(Commands.Logisim.OpenCurrentCircuit, () => openCurrentCircuit(services))
   );
 }
 

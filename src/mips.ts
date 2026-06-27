@@ -22,7 +22,7 @@ import {
   p7RiInstructionNeeded,
   P7_COURSE_MEMORY_CONFIG
 } from './language/mips/marsArgs';
-import { CPU_HALT_PROFILES } from './constants';
+import { Commands, CPU_HALT_PROFILES } from './constants';
 
 // Re-export for testability
 export { buildMarsArgs } from './language/mips/marsArgs';
@@ -49,16 +49,16 @@ export interface MarsRunOutput {
 
 export function registerMips(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.mips.disablePseudoWarnings', async () => {
+    vscode.commands.registerCommand(Commands.Mips.DisablePseudoWarnings, async () => {
       await vscode.workspace.getConfiguration('co').update('mips.warnPseudoInstruction', false, vscode.ConfigurationTarget.Workspace);
       vscode.window.showInformationMessage('已在当前工作区中禁用 MIPS 伪指令警告');
     }),
-    vscode.commands.registerCommand('co.mips.runCurrentFile', () => runMarsCurrentFile(services, 'run')),
-    vscode.commands.registerCommand('co.mips.runAndCapture', () => runMarsCurrentFile(services, 'run')),
-    vscode.commands.registerCommand('co.mips.runWithStdinFile', () => runMarsCurrentFileWithStdinFile(services)),
-    vscode.commands.registerCommand('co.mips.runInTerminal', () => runMarsCurrentFileInTerminal()),
-    vscode.commands.registerCommand('co.mips.dumpText', () => runMarsCurrentFile(services, 'dumpText')),
-    vscode.commands.registerCommand('co.mips.dumpKernelText', () => runMarsCurrentFile(services, 'dumpKernel'))
+    vscode.commands.registerCommand(Commands.Mips.RunCurrentFile, () => runMarsCurrentFile(services, 'run')),
+    vscode.commands.registerCommand(Commands.Mips.RunAndCapture, () => runMarsCurrentFile(services, 'run')),
+    vscode.commands.registerCommand(Commands.Mips.RunWithStdinFile, () => runMarsCurrentFileWithStdinFile(services)),
+    vscode.commands.registerCommand(Commands.Mips.RunInTerminal, () => runMarsCurrentFileInTerminal()),
+    vscode.commands.registerCommand(Commands.Mips.DumpText, () => runMarsCurrentFile(services, 'dumpText')),
+    vscode.commands.registerCommand(Commands.Mips.DumpKernelText, () => runMarsCurrentFile(services, 'dumpKernel'))
   );
 }
 

@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 // @index main-coordinator — 课程测试总调度，14个co.test.*命令
 import * as fs from 'fs';
 import * as path from 'path';
@@ -151,18 +152,18 @@ interface GeneratedAsmBatch {
 export function registerCourseTest(context: vscode.ExtensionContext, services: AppServices): void {
   const continuousTraceDependencies = createContinuousTraceDependencies();
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.test.runFullTest', () => runFullCourseTraceTest(services)),
-    vscode.commands.registerCommand('co.test.runBatchTraceTests', () => runBatchCourseTraceTests(services)),
-    vscode.commands.registerCommand('co.test.runGeneratedTraceTests', () => runGeneratedCourseTraceTests(services)),
-    vscode.commands.registerCommand('co.test.startContinuousGeneratedTraceTests', () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
-    vscode.commands.registerCommand('co.test.generateAsmTests', () => generateAsmTests(services)),
-    vscode.commands.registerCommand('co.test.generateAndDumpAsmTests', () => generateAndDumpAsmTests(services)),
-    vscode.commands.registerCommand('co.test.stopContinuousTests', () => stopContinuousTests()),
-    vscode.commands.registerCommand('co.test.prepareLogisimCases', () => prepareLogisimCases(services)),
-    vscode.commands.registerCommand('co.test.diagnoseP3LogisimTraceCircuit', () => diagnoseP3LogisimTraceCircuit(services)),
-    vscode.commands.registerCommand('co.test.prepareGeneratedLogisimCases', () => prepareGeneratedLogisimCases(services)),
-    vscode.commands.registerCommand('co.test.openBatchTraceReport', () => openBatchTraceReport()),
-    vscode.commands.registerCommand('co.test.openAsmCaseIndex', () => openAsmCaseIndex())
+    vscode.commands.registerCommand(Commands.Test.RunFullTest, () => runFullCourseTraceTest(services)),
+    vscode.commands.registerCommand(Commands.Test.RunBatchTraceTests, () => runBatchCourseTraceTests(services)),
+    vscode.commands.registerCommand(Commands.Test.RunGeneratedTraceTests, () => runGeneratedCourseTraceTests(services)),
+    vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
+    vscode.commands.registerCommand(Commands.Test.GenerateAsmTests, () => generateAsmTests(services)),
+    vscode.commands.registerCommand(Commands.Test.GenerateAndDumpAsmTests, () => generateAndDumpAsmTests(services)),
+    vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopContinuousTests()),
+    vscode.commands.registerCommand(Commands.Test.PrepareLogisimCases, () => prepareLogisimCases(services)),
+    vscode.commands.registerCommand(Commands.Test.DiagnoseP3LogisimTraceCircuit, () => diagnoseP3LogisimTraceCircuit(services)),
+    vscode.commands.registerCommand(Commands.Test.PrepareGeneratedLogisimCases, () => prepareGeneratedLogisimCases(services)),
+    vscode.commands.registerCommand(Commands.Test.OpenBatchTraceReport, () => openBatchTraceReport()),
+    vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, () => openAsmCaseIndex())
   );
 }
 

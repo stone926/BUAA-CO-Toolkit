@@ -84,3 +84,82 @@ export const CO_TMP_DIR = '.co/tmp';
 
 /** ISE 语法检查临时目录。 */
 export const CO_ISE_CHECK_DIR = '.co/ise-check';
+
+/** Logisim 用例准备目录。 */
+export const CO_LOGISIM_DIR = '.co/logisim';
+
+// ── 命令 ID ──
+
+export const Commands = {
+  CheckToolchain: 'co.checkToolchain',
+  SidebarRefresh: 'co.sidebar.refresh',
+  SelectProjectProfile: 'co.selectProjectProfile',
+  ProjectWizard: 'co.projectWizard',
+  ToolsOpenAdvanced: 'co.tools.openAdvanced',
+
+  Mips: {
+    DisablePseudoWarnings: 'co.mips.disablePseudoWarnings',
+    RunCurrentFile: 'co.mips.runCurrentFile',
+    RunAndCapture: 'co.mips.runAndCapture',
+    RunWithStdinFile: 'co.mips.runWithStdinFile',
+    RunInTerminal: 'co.mips.runInTerminal',
+    DumpText: 'co.mips.dumpText',
+    DumpKernelText: 'co.mips.dumpKernelText'
+  },
+
+  Verilog: {
+    DisableLintRule: 'co.verilog.disableLintRule',
+    GenerateTestbench: 'co.verilog.generateTestbench',
+    GenerateIseProject: 'co.verilog.generateIseProject',
+    CheckSyntaxWithIse: 'co.verilog.checkSyntaxWithIse',
+    RunIsim: 'co.verilog.runIsim',
+    OpenIsimWaveform: 'co.verilog.openIsimWaveform',
+    ExportVcd: 'co.verilog.exportVcd',
+    InspectSignal: 'co.verilog.inspectSignal'
+  },
+
+  Test: {
+    RunFullTest: 'co.test.runFullTest',
+    RunBatchTraceTests: 'co.test.runBatchTraceTests',
+    RunGeneratedTraceTests: 'co.test.runGeneratedTraceTests',
+    StartContinuousGeneratedTraceTests: 'co.test.startContinuousGeneratedTraceTests',
+    GenerateAsmTests: 'co.test.generateAsmTests',
+    GenerateAndDumpAsmTests: 'co.test.generateAndDumpAsmTests',
+    StopContinuousTests: 'co.test.stopContinuousTests',
+    PrepareLogisimCases: 'co.test.prepareLogisimCases',
+    DiagnoseP3LogisimTraceCircuit: 'co.test.diagnoseP3LogisimTraceCircuit',
+    PrepareGeneratedLogisimCases: 'co.test.prepareGeneratedLogisimCases',
+    OpenBatchTraceReport: 'co.test.openBatchTraceReport',
+    OpenAsmCaseIndex: 'co.test.openAsmCaseIndex',
+    CompareTraceFiles: 'co.test.compareTraceFiles',
+    CompareLatestOutputs: 'co.test.compareLatestOutputs'
+  },
+
+  Logisim: {
+    GenerateRom: 'co.logisim.generateRom',
+    InjectRomIntoCircuit: 'co.logisim.injectRomIntoCircuit',
+    ConvertLogToCsv: 'co.logisim.convertLogToCsv',
+    OpenCurrentCircuit: 'co.logisim.openCurrentCircuit'
+  },
+
+  Hazard: {
+    AnalyzeCurrentMachineCode: 'co.hazard.analyzeCurrentMachineCode',
+    OpenReport: 'co.hazard.openReport'
+  },
+
+  Course: {
+    OpenTutorial: 'co.course.openTutorial',
+    OpenProfileTutorial: 'co.course.openProfileTutorial',
+    OpenTutorialLink: 'co.course.openTutorialLink'
+  },
+
+  Diagnostics: {
+    DisableCode: 'co.diagnostics.disableCode'
+  },
+
+  Server: {
+    MipsIgnorePseudoWarningsForFile: 'co.server.mips.ignorePseudoWarningsForFile',
+    MipsIgnorePseudoWarningsForMnemonic: 'co.server.mips.ignorePseudoWarningsForMnemonic',
+    InternalVerilogCheckSyntaxWithIse: 'co.internal.verilog.checkSyntaxWithIse'
+  }
+} as const;

@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -62,8 +63,8 @@ interface ZipEntry {
 
 export function registerHazard(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.hazard.analyzeCurrentMachineCode', () => runHazardAnalysis(services)),
-    vscode.commands.registerCommand('co.hazard.openReport', () => openHazardReport())
+    vscode.commands.registerCommand(Commands.Hazard.AnalyzeCurrentMachineCode, () => runHazardAnalysis(services)),
+    vscode.commands.registerCommand(Commands.Hazard.OpenReport, () => openHazardReport())
   );
 }
 

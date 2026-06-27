@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 import * as vscode from 'vscode';
 import { compareTraces, firstTraceDiffEntry, TraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
 import { CpuTraceEvent, parseMarsOutput } from './language/mips/traceParser';
@@ -27,8 +28,8 @@ export const defaultTraceCompareMode: CompareMode = {
 
 export function registerTraceCompare(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('co.test.compareTraceFiles', () => compareTraceFiles(services)),
-    vscode.commands.registerCommand('co.test.compareLatestOutputs', () => compareLatestOutputs(services))
+    vscode.commands.registerCommand(Commands.Test.CompareTraceFiles, () => compareTraceFiles(services)),
+    vscode.commands.registerCommand(Commands.Test.CompareLatestOutputs, () => compareLatestOutputs(services))
   );
 }
 

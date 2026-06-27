@@ -1,6 +1,7 @@
 // @index sidebar-model — 纯函数式数据模型，四段结构
 import * as path from 'path';
 import {
+  Commands,
   ASM_NEEDED_VERILOG_PROFILES,
   LOGISIM_PROFILES,
   MIPS_PROFILES,
@@ -88,7 +89,7 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
   const toolSummary = summarizeTools(context.tools);
   const children: SidebarNodeModel[] = [
     infoItem('project.profile', 'Profile', profileDescription(context.profile), `配置来源: ${context.configSource}`, context.profile === 'auto' ? 'warning' : 'symbol-class', {
-      command: 'co.selectProjectProfile',
+      command: Commands.SelectProjectProfile,
       title: '选择 Profile'
     }),
     infoItem(
@@ -100,13 +101,13 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
     ),
     infoItem('project.config', '配置来源', context.configSource, configSourceTooltip(context), 'json'),
     infoItem('project.tools', '工具链', toolSummary.description, toolSummary.tooltip, toolSummary.icon, {
-      command: 'co.checkToolchain',
+      command: Commands.CheckToolchain,
       title: '检查工具链'
     }),
     actionItem(
       'project.wizard',
       '项目向导',
-      'co.projectWizard',
+      Commands.ProjectWizard,
       'new-folder',
       '创建结构 / 写入工作区设置',
       workspaceTooltip(context, '项目向导会在当前工作区创建课程目录，并写入 VS Code 工作区设置。')
@@ -114,7 +115,7 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
     actionItem(
       'project.selectProfile',
       '选择 Profile',
-      'co.selectProjectProfile',
+      Commands.SelectProjectProfile,
       'settings-gear',
       context.profile === 'auto' ? '无法自动推断' : `当前 ${context.profile}`,
       '切换 co.project.profile；auto 无法推断时会要求手动选择。'
@@ -122,7 +123,7 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
     actionItem(
       'project.checkToolchain',
       '检查工具链',
-      'co.checkToolchain',
+      Commands.CheckToolchain,
       'check-all',
       toolSummary.description,
       toolSummary.tooltip
@@ -208,7 +209,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.continuousTrace',
         '持续生成测试',
-        'co.test.startContinuousGeneratedTraceTests',
+        Commands.Test.StartContinuousGeneratedTraceTests,
         'rocket',
         `生成 ASM -> case -> dump -> ${traceBackendName(context.profile)} -> 对拍`,
         `自动生成或导入 ASM，并为每次运行写入 .co/cases/<caseId>。\n报告和输出保留在 .co/out。`
@@ -216,7 +217,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.stopContinuousTrace',
         '停止持续测试',
-        'co.test.stopContinuousTests',
+        Commands.Test.StopContinuousTests,
         'debug-stop',
         '停止当前持续测试任务',
         '如果没有正在运行的持续测试，此命令会安全返回。'
@@ -224,7 +225,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.asmCases',
         '查看 ASM 用例记录',
-        'co.test.openAsmCaseIndex',
+        Commands.Test.OpenAsmCaseIndex,
         'history',
         '.co/cases 历史记录',
         '打开 .co/cases/*/case.json 的索引视图，查看 ASM 快照、机器码和派生输出。'
@@ -238,7 +239,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         actionItem(
           'core.openCircuit',
           '打开 Logisim 电路',
-          'co.logisim.openCurrentCircuit',
+          Commands.Logisim.OpenCurrentCircuit,
           'circuit-board',
           `使用当前电路: ${active.basename}`,
           active.fsPath
@@ -246,7 +247,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         actionItem(
           'core.injectCircuit',
           'Logisim 注入 ROM',
-          'co.logisim.injectRomIntoCircuit',
+          Commands.Logisim.InjectRomIntoCircuit,
           'circuit-board',
           '当前 .circ + 运行时选择 ASM',
           `电路:\n${active.fsPath}\n\nASM 会在执行时选择，并导入 .co/cases/<caseId>。`
@@ -260,7 +261,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.asmRun',
         'ASM 运行',
-        'co.mips.runCurrentFile',
+        Commands.Mips.RunCurrentFile,
         'play',
         `使用当前 ASM: ${active.basename}`,
         active.fsPath
@@ -268,7 +269,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.asmDumpText',
         'ASM 导出文本段',
-        'co.mips.dumpText',
+        Commands.Mips.DumpText,
         'export',
         `写入 ${context.machineCode}`,
         `ASM:\n${active.fsPath}\n\n默认输出:\n${defaultSiblingPath(active.fsPath, context.machineCode)}`
@@ -281,7 +282,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.runIsim',
         '运行 ISim',
-        'co.verilog.runIsim',
+        Commands.Verilog.RunIsim,
         'run',
         verilogSimulationDescription(context),
         verilogSimulationTooltip(context, active)
@@ -289,7 +290,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.openWave',
         '查看 ISim 波形',
-        'co.verilog.openIsimWaveform',
+        Commands.Verilog.OpenIsimWaveform,
         'pulse',
         verilogSimulationDescription(context),
         `${verilogSimulationTooltip(context, active)}\n\nGUI 启动后执行 wave add -r /。`
@@ -297,7 +298,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.inspectSignal',
         '查看信号连线',
-        'co.verilog.inspectSignal',
+        Commands.Verilog.InspectSignal,
         'circuit-board',
         `使用当前 Verilog: ${active.basename}`,
         '将光标放在任一信号上，侧边栏会显示声明、驱动和读取位置。'
@@ -309,7 +310,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
     actionItem(
       'core.moreTools',
       '更多工具...',
-      'co.tools.openAdvanced',
+      Commands.ToolsOpenAdvanced,
       'tools',
       '按当前 Profile 显示低频工具',
       '打开高级工具选择器，包含批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等低频入口。'
@@ -347,7 +348,7 @@ function materialsSection(context: SidebarModelContext): SidebarNodeModel {
       kind: 'tool',
       contextValue: 'tool',
       command: {
-        command: 'co.checkToolchain',
+        command: Commands.CheckToolchain,
         title: '检查工具链',
         arguments: []
       }

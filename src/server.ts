@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 // @index lsp-server — 协议路由、验证调度、跨文件索引管理
 import {
   CodeAction,
@@ -206,7 +207,7 @@ const state: ServerState = {
   configurationVersion: 0,
   effectiveSettingsCache: new Map()
 };
-const verilogIseCommand = 'co.internal.verilog.checkSyntaxWithIse';
+const verilogIseCommand = Commands.Server.InternalVerilogCheckSyntaxWithIse;
 const maxEffectiveSettingsCacheEntries = 200;
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {

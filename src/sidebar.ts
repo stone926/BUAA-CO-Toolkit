@@ -1,3 +1,4 @@
+import { Commands } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -168,7 +169,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         label: '课程教程首页',
         description: '打开教程首页',
         tooltip: '打开 CO 课程教程首页',
-        command: 'co.course.openTutorial',
+        command: Commands.Course.OpenTutorial,
         icon: 'book'
       }
     ];
@@ -179,7 +180,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         label: `${profile} 教程`,
         description: profileLink.description,
         tooltip: profileLink.description ?? profileLink.title,
-        command: 'co.course.openTutorialLink',
+        command: Commands.Course.OpenTutorialLink,
         arguments: [profileLink],
         icon: 'symbol-class'
       });
@@ -190,7 +191,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         label: link.title,
         description: link.description,
         tooltip: link.description ?? link.title,
-        command: 'co.course.openTutorialLink',
+        command: Commands.Course.OpenTutorialLink,
         arguments: [link],
         icon: 'link-external'
       });

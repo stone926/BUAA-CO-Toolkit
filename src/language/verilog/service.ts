@@ -20,6 +20,7 @@ import {
   TextEdit,
   WorkspaceEdit
 } from 'vscode-languageserver/node';
+import { Commands } from '../../constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -829,7 +830,7 @@ function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagno
       diagnostics: [diagnostic],
       command: Command.create(
         `对此文件禁用 ${code}`,
-        'co.diagnostics.disableCode',
+        Commands.Diagnostics.DisableCode,
         document.languageId,
         code,
         document.uri
@@ -842,7 +843,7 @@ function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagno
       diagnostics: [diagnostic],
       command: Command.create(
         `对此工作区禁用 ${code}`,
-        'co.diagnostics.disableCode',
+        Commands.Diagnostics.DisableCode,
         document.languageId,
         code
       )
@@ -963,7 +964,7 @@ function getVerilogLintRuleCodeActions(diagnostics: Diagnostic[], settings: CoSe
       title: `Disable ${rule.toUpperCase()} in this workspace`,
       kind: CodeActionKind.QuickFix,
       diagnostics: [diagnostic],
-      command: Command.create(`Disable ${rule.toUpperCase()}`, 'co.verilog.disableLintRule', rule)
+      command: Command.create(`Disable ${rule.toUpperCase()}`, Commands.Verilog.DisableLintRule, rule)
     });
   }
   return actions;

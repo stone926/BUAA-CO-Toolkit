@@ -1,3 +1,4 @@
+import { Commands } from '../../constants';
 import {
   CodeAction,
   CodeActionKind,
@@ -30,7 +31,7 @@ export function getMipsCodeActions(document: TextDocument, diagnostics: Diagnost
     ),
     CodeAction.create(
       'Disable pseudo-instruction warnings in this workspace',
-      Command.create('Disable pseudo warnings', 'co.mips.disablePseudoWarnings'),
+      Command.create('Disable pseudo warnings', Commands.Mips.DisablePseudoWarnings),
       CodeActionKind.QuickFix
     )
   ];
