@@ -1,3 +1,4 @@
+// @index lint — VC-001~022课程诊断规则，基于AST
 import { Diagnostic, DiagnosticSeverity, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';

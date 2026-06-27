@@ -1,3 +1,4 @@
+// @index workspace-index — 跨文件模块数据库：索引/查找/增量更新
 import * as fs from 'fs';
 import * as path from 'path';
 import { Location, WorkspaceFolder } from 'vscode-languageserver/node';

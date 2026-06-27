@@ -1,3 +1,4 @@
+// @index config — co.*设置读取，分层取值+值域裁剪+Python探测缓存
 import * as vscode from 'vscode';
 import {
   ConcreteProjectProfile,

@@ -1,166 +1,1488 @@
 {
-  "loadImmediate": {
-    "mnemonic": "li",
-    "operands": 2,
-    "description": "加载立即数到寄存器",
-    "expansions": [
+  "li": {
+    "description": "加载立即数到寄存器（Load Immediate）",
+    "forms": [
       {
-        "condition": "value fits signed 16-bit",
-        "template": ["addiu {dst}, $zero, {signed16}"]
+        "operands": [
+          "$rd",
+          "imm16_signed"
+        ],
+        "template": [
+          "addiu ${rd}, $zero, ${imm:signed16}"
+        ]
       },
       {
-        "condition": "value fits unsigned 16-bit but not signed 16-bit",
-        "template": ["ori {dst}, $zero, {lower16}"]
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "ori ${rd}, $zero, ${imm:hex16}"
+        ]
       },
       {
-        "condition": "32-bit value",
-        "template": ["lui $at, {upper16}", "ori {dst}, $at, {lower16}"]
+        "operands": [
+          "$rd",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori ${rd}, $at, ${imm:lower16}"
+        ]
       }
     ]
   },
-  "loadAddress": {
-    "mnemonic": "la",
-    "operands": 2,
-    "description": "加载地址到寄存器",
-    "template": ["lui $at, upper({src})", "ori {dst}, $at, lower({src})"]
+  "la": {
+    "description": "加载标签地址到寄存器（Load Address）",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "ori ${rd}, $at, %lo(${label})"
+        ]
+      }
+    ]
   },
   "move": {
-    "mnemonic": "move",
-    "operands": 2,
-    "description": "寄存器间移动",
-    "template": ["addu {dst}, $zero, {src}"]
-  },
-  "nop": {
-    "mnemonic": "nop",
-    "operands": 0,
-    "description": "MARS 基本空操作，机器码为 0；hover 不再作为伪指令展开展示",
-    "template": ["sll $zero, $zero, 0"]
-  },
-  "branch": {
-    "mnemonic": "b",
-    "operands": 1,
-    "description": "无条件跳转",
-    "template": ["bgez $zero, {label}"]
-  },
-  "branchEqualZero": {
-    "mnemonic": "beqz",
-    "operands": 2,
-    "description": "等于零时跳转",
-    "template": ["beq {reg}, $zero, {label}"]
-  },
-  "branchNotEqualZero": {
-    "mnemonic": "bnez",
-    "operands": 2,
-    "description": "不等于零时跳转",
-    "template": ["bne {reg}, $zero, {label}"]
-  },
-  "not": {
-    "mnemonic": "not",
-    "operands": 2,
-    "description": "按位取反",
-    "template": ["nor {dst}, {src}, $zero"]
-  },
-  "neg": {
-    "mnemonic": "neg",
-    "operands": 2,
-    "description": "有符号取负",
-    "template": ["sub {dst}, $zero, {src}"]
-  },
-  "negu": {
-    "mnemonic": "negu",
-    "operands": 2,
-    "description": "无符号取负跳转",
-    "template": ["subu {dst}, $zero, {src}"]
-  },
-  "multiplyImmediate": {
-    "mnemonic": "mul",
-    "operands": 3,
-    "description": "第三操作数为立即数时的 MARS 伪格式；mul $rd, $rs, $rt 是基本指令",
-    "expansions": [
+    "description": "寄存器间数据移动（Move）",
+    "forms": [
       {
-        "condition": "immediate fits signed 16-bit",
-        "template": ["addi $at, $zero, {signed16}", "mul {dst}, {src1}, $at"]
-      },
-      {
-        "condition": "32-bit immediate",
-        "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "mul {dst}, {src1}, $at"]
+        "operands": [
+          "$rd",
+          "$rs"
+        ],
+        "template": [
+          "addu ${rd}, $zero, ${rs}"
+        ]
       }
     ]
   },
-  "divide": {
-    "mnemonic": "div",
-    "operands": 3,
-    "description": "除法（取商）",
-    "template": ["div {src1}, {src2}", "mflo {dst}"]
+  "b": {
+    "description": "无条件跳转（Branch）",
+    "forms": [
+      {
+        "operands": [
+          "label"
+        ],
+        "template": [
+          "bgez $zero, ${label}"
+        ]
+      }
+    ]
   },
-  "divideUnsigned": {
-    "mnemonic": "divu",
-    "operands": 3,
-    "description": "无符号除法（取商）",
-    "template": ["divu {src1}, {src2}", "mflo {dst}"]
+  "beqz": {
+    "description": "等于零时跳转（Branch if Equal Zero）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "label"
+        ],
+        "template": [
+          "beq ${rs}, $zero, ${label}"
+        ]
+      }
+    ]
   },
-  "remainder": {
-    "mnemonic": "rem",
-    "operands": 3,
-    "description": "有符号取余",
-    "template": ["div {src1}, {src2}", "mfhi {dst}"]
+  "bnez": {
+    "description": "不等于零时跳转（Branch if Not Equal Zero）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "label"
+        ],
+        "template": [
+          "bne ${rs}, $zero, ${label}"
+        ]
+      }
+    ]
   },
-  "remainderUnsigned": {
-    "mnemonic": "remu",
-    "operands": 3,
-    "description": "无符号取余跳转",
-    "template": ["divu {src1}, {src2}", "mfhi {dst}"]
+  "not": {
+    "description": "按位取反（Bitwise NOT）",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs"
+        ],
+        "template": [
+          "nor ${rd}, ${rs}, $zero"
+        ]
+      }
+    ]
   },
-  "compareBranch": {
-    "blt": {
-      "description": "有符号小于时跳转跳转",
-      "template": ["slt $at, {left}, {right}", "bne $at, $zero, {label}"]
-    },
-    "bltu": {
-      "description": "无符号小于时跳转跳转",
-      "template": ["sltu $at, {left}, {right}", "bne $at, $zero, {label}"]
-    },
-    "bgt": {
-      "description": "有符号大于时跳转跳转",
-      "template": ["slt $at, {right}, {left}", "bne $at, $zero, {label}"]
-    },
-    "bgtu": {
-      "description": "无符号大于时跳转跳转",
-      "template": ["sltu $at, {right}, {left}", "bne $at, $zero, {label}"]
-    },
-    "ble": {
-      "description": "有符号小于等于时跳转跳转",
-      "template": ["slt $at, {right}, {left}", "beq $at, $zero, {label}"]
-    },
-    "bleu": {
-      "description": "无符号小于等于时跳转跳转",
-      "template": ["sltu $at, {right}, {left}", "beq $at, $zero, {label}"]
-    },
-    "bge": {
-      "description": "有符号大于等于时跳转跳转",
-      "template": ["slt $at, {left}, {right}", "beq $at, $zero, {label}"]
-    },
-    "bgeu": {
-      "description": "无符号大于等于时跳转跳转",
-      "template": ["sltu $at, {left}, {right}", "beq $at, $zero, {label}"]
-    }
+  "neg": {
+    "description": "有符号取负（Negate）",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs"
+        ],
+        "template": [
+          "sub ${rd}, $zero, ${rs}"
+        ]
+      }
+    ]
   },
-  "threeOperandArithmetic": {
-    "add": {
-      "description": "加法（三操作数形式）",
-      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "add {dst}, {src}, $at"]
-    },
-    "addu": {
-      "description": "无溢出加法（三操作数形式）",
-      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "addu {dst}, {src}, $at"]
-    },
-    "sub": {
-      "description": "减法（三操作数形式）",
-      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "sub {dst}, {src}, $at"]
-    },
-    "subu": {
-      "description": "无溢出减法（三操作数形式）",
-      "template": ["lui $at, {upper16}", "ori $at, $at, {lower16}", "subu {dst}, {src}, $at"]
-    }
+  "negu": {
+    "description": "无符号取负（Negate Unsigned）",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs"
+        ],
+        "template": [
+          "subu ${rd}, $zero, ${rs}"
+        ]
+      }
+    ]
+  },
+  "abs": {
+    "description": "取绝对值（Absolute Value）",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs"
+        ],
+        "template": [
+          "sra $at, ${rs}, 31",
+          "xor ${rd}, $at, ${rs}",
+          "subu ${rd}, ${rd}, $at"
+        ]
+      }
+    ]
+  },
+  "add": {
+    "description": "加法（ADDition）：第三操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_signed"
+        ],
+        "template": [
+          "addi ${rd}, ${rs}, ${imm:signed16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "add ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "addu": {
+    "description": "无溢出加法（ADDition Unsigned）：第三操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "addu ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "sub": {
+    "description": "减法（SUBtraction）：第三操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_signed"
+        ],
+        "template": [
+          "addi $at, $zero, ${imm:signed16}",
+          "sub ${rd}, ${rs}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sub ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "subu": {
+    "description": "无溢出减法（SUBtraction Unsigned）：第三操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "subu ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "addi": {
+    "description": "加法立即数（ADD Immediate）：立即数超出有符号16位范围时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "add ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "addiu": {
+    "description": "无溢出加法立即数（ADD Immediate Unsigned）：立即数超出有符号16位范围时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "addu ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "subi": {
+    "description": "减法立即数（SUBtract Immediate）：第三操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_signed"
+        ],
+        "template": [
+          "addi $at, $zero, ${imm:signed16}",
+          "sub ${rd}, ${rs}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sub ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "subiu": {
+    "description": "无溢出减法立即数（SUBtract Immediate Unsigned）：第三操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "subu ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "andi": {
+    "description": "按位与立即数（AND Immediate）：立即数不在无符号16位范围时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "andi ${rd}, ${rd}, ${imm:hex16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "and ${rd}, ${rd}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "and ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "ori": {
+    "description": "按位或立即数（OR Immediate）：立即数不在无符号16位范围时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "ori ${rd}, ${rd}, ${imm:hex16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "or ${rd}, ${rd}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "or ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "xori": {
+    "description": "按位异或立即数（XOR Immediate）：立即数不在无符号16位范围时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "xori ${rd}, ${rd}, ${imm:hex16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "xor ${rd}, ${rd}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "xor ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "and": {
+    "description": "按位与（AND）：第二操作数为无符号16位立即数时展开为 andi",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "andi ${rd}, ${rd}, ${imm:hex16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "andi ${rd}, ${rs}, ${imm:hex16}"
+        ]
+      }
+    ]
+  },
+  "or": {
+    "description": "按位或（OR）：第二操作数为无符号16位立即数时展开为 ori",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "ori ${rd}, ${rd}, ${imm:hex16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "ori ${rd}, ${rs}, ${imm:hex16}"
+        ]
+      }
+    ]
+  },
+  "xor": {
+    "description": "按位异或（XOR）：第二操作数为无符号16位立即数时展开为 xori",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "xori ${rd}, ${rd}, ${imm:hex16}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_unsigned"
+        ],
+        "template": [
+          "xori ${rd}, ${rs}, ${imm:hex16}"
+        ]
+      }
+    ]
+  },
+  "mul": {
+    "description": "乘法（MULtiplication）：第三操作数为立即数时展开（注意：mul 三寄存器形式为基本指令，返回 undefined）",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm16_signed"
+        ],
+        "template": [
+          "addi $at, $zero, ${imm:signed16}",
+          "mul ${rd}, ${rs}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "mul ${rd}, ${rs}, $at"
+        ]
+      }
+    ]
+  },
+  "div": {
+    "description": "除法（DIVision）：三操作数形式，取商存入 $rd",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "bne ${rt}, $zero, 1",
+          "break",
+          "div ${rs}, ${rt}",
+          "mflo ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "div ${rs}, $at",
+          "mflo ${rd}"
+        ]
+      }
+    ]
+  },
+  "divu": {
+    "description": "无符号除法（DIVision Unsigned）：三操作数形式，取商存入 $rd",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "bne ${rt}, $zero, 1",
+          "break",
+          "divu ${rs}, ${rt}",
+          "mflo ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "divu ${rs}, $at",
+          "mflo ${rd}"
+        ]
+      }
+    ]
+  },
+  "rem": {
+    "description": "有符号取余（REMainder）：三操作数形式，取余数存入 $rd",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "bne ${rt}, $zero, 1",
+          "break",
+          "div ${rs}, ${rt}",
+          "mfhi ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "div ${rs}, $at",
+          "mfhi ${rd}"
+        ]
+      }
+    ]
+  },
+  "remu": {
+    "description": "无符号取余（REMainder Unsigned）：三操作数形式，取余数存入 $rd",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "bne ${rt}, $zero, 1",
+          "break",
+          "divu ${rs}, ${rt}",
+          "mfhi ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "divu ${rs}, $at",
+          "mfhi ${rd}"
+        ]
+      }
+    ]
+  },
+  "beq": {
+    "description": "相等时跳转（Branch if EQual）：第二操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "imm16_signed",
+          "label"
+        ],
+        "template": [
+          "addi $at, $zero, ${imm:signed16}",
+          "beq $at, ${rs}, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "beq $at, ${rs}, ${label}"
+        ]
+      }
+    ]
+  },
+  "bne": {
+    "description": "不等时跳转（Branch if Not Equal）：第二操作数为立即数时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "imm16_signed",
+          "label"
+        ],
+        "template": [
+          "addi $at, $zero, ${imm:signed16}",
+          "bne $at, ${rs}, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "bne $at, ${rs}, ${label}"
+        ]
+      }
+    ]
+  },
+  "blt": {
+    "description": "有符号小于时跳转（Branch if Less Than）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "slt $at, ${rs}, ${rt}",
+          "bne $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt $at, ${rs}, $at",
+          "bne $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "bltu": {
+    "description": "无符号小于时跳转（Branch if Less Than Unsigned）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "sltu $at, ${rs}, ${rt}",
+          "bne $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu $at, ${rs}, $at",
+          "bne $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "bgt": {
+    "description": "有符号大于时跳转（Branch if Greater Than）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "slt $at, ${rt}, ${rs}",
+          "bne $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt $at, $at, ${rs}",
+          "bne $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "bgtu": {
+    "description": "无符号大于时跳转（Branch if Greater Than Unsigned）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "sltu $at, ${rt}, ${rs}",
+          "bne $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu $at, $at, ${rs}",
+          "bne $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "ble": {
+    "description": "有符号小于等于时跳转（Branch if Less or Equal）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "slt $at, ${rt}, ${rs}",
+          "beq $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt $at, $at, ${rs}",
+          "beq $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "bleu": {
+    "description": "无符号小于等于时跳转（Branch if Less or Equal Unsigned）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "sltu $at, ${rt}, ${rs}",
+          "beq $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu $at, $at, ${rs}",
+          "beq $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "bge": {
+    "description": "有符号大于等于时跳转（Branch if Greater or Equal）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "slt $at, ${rs}, ${rt}",
+          "beq $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt $at, ${rs}, $at",
+          "beq $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "bgeu": {
+    "description": "无符号大于等于时跳转（Branch if Greater or Equal Unsigned）",
+    "forms": [
+      {
+        "operands": [
+          "$rs",
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "sltu $at, ${rs}, ${rt}",
+          "beq $at, $zero, ${label}"
+        ]
+      },
+      {
+        "operands": [
+          "$rs",
+          "imm32",
+          "label"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu $at, ${rs}, $at",
+          "beq $at, $zero, ${label}"
+        ]
+      }
+    ]
+  },
+  "seq": {
+    "description": "相等置1（Set EQual）：两数相等则 $rd 置1，否则置0",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "subu ${rd}, ${rs}, ${rt}",
+          "ori $at, $zero, 1",
+          "sltu ${rd}, ${rd}, $at"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "subu ${rd}, ${rs}, $at",
+          "ori $at, $zero, 1",
+          "sltu ${rd}, ${rd}, $at"
+        ]
+      }
+    ]
+  },
+  "sne": {
+    "description": "不等置1（Set Not Equal）：两数不等则 $rd 置1，否则置0",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "subu ${rd}, ${rs}, ${rt}",
+          "sltu ${rd}, $zero, ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "subu ${rd}, ${rs}, $at",
+          "sltu ${rd}, $zero, ${rd}"
+        ]
+      }
+    ]
+  },
+  "sgt": {
+    "description": "有符号大于置1（Set Greater Than）：$rs > 比较数则 $rd 置1",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "slt ${rd}, ${rt}, ${rs}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt ${rd}, $at, ${rs}"
+        ]
+      }
+    ]
+  },
+  "sgtu": {
+    "description": "无符号大于置1（Set Greater Than Unsigned）：$rs > 比较数则 $rd 置1",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "sltu ${rd}, ${rt}, ${rs}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu ${rd}, $at, ${rs}"
+        ]
+      }
+    ]
+  },
+  "sge": {
+    "description": "有符号大于等于置1（Set Greater or Equal）：$rs >= 比较数则 $rd 置1",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "slt ${rd}, ${rs}, ${rt}",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt ${rd}, ${rs}, $at",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      }
+    ]
+  },
+  "sgeu": {
+    "description": "无符号大于等于置1（Set Greater or Equal Unsigned）：$rs >= 比较数则 $rd 置1",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "sltu ${rd}, ${rs}, ${rt}",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu ${rd}, ${rs}, $at",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      }
+    ]
+  },
+  "sle": {
+    "description": "有符号小于等于置1（Set Less or Equal）：$rs <= 比较数则 $rd 置1",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "slt ${rd}, ${rt}, ${rs}",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "slt ${rd}, $at, ${rs}",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      }
+    ]
+  },
+  "sleu": {
+    "description": "无符号小于等于置1（Set Less or Equal Unsigned）：$rs <= 比较数则 $rd 置1",
+    "forms": [
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "$rt"
+        ],
+        "template": [
+          "sltu ${rd}, ${rt}, ${rs}",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      },
+      {
+        "operands": [
+          "$rd",
+          "$rs",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sltu ${rd}, $at, ${rs}",
+          "ori $at, $zero, 1",
+          "subu ${rd}, $at, ${rd}"
+        ]
+      }
+    ]
+  },
+  "lw": {
+    "description": "加载字（Load Word）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "lw ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "lw ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "lw ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "sw": {
+    "description": "存字（Store Word）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "sw ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sw ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "sw ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "lb": {
+    "description": "加载字节（Load Byte）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "lb ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "lb ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "lb ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "lbu": {
+    "description": "加载无符号字节（Load Byte Unsigned）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "lbu ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "lbu ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "lbu ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "lh": {
+    "description": "加载半字（Load Halfword）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "lh ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "lh ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "lh ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "lhu": {
+    "description": "加载无符号半字（Load Halfword Unsigned）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "lhu ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "lhu ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "lhu ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "sb": {
+    "description": "存字节（Store Byte）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "sb ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sb ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "sb ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
+  },
+  "sh": {
+    "description": "存半字（Store Halfword）：使用标签或32位立即数地址时展开",
+    "forms": [
+      {
+        "operands": [
+          "$rt",
+          "label"
+        ],
+        "template": [
+          "lui $at, %hi(${label})",
+          "sh ${rt}, %lo(${label})($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "imm32"
+        ],
+        "template": [
+          "lui $at, ${imm:upper16}",
+          "ori $at, $at, ${imm:lower16}",
+          "sh ${rt}, 0($at)"
+        ]
+      },
+      {
+        "operands": [
+          "$rt",
+          "offset(base)"
+        ],
+        "template": [
+          "lui $at, %hi(${offset})",
+          "addu $at, $at, ${base}",
+          "sh ${rt}, %lo(${offset})($at)"
+        ]
+      }
+    ]
   }
 }

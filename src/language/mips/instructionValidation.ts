@@ -1,3 +1,4 @@
+// @index instruction-validation — 纯AST指令格式/类型/操作数校验
 import {
   Diagnostic,
   DiagnosticSeverity,
@@ -169,9 +170,27 @@ export function usesMarsPseudoInstructionForm(mnemonic: string, operands: readon
   }
 
   if (
+    pseudoForms.threeOperandRegister.has(mnemonic) &&
+    operands.length === 3 &&
+    operands.every((operand) => isRegisterOperand(operand, activeMacro, eqvSymbols))
+  ) {
+    return true;
+  }
+
+  if (
     pseudoForms.threeRegisterPseudo.has(mnemonic) &&
     operands.length === 3 &&
     operands.every((operand) => isRegisterOperand(operand, activeMacro, eqvSymbols))
+  ) {
+    return true;
+  }
+
+  if (
+    pseudoForms.branchRegisterCompare.has(mnemonic) &&
+    operands.length === 3 &&
+    isRegisterOperand(operands[0], activeMacro, eqvSymbols) &&
+    isRegisterOperand(operands[1], activeMacro, eqvSymbols) &&
+    isLabelOperand(operands[2], activeMacro)
   ) {
     return true;
   }

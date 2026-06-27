@@ -1,3 +1,4 @@
+// @index settings — CoSettings接口/默认值/合并验证/诊断禁用键
 import { ProjectProfile } from '../../projectProfile';
 
 export const defaultDisabledVerilogLintRules = ['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-017', 'vc-021'] as const;

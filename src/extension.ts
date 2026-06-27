@@ -1,3 +1,4 @@
+// @index entry — activate()入口，注册全部命令/UI/FileWatcher
 import * as vscode from 'vscode';
 import { getProfileResolution, setProfileInferenceProvider } from './config';
 import {

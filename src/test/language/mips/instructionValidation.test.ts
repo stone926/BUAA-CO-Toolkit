@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { defaultCoSettings } from '../../../language/common/settings';
-import { isMacroArgumentToken, instructionWritesRegister, labelOperand } from '../../../language/mips/instructionValidation';
+import { isMacroArgumentToken, instructionWritesRegister, labelOperand, usesMarsPseudoInstructionForm } from '../../../language/mips/instructionValidation';
 import { parseMips } from '../../../language/mips/parser';
 import { instructions } from '../../../language/mips/resources';
 import type { MipsOperandAst } from '../../../language/mips/ast';
@@ -280,5 +280,70 @@ describe('labelOperand', () => {
     if (instr) {
       expect(labelOperand(instr, [])).toBeUndefined();
     }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// usesMarsPseudoInstructionForm — must align with MARS PseudoOps.txt
+// ────────────────────────────────────────────────────────────────────────────────
+describe('usesMarsPseudoInstructionForm aligns with MARS PseudoOps.txt', () => {
+  function ops(text: string) {
+    return astOperands(text);
+  }
+
+  // ── Set/comparison pseudos: MARS accepts rd,rs,rt AND rd,rs,imm16 AND rd,rs,imm32 ──
+  describe('set/comparison pseudos (seq, sne, sgt, sgtu, sge, sgeu, sle, sleu)', () => {
+    const OPS = ['seq', 'sne', 'sgt', 'sgtu', 'sge', 'sgeu', 'sle', 'sleu'];
+
+    it('recognizes rd, rs, rt (all registers)', () => {
+      for (const op of OPS) {
+        expect(usesMarsPseudoInstructionForm(op, ops(`${op} $t0, $t1, $t2`), undefined, new Map())).toBe(true);
+      }
+    });
+
+    it('recognizes rd, rs, imm16', () => {
+      for (const op of OPS) {
+        expect(usesMarsPseudoInstructionForm(op, ops(`${op} $t0, $t1, -100`), undefined, new Map())).toBe(true);
+      }
+    });
+
+    it('recognizes rd, rs, imm32', () => {
+      for (const op of OPS) {
+        expect(usesMarsPseudoInstructionForm(op, ops(`${op} $t0, $t1, 100000`), undefined, new Map())).toBe(true);
+      }
+    });
+  });
+
+  // ── Branch pseudos: MARS accepts rs,rt,label AND rs,imm16,label AND rs,imm32,label ──
+  describe('branch pseudos (blt, bltu, bgt, bgtu, ble, bleu, bge, bgeu)', () => {
+    const OPS = ['blt', 'bltu', 'bgt', 'bgtu', 'ble', 'bleu', 'bge', 'bgeu'];
+
+    it('recognizes rs, rt, label (register comparison)', () => {
+      for (const op of OPS) {
+        expect(usesMarsPseudoInstructionForm(op, ops(`${op} $t0, $t1, target`), undefined, new Map())).toBe(true);
+      }
+    });
+
+    it('recognizes rs, imm16, label', () => {
+      for (const op of OPS) {
+        expect(usesMarsPseudoInstructionForm(op, ops(`${op} $t0, -100, target`), undefined, new Map())).toBe(true);
+      }
+    });
+
+    it('recognizes rs, imm32, label', () => {
+      for (const op of OPS) {
+        expect(usesMarsPseudoInstructionForm(op, ops(`${op} $t0, 100000, target`), undefined, new Map())).toBe(true);
+      }
+    });
+  });
+
+  // ── div/divu: 3-register form (regression) ──
+  describe('div/divu with 3 registers', () => {
+    it('recognizes div rd, rs, rt', () => {
+      expect(usesMarsPseudoInstructionForm('div', ops('div $t0, $t1, $t2'), undefined, new Map())).toBe(true);
+    });
+    it('recognizes divu rd, rs, rt', () => {
+      expect(usesMarsPseudoInstructionForm('divu', ops('divu $t0, $t1, $t2'), undefined, new Map())).toBe(true);
+    });
   });
 });

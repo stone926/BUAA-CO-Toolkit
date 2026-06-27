@@ -1,3 +1,4 @@
+// @index toolchain — Java/Python/MARS/ISE/Logisim/Hazard检测
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';

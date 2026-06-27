@@ -1,3 +1,4 @@
+// @index mips-commands — MARS运行/dump/终端/P7内核段合并
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {

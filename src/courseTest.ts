@@ -1,3 +1,4 @@
+// @index main-coordinator — 课程测试总调度，14个co.test.*命令
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';

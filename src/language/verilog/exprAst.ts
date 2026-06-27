@@ -1,3 +1,4 @@
+// @index expr-ast — 递归下降表达式解析器，40+节点类型AST
 import { isIdentifierLike, lexVerilog, VerilogToken } from './lexer';
 
 export type VerilogExpressionAst =

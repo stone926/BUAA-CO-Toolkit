@@ -1,3 +1,4 @@
+// @index resources — ISA静态资源：指令/寄存器/CP0/syscall加载
 import * as fs from 'fs';
 import * as path from 'path';
 import { DocumentUri } from 'vscode-languageserver/node';
@@ -62,7 +63,9 @@ interface MipsPseudoFormData {
   signedImmediateExpansion: string[];
   unsignedImmediateExpansion: string[];
   threeOperandImmediate: string[];
+  threeOperandRegister: string[];
   threeRegisterPseudo: string[];
+  branchRegisterCompare: string[];
   branchImmediateCompare: string[];
   loadStorePseudoOffset: string[];
 }
@@ -70,6 +73,18 @@ interface MipsPseudoFormData {
 export type MipsPseudoFormGroup = {
   [Key in keyof MipsPseudoFormData]: ReadonlySet<string>;
 };
+
+export interface MipsPseudoExpansionForm {
+  operands: string[];
+  template: string[];
+}
+
+export interface MipsPseudoExpansionEntry {
+  description: string;
+  forms: MipsPseudoExpansionForm[];
+}
+
+export type MipsPseudoExpansions = Record<string, MipsPseudoExpansionEntry>;
 
 interface MipsResourceData {
   registers: MipsRegisterInfo[];
@@ -130,6 +145,7 @@ export const cp0Registers = mipsResourceData.cp0Registers;
 export const cp0RegistersByNumber = new Map(cp0Registers.map((register) => [register.number, register]));
 export const pseudoForms = mipsResourceData.pseudoForms;
 export const instructionMeta = mipsInstructionMeta;
+export const pseudoExpansions = loadPseudoExpansions();
 
 for (const info of registerInfos) {
   const names = info.names.join(' / ');
@@ -310,7 +326,9 @@ function normalizePseudoForms(data: MipsPseudoFormData): MipsPseudoFormGroup {
     signedImmediateExpansion: makeLowercaseSet(data.signedImmediateExpansion),
     unsignedImmediateExpansion: makeLowercaseSet(data.unsignedImmediateExpansion),
     threeOperandImmediate: makeLowercaseSet(data.threeOperandImmediate),
+    threeOperandRegister: makeLowercaseSet(data.threeOperandRegister),
     threeRegisterPseudo: makeLowercaseSet(data.threeRegisterPseudo),
+    branchRegisterCompare: makeLowercaseSet(data.branchRegisterCompare),
     branchImmediateCompare: makeLowercaseSet(data.branchImmediateCompare),
     loadStorePseudoOffset: makeLowercaseSet(data.loadStorePseudoOffset)
   };
@@ -321,4 +339,13 @@ function makeLowercaseSet(values: string[]): ReadonlySet<string> {
     throw new Error('Invalid MIPS pseudo form resource.');
   }
   return new Set(values.map((value) => value.toLowerCase()));
+}
+
+function loadPseudoExpansions(): MipsPseudoExpansions {
+  try {
+    const resourceRoot = path.join(__dirname, '..', '..', '..', 'resources', 'mips');
+    return readJsonResource<MipsPseudoExpansions>(path.join(resourceRoot, 'pseudoExpansions.json'));
+  } catch {
+    return {};
+  }
 }

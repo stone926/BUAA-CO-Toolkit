@@ -1,3 +1,4 @@
+// @index sidebar-model — 纯函数式数据模型，四段结构
 import * as path from 'path';
 import { ProjectProfile } from './projectProfile';
 

@@ -1,3 +1,4 @@
+// @index parser — lexer→statementParser→astParser主入口
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { collectVerilogDiagnostics } from './diagnostics';

@@ -1,3 +1,4 @@
+// @index parse-cache — 文档版本感知通用缓存，含文本content shortcut
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 interface CacheEntry<T> {

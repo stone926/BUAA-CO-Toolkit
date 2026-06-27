@@ -1,3 +1,4 @@
+// @index process — runTool(同步捕获)+launchTool(GUI分离启动)
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import { getRunTimeout, shouldRevealOutput, showCommandBeforeRun } from './config';

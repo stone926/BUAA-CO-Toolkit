@@ -36,9 +36,29 @@
     "sle",
     "sleu"
   ],
+  "threeOperandRegister": [
+    "seq",
+    "sne",
+    "sgt",
+    "sgtu",
+    "sge",
+    "sgeu",
+    "sle",
+    "sleu"
+  ],
   "threeRegisterPseudo": [
     "div",
     "divu"
+  ],
+  "branchRegisterCompare": [
+    "blt",
+    "bltu",
+    "bgt",
+    "bgtu",
+    "ble",
+    "bleu",
+    "bge",
+    "bgeu"
   ],
   "branchImmediateCompare": [
     "beq",

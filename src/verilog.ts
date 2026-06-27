@@ -1,3 +1,4 @@
+// @index verilog-commands — ISE/ISim工作流：编译/仿真/波形/P7 probe
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';

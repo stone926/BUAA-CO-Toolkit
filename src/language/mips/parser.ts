@@ -1,3 +1,4 @@
+// @index parser — 源文本→词法行→AST→语义模型→诊断
 import {
   Diagnostic,
   DiagnosticSeverity,

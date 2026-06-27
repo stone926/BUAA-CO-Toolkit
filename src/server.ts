@@ -1,3 +1,4 @@
+// @index lsp-server — 协议路由、验证调度、跨文件索引管理
 import {
   CodeAction,
   CodeActionKind,

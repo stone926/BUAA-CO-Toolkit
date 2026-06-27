@@ -1,3 +1,4 @@
+// @index diagnostics-orchestrator — 聚合所有Verilog诊断：语法/Lint/数据流/连接/usage
 import * as fs from 'fs';
 import * as path from 'path';
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';

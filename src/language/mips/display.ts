@@ -7,7 +7,7 @@ import { macroCallArgumentsAtPosition } from './queries';
 import type { MipsAstLine, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
 import { collectMipsOperandReferences } from './operandReferences';
 import {
-  cp0RegistersByNumber,
+  cp0RegistersByNumber, pseudoExpansions,
   directives,
   isRegister,
   MipsCp0RegisterInfo,
@@ -65,69 +65,36 @@ export function macroExpansionPreview(document: TextDocument, parsed: MipsParseR
 }
 
 export function pseudoExpansionPreview(mnemonic: string, operands: string[]): string[] | undefined {
-  if (mnemonic === 'li' && operands.length === 2) {
-    return expandLoadImmediate(operands[0], operands[1]);
+  const entry = pseudoExpansions[mnemonic];
+  if (!entry) {
+    return undefined;
   }
-  if (['add', 'addu', 'sub', 'subu'].includes(mnemonic) && operands.length === 3 && parseIntegerLiteral(operands[2]) !== undefined) {
-    return expandRegisterImmediateArithmetic(mnemonic, operands);
-  }
-  if ((mnemonic === 'addi' || mnemonic === 'addiu') && operands.length === 3) {
-    const immediate = parseImmediate(operands[2]);
-    if (immediate && !fitsSigned16(immediate.signed)) {
-      return [...loadFullImmediateToAt(immediate), `${mnemonic === 'addi' ? 'add' : 'addu'} ${operands[0]}, ${operands[1]}, $at`];
+  for (const form of entry.forms) {
+    if (form.operands.length !== operands.length) {
+      continue;
     }
-  }
-  if ((mnemonic === 'subi' || mnemonic === 'subiu') && operands.length === 3) {
-    return expandSubtractImmediate(mnemonic, operands);
-  }
-  if (['andi', 'ori', 'xori'].includes(mnemonic)) {
-    return expandLogicalImmediate(mnemonic, operands);
-  }
-  if (['and', 'or', 'xor'].includes(mnemonic)) {
-    return expandLogicalRegisterImmediate(mnemonic, operands);
-  }
-  if (mnemonic === 'la' && operands.length === 2) {
-    return [`lui $at, upper(${operands[1]})`, `ori ${operands[0]}, $at, lower(${operands[1]})`];
-  }
-  if (mnemonic === 'move' && operands.length === 2) {
-    return [`addu ${operands[0]}, $zero, ${operands[1]}`];
-  }
-  if (mnemonic === 'b' && operands.length === 1) {
-    return [`bgez $zero, ${operands[0]}`];
-  }
-  if (mnemonic === 'beqz' && operands.length === 2) {
-    return [`beq ${operands[0]}, $zero, ${operands[1]}`];
-  }
-  if (mnemonic === 'bnez' && operands.length === 2) {
-    return [`bne ${operands[0]}, $zero, ${operands[1]}`];
-  }
-  if (mnemonic === 'not' && operands.length === 2) {
-    return [`nor ${operands[0]}, ${operands[1]}, $zero`];
-  }
-  if (mnemonic === 'neg' && operands.length === 2) {
-    return [`sub ${operands[0]}, $zero, ${operands[1]}`];
-  }
-  if (mnemonic === 'negu' && operands.length === 2) {
-    return [`subu ${operands[0]}, $zero, ${operands[1]}`];
-  }
-  if (mnemonic === 'abs' && operands.length === 2) {
-    return [`sra $at, ${operands[1]}, 31`, `xor ${operands[0]}, $at, ${operands[1]}`, `subu ${operands[0]}, ${operands[0]}, $at`];
-  }
-  if (mnemonic === 'mul' && operands.length === 3) {
-    return expandMultiplyImmediate(operands);
-  }
-  if ((mnemonic === 'div' || mnemonic === 'divu') && operands.length === 3) {
-    return expandDivideLike(mnemonic, operands, 'mflo');
-  }
-  if ((mnemonic === 'rem' || mnemonic === 'remu') && operands.length === 3) {
-    const real = mnemonic === 'remu' ? 'divu' : 'div';
-    return expandDivideLike(real, operands, 'mfhi');
-  }
-  if ((mnemonic === 'beq' || mnemonic === 'bne') && operands.length === 3 && !isRegister(operands[1])) {
-    return expandEqualityBranchImmediate(mnemonic, operands);
-  }
-  if (['blt', 'bltu', 'bgt', 'bgtu', 'ble', 'bleu', 'bge', 'bgeu'].includes(mnemonic) && operands.length === 3) {
-    return expandCompareBranch(mnemonic, operands);
+    if (!matchOperandPattern(form.operands, operands)) {
+      continue;
+    }
+    // Mnemonic-specific filters
+    if ((mnemonic === 'addi' || mnemonic === 'addiu') && operands.length === 3) {
+      const imm = parseImmediate(operands[2]);
+      if (!imm || fitsSigned16(imm.signed)) continue;
+    }
+    if (['andi', 'ori', 'xori'].includes(mnemonic) && operands.length === 3) {
+      const imm = parseImmediate(operands[2]);
+      if (imm && fitsUnsigned16(imm.signed)) continue;
+    }
+    // Load/store: skip if offset(base) has simm16 offset (native instruction)
+    if (form.operands[1] === 'offset(base)' && operands.length === 2) {
+      const match = operands[1].match(/^([^(]+)\((.+)\)$/);
+      if (match) {
+        const offImm = parseImmediate(match[1]);
+        if (offImm && fitsSigned16(offImm.signed)) continue;
+      }
+    }
+    const addiOptimize = !['andi', 'ori', 'xori'].includes(mnemonic);
+    return interpolateTemplates(form.template, form.operands, operands, addiOptimize);
   }
   return undefined;
 }
@@ -425,20 +392,6 @@ function operandIntegerValue(operand: MipsOperandAst, stripRegisterPrefix = fals
   return parseIntegerOrCharLiteral(stripRegisterPrefix && text.startsWith('$') ? text.slice(1) : text);
 }
 
-function expandLoadImmediate(register: string, operand: string): string[] | undefined {
-  const immediate = parseImmediate(operand);
-  if (!immediate) {
-    return undefined;
-  }
-  if (fitsSigned16(immediate.signed)) {
-    return [`addiu ${register}, $zero, ${formatSignedImmediate(immediate.signed)}`];
-  }
-  if (fitsUnsigned16(immediate.signed)) {
-    return [`ori ${register}, $zero, ${formatHex16(immediate.unsigned)}`];
-  }
-  return [`lui $at, ${upper16(immediate)}`, `ori ${register}, $at, ${lower16(immediate)}`];
-}
-
 function formatHex16(value: number): string {
   return `0x${(value & 0xffff).toString(16).padStart(4, '0')}`;
 }
@@ -478,135 +431,95 @@ function loadSignedImmediateToAt(operand: string): string[] | undefined {
   return loadFullImmediateToAt(immediate);
 }
 
-function expandRegisterImmediateArithmetic(mnemonic: string, operands: string[]): string[] | undefined {
-  const immediate = parseImmediate(operands[2]);
-  if (!immediate) {
-    return undefined;
-  }
-  if (mnemonic === 'add' && fitsSigned16(immediate.signed)) {
-    return [`addi ${operands[0]}, ${operands[1]}, ${formatSignedImmediate(immediate.signed)}`];
-  }
-  if (mnemonic === 'sub' && fitsSigned16(immediate.signed)) {
-    return [`addi $at, $zero, ${formatSignedImmediate(immediate.signed)}`, `sub ${operands[0]}, ${operands[1]}, $at`];
-  }
-  return [...loadFullImmediateToAt(immediate), `${mnemonic} ${operands[0]}, ${operands[1]}, $at`];
+function operandText(operand: { kind: string; tokenText: string; }): string {
+  return operand.tokenText;
 }
 
-function expandSubtractImmediate(mnemonic: string, operands: string[]): string[] | undefined {
-  const immediate = parseImmediate(operands[2]);
-  if (!immediate) {
-    return undefined;
-  }
-  const real = mnemonic === 'subiu' ? 'subu' : 'sub';
-  if (mnemonic === 'subi' && fitsSigned16(immediate.signed)) {
-    return [`addi $at, $zero, ${formatSignedImmediate(immediate.signed)}`, `${real} ${operands[0]}, ${operands[1]}, $at`];
-  }
-  return [...loadFullImmediateToAt(immediate), `${real} ${operands[0]}, ${operands[1]}, $at`];
-}
-
-function expandLogicalImmediate(mnemonic: string, operands: string[]): string[] | undefined {
-  const immediateOperand = operands[operands.length - 1];
-  const immediate = parseImmediate(immediateOperand);
-  if (!immediate) {
-    return undefined;
-  }
-  const real = mnemonic === 'andi' ? 'and' : mnemonic === 'ori' ? 'or' : 'xor';
-  if (operands.length === 2) {
-    if (fitsUnsigned16(immediate.signed)) {
-      return [`${mnemonic} ${operands[0]}, ${operands[0]}, ${formatHex16(immediate.unsigned)}`];
-    }
-    return [...loadFullImmediateToAt(immediate), `${real} ${operands[0]}, ${operands[0]}, $at`];
-  }
-  if (operands.length === 3 && !fitsUnsigned16(immediate.signed)) {
-    return [...loadFullImmediateToAt(immediate), `${real} ${operands[0]}, ${operands[1]}, $at`];
-  }
-  return undefined;
-}
-
-function expandLogicalRegisterImmediate(mnemonic: string, operands: string[]): string[] | undefined {
-  const immediateOperand = operands[operands.length - 1];
-  const immediate = parseImmediate(immediateOperand);
-  if (!immediate || !fitsUnsigned16(immediate.signed)) {
-    return undefined;
-  }
-  const real = `${mnemonic}i`;
-  if (operands.length === 2) {
-    return [`${real} ${operands[0]}, ${operands[0]}, ${formatHex16(immediate.unsigned)}`];
-  }
-  if (operands.length === 3) {
-    return [`${real} ${operands[0]}, ${operands[1]}, ${formatHex16(immediate.unsigned)}`];
-  }
-  return undefined;
-}
-
-function expandMultiplyImmediate(operands: string[]): string[] | undefined {
-  if (isRegister(operands[2])) {
-    return undefined;
-  }
-  const load = loadSignedImmediateToAt(operands[2]);
-  return load ? [...load, `mul ${operands[0]}, ${operands[1]}, $at`] : undefined;
-}
-
-function expandDivideLike(realMnemonic: string, operands: string[], resultMove: 'mflo' | 'mfhi'): string[] | undefined {
-  const [target, dividend, divisor] = operands;
-  if (isRegister(divisor)) {
-    return [`bne ${divisor}, $zero, 1`, 'break', `${realMnemonic} ${dividend}, ${divisor}`, `${resultMove} ${target}`];
-  }
-  const load = loadSignedImmediateToAt(divisor);
-  return load ? [...load, `${realMnemonic} ${dividend}, $at`, `${resultMove} ${target}`] : undefined;
-}
-
-function expandEqualityBranchImmediate(mnemonic: string, operands: string[]): string[] | undefined {
-  const load = loadSignedImmediateToAt(operands[1]);
-  return load ? [...load, `${mnemonic} $at, ${operands[0]}, ${operands[2]}`] : undefined;
-}
-
-function expandCompareBranch(mnemonic: string, operands: string[]): string[] {
-  const [left, right, label] = operands;
-  if (!isRegister(right)) {
-    const load = loadSignedImmediateToAt(right);
-    if (!load) {
-      return [];
-    }
-    switch (mnemonic) {
-      case 'blt':
-        return [...load, `slt $at, ${left}, $at`, `bne $at, $zero, ${label}`];
-      case 'bltu':
-        return [...load, `sltu $at, ${left}, $at`, `bne $at, $zero, ${label}`];
-      case 'bgt':
-        return [...load, `slt $at, $at, ${left}`, `bne $at, $zero, ${label}`];
-      case 'bgtu':
-        return [...load, `sltu $at, $at, ${left}`, `bne $at, $zero, ${label}`];
-      case 'ble':
-        return [...load, `slt $at, $at, ${left}`, `beq $at, $zero, ${label}`];
-      case 'bleu':
-        return [...load, `sltu $at, $at, ${left}`, `beq $at, $zero, ${label}`];
-      case 'bge':
-        return [...load, `slt $at, ${left}, $at`, `beq $at, $zero, ${label}`];
-      case 'bgeu':
-        return [...load, `sltu $at, ${left}, $at`, `beq $at, $zero, ${label}`];
-      default:
-        return [];
+function matchOperandPattern(patterns: string[], operands: string[]): boolean {
+  for (let i = 0; i < patterns.length; i++) {
+    if (!singleOperandMatch(patterns[i], operands[i])) {
+      return false;
     }
   }
-  switch (mnemonic) {
-    case 'blt':
-      return [`slt $at, ${left}, ${right}`, `bne $at, $zero, ${label}`];
-    case 'bltu':
-      return [`sltu $at, ${left}, ${right}`, `bne $at, $zero, ${label}`];
-    case 'bgt':
-      return [`slt $at, ${right}, ${left}`, `bne $at, $zero, ${label}`];
-    case 'bgtu':
-      return [`sltu $at, ${right}, ${left}`, `bne $at, $zero, ${label}`];
-    case 'ble':
-      return [`slt $at, ${right}, ${left}`, `beq $at, $zero, ${label}`];
-    case 'bleu':
-      return [`sltu $at, ${right}, ${left}`, `beq $at, $zero, ${label}`];
-    case 'bge':
-      return [`slt $at, ${left}, ${right}`, `beq $at, $zero, ${label}`];
-    case 'bgeu':
-      return [`sltu $at, ${left}, ${right}`, `beq $at, $zero, ${label}`];
+  return true;
+}
+
+function singleOperandMatch(pattern: string, operand: string): boolean {
+  switch (pattern) {
+    case '$rd': case '$rs': case '$rt':
+      return isRegister(operand);
+    case 'label':
+      return !isRegister(operand) && parseIntegerLiteral(operand) === undefined && !/^.+\(.+\)$/.test(operand);
+    case 'imm16_signed': {
+      const v = parseImmediate(operand);
+      return v !== undefined && fitsSigned16(v.signed);
+    }
+    case 'imm16_unsigned': {
+      const v = parseImmediate(operand);
+      return v !== undefined && fitsUnsigned16(v.signed);
+    }
+    case 'imm32': {
+      const v = parseImmediate(operand);
+      return v !== undefined;
+    }
+    case 'offset(base)':
+      return /^.+\(.+\)$/.test(operand);
     default:
-      return [];
+      return operand === pattern;
   }
 }
+
+function interpolateTemplate(line: string, patterns: string[], operands: string[]): string {
+  let result = line;
+  // Replace operand placeholders: pattern "$rd" -> template variable "${rd}" or "${rs}" etc.
+  for (let i = 0; i < operands.length; i++) {
+    const p = patterns[i];
+    const op = operands[i];
+    const varName = p.startsWith('$') ? p.slice(1) : p;
+    result = result.replace(new RegExp(`\\$\\{${escapeRegExp(varName)}\\}`, 'g'), op);
+  }
+  // Handle memory operand: offset(base)
+  const memIdx = patterns.findIndex(p => p === 'offset(base)');
+  if (memIdx >= 0) {
+    const match = operands[memIdx].match(/^(.+)\((.+)\)$/);
+    if (match) {
+      result = result.replace(/\$\{offset\}/g, match[1]);
+      result = result.replace(/\$\{base\}/g, match[2]);
+    }
+  }
+  // Handle immediate format modifiers
+  const immIdx = patterns.findIndex(p => p === 'imm16_signed' || p === 'imm16_unsigned' || p === 'imm32');
+  if (immIdx >= 0) {
+    const info = parseImmediate(operands[immIdx]);
+    if (info) {
+      result = result.replace(/\$\{imm:hex16\}/g, formatHex16(info.unsigned));
+      result = result.replace(/\$\{imm:upper16\}/g, upper16(info));
+      result = result.replace(/\$\{imm:lower16\}/g, lower16(info));
+      result = result.replace(/\$\{imm:signed16\}/g, formatSignedImmediate(info.signed));
+      result = result.replace(/\$\{imm\}/g, String(info.signed));
+    }
+  }
+  return result;
+}
+
+function interpolateTemplates(templates: string[], patterns: string[], operands: string[], optimizeAddi = true): string[] {
+  if (optimizeAddi) {
+    const immIdx = patterns.findIndex(p => p === 'imm16_signed' || p === 'imm16_unsigned' || p === 'imm32');
+    if (immIdx >= 0) {
+      const info = parseImmediate(operands[immIdx]);
+      if (info && fitsSigned16(info.signed) && templates.length >= 2 &&
+          templates[0].includes('${imm:upper16}') && templates[1].includes('${imm:lower16}')) {
+        const loadLine = `addi $at, $zero, ${formatSignedImmediate(info.signed)}`;
+        const rest = templates.slice(2);
+        return [loadLine, ...rest].map((line) => interpolateTemplate(line, patterns, operands));
+      }
+    }
+  }
+  return templates.map((line) => interpolateTemplate(line, patterns, operands));
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+

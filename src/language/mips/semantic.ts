@@ -1,3 +1,4 @@
+// @index semantic — 符号收集/作用域解析/引用追踪
 import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition } from '../common/lsp';

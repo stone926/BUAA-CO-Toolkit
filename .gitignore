@@ -7,11 +7,8 @@ dist/
 fuse.log
 isim.log
 additional
-docs
-!docs/semantic-colors.md
 .claude
 *.class
 !resources/mars/_co_internal_unknown_instruction.class
-*.md
-!CHANGELOG.md
-!README.md
+AGENTS.md
+CLAUDE.md

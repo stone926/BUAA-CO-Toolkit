@@ -1,3 +1,4 @@
+// @index profile-resolver — 基于端口签名+trace格式推断CPU Profile(P4-P7)
 import {
   ConcreteProjectProfile,
   ProjectProfile,

@@ -1,3 +1,4 @@
+// @index core-generator — 核心随机指令序列生成，状态感知CPU模型，1860行
 import { randomBytes } from 'crypto';
 import { ProjectProfile } from '../../projectProfile';
 import {
