@@ -8,6 +8,11 @@ import {
 import { P7ProbeMetadata, P7ProbeOptions, P7StressMode } from './types';
 import { CpuState } from '../cpuState';
 import {
+  p7UserTextBaseAddress,
+  p7ExceptionHandlerAddress,
+  p7ExternalInterruptAckAddress
+} from './p7/constants';
+import {
   CpuProfile,
   MduReadProbeMode,
   ControlMnemonic,
@@ -87,17 +92,17 @@ const readRegisters = ['$0', ...writableRegisters];
 
 const dataByteLength = 1024;
 const dataWordCount = dataByteLength / 4;
-const textBaseAddress = 0x3000;
-const p7ExceptionHandlerAddress = 0x4180;
+const textBaseAddress = p7UserTextBaseAddress;
 const p7ExceptionHandlerInstructionIndex = (p7ExceptionHandlerAddress - textBaseAddress) / 4;
 const p7MainTerminatorInstructionCount = 2;
 const p7PrologueInstructionCount = 2;
 const poisonRegister = '$26';
 // The unified P7 handler (interrupt + exception) needs these CP0 instructions in the set.
 const p7HandlerRequiredMnemonics = ['mfc0', 'mtc0', 'eret'] as const;
-// SR value the prologue installs: IE=1 (bit0) + IM[2]=1 (bit12, the external-interrupt mask).
+// SR value the prologue installs: IE=1 (bit0) + external interrupt mask IM[2]=1 (bit12).
+// Uses 0x1001 (IE + IM[2] only), not the full course mask (0x1c01).
 const p7StatusEnableInterrupts = 0x1001;
-const p7IntAckAddress = 0x7f20;
+const p7IntAckAddress = p7ExternalInterruptAckAddress;
 const p7ExceptionFlushShadowSlots = 2;
 const p7InterruptAnchorInstructionCount = 2;
 export const p7InternalUnknownInstructionMnemonic = '_co_internal_unknown_instruction';

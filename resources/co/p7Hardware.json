@@ -1,0 +1,90 @@
+{
+  "memoryLayout": {
+    "userTextBaseAddress": 12288,
+    "_userTextBaseAddress_hex": "0x3000",
+    "exceptionHandlerAddress": 16768,
+    "_exceptionHandlerAddress_hex": "0x4180",
+    "probeLogBase": 10240,
+    "_probeLogBase_hex": "0x2800",
+    "probeRecordWords": 8,
+    "probeState": {
+      "scenarioId": 10208,
+      "_scenarioId_hex": "0x27e0",
+      "kind": 10212,
+      "_kind_hex": "0x27e4",
+      "donePc": 10216,
+      "_donePc_hex": "0x27e8",
+      "recordPtr": 10220,
+      "_recordPtr_hex": "0x27ec"
+    },
+    "probeExternalArmAddress": 10192,
+    "_probeExternalArmAddress_hex": "0x27d0",
+    "exceptionFlushShadowSlots": 2,
+    "interruptAnchorInstructionCount": 2
+  },
+  "timer": {
+    "timer0": {
+      "ctrl": 32512,
+      "_ctrl_hex": "0x7f00",
+      "preset": 32516,
+      "_preset_hex": "0x7f04",
+      "count": 32520,
+      "_count_hex": "0x7f08"
+    },
+    "timer1": {
+      "ctrl": 32528,
+      "_ctrl_hex": "0x7f10",
+      "preset": 32532,
+      "_preset_hex": "0x7f14",
+      "count": 32536,
+      "_count_hex": "0x7f18"
+    },
+    "presetMin": 2,
+    "presetMax": 96,
+    "ctrlStartValue": 9
+  },
+  "cp0": {
+    "status": {
+      "enableAllCourseInterrupts": 7169,
+      "_enableAllCourseInterrupts_hex": "0x1c01"
+    },
+    "cause": {
+      "ipTimer0Mask": 1024,
+      "_ipTimer0Mask_hex": "0x0400",
+      "ipTimer1Mask": 2048,
+      "_ipTimer1Mask_hex": "0x0800",
+      "ipExternalMask": 4096,
+      "_ipExternalMask_hex": "0x1000",
+      "excCodeMask": 124,
+      "_excCodeMask_hex": "0x007c"
+    },
+    "exceptionCodes": {
+      "adel": 4,
+      "ades": 5,
+      "syscall": 8,
+      "ri": 10,
+      "ov": 12
+    }
+  },
+  "interrupt": {
+    "externalAckAddress": 32544,
+    "_externalAckAddress_hex": "0x7f20"
+  },
+  "probe": {
+    "magic": 3234799617,
+    "_magic_hex": "0xc0a70001",
+    "kind": {
+      "external": 1,
+      "timer0": 2,
+      "timer1": 3,
+      "internal": 4,
+      "adel": 5,
+      "ades": 6,
+      "syscall": 7,
+      "ri": 8,
+      "ov": 9
+    },
+    "defaultScenarioCount": 32,
+    "maxScenarioCount": 64
+  }
+}
