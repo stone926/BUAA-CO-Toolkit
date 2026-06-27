@@ -1,3 +1,4 @@
+import { CO_DIR, CO_TMP_DIR } from './constants';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -53,7 +54,7 @@ export function coTmpDir(resource: vscode.Uri | undefined, prefix: string): stri
   const folder = resource
     ? vscode.workspace.getWorkspaceFolder(resource)
     : vscode.workspace.workspaceFolders?.[0];
-  const base = folder ? path.join(folder.uri.fsPath, '.co', 'tmp') : os.tmpdir();
+  const base = folder ? path.join(folder.uri.fsPath, CO_TMP_DIR) : os.tmpdir();
   fs.mkdirSync(base, { recursive: true });
   return fs.mkdtempSync(path.join(base, prefix));
 }
@@ -70,7 +71,7 @@ export async function cleanupCoTmp(dir: string): Promise<void> {
   }
   const parent = path.dirname(dir);
   try {
-    if (path.basename(parent) === 'tmp' && path.basename(path.dirname(parent)) === '.co') {
+    if (path.basename(parent) === 'tmp' && path.basename(path.dirname(parent)) === CO_DIR) {
       const entries = await fs.promises.readdir(parent);
       if (entries.length === 0) {
         await fs.promises.rm(parent, { recursive: true, force: true });

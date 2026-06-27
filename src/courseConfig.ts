@@ -1,3 +1,4 @@
+import { CO_DIR } from './constants';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -80,7 +81,7 @@ export function getProfileName(profile: string): string {
 
 export function getProfileDirectories(profile: string): string[] {
   const config = getProfileConfig(profile);
-  return config?.directories ?? ['.co'];
+  return config?.directories ?? [CO_DIR];
 }
 
 export function getProfileRequiredTools(profile: string): string[] {

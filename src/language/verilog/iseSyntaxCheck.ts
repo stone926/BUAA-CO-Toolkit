@@ -1,3 +1,4 @@
+import { CO_DIR, CO_ISE_CHECK_DIR } from '../../constants';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -57,7 +58,7 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
     return emptyResult(false, 'no-top');
   }
 
-  const outDir = path.join(root, '.co', 'ise-check');
+  const outDir = path.join(root, CO_ISE_CHECK_DIR);
   await fs.promises.mkdir(outDir, { recursive: true });
   const prj = path.join(outDir, 'co_syntax.prj');
   await fs.promises.writeFile(prj, buildIseProjectText(files), 'utf8');
@@ -245,7 +246,7 @@ function workspaceRootFor(workspaceFolders: WorkspaceFolder[] | null | undefined
 
 function shouldSkipDirectory(name: string): boolean {
   return name === '.git' ||
-    name === '.co' ||
+    name === CO_DIR ||
     name === '.vscode' ||
     name === '.vscode-test' ||
     name === 'node_modules' ||

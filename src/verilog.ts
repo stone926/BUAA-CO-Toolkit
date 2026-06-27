@@ -2,7 +2,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Commands, ASM_NEEDED_VERILOG_PROFILES } from './constants';
+import { Commands, ASM_NEEDED_VERILOG_PROFILES, CO_DIR, CO_ISIM_DIR } from './constants';
 import {
   config,
   ensureConcreteProfile,
@@ -254,7 +254,7 @@ export async function generateIseProject(
     return undefined;
   }
 
-  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, '.co', 'isim'));
+  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_ISIM_DIR));
   await ensureDirectory(outDir);
   const prj = vscode.Uri.file(path.join(outDir.fsPath, `${projectFileBaseName}.prj`));
   const tcl = vscode.Uri.file(path.join(outDir.fsPath, options.tclFileName ?? `${projectFileBaseName}.tcl`));
@@ -564,7 +564,7 @@ async function ensureP7InterruptTestbench(
   }
   const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(topDefinition.uri) ?? vscode.workspace.workspaceFolders?.[0];
   const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'isim'));
+  const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
   await ensureDirectory(outDir);
   const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
   const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
@@ -676,7 +676,7 @@ async function ensureActiveModuleTestbench(
 async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string): Promise<vscode.Uri> {
   const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
   const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'isim'));
+  const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
   await ensureDirectory(outDir);
   return vscode.Uri.file(path.join(outDir.fsPath, runtimeTestbenchFileName(testbenchName)));
 }
@@ -1094,7 +1094,7 @@ async function copyMachineCodeToSimDirectory(
 }
 
 function isCoPath(file: string): boolean {
-  return file.split(/[\\/]+/).some((part) => part.toLowerCase() === '.co');
+  return file.split(/[\\/]+/).some((part) => part.toLowerCase() === CO_DIR);
 }
 
 function verilogDelayFromSimTime(simTime: string): string {

@@ -1,4 +1,4 @@
-import { Commands } from './constants';
+import { Commands, CO_HAZARD_DIR } from './constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -224,7 +224,7 @@ async function prepareHazardWorkspace(
   machineCode: vscode.Uri,
   resource: vscode.Uri
 ): Promise<PreparedHazardRun> {
-  const rootDir = path.join(folder.uri.fsPath, '.co', 'hazard');
+  const rootDir = path.join(folder.uri.fsPath, CO_HAZARD_DIR);
   const workDir = path.join(rootDir, 'work');
   const resultDir = path.join(rootDir, 'result');
   await ensureDirectory(vscode.Uri.file(rootDir));

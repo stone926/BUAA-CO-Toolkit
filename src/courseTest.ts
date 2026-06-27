@@ -1,4 +1,4 @@
-import { Commands } from './constants';
+import { Commands, CO_OUT_DIR } from './constants';
 // @index main-coordinator — 课程测试总调度，14个co.test.*命令
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1063,7 +1063,7 @@ async function writeBatchTraceReport(
 ): Promise<vscode.Uri> {
   const folder = workspaceFolderFor(firstAsm) ?? vscode.workspace.workspaceFolders?.[0];
   const baseDir = folder?.uri.fsPath ?? path.dirname(firstAsm.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'out'));
+  const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
   await ensureDirectory(outDir);
   const report = vscode.Uri.file(path.join(outDir.fsPath, 'trace-batch-report.json'));
   await writeTextFile(report, JSON.stringify({

@@ -1,3 +1,4 @@
+import { CO_CASES_DIR } from './constants';
 import * as crypto from 'crypto';
 import * as path from 'path';
 
@@ -94,7 +95,7 @@ export function asmCaseId(createdAt: Date, asmSha256: string): string {
 }
 
 export function asmCasePaths(workspaceRoot: string, caseId: string): AsmCasePaths {
-  const caseDir = path.join(workspaceRoot, '.co', 'cases', caseId);
+  const caseDir = path.join(workspaceRoot, CO_CASES_DIR, caseId);
   return {
     caseDir,
     manifest: path.join(caseDir, asmCaseManifestFileName),

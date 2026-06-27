@@ -1,3 +1,4 @@
+import { CO_OUT_DIR } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ensureDirectory, workspaceFolderFor } from './fsUtil';
@@ -10,7 +11,7 @@ export function isimOutputFileName(top: string, configured?: string): string {
 export async function simulationOutputDirectory(resource: vscode.Uri | undefined, isimDir: vscode.Uri): Promise<vscode.Uri> {
   const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(isimDir) ?? vscode.workspace.workspaceFolders?.[0];
   const baseDir = folder?.uri.fsPath ?? path.dirname(path.dirname(isimDir.fsPath));
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'out'));
+  const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
   await ensureDirectory(outDir);
   return outDir;
 }

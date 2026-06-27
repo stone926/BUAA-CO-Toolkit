@@ -1,3 +1,4 @@
+import { CO_DIR } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ProfileResolverFile, ProfileResolverInput } from './profileResolver';
@@ -201,7 +202,7 @@ function isProfileRelevantFile(name: string): boolean {
 
 function shouldSkipDirectory(name: string): boolean {
   return name === '.git'
-    || name === '.co'
+    || name === CO_DIR
     || name === '.vscode'
     || name === '.vscode-test'
     || name === 'node_modules'

@@ -1,3 +1,4 @@
+import { CO_DIR } from '../../constants';
 // @index workspace-index — 跨文件模块数据库：索引/查找/增量更新
 import * as fs from 'fs';
 import * as path from 'path';
@@ -539,7 +540,7 @@ async function* scanVerilogFiles(root: string, limit: number): AsyncGenerator<st
 
 function shouldSkipDirectory(name: string): boolean {
   return name === '.git' ||
-    name === '.co' ||
+    name === CO_DIR ||
     name === '.vscode' ||
     name === '.vscode-test' ||
     name === 'node_modules' ||

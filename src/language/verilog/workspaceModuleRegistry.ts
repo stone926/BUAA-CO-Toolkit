@@ -1,3 +1,4 @@
+import { CO_DIR } from '../../constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -250,7 +251,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
 function shouldSkipDirectory(name: string): boolean {
   return (
     name === '.git' ||
-    name === '.co' ||
+    name === CO_DIR ||
     name === '.vscode' ||
     name === '.vscode-test' ||
     name === 'node_modules' ||

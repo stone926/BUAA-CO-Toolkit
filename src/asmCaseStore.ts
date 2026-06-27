@@ -1,3 +1,4 @@
+import { CO_CASES_DIR } from './constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
@@ -268,7 +269,7 @@ export async function copyAsmCaseArtifact(
 
 export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array<{ manifest: AsmCaseManifest; uri: vscode.Uri }>> {
   const root = caseWorkspaceRoot(resource);
-  const casesDir = path.join(root, '.co', 'cases');
+  const casesDir = path.join(root, CO_CASES_DIR);
   let entries: fs.Dirent[];
   try {
     entries = await fs.promises.readdir(casesDir, { withFileTypes: true });

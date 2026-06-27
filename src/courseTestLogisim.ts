@@ -1,3 +1,4 @@
+import { CO_LOGISIM_DIR } from './constants';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -144,7 +145,7 @@ export async function runLogisimPrepareBatch(
 
   const folder = workspaceFolderFor(circuit) ?? workspaceFolderFor(cases[0]?.asm) ?? vscode.workspace.workspaceFolders?.[0];
   const baseDir = folder?.uri.fsPath ?? path.dirname(circuit.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, '.co', 'logisim'));
+  const outDir = vscode.Uri.file(path.join(baseDir, CO_LOGISIM_DIR));
   await ensureDirectory(outDir);
 
   revealOutputChannel(services.output, circuit);

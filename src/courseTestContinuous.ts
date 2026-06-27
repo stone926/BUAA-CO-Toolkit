@@ -1,3 +1,4 @@
+import { CO_DIR, CO_OUT_DIR } from './constants';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
@@ -131,7 +132,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
     retainedPassingCases: getContinuousRetainedPassingCases(resource),
     reportRetainedIterations: getContinuousReportRetainedIterations(resource)
   };
-  const outDir = vscode.Uri.file(path.join(deps.generatorFolder(setup).uri.fsPath, '.co', 'out'));
+  const outDir = vscode.Uri.file(path.join(deps.generatorFolder(setup).uri.fsPath, CO_OUT_DIR));
   await ensureDirectory(outDir);
   const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
   const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
@@ -484,14 +485,14 @@ function continuousCaseDirFromManifest(manifest: string | undefined): string | u
 function isSafeContinuousCaseDir(dir: string): boolean {
   const resolved = path.resolve(dir);
   return path.basename(path.dirname(resolved)).toLowerCase() === 'cases'
-    && path.basename(path.dirname(path.dirname(resolved))).toLowerCase() === '.co'
+    && path.basename(path.dirname(path.dirname(resolved))).toLowerCase() === CO_DIR
     && path.basename(resolved).length > 0;
 }
 
 function isSafeContinuousOutFile(file: string): boolean {
   const resolved = path.resolve(file);
   return path.basename(path.dirname(resolved)).toLowerCase() === 'out'
-    && path.basename(path.dirname(path.dirname(resolved))).toLowerCase() === '.co';
+    && path.basename(path.dirname(path.dirname(resolved))).toLowerCase() === CO_DIR;
 }
 
 function isPathInside(file: string, directory: string): boolean {

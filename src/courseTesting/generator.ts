@@ -1,3 +1,4 @@
+import { CO_DIR } from '../constants';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -127,7 +128,7 @@ async function walk(directory: string, results: AsmSnapshotEntry[], pending: str
     const file = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       await flushAsmStats(pending, results, maxFiles);
-      if (path.basename(directory) === '.co' && ignoredCoDirectories.has(entry.name.toLowerCase())) {
+      if (path.basename(directory) === CO_DIR && ignoredCoDirectories.has(entry.name.toLowerCase())) {
         continue;
       }
       await walk(file, results, pending, maxFiles);

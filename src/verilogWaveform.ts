@@ -1,3 +1,4 @@
+import { CO_ISIM_DIR } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getIsePath, getSimTime, getTestbench } from './config';
@@ -85,7 +86,7 @@ export async function exportVcdWaveform(
 ): Promise<void> {
   const activeUri = vscode.window.activeTextEditor?.document.uri;
   const simTime = getSimTime(activeUri);
-  const fallbackIsimDir = vscode.Uri.file(path.join(workspaceFolderFor(activeUri)?.uri.fsPath ?? process.cwd(), '.co', 'isim'));
+  const fallbackIsimDir = vscode.Uri.file(path.join(workspaceFolderFor(activeUri)?.uri.fsPath ?? process.cwd(), CO_ISIM_DIR));
   const simOutDir = await simulationOutputDirectory(activeUri, fallbackIsimDir);
   const preliminaryTestbenchName = getTestbench(activeUri);
   const preliminaryVcd = vscode.Uri.file(path.join(simOutDir.fsPath, `${preliminaryTestbenchName}.vcd`));

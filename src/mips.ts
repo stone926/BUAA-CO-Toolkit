@@ -22,7 +22,7 @@ import {
   p7RiInstructionNeeded,
   P7_COURSE_MEMORY_CONFIG
 } from './language/mips/marsArgs';
-import { Commands, CPU_HALT_PROFILES } from './constants';
+import { Commands, CO_OUT_DIR, CPU_HALT_PROFILES } from './constants';
 
 // Re-export for testability
 export { buildMarsArgs } from './language/mips/marsArgs';
@@ -413,7 +413,7 @@ async function workspaceFileExists(uri: vscode.Uri): Promise<boolean> {
 function marsRunOutputDirectory(asmUri: vscode.Uri): vscode.Uri {
   const folder = workspaceFolderFor(asmUri);
   const baseDir = folder?.uri.fsPath ?? dirname(asmUri);
-  return vscode.Uri.file(path.join(baseDir, '.co', 'out'));
+  return vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
 }
 
 function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): string {
