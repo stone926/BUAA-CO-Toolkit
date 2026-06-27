@@ -6,17 +6,25 @@ import {
   getMachineCode,
   getMarsJar,
   getMemoryConfiguration,
-  getMipsExtraArgs,
   getProfile,
-  useDelayedBranching,
   ensureConcreteProfile
 } from './config';
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, isFile, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
-import { appendHaltLoop } from './courseTesting/mipsUtil';
+import { appendHaltLoop, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from './courseTesting/mipsUtil';
 import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
-import { p7InternalUnknownInstructionMnemonic } from './courseTesting/builtinAsmGenerator';
+import {
+  buildMarsArgs,
+  isCourseTraceMarsRun,
+  isLargeTextMemoryConfiguration,
+  p7InternalUnknownInstructionClassPath,
+  p7RiInstructionNeeded,
+  P7_COURSE_MEMORY_CONFIG
+} from './language/mips/marsArgs';
+
+// Re-export for testability
+export { buildMarsArgs } from './language/mips/marsArgs';
 
 export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
 
@@ -233,8 +241,8 @@ async function marsRunSetupError(
     if (options.p7RiInstruction && !await isFile(p7InternalUnknownInstructionClassPath())) {
       return `P7 RI 异常测试需要内部 MARS 额外指令 class，但文件不存在: ${p7InternalUnknownInstructionClassPath()}`;
     }
-    if ((mode === 'dumpText' || mode === 'dumpKernel' || isCourseTraceMarsRun(mode, options)) && memoryConfiguration !== p7CourseMemoryConfiguration) {
-      return `P7 机器码 dump 必须使用 MARS 内存配置 ${p7CourseMemoryConfiguration}。${memoryConfiguration} 会改变异常入口或让程序顺序落入 0x4180 处理程序，不适配课程 CPU。`;
+    if ((mode === 'dumpText' || mode === 'dumpKernel' || isCourseTraceMarsRun(mode, options)) && memoryConfiguration !== P7_COURSE_MEMORY_CONFIG) {
+      return `P7 机器码 dump 必须使用 MARS 内存配置 ${P7_COURSE_MEMORY_CONFIG}。${memoryConfiguration} 会改变异常入口或让程序顺序落入 0x4180 处理程序，不适配课程 CPU。`;
     }
     return undefined;
   }
@@ -247,9 +255,6 @@ async function marsRunSetupError(
   return undefined;
 }
 
-function isCourseTraceMarsRun(mode: MarsRunMode, options: MarsRunOptions): boolean {
-  return options.courseTrace === true || options.traceOutput === true;
-}
 
 function withMarsCompatibilityDiagnostics(
   result: RunResult,
@@ -312,7 +317,7 @@ async function mergeP7KernelTextDump(
   const tempDirPath = coTmpDir(asmUri, 'co-p7-ktext-');
   const tempDir = vscode.Uri.file(tempDirPath);
   const kernelOutputFile = vscode.Uri.file(path.join(tempDir.fsPath, `${basenameNoExt(asmUri)}.kernel-merge.txt`));
-  const args = buildMarsArgs(asmUri, mars, 'dumpKernel', options, p7CourseMemoryConfiguration);
+  const args = buildMarsArgs(asmUri, mars, 'dumpKernel', options, P7_COURSE_MEMORY_CONFIG);
   args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
 
   const kernelResult = await runTool(java, args, {
@@ -347,9 +352,9 @@ async function mergeP7KernelTextDump(
       };
     }
 
-    const merged = [...textLines, mipsSelfBranchHex, mipsNopHex];
+    const merged = [...textLines, MIPS_SELF_BRANCH_HEX, MIPS_NOP_HEX];
     while (merged.length < p7KernelTextStartIndex) {
-      merged.push(mipsNopHex);
+      merged.push(MIPS_NOP_HEX);
     }
     for (let i = 0; i < kernelLines.length; i++) {
       merged[p7KernelTextStartIndex + i] = kernelLines[i];
@@ -422,78 +427,6 @@ function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): strin
 const p7UserTextBaseAddress = 0x3000;
 const p7KernelTextBaseAddress = 0x4180;
 const p7KernelTextStartIndex = (p7KernelTextBaseAddress - p7UserTextBaseAddress) / 4;
-const p7CourseMemoryConfiguration = 'CompactLargeText';
-const largeTextMemoryConfigurations = new Set(['FixedCompactLargeText', 'CompactLargeText']);
-const mipsNopHex = '00000000';
-const mipsSelfBranchHex = '1000ffff';
-
-export function buildMarsArgs(
-  asmUri: vscode.Uri,
-  mars: string,
-  mode: MarsRunMode,
-  options: MarsRunOptions = {},
-  memoryConfiguration = getMemoryConfiguration(asmUri)
-): string[] {
-  const args = options.p7RiInstruction
-    ? ['-cp', `${mars}${path.delimiter}${p7InternalUnknownInstructionClassDir()}`, 'Mars', 'nc', 'mc', memoryConfiguration]
-    : ['-jar', mars, 'nc', 'mc', memoryConfiguration];
-  if (useDelayedBranching(asmUri)) {
-    args.push('db');
-  }
-  if (options.p7RiInstruction) {
-    args.push('cl', `${p7InternalUnknownInstructionMnemonic}.class`);
-  }
-  args.push(...getMipsExtraArgs(asmUri));
-  if (mode === 'run' && options.traceOutput && !hasMarsArg(args, 'coL1')) {
-    args.push('coL1');
-  }
-  if (mode === 'run' && getProfile(asmUri) === 'P7' && isCourseTraceMarsRun(mode, options)) {
-    // efc = enable P7 exception/interrupt handling (dispatch to 0x4180, BUAA CP0 semantics).
-    if (!hasMarsArg(args, 'efc')) {
-      args.push('efc');
-    }
-    // p7irq = inject the external interrupt so MARS defers the same instruction the CPU does.
-    // The schedule holds the testbench target_pc (the instruction the CPU defers, sampled at its
-    // M-stage macroscopic_pc). MARS's prevIRQ injection commits the p7irq instruction and defers
-    // the next one, so fire one slot earlier (target - 4); the generator guarantees target - 4 is
-    // an executed simple instruction.
-    const schedule = (options.interruptSchedule ?? []).filter((pc) => Number.isFinite(pc) && pc > 0);
-    if (schedule.length && !args.some((arg) => arg.toLowerCase().startsWith('p7irq='))) {
-      args.push(`p7irq=${schedule.map((pc) => `0x${((pc - 4) >>> 0).toString(16)}`).join(',')}`);
-    }
-  }
-  if (mode === 'run') {
-    args.push(asmUri.fsPath);
-  }
-  return args;
-}
-
-async function p7RiInstructionNeeded(asmUri: vscode.Uri): Promise<boolean> {
-  if (getProfile(asmUri) !== 'P7') {
-    return false;
-  }
-  try {
-    return (await readTextFile(asmUri)).includes(p7InternalUnknownInstructionMnemonic);
-  } catch {
-    return false;
-  }
-}
-
-function p7InternalUnknownInstructionClassDir(): string {
-  return path.resolve(__dirname, '..', 'resources', 'mars');
-}
-
-function p7InternalUnknownInstructionClassPath(): string {
-  return path.join(p7InternalUnknownInstructionClassDir(), `${p7InternalUnknownInstructionMnemonic}.class`);
-}
-
-function hasMarsArg(args: readonly string[], value: string): boolean {
-  return args.some((arg) => arg.toLowerCase() === value.toLowerCase());
-}
-
-function isLargeTextMemoryConfiguration(value: string): boolean {
-  return largeTextMemoryConfigurations.has(value);
-}
 
 function sanitizeFileStem(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';
