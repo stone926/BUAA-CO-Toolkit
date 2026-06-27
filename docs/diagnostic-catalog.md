@@ -83,11 +83,11 @@ This catalog records stable diagnostic codes used by the built-in MIPS and Veril
 | `syntax-unexpected-token` | Error | Parse | `src/language/verilog/syntaxParser.ts` | unsupported token at module scope |
 | `syntax-unsupported-construct` | Information | Course-out | `src/language/verilog/syntaxParser.ts` | `specify`, `primitive`, `fork`, `tri1`, drive strength |
 | `missing-endmodule` | Error | Structural | `src/language/verilog/diagnostics.ts` | module without `endmodule` |
-| `duplicate-module` | Error | Structural | `src/language/verilog/diagnostics.ts` | repeated module name |
+| `duplicate-module` | Error | Structural | `src/language/verilog/diagnostics.ts`, `src/language/verilog/workspaceDiagnostics.ts` | repeated module name |
 | `missing-include` | Warning | Preprocess | `src/language/verilog/diagnostics.ts` | ``include "missing.v"` |
 | `unknown-port` | Error | Semantic | `src/language/verilog/instanceConnectionDiagnostics.ts` | `.bad(signal)` |
-| `unknown-parameter` | Error | Semantic | `src/language/verilog/parameterOverrides.ts` | `#(.BAD(1))` |
-| `port-width-mismatch` | Warning | Semantic | `src/language/verilog/diagnostics.ts` | 1-bit port driven by 32-bit signal |
+| `unknown-parameter` | Error | Semantic | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.BAD(1))` |
+| `port-width-mismatch` | Warning | Semantic | `src/language/verilog/instanceConnectionDiagnostics.ts` | 1-bit port driven by 32-bit signal |
 | `width-mismatch` | Warning | Semantic | `src/language/verilog/diagnostics.ts` | assignment truncation |
 | `select-out-of-range` | Warning | Semantic | `src/language/verilog/diagnostics.ts` | `a[8]` on 4-bit signal |
 | `constant-division-by-zero` | Warning | Semantic | `src/language/verilog/diagnostics.ts` | `a / 0` |
