@@ -26,7 +26,7 @@ expr-support:
   gatePrimitives.ts — 内建门级原语关键字(and/or/not/buf/...)
   tokenUtils.ts — token辅助: 区间/种类/文本提取
   preprocessor.ts — 预处理指令集(define/include/ifdef/...)供补全
-  moduleUtils.ts — expectedPorts, declDetail
+  moduleUtils.ts — moduleAtPosition/declDetail/buildTestbench, P7 testbench shell/block 从 resources/templates/verilog 渲染
   moduleProvider.ts — MutableVerilogModuleProvider接口
   lintRuleCatalog.ts — Verilog lint 规则元数据 catalog, 从 resources/verilog/lintRules.json 加载
   statementUtils.ts — splitTopLevelCommaSpans

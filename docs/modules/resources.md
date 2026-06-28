@@ -20,9 +20,15 @@ resources/verilog/:
 
 resources/co/:
   configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐
-  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/工具/端口/内存/教程/指令描述
+  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/工具/端口/内存/教程/指令描述/Profile推断hints
   p7Hardware.json — P7 课程硬件布局: 文本段/异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
+
+resources/templates/verilog/:
+  p7_official_testbench.v.tmpl — P7 official-style testbench shell
+  p7_interrupt_block*.v.tmpl — P7 external interrupt主动/注释模板
+  p7_probe_block.v.tmpl — P7 probe interrupt/MMIO观测模板
+  加载: templateRegistry 受控占位替换
 
 syntaxes/:
   mips.tmLanguage.json — TextMate语法: MIPS标记分类
