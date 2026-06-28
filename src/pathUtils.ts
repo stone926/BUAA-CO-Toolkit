@@ -12,8 +12,12 @@ export interface SanitizeFileStemOptions {
 }
 
 export function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+  const windowsLike = isWindowsLikePath(file);
+  const normalized = windowsLike
+    ? path.win32.normalize(file)
+    : path.normalize(file);
+  const slashSeparated = normalized.replace(/\\/g, '/');
+  return windowsLike || process.platform === 'win32' ? slashSeparated.toLowerCase() : slashSeparated;
 }
 
 export function samePath(left: string, right: string): boolean {
@@ -58,4 +62,8 @@ export function sanitizeFileStem(value: string, options: SanitizeFileStemOptions
     ? replaced
     : replaced.replace(/^_+|_+$/g, '');
   return trimmed || fallback;
+}
+
+function isWindowsLikePath(file: string): boolean {
+  return file.includes('\\') || /^[A-Za-z]:[\\/]/.test(file) || /^\/\//.test(file);
 }

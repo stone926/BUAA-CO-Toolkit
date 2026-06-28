@@ -21,6 +21,10 @@ export function findIsimGui(isePath: string): string {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 }
 
+export function isimExecutableName(stem: string, fusePath: string): string {
+  return isWindowsIseTool(fusePath) ? `${stem}.exe` : stem;
+}
+
 export function buildIseEnvironment(isePath: string, baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const fuse = findFuse(isePath);
   const binDir = path.dirname(fuse);
@@ -36,4 +40,9 @@ export function buildIseEnvironment(isePath: string, baseEnv: NodeJS.ProcessEnv 
     XILINX: isePath,
     [pathKey]: entries.join(path.delimiter)
   };
+}
+
+function isWindowsIseTool(toolPath: string): boolean {
+  const normalized = toolPath.replace(/\\/g, '/').toLowerCase();
+  return normalized.endsWith('.exe') || /\/bin\/nt(?:64)?\//.test(normalized);
 }

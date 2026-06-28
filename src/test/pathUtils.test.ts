@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dedupePaths,
   dedupeUris,
+  normalizePathKey,
   samePath,
   sanitizeFileStem
 } from '../pathUtils';
@@ -10,6 +11,11 @@ import {
 describe('path utilities', () => {
   it('compares normalized filesystem paths', () => {
     expect(samePath(path.join('root', 'out', '..', 'code.txt'), path.join('root', 'code.txt'))).toBe(true);
+  });
+
+  it('normalizes Windows separators consistently on every host platform', () => {
+    expect(normalizePathKey('E:\\work\\cpu\\.co\\isim\\tb.v')).toBe(normalizePathKey('E:/work/cpu/.co/isim/tb.v'));
+    expect(normalizePathKey('root\\out\\..\\code.txt')).toBe(normalizePathKey('root/code.txt'));
   });
 
   it('deduplicates paths and Uri-like objects while preserving first entries', () => {

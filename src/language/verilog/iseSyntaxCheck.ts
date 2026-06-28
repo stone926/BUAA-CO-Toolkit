@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Diagnostic, DiagnosticSeverity, Range, WorkspaceFolder } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
-import { buildIseEnvironment, findFuse } from '../../iseCommon';
+import { buildIseEnvironment, findFuse, isimExecutableName } from '../../iseCommon';
 import { buildIseProjectText } from '../../verilogSimulationFiles';
 import { isFile, yieldEventLoop } from '../../nodeFs';
 import { runProcessCore } from '../../processCore';
@@ -54,7 +54,7 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
   const prj = path.join(outDir, 'co_syntax.prj');
   await fs.promises.writeFile(prj, buildIseProjectText(files), 'utf8');
 
-  const exeName = process.platform === 'win32' ? 'co_syntax.exe' : 'co_syntax';
+  const exeName = isimExecutableName('co_syntax', fuse);
   const run = await runProcessCore(fuse, ['--incremental', '-nodebug', '-prj', path.basename(prj), '-o', exeName, topModule], {
     cwd: outDir,
     env: buildIseEnvironment(isePath),

@@ -18,7 +18,7 @@ config:
 
 toolchain:
   toolchain.ts — checkToolchain: Java(-version)/Python(--version)/MARS(coL1 trace+CompactLargeText+FixedCompactLargeText内存配置兼容)/ISE(fuse+ISim GUI可执行)/Logisim jar/Hazard Calculator
-  iseCommon.ts — buildIseEnvironment, findFuse, findIsimGui
+  iseCommon.ts — buildIseEnvironment, findFuse, findIsimGui, isimExecutableName
   python.ts — pythonCandidates(win32:python/py/python3, other:python3/python), firstWorkingCommand, commandResponds
 
 process:

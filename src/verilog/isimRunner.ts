@@ -12,6 +12,7 @@ import {
 import { ensureDirectory, isFile, pathExists, workspaceFolderFor, writeTextFile } from '../fsUtil';
 import { revealOutputChannel, runTool } from '../process';
 import { buildIseEnvironment, findFuse } from '../toolchain';
+import { isimExecutableName } from '../iseCommon';
 import { AppServices, RunResult } from '../types';
 import { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
@@ -226,7 +227,7 @@ export async function compileIsim(
     return undefined;
   }
 
-  const exeName = process.platform === 'win32' ? `${artifactStem}.exe` : artifactStem;
+  const exeName = isimExecutableName(artifactStem, fuse);
   if (options.revealOutput !== false) {
     revealOutputChannel(services.output, activeUri);
   }

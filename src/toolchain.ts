@@ -7,7 +7,7 @@ import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
 import { runTool } from './process';
 import { ToolDetection } from './types';
-export { buildIseEnvironment, findFuse, findIsimGui } from './iseCommon';
+export { buildIseEnvironment, findFuse, findIsimGui, isimExecutableName } from './iseCommon';
 import { findFuse, findIsimGui } from './iseCommon';
 
 export async function checkToolchain(
