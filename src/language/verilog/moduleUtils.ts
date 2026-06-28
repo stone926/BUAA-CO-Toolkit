@@ -60,83 +60,133 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   });
   const hasClk = module.ports.some((port) => port.name === 'clk');
   const hasReset = module.ports.some((port) => port.name === 'reset');
-  const lines: string[] = [
-    '`timescale 1ns / 1ps',
-    '',
-    `module ${tbName};`,
-    ...declarations
-  ];
-
-  if (hasExternalInstructionMemory) {
-    lines.push(`    reg [31:0] inst[0:${isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseMemoryWords - 1}];`);
-  }
-  if (hasExternalDataMemory) {
-    lines.push(`    reg [31:0] data[0:${isP7ExternalInterface ? p7DataMemoryWords - 1 : courseMemoryWords - 1}];`, '    integer i;', '    reg [31:0] fixed_addr;', '    reg [31:0] fixed_wdata;');
-  }
-
-  lines.push(
-    '',
-    `    ${module.name} uut (`,
-    ...connections,
-    '    );',
-    ''
-  );
-
-  if (hasExternalInstructionMemory || hasExternalDataMemory) {
-    lines.push(...externalMemoryInitialLines(hasExternalInstructionMemory, hasExternalDataMemory, isP7ExternalInterface), '');
-  }
-
-  if (hasExternalInstructionMemory) {
-    lines.push(isP7ExternalInterface
-      ? `    assign i_inst_rdata = inst[((i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2) % ${p7InstructionMemoryWords}];`
-      : `    assign i_inst_rdata = inst[(i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2];`);
-  }
-  if (hasExternalDataMemory) {
-    lines.push(isP7ExternalInterface
-      ? `    assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`
-      : '    assign m_data_rdata = data[m_data_addr >> 2];');
-  }
-  if (hasExternalInstructionMemory || hasExternalDataMemory) {
-    lines.push('');
-  }
-
-  if (hasExternalDataMemory && hasClk) {
-    lines.push(...externalDataMemoryWriteLines(hasReset, isP7ExternalInterface, hasDataMemoryTrace), '');
-  }
-
-  if (hasWritebackTrace && hasClk) {
-    lines.push(...writebackTraceLines(hasReset), '');
-  }
 
   if (hasCourseExternalMemory) {
-    lines.push(...courseExternalInitialLines(module, hasClk, hasReset), '');
-    if (hasClk) {
-      lines.push('    always #2 clk <= ~clk;', '');
-    }
-    lines.push('endmodule', '');
-    return lines.join('\n');
+    return renderExternalMemoryTestbench({
+      connections,
+      declarations,
+      hasClk,
+      hasDataMemoryTrace,
+      hasExternalDataMemory,
+      hasExternalInstructionMemory,
+      hasReset,
+      hasWritebackTrace,
+      isP7ExternalInterface,
+      module,
+      tbName
+    });
   }
 
-  if (hasClk) {
-    lines.push(
-      '    initial begin',
-      "        clk = 1'b0;",
-      '        forever #5 clk = ~clk;',
-      '    end',
-      ''
-    );
-  }
+  return renderBasicTestbench({
+    connections,
+    declarations,
+    finishDelay,
+    hasClk,
+    hasReset,
+    module,
+    tbName
+  });
+}
 
-  lines.push('    initial begin');
-  if (hasReset) {
-    lines.push(
+interface BasicTestbenchViewModel {
+  connections: string[];
+  declarations: string[];
+  finishDelay: string;
+  hasClk: boolean;
+  hasReset: boolean;
+  module: VerilogModule;
+  tbName: string;
+}
+
+function renderBasicTestbench(view: BasicTestbenchViewModel): string {
+  const finishLines = ['    initial begin'];
+  if (view.hasReset) {
+    finishLines.push(
       "        reset = 1'b1;",
       '        #20;',
       "        reset = 1'b0;"
     );
   }
-  lines.push(`        #${finishDelay};`, '        $finish;', '    end', 'endmodule', '');
-  return lines.join('\n');
+  finishLines.push(`        #${view.finishDelay};`, '        $finish;', '    end');
+
+  return renderResourceTemplate('verilog/basic_testbench.v.tmpl', {
+    tbName: view.tbName,
+    topModuleName: view.module.name,
+    declarations: lineList(view.declarations),
+    connections: lineList(view.connections),
+    clockBlock: view.hasClk ? separatedBlock([
+      '    initial begin',
+      "        clk = 1'b0;",
+      '        forever #5 clk = ~clk;',
+      '    end'
+    ]) : '',
+    finishBlock: separatedBlock(finishLines)
+  });
+}
+
+interface ExternalMemoryTestbenchViewModel {
+  connections: string[];
+  declarations: string[];
+  hasClk: boolean;
+  hasDataMemoryTrace: boolean;
+  hasExternalDataMemory: boolean;
+  hasExternalInstructionMemory: boolean;
+  hasReset: boolean;
+  hasWritebackTrace: boolean;
+  isP7ExternalInterface: boolean;
+  module: VerilogModule;
+  tbName: string;
+}
+
+function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): string {
+  const memoryDeclarations: string[] = [];
+  if (view.hasExternalInstructionMemory) {
+    memoryDeclarations.push(`    reg [31:0] inst[0:${view.isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseMemoryWords - 1}];`);
+  }
+  if (view.hasExternalDataMemory) {
+    memoryDeclarations.push(
+      `    reg [31:0] data[0:${view.isP7ExternalInterface ? p7DataMemoryWords - 1 : courseMemoryWords - 1}];`,
+      '    integer i;',
+      '    reg [31:0] fixed_addr;',
+      '    reg [31:0] fixed_wdata;'
+    );
+  }
+
+  const memoryReadLines: string[] = [];
+  if (view.hasExternalInstructionMemory) {
+    memoryReadLines.push(view.isP7ExternalInterface
+      ? `    assign i_inst_rdata = inst[((i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2) % ${p7InstructionMemoryWords}];`
+      : `    assign i_inst_rdata = inst[(i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2];`);
+  }
+  if (view.hasExternalDataMemory) {
+    memoryReadLines.push(view.isP7ExternalInterface
+      ? `    assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`
+      : '    assign m_data_rdata = data[m_data_addr >> 2];');
+  }
+
+  return renderResourceTemplate('verilog/external_memory_testbench.v.tmpl', {
+    tbName: view.tbName,
+    topModuleName: view.module.name,
+    declarations: lineList(view.declarations),
+    memoryDeclarations: lineList(memoryDeclarations),
+    connections: lineList(view.connections),
+    memoryInitialBlock: separatedBlock(externalMemoryInitialLines(view.hasExternalInstructionMemory, view.hasExternalDataMemory, view.isP7ExternalInterface)),
+    memoryReadBlock: separatedBlock(memoryReadLines),
+    dataWriteBlock: view.hasExternalDataMemory && view.hasClk
+      ? separatedBlock(externalDataMemoryWriteLines(view.hasReset, view.isP7ExternalInterface, view.hasDataMemoryTrace))
+      : '',
+    writebackTraceBlock: view.hasWritebackTrace && view.hasClk ? separatedBlock(writebackTraceLines(view.hasReset)) : '',
+    courseInitialBlock: separatedBlock(courseExternalInitialLines(view.module, view.hasClk, view.hasReset)),
+    clockBlock: view.hasClk ? separatedBlock(['    always #2 clk <= ~clk;']) : ''
+  });
+}
+
+function lineList(lines: string[]): string {
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+function separatedBlock(lines: string[]): string {
+  return lines.length ? `${lines.join('\n')}\n\n` : '';
 }
 
 function buildP7OfficialTestbench(

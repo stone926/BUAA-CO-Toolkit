@@ -25,6 +25,8 @@ resources/co/:
   加载: courseConfig loader, P7 hardware loader
 
 resources/templates/verilog/:
+  basic_testbench.v.tmpl — 通用 Verilog testbench shell
+  external_memory_testbench.v.tmpl — P6-style 外部指令/数据存储器 testbench shell
   p7_official_testbench.v.tmpl — P7 official-style testbench shell
   p7_interrupt_block*.v.tmpl — P7 external interrupt主动/注释模板
   p7_probe_block.v.tmpl — P7 probe interrupt/MMIO观测模板
