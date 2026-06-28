@@ -78,6 +78,9 @@ export interface MemoryRange {
 
 export interface CourseConfig {
   memoryLayout: Record<string, Record<string, MemoryRange>>;
+  verilogTestbench?: {
+    externalMemoryWords?: number;
+  };
   profiles: Record<string, ProfileConfig>;
   verilogPorts: Record<string, PortConfig[]>;
   profileInference?: ProfileInferenceConfig;
@@ -113,6 +116,7 @@ function loadCourseConfig(): CourseConfig {
     console.error('Failed to load course config:', error);
     return {
       memoryLayout: {},
+      verilogTestbench: {},
       profiles: {},
       verilogPorts: {},
       logisimTrace: {},
@@ -172,6 +176,15 @@ export function getLogisimTraceProfileConfig(profile: string): LogisimTraceProfi
 
 export function getProfileInferenceConfig(): ProfileInferenceConfig {
   return loadCourseConfig().profileInference ?? {};
+}
+
+export function getVerilogTestbenchConfig(): { externalMemoryWords: number } {
+  const externalMemoryWords = loadCourseConfig().verilogTestbench?.externalMemoryWords;
+  return {
+    externalMemoryWords: typeof externalMemoryWords === 'number' && Number.isInteger(externalMemoryWords) && externalMemoryWords > 0
+      ? externalMemoryWords
+      : 4096
+  };
 }
 
 /**

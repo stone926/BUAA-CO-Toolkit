@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { sanitizeFileStem as sanitizePathFileStem } from '../pathUtils';
+import { sanitizeFileStem } from '../pathUtils';
 
 export type LogisimPrepareStatus = 'prepared' | 'error';
 
@@ -34,11 +34,11 @@ export function preparedCircuitFileName(circuitFile: string, asmFile: string, ro
   const asmStem = root
     ? path.relative(root, asmFile)
     : path.basename(asmFile, path.extname(asmFile));
-  return `${sanitizeFileStem(circuitStem)}.${sanitizeFileStem(removeKnownAsmExtension(asmStem))}.circ`;
+  return `${sanitizeLogisimFileStem(circuitStem)}.${sanitizeLogisimFileStem(removeKnownAsmExtension(asmStem))}.circ`;
 }
 
-export function sanitizeFileStem(value: string): string {
-  return sanitizePathFileStem(value, {
+function sanitizeLogisimFileStem(value: string): string {
+  return sanitizeFileStem(value, {
     stripExtension: true,
     fallback: 'case'
   });

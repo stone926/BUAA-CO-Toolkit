@@ -2,8 +2,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   logisimPrepSummary,
-  preparedCircuitFileName,
-  sanitizeFileStem
+  preparedCircuitFileName
 } from '../../courseTesting/logisimPrep';
 
 describe('Logisim preparation helpers', () => {
@@ -27,8 +26,4 @@ describe('Logisim preparation helpers', () => {
     expect(preparedCircuitFileName(circuit, asm, root)).toBe('cpu.generated_case_01.circ');
   });
 
-  it('sanitizes non-file-safe stems', () => {
-    expect(sanitizeFileStem('p3/generated case #1.asm')).toBe('p3_generated_case_1');
-    expect(sanitizeFileStem('***')).toBe('case');
-  });
 });

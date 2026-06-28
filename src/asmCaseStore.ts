@@ -8,6 +8,7 @@ import { ensureDirectory, pathExists, readTextFile, workspaceFolderForOrFirst, w
 import { normalizePathKey } from './pathUtils';
 import { runMarsFile, MarsRunOptions, MarsRunOutput } from './mips';
 import { AppServices } from './types';
+import { resolveFileInput } from './workflowInputs';
 import {
   AsmCaseArtifactKind,
   AsmCaseManifest,
@@ -41,51 +42,19 @@ export interface CreateAsmCaseOptions {
 }
 
 export async function resolveAsmCaseInput(title = '选择 MIPS ASM 文件'): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && isAsmFile(editor.document.uri)) {
-    if (editor.document.isDirty) {
-      await editor.document.save();
-    }
-    return editor.document.uri;
-  }
-
-  const folder = workspaceFolderForOrFirst(editor?.document.uri);
-  if (folder) {
-    const files = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(folder, '**/*.{asm,s,mips}'),
-      asmCaseInputExcludeGlob,
-      500
-    );
-    if (files.length === 1) {
-      return files[0];
-    }
-    if (files.length > 1) {
-      const picked = await vscode.window.showQuickPick(
-        files.map((uri) => ({
-          label: vscode.workspace.asRelativePath(uri),
-          description: path.dirname(uri.fsPath),
-          uri
-        })),
-        {
-          title,
-          matchOnDescription: true
-        }
-      );
-      return picked?.uri;
-    }
-  }
-
-  const picked = await vscode.window.showOpenDialog({
+  const active = vscode.window.activeTextEditor?.document.uri;
+  return await resolveFileInput({
     title,
-    canSelectFiles: true,
-    canSelectFolders: false,
-    canSelectMany: false,
+    active: { predicate: isAsmFile, saveDirty: true },
+    folder: workspaceFolderForOrFirst(active),
+    include: '**/*.{asm,s,mips}',
+    exclude: asmCaseInputExcludeGlob,
+    maxResults: 500,
     filters: {
       ASM: ['asm', 's', 'mips'],
       All: ['*']
     }
   });
-  return picked?.[0];
 }
 
 export async function createAsmCaseFromAsm(

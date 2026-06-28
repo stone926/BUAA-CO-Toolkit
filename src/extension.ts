@@ -364,7 +364,7 @@ function renderToolchainReport(checks: ToolDetection[]): string {
   return renderReportPage({
     title: 'CO 工具链',
     extraCss: toolchainReportCss,
-    body: `  ${renderTable(['工具', '状态', '路径 / 版本', '建议'], rows)}`
+    body: html.raw(`  ${renderTable(['工具', '状态', '路径 / 版本', '建议'], rows)}`)
   });
 }
 

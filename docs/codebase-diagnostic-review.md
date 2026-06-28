@@ -71,7 +71,13 @@
 - 由 `courseConfig.json` 生成 `co.project.profile` enum。
 - 将 `profileResolver.ts` 的 fallback 缩小到“资源缺失时报错或空规则”，或把 fallback 与资源一致性纳入测试。
 
-### 4. Verilog/P7 testbench 已模板化，但 probe/legacy 分支仍混在 TypeScript 和模板中
+### 4. [x] Verilog/P7 testbench 已模板化，但 probe/legacy 分支仍混在 TypeScript 和模板中
+
+完成记录:
+
+- 新增 P7 probe partial 模板：external case、armed raise、legacy raise、arm observer、MMIO observer，`moduleUtils.ts` 只计算 view model 和选择 block。
+- legacy external interrupt 触发只在旧 metadata（缺 arm address）场景中注入；新式 armed 场景不包含 legacy raise 分支。
+- 非 P7 external memory 深度改为读取 `resources/co/courseConfig.json` 的 `verilogTestbench.externalMemoryWords`。
 
 剩余证据:
 
@@ -92,7 +98,13 @@
 - 把 `co_p7_external_legacy` 拆成独立 legacy 模板或显式 feature flag，并记录移除条件。
 - 将非 P7 external memory 容量从 `courseConfig` 或专门硬件 profile 读取。
 
-### 5. 报告页面 shell 已统一，但正文和表格 cell 仍依赖调用方手工转义
+### 5. [x] 报告页面 shell 已统一，但正文和表格 cell 仍依赖调用方手工转义
+
+完成记录:
+
+- `src/webview/reportLayout.ts` 新增 `SafeHtml` 边界和 `ReportCell` model；primitive cell 默认按文本转义，HTML cell 必须显式使用 `html.raw/html.code/html.path`。
+- `renderReportPage()` 改为接收 `SafeHtml` body，调用方通过 `html.raw()` 明确标记组合后的安全片段。
+- 已迁移 `courseTestReport.ts`、`traceCompare.ts`、`hazard.ts`、`extension.ts`，并把 Hazard 手写表格收敛到 `renderTable()`。
 
 剩余证据:
 
@@ -200,7 +212,13 @@
 - 新增 `src/verilog/isimRunner.ts`，承接 `runIsim()`、`compileIsim()`、`prepareIsimRunInputs()`。
 - `src/verilog.ts` 保留 command entry、lint 禁用、用户 testbench 生成和依赖装配。
 
-### 10. 文件选择和路径工具只完成了部分收敛
+### 10. [x] 文件选择和路径工具只完成了部分收敛
+
+完成记录:
+
+- `workflowInputs.ts` 新增 `resolveActiveFile()`、`findWorkspaceFileCandidates()`、`resolveFileInput()`，统一 active file、workspace folder、候选路径、rank、QuickPick 和 openDialog fallback。
+- 已迁移 `asmCaseStore.ts`、`courseTesting/generatorWorkflow.ts`、`traceCompare.ts`、`hazard.ts`、`verilog/testbenchResolver.ts` 中的通用文件选择/扫描流程；特殊业务排序保留为 rank 或局部业务逻辑。
+- `logisimPrep.ts` 不再导出局部 sanitize wrapper，文件名清洗复用 `pathUtils.sanitizeFileStem()`。
 
 剩余证据:
 

@@ -42,7 +42,7 @@ import { CourseTraceBatchSource } from '../courseTestReport';
 import { workspaceFolderForOrFirst } from '../fsUtil';
 import { revealOutputChannel, runTool } from '../process';
 import { AppServices, ProjectProfile } from '../types';
-import { pickOneFile } from '../workflowInputs';
+import { resolveActiveFile, resolveFileInput } from '../workflowInputs';
 
 export type GeneratorRunSetup = ExternalGeneratorRunSetup | BuiltinGeneratorRunSetup;
 
@@ -337,14 +337,10 @@ async function runBuiltinGeneratorAndCollectAsms(
 }
 
 async function resolveActiveGeneratorInput(): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.uri.scheme === 'file' && isSupportedGeneratorFile(editor.document.uri.fsPath)) {
-    if (editor.document.isDirty) {
-      await editor.document.save();
-    }
-    return editor.document.uri;
-  }
-  return undefined;
+  return await resolveActiveFile({
+    predicate: (uri) => isSupportedGeneratorFile(uri.fsPath),
+    saveDirty: true
+  });
 }
 
 function builtinInstructionCountForProfile(profile: ProjectProfile, resource: vscode.Uri): number {
@@ -362,39 +358,19 @@ function builtinAsmFileName(profile: string, generatedAt: Date, mode?: string): 
 }
 
 async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.uri.scheme === 'file' && isSupportedGeneratorFile(editor.document.uri.fsPath)) {
-    if (editor.document.isDirty) {
-      await editor.document.save();
-    }
-    return editor.document.uri;
-  }
-
-  const files = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, '**/*.{py,js,mjs,cjs,jar,bat,cmd,exe,ps1}'),
-    '**/{node_modules,out,.git,.co}/**',
-    200
-  );
-  if (files.length === 1) {
-    return files[0];
-  }
-  if (files.length > 1) {
-    const picked = await vscode.window.showQuickPick(
-      files.map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri),
-        description: path.dirname(uri.fsPath),
-        uri
-      })),
-      {
-        title: '选择随机测试生成器',
-        matchOnDescription: true
-      }
-    );
-    return picked?.uri;
-  }
-
-  return await pickOneFile('选择随机测试生成器', {
+  return await resolveFileInput({
+    title: '选择随机测试生成器',
+    active: {
+      predicate: (uri) => isSupportedGeneratorFile(uri.fsPath),
+      saveDirty: true
+    },
+    folder,
+    include: '**/*.{py,js,mjs,cjs,jar,bat,cmd,exe,ps1}',
+    exclude: '**/{node_modules,out,.git,.co}/**',
+    maxResults: 200,
+    filters: {
     Generator: ['py', 'js', 'mjs', 'cjs', 'jar', 'bat', 'cmd', 'exe', 'ps1'],
     All: ['*']
+    }
   });
 }

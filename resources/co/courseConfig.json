@@ -18,6 +18,9 @@
       }
     }
   },
+  "verilogTestbench": {
+    "externalMemoryWords": 4096
+  },
   "profiles": {
     "P0": {
       "name": "初识 Logisim",

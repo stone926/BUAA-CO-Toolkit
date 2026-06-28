@@ -6,8 +6,8 @@ import { parseSimOutput } from './language/verilog/traceParser';
 import { fileMtimeMs, readTextFile, workspaceFolderFor } from './fsUtil';
 import { revealOutputChannel } from './process';
 import { AppServices } from './types';
-import { pickOneFile } from './workflowInputs';
-import { html, renderMetricGrid, renderReportPage, renderTable } from './webview/reportLayout';
+import { findWorkspaceFileCandidates, resolveFileInput } from './workflowInputs';
+import { html, renderMetricGrid, renderReportPage, renderTable, ReportTableRow, SafeHtml } from './webview/reportLayout';
 
 const escapeHtml = html.text;
 
@@ -36,16 +36,24 @@ export function registerTraceCompare(context: vscode.ExtensionContext, services:
 }
 
 async function compareTraceFiles(services: AppServices): Promise<void> {
-  const mars = await pickOneFile('选择 MARS 答案 Trace 输出', {
-    Text: ['txt', 'out', 'log'],
-    All: ['*']
+  const mars = await resolveFileInput({
+    title: '选择 MARS 答案 Trace 输出',
+    active: false,
+    filters: {
+      Text: ['txt', 'out', 'log'],
+      All: ['*']
+    }
   });
   if (!mars) {
     return;
   }
-  const sim = await pickOneFile('选择仿真器 Trace 输出', {
-    Text: ['txt', 'out', 'log'],
-    All: ['*']
+  const sim = await resolveFileInput({
+    title: '选择仿真器 Trace 输出',
+    active: false,
+    filters: {
+      Text: ['txt', 'out', 'log'],
+      All: ['*']
+    }
   });
   if (!sim) {
     return;
@@ -138,14 +146,14 @@ async function findLatestTracePair(folder: vscode.WorkspaceFolder): Promise<Trac
 }
 
 async function findLatestFile(folder: vscode.WorkspaceFolder, pattern: string): Promise<vscode.Uri | undefined> {
-  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, pattern), undefined, 100);
-  const existing = (await Promise.all(files.map(async (uri) => {
-    const mtime = await fileMtimeMs(uri.fsPath);
-    return mtime === undefined ? undefined : { uri, mtime };
-  })))
-    .filter((item): item is { uri: vscode.Uri; mtime: number } => Boolean(item))
-    .sort((left, right) => right.mtime - left.mtime);
-  return existing[0]?.uri;
+  const candidates = await findWorkspaceFileCandidates({
+    folder,
+    include: pattern,
+    maxResults: 100,
+    predicate: async (uri) => await fileMtimeMs(uri.fsPath) !== undefined,
+    rank: async (uri) => -(await fileMtimeMs(uri.fsPath) ?? 0)
+  });
+  return candidates[0]?.uri;
 }
 
 function showTraceCompareReport(
@@ -181,7 +189,7 @@ function renderTraceCompareReport(
   return renderReportPage({
     title: 'CO Trace 比较',
     extraCss: traceCompareCss,
-    body: `
+    body: html.raw(`
   ${renderMetricGrid([
     { label: '状态', value: diff.matched ? '匹配' : '不同' },
     { label: 'MARS 事件', value: diff.summary.marsEvents },
@@ -196,7 +204,7 @@ function renderTraceCompareReport(
   ${parseWarning}
   ${hiddenNote}
   ${renderTable(['状态', '#', '原因', 'MARS', 'SIM'], rows)}
-`
+`)
   });
 }
 
@@ -223,7 +231,7 @@ function totalEntryCount(diff: TraceDiffResult): number {
   return Math.max(diff.summary.marsEvents, diff.summary.simEvents);
 }
 
-function renderDiffRow(entry: TraceDiffEntry): { className: string; cells: string[] } {
+function renderDiffRow(entry: TraceDiffEntry): ReportTableRow {
   return {
     className: entry.status,
     cells: [
@@ -236,14 +244,14 @@ function renderDiffRow(entry: TraceDiffEntry): { className: string; cells: strin
   };
 }
 
-function renderEvent(event?: CpuTraceEvent): string {
+function renderEvent(event?: CpuTraceEvent): SafeHtml {
   if (!event) {
-    return '<span class="muted">(missing)</span>';
+    return html.raw('<span class="muted">(missing)</span>');
   }
   const cycle = event.cycle === undefined ? '' : `cycle=${event.cycle} `;
   const target = event.kind === 'grf' ? `$${event.target}` : `*${event.target}`;
   const normalized = `${cycle}pc=${event.pc} ${target} <= ${event.value}`;
-  return `<div><code>${escapeHtml(event.raw)}</code></div><div class="muted">${escapeHtml(normalized)}; line ${event.lineNumber}</div>`;
+  return html.raw(`<div>${html.code(event.raw)}</div><div class="muted">${html.text(normalized)}; line ${html.text(event.lineNumber)}</div>`);
 }
 
 const traceCompareCss = `

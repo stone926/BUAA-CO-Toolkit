@@ -40,6 +40,7 @@ import {
   toTextDocument,
   verilogDelayFromSimTime
 } from './documentContext';
+import { findWorkspaceFileCandidates } from '../workflowInputs';
 
 export interface VerilogModuleDefinition {
   module: VerilogModule;
@@ -344,13 +345,14 @@ async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: stri
   if (!folder) {
     return [];
   }
-  const files = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, '**/*.v'),
-    '**/{node_modules,out,.git,.co}/**',
-    5000
-  );
   const found: VerilogModule[] = [];
-  for (const uri of files) {
+  const candidates = await findWorkspaceFileCandidates({
+    folder,
+    include: '**/*.v',
+    exclude: '**/{node_modules,out,.git,.co}/**',
+    maxResults: 5000
+  });
+  for (const { uri } of candidates) {
     const document = await verilogDocumentForUri(uri);
     if (!document) {
       continue;
@@ -469,15 +471,14 @@ async function findTopModuleDefinition(
   if (!folder) {
     return undefined;
   }
-  const files = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, '**/*.v'),
-    '**/{node_modules,out,.git,.co}/**',
-    5000
-  );
-  const sorted = files
-    .filter((uri) => resource?.toString() !== uri.toString())
-    .sort((left, right) => left.fsPath.localeCompare(right.fsPath));
-  for (const uri of sorted) {
+  const candidates = await findWorkspaceFileCandidates({
+    folder,
+    include: '**/*.v',
+    exclude: '**/{node_modules,out,.git,.co}/**',
+    maxResults: 5000,
+    predicate: (uri) => resource?.toString() !== uri.toString()
+  });
+  for (const { uri } of candidates) {
     const definition = await topModuleDefinitionFromUri(uri, topName);
     if (definition) {
       return definition;

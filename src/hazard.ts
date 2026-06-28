@@ -7,9 +7,9 @@ import { ensureDirectory, fileMtimeMs, isDirectory, isFile, readTextFile, worksp
 import { runMarsFile } from './mips';
 import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
-import { pickOneFile } from './workflowInputs';
+import { resolveFileInput } from './workflowInputs';
 import { dedupePaths, samePath, sanitizeFileStem } from './pathUtils';
-import { html, renderReportPage } from './webview/reportLayout';
+import { html, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
 
 const escapeHtml = html.text;
 
@@ -186,38 +186,21 @@ async function resolveMachineCodeForHazard(
   }
   candidates.push(path.resolve(folder.uri.fsPath, configured));
 
-  for (const candidate of dedupePaths(candidates)) {
-    if (await isFile(candidate)) {
-      return vscode.Uri.file(candidate);
+  return await resolveFileInput({
+    title: '选择用于 Hazard 分析的机器码文件',
+    active: {
+      predicate: (uri) => path.basename(uri.fsPath).toLowerCase() === path.basename(configured).toLowerCase()
+    },
+    folder,
+    include: `**/${path.basename(configured)}`,
+    exclude: '**/{node_modules,out,.git,.co}/**',
+    maxResults: 50,
+    candidatePaths: dedupePaths(candidates),
+    predicate: async (uri) => await isFile(uri.fsPath),
+    filters: {
+      Text: ['txt', 'hex', 'coe'],
+      All: ['*']
     }
-  }
-
-  const matches = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, `**/${path.basename(configured)}`),
-    '**/{node_modules,out,.git,.co}/**',
-    50
-  );
-  if (matches.length === 1) {
-    return matches[0];
-  }
-  if (matches.length > 1) {
-    const picked = await vscode.window.showQuickPick(
-      matches.map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri),
-        description: path.dirname(uri.fsPath),
-        uri
-      })),
-      {
-        title: '选择用于 Hazard 分析的机器码文件',
-        matchOnDescription: true
-      }
-    );
-    return picked?.uri;
-  }
-
-  return await pickOneFile('选择用于 Hazard 分析的机器码文件', {
-    Text: ['txt', 'hex', 'coe'],
-    All: ['*']
   });
 }
 
@@ -288,9 +271,13 @@ async function openHazardReport(): Promise<void> {
     await showHazardReportWebview(vscode.Uri.file(report));
     return;
   }
-  const picked = await pickOneFile('选择冲突报告 JSON 文件', {
-    JSON: ['json'],
-    All: ['*']
+  const picked = await resolveFileInput({
+    title: '选择冲突报告 JSON 文件',
+    active: false,
+    filters: {
+      JSON: ['json'],
+      All: ['*']
+    }
   });
   if (picked) {
     await showHazardReportWebview(picked);
@@ -347,11 +334,11 @@ function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: 
   return renderReportPage({
     title: 'CO Hazard 分析',
     extraCss: hazardReportCss,
-    body: `
+    body: html.raw(`
   ${preparedInfo}
   <div class="paths">JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
   ${body}
-`
+`)
   });
 }
 
@@ -405,10 +392,10 @@ const hazardReportCss = `
     }
 `;
 
-function renderStatisticReport(report: HazardStatisticReport): string {
+function renderStatisticReport(report: HazardStatisticReport): SafeHtml {
   const forwardGrade = gradeSection(report.grade?.forward);
   const stallGrade = gradeSection(report.grade?.stall);
-  return `
+  return html.raw(`
   <div class="summary">
     ${renderMetric('转发有效率', formatPercent(report.forward_valid_ratio), percentValue(report.forward_valid_ratio))}
     ${renderMetric('转发覆盖率', formatPercent(report.forward_coverage), percentValue(report.forward_coverage))}
@@ -423,15 +410,15 @@ function renderStatisticReport(report: HazardStatisticReport): string {
   ${renderGradeDetails(forwardGrade.details, stallGrade.details)}
   ${renderForwardTable(asArray(report.forward))}
   ${renderStallTable(asArray(report.stall))}
-  `;
+  `);
 }
 
-function renderCaseReport(report: HazardCaseReport): string {
+function renderCaseReport(report: HazardCaseReport): SafeHtml {
   const forwarding = asArray(report.forwarding);
   const stalling = asArray(report.stalling);
   const validForwarding = forwarding.filter((item) => asRecord(item).valid === true).length;
   const realStalling = stalling.filter((item) => asRecord(item).cause !== 'none').length;
-  return `
+  return html.raw(`
   <div class="summary">
     ${renderMetric('转发事件', String(forwarding.length))}
     ${renderMetric('有效转发', String(validForwarding))}
@@ -440,83 +427,80 @@ function renderCaseReport(report: HazardCaseReport): string {
   </div>
   ${renderRawForwardingTable(forwarding)}
   ${renderRawStallingTable(stalling)}
-  `;
+  `);
 }
 
-function renderUnknownReport(report: unknown): string {
-  return `<p class="paths">无法识别该 JSON 的 Hazard 报告结构。</p>
-  <pre><code>${escapeHtml(JSON.stringify(report, null, 2).slice(0, 8000))}</code></pre>`;
+function renderUnknownReport(report: unknown): SafeHtml {
+  return html.raw(`<p class="paths">无法识别该 JSON 的 Hazard 报告结构。</p>
+  <pre><code>${html.text(JSON.stringify(report, null, 2).slice(0, 8000))}</code></pre>`);
 }
 
-function renderMetric(label: string, value: string, percent?: number): string {
+function renderMetric(label: string, value: string, percent?: number): SafeHtml {
   const bar = percent === undefined ? '' : `<div class="bar"><i style="width: ${Math.max(0, Math.min(100, percent * 100)).toFixed(1)}%"></i></div>`;
-  return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>${bar}</div>`;
+  return html.raw(`<div class="metric"><span>${html.text(label)}</span><strong>${html.text(value)}</strong>${bar}</div>`);
 }
 
-function renderWarningList(title: string, warnings: unknown[]): string {
+function renderWarningList(title: string, warnings: unknown[]): SafeHtml {
   if (!warnings.length) {
-    return `<h2>${escapeHtml(title)}</h2><div class="chips"><span class="chip ok">无缺失项</span></div>`;
+    return html.raw(`<h2>${html.text(title)}</h2><div class="chips"><span class="chip ok">无缺失项</span></div>`);
   }
-  return `<h2>${escapeHtml(title)}</h2><div class="chips">${warnings.map((item) => `<span class="chip warn">${escapeHtml(String(item))}</span>`).join('')}</div>`;
+  return html.raw(`<h2>${html.text(title)}</h2><div class="chips">${warnings.map((item) => `<span class="chip warn">${html.text(String(item))}</span>`).join('')}</div>`);
 }
 
-function renderGradeDetails(forwardDetails: Record<string, unknown>, stallDetails: Record<string, unknown>): string {
+function renderGradeDetails(forwardDetails: Record<string, unknown>, stallDetails: Record<string, unknown>): SafeHtml {
   const keys = [...new Set([...Object.keys(forwardDetails), ...Object.keys(stallDetails)])].sort();
   if (!keys.length) {
-    return '';
+    return html.raw('');
   }
-  const rows = keys.map((key) => `<tr>
-    <td><code>${escapeHtml(key)}</code></td>
-    <td>${formatGrade(forwardDetails[key])}</td>
-    <td>${formatGrade(stallDetails[key])}</td>
-  </tr>`).join('\n');
-  return `<h2>分类覆盖评分</h2>
-  <table>
-    <thead><tr><th>指令类别依赖</th><th>转发</th><th>阻塞</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+  const rows = keys.map((key) => ({
+    cells: [
+      html.code(key),
+      formatGrade(forwardDetails[key]),
+      formatGrade(stallDetails[key])
+    ]
+  }));
+  return html.raw(`<h2>分类覆盖评分</h2>
+  ${renderTable(['指令类别依赖', '转发', '阻塞'], rows)}`);
 }
 
-function renderForwardTable(items: unknown[]): string {
+function renderForwardTable(items: unknown[]): SafeHtml {
   if (!items.length) {
-    return '';
+    return html.raw('');
   }
   const rows = items.map((item) => {
     const row = asRecord(item);
-    return `<tr>
-      <td><code>${escapeHtml(row.src_instr)}</code></td>
-      <td><code>${escapeHtml(row.dst_instr)}</code></td>
-      <td>${escapeHtml(row.src_stage)}</td>
-      <td>${escapeHtml(row.dst_stage)}</td>
-    </tr>`;
-  }).join('\n');
-  return `<h2>转发覆盖</h2>
-  <table>
-    <thead><tr><th>供给指令</th><th>需求指令</th><th>供给级</th><th>需求级</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+    return {
+      cells: [
+        html.code(row.src_instr),
+        html.code(row.dst_instr),
+        String(row.src_stage ?? ''),
+        String(row.dst_stage ?? '')
+      ]
+    };
+  });
+  return html.raw(`<h2>转发覆盖</h2>
+  ${renderTable(['供给指令', '需求指令', '供给级', '需求级'], rows)}`);
 }
 
-function renderStallTable(items: unknown[]): string {
+function renderStallTable(items: unknown[]): SafeHtml {
   if (!items.length) {
-    return '';
+    return html.raw('');
   }
   const rows = items.map((item) => {
     const row = asRecord(item);
-    return `<tr>
-      <td><code>${escapeHtml(row.d_instr)}</code></td>
-      <td><code>${escapeHtml(row.cause)}</code></td>
-      <td>${escapeHtml(row.interval ?? '')}</td>
-    </tr>`;
-  }).join('\n');
-  return `<h2>阻塞覆盖</h2>
-  <table>
-    <thead><tr><th>D 级指令</th><th>冲突来源</th><th>间隔</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+    return {
+      cells: [
+        html.code(row.d_instr),
+        html.code(row.cause),
+        String(row.interval ?? '')
+      ]
+    };
+  });
+  return html.raw(`<h2>阻塞覆盖</h2>
+  ${renderTable(['D 级指令', '冲突来源', '间隔'], rows)}`);
 }
 
-function renderRawForwardingTable(items: unknown[]): string {
+function renderRawForwardingTable(items: unknown[]): SafeHtml {
   const visible = items.slice(0, 200);
   const rows = visible.map((item) => {
     const row = asRecord(item);
@@ -524,43 +508,41 @@ function renderRawForwardingTable(items: unknown[]): string {
     const oldValue = asRecord(forward.old);
     const newValue = asRecord(forward.new);
     const view = asRecord(row.view);
-    return `<tr>
-      <td class="${row.valid ? 'ok' : 'warn'}">${row.valid ? 'VALID' : 'INVALID'}</td>
-      <td>${escapeHtml(forward.reg ?? '')}</td>
-      <td>${escapeHtml(oldValue.stage ?? '')} -> ${escapeHtml(newValue.stage ?? '')}</td>
-      <td><code>${escapeHtml(stageInstr(view, 'd'))}</code></td>
-      <td><code>${escapeHtml(stageInstr(view, 'e'))}</code></td>
-      <td><code>${escapeHtml(stageInstr(view, 'm'))}</code></td>
-      <td><code>${escapeHtml(stageInstr(view, 'w'))}</code></td>
-    </tr>`;
-  }).join('\n');
+    return {
+      cells: [
+        html.raw(`<span class="${row.valid ? 'ok' : 'warn'}">${row.valid ? 'VALID' : 'INVALID'}</span>`),
+        String(forward.reg ?? ''),
+        `${String(oldValue.stage ?? '')} -> ${String(newValue.stage ?? '')}`,
+        html.code(stageInstr(view, 'd')),
+        html.code(stageInstr(view, 'e')),
+        html.code(stageInstr(view, 'm')),
+        html.code(stageInstr(view, 'w'))
+      ]
+    };
+  });
   const hidden = items.length > visible.length ? `<div class="paths">仅显示前 ${visible.length} 条，共 ${items.length} 条。</div>` : '';
-  return `<h2>逐周期转发事件</h2>${hidden}
-  <table>
-    <thead><tr><th>状态</th><th>寄存器</th><th>级间</th><th>D</th><th>E</th><th>M</th><th>W</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+  return html.raw(`<h2>逐周期转发事件</h2>${hidden}
+  ${renderTable(['状态', '寄存器', '级间', 'D', 'E', 'M', 'W'], rows)}`);
 }
 
-function renderRawStallingTable(items: unknown[]): string {
+function renderRawStallingTable(items: unknown[]): SafeHtml {
   const visible = items.slice(0, 200);
   const rows = visible.map((item) => {
     const row = asRecord(item);
     const view = asRecord(row.view);
-    return `<tr>
-      <td class="${row.cause === 'none' ? 'ok' : 'warn'}">${escapeHtml(row.cause ?? '')}</td>
-      <td><code>${escapeHtml(stageInstr(view, 'd'))}</code></td>
-      <td><code>${escapeHtml(stageInstr(view, 'e'))}</code></td>
-      <td><code>${escapeHtml(stageInstr(view, 'm'))}</code></td>
-      <td><code>${escapeHtml(stageInstr(view, 'w'))}</code></td>
-    </tr>`;
-  }).join('\n');
+    return {
+      cells: [
+        html.raw(`<span class="${row.cause === 'none' ? 'ok' : 'warn'}">${html.text(row.cause ?? '')}</span>`),
+        html.code(stageInstr(view, 'd')),
+        html.code(stageInstr(view, 'e')),
+        html.code(stageInstr(view, 'm')),
+        html.code(stageInstr(view, 'w'))
+      ]
+    };
+  });
   const hidden = items.length > visible.length ? `<div class="paths">仅显示前 ${visible.length} 条，共 ${items.length} 条。</div>` : '';
-  return `<h2>逐周期阻塞事件</h2>${hidden}
-  <table>
-    <thead><tr><th>来源</th><th>D</th><th>E</th><th>M</th><th>W</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+  return html.raw(`<h2>逐周期阻塞事件</h2>${hidden}
+  ${renderTable(['来源', 'D', 'E', 'M', 'W'], rows)}`);
 }
 
 function stageInstr(view: Record<string, unknown>, stage: string): string {

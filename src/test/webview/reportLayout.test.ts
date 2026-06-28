@@ -10,10 +10,10 @@ describe('webview report layout', () => {
   it('escapes page, metric, table, and code content', () => {
     const page = renderReportPage({
       title: '<Report>',
-      body: [
+      body: html.raw([
         renderMetricGrid([{ label: '<Total>', value: '<1>' }]),
         renderTable(['<Name>'], [{ className: 'ok', cells: [html.code('<path>')] }])
-      ].join('\n')
+      ].join('\n'))
     });
 
     expect(page).toContain('&lt;Report&gt;');
@@ -21,5 +21,18 @@ describe('webview report layout', () => {
     expect(page).toContain('&lt;Name&gt;');
     expect(page).toContain('<code>&lt;path&gt;</code>');
     expect(page).not.toContain('<Report>');
+  });
+
+  it('escapes primitive table cells by default and requires explicit raw html cells', () => {
+    const table = renderTable(
+      ['Value'],
+      [
+        { cells: ['<script>bad()</script>'] },
+        { cells: [html.raw('<strong>safe</strong>')] }
+      ]
+    ).toString();
+
+    expect(table).toContain('&lt;script&gt;bad()&lt;/script&gt;');
+    expect(table).toContain('<strong>safe</strong>');
   });
 });

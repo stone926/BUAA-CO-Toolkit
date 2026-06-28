@@ -59,37 +59,11 @@ ${externalScenarioCases}
                     co_p7_external_index = co_p7_external_index + 1;
                 end
             end
-            else if (co_p7_external_target != 0 && co_p7_external_legacy && fixed_macroscopic_pc == co_p7_external_target) begin
-                $display("CO_P7_PROBE external_raise scenario=%0d pc=%h time=%0d", co_p7_external_scenario, fixed_macroscopic_pc, $time);
-                interrupt = 1;
-            end
-            else if (co_p7_external_target != 0 && co_p7_external_armed && fixed_macroscopic_pc == co_p7_external_target) begin
-                if (co_p7_external_wait_count >= co_p7_external_delay) begin
-                    $display("CO_P7_PROBE external_raise scenario=%0d pc=%h time=%0d", co_p7_external_scenario, fixed_macroscopic_pc, $time);
-                    interrupt = 1;
-                    co_p7_external_armed = 0;
-                end
-                else begin
-                    co_p7_external_wait_count = co_p7_external_wait_count + 1;
-                end
-            end
+${externalLegacyRaiseBlock}
+${externalArmedRaiseBlock}
         end
     end
 
-    always @(posedge clk) begin
-        if (reset) begin
-            co_p7_external_armed = 0;
-            co_p7_external_wait_count = 0;
-        end
-        else if (co_p7_external_arm_addr != 0 && |m_data_byteen && fixed_addr == co_p7_external_arm_addr && fixed_wdata == co_p7_external_arm_value) begin
-            co_p7_external_armed = 1;
-            co_p7_external_wait_count = 0;
-            $display("CO_P7_PROBE external_arm scenario=%0d addr=%h value=%h time=%0d", co_p7_external_scenario, fixed_addr, fixed_wdata, $time);
-        end
-    end
+${externalArmObserverBlock}
 
-    always @(posedge clk) begin
-        if (~reset && |m_data_byteen && fixed_addr >= ${timer0CtrlAddress} && fixed_addr <= ${externalInterruptMmioMaxAddress}) begin
-            $display("CO_P7_PROBE mmio_on_dm pc=%h addr=%h byteen=%h time=%0d", m_inst_addr, fixed_addr, m_data_byteen, $time);
-        end
-    end
+${mmioObserverBlock}

@@ -30,6 +30,7 @@ import {
   p7InstructionMemoryWords,
   p7UserTextBaseAddress
 } from '../../../courseTesting/p7Hardware';
+import { getVerilogTestbenchConfig } from '../../../courseConfig';
 
 function doc(text: string): TextDocument {
   return TextDocument.create('test://test.v', 'verilog', 1, text);
@@ -1411,12 +1412,13 @@ describe('buildTestbench', () => {
       ]
     });
     const tb = buildTestbench(module, 'mips_tb');
+    const externalMemoryWords = getVerilogTestbenchConfig().externalMemoryWords;
     expect(tb).toContain('wire [31:0] i_inst_rdata;');
-    expect(tb).toContain('reg [31:0] data[0:4095];');
+    expect(tb).toContain(`reg [31:0] data[0:${externalMemoryWords - 1}];`);
     expect(tb).toContain('reg [31:0] fixed_addr;');
     expect(tb).toContain('reg [31:0] fixed_wdata;');
     expect(tb).toContain('$readmemh("code.txt", inst);');
-    expect(tb).toContain('for (i = 0; i < 4096; i = i + 1) begin');
+    expect(tb).toContain(`for (i = 0; i < ${externalMemoryWords}; i = i + 1) begin`);
     expect(tb).toContain('data[i] <= 0;');
     expect(tb).toContain('assign i_inst_rdata = inst[(i_inst_addr - 32\'h3000) >> 2];');
     expect(tb).toContain('assign m_data_rdata = data[m_data_addr >> 2];');
@@ -1533,6 +1535,30 @@ describe('buildTestbench', () => {
     expect(tb).toContain("co_p7_external_target = 32'h00003020;");
     expect(tb).toContain("co_p7_external_arm_addr = 32'h000027d0;");
     expect(tb).toContain('co_p7_external_armed && fixed_macroscopic_pc == co_p7_external_target');
+    expect(tb).not.toContain('co_p7_external_legacy && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('uut.');
+  });
+
+  it('keeps legacy P7 probe external interrupt support behind legacy metadata', () => {
+    const module = makeModule({
+      name: 'mips',
+      ports: [
+        makeDecl({ name: 'clk', kind: 'input', direction: 'input' }),
+        makeDecl({ name: 'reset', kind: 'input', direction: 'input' })
+      ]
+    });
+    const tb = buildTestbench(module, 'mips_tb', {
+      profile: 'P7',
+      p7Probe: {
+        scenarios: [
+          { id: 1, kind: 'external', waitPc: 0x3020 }
+        ]
+      }
+    });
+
+    expect(tb).toContain("co_p7_external_arm_addr = 32'h00000000;");
+    expect(tb).toContain('co_p7_external_legacy = 1;');
+    expect(tb).toContain('co_p7_external_legacy && fixed_macroscopic_pc == co_p7_external_target');
+    expect(tb).not.toContain('CO_P7_PROBE external_arm');
   });
 });

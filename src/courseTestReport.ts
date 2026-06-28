@@ -6,7 +6,7 @@ import { P7ProbeCheckResult } from './courseTesting/p7ProbeCheck';
 import { LogisimRomTarget } from './language/logisim/rom';
 import { TraceDiffSnapshot, TraceEventSnapshot } from './language/mips/traceCompare';
 import { AsmCaseManifest } from './asmCaseStoreCore';
-import { html, renderMetricGrid, renderReportPage, renderTable } from './webview/reportLayout';
+import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
 
 const escapeHtml = html.text;
 
@@ -191,17 +191,17 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
     };
   });
   const hiddenNote = hiddenIterations
-    ? `<p class="muted">仅显示最近 ${visibleIterations.length} / ${totalIterations} 轮；旧通过轮可能已从 JSON 报告和 case 产物中清理。</p>`
-    : '';
+    ? html.raw(`<p class="muted">仅显示最近 ${html.text(visibleIterations.length)} / ${html.text(totalIterations)} 轮；旧通过轮可能已从 JSON 报告和 case 产物中清理。</p>`)
+    : html.raw('');
   const retentionNote = report.retention
-    ? `<div>留存: 通过 case 最近 ${report.retention.retainedPassingCases} 个，报告最近 ${report.retention.reportRetainedIterations || '无限制'} 轮，输出 ${report.retention.artifactOutputMode === 'case' ? '写入 ASM case' : '写入 .co/out'}</div>`
-    : '';
+    ? html.raw(`<div>留存: 通过 case 最近 ${html.text(report.retention.retainedPassingCases)} 个，报告最近 ${html.text(report.retention.reportRetainedIterations || '无限制')} 轮，输出 ${html.text(report.retention.artifactOutputMode === 'case' ? '写入 ASM case' : '写入 .co/out')}</div>`)
+    : html.raw('');
   const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
 
   return renderReportPage({
     title: '持续测试',
     extraCss: traceStatusCss,
-    body: `
+    body: html.raw(`
   ${renderMetricGrid([
     { label: '状态', value: state },
     { label: '轮数', value: totalIterations },
@@ -219,7 +219,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
   </div>
   ${hiddenNote}
   ${renderTable(['#', '状态', '开始', '结束', '总数', '通过', '失败', '错误', '首个问题', '消息'], rows)}
-`
+`)
   });
 }
 
@@ -235,7 +235,7 @@ export function renderBatchTraceReport(
     cells: [
       String(index + 1),
       escapeHtml(item.status.toUpperCase()),
-      item.caseId ? `<code>${escapeHtml(item.caseId)}</code>` : '',
+      item.caseId ? html.code(item.caseId) : '',
       escapeHtml(path.basename(item.asm)),
       item.stdin ? escapeHtml(path.basename(item.stdin)) : '',
       escapeHtml(item.stage),
@@ -249,7 +249,7 @@ export function renderBatchTraceReport(
   return renderReportPage({
     title: 'CO 批量 Trace 测试',
     extraCss: traceStatusCss,
-    body: `
+    body: html.raw(`
   ${renderMetricGrid([
     { label: '总数', value: summary.total },
     { label: '通过', value: summary.passed },
@@ -260,7 +260,7 @@ export function renderBatchTraceReport(
   ${renderBatchSource(source)}
   <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
   ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', '首个差异', '首个差异详情', '事件', '消息'], rows)}
-`
+`)
   });
 }
 
@@ -277,10 +277,10 @@ export function renderLogisimPrepareReport(
     cells: [
       String(index + 1),
       escapeHtml(item.status.toUpperCase()),
-      item.caseId ? `<code>${escapeHtml(item.caseId)}</code>` : '',
+      item.caseId ? html.code(item.caseId) : '',
       escapeHtml(path.basename(item.asm)),
       item.wordCount === undefined ? '' : String(item.wordCount),
-      item.circuit ? `<code>${escapeHtml(item.circuit)}</code>` : '',
+      item.circuit ? html.code(item.circuit) : '',
       escapeHtml(item.message)
     ]
   }));
@@ -288,7 +288,7 @@ export function renderLogisimPrepareReport(
   return renderReportPage({
     title: 'CO Logisim 用例准备',
     extraCss: logisimPrepareStatusCss,
-    body: `
+    body: html.raw(`
   ${renderMetricGrid([
     { label: '总数', value: summary.total },
     { label: '已准备', value: summary.prepared },
@@ -301,24 +301,24 @@ export function renderLogisimPrepareReport(
     <div>JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
   </div>
   ${renderTable(['#', '状态', 'Case', 'ASM', '字数', '已准备电路', '消息'], rows)}
-`
+`)
   });
 }
 
-export function renderBatchSource(source: CourseTraceBatchSource | undefined): string {
+export function renderBatchSource(source: CourseTraceBatchSource | undefined): SafeHtml {
   if (!source) {
-    return '';
+    return html.raw('');
   }
   if (source.kind !== 'generator') {
-    return '<div class="paths">来源: 手动选择的 ASM 文件</div>';
+    return html.raw('<div class="paths">来源: 手动选择的 ASM 文件</div>');
   }
   const asmCount = source.asmFiles?.length ?? 0;
-  return `<div class="paths">
+  return html.raw(`<div class="paths">
     <div>来源: 生成的 ASM 文件${asmCount ? ` (${asmCount})` : ''}</div>
-    ${source.generator ? `<div>生成器: <code>${escapeHtml(source.generator)}</code></div>` : ''}
-    ${source.commandLine ? `<div>命令: <code>${escapeHtml(source.commandLine)}</code></div>` : ''}
-    ${source.cwd ? `<div>工作目录: <code>${escapeHtml(source.cwd)}</code></div>` : ''}
-  </div>`;
+    ${source.generator ? `<div>生成器: ${html.code(source.generator)}</div>` : ''}
+    ${source.commandLine ? `<div>命令: ${html.code(source.commandLine)}</div>` : ''}
+    ${source.cwd ? `<div>工作目录: ${html.code(source.cwd)}</div>` : ''}
+  </div>`);
 }
 
 export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
@@ -328,24 +328,24 @@ export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
       .slice(0, 6);
     return {
       cells: [
-        `<code>${escapeHtml(manifest.caseId)}</code>`,
+        html.code(manifest.caseId),
         escapeHtml(manifest.createdAt),
         escapeHtml(manifest.profile),
         escapeHtml(manifest.source.kind),
-        `<code>${escapeHtml(manifest.originalAsmPath)}</code>`,
-        `<code>${escapeHtml(manifest.asmSnapshot.path)}</code>`,
-        manifest.machineCode ? `<code>${escapeHtml(manifest.machineCode.path)}</code>` : '',
-        artifacts.map((item) => `<div><code>${escapeHtml(item)}</code></div>`).join(''),
-        `<code>${escapeHtml(uri.fsPath)}</code>`
+        html.code(manifest.originalAsmPath),
+        html.code(manifest.asmSnapshot.path),
+        manifest.machineCode ? html.code(manifest.machineCode.path) : '',
+        html.raw(artifacts.map((item) => `<div>${html.code(item)}</div>`).join('')),
+        html.code(uri.fsPath)
       ]
     };
   });
   return renderReportPage({
     title: 'CO ASM 用例记录',
-    body: `
+    body: html.raw(`
   <div class="summary">共 ${cases.length} 个 case，按创建时间倒序排列。</div>
   ${renderTable(['Case', '时间', 'Profile', '来源', '原始 ASM', 'ASM 快照', '机器码', 'Artifacts', 'Manifest'], rows)}
-`
+`)
   });
 }
 
@@ -368,29 +368,29 @@ function summaryText(item: CourseTraceCaseResult): string {
   return `MARS ${item.marsEvents}, SIM ${item.simEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
 }
 
-function renderFirstDiffSummary(item: CourseTraceCaseResult): string {
+function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
   if (item.probe) {
     return renderProbeDetails(item.probe);
   }
   if (!item.firstDiff) {
-    return '';
+    return html.raw('');
   }
   const reason = item.firstDiff.reason ?? item.firstDiff.status;
-  return [
-    `<div>${escapeHtml(reason)}</div>`,
-    `<div><code>MARS ${escapeHtml(traceEventSummary(item.firstDiff.mars))}</code></div>`,
-    `<div><code>SIM ${escapeHtml(traceEventSummary(item.firstDiff.sim))}</code></div>`
-  ].join('');
+  return html.raw([
+    `<div>${html.text(reason)}</div>`,
+    `<div><code>MARS ${html.text(traceEventSummary(item.firstDiff.mars))}</code></div>`,
+    `<div><code>SIM ${html.text(traceEventSummary(item.firstDiff.sim))}</code></div>`
+  ].join(''));
 }
 
-function renderProbeDetails(probe: P7ProbeCheckResult): string {
+function renderProbeDetails(probe: P7ProbeCheckResult): SafeHtml {
   const failures = probe.failures.slice(0, 5).map((failure) =>
-    `<div><code>#${failure.scenarioId} ${escapeHtml(failure.kind)}: ${escapeHtml(failure.message)}</code></div>`
+    `<div><code>#${html.text(failure.scenarioId)} ${html.text(failure.kind)}: ${html.text(failure.message)}</code></div>`
   );
   const records = probe.records.slice(0, 5).map((record) =>
-    `<div><code>#${record.scenarioId}: Cause=0x${(record.cause >>> 0).toString(16)} EPC=0x${(record.epc >>> 0).toString(16)} aux0=0x${(record.aux0 >>> 0).toString(16)}</code></div>`
+    `<div><code>#${html.text(record.scenarioId)}: Cause=0x${html.text((record.cause >>> 0).toString(16))} EPC=0x${html.text((record.epc >>> 0).toString(16))} aux0=0x${html.text((record.aux0 >>> 0).toString(16))}</code></div>`
   );
-  return [...failures, ...records].join('');
+  return html.raw([...failures, ...records].join(''));
 }
 
 function traceEventSummary(event: TraceEventSnapshot | undefined): string {

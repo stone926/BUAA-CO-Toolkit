@@ -8,10 +8,11 @@ import {
   p7Timer0Ctrl,
   p7UserTextBaseAddress
 } from '../../courseTesting/p7Hardware';
+import { getVerilogTestbenchConfig } from '../../courseConfig';
 import { renderResourceTemplate } from '../../templates/templateRegistry';
 import { VerilogDecl, VerilogModule } from './model';
 
-const courseMemoryWords = 4096;
+const courseExternalMemoryWords = getVerilogTestbenchConfig().externalMemoryWords;
 
 export function moduleAtPosition(modules: VerilogModule[], position: Position): VerilogModule | undefined {
   return modules.find((module) => containsPosition(module.range, position));
@@ -141,11 +142,11 @@ interface ExternalMemoryTestbenchViewModel {
 function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): string {
   const memoryDeclarations: string[] = [];
   if (view.hasExternalInstructionMemory) {
-    memoryDeclarations.push(`    reg [31:0] inst[0:${view.isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseMemoryWords - 1}];`);
+    memoryDeclarations.push(`    reg [31:0] inst[0:${view.isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseExternalMemoryWords - 1}];`);
   }
   if (view.hasExternalDataMemory) {
     memoryDeclarations.push(
-      `    reg [31:0] data[0:${view.isP7ExternalInterface ? p7DataMemoryWords - 1 : courseMemoryWords - 1}];`,
+      `    reg [31:0] data[0:${view.isP7ExternalInterface ? p7DataMemoryWords - 1 : courseExternalMemoryWords - 1}];`,
       '    integer i;',
       '    reg [31:0] fixed_addr;',
       '    reg [31:0] fixed_wdata;'
@@ -224,28 +225,64 @@ function p7InterruptBlock(interruptSchedule?: number[]): string {
 function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
   const externalScenarios = probe.scenarios.filter((scenario) =>
     scenario.kind === 'external' && Number.isFinite(scenario.waitPc));
-  const externalScenarioCases = externalScenarios.map((scenario, index) => {
-    const target = ((scenario.waitPc ?? 0) >>> 0).toString(16).padStart(8, '0');
-    const armAddress = Number.isFinite(scenario.armAddress) ? ((scenario.armAddress ?? 0) >>> 0) : 0;
-    const armValue = Number.isFinite(scenario.armValue) ? ((scenario.armValue ?? scenario.id) >>> 0) : scenario.id;
-    const delay = Number.isFinite(scenario.externalDelayCycles) ? Math.max(0, Math.floor(scenario.externalDelayCycles ?? 0)) : 0;
-    return [
-      `            ${index}: begin`,
-      `                co_p7_external_scenario = ${scenario.id};`,
-      `                co_p7_external_target = 32'h${target};`,
-      `                co_p7_external_arm_addr = 32'h${armAddress.toString(16).padStart(8, '0')};`,
-      `                co_p7_external_arm_value = 32'h${armValue.toString(16).padStart(8, '0')};`,
-      `                co_p7_external_delay = ${delay};`,
-      `                co_p7_external_legacy = ${armAddress === 0 ? 1 : 0};`,
-      '            end'
-    ].join('\n');
-  }).join('\n');
+  const externalScenarioViews = externalScenarios.map((scenario, index) => p7ExternalScenarioView(scenario, index));
+  const hasArmedExternalScenario = externalScenarioViews.some((scenario) => !scenario.legacy);
+  const hasLegacyExternalScenario = externalScenarioViews.some((scenario) => scenario.legacy);
+  const externalScenarioCases = externalScenarioViews
+    .map((scenario) => renderResourceTemplate('verilog/p7_probe_external_case.v', {
+      index: scenario.index,
+      scenarioId: scenario.scenarioId,
+      targetPcHex: scenario.targetPcHex,
+      armAddressHex: scenario.armAddressHex,
+      armValueHex: scenario.armValueHex,
+      delayCycles: scenario.delayCycles,
+      legacyFlag: scenario.legacy ? 1 : 0
+    }))
+    .join('\n');
   return renderResourceTemplate('verilog/p7_probe_block.v', {
     externalScenarioCases,
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress),
-    timer0CtrlAddress: verilogHex32(p7Timer0Ctrl),
-    externalInterruptMmioMaxAddress: verilogHex32(p7ExternalInterruptAckAddress + 0xf)
+    externalLegacyRaiseBlock: hasLegacyExternalScenario
+      ? renderResourceTemplate('verilog/p7_probe_external_legacy_raise_block.v', {})
+      : '',
+    externalArmedRaiseBlock: hasArmedExternalScenario
+      ? renderResourceTemplate('verilog/p7_probe_external_armed_raise_block.v', {})
+      : '',
+    externalArmObserverBlock: hasArmedExternalScenario
+      ? renderResourceTemplate('verilog/p7_probe_external_arm_observer.v', {})
+      : '',
+    mmioObserverBlock: renderResourceTemplate('verilog/p7_probe_mmio_observer.v', {
+      timer0CtrlAddress: verilogHex32(p7Timer0Ctrl),
+      externalInterruptMmioMaxAddress: verilogHex32(p7ExternalInterruptAckAddress + 0xf)
+    })
   });
+}
+
+interface P7ExternalScenarioView {
+  index: number;
+  scenarioId: number;
+  targetPcHex: string;
+  armAddressHex: string;
+  armValueHex: string;
+  delayCycles: number;
+  legacy: boolean;
+}
+
+function p7ExternalScenarioView(
+  scenario: P7ProbeTestbenchMetadata['scenarios'][number],
+  index: number
+): P7ExternalScenarioView {
+  const armAddress = Number.isFinite(scenario.armAddress) ? ((scenario.armAddress ?? 0) >>> 0) : 0;
+  const armValue = Number.isFinite(scenario.armValue) ? ((scenario.armValue ?? scenario.id) >>> 0) : scenario.id;
+  return {
+    index,
+    scenarioId: scenario.id,
+    targetPcHex: hex32NoPrefix(scenario.waitPc ?? 0),
+    armAddressHex: hex32NoPrefix(armAddress),
+    armValueHex: hex32NoPrefix(armValue),
+    delayCycles: Number.isFinite(scenario.externalDelayCycles) ? Math.max(0, Math.floor(scenario.externalDelayCycles ?? 0)) : 0,
+    legacy: armAddress === 0
+  };
 }
 
 function commentedP7InterruptBlock(): string {
@@ -297,7 +334,7 @@ function externalMemoryInitialLines(hasInstructionMemory: boolean, hasDataMemory
     lines.push('        $readmemh("code.txt", inst);');
   }
   if (hasDataMemory) {
-    lines.push(`        for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseMemoryWords}; i = i + 1) begin`, '            data[i] <= 0;', '        end');
+    lines.push(`        for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseExternalMemoryWords}; i = i + 1) begin`, '            data[i] <= 0;', '        end');
   }
   lines.push('    end');
   return lines;
@@ -321,7 +358,7 @@ function externalDataMemoryWriteLines(hasReset: boolean, isP7ExternalInterface: 
   if (hasReset) {
     lines.push(
       '        if (reset) begin',
-      `            for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseMemoryWords}; i = i + 1) begin`,
+      `            for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseExternalMemoryWords}; i = i + 1) begin`,
       '                data[i] <= 0;',
       '            end',
       `        end else if (${writeCondition}) begin`
@@ -363,4 +400,8 @@ function writebackTraceLines(hasReset: boolean): string[] {
 
 function verilogHex32(value: number): string {
   return `32'h${(value >>> 0).toString(16).padStart(4, '0')}`;
+}
+
+function hex32NoPrefix(value: number): string {
+  return (value >>> 0).toString(16).padStart(8, '0');
 }
