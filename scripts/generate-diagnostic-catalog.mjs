@@ -15,18 +15,33 @@ function markdownCell(value) {
 }
 
 function enabledLabel(rule) {
-  return rule.enabledByDefault ? 'enabled' : 'disabled';
+  return rule.enabledByDefault ? '启用' : '禁用';
 }
 
 function configurableLabel(rule) {
-  return rule.configurable ? 'yes' : 'no';
+  return rule.configurable ? '是' : '否';
+}
+
+function severityLabel(value) {
+  switch (value) {
+    case 'error':
+      return '错误';
+    case 'warning':
+      return '警告';
+    case 'information':
+      return '信息';
+    case 'hint':
+      return '提示';
+    default:
+      return value;
+  }
 }
 
 function generatedLintCatalog(rules) {
   const configurableIds = rules.filter((rule) => rule.configurable).map((rule) => `\`${rule.id}\``).join(', ');
   const rows = rules.map((rule) => [
     `\`${rule.id}\``,
-    markdownCell(rule.severity),
+    severityLabel(rule.severity),
     enabledLabel(rule),
     configurableLabel(rule),
     markdownCell(rule.title),
@@ -35,11 +50,11 @@ function generatedLintCatalog(rules) {
   return [
     startMarker,
     '',
-    'Configurable VC rules and synthesizable hint rules are generated from `resources/verilog/lintRules.json`.',
+    '可配置 VC 规则和可综合性提示规则由 `resources/verilog/lintRules.json` 生成。',
     '',
-    `Configurable rule ids: ${configurableIds}.`,
+    `可配置规则 ID：${configurableIds}。`,
     '',
-    '| Code | Severity | Default | Configurable | Title | Description |',
+    '| 代码 | 严重级别 | 默认 | 可配置 | 标题 | 说明 |',
     '| --- | --- | --- | --- | --- | --- |',
     ...rows.map((row) => `| ${row.join(' | ')} |`),
     '',

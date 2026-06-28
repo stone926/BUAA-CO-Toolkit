@@ -1,179 +1,179 @@
 [
   {
     "id": "vc-001",
-    "title": "Signal naming style",
+    "title": "信号命名风格",
     "severity": "information",
     "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Keep signal names in one recognizable style."
+    "description": "信号名应保持一种可识别且一致的命名风格。"
   },
   {
     "id": "vc-002",
-    "title": "Low-active suffix",
+    "title": "低有效后缀",
     "severity": "information",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Low-active signal names should use the _n suffix."
+    "description": "低有效信号名应使用 _n 后缀。"
   },
   {
     "id": "vc-003",
-    "title": "Multiplexer signal naming",
+    "title": "多路选择器命名",
     "severity": "information",
     "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Multiplexer signal names should reveal width or input count."
+    "description": "多路选择器信号名应体现位宽或输入数量。"
   },
   {
     "id": "vc-004",
-    "title": "Magic number",
+    "title": "魔数",
     "severity": "information",
     "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Replace unexplained numeric literals with a localparam, parameter, or macro."
+    "description": "将缺少说明的数字字面量替换为 localparam、parameter 或宏。"
   },
   {
     "id": "vc-005",
-    "title": "Multiple always drivers",
+    "title": "多个 always 驱动",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Avoid assigning one signal in multiple always blocks."
+    "description": "避免在多个 always 块中给同一个信号赋值。"
   },
   {
     "id": "vc-006",
-    "title": "Combinational sensitivity",
+    "title": "组合逻辑敏感列表",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Combinational logic should use always @(*) or assign."
+    "description": "组合逻辑应使用 always @(*) 或 assign。"
   },
   {
     "id": "vc-007",
-    "title": "Combinational blocking assignment",
+    "title": "组合逻辑阻塞赋值",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Combinational always blocks should use blocking assignments."
+    "description": "组合逻辑 always 块应使用阻塞赋值。"
   },
   {
     "id": "vc-008",
-    "title": "Combinational completeness",
+    "title": "组合逻辑完备性",
     "severity": "information",
     "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Combinational branches and case statements should assign every output path."
+    "description": "组合逻辑分支和 case 语句应覆盖每条输出赋值路径。"
   },
   {
     "id": "vc-009",
-    "title": "Sequential posedge",
+    "title": "时序逻辑 posedge",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Sequential logic should use always @(posedge clock)."
+    "description": "时序逻辑应使用 always @(posedge clock)。"
   },
   {
     "id": "vc-010",
-    "title": "Sequential nonblocking assignment",
+    "title": "时序逻辑非阻塞赋值",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Sequential always blocks should use nonblocking assignments."
+    "description": "时序逻辑 always 块应使用非阻塞赋值。"
   },
   {
     "id": "vc-011",
-    "title": "Negedge trigger",
+    "title": "negedge 触发",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Avoid negedge-triggered logic unless a protocol requires it."
+    "description": "除非协议需要，否则避免使用 negedge 触发逻辑。"
   },
   {
     "id": "vc-012",
-    "title": "Edge signal kind",
+    "title": "边沿触发信号类型",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Edge-triggered sensitivity signals should be clocks or resets."
+    "description": "边沿触发敏感信号应为时钟或复位。"
   },
   {
     "id": "vc-013",
-    "title": "Clock used as data",
+    "title": "时钟作为数据",
     "severity": "information",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Clock signals should not be used as ordinary data inside sequential logic."
+    "description": "时钟信号不应在时序逻辑中作为普通数据使用。"
   },
   {
     "id": "vc-014",
-    "title": "Synchronous reset preference",
+    "title": "同步复位偏好",
     "severity": "information",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Prefer synchronous reset when async reset appears in sensitivity lists."
+    "description": "当敏感列表中出现异步复位时，优先考虑同步复位写法。"
   },
   {
     "id": "vc-015",
-    "title": "Internal inout port",
+    "title": "内部 inout 端口",
     "severity": "warning",
     "enabledByDefault": true,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Internal modules should avoid inout ports."
+    "description": "内部模块应避免使用 inout 端口。"
   },
   {
     "id": "vc-017",
-    "title": "Instance port formatting",
+    "title": "实例端口格式",
     "severity": "information",
     "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Instances should use named, multiline, one-port-per-line mapping."
+    "description": "模块实例应使用命名映射、多行格式，并让每个端口单独占一行。"
   },
   {
     "id": "vc-021",
-    "title": "Explicit signal width",
+    "title": "显式信号位宽",
     "severity": "information",
     "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
-    "description": "Declare explicit widths for non-parameter signals."
+    "description": "非参数信号应显式声明位宽。"
   },
   {
     "id": "synth-decl-init",
-    "title": "Declaration initializer",
+    "title": "声明初始化器",
     "severity": "information",
     "enabledByDefault": true,
     "configurable": false,
-    "description": "Avoid declaration initializers for registers in synthesizable modules."
+    "description": "可综合模块中的寄存器应避免在声明处初始化。"
   },
   {
     "id": "synth-initial",
-    "title": "Initial block",
+    "title": "initial 块",
     "severity": "information",
     "enabledByDefault": true,
     "configurable": false,
-    "description": "Avoid initial blocks in synthesizable design modules."
+    "description": "可综合设计模块中应避免使用 initial 块。"
   },
   {
     "id": "synth-mul-div",
-    "title": "Expensive arithmetic operator",
+    "title": "高成本算术运算符",
     "severity": "information",
     "enabledByDefault": true,
     "configurable": false,
-    "description": "Avoid multiply, divide, and modulo operators unless hardware cost is intentional."
+    "description": "除非明确接受硬件代价，否则避免使用乘法、除法和取模运算符。"
   }
 ]
