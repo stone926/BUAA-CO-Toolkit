@@ -8,6 +8,7 @@ coverage/
 fuse.log
 isim.log
 additional
+.agents/
 .claude
 *.class
 !resources/mars/_co_internal_unknown_instruction.class
