@@ -31,6 +31,7 @@ import { registerCourseLinks } from './courseLinks';
 import { registerSemanticColorDefaults } from './semanticColors';
 import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
+import { getProfileName } from './courseConfig';
 import { escapeHtml } from './language/common/util';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -315,26 +316,7 @@ function sameResource(left?: vscode.Uri, right?: vscode.Uri): boolean {
 }
 
 function profileDescription(profile: ProjectProfile): string {
-  switch (profile) {
-    case 'P0':
-      return '初识 Logisim';
-    case 'P1':
-      return '初识 Verilog';
-    case 'P2':
-      return '初识 ASM';
-    case 'P3':
-      return 'Logisim 单周期 CPU';
-    case 'P4':
-      return 'Verilog 单周期 CPU';
-    case 'P5':
-      return 'Verilog 五级流水线（阻塞+转发）';
-    case 'P6':
-      return '流水线 + 乘除法 + 外置存储器';
-    case 'P7':
-      return 'MIPS 微系统（异常+外设）';
-    default:
-      return '自动推断；无法推断时要求选择';
-  }
+  return profile === 'auto' ? '自动推断；无法推断时要求选择' : getProfileName(profile);
 }
 
 function currentProfileDescription(profile: ProjectProfile, resolution: ReturnType<typeof getProfileResolution>): string {

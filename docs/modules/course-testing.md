@@ -25,6 +25,7 @@ generation:
   courseTesting/continuous.ts — ContinuousRunStatus/Counts, 按留存轮数裁剪
 
 builtin-asm:
+  courseTesting/builtinAsm/asmTemplates.ts — 从 resources/asm/*.asm 加载 P7 异常处理模板并做受控变量插值
   courseTesting/builtinAsm/facade.ts — 高层API: generateBuiltinAsmTestCase/resolveBuiltinInstructionSet
   courseTesting/builtinAsm/randomBody.ts — 核心引擎(1860行): 状态感知指令生成, 合法操作数选取, MDU忙周期保护, P7 anchor中断调度, 异常率控制
   courseTesting/builtinAsm/programWriter.ts — ProgramWriter类: label/emit/raw累积汇编行, 跟踪PC

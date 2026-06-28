@@ -1,4 +1,5 @@
 // @index constants — 集中常量：Profile分组/路径约定/输出目录名
+import { profilesWithCapability } from './courseConfig';
 import { ProjectProfile } from './projectProfile';
 
 // ── Profile 分组 ──
@@ -14,53 +15,33 @@ export const CONCRETE_PROFILES: ProjectProfile[] = [
 ];
 
 /** 产生 CPU Trace 的 Profile。 */
-export const TRACE_PROFILES = new Set<ProjectProfile>([
-  'P3', 'P4', 'P5', 'P6', 'P7'
-]);
+export const TRACE_PROFILES = new Set<ProjectProfile>(profilesWithCapability('trace'));
 
 /** 使用 Verilog 开发流程的 Profile。 */
-export const VERILOG_PROFILES = new Set<ProjectProfile>([
-  'P1', 'P4', 'P5', 'P6', 'P7'
-]);
+export const VERILOG_PROFILES = new Set<ProjectProfile>(profilesWithCapability('verilog'));
 
 /** 使用 MIPS 汇编（Mars 运行）的 Profile。 */
-export const MIPS_PROFILES = new Set<ProjectProfile>([
-  'P2', 'P4', 'P5', 'P6', 'P7'
-]);
+export const MIPS_PROFILES = new Set<ProjectProfile>(profilesWithCapability('mips'));
 
 /** Logisim 电路相关的 Profile。 */
-export const LOGISIM_PROFILES = new Set<ProjectProfile>([
-  'P0', 'P3'
-]);
+export const LOGISIM_PROFILES = new Set<ProjectProfile>(profilesWithCapability('logisim'));
 
 /** 需要 ASM case 才能仿真对拍的 Verilog Profile。 */
-export const ASM_NEEDED_VERILOG_PROFILES = new Set<ProjectProfile>([
-  'P4', 'P5', 'P6', 'P7'
-]);
+export const ASM_NEEDED_VERILOG_PROFILES = new Set<ProjectProfile>(profilesWithCapability('asmNeededForVerilog'));
 
 /** 需要 Hazard 对拍的 Profile。 */
-export const HAZARD_PROFILES = new Set<ProjectProfile>([
-  'P5', 'P6', 'P7'
-]);
+export const HAZARD_PROFILES = new Set<ProjectProfile>(profilesWithCapability('hazard'));
 
 /** 流水线 CPU（有延迟槽）的 Profile。 */
-export const DELAYED_BRANCHING_PROFILES = new Set<ProjectProfile>([
-  'P5', 'P6', 'P7'
-]);
+export const DELAYED_BRANCHING_PROFILES = new Set<ProjectProfile>(profilesWithCapability('delayedBranching'));
 
 /** 需要停机自环的 CPU Profile（P7 自带内核合并，单独处理）。 */
-export const CPU_HALT_PROFILES = new Set<ProjectProfile>([
-  'P4', 'P5', 'P6'
-]);
+export const CPU_HALT_PROFILES = new Set<ProjectProfile>(profilesWithCapability('cpuHalt'));
 
 /** 追踪产生时配置文件/上下文 Profile 映射。 */
-export const TRACE_CONTEXT_PROFILES = new Set<ProjectProfile>([
-  'P3', 'P4', 'P5', 'P6', 'P7'
-]);
+export const TRACE_CONTEXT_PROFILES = new Set<ProjectProfile>(TRACE_PROFILES);
 
-export const VERILOG_CONTEXT_PROFILES = new Set<ProjectProfile>([
-  'P1', 'P4', 'P5', 'P6', 'P7'
-]);
+export const VERILOG_CONTEXT_PROFILES = new Set<ProjectProfile>(VERILOG_PROFILES);
 
 // ── 路径约定 ──
 

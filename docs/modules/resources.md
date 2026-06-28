@@ -18,7 +18,7 @@ resources/verilog/:
 
 resources/co/:
   configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐
-  courseConfig.json — Profile定义(P0-P7): 名称/描述/语言/目录/工具/端口/内存/教程/指令描述
+  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/工具/端口/内存/教程/指令描述
   p7Hardware.json — P7 课程硬件布局: 文本段/异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
 

@@ -1,6 +1,6 @@
-import { CO_DIR } from './constants';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ProjectProfile } from './projectProfile';
 
 export interface ProfileConfig {
   name: string;
@@ -8,6 +8,26 @@ export interface ProfileConfig {
   language: string;
   directories: string[];
   requiredTools: string[];
+  capabilities?: Partial<Record<ProfileCapability, boolean>>;
+  defaults?: Partial<ProfileDefaults>;
+}
+
+export type ProfileCapability =
+  | 'trace'
+  | 'verilog'
+  | 'mips'
+  | 'logisim'
+  | 'hazard'
+  | 'delayedBranching'
+  | 'cpuHalt'
+  | 'asmNeededForVerilog';
+
+export interface ProfileDefaults {
+  topModule: string;
+  testbench: string;
+  machineCode: string;
+  simTime: string;
+  simBackend: string;
 }
 
 export interface PortConfig {
@@ -83,12 +103,26 @@ export function getProfileName(profile: string): string {
 
 export function getProfileDirectories(profile: string): string[] {
   const config = getProfileConfig(profile);
-  return config?.directories ?? [CO_DIR];
+  return config?.directories ?? ['.co'];
 }
 
 export function getProfileRequiredTools(profile: string): string[] {
   const config = getProfileConfig(profile);
   return config?.requiredTools ?? [];
+}
+
+export function getProfileCapabilities(profile: string): Partial<Record<ProfileCapability, boolean>> {
+  return getProfileConfig(profile)?.capabilities ?? {};
+}
+
+export function getProfileDefaults(profile: string): Partial<ProfileDefaults> {
+  return getProfileConfig(profile)?.defaults ?? {};
+}
+
+export function profilesWithCapability(capability: ProfileCapability): ProjectProfile[] {
+  return Object.entries(loadCourseConfig().profiles)
+    .filter(([, config]) => config.capabilities?.[capability] === true)
+    .map(([profile]) => profile as ProjectProfile);
 }
 
 export function getVerilogPorts(profile: string): PortConfig[] {

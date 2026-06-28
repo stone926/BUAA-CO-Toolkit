@@ -7,12 +7,13 @@ import {
 } from '../semanticColorPresets';
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
+import { getCourseConfig } from '../courseConfig';
 
 interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
-    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown }> }>;
+    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; enum?: unknown[] }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
@@ -149,6 +150,14 @@ describe('package manifest', () => {
     expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
     expect(properties['co.test.p7.probeScenarioCount'].default).toBe(32);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
+  });
+
+  it('keeps the project profile enum aligned with course config profiles', () => {
+    const pkg = readPackage();
+    const groups = pkg.contributes?.configuration ?? [];
+    const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
+    const profileEnum = properties['co.project.profile']?.enum ?? [];
+    expect(profileEnum).toEqual(['auto', ...Object.keys(getCourseConfig().profiles)]);
   });
 
   it('does not provide XML editor support for Logisim .circ files', () => {

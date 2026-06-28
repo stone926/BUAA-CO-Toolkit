@@ -8,6 +8,7 @@ import {
   TRACE_PROFILES,
   VERILOG_PROFILES
 } from './constants';
+import { getProfileName } from './courseConfig';
 import { ProjectProfile } from './projectProfile';
 
 export type SidebarNodeKind = 'section' | 'info' | 'action' | 'tool' | 'tutorial';
@@ -459,7 +460,7 @@ function traceBackendName(profile: ProjectProfile): string {
 }
 
 function profileDescription(profile: ProjectProfile): string {
-  return profile === 'auto' ? '未推断' : profile;
+  return profile === 'auto' ? '未推断' : getProfileName(profile);
 }
 
 function summarizeTools(tools: SidebarToolModel[]): { description: string; tooltip: string; icon: string } {

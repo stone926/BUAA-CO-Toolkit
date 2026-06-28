@@ -7,7 +7,7 @@ import { configDefault } from './configDefaults';
 import { ProjectProfile } from './types';
 import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
 import {
-  getProfileDescription,
+  getProfileDefaults,
   getProfileDirectories,
   getProfileName,
   getProfileRequiredTools,
@@ -39,7 +39,7 @@ export async function runProjectWizard(): Promise<void> {
   const profilePick = await vscode.window.showQuickPick(
     profiles.map((p) => ({
       label: p,
-      description: profileDescription(p),
+      description: getProfileName(p),
       profile: p
     })),
     {
@@ -117,10 +117,6 @@ export async function runProjectWizard(): Promise<void> {
   } catch (error) {
     vscode.window.showErrorMessage(`创建项目失败: ${error}`);
   }
-}
-
-function profileDescription(profile: ProjectProfile): string {
-  return getProfileName(profile) || getProfileDescription(profile);
 }
 
 async function configureToolchainPaths(profile: ProjectProfile): Promise<ToolchainSettings> {
@@ -293,13 +289,7 @@ function getVerilogPorts(profile: ProjectProfile): string {
 }
 
 function defaultTopModuleForProfile(profile: ProjectProfile): string | undefined {
-  if (profile === 'P1') {
-    return 'main';
-  }
-  if (profile === 'P4' || profile === 'P5' || profile === 'P6' || profile === 'P7') {
-    return 'mips';
-  }
-  return undefined;
+  return getProfileDefaults(profile).topModule;
 }
 
 function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string, profile: ProjectProfile): string {
@@ -341,8 +331,9 @@ async function updateProjectSettings(profile: ProjectProfile, toolchainConfig: T
   const topModule = defaultTopModuleForProfile(profile);
   await config.update('project.profile', profile, vscode.ConfigurationTarget.Workspace);
   if (topModule) {
+    const defaults = getProfileDefaults(profile);
     await config.update('project.topModule', topModule, vscode.ConfigurationTarget.Workspace);
-    await config.update('project.testbench', `${topModule}_tb`, vscode.ConfigurationTarget.Workspace);
+    await config.update('project.testbench', defaults.testbench ?? `${topModule}_tb`, vscode.ConfigurationTarget.Workspace);
   }
   await config.update('project.machineCode', configDefault<string>('project.machineCode'), vscode.ConfigurationTarget.Workspace);
   await config.update('project.simTime', configDefault<string>('project.simTime'), vscode.ConfigurationTarget.Workspace);

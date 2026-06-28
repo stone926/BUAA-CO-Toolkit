@@ -24,56 +24,137 @@
       "description": "Logisim 基本操作",
       "language": "logisim",
       "directories": [".co", "logisim", "test"],
-      "requiredTools": ["logisim", "java"]
+      "requiredTools": ["logisim", "java"],
+      "capabilities": {
+        "logisim": true
+      },
+      "defaults": {}
     },
     "P1": {
       "name": "初识 Verilog",
       "description": "Verilog 基本语法",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim"],
-      "requiredTools": ["ise"]
+      "requiredTools": ["ise"],
+      "capabilities": {
+        "verilog": true
+      },
+      "defaults": {
+        "topModule": "main",
+        "testbench": "main_tb"
+      }
     },
     "P2": {
       "name": "初识 ASM",
       "description": "MIPS 汇编编程",
       "language": "mipsasm",
       "directories": [".co", "src", "test", "data"],
-      "requiredTools": ["mars", "java"]
+      "requiredTools": ["mars", "java"],
+      "capabilities": {
+        "mips": true
+      },
+      "defaults": {}
     },
     "P3": {
       "name": "Logisim 单周期 CPU",
       "description": "用 Logisim 实现单周期 CPU",
       "language": "logisim",
       "directories": [".co", "logisim", "test"],
-      "requiredTools": ["logisim", "java"]
+      "requiredTools": ["logisim", "java"],
+      "capabilities": {
+        "trace": true,
+        "logisim": true
+      },
+      "defaults": {}
     },
     "P4": {
       "name": "Verilog 单周期 CPU",
       "description": "用 Verilog 实现单周期 CPU",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["mars", "ise", "java"]
+      "requiredTools": ["mars", "ise", "java"],
+      "capabilities": {
+        "trace": true,
+        "verilog": true,
+        "mips": true,
+        "asmNeededForVerilog": true,
+        "cpuHalt": true
+      },
+      "defaults": {
+        "topModule": "mips",
+        "testbench": "mips_tb",
+        "machineCode": "code.txt",
+        "simTime": "200us",
+        "simBackend": "isim"
+      }
     },
     "P5": {
       "name": "Verilog 五级流水线（阻塞+转发）",
       "description": "带阻塞和转发的五级流水线 CPU",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["mars", "ise", "java"]
+      "requiredTools": ["mars", "ise", "java"],
+      "capabilities": {
+        "trace": true,
+        "verilog": true,
+        "mips": true,
+        "asmNeededForVerilog": true,
+        "hazard": true,
+        "delayedBranching": true,
+        "cpuHalt": true
+      },
+      "defaults": {
+        "topModule": "mips",
+        "testbench": "mips_tb",
+        "machineCode": "code.txt",
+        "simTime": "200us",
+        "simBackend": "isim"
+      }
     },
     "P6": {
       "name": "流水线 + 乘除法 + 外置存储器",
       "description": "流水线 CPU + 乘除法 + 存储器外置 + 按字节访存",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["mars", "ise", "java"]
+      "requiredTools": ["mars", "ise", "java"],
+      "capabilities": {
+        "trace": true,
+        "verilog": true,
+        "mips": true,
+        "asmNeededForVerilog": true,
+        "hazard": true,
+        "delayedBranching": true,
+        "cpuHalt": true
+      },
+      "defaults": {
+        "topModule": "mips",
+        "testbench": "mips_tb",
+        "machineCode": "code.txt",
+        "simTime": "200us",
+        "simBackend": "isim"
+      }
     },
     "P7": {
       "name": "MIPS 微系统（异常+外设）",
       "description": "异常处理和访问外设",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["marsP7", "ise", "java"]
+      "requiredTools": ["marsP7", "ise", "java"],
+      "capabilities": {
+        "trace": true,
+        "verilog": true,
+        "mips": true,
+        "asmNeededForVerilog": true,
+        "hazard": true,
+        "delayedBranching": true
+      },
+      "defaults": {
+        "topModule": "mips",
+        "testbench": "mips_tb",
+        "machineCode": "code.txt",
+        "simTime": "200us",
+        "simBackend": "isim"
+      }
     }
   },
   "verilogPorts": {

@@ -21,6 +21,7 @@ ast-helpers:
 
 resources:
   resources.ts — ISA静态资源加载: instructions/registers/cp0/directives/syscalls/pseudo/meta | exports: instructions, registers, cp0Registers, mipsSemanticTokenTypes
+  marsArgs.ts — MARS 命令行参数构造: run/dumpText/dumpKernel, P7 efc/p7irq/cl 参数, 内存配置常量
 
 display:
   display.ts — hover/inlay Markdown: syscall详情, CP0寄存器, 宏体/展开预览

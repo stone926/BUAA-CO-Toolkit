@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   getCourseConfig,
+  getProfileDefaults,
   getProfileDirectories,
   getProfileRequiredTools,
-  getVerilogPorts
+  getVerilogPorts,
+  profilesWithCapability
 } from '../courseConfig';
 
 describe('course config alignment', () => {
@@ -20,6 +22,26 @@ describe('course config alignment', () => {
 
   it('matches the tutorial P5 top-level interface', () => {
     expect(getVerilogPorts('P5').map((port) => port.name)).toEqual(['clk', 'reset']);
+  });
+
+  it('exposes profile capabilities from course config', () => {
+    expect(profilesWithCapability('trace')).toEqual(['P3', 'P4', 'P5', 'P6', 'P7']);
+    expect(profilesWithCapability('verilog')).toEqual(['P1', 'P4', 'P5', 'P6', 'P7']);
+    expect(profilesWithCapability('mips')).toEqual(['P2', 'P4', 'P5', 'P6', 'P7']);
+    expect(profilesWithCapability('hazard')).toEqual(['P5', 'P6', 'P7']);
+  });
+
+  it('exposes project defaults for Verilog profiles', () => {
+    expect(getProfileDefaults('P1')).toEqual(expect.objectContaining({
+      topModule: 'main',
+      testbench: 'main_tb'
+    }));
+    expect(getProfileDefaults('P7')).toEqual(expect.objectContaining({
+      topModule: 'mips',
+      testbench: 'mips_tb',
+      machineCode: 'code.txt',
+      simBackend: 'isim'
+    }));
   });
 
   it('contains tutorial links for profiles and core tools', () => {

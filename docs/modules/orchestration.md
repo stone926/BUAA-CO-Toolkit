@@ -8,6 +8,7 @@ entry:
   languageClient.ts — startLanguageServer(IPC模式), stopLanguageServer, executeLanguageServerCommand
 
 config:
+  constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
   config.ts — 所有co.*设置读取(getProfile/getMarsJar/getIsePath/getRunTimeout...), 分层取值(Workspace/WorkspaceFolder/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪
   configDefaults.ts — 从resources/co/configDefaults.json加载 co.* 默认值, 供扩展宿主/LSP/测试共享
   courseConfig.ts — Profile定义(P0-P7): 名称/描述/语言/目录/必需工具/端口/内存布局/教程, 从resources/co/courseConfig.json加载缓存
