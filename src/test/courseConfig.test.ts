@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getCourseConfig,
+  getLogisimTraceProfileConfig,
   getProfileDefaults,
   getProfileDirectories,
   getProfileRequiredTools,
@@ -42,6 +43,25 @@ describe('course config alignment', () => {
       machineCode: 'code.txt',
       simBackend: 'isim'
     }));
+  });
+
+  it('exposes the P3 Logisim trace profile as course data', () => {
+    const profile = getLogisimTraceProfileConfig('P3');
+    expect(profile?.defaultCircuit).toBe('main');
+    expect(profile?.textBase).toBe('0x00003000');
+    expect(profile?.romMaxWords).toBe(4096);
+    expect(profile?.haltLoopWords).toBe(2);
+    expect(profile?.orderedColumns).toEqual([
+      'instr',
+      'pc',
+      'regwrite',
+      'regaddr',
+      'regdata',
+      'memwrite',
+      'memaddr',
+      'memdata'
+    ]);
+    expect(profile?.columns.regaddr.width).toBe(5);
   });
 
   it('contains tutorial links for profiles and core tools', () => {

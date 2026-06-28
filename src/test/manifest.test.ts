@@ -7,7 +7,7 @@ import {
 } from '../semanticColorPresets';
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
-import { getCourseConfig } from '../courseConfig';
+import { getCourseConfig, getLogisimTraceProfileConfig } from '../courseConfig';
 import {
   configurableVerilogLintRuleIds,
   defaultDisabledVerilogLintRuleIds
@@ -156,6 +156,7 @@ describe('package manifest', () => {
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
     expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
+    expect(properties['co.test.logisim.mainCircuit'].default).toBe(getLogisimTraceProfileConfig('P3')?.defaultCircuit);
   });
 
   it('keeps the project profile enum aligned with course config profiles', () => {

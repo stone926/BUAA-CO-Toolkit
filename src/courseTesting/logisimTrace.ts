@@ -1,23 +1,29 @@
 import { CpuTraceEvent, formatTraceEvent } from '../language/mips/traceParser';
 import { appendHaltLoop } from './mipsUtil';
 import { findLogisimRomTargets, LogisimRomTarget, parseMachineCodeWords } from '../language/logisim/rom';
+import {
+  canonicalizeP3LogisimTraceLabel,
+  isP3LogisimTraceSemanticLabel,
+  p3LogisimTraceProfile
+} from './logisimTraceProfile';
+import type {
+  LogisimTraceRequiredLabel,
+  LogisimTraceSemanticLabel
+} from './logisimTraceProfile';
 
-export const defaultLogisimTraceCircuit = 'main';
-export const p3TextBase = 0x3000;
-export const p3LogisimMaxWords = 4096;
-export const p3LogisimHaltWords = 2;
-export const p3LogisimMaxProgramWords = p3LogisimMaxWords - p3LogisimHaltWords;
+export type {
+  LogisimTraceRequiredLabel,
+  LogisimTraceSemanticLabel
+} from './logisimTraceProfile';
+export {
+  p3LogisimTraceProfile
+} from './logisimTraceProfile';
 
-export type LogisimTraceRequiredLabel =
-  | 'pc'
-  | 'regwrite'
-  | 'regaddr'
-  | 'regdata'
-  | 'memwrite'
-  | 'memaddr'
-  | 'memdata';
-
-export type LogisimTraceSemanticLabel = 'instr' | LogisimTraceRequiredLabel;
+export const defaultLogisimTraceCircuit = p3LogisimTraceProfile.defaultCircuit;
+export const p3TextBase = p3LogisimTraceProfile.textBase;
+export const p3LogisimMaxWords = p3LogisimTraceProfile.romMaxWords;
+export const p3LogisimHaltWords = p3LogisimTraceProfile.haltLoopWords;
+export const p3LogisimMaxProgramWords = p3LogisimTraceProfile.maxProgramWords;
 export type LogisimTraceMappingMode = 'explicit' | 'labels' | 'appearance' | 'position';
 export type LogisimTraceColumnMap = Partial<Record<LogisimTraceSemanticLabel, number>>;
 
@@ -112,42 +118,10 @@ export interface LogisimPcProgressResult {
   error?: string;
 }
 
-const requiredLabels: LogisimTraceRequiredLabel[] = [
-  'pc',
-  'regwrite',
-  'regaddr',
-  'regdata',
-  'memwrite',
-  'memaddr',
-  'memdata'
-];
-
-const p3OrderedLabels = [
-  'instr',
-  'pc',
-  'regwrite',
-  'regaddr',
-  'regdata',
-  'memwrite',
-  'memaddr',
-  'memdata'
-] as const;
-
-const p3OrderedWidths: Record<typeof p3OrderedLabels[number], number> = {
-  instr: 32,
-  pc: 32,
-  regwrite: 1,
-  regaddr: 5,
-  regdata: 32,
-  memwrite: 1,
-  memaddr: 32,
-  memdata: 32
-};
-
-const p3SemanticLabels: LogisimTraceSemanticLabel[] = [
-  'instr',
-  ...requiredLabels
-];
+const requiredLabels = p3LogisimTraceProfile.requiredLabels;
+const p3OrderedLabels = p3LogisimTraceProfile.orderedLabels;
+const p3OrderedWidths = p3LogisimTraceProfile.widths;
+const p3SemanticLabels = p3LogisimTraceProfile.semanticLabels;
 
 const circuitPattern = /<circuit\b[^>]*\bname="([^"]+)"[^>]*>[\s\S]*?<\/circuit>/g;
 const pinPattern = /<comp\b[^>]*\bname="Pin"[^>]*(?:\/>|>[\s\S]*?<\/comp>)/g;
@@ -465,7 +439,7 @@ export function inspectLogisimPcProgress(
   spec: LogisimTraceSpec,
   state: LogisimPcProgressState,
   haltPcHex: string,
-  stuckPcRowLimit = 256
+  stuckPcRowLimit = p3LogisimTraceProfile.stuckPcRowLimit
 ): LogisimPcProgressResult {
   const pc = logisimRowPcHex(line, spec);
   if (!pc) {
@@ -535,20 +509,21 @@ export function validateP3LogisimFetchTrace(
   }
 
   let reachedHaltPc = false;
+  const initialPcHex = formatHex(p3TextBase, 8);
   for (const row of rows) {
     const pc = requiredKnown(row, 'pc');
     if (pc.numeric === undefined) {
       throw new Error(`Logisim row ${row.lineNumber} has non-numeric PC value.`);
     }
     const pcValue = pc.numeric;
-    if (row.rowNumber === 1 && pc.hex !== '00003000') {
-      throw new Error(`Logisim CLI 初始 PC 应为 0x00003000，实际为 0x${pc.hex}。请提供无需人工 reset 的测试顶层。`);
+    if (row.rowNumber === 1 && pc.hex !== initialPcHex) {
+      throw new Error(`Logisim CLI 初始 PC 应为 0x${initialPcHex}，实际为 0x${pc.hex}。请提供无需人工 reset 的测试顶层。`);
     }
     if (pcValue < p3TextBase || pcValue > haltPc) {
       throw new Error(`Logisim PC 跑出 P3 文本区：第 ${row.lineNumber} 行 PC=0x${pc.hex}，期望范围 0x${formatHex(p3TextBase, 8)}..0x${haltPcHex}。`);
     }
-    if ((pcValue - p3TextBase) % 4 !== 0) {
-      throw new Error(`Logisim row ${row.lineNumber} PC=0x${pc.hex} is not 4-byte aligned from 0x${formatHex(p3TextBase, 8)}.`);
+    if ((pcValue - p3TextBase) % p3LogisimTraceProfile.pcAlignmentBytes !== 0) {
+      throw new Error(`Logisim row ${row.lineNumber} PC=0x${pc.hex} is not ${p3LogisimTraceProfile.pcAlignmentBytes}-byte aligned from 0x${formatHex(p3TextBase, 8)}.`);
     }
     if (pc.hex === haltPcHex) {
       reachedHaltPc = true;
@@ -628,7 +603,7 @@ function findOutputPins(circuitBlock: string): LogisimOutputPinDiscovery {
       ignored.push({
         label,
         logisimLabel,
-        canonicalLabel: canonicalLogisimTraceLabel(logisimLabel),
+        canonicalLabel: canonicalizeP3LogisimTraceLabel(logisimLabel),
         width,
         reason: 'output Pin has no parseable loc attribute'
       });
@@ -644,7 +619,7 @@ function findOutputPins(circuitBlock: string): LogisimOutputPinDiscovery {
         y,
         label,
         logisimLabel,
-        canonicalLabel: canonicalLogisimTraceLabel(logisimLabel),
+        canonicalLabel: canonicalizeP3LogisimTraceLabel(logisimLabel),
         width,
         reason: 'output Pin is not present in the explicit circuit appearance'
       });
@@ -688,7 +663,7 @@ function assignLogisimPinLabels(
     return {
       ...pin,
       logisimLabel,
-      canonicalLabel: canonicalLogisimTraceLabel(logisimLabel)
+      canonicalLabel: canonicalizeP3LogisimTraceLabel(logisimLabel)
     };
   });
   return result;
@@ -745,7 +720,7 @@ function isJavaIdentifierPart(char: string): boolean {
 }
 
 function isLogisimCliHaltLabel(logisimLabel: string): boolean {
-  return logisimLabel === 'halt';
+  return canonicalizeP3LogisimTraceLabel(logisimLabel) === p3LogisimTraceProfile.haltLabel;
 }
 
 interface LogisimTraceColumnResolution {
@@ -801,21 +776,22 @@ function resolveP3LabeledColumns(
   const errors: string[] = [];
   let instruction: LogisimTraceOutputColumn | undefined;
   for (const column of columns) {
-    if (!p3SemanticLabels.includes(column.canonicalLabel as LogisimTraceSemanticLabel)) {
+    if (!isP3LogisimTraceSemanticLabel(column.canonicalLabel)) {
       continue;
     }
-    if (column.canonicalLabel === 'instr') {
+    const semantic = column.canonicalLabel;
+    if (semantic === 'instr') {
       if (instruction) {
         errors.push(`Logisim trace circuit "${circuitName}" has duplicate output label "${column.logisimLabel}".`);
       }
       instruction = column;
       continue;
     }
-    if (byLabel.has(column.canonicalLabel)) {
+    if (byLabel.has(semantic)) {
       errors.push(`Logisim trace circuit "${circuitName}" has duplicate output label "${column.logisimLabel}".`);
       continue;
     }
-    byLabel.set(column.canonicalLabel, column);
+    byLabel.set(semantic, column);
   }
 
   if (errors.length) {
@@ -880,25 +856,19 @@ function resolveP3ColumnsInSemanticOrder(
     }
   }
 
-  const semanticColumns = Object.fromEntries(p3OrderedLabels.map((label, index) => [label, ordered[index]])) as Record<typeof p3OrderedLabels[number], LogisimTraceOutputColumn>;
-  for (const [semantic, column] of Object.entries(semanticColumns) as Array<[LogisimTraceSemanticLabel, LogisimTraceOutputColumn]>) {
-    if (p3SemanticLabels.includes(column.canonicalLabel as LogisimTraceSemanticLabel) && column.canonicalLabel !== semantic) {
+  const semanticColumns = new Map<LogisimTraceSemanticLabel, LogisimTraceOutputColumn>(
+    p3OrderedLabels.map((label, index) => [label, ordered[index]])
+  );
+  for (const [semantic, column] of semanticColumns) {
+    if (isP3LogisimTraceSemanticLabel(column.canonicalLabel) && column.canonicalLabel !== semantic) {
       errors.push(`Logisim trace output label "${column.logisimLabel}" is at ${mappingMode} position for "${semantic}", but the label means "${column.canonicalLabel}".`);
     }
   }
 
-  const required = {
-    pc: ordered[1],
-    regwrite: ordered[2],
-    regaddr: ordered[3],
-    regdata: ordered[4],
-    memwrite: ordered[5],
-    memaddr: ordered[6],
-    memdata: ordered[7]
-  };
+  const required = requiredColumnsFromSemanticMap(semanticColumns);
   return errors.length
     ? { warnings, errors }
-    : { required, instruction: ordered[0], mappingMode, warnings, errors };
+    : { required, instruction: semanticColumns.get('instr'), mappingMode, warnings, errors };
 }
 
 function resolveP3ExplicitColumns(
@@ -935,7 +905,7 @@ function resolveP3ExplicitColumns(
     if (column.width !== p3OrderedWidths[label]) {
       errors.push(`co.test.logisim.traceColumns.${label} points to ${formatColumnSummary(column)} with width ${column.width}; expected ${p3OrderedWidths[label]}.`);
     }
-    if (p3SemanticLabels.includes(column.canonicalLabel as LogisimTraceSemanticLabel) && column.canonicalLabel !== label) {
+    if (isP3LogisimTraceSemanticLabel(column.canonicalLabel) && column.canonicalLabel !== label) {
       warnings.push(`co.test.logisim.traceColumns.${label} points to label "${column.logisimLabel}", which looks like "${column.canonicalLabel}".`);
     }
     selected.set(label, column);
@@ -948,6 +918,18 @@ function resolveP3ExplicitColumns(
   return errors.length
     ? { warnings, errors }
     : { required, instruction: selected.get('instr'), mappingMode: 'explicit', warnings, errors };
+}
+
+function requiredColumnsFromSemanticMap(
+  columns: ReadonlyMap<LogisimTraceSemanticLabel, LogisimTraceOutputColumn>
+): Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn> {
+  return Object.fromEntries(requiredLabels.map((label) => {
+    const column = columns.get(label);
+    if (!column) {
+      throw new Error(`Logisim trace profile is missing ordered column "${label}".`);
+    }
+    return [label, column];
+  })) as Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn>;
 }
 
 function findAppearancePortOrder(circuitBlock: string): Map<string, { x: number; y: number }> {
@@ -1068,10 +1050,6 @@ function numericAttributeValue(block: string, name: string): number | undefined 
     return undefined;
   }
   return Number(value);
-}
-
-function canonicalLogisimTraceLabel(label: string): string {
-  return label.trim().toLowerCase().replace(/[_\-\s]+/g, '');
 }
 
 function formatColumnSummary(column: LogisimTraceOutputColumn): string {

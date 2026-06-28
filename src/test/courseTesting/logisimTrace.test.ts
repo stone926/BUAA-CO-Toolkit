@@ -8,6 +8,7 @@ import {
   logisimRowPcHex,
   parseLogisimTraceOutput,
   parseLogisimTraceSpec,
+  p3LogisimTraceProfile,
   p3LogisimMaxProgramWords,
   prepareP3LogisimMachineCode,
   setLogisimMainCircuit,
@@ -176,6 +177,24 @@ function projectWithoutUsableOrder(): string {
 }
 
 describe('Logisim trace helpers', () => {
+  it('derives P3 trace constants from the course profile', () => {
+    expect(p3LogisimTraceProfile.defaultCircuit).toBe('main');
+    expect(p3LogisimTraceProfile.textBase).toBe(0x3000);
+    expect(p3LogisimTraceProfile.romMaxWords).toBe(4096);
+    expect(p3LogisimTraceProfile.haltLoopWords).toBe(2);
+    expect(p3LogisimMaxProgramWords).toBe(4094);
+    expect(p3LogisimTraceProfile.widths.regaddr).toBe(5);
+    expect([...p3LogisimTraceProfile.requiredLabels]).toEqual([
+      'pc',
+      'regwrite',
+      'regaddr',
+      'regdata',
+      'memwrite',
+      'memaddr',
+      'memdata'
+    ]);
+  });
+
   it('orders output pins by position, ignores extra columns, and excludes halt', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
 

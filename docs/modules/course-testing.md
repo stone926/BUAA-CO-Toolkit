@@ -39,6 +39,7 @@ p7-probe:
   courseTesting/builtinAsm/p7/constants.ts — 内存映射: 用户0x3000, 异常入口0x4180, 探针0x2800(8 words/场景), Timer 0x7f00-0x7f1c, magic 0xc0a70001
 
 logisim:
+  courseTesting/logisimTraceProfile.ts — P3 Logisim trace profile: 从courseConfig读取/校验text base、ROM容量、列顺序/宽度、halt和PC监控策略
   courseTesting/logisimPrep.ts — LogisimPrepareCaseResult, preparedCircuitFileName
   courseTesting/logisimTrace.ts — 电路分析(XML端口标注/label推导/appearance排序), Trace解析(TTY table->CpuTraceEvent), PC监控(到达停机PC自动kill), Fetch校验(逐拍比对instr列)
   courseTesting/p7ProbeCheck.ts — 黑盒验证: 从ISim DM写事件重建探针记录, 逐场景检查kind/ExcCode/Cause.IP/EPC/时序

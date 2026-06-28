@@ -36,6 +36,24 @@ export interface PortConfig {
   width: number;
 }
 
+export interface LogisimTraceColumnConfig {
+  width: number;
+  required?: boolean;
+  aliases?: string[];
+}
+
+export interface LogisimTraceProfileConfig {
+  defaultCircuit: string;
+  textBase: string;
+  romMaxWords: number;
+  haltLoopWords: number;
+  pcAlignmentBytes?: number;
+  stuckPcRowLimit?: number;
+  haltLabel: string;
+  orderedColumns: string[];
+  columns: Record<string, LogisimTraceColumnConfig>;
+}
+
 export interface MemoryRange {
   min: string;
   max: string;
@@ -46,6 +64,7 @@ export interface CourseConfig {
   memoryLayout: Record<string, Record<string, MemoryRange>>;
   profiles: Record<string, ProfileConfig>;
   verilogPorts: Record<string, PortConfig[]>;
+  logisimTrace?: Record<string, LogisimTraceProfileConfig>;
   traceFormatPatterns: Record<string, string[]>;
   directiveDescriptions: Record<string, string>;
   directiveDetails: Record<string, { description: string; commonValues?: Record<string, string> }>;
@@ -79,6 +98,7 @@ function loadCourseConfig(): CourseConfig {
       memoryLayout: {},
       profiles: {},
       verilogPorts: {},
+      logisimTrace: {},
       traceFormatPatterns: {},
       directiveDescriptions: {},
       directiveDetails: {},
@@ -127,6 +147,10 @@ export function profilesWithCapability(capability: ProfileCapability): ProjectPr
 
 export function getVerilogPorts(profile: string): PortConfig[] {
   return loadCourseConfig().verilogPorts[profile] ?? [];
+}
+
+export function getLogisimTraceProfileConfig(profile: string): LogisimTraceProfileConfig | undefined {
+  return loadCourseConfig().logisimTrace?.[profile];
 }
 
 /**

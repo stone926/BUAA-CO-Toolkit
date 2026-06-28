@@ -201,6 +201,60 @@
       {"name": "w_inst_addr", "direction": "output", "width": 32}
     ]
   },
+  "logisimTrace": {
+    "P3": {
+      "defaultCircuit": "main",
+      "textBase": "0x00003000",
+      "romMaxWords": 4096,
+      "haltLoopWords": 2,
+      "pcAlignmentBytes": 4,
+      "stuckPcRowLimit": 256,
+      "haltLabel": "halt",
+      "orderedColumns": ["instr", "pc", "regwrite", "regaddr", "regdata", "memwrite", "memaddr", "memdata"],
+      "columns": {
+        "instr": {
+          "width": 32,
+          "required": false,
+          "aliases": ["instr", "instruction"]
+        },
+        "pc": {
+          "width": 32,
+          "required": true,
+          "aliases": ["pc"]
+        },
+        "regwrite": {
+          "width": 1,
+          "required": true,
+          "aliases": ["regwrite", "regwe", "grfwrite"]
+        },
+        "regaddr": {
+          "width": 5,
+          "required": true,
+          "aliases": ["regaddr", "regaddress", "grfaddr", "grfaddress"]
+        },
+        "regdata": {
+          "width": 32,
+          "required": true,
+          "aliases": ["regdata", "regwdata", "grfdata", "grfwdata"]
+        },
+        "memwrite": {
+          "width": 1,
+          "required": true,
+          "aliases": ["memwrite", "memwe", "dmwrite"]
+        },
+        "memaddr": {
+          "width": 32,
+          "required": true,
+          "aliases": ["memaddr", "memaddress", "dmaddr", "dmaddress"]
+        },
+        "memdata": {
+          "width": 32,
+          "required": true,
+          "aliases": ["memdata", "memwdata", "dmdata", "dmwdata"]
+        }
+      }
+    }
+  },
   "directiveDescriptions": {
     ".data": "数据段",
     ".text": "代码段",
