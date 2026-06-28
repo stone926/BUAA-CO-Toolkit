@@ -66,6 +66,7 @@ import {
   paddingProfile,
   probeUserScratchRegisters
 } from './probeAsm';
+import { renderResourceTemplate } from '../../../templates/templateRegistry';
 
 const requiredProbeMnemonics = [
   'nop', 'ori', 'lui', 'addi', 'andi', 'beq', 'bne', 'jal', 'jr',
@@ -168,14 +169,16 @@ function emitHeader(writer: ProgramWriter, instructionSet: string, seed: string,
 }
 
 function emitProbePrologue(writer: ProgramWriter): void {
-  emitDisableInterrupts(writer);
-  emitClearTimers(writer);
-  writer.emit(`sw $0, 0x${p7ProbeExternalArmAddress.toString(16)}($0)`);
-  emitLoadImmediate(writer, '$26', p7ProbeLogBase);
-  writer.emit(`sw $26, 0x${p7ProbeStateRecordPtr.toString(16)}($0)`);
-  writer.emit(`sw $0, 0x${p7ProbeStateScenarioId.toString(16)}($0)`);
-  writer.emit(`sw $0, 0x${p7ProbeStateKind.toString(16)}($0)`);
-  writer.emit(`sw $0, 0x${p7ProbeStateDonePc.toString(16)}($0)`);
+  emitInstructionTemplate(writer, 'asm/p7_probe_prologue.asm.tmpl', {
+    externalArmAddressHex: asmHex(p7ProbeExternalArmAddress),
+    loadProbeLogBase: loadImmediateLines('$26', p7ProbeLogBase).join('\n'),
+    stateDonePcHex: asmHex(p7ProbeStateDonePc),
+    stateKindHex: asmHex(p7ProbeStateKind),
+    stateRecordPtrHex: asmHex(p7ProbeStateRecordPtr),
+    stateScenarioIdHex: asmHex(p7ProbeStateScenarioId),
+    timer0CtrlHex: asmHex(p7Timer0Ctrl),
+    timer1CtrlHex: asmHex(p7Timer1Ctrl)
+  });
 }
 
 function emitScenario(
@@ -338,83 +341,46 @@ function renderProbeHandler(): string[] {
   const magicHi = (p7ProbeMagic >>> 16) & 0xffff;
   const magicLo = p7ProbeMagic & 0xffff;
   const recordByteLength = p7ProbeRecordWords * 4;
-  return [
-    '',
-    `.ktext 0x${p7ExceptionHandlerAddress.toString(16)}`,
-    '_co_probe_handler:',
-    '    mfc0 $24, $13',
-    '    mfc0 $25, $12',
-    '    mfc0 $23, $14',
-    `    andi $26, $24, 0x${p7CauseExcCodeMask.toString(16)}`,
-    '    bne $26, $0, _co_probe_record_internal',
-    '    nop',
-    `    andi $26, $24, 0x${p7CauseIpTimer0Mask.toString(16)}`,
-    '    beq $26, $0, _co_probe_check_timer1',
-    '    nop',
-    `    sw $0, 0x${p7Timer0Ctrl.toString(16)}($0)`,
-    '_co_probe_check_timer1:',
-    `    andi $26, $24, 0x${p7CauseIpTimer1Mask.toString(16)}`,
-    '    beq $26, $0, _co_probe_check_external',
-    '    nop',
-    `    sw $0, 0x${p7Timer1Ctrl.toString(16)}($0)`,
-    '_co_probe_check_external:',
-    `    andi $26, $24, 0x${p7CauseIpExternalMask.toString(16)}`,
-    '    beq $26, $0, _co_probe_record_interrupt',
-    '    nop',
-    `    sb $0, 0x${p7ExternalInterruptAckAddress.toString(16)}($0)`,
-    '_co_probe_record_interrupt:',
-    `    lw $26, 0x${p7ProbeStateRecordPtr.toString(16)}($0)`,
-    `    lui $27, 0x${magicHi.toString(16)}`,
-    `    ori $27, $27, 0x${magicLo.toString(16)}`,
-    '    sw $27, 0($26)',
-    `    lw $27, 0x${p7ProbeStateScenarioId.toString(16)}($0)`,
-    '    sw $27, 4($26)',
-    `    lw $27, 0x${p7ProbeStateKind.toString(16)}($0)`,
-    '    sw $27, 8($26)',
-    '    sw $25, 12($26)',
-    '    sw $24, 16($26)',
-    '    sw $23, 20($26)',
-    `    lw $27, 0x${p7ProbeStateKind.toString(16)}($0)`,
-    `    ori $22, $0, ${p7ProbeKindTimer1}`,
-    '    beq $27, $22, _co_probe_aux_timer1',
-    '    nop',
-    `    lw $22, 0x${p7Timer0Ctrl.toString(16)}($0)`,
-    '    sw $22, 24($26)',
-    `    lw $22, 0x${p7Timer0Count.toString(16)}($0)`,
-    '    sw $22, 28($26)',
-    '    beq $0, $0, _co_probe_record_done',
-    '    nop',
-    '_co_probe_aux_timer1:',
-    `    lw $22, 0x${p7Timer1Ctrl.toString(16)}($0)`,
-    '    sw $22, 24($26)',
-    `    lw $22, 0x${p7Timer1Count.toString(16)}($0)`,
-    '    sw $22, 28($26)',
-    '_co_probe_record_done:',
-    `    addi $26, $26, ${recordByteLength}`,
-    `    sw $26, 0x${p7ProbeStateRecordPtr.toString(16)}($0)`,
-    `    lw $23, 0x${p7ProbeStateDonePc.toString(16)}($0)`,
-    '    mtc0 $23, $14',
-    '    eret',
-    '_co_probe_record_internal:',
-    `    lw $26, 0x${p7ProbeStateRecordPtr.toString(16)}($0)`,
-    `    lui $27, 0x${magicHi.toString(16)}`,
-    `    ori $27, $27, 0x${magicLo.toString(16)}`,
-    '    sw $27, 0($26)',
-    `    lw $27, 0x${p7ProbeStateScenarioId.toString(16)}($0)`,
-    '    sw $27, 4($26)',
-    `    lw $27, 0x${p7ProbeStateKind.toString(16)}($0)`,
-    '    sw $27, 8($26)',
-    '    sw $25, 12($26)',
-    '    sw $24, 16($26)',
-    '    sw $23, 20($26)',
-    '    sw $0, 24($26)',
-    '    sw $0, 28($26)',
-    `    addi $26, $26, ${recordByteLength}`,
-    `    sw $26, 0x${p7ProbeStateRecordPtr.toString(16)}($0)`,
-    '    addi $23, $23, 4',
-    '    mtc0 $23, $14',
-    '    eret'
-  ];
+  const rendered = renderResourceTemplate('asm/p7_probe_handler.asm.tmpl', {
+    causeIpExternalMaskHex: asmHex(p7CauseIpExternalMask),
+    causeIpTimer0MaskHex: asmHex(p7CauseIpTimer0Mask),
+    causeIpTimer1MaskHex: asmHex(p7CauseIpTimer1Mask),
+    exceptionHandlerHex: asmHex(p7ExceptionHandlerAddress),
+    excCodeMaskHex: asmHex(p7CauseExcCodeMask),
+    externalInterruptAckHex: asmHex(p7ExternalInterruptAckAddress),
+    magicHiHex: asmHex(magicHi),
+    magicLoHex: asmHex(magicLo),
+    probeKindTimer1: p7ProbeKindTimer1,
+    recordByteLength,
+    stateDonePcHex: asmHex(p7ProbeStateDonePc),
+    stateKindHex: asmHex(p7ProbeStateKind),
+    stateRecordPtrHex: asmHex(p7ProbeStateRecordPtr),
+    stateScenarioIdHex: asmHex(p7ProbeStateScenarioId),
+    timer0CountHex: asmHex(p7Timer0Count),
+    timer0CtrlHex: asmHex(p7Timer0Ctrl),
+    timer1CountHex: asmHex(p7Timer1Count),
+    timer1CtrlHex: asmHex(p7Timer1Ctrl)
+  });
+  return ['', ...rendered.trimEnd().split(/\r?\n/)];
+}
+
+function emitInstructionTemplate(writer: ProgramWriter, relativePath: string, values: Record<string, string | number>): void {
+  for (const line of renderResourceTemplate(relativePath, values).split(/\r?\n/)) {
+    const instruction = line.trim();
+    if (instruction) {
+      writer.emit(instruction);
+    }
+  }
+}
+
+function loadImmediateLines(register: string, value: number): string[] {
+  const temp = new ProgramWriter(0);
+  emitLoadImmediate(temp, register, value);
+  return temp.render().map((line) => line.trim());
+}
+
+function asmHex(value: number): string {
+  return `0x${(value >>> 0).toString(16)}`;
 }
 
 function probeKindCode(kind: P7ProbeScenarioKind): number {

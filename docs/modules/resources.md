@@ -38,6 +38,11 @@ resources/templates/wizard/:
   basic_testbench.v.tmpl — 项目向导解析失败时的基础 testbench fallback
   加载: templateRegistry 受控占位替换
 
+resources/templates/asm/:
+  p7_probe_prologue.asm.tmpl — P7 probe 用户段初始化指令模板, 逐行 emit 保持 PC/预算计数
+  p7_probe_handler.asm.tmpl — P7 probe kernel handler 模板
+  加载: templateRegistry 受控占位替换
+
 syntaxes/:
   mips.tmLanguage.json — TextMate语法: MIPS标记分类
   verilog.tmLanguage.json — TextMate语法: Verilog标记分类
