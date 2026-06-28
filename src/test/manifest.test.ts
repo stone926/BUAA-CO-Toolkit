@@ -37,20 +37,14 @@ function readJsonFile<T>(relativePath: string): T {
 }
 
 describe('package manifest', () => {
-  it('activates every contributed command from a cold start', () => {
+  it('keeps activation events limited to non-auto workspace triggers', () => {
     const pkg = readPackage();
-    const activationEvents = new Set(pkg.activationEvents ?? []);
-    for (const command of pkg.contributes?.commands ?? []) {
-      expect(activationEvents.has(`onCommand:${command.command}`), command.command).toBe(true);
-    }
-  });
-
-  it('activates when the BUAA CO sidebar is opened', () => {
-    const pkg = readPackage();
-    const activationEvents = new Set(pkg.activationEvents ?? []);
-    const viewIds = Object.values(pkg.contributes?.views ?? {}).flat().map((view) => view.id);
-    expect(viewIds).toContain('coSidebar');
-    expect(activationEvents.has('onView:coSidebar')).toBe(true);
+    expect(pkg.activationEvents).toEqual(['workspaceContains:**/*.circ']);
+    expect(pkg.activationEvents?.some((event) =>
+      event.startsWith('onCommand:')
+      || event.startsWith('onLanguage:')
+      || event.startsWith('onView:')
+    )).toBe(false);
   });
 
   it('keeps only the public command allowlist visible from the command palette', () => {
@@ -115,7 +109,7 @@ describe('package manifest', () => {
 
     expect(commands.has('co.test.openAsmCaseIndex')).toBe(true);
     expect(commandPalette.has('co.test.openAsmCaseIndex')).toBe(true);
-    expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(true);
+    expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(false);
   });
 
   it('hides the Verilog signal view outside Verilog signal contexts', () => {
