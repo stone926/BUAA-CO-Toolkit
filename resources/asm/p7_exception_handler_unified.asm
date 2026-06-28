@@ -1,4 +1,4 @@
-.ktext 0x4180
+.ktext ${exceptionHandlerHex}
 _co_excep:
     mfc0 $k0, $13
     andi $k1, $k0, 0x7c

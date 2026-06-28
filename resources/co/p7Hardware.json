@@ -7,6 +7,8 @@
     "probeLogBase": 10240,
     "_probeLogBase_hex": "0x2800",
     "probeRecordWords": 8,
+    "instructionMemoryWords": 5120,
+    "dataMemoryWords": 4096,
     "probeState": {
       "scenarioId": 10208,
       "_scenarioId_hex": "0x27e0",
@@ -71,7 +73,7 @@
     "_externalAckAddress_hex": "0x7f20"
   },
   "probe": {
-    "magic": 3234799617,
+    "magic": 3232169985,
     "_magic_hex": "0xc0a70001",
     "kind": {
       "external": 1,

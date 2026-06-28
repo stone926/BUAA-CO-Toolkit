@@ -16,6 +16,7 @@ import {
   p7ProbeKindSyscall,
   p7ProbeKindTimer0,
   p7ProbeKindTimer1,
+  p7ExternalInterruptAckAddress,
   p7ProbeMagic
 } from './builtinAsm/p7/constants';
 
@@ -110,7 +111,7 @@ export function checkP7Probe(
         failures.push(failure(scenario, 'external interrupt was not raised after arm marker'));
       }
       if (ackIndex < 0) {
-        failures.push(failure(scenario, 'external interrupt was not acknowledged through 0x7f20'));
+        failures.push(failure(scenario, `external interrupt was not acknowledged through 0x${p7ExternalInterruptAckAddress.toString(16)}`));
       }
       if (requiresArm && armIndex >= 0 && raiseIndex >= 0 && armIndex > raiseIndex) {
         failures.push(failure(scenario, 'external interrupt was raised before arm marker'));

@@ -3,6 +3,25 @@ import {
   generateBuiltinAsmTestCase,
   resolveBuiltinInstructionSet
 } from '../../courseTesting/builtinAsmGenerator';
+import {
+  p7ExceptionHandlerAddress,
+  p7ExternalInterruptAckAddress,
+  p7Hex,
+  p7ProbeDefaultScenarioCount,
+  p7ProbeLogBase,
+  p7ProbeMaxScenarioCount,
+  p7ProbeStateDonePc,
+  p7ProbeExternalArmAddress,
+  p7ProbeTimerPresetMax,
+  p7ProbeTimerPresetMin,
+  p7Timer0Ctrl,
+  p7Timer0Count,
+  p7Timer0Preset,
+  p7Timer1Ctrl,
+  p7Timer1Count,
+  p7Timer1Preset,
+  p7UserTextBaseAddress
+} from '../../courseTesting/p7Hardware';
 
 describe('built-in ASM generator', () => {
   it('uses the course default instruction set for each CPU profile', () => {
@@ -134,7 +153,7 @@ describe('built-in ASM generator', () => {
     expect(result.instructionCount).toBe(96);
     expect(mainMnemonics).toHaveLength(96);
     expect(mainMnemonics).toContain('syscall');
-    expect(result.text).toContain('.ktext 0x4180');
+    expect(result.text).toContain(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`);
     expect(result.text).toContain('mfc0 $k0, $13');
     expect(result.text).toContain('mtc0 $k0, $14');
     expect(result.text).toContain('sb $0, 0($k0)');
@@ -202,16 +221,16 @@ describe('built-in ASM generator', () => {
     expect(result.interruptSchedule).toHaveLength(1);
     const target = result.interruptSchedule[0];
     expect(target % 4).toBe(0);
-    expect(target).toBeGreaterThan(0x3000);
+    expect(target).toBeGreaterThan(p7UserTextBaseAddress);
     // SR prologue enables the external interrupt before any body instruction.
     expect(result.text).toContain('ori $k0, $0, 0x1001');
     expect(result.text).toContain('mtc0 $k0, $12');
     // The first handler entry is the pre-anchor external interrupt, so it must not read full Cause
     // before acknowledging: MARS and legal CPUs may differ in Cause.IP visibility.
-    const handler = result.text.slice(result.text.indexOf('.ktext 0x4180'));
+    const handler = result.text.slice(result.text.indexOf(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`));
     const firstEntryFlag = handler.indexOf('    ori $k1, $0, 1');
     const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
-    const interruptAck = handler.indexOf('    ori $k0, $0, 0x7f20');
+    const interruptAck = handler.indexOf(`    ori $k0, $0, ${p7Hex(p7ExternalInterruptAckAddress)}`);
     const exceptionPath = handler.indexOf('_co_excep_skip:');
     expect(handler).not.toContain('    mfc0 $k0, $13');
     expect(branchToException).toBeGreaterThanOrEqual(0);
@@ -231,7 +250,7 @@ describe('built-in ASM generator', () => {
       interrupt: false,
       exceptionRate: 0.2
     });
-    const handler = result.text.slice(result.text.indexOf('.ktext 0x4180'));
+    const handler = result.text.slice(result.text.indexOf(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`));
     const causeRead = handler.indexOf('    mfc0 $k0, $13');
     const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
 
@@ -254,7 +273,7 @@ describe('built-in ASM generator', () => {
     const exceptionVictims = exceptionVictimIndices(bodyLines);
     expect(exceptionVictims.length).toBeGreaterThan(0);
 
-    const targetIndex = (result.interruptSchedule[0] - 0x3000) / 4;
+    const targetIndex = (result.interruptSchedule[0] - p7UserTextBaseAddress) / 4;
     expect(Number.isInteger(targetIndex)).toBe(true);
     expect(targetIndex).toBeLessThan(Math.min(...exceptionVictims));
     expect(isInExceptionFlushShadow(targetIndex - 1, exceptionVictims)).toBe(false);
@@ -334,12 +353,12 @@ describe('built-in ASM generator', () => {
       interrupt: true,
       p7StressMode: 'probe',
       timerInterrupt: true,
-      probeScenarioCount: 32
+      probeScenarioCount: p7ProbeDefaultScenarioCount
     });
 
     expect(result.mode).toBe('probe');
-    expect(result.probe?.logBase).toBe(0x2800);
-    expect(result.probe?.scenarios).toHaveLength(32);
+    expect(result.probe?.logBase).toBe(p7ProbeLogBase);
+    expect(result.probe?.scenarios).toHaveLength(p7ProbeDefaultScenarioCount);
     expect(new Set(result.probe?.scenarios.map((scenario) => scenario.kind))).toEqual(new Set([
       'external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'
     ]));
@@ -347,14 +366,14 @@ describe('built-in ASM generator', () => {
     expect(result.text).toContain('mfc0 $25, $12');
     expect(result.text).toContain('mfc0 $23, $14');
     expect(result.text).not.toMatch(/mfc0\s+\$\d+,\s*\$8\b/);
-    expect(result.text).toContain('sb $0, 0x7f20($0)');
-    expect(result.text).toContain('sw $26, 0x7f04($0)');
-    expect(result.text).toContain('sw $26, 0x7f00($0)');
-    expect(result.text).toContain('sw $26, 0x7f14($0)');
-    expect(result.text).toContain('sw $26, 0x7f10($0)');
-    expect(result.text).not.toContain('sw $26, 0x7f08($0)');
-    expect(result.text).not.toContain('sw $26, 0x7f18($0)');
-    expect(result.text).toContain('sw $26, 0x27d0($0)');
+    expect(result.text).toContain(`sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
+    expect(result.text).toContain(`sw $26, ${p7Hex(p7Timer0Preset)}($0)`);
+    expect(result.text).toContain(`sw $26, ${p7Hex(p7Timer0Ctrl)}($0)`);
+    expect(result.text).toContain(`sw $26, ${p7Hex(p7Timer1Preset)}($0)`);
+    expect(result.text).toContain(`sw $26, ${p7Hex(p7Timer1Ctrl)}($0)`);
+    expect(result.text).not.toContain(`sw $26, ${p7Hex(p7Timer0Count)}($0)`);
+    expect(result.text).not.toContain(`sw $26, ${p7Hex(p7Timer1Count)}($0)`);
+    expect(result.text).toContain(`sw $26, ${p7Hex(p7ProbeExternalArmAddress)}($0)`);
     expect(result.text).toContain('_co_internal_unknown_instruction');
   });
 
@@ -376,21 +395,21 @@ describe('built-in ASM generator', () => {
     }
     const timerStart = result.text.indexOf(`# probe scenario ${scenario.id}: ${scenario.kind}`);
     const waitLabel = result.text.indexOf(`_co_probe_s${scenario.id}_wait:`, timerStart);
-    const doneStore = result.text.lastIndexOf('sw $26, 0x27e8($0)', waitLabel);
+    const doneStore = result.text.lastIndexOf(`sw $26, ${p7Hex(p7ProbeStateDonePc)}($0)`, waitLabel);
     const enableStatus = result.text.indexOf('mtc0 $26, $12', timerStart);
 
     expect(result.text.slice(timerStart, waitLabel)).toContain('jal _co_probe_guard');
     expect(result.text).toContain('_co_probe_guard:');
-    expect(result.text).toContain('sw $0, 0x7f00($0)');
-    expect(result.text).toContain('sw $0, 0x7f10($0)');
+    expect(result.text).toContain(`sw $0, ${p7Hex(p7Timer0Ctrl)}($0)`);
+    expect(result.text).toContain(`sw $0, ${p7Hex(p7Timer1Ctrl)}($0)`);
     expect(doneStore).toBeGreaterThan(timerStart);
     expect(enableStatus).toBeGreaterThan(doneStore);
     expect(waitLabel).toBeGreaterThan(enableStatus);
     expect(scenario.allowedEpc).toContain(scenario.waitPc);
     expect(scenario.allowedEpc).toContain((scenario.waitPc ?? 0) + 4);
     expect(scenario.allowedEpc.some((pc) => pc < (scenario.waitPc ?? 0))).toBe(true);
-    expect(scenario.timerPreset).toBeGreaterThanOrEqual(2);
-    expect(scenario.timerPreset).toBeLessThanOrEqual(96);
+    expect(scenario.timerPreset).toBeGreaterThanOrEqual(p7ProbeTimerPresetMin);
+    expect(scenario.timerPreset).toBeLessThanOrEqual(p7ProbeTimerPresetMax);
   });
 
   it('records the actual syscall PC for internal P7 probe scenarios', () => {
@@ -411,7 +430,7 @@ describe('built-in ASM generator', () => {
 
     expect(scenario?.kind).toBe('syscall');
     expect(scenario?.expectedExcCode).toBe(8);
-    expect(scenario?.allowedEpc).toEqual([0x3000 + syscallIndex * 4]);
+    expect(scenario?.allowedEpc).toEqual([p7UserTextBaseAddress + syscallIndex * 4]);
   });
 
   it('caps P7 probe scenario count at the log capacity without overlapping the handler', () => {
@@ -427,8 +446,8 @@ describe('built-in ASM generator', () => {
     });
     const mainLines = instructionSlotLines(beforeKernelText(result.text));
 
-    expect(result.probe?.scenarios).toHaveLength(64);
-    expect(mainLines.length).toBeLessThanOrEqual((0x4180 - 0x3000) / 4 - 2);
+    expect(result.probe?.scenarios).toHaveLength(p7ProbeMaxScenarioCount);
+    expect(mainLines.length).toBeLessThanOrEqual((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4 - 2);
   });
 });
 

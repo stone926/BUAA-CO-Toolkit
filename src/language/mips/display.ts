@@ -1,5 +1,6 @@
 import { MarkupKind, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { p7ExceptionHandlerAddress } from '../../courseTesting/p7Hardware';
 import { lineAt } from '../common/lsp';
 import { MipsMacro, MipsParseResult } from './model';
 import { instructionWritesRegister } from './instructionValidation';
@@ -31,7 +32,7 @@ export function directiveHoverText(directive: string): string | undefined {
     return `**${directive}**\n\n切换当前汇编段。课程自动测试会按当前 Profile 选择 MARS 内存配置，通常不应传递自定义段地址`;
   }
   if (directive === '.ktext') {
-    return '**.ktext**\n\n切换到内核文本段。P7 异常处理程序使用课程固定入口 `.ktext 0x4180`';
+    return `**.ktext**\n\n切换到内核文本段。P7 异常处理程序使用课程固定入口 \`.ktext 0x${p7ExceptionHandlerAddress.toString(16)}\``;
   }
   if (directive === '.set') {
     return '**.set**\n\nSPIM 兼容 directive。MARS 4.5 会识别它，但当前会忽略其效果并给出 warning';

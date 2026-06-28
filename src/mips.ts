@@ -12,6 +12,7 @@ import {
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, isFile, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { appendHaltLoop, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from './courseTesting/mipsUtil';
+import { p7ExceptionHandlerAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
 import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 import {
@@ -243,7 +244,7 @@ async function marsRunSetupError(
       return `P7 RI 异常测试需要内部 MARS 额外指令 class，但文件不存在: ${p7InternalUnknownInstructionClassPath()}`;
     }
     if ((mode === 'dumpText' || mode === 'dumpKernel' || isCourseTraceMarsRun(mode, options)) && memoryConfiguration !== P7_COURSE_MEMORY_CONFIG) {
-      return `P7 机器码 dump 必须使用 MARS 内存配置 ${P7_COURSE_MEMORY_CONFIG}。${memoryConfiguration} 会改变异常入口或让程序顺序落入 0x4180 处理程序，不适配课程 CPU。`;
+      return `P7 机器码 dump 必须使用 MARS 内存配置 ${P7_COURSE_MEMORY_CONFIG}。${memoryConfiguration} 会改变异常入口或让程序顺序落入 0x${p7ExceptionHandlerAddress.toString(16)} 处理程序，不适配课程 CPU。`;
     }
     return undefined;
   }
@@ -319,7 +320,7 @@ async function mergeP7KernelTextDump(
   const tempDir = vscode.Uri.file(tempDirPath);
   const kernelOutputFile = vscode.Uri.file(path.join(tempDir.fsPath, `${basenameNoExt(asmUri)}.kernel-merge.txt`));
   const args = buildMarsArgs(asmUri, mars, 'dumpKernel', options, P7_COURSE_MEMORY_CONFIG);
-  args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
+  args.push('a', 'dump', `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-0x00004ffc`, 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
 
   const kernelResult = await runTool(java, args, {
     cwd,
@@ -342,7 +343,7 @@ async function mergeP7KernelTextDump(
 
     const maxTextLinesBeforeStopLoop = p7KernelTextStartIndex - 2;
     if (textLines.length > maxTextLinesBeforeStopLoop) {
-      const message = `P7 机器码导出失败：用户文本段已有 ${textLines.length} 条指令，无法在 0x${p7KernelTextBaseAddress.toString(16)} 异常入口前插入安全停机自环。`;
+      const message = `P7 机器码导出失败：用户文本段已有 ${textLines.length} 条指令，无法在 0x${p7ExceptionHandlerAddress.toString(16)} 异常入口前插入安全停机自环。`;
       services.output.appendLine(message);
       return {
         ...previousResult,
@@ -425,9 +426,11 @@ function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): strin
   return `${asmName}.${sanitizeFileStem(inputName)}.mars.out`;
 }
 
-const p7UserTextBaseAddress = 0x3000;
-const p7KernelTextBaseAddress = 0x4180;
-const p7KernelTextStartIndex = (p7KernelTextBaseAddress - p7UserTextBaseAddress) / 4;
+const p7KernelTextStartIndex = (p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4;
+
+function formatMarsDumpAddress(value: number): string {
+  return `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
+}
 
 function sanitizeFileStem(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';

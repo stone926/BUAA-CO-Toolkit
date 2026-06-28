@@ -1,4 +1,4 @@
-.ktext 0x4180
+.ktext ${exceptionHandlerHex}
 _co_excep:
     bne $k1, $0, _co_excep_skip
     nop

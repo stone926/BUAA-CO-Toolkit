@@ -24,9 +24,19 @@ import {
 } from '../../../language/verilog/parser';
 import { VerilogDecl, VerilogModule } from '../../../language/verilog/model';
 import { mergeCoSettings } from '../../../language/common/settings';
+import {
+  p7DataMemoryWords,
+  p7ExternalInterruptAckAddress,
+  p7InstructionMemoryWords,
+  p7UserTextBaseAddress
+} from '../../../courseTesting/p7Hardware';
 
 function doc(text: string): TextDocument {
   return TextDocument.create('test://test.v', 'verilog', 1, text);
+}
+
+function verilogHex32(value: number): string {
+  return `32'h${(value >>> 0).toString(16).padStart(4, '0')}`;
 }
 
 function makeModule(overrides: Partial<VerilogModule> = {}): VerilogModule {
@@ -1447,15 +1457,16 @@ describe('buildTestbench', () => {
     expect(tb).toContain('mips uut(');
     expect(tb).toContain('reg interrupt;');
     expect(tb).toContain('interrupt <= 0;');
-    expect(tb).toContain('reg [31:0] inst[0:5119];');
-    expect(tb).toContain('for (i = 0; i < 5120; i = i + 1) data[i] <= 0;');
-    expect(tb).toContain('assign i_inst_rdata = inst[((i_inst_addr - 32\'h3000) >> 2) % 5120];');
-    expect(tb).toContain('assign m_data_rdata = data[(m_data_addr >> 2) % 5120];');
-    expect(tb).toContain('fixed_wdata = data[(m_data_addr >> 2) & 4095];');
-    expect(tb).toContain('else if (|m_data_byteen && fixed_addr >> 2 < 4096) begin');
+    expect(tb).toContain(`reg [31:0] inst[0:${p7InstructionMemoryWords - 1}];`);
+    expect(tb).toContain(`reg [31:0] data[0:${p7DataMemoryWords - 1}];`);
+    expect(tb).toContain(`for (i = 0; i < ${p7DataMemoryWords}; i = i + 1) data[i] <= 0;`);
+    expect(tb).toContain(`assign i_inst_rdata = inst[((i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2) % ${p7InstructionMemoryWords}];`);
+    expect(tb).toContain(`assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`);
+    expect(tb).toContain(`fixed_wdata = data[(m_data_addr >> 2) & ${p7DataMemoryWords - 1}];`);
+    expect(tb).toContain(`else if (|m_data_byteen && fixed_addr >> 2 < ${p7DataMemoryWords}) begin`);
     expect(tb).toContain('// ----------- For Interrupt -----------');
     expect(tb).toContain("// parameter target_pc = 32'h00003010;");
-    expect(tb).toMatch(/\/\/\s+if \(\|m_int_byteen && \(m_int_addr & 32'hfffffffc\) == 32'h7f20\) begin/);
+    expect(tb).toContain(`//             if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`);
     expect(tb).toMatch(/\/\/\s+interrupt = 1;/);
     expect(tb).not.toMatch(/^\s*parameter\s+target_pc\b/m);
     expect(tb).not.toMatch(/^\s*always\s+@\(negedge clk\)\s+begin/m);
@@ -1474,7 +1485,7 @@ describe('buildTestbench', () => {
 
     expect(tb).toContain('wire [31:0] macroscopic_pc;');
     expect(tb).toContain('.interrupt(interrupt),');
-    expect(tb).toContain('reg [31:0] inst[0:5119];');
+    expect(tb).toContain(`reg [31:0] inst[0:${p7InstructionMemoryWords - 1}];`);
     expect(tb).toContain('always #2 clk <= ~clk;');
   });
 
@@ -1492,7 +1503,7 @@ describe('buildTestbench', () => {
     expect(tb).toMatch(/^\s*parameter target_pc = 32'h00003010;/m);
     expect(tb).toMatch(/^\s*always @\(negedge clk\) begin/m);
     expect(tb).toMatch(/^\s*assign fixed_macroscopic_pc = macroscopic_pc & 32'hfffffffc;/m);
-    expect(tb).toMatch(/^\s*if \(\|m_int_byteen && \(m_int_addr & 32'hfffffffc\) == 32'h7f20\) begin/m);
+    expect(tb).toContain(`if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`);
     expect(tb).toMatch(/^\s*interrupt = 1;/m);
     // No leftover commented interrupt scaffolding for the parameter line.
     expect(tb).not.toContain("// parameter target_pc = 32'h00003010;");

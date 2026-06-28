@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  p7Hardware,
   p7UserTextBaseAddress,
   p7ExceptionHandlerAddress,
   p7ProbeLogBase,
   p7ProbeRecordWords,
+  p7InstructionMemoryWords,
+  p7DataMemoryWords,
   p7ProbeStateScenarioId,
   p7ProbeStateKind,
   p7ProbeStateDonePc,
@@ -45,6 +48,17 @@ import {
 import { p7InternalUnknownInstructionMnemonic } from '../../courseTesting/builtinAsmGenerator';
 
 describe('P7 hardware memory layout', () => {
+  it('exports constants from the structured P7 hardware resource', () => {
+    expect(p7UserTextBaseAddress).toBe(p7Hardware.memoryLayout.userTextBaseAddress);
+    expect(p7ExceptionHandlerAddress).toBe(p7Hardware.memoryLayout.exceptionHandlerAddress);
+    expect(p7ProbeLogBase).toBe(p7Hardware.memoryLayout.probeLogBase);
+    expect(p7ProbeRecordWords).toBe(p7Hardware.memoryLayout.probeRecordWords);
+    expect(p7InstructionMemoryWords).toBe(p7Hardware.memoryLayout.instructionMemoryWords);
+    expect(p7DataMemoryWords).toBe(p7Hardware.memoryLayout.dataMemoryWords);
+    expect(p7ExternalInterruptAckAddress).toBe(p7Hardware.interrupt.externalAckAddress);
+    expect(p7ProbeMagic).toBe(p7Hardware.probe.magic);
+  });
+
   it('text base address is 0x3000', () => {
     expect(p7UserTextBaseAddress).toBe(0x3000);
   });
@@ -85,6 +99,12 @@ describe('P7 hardware memory layout', () => {
 
   it('probe record uses 8 words', () => {
     expect(p7ProbeRecordWords).toBe(8);
+  });
+
+  it('uses separate P7 instruction and data memory depths', () => {
+    expect(p7InstructionMemoryWords).toBe(5120);
+    expect(p7DataMemoryWords).toBe(4096);
+    expect(p7InstructionMemoryWords).toBeGreaterThan(p7DataMemoryWords);
   });
 });
 

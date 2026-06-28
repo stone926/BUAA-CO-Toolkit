@@ -18,7 +18,8 @@ resources/verilog/:
 
 resources/co/:
   courseConfig.json — Profile定义(P0-P7): 名称/描述/语言/目录/工具/端口/内存/教程/指令描述
-  加载: src/courseConfig.ts
+  p7Hardware.json — P7 课程硬件布局: 文本段/异常入口/probe/Timer/CP0/中断确认/testbench容量
+  加载: courseConfig loader, P7 hardware loader
 
 syntaxes/:
   mips.tmLanguage.json — TextMate语法: MIPS标记分类

@@ -423,16 +423,16 @@ class ProgramGenerator {
       // entry is the external interrupt. Avoid reading full Cause there: MARS leaves IP clear for
       // p7irq while many course CPUs expose HWInt[2] in Cause.IP, and that implementation detail
       // would otherwise appear as a trace-visible $k0 write.
-      return renderP7ExceptionHandler(p7ExternalInterruptAckAddress);
+      return renderP7ExceptionHandler(p7ExternalInterruptAckAddress, p7ExceptionHandlerAddress);
     }
-    // Unified P7 handler at 0x4180.
+    // Unified P7 handler at the course exception entry.
     // 1. Read Cause first and branch on ExcCode. Only an external interrupt (ExcCode == 0)
     //    acknowledges/clears the interrupt generator at 0x7F20.
     // 2. Internal exceptions advance EPC by 4 to skip the faulting instruction, but must not ack
     //    the external interrupt generator: a pending interrupt may have arrived while EXL was set.
     // Only $k0/$k1 ($26/$27) are touched; generated user code never reads them, so the handler
     // is transparent to user-visible state. eret has no delay slot.
-    return renderP7ExceptionHandlerUnified(p7ExternalInterruptAckAddress);
+    return renderP7ExceptionHandlerUnified(p7ExternalInterruptAckAddress, p7ExceptionHandlerAddress);
   }
 
   private emitP7Prologue(): void {

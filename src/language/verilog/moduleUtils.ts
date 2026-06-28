@@ -1,7 +1,16 @@
 import { Position } from 'vscode-languageserver/node';
 import { containsPosition } from '../common/lsp';
 import { ProjectProfile } from '../../projectProfile';
+import {
+  p7DataMemoryWords,
+  p7ExternalInterruptAckAddress,
+  p7InstructionMemoryWords,
+  p7Timer0Ctrl,
+  p7UserTextBaseAddress
+} from '../../courseTesting/p7Hardware';
 import { VerilogDecl, VerilogModule } from './model';
+
+const courseMemoryWords = 4096;
 
 export function moduleAtPosition(modules: VerilogModule[], position: Position): VerilogModule | undefined {
   return modules.find((module) => containsPosition(module.range, position));
@@ -58,10 +67,10 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
   ];
 
   if (hasExternalInstructionMemory) {
-    lines.push(`    reg [31:0] inst[0:${isP7ExternalInterface ? 5119 : 4095}];`);
+    lines.push(`    reg [31:0] inst[0:${isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseMemoryWords - 1}];`);
   }
   if (hasExternalDataMemory) {
-    lines.push('    reg [31:0] data[0:4095];', '    integer i;', '    reg [31:0] fixed_addr;', '    reg [31:0] fixed_wdata;');
+    lines.push(`    reg [31:0] data[0:${isP7ExternalInterface ? p7DataMemoryWords - 1 : courseMemoryWords - 1}];`, '    integer i;', '    reg [31:0] fixed_addr;', '    reg [31:0] fixed_wdata;');
   }
 
   lines.push(
@@ -78,12 +87,12 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
 
   if (hasExternalInstructionMemory) {
     lines.push(isP7ExternalInterface
-      ? '    assign i_inst_rdata = inst[((i_inst_addr - 32\'h3000) >> 2) % 5120];'
-      : '    assign i_inst_rdata = inst[(i_inst_addr - 32\'h3000) >> 2];');
+      ? `    assign i_inst_rdata = inst[((i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2) % ${p7InstructionMemoryWords}];`
+      : `    assign i_inst_rdata = inst[(i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2];`);
   }
   if (hasExternalDataMemory) {
     lines.push(isP7ExternalInterface
-      ? '    assign m_data_rdata = data[(m_data_addr >> 2) % 5120];'
+      ? `    assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`
       : '    assign m_data_rdata = data[m_data_addr >> 2];');
   }
   if (hasExternalInstructionMemory || hasExternalDataMemory) {
@@ -201,23 +210,23 @@ function buildP7OfficialTestbench(
     '    integer i;',
     '    reg [31:0] fixed_addr;',
     '    reg [31:0] fixed_wdata;',
-    '    reg [31:0] data[0:4095];',
-    '    reg [31:0] inst[0:5119];',
+    `    reg [31:0] data[0:${p7DataMemoryWords - 1}];`,
+    `    reg [31:0] inst[0:${p7InstructionMemoryWords - 1}];`,
     '',
     '    // ----------- For Instructions -----------',
     '',
-    "    assign m_data_rdata = data[(m_data_addr >> 2) % 5120];",
-    "    assign i_inst_rdata = inst[((i_inst_addr - 32'h3000) >> 2) % 5120];",
+    `    assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`,
+    `    assign i_inst_rdata = inst[((i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2) % ${p7InstructionMemoryWords}];`,
     '',
     '    initial begin',
     '        $readmemh("code.txt", inst);',
-    '        for (i = 0; i < 5120; i = i + 1) data[i] <= 0;',
+    `        for (i = 0; i < ${p7DataMemoryWords}; i = i + 1) data[i] <= 0;`,
     '    end',
     '',
     '    // ----------- For Data Memory -----------',
     '',
     '    always @(*) begin',
-    '        fixed_wdata = data[(m_data_addr >> 2) & 4095];',
+    `        fixed_wdata = data[(m_data_addr >> 2) & ${p7DataMemoryWords - 1}];`,
     "        fixed_addr = m_data_addr & 32'hfffffffc;",
     '        if (m_data_byteen[3]) fixed_wdata[31:24] = m_data_wdata[31:24];',
     '        if (m_data_byteen[2]) fixed_wdata[23:16] = m_data_wdata[23:16];',
@@ -226,8 +235,8 @@ function buildP7OfficialTestbench(
     '    end',
     '',
     '    always @(posedge clk) begin',
-    '        if (reset) for (i = 0; i < 4096; i = i + 1) data[i] <= 0;',
-    '        else if (|m_data_byteen && fixed_addr >> 2 < 4096) begin',
+    `        if (reset) for (i = 0; i < ${p7DataMemoryWords}; i = i + 1) data[i] <= 0;`,
+    `        else if (|m_data_byteen && fixed_addr >> 2 < ${p7DataMemoryWords}) begin`,
     '            data[fixed_addr >> 2] <= fixed_wdata;',
     '            $display("%d@%h: *%h <= %h", $time, m_inst_addr, fixed_addr, fixed_wdata);',
     '        end',
@@ -259,7 +268,7 @@ function p7InterruptBlock(interruptSchedule?: number[]): string[] {
   }
   const targetHex = (target >>> 0).toString(16).padStart(8, '0');
   // Official tb_interrupt_demo.v interrupt block: raise `interrupt` once when the
-  // macroscopic (M-stage) PC reaches target_pc, clear it when the handler writes 0x7f20.
+  // macroscopic (M-stage) PC reaches target_pc, clear it when the handler writes the P7 ack MMIO.
   return [
     '    // ----------- For Interrupt -----------',
     '',
@@ -281,7 +290,7 @@ function p7InterruptBlock(interruptSchedule?: number[]): string[] {
     '        end',
     '        else begin',
     '            if (interrupt) begin',
-    "                if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20) begin",
+    `                if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`,
     '                    interrupt = 0;',
     '                end',
     '            end',
@@ -370,7 +379,7 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string[] {
     '        end',
     '        else begin',
     '            if (interrupt) begin',
-    "                if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20) begin",
+    `                if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`,
     '                    $display("CO_P7_PROBE external_ack scenario=%0d time=%0d", co_p7_external_scenario, $time);',
     '                    interrupt = 0;',
     '                    co_p7_external_armed = 0;',
@@ -408,7 +417,7 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string[] {
     '    end',
     '',
     '    always @(posedge clk) begin',
-    '        if (~reset && |m_data_byteen && fixed_addr >= 32\'h00007f00 && fixed_addr <= 32\'h00007f2f) begin',
+    `        if (~reset && |m_data_byteen && fixed_addr >= ${verilogHex32(p7Timer0Ctrl)} && fixed_addr <= ${verilogHex32(p7ExternalInterruptAckAddress + 0xf)}) begin`,
     '            $display("CO_P7_PROBE mmio_on_dm pc=%h addr=%h byteen=%h time=%0d", m_inst_addr, fixed_addr, m_data_byteen, $time);',
     '        end',
     '    end'
@@ -438,7 +447,7 @@ function commentedP7InterruptBlock(): string[] {
     '    //     end',
     '    //     else begin',
     '    //         if (interrupt) begin',
-    "    //             if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == 32'h7f20) begin",
+    `    //             if (|m_int_byteen && (m_int_addr & 32'hfffffffc) == ${verilogHex32(p7ExternalInterruptAckAddress)}) begin`,
     '    //                 interrupt = 0;',
     '    //             end',
     '    //         end',
@@ -496,15 +505,15 @@ function externalMemoryInitialLines(hasInstructionMemory: boolean, hasDataMemory
     lines.push('        $readmemh("code.txt", inst);');
   }
   if (hasDataMemory) {
-    lines.push(`        for (i = 0; i < ${isP7ExternalInterface ? 5120 : 4096}; i = i + 1) begin`, '            data[i] <= 0;', '        end');
+    lines.push(`        for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseMemoryWords}; i = i + 1) begin`, '            data[i] <= 0;', '        end');
   }
   lines.push('    end');
   return lines;
 }
 
 function externalDataMemoryWriteLines(hasReset: boolean, isP7ExternalInterface: boolean, hasDataMemoryTrace: boolean): string[] {
-  const fixedReadIndex = isP7ExternalInterface ? '(m_data_addr >> 2) & 4095' : 'm_data_addr >> 2';
-  const writeCondition = isP7ExternalInterface ? '|m_data_byteen && fixed_addr >> 2 < 4096' : '|m_data_byteen';
+  const fixedReadIndex = isP7ExternalInterface ? `(m_data_addr >> 2) & ${p7DataMemoryWords - 1}` : 'm_data_addr >> 2';
+  const writeCondition = isP7ExternalInterface ? `|m_data_byteen && fixed_addr >> 2 < ${p7DataMemoryWords}` : '|m_data_byteen';
   const lines = ['    always @(posedge clk) begin'];
   const combinational = [
     '    always @(*) begin',
@@ -520,7 +529,7 @@ function externalDataMemoryWriteLines(hasReset: boolean, isP7ExternalInterface: 
   if (hasReset) {
     lines.push(
       '        if (reset) begin',
-      '            for (i = 0; i < 4096; i = i + 1) begin',
+      `            for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseMemoryWords}; i = i + 1) begin`,
       '                data[i] <= 0;',
       '            end',
       `        end else if (${writeCondition}) begin`
@@ -558,4 +567,8 @@ function writebackTraceLines(hasReset: boolean): string[] {
     '    end'
   );
   return lines;
+}
+
+function verilogHex32(value: number): string {
+  return `32'h${(value >>> 0).toString(16).padStart(4, '0')}`;
 }

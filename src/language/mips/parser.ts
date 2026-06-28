@@ -6,6 +6,7 @@ import {
   Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { p7ExceptionHandlerAddress } from '../../courseTesting/p7Hardware';
 import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
@@ -582,7 +583,7 @@ function validateDirective(
       }
       validateSectionAddressRange(directive, executable.operands[0], diagnostics);
       if (executable.operands[0] && CO_FIXED_SECTION_DIRECTIVES.has(directive) && !isAllowedCourseSectionAddress(directive, executable.operands[0], profile)) {
-        diagnostics.push(makeDiagnostic(executable.operands[0].range, '课程自动测试通常不应传递自定义段地址；P7 异常处理程序仅允许 .ktext 0x4180', DiagnosticSeverity.Error, 'co-section-address'));
+        diagnostics.push(makeDiagnostic(executable.operands[0].range, `课程自动测试通常不应传递自定义段地址；P7 异常处理程序仅允许 .ktext 0x${p7ExceptionHandlerAddress.toString(16)}`, DiagnosticSeverity.Error, 'co-section-address'));
       }
       return;
     case '.byte':
@@ -640,7 +641,7 @@ function isAllowedCourseSectionAddress(directive: string, operand: MipsOperandAs
   if (directive === '.data') {
     return address === 0;
   }
-  return profile === 'P7' && directive === '.ktext' && address === 0x4180;
+  return profile === 'P7' && directive === '.ktext' && address === p7ExceptionHandlerAddress;
 }
 
 function validateDirectiveContinuation(document: TextDocument, lineNumber: number, directive: string, continuation: MipsDataDirectiveContinuationAst, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {

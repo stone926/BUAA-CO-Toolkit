@@ -59,6 +59,7 @@ function loadCourseConfig(): CourseConfig {
       memoryLayout: {},
       profiles: {},
       verilogPorts: {},
+      traceFormatPatterns: {},
       directiveDescriptions: {},
       directiveDetails: {},
       tutorial: {}

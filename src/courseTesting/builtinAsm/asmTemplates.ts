@@ -9,6 +9,7 @@ const asmDir = path.resolve(__dirname, '..', '..', '..', 'resources', 'asm');
  * 对每行做 ${var} → value 替换。
  *
  * 模板变量约定（驼峰命名，不含 `$` 前缀）：
+ *  - ${exceptionHandlerHex} — P7 异常处理程序入口的十六进制
  *  - ${intAckHex} — 中断确认地址的十六进制
  */
 function loadAsmTemplate(filename: string): string[] {
@@ -32,14 +33,16 @@ function interpolateTemplate(lines: string[], vars: Record<string, string>): str
 const p7ExceptionHandlerTemplate = loadAsmTemplate('p7_exception_handler.asm');
 const p7ExceptionHandlerUnifiedTemplate = loadAsmTemplate('p7_exception_handler_unified.asm');
 
-export function renderP7ExceptionHandler(intAckAddress: number): string[] {
+export function renderP7ExceptionHandler(intAckAddress: number, exceptionHandlerAddress: number): string[] {
   return interpolateTemplate(p7ExceptionHandlerTemplate, {
+    exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
     intAckHex: `0x${intAckAddress.toString(16)}`
   });
 }
 
-export function renderP7ExceptionHandlerUnified(intAckAddress: number): string[] {
+export function renderP7ExceptionHandlerUnified(intAckAddress: number, exceptionHandlerAddress: number): string[] {
   return interpolateTemplate(p7ExceptionHandlerUnifiedTemplate, {
+    exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
     intAckHex: `0x${intAckAddress.toString(16)}`
   });
 }
