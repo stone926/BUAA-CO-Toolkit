@@ -1,6 +1,6 @@
 # test-suite | src/test/ | ~70 files | 框架: Vitest
 
-单元/集成测试, 镜像src/结构. npm test = vitest run
+单元/集成测试, 镜像src/结构. npm test = vitest run. 以下为<name>.test.ts
 
 test/:
   manifest, advancedToolModel, asmCaseStoreCore, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver
