@@ -45,7 +45,7 @@ import { commandLine, revealOutputChannel } from './process';
 import { runProcessCore } from './processCore';
 import { checkToolchain } from './toolchain';
 import { AppServices, RunResult } from './types';
-import { pickOneFile } from './workflowInputs';
+import { resolveWorkspaceFile } from './workflowInputs';
 import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
 import {
   asmCaseArtifactUri,
@@ -462,36 +462,17 @@ export async function runP3LogisimTraceCase(
 }
 
 export async function resolveLogisimCircuitInput(): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && isLogisimCircuitFile(editor.document.uri)) {
-    if (editor.document.isDirty) {
-      await editor.document.save();
-    }
-    return editor.document.uri;
-  }
-
-  const files = await vscode.workspace.findFiles('**/*.circ', '**/{node_modules,out,.git,.co}/**', 200);
-  if (files.length === 1) {
-    return files[0];
-  }
-  if (files.length > 1) {
-    const picked = await vscode.window.showQuickPick(
-      files.map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri),
-        description: path.dirname(uri.fsPath),
-        uri
-      })),
-      {
-        title: '选择 Logisim 电路模板',
-        matchOnDescription: true
-      }
-    );
-    return picked?.uri;
-  }
-
-  return await pickOneFile('选择 Logisim 电路模板', {
-    Logisim: ['circ'],
-    All: ['*']
+  return await resolveWorkspaceFile({
+    title: '选择 Logisim 电路模板',
+    include: '**/*.circ',
+    exclude: '**/{node_modules,out,.git,.co}/**',
+    maxResults: 200,
+    filters: {
+      Logisim: ['circ'],
+      All: ['*']
+    },
+    activeFile: isLogisimCircuitFile,
+    saveActive: true
   });
 }
 

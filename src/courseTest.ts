@@ -25,7 +25,7 @@ import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { createIsimCompileCache } from './verilogIsimCache';
 import { AppServices } from './types';
 import { readTextFile, workspaceFolderForOrFirst } from './fsUtil';
-import { pickOneFile } from './workflowInputs';
+import { pickOneFile, resolveWorkspaceFile, resolveWorkspaceFiles } from './workflowInputs';
 import {
   AsmCase,
   createAsmCaseFromAsm,
@@ -218,68 +218,31 @@ async function openAsmCaseIndex(): Promise<void> {
 }
 
 async function resolveAsmInput(): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.uri.scheme === 'file' && isAsmFile(editor.document.uri)) {
-    if (editor.document.isDirty) {
-      await editor.document.save();
-    }
-    return editor.document.uri;
-  }
-
-  const files = await vscode.workspace.findFiles('**/*.{asm,s,mips}', '**/{node_modules,out,.git}/**', 200);
-  if (files.length === 1) {
-    return files[0];
-  }
-  if (files.length > 1) {
-    const picked = await vscode.window.showQuickPick(
-      files.map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri),
-        description: path.dirname(uri.fsPath),
-        uri
-      })),
-      {
-        title: '选择课程 Trace 测试的 MIPS ASM 文件',
-        matchOnDescription: true
-      }
-    );
-    return picked?.uri;
-  }
-
-  return await pickOneFile('选择课程 Trace 测试的 MIPS ASM 文件', {
-    ASM: ['asm', 's', 'mips'],
-    All: ['*']
+  return await resolveWorkspaceFile({
+    title: '选择课程 Trace 测试的 MIPS ASM 文件',
+    include: '**/*.{asm,s,mips}',
+    exclude: '**/{node_modules,out,.git}/**',
+    maxResults: 200,
+    filters: {
+      ASM: ['asm', 's', 'mips'],
+      All: ['*']
+    },
+    activeFile: isAsmFile,
+    saveActive: true
   });
 }
 
 async function resolveAsmBatchInputs(): Promise<vscode.Uri[]> {
-  const files = await vscode.workspace.findFiles('**/*.{asm,s,mips}', '**/{node_modules,out,.git}/**', 500);
-  if (files.length) {
-    const picked = await vscode.window.showQuickPick(
-      files.map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri),
-        description: path.dirname(uri.fsPath),
-        uri
-      })),
-      {
-        title: '选择批量 Trace 测试的 MIPS ASM 文件',
-        matchOnDescription: true,
-        canPickMany: true
-      }
-    );
-    return picked?.map((item) => item.uri) ?? [];
-  }
-
-  const picked = await vscode.window.showOpenDialog({
+  return await resolveWorkspaceFiles({
     title: '选择批量 Trace 测试的 MIPS ASM 文件',
-    canSelectFiles: true,
-    canSelectFolders: false,
-    canSelectMany: true,
+    include: '**/*.{asm,s,mips}',
+    exclude: '**/{node_modules,out,.git}/**',
+    maxResults: 500,
     filters: {
       ASM: ['asm', 's', 'mips'],
       All: ['*']
     }
   });
-  return picked ?? [];
 }
 
 async function resolveBatchTraceCases(): Promise<CourseTraceCaseInput[]> {

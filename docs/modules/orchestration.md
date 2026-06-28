@@ -68,5 +68,5 @@ other:
   semanticColors.ts — registerSemanticColorDefaults(): auto/dark/light/off preset
   semanticColorPresets.ts — 深色/浅色预设: hex+italic/bold按token类型
   courseLinks.ts — registerCourseLinks()3命令: 教程首页/Profile教程/工具教程. 支持本地镜像
-  workflowInputs.ts — resolveMachineCodeInput(智能查找code.txt), resolveActiveOrPickedTextFile, pickOneFile
+  workflowInputs.ts — resolveWorkspaceFile(s)、resolveMachineCodeInput(智能查找code.txt), resolveActiveOrPickedTextFile, pickOneFile
   types.ts — AppServices(OutputChannel+StatusBarItem), RunResult, ToolDetection
