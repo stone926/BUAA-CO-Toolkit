@@ -15,6 +15,7 @@ orchestration:
   courseTestTraceFiles.ts — 输出命名: .co/out/{stem}.mars.out, .co/out/{stem}.sim.out
 
 generation:
+  courseTesting/generatorWorkflow.ts — 生成器工作流: 外部/内置generator setup、运行、ASM产物收集、CourseTraceBatchSource描述
   courseTesting/builtinAsmGenerator.ts — 入口: generateBuiltinAsmTestCase, p7StressMode分派(anchor->randomBody, probe->probeEmitter, hybrid两次调用)
   courseTesting/generator.ts — 外部生成器: .py/.js/.jar/.ps1/.bat, snapshotAsmFiles(mtime快照)
   courseTesting/generatorInstructionCatalog.ts — 内置 ASM 生成器指令 profile、分类、对齐和 MDU 延迟资源加载
