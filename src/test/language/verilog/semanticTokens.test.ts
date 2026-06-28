@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mipsSemanticTokenTypes } from '../../../language/mips/resources';
-import { mergeCoSettings } from '../../../language/common/settings';
-import { getVerilogSemanticTokens } from '../../../language/verilog/service';
+import { defaultCoSettings, mergeCoSettings } from '../../../language/common/settings';
+import { clearVerilogSemanticTokenCache, getVerilogSemanticTokens } from '../../../language/verilog/service';
 import { verilogSemanticTokenTypes } from '../../../language/verilog/model';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
@@ -35,6 +35,10 @@ function decode(data: number[]): DecodedToken[] {
 }
 
 describe('Verilog semantic tokens', () => {
+  afterEach(() => {
+    clearVerilogSemanticTokenCache();
+  });
+
   it('highlights backtick macro uses as one macro token', () => {
     const text = [
       '`define WIDTH 8',
@@ -120,4 +124,38 @@ describe('Verilog semantic tokens', () => {
     expect(tokens).toContainEqual({ line: 1, character: 15, length: 4, type: numberType });
     expect(tokens).toContainEqual({ line: 1, character: 19, length: 1, type: punctuationType });
   });
+
+  it('does not invalidate cached tokens for unrelated workspace index revisions', () => {
+    const document = doc('module top; wire sig; Child u(.a(sig)); endmodule');
+    const index = new VerilogWorkspaceIndex();
+    const first = getVerilogSemanticTokens(document, mergeCoSettings({}), index);
+
+    index.updateDocument(TextDocument.create('test://semantic-child.v', 'verilog', 1, 'module Child(input wire a); endmodule'), defaultCoSettings);
+
+    expect(getVerilogSemanticTokens(document, mergeCoSettings({}), index)).toBe(first);
+  });
+
+  it('refreshes cross-file port connection colors after semantic token cache is cleared', () => {
+    const text = 'module top; wire sig; Child u(.a(sig)); endmodule';
+    const document = doc(text);
+    const index = new VerilogWorkspaceIndex();
+    const signalType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogSignal');
+    const portType = mipsSemanticTokenTypes.length + verilogSemanticTokenTypes.indexOf('verilogPort');
+    const connectionCharacter = text.indexOf('.a') + 1;
+
+    expect(tokenAt(decode(getVerilogSemanticTokens(document, mergeCoSettings({}), index).data), 0, connectionCharacter)?.type).toBe(signalType);
+
+    index.updateDocument(TextDocument.create('test://semantic-child.v', 'verilog', 1, 'module Child(input wire a); endmodule'), defaultCoSettings);
+    clearVerilogSemanticTokenCache(document.uri);
+
+    expect(tokenAt(decode(getVerilogSemanticTokens(document, mergeCoSettings({}), index).data), 0, connectionCharacter)?.type).toBe(portType);
+  });
 });
+
+function tokenAt(tokens: DecodedToken[], line: number, character: number): DecodedToken | undefined {
+  return tokens.find((token) =>
+    token.line === line &&
+    token.character <= character &&
+    character < token.character + token.length
+  );
+}

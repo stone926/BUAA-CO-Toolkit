@@ -8,7 +8,7 @@ import { DocumentResultCache } from '../common/documentResultCache';
 import { CoSettings } from '../common/settings';
 import { rangeKey } from '../common/util';
 import { cp0RegisterAtPosition } from './display';
-import { getCachedMipsParse } from './parseCache';
+import { getCachedMipsSemanticParse } from './parseCache';
 import type { MipsAstLine, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
 import { getNumericLikeRanges, isCharLiteral } from './literals';
 import { collectMipsOperandReferences } from './operandReferences';
@@ -42,8 +42,12 @@ export function getMipsSemanticTokens(document: TextDocument, settings: CoSettin
   );
 }
 
+export function clearMipsSemanticTokenCache(uri?: string): void {
+  semanticTokenCache.clear(uri);
+}
+
 function buildMipsSemanticTokens(document: TextDocument, settings: CoSettings, state: MipsServerState): SemanticTokens {
-  const parsed = getCachedMipsParse(document, settings, state);
+  const parsed = getCachedMipsSemanticParse(document, settings, state);
   const tokens: MipsSemanticTokenCandidate[] = [];
   const builder = new SemanticTokensBuilder();
   const semanticReferences = new Map(parsed.semantic.references.map((reference) => [rangeKey(reference.range), reference]));
@@ -84,7 +88,7 @@ function buildMipsSemanticTokens(document: TextDocument, settings: CoSettings, s
 function pushAstLineSemanticTokens(
   tokens: MipsSemanticTokenCandidate[],
   line: MipsAstLine,
-  parsed: ReturnType<typeof getCachedMipsParse>,
+  parsed: ReturnType<typeof getCachedMipsSemanticParse>,
   settings: CoSettings,
   semanticReferences: Map<string, { kind: MipsSemanticReferenceKind }>,
   instructionByRange: Map<string, { usesPseudoForm: boolean }>
@@ -116,7 +120,7 @@ function pushAstLineSemanticTokens(
 function pushOperandSemanticTokens(
   tokens: MipsSemanticTokenCandidate[],
   operand: MipsOperandAst,
-  parsed: ReturnType<typeof getCachedMipsParse>,
+  parsed: ReturnType<typeof getCachedMipsSemanticParse>,
   semanticReferences: Map<string, { kind: MipsSemanticReferenceKind }>
 ): void {
   if (parsed.semantic.declarationRangeKeys.has(rangeKey(operand.range))) {
@@ -150,7 +154,7 @@ function pushOperandSemanticTokens(
 function pushExpressionSemanticTokens(
   tokens: MipsSemanticTokenCandidate[],
   operand: MipsOperandAst,
-  parsed: ReturnType<typeof getCachedMipsParse>,
+  parsed: ReturnType<typeof getCachedMipsSemanticParse>,
   semanticReferences: Map<string, { kind: MipsSemanticReferenceKind }>
 ): void {
   for (const reference of collectMipsOperandReferences(operand, { includeRegisters: true })) {
@@ -182,7 +186,7 @@ function pushExpressionSemanticTokens(
 
 function pushNamedSemanticToken(
   tokens: MipsSemanticTokenCandidate[],
-  parsed: ReturnType<typeof getCachedMipsParse>,
+  parsed: ReturnType<typeof getCachedMipsSemanticParse>,
   settings: CoSettings,
   semanticReferences: Map<string, { kind: MipsSemanticReferenceKind }>,
   instructionByRange: Map<string, { usesPseudoForm: boolean }>,
@@ -227,7 +231,7 @@ function pushReferenceSemanticToken(
   }
 }
 
-function pushRegisterSemanticToken(tokens: MipsSemanticTokenCandidate[], parsed: ReturnType<typeof getCachedMipsParse>, text: string, range: Range): void {
+function pushRegisterSemanticToken(tokens: MipsSemanticTokenCandidate[], parsed: ReturnType<typeof getCachedMipsSemanticParse>, text: string, range: Range): void {
   if (text.startsWith('$') && cp0RegisterAtPosition(parsed, text, range.start)) {
     pushSemanticToken(tokens, range, 'mipsCp0Register');
   } else if (text.startsWith('$') && (isRegister(text) || isFloatingPointRegister(text))) {

@@ -17,10 +17,13 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private readonly modules = new Map<string, VerilogModule[]>();
   private readonly modulesByUri = new Map<string, VerilogModule[]>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
+  private scanTimer: ReturnType<typeof setTimeout> | undefined;
   private _scanning = true;
   private _disposed = false;
 
   readonly onDidChange = this._onDidChange.event;
+
+  constructor(private readonly options: { initialScanDelayMs?: number } = {}) {}
 
   /** 是否正在执行初始扫描 */
   get scanning(): boolean {
@@ -77,9 +80,17 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       }
     }
 
-    // 后台异步扫描所有工作空间文件夹中的 .v 文件
+    // 后台异步扫描所有工作空间文件夹中的 .v 文件。启动阶段可延后，避免抢占首屏语义着色。
     const allFolders = folders.map((f) => f.uri.fsPath);
-    this.scanFoldersAsync(allFolders);
+    const delayMs = Math.max(0, this.options.initialScanDelayMs ?? 0);
+    if (delayMs > 0) {
+      this.scanTimer = setTimeout(() => {
+        this.scanTimer = undefined;
+        void this.scanFoldersAsync(allFolders);
+      }, delayMs);
+    } else {
+      void this.scanFoldersAsync(allFolders);
+    }
   }
 
   /** 当文件保存或变更时更新该文件的模块信息 */
@@ -107,6 +118,10 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
 
   dispose(): void {
     this._disposed = true;
+    if (this.scanTimer) {
+      clearTimeout(this.scanTimer);
+      this.scanTimer = undefined;
+    }
     this._onDidChange.dispose();
     this.modules.clear();
     this.modulesByUri.clear();

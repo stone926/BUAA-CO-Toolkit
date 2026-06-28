@@ -1,4 +1,4 @@
-# orchestration | src/ | ~46 files
+# orchestration | src/ | ~47 files
 
 扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/语义着色/用例存储
 不含语言智能逻辑(在src/language/ LSP Server端)
@@ -24,6 +24,7 @@ toolchain:
 process:
   process.ts — runTool(同步等待,stdout/stderr流式写入OutputChannel,超时kill), launchTool(GUI分离启动,spawn延迟判定,unref), commandLine, quoteArg
   processCore.ts — 无VS Code依赖的spawn/timeout/stdout/stderr/逐行监控核心, 供扩展宿主和LSP复用
+  startupTrace.ts — CO_TRACE_STARTUP/BUAA_CO_TRACE_STARTUP 启动耗时追踪 helper
   textChunks.ts — TextChunkAccumulator(零拷贝chunk收集), LineChunkScanner(流式逐行CRLF兼容)
 
 fs:

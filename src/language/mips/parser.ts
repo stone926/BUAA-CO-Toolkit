@@ -125,14 +125,16 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
   let pendingEmptyDataDirective: PendingEmptyDataDirective | undefined;
   const directiveContinuationLines = new Map<number, string>();
 
-  collectMipsSourceDiagnostics(source.lines, diagnostics);
+  if (includeDiagnostics) {
+    collectMipsSourceDiagnostics(source.lines, diagnostics);
+  }
 
   for (const statement of ast.statements) {
     const lineNumber = statement.line;
     const executableAst = statement.executable;
 
     for (const label of statement.labels) {
-      if (isRegister(label.name)) {
+      if (includeDiagnostics && isRegister(label.name)) {
         diagnostics.push(makeDiagnostic(label.range, `寄存器 '${label.name}' 不能作为标签名`, DiagnosticSeverity.Error, 'mips-syntax-line'));
       }
       const name = label.name;
@@ -146,11 +148,13 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       };
       const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
       const targetMap = section === 'data' ? scope.dataSymbols : scope.labels;
-      if (isReservedSymbolName(name, symbol.kind)) {
+      if (includeDiagnostics && isReservedSymbolName(name, symbol.kind)) {
         diagnostics.push(makeDiagnostic(selectionRange, `符号 '${name}' 与保留的 MIPS 关键字冲突`, DiagnosticSeverity.Error, 'reserved-symbol'));
       }
       if (symbolScopeHas(scope, name)) {
-        diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'`, DiagnosticSeverity.Error, 'duplicate-symbol'));
+        if (includeDiagnostics) {
+          diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'`, DiagnosticSeverity.Error, 'duplicate-symbol'));
+        }
       } else {
         targetMap.set(name, symbol);
       }
@@ -160,19 +164,25 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       const continuation = statement.dataContinuation;
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuation)) {
         pendingEmptyDataDirective = undefined;
-        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
-        directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+        if (includeDiagnostics) {
+          validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
+          directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+        }
       } else if (pendingEmptyDataDirective && statementTerminatesDataContinuation(statement)) {
-        reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+        if (includeDiagnostics) {
+          reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+        }
         pendingEmptyDataDirective = undefined;
-      } else if (isMalformedStatementLine(statement)) {
+      } else if (includeDiagnostics && isMalformedStatementLine(statement)) {
         diagnostics.push(makeDiagnostic(statement.dataContinuation?.range ?? statement.range, '无法解析的 MIPS 语句。请检查标签、冒号或助记符位置', DiagnosticSeverity.Error, 'mips-syntax-line'));
       }
       continue;
     }
 
     if (pendingEmptyDataDirective && statementTerminatesDataContinuation(statement)) {
-      reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+      if (includeDiagnostics) {
+        reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
+      }
       pendingEmptyDataDirective = undefined;
     }
 
@@ -190,7 +200,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         };
         const scope = symbolScope(activeMacro, labels, dataSymbols, eqvSymbols);
         if (symbolScopeHas(scope, name)) {
-          diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'`, DiagnosticSeverity.Error, 'duplicate-symbol'));
+          if (includeDiagnostics) {
+            diagnostics.push(makeDiagnostic(selectionRange, `重复的符号 '${name}'`, DiagnosticSeverity.Error, 'duplicate-symbol'));
+          }
         } else {
           scope.eqvSymbols.set(name, symbol);
         }
@@ -208,7 +220,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       const name = macroStart.name;
       const params = macroStart.params.map((param) => param.name);
       const selectionRange = macroStart.nameRange;
-      validateMacroHeader(document, lineNumber, name, params, selectionRange, diagnostics);
+      if (includeDiagnostics) {
+        validateMacroHeader(document, lineNumber, name, params, selectionRange, diagnostics);
+      }
       const macro: MipsMacro = {
         name,
         params,
@@ -220,12 +234,14 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         selectionRange,
         bodyStartLine: lineNumber + 1
       };
-      if (activeMacro) {
+      if (includeDiagnostics && activeMacro) {
         diagnostics.push(makeDiagnostic(selectionRange, `嵌套宏 '${name}' 不受此语言服务支持`, DiagnosticSeverity.Warning, 'nested-macro'));
       }
       const overloads = macros.get(name) ?? [];
       if (overloads.some((overload) => overload.params.length === macro.params.length)) {
-        diagnostics.push(makeDiagnostic(selectionRange, `重复的宏 '${name}'，具有 ${macro.params.length} 个参数`, DiagnosticSeverity.Error, 'duplicate-macro'));
+        if (includeDiagnostics) {
+          diagnostics.push(makeDiagnostic(selectionRange, `重复的宏 '${name}'，具有 ${macro.params.length} 个参数`, DiagnosticSeverity.Error, 'duplicate-macro'));
+        }
       } else {
         overloads.push(macro);
         macros.set(name, overloads);
@@ -237,7 +253,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       activeMacro = macro;
       for (const param of macroStart.params) {
         if (macro.paramSymbols.has(param.name)) {
-          diagnostics.push(makeDiagnostic(param.range, `重复的宏参数 '${param.name}'`, DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
+          if (includeDiagnostics) {
+            diagnostics.push(makeDiagnostic(param.range, `重复的宏参数 '${param.name}'`, DiagnosticSeverity.Error, 'duplicate-macro-parameter'));
+          }
           continue;
         }
         macro.paramSymbols.set(param.name, {
@@ -253,7 +271,9 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
     if (executableAst.lowerMnemonic === '.end_macro') {
       if (!activeMacro) {
-        diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, 'Unexpected .end_macro without a matching .macro.', DiagnosticSeverity.Error, 'macro-end'));
+        if (includeDiagnostics) {
+          diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, 'Unexpected .end_macro without a matching .macro.', DiagnosticSeverity.Error, 'macro-end'));
+        }
       } else {
         activeMacro.bodyEndLine = lineNumber - 1;
         activeMacro.range = Range.create(activeMacro.range.start, lineAt(document, lineNumber).range.end);
@@ -266,14 +286,18 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       continue;
     }
 
-    validateRegisterOperands(statement, activeMacro, diagnostics);
+    if (includeDiagnostics) {
+      validateRegisterOperands(statement, activeMacro, diagnostics);
+    }
 
     const mnemonic = executableAst.lowerMnemonic;
     if (mnemonic.startsWith('.')) {
-      if (!directives.has(mnemonic)) {
+      if (includeDiagnostics && !directives.has(mnemonic)) {
         diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `未知的指令 '${executableAst.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-directive'));
       }
-      validateDirective(document, lineNumber, statement, section, profile, activeMacro, diagnostics);
+      if (includeDiagnostics) {
+        validateDirective(document, lineNumber, statement, section, profile, activeMacro, diagnostics);
+      }
       activeDataContinuationDirective = section === 'data' && CONTINUABLE_DATA_DIRECTIVES.has(mnemonic) && !activeMacro
         ? mnemonic
         : undefined;
@@ -293,25 +317,29 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       const continuation = statement.dataContinuation;
       if (shouldTreatAsDataDirectiveContinuation(section, activeDataContinuationDirective, activeMacro, continuation)) {
         pendingEmptyDataDirective = undefined;
-        validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
-        directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+        if (includeDiagnostics) {
+          validateDirectiveContinuation(document, lineNumber, activeDataContinuationDirective!, continuation, activeMacro, diagnostics);
+          directiveContinuationLines.set(lineNumber, activeDataContinuationDirective!);
+        }
         continue;
       }
       const eqv = resolveEqvSymbolInScope(executableAst.mnemonic, activeMacro, eqvSymbols);
       if (eqv && isDeclaredBefore(eqv, Range.create(lineNumber, 0, lineNumber, 0).start)) {
         continue;
       }
-      diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `未知的指令或宏 '${executableAst.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-instruction'));
+      if (includeDiagnostics) {
+        diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `未知的指令或宏 '${executableAst.mnemonic}'`, DiagnosticSeverity.Error, 'unknown-instruction'));
+      }
       continue;
     }
 
     activeDataContinuationDirective = undefined;
 
-    if (section === 'data' && instruction) {
+    if (includeDiagnostics && section === 'data' && instruction) {
       diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, `指令 '${executableAst.mnemonic}' 不能出现在数据段中。请先切换到 .text`, DiagnosticSeverity.Error, 'instruction-in-data'));
     }
 
-    if (!instruction && macroOverloads?.length) {
+    if (includeDiagnostics && !instruction && macroOverloads?.length) {
       const operands = executableAst.macroArguments;
       for (const operand of operands) {
         if (!isMacroArgumentToken(operand.text)) {
@@ -329,7 +357,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
       const operands = astOperands.map((operand) => operand.text);
       if (mnemonic === 'syscall') {
         hasSyscall = true;
-        if (profile === 'P2' && !v0Initialized) {
+        if (includeDiagnostics && profile === 'P2' && !v0Initialized) {
           diagnostics.push(makeDiagnostic(executableAst.mnemonicRange, 'P2 syscall 以 $v0 值为调用号, 但 $v0 自上次 syscall 起未赋值', DiagnosticSeverity.Warning, 'syscall-v0-uninitialized'));
         }
       }
@@ -341,9 +369,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
         range: executableAst.mnemonicRange,
         usesPseudoForm
       });
-      validateInstruction(document, lineNumber, instruction, astOperands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
+      if (includeDiagnostics) {
+        validateInstruction(document, lineNumber, instruction, astOperands, profile, settings, options, activeMacro, eqvSymbols, diagnostics);
+      }
       const labelRef = labelOperand(instruction, astOperands);
-      if (labelRef && isSymbolLike(labelRef)) {
+      if (includeDiagnostics && labelRef && isSymbolLike(labelRef)) {
         labelReferences.push({
           line: lineNumber,
           operand: labelRef,
@@ -360,9 +390,11 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
 
   if (activeMacro) {
     activeMacro.range = Range.create(activeMacro.range.start, lineAt(document, document.lineCount - 1).range.end);
-    diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `宏 '${activeMacro.name}' 缺少 .end_macro`, DiagnosticSeverity.Error, 'macro-unclosed'));
+    if (includeDiagnostics) {
+      diagnostics.push(makeDiagnostic(activeMacro.selectionRange, `宏 '${activeMacro.name}' 缺少 .end_macro`, DiagnosticSeverity.Error, 'macro-unclosed'));
+    }
   }
-  if (pendingEmptyDataDirective) {
+  if (includeDiagnostics && pendingEmptyDataDirective) {
     reportMissingDataDirectiveOperands(pendingEmptyDataDirective, diagnostics);
   }
 
@@ -384,25 +416,27 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     instructions: instructionsSeen,
     diagnostics
   });
-  const parsedForQueries: MipsParseResult = {
-    ...parsed,
-    ast,
-    semantic
-  };
-  const missingLabelRanges = new Set<string>();
-  for (const reference of labelReferences) {
-    if (!resolveReferenceSymbol(reference.operand, reference.macro, labels, dataSymbols)) {
-      const range = rangeOfText(document, reference.line, reference.operand);
-      missingLabelRanges.add(rangeKey(range));
-      diagnostics.push(makeDiagnostic(range, `找不到标签或 data 段符号 '${reference.operand}'`, DiagnosticSeverity.Error, 'missing-label'));
+  if (includeDiagnostics) {
+    const parsedForQueries: MipsParseResult = {
+      ...parsed,
+      ast,
+      semantic
+    };
+    const missingLabelRanges = new Set<string>();
+    for (const reference of labelReferences) {
+      if (!resolveReferenceSymbol(reference.operand, reference.macro, labels, dataSymbols)) {
+        const range = rangeOfText(document, reference.line, reference.operand);
+        missingLabelRanges.add(rangeKey(range));
+        diagnostics.push(makeDiagnostic(range, `找不到标签或 data 段符号 '${reference.operand}'`, DiagnosticSeverity.Error, 'missing-label'));
+      }
     }
-  }
-  collectUndeclaredSymbolDiagnostics(parsedForQueries, diagnostics, missingLabelRanges, directiveContinuationLines);
+    collectUndeclaredSymbolDiagnostics(parsedForQueries, diagnostics, missingLabelRanges, directiveContinuationLines);
 
-  if (profile === 'P2' && settings.mips.warnMissingExitSyscall && !hasSyscall && document.lineCount > 2) {
-    const firstLine = lineAt(document, 0).text;
-    const range = Range.create(0, 0, 0, Math.max(1, firstLine.length));
-    diagnostics.push(makeDiagnostic(range, 'P2 programs usually need a syscall exit path, otherwise MARS/online tests may time out.', DiagnosticSeverity.Warning, 'missing-syscall'));
+    if (profile === 'P2' && settings.mips.warnMissingExitSyscall && !hasSyscall && document.lineCount > 2) {
+      const firstLine = lineAt(document, 0).text;
+      const range = Range.create(0, 0, 0, Math.max(1, firstLine.length));
+      diagnostics.push(makeDiagnostic(range, 'P2 programs usually need a syscall exit path, otherwise MARS/online tests may time out.', DiagnosticSeverity.Warning, 'missing-syscall'));
+    }
   }
 
   const resultDiagnostics = includeDiagnostics ? diagnostics : [];

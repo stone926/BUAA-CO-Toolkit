@@ -1,6 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { defaultCoSettings } from '../../../language/common/settings';
+import { defaultCoSettings, mergeCoSettings } from '../../../language/common/settings';
 import { clearCachedVerilogParse, getCachedVerilogParse } from '../../../language/verilog/parseCache';
 
 describe('Verilog parse cache', () => {
@@ -14,6 +14,28 @@ describe('Verilog parse cache', () => {
 
     expect(getCachedVerilogParse(first, defaultCoSettings, false).modules[0]?.name).toBe('First');
     expect(getCachedVerilogParse(second, defaultCoSettings, false).modules[0]?.name).toBe('Second');
+  });
+
+  it('reuses structural parses across diagnostic settings', () => {
+    const document = doc('module Top; wire a; endmodule\n');
+    const structural = getCachedVerilogParse(document, defaultCoSettings, false);
+    const relaxedSettings = mergeCoSettings({
+      verilog: {
+        implicitNet: {
+          diagnostic: 'off'
+        },
+        lint: {
+          courseRules: false,
+          synthesizableHints: false
+        }
+      }
+    });
+
+    expect(getCachedVerilogParse(document, relaxedSettings, false)).toBe(structural);
+    const diagnostics = getCachedVerilogParse(document, relaxedSettings, true);
+    expect(diagnostics).toBe(getCachedVerilogParse(document, relaxedSettings, true));
+    expect(diagnostics.modules).toBe(structural.modules);
+    expect(getCachedVerilogParse(document, defaultCoSettings, false)).toBe(structural);
   });
 });
 

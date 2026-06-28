@@ -90,6 +90,7 @@ import {
   getVerilogRenameEdits,
   getVerilogRenamePrepare,
   getVerilogSemanticTokens,
+  clearVerilogSemanticTokenCache,
   getVerilogSignatureHelp
 } from './language/verilog/service';
 import { runIseSyntaxCheck } from './language/verilog/iseSyntaxCheck';
@@ -97,6 +98,7 @@ import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
 import { samePath } from './pathUtils';
+import { startupTraceEnabled, timeStartup, traceStartup } from './startupTrace';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -210,8 +212,20 @@ const state: ServerState = {
 };
 const verilogIseCommand = Commands.Server.InternalVerilogCheckSyntaxWithIse;
 const maxEffectiveSettingsCacheEntries = 200;
+const verilogIndexStartupDelayMs = 750;
+let verilogIndexRebuildTimer: ReturnType<typeof setTimeout> | undefined;
+let tracedFirstSemanticTokens = false;
+
+function traceServerStartup(message: string): void {
+  if (!startupTraceEnabled()) {
+    return;
+  }
+  traceStartup(message);
+  connection.console.info(`[BUAA CO Toolkit] ${message}`);
+}
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
+  traceServerStartup('server initialize begin');
   state.hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
   state.hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
   state.workspaceFolders = params.workspaceFolders;
@@ -256,6 +270,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 });
 
 connection.onInitialized(() => {
+  traceServerStartup('server initialized');
   if (state.hasConfigurationCapability) {
     void connection.client.register(DidChangeConfigurationNotification.type, undefined);
   }
@@ -267,7 +282,7 @@ connection.onInitialized(() => {
       ]
     });
   }
-  void rebuildVerilogIndex();
+  scheduleVerilogIndexRebuild(verilogIndexStartupDelayMs);
 });
 
 connection.onDidChangeConfiguration((change) => {
@@ -283,9 +298,15 @@ connection.onDidChangeConfiguration((change) => {
 });
 
 connection.onDidChangeWatchedFiles((params) => {
-  void handleWatchedFilesChanged(params.changes).then((languageIds) =>
-    languageIds.has('*') ? validateAllDocuments() : validateDocuments((document) => languageIds.has(document.languageId))
-  );
+  void handleWatchedFilesChanged(params.changes).then((languageIds) => {
+    if (languageIds.has('verilog')) {
+      clearVerilogSemanticTokenCache();
+      refreshSemanticTokens();
+    }
+    return languageIds.has('*')
+      ? validateAllDocuments()
+      : validateDocuments((document) => languageIds.has(document.languageId));
+  });
 });
 
 documents.onDidOpen((event) => {
@@ -348,11 +369,14 @@ interface DocumentRequestParams {
 
 function withDocument<P extends DocumentRequestParams, R>(
   handler: (doc: TextDocument, params: P, settings: CoSettings, svc: CoLanguageService) => R | undefined,
-  fallback: R
+  fallback: R,
+  options: { traceName?: string; firstOnly?: boolean } = {}
 ): (params: P) => Promise<R> {
   return async (params) => {
+    const startedAt = startupTraceEnabled() && options.traceName ? Date.now() : undefined;
+    let document: TextDocument | undefined;
     try {
-      const document = documents.get(params.textDocument.uri);
+      document = documents.get(params.textDocument.uri);
       if (!document) return fallback;
       const settings = effectiveSettingsForDocument(document, await getDocumentSettings(document.uri));
       const svc = serviceForDocument(document);
@@ -360,6 +384,16 @@ function withDocument<P extends DocumentRequestParams, R>(
     } catch (e) {
       connection.console.error(`[BUAA CO Toolkit] 处理程序错误: ${e}`);
       return fallback;
+    } finally {
+      if (startedAt !== undefined && options.traceName) {
+        const shouldTrace = !options.firstOnly || !tracedFirstSemanticTokens;
+        if (shouldTrace) {
+          if (options.firstOnly) {
+            tracedFirstSemanticTokens = true;
+          }
+          traceServerStartup(`${options.traceName} ${document?.languageId ?? 'unknown'} completed in ${Date.now() - startedAt}ms`);
+        }
+      }
     }
   };
 }
@@ -397,7 +431,9 @@ connection.languages.inlayHint.on(withDocument(
 ));
 
 connection.languages.semanticTokens.on(withDocument(
-  (doc, _params: SemanticTokensParams, settings, svc) => svc.getSemanticTokens?.(doc, settings), { data: [] } as SemanticTokens
+  (doc, _params: SemanticTokensParams, settings, svc) => svc.getSemanticTokens?.(doc, settings),
+  { data: [] } as SemanticTokens,
+  { traceName: 'first semantic tokens', firstOnly: true }
 ));
 
 connection.onFoldingRanges(withDocument(
@@ -449,6 +485,9 @@ async function updateIndexAndValidate(document: TextDocument): Promise<void> {
 }
 
 async function validateDocument(document: TextDocument, settings?: CoSettings): Promise<void> {
+  const finishTrace = startupTraceEnabled()
+    ? timeStartup(`diagnostics ${document.languageId} ${document.uri}`)
+    : undefined;
   const resolvedSettings = effectiveSettingsForDocument(document, settings ?? await getDocumentSettings(document.uri));
   const diagnosticLanguageId = serviceKeyForDocument(document);
   const serviceDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [];
@@ -462,6 +501,7 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
     uri: document.uri,
     diagnostics
   });
+  finishTrace?.();
 }
 
 function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnostic[]): Diagnostic[] {
@@ -584,13 +624,40 @@ async function validateDocuments(predicate: (document: TextDocument) => boolean)
   }
 }
 
-async function rebuildVerilogIndex(): Promise<void> {
-  const settings = await getDocumentSettings('');
-  await verilogIndex.rebuild(state.workspaceFolders, settings);
-  for (const document of documents.all()) {
-    serviceForDocument(document)?.updateDocument?.(document, settings);
+function scheduleVerilogIndexRebuild(delayMs = 0): void {
+  if (verilogIndexRebuildTimer) {
+    clearTimeout(verilogIndexRebuildTimer);
   }
-  await validateOpenVerilogDocuments();
+  verilogIndexRebuildTimer = setTimeout(() => {
+    verilogIndexRebuildTimer = undefined;
+    void rebuildVerilogIndex();
+  }, Math.max(0, delayMs));
+}
+
+async function rebuildVerilogIndex(): Promise<void> {
+  const finishTrace = startupTraceEnabled()
+    ? timeStartup('verilog workspace index rebuild')
+    : undefined;
+  try {
+    const settings = await getDocumentSettings('');
+    await verilogIndex.rebuild(state.workspaceFolders, settings);
+    for (const document of documents.all()) {
+      serviceForDocument(document)?.updateDocument?.(document, settings);
+    }
+    clearVerilogSemanticTokenCache();
+    refreshSemanticTokens();
+    await validateOpenVerilogDocuments();
+  } finally {
+    finishTrace?.();
+  }
+}
+
+function refreshSemanticTokens(): void {
+  try {
+    connection.languages.semanticTokens.refresh();
+  } catch (error) {
+    traceServerStartup(`semantic tokens refresh skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function effectiveSettingsForDocument(document: TextDocument, settings: CoSettings): CoSettings {

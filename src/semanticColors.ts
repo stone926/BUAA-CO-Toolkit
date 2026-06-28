@@ -10,15 +10,17 @@ type SemanticColorMode = 'auto' | 'dark' | 'light' | 'off';
 type SemanticRuleValue = string | { foreground?: string; fontStyle?: string; bold?: boolean; italic?: boolean; underline?: boolean };
 
 const lastAppliedKey = 'semanticColors.lastAppliedRules';
+const initialApplyDelayMs = 1500;
 
 export function registerSemanticColorDefaults(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
   const controller = new SemanticColorController(context, output);
   context.subscriptions.push(controller);
-  void controller.apply();
+  controller.applySoon(initialApplyDelayMs);
 }
 
 class SemanticColorController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
+  private applyTimer: ReturnType<typeof setTimeout> | undefined;
   private applying = false;
 
   constructor(
@@ -39,9 +41,23 @@ class SemanticColorController implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.applyTimer) {
+      clearTimeout(this.applyTimer);
+      this.applyTimer = undefined;
+    }
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
+  }
+
+  applySoon(delayMs: number): void {
+    if (this.applyTimer) {
+      clearTimeout(this.applyTimer);
+    }
+    this.applyTimer = setTimeout(() => {
+      this.applyTimer = undefined;
+      void this.apply();
+    }, Math.max(0, delayMs));
   }
 
   async apply(): Promise<void> {

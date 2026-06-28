@@ -33,9 +33,13 @@ const semanticTokenCache = new DocumentResultCache<SemanticTokens>();
 export function getVerilogSemanticTokens(document: TextDocument, _settings: CoSettings, index: VerilogWorkspaceIndex): SemanticTokens {
   return semanticTokenCache.getOrCreate(
     document,
-    `verilog-semantic:${index.version}`,
+    'verilog-semantic',
     () => buildVerilogSemanticTokens(document, index)
   );
+}
+
+export function clearVerilogSemanticTokenCache(uri?: string): void {
+  semanticTokenCache.clear(uri);
 }
 
 function buildVerilogSemanticTokens(document: TextDocument, index: VerilogWorkspaceIndex): SemanticTokens {

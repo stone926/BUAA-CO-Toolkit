@@ -67,7 +67,7 @@ import { getVerilogCompletions as getVerilogCompletionsFromProvider } from './co
 export { buildTestbench, parseVerilog, moduleAtPosition };
 export { getVerilogFoldingRanges } from './folding';
 export { getVerilogFormattingEdits } from './formatting';
-export { getVerilogSemanticTokens } from './semanticTokens';
+export { getVerilogSemanticTokens, clearVerilogSemanticTokenCache } from './semanticTokens';
 export { getVerilogDocumentSymbols } from './symbols';
 export { getVerilogDiagnostics } from './diagnosticProvider';
 export type { VerilogModule } from './model';

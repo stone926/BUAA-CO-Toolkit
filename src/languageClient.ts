@@ -7,10 +7,13 @@ import {
   ServerOptions,
   TransportKind
 } from 'vscode-languageclient/node';
+import { StartupTraceOutput, timeStartup, traceStartup } from './startupTrace';
 
 let client: LanguageClient | undefined;
 
-export function startLanguageServer(context: vscode.ExtensionContext): void {
+export function startLanguageServer(context: vscode.ExtensionContext, output?: StartupTraceOutput): void {
+  const finishStartTrace = timeStartup('language client start', output);
+  traceStartup('language client start requested', output);
   const serverModule = context.asAbsolutePath(path.join('out', 'server.js'));
   const serverOptions: ServerOptions = {
     run: {
@@ -39,7 +42,12 @@ export function startLanguageServer(context: vscode.ExtensionContext): void {
 
   client = new LanguageClient('buaa-co-language-server', 'BUAA CO Toolkit LSP', serverOptions, clientOptions);
   context.subscriptions.push(client);
-  void client.start();
+  void client.start().then(
+    () => finishStartTrace(),
+    (error) => {
+      traceStartup(`language client start failed: ${error instanceof Error ? error.message : String(error)}`, output);
+    }
+  );
 }
 
 export async function stopLanguageServer(): Promise<void> {

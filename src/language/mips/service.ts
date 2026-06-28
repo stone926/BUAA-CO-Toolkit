@@ -18,7 +18,7 @@ import {
 } from './navigation';
 import { clearCachedMipsParse, getCachedMipsParse } from './parseCache';
 import { getMipsRenameEdits, getMipsRenamePrepare } from './rename';
-import { getMipsSemanticTokens } from './semanticTokens';
+import { clearMipsSemanticTokenCache, getMipsSemanticTokens } from './semanticTokens';
 import { getMipsSignatureHelp } from './signatureHelp';
 import { MipsServerState } from './state';
 
@@ -35,6 +35,7 @@ export {
   getMipsRenameEdits,
   getMipsRenamePrepare,
   getMipsSemanticTokens,
+  clearMipsSemanticTokenCache,
   getMipsSignatureHelp,
   mipsIgnorePseudoFileCommand,
   mipsIgnorePseudoMnemonicCommand

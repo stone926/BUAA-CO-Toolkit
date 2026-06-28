@@ -33,13 +33,17 @@ import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProf
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 import { getProfileName } from './courseConfig';
 import { html, renderReportPage, renderTable } from './webview/reportLayout';
+import { timeStartup, traceStartup } from './startupTrace';
 
 const escapeHtml = html.text;
+const verilogModuleRegistryStartupDelayMs = 1000;
 
 export function activate(context: vscode.ExtensionContext): void {
-  startLanguageServer(context);
-
+  const finishActivateTrace = timeStartup('extension.activate');
   const output = vscode.window.createOutputChannel('BUAA CO Toolkit');
+  traceStartup('extension.activate begin', output);
+  startLanguageServer(context, output);
+
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBar.command = Commands.CheckToolchain;
   context.subscriptions.push(output, statusBar);
@@ -78,7 +82,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // 工作空间模块注册表：后台解析所有 .v 文件，供 sidebar 连线分析跨文件查找模块
-  const moduleRegistry = new WorkspaceModuleRegistry();
+  const moduleRegistry = new WorkspaceModuleRegistry({
+    initialScanDelayMs: verilogModuleRegistryStartupDelayMs
+  });
   setProfileInferenceProvider((resource) => buildProfileInferenceInput(resource, moduleRegistry));
   context.subscriptions.push({ dispose: () => setProfileInferenceProvider(undefined) });
   moduleRegistry.activate();
@@ -199,6 +205,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   refreshProjectUi();
+  finishActivateTrace();
 }
 
 function updateCoContext(resource?: vscode.Uri): void {
