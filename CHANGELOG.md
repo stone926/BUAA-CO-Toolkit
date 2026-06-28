@@ -2,6 +2,10 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [0.7.1] - 2026-06-28
+
+- fix: normalize ISim paths across CI platforms (54d548b)
+
 ## [0.7.0] - 2026-06-28
 
 - 移除中间产物 (e651452)
