@@ -17,6 +17,7 @@ orchestration:
 generation:
   courseTesting/builtinAsmGenerator.ts — 入口: generateBuiltinAsmTestCase, p7StressMode分派(anchor->randomBody, probe->probeEmitter, hybrid两次调用)
   courseTesting/generator.ts — 外部生成器: .py/.js/.jar/.ps1/.bat, snapshotAsmFiles(mtime快照)
+  courseTesting/generatorInstructionCatalog.ts — 内置 ASM 生成器指令 profile、分类、对齐和 MDU 延迟资源加载
   courseTesting/cpuState.ts — 软件CPU模型: 32GPR+256word DM+HI/LO+CP0(SR/Cause/EPC)+MDU保护, 按字节/半字/字读写, 最近写入追踪
   courseTesting/mnemonicSets.ts — Profile指令集(P3:8条,P4-5:+J型,P6:+MDU/load-store变体,P7:+CP0/异常), 功能分组(分支/load-store/MDU/CP0), memoryAlignment/mduBusyCycles
   courseTesting/p7Hardware.ts — P7 硬件布局单一入口: 加载/校验 resources/co/p7Hardware.json, 导出异常入口/Timer/CP0/probe/testbench容量常量

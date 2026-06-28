@@ -3,6 +3,7 @@ import {
   generateBuiltinAsmTestCase,
   resolveBuiltinInstructionSet
 } from '../../courseTesting/builtinAsmGenerator';
+import { generatorInstructionCatalog } from '../../courseTesting/generatorInstructionCatalog';
 import {
   p7ExceptionHandlerAddress,
   p7ExternalInterruptAckAddress,
@@ -25,29 +26,8 @@ import {
 
 describe('built-in ASM generator', () => {
   it('uses the course default instruction set for each CPU profile', () => {
-    const defaults = new Map([
-      ['P3', ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'nop']],
-      ['P4', ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'jal', 'jr', 'nop']],
-      ['P5', ['add', 'sub', 'ori', 'lw', 'sw', 'beq', 'lui', 'jal', 'jr', 'nop']],
-      ['P6', [
-        'add', 'sub', 'and', 'or', 'slt', 'sltu', 'lui',
-        'addi', 'andi', 'ori',
-        'lb', 'lh', 'lw', 'sb', 'sh', 'sw',
-        'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
-        'beq', 'bne', 'jal', 'jr'
-      ]],
-      ['P7', [
-        'nop', 'add', 'sub', 'and', 'or', 'slt', 'sltu', 'lui',
-        'addi', 'andi', 'ori',
-        'lb', 'lh', 'lw', 'sb', 'sh', 'sw',
-        'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
-        'beq', 'bne', 'jal', 'jr',
-        'mfc0', 'mtc0', 'eret', 'syscall'
-      ]]
-    ] as const);
-
-    for (const [profile, mnemonics] of defaults) {
-      const resolved = resolveBuiltinInstructionSet(profile, '');
+    for (const [profile, mnemonics] of Object.entries(generatorInstructionCatalog.profiles)) {
+      const resolved = resolveBuiltinInstructionSet(profile as Parameters<typeof resolveBuiltinInstructionSet>[0], '');
       expect(resolved.mnemonics).toEqual(mnemonics);
       expect(resolved.defaulted).toBe(true);
     }

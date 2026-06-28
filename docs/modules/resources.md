@@ -5,6 +5,7 @@
 resources/mips/:
   instructions.json — 指令元数据(助记符/类型R-I-J-special-pseudo/格式/操作数/描述/延迟槽/Profile)
   instructionMeta.json — 指令附加元数据, projects字段按Profile过滤
+  generatorProfiles.json — 内置 ASM 生成器默认指令集、分类、访存对齐、MDU延迟
   pseudoExpansions.json — 伪指令展开模板
   pseudoForms.json — 伪指令操作数形式
   registers.json — 寄存器表(编号/名称/用途)
