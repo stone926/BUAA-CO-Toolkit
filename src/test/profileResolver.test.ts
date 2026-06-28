@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultCoSettings } from '../language/common/settings';
 import { applyResolvedProfile, resolveProjectProfile, ProfileResolverModule } from '../profileResolver';
+import { getProfileInferenceConfig } from '../courseConfig';
 
 function module(name: string, ports: string[], bodyText = ''): ProfileResolverModule {
   return {
@@ -11,6 +12,15 @@ function module(name: string, ports: string[], bodyText = ''): ProfileResolverMo
 }
 
 describe('profile resolver', () => {
+  it('loads inference hints from the course configuration resource', () => {
+    const hints = getProfileInferenceConfig();
+    expect(hints.topModuleNames).toEqual(expect.arrayContaining(['mips', 'cpu']));
+    expect(hints.p6RequiredPorts?.length).toBeGreaterThan(0);
+    expect(hints.p7ExclusivePorts?.length).toBeGreaterThan(0);
+    expect(hints.p7Structure?.cp0DeclarationHints?.length).toBeGreaterThan(0);
+    expect(hints.logisimCpuPathPatterns?.length).toBeGreaterThan(0);
+  });
+
   it('uses explicit concrete profiles before inference', () => {
     const result = resolveProjectProfile({
       configuredProfile: 'P5',
@@ -165,29 +175,12 @@ describe('profile resolver', () => {
 });
 
 function p6Ports(): string[] {
-  return [
-    'clk',
-    'reset',
-    'i_inst_rdata',
-    'm_data_rdata',
-    'i_inst_addr',
-    'm_data_addr',
-    'm_data_wdata',
-    'm_data_byteen',
-    'm_inst_addr',
-    'w_grf_addr',
-    'w_grf_wdata',
-    'w_grf_we',
-    'w_inst_addr'
-  ];
+  return [...(getProfileInferenceConfig().p6RequiredPorts ?? [])];
 }
 
 function p7Ports(): string[] {
   return [
     ...p6Ports(),
-    'interrupt',
-    'macroscopic_pc',
-    'm_int_addr',
-    'm_int_byteen'
+    ...(getProfileInferenceConfig().p7ExclusivePorts ?? [])
   ];
 }

@@ -46,7 +46,13 @@
 - 建立配置 schema 源或生成脚本，生成 `package.json.contributes.configuration` 中的 default、enum、范围和说明。
 - 保留 manifest 测试作为生成结果校验，而不是唯一防线。
 
-### 3. Profile manifest enum 和推断 fallback 仍有重复来源
+### 3. [x] Profile manifest enum 和推断 fallback 仍有重复来源
+
+完成记录:
+
+- `co.project.profile` enum/enumDescriptions 已由 `resources/co/courseConfig.json` 生成。
+- `src/profileResolver.ts` 移除 `fallbackP7ExclusivePorts`、`fallbackP6RequiredPorts`、`fallbackTopModuleNames`、`fallbackP7Structure` 等重复数组；资源缺失时对应推断规则为空，不再隐藏资源缺失。
+- `profileResolver` 测试改为从 `courseConfig.profileInference` 读取端口规则，并校验资源中的推断 hint 非空。
 
 剩余证据:
 
@@ -126,7 +132,13 @@
 - 从 `generatorProfiles.json` 生成 `co.test.builtinGenerator.instructions` 的说明文本。
 - 增加 manifest 测试，确保说明里列出的 profile 指令集与 catalog 一致，或避免在 package 文案中展开完整列表。
 
-### 7. Verilog lint catalog 尚未成为规则文案、manifest enum 和文档的完整单一来源
+### 7. [x] Verilog lint catalog 尚未成为规则文案、manifest enum 和文档的完整单一来源
+
+完成记录:
+
+- `co.verilog.lint.disabledRules` default/enum 已由 `resources/verilog/lintRules.json` 生成，settings normalization 也只接受 catalog 中可配置规则。
+- `lintDiagnostics.ts` 的 VC/synth 诊断 severity 通过 lint catalog 注入，检测逻辑保留局部上下文 message。
+- 新增 `scripts/generate-diagnostic-catalog.mjs`，生成 `docs/diagnostic-catalog.md` 的 Verilog lint catalog 段，并新增测试防止文档漂移。
 
 剩余证据:
 

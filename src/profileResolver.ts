@@ -69,35 +69,6 @@ interface Candidate {
   reason: string;
 }
 
-const fallbackP7ExclusivePorts = ['interrupt', 'macroscopic_pc', 'm_int_addr', 'm_int_byteen'];
-const fallbackP6RequiredPorts = [
-  'clk',
-  'reset',
-  'i_inst_rdata',
-  'm_data_rdata',
-  'i_inst_addr',
-  'm_data_addr',
-  'm_data_wdata',
-  'm_data_byteen',
-  'm_inst_addr',
-  'w_grf_addr',
-  'w_grf_wdata',
-  'w_grf_we',
-  'w_inst_addr'
-];
-const fallbackTopModuleNames = ['mips', 'cpu'];
-const fallbackLogisimCpuPathPatterns = [
-  '(^|/)(p3|cpu|rom|test|code\\.txt)(/|$)',
-  '(^|/)code\\.txt$'
-];
-const fallbackP7Structure = {
-  cp0ModuleNames: ['cp0'],
-  cp0ModuleNameIncludes: ['cp0'],
-  cp0DeclarationHints: ['sr', 'cause', 'epc'],
-  bridgeModuleNames: ['bridge'],
-  timerModuleNames: ['tc', 'timer', 'timer0', 'timer1']
-};
-
 export function resolveProjectProfile(input: ProfileResolverInput): ProfileResolution {
   const configuredProfile = input.configuredProfile ?? 'auto';
   const configuredSource = input.configuredSource ?? 'default';
@@ -277,6 +248,9 @@ function findTopModule(modules: ProfileResolverModule[], topName?: string): Prof
 }
 
 function hasAllPorts(module: ProfileResolverModule, names: readonly string[]): boolean {
+  if (!names.length) {
+    return false;
+  }
   const ports = new Set(module.ports.map((port) => port.name));
   return names.every((name) => ports.has(name));
 }
@@ -399,22 +373,22 @@ interface ResolvedProfileInferenceHints {
 function profileInferenceHints(): ResolvedProfileInferenceHints {
   const config = getProfileInferenceConfig();
   return {
-    topModuleNames: normalizeStringList(config.topModuleNames, fallbackTopModuleNames),
-    p6RequiredPorts: normalizeStringList(config.p6RequiredPorts, fallbackP6RequiredPorts),
-    p7ExclusivePorts: normalizeStringList(config.p7ExclusivePorts, fallbackP7ExclusivePorts),
+    topModuleNames: normalizeStringList(config.topModuleNames),
+    p6RequiredPorts: normalizeStringList(config.p6RequiredPorts),
+    p7ExclusivePorts: normalizeStringList(config.p7ExclusivePorts),
     p7Structure: {
-      cp0ModuleNames: normalizeStringList(config.p7Structure?.cp0ModuleNames, fallbackP7Structure.cp0ModuleNames),
-      cp0ModuleNameIncludes: normalizeStringList(config.p7Structure?.cp0ModuleNameIncludes, fallbackP7Structure.cp0ModuleNameIncludes),
-      cp0DeclarationHints: normalizeStringList(config.p7Structure?.cp0DeclarationHints, fallbackP7Structure.cp0DeclarationHints),
-      bridgeModuleNames: normalizeStringList(config.p7Structure?.bridgeModuleNames, fallbackP7Structure.bridgeModuleNames),
-      timerModuleNames: normalizeStringList(config.p7Structure?.timerModuleNames, fallbackP7Structure.timerModuleNames)
+      cp0ModuleNames: normalizeStringList(config.p7Structure?.cp0ModuleNames),
+      cp0ModuleNameIncludes: normalizeStringList(config.p7Structure?.cp0ModuleNameIncludes),
+      cp0DeclarationHints: normalizeStringList(config.p7Structure?.cp0DeclarationHints),
+      bridgeModuleNames: normalizeStringList(config.p7Structure?.bridgeModuleNames),
+      timerModuleNames: normalizeStringList(config.p7Structure?.timerModuleNames)
     },
-    logisimCpuPathPatterns: normalizeStringList(config.logisimCpuPathPatterns, fallbackLogisimCpuPathPatterns)
+    logisimCpuPathPatterns: normalizeStringList(config.logisimCpuPathPatterns)
   };
 }
 
-function normalizeStringList(values: string[] | undefined, fallback: readonly string[]): string[] {
-  const normalized = (values?.length ? values : [...fallback])
+function normalizeStringList(values: string[] | undefined): string[] {
+  const normalized = (values ?? [])
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
   return [...new Set(normalized)];

@@ -56,7 +56,8 @@ vi.mock('../../config', () => ({
   getMachineCode() { return 'code.txt'; }
 }));
 
-import { buildMarsArgs } from '../../mips';
+import { p7ExceptionHandlerAddress, p7KernelTextDumpEndAddress } from '../../courseTesting/p7Hardware';
+import { buildMarsArgs, p7KernelTextDumpRange } from '../../mips';
 
 function makeUri(fsPath = '/test/asm.asm'): any {
   return { scheme: 'file', fsPath, path: fsPath };
@@ -230,6 +231,11 @@ describe('buildMarsArgs', () => {
   });
 
   describe('dumpKernel mode', () => {
+    it('derives the P7 kernel dump range from the hardware resource', () => {
+      const format = (value: number) => `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
+      expect(p7KernelTextDumpRange()).toBe(`${format(p7ExceptionHandlerAddress)}-${format(p7KernelTextDumpEndAddress)}`);
+    });
+
     it('does not append asm file path', () => {
       setProfile(asmUri, 'P5');
 

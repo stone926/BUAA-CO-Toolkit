@@ -19,6 +19,7 @@ import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostic
 import { collectCombinationalDataflowDiagnostics } from './dataflowDiagnostics';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
 import type { VerilogAssignmentStatementAst, VerilogLocalDeclarationAst, VerilogProceduralStatementAst } from './proceduralAst';
+import { getVerilogLintRule } from './lintRuleCatalog';
 
 export function collectAssignmentDiagnostics(
   document: TextDocument,
@@ -82,7 +83,7 @@ export function collectSynthesizableHintDiagnostics(document: TextDocument, sett
     }
     for (const decl of module.declarations.values()) {
       if (registerInitializerKinds.has(decl.kind) && decl.initializerRange) {
-        diagnostics.push(makeDiagnostic(decl.selectionRange, 'Synthesizable style: avoid declaration initializers for registers; reset them in clocked logic.', DiagnosticSeverity.Information, 'synth-decl-init'));
+        diagnostics.push(makeDiagnostic(decl.selectionRange, 'Synthesizable style: avoid declaration initializers for registers; reset them in clocked logic.', lintSeverity('synth-decl-init', DiagnosticSeverity.Information), 'synth-decl-init'));
       }
     }
   }
@@ -91,10 +92,26 @@ export function collectSynthesizableHintDiagnostics(document: TextDocument, sett
 const registerInitializerKinds = new Set(['reg', 'logic', 'integer']);
 const expensiveSynthesizableOperators = new Set(['*', '/', '%']);
 
+function lintSeverity(ruleId: string, fallback: DiagnosticSeverity): DiagnosticSeverity {
+  const severity = getVerilogLintRule(ruleId)?.severity;
+  switch (severity) {
+    case 'error':
+      return DiagnosticSeverity.Error;
+    case 'warning':
+      return DiagnosticSeverity.Warning;
+    case 'information':
+      return DiagnosticSeverity.Information;
+    case 'hint':
+      return DiagnosticSeverity.Hint;
+    default:
+      return fallback;
+  }
+}
+
 function collectInitialBlockHintDiagnostics(moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
   for (const block of moduleAst.proceduralBlocks) {
     if (block.kind === 'initial') {
-      diagnostics.push(makeDiagnostic(block.headerRange, 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', DiagnosticSeverity.Information, 'synth-initial'));
+      diagnostics.push(makeDiagnostic(block.headerRange, 'Synthesizable style: avoid initial blocks in design modules; use reset logic instead.', lintSeverity('synth-initial', DiagnosticSeverity.Information), 'synth-initial'));
     }
   }
 }
@@ -115,7 +132,7 @@ function collectSynthesizableOperatorDiagnostics(document: TextDocument, moduleA
         return;
       }
       reported.add(key);
-      diagnostics.push(makeDiagnostic(range, 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', DiagnosticSeverity.Information, 'synth-mul-div'));
+      diagnostics.push(makeDiagnostic(range, 'Synthesizable style: avoid multiply/divide/modulo operators on FPGA datapaths unless the hardware cost is intentional.', lintSeverity('synth-mul-div', DiagnosticSeverity.Information), 'synth-mul-div'));
     });
   };
 
@@ -319,10 +336,10 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
     const blockAssignments = collectAssignmentUsesFromProceduralStatementAst(document, block.statementTree, index);
     if (block.combinational) {
       if (isVerilogLintRuleEnabled(settings, 'vc-006') && !block.sensitivity.wildcard) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', DiagnosticSeverity.Warning, 'vc-006-comb-sensitivity'));
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-006: combinational logic should use always @(*) or assign.', lintSeverity('vc-006', DiagnosticSeverity.Warning), 'vc-006-comb-sensitivity'));
       }
       if (isVerilogLintRuleEnabled(settings, 'vc-007') && blockAssignments.some((assignment) => assignment.operator === '<=')) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-007: combinational always blocks should use blocking assignments (=), not nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-007-comb-nonblocking'));
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-007: combinational always blocks should use blocking assignments (=), not nonblocking assignments (<=).', lintSeverity('vc-007', DiagnosticSeverity.Warning), 'vc-007-comb-nonblocking'));
       }
       collectCombinationalDataflowDiagnostics(document, settings, module, block, diagnostics);
     }
@@ -332,28 +349,28 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
         .filter((event) => event.edge === 'posedge' || event.edge === 'negedge')
         .flatMap((event) => event.signal ? [event.signal] : []);
       if (isVerilogLintRuleEnabled(settings, 'vc-009') && !block.sensitivity.hasPosedgeSignal) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-009: sequential logic should be implemented in always @(posedge clock) blocks.', DiagnosticSeverity.Warning, 'vc-009-seq-posedge'));
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-009: sequential logic should be implemented in always @(posedge clock) blocks.', lintSeverity('vc-009', DiagnosticSeverity.Warning), 'vc-009-seq-posedge'));
       }
       if (isVerilogLintRuleEnabled(settings, 'vc-011') && block.sensitivity.hasNegedge) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-011: avoid negedge-triggered logic unless a protocol explicitly requires it.', DiagnosticSeverity.Warning, 'vc-011-negedge'));
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-011: avoid negedge-triggered logic unless a protocol explicitly requires it.', lintSeverity('vc-011', DiagnosticSeverity.Warning), 'vc-011-negedge'));
       }
       for (const signal of edgeSignals) {
         if (isVerilogLintRuleEnabled(settings, 'vc-012') && !isClockOrResetSignal(signal)) {
-          diagnostics.push(makeDiagnostic(block.headerRange, `VC-012: edge trigger on '${signal}' is not a clock/reset signal.`, DiagnosticSeverity.Warning, 'vc-012-edge-signal'));
+          diagnostics.push(makeDiagnostic(block.headerRange, `VC-012: edge trigger on '${signal}' is not a clock/reset signal.`, lintSeverity('vc-012', DiagnosticSeverity.Warning), 'vc-012-edge-signal'));
         }
       }
       if (isVerilogLintRuleEnabled(settings, 'vc-014') && edgeSignals.length > 1) {
-        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', DiagnosticSeverity.Information, 'vc-014-sync-reset'));
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', lintSeverity('vc-014', DiagnosticSeverity.Information), 'vc-014-sync-reset'));
       }
       for (const assignment of blockAssignments) {
         if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=') {
-          diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', DiagnosticSeverity.Warning, 'vc-010-seq-blocking'));
+          diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', lintSeverity('vc-010', DiagnosticSeverity.Warning), 'vc-010-seq-blocking'));
         }
       }
       const clockSignals = edgeSignals.filter(isClockSignalName);
       for (const clock of clockSignals) {
         if (isVerilogLintRuleEnabled(settings, 'vc-013') && proceduralAssignmentRhsContainsIdentifier(block.statementTree, clock)) {
-          diagnostics.push(makeDiagnostic(block.headerRange, `VC-013: clock signal '${clock}' should not be used as data inside sequential logic.`, DiagnosticSeverity.Information, 'vc-013-clock-data'));
+          diagnostics.push(makeDiagnostic(block.headerRange, `VC-013: clock signal '${clock}' should not be used as data inside sequential logic.`, lintSeverity('vc-013', DiagnosticSeverity.Information), 'vc-013-clock-data'));
         }
       }
     }
@@ -367,7 +384,7 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
   for (const [name, blockIndexes] of assignedBlocks) {
     if (isVerilogLintRuleEnabled(settings, 'vc-005') && blockIndexes.size > 1) {
       const decl = module.declarations.get(name);
-      diagnostics.push(makeDiagnostic(decl?.selectionRange ?? module.selectionRange, `VC-005: signal '${name}' is assigned in multiple always blocks.`, DiagnosticSeverity.Warning, 'vc-005-multiple-always'));
+      diagnostics.push(makeDiagnostic(decl?.selectionRange ?? module.selectionRange, `VC-005: signal '${name}' is assigned in multiple always blocks.`, lintSeverity('vc-005', DiagnosticSeverity.Warning), 'vc-005-multiple-always'));
     }
   }
 }
@@ -378,20 +395,20 @@ function collectNamingDiagnostics(settings: CoSettings, module: VerilogModule, d
     const style = identifierStyle(decl.name);
     if (!style) {
       if (isVerilogLintRuleEnabled(settings, 'vc-001')) {
-        diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-001: signal '${decl.name}' should use snake_case, camelCase, or PascalCase.`, DiagnosticSeverity.Information, 'vc-001-name-style'));
+        diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-001: signal '${decl.name}' should use snake_case, camelCase, or PascalCase.`, lintSeverity('vc-001', DiagnosticSeverity.Information), 'vc-001-name-style'));
       }
     } else {
       styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
     }
     if (isVerilogLintRuleEnabled(settings, 'vc-002') && looksLowActiveWithoutSuffix(decl.name)) {
-      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-002: low-active signal '${decl.name}' should use the _n suffix.`, DiagnosticSeverity.Information, 'vc-002-low-active-suffix'));
+      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-002: low-active signal '${decl.name}' should use the _n suffix.`, lintSeverity('vc-002', DiagnosticSeverity.Information), 'vc-002-low-active-suffix'));
     }
     if (isVerilogLintRuleEnabled(settings, 'vc-003') && /mux/i.test(decl.name) && !/\d/.test(decl.name)) {
-      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-003: multiplexer signal '${decl.name}' should reflect its width or input count.`, DiagnosticSeverity.Information, 'vc-003-mux-name'));
+      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-003: multiplexer signal '${decl.name}' should reflect its width or input count.`, lintSeverity('vc-003', DiagnosticSeverity.Information), 'vc-003-mux-name'));
     }
   }
   if (isVerilogLintRuleEnabled(settings, 'vc-001') && styleCounts.size > 1) {
-    diagnostics.push(makeDiagnostic(module.selectionRange, 'VC-001: this module mixes signal naming styles; keep one of snake_case, camelCase, or PascalCase consistently.', DiagnosticSeverity.Information, 'vc-001-mixed-name-style'));
+    diagnostics.push(makeDiagnostic(module.selectionRange, 'VC-001: this module mixes signal naming styles; keep one of snake_case, camelCase, or PascalCase consistently.', lintSeverity('vc-001', DiagnosticSeverity.Information), 'vc-001-mixed-name-style'));
   }
 }
 
@@ -401,14 +418,14 @@ function collectInstantiationStyleDiagnostics(settings: CoSettings, module: Veri
   }
   for (const instance of module.instances) {
     if (instance.portConnections.some((connection) => !connection.name)) {
-      diagnostics.push(makeDiagnostic(instance.selectionRange, `Testbench/VC-017: instance '${instance.instanceName}' should use named port mapping.`, DiagnosticSeverity.Information, 'vc-017-named-ports'));
+      diagnostics.push(makeDiagnostic(instance.selectionRange, `Testbench/VC-017: instance '${instance.instanceName}' should use named port mapping.`, lintSeverity('vc-017', DiagnosticSeverity.Information), 'vc-017-named-ports'));
     }
     if (instance.portConnections.length > 1 && instance.range.start.line === instance.range.end.line) {
-      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should use multi-line formatting with one port connection per line.`, DiagnosticSeverity.Information, 'vc-017-multiline-instance'));
+      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should use multi-line formatting with one port connection per line.`, lintSeverity('vc-017', DiagnosticSeverity.Information), 'vc-017-multiline-instance'));
     }
     const lines = new Set(instance.portConnections.map((connection) => connection.range.start.line));
     if (lines.size < instance.portConnections.length) {
-      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should place each port connection on a separate line.`, DiagnosticSeverity.Information, 'vc-017-one-port-per-line'));
+      diagnostics.push(makeDiagnostic(instance.selectionRange, `VC-017: instance '${instance.instanceName}' should place each port connection on a separate line.`, lintSeverity('vc-017', DiagnosticSeverity.Information), 'vc-017-one-port-per-line'));
     }
   }
 }
@@ -422,7 +439,7 @@ function collectExplicitWidthDiagnostics(settings: CoSettings, module: VerilogMo
       continue;
     }
     if (!decl.width && !['clk', 'clock', 'reset', 'rst'].includes(decl.name.toLowerCase())) {
-      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-021: signal '${decl.name}' should declare an explicit width, even if it is 1 bit.`, DiagnosticSeverity.Information, 'vc-021-explicit-width'));
+      diagnostics.push(makeDiagnostic(decl.selectionRange, `VC-021: signal '${decl.name}' should declare an explicit width, even if it is 1 bit.`, lintSeverity('vc-021', DiagnosticSeverity.Information), 'vc-021-explicit-width'));
     }
   }
 }
@@ -483,7 +500,7 @@ function collectMagicNumberDiagnosticsFromExpression(
         return;
       }
       reported.add(key);
-      diagnostics.push(makeDiagnostic(range, 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', DiagnosticSeverity.Information, 'vc-004-magic-number'));
+      diagnostics.push(makeDiagnostic(range, 'VC-004: replace magic numbers with a descriptive localparam, parameter, or macro.', lintSeverity('vc-004', DiagnosticSeverity.Information), 'vc-004-magic-number'));
       return;
     }
     case 'parenthesizedExpression':
@@ -555,7 +572,7 @@ function collectInoutDiagnostics(settings: CoSettings, module: VerilogModule, di
   }
   for (const port of module.ports) {
     if (port.direction === 'inout') {
-      diagnostics.push(makeDiagnostic(port.selectionRange, `VC-015: internal module '${module.name}' should not use inout port '${port.name}'.`, DiagnosticSeverity.Warning, 'vc-015-inout'));
+      diagnostics.push(makeDiagnostic(port.selectionRange, `VC-015: internal module '${module.name}' should not use inout port '${port.name}'.`, lintSeverity('vc-015', DiagnosticSeverity.Warning), 'vc-015-inout'));
     }
   }
 }

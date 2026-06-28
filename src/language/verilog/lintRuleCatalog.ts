@@ -19,6 +19,11 @@ export const configurableVerilogLintRuleIds = verilogLintRuleCatalog
 export const defaultDisabledVerilogLintRuleIds = verilogLintRuleCatalog
   .filter((rule) => rule.configurable && !rule.enabledByDefault)
   .map((rule) => rule.id);
+const verilogLintRuleById = new Map(verilogLintRuleCatalog.map((rule) => [rule.id, rule]));
+
+export function getVerilogLintRule(id: string): VerilogLintRuleCatalogEntry | undefined {
+  return verilogLintRuleById.get(id.toLowerCase());
+}
 
 function loadVerilogLintRuleCatalog(): VerilogLintRuleCatalogEntry[] {
   const filePath = path.join(__dirname, '..', '..', '..', 'resources', 'verilog', 'lintRules.json');

@@ -98,9 +98,36 @@ This catalog records stable diagnostic codes used by the built-in MIPS and Veril
 
 ### Verilog Course Lint Catalog
 
-Configurable VC rules are cataloged in `resources/verilog/lintRules.json`; `co.verilog.lint.disabledRules` must use this same set:
+<!-- generated:verilog-lint-rules:start -->
 
-`vc-001`, `vc-002`, `vc-003`, `vc-004`, `vc-005`, `vc-006`, `vc-007`, `vc-008`, `vc-009`, `vc-010`, `vc-011`, `vc-012`, `vc-013`, `vc-014`, `vc-015`, `vc-017`, `vc-021`.
+Configurable VC rules and synthesizable hint rules are generated from `resources/verilog/lintRules.json`.
+
+Configurable rule ids: `vc-001`, `vc-002`, `vc-003`, `vc-004`, `vc-005`, `vc-006`, `vc-007`, `vc-008`, `vc-009`, `vc-010`, `vc-011`, `vc-012`, `vc-013`, `vc-014`, `vc-015`, `vc-017`, `vc-021`.
+
+| Code | Severity | Default | Configurable | Title | Description |
+| --- | --- | --- | --- | --- | --- |
+| `vc-001` | information | disabled | yes | Signal naming style | Keep signal names in one recognizable style. |
+| `vc-002` | information | enabled | yes | Low-active suffix | Low-active signal names should use the _n suffix. |
+| `vc-003` | information | disabled | yes | Multiplexer signal naming | Multiplexer signal names should reveal width or input count. |
+| `vc-004` | information | disabled | yes | Magic number | Replace unexplained numeric literals with a localparam, parameter, or macro. |
+| `vc-005` | warning | enabled | yes | Multiple always drivers | Avoid assigning one signal in multiple always blocks. |
+| `vc-006` | warning | enabled | yes | Combinational sensitivity | Combinational logic should use always @(*) or assign. |
+| `vc-007` | warning | enabled | yes | Combinational blocking assignment | Combinational always blocks should use blocking assignments. |
+| `vc-008` | information | disabled | yes | Combinational completeness | Combinational branches and case statements should assign every output path. |
+| `vc-009` | warning | enabled | yes | Sequential posedge | Sequential logic should use always @(posedge clock). |
+| `vc-010` | warning | enabled | yes | Sequential nonblocking assignment | Sequential always blocks should use nonblocking assignments. |
+| `vc-011` | warning | enabled | yes | Negedge trigger | Avoid negedge-triggered logic unless a protocol requires it. |
+| `vc-012` | warning | enabled | yes | Edge signal kind | Edge-triggered sensitivity signals should be clocks or resets. |
+| `vc-013` | information | enabled | yes | Clock used as data | Clock signals should not be used as ordinary data inside sequential logic. |
+| `vc-014` | information | enabled | yes | Synchronous reset preference | Prefer synchronous reset when async reset appears in sensitivity lists. |
+| `vc-015` | warning | enabled | yes | Internal inout port | Internal modules should avoid inout ports. |
+| `vc-017` | information | disabled | yes | Instance port formatting | Instances should use named, multiline, one-port-per-line mapping. |
+| `vc-021` | information | disabled | yes | Explicit signal width | Declare explicit widths for non-parameter signals. |
+| `synth-decl-init` | information | enabled | no | Declaration initializer | Avoid declaration initializers for registers in synthesizable modules. |
+| `synth-initial` | information | enabled | no | Initial block | Avoid initial blocks in synthesizable design modules. |
+| `synth-mul-div` | information | enabled | no | Expensive arithmetic operator | Avoid multiply, divide, and modulo operators unless hardware cost is intentional. |
+
+<!-- generated:verilog-lint-rules:end -->
 
 ## Adding A Code
 

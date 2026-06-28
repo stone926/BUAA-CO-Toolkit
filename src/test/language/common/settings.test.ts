@@ -96,7 +96,7 @@ describe('mergeCoSettings', () => {
   });
 
   it('normalizes custom disabled Verilog lint rules', () => {
-    const result = mergeCoSettings({ verilog: { lint: { disabledRules: ['VC-002', 'bad', 'vc-002', ' vc-017 '] } } });
+    const result = mergeCoSettings({ verilog: { lint: { disabledRules: ['VC-002', 'bad', 'vc-999', 'vc-002', ' vc-017 '] } } });
     expect(result.verilog.lint.disabledRules).toEqual(['vc-002', 'vc-017']);
   });
 

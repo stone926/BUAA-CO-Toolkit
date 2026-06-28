@@ -1,9 +1,10 @@
 // @index settings — CoSettings接口/默认值/合并验证/诊断禁用键
 import { ProjectProfile } from '../../projectProfile';
 import { configDefault, configDefaultArray } from '../../configDefaults';
-import { defaultDisabledVerilogLintRuleIds } from '../verilog/lintRuleCatalog';
+import { configurableVerilogLintRuleIds, defaultDisabledVerilogLintRuleIds } from '../verilog/lintRuleCatalog';
 
 export const defaultDisabledVerilogLintRules = defaultDisabledVerilogLintRuleIds as readonly string[];
+const configurableVerilogLintRuleSet = new Set(configurableVerilogLintRuleIds);
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
@@ -265,7 +266,7 @@ function normalizeDisabledRules(value: unknown): string[] {
   return [...new Set(value
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim().toLowerCase())
-    .filter((item) => /^vc-\d{3}$/.test(item)))];
+    .filter((item) => configurableVerilogLintRuleSet.has(item)))];
 }
 
 function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format'] {

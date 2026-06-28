@@ -433,6 +433,6 @@ function formatMarsDumpAddress(value: number): string {
   return `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
 }
 
-function p7KernelTextDumpRange(): string {
+export function p7KernelTextDumpRange(): string {
   return `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-${formatMarsDumpAddress(p7KernelTextDumpEndAddress)}`;
 }
