@@ -37,7 +37,9 @@ expr-support:
   parseCache.ts — 解析缓存(DocumentResultCache wrapper)
 
 lsp-providers:
-  service.ts — 注册中心(1961行): 诊断(含ISE合并)/补全(实例连接上下文/宏/关键字/snippet)/hover(宽度+常量+实例+include)/定义(跨文件)/引用(跨文件接口)/代码操作(常量折叠/提取localparam/wire/冗余括号移除/隐式连线声明/实例连接补全)/签名帮助/内联提示(端口方向+宽度)/重命名
+  service.ts — 聚合facade: hover(宽度+常量+实例+include)/定义(跨文件)/引用(跨文件接口)/代码操作(常量折叠/提取localparam/wire/冗余括号移除/隐式连线声明/实例连接补全)/签名帮助/内联提示(端口方向+宽度)/重命名, 并聚合各provider导出
+  diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
+  completionProvider.ts — 补全provider: 实例连接上下文/宏/关键字/snippet/workspace模块补全
   semanticTokens.ts — 语义高亮: module/port/signal/parameter/instance/macro/systemTask/number/keyword/comment/string/formatSpecifier/punctuation
   formatting.ts — course/compact/custom三种风格
   folding.ts — module/always/initial/function/task/generate/case/预处理条件块
