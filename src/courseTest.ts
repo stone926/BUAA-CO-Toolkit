@@ -52,7 +52,7 @@ import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { runIsim } from './verilog';
 import { createIsimCompileCache, IsimCompileCache } from './verilogIsimCache';
 import { AppServices, ProjectProfile } from './types';
-import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, readTextFile, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { pickOneFile } from './workflowInputs';
 import {
@@ -98,7 +98,6 @@ import type {
 } from './courseTestReport';
 import {
   marsOutputFileNameForCase,
-  normalizePathKey,
   simOutputFileNameForCase
 } from './courseTestTraceFiles';
 import { diffMessage, marsStageFailureMessage } from './courseTestMessages';
@@ -106,6 +105,7 @@ import {
   findStdinCandidatesForAsm,
   resolveSingleStdinInput
 } from './courseTestStdin';
+import { normalizePathKey } from './pathUtils';
 
 const batchTraceCompareRetainedEntries = 1;
 
@@ -607,7 +607,7 @@ async function resolveGeneratedAsmBatch(services: AppServices): Promise<Generate
 }
 
 async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined> {
-  const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(vscode.window.activeTextEditor?.document.uri);
   if (!folder) {
     vscode.window.showErrorMessage('运行测试生成器前请先打开一个工作区文件夹');
     return undefined;
@@ -1061,7 +1061,7 @@ async function writeBatchTraceReport(
   results: CourseTraceCaseResult[],
   source: CourseTraceBatchSource
 ): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(firstAsm) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(firstAsm);
   const baseDir = folder?.uri.fsPath ?? path.dirname(firstAsm.fsPath);
   const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
   await ensureDirectory(outDir);
@@ -1076,7 +1076,7 @@ async function writeBatchTraceReport(
 }
 
 async function resolveBatchTraceReport(): Promise<vscode.Uri | undefined> {
-  const folder = workspaceFolderFor(vscode.window.activeTextEditor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(vscode.window.activeTextEditor?.document.uri);
   if (folder) {
     const matches = await vscode.workspace.findFiles(
       new vscode.RelativePattern(folder, '**/.co/out/trace-batch-report.json'),

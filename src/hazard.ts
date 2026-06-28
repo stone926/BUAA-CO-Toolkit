@@ -3,12 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ensureConcreteProfile, getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
-import { ensureDirectory, fileMtimeMs, isDirectory, isFile, readTextFile, workspaceFolderFor } from './fsUtil';
+import { ensureDirectory, fileMtimeMs, isDirectory, isFile, readTextFile, workspaceFolderForOrFirst } from './fsUtil';
 import { runMarsFile } from './mips';
 import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
 import { pickOneFile } from './workflowInputs';
 import { escapeHtml } from './language/common/util';
+import { dedupePaths, samePath, sanitizeFileStem } from './pathUtils';
 
 interface HazardToolPaths {
   dir: string;
@@ -90,7 +91,7 @@ async function resolveHazardDir(resource?: vscode.Uri): Promise<HazardToolPaths 
 }
 
 function findWorkspaceFolder(resource?: vscode.Uri): vscode.WorkspaceFolder | undefined {
-  return workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  return workspaceFolderForOrFirst(resource);
 }
 
 async function runHazardAnalysis(services: AppServices): Promise<void> {
@@ -756,20 +757,6 @@ function crc32(data: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function dedupePaths(files: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const file of files) {
-    const key = normalizePathKey(file);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(file);
-  }
-  return result;
-}
-
 async function hazardStatisticReports(directory: string): Promise<string[]> {
   let entries: string[];
   try {
@@ -791,17 +778,4 @@ async function hazardStatisticReports(directory: string): Promise<string[]> {
     .filter((item): item is { file: string; mtimeMs: number } => Boolean(item))
     .sort((left, right) => right.mtimeMs - left.mtimeMs)
     .map((item) => item.file);
-}
-
-function samePath(left: string, right: string): boolean {
-  return normalizePathKey(left) === normalizePathKey(right);
-}
-
-function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-}
-
-function sanitizeFileStem(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'case';
 }

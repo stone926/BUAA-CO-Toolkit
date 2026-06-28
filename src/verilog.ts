@@ -21,7 +21,7 @@ import {
   parseVerilog,
   VerilogModule
 } from './language/verilog/service';
-import { ensureDirectory, isFile, pathExists, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import { revealOutputChannel, runTool } from './process';
 import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
@@ -53,8 +53,6 @@ import {
 } from './verilogWaveform';
 import {
   isimOutputFileName,
-  normalizePathKey,
-  samePath,
   simulationOutputDirectory
 } from './verilogIsimOutput';
 import {
@@ -62,6 +60,12 @@ import {
   isimCompileArtifactStem,
   isimCompileCacheKey
 } from './verilogIsimCache';
+import {
+  dedupePaths,
+  dedupeUris,
+  normalizePathKey,
+  samePath
+} from './pathUtils';
 
 export interface IseProjectFiles {
   prj: vscode.Uri;
@@ -562,7 +566,7 @@ async function ensureP7InterruptTestbench(
     services.output.appendLine(`未找到顶层模块 ${topName}，无法生成 P7 中断 testbench；改用默认 testbench（不注入外部中断）。`);
     return undefined;
   }
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(topDefinition.uri) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(topDefinition.uri);
   const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
   const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
   await ensureDirectory(outDir);
@@ -674,7 +678,7 @@ async function ensureActiveModuleTestbench(
 }
 
 async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(resource);
   const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
   const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
   await ensureDirectory(outDir);
@@ -940,7 +944,7 @@ async function findTopModuleDefinition(
     }
   }
 
-  const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(resource);
   if (!folder) {
     return undefined;
   }
@@ -984,7 +988,7 @@ async function resolveMachineCodeSource(resource: vscode.Uri | undefined, outDir
   if (resource?.scheme === 'file') {
     candidates.push(path.resolve(path.dirname(resource.fsPath), machineCode));
   }
-  const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(resource);
   if (folder) {
     candidates.push(path.resolve(folder.uri.fsPath, machineCode));
   }
@@ -1027,34 +1031,6 @@ function machineCodeCandidateRank(file: string, resource: vscode.Uri | undefined
     return 30;
   }
   return 100 + relative.length;
-}
-
-function dedupePaths(files: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const file of files) {
-    const key = normalizePathKey(file);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(file);
-  }
-  return result;
-}
-
-function dedupeUris(files: vscode.Uri[]): vscode.Uri[] {
-  const seen = new Set<string>();
-  const result: vscode.Uri[] = [];
-  for (const uri of files) {
-    const key = normalizePathKey(uri.fsPath);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(uri);
-  }
-  return result;
 }
 
 function uriForVerilogModule(module: VerilogModule): vscode.Uri | undefined {

@@ -30,6 +30,7 @@ import {
   renderContinuousTraceMonitor
 } from './courseTestReport';
 import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
+import { normalizePathKey } from './pathUtils';
 
 interface ContinuousTraceSession {
   stopRequested: boolean;
@@ -498,11 +499,6 @@ function isSafeContinuousOutFile(file: string): boolean {
 function isPathInside(file: string, directory: string): boolean {
   const relative = path.relative(path.resolve(directory), path.resolve(file));
   return relative === '' || Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
-}
-
-function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 async function delay(ms: number): Promise<void> {

@@ -26,8 +26,9 @@ process:
   textChunks.ts — TextChunkAccumulator(零拷贝chunk收集), LineChunkScanner(流式逐行CRLF兼容)
 
 fs:
-  fsUtil.ts — workspaceFolderFor/dirname/basenameNoExt/readTextFile/writeTextFile(VSCode API)/coTmpDir(.co/tmp/)/cleanupCoTmp
+  fsUtil.ts — workspaceFolderFor/workspaceFolderForOrFirst/dirname/basenameNoExt/readTextFile/writeTextFile(VSCode API)/coTmpDir(.co/tmp/)/cleanupCoTmp
   nodeFs.ts — pathExists/isFile/isDirectory/fileMtimeMs/yieldEventLoop
+  pathUtils.ts — normalizePathKey/samePath/dedupePaths/dedupeUris/sanitizeFileStem 纯路径工具
 
 mips-commands:
   mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, P7内核段合并(0x4180+停机自环), P4/P5/P6自动追加停机自环, MARS兼容诊断(coL1/efc/p7irq/cl). registerMips()注册6个命令
@@ -36,7 +37,7 @@ verilog-commands:
   verilog.ts — generateTestbench(course-aware), generateIseProject(.prj/.tcl), runIsim(compile+sim含P7 auto/probe testbench+中断调度), compileIsim(fuse+缓存). registerVerilog()注册7个命令
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
-  verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 路径标准化
+  verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper
   verilogSimulationFiles.ts — ISE项目文本/ISim TCL/运行时testbench(含P7 auto/probe), isGeneratedRuntimeTestbench
   verilogWaveform.ts — openIsimWaveform(ISim GUI+wave add -r /), exportVcdWaveform(TCL批处理VCD)
 

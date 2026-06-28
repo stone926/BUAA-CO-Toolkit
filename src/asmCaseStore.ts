@@ -4,7 +4,8 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
-import { ensureDirectory, pathExists, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, pathExists, readTextFile, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
+import { normalizePathKey } from './pathUtils';
 import { runMarsFile, MarsRunOptions, MarsRunOutput } from './mips';
 import { AppServices } from './types';
 import {
@@ -48,7 +49,7 @@ export async function resolveAsmCaseInput(title = '选择 MIPS ASM 文件'): Pro
     return editor.document.uri;
   }
 
-  const folder = workspaceFolderFor(editor?.document.uri) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(editor?.document.uri);
   if (folder) {
     const files = await vscode.workspace.findFiles(
       new vscode.RelativePattern(folder, '**/*.{asm,s,mips}'),
@@ -330,7 +331,7 @@ async function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string):
 }
 
 function caseWorkspaceRoot(resource?: vscode.Uri): string {
-  const folder = workspaceFolderFor(resource) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderForOrFirst(resource);
   if (folder) {
     return folder.uri.fsPath;
   }
@@ -410,9 +411,4 @@ function artifactDirectory(asmCase: AsmCase, kind: 'verilog' | 'logisim' | 'mars
 
 async function writeAsmCaseManifest(asmCase: AsmCase): Promise<void> {
   await writeTextFile(asmCase.manifestUri, JSON.stringify(asmCase.manifest, null, 2) + '\n');
-}
-
-function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }

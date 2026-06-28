@@ -28,6 +28,7 @@ import {
   SidebarTutorialModel
 } from './sidebarModel';
 import { ProjectProfile } from './types';
+import { workspaceFolderForOrFirst } from './fsUtil';
 
 export type SidebarItem = vscode.TreeItem & { children?: SidebarItem[]; contextValue?: string };
 
@@ -60,7 +61,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     const activeDocument = this.currentTextDocument();
     const resource = activeDocument?.uri;
     const profile = getProfile(resource);
-    const folder = this.workspaceFolder(resource);
+    const folder = workspaceFolderForOrFirst(resource);
 
     return {
       profile,
@@ -197,13 +198,6 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       });
     }
     return items;
-  }
-
-  private workspaceFolder(resource?: vscode.Uri): vscode.WorkspaceFolder | undefined {
-    if (resource) {
-      return vscode.workspace.getWorkspaceFolder(resource) ?? vscode.workspace.workspaceFolders?.[0];
-    }
-    return vscode.workspace.workspaceFolders?.[0];
   }
 
   private isLogisimCircuitFile(uri: vscode.Uri): boolean {

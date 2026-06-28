@@ -15,6 +15,7 @@ import { appendHaltLoop, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from './courseTest
 import { p7ExceptionHandlerAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
 import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
+import { sanitizeFileStem } from './pathUtils';
 import {
   buildMarsArgs,
   isCourseTraceMarsRun,
@@ -423,15 +424,11 @@ function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): strin
     return `${asmName}.mars.out`;
   }
   const inputName = path.basename(stdinSource.fsPath, path.extname(stdinSource.fsPath));
-  return `${asmName}.${sanitizeFileStem(inputName)}.mars.out`;
+  return `${asmName}.${sanitizeFileStem(inputName, { fallback: 'stdin', trimOuterUnderscores: false })}.mars.out`;
 }
 
 const p7KernelTextStartIndex = (p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4;
 
 function formatMarsDumpAddress(value: number): string {
   return `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
-}
-
-function sanitizeFileStem(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';
 }

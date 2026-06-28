@@ -96,6 +96,7 @@ import { runIseSyntaxCheck } from './language/verilog/iseSyntaxCheck';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
+import { samePath } from './pathUtils';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -645,7 +646,7 @@ function profileFilesWithActive(
   languageId: string
 ): Array<{ path: string; languageId?: string }> {
   const activePath = fsPathFromUri(uri);
-  if (!activePath || files.some((file) => samePathKey(file.path, activePath))) {
+  if (!activePath || files.some((file) => samePath(file.path, activePath))) {
     return files;
   }
   return [...files, { path: activePath, languageId }];
@@ -677,14 +678,6 @@ function effectiveSettingsCacheKey(uri: string, documentVersion: number): string
     state.configurationVersion,
     verilogIndex.version
   ].join('\u0000');
-}
-
-function samePathKey(left: string, right: string): boolean {
-  return normalizePathKey(left) === normalizePathKey(right);
-}
-
-function normalizePathKey(filePath: string): string {
-  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }
 
 function fsPathFromUri(uri: string): string | undefined {

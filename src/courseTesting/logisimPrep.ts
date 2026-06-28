@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { sanitizeFileStem as sanitizePathFileStem } from '../pathUtils';
 
 export type LogisimPrepareStatus = 'prepared' | 'error';
 
@@ -37,11 +38,10 @@ export function preparedCircuitFileName(circuitFile: string, asmFile: string, ro
 }
 
 export function sanitizeFileStem(value: string): string {
-  return value
-    .replace(/\.[A-Za-z0-9]+$/, '')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    || 'case';
+  return sanitizePathFileStem(value, {
+    stripExtension: true,
+    fallback: 'case'
+  });
 }
 
 function removeKnownAsmExtension(value: string): string {

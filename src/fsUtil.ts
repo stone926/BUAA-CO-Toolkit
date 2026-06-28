@@ -16,6 +16,10 @@ export function workspaceFolderFor(uri?: vscode.Uri): vscode.WorkspaceFolder | u
   return vscode.workspace.workspaceFolders?.[0];
 }
 
+export function workspaceFolderForOrFirst(uri?: vscode.Uri): vscode.WorkspaceFolder | undefined {
+  return workspaceFolderFor(uri) ?? vscode.workspace.workspaceFolders?.[0];
+}
+
 export function workspaceRootFor(uri?: vscode.Uri): string | undefined {
   return workspaceFolderFor(uri)?.uri.fsPath;
 }

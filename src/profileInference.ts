@@ -3,6 +3,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ProfileResolverFile, ProfileResolverInput } from './profileResolver';
 import type { VerilogModuleProvider } from './language/verilog/moduleProvider';
+import { workspaceFolderForOrFirst } from './fsUtil';
+import { normalizePathKey } from './pathUtils';
 
 const scanTtlMs = 30000;
 const maxProfileFiles = 3000;
@@ -19,7 +21,7 @@ export function buildProfileInferenceInput(
 ): Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'> {
   const activeResource = resource ?? currentTextDocument()?.uri;
   const activeDocument = documentFor(activeResource);
-  const folder = workspaceFolderFor(activeResource);
+  const folder = workspaceFolderForOrFirst(activeResource);
   const modules = moduleRegistry.allModules();
   return {
     activeLanguageId: activeDocument?.languageId ?? languageIdForPath(activeResource?.fsPath),
@@ -166,13 +168,6 @@ function documentFor(uri: vscode.Uri | undefined): vscode.TextDocument | undefin
     ?? (active?.uri.toString() === uri.toString() ? active : undefined);
 }
 
-function workspaceFolderFor(resource?: vscode.Uri): vscode.WorkspaceFolder | undefined {
-  if (resource) {
-    return vscode.workspace.getWorkspaceFolder(resource) ?? vscode.workspace.workspaceFolders?.[0];
-  }
-  return vscode.workspace.workspaceFolders?.[0];
-}
-
 function languageIdForPath(filePath: string | undefined): string | undefined {
   if (!filePath) {
     return undefined;
@@ -219,8 +214,4 @@ function shouldSkipPath(filePath: string): boolean {
 function isInsideDirectory(file: string, dir: string): boolean {
   const relative = path.relative(dir, file);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function normalizePathKey(filePath: string): string {
-  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }

@@ -1,5 +1,5 @@
-import * as path from 'path';
 import { sha256Bytes } from './asmCaseStoreCore';
+import { normalizePathKey, sanitizeFileStem } from './pathUtils';
 
 export interface IsimCompileCache {
   get(key: string): unknown | undefined;
@@ -46,10 +46,8 @@ function normalizeOptionalPath(value: string | undefined): string | undefined {
 }
 
 function safeFileStem(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'testbench';
-}
-
-function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+  return sanitizeFileStem(value, {
+    fallback: 'testbench',
+    trimOuterUnderscores: false
+  });
 }

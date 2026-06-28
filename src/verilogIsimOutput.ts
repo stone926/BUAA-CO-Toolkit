@@ -1,7 +1,8 @@
 import { CO_OUT_DIR } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureDirectory, workspaceFolderFor } from './fsUtil';
+import { ensureDirectory, workspaceFolderFor, workspaceFolderForOrFirst } from './fsUtil';
+export { normalizePathKey, samePath } from './pathUtils';
 
 export function isimOutputFileName(top: string, configured?: string): string {
   const trimmed = configured?.trim();
@@ -9,18 +10,9 @@ export function isimOutputFileName(top: string, configured?: string): string {
 }
 
 export async function simulationOutputDirectory(resource: vscode.Uri | undefined, isimDir: vscode.Uri): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(isimDir) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(isimDir);
   const baseDir = folder?.uri.fsPath ?? path.dirname(path.dirname(isimDir.fsPath));
   const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
   await ensureDirectory(outDir);
   return outDir;
-}
-
-export function samePath(left: string, right: string): boolean {
-  return normalizePathKey(left) === normalizePathKey(right);
-}
-
-export function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }

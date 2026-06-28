@@ -33,7 +33,7 @@ import {
   LogisimPrepareCaseResult,
   preparedCircuitFileName
 } from './courseTesting/logisimPrep';
-import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
+import { ensureDirectory, readTextFile, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import {
   findLogisimRomTargets,
   injectMachineCodeIntoLogisimRom,
@@ -143,7 +143,7 @@ export async function runLogisimPrepareBatch(
     return;
   }
 
-  const folder = workspaceFolderFor(circuit) ?? workspaceFolderFor(cases[0]?.asm) ?? vscode.workspace.workspaceFolders?.[0];
+  const folder = workspaceFolderFor(circuit) ?? workspaceFolderForOrFirst(cases[0]?.asm);
   const baseDir = folder?.uri.fsPath ?? path.dirname(circuit.fsPath);
   const outDir = vscode.Uri.file(path.join(baseDir, CO_LOGISIM_DIR));
   await ensureDirectory(outDir);

@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { workspaceFolderFor } from './fsUtil';
 import { CourseTraceCaseInput } from './courseTestCases';
+import { normalizePathKey, sanitizeFileStem } from './pathUtils';
 
 export function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.sim.out`;
@@ -21,11 +22,6 @@ export function courseTraceOutputDirectory(resource: vscode.Uri): vscode.Uri {
   return vscode.Uri.file(path.join(baseDir, '.co', 'out'));
 }
 
-export function normalizePathKey(file: string): string {
-  const normalized = path.normalize(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-}
-
 function traceOutputStem(item: CourseTraceCaseInput): string {
   const asmName = path.basename(item.asm.fsPath, path.extname(item.asm.fsPath));
   if (!item.stdin) {
@@ -36,5 +32,8 @@ function traceOutputStem(item: CourseTraceCaseInput): string {
 }
 
 function sanitizeTraceFileStem(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]+/g, '_') || 'stdin';
+  return sanitizeFileStem(value, {
+    fallback: 'stdin',
+    trimOuterUnderscores: false
+  });
 }
