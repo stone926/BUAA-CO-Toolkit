@@ -169,7 +169,14 @@
 - 由 lint catalog 生成 package enum 和 diagnostic catalog 中的 VC 规则表。
 - 将 rule title/severity/doc text 尽量从 catalog 注入诊断实现，lintDiagnostics 只保留检测逻辑。
 
-### 8. Verilog LSP service 仍是 provider 大文件
+### 8. [x] Verilog LSP service 仍是 provider 大文件
+
+完成记录:
+
+- `src/language/verilog/service.ts` 已缩减为 15 行公共导出层，只 re-export parser、diagnostic 和各 provider 入口。
+- 新增 `completions.ts`、`hover.ts`、`navigation.ts`、`rename.ts`、`codeActions.ts`、`signatureHelp.ts`、`inlayHints.ts`，按 LSP provider 拆分入口逻辑。
+- 新增 `resolveSymbol.ts` 和 `display.ts`，集中 Verilog symbol resolution、实例连接上下文和 hover/inlay/signature markdown 展示 helper。
+- `docs/modules/verilog-lsp.md` 已同步索引新 provider 文件，`node scripts/check-index.mjs` 无错误且无新增孤儿文件。
 
 剩余证据:
 
@@ -194,7 +201,14 @@
 - `resolveSymbol.ts`
 - `service.ts` 只保留 re-export 和 provider 聚合。
 
-### 9. Verilog ISim orchestration 仍有 compile/run 核心留在入口文件
+### 9. [x] Verilog ISim orchestration 仍有 compile/run 核心留在入口文件
+
+完成记录:
+
+- 新增 `src/verilog/isimRunner.ts`，承接 `runIsim()`、`compileIsim()`、`prepareIsimRunInputs()`、`ensureSimulationAsmCase()` 和 ASM case artifact 记录。
+- `src/verilog.ts` 现在保留命令注册、testbench 生成、lint 禁用和共享 module registry 注入，ISim compile/run 通过 runner wrapper 调用。
+- `CompiledIsimOutput`、`IsimRunOptions` 等类型从 `isimRunner.ts` 导出，波形/VCD 功能继续通过入口 wrapper 复用共享 registry。
+- `docs/modules/orchestration.md` 已同步记录 `verilog/isimRunner.ts` 的职责。
 
 剩余证据:
 

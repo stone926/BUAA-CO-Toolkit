@@ -1,4 +1,4 @@
-# orchestration | src/ | ~47 files
+# orchestration | src/ | ~48 files
 
 扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/语义着色/用例存储
 不含语言智能逻辑(在src/language/ LSP Server端)
@@ -36,9 +36,10 @@ mips-commands:
   mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, P7内核段合并(0x4180+停机自环), P4/P5/P6自动追加停机自环, MARS兼容诊断(coL1/efc/p7irq/cl). registerMips()注册6个命令
 
 verilog-commands:
-  verilog.ts — generateTestbench(course-aware), generateIseProject(.prj/.tcl), runIsim(compile+sim含P7 auto/probe testbench+中断调度), compileIsim(fuse+缓存). registerVerilog()注册7个命令
+  verilog.ts — Verilog 命令入口: generateTestbench、generateIseProject、runIsim/compileIsim wrapper、lint禁用和 registerVerilog()注册7个命令
   verilog/documentContext.ts — VS Code 文档到 Verilog LSP TextDocument/CoSettings 的适配
   verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集、项目签名
+  verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘
   verilog/simulationInputs.ts — ISim 运行前机器码源定位与复制
   verilog/testbenchResolver.ts — ISim testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航

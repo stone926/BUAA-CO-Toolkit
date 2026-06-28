@@ -1,8 +1,8 @@
-# verilog-lsp | src/language/verilog/ | 48 files
+# verilog-lsp | src/language/verilog/ | 60 files
 
 Verilog HDL(.v) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex
 
-数据流: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts(调度): syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag -> service.ts
+数据流: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts(调度): syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag -> service.ts(provider barrel)
 跨文件: workspaceModuleRegistry.ts(VSCode端) <-> workspaceIndex.ts(LSP端) -> signalWiring.ts
 
 See also: verilog-diagnostics.md(诊断子模块10文件), verilog-ast.md(AST/解析子模块8文件), ARCHITECTURE_REVIEW.md(迁移状态)
@@ -37,9 +37,18 @@ expr-support:
   parseCache.ts — 解析缓存(DocumentResultCache wrapper)
 
 lsp-providers:
-  service.ts — 聚合facade: hover(宽度+常量+实例+include)/定义(跨文件)/引用(跨文件接口)/代码操作(常量折叠/提取localparam/wire/冗余括号移除/隐式连线声明/实例连接补全)/签名帮助/内联提示(端口方向+宽度)/重命名, 并聚合各provider导出
+  service.ts — 聚合facade: 只 re-export parser/diagnostic/provider 公共入口
   diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
+  completions.ts — completionProvider 依赖装配入口, 注入实例连接上下文 resolver
   completionProvider.ts — 补全provider: 实例连接上下文/宏/关键字/snippet/workspace模块补全
+  hover.ts — hover provider: 宽度/常量/实例参数/include 状态/表达式 AST
+  navigation.ts — definition/reference provider: 跨文件 module/interface/macro/include 引用收集和去重
+  rename.ts — rename provider: 基于 reference provider 生成 workspace edit, 标识符边界校验
+  codeActions.ts — quick fix/refactor provider: 隐式连线声明、lint 禁用、case default、表达式折叠/抽取、实例连接补全
+  signatureHelp.ts — 实例端口/参数列表签名帮助
+  inlayHints.ts — 实例连接端口方向/宽度与参数提示
+  resolveSymbol.ts — 语义模型+语法 fallback 的 Verilog symbol resolution, 实例连接上下文
+  display.ts — hover/inlay/signature markdown 文案、宽度/参数显示 helper
   semanticTokens.ts — 语义高亮: module/port/signal/parameter/instance/macro/systemTask/number/keyword/comment/string/formatSpecifier/punctuation
   formatting.ts — course/compact/custom三种风格
   folding.ts — module/always/initial/function/task/generate/case/预处理条件块
