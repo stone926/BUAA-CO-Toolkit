@@ -69,6 +69,9 @@ function parseLogisim(document: TextDocument): LogisimParseResult {
     const firstLine = lineAt(document, 0).text;
     diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, firstLine.length)), 'This .circ file does not look like a Logisim project XML file.', DiagnosticSeverity.Warning, 'circ-project'));
   }
+  if (/<comp\b/.test(text) && !/<comp\b[^>]*(?:\/>|>[\s\S]*?<\/comp>)/.test(text)) {
+    diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, lineAt(document, 0).text.length)), 'This .circ file contains an incomplete component tag.', DiagnosticSeverity.Warning, 'circ-xml'));
+  }
 
   const circuitRegex = /<circuit\b[^>]*\bname="([^"]+)"/g;
   let circuitMatch: RegExpExecArray | null;
@@ -102,6 +105,9 @@ function parseLogisim(document: TextDocument): LogisimParseResult {
     }
     if ((name === 'ROM' || name === 'RAM' || name === 'Memory') && !/name="contents"/.test(block)) {
       diagnostics.push(makeDiagnostic(component.selectionRange, `${name} has no embedded contents. Remember to import a ROM file with 'v2.0 raw' when needed.`, DiagnosticSeverity.Information, 'memory-contents'));
+    }
+    if ((name === 'ROM' || name === 'RAM' || name === 'Memory') && (!/name="addrWidth"/.test(block) || !/name="dataWidth"/.test(block))) {
+      diagnostics.push(makeDiagnostic(component.selectionRange, `${name} should declare addrWidth and dataWidth so course ROM injection can preserve the intended memory shape.`, DiagnosticSeverity.Information, 'memory-widths'));
     }
   }
 

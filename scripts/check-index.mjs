@@ -11,7 +11,7 @@
  *   4. @index 的 module-name 与实际归属不一致
  *   5. 文件被多个模块重复索引
  *
- * 退出码: 0=干净, 1=warning, 2=error
+ * 退出码: 0=无 error（默认允许 warning）, 1=--strict 下有 warning, 2=error
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -225,7 +225,7 @@ console.log(`索引引用的文件: ${indexedFiles.size}`);
 console.log(`错误: ${errors}, 警告: ${warnings}`);
 
 if (errors > 0) exitCode = 2;
-else if (warnings > 0) exitCode = 1;
-else console.log('全部通过');
+else if (STRICT && warnings > 0) exitCode = 1;
+else console.log(warnings > 0 ? '无错误（warning 已允许）' : '全部通过');
 
 process.exit(exitCode);

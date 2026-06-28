@@ -241,6 +241,7 @@ export function renderBatchTraceReport(
       escapeHtml(item.stage),
       item.firstDiffIndex === undefined ? '' : String(item.firstDiffIndex + 1),
       renderFirstDiffSummary(item),
+      renderCaseArtifacts(item),
       escapeHtml(summaryText(item)),
       escapeHtml(item.message)
     ]
@@ -259,7 +260,7 @@ export function renderBatchTraceReport(
   ${generatedAt ? `<div class="paths">生成时间: <code>${escapeHtml(generatedAt)}</code></div>` : ''}
   ${renderBatchSource(source)}
   <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
-  ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', '首个差异', '首个差异详情', '事件', '消息'], rows)}
+  ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', '首个差异', '首个差异详情', '产物', '事件', '消息'], rows)}
 `)
   });
 }
@@ -366,6 +367,21 @@ function summaryText(item: CourseTraceCaseResult): string {
     return '';
   }
   return `MARS ${item.marsEvents}, SIM ${item.simEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
+}
+
+function renderCaseArtifacts(item: CourseTraceCaseResult): SafeHtml {
+  const entries = [
+    ['ASM Snapshot', item.asmSnapshot],
+    ['Machine Code', item.machineCode],
+    ['Mars', item.marsOut],
+    ['ISim', item.simOut]
+  ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
+  if (!entries.length) {
+    return html.raw('');
+  }
+  return html.raw(entries
+    .map(([label, value]) => `<div>${html.text(label)}: ${html.path(value)}</div>`)
+    .join(''));
 }
 
 function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {

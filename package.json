@@ -1352,11 +1352,13 @@
     "check:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:all": "npm run compile && npm test && npm run test:coverage && node scripts/check-index.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
     "@types/vscode": "^1.90.0",
+    "@vitest/coverage-v8": "^4.1.9",
     "@vscode/vsce": "^3.9.2",
     "typescript": "^5.5.2",
     "vitest": "^4.1.7"

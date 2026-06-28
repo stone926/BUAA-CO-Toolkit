@@ -317,7 +317,7 @@ async function showHazardReportWebview(report: vscode.Uri, prepared?: PreparedHa
   panel.webview.html = renderHazardReport(parsed, report, prepared);
 }
 
-function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: PreparedHazardRun): string {
+export function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: PreparedHazardRun): string {
   const body = isStatisticReport(report)
     ? renderStatisticReport(report)
     : isCaseReport(report)

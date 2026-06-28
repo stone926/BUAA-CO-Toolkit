@@ -20,6 +20,7 @@ import {
   configurableVerilogLintRuleIds,
   defaultDisabledVerilogLintRuleIds
 } from '../language/verilog/lintRuleCatalog';
+import { Commands } from '../constants';
 
 interface PackageJson {
   activationEvents?: string[];
@@ -42,6 +43,16 @@ function readPackage(): PackageJson {
 
 function readJsonFile<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')) as T;
+}
+
+function commandValues(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  return Object.values(value).flatMap((entry) => commandValues(entry));
 }
 
 describe('package manifest', () => {
@@ -86,6 +97,21 @@ describe('package manifest', () => {
       if (!visible.includes(command.command)) {
         expect(paletteByCommand.get(command.command)?.when, command.command).toBe('false');
       }
+    }
+  });
+
+  it('keeps contributed commands declared in the command source and attached to manifest UI surfaces', () => {
+    const pkg = readPackage();
+    const sourceCommands = new Set(commandValues(Commands));
+    const allMenuCommands = new Set(
+      Object.values(pkg.contributes?.menus ?? {})
+        .flat()
+        .map((item) => item.command)
+    );
+
+    for (const { command } of pkg.contributes?.commands ?? []) {
+      expect(sourceCommands.has(command), command).toBe(true);
+      expect(allMenuCommands.has(command), command).toBe(true);
     }
   });
 

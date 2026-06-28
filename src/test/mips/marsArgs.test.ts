@@ -153,6 +153,24 @@ describe('buildMarsArgs', () => {
       expect(args[args.length - 1]).toBe('/test/asm/test.asm');
     });
 
+    it('keeps delayed branching, memory config, and asm path arguments in a stable order', () => {
+      setProfile(asmUri, 'P5');
+      setMemoryConfig(asmUri, 'FixedCompactLargeText');
+      setDelayedBranching(asmUri, true);
+
+      const args = buildMarsArgs(asmUri, marsJar, 'run', {});
+
+      expect(args).toEqual([
+        '-jar',
+        marsJar,
+        'nc',
+        'mc',
+        'FixedCompactLargeText',
+        'db',
+        '/test/asm/test.asm'
+      ]);
+    });
+
     it('appends efc and p7irq for P7 course-trace run', () => {
       setProfile(asmUri, 'P7');
       setMemoryConfig(asmUri, 'CompactLargeText');

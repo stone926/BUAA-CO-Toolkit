@@ -42,6 +42,11 @@ describe('course test reports', () => {
       {
         asm: 'E:/cases/bad<name>.asm',
         stdin: 'E:/cases/in&1.txt',
+        caseId: 'case<&1',
+        asmSnapshot: 'E:/cases/snap<shot>.asm',
+        machineCode: 'E:/cases/code&latest.txt',
+        marsOut: 'E:/cases/mars"out.txt',
+        simOut: 'E:/cases/sim<out>.txt',
         status: 'error',
         stage: 'compare',
         message: '<script>alert("x")</script>'
@@ -53,8 +58,68 @@ describe('course test reports', () => {
 
     expect(html).toContain('bad&lt;name&gt;.asm');
     expect(html).toContain('in&amp;1.txt');
+    expect(html).toContain('case&lt;&amp;1');
+    expect(html).toContain('snap&lt;shot&gt;.asm');
+    expect(html).toContain('code&amp;latest.txt');
+    expect(html).toContain('mars&quot;out.txt');
+    expect(html).toContain('sim&lt;out&gt;.txt');
     expect(html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
     expect(html).toContain('report&amp;latest.json');
+  });
+
+  it('maps continuous monitor statuses into row classes and summary metrics', () => {
+    const report: ContinuousTraceReport = {
+      generatedAt: '2026-06-23T00:00:00.000Z',
+      running: false,
+      stopRequested: true,
+      generator: 'gen',
+      commandLine: 'python gen.py',
+      cwd: 'E:/cases',
+      options: {
+        intervalMs: 1000,
+        maxIterations: 0,
+        stopOnFailure: true
+      },
+      iterations: [
+        {
+          index: 4,
+          status: 'stopped',
+          startedAt: '2026-06-23T00:04:00.000Z',
+          summary: { total: 0, passed: 0, failed: 0, errors: 0 },
+          results: []
+        },
+        {
+          index: 3,
+          status: 'error',
+          startedAt: '2026-06-23T00:03:00.000Z',
+          summary: { total: 1, passed: 0, failed: 0, errors: 1 },
+          results: [{ asm: 'err.asm', status: 'error', stage: 'mars', message: 'bad' }]
+        },
+        {
+          index: 2,
+          status: 'failed',
+          startedAt: '2026-06-23T00:02:00.000Z',
+          summary: { total: 1, passed: 0, failed: 1, errors: 0 },
+          results: [{ asm: 'fail.asm', status: 'failed', stage: 'compare', message: 'wa' }]
+        },
+        {
+          index: 1,
+          status: 'passed',
+          startedAt: '2026-06-23T00:01:00.000Z',
+          summary: { total: 1, passed: 1, failed: 0, errors: 0 },
+          results: [{ asm: 'ok.asm', status: 'passed', stage: 'compare', message: 'ok' }]
+        }
+      ]
+    };
+
+    const html = renderContinuousTraceMonitor(report, { fsPath: 'E:/out/continuous.json' } as unknown as import('vscode').Uri);
+
+    expect(html).toContain('<tr class="stopped">');
+    expect(html).toContain('<tr class="error">');
+    expect(html).toContain('<tr class="failed">');
+    expect(html).toContain('<tr class="passed">');
+    expect(html).toContain('<span>轮数</span><strong>4</strong>');
+    expect(html).toContain('<span>状态</span><strong>已停止</strong>');
   });
 
   it('limits continuous monitor rows while keeping the full iteration count visible', () => {
