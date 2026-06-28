@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
 import { getVerilogCodeActions, getVerilogDiagnostics } from '../../../language/verilog/service';
+import {
+  defaultDisabledVerilogLintRuleIds,
+  verilogLintRuleCatalog
+} from '../../../language/verilog/lintRuleCatalog';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
 let documentVersion = 1;
@@ -58,6 +62,14 @@ endmodule
     expect(codes.some((code) => code.startsWith('vc-004'))).toBe(true);
     expect(codes.some((code) => code.startsWith('vc-008'))).toBe(true);
     expect(codes.some((code) => code.startsWith('vc-021'))).toBe(true);
+  });
+
+  it('loads lint rule defaults from the catalog', () => {
+    expect(defaultDisabledVerilogLintRuleIds).toEqual(['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-017', 'vc-021']);
+    expect(verilogLintRuleCatalog.filter((rule) => rule.configurable).map((rule) => rule.id)).toEqual([
+      'vc-001', 'vc-002', 'vc-003', 'vc-004', 'vc-005', 'vc-006', 'vc-007', 'vc-008',
+      'vc-009', 'vc-010', 'vc-011', 'vc-012', 'vc-013', 'vc-014', 'vc-015', 'vc-017', 'vc-021'
+    ]);
   });
 
   it('reports magic numbers from AST expressions but skips parameters and selects', () => {

@@ -1,0 +1,179 @@
+[
+  {
+    "id": "vc-001",
+    "title": "Signal naming style",
+    "severity": "information",
+    "enabledByDefault": false,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Keep signal names in one recognizable style."
+  },
+  {
+    "id": "vc-002",
+    "title": "Low-active suffix",
+    "severity": "information",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Low-active signal names should use the _n suffix."
+  },
+  {
+    "id": "vc-003",
+    "title": "Multiplexer signal naming",
+    "severity": "information",
+    "enabledByDefault": false,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Multiplexer signal names should reveal width or input count."
+  },
+  {
+    "id": "vc-004",
+    "title": "Magic number",
+    "severity": "information",
+    "enabledByDefault": false,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Replace unexplained numeric literals with a localparam, parameter, or macro."
+  },
+  {
+    "id": "vc-005",
+    "title": "Multiple always drivers",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Avoid assigning one signal in multiple always blocks."
+  },
+  {
+    "id": "vc-006",
+    "title": "Combinational sensitivity",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Combinational logic should use always @(*) or assign."
+  },
+  {
+    "id": "vc-007",
+    "title": "Combinational blocking assignment",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Combinational always blocks should use blocking assignments."
+  },
+  {
+    "id": "vc-008",
+    "title": "Combinational completeness",
+    "severity": "information",
+    "enabledByDefault": false,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Combinational branches and case statements should assign every output path."
+  },
+  {
+    "id": "vc-009",
+    "title": "Sequential posedge",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Sequential logic should use always @(posedge clock)."
+  },
+  {
+    "id": "vc-010",
+    "title": "Sequential nonblocking assignment",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Sequential always blocks should use nonblocking assignments."
+  },
+  {
+    "id": "vc-011",
+    "title": "Negedge trigger",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Avoid negedge-triggered logic unless a protocol requires it."
+  },
+  {
+    "id": "vc-012",
+    "title": "Edge signal kind",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Edge-triggered sensitivity signals should be clocks or resets."
+  },
+  {
+    "id": "vc-013",
+    "title": "Clock used as data",
+    "severity": "information",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Clock signals should not be used as ordinary data inside sequential logic."
+  },
+  {
+    "id": "vc-014",
+    "title": "Synchronous reset preference",
+    "severity": "information",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Prefer synchronous reset when async reset appears in sensitivity lists."
+  },
+  {
+    "id": "vc-015",
+    "title": "Internal inout port",
+    "severity": "warning",
+    "enabledByDefault": true,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Internal modules should avoid inout ports."
+  },
+  {
+    "id": "vc-017",
+    "title": "Instance port formatting",
+    "severity": "information",
+    "enabledByDefault": false,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Instances should use named, multiline, one-port-per-line mapping."
+  },
+  {
+    "id": "vc-021",
+    "title": "Explicit signal width",
+    "severity": "information",
+    "enabledByDefault": false,
+    "configurable": true,
+    "quickFixCommand": "co.verilog.disableLintRule",
+    "description": "Declare explicit widths for non-parameter signals."
+  },
+  {
+    "id": "synth-decl-init",
+    "title": "Declaration initializer",
+    "severity": "information",
+    "enabledByDefault": true,
+    "configurable": false,
+    "description": "Avoid declaration initializers for registers in synthesizable modules."
+  },
+  {
+    "id": "synth-initial",
+    "title": "Initial block",
+    "severity": "information",
+    "enabledByDefault": true,
+    "configurable": false,
+    "description": "Avoid initial blocks in synthesizable design modules."
+  },
+  {
+    "id": "synth-mul-div",
+    "title": "Expensive arithmetic operator",
+    "severity": "information",
+    "enabledByDefault": true,
+    "configurable": false,
+    "description": "Avoid multiply, divide, and modulo operators unless hardware cost is intentional."
+  }
+]

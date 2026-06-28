@@ -28,6 +28,7 @@ expr-support:
   preprocessor.ts — 预处理指令集(define/include/ifdef/...)供补全
   moduleUtils.ts — expectedPorts, declDetail
   moduleProvider.ts — MutableVerilogModuleProvider接口
+  lintRuleCatalog.ts — Verilog lint 规则元数据 catalog, 从 resources/verilog/lintRules.json 加载
   statementUtils.ts — splitTopLevelCommaSpans
   textUtils.ts — 文本/空白处理供formatting
   displayFormats.ts — $display/$write格式字符串提取供trace格式推断

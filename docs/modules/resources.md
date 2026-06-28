@@ -15,6 +15,7 @@ resources/mips/:
 
 resources/verilog/:
   keywords.json — Verilog保留字(IEEE 1364-2001, 1365+词条)
+  lintRules.json — Verilog course lint 规则 catalog: id/title/severity/default/configurable/quickFix
 
 resources/co/:
   configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐

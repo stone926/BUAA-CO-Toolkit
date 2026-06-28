@@ -8,12 +8,16 @@ import {
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
 import { getCourseConfig } from '../courseConfig';
+import {
+  configurableVerilogLintRuleIds,
+  defaultDisabledVerilogLintRuleIds
+} from '../language/verilog/lintRuleCatalog';
 
 interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
-    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; enum?: unknown[] }> }>;
+    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; enum?: unknown[]; items?: { enum?: unknown[] } }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
@@ -150,6 +154,8 @@ describe('package manifest', () => {
     expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
     expect(properties['co.test.p7.probeScenarioCount'].default).toBe(32);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
+    expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
+    expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
   });
 
   it('keeps the project profile enum aligned with course config profiles', () => {

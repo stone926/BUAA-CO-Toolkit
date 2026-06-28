@@ -96,6 +96,12 @@ This catalog records stable diagnostic codes used by the built-in MIPS and Veril
 | `synth-*` | Warning | Course Lint | `src/language/verilog/lintDiagnostics.ts` | synthesizability hints |
 | `vc-001` - `vc-022` | Error/Warning/Info | Course Lint | `src/language/verilog/lintDiagnostics.ts` | CO course style/profile rules |
 
+### Verilog Course Lint Catalog
+
+Configurable VC rules are cataloged in `resources/verilog/lintRules.json`; `co.verilog.lint.disabledRules` must use this same set:
+
+`vc-001`, `vc-002`, `vc-003`, `vc-004`, `vc-005`, `vc-006`, `vc-007`, `vc-008`, `vc-009`, `vc-010`, `vc-011`, `vc-012`, `vc-013`, `vc-014`, `vc-015`, `vc-017`, `vc-021`.
+
 ## Adding A Code
 
 1. Pick the narrowest layer prefix that matches the diagnostic.

@@ -1,8 +1,9 @@
 // @index settings — CoSettings接口/默认值/合并验证/诊断禁用键
 import { ProjectProfile } from '../../projectProfile';
 import { configDefault, configDefaultArray } from '../../configDefaults';
+import { defaultDisabledVerilogLintRuleIds } from '../verilog/lintRuleCatalog';
 
-export const defaultDisabledVerilogLintRules = configDefaultArray('verilog.lint.disabledRules') as readonly string[];
+export const defaultDisabledVerilogLintRules = defaultDisabledVerilogLintRuleIds as readonly string[];
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
