@@ -1,4 +1,4 @@
-# course-testing | src/ | 29 files
+# course-testing | src/ | 30 files
 
 P3-P7自动化测试: 随机ASM生成->MARS dump->MARS golden trace->ISim/Logisim仿真trace->对比->HTML报告
 P7模式: anchor(精确对拍+中断注入), probe(DM探针0x2800黑盒检查), hybrid(两者), off(无中断)
@@ -16,6 +16,7 @@ orchestration:
 
 generation:
   courseTesting/generatorWorkflow.ts — 生成器工作流: 外部/内置generator setup、运行、ASM产物收集、CourseTraceBatchSource描述
+  courseTesting/traceRunner.ts — 单个课程 Trace case 的 MARS/ISim/Logisim 执行、P7 probe 校验和 P7 manifest metadata 解析
   courseTesting/builtinAsmGenerator.ts — 入口: generateBuiltinAsmTestCase, p7StressMode分派(anchor->randomBody, probe->probeEmitter, hybrid两次调用)
   courseTesting/generator.ts — 外部生成器: .py/.js/.jar/.ps1/.bat, snapshotAsmFiles(mtime快照)
   courseTesting/generatorInstructionCatalog.ts — 内置 ASM 生成器指令 profile、分类、对齐和 MDU 延迟资源加载
