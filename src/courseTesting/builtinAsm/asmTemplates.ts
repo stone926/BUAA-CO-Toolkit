@@ -10,14 +10,14 @@ import { renderResourceTemplate } from '../../templates/templateRegistry';
  *  - ${intAckHex} — 中断确认地址的十六进制
  */
 export function renderP7ExceptionHandler(intAckAddress: number, exceptionHandlerAddress: number): string[] {
-  return renderAsmTemplate('asm/p7_exception_handler.asm.tmpl', {
+  return renderAsmTemplate('asm/p7_exception_handler.asm', {
     exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
     intAckHex: `0x${intAckAddress.toString(16)}`
   });
 }
 
 export function renderP7ExceptionHandlerUnified(intAckAddress: number, exceptionHandlerAddress: number): string[] {
-  return renderAsmTemplate('asm/p7_exception_handler_unified.asm.tmpl', {
+  return renderAsmTemplate('asm/p7_exception_handler_unified.asm', {
     exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
     intAckHex: `0x${intAckAddress.toString(16)}`
   });

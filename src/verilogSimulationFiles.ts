@@ -21,19 +21,19 @@ export function buildIseProjectText(verilogFiles: readonly string[]): string {
     .map((file) => `Verilog work "${file.replace(/\\/g, '/')}"`)
     .sort()
     .join('\n');
-  return renderResourceTemplate('isim/project.prj.tmpl', { projectEntries });
+  return renderResourceTemplate('isim/project.prj', { projectEntries });
 }
 
 export function buildIsimRunTcl(simTime: string): string {
-  return renderResourceTemplate('isim/run.tcl.tmpl', { simTime });
+  return renderResourceTemplate('isim/run.tcl', { simTime });
 }
 
 export function buildIsimWaveTcl(simTime: string): string {
-  return renderResourceTemplate('isim/wave.tcl.tmpl', { simTime });
+  return renderResourceTemplate('isim/wave.tcl', { simTime });
 }
 
 export function buildIsimVcdTcl(vcdFile: string, testbenchName: string, simTime: string): string {
-  return renderResourceTemplate('isim/vcd.tcl.tmpl', {
+  return renderResourceTemplate('isim/vcd.tcl', {
     simTime,
     testbenchName,
     vcdFile: quoteTclString(vcdFile.replace(/\\/g, '/'))

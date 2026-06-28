@@ -25,35 +25,35 @@ resources/co/:
   加载: courseConfig loader, P7 hardware loader
 
 resources/templates/verilog/:
-  basic_testbench.v.tmpl — 通用 Verilog testbench shell
-  external_memory_testbench.v.tmpl — P6-style 外部指令/数据存储器 testbench shell
-  p7_official_testbench.v.tmpl — P7 official-style testbench shell
-  p7_interrupt_block*.v.tmpl — P7 external interrupt主动/注释模板
-  p7_probe_block.v.tmpl — P7 probe interrupt/MMIO观测模板
+  basic_testbench.v — 通用 Verilog testbench shell
+  external_memory_testbench.v — P6-style 外部指令/数据存储器 testbench shell
+  p7_official_testbench.v — P7 official-style testbench shell
+  p7_interrupt_block*.v — P7 external interrupt主动/注释模板
+  p7_probe_block.v — P7 probe interrupt/MMIO观测模板
   加载: templateRegistry 受控占位替换
 
 resources/templates/isim/:
-  project.prj.tmpl — ISE PRJ 文件模板
-  run.tcl.tmpl — ISim 批处理运行 TCL 模板
-  wave.tcl.tmpl — ISim GUI 波形 TCL 模板
-  vcd.tcl.tmpl — ISim VCD 导出 TCL 模板
+  project.prj — ISE PRJ 文件模板
+  run.tcl — ISim 批处理运行 TCL 模板
+  wave.tcl — ISim GUI 波形 TCL 模板
+  vcd.tcl — ISim VCD 导出 TCL 模板
   加载: templateRegistry 受控占位替换
 
 resources/templates/webview/:
-  report_page.html.tmpl — 报告 Webview 页面 shell
+  report_page.html — 报告 Webview 页面 shell
   report.css — 报告 Webview 共享 CSS
   加载: templateRegistry 受控占位替换
 
 resources/templates/wizard/:
-  p2_main.asm.tmpl — 项目向导生成的 P2 初始汇编入口
-  verilog_top.v.tmpl — 项目向导生成的 Verilog 顶层模块
-  basic_testbench.v.tmpl — 项目向导解析失败时的基础 testbench fallback
+  p2_main.asm — 项目向导生成的 P2 初始汇编入口
+  verilog_top.v — 项目向导生成的 Verilog 顶层模块
+  basic_testbench.v — 项目向导解析失败时的基础 testbench fallback
   加载: templateRegistry 受控占位替换
 
 resources/templates/asm/:
-  p7_exception_handler*.asm.tmpl — P7 anchor/hybrid 异常处理模板
-  p7_probe_prologue.asm.tmpl — P7 probe 用户段初始化指令模板, 逐行 emit 保持 PC/预算计数
-  p7_probe_handler.asm.tmpl — P7 probe kernel handler 模板
+  p7_exception_handler*.asm — P7 anchor/hybrid 异常处理模板
+  p7_probe_prologue.asm — P7 probe 用户段初始化指令模板, 逐行 emit 保持 PC/预算计数
+  p7_probe_handler.asm — P7 probe kernel handler 模板
   加载: templateRegistry 受控占位替换
 
 syntaxes/:

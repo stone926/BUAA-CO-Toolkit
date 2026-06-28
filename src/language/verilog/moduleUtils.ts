@@ -109,7 +109,7 @@ function renderBasicTestbench(view: BasicTestbenchViewModel): string {
   }
   finishLines.push(`        #${view.finishDelay};`, '        $finish;', '    end');
 
-  return renderResourceTemplate('verilog/basic_testbench.v.tmpl', {
+  return renderResourceTemplate('verilog/basic_testbench.v', {
     tbName: view.tbName,
     topModuleName: view.module.name,
     declarations: lineList(view.declarations),
@@ -164,7 +164,7 @@ function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): 
       : '    assign m_data_rdata = data[m_data_addr >> 2];');
   }
 
-  return renderResourceTemplate('verilog/external_memory_testbench.v.tmpl', {
+  return renderResourceTemplate('verilog/external_memory_testbench.v', {
     tbName: view.tbName,
     topModuleName: view.module.name,
     declarations: lineList(view.declarations),
@@ -195,7 +195,7 @@ function buildP7OfficialTestbench(
   interruptSchedule?: number[],
   p7Probe?: P7ProbeTestbenchMetadata
 ): string {
-  return renderResourceTemplate('verilog/p7_official_testbench.v.tmpl', {
+  return renderResourceTemplate('verilog/p7_official_testbench.v', {
     tbName,
     topModuleName,
     dataMemoryWords: p7DataMemoryWords,
@@ -215,7 +215,7 @@ function p7InterruptBlock(interruptSchedule?: number[]): string {
   const targetHex = (target >>> 0).toString(16).padStart(8, '0');
   // Official tb_interrupt_demo.v interrupt block: raise `interrupt` once when the
   // macroscopic (M-stage) PC reaches target_pc, clear it when the handler writes the P7 ack MMIO.
-  return renderResourceTemplate('verilog/p7_interrupt_block.v.tmpl', {
+  return renderResourceTemplate('verilog/p7_interrupt_block.v', {
     targetPcHex: targetHex,
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress)
   });
@@ -240,7 +240,7 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
       '            end'
     ].join('\n');
   }).join('\n');
-  return renderResourceTemplate('verilog/p7_probe_block.v.tmpl', {
+  return renderResourceTemplate('verilog/p7_probe_block.v', {
     externalScenarioCases,
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress),
     timer0CtrlAddress: verilogHex32(p7Timer0Ctrl),
@@ -249,7 +249,7 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
 }
 
 function commentedP7InterruptBlock(): string {
-  return renderResourceTemplate('verilog/p7_interrupt_block_commented.v.tmpl', {
+  return renderResourceTemplate('verilog/p7_interrupt_block_commented.v', {
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress)
   });
 }

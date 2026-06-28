@@ -223,7 +223,7 @@ async function createTemplateFiles(rootPath: string, profile: ProjectProfile): P
 async function createMipsTemplate(rootPath: string): Promise<void> {
   const mainPath = path.join(rootPath, 'src', 'main.asm');
   if (!await pathExists(mainPath)) {
-    const template = renderResourceTemplate('wizard/p2_main.asm.tmpl', { date: currentDateStamp() });
+    const template = renderResourceTemplate('wizard/p2_main.asm', { date: currentDateStamp() });
     await fs.promises.writeFile(mainPath, template, 'utf8');
   }
 }
@@ -235,7 +235,7 @@ async function createVerilogTemplate(rootPath: string, profile: ProjectProfile):
 
   if (!await pathExists(topPath)) {
     const ports = getVerilogPorts(profile);
-    topText = renderResourceTemplate('wizard/verilog_top.v.tmpl', {
+    topText = renderResourceTemplate('wizard/verilog_top.v', {
       date: currentDateStamp(),
       ports,
       profile,
@@ -280,7 +280,7 @@ function buildWizardTestbench(topText: string, topPath: string, topModule: strin
   if (module) {
     return buildTestbench(module, tbName, { profile });
   }
-  return renderResourceTemplate('wizard/basic_testbench.v.tmpl', { tbName, topModule });
+  return renderResourceTemplate('wizard/basic_testbench.v', { tbName, topModule });
 }
 
 function currentDateStamp(): string {

@@ -169,7 +169,7 @@ function emitHeader(writer: ProgramWriter, instructionSet: string, seed: string,
 }
 
 function emitProbePrologue(writer: ProgramWriter): void {
-  emitInstructionTemplate(writer, 'asm/p7_probe_prologue.asm.tmpl', {
+  emitInstructionTemplate(writer, 'asm/p7_probe_prologue.asm', {
     externalArmAddressHex: asmHex(p7ProbeExternalArmAddress),
     loadProbeLogBase: loadImmediateLines('$26', p7ProbeLogBase).join('\n'),
     stateDonePcHex: asmHex(p7ProbeStateDonePc),
@@ -341,7 +341,7 @@ function renderProbeHandler(): string[] {
   const magicHi = (p7ProbeMagic >>> 16) & 0xffff;
   const magicLo = p7ProbeMagic & 0xffff;
   const recordByteLength = p7ProbeRecordWords * 4;
-  const rendered = renderResourceTemplate('asm/p7_probe_handler.asm.tmpl', {
+  const rendered = renderResourceTemplate('asm/p7_probe_handler.asm', {
     causeIpExternalMaskHex: asmHex(p7CauseIpExternalMask),
     causeIpTimer0MaskHex: asmHex(p7CauseIpTimer0Mask),
     causeIpTimer1MaskHex: asmHex(p7CauseIpTimer1Mask),

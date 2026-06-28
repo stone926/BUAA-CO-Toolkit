@@ -14,7 +14,7 @@ describe('template registry', () => {
   });
 
   it('renders wizard resource templates', () => {
-    expect(renderResourceTemplate('wizard/verilog_top.v.tmpl', {
+    expect(renderResourceTemplate('wizard/verilog_top.v', {
       date: '2026-06-28',
       ports: '    input clk',
       profile: 'P4',

@@ -33,7 +33,7 @@ export const html = {
 };
 
 export function renderReportPage(options: ReportPageOptions): string {
-  return renderResourceTemplate('webview/report_page.html.tmpl', {
+  return renderResourceTemplate('webview/report_page.html', {
     body: options.body,
     extraCss: options.extraCss ?? '',
     reportCss: renderResourceTemplate('webview/report.css', {}),
