@@ -36,8 +36,10 @@ mips-commands:
 
 verilog-commands:
   verilog.ts — generateTestbench(course-aware), generateIseProject(.prj/.tcl), runIsim(compile+sim含P7 auto/probe testbench+中断调度), compileIsim(fuse+缓存). registerVerilog()注册7个命令
+  verilog/documentContext.ts — VS Code 文档到 Verilog LSP TextDocument/CoSettings 的适配
   verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集、项目签名
   verilog/simulationInputs.ts — ISim 运行前机器码源定位与复制
+  verilog/testbenchResolver.ts — ISim testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
   verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper

@@ -1,27 +1,23 @@
 // @index verilog-commands — ISE/ISim工作流：编译/仿真/波形/P7 probe
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Commands, ASM_NEEDED_VERILOG_PROFILES, CO_DIR, CO_ISIM_DIR } from './constants';
+import { Commands, ASM_NEEDED_VERILOG_PROFILES } from './constants';
 import {
-  config,
   ensureConcreteProfile,
   getMachineCode,
   getIsePath,
   getProfile,
-  getRunTimeout,
   getSimTime,
   getTestbench,
   getTopModule
 } from './config';
-import { CoSettings, defaultCoSettings } from './language/common/settings';
+import { defaultCoSettings } from './language/common/settings';
 import {
   buildTestbench,
   moduleAtPosition,
-  parseVerilog,
-  VerilogModule
+  parseVerilog
 } from './language/verilog/service';
-import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
+import { ensureDirectory, isFile, pathExists, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { revealOutputChannel, runTool } from './process';
 import { buildIseEnvironment, findFuse } from './toolchain';
 import { AppServices, RunResult } from './types';
@@ -30,7 +26,6 @@ import { executeLanguageServerCommand } from './languageClient';
 import type { MutableVerilogModuleProvider } from './language/verilog/moduleProvider';
 import {
   AsmCase,
-  copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
   resolveAsmCaseInput,
@@ -38,13 +33,8 @@ import {
   writeAsmCaseArtifact
 } from './asmCaseStore';
 import {
-  buildIsimRunTcl,
-  generatedRuntimeTestbenchText,
-  isGeneratedRuntimeTestbench,
-  p7AutoRuntimeTestbenchName,
-  runtimeTestbenchFileName
+  buildIsimRunTcl
 } from './verilogSimulationFiles';
-import { sha256Bytes } from './asmCaseStoreCore';
 import {
   exportVcdWaveform,
   openIsimWaveform
@@ -60,8 +50,7 @@ import {
 } from './verilogIsimCache';
 import {
   dedupeUris,
-  normalizePathKey,
-  samePath
+  normalizePathKey
 } from './pathUtils';
 import {
   generateIseProject,
@@ -74,8 +63,23 @@ import {
   copyMachineCodeToSimDirectory,
   resolveMachineCodeSource
 } from './verilog/simulationInputs';
+import {
+  coSettingsForUri,
+  toTextDocument,
+  verilogDelayFromSimTime
+} from './verilog/documentContext';
+import {
+  defaultUserTestbenchUri,
+  ensureP7InterruptTestbench,
+  ensureRunnableTestbench,
+  findExistingTestbenchResolution,
+  recordTestbenchForAsmCase,
+  resolveNamedTestbench,
+  TestbenchResolution
+} from './verilog/testbenchResolver';
 
 export { generateIseProject } from './verilog/iseProject';
+export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
 
 export interface IsimRunOptions extends IseProjectOptions {
   machineCodeSource?: vscode.Uri;
@@ -95,21 +99,6 @@ export interface IsimRunOutput {
   fuseResult: RunResult;
   simResult: RunResult;
   simOut?: vscode.Uri;
-}
-
-interface VerilogModuleDefinition {
-  module: VerilogModule;
-  uri: vscode.Uri;
-}
-
-type TestbenchResolutionKind = 'active' | 'user' | 'generated' | 'p7-auto';
-
-interface TestbenchResolution {
-  moduleName: string;
-  kind: TestbenchResolutionKind;
-  sourceUri?: vscode.Uri;
-  generatedUri?: vscode.Uri;
-  sha256?: string;
 }
 
 interface CompiledIsimOutput {
@@ -214,16 +203,6 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
   }));
   moduleRegistry?.updateUri(tbUri);
   await vscode.window.showTextDocument(tbUri);
-}
-
-async function defaultUserTestbenchUri(resource: vscode.Uri, tbName: string, configuredTop: boolean): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(resource);
-  if (configuredTop && folder) {
-    const testDir = vscode.Uri.file(path.join(folder.uri.fsPath, 'test'));
-    await ensureDirectory(testDir);
-    return vscode.Uri.file(path.join(testDir.fsPath, `${tbName}.v`));
-  }
-  return vscode.Uri.file(path.join(path.dirname(resource.fsPath), `${tbName}.v`));
 }
 
 export async function runIsim(
@@ -466,539 +445,6 @@ async function ensureSimulationAsmCase(
 
 function requiresAsmCase(resource: vscode.Uri | undefined): boolean {
   return ASM_NEEDED_VERILOG_PROFILES.has(getProfile(resource));
-}
-
-/**
- * For P7 automated trace runs that inject an external interrupt, generate a dedicated testbench
- * (the official P7 interrupt testbench with the interrupt block active and target_pc baked in)
- * under .co/isim, without overwriting the student's own testbench. Returns the module name, or
- * undefined when no schedule is given or the top module cannot be located.
- */
-async function ensureP7InterruptTestbench(
-  services: AppServices,
-  resource: vscode.Uri | undefined,
-  interruptSchedule: number[] | undefined,
-  p7Probe: P7ProbeMetadata | undefined,
-  showMessages: boolean
-): Promise<TestbenchResolution | undefined> {
-  if ((!interruptSchedule || !interruptSchedule.length) && !p7Probe) {
-    return undefined;
-  }
-  const topName = getTopModule(resource);
-  const topDefinition = await findTopModuleDefinition(resource, topName);
-  if (!topDefinition) {
-    services.output.appendLine(`未找到顶层模块 ${topName}，无法生成 P7 中断 testbench；改用默认 testbench（不注入外部中断）。`);
-    return undefined;
-  }
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(topDefinition.uri);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
-  await ensureDirectory(outDir);
-  const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
-  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(resource)),
-    profile: 'P7',
-    interruptSchedule,
-    p7Probe
-  }));
-  if (!written) {
-    return undefined;
-  }
-  if (p7Probe) {
-    services.output.appendLine(`已生成 P7 probe testbench ${tbUri.fsPath}（scenarios=${p7Probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(',')}）`);
-  } else {
-    services.output.appendLine(`已生成 P7 中断 testbench ${tbUri.fsPath}（target_pc=${(interruptSchedule ?? []).map((pc) => `0x${(pc >>> 0).toString(16)}`).join(',')}）`);
-  }
-  if (showMessages) {
-    vscode.window.showInformationMessage('已生成 P7 中断 testbench');
-  }
-  return { moduleName: p7AutoRuntimeTestbenchName, kind: 'p7-auto', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
-}
-
-async function ensureRunnableTestbench(
-  services: AppServices,
-  resource: vscode.Uri | undefined,
-  showMessages: boolean,
-  moduleRegistry?: MutableVerilogModuleProvider
-): Promise<TestbenchResolution | undefined> {
-  const configuredTestbench = getTestbench(resource);
-  const activeTestbench = await activeTestbenchModuleName(resource, configuredTestbench);
-  if (activeTestbench) {
-    return {
-      moduleName: activeTestbench,
-      kind: 'active',
-      sourceUri: resource,
-      sha256: resource ? await fileSha256(resource) : undefined
-    };
-  }
-
-  const topName = getTopModule(resource);
-  const topDefinition = await findTopModuleDefinition(resource, topName, moduleRegistry);
-  if (!topDefinition) {
-    if (getProfile(resource) === 'P1') {
-      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages, moduleRegistry);
-      if (activeTestbench) {
-        return activeTestbench;
-      }
-    }
-    services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}`);
-    return await resolveNamedTestbench(configuredTestbench, resource, moduleRegistry);
-  }
-
-  const existing = await findExistingTestbenchResolution(topDefinition.uri, configuredTestbench, moduleRegistry);
-  if (existing.conflict) {
-    return undefined;
-  }
-  if (existing.resolution) {
-    return existing.resolution;
-  }
-
-  const tbUri = await runtimeTestbenchUri(topDefinition.uri, configuredTestbench);
-  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(topDefinition.uri)),
-    profile: getProfile(topDefinition.uri)
-  }));
-  if (!written) {
-    return undefined;
-  }
-  services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
-  if (showMessages) {
-    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
-  }
-  return { moduleName: configuredTestbench, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
-}
-
-async function ensureActiveModuleTestbench(
-  services: AppServices,
-  resource: vscode.Uri | undefined,
-  showMessages: boolean,
-  moduleRegistry?: MutableVerilogModuleProvider
-): Promise<TestbenchResolution | undefined> {
-  const definition = await activeModuleDefinition(resource);
-  if (!definition) {
-    return undefined;
-  }
-  const tbName = `${definition.module.name}_tb`;
-  const existing = await findExistingTestbenchResolution(definition.uri, tbName, moduleRegistry);
-  if (existing.conflict) {
-    return undefined;
-  }
-  if (existing.resolution) {
-    return existing.resolution;
-  }
-  const tbUri = await runtimeTestbenchUri(definition.uri, tbName);
-  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(definition.module, tbName, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)),
-    profile: getProfile(definition.uri)
-  }));
-  if (!written) {
-    return undefined;
-  }
-  services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
-  if (showMessages) {
-    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
-  }
-  return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
-}
-
-async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string): Promise<vscode.Uri> {
-  const folder = workspaceFolderForOrFirst(resource);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
-  await ensureDirectory(outDir);
-  return vscode.Uri.file(path.join(outDir.fsPath, runtimeTestbenchFileName(testbenchName)));
-}
-
-async function resolveNamedTestbench(
-  testbenchName: string,
-  resource: vscode.Uri | undefined,
-  moduleRegistry?: MutableVerilogModuleProvider
-): Promise<TestbenchResolution | undefined> {
-  const existing = resource
-    ? await findExistingTestbenchResolution(resource, testbenchName, moduleRegistry)
-    : { resolution: undefined, conflict: false };
-  if (existing.conflict) {
-    return undefined;
-  }
-  return existing.resolution ?? { moduleName: testbenchName, kind: 'user' };
-}
-
-interface ExistingTestbenchSearchResult {
-  resolution?: TestbenchResolution;
-  conflict: boolean;
-}
-
-async function findExistingTestbenchResolution(
-  resource: vscode.Uri,
-  tbName: string,
-  moduleRegistry?: MutableVerilogModuleProvider
-): Promise<ExistingTestbenchSearchResult> {
-  const candidates = await testbenchCandidates(resource, tbName, moduleRegistry);
-  if (!candidates.length) {
-    if (moduleRegistry?.scanning) {
-      vscode.window.showWarningMessage('项目 Verilog 模块仍在解析，未找到跨文件 testbench 时可稍后重试');
-    }
-    return { conflict: false };
-  }
-  const ranked = candidates
-    .map((candidate) => ({
-      ...candidate,
-      rank: testbenchCandidateRank(candidate.uri, resource, tbName)
-    }))
-    .sort((left, right) => left.rank - right.rank || left.uri.fsPath.localeCompare(right.uri.fsPath));
-  const best = ranked[0];
-  const sameRank = ranked.filter((candidate) => candidate.rank === best.rank);
-  if (sameRank.length > 1) {
-    const choices = sameRank.map((candidate) => vscode.workspace.asRelativePath(candidate.uri)).join(', ');
-    vscode.window.showErrorMessage(`发现多个同优先级 testbench 模块 ${tbName}: ${choices}`);
-    return { conflict: true };
-  }
-  return {
-    conflict: false,
-    resolution: {
-      moduleName: best.module.name,
-      kind: 'user',
-      sourceUri: best.uri,
-      sha256: await fileSha256(best.uri)
-    }
-  };
-}
-
-async function testbenchCandidates(
-  resource: vscode.Uri,
-  tbName: string,
-  moduleRegistry?: MutableVerilogModuleProvider
-): Promise<Array<{ module: VerilogModule; uri: vscode.Uri }>> {
-  const seen = new Set<string>();
-  const candidates: Array<{ module: VerilogModule; uri: vscode.Uri }> = [];
-  const add = async (module: VerilogModule): Promise<void> => {
-    if (module.name !== tbName) {
-      return;
-    }
-    const uri = uriForVerilogModule(module);
-    if (!uri || isCoPath(uri.fsPath)) {
-      return;
-    }
-    if (!await isFile(uri.fsPath)) {
-      moduleRegistry?.removeUri(uri);
-      return;
-    }
-    const key = `${module.name}@${normalizePathKey(uri.fsPath)}`;
-    if (seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-    candidates.push({ module, uri });
-  };
-
-  const active = await activeModuleDefinition(resource);
-  if (active) {
-    await add(active.module);
-  }
-  for (const module of moduleRegistry?.getModules(tbName) ?? []) {
-    await add(module);
-  }
-  if (!moduleRegistry) {
-    for (const module of await scanWorkspaceModulesByName(resource, tbName)) {
-      await add(module);
-    }
-  }
-  return candidates;
-}
-
-function testbenchCandidateRank(uri: vscode.Uri, resource: vscode.Uri, tbName: string): number {
-  const activeUri = vscode.window.activeTextEditor?.document.uri;
-  if (activeUri && samePath(activeUri.fsPath, uri.fsPath)) {
-    return 0;
-  }
-  const folder = workspaceFolderFor(resource) ?? workspaceFolderFor(uri);
-  const relativeParts = folder ? path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep).map((part) => part.toLowerCase()) : [];
-  if (relativeParts.includes('test') || relativeParts.includes('tests')) {
-    return 10;
-  }
-  if (path.basename(uri.fsPath).toLowerCase() === `${tbName.toLowerCase()}.v`) {
-    return 20;
-  }
-  return 50 + relativeParts.length;
-}
-
-async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: string): Promise<VerilogModule[]> {
-  const folder = workspaceFolderFor(resource);
-  if (!folder) {
-    return [];
-  }
-  const files = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, '**/*.v'),
-    '**/{node_modules,out,.git,.co}/**',
-    5000
-  );
-  const found: VerilogModule[] = [];
-  for (const uri of files) {
-    const document = await verilogDocumentForUri(uri);
-    if (!document) {
-      continue;
-    }
-    const parsed = parseVerilog(document, coSettingsForUri(uri), false);
-    found.push(...parsed.modules.filter((module) => module.name === moduleName));
-  }
-  return found;
-}
-
-async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: TestbenchResolution): Promise<void> {
-  const source = resolution.sourceUri ?? resolution.generatedUri;
-  const artifacts: Record<string, string> = {
-    testbenchModule: resolution.moduleName,
-    testbenchKind: resolution.kind
-  };
-  if (source) {
-    const snapshot = await copyAsmCaseArtifact(asmCase, 'verilog', source, 'testbench.v', 'testbenchSnapshot');
-    const sha256 = await fileSha256(source);
-    artifacts.testbenchSource = source.fsPath;
-    artifacts.testbenchSnapshot = snapshot.fsPath;
-    if (sha256) {
-      artifacts.testbenchSha256 = sha256;
-    }
-  } else if (resolution.sha256) {
-    artifacts.testbenchSha256 = resolution.sha256;
-  }
-  await updateAsmCaseArtifacts(asmCase, 'verilog', artifacts);
-}
-
-async function writeGeneratedRuntimeTestbench(uri: vscode.Uri, testbenchText: string): Promise<boolean> {
-  const next = generatedRuntimeTestbenchText(testbenchText);
-  if (await pathExists(uri.fsPath)) {
-    const existing = await readTextFileSafe(uri);
-    if (!isGeneratedRuntimeTestbench(existing)) {
-      vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
-      return false;
-    }
-    if (existing === next) {
-      return true;
-    }
-  }
-  await writeTextFile(uri, next);
-  return true;
-}
-
-async function readTextFileSafe(uri: vscode.Uri): Promise<string> {
-  try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    return Buffer.from(bytes).toString('utf8');
-  } catch {
-    // 读取失败时按空文件处理，调用方只用它做生成标记检查
-    return '';
-  }
-}
-
-async function activeModuleDefinition(resource: vscode.Uri | undefined): Promise<VerilogModuleDefinition | undefined> {
-  if (!resource || resource.scheme !== 'file' || path.extname(resource.fsPath).toLowerCase() !== '.v') {
-    return undefined;
-  }
-  const document = await verilogDocumentForUri(resource);
-  if (!document) {
-    return undefined;
-  }
-  const parsed = parseVerilog(document, coSettingsForUri(resource), false);
-  const activeEditor = vscode.window.activeTextEditor;
-  const activePosition = activeEditor?.document.uri.toString() === resource.toString()
-    ? activeEditor.selection.active
-    : undefined;
-  const module = activePosition
-    ? moduleAtPosition(parsed.modules, activePosition) ?? parsed.modules[0]
-    : parsed.modules[0];
-  return module ? { module, uri: resource } : undefined;
-}
-
-async function activeTestbenchModuleName(resource: vscode.Uri | undefined, configuredTestbench: string): Promise<string | undefined> {
-  if (!resource || resource.scheme !== 'file' || path.extname(resource.fsPath).toLowerCase() !== '.v') {
-    return undefined;
-  }
-  const document = await verilogDocumentForUri(resource);
-  if (!document) {
-    return undefined;
-  }
-  const parsed = parseVerilog(document, coSettingsForUri(resource), false);
-  const activeEditor = vscode.window.activeTextEditor;
-  const activePosition = activeEditor?.document.uri.toString() === resource.toString()
-    ? activeEditor.selection.active
-    : undefined;
-  const activeModule = activePosition ? moduleAtPosition(parsed.modules, activePosition) : undefined;
-  if (activeModule && isTestbenchModule(activeModule, configuredTestbench)) {
-    return activeModule.name;
-  }
-  return parsed.modules.find((module) => isTestbenchModule(module, configuredTestbench))?.name;
-}
-
-async function verilogDocumentForUri(uri: vscode.Uri): Promise<TextDocument | undefined> {
-  const active = vscode.window.activeTextEditor?.document;
-  if (active && active.uri.toString() === uri.toString()) {
-    return toTextDocument(active);
-  }
-  try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    return TextDocument.create(uri.toString(), 'verilog', 1, Buffer.from(bytes).toString('utf8'));
-  } catch {
-    // 文件不可读时跳过该 Verilog 候选
-    return undefined;
-  }
-}
-
-function isTestbenchModule(module: { name: string; ports: unknown[] }, configuredTestbench: string): boolean {
-  const lower = module.name.toLowerCase();
-  return module.name === configuredTestbench || lower.includes('tb') || (module.ports.length === 0 && lower.endsWith('test'));
-}
-
-async function findTopModuleDefinition(
-  resource: vscode.Uri | undefined,
-  topName: string,
-  moduleRegistry?: MutableVerilogModuleProvider
-): Promise<VerilogModuleDefinition | undefined> {
-  if (!topName.trim()) {
-    return undefined;
-  }
-  const active = await topModuleDefinitionFromUri(resource, topName);
-  if (active) {
-    return active;
-  }
-
-  for (const module of moduleRegistry?.getModules(topName) ?? []) {
-    const uri = uriForVerilogModule(module);
-    if (uri && resource?.toString() !== uri.toString()) {
-      return { module, uri };
-    }
-  }
-
-  const folder = workspaceFolderForOrFirst(resource);
-  if (!folder) {
-    return undefined;
-  }
-  const files = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(folder, '**/*.v'),
-    '**/{node_modules,out,.git,.co}/**',
-    5000
-  );
-  const sorted = files
-    .filter((uri) => resource?.toString() !== uri.toString())
-    .sort((left, right) => left.fsPath.localeCompare(right.fsPath));
-  for (const uri of sorted) {
-    const definition = await topModuleDefinitionFromUri(uri, topName);
-    if (definition) {
-      return definition;
-    }
-  }
-  return undefined;
-}
-
-async function topModuleDefinitionFromUri(uri: vscode.Uri | undefined, topName: string): Promise<VerilogModuleDefinition | undefined> {
-  if (!uri || uri.scheme !== 'file' || path.extname(uri.fsPath).toLowerCase() !== '.v') {
-    return undefined;
-  }
-  const document = await verilogDocumentForUri(uri);
-  if (!document) {
-    return undefined;
-  }
-  const parsed = parseVerilog(document, coSettingsForUri(uri), false);
-  const module = parsed.modules.find((candidate) => candidate.name === topName);
-  return module ? { module, uri } : undefined;
-}
-
-function uriForVerilogModule(module: VerilogModule): vscode.Uri | undefined {
-  try {
-    return vscode.Uri.parse(module.uri);
-  } catch {
-    // 索引里的 URI 异常时跳过该模块位置
-    return undefined;
-  }
-}
-
-async function fileSha256(uri: vscode.Uri | undefined): Promise<string | undefined> {
-  if (!uri || uri.scheme !== 'file') {
-    return undefined;
-  }
-  try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    return sha256Bytes(bytes);
-  } catch {
-    // 哈希只用于记录生成物版本，读取失败时留空
-    return undefined;
-  }
-}
-
-function isCoPath(file: string): boolean {
-  return file.split(/[\\/]+/).some((part) => part.toLowerCase() === CO_DIR);
-}
-
-function verilogDelayFromSimTime(simTime: string): string {
-  const match = /^(\d+(?:\.\d+)?)\s*(fs|ps|ns|us|ms|s)?$/i.exec(simTime.trim());
-  if (!match) {
-    return '200000';
-  }
-  const value = Number(match[1]);
-  const unit = (match[2] ?? 'ns').toLowerCase();
-  const multipliers: Record<string, number> = {
-    fs: 0.000001,
-    ps: 0.001,
-    ns: 1,
-    us: 1000,
-    ms: 1000000,
-    s: 1000000000
-  };
-  const delay = value * multipliers[unit];
-  if (!Number.isFinite(delay) || delay < 0) {
-    return '200000';
-  }
-  const rounded = Math.round(delay);
-  return Math.abs(delay - rounded) < 1e-9 ? String(rounded) : Number(delay.toFixed(6)).toString();
-}
-
-export function toTextDocument(document: vscode.TextDocument): TextDocument {
-  return TextDocument.create(document.uri.toString(), document.languageId, document.version, document.getText());
-}
-
-export function coSettingsForUri(uri: vscode.Uri): CoSettings {
-  return {
-    ...defaultCoSettings,
-    project: {
-      ...defaultCoSettings.project,
-      profile: getProfile(uri),
-      topModule: getTopModule(uri),
-      testbench: getTestbench(uri),
-      simTime: getSimTime(uri)
-    },
-    toolchain: {
-      isePath: getIsePath(uri)
-    },
-    run: {
-      timeoutMs: getRunTimeout(uri)
-    },
-    verilog: {
-      syntax: {
-        ise: {
-          enabled: config<boolean>('verilog.syntax.ise.enabled', defaultCoSettings.verilog.syntax.ise.enabled, uri),
-          mode: config<CoSettings['verilog']['syntax']['ise']['mode']>('verilog.syntax.ise.mode', defaultCoSettings.verilog.syntax.ise.mode, uri),
-          timeoutMs: config<number>('verilog.syntax.ise.timeoutMs', defaultCoSettings.verilog.syntax.ise.timeoutMs, uri)
-        }
-      },
-      implicitNet: {
-        diagnostic: config<CoSettings['verilog']['implicitNet']['diagnostic']>('verilog.implicitNet.diagnostic', defaultCoSettings.verilog.implicitNet.diagnostic, uri),
-        ignorePatterns: config<string[]>('verilog.implicitNet.ignorePatterns', defaultCoSettings.verilog.implicitNet.ignorePatterns, uri)
-      },
-      lint: {
-        courseRules: config<boolean>('verilog.lint.courseRules', defaultCoSettings.verilog.lint.courseRules, uri),
-        synthesizableHints: config<boolean>('verilog.lint.synthesizableHints', defaultCoSettings.verilog.lint.synthesizableHints, uri),
-        disabledRules: config<string[]>('verilog.lint.disabledRules', defaultCoSettings.verilog.lint.disabledRules, uri)
-      },
-      format: {
-        style: config<CoSettings['verilog']['format']['style']>('verilog.format.style', defaultCoSettings.verilog.format.style, uri),
-        continuationIndent: config<number>('verilog.format.continuationIndent', defaultCoSettings.verilog.format.continuationIndent, uri),
-        spaceInRange: config<boolean>('verilog.format.spaceInRange', defaultCoSettings.verilog.format.spaceInRange, uri),
-        declarationRangeSpacing: config<CoSettings['verilog']['format']['declarationRangeSpacing']>('verilog.format.declarationRangeSpacing', defaultCoSettings.verilog.format.declarationRangeSpacing, uri),
-        spaceBeforeInstancePorts: config<boolean>('verilog.format.spaceBeforeInstancePorts', defaultCoSettings.verilog.format.spaceBeforeInstancePorts, uri),
-        separateElse: config<boolean>('verilog.format.separateElse', defaultCoSettings.verilog.format.separateElse, uri),
-        maxBlankLines: config<number>('verilog.format.maxBlankLines', defaultCoSettings.verilog.format.maxBlankLines, uri)
-      }
-    }
-  };
 }
 
 function normalizeLintRule(rule?: string): string | undefined {
