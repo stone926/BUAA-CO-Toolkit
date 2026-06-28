@@ -117,6 +117,10 @@ const generated = {
   tcl: URI.file('E:/work/.co/isim/mips_tb.tcl')
 };
 
+function normalizedPath(value: string): string {
+  return value.replace(/\\/g, '/').toLowerCase();
+}
+
 function services(): AppServices {
   return {
     output: {
@@ -201,7 +205,7 @@ describe('Verilog ISim runner orchestration', () => {
       tclFileName: 'custom.tcl'
     });
 
-    expect(result?.exePath.toLowerCase()).toBe('e:\\work\\.co\\isim\\mips_tb.exe');
+    expect(normalizedPath(result?.exePath ?? '')).toBe('e:/work/.co/isim/mips_tb.exe');
     expect(generateIseProject).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       testbenchName: 'mips_tb',
       projectFiles: [URI.file('E:/work/src/mips.v'), URI.file('E:/work/tb.v')],

@@ -98,6 +98,10 @@ function setActiveDocument(filePath: string, languageId: string, text: string): 
   };
 }
 
+function normalizedFsPath(uri: vscode.Uri): string {
+  return uri.fsPath.replace(/\\/g, '/').toLowerCase();
+}
+
 describe('Verilog command registration and entry behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -168,16 +172,16 @@ describe('Verilog command registration and entry behavior', () => {
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('打开');
     await commands.get(Commands.Verilog.GenerateTestbench)!();
     const openedUri = vi.mocked(vscode.window.showTextDocument).mock.calls[0]?.[0] as vscode.Uri;
-    expect(openedUri.fsPath.toLowerCase()).toBe('e:\\work\\mips_tb.v');
+    expect(normalizedFsPath(openedUri)).toBe('e:/work/mips_tb.v');
     expect(writeTextFile).not.toHaveBeenCalled();
 
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('覆盖');
     await commands.get(Commands.Verilog.GenerateTestbench)!();
     const [writtenUri, writtenText] = vi.mocked(writeTextFile).mock.calls[0];
-    expect((writtenUri as vscode.Uri).fsPath.toLowerCase()).toBe('e:\\work\\mips_tb.v');
+    expect(normalizedFsPath(writtenUri as vscode.Uri)).toBe('e:/work/mips_tb.v');
     expect(writtenText).toBe('module mips_tb; endmodule\n');
     expect(buildTestbench).toHaveBeenCalledWith(expect.objectContaining({ name: 'mips' }), 'mips_tb', expect.objectContaining({ profile: 'P4' }));
     const updatedUri = vi.mocked(moduleRegistry.updateUri).mock.calls[0]?.[0] as vscode.Uri;
-    expect(updatedUri.fsPath.toLowerCase()).toBe('e:\\work\\mips_tb.v');
+    expect(normalizedFsPath(updatedUri)).toBe('e:/work/mips_tb.v');
   });
 });
