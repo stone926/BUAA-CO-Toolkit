@@ -8,8 +8,10 @@ import { runMarsFile } from './mips';
 import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
 import { pickOneFile } from './workflowInputs';
-import { escapeHtml } from './language/common/util';
 import { dedupePaths, samePath, sanitizeFileStem } from './pathUtils';
+import { html, renderReportPage } from './webview/reportLayout';
+
+const escapeHtml = html.text;
 
 interface HazardToolPaths {
   dir: string;
@@ -342,42 +344,28 @@ function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: 
       <div>模型: <code>${escapeHtml(prepared.project)}${prepared.profile === 'P7' ? ' (P7 使用 P6 hazard 模型)' : ''}</code></div>
     </div>` : '';
 
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body {
-      font-family: var(--vscode-font-family);
-      padding: 20px;
-      color: var(--vscode-foreground);
-      background: var(--vscode-editor-background);
-    }
-    h1 {
-      font-size: 22px;
-      margin: 0 0 16px;
-    }
+  return renderReportPage({
+    title: 'CO Hazard 分析',
+    extraCss: hazardReportCss,
+    body: `
+  ${preparedInfo}
+  <div class="paths">JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
+  ${body}
+`
+  });
+}
+
+const hazardReportCss = `
     h2 {
-      font-size: 16px;
       margin: 22px 0 10px;
     }
-    .summary {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 8px;
-      margin-bottom: 16px;
-    }
     .metric {
-      border: 1px solid var(--vscode-panel-border);
       border-radius: 6px;
-      padding: 10px;
     }
     .metric span {
       color: var(--vscode-descriptionForeground);
     }
     .metric strong {
-      display: block;
-      font-size: 18px;
       margin-top: 4px;
     }
     .bar {
@@ -392,10 +380,6 @@ function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: 
       height: 100%;
       background: var(--vscode-testing-iconPassed);
     }
-    .paths {
-      margin: 0 0 16px;
-      color: var(--vscode-descriptionForeground);
-    }
     .chips {
       display: flex;
       flex-wrap: wrap;
@@ -409,25 +393,7 @@ function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: 
       color: var(--vscode-descriptionForeground);
     }
     table {
-      width: 100%;
-      border-collapse: collapse;
       margin-bottom: 18px;
-    }
-    th, td {
-      border-bottom: 1px solid var(--vscode-panel-border);
-      padding: 7px;
-      text-align: left;
-      vertical-align: top;
-    }
-    th {
-      position: sticky;
-      top: 0;
-      background: var(--vscode-editor-background);
-    }
-    code {
-      background: var(--vscode-textCodeBlock-background);
-      padding: 2px 4px;
-      word-break: break-word;
     }
     .ok {
       color: var(--vscode-testing-iconPassed);
@@ -437,16 +403,7 @@ function renderHazardReport(report: unknown, reportFile: vscode.Uri, prepared?: 
       color: var(--vscode-testing-iconFailed);
       font-weight: 600;
     }
-  </style>
-</head>
-<body>
-  <h1>CO Hazard 分析</h1>
-  ${preparedInfo}
-  <div class="paths">JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
-  ${body}
-</body>
-</html>`;
-}
+`;
 
 function renderStatisticReport(report: HazardStatisticReport): string {
   const forwardGrade = gradeSection(report.grade?.forward);

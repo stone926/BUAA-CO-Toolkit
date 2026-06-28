@@ -7,7 +7,9 @@ import { fileMtimeMs, readTextFile, workspaceFolderFor } from './fsUtil';
 import { revealOutputChannel } from './process';
 import { AppServices } from './types';
 import { pickOneFile } from './workflowInputs';
-import { escapeHtml } from './language/common/util';
+import { html, renderMetricGrid, renderReportPage, renderTable } from './webview/reportLayout';
+
+const escapeHtml = html.text;
 
 export interface CompareMode {
   label: string;
@@ -167,7 +169,7 @@ function renderTraceCompareReport(
   simEvents: CpuTraceEvent[]
 ): string {
   const visible = visibleEntries(diff);
-  const rows = visible.entries.map(renderDiffRow).join('\n');
+  const rows = visible.entries.map(renderDiffRow);
   const firstDiff = diff.firstDiffIndex >= 0 ? `#${diff.firstDiffIndex + 1}` : '无';
   const hiddenNote = visible.hidden
     ? `<p class="muted">显示首个差异附近的 ${visible.entries.length} / ${totalEntryCount(diff)} 个事件。</p>`
@@ -176,83 +178,16 @@ function renderTraceCompareReport(
     ? '<p class="warn-text">其中一侧没有可解析的 Trace 事件。请检查输出是否包含类似 <code>@00003000: $3 &lt;= 00000000</code> 或 <code>100@00003000: *00001004 &lt;= 00000000</code> 的行。</p>'
     : '';
 
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body {
-      font-family: var(--vscode-font-family);
-      padding: 20px;
-      color: var(--vscode-foreground);
-      background: var(--vscode-editor-background);
-    }
-    h1 {
-      font-size: 22px;
-      margin: 0 0 16px;
-    }
-    .summary {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .metric {
-      border: 1px solid var(--vscode-panel-border);
-      padding: 10px;
-    }
-    .metric strong {
-      display: block;
-      font-size: 18px;
-    }
-    .paths {
-      margin: 0 0 16px;
-      color: var(--vscode-descriptionForeground);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th, td {
-      border-bottom: 1px solid var(--vscode-panel-border);
-      padding: 7px;
-      text-align: left;
-      vertical-align: top;
-    }
-    th {
-      position: sticky;
-      top: 0;
-      background: var(--vscode-editor-background);
-    }
-    code {
-      background: var(--vscode-textCodeBlock-background);
-      padding: 2px 4px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .ok td:first-child {
-      color: var(--vscode-testing-iconPassed);
-    }
-    .diff td:first-child, .mars-only td:first-child, .sim-only td:first-child, .cycle-diff td:first-child {
-      color: var(--vscode-testing-iconFailed);
-      font-weight: 600;
-    }
-    .muted {
-      color: var(--vscode-descriptionForeground);
-    }
-    .warn-text {
-      color: var(--vscode-testing-iconFailed);
-    }
-  </style>
-</head>
-<body>
-  <h1>CO Trace 比较</h1>
-  <div class="summary">
-    <div class="metric"><span>状态</span><strong>${diff.matched ? '匹配' : '不同'}</strong></div>
-    <div class="metric"><span>MARS 事件</span><strong>${diff.summary.marsEvents}</strong></div>
-    <div class="metric"><span>SIM 事件</span><strong>${diff.summary.simEvents}</strong></div>
-    <div class="metric"><span>首个差异</span><strong>${firstDiff}</strong></div>
-  </div>
+  return renderReportPage({
+    title: 'CO Trace 比较',
+    extraCss: traceCompareCss,
+    body: `
+  ${renderMetricGrid([
+    { label: '状态', value: diff.matched ? '匹配' : '不同' },
+    { label: 'MARS 事件', value: diff.summary.marsEvents },
+    { label: 'SIM 事件', value: diff.summary.simEvents },
+    { label: '首个差异', value: firstDiff }
+  ])}
   <div class="paths">
     <div>模式: ${escapeHtml(mode.label)}</div>
     <div>MARS: <code>${escapeHtml(pair.mars.fsPath)}</code></div>
@@ -260,16 +195,9 @@ function renderTraceCompareReport(
   </div>
   ${parseWarning}
   ${hiddenNote}
-  <table>
-    <thead>
-      <tr><th>状态</th><th>#</th><th>原因</th><th>MARS</th><th>SIM</th></tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-</body>
-</html>`;
+  ${renderTable(['状态', '#', '原因', 'MARS', 'SIM'], rows)}
+`
+  });
 }
 
 function visibleEntries(diff: TraceDiffResult): { entries: TraceDiffEntry[]; hidden: boolean } {
@@ -295,14 +223,17 @@ function totalEntryCount(diff: TraceDiffResult): number {
   return Math.max(diff.summary.marsEvents, diff.summary.simEvents);
 }
 
-function renderDiffRow(entry: TraceDiffEntry): string {
-  return `<tr class="${entry.status}">
-    <td>${entry.status.toUpperCase()}</td>
-    <td>${entry.index + 1}</td>
-    <td>${escapeHtml(entry.reason ?? '')}</td>
-    <td>${renderEvent(entry.mars)}</td>
-    <td>${renderEvent(entry.sim)}</td>
-  </tr>`;
+function renderDiffRow(entry: TraceDiffEntry): { className: string; cells: string[] } {
+  return {
+    className: entry.status,
+    cells: [
+      escapeHtml(entry.status.toUpperCase()),
+      String(entry.index + 1),
+      escapeHtml(entry.reason ?? ''),
+      renderEvent(entry.mars),
+      renderEvent(entry.sim)
+    ]
+  };
 }
 
 function renderEvent(event?: CpuTraceEvent): string {
@@ -314,3 +245,19 @@ function renderEvent(event?: CpuTraceEvent): string {
   const normalized = `${cycle}pc=${event.pc} ${target} <= ${event.value}`;
   return `<div><code>${escapeHtml(event.raw)}</code></div><div class="muted">${escapeHtml(normalized)}; line ${event.lineNumber}</div>`;
 }
+
+const traceCompareCss = `
+    code {
+      white-space: pre-wrap;
+    }
+    .ok td:first-child {
+      color: var(--vscode-testing-iconPassed);
+    }
+    .diff td:first-child, .mars-only td:first-child, .sim-only td:first-child, .cycle-diff td:first-child {
+      color: var(--vscode-testing-iconFailed);
+      font-weight: 600;
+    }
+    .warn-text {
+      color: var(--vscode-testing-iconFailed);
+    }
+`;

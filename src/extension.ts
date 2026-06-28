@@ -32,7 +32,9 @@ import { registerSemanticColorDefaults } from './semanticColors';
 import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 import { getProfileName } from './courseConfig';
-import { escapeHtml } from './language/common/util';
+import { html, renderReportPage, renderTable } from './webview/reportLayout';
+
+const escapeHtml = html.text;
 
 export function activate(context: vscode.ExtensionContext): void {
   startLanguageServer(context);
@@ -342,29 +344,24 @@ function renderToolchainReport(checks: ToolDetection[]): string {
   const rows = checks.map((check) => {
     const status = check.ok ? '正常' : '缺失';
     const suggestion = check.suggestion ?? '';
-    return `<tr class="${check.ok ? 'ok' : 'bad'}"><td>${escapeHtml(check.name)}</td><td>${status}</td><td>${escapeHtml(check.detail)}</td><td>${escapeHtml(suggestion)}</td></tr>`;
-  }).join('\n');
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body {
-      font-family: var(--vscode-font-family);
-      padding: 20px;
-      color: var(--vscode-foreground);
-      background: var(--vscode-editor-background);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th, td {
-      border-bottom: 1px solid var(--vscode-panel-border);
-      padding: 8px;
-      text-align: left;
-      vertical-align: top;
-    }
+    return {
+      className: check.ok ? 'ok' : 'bad',
+      cells: [
+        escapeHtml(check.name),
+        escapeHtml(status),
+        escapeHtml(check.detail),
+        escapeHtml(suggestion)
+      ]
+    };
+  });
+  return renderReportPage({
+    title: 'CO 工具链',
+    extraCss: toolchainReportCss,
+    body: `  ${renderTable(['工具', '状态', '路径 / 版本', '建议'], rows)}`
+  });
+}
+
+const toolchainReportCss = `
     .ok td:nth-child(2) {
       color: var(--vscode-testing-iconPassed);
       font-weight: 600;
@@ -373,22 +370,4 @@ function renderToolchainReport(checks: ToolDetection[]): string {
       color: var(--vscode-testing-iconFailed);
       font-weight: 600;
     }
-    code {
-      background: var(--vscode-textCodeBlock-background);
-      padding: 2px 4px;
-    }
-  </style>
-</head>
-<body>
-  <h1>CO 工具链</h1>
-  <table>
-    <thead>
-      <tr><th>工具</th><th>状态</th><th>路径 / 版本</th><th>建议</th></tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-</body>
-</html>`;
-}
+`;

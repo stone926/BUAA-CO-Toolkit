@@ -56,6 +56,7 @@ ui:
   wizard.ts — 4步向导: 选Profile->项目名->配置工具链(可选)->创建目录+模板(.v/.asm+testbench)
   advancedTools.ts — registerAdvancedTools(): 按Profile过滤低频工具
   advancedToolModel.ts — 工具分组/标签/描述模型
+  webview/reportLayout.ts — 报告 Webview 共享页面 shell、metric、table 和转义 helper
 
 other:
   semanticColors.ts — registerSemanticColorDefaults(): auto/dark/light/off preset
