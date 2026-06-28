@@ -15,6 +15,7 @@ import {
 } from './courseConfig';
 import { defaultCoSettings } from './language/common/settings';
 import { buildTestbench, parseVerilog } from './language/verilog/service';
+import { renderResourceTemplate } from './templates/templateRegistry';
 import { pathExists } from './fsUtil';
 
 interface ToolchainSettings {
@@ -222,22 +223,7 @@ async function createTemplateFiles(rootPath: string, profile: ProjectProfile): P
 async function createMipsTemplate(rootPath: string): Promise<void> {
   const mainPath = path.join(rootPath, 'src', 'main.asm');
   if (!await pathExists(mainPath)) {
-    const template = `# BUAA CO P2 MIPS Assembly
-# Author: Your Name
-# Date: ${new Date().toISOString().split('T')[0]}
-
-.data
-    # 数据段
-
-.text
-.globl main
-main:
-    # 你的代码
-
-    # 退出程序
-    li $v0, 10
-    syscall
-`;
+    const template = renderResourceTemplate('wizard/p2_main.asm.tmpl', { date: currentDateStamp() });
     await fs.promises.writeFile(mainPath, template, 'utf8');
   }
 }
@@ -249,17 +235,12 @@ async function createVerilogTemplate(rootPath: string, profile: ProjectProfile):
 
   if (!await pathExists(topPath)) {
     const ports = getVerilogPorts(profile);
-    topText = `// BUAA CO ${profile} Verilog
-// Author: Your Name
-// Date: ${new Date().toISOString().split('T')[0]}
-
-module ${topModule}(
-${ports}
-);
-    // 你的实现
-
-endmodule
-`;
+    topText = renderResourceTemplate('wizard/verilog_top.v.tmpl', {
+      date: currentDateStamp(),
+      ports,
+      profile,
+      topModule
+    });
     await fs.promises.writeFile(topPath, topText, 'utf8');
   } else {
     topText = await fs.promises.readFile(topPath, 'utf8');
@@ -299,31 +280,11 @@ function buildWizardTestbench(topText: string, topPath: string, topModule: strin
   if (module) {
     return buildTestbench(module, tbName, { profile });
   }
-  return `\`timescale 1ns / 1ps
+  return renderResourceTemplate('wizard/basic_testbench.v.tmpl', { tbName, topModule });
+}
 
-module ${tbName};
-    reg clk;
-    reg reset;
-
-    ${topModule} uut (
-        .clk(clk),
-        .reset(reset)
-    );
-
-    initial begin
-        clk = 1'b0;
-        forever #5 clk = ~clk;
-    end
-
-    initial begin
-        reset = 1'b1;
-        #20;
-        reset = 1'b0;
-        #200000;
-        $finish;
-    end
-endmodule
-`;
+function currentDateStamp(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 async function updateProjectSettings(profile: ProjectProfile, toolchainConfig: ToolchainSettings): Promise<void> {

@@ -30,6 +30,12 @@ resources/templates/verilog/:
   p7_probe_block.v.tmpl — P7 probe interrupt/MMIO观测模板
   加载: templateRegistry 受控占位替换
 
+resources/templates/wizard/:
+  p2_main.asm.tmpl — 项目向导生成的 P2 初始汇编入口
+  verilog_top.v.tmpl — 项目向导生成的 Verilog 顶层模块
+  basic_testbench.v.tmpl — 项目向导解析失败时的基础 testbench fallback
+  加载: templateRegistry 受控占位替换
+
 syntaxes/:
   mips.tmLanguage.json — TextMate语法: MIPS标记分类
   verilog.tmLanguage.json — TextMate语法: Verilog标记分类
