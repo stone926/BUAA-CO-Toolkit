@@ -1,5 +1,4 @@
 import { CO_LOGISIM_DIR } from './constants';
-import { spawn } from 'child_process';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -43,8 +42,8 @@ import {
 import { compareTraceIterables, firstTraceDiffSnapshot } from './language/mips/traceCompare';
 import { iterCpuTraceEvents } from './language/mips/traceParser';
 import { commandLine, revealOutputChannel } from './process';
+import { runProcessCore } from './processCore';
 import { checkToolchain } from './toolchain';
-import { LineChunkScanner, TextChunkAccumulator } from './textChunks';
 import { AppServices, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
@@ -638,24 +637,27 @@ export async function runLogisimTraceCli(
     }
   }
 
-  return await new Promise<LogisimCliTraceRun>((resolve) => {
-    const stdout = new TextChunkAccumulator();
-    const stderr = new TextChunkAccumulator();
-    let rowsSeen = 0;
-    let settled = false;
-    let timedOut = false;
-    let haltedByPc = false;
-    let pcError: string | undefined;
-    const pcProgress = createLogisimPcProgressState();
-
-    const child = spawn(java, args, {
-      cwd,
-      env: process.env,
-      shell: false,
-      windowsHide: true
-    });
-
-    const inspectLine = (line: string): void => {
+  let rowsSeen = 0;
+  let haltedByPc = false;
+  let pcError: string | undefined;
+  const pcProgress = createLogisimPcProgressState();
+  const run = await runProcessCore(java, args, {
+    cwd,
+    timeoutMs,
+    commandLine: display,
+    onStdout: (text) => {
+      if (streamOutput) {
+        services.output.append(text);
+      }
+    },
+    onStderr: (text) => services.output.append(text),
+    onError: (error) => services.output.appendLine(error.message),
+    onTimeout: () => {
+      if (!haltedByPc && !pcError) {
+        services.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
+      }
+    },
+    onStdoutLine: (line, control) => {
       try {
         const progress = inspectLogisimPcProgress(line, setup.traceSpec, pcProgress, haltPcHex);
         rowsSeen = pcProgress.rowsSeen;
@@ -664,111 +666,44 @@ export async function runLogisimTraceCli(
         }
         if (progress.error) {
           pcError = progress.error;
-          child.kill();
+          control.stop(progress.error);
           return;
         }
         if (!haltedByPc && progress.halted) {
           haltedByPc = true;
-          child.kill();
+          control.stop('halted-by-pc');
         }
       } catch {
         // Full parser will report malformed table rows after the process exits.
       }
-    };
-    const stdoutLines = new LineChunkScanner(inspectLine);
-
-    const timer = setTimeout(() => {
-      stdoutLines.flush();
-      if (!haltedByPc && !pcError) {
-        timedOut = true;
-        child.kill();
-      }
-    }, timeoutMs);
-
-    const appendStdout = (text: string): void => {
-      stdout.append(text);
-      if (streamOutput) {
-        services.output.append(text);
-      }
-      stdoutLines.append(text);
-    };
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      appendStdout(chunk.toString());
-    });
-
-    child.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr.append(text);
-      services.output.append(text);
-    });
-
-    child.on('error', (error: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      stderr.append(error.message);
-      services.output.appendLine(error.message);
-      const finalStdout = stdout.toString();
-      const finalStderr = stderr.toString();
-      resolve({
-        result: {
-          ok: false,
-          exitCode: null,
-          commandLine: display,
-          cwd,
-          stdout: finalStdout,
-          stderr: finalStderr,
-          timedOut
-        },
-        stdout: finalStdout,
-        stderr: finalStderr,
-        rowsSeen,
-        haltedByPc
-      });
-    });
-
-    child.on('close', (code: number | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      stdoutLines.flush();
-      if (timedOut) {
-        services.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
-      }
-      if (haltedByPc) {
-        services.output.appendLine(`Logisim 已到达停机 PC 0x${haltPcHex}，结束命令行仿真`);
-      }
-      if (pcError) {
-        services.output.appendLine(pcError);
-      }
-      const finalStdout = stdout.toString();
-      const rawStderr = stderr.toString();
-      const finalStderr = pcError
-        ? [rawStderr.trimEnd(), pcError].filter(Boolean).join('\n')
-        : rawStderr;
-      resolve({
-        result: {
-          ok: haltedByPc || (!timedOut && !pcError && code === 0),
-          exitCode: code,
-          commandLine: display,
-          cwd,
-          stdout: finalStdout,
-          stderr: finalStderr,
-          timedOut: timedOut && !haltedByPc
-        },
-        stdout: finalStdout,
-        stderr: finalStderr,
-        rowsSeen,
-        haltedByPc,
-        pcError
-      });
-    });
+    },
+    successPredicate: (result) => haltedByPc || (!result.timedOut && !pcError && result.exitCode === 0)
   });
+  if (haltedByPc) {
+    services.output.appendLine(`Logisim 已到达停机 PC 0x${haltPcHex}，结束命令行仿真`);
+  }
+  if (pcError) {
+    services.output.appendLine(pcError);
+  }
+  const finalStderr = pcError
+    ? [run.stderr.trimEnd(), pcError].filter(Boolean).join('\n')
+    : run.stderr;
+  return {
+    result: {
+      ok: run.ok,
+      exitCode: run.exitCode,
+      commandLine: display,
+      cwd,
+      stdout: run.stdout,
+      stderr: finalStderr,
+      timedOut: run.timedOut && !haltedByPc
+    },
+    stdout: run.stdout,
+    stderr: finalStderr,
+    rowsSeen,
+    haltedByPc,
+    pcError
+  };
 }
 
 export function p3LogisimRomCapacityError(target: LogisimRomTarget, wordCount: number): string | undefined {

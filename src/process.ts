@@ -2,8 +2,8 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import { getRunTimeout, shouldRevealOutput, showCommandBeforeRun } from './config';
-import { TextChunkAccumulator } from './textChunks';
 import { RunResult } from './types';
+import { runProcessCore } from './processCore';
 
 /**
  * 仅在用户开启 `co.run.revealOutput` 时弹出「输出」面板，否则静默写入。
@@ -58,87 +58,26 @@ export async function runTool(command: string, args: string[], options: RunToolO
     }
   }
 
-  return await new Promise<RunResult>((resolve) => {
-    const stdout = new TextChunkAccumulator();
-    const stderr = new TextChunkAccumulator();
-    let settled = false;
-    let timedOut = false;
-
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        ...(options.env ?? {})
-      },
-      shell: false,
-      windowsHide: true
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeoutMs);
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stdout.append(text);
-      options.output.append(text);
-    });
-
-    child.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr.append(text);
-      options.output.append(text);
-    });
-
-    child.on('error', (error: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      stderr.append(error.message);
-      options.output.appendLine(error.message);
-      const finalStdout = stdout.toString();
-      const finalStderr = stderr.toString();
-      resolve({
-        ok: false,
-        exitCode: null,
-        commandLine: display,
-        cwd,
-        stdout: finalStdout,
-        stderr: finalStderr,
-        timedOut
-      });
-    });
-
-    child.on('close', (code: number | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      if (timedOut) {
-        options.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
-      }
-      const finalStdout = stdout.toString();
-      const finalStderr = stderr.toString();
-      resolve({
-        ok: code === 0 && !timedOut,
-        exitCode: code,
-        commandLine: display,
-        cwd,
-        stdout: finalStdout,
-        stderr: finalStderr,
-        timedOut
-      });
-    });
-
-    if (options.stdin !== undefined) {
-      child.stdin.write(options.stdin);
-    }
-    child.stdin.end();
+  const result = await runProcessCore(command, args, {
+    cwd,
+    env: options.env,
+    timeoutMs,
+    stdin: options.stdin,
+    commandLine: display,
+    onStdout: (text) => options.output.append(text),
+    onStderr: (text) => options.output.append(text),
+    onError: (error) => options.output.appendLine(error.message),
+    onTimeout: () => options.output.appendLine(`运行超时（${timeoutMs} 毫秒）`)
   });
+  return {
+    ok: result.ok,
+    exitCode: result.exitCode,
+    commandLine: display,
+    cwd,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    timedOut: result.timedOut
+  };
 }
 
 export async function launchTool(command: string, args: string[], options: RunToolOptions): Promise<RunResult> {

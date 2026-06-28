@@ -23,6 +23,7 @@ toolchain:
 
 process:
   process.ts — runTool(同步等待,stdout/stderr流式写入OutputChannel,超时kill), launchTool(GUI分离启动,spawn延迟判定,unref), commandLine, quoteArg
+  processCore.ts — 无VS Code依赖的spawn/timeout/stdout/stderr/逐行监控核心, 供扩展宿主和LSP复用
   textChunks.ts — TextChunkAccumulator(零拷贝chunk收集), LineChunkScanner(流式逐行CRLF兼容)
 
 fs:

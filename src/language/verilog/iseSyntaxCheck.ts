@@ -1,5 +1,4 @@
 import { CO_DIR, CO_ISE_CHECK_DIR } from '../../constants';
-import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Diagnostic, DiagnosticSeverity, Range, WorkspaceFolder } from 'vscode-languageserver/node';
@@ -7,7 +6,7 @@ import { URI } from 'vscode-uri';
 import { buildIseEnvironment, findFuse } from '../../iseCommon';
 import { buildIseProjectText } from '../../verilogSimulationFiles';
 import { isFile, yieldEventLoop } from '../../nodeFs';
-import { TextChunkAccumulator } from '../../textChunks';
+import { runProcessCore } from '../../processCore';
 
 export interface IseSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -22,14 +21,6 @@ export interface IseSyntaxCheckResult {
   ok: boolean;
   skipped?: 'missing-toolchain' | 'no-files' | 'no-top';
   diagnosticsByUri: Map<string, Diagnostic[]>;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-}
-
-interface RunProcessResult {
-  ok: boolean;
-  exitCode: number | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
@@ -64,7 +55,7 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
   await fs.promises.writeFile(prj, buildIseProjectText(files), 'utf8');
 
   const exeName = process.platform === 'win32' ? 'co_syntax.exe' : 'co_syntax';
-  const run = await runProcess(fuse, ['--incremental', '-nodebug', '-prj', path.basename(prj), '-o', exeName, topModule], {
+  const run = await runProcessCore(fuse, ['--incremental', '-nodebug', '-prj', path.basename(prj), '-o', exeName, topModule], {
     cwd: outDir,
     env: buildIseEnvironment(isePath),
     timeoutMs: options.timeoutMs > 0 ? options.timeoutMs : defaultTimeoutMs
@@ -136,67 +127,6 @@ function parseFuseDiagnosticLine(
       message
     }
   };
-}
-
-function runProcess(
-  command: string,
-  args: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number }
-): Promise<RunProcessResult> {
-  return new Promise((resolve) => {
-    const stdout = new TextChunkAccumulator();
-    const stderr = new TextChunkAccumulator();
-    let settled = false;
-    let timedOut = false;
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: {
-        ...process.env,
-        ...options.env
-      },
-      shell: false,
-      windowsHide: true
-    });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, options.timeoutMs);
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout.append(chunk.toString());
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr.append(chunk.toString());
-    });
-    child.on('error', (error: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      stderr.append(error.message);
-      resolve({
-        ok: false,
-        exitCode: null,
-        stdout: stdout.toString(),
-        stderr: stderr.toString(),
-        timedOut
-      });
-    });
-    child.on('close', (code: number | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      resolve({
-        ok: code === 0 && !timedOut,
-        exitCode: code,
-        stdout: stdout.toString(),
-        stderr: stderr.toString(),
-        timedOut
-      });
-    });
-  });
 }
 
 async function scanVerilogFiles(root: string, limit: number): Promise<string[]> {
