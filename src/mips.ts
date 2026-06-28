@@ -12,7 +12,7 @@ import {
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, isFile, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { appendHaltLoop, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from './courseTesting/mipsUtil';
-import { p7ExceptionHandlerAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
+import { p7ExceptionHandlerAddress, p7KernelTextDumpEndAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
 import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
 import { sanitizeFileStem } from './pathUtils';
@@ -162,7 +162,7 @@ export async function runMarsFile(
   } else if (mode === 'dumpKernel') {
     outputFile = options.dumpOutputFile ?? vscode.Uri.file(path.join(cwd, `${basenameNoExt(asmUri)}.kernel.txt`));
     await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
-    args.push('a', 'dump', '0x00004180-0x00004ffc', 'HexText', outputFile.fsPath, asmUri.fsPath);
+    args.push('a', 'dump', p7KernelTextDumpRange(), 'HexText', outputFile.fsPath, asmUri.fsPath);
   }
 
   const setupError = await marsRunSetupError(asmUri, mode, effectiveOptions, memoryConfiguration);
@@ -321,7 +321,7 @@ async function mergeP7KernelTextDump(
   const tempDir = vscode.Uri.file(tempDirPath);
   const kernelOutputFile = vscode.Uri.file(path.join(tempDir.fsPath, `${basenameNoExt(asmUri)}.kernel-merge.txt`));
   const args = buildMarsArgs(asmUri, mars, 'dumpKernel', options, P7_COURSE_MEMORY_CONFIG);
-  args.push('a', 'dump', `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-0x00004ffc`, 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
+  args.push('a', 'dump', p7KernelTextDumpRange(), 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
 
   const kernelResult = await runTool(java, args, {
     cwd,
@@ -431,4 +431,8 @@ const p7KernelTextStartIndex = (p7ExceptionHandlerAddress - p7UserTextBaseAddres
 
 function formatMarsDumpAddress(value: number): string {
   return `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function p7KernelTextDumpRange(): string {
+  return `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-${formatMarsDumpAddress(p7KernelTextDumpEndAddress)}`;
 }

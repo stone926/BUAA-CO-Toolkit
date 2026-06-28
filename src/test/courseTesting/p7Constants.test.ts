@@ -3,6 +3,7 @@ import {
   p7Hardware,
   p7UserTextBaseAddress,
   p7ExceptionHandlerAddress,
+  p7KernelTextDumpEndAddress,
   p7ProbeLogBase,
   p7ProbeRecordWords,
   p7InstructionMemoryWords,
@@ -105,6 +106,12 @@ describe('P7 hardware memory layout', () => {
     expect(p7InstructionMemoryWords).toBe(5120);
     expect(p7DataMemoryWords).toBe(4096);
     expect(p7InstructionMemoryWords).toBeGreaterThan(p7DataMemoryWords);
+  });
+
+  it('derives kernel text dump end from instruction memory depth', () => {
+    expect(p7KernelTextDumpEndAddress).toBe(p7InstructionMemoryWords * 4 - 4);
+    expect(p7KernelTextDumpEndAddress).toBe(0x4ffc);
+    expect(p7ExceptionHandlerAddress).toBeLessThanOrEqual(p7KernelTextDumpEndAddress);
   });
 });
 

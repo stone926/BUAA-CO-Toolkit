@@ -86,6 +86,7 @@ export const p7ExceptionFlushShadowSlots = p7Hardware.memoryLayout.exceptionFlus
 export const p7InterruptAnchorInstructionCount = p7Hardware.memoryLayout.interruptAnchorInstructionCount;
 export const p7CourseInstructionCountMaximum =
   ((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4) - p7MainTerminatorInstructionCount;
+export const p7KernelTextDumpEndAddress = p7InstructionMemoryWords * 4 - 4;
 
 export const p7ProbeStateScenarioId = p7Hardware.memoryLayout.probeState.scenarioId;
 export const p7ProbeStateKind = p7Hardware.memoryLayout.probeState.kind;
@@ -216,6 +217,9 @@ function validateP7Hardware(value: unknown): asserts value is P7HardwareConfig {
   }
   if (mainTerminatorInstructionCount >= userInstructionSlots) {
     throw new Error('Invalid P7 terminator reservation.');
+  }
+  if ((memoryLayout.exceptionHandlerAddress as number) > instructionMemoryWords * 4 - 4) {
+    throw new Error('P7 exception handler must be inside instruction memory.');
   }
   if ((timer.presetMin as number) > (timer.presetMax as number)) {
     throw new Error('Invalid P7 timer preset range.');

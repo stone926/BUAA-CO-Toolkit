@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
 import {
   semanticColorPresets,
@@ -8,6 +9,13 @@ import {
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
 import { getCourseConfig, getLogisimTraceProfileConfig } from '../courseConfig';
+import { generatorInstructionCatalog } from '../courseTesting/generatorInstructionCatalog';
+import {
+  p7CourseInstructionCountMaximum,
+  p7ExceptionHandlerAddress,
+  p7ProbeDefaultScenarioCount,
+  p7ProbeMaxScenarioCount
+} from '../courseTesting/p7Hardware';
 import {
   configurableVerilogLintRuleIds,
   defaultDisabledVerilogLintRuleIds
@@ -17,7 +25,7 @@ interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
-    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; enum?: unknown[]; items?: { enum?: unknown[] } }> }>;
+    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { enum?: unknown[] } }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
@@ -37,6 +45,13 @@ function readJsonFile<T>(relativePath: string): T {
 }
 
 describe('package manifest', () => {
+  it('keeps generated configuration schema in sync with resource sources', () => {
+    expect(() => execFileSync(process.execPath, ['scripts/generate-manifest-config.mjs', '--check'], {
+      cwd: process.cwd(),
+      stdio: 'pipe'
+    })).not.toThrow();
+  });
+
   it('keeps activation events limited to non-auto workspace triggers', () => {
     const pkg = readPackage();
     expect(pkg.activationEvents).toEqual(['workspaceContains:**/*.circ']);
@@ -146,11 +161,38 @@ describe('package manifest', () => {
     expect(properties['co.test.continuousRetainedPassingCases'].default).toBe(20);
     expect(properties['co.test.continuousReportRetainedIterations'].default).toBe(200);
     expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
-    expect(properties['co.test.p7.probeScenarioCount'].default).toBe(32);
+    expect(properties['co.test.p7.probeScenarioCount'].default).toBe(p7ProbeDefaultScenarioCount);
+    expect(properties['co.test.p7.probeScenarioCount'].maximum).toBe(p7ProbeMaxScenarioCount);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
     expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
     expect(properties['co.test.logisim.mainCircuit'].default).toBe(getLogisimTraceProfileConfig('P3')?.defaultCircuit);
+  });
+
+  it('derives P7 manifest limits and descriptions from the hardware resource', () => {
+    const pkg = readPackage();
+    const groups = pkg.contributes?.configuration ?? [];
+    const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
+    const p7InstructionCount = properties['co.test.builtinGenerator.p7InstructionCount'];
+    const handler = `0x${p7ExceptionHandlerAddress.toString(16)}`;
+
+    expect(p7InstructionCount.default).toBe(p7CourseInstructionCountMaximum);
+    expect(p7InstructionCount.maximum).toBe(p7CourseInstructionCountMaximum);
+    expect(p7InstructionCount.description).toContain(handler);
+    expect(p7InstructionCount.description).toContain(String(p7CourseInstructionCountMaximum));
+    expect(properties['co.toolchain.marsP7'].description).toContain(handler);
+    expect(properties['co.mips.memoryConfiguration'].description).toContain(handler);
+  });
+
+  it('derives generator profile descriptions from the ASM generator catalog', () => {
+    const pkg = readPackage();
+    const groups = pkg.contributes?.configuration ?? [];
+    const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
+    const description = properties['co.test.builtinGenerator.instructions'].description ?? '';
+
+    for (const [profile, mnemonics] of Object.entries(generatorInstructionCatalog.profiles)) {
+      expect(description).toContain(`${profile}=${mnemonics.join(', ')}`);
+    }
   });
 
   it('keeps the project profile enum aligned with course config profiles', () => {
@@ -158,7 +200,9 @@ describe('package manifest', () => {
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
     const profileEnum = properties['co.project.profile']?.enum ?? [];
+    const profileNames = Object.values(getCourseConfig().profiles).map((profile) => profile.name);
     expect(profileEnum).toEqual(['auto', ...Object.keys(getCourseConfig().profiles)]);
+    expect(properties['co.project.profile']?.enumDescriptions?.slice(1)).toEqual(profileNames);
   });
 
   it('does not provide XML editor support for Logisim .circ files', () => {

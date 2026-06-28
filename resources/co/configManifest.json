@@ -1,0 +1,426 @@
+[
+  {
+    "title": "BUAA CO: 基础",
+    "properties": {
+      "co.project.profile": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "P0",
+          "P1",
+          "P2",
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ],
+        "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法推断时会要求手动选择并保存"
+      },
+      "co.course.tutorialRoot": {
+        "type": "string",
+        "description": "可选的教程根目录。可使用本地镜像路径如 C:/co/tutorial 或 URL。为空时自动检测附近的本地镜像，若无则回退到官方网站"
+      },
+      "co.project.topModule": {
+        "type": "string",
+        "description": "课程检查和 ISim 工程生成使用的顶层 Verilog 模块名"
+      },
+      "co.project.testbench": {
+        "type": "string",
+        "description": "ISim 默认使用的 Verilog Testbench 模块名"
+      },
+      "co.project.machineCode": {
+        "type": "string",
+        "description": "MARS 生成、Verilog/Logisim 工作流加载的默认机器码文件名"
+      },
+      "co.project.simTime": {
+        "type": "string",
+        "description": "ISim TCL 运行时长，格式为 `run <值>; exit`。默认为课程的 200us"
+      },
+      "co.project.simBackend": {
+        "type": "string",
+        "enum": [
+          "isim"
+        ],
+        "description": "Verilog 仿真后端。当前版本仅支持 ISim"
+      }
+    }
+  },
+  {
+    "title": "BUAA CO: 工具链",
+    "properties": {
+      "co.toolchain.java": {
+        "type": "string",
+        "description": "本机 Java 命令"
+      },
+      "co.toolchain.python": {
+        "type": "string",
+        "description": "本机 Python 命令。留空时自动检测（macOS/Linux 优先 python3，Windows 优先 python/py），用于流水线冲突分析和外部 .py 生成器"
+      },
+      "co.toolchain.mars": {
+        "type": "string",
+        "description": "Mars jar 包路径。非 P7 课程 trace 对拍需要支持 coL1 和 large text 内存配置"
+      },
+      "co.toolchain.marsP7": {
+        "type": "string",
+        "description": "P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口固定 0x4180）。未配置时回退到 co.toolchain.mars"
+      },
+      "co.toolchain.logisim": {
+        "type": "string",
+        "description": "Logisim 的 jar 包路径"
+      },
+      "co.toolchain.isePath": {
+        "type": "string",
+        "description": "Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE"
+      },
+      "co.toolchain.hazardCalculator": {
+        "type": "string",
+        "description": "课程提供的 hazard_analysis 路径（含 Hazard-Calculator.jar 和 analyzer.py）"
+      }
+    }
+  },
+  {
+    "title": "BUAA CO: 运行与测试",
+    "properties": {
+      "co.run.showCommandBeforeRun": {
+        "type": "boolean",
+        "description": "运行前显示完整的外部命令"
+      },
+      "co.run.revealOutput": {
+        "type": "boolean",
+        "description": "运行外部工具（MARS/ISim/对拍等）时自动弹出「输出」面板。默认关闭，仅静默写入输出，可手动从输出面板查看"
+      },
+      "co.run.timeoutMs": {
+        "type": "number",
+        "description": "外部工具运行超时时间（毫秒）"
+      },
+      "co.test.generatorArgs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "向内置随机 ASM 测试生成器追加的命令行参数"
+      },
+      "co.test.generatedAsmLimit": {
+        "type": "number",
+        "minimum": 1,
+        "description": "批量测试时，插件获取的新建或修改 ASM 文件的最大数量"
+      },
+      "co.test.builtinGenerator.enabled": {
+        "type": "boolean",
+        "description": "默认使用内置 ASM 生成器。打开外部生成器文件或禁用此项可使用外部生成器"
+      },
+      "co.test.builtinGenerator.instructions": {
+        "type": "string",
+        "description": "内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 Profile 默认值：P3=add, sub, ori, lw, sw, beq, lui, nop；P4=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P5=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P6=add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr；P7=nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall"
+      },
+      "co.test.builtinGenerator.instructionCount": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 4000,
+        "description": "内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P3-P6 使用此设置；P7 下此设置被忽略，P7 使用 co.test.builtinGenerator.p7InstructionCount"
+      },
+      "co.test.builtinGenerator.p7InstructionCount": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 1118,
+        "description": "P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。课程异常入口固定在 0x4180，因此最大为 1118 条，以保留停机自环并避免覆盖处理程序"
+      },
+      "co.test.continuousIntervalMs": {
+        "type": "number",
+        "minimum": 1,
+        "description": "两轮持续测试之间的时间间隔"
+      },
+      "co.test.continuousMaxIterations": {
+        "type": "number",
+        "minimum": 0,
+        "description": "持续测试轮数。0 表示运行到手动停止或失败策略触发"
+      },
+      "co.test.continuousStopOnFailure": {
+        "type": "boolean",
+        "description": "当持续测试中测试点 WA 或非法样例时，停止持续测试"
+      },
+      "co.test.continuousRetainedPassingCases": {
+        "type": "number",
+        "minimum": 0,
+        "description": "持续测试自动保留的最近通过 ASM case 数量。旧的通过 case 会被清理；失败和异常 case 始终保留。设为 0 表示不保留通过 case 产物"
+      },
+      "co.test.continuousReportRetainedIterations": {
+        "type": "number",
+        "minimum": 0,
+        "description": "持续测试 JSON 报告保留的最近轮数。旧的通过轮会被压缩；失败和异常轮始终保留。设为 0 表示不压缩报告历史"
+      },
+      "co.test.logisim.mainCircuit": {
+        "type": "string",
+        "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露教程 Trace 输出 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData；可用标准 label 识别，未完整标注时按外观端口顺序推断"
+      },
+      "co.test.logisim.traceColumns": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number",
+          "minimum": 0
+        },
+        "description": "P3 Logisim Trace stdout 显式列映射（零基，halt pin 不计入）。可配置 instr、pc、regwrite、regaddr、regdata、memwrite、memaddr、memdata，用于非标准 label/外观顺序的电路"
+      },
+      "co.test.p7.interrupt": {
+        "type": "boolean",
+        "description": "P7 自动对拍是否注入外部中断（在生成器选定的安全 PC 处，testbench 与 MARS 同步触发）。若你的流水线时序导致中断点假阳性，可关闭此项退化为纯异常/正常数据通路对拍（完全确定性）"
+      },
+      "co.test.p7.stressMode": {
+        "type": "string",
+        "enum": [
+          "anchor",
+          "probe",
+          "hybrid",
+          "off"
+        ],
+        "description": "P7 中断/Timer 压测模式。anchor 保持原精确对拍；probe 使用黑盒 probe 性质检查；hybrid 同时生成 anchor 与 probe；off 关闭中断/Timer 压测"
+      },
+      "co.test.p7.timerInterrupt": {
+        "type": "boolean",
+        "description": "P7 probe 模式是否生成 Timer0/Timer1 中断场景"
+      },
+      "co.test.p7.externalInterruptIntensity": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "P7 probe 模式生成外部中断场景的强度（0~1）"
+      },
+      "co.test.p7.timerIntensity": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "P7 probe 模式生成 Timer 中断场景的强度（0~1）"
+      },
+      "co.test.p7.probeScenarioCount": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 64,
+        "description": "P7 probe 模式每个 ASM 生成的场景数量，最多 64 条以保持 probe log 在 DM 范围内"
+      },
+      "co.test.p7.exceptionRate": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "P7 生成器主动制造内部异常（AdEL、AdES、Syscall、RI、Ov）的比例（0~1）。0 表示不主动制造内部异常"
+      },
+      "co.test.p7.exceptionTypes": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "AdEL",
+            "AdES",
+            "Syscall",
+            "RI",
+            "Ov"
+          ]
+        },
+        "description": "P7 内置 ASM 生成器主动覆盖的异常类型。Syscall 关闭时也不会在用户态随机生成 syscall；RI 需要支持 cl 额外指令加载的 P7 修改版 MARS"
+      }
+    }
+  },
+  {
+    "title": "BUAA CO: 编辑器与诊断",
+    "properties": {
+      "co.semanticColors.preset": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "dark",
+          "light",
+          "off"
+        ],
+        "enumDescriptions": [
+          "根据当前 VS Code 主题明暗自动选择 CO 语义着色预设",
+          "始终使用深色主题语义着色预设",
+          "始终使用浅色主题语义着色预设",
+          "不自动写入 CO 语义着色预设；保留用户和主题自己的规则"
+        ],
+        "description": "控制 CO 自定义语义 token 的默认配色。auto 会按当前主题明暗切换，同时不覆盖用户已手动修改的 token 规则。"
+      },
+      "co.mips.delayedBranching": {
+        "type": "string",
+        "enum": [
+          "profile",
+          "on",
+          "off"
+        ],
+        "description": "MARS 延迟槽开关。profile 模式在 P5/P6/P7 时启用"
+      },
+      "co.mips.memoryConfiguration": {
+        "type": "string",
+        "description": "MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口固定在 0x4180）"
+      },
+      "co.mips.extraArgs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "追加额外的 MARS 命令行参数"
+      },
+      "co.mips.warnPseudoInstruction": {
+        "type": "boolean",
+        "description": "当 ASM 使用 MIPS 伪指令时发出警告"
+      },
+      "co.mips.instructionColorMode": {
+        "type": "string",
+        "enum": [
+          "realVsPseudo",
+          "same",
+          "byType"
+        ],
+        "enumDescriptions": [
+          "真实指令和伪指令使用不同颜色",
+          "所有指令使用相同颜色",
+          "R 型、I 型、J 型、特殊指令和伪指令分别使用不同颜色"
+        ],
+        "description": "控制 ASM 指令语义高亮的着色方式"
+      },
+      "co.mips.warnMissingExitSyscall": {
+        "type": "boolean",
+        "description": "在 P2 Profile 下，当文件没有 syscall 指令时发出警告"
+      },
+      "co.verilog.implicitNet.diagnostic": {
+        "type": "string",
+        "enum": [
+          "off",
+          "hint",
+          "warning",
+          "error"
+        ],
+        "description": "Verilog 隐式连线诊断的严重级别"
+      },
+      "co.verilog.syntax.ise.enabled": {
+        "type": "boolean",
+        "description": "默认启用保存后 ISE fuse 语法检查。ISE 不可用时自动回退到内置 Verilog 检查"
+      },
+      "co.verilog.syntax.ise.mode": {
+        "type": "string",
+        "enum": [
+          "off",
+          "onSave",
+          "commandOnly"
+        ],
+        "enumDescriptions": [
+          "禁用 ISE 语法检查",
+          "保存 Verilog 文件时自动运行 ISE 检查",
+          "只在运行 CO: Verilog 使用 ISE 检查语法 命令时检查"
+        ],
+        "description": "控制 ISE fuse 语法检查触发时机"
+      },
+      "co.verilog.syntax.ise.timeoutMs": {
+        "type": "number",
+        "minimum": 0,
+        "description": "ISE 语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs"
+      },
+      "co.verilog.implicitNet.ignorePatterns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "需要忽略的 Verilog 隐式连线标识符的正则表达式"
+      },
+      "co.verilog.lint.courseRules": {
+        "type": "boolean",
+        "description": "启用课程 Verilog Lint"
+      },
+      "co.verilog.lint.synthesizableHints": {
+        "type": "boolean",
+        "description": "启用 Verilog 可综合性检查，如 initial 块、声明初始化器和乘除运算符"
+      },
+      "co.verilog.lint.disabledRules": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "vc-001",
+            "vc-002",
+            "vc-003",
+            "vc-004",
+            "vc-005",
+            "vc-006",
+            "vc-007",
+            "vc-008",
+            "vc-009",
+            "vc-010",
+            "vc-011",
+            "vc-012",
+            "vc-013",
+            "vc-014",
+            "vc-015",
+            "vc-017",
+            "vc-021"
+          ]
+        },
+        "description": "需要禁用的 Verilog Lint。VC-018、VC-019、VC-020 和 VC-022 不会生成；格式化会处理间距和缩进"
+      },
+      "co.verilog.format.style": {
+        "type": "string",
+        "enum": [
+          "course",
+          "compact",
+          "custom"
+        ],
+        "enumDescriptions": [
+          "内置风格",
+          "更紧凑的 4 空格风格，范围表达式更紧凑",
+          "使用下方的 co.verilog.format.* 各项设置"
+        ],
+        "description": "控制 Verilog 格式化器使用的基础风格"
+      },
+      "co.verilog.format.continuationIndent": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 4,
+        "description": "模块端口和实例连接续行的额外缩进量"
+      },
+      "co.verilog.format.spaceInRange": {
+        "type": "boolean",
+        "description": "将位宽格式化为 [31: 0] 而非 [31:0]"
+      },
+      "co.verilog.format.declarationRangeSpacing": {
+        "type": "string",
+        "enum": [
+          "space",
+          "compact",
+          "preserve"
+        ],
+        "enumDescriptions": [
+          "在声明中的 [ 前和 ] 后保留一个空格，例如 output reg [3: 0] y",
+          "移除声明范围方括号周围的空格，例如 output reg[3: 0]y",
+          "不改变声明范围方括号周围的间距"
+        ],
+        "description": "控制 input/output/inout/wire/reg 声明范围中 [ 和 ] 周围的间距"
+      },
+      "co.verilog.format.spaceBeforeInstancePorts": {
+        "type": "boolean",
+        "description": "在实例端口列表前保留空格，例如 PC pc (...)。模块声明仍使用 module m(...)"
+      },
+      "co.verilog.format.separateElse": {
+        "type": "boolean",
+        "description": "将 else 放在 end 语句后的单独一行"
+      },
+      "co.verilog.format.maxBlankLines": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 3,
+        "description": "Verilog 格式化器保留的最大连续空行数"
+      },
+      "co.diagnostics.disabledCodes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "在当前工作区中禁用的诊断。快速修复的条目带有语言前缀，如 verilog:synth-mul-div"
+      },
+      "co.diagnostics.disabledFileCodes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "在当前工作区中对特定文件禁用的诊断。快速修复写入形如 verilog:synth-mul-div@file:///... 的条目"
+      }
+    }
+  }
+]
