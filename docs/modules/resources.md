@@ -1,4 +1,4 @@
-# resources | resources/ + syntaxes/ + snippets/ + language-configuration/ | ~15 files
+# resources | resources/ + syntaxes/ + snippets/ + language-configuration/ | ~40 files
 
 静态资产, 编译打包进VSIX
 
@@ -32,6 +32,18 @@ resources/templates/verilog/:
   p7_probe_block.v.tmpl — P7 probe interrupt/MMIO观测模板
   加载: templateRegistry 受控占位替换
 
+resources/templates/isim/:
+  project.prj.tmpl — ISE PRJ 文件模板
+  run.tcl.tmpl — ISim 批处理运行 TCL 模板
+  wave.tcl.tmpl — ISim GUI 波形 TCL 模板
+  vcd.tcl.tmpl — ISim VCD 导出 TCL 模板
+  加载: templateRegistry 受控占位替换
+
+resources/templates/webview/:
+  report_page.html.tmpl — 报告 Webview 页面 shell
+  report.css — 报告 Webview 共享 CSS
+  加载: templateRegistry 受控占位替换
+
 resources/templates/wizard/:
   p2_main.asm.tmpl — 项目向导生成的 P2 初始汇编入口
   verilog_top.v.tmpl — 项目向导生成的 Verilog 顶层模块
@@ -39,6 +51,7 @@ resources/templates/wizard/:
   加载: templateRegistry 受控占位替换
 
 resources/templates/asm/:
+  p7_exception_handler*.asm.tmpl — P7 anchor/hybrid 异常处理模板
   p7_probe_prologue.asm.tmpl — P7 probe 用户段初始化指令模板, 逐行 emit 保持 PC/预算计数
   p7_probe_handler.asm.tmpl — P7 probe kernel handler 模板
   加载: templateRegistry 受控占位替换

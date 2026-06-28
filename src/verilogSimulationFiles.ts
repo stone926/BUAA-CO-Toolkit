@@ -1,3 +1,5 @@
+import { renderResourceTemplate } from './templates/templateRegistry';
+
 export const generatedTestbenchMarker = '// CO_GENERATED_RUNTIME_TESTBENCH';
 export const p7AutoRuntimeTestbenchName = 'co_generated_p7_auto_tb';
 export const verilogProjectExcludeGlob = '**/{node_modules,out,.git,.co}/**';
@@ -15,29 +17,27 @@ export function isGeneratedRuntimeTestbench(text: string): boolean {
 }
 
 export function buildIseProjectText(verilogFiles: readonly string[]): string {
-  return verilogFiles
+  const projectEntries = verilogFiles
     .map((file) => `Verilog work "${file.replace(/\\/g, '/')}"`)
     .sort()
-    .join('\n') + '\n';
+    .join('\n');
+  return renderResourceTemplate('isim/project.prj.tmpl', { projectEntries });
 }
 
 export function buildIsimRunTcl(simTime: string): string {
-  return `run ${simTime};\nexit\n`;
+  return renderResourceTemplate('isim/run.tcl.tmpl', { simTime });
 }
 
 export function buildIsimWaveTcl(simTime: string): string {
-  return `wave add -r /\nrun ${simTime}\n`;
+  return renderResourceTemplate('isim/wave.tcl.tmpl', { simTime });
 }
 
 export function buildIsimVcdTcl(vcdFile: string, testbenchName: string, simTime: string): string {
-  return [
-    `vcd dumpfile ${quoteTclString(vcdFile.replace(/\\/g, '/'))}`,
-    `vcd dumpvars -m /${testbenchName} -l 0`,
-    `run ${simTime}`,
-    'vcd dumpflush',
-    'quit',
-    ''
-  ].join('\n');
+  return renderResourceTemplate('isim/vcd.tcl.tmpl', {
+    simTime,
+    testbenchName,
+    vcdFile: quoteTclString(vcdFile.replace(/\\/g, '/'))
+  });
 }
 
 function safeFileStem(value: string): string {

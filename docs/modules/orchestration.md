@@ -43,7 +43,7 @@ verilog-commands:
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
   verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper
-  verilogSimulationFiles.ts — ISE项目文本/ISim TCL/运行时testbench(含P7 auto/probe), isGeneratedRuntimeTestbench
+  verilogSimulationFiles.ts — ISE项目文本/ISim TCL(从resources/templates/isim渲染)/运行时testbench(含P7 auto/probe), isGeneratedRuntimeTestbench
   verilogWaveform.ts — openIsimWaveform(ISim GUI+wave add -r /), exportVcdWaveform(TCL批处理VCD)
 
 logisim-commands:
@@ -61,7 +61,7 @@ ui:
   wizard.ts — 4步向导: 选Profile->项目名->配置工具链(可选)->创建目录+模板(.v/.asm+testbench)
   advancedTools.ts — registerAdvancedTools(): 按Profile过滤低频工具
   advancedToolModel.ts — 工具分组/标签/描述模型
-  webview/reportLayout.ts — 报告 Webview 共享页面 shell、metric、table 和转义 helper
+  webview/reportLayout.ts — 报告 Webview 共享页面 shell/CSS(从resources/templates/webview渲染)、metric、table 和转义 helper
   templates/templateRegistry.ts — resources/templates 受控占位替换加载器, 用于生成可审计模板产物
 
 other:

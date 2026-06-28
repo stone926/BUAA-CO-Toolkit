@@ -1,8 +1,5 @@
-// @index asm-templates — 从 resources/asm/*.asm 加载 MIPS 汇编模板并做 ${var} 插值
-import * as fs from 'fs';
-import * as path from 'path';
-
-const asmDir = path.resolve(__dirname, '..', '..', '..', 'resources', 'asm');
+// @index asm-templates — 从 resources/templates/asm 加载 MIPS 汇编模板
+import { renderResourceTemplate } from '../../templates/templateRegistry';
 
 /**
  * 加载 .asm 文件，按行分割（去除首尾空白和空行），
@@ -12,37 +9,22 @@ const asmDir = path.resolve(__dirname, '..', '..', '..', 'resources', 'asm');
  *  - ${exceptionHandlerHex} — P7 异常处理程序入口的十六进制
  *  - ${intAckHex} — 中断确认地址的十六进制
  */
-function loadAsmTemplate(filename: string): string[] {
-  const filePath = path.join(asmDir, filename);
-  const text = fs.readFileSync(filePath, 'utf8');
-  return text.split(/\r?\n/).filter((line) => line.trim() !== '');
-}
-
-function interpolateTemplate(lines: string[], vars: Record<string, string>): string[] {
-  return lines.map((line) => {
-    let result = line;
-    for (const [key, value] of Object.entries(vars)) {
-      result = result.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), value);
-    }
-    return result;
-  });
-}
-
-// ── P7 异常处理模板 ──
-
-const p7ExceptionHandlerTemplate = loadAsmTemplate('p7_exception_handler.asm');
-const p7ExceptionHandlerUnifiedTemplate = loadAsmTemplate('p7_exception_handler_unified.asm');
-
 export function renderP7ExceptionHandler(intAckAddress: number, exceptionHandlerAddress: number): string[] {
-  return interpolateTemplate(p7ExceptionHandlerTemplate, {
+  return renderAsmTemplate('asm/p7_exception_handler.asm.tmpl', {
     exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
     intAckHex: `0x${intAckAddress.toString(16)}`
   });
 }
 
 export function renderP7ExceptionHandlerUnified(intAckAddress: number, exceptionHandlerAddress: number): string[] {
-  return interpolateTemplate(p7ExceptionHandlerUnifiedTemplate, {
+  return renderAsmTemplate('asm/p7_exception_handler_unified.asm.tmpl', {
     exceptionHandlerHex: `0x${exceptionHandlerAddress.toString(16)}`,
     intAckHex: `0x${intAckAddress.toString(16)}`
   });
+}
+
+function renderAsmTemplate(relativePath: string, values: Record<string, string>): string[] {
+  return renderResourceTemplate(relativePath, values)
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '');
 }
