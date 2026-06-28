@@ -54,6 +54,22 @@ export interface LogisimTraceProfileConfig {
   columns: Record<string, LogisimTraceColumnConfig>;
 }
 
+export interface ProfileInferenceStructureConfig {
+  cp0ModuleNames?: string[];
+  cp0ModuleNameIncludes?: string[];
+  cp0DeclarationHints?: string[];
+  bridgeModuleNames?: string[];
+  timerModuleNames?: string[];
+}
+
+export interface ProfileInferenceConfig {
+  topModuleNames?: string[];
+  p6RequiredPorts?: string[];
+  p7ExclusivePorts?: string[];
+  p7Structure?: ProfileInferenceStructureConfig;
+  logisimCpuPathPatterns?: string[];
+}
+
 export interface MemoryRange {
   min: string;
   max: string;
@@ -64,6 +80,7 @@ export interface CourseConfig {
   memoryLayout: Record<string, Record<string, MemoryRange>>;
   profiles: Record<string, ProfileConfig>;
   verilogPorts: Record<string, PortConfig[]>;
+  profileInference?: ProfileInferenceConfig;
   logisimTrace?: Record<string, LogisimTraceProfileConfig>;
   traceFormatPatterns: Record<string, string[]>;
   directiveDescriptions: Record<string, string>;
@@ -151,6 +168,10 @@ export function getVerilogPorts(profile: string): PortConfig[] {
 
 export function getLogisimTraceProfileConfig(profile: string): LogisimTraceProfileConfig | undefined {
   return loadCourseConfig().logisimTrace?.[profile];
+}
+
+export function getProfileInferenceConfig(): ProfileInferenceConfig {
+  return loadCourseConfig().profileInference ?? {};
 }
 
 /**

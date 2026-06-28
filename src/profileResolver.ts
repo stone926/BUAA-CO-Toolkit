@@ -5,7 +5,7 @@ import {
   isConcreteProjectProfile
 } from './projectProfile';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
-import { getTraceFormatPatterns } from './courseConfig';
+import { getProfileInferenceConfig, getTraceFormatPatterns, ProfileInferenceConfig } from './courseConfig';
 
 export type ProfileConfiguredSource = 'settings' | 'default';
 export type ProfileResolutionSource = ProfileConfiguredSource | 'inferred' | 'manualFallback';
@@ -69,8 +69,8 @@ interface Candidate {
   reason: string;
 }
 
-const p7ExclusivePorts = new Set(['interrupt', 'macroscopic_pc', 'm_int_addr', 'm_int_byteen']);
-const p6RequiredPorts = [
+const fallbackP7ExclusivePorts = ['interrupt', 'macroscopic_pc', 'm_int_addr', 'm_int_byteen'];
+const fallbackP6RequiredPorts = [
   'clk',
   'reset',
   'i_inst_rdata',
@@ -85,6 +85,18 @@ const p6RequiredPorts = [
   'w_grf_we',
   'w_inst_addr'
 ];
+const fallbackTopModuleNames = ['mips', 'cpu'];
+const fallbackLogisimCpuPathPatterns = [
+  '(^|/)(p3|cpu|rom|test|code\\.txt)(/|$)',
+  '(^|/)code\\.txt$'
+];
+const fallbackP7Structure = {
+  cp0ModuleNames: ['cp0'],
+  cp0ModuleNameIncludes: ['cp0'],
+  cp0DeclarationHints: ['sr', 'cause', 'epc'],
+  bridgeModuleNames: ['bridge'],
+  timerModuleNames: ['tc', 'timer', 'timer0', 'timer1']
+};
 
 export function resolveProjectProfile(input: ProfileResolverInput): ProfileResolution {
   const configuredProfile = input.configuredProfile ?? 'auto';
@@ -156,10 +168,12 @@ function inferCandidates(input: ProfileResolverInput): Candidate[] {
   const files = normalizedFiles(input);
   const top = findTopModule(modules, input.topModule);
   const candidates: Candidate[] = [];
+  const hints = profileInferenceHints();
+  const p7ExclusivePorts = new Set(hints.p7ExclusivePorts);
 
   const p7ByPorts = top && hasAnyPort(top, p7ExclusivePorts);
-  const p6ByPorts = top && hasAllPorts(top, p6RequiredPorts) && !hasAnyPort(top, p7ExclusivePorts);
-  const p7ByStructure = hasP7Structure(modules);
+  const p6ByPorts = top && hasAllPorts(top, hints.p6RequiredPorts) && !hasAnyPort(top, p7ExclusivePorts);
+  const p7ByStructure = hasP7Structure(modules, hints);
 
   if (p7ByPorts) {
     candidates.push({
@@ -199,7 +213,7 @@ function inferCandidates(input: ProfileResolverInput): Candidate[] {
   const hasVerilog = modules.length > 0 || files.some((file) => file.kind === 'verilog');
   const hasAsm = isAsmLanguage(input.activeLanguageId) || files.some((file) => file.kind === 'asm');
   const hasCircuit = isCircuitPath(input.activeFilePath) || files.some((file) => file.kind === 'circ');
-  const hasCpuLikeTop = Boolean(top && (isClockResetOnlyTop(top) || hasAnyPort(top, p7ExclusivePorts) || hasAllPorts(top, p6RequiredPorts)));
+  const hasCpuLikeTop = Boolean(top && (isClockResetOnlyTop(top) || hasAnyPort(top, p7ExclusivePorts) || hasAllPorts(top, hints.p6RequiredPorts)));
 
   if (hasVerilog && !hasCpuLikeTop && !hasAsm && !hasCircuit) {
     return [{
@@ -257,8 +271,9 @@ function inferP4P5FromTraceFormats(input: ProfileResolverInput, top: ProfileReso
 function findTopModule(modules: ProfileResolverModule[], topName?: string): ProfileResolverModule | undefined {
   const wanted = (topName?.trim() || 'mips').toLowerCase();
   return modules.find((module) => module.name.toLowerCase() === wanted)
-    ?? modules.find((module) => module.name.toLowerCase() === 'mips')
-    ?? modules.find((module) => module.name.toLowerCase() === 'cpu');
+    ?? profileInferenceHints().topModuleNames
+      .map((name) => modules.find((module) => module.name.toLowerCase() === name))
+      .find((module): module is ProfileResolverModule => Boolean(module));
 }
 
 function hasAllPorts(module: ProfileResolverModule, names: readonly string[]): boolean {
@@ -275,13 +290,15 @@ function isClockResetOnlyTop(module: ProfileResolverModule): boolean {
   return ports.length === 2 && ports[0] === 'clk' && ports[1] === 'reset';
 }
 
-function hasP7Structure(modules: ProfileResolverModule[]): boolean {
+function hasP7Structure(modules: ProfileResolverModule[], hints = profileInferenceHints()): boolean {
   const names = new Set(modules.map((module) => module.name.toLowerCase()));
-  const hasCp0 = names.has('cp0') || modules.some((module) =>
-    module.name.toLowerCase().includes('cp0') && hasAnyDeclaration(module, ['sr', 'cause', 'epc'])
+  const structure = hints.p7Structure;
+  const hasCp0 = structure.cp0ModuleNames.some((name) => names.has(name)) || modules.some((module) =>
+    structure.cp0ModuleNameIncludes.some((fragment) => module.name.toLowerCase().includes(fragment))
+    && hasAnyDeclaration(module, structure.cp0DeclarationHints)
   );
-  const hasBridge = names.has('bridge');
-  const hasTimer = names.has('tc') || names.has('timer') || names.has('timer0') || names.has('timer1');
+  const hasBridge = structure.bridgeModuleNames.some((name) => names.has(name));
+  const hasTimer = structure.timerModuleNames.some((name) => names.has(name));
   return hasCp0 && hasBridge && hasTimer;
 }
 
@@ -364,8 +381,41 @@ function isCircuitPath(value: string | undefined): boolean {
 }
 
 function looksLikeLogisimCpuProject(files: Array<ProfileResolverFile & { kind: string }>): boolean {
+  const patterns = profileInferenceHints().logisimCpuPathPatterns.map((pattern) => new RegExp(pattern, 'i'));
   return files.some((file) => {
     const lower = file.path.toLowerCase().replace(/\\/g, '/');
-    return /(^|\/)(p3|cpu|rom|test|code\.txt)(\/|$)/.test(lower) || /(^|\/)code\.txt$/.test(lower);
+    return patterns.some((pattern) => pattern.test(lower));
   });
+}
+
+interface ResolvedProfileInferenceHints {
+  topModuleNames: string[];
+  p6RequiredPorts: string[];
+  p7ExclusivePorts: string[];
+  p7Structure: Required<NonNullable<ProfileInferenceConfig['p7Structure']>>;
+  logisimCpuPathPatterns: string[];
+}
+
+function profileInferenceHints(): ResolvedProfileInferenceHints {
+  const config = getProfileInferenceConfig();
+  return {
+    topModuleNames: normalizeStringList(config.topModuleNames, fallbackTopModuleNames),
+    p6RequiredPorts: normalizeStringList(config.p6RequiredPorts, fallbackP6RequiredPorts),
+    p7ExclusivePorts: normalizeStringList(config.p7ExclusivePorts, fallbackP7ExclusivePorts),
+    p7Structure: {
+      cp0ModuleNames: normalizeStringList(config.p7Structure?.cp0ModuleNames, fallbackP7Structure.cp0ModuleNames),
+      cp0ModuleNameIncludes: normalizeStringList(config.p7Structure?.cp0ModuleNameIncludes, fallbackP7Structure.cp0ModuleNameIncludes),
+      cp0DeclarationHints: normalizeStringList(config.p7Structure?.cp0DeclarationHints, fallbackP7Structure.cp0DeclarationHints),
+      bridgeModuleNames: normalizeStringList(config.p7Structure?.bridgeModuleNames, fallbackP7Structure.bridgeModuleNames),
+      timerModuleNames: normalizeStringList(config.p7Structure?.timerModuleNames, fallbackP7Structure.timerModuleNames)
+    },
+    logisimCpuPathPatterns: normalizeStringList(config.logisimCpuPathPatterns, fallbackLogisimCpuPathPatterns)
+  };
+}
+
+function normalizeStringList(values: string[] | undefined, fallback: readonly string[]): string[] {
+  const normalized = (values?.length ? values : [...fallback])
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return [...new Set(normalized)];
 }

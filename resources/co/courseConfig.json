@@ -201,6 +201,36 @@
       {"name": "w_inst_addr", "direction": "output", "width": 32}
     ]
   },
+  "profileInference": {
+    "topModuleNames": ["mips", "cpu"],
+    "p6RequiredPorts": [
+      "clk",
+      "reset",
+      "i_inst_rdata",
+      "m_data_rdata",
+      "i_inst_addr",
+      "m_data_addr",
+      "m_data_wdata",
+      "m_data_byteen",
+      "m_inst_addr",
+      "w_grf_addr",
+      "w_grf_wdata",
+      "w_grf_we",
+      "w_inst_addr"
+    ],
+    "p7ExclusivePorts": ["interrupt", "macroscopic_pc", "m_int_addr", "m_int_byteen"],
+    "p7Structure": {
+      "cp0ModuleNames": ["cp0"],
+      "cp0ModuleNameIncludes": ["cp0"],
+      "cp0DeclarationHints": ["sr", "cause", "epc"],
+      "bridgeModuleNames": ["bridge"],
+      "timerModuleNames": ["tc", "timer", "timer0", "timer1"]
+    },
+    "logisimCpuPathPatterns": [
+      "(^|/)(p3|cpu|rom|test|code\\.txt)(/|$)",
+      "(^|/)code\\.txt$"
+    ]
+  },
   "logisimTrace": {
     "P3": {
       "defaultCircuit": "main",

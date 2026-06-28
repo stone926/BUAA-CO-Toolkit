@@ -4,6 +4,7 @@ import {
   getLogisimTraceProfileConfig,
   getProfileDefaults,
   getProfileDirectories,
+  getProfileInferenceConfig,
   getProfileRequiredTools,
   getVerilogPorts,
   profilesWithCapability
@@ -62,6 +63,15 @@ describe('course config alignment', () => {
       'memdata'
     ]);
     expect(profile?.columns.regaddr.width).toBe(5);
+  });
+
+  it('exposes profile inference hints as course data', () => {
+    const inference = getProfileInferenceConfig();
+    expect(inference.topModuleNames).toContain('mips');
+    expect(inference.p6RequiredPorts).toContain('i_inst_rdata');
+    expect(inference.p7ExclusivePorts).toContain('macroscopic_pc');
+    expect(inference.p7Structure?.bridgeModuleNames).toContain('bridge');
+    expect(inference.logisimCpuPathPatterns?.length).toBeGreaterThan(0);
   });
 
   it('contains tutorial links for profiles and core tools', () => {

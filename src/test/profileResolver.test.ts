@@ -64,6 +64,28 @@ describe('profile resolver', () => {
     expect(result.effectiveProfile).toBe('P5');
   });
 
+  it('infers P7 from course-configured structure hints', () => {
+    const result = resolveProjectProfile({
+      configuredProfile: 'auto',
+      modules: [
+        module('mips', ['clk', 'reset']),
+        {
+          name: 'MyCP0',
+          ports: [],
+          declarations: new Map([
+            ['SR', { name: 'SR' }],
+            ['Cause', { name: 'Cause' }],
+            ['EPC', { name: 'EPC' }]
+          ])
+        },
+        module('Bridge', []),
+        module('TC', [])
+      ]
+    });
+
+    expect(result.effectiveProfile).toBe('P7');
+  });
+
   it('uses precomputed Verilog display formats without requiring full source text', () => {
     const result = resolveProjectProfile({
       configuredProfile: 'auto',
