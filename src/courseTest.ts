@@ -1,4 +1,4 @@
-import { Commands, CO_OUT_DIR } from './constants';
+import { Commands } from './constants';
 // @index main-coordinator — 课程测试总调度，14个co.test.*命令
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -20,11 +20,11 @@ import {
   p7MetadataFromManifest,
   runCourseTraceCase
 } from './courseTesting/traceRunner';
+import { runCourseTraceBatch } from './courseTesting/batchRunner';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { createIsimCompileCache } from './verilogIsimCache';
 import { AppServices } from './types';
-import { ensureDirectory, readTextFile, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
-import { revealOutputChannel } from './process';
+import { readTextFile, workspaceFolderForOrFirst } from './fsUtil';
 import { pickOneFile } from './workflowInputs';
 import {
   AsmCase,
@@ -33,7 +33,6 @@ import {
   prepareAsmCaseMachineCode,
 } from './asmCaseStore';
 import {
-  batchSummary,
   renderAsmCaseIndex,
   showBatchTraceReport
 } from './courseTestReport';
@@ -51,8 +50,7 @@ import { asmCaseSourceFromBatchSource } from './courseTestCases';
 import type { CourseTraceCaseInput } from './courseTestCases';
 import type {
   CourseTraceBatchReport,
-  CourseTraceBatchSource,
-  CourseTraceCaseResult
+  CourseTraceBatchSource
 } from './courseTestReport';
 import { marsStageFailureMessage } from './courseTestMessages';
 import {
@@ -135,7 +133,7 @@ async function runBatchCourseTraceTests(services: AppServices): Promise<void> {
     return;
   }
 
-  await runCourseTraceBatch(services, cases, { kind: 'selected' });
+  await runCourseTraceBatch(services, cases, { kind: 'selected' }, resolveCourseTraceRunOptions);
 }
 
 async function runGeneratedCourseTraceTests(services: AppServices): Promise<void> {
@@ -146,60 +144,7 @@ async function runGeneratedCourseTraceTests(services: AppServices): Promise<void
     return;
   }
 
-  await runCourseTraceBatch(services, await expandTraceCases(generated.asms, generated.asmCases), generated.source);
-}
-
-async function runCourseTraceBatch(
-  services: AppServices,
-  cases: CourseTraceCaseInput[],
-  source: CourseTraceBatchSource
-): Promise<void> {
-  revealOutputChannel(services.output);
-  services.output.appendLine('');
-  const sourceLabel = source.kind === 'generator' ? '生成的课程 Trace 测试' : '批量课程 Trace 测试';
-  services.output.appendLine(`${sourceLabel}: ${cases.length} 个用例`);
-
-  const runOptions = await resolveCourseTraceRunOptions(services, cases[0].asm, { source });
-  if (!runOptions) {
-    return;
-  }
-
-  const results: CourseTraceCaseResult[] = [];
-  for (let i = 0; i < cases.length; i++) {
-    const item = cases[i];
-    const asm = item.asm;
-    services.output.appendLine('');
-    services.output.appendLine(`[${i + 1}/${cases.length}] ${asm.fsPath}`);
-    if (item.stdin) {
-      services.output.appendLine(`stdin: ${item.stdin.fsPath}`);
-    }
-    try {
-      results.push(await runCourseTraceCase(services, item, runOptions));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      results.push({
-        asm: asm.fsPath,
-        stdin: item.stdin?.fsPath,
-        status: 'error',
-        stage: 'compare',
-        message
-      });
-    }
-  }
-
-  const report = await writeBatchTraceReport(cases[0].asm, results, source);
-  showBatchTraceReport(results, report, undefined, source);
-
-  const summary = batchSummary(results);
-  const passed = summary.passed;
-  const failed = summary.failed;
-  const errors = summary.errors;
-  const message = `批量 Trace 测试完成: ${passed} 通过, ${failed} 失败, ${errors} 错误`;
-  if (failed || errors) {
-    vscode.window.showWarningMessage(message);
-  } else {
-    vscode.window.showInformationMessage(message);
-  }
+  await runCourseTraceBatch(services, await expandTraceCases(generated.asms, generated.asmCases), generated.source, resolveCourseTraceRunOptions);
 }
 
 async function resolveCourseTraceRunOptions(
@@ -416,25 +361,6 @@ async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
   vscode.window.showInformationMessage(`已生成 ${generated.asms.length} 个 ASM 测试点，并 dump ${dumped} 个机器码文件`);
 }
 
-
-async function writeBatchTraceReport(
-  firstAsm: vscode.Uri,
-  results: CourseTraceCaseResult[],
-  source: CourseTraceBatchSource
-): Promise<vscode.Uri> {
-  const folder = workspaceFolderForOrFirst(firstAsm);
-  const baseDir = folder?.uri.fsPath ?? path.dirname(firstAsm.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
-  await ensureDirectory(outDir);
-  const report = vscode.Uri.file(path.join(outDir.fsPath, 'trace-batch-report.json'));
-  await writeTextFile(report, JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    source,
-    summary: batchSummary(results),
-    results
-  }, null, 2) + '\n');
-  return report;
-}
 
 async function resolveBatchTraceReport(): Promise<vscode.Uri | undefined> {
   const folder = workspaceFolderForOrFirst(vscode.window.activeTextEditor?.document.uri);
