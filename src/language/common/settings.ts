@@ -1,7 +1,8 @@
 // @index settings — CoSettings接口/默认值/合并验证/诊断禁用键
 import { ProjectProfile } from '../../projectProfile';
+import { configDefault, configDefaultArray } from '../../configDefaults';
 
-export const defaultDisabledVerilogLintRules = ['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-017', 'vc-021'] as const;
+export const defaultDisabledVerilogLintRules = configDefaultArray('verilog.lint.disabledRules') as readonly string[];
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
@@ -58,52 +59,52 @@ export interface CoSettings {
 
 export const defaultCoSettings: CoSettings = {
   diagnostics: {
-    disabledCodes: [],
-    disabledFileCodes: []
+    disabledCodes: configDefaultArray('diagnostics.disabledCodes'),
+    disabledFileCodes: configDefaultArray('diagnostics.disabledFileCodes')
   },
   project: {
-    profile: 'auto',
-    topModule: 'mips',
-    testbench: 'mips_tb',
-    machineCode: 'code.txt',
-    simTime: '200us'
+    profile: configDefault<ProjectProfile>('project.profile'),
+    topModule: configDefault<string>('project.topModule'),
+    testbench: configDefault<string>('project.testbench'),
+    machineCode: configDefault<string>('project.machineCode'),
+    simTime: configDefault<string>('project.simTime')
   },
   toolchain: {
-    isePath: ''
+    isePath: configDefault<string>('toolchain.isePath')
   },
   run: {
-    timeoutMs: 120000
+    timeoutMs: configDefault<number>('run.timeoutMs')
   },
   mips: {
-    warnPseudoInstruction: true,
-    instructionColorMode: 'realVsPseudo',
-    warnMissingExitSyscall: true
+    warnPseudoInstruction: configDefault<boolean>('mips.warnPseudoInstruction'),
+    instructionColorMode: configDefault<'realVsPseudo' | 'same' | 'byType'>('mips.instructionColorMode'),
+    warnMissingExitSyscall: configDefault<boolean>('mips.warnMissingExitSyscall')
   },
   verilog: {
     syntax: {
       ise: {
-        enabled: true,
-        mode: 'onSave',
-        timeoutMs: 0
+        enabled: configDefault<boolean>('verilog.syntax.ise.enabled'),
+        mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.ise.mode'),
+        timeoutMs: configDefault<number>('verilog.syntax.ise.timeoutMs')
       }
     },
     implicitNet: {
-      diagnostic: 'warning',
-      ignorePatterns: ['^uut\\.', '^tb\\.']
+      diagnostic: configDefault<'off' | 'hint' | 'warning' | 'error'>('verilog.implicitNet.diagnostic'),
+      ignorePatterns: configDefaultArray('verilog.implicitNet.ignorePatterns')
     },
     lint: {
-      courseRules: true,
-      synthesizableHints: true,
+      courseRules: configDefault<boolean>('verilog.lint.courseRules'),
+      synthesizableHints: configDefault<boolean>('verilog.lint.synthesizableHints'),
       disabledRules: [...defaultDisabledVerilogLintRules]
     },
     format: {
-      style: 'course',
-      continuationIndent: 2,
-      spaceInRange: true,
-      declarationRangeSpacing: 'space',
-      spaceBeforeInstancePorts: true,
-      separateElse: true,
-      maxBlankLines: 1
+      style: configDefault<'course' | 'compact' | 'custom'>('verilog.format.style'),
+      continuationIndent: configDefault<number>('verilog.format.continuationIndent'),
+      spaceInRange: configDefault<boolean>('verilog.format.spaceInRange'),
+      declarationRangeSpacing: configDefault<'space' | 'compact' | 'preserve'>('verilog.format.declarationRangeSpacing'),
+      spaceBeforeInstancePorts: configDefault<boolean>('verilog.format.spaceBeforeInstancePorts'),
+      separateElse: configDefault<boolean>('verilog.format.separateElse'),
+      maxBlankLines: configDefault<number>('verilog.format.maxBlankLines')
     }
   }
 };

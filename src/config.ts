@@ -1,12 +1,18 @@
 // @index config — co.*设置读取，分层取值+值域裁剪+Python探测缓存
 import * as vscode from 'vscode';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
+import { configDefault, configDefaultArray } from './configDefaults';
 import {
   ConcreteProjectProfile,
   ProjectProfile,
   concreteProjectProfiles,
   isConcreteProjectProfile
 } from './projectProfile';
+import {
+  p7CourseInstructionCountMaximum,
+  p7ProbeDefaultScenarioCount,
+  p7ProbeMaxScenarioCount
+} from './courseTesting/p7Hardware';
 import { getProfileName } from './courseConfig';
 import { commandResponds, defaultPythonCommand, firstWorkingCommand, pythonCandidates } from './python';
 import {
@@ -130,27 +136,27 @@ export async function ensureConcreteProfile(resource?: vscode.Uri, detail?: stri
 }
 
 export function getTopModule(resource?: vscode.Uri): string {
-  return layeredGetString('project.topModule', 'mips', resource);
+  return layeredGetString('project.topModule', configDefault<string>('project.topModule'), resource);
 }
 
 export function getTestbench(resource?: vscode.Uri): string {
-  return layeredGetString('project.testbench', 'mips_tb', resource);
+  return layeredGetString('project.testbench', configDefault<string>('project.testbench'), resource);
 }
 
 export function getMachineCode(resource?: vscode.Uri): string {
-  return layeredGetString('project.machineCode', 'code.txt', resource);
+  return layeredGetString('project.machineCode', configDefault<string>('project.machineCode'), resource);
 }
 
 export function getSimTime(resource?: vscode.Uri): string {
-  return layeredGetString('project.simTime', '200us', resource);
+  return layeredGetString('project.simTime', configDefault<string>('project.simTime'), resource);
 }
 
 export function getSimBackend(resource?: vscode.Uri): string {
-  return layeredGetString('project.simBackend', 'isim', resource);
+  return layeredGetString('project.simBackend', configDefault<string>('project.simBackend'), resource);
 }
 
 export function useDelayedBranching(resource?: vscode.Uri): boolean {
-  const mode = config<string>('mips.delayedBranching', 'profile', resource);
+  const mode = config<string>('mips.delayedBranching', configDefault<string>('mips.delayedBranching'), resource);
   if (mode === 'on') { return true; }
   if (mode === 'off') { return false; }
   const profile = getProfile(resource);
@@ -158,7 +164,7 @@ export function useDelayedBranching(resource?: vscode.Uri): boolean {
 }
 
 export function getJava(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.java', 'java', resource);
+  return layeredGetString('toolchain.java', configDefault<string>('toolchain.java'), resource);
 }
 
 /**
@@ -211,34 +217,34 @@ export async function resolvePython(resource?: vscode.Uri): Promise<string> {
 export function getMarsJar(resource?: vscode.Uri): string {
   const profile = getProfile(resource);
   if (profile === 'P7') {
-    const p7 = layeredGetString('toolchain.marsP7', '', resource);
+    const p7 = layeredGetString('toolchain.marsP7', configDefault<string>('toolchain.marsP7'), resource);
     if (p7) { return p7; }
   }
-  return layeredGetString('toolchain.mars', '', resource);
+  return layeredGetString('toolchain.mars', configDefault<string>('toolchain.mars'), resource);
 }
 
 export function getLogisimJar(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.logisim', '', resource);
+  return layeredGetString('toolchain.logisim', configDefault<string>('toolchain.logisim'), resource);
 }
 
 export function getIsePath(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.isePath', '', resource);
+  return layeredGetString('toolchain.isePath', configDefault<string>('toolchain.isePath'), resource);
 }
 
 export function getHazardCalculator(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.hazardCalculator', '', resource);
+  return layeredGetString('toolchain.hazardCalculator', configDefault<string>('toolchain.hazardCalculator'), resource);
 }
 
 export function getTutorialRoot(resource?: vscode.Uri): string {
-  return layeredGetString('course.tutorialRoot', '', resource);
+  return layeredGetString('course.tutorialRoot', configDefault<string>('course.tutorialRoot'), resource);
 }
 
 export function getRunTimeout(resource?: vscode.Uri): number {
-  return config<number>('run.timeoutMs', 120000, resource);
+  return config<number>('run.timeoutMs', configDefault<number>('run.timeoutMs'), resource);
 }
 
 export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
-  return config<boolean>('run.showCommandBeforeRun', false, resource);
+  return config<boolean>('run.showCommandBeforeRun', configDefault<boolean>('run.showCommandBeforeRun'), resource);
 }
 
 /**
@@ -246,7 +252,7 @@ export function showCommandBeforeRun(resource?: vscode.Uri): boolean {
  * 用户可手动打开输出面板查看，避免侧边栏操作频繁抢占编辑器下方空间。
  */
 export function shouldRevealOutput(resource?: vscode.Uri): boolean {
-  return config<boolean>('run.revealOutput', false, resource);
+  return config<boolean>('run.revealOutput', configDefault<boolean>('run.revealOutput'), resource);
 }
 
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
@@ -266,11 +272,11 @@ function configuredMemoryConfiguration(resource?: vscode.Uri): string | undefine
 }
 
 export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('mips.extraArgs', [], resource);
+  return layeredGetArray('mips.extraArgs', configDefaultArray('mips.extraArgs'), resource);
 }
 
 export function getGeneratorArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('test.generatorArgs', [], resource);
+  return layeredGetArray('test.generatorArgs', configDefaultArray('test.generatorArgs'), resource);
 }
 
 export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
@@ -278,7 +284,7 @@ export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
   }
-  return 100;
+  return configDefault<number>('test.generatedAsmLimit');
 }
 
 export function useBuiltinTestGenerator(resource?: vscode.Uri): boolean {
@@ -286,13 +292,13 @@ export function useBuiltinTestGenerator(resource?: vscode.Uri): boolean {
   if (typeof configured === 'boolean') {
     return configured;
   }
-  return true;
+  return configDefault<boolean>('test.builtinGenerator.enabled');
 }
 
 export function getBuiltinGeneratorInstructions(resource?: vscode.Uri): string {
   return layeredGetString(
     'test.builtinGenerator.instructions',
-    '',
+    configDefault<string>('test.builtinGenerator.instructions'),
     resource
   );
 }
@@ -302,41 +308,41 @@ export function getBuiltinGeneratorInstructionCount(resource?: vscode.Uri): numb
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
   }
-  return 4000;
+  return configDefault<number>('test.builtinGenerator.instructionCount');
 }
 
 export function getBuiltinGeneratorP7InstructionCount(resource?: vscode.Uri): number {
   const configured = inspectedValue<number>('test.builtinGenerator.p7InstructionCount', resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
-    return Math.min(Math.floor(configured), 1118);
+    return Math.min(Math.floor(configured), p7CourseInstructionCountMaximum);
   }
-  return 1118;
+  return Math.min(configDefault<number>('test.builtinGenerator.p7InstructionCount'), p7CourseInstructionCountMaximum);
 }
 
 export function getContinuousIntervalMs(resource?: vscode.Uri): number {
-  return positiveIntegerConfig('test.continuousIntervalMs', 1000, resource);
+  return positiveIntegerConfig('test.continuousIntervalMs', configDefault<number>('test.continuousIntervalMs'), resource);
 }
 
 export function getContinuousMaxIterations(resource?: vscode.Uri): number {
-  return nonNegativeIntegerConfig('test.continuousMaxIterations', 0, resource);
+  return nonNegativeIntegerConfig('test.continuousMaxIterations', configDefault<number>('test.continuousMaxIterations'), resource);
 }
 
 export function getContinuousStopOnFailure(resource?: vscode.Uri): boolean {
-  return config<boolean>('test.continuousStopOnFailure', true, resource);
+  return config<boolean>('test.continuousStopOnFailure', configDefault<boolean>('test.continuousStopOnFailure'), resource);
 }
 
 export function getContinuousRetainedPassingCases(resource?: vscode.Uri): number {
-  return nonNegativeIntegerConfig('test.continuousRetainedPassingCases', 20, resource);
+  return nonNegativeIntegerConfig('test.continuousRetainedPassingCases', configDefault<number>('test.continuousRetainedPassingCases'), resource);
 }
 
 export function getContinuousReportRetainedIterations(resource?: vscode.Uri): number {
-  return nonNegativeIntegerConfig('test.continuousReportRetainedIterations', 200, resource);
+  return nonNegativeIntegerConfig('test.continuousReportRetainedIterations', configDefault<number>('test.continuousReportRetainedIterations'), resource);
 }
 
 export function getLogisimTraceMainCircuit(resource?: vscode.Uri): string {
   return layeredGetString(
     'test.logisim.mainCircuit',
-    'main',
+    configDefault<string>('test.logisim.mainCircuit'),
     resource
   );
 }
@@ -364,7 +370,7 @@ export function getP7InterruptEnabled(resource?: vscode.Uri): boolean {
   if (typeof configured === 'boolean') {
     return configured;
   }
-  return true;
+  return configDefault<boolean>('test.p7.interrupt');
 }
 
 export type P7StressMode = 'anchor' | 'probe' | 'hybrid' | 'off';
@@ -377,7 +383,7 @@ export function getP7StressMode(resource?: vscode.Uri): P7StressMode {
       : undefined;
   };
   return normalize(inspectedValue<string>('test.p7.stressMode', resource))
-    ?? 'anchor';
+    ?? configDefault<P7StressMode>('test.p7.stressMode');
 }
 
 export function getP7TimerInterruptEnabled(resource?: vscode.Uri): boolean {
@@ -385,24 +391,24 @@ export function getP7TimerInterruptEnabled(resource?: vscode.Uri): boolean {
   if (typeof configured === 'boolean') {
     return configured;
   }
-  return false;
+  return configDefault<boolean>('test.p7.timerInterrupt');
 }
 
 export function getP7ExternalInterruptIntensity(resource?: vscode.Uri): number {
-  return p7UnitIntervalConfig('test.p7.externalInterruptIntensity', 0.25, resource);
+  return p7UnitIntervalConfig('test.p7.externalInterruptIntensity', configDefault<number>('test.p7.externalInterruptIntensity'), resource);
 }
 
 export function getP7TimerIntensity(resource?: vscode.Uri): number {
-  return p7UnitIntervalConfig('test.p7.timerIntensity', 0.2, resource);
+  return p7UnitIntervalConfig('test.p7.timerIntensity', configDefault<number>('test.p7.timerIntensity'), resource);
 }
 
 export function getP7ProbeScenarioCount(resource?: vscode.Uri): number {
-  const normalize = (value: number): number => Math.min(64, Math.max(1, Math.floor(value)));
+  const normalize = (value: number): number => Math.min(p7ProbeMaxScenarioCount, Math.max(1, Math.floor(value)));
   const configured = inspectedValue<number>('test.p7.probeScenarioCount', resource);
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return normalize(configured);
   }
-  return 32;
+  return normalize(configDefault<number>('test.p7.probeScenarioCount') ?? p7ProbeDefaultScenarioCount);
 }
 
 /**
@@ -413,13 +419,13 @@ export function getP7ExceptionRate(resource?: vscode.Uri): number {
   if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
     return Math.min(1, configured);
   }
-  return 0.08;
+  return configDefault<number>('test.p7.exceptionRate');
 }
 
 export function getP7ExceptionTypes(resource?: vscode.Uri): string[] {
   return layeredGetArray(
     'test.p7.exceptionTypes',
-    ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov'],
+    configDefaultArray('test.p7.exceptionTypes'),
     resource
   );
 }

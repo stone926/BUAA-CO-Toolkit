@@ -10,6 +10,7 @@ export interface P7HardwareConfig {
     probeRecordWords: number;
     instructionMemoryWords: number;
     dataMemoryWords: number;
+    mainTerminatorInstructionCount: number;
     probeState: {
       scenarioId: number;
       kind: number;
@@ -80,6 +81,11 @@ export const p7ProbeLogBase = p7Hardware.memoryLayout.probeLogBase;
 export const p7ProbeRecordWords = p7Hardware.memoryLayout.probeRecordWords;
 export const p7InstructionMemoryWords = p7Hardware.memoryLayout.instructionMemoryWords;
 export const p7DataMemoryWords = p7Hardware.memoryLayout.dataMemoryWords;
+export const p7MainTerminatorInstructionCount = p7Hardware.memoryLayout.mainTerminatorInstructionCount;
+export const p7ExceptionFlushShadowSlots = p7Hardware.memoryLayout.exceptionFlushShadowSlots;
+export const p7InterruptAnchorInstructionCount = p7Hardware.memoryLayout.interruptAnchorInstructionCount;
+export const p7CourseInstructionCountMaximum =
+  ((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4) - p7MainTerminatorInstructionCount;
 
 export const p7ProbeStateScenarioId = p7Hardware.memoryLayout.probeState.scenarioId;
 export const p7ProbeStateKind = p7Hardware.memoryLayout.probeState.kind;
@@ -101,6 +107,7 @@ export const p7CauseIpTimer0Mask = p7Hardware.cp0.cause.ipTimer0Mask;
 export const p7CauseIpTimer1Mask = p7Hardware.cp0.cause.ipTimer1Mask;
 export const p7CauseIpExternalMask = p7Hardware.cp0.cause.ipExternalMask;
 export const p7CauseExcCodeMask = p7Hardware.cp0.cause.excCodeMask;
+export const p7StatusEnableExternalInterrupt = 1 | p7CauseIpExternalMask;
 
 export const p7ProbeMagic = p7Hardware.probe.magic;
 export const p7ProbeKindExternal = p7Hardware.probe.kind.external;
@@ -158,6 +165,7 @@ function validateP7Hardware(value: unknown): asserts value is P7HardwareConfig {
   integerAt(memoryLayout, 'probeRecordWords');
   integerAt(memoryLayout, 'instructionMemoryWords');
   integerAt(memoryLayout, 'dataMemoryWords');
+  integerAt(memoryLayout, 'mainTerminatorInstructionCount');
   integerAt(memoryLayout, 'probeExternalArmAddress');
   integerAt(memoryLayout, 'exceptionFlushShadowSlots');
   integerAt(memoryLayout, 'interruptAnchorInstructionCount');
@@ -198,11 +206,16 @@ function validateP7Hardware(value: unknown): asserts value is P7HardwareConfig {
   const probeRecordWords = memoryLayout.probeRecordWords as number;
   const instructionMemoryWords = memoryLayout.instructionMemoryWords as number;
   const dataMemoryWords = memoryLayout.dataMemoryWords as number;
+  const mainTerminatorInstructionCount = memoryLayout.mainTerminatorInstructionCount as number;
+  const userInstructionSlots = (handler - userText) / 4;
   if (handler <= userText || (handler - userText) % 4 !== 0) {
     throw new Error('P7 exception handler must be word-aligned after user text.');
   }
-  if (probeLogBase >= userText || probeRecordWords <= 0 || instructionMemoryWords <= 0 || dataMemoryWords <= 0) {
+  if (probeLogBase >= userText || probeRecordWords <= 0 || instructionMemoryWords <= 0 || dataMemoryWords <= 0 || mainTerminatorInstructionCount <= 0) {
     throw new Error('Invalid P7 memory layout bounds.');
+  }
+  if (mainTerminatorInstructionCount >= userInstructionSlots) {
+    throw new Error('Invalid P7 terminator reservation.');
   }
   if ((timer.presetMin as number) > (timer.presetMax as number)) {
     throw new Error('Invalid P7 timer preset range.');

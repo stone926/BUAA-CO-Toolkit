@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
+import { configDefault } from './configDefaults';
 import { ProjectProfile } from './types';
 import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
 import {
@@ -343,9 +344,9 @@ async function updateProjectSettings(profile: ProjectProfile, toolchainConfig: T
     await config.update('project.topModule', topModule, vscode.ConfigurationTarget.Workspace);
     await config.update('project.testbench', `${topModule}_tb`, vscode.ConfigurationTarget.Workspace);
   }
-  await config.update('project.machineCode', 'code.txt', vscode.ConfigurationTarget.Workspace);
-  await config.update('project.simTime', '200us', vscode.ConfigurationTarget.Workspace);
-  await config.update('project.simBackend', 'isim', vscode.ConfigurationTarget.Workspace);
+  await config.update('project.machineCode', configDefault<string>('project.machineCode'), vscode.ConfigurationTarget.Workspace);
+  await config.update('project.simTime', configDefault<string>('project.simTime'), vscode.ConfigurationTarget.Workspace);
+  await config.update('project.simBackend', configDefault<string>('project.simBackend'), vscode.ConfigurationTarget.Workspace);
   for (const [key, value] of Object.entries(toolchainConfig)) {
     if (typeof value === 'string' && value.trim()) {
       await config.update(`toolchain.${key}`, value.trim(), vscode.ConfigurationTarget.Workspace);

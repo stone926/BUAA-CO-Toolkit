@@ -9,6 +9,7 @@
     "probeRecordWords": 8,
     "instructionMemoryWords": 5120,
     "dataMemoryWords": 4096,
+    "mainTerminatorInstructionCount": 2,
     "probeState": {
       "scenarioId": 10208,
       "_scenarioId_hex": "0x27e0",

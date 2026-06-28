@@ -6,6 +6,7 @@ import {
   semanticColorTokenIds
 } from '../semanticColorPresets';
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
+import { getConfigDefaults } from '../configDefaults';
 
 interface PackageJson {
   activationEvents?: string[];
@@ -126,6 +127,7 @@ describe('package manifest', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
+    const configDefaults = getConfigDefaults();
 
     expect(groups.map((group) => group.title)).toEqual([
       'BUAA CO: 基础',
@@ -134,6 +136,13 @@ describe('package manifest', () => {
       'BUAA CO: 编辑器与诊断'
     ]);
     expect(Object.keys(properties)).toHaveLength(62);
+    expect(Object.keys(configDefaults)).toHaveLength(62);
+    for (const [key, value] of Object.entries(configDefaults)) {
+      expect(properties[`co.${key}`]?.default, key).toEqual(value);
+    }
+    for (const key of Object.keys(properties)) {
+      expect(configDefaults[key.replace(/^co\./, '')], key).not.toBeUndefined();
+    }
     expect(properties['co.test.builtinGenerator.instructionCount'].default).toBe(4000);
     expect(properties['co.test.continuousRetainedPassingCases'].default).toBe(20);
     expect(properties['co.test.continuousReportRetainedIterations'].default).toBe(200);

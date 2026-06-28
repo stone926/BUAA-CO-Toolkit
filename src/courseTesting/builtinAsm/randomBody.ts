@@ -10,7 +10,11 @@ import { CpuState } from '../cpuState';
 import {
   p7UserTextBaseAddress,
   p7ExceptionHandlerAddress,
-  p7ExternalInterruptAckAddress
+  p7ExternalInterruptAckAddress,
+  p7CourseInstructionCountMaximum,
+  p7ExceptionFlushShadowSlots,
+  p7InterruptAnchorInstructionCount,
+  p7StatusEnableExternalInterrupt
 } from './p7/constants';
 import { renderP7ExceptionHandler, renderP7ExceptionHandlerUnified } from './asmTemplates';
 import {
@@ -94,17 +98,13 @@ const readRegisters = ['$0', ...writableRegisters];
 const dataByteLength = 1024;
 const dataWordCount = dataByteLength / 4;
 const textBaseAddress = p7UserTextBaseAddress;
-const p7ExceptionHandlerInstructionIndex = (p7ExceptionHandlerAddress - textBaseAddress) / 4;
-const p7MainTerminatorInstructionCount = 2;
 const p7PrologueInstructionCount = 2;
 const poisonRegister = '$26';
 // The unified P7 handler (interrupt + exception) needs these CP0 instructions in the set.
 const p7HandlerRequiredMnemonics = ['mfc0', 'mtc0', 'eret'] as const;
 // SR value the prologue installs: IE=1 (bit0) + external interrupt mask IM[2]=1 (bit12).
-// Uses 0x1001 (IE + IM[2] only), not the full course mask (0x1c01).
-const p7StatusEnableInterrupts = 0x1001;
-const p7ExceptionFlushShadowSlots = 2;
-const p7InterruptAnchorInstructionCount = 2;
+// Uses IE + IM[2] only, not the full course mask (0x1c01).
+const p7StatusEnableInterrupts = p7StatusEnableExternalInterrupt;
 export const p7InternalUnknownInstructionMnemonic = '_co_internal_unknown_instruction';
 const p7ExceptionCoverageOrder: P7ExceptionKind[] = ['adel', 'ades', 'syscall', 'ri', 'ov'];
 const p7ExceptionKindNames = new Set<string>(p7ExceptionCoverageOrder);
@@ -257,7 +257,7 @@ function validateBuiltinGeneratorRequest(
   const allowed = new Set(instructionSet.mnemonics);
   const isP7 = instructionSet.profile === 'P7';
   if (isP7) {
-    const p7MaxCount = p7CourseInstructionCountMaximum();
+    const p7MaxCount = p7CourseInstructionCountMaximum;
     if (count > p7MaxCount) {
       throw new BuiltinAsmGeneratorError(`P7 generated instruction count must be at most ${p7MaxCount}, because 0x${p7ExceptionHandlerAddress.toString(16)} is reserved for the course exception entry.`);
     }
@@ -289,10 +289,6 @@ function validateBuiltinGeneratorRequest(
       throw new BuiltinAsmGeneratorError(`Built-in ASM generator P7 exception handler requires instruction(s): ${missing.join(', ')}.`);
     }
   }
-}
-
-function p7CourseInstructionCountMaximum(): number {
-  return p7ExceptionHandlerInstructionIndex - p7MainTerminatorInstructionCount;
 }
 
 class ProgramGenerator {
