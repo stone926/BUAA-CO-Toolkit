@@ -11,7 +11,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~46 files| 扩展宿主层
   course-testing | docs/modules/course-testing.md | 31 files | 自动化测试框架
-  test-suite     | docs/modules/test-suite.md     | ~70 files| 测试套件
+  test-suite     | docs/modules/test-suite.md     | ~70 files| Vitest 测试
   resources      | docs/modules/resources.md      | ~15 files| 静态资源
 
 数据流:
