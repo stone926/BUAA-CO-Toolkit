@@ -45,5 +45,5 @@ logisim:
   courseTesting/p7ProbeCheck.ts — 黑盒验证: 从ISim DM写事件重建探针记录, 逐场景检查kind/ExcCode/Cause.IP/EPC/时序
 
 case-storage:
-  asmCaseStore.ts — 持久化: createAsmCaseFromAsm/FromText, prepareAsmCaseMachineCode, artifact管理(update/write/copy), listAsmCaseManifests
-  asmCaseStoreCore.ts — Manifest Schema(v1): caseId(ISO+SHA256前8位), .co/cases/{caseId}/, sha256Bytes/sha256Text
+  asmCaseStore.ts — 持久化: createAsmCaseFromAsm/FromText, prepareAsmCaseMachineCode, artifact管理(update/write/copy), listAsmCaseManifests；P7 metadata 只来自 manifest/显式参数
+  asmCaseStoreCore.ts — Manifest Schema(v1): caseId(ISO+SHA256前8位), .co/cases/{caseId}/, sha256Bytes/sha256Text, manifest-only P7 metadata

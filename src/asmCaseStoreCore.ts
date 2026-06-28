@@ -46,7 +46,6 @@ export interface AsmCaseMarsRun {
 export interface AsmCaseP7Metadata {
   interruptSchedule?: number[];
   probe?: unknown;
-  sidecar?: string;
 }
 
 export interface AsmCaseArtifacts {

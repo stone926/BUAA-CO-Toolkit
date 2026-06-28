@@ -103,8 +103,7 @@ export async function createAsmCaseFromAsm(
   const caseAsm = vscode.Uri.file(paths.asm);
   await vscode.workspace.fs.writeFile(caseAsm, asmBytes);
 
-  const sidecar = await readCaseSidecar(asm);
-  const p7 = mergeP7Metadata(options.p7, sidecar.metadata, sidecar.path);
+  const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
 
   const manifest: AsmCaseManifest = {
@@ -152,7 +151,7 @@ export async function createAsmCaseFromText(
 
   const caseAsm = vscode.Uri.file(paths.asm);
   await vscode.workspace.fs.writeFile(caseAsm, bytes);
-  const p7 = mergeP7Metadata(options.p7, undefined, undefined);
+  const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
   const manifest: AsmCaseManifest = {
     version: asmCaseManifestVersion,
@@ -360,49 +359,17 @@ async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<{
   };
 }
 
-async function readCaseSidecar(asm: vscode.Uri): Promise<{ path?: string; metadata?: AsmCaseP7Metadata }> {
-  const dir = path.dirname(asm.fsPath);
-  const stem = path.basename(asm.fsPath, path.extname(asm.fsPath));
-  const sidecar = path.join(dir, `${stem}.co-meta.json`);
-  try {
-    const parsed = JSON.parse(await fs.promises.readFile(sidecar, 'utf8')) as Record<string, unknown>;
-    return {
-      path: sidecar,
-      metadata: {
-        interruptSchedule: Array.isArray(parsed.interruptSchedule)
-          ? parsed.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value))
-          : undefined,
-        probe: parsed.probe
-      }
-    };
-  } catch {
-    // sidecar 缺失或格式异常时忽略附加元数据
-    return {};
-  }
-}
-
-function mergeP7Metadata(
-  explicit: AsmCaseP7Metadata | undefined,
-  sidecar: AsmCaseP7Metadata | undefined,
-  sidecarPath: string | undefined
-): AsmCaseP7Metadata | undefined {
+function normalizeP7Metadata(explicit: AsmCaseP7Metadata | undefined): AsmCaseP7Metadata | undefined {
   const merged: AsmCaseP7Metadata = {
-    ...(sidecar ?? {}),
     ...(explicit ?? {})
   };
-  if (sidecarPath) {
-    merged.sidecar = sidecarPath;
-  }
   if (!merged.interruptSchedule?.length) {
     delete merged.interruptSchedule;
   }
   if (!merged.probe) {
     delete merged.probe;
   }
-  if (!merged.sidecar) {
-    delete merged.sidecar;
-  }
-  return merged.interruptSchedule || merged.probe || merged.sidecar ? merged : undefined;
+  return merged.interruptSchedule || merged.probe ? merged : undefined;
 }
 
 function artifactDirectory(asmCase: AsmCase, kind: 'verilog' | 'logisim' | 'mars'): vscode.Uri {
