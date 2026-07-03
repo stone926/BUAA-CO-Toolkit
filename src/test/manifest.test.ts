@@ -193,6 +193,14 @@ describe('package manifest', () => {
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
     expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
     expect(properties['co.test.logisim.mainCircuit'].default).toBe(getLogisimTraceProfileConfig('P3')?.defaultCircuit);
+
+    const propertyKeys = Object.keys(properties);
+    const alignmentStart = propertyKeys.indexOf('co.verilog.format.alignment.parameter');
+    expect(propertyKeys.slice(alignmentStart, alignmentStart + 3)).toEqual([
+      'co.verilog.format.alignment.parameter',
+      'co.verilog.format.alignment.modulePort',
+      'co.verilog.format.alignment.ternary'
+    ]);
   });
 
   it('derives P7 manifest limits and descriptions from the hardware resource', () => {

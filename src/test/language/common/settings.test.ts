@@ -70,9 +70,11 @@ describe('mergeCoSettings', () => {
           continuationIndent: 0,
           spaceInRange: false,
           declarationRangeSpacing: 'compact',
-          parameterAlignment: 'equals',
-          modulePortAlignment: 'name',
-          ternaryAlignment: 'question',
+          alignment: {
+            parameter: 'equals',
+            modulePort: 'name',
+            ternary: 'question'
+          },
           maxBlankLines: -1
         }
       }
@@ -85,6 +87,22 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.modulePortAlignment).toBe('name');
     expect(result.verilog.format.ternaryAlignment).toBe('question');
     expect(result.verilog.format.maxBlankLines).toBe(0);
+  });
+
+  it('keeps legacy Verilog format alignment keys compatible', () => {
+    const result = mergeCoSettings({
+      verilog: {
+        format: {
+          style: 'custom',
+          parameterAlignment: 'none',
+          modulePortAlignment: 'none',
+          ternaryAlignment: 'none'
+        }
+      }
+    });
+    expect(result.verilog.format.parameterAlignment).toBe('none');
+    expect(result.verilog.format.modulePortAlignment).toBe('none');
+    expect(result.verilog.format.ternaryAlignment).toBe('none');
   });
 
   it('uses the compact Verilog format preset', () => {

@@ -110,9 +110,9 @@ export const defaultCoSettings: CoSettings = {
       spaceBeforeInstancePorts: configDefault<boolean>('verilog.format.spaceBeforeInstancePorts'),
       separateElse: configDefault<boolean>('verilog.format.separateElse'),
       maxBlankLines: configDefault<number>('verilog.format.maxBlankLines'),
-      parameterAlignment: configDefault<'none' | 'equals'>('verilog.format.parameterAlignment'),
-      modulePortAlignment: configDefault<'none' | 'name'>('verilog.format.modulePortAlignment'),
-      ternaryAlignment: configDefault<'none' | 'question'>('verilog.format.ternaryAlignment')
+      parameterAlignment: configDefault<'none' | 'equals'>('verilog.format.alignment.parameter'),
+      modulePortAlignment: configDefault<'none' | 'name'>('verilog.format.alignment.modulePort'),
+      ternaryAlignment: configDefault<'none' | 'question'>('verilog.format.alignment.ternary')
     }
   }
 };
@@ -275,9 +275,22 @@ function normalizeDisabledRules(value: unknown): string[] {
     .filter((item) => configurableVerilogLintRuleSet.has(item)))];
 }
 
+type VerilogFormatAlignmentCandidate = {
+  parameter?: unknown;
+  modulePort?: unknown;
+  ternary?: unknown;
+};
+
+type VerilogFormatCandidate = Partial<CoSettings['verilog']['format']> & {
+  alignment?: VerilogFormatAlignmentCandidate;
+};
+
 function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format'] {
   const candidate = typeof value === 'object' && value !== null
-    ? value as Partial<CoSettings['verilog']['format']>
+    ? value as VerilogFormatCandidate
+    : {};
+  const alignment = typeof candidate.alignment === 'object' && candidate.alignment !== null && !Array.isArray(candidate.alignment)
+    ? candidate.alignment
     : {};
   const style: CoSettings['verilog']['format']['style'] =
     candidate.style === 'compact' || candidate.style === 'custom' ? candidate.style : 'course';
@@ -306,9 +319,9 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
     spaceBeforeInstancePorts: typeof candidate.spaceBeforeInstancePorts === 'boolean' ? candidate.spaceBeforeInstancePorts : preset.spaceBeforeInstancePorts,
     separateElse: typeof candidate.separateElse === 'boolean' ? candidate.separateElse : preset.separateElse,
     maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3),
-    parameterAlignment: normalizeParameterAlignment(candidate.parameterAlignment, preset.parameterAlignment),
-    modulePortAlignment: normalizeModulePortAlignment(candidate.modulePortAlignment, preset.modulePortAlignment),
-    ternaryAlignment: normalizeTernaryAlignment(candidate.ternaryAlignment, preset.ternaryAlignment)
+    parameterAlignment: normalizeParameterAlignment(alignment.parameter ?? candidate.parameterAlignment, preset.parameterAlignment),
+    modulePortAlignment: normalizeModulePortAlignment(alignment.modulePort ?? candidate.modulePortAlignment, preset.modulePortAlignment),
+    ternaryAlignment: normalizeTernaryAlignment(alignment.ternary ?? candidate.ternaryAlignment, preset.ternaryAlignment)
   };
 }
 

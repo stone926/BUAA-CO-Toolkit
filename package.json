@@ -1318,7 +1318,7 @@
             "description": "Verilog 格式化器保留的最大连续空行数",
             "default": 1
           },
-          "co.verilog.format.parameterAlignment": {
+          "co.verilog.format.alignment.parameter": {
             "type": "string",
             "enum": [
               "none",
@@ -1331,7 +1331,7 @@
             "description": "控制多行 parameter/localparam 声明的纵向对齐方式",
             "default": "equals"
           },
-          "co.verilog.format.modulePortAlignment": {
+          "co.verilog.format.alignment.modulePort": {
             "type": "string",
             "enum": [
               "none",
@@ -1344,7 +1344,7 @@
             "description": "控制多行 module 声明端口列表的纵向对齐方式",
             "default": "name"
           },
-          "co.verilog.format.ternaryAlignment": {
+          "co.verilog.format.alignment.ternary": {
             "type": "string",
             "enum": [
               "none",

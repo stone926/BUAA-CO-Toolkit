@@ -310,7 +310,9 @@ describe('Verilog formatting', () => {
       verilog: {
         format: {
           style: 'custom',
-          ternaryAlignment: 'none'
+          alignment: {
+            ternary: 'none'
+          }
         }
       }
     });
@@ -446,8 +448,10 @@ describe('Verilog formatting', () => {
       verilog: {
         format: {
           style: 'custom',
-          parameterAlignment: 'none',
-          modulePortAlignment: 'none'
+          alignment: {
+            parameter: 'none',
+            modulePort: 'none'
+          }
         }
       }
     });
