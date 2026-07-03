@@ -1041,12 +1041,12 @@
               "off"
             ],
             "description": "P7 中断/Timer 压测模式。anchor 保持原精确对拍；probe 使用黑盒 probe 性质检查；hybrid 同时生成 anchor 与 probe；off 关闭中断/Timer 压测",
-            "default": "anchor"
+            "default": "hybrid"
           },
           "co.test.p7.timerInterrupt": {
             "type": "boolean",
             "description": "P7 probe 模式是否生成 Timer0/Timer1 中断场景",
-            "default": false
+            "default": true
           },
           "co.test.p7.externalInterruptIntensity": {
             "type": "number",
