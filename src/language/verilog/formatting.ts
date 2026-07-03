@@ -455,7 +455,7 @@ function alignTernaryChains(lines: string[]): string[] {
       continue;
     }
     if (/^assign\b/.test(first.condition)) {
-      index = skipTernaryChain(result, index);
+      index++;
       continue;
     }
     const branches: TernaryBranchLine[] = [first];
@@ -479,23 +479,6 @@ function alignTernaryChains(lines: string[]): string[] {
     index = fallback ? cursor + 1 : cursor;
   }
   return result;
-}
-
-function skipTernaryChain(lines: string[], start: number): number {
-  let cursor = start;
-  let lastBranch: TernaryBranchLine | undefined;
-  while (cursor < lines.length) {
-    const branch = parseTernaryBranchLine(lines[cursor], cursor);
-    if (!branch || startsWithClosingDelimiter(branch.condition)) {
-      break;
-    }
-    lastBranch = branch;
-    cursor++;
-  }
-  if (lastBranch && branchEndsWithBareColon(lastBranch) && parseTernaryFallbackLine(lines[cursor], cursor)) {
-    cursor++;
-  }
-  return Math.max(cursor, start + 1);
 }
 
 function parseTernaryBranchLine(line: string, lineIndex: number): TernaryBranchLine | undefined {

@@ -226,9 +226,33 @@ describe('Verilog formatting', () => {
     expect(format(input)).toBe([
       'assign ALU_out = (ALU_op == ADD) ? (ALU_in1 + ALU_in2) :',
       '    (ALU_op == SUB) ? (ALU_in1 - ALU_in2) :',
-      '    (ALU_op == OR) ? (ALU_in1 | ALU_in2) :',
-      "    32'b0;"
+      '    (ALU_op == OR)  ? (ALU_in1 | ALU_in2) :',
+      `${' '.repeat(22)}32'b0;`
     ].join('\n'));
+  });
+
+  it('aligns non-leading branches when the first ternary stays on the assign line', () => {
+    const input = [
+      'assign outputA=type==ADD?a_add_b:',
+      'type==SUB?a_sub_b:',
+      'type==ADDIU?a_add_b:',
+      'type==ORI?a_or_b:',
+      'type==LUI?b_left_shift_16:',
+      'type==LW?a_add_b:',
+      'type==SW?a_add_b:none;'
+    ].join('\n');
+    const once = format(input);
+
+    expect(once).toBe([
+      'assign outputA = type == ADD ? a_add_b :',
+      '    type == SUB   ? a_sub_b :',
+      '    type == ADDIU ? a_add_b :',
+      '    type == ORI   ? a_or_b :',
+      '    type == LUI   ? b_left_shift_16 :',
+      '    type == LW    ? a_add_b :',
+      '    type == SW    ? a_add_b : none;'
+    ].join('\n'));
+    expect(format(once)).toBe(once);
   });
 
   it('aligns question marks in multiline ternary chains', () => {
