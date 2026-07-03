@@ -281,6 +281,30 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
+  it('can disable multiline ternary alignment', () => {
+    const settings = mergeCoSettings({
+      verilog: {
+        format: {
+          style: 'custom',
+          ternaryAlignment: 'none'
+        }
+      }
+    });
+    const input = [
+      'assign type=',
+      'add?ADD:',
+      'addiu?ADDIU:',
+      'new?NEW:6\'b111111;'
+    ].join('\n');
+
+    expect(format(input, settings)).toBe([
+      'assign type =',
+      '    add ? ADD :',
+      '    addiu ? ADDIU :',
+      "    new ? NEW : 6'b111111;"
+    ].join('\n'));
+  });
+
   it('preserves manual ternary line breaks and aligns nested parentheses', () => {
     const input = [
       'module demo;',

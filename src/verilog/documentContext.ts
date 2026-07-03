@@ -58,7 +58,8 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
         separateElse: config<boolean>('verilog.format.separateElse', defaultCoSettings.verilog.format.separateElse, uri),
         maxBlankLines: config<number>('verilog.format.maxBlankLines', defaultCoSettings.verilog.format.maxBlankLines, uri),
         parameterAlignment: config<CoSettings['verilog']['format']['parameterAlignment']>('verilog.format.parameterAlignment', defaultCoSettings.verilog.format.parameterAlignment, uri),
-        modulePortAlignment: config<CoSettings['verilog']['format']['modulePortAlignment']>('verilog.format.modulePortAlignment', defaultCoSettings.verilog.format.modulePortAlignment, uri)
+        modulePortAlignment: config<CoSettings['verilog']['format']['modulePortAlignment']>('verilog.format.modulePortAlignment', defaultCoSettings.verilog.format.modulePortAlignment, uri),
+        ternaryAlignment: config<CoSettings['verilog']['format']['ternaryAlignment']>('verilog.format.ternaryAlignment', defaultCoSettings.verilog.format.ternaryAlignment, uri)
       }
     }
   };

@@ -17,6 +17,7 @@ interface VerilogFormattingStyle {
   maxBlankLines: number;
   parameterAlignment: 'none' | 'equals';
   modulePortAlignment: 'none' | 'name';
+  ternaryAlignment: 'none' | 'question';
 }
 
 type FormattingLineKind = 'code' | 'comment' | 'directive';
@@ -263,7 +264,9 @@ function alignFormattedLines(lines: string[], style: VerilogFormattingStyle): st
   if (style.modulePortAlignment === 'name') {
     result = alignModulePortNames(result);
   }
-  result = alignTernaryChains(result);
+  if (style.ternaryAlignment === 'question') {
+    result = alignTernaryChains(result);
+  }
   return result;
 }
 

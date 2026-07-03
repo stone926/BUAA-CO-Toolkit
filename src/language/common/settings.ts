@@ -57,6 +57,7 @@ export interface CoSettings {
       maxBlankLines: number;
       parameterAlignment: 'none' | 'equals';
       modulePortAlignment: 'none' | 'name';
+      ternaryAlignment: 'none' | 'question';
     };
   };
 }
@@ -110,7 +111,8 @@ export const defaultCoSettings: CoSettings = {
       separateElse: configDefault<boolean>('verilog.format.separateElse'),
       maxBlankLines: configDefault<number>('verilog.format.maxBlankLines'),
       parameterAlignment: configDefault<'none' | 'equals'>('verilog.format.parameterAlignment'),
-      modulePortAlignment: configDefault<'none' | 'name'>('verilog.format.modulePortAlignment')
+      modulePortAlignment: configDefault<'none' | 'name'>('verilog.format.modulePortAlignment'),
+      ternaryAlignment: configDefault<'none' | 'question'>('verilog.format.ternaryAlignment')
     }
   }
 };
@@ -289,7 +291,8 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
       separateElse: false,
       maxBlankLines: 1,
       parameterAlignment: 'none',
-      modulePortAlignment: 'none'
+      modulePortAlignment: 'none',
+      ternaryAlignment: 'none'
     }
     : {
       ...defaultCoSettings.verilog.format,
@@ -304,7 +307,8 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
     separateElse: typeof candidate.separateElse === 'boolean' ? candidate.separateElse : preset.separateElse,
     maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3),
     parameterAlignment: normalizeParameterAlignment(candidate.parameterAlignment, preset.parameterAlignment),
-    modulePortAlignment: normalizeModulePortAlignment(candidate.modulePortAlignment, preset.modulePortAlignment)
+    modulePortAlignment: normalizeModulePortAlignment(candidate.modulePortAlignment, preset.modulePortAlignment),
+    ternaryAlignment: normalizeTernaryAlignment(candidate.ternaryAlignment, preset.ternaryAlignment)
   };
 }
 
@@ -327,6 +331,13 @@ function normalizeModulePortAlignment(
   fallback: CoSettings['verilog']['format']['modulePortAlignment']
 ): CoSettings['verilog']['format']['modulePortAlignment'] {
   return value === 'none' || value === 'name' ? value : fallback;
+}
+
+function normalizeTernaryAlignment(
+  value: unknown,
+  fallback: CoSettings['verilog']['format']['ternaryAlignment']
+): CoSettings['verilog']['format']['ternaryAlignment'] {
+  return value === 'none' || value === 'question' ? value : fallback;
 }
 
 function normalizeInteger(value: unknown, fallback: number, min: number, max: number): number {

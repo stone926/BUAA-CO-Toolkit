@@ -1344,6 +1344,19 @@
             "description": "控制多行 module 声明端口列表的纵向对齐方式",
             "default": "name"
           },
+          "co.verilog.format.ternaryAlignment": {
+            "type": "string",
+            "enum": [
+              "none",
+              "question"
+            ],
+            "enumDescriptions": [
+              "不额外对齐多行三目运算符链",
+              "将多行三目运算符链中的问号对齐到同一列"
+            ],
+            "description": "控制多行三目运算符链的纵向对齐方式",
+            "default": "question"
+          },
           "co.diagnostics.disabledCodes": {
             "type": "array",
             "items": {

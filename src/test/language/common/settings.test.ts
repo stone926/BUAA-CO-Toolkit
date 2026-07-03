@@ -72,6 +72,7 @@ describe('mergeCoSettings', () => {
           declarationRangeSpacing: 'compact',
           parameterAlignment: 'equals',
           modulePortAlignment: 'name',
+          ternaryAlignment: 'question',
           maxBlankLines: -1
         }
       }
@@ -82,6 +83,7 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.declarationRangeSpacing).toBe('compact');
     expect(result.verilog.format.parameterAlignment).toBe('equals');
     expect(result.verilog.format.modulePortAlignment).toBe('name');
+    expect(result.verilog.format.ternaryAlignment).toBe('question');
     expect(result.verilog.format.maxBlankLines).toBe(0);
   });
 
@@ -92,6 +94,7 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.separateElse).toBe(false);
     expect(result.verilog.format.parameterAlignment).toBe('none');
     expect(result.verilog.format.modulePortAlignment).toBe('none');
+    expect(result.verilog.format.ternaryAlignment).toBe('none');
   });
 
   it('defaults selected Verilog course lint rules to disabled', () => {
