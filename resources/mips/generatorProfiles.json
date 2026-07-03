@@ -8,15 +8,15 @@
       "addi", "andi", "ori",
       "lb", "lh", "lw", "sb", "sh", "sw",
       "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo",
-      "beq", "bne", "jal", "jr"
+      "beq", "bne", "jal", "jr", "nop"
     ],
     "P7": [
-      "nop", "add", "sub", "and", "or", "slt", "sltu", "lui",
+      "add", "sub", "and", "or", "slt", "sltu", "lui",
       "addi", "andi", "ori",
       "lb", "lh", "lw", "sb", "sh", "sw",
       "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo",
       "beq", "bne", "jal", "jr",
-      "mfc0", "mtc0", "eret", "syscall"
+      "mfc0", "mtc0", "eret", "syscall", "nop"
     ]
   },
   "categories": {
