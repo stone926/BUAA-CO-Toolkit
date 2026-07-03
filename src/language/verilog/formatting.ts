@@ -66,6 +66,21 @@ interface ModulePortAlignmentLine {
   comment: string;
 }
 
+interface TernaryBranchLine {
+  lineIndex: number;
+  indent: string;
+  condition: string;
+  trueExpression: string;
+  suffix: string;
+  comment: string;
+}
+
+interface TernaryFallbackLine {
+  lineIndex: number;
+  expression: string;
+  comment: string;
+}
+
 interface VerilogFormatAst {
   kind: 'document';
   nodes: VerilogFormatNode[];
@@ -248,6 +263,7 @@ function alignFormattedLines(lines: string[], style: VerilogFormattingStyle): st
   if (style.modulePortAlignment === 'name') {
     result = alignModulePortNames(result);
   }
+  result = alignTernaryChains(result);
   return result;
 }
 
@@ -424,6 +440,207 @@ function alignLineIndexes(
     const line = lines[target.lineIndex];
     lines[target.lineIndex] = `${line.slice(0, target.insertIndex)}${' '.repeat(padding)}${line.slice(target.insertIndex)}`;
   }
+}
+
+function alignTernaryChains(lines: string[]): string[] {
+  const result = [...lines];
+  let index = 0;
+  while (index < result.length) {
+    const first = parseTernaryBranchLine(result[index], index);
+    if (!first || startsWithClosingDelimiter(first.condition)) {
+      index++;
+      continue;
+    }
+    if (/^assign\b/.test(first.condition)) {
+      index = skipTernaryChain(result, index);
+      continue;
+    }
+    const branches: TernaryBranchLine[] = [first];
+    let cursor = index + 1;
+    while (cursor < result.length) {
+      const branch = parseTernaryBranchLine(result[cursor], cursor);
+      if (!branch || startsWithClosingDelimiter(branch.condition)) {
+        break;
+      }
+      branches.push(branch);
+      cursor++;
+    }
+    if (branches.length < 2) {
+      index = Math.max(cursor, index + 1);
+      continue;
+    }
+    const fallback = branchEndsWithBareColon(branches[branches.length - 1])
+      ? parseTernaryFallbackLine(result[cursor], cursor)
+      : undefined;
+    alignTernaryBranchLines(result, branches, fallback);
+    index = fallback ? cursor + 1 : cursor;
+  }
+  return result;
+}
+
+function skipTernaryChain(lines: string[], start: number): number {
+  let cursor = start;
+  let lastBranch: TernaryBranchLine | undefined;
+  while (cursor < lines.length) {
+    const branch = parseTernaryBranchLine(lines[cursor], cursor);
+    if (!branch || startsWithClosingDelimiter(branch.condition)) {
+      break;
+    }
+    lastBranch = branch;
+    cursor++;
+  }
+  if (lastBranch && branchEndsWithBareColon(lastBranch) && parseTernaryFallbackLine(lines[cursor], cursor)) {
+    cursor++;
+  }
+  return Math.max(cursor, start + 1);
+}
+
+function parseTernaryBranchLine(line: string, lineIndex: number): TernaryBranchLine | undefined {
+  const split = splitLineComment(line);
+  const code = split.code.trimEnd();
+  const indent = /^\s*/.exec(code)?.[0] ?? '';
+  const body = code.slice(indent.length);
+  const question = topLevelTernaryQuestion(body);
+  if (question < 0) {
+    return undefined;
+  }
+  const colon = topLevelTernaryColon(body, question);
+  if (colon < 0) {
+    return undefined;
+  }
+  const condition = body.slice(0, question).trim();
+  const trueExpression = body.slice(question + 1, colon).trim();
+  const suffix = body.slice(colon).trim();
+  if (!condition || !trueExpression || !suffix.startsWith(':')) {
+    return undefined;
+  }
+  return {
+    lineIndex,
+    indent,
+    condition,
+    trueExpression,
+    suffix,
+    comment: split.comment ? split.comment.trim() : ''
+  };
+}
+
+function parseTernaryFallbackLine(line: string, lineIndex: number): TernaryFallbackLine | undefined {
+  const split = splitLineComment(line);
+  const expression = split.code.trim();
+  if (!expression || parseTernaryBranchLine(line, lineIndex) || /^(?:end|endmodule|endcase|else|begin|case|if|assign|always|module)\b/.test(expression)) {
+    return undefined;
+  }
+  return {
+    lineIndex,
+    expression,
+    comment: split.comment ? split.comment.trim() : ''
+  };
+}
+
+function alignTernaryBranchLines(
+  lines: string[],
+  branches: TernaryBranchLine[],
+  fallback: TernaryFallbackLine | undefined
+): void {
+  const conditionLength = Math.max(...branches.map((branch) => branch.condition.length));
+  for (const branch of branches) {
+    const code = `${branch.indent}${branch.condition.padEnd(conditionLength)} ? ${branch.trueExpression} ${branch.suffix}`;
+    lines[branch.lineIndex] = branch.comment ? `${code} ${branch.comment}` : code;
+  }
+  if (fallback) {
+    const indent = branches[branches.length - 1].indent;
+    const code = `${indent}${' '.repeat(conditionLength + ' ? '.length)}${fallback.expression}`;
+    lines[fallback.lineIndex] = fallback.comment ? `${code} ${fallback.comment}` : code;
+  }
+}
+
+function branchEndsWithBareColon(branch: TernaryBranchLine): boolean {
+  return branch.suffix === ':';
+}
+
+function startsWithClosingDelimiter(text: string): boolean {
+  return /^[)\]}]/.test(text.trimStart());
+}
+
+function topLevelTernaryQuestion(text: string): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      escaped = char === '\\' && !escaped;
+      if (char === '"' && !escaped) {
+        inString = false;
+      } else if (char !== '\\') {
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      escaped = false;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth++;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (char === '?' && depth === 0 && !isInsideBasedLiteral(text, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function topLevelTernaryColon(text: string, question: number): number {
+  let depth = 0;
+  let nestedTernary = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = question + 1; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      escaped = char === '\\' && !escaped;
+      if (char === '"' && !escaped) {
+        inString = false;
+      } else if (char !== '\\') {
+        escaped = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      escaped = false;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth++;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 0) {
+      continue;
+    }
+    if (char === '?' && !isInsideBasedLiteral(text, index)) {
+      nestedTernary++;
+      continue;
+    }
+    if (char === ':') {
+      if (nestedTernary === 0) {
+        return index;
+      }
+      nestedTernary--;
+    }
+  }
+  return -1;
 }
 
 function splitLogicalFormattingLines(line: string, style: VerilogFormattingStyle): string[] {

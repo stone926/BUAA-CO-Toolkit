@@ -231,6 +231,56 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
+  it('aligns question marks in multiline ternary chains', () => {
+    const input = [
+      'assign NPC_sel=',
+      '//0;',
+      '(j|jal)?2\'b01:',
+      '(jr|jalr)?2\'b10:',
+      '(beq|bne)?2\'b11:2\'b00;',
+      'assign type=',
+      'add?ADD:',
+      'sub?SUB:',
+      'addiu?ADDIU:',
+      'ori?ORI:',
+      'new?NEW:6\'b111111;'
+    ].join('\n');
+    const once = format(input);
+
+    expect(once).toBe([
+      'assign NPC_sel =',
+      '    // 0;',
+      "    (j | jal)   ? 2'b01 :",
+      "    (jr | jalr) ? 2'b10 :",
+      "    (beq | bne) ? 2'b11 : 2'b00;",
+      'assign type =',
+      '    add   ? ADD :',
+      '    sub   ? SUB :',
+      '    addiu ? ADDIU :',
+      '    ori   ? ORI :',
+      "    new   ? NEW : 6'b111111;"
+    ].join('\n'));
+    expect(format(once)).toBe(once);
+  });
+
+  it('aligns the final false expression when a ternary chain wraps it onto a new line', () => {
+    const input = [
+      'assign NPC_sel=',
+      '(j|jal)?2\'b01:',
+      '(jr|jalr)?2\'b10:',
+      '(beq|bne)?2\'b11:',
+      '2\'b00;'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'assign NPC_sel =',
+      "    (j | jal)   ? 2'b01 :",
+      "    (jr | jalr) ? 2'b10 :",
+      "    (beq | bne) ? 2'b11 :",
+      `${' '.repeat(18)}2'b00;`
+    ].join('\n'));
+  });
+
   it('preserves manual ternary line breaks and aligns nested parentheses', () => {
     const input = [
       'module demo;',
