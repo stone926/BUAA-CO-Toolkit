@@ -55,6 +55,8 @@ export interface CoSettings {
       spaceBeforeInstancePorts: boolean;
       separateElse: boolean;
       maxBlankLines: number;
+      parameterAlignment: 'none' | 'equals';
+      modulePortAlignment: 'none' | 'name';
     };
   };
 }
@@ -106,7 +108,9 @@ export const defaultCoSettings: CoSettings = {
       declarationRangeSpacing: configDefault<'space' | 'compact' | 'preserve'>('verilog.format.declarationRangeSpacing'),
       spaceBeforeInstancePorts: configDefault<boolean>('verilog.format.spaceBeforeInstancePorts'),
       separateElse: configDefault<boolean>('verilog.format.separateElse'),
-      maxBlankLines: configDefault<number>('verilog.format.maxBlankLines')
+      maxBlankLines: configDefault<number>('verilog.format.maxBlankLines'),
+      parameterAlignment: configDefault<'none' | 'equals'>('verilog.format.parameterAlignment'),
+      modulePortAlignment: configDefault<'none' | 'name'>('verilog.format.modulePortAlignment')
     }
   }
 };
@@ -283,7 +287,9 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
       spaceInRange: false,
       spaceBeforeInstancePorts: true,
       separateElse: false,
-      maxBlankLines: 1
+      maxBlankLines: 1,
+      parameterAlignment: 'none',
+      modulePortAlignment: 'none'
     }
     : {
       ...defaultCoSettings.verilog.format,
@@ -296,7 +302,9 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
     declarationRangeSpacing: normalizeDeclarationRangeSpacing(candidate.declarationRangeSpacing, preset.declarationRangeSpacing),
     spaceBeforeInstancePorts: typeof candidate.spaceBeforeInstancePorts === 'boolean' ? candidate.spaceBeforeInstancePorts : preset.spaceBeforeInstancePorts,
     separateElse: typeof candidate.separateElse === 'boolean' ? candidate.separateElse : preset.separateElse,
-    maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3)
+    maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3),
+    parameterAlignment: normalizeParameterAlignment(candidate.parameterAlignment, preset.parameterAlignment),
+    modulePortAlignment: normalizeModulePortAlignment(candidate.modulePortAlignment, preset.modulePortAlignment)
   };
 }
 
@@ -305,6 +313,20 @@ function normalizeDeclarationRangeSpacing(
   fallback: CoSettings['verilog']['format']['declarationRangeSpacing']
 ): CoSettings['verilog']['format']['declarationRangeSpacing'] {
   return value === 'space' || value === 'compact' || value === 'preserve' ? value : fallback;
+}
+
+function normalizeParameterAlignment(
+  value: unknown,
+  fallback: CoSettings['verilog']['format']['parameterAlignment']
+): CoSettings['verilog']['format']['parameterAlignment'] {
+  return value === 'none' || value === 'equals' ? value : fallback;
+}
+
+function normalizeModulePortAlignment(
+  value: unknown,
+  fallback: CoSettings['verilog']['format']['modulePortAlignment']
+): CoSettings['verilog']['format']['modulePortAlignment'] {
+  return value === 'none' || value === 'name' ? value : fallback;
 }
 
 function normalizeInteger(value: unknown, fallback: number, min: number, max: number): number {

@@ -1318,6 +1318,32 @@
             "description": "Verilog 格式化器保留的最大连续空行数",
             "default": 1
           },
+          "co.verilog.format.parameterAlignment": {
+            "type": "string",
+            "enum": [
+              "none",
+              "equals"
+            ],
+            "enumDescriptions": [
+              "不额外对齐 parameter/localparam 声明",
+              "将连续 parameter/localparam 声明中的等号对齐到同一列"
+            ],
+            "description": "控制多行 parameter/localparam 声明的纵向对齐方式",
+            "default": "equals"
+          },
+          "co.verilog.format.modulePortAlignment": {
+            "type": "string",
+            "enum": [
+              "none",
+              "name"
+            ],
+            "enumDescriptions": [
+              "不额外对齐 module 声明端口",
+              "将多行 module 声明中的端口名对齐到同一列"
+            ],
+            "description": "控制多行 module 声明端口列表的纵向对齐方式",
+            "default": "name"
+          },
           "co.diagnostics.disabledCodes": {
             "type": "array",
             "items": {

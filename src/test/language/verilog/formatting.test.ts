@@ -38,7 +38,7 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module demo (',
-      '    input [31: 0] a,',
+      '    input [31: 0]     a,',
       '    output reg [3: 0] y',
       '  );',
       '  always @(posedge clk) begin',
@@ -261,7 +261,7 @@ describe('Verilog formatting', () => {
     const input = [
       'module demo;',
       'parameter ADD=6\'b000000,',
-      'SUB=6\'b000001,',
+      'SUBLONG=6\'b000001,',
       'ORI=6\'b000010;',
       'assign outputA=',
       'type==ADD?a_add_b:',
@@ -271,12 +271,71 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module demo;',
-      "  parameter ADD = 6'b000000,",
-      "            SUB = 6'b000001,",
-      "            ORI = 6'b000010;",
+      "  parameter ADD     = 6'b000000,",
+      "            SUBLONG = 6'b000001,",
+      "            ORI     = 6'b000010;",
       '  assign outputA =',
       '      type == ADD ? a_add_b :',
       '      type == SUB ? a_sub_b : none;',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('aligns module declaration port names in course style', () => {
+    const input = [
+      'module DM(',
+      'input clk,',
+      'input reset,',
+      'input WE,',
+      'input [31:0] addr,',
+      'input [31:0] WD,',
+      'input [31:0] PC,',
+      'output [31:0] data',
+      ');',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module DM (',
+      '    input          clk,',
+      '    input          reset,',
+      '    input          WE,',
+      '    input [31: 0]  addr,',
+      '    input [31: 0]  WD,',
+      '    input [31: 0]  PC,',
+      '    output [31: 0] data',
+      '  );',
+      'endmodule'
+    ].join('\n'));
+  });
+
+  it('can disable vertical alignment for custom Verilog formatting', () => {
+    const settings = mergeCoSettings({
+      verilog: {
+        format: {
+          style: 'custom',
+          parameterAlignment: 'none',
+          modulePortAlignment: 'none'
+        }
+      }
+    });
+    const input = [
+      'module demo(',
+      'input clk,',
+      'input [31:0] data',
+      ');',
+      'parameter ADD=1,',
+      'SUBLONG=2;',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input, settings)).toBe([
+      'module demo (',
+      '    input clk,',
+      '    input [31: 0] data',
+      '  );',
+      '  parameter ADD = 1,',
+      '            SUBLONG = 2;',
       'endmodule'
     ].join('\n'));
   });

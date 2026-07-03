@@ -239,6 +239,8 @@ MIPS / MARS 行为：
 
 同组还包含：`co.semanticColors.preset`、`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（风格、续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
 
+Verilog 格式化的纵向对齐细项：`co.verilog.format.parameterAlignment` 默认 `equals`，会对齐连续 `parameter` / `localparam` 声明中的等号；`co.verilog.format.modulePortAlignment` 默认 `name`，会对齐多行 `module` 声明中的端口名。紧凑风格 `compact` 会将这两项预设为 `none`，自定义风格可单独覆盖。
+
 ---
 
 ## 5. ⚠️ 特别注意事项

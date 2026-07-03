@@ -55,6 +55,8 @@
   "verilog.format.continuationIndent": 2,
   "verilog.format.declarationRangeSpacing": "space",
   "verilog.format.maxBlankLines": 1,
+  "verilog.format.modulePortAlignment": "name",
+  "verilog.format.parameterAlignment": "equals",
   "verilog.format.separateElse": true,
   "verilog.format.spaceBeforeInstancePorts": true,
   "verilog.format.spaceInRange": true,

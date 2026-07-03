@@ -175,8 +175,8 @@ describe('package manifest', () => {
       'BUAA CO: 运行与测试',
       'BUAA CO: 编辑器与诊断'
     ]);
-    expect(Object.keys(properties)).toHaveLength(62);
-    expect(Object.keys(configDefaults)).toHaveLength(62);
+    expect(Object.keys(properties)).toHaveLength(64);
+    expect(Object.keys(configDefaults)).toHaveLength(64);
     for (const [key, value] of Object.entries(configDefaults)) {
       expect(properties[`co.${key}`]?.default, key).toEqual(value);
     }

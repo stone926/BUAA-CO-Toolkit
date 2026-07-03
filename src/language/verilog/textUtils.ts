@@ -91,7 +91,7 @@ export function topLevelAssignmentEquals(text: string): number {
     if (char === '=' && depth === 0) {
       const previous = text[index - 1] ?? '';
       const next = text[index + 1] ?? '';
-      if (previous !== '<' && previous !== '>' && previous !== '!' && previous !== '=' && next !== '=') {
+      if (previous !== '<' && previous !== '>' && previous !== '!' && previous !== '=' && next !== '=' && next !== '>') {
         return index;
       }
     }

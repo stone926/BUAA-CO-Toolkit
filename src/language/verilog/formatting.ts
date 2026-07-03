@@ -6,6 +6,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { lexVerilog, VerilogToken } from './lexer';
+import { topLevelAssignmentEquals } from './textUtils';
 
 interface VerilogFormattingStyle {
   continuationIndent: number;
@@ -14,6 +15,8 @@ interface VerilogFormattingStyle {
   spaceBeforeInstancePorts: boolean;
   separateElse: boolean;
   maxBlankLines: number;
+  parameterAlignment: 'none' | 'equals';
+  modulePortAlignment: 'none' | 'name';
 }
 
 type FormattingLineKind = 'code' | 'comment' | 'directive';
@@ -46,6 +49,16 @@ interface FormattingBlock {
 interface CaseItemInfo {
   labelOnly: boolean;
   statement: string;
+}
+
+interface ParameterAlignmentLine {
+  lineIndex: number;
+  equalIndex: number;
+}
+
+interface ModulePortAlignmentLine {
+  lineIndex: number;
+  nameIndex: number;
 }
 
 interface VerilogFormatAst {
@@ -219,7 +232,136 @@ function printVerilogFormattingAst(
         ?? alignedContinuationPrefix(continuationText, linePrefix);
     }
   }
-  return formatted.join(eol);
+  return alignFormattedLines(formatted, style).join(eol);
+}
+
+function alignFormattedLines(lines: string[], style: VerilogFormattingStyle): string[] {
+  let result = lines;
+  if (style.parameterAlignment === 'equals') {
+    result = alignParameterEquals(result);
+  }
+  if (style.modulePortAlignment === 'name') {
+    result = alignModulePortNames(result);
+  }
+  return result;
+}
+
+function alignParameterEquals(lines: string[]): string[] {
+  const result = [...lines];
+  let index = 0;
+  while (index < result.length) {
+    if (!isParameterDeclarationStart(result[index])) {
+      index++;
+      continue;
+    }
+    const group: ParameterAlignmentLine[] = [];
+    let cursor = index;
+    while (cursor < result.length) {
+      const line = result[cursor];
+      const code = splitLineComment(line).code.trim();
+      if (!code) {
+        cursor++;
+        continue;
+      }
+      const alignment = parameterAlignmentLine(line, cursor);
+      if (!alignment) {
+        break;
+      }
+      group.push(alignment);
+      cursor++;
+      if (code.endsWith(';')) {
+        break;
+      }
+    }
+    alignLineIndexes(result, group.map((item) => ({
+      lineIndex: item.lineIndex,
+      insertIndex: item.equalIndex
+    })));
+    index = Math.max(cursor, index + 1);
+  }
+  return result;
+}
+
+function isParameterDeclarationStart(line: string): boolean {
+  return /^(?:parameter|localparam)\b/.test(splitLineComment(line).code.trim());
+}
+
+function parameterAlignmentLine(line: string, lineIndex: number): ParameterAlignmentLine | undefined {
+  const code = splitLineComment(line).code;
+  const equalIndex = topLevelAssignmentEquals(code);
+  if (equalIndex < 0) {
+    return undefined;
+  }
+  const left = code.slice(0, equalIndex).trim();
+  if (!left || /^(?:input|output|inout|wire|reg|logic|assign|if|else|case|for|while|always)\b/.test(left)) {
+    return undefined;
+  }
+  return { lineIndex, equalIndex };
+}
+
+function alignModulePortNames(lines: string[]): string[] {
+  const result = [...lines];
+  let index = 0;
+  while (index < result.length) {
+    if (!isModulePortListStart(result[index])) {
+      index++;
+      continue;
+    }
+    const group: ModulePortAlignmentLine[] = [];
+    let cursor = index + 1;
+    while (cursor < result.length) {
+      const code = splitLineComment(result[cursor]).code.trim();
+      if (/^\)\s*;/.test(code)) {
+        break;
+      }
+      const alignment = modulePortAlignmentLine(result[cursor], cursor);
+      if (alignment) {
+        group.push(alignment);
+      }
+      cursor++;
+    }
+    alignLineIndexes(result, group.map((item) => ({
+      lineIndex: item.lineIndex,
+      insertIndex: item.nameIndex
+    })));
+    index = Math.max(cursor + 1, index + 1);
+  }
+  return result;
+}
+
+function isModulePortListStart(line: string): boolean {
+  const code = splitLineComment(line).code.trim();
+  return /^module\b[\s\S]*\($/.test(code) && !/#\s*\($/.test(code);
+}
+
+function modulePortAlignmentLine(line: string, lineIndex: number): ModulePortAlignmentLine | undefined {
+  const code = splitLineComment(line).code;
+  const match = /^(\s*)((?:input|output|inout)\b(?:\s+(?:wire|reg|logic|signed|unsigned|tri|tri0|tri1|supply0|supply1))*\s*(?:\[[^\]]+\])?\s*)([A-Za-z_]\w*)([\s\S]*)$/.exec(code);
+  if (!match) {
+    return undefined;
+  }
+  return {
+    lineIndex,
+    nameIndex: match[1].length + match[2].length
+  };
+}
+
+function alignLineIndexes(
+  lines: string[],
+  targets: Array<{ lineIndex: number; insertIndex: number }>
+): void {
+  if (targets.length < 2) {
+    return;
+  }
+  const targetIndex = Math.max(...targets.map((item) => item.insertIndex));
+  for (const target of targets) {
+    const padding = targetIndex - target.insertIndex;
+    if (padding <= 0) {
+      continue;
+    }
+    const line = lines[target.lineIndex];
+    lines[target.lineIndex] = `${line.slice(0, target.insertIndex)}${' '.repeat(padding)}${line.slice(target.insertIndex)}`;
+  }
 }
 
 function splitLogicalFormattingLines(line: string, style: VerilogFormattingStyle): string[] {
