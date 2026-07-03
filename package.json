@@ -1365,20 +1365,21 @@
     ]
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "npm run sync:manifest-config && tsc -p ./",
+    "watch": "npm run sync:manifest-config && tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
-    "package:vsix": "vsce package",
-    "deploy": "vsce publish",
+    "package:vsix": "npm run sync:manifest-config && vsce package",
+    "deploy": "npm run sync:manifest-config && vsce publish",
     "publish": "node scripts/release.mjs",
     "publish:dry-run": "node scripts/release.mjs --dry-run",
     "generate:manifest-config": "node scripts/generate-manifest-config.mjs",
     "check:manifest-config": "node scripts/generate-manifest-config.mjs --check",
+    "sync:manifest-config": "npm run generate:manifest-config && npm run check:manifest-config",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",
     "check:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs --check",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "npm run sync:manifest-config && vitest run",
+    "test:watch": "npm run sync:manifest-config && vitest",
+    "test:coverage": "npm run sync:manifest-config && vitest run --coverage",
     "test:all": "npm run compile && npm test && npm run test:coverage && node scripts/check-index.mjs"
   },
   "devDependencies": {

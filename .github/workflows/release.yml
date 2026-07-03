@@ -26,6 +26,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate and check manifest config
+        run: npm run sync:manifest-config
+
+      - name: Verify generated files are committed
+        run: git diff --exit-code -- package.json resources/co/configDefaults.json
+
       - name: Test
         run: npm test
 

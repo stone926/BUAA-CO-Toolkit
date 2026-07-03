@@ -20,9 +20,17 @@ resources/verilog/:
 
 resources/co/:
   configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐
+  configManifest.json — co.* VS Code settings schema 源: 分组/类型/描述/枚举/范围, default 由 configDefaults.json 注入
   courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/工具/端口/内存/教程/指令描述/Profile推断hints
   p7Hardware.json — P7 课程硬件布局: 文本段/异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
+
+配置资源维护:
+  源文件: resources/co/configManifest.json + resources/co/configDefaults.json + courseConfig/p7Hardware/generatorProfiles/lintRules 等派生输入
+  派生产物: package.json contributes.configuration 与 resources/co/configDefaults.json 中的派生默认值
+  命令: npm run generate:manifest-config 生成, npm run check:manifest-config 检查, npm run sync:manifest-config 生成后检查
+  自动流程: compile/watch/test/test:coverage/test:watch/package:vsix/deploy/publish/release CI 都会先运行 sync:manifest-config
+  规则: 不手写 package.json contributes.configuration; 修改配置资源后提交生成结果
 
 resources/templates/verilog/:
   basic_testbench.v — 通用 Verilog testbench shell

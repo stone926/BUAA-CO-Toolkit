@@ -64,6 +64,9 @@ function main() {
     return;
   }
 
+  run("npm", ["run", "sync:manifest-config"]);
+  assertNoGeneratedChanges();
+
   if (!skipTests) {
     run("npm", ["test"]);
   }
@@ -242,6 +245,7 @@ function printPlan(releaseBase, notes) {
   }
 
   console.log("Steps:");
+  console.log("- npm run sync:manifest-config");
   if (!skipTests) {
     console.log("- npm test");
   } else {
@@ -267,6 +271,19 @@ function assertTagDoesNotExist(tag) {
 
 function getGitStatus() {
   return capture("git", ["status", "--porcelain"]);
+}
+
+function assertNoGeneratedChanges() {
+  const status = getGitStatus();
+  if (status) {
+    fail(
+      [
+        "Generated manifest configuration changed files. Review and commit them before publishing.",
+        "Dirty files:",
+        status,
+      ].join("\n"),
+    );
+  }
 }
 
 function run(command, commandArgs) {

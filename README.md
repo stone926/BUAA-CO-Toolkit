@@ -289,20 +289,22 @@ npm run publish -- patch
 
 本地脚本会要求工作树干净，然后执行：
 
-1. `npm test` 和 `npm run compile`
-2. 更新 `package.json` / `package-lock.json` 的 version
-3. 根据最近一个 `v*` tag 之后的提交更新 `CHANGELOG.md`
-4. 创建 `chore: release vX.Y.Z` 提交和 `vX.Y.Z` annotated tag
-5. `git push origin HEAD --follow-tags`
+1. `npm run sync:manifest-config`，生成并检查 `package.json` 中的 VS Code 配置清单；若生成文件有未提交变化会停止发布
+2. `npm test` 和 `npm run compile`
+3. 更新 `package.json` / `package-lock.json` 的 version
+4. 根据最近一个 `v*` tag 之后的提交更新 `CHANGELOG.md`
+5. 创建 `chore: release vX.Y.Z` 提交和 `vX.Y.Z` annotated tag
+6. `git push origin HEAD --follow-tags`
 
 tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 1. `npm ci`
-2. `npm test`
-3. `npm run compile`
-4. `vsce package` 生成 VSIX
-5. `vsce publish --packagePath <vsix>` 发布到 VS Code Marketplace
-6. 用同一个 VSIX 创建 GitHub Release
+2. `npm run sync:manifest-config`，并确认生成文件已经提交
+3. `npm test`
+4. `npm run compile`
+5. `vsce package` 生成 VSIX
+6. `vsce publish --packagePath <vsix>` 发布到 VS Code Marketplace
+7. 用同一个 VSIX 创建 GitHub Release
 
 首次使用前，需要在 GitHub 仓库的 Actions secrets 中添加 `VSCE_PAT`，该 token 需要有 VS Code Marketplace 的 Manage 权限。GitHub Release 使用仓库自带的 `GITHUB_TOKEN`，不需要额外配置。
 
@@ -310,7 +312,13 @@ tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 - `npm run publish:dry-run`：预览下一次 release notes 和步骤，不改文件
 - `npm run publish -- minor --no-push`：只在本地创建 release commit/tag，不推送
-- `npm run publish -- patch --skip-tests`：跳过本地测试（GitHub Actions 仍会测试）
+- `npm run publish -- patch --skip-tests`：跳过本地测试；manifest 配置生成和检查仍会执行，GitHub Actions 仍会测试
+
+配置清单维护命令：
+
+- `npm run generate:manifest-config`：从 `resources/co/configManifest.json`、`resources/co/configDefaults.json` 和课程资源生成 `package.json` 的 `contributes.configuration`
+- `npm run check:manifest-config`：只检查生成结果是否已同步，不写文件
+- `npm run sync:manifest-config`：先生成再检查；`compile`、`watch`、`test`、`test:coverage`、`test:watch`、`package:vsix`、`deploy` 和发布流程都会自动运行
 
 ---
 
