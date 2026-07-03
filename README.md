@@ -310,7 +310,7 @@ tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 辅助命令：
 
-- `npm run publish:dry-run`：预览下一次 release notes 和步骤，不改文件
+- `npm run publish -- --dry-run`：预览下一次 release notes 和步骤，不改文件
 - `npm run publish -- minor --no-push`：只在本地创建 release commit/tag，不推送
 - `npm run publish -- patch --skip-tests`：跳过本地测试；manifest 配置生成和检查仍会执行，GitHub Actions 仍会测试
 
@@ -318,7 +318,7 @@ tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 - `npm run generate:manifest-config`：从 `resources/co/configManifest.json`、`resources/co/configDefaults.json` 和课程资源生成 `package.json` 的 `contributes.configuration`
 - `npm run check:manifest-config`：只检查生成结果是否已同步，不写文件
-- `npm run sync:manifest-config`：先生成再检查；`compile`、`watch`、`test`、`test:coverage`、`test:watch`、`package:vsix`、`deploy` 和发布流程都会自动运行
+- `npm run sync:manifest-config`：先生成再检查；`compile`、`watch`、`test`、`test:coverage`、`package:vsix` 和发布流程都会自动运行
 
 ---
 
