@@ -170,10 +170,10 @@ describe('package manifest', () => {
     const configDefaults = getConfigDefaults();
 
     expect(groups.map((group) => group.title)).toEqual([
-      'BUAA CO: 基础',
-      'BUAA CO: 工具链',
-      'BUAA CO: 运行与测试',
-      'BUAA CO: 编辑器与诊断'
+      '项目基本情况',
+      '工具链',
+      '运行与测试',
+      '编辑器与诊断'
     ]);
     expect(Object.keys(properties)).toHaveLength(64);
     expect(Object.keys(configDefaults)).toHaveLength(64);

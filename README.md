@@ -181,9 +181,9 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 ## 4. 配置项（按 Settings UI 分组）
 
 > 优先级：VS Code 用户/工作区设置 `co.*` → 默认值。工作区设置可写在 `.vscode/settings.json`。
-> 设置 UI 保留完整细项，但只分成四组：`BUAA CO: 基础`、`BUAA CO: 工具链`、`BUAA CO: 运行与测试`、`BUAA CO: 编辑器与诊断`。
+> 设置 UI 保留完整细项，但只分成四组：`项目基本情况`、`工具链`、`运行与测试`、`编辑器与诊断`。
 
-### BUAA CO: 基础 / 工具链
+### 项目基础 / 工具链
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
@@ -196,7 +196,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 其余基础/工具链项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
 
-### BUAA CO: 运行与测试
+### 运行与测试
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
@@ -224,7 +224,7 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 运行细项也在本组：`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.revealOutput`(`false`，运行外部工具时是否自动弹出「输出」面板；默认不弹，仅静默写入)、`co.run.timeoutMs`(`120000`)。
 
-### BUAA CO: 编辑器与诊断
+### 编辑器与诊断
 
 MIPS / MARS 行为：
 

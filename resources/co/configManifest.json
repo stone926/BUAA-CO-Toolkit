@@ -1,6 +1,6 @@
 [
   {
-    "title": "BUAA CO: 基础",
+    "title": "项目基本情况",
     "properties": {
       "co.project.profile": {
         "type": "string",
@@ -47,7 +47,7 @@
     }
   },
   {
-    "title": "BUAA CO: 工具链",
+    "title": "工具链",
     "properties": {
       "co.toolchain.java": {
         "type": "string",
@@ -80,7 +80,7 @@
     }
   },
   {
-    "title": "BUAA CO: 运行与测试",
+    "title": "运行与测试",
     "properties": {
       "co.run.showCommandBeforeRun": {
         "type": "boolean",
@@ -221,7 +221,7 @@
     }
   },
   {
-    "title": "BUAA CO: 编辑器与诊断",
+    "title": "编辑器与诊断",
     "properties": {
       "co.semanticColors.preset": {
         "type": "string",
