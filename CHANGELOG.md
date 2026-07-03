@@ -2,6 +2,29 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [1.0.0] - 2026-07-03
+
+- 微调默认指令集 (98aa6c0)
+- 微调默认指令集 (27f6bf8)
+- chore: keep setting descriptions user-facing (a0643f2)
+- 修改p7测试配置默认值 (d3f2c04)
+- 修改p7测试配置默认值 (0c9ec4f)
+- chore: improve generator instruction setting description (c74f3a5)
+- chore: regroup vscode settings (9e5fd5c)
+- 修改p7测试配置默认值 (1604093)
+- refactor: remove Verilog format style preset (ba660d2)
+- fix: remove Verilog alignment legacy fallback (5347a36)
+- fix: group Verilog alignment settings (b027db5)
+- fix: align ternary chains after inline assign branch (97f88f6)
+- feat: configure Verilog ternary alignment (983c30d)
+- feat: align multiline Verilog ternary chains (f036501)
+- fix: make Verilog port alignment idempotent (f966114)
+- fix: align Verilog module port ranges (2a4ac08)
+- chore: prune unused npm scripts (a52d2b4)
+- chore: sync manifest config in workflows (eeb72c8)
+- fix: 修改配置分组的名称 (07121c2)
+- feat: add configurable Verilog formatter alignment (0f378e6)
+
 ## [0.7.1] - 2026-06-28
 
 - fix: normalize ISim paths across CI platforms (54d548b)
