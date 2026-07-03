@@ -38,8 +38,8 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module demo (',
-      '    input [31: 0]     a,',
-      '    output reg [3: 0] y',
+      '    input      [31: 0] a,',
+      '    output reg [3: 0]  y',
       '  );',
       '  always @(posedge clk) begin',
       '    if (a == 1) begin',
@@ -300,9 +300,9 @@ describe('Verilog formatting', () => {
       '    input          clk,',
       '    input          reset,',
       '    input          WE,',
-      '    input [31: 0]  addr,',
-      '    input [31: 0]  WD,',
-      '    input [31: 0]  PC,',
+      '    input  [31: 0] addr,',
+      '    input  [31: 0] WD,',
+      '    input  [31: 0] PC,',
       '    output [31: 0] data',
       '  );',
       'endmodule'
@@ -323,10 +323,24 @@ describe('Verilog formatting', () => {
       'module EXT (',
       '    input wire [15: 0] imm16,',
       '    input wire         EXTop,',
-      '    output [31: 0]     ext32',
+      '    output     [31: 0] ext32',
       '  );',
       'endmodule'
     ].join('\n'));
+  });
+
+  it('keeps module port alignment idempotent across repeated formatting', () => {
+    const input = [
+      'module EXT(',
+      'input wire [15:0] imm16,',
+      'input wire EXTop,',
+      'output wire [31:0] ext32',
+      ');',
+      'endmodule'
+    ].join('\n');
+    const once = format(input);
+
+    expect(format(once)).toBe(once);
   });
 
   it('can disable vertical alignment for custom Verilog formatting', () => {

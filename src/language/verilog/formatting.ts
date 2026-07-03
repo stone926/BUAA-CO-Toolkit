@@ -58,10 +58,12 @@ interface ParameterAlignmentLine {
 
 interface ModulePortAlignmentLine {
   lineIndex: number;
-  prefixKey: string;
-  rangeIndex: number;
-  rangeLength: number;
-  nameIndex: number;
+  indent: string;
+  prefix: string;
+  range: string;
+  name: string;
+  suffix: string;
+  comment: string;
 }
 
 interface VerilogFormatAst {
@@ -317,20 +319,13 @@ function alignModulePortNames(lines: string[]): string[] {
       if (/^\)\s*;/.test(code)) {
         break;
       }
-      const alignment = modulePortAlignmentLine(result[cursor], cursor);
+      const alignment = parseModulePortAlignmentLine(result[cursor], cursor);
       if (alignment) {
         group.push(alignment);
       }
       cursor++;
     }
-    alignModulePortRanges(result, group);
-    const refreshed = group
-      .map((item) => modulePortAlignmentLine(result[item.lineIndex], item.lineIndex))
-      .filter((item): item is ModulePortAlignmentLine => Boolean(item));
-    alignLineIndexes(result, refreshed.map((item) => ({
-      lineIndex: item.lineIndex,
-      insertIndex: item.nameIndex
-    })));
+    alignModulePortDeclarations(result, group);
     index = Math.max(cursor + 1, index + 1);
   }
   return result;
@@ -341,45 +336,76 @@ function isModulePortListStart(line: string): boolean {
   return /^module\b[\s\S]*\($/.test(code) && !/#\s*\($/.test(code);
 }
 
-function modulePortAlignmentLine(line: string, lineIndex: number): ModulePortAlignmentLine | undefined {
-  const code = splitLineComment(line).code;
-  const match = /^(\s*)((?:input|output|inout)\b(?:\s+(?:wire|reg|logic|signed|unsigned|tri|tri0|tri1|supply0|supply1))*\s*)(?:(\[[^\]]+\])\s*)?([A-Za-z_]\w*)([\s\S]*)$/.exec(code);
-  if (!match) {
+function parseModulePortAlignmentLine(line: string, lineIndex: number): ModulePortAlignmentLine | undefined {
+  const split = splitLineComment(line);
+  const code = split.code.trimEnd();
+  const indent = /^\s*/.exec(code)?.[0] ?? '';
+  let cursor = indent.length;
+  const direction = readFormattingWord(code, cursor);
+  if (!direction || !modulePortDirections.has(direction.value)) {
     return undefined;
   }
-  const range = match[3] ?? '';
-  const rangeIndex = match[1].length + match[2].length;
+  cursor = direction.end;
+  const prefixParts = [direction.value];
+  while (true) {
+    const wordStart = skipFormattingSpaces(code, cursor);
+    const word = readFormattingWord(code, wordStart);
+    if (!word || !modulePortQualifiers.has(word.value)) {
+      cursor = wordStart;
+      break;
+    }
+    prefixParts.push(word.value);
+    cursor = word.end;
+  }
+
+  cursor = skipFormattingSpaces(code, cursor);
+  const rangeMatch = /^\[[^\]]+\]/.exec(code.slice(cursor));
+  const range = rangeMatch?.[0] ?? '';
+  if (range) {
+    cursor = skipFormattingSpaces(code, cursor + range.length);
+  }
+  const name = readFormattingWord(code, cursor);
+  if (!name) {
+    return undefined;
+  }
   return {
     lineIndex,
-    prefixKey: match[2].trim().replace(/\s+/g, ' '),
-    rangeIndex,
-    rangeLength: range.length,
-    nameIndex: rangeIndex + range.length + (range ? 1 : 0)
+    indent,
+    prefix: prefixParts.join(' '),
+    range,
+    name: name.value,
+    suffix: code.slice(name.end).trimStart(),
+    comment: split.comment ? split.comment.trim() : ''
   };
 }
 
-function alignModulePortRanges(lines: string[], group: ModulePortAlignmentLine[]): void {
-  const byPrefix = new Map<string, ModulePortAlignmentLine[]>();
+function alignModulePortDeclarations(lines: string[], group: ModulePortAlignmentLine[]): void {
+  if (group.length < 2) {
+    return;
+  }
+  const prefixLength = Math.max(...group.map((item) => item.prefix.length));
+  const rangeLength = Math.max(...group.map((item) => item.range.length));
   for (const item of group) {
-    const bucket = byPrefix.get(item.prefixKey) ?? [];
-    bucket.push(item);
-    byPrefix.set(item.prefixKey, bucket);
+    const prefix = item.prefix.padEnd(prefixLength);
+    const rangeSlot = rangeLength > 0
+      ? `${item.range.padEnd(rangeLength)} `
+      : '';
+    const code = `${item.indent}${prefix} ${rangeSlot}${item.name}${item.suffix}`;
+    lines[item.lineIndex] = item.comment ? `${code} ${item.comment}` : code;
   }
-  for (const bucket of byPrefix.values()) {
-    const rangeLength = Math.max(...bucket.map((item) => item.rangeLength));
-    if (rangeLength <= 0) {
-      continue;
-    }
-    for (const item of bucket) {
-      const targetNameIndex = item.rangeIndex + rangeLength + 1;
-      const padding = targetNameIndex - item.nameIndex;
-      if (padding <= 0) {
-        continue;
-      }
-      const line = lines[item.lineIndex];
-      lines[item.lineIndex] = `${line.slice(0, item.nameIndex)}${' '.repeat(padding)}${line.slice(item.nameIndex)}`;
-    }
+}
+
+function skipFormattingSpaces(text: string, start: number): number {
+  let cursor = start;
+  while (cursor < text.length && /[ \t]/.test(text[cursor])) {
+    cursor++;
   }
+  return cursor;
+}
+
+function readFormattingWord(text: string, start: number): { value: string; end: number } | undefined {
+  const match = /^[A-Za-z_]\w*/.exec(text.slice(start));
+  return match ? { value: match[0], end: start + match[0].length } : undefined;
 }
 
 function alignLineIndexes(
@@ -854,6 +880,8 @@ function isFormattingKeyword(value: string): boolean {
 }
 
 const formattingKeywords = new Set(['if', 'for', 'while', 'case', 'casex', 'casez', 'repeat', 'module', 'always', 'assign', 'else', 'begin', 'end']);
+const modulePortDirections = new Set(['input', 'output', 'inout']);
+const modulePortQualifiers = new Set(['wire', 'reg', 'logic', 'signed', 'unsigned', 'tri', 'tri0', 'tri1', 'supply0', 'supply1']);
 const expressionContinuationOperators = new Set([
   '||',
   '&&',
