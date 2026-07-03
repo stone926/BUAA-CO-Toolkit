@@ -87,7 +87,7 @@
       "ri": 8,
       "ov": 9
     },
-    "defaultScenarioCount": 32,
+    "defaultScenarioCount": 64,
     "maxScenarioCount": 64
   }
 }
