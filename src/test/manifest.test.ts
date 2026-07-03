@@ -252,6 +252,26 @@ describe('package manifest', () => {
     }
   });
 
+  it('keeps setting descriptions focused on user-facing behavior', () => {
+    const pkg = readPackage();
+    const groups = pkg.contributes?.configuration ?? [];
+    const descriptions = groups.flatMap((group) =>
+      Object.entries(group.properties ?? {}).flatMap(([key, property]) => [
+        [`${key}.description`, property.description],
+        [`${key}.markdownDescription`, property.markdownDescription]
+      ])
+    );
+
+    for (const [label, description] of descriptions) {
+      if (!description) {
+        continue;
+      }
+      expect(description, label).not.toMatch(/resources[\\/]/);
+      expect(description, label).not.toMatch(/由 .*(生成|派生)/);
+      expect(description, label).not.toContain('派生为');
+    }
+  });
+
   it('keeps the project profile enum aligned with course config profiles', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];

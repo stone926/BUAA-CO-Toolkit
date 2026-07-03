@@ -908,7 +908,7 @@
           },
           "co.toolchain.marsP7": {
             "type": "string",
-            "description": "P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口由 resources/co/p7Hardware.json 派生为 0x4180）。未配置时回退到 co.toolchain.mars",
+            "description": "P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口 0x4180）。未配置时回退到 co.toolchain.mars",
             "default": ""
           },
           "co.mips.delayedBranching": {
@@ -923,7 +923,7 @@
           },
           "co.mips.memoryConfiguration": {
             "type": "string",
-            "description": "MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口由 resources/co/p7Hardware.json 派生为 0x4180）",
+            "description": "MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口 0x4180）",
             "default": "auto"
           },
           "co.toolchain.logisim": {
@@ -992,7 +992,7 @@
             "type": "string",
             "description": "自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。",
             "default": "",
-            "markdownDescription": "自定义内置 ASM 生成器使用的指令集。\n\n- 用逗号或任意数量空白分隔。\n- 只接受真实指令，不接受伪指令。\n- 留空时使用当前 Profile 的默认指令集。\n\n默认指令集（由 `resources/mips/generatorProfiles.json` 生成）：\n- **P3**: `add, sub, ori, lw, sw, beq, lui, nop`\n- **P4**: `add, sub, ori, lw, sw, beq, lui, jal, jr, nop`\n- **P5**: `add, sub, ori, lw, sw, beq, lui, jal, jr, nop`\n- **P6**: `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr`\n- **P7**: `nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall`"
+            "markdownDescription": "自定义内置 ASM 生成器使用的指令集。\n\n- 用逗号或任意数量空白分隔。\n- 只接受真实指令，不接受伪指令。\n- 留空时使用当前 Profile 的默认指令集。\n\n各 Profile 默认指令集：\n- **P3**: `add, sub, ori, lw, sw, beq, lui, nop`\n- **P4**: `add, sub, ori, lw, sw, beq, lui, jal, jr, nop`\n- **P5**: `add, sub, ori, lw, sw, beq, lui, jal, jr, nop`\n- **P6**: `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr`\n- **P7**: `nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall`"
           },
           "co.test.builtinGenerator.instructionCount": {
             "type": "number",
@@ -1005,7 +1005,7 @@
             "type": "number",
             "minimum": 1,
             "maximum": 1118,
-            "description": "P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。课程异常入口由 resources/co/p7Hardware.json 派生为 0x4180，因此最大为 1118 条，以保留停机自环并避免覆盖处理程序",
+            "description": "P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P7 课程异常入口为 0x4180，因此最大为 1118 条，以保留停机自环并避免覆盖处理程序",
             "default": 1118
           },
           "co.test.continuousIntervalMs": {
@@ -1091,7 +1091,7 @@
             "minimum": 1,
             "maximum": 64,
             "description": "P7 probe 模式每个 ASM 生成的场景数量，最多 64 条以保持 probe log 在 DM 范围内",
-            "default": 32
+            "default": 64
           },
           "co.test.p7.exceptionRate": {
             "type": "number",

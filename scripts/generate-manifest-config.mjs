@@ -110,7 +110,7 @@ function generatorInstructionMarkdownDescription(generatorProfiles) {
     '- 只接受真实指令，不接受伪指令。',
     '- 留空时使用当前 Profile 的默认指令集。',
     '',
-    '默认指令集（由 `resources/mips/generatorProfiles.json` 生成）：',
+    '各 Profile 默认指令集：',
     defaultProfiles
   ].join('\n');
 }
@@ -161,12 +161,12 @@ function applyGeneratedSchema(groups, defaults, resources) {
   p7InstructionCount.minimum = 1;
   p7InstructionCount.maximum = p7Values.instructionCountMaximum;
   p7InstructionCount.description =
-    `P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。课程异常入口由 resources/co/p7Hardware.json 派生为 ${shortHex(p7Values.exceptionHandlerAddress)}，因此最大为 ${p7Values.instructionCountMaximum} 条，以保留停机自环并避免覆盖处理程序`;
+    `P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P7 课程异常入口为 ${shortHex(p7Values.exceptionHandlerAddress)}，因此最大为 ${p7Values.instructionCountMaximum} 条，以保留停机自环并避免覆盖处理程序`;
 
   properties['co.toolchain.marsP7'].description =
-    `P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口由 resources/co/p7Hardware.json 派生为 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
+    `P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
   properties['co.mips.memoryConfiguration'].description =
-    `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口由 resources/co/p7Hardware.json 派生为 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
+    `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
   properties['co.test.builtinGenerator.instructions'].description = generatorInstructionDescription();
   properties['co.test.builtinGenerator.instructions'].markdownDescription =
     generatorInstructionMarkdownDescription(generatorProfiles);
