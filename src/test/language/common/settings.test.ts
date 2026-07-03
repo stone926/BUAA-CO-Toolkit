@@ -66,7 +66,6 @@ describe('mergeCoSettings', () => {
     const result = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           continuationIndent: 0,
           spaceInRange: false,
           declarationRangeSpacing: 'compact',
@@ -79,7 +78,6 @@ describe('mergeCoSettings', () => {
         }
       }
     });
-    expect(result.verilog.format.style).toBe('custom');
     expect(result.verilog.format.continuationIndent).toBe(1);
     expect(result.verilog.format.spaceInRange).toBe(false);
     expect(result.verilog.format.declarationRangeSpacing).toBe('compact');
@@ -89,21 +87,10 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.maxBlankLines).toBe(0);
   });
 
-  it('uses the compact Verilog format preset', () => {
-    const result = mergeCoSettings({ verilog: { format: { style: 'compact' } } });
-    expect(result.verilog.format.continuationIndent).toBe(1);
-    expect(result.verilog.format.spaceInRange).toBe(false);
-    expect(result.verilog.format.separateElse).toBe(false);
-    expect(result.verilog.format.parameterAlignment).toBe('none');
-    expect(result.verilog.format.modulePortAlignment).toBe('none');
-    expect(result.verilog.format.ternaryAlignment).toBe('none');
-  });
-
   it('ignores old flattened Verilog format alignment keys', () => {
     const result = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           parameterAlignment: 'none',
           modulePortAlignment: 'none',
           ternaryAlignment: 'none'

@@ -50,7 +50,7 @@ lsp-providers:
   resolveSymbol.ts — 语义模型+语法 fallback 的 Verilog symbol resolution, 实例连接上下文
   display.ts — hover/inlay/signature markdown 文案、宽度/参数显示 helper
   semanticTokens.ts — 语义高亮: module/port/signal/parameter/instance/macro/systemTask/number/keyword/comment/string/formatSpecifier/punctuation
-  formatting.ts — course/compact/custom三种风格
+  formatting.ts — Verilog 细项格式化配置
   folding.ts — module/always/initial/function/task/generate/case/预处理条件块
   symbols.ts — 文档符号树(模块->端口/参数/声明/实例)
   traceParser.ts — ISim $display输出解析为CpuTraceEvent[]

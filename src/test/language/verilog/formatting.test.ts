@@ -20,7 +20,7 @@ function format(text: string, settings = mergeCoSettings({}), options = twoSpace
 }
 
 describe('Verilog formatting', () => {
-  it('formats with the default BUAA CO course style', () => {
+  it('formats with the default BUAA CO formatting', () => {
     const input = [
       'module demo(',
       'input [31:0] a,',
@@ -53,11 +53,10 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
-  it('honors custom style settings', () => {
+  it('honors configured formatting settings', () => {
     const settings = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           continuationIndent: 1,
           spaceInRange: false,
           spaceBeforeInstancePorts: false,
@@ -134,7 +133,6 @@ describe('Verilog formatting', () => {
     const compact = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           spaceInRange: false,
           declarationRangeSpacing: 'compact'
         }
@@ -149,7 +147,6 @@ describe('Verilog formatting', () => {
     const preserve = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           spaceInRange: false,
           declarationRangeSpacing: 'preserve'
         }
@@ -309,7 +306,6 @@ describe('Verilog formatting', () => {
     const settings = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           alignment: {
             ternary: 'none'
           }
@@ -357,7 +353,7 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
-  it('aligns assign and parameter continuations to the course examples', () => {
+  it('aligns assign and parameter continuations to the default examples', () => {
     const input = [
       'module demo;',
       'parameter ADD=6\'b000000,',
@@ -381,7 +377,7 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
-  it('aligns module declaration port names in course style', () => {
+  it('aligns module declaration port names by default', () => {
     const input = [
       'module DM(',
       'input clk,',
@@ -443,11 +439,10 @@ describe('Verilog formatting', () => {
     expect(format(once)).toBe(once);
   });
 
-  it('can disable vertical alignment for custom Verilog formatting', () => {
+  it('can disable vertical alignment for Verilog formatting', () => {
     const settings = mergeCoSettings({
       verilog: {
         format: {
-          style: 'custom',
           alignment: {
             parameter: 'none',
             modulePort: 'none'

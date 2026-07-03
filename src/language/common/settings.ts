@@ -48,7 +48,6 @@ export interface CoSettings {
       disabledRules: string[];
     };
     format: {
-      style: 'course' | 'compact' | 'custom';
       continuationIndent: number;
       spaceInRange: boolean;
       declarationRangeSpacing: 'space' | 'compact' | 'preserve';
@@ -103,7 +102,6 @@ export const defaultCoSettings: CoSettings = {
       disabledRules: [...defaultDisabledVerilogLintRules]
     },
     format: {
-      style: configDefault<'course' | 'compact' | 'custom'>('verilog.format.style'),
       continuationIndent: configDefault<number>('verilog.format.continuationIndent'),
       spaceInRange: configDefault<boolean>('verilog.format.spaceInRange'),
       declarationRangeSpacing: configDefault<'space' | 'compact' | 'preserve'>('verilog.format.declarationRangeSpacing'),
@@ -295,25 +293,7 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
   const alignment = typeof candidate.alignment === 'object' && candidate.alignment !== null && !Array.isArray(candidate.alignment)
     ? candidate.alignment
     : {};
-  const style: CoSettings['verilog']['format']['style'] =
-    candidate.style === 'compact' || candidate.style === 'custom' ? candidate.style : 'course';
-  const preset: CoSettings['verilog']['format'] = style === 'compact'
-    ? {
-      ...defaultCoSettings.verilog.format,
-      style,
-      continuationIndent: 1,
-      spaceInRange: false,
-      spaceBeforeInstancePorts: true,
-      separateElse: false,
-      maxBlankLines: 1,
-      parameterAlignment: 'none',
-      modulePortAlignment: 'none',
-      ternaryAlignment: 'none'
-    }
-    : {
-      ...defaultCoSettings.verilog.format,
-      style
-    };
+  const preset = defaultCoSettings.verilog.format;
   return {
     ...preset,
     continuationIndent: normalizeInteger(candidate.continuationIndent, preset.continuationIndent, 1, 4),

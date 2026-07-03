@@ -1259,21 +1259,6 @@
               "vc-021"
             ]
           },
-          "co.verilog.format.style": {
-            "type": "string",
-            "enum": [
-              "course",
-              "compact",
-              "custom"
-            ],
-            "enumDescriptions": [
-              "内置风格",
-              "更紧凑的 4 空格风格，范围表达式更紧凑",
-              "使用下方的 co.verilog.format.* 各项设置"
-            ],
-            "description": "控制 Verilog 格式化器使用的基础风格",
-            "default": "course"
-          },
           "co.verilog.format.continuationIndent": {
             "type": "number",
             "minimum": 1,

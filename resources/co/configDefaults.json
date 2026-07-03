@@ -61,7 +61,6 @@
   "verilog.format.separateElse": true,
   "verilog.format.spaceBeforeInstancePorts": true,
   "verilog.format.spaceInRange": true,
-  "verilog.format.style": "course",
   "verilog.implicitNet.diagnostic": "warning",
   "verilog.implicitNet.ignorePatterns": [
     "^uut\\.",

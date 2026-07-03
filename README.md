@@ -237,9 +237,9 @@ MIPS / MARS 行为：
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
 | `co.mips.instructionColorMode` | `realVsPseudo` | 指令着色方式 |
 
-同组还包含：`co.semanticColors.preset`、`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（风格、续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
+同组还包含：`co.semanticColors.preset`、`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
 
-Verilog 格式化的纵向对齐细项在设置页中集中于 `co.verilog.format.alignment.*`：`parameter` 默认 `equals`，会对齐连续 `parameter` / `localparam` 声明中的等号；`modulePort` 默认 `name`，会对齐多行 `module` 声明中的位宽和端口名；`ternary` 默认 `question`，会对齐多行三目运算符链中的问号。紧凑风格 `compact` 会将这些对齐项预设为 `none`，自定义风格可单独覆盖。
+Verilog 格式化的纵向对齐细项在设置页中集中于 `co.verilog.format.alignment.*`：`parameter` 默认 `equals`，会对齐连续 `parameter` / `localparam` 声明中的等号；`modulePort` 默认 `name`，会对齐多行 `module` 声明中的位宽和端口名；`ternary` 默认 `question`，会对齐多行三目运算符链中的问号。
 
 ---
 
