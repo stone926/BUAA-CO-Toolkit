@@ -58,6 +58,9 @@ interface ParameterAlignmentLine {
 
 interface ModulePortAlignmentLine {
   lineIndex: number;
+  prefixKey: string;
+  rangeIndex: number;
+  rangeLength: number;
   nameIndex: number;
 }
 
@@ -320,7 +323,11 @@ function alignModulePortNames(lines: string[]): string[] {
       }
       cursor++;
     }
-    alignLineIndexes(result, group.map((item) => ({
+    alignModulePortRanges(result, group);
+    const refreshed = group
+      .map((item) => modulePortAlignmentLine(result[item.lineIndex], item.lineIndex))
+      .filter((item): item is ModulePortAlignmentLine => Boolean(item));
+    alignLineIndexes(result, refreshed.map((item) => ({
       lineIndex: item.lineIndex,
       insertIndex: item.nameIndex
     })));
@@ -336,14 +343,43 @@ function isModulePortListStart(line: string): boolean {
 
 function modulePortAlignmentLine(line: string, lineIndex: number): ModulePortAlignmentLine | undefined {
   const code = splitLineComment(line).code;
-  const match = /^(\s*)((?:input|output|inout)\b(?:\s+(?:wire|reg|logic|signed|unsigned|tri|tri0|tri1|supply0|supply1))*\s*(?:\[[^\]]+\])?\s*)([A-Za-z_]\w*)([\s\S]*)$/.exec(code);
+  const match = /^(\s*)((?:input|output|inout)\b(?:\s+(?:wire|reg|logic|signed|unsigned|tri|tri0|tri1|supply0|supply1))*\s*)(?:(\[[^\]]+\])\s*)?([A-Za-z_]\w*)([\s\S]*)$/.exec(code);
   if (!match) {
     return undefined;
   }
+  const range = match[3] ?? '';
+  const rangeIndex = match[1].length + match[2].length;
   return {
     lineIndex,
-    nameIndex: match[1].length + match[2].length
+    prefixKey: match[2].trim().replace(/\s+/g, ' '),
+    rangeIndex,
+    rangeLength: range.length,
+    nameIndex: rangeIndex + range.length + (range ? 1 : 0)
   };
+}
+
+function alignModulePortRanges(lines: string[], group: ModulePortAlignmentLine[]): void {
+  const byPrefix = new Map<string, ModulePortAlignmentLine[]>();
+  for (const item of group) {
+    const bucket = byPrefix.get(item.prefixKey) ?? [];
+    bucket.push(item);
+    byPrefix.set(item.prefixKey, bucket);
+  }
+  for (const bucket of byPrefix.values()) {
+    const rangeLength = Math.max(...bucket.map((item) => item.rangeLength));
+    if (rangeLength <= 0) {
+      continue;
+    }
+    for (const item of bucket) {
+      const targetNameIndex = item.rangeIndex + rangeLength + 1;
+      const padding = targetNameIndex - item.nameIndex;
+      if (padding <= 0) {
+        continue;
+      }
+      const line = lines[item.lineIndex];
+      lines[item.lineIndex] = `${line.slice(0, item.nameIndex)}${' '.repeat(padding)}${line.slice(item.nameIndex)}`;
+    }
+  }
 }
 
 function alignLineIndexes(

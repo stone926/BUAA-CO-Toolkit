@@ -309,6 +309,26 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
+  it('aligns module declaration width slots before port names', () => {
+    const input = [
+      'module EXT(',
+      'input wire [15:0] imm16,',
+      'input wire EXTop,',
+      'output [31:0] ext32',
+      ');',
+      'endmodule'
+    ].join('\n');
+
+    expect(format(input)).toBe([
+      'module EXT (',
+      '    input wire [15: 0] imm16,',
+      '    input wire         EXTop,',
+      '    output [31: 0]     ext32',
+      '  );',
+      'endmodule'
+    ].join('\n'));
+  });
+
   it('can disable vertical alignment for custom Verilog formatting', () => {
     const settings = mergeCoSettings({
       verilog: {
