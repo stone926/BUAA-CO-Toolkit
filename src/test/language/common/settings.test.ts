@@ -89,7 +89,17 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.maxBlankLines).toBe(0);
   });
 
-  it('keeps legacy Verilog format alignment keys compatible', () => {
+  it('uses the compact Verilog format preset', () => {
+    const result = mergeCoSettings({ verilog: { format: { style: 'compact' } } });
+    expect(result.verilog.format.continuationIndent).toBe(1);
+    expect(result.verilog.format.spaceInRange).toBe(false);
+    expect(result.verilog.format.separateElse).toBe(false);
+    expect(result.verilog.format.parameterAlignment).toBe('none');
+    expect(result.verilog.format.modulePortAlignment).toBe('none');
+    expect(result.verilog.format.ternaryAlignment).toBe('none');
+  });
+
+  it('ignores old flattened Verilog format alignment keys', () => {
     const result = mergeCoSettings({
       verilog: {
         format: {
@@ -100,19 +110,9 @@ describe('mergeCoSettings', () => {
         }
       }
     });
-    expect(result.verilog.format.parameterAlignment).toBe('none');
-    expect(result.verilog.format.modulePortAlignment).toBe('none');
-    expect(result.verilog.format.ternaryAlignment).toBe('none');
-  });
-
-  it('uses the compact Verilog format preset', () => {
-    const result = mergeCoSettings({ verilog: { format: { style: 'compact' } } });
-    expect(result.verilog.format.continuationIndent).toBe(1);
-    expect(result.verilog.format.spaceInRange).toBe(false);
-    expect(result.verilog.format.separateElse).toBe(false);
-    expect(result.verilog.format.parameterAlignment).toBe('none');
-    expect(result.verilog.format.modulePortAlignment).toBe('none');
-    expect(result.verilog.format.ternaryAlignment).toBe('none');
+    expect(result.verilog.format.parameterAlignment).toBe(defaultCoSettings.verilog.format.parameterAlignment);
+    expect(result.verilog.format.modulePortAlignment).toBe(defaultCoSettings.verilog.format.modulePortAlignment);
+    expect(result.verilog.format.ternaryAlignment).toBe(defaultCoSettings.verilog.format.ternaryAlignment);
   });
 
   it('defaults selected Verilog course lint rules to disabled', () => {

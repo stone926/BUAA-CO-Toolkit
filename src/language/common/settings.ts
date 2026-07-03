@@ -281,7 +281,10 @@ type VerilogFormatAlignmentCandidate = {
   ternary?: unknown;
 };
 
-type VerilogFormatCandidate = Partial<CoSettings['verilog']['format']> & {
+type VerilogFormatCandidate = Partial<Omit<
+  CoSettings['verilog']['format'],
+  'parameterAlignment' | 'modulePortAlignment' | 'ternaryAlignment'
+>> & {
   alignment?: VerilogFormatAlignmentCandidate;
 };
 
@@ -319,9 +322,9 @@ function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format']
     spaceBeforeInstancePorts: typeof candidate.spaceBeforeInstancePorts === 'boolean' ? candidate.spaceBeforeInstancePorts : preset.spaceBeforeInstancePorts,
     separateElse: typeof candidate.separateElse === 'boolean' ? candidate.separateElse : preset.separateElse,
     maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3),
-    parameterAlignment: normalizeParameterAlignment(alignment.parameter ?? candidate.parameterAlignment, preset.parameterAlignment),
-    modulePortAlignment: normalizeModulePortAlignment(alignment.modulePort ?? candidate.modulePortAlignment, preset.modulePortAlignment),
-    ternaryAlignment: normalizeTernaryAlignment(alignment.ternary ?? candidate.ternaryAlignment, preset.ternaryAlignment)
+    parameterAlignment: normalizeParameterAlignment(alignment.parameter, preset.parameterAlignment),
+    modulePortAlignment: normalizeModulePortAlignment(alignment.modulePort, preset.modulePortAlignment),
+    ternaryAlignment: normalizeTernaryAlignment(alignment.ternary, preset.ternaryAlignment)
   };
 }
 

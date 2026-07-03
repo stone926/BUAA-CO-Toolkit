@@ -57,17 +57,12 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
         spaceBeforeInstancePorts: config<boolean>('verilog.format.spaceBeforeInstancePorts', defaultCoSettings.verilog.format.spaceBeforeInstancePorts, uri),
         separateElse: config<boolean>('verilog.format.separateElse', defaultCoSettings.verilog.format.separateElse, uri),
         maxBlankLines: config<number>('verilog.format.maxBlankLines', defaultCoSettings.verilog.format.maxBlankLines, uri),
-        parameterAlignment: formatConfig('alignment.parameter', 'parameterAlignment', defaultCoSettings.verilog.format.parameterAlignment, uri),
-        modulePortAlignment: formatConfig('alignment.modulePort', 'modulePortAlignment', defaultCoSettings.verilog.format.modulePortAlignment, uri),
-        ternaryAlignment: formatConfig('alignment.ternary', 'ternaryAlignment', defaultCoSettings.verilog.format.ternaryAlignment, uri)
+        parameterAlignment: config<CoSettings['verilog']['format']['parameterAlignment']>('verilog.format.alignment.parameter', defaultCoSettings.verilog.format.parameterAlignment, uri),
+        modulePortAlignment: config<CoSettings['verilog']['format']['modulePortAlignment']>('verilog.format.alignment.modulePort', defaultCoSettings.verilog.format.modulePortAlignment, uri),
+        ternaryAlignment: config<CoSettings['verilog']['format']['ternaryAlignment']>('verilog.format.alignment.ternary', defaultCoSettings.verilog.format.ternaryAlignment, uri)
       }
     }
   };
-}
-
-function formatConfig<T>(key: string, legacyKey: string, fallback: T, uri: vscode.Uri): T {
-  const legacyValue = config<T>(`verilog.format.${legacyKey}`, fallback, uri);
-  return config<T>(`verilog.format.${key}`, legacyValue, uri);
 }
 
 export function verilogDelayFromSimTime(simTime: string): string {
