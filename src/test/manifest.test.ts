@@ -26,7 +26,7 @@ interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
-    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { enum?: unknown[] } }> }>;
+    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; type?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { type?: string; enum?: unknown[] } }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
@@ -173,7 +173,8 @@ describe('package manifest', () => {
       '项目基本情况',
       '工具链',
       '运行与测试',
-      '编辑器与诊断'
+      '编辑器与诊断',
+      '格式化'
     ]);
     expect(Object.keys(properties)).toHaveLength(64);
     expect(Object.keys(configDefaults)).toHaveLength(64);
@@ -186,13 +187,29 @@ describe('package manifest', () => {
     expect(properties['co.test.builtinGenerator.instructionCount'].default).toBe(4000);
     expect(properties['co.test.continuousRetainedPassingCases'].default).toBe(20);
     expect(properties['co.test.continuousReportRetainedIterations'].default).toBe(200);
-    expect(properties['co.test.p7.stressMode'].default).toBe('anchor');
+    expect(properties['co.test.p7.stressMode'].default).toBe('hybrid');
     expect(properties['co.test.p7.probeScenarioCount'].default).toBe(p7ProbeDefaultScenarioCount);
     expect(properties['co.test.p7.probeScenarioCount'].maximum).toBe(p7ProbeMaxScenarioCount);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
     expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
     expect(properties['co.test.logisim.mainCircuit'].default).toBe(getLogisimTraceProfileConfig('P3')?.defaultCircuit);
+    expect(properties['co.mips.extraArgs'].type).toBe('array');
+    expect(properties['co.mips.extraArgs'].items?.type).toBe('string');
+
+    const groupProperties = (title: string) => Object.keys(groups.find((group) => group.title === title)?.properties ?? {});
+    expect(groupProperties('工具链')).toEqual(expect.arrayContaining([
+      'co.mips.delayedBranching',
+      'co.mips.memoryConfiguration'
+    ]));
+    expect(groupProperties('运行与测试')).toContain('co.mips.extraArgs');
+    expect(groupProperties('编辑器与诊断').some((key) => key.startsWith('co.verilog.format.'))).toBe(false);
+    expect(groupProperties('格式化')).toEqual(expect.arrayContaining([
+      'co.verilog.format.continuationIndent',
+      'co.verilog.format.alignment.parameter',
+      'co.verilog.format.alignment.modulePort',
+      'co.verilog.format.alignment.ternary'
+    ]));
 
     const propertyKeys = Object.keys(properties);
     const alignmentStart = propertyKeys.indexOf('co.verilog.format.alignment.parameter');

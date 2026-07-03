@@ -61,7 +61,7 @@
 
 低频入口（单次/批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等）统一放在侧边栏 **更多工具...** 或命令面板 **`CO: 更多工具`**。
 
-P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`）。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
+P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 probe 性质检查用例。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
 
 就这么简单。下面是细节。
 
@@ -109,15 +109,15 @@ P7 的默认模式仍是精确 trace 对拍（`co.test.p7.stressMode: "anchor"`�
 | P6 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr` |
 | P7 | `nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall` |
 
-> 也可以用**外部生成器**：打开你的 `.py/.js/.jar/.bat/.cmd/.exe/.ps1` 生成器文件再触发测试，或关掉 `co.test.builtinGenerator.enabled`。用 `co.test.generatorArgs` 传种子/数量等参数。
+> 也可以用**外部生成器**：打开你的 `.py/.js/.jar/.bat/.cmd/.exe/.ps1` 生成器文件再触发测试，或关掉 `co.test.builtinGenerator.enabled`。用 `co.test.generatorArgs` 按列表逐项追加外部生成器自己支持的参数，例如 `--seed`、`1234`、`--count`、`100`。
 
 ### P7 专项说明（异常 + 外部中断 + Timer）
 
 P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。本插件的 P7 对拍：
 
-- **`anchor` 模式（默认）**：运行 MARS 黄金 trace + ISim trace，精确比较 GRF/DM 写事件。外部中断由生成器选定的安全 anchor PC 驱动，MARS 与 testbench 在同一架构点注入。此模式适合对拍。
+- **`anchor` 模式**：运行 MARS 黄金 trace + ISim trace，精确比较 GRF/DM 写事件。外部中断由生成器选定的安全 anchor PC 驱动，MARS 与 testbench 在同一架构点注入。此模式适合对拍。
 - **`probe` 模式**：生成黑盒 probe ASM，MARS 只 dump 机器码。CPU 运行时由软件 handler 在 DM `0x2800` 起写 probe log，checker 检查异常码、IP 位、EPC 窗口、外部中断响应、Timer CTRL 清零等课程可观察性质。此模式适合高强度测外部中断/Timer，但不是逐指令黄金模型对拍。
-- **`hybrid` 模式**：同一轮生成一个 `anchor` 精确对拍用例和一个 `probe` 性质检查用例。
+- **`hybrid` 模式（默认）**：同一轮生成一个 `anchor` 精确对拍用例和一个 `probe` 性质检查用例。
 - **`off` 模式**：关闭 P7 外部中断/Timer 压测；仍可按 `co.test.p7.exceptionRate`/`exceptionTypes` 生成普通 P7 异常与指令对拍。
 - **内部异常覆盖**：默认覆盖课程要求的 AdEL、AdES、Syscall、RI、Ov。`exceptionRate` 只影响 anchor/random body；probe 内部异常覆盖由 `co.test.p7.exceptionTypes` 控制。
 - **外部中断**（`co.test.p7.interrupt`，默认开）：anchor 使用安全 PC 注入；probe 使用“软件 arm 标记 `0x27d0` + wait PC”双条件触发，避免内部异常 flush 后宏观 PC 不确定导致误拉高中断。
@@ -181,20 +181,29 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 ## 4. 配置项（按 Settings UI 分组）
 
 > 优先级：VS Code 用户/工作区设置 `co.*` → 默认值。工作区设置可写在 `.vscode/settings.json`。
-> 设置 UI 保留完整细项，但只分成四组：`项目基本情况`、`工具链`、`运行与测试`、`编辑器与诊断`。
+> 设置 UI 保留完整细项，并分成五组：`项目基本情况`、`工具链`、`运行与测试`、`编辑器与诊断`、`格式化`。
 
-### 项目基础 / 工具链
+### 项目基础
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto；auto 会推断具体 P 并保存，无法推断时要求选择） |
-| `co.toolchain.mars` | — | Mars jar（非 P7 对拍） |
-| `co.toolchain.marsP7` | — | P7 专用 Mars（需 efc/p7irq/coL1） |
-| `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
-| `co.toolchain.logisim` | — | Logisim jar |
 | `co.project.simTime` | `200us` | ISim 运行时长（写入 TCL `run <值>; exit`） |
 
-其余基础/工具链项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`、`co.course.tutorialRoot`。
+其余项目项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.course.tutorialRoot`。
+
+### 工具链
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `co.toolchain.mars` | — | Mars jar（非 P7 对拍） |
+| `co.toolchain.marsP7` | — | P7 专用 Mars（需 efc/p7irq/coL1） |
+| `co.mips.delayedBranching` | `profile` | MARS 延迟槽（profile：P5/P6/P7 自动追加 `db`） |
+| `co.mips.memoryConfiguration` | `auto` | MARS 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
+| `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
+| `co.toolchain.logisim` | — | Logisim jar |
+
+其余工具链项：`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`。
 
 ### 运行与测试
 
@@ -204,9 +213,9 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.test.builtinGenerator.instructionCount` | `4000` | P3–P6 主程序指令数 |
 | `co.test.builtinGenerator.p7InstructionCount` | `1118` | P7 主程序指令数（上限 1118，0x4180 之前） |
 | `co.test.builtinGenerator.instructions` | `""` | 自定义指令集（空=用当前 Profile 默认；默认集见“内置随机生成器”） |
-| `co.test.p7.stressMode` | `"anchor"` | P7 压测模式：`anchor` 精确对拍、`probe` 黑盒性质检查、`hybrid` 两者都跑、`off` 关闭中断/Timer 压测 |
+| `co.test.p7.stressMode` | `"hybrid"` | P7 压测模式：`anchor` 精确对拍、`probe` 黑盒性质检查、`hybrid` 两者都跑、`off` 关闭中断/Timer 压测 |
 | `co.test.p7.interrupt` | `true` | P7 是否生成外部中断场景；关掉后 anchor/probe 都不会注入外部中断 |
-| `co.test.p7.timerInterrupt` | `false` | probe/hybrid 的 probe 用例是否生成 Timer0/Timer1 中断场景 |
+| `co.test.p7.timerInterrupt` | `true` | probe/hybrid 的 probe 用例是否生成 Timer0/Timer1 中断场景 |
 | `co.test.p7.externalInterruptIntensity` | `0.25` | probe 外部中断场景随机补齐强度（0–1） |
 | `co.test.p7.timerIntensity` | `0.20` | probe Timer 场景随机补齐强度（0–1） |
 | `co.test.p7.probeScenarioCount` | `32` | 每个 probe ASM 的场景数，最大 64 |
@@ -217,29 +226,30 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
 | `co.test.continuousRetainedPassingCases` | `20` | 持续测试保留的最近通过 case 数；失败/异常 case 始终保留 |
 | `co.test.continuousReportRetainedIterations` | `200` | 持续测试 JSON 报告保留的最近轮数；失败/异常轮始终保留 |
-| `co.test.generatorArgs` | `[]` | 传给内置/外部生成器的额外参数（如种子、数量） |
+| `co.mips.extraArgs` | `[]` | 按列表追加 MARS/修改版 MARS 支持的参数，如 `sm`、`smc`、`np`、`ae1`、`se1`、`me`、`coERR`；`coL1`/`efc`/`p7irq`/`cl`/`db`/`mc` 通常由插件自动拼接 |
+| `co.test.generatorArgs` | `[]` | 按列表追加外部生成器支持的参数，如 `--seed` `1234`、`--count` `100`、`--profile` `P6`、输出路径参数；内置生成器用 `co.test.builtinGenerator.*` / `co.test.p7.*` 配置 |
 | `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
 | `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
 | `co.test.logisim.traceColumns` | `{}` | P3 Logisim Trace stdout 显式列映射，零基列号 |
 
 运行细项也在本组：`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.revealOutput`(`false`，运行外部工具时是否自动弹出「输出」面板；默认不弹，仅静默写入)、`co.run.timeoutMs`(`120000`)。
 
-### 编辑器与诊断
+`co.mips.extraArgs` 和 `co.test.generatorArgs` 都是 Settings UI 的列表项；每个命令行 token 单独添加一项，不需要写 shell 引号。
 
-MIPS / MARS 行为：
+### 编辑器与诊断
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `co.mips.memoryConfiguration` | `auto` | 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
-| `co.mips.delayedBranching` | `profile` | 延迟槽（profile：P5/P6/P7 启用） |
-| `co.mips.extraArgs` | `[]` | 追加 MARS 命令行参数 |
 | `co.mips.warnPseudoInstruction` | `true` | 使用伪指令时告警 |
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
 | `co.mips.instructionColorMode` | `realVsPseudo` | 指令着色方式 |
+| `co.semanticColors.preset` | `auto` | CO 自定义语义 token 配色预设 |
 
-同组还包含：`co.semanticColors.preset`、`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.verilog.format.*`（续行缩进、位宽间距等）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
+同组还包含：`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
 
-Verilog 格式化的纵向对齐细项在设置页中集中于 `co.verilog.format.alignment.*`：`parameter` 默认 `equals`，会对齐连续 `parameter` / `localparam` 声明中的等号；`modulePort` 默认 `name`，会对齐多行 `module` 声明中的位宽和端口名；`ternary` 默认 `question`，会对齐多行三目运算符链中的问号。
+### 格式化
+
+格式化组包含 `co.verilog.format.*`（续行缩进、位宽间距、声明范围间距、`else` 换行、最大连续空行等）。纵向对齐细项集中于 `co.verilog.format.alignment.*`：`parameter` 默认 `equals`，会对齐连续 `parameter` / `localparam` 声明中的等号；`modulePort` 默认 `name`，会对齐多行 `module` 声明中的位宽和端口名；`ternary` 默认 `question`，会对齐多行三目运算符链中的问号。
 
 ---
 
@@ -359,6 +369,6 @@ Mars 的 `coL1` 输出被本插件自动解析和对拍。`anchor` 精确对拍�
 |----------|-----------------|
 | Profile `P7` | `mc CompactLargeText efc` |
 | Profile `P4/P5/P6` | `mc FixedCompactLargeText` |
-| `mips.delayedBranching` = `on` / `profile:P5+` | `db` |
-| `test.p7.interrupt` = `true` 且 `stressMode=anchor` | `p7irq=<target_pc-4>` |
-| `mips.extraArgs` | 直接附加到命令行 |
+| `co.mips.delayedBranching` = `on` / `profile:P5+` | `db` |
+| `co.test.p7.interrupt` = `true` 且 `stressMode=anchor` | `p7irq=<target_pc-4>` |
+| `co.mips.extraArgs` | 按列表逐项附加到命令行 |
