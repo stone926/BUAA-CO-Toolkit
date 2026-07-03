@@ -26,7 +26,7 @@ interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string }>;
-    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; type?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { type?: string; enum?: unknown[] } }> }>;
+    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; markdownDescription?: string; type?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { type?: string; enum?: unknown[] } }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
@@ -239,10 +239,16 @@ describe('package manifest', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
-    const description = properties['co.test.builtinGenerator.instructions'].description ?? '';
+    const property = properties['co.test.builtinGenerator.instructions'];
+    const description = property.description ?? '';
+    const markdownDescription = property.markdownDescription ?? '';
 
+    expect(description).toBe('自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。');
+    expect(description).not.toContain('P6=');
+    expect(markdownDescription).toContain('默认指令集');
     for (const [profile, mnemonics] of Object.entries(generatorInstructionCatalog.profiles)) {
-      expect(description).toContain(`${profile}=${mnemonics.join(', ')}`);
+      expect(markdownDescription).toContain(`**${profile}**`);
+      expect(markdownDescription).toContain(`\`${mnemonics.join(', ')}\``);
     }
   });
 

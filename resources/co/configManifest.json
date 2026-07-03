@@ -132,7 +132,7 @@
       },
       "co.test.builtinGenerator.instructions": {
         "type": "string",
-        "description": "内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 Profile 默认值：P3=add, sub, ori, lw, sw, beq, lui, nop；P4=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P5=add, sub, ori, lw, sw, beq, lui, jal, jr, nop；P6=add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr；P7=nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall"
+        "description": "自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。"
       },
       "co.test.builtinGenerator.instructionCount": {
         "type": "number",

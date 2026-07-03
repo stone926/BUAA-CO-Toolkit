@@ -93,13 +93,26 @@ function exceptionTypeLabels(exceptionCodes) {
     .filter(Boolean);
 }
 
-function generatorInstructionDescription(generatorProfiles) {
+function generatorInstructionDescription() {
+  return '自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。';
+}
+
+function generatorInstructionMarkdownDescription(generatorProfiles) {
   const profiles = generatorProfiles.profiles;
   const defaultProfiles = Object.keys(profiles)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    .map((profile) => `${profile}=${profiles[profile].join(', ')}`)
-    .join('；');
-  return `内置 ASM 生成器的指令集。用逗号或任意数量空白分隔。仅接受真实指令。为空时使用当前 Profile 默认值（由 resources/mips/generatorProfiles.json 生成）：${defaultProfiles}`;
+    .map((profile) => `- **${profile}**: \`${profiles[profile].join(', ')}\``)
+    .join('\n');
+  return [
+    '自定义内置 ASM 生成器使用的指令集。',
+    '',
+    '- 用逗号或任意数量空白分隔。',
+    '- 只接受真实指令，不接受伪指令。',
+    '- 留空时使用当前 Profile 的默认指令集。',
+    '',
+    '默认指令集（由 `resources/mips/generatorProfiles.json` 生成）：',
+    defaultProfiles
+  ].join('\n');
 }
 
 function deriveConfigDefaults(baseDefaults, resources) {
@@ -154,8 +167,9 @@ function applyGeneratedSchema(groups, defaults, resources) {
     `P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口由 resources/co/p7Hardware.json 派生为 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
   properties['co.mips.memoryConfiguration'].description =
     `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口由 resources/co/p7Hardware.json 派生为 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
-  properties['co.test.builtinGenerator.instructions'].description =
-    generatorInstructionDescription(generatorProfiles);
+  properties['co.test.builtinGenerator.instructions'].description = generatorInstructionDescription();
+  properties['co.test.builtinGenerator.instructions'].markdownDescription =
+    generatorInstructionMarkdownDescription(generatorProfiles);
 
   const probeScenario = properties['co.test.p7.probeScenarioCount'];
   probeScenario.minimum = 1;
