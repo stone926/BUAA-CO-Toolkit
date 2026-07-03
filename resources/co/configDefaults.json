@@ -41,7 +41,7 @@
   ],
   "test.p7.externalInterruptIntensity": 0.25,
   "test.p7.interrupt": true,
-  "test.p7.probeScenarioCount": 32,
+  "test.p7.probeScenarioCount": 64,
   "test.p7.stressMode": "hybrid",
   "test.p7.timerIntensity": 0.2,
   "test.p7.timerInterrupt": true,

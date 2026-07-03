@@ -1250,7 +1250,7 @@
                 "vc-021"
               ]
             },
-            "description": "需要禁用的 Verilog Lint。可配置规则列表由 resources/verilog/lintRules.json 生成；格式化会处理间距和缩进",
+            "description": "需要禁用的 Verilog Lint。格式化会处理间距和缩进",
             "default": [
               "vc-001",
               "vc-003",

@@ -184,7 +184,7 @@ function applyGeneratedSchema(groups, defaults, resources) {
     .map((rule) => rule.id);
   properties['co.verilog.lint.disabledRules'].items.enum = configurableLintIds;
   properties['co.verilog.lint.disabledRules'].description =
-    '需要禁用的 Verilog Lint。可配置规则列表由 resources/verilog/lintRules.json 生成；格式化会处理间距和缩进';
+    '需要禁用的 Verilog Lint。格式化会处理间距和缩进';
 
   return generated;
 }
