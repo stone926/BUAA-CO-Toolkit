@@ -7,6 +7,8 @@ import { buildIseEnvironment, findFuse, isimExecutableName } from '../../iseComm
 import { buildIseProjectText } from '../../verilogSimulationFiles';
 import { isFile, yieldEventLoop } from '../../nodeFs';
 import { runProcessCore } from '../../processCore';
+import type { CoSettings } from '../common/settings';
+import { filterIseDiagnosticsByUri } from './iseDiagnosticFilters';
 
 export interface IseSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -15,6 +17,7 @@ export interface IseSyntaxCheckOptions {
   topModule: string;
   fallbackTopModule?: string;
   timeoutMs: number;
+  settings: CoSettings;
 }
 
 export interface IseSyntaxCheckResult {
@@ -60,9 +63,9 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
     env: buildIseEnvironment(isePath),
     timeoutMs: options.timeoutMs > 0 ? options.timeoutMs : defaultTimeoutMs
   });
-  const diagnosticsByUri = parseFuseDiagnostics(`${run.stdout}\n${run.stderr}`, root, options.triggerUri);
-  if (!run.ok && diagnosticsByUri.size === 0) {
-    addDiagnostic(diagnosticsByUri, options.triggerUri, {
+  const rawDiagnosticsByUri = parseFuseDiagnostics(`${run.stdout}\n${run.stderr}`, root, options.triggerUri);
+  if (!run.ok && rawDiagnosticsByUri.size === 0) {
+    addDiagnostic(rawDiagnosticsByUri, options.triggerUri, {
       range: Range.create(0, 0, 0, 1),
       severity: DiagnosticSeverity.Error,
       source: 'ISE fuse',
@@ -70,6 +73,7 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
       message: firstNonEmptyLine(run.stderr || run.stdout) || (run.timedOut ? 'ISE syntax check timed out.' : 'ISE syntax check failed.')
     });
   }
+  const diagnosticsByUri = filterIseDiagnosticsByUri(rawDiagnosticsByUri, options.settings);
   return {
     ok: run.ok,
     diagnosticsByUri,

@@ -37,7 +37,8 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
         ise: {
           enabled: config<boolean>('verilog.syntax.ise.enabled', defaultCoSettings.verilog.syntax.ise.enabled, uri),
           mode: config<CoSettings['verilog']['syntax']['ise']['mode']>('verilog.syntax.ise.mode', defaultCoSettings.verilog.syntax.ise.mode, uri),
-          timeoutMs: config<number>('verilog.syntax.ise.timeoutMs', defaultCoSettings.verilog.syntax.ise.timeoutMs, uri)
+          timeoutMs: config<number>('verilog.syntax.ise.timeoutMs', defaultCoSettings.verilog.syntax.ise.timeoutMs, uri),
+          suppressedWarnings: config<string[]>('verilog.syntax.ise.suppressedWarnings', defaultCoSettings.verilog.syntax.ise.suppressedWarnings, uri)
         }
       },
       implicitNet: {

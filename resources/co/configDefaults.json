@@ -78,5 +78,8 @@
   "verilog.lint.synthesizableHints": true,
   "verilog.syntax.ise.enabled": true,
   "verilog.syntax.ise.mode": "onSave",
+  "verilog.syntax.ise.suppressedWarnings": [
+    "ise-unconnected-port"
+  ],
   "verilog.syntax.ise.timeoutMs": 0
 }

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "ise-unconnected-port",
+    "severity": "warning",
+    "messagePattern": "\\bPort\\s+\\S+\\s+is not connected to this instance\\b",
+    "defaultEnabled": true,
+    "reason": "ISE reports intentionally empty Verilog instance port connections as warnings, but course designs often leave unused outputs unconnected on purpose."
+  }
+]

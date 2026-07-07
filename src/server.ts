@@ -565,7 +565,8 @@ async function runVerilogIseSyntaxCheck(uri: string, settings: CoSettings, manua
     isePath: settings.toolchain.isePath,
     topModule,
     fallbackTopModule: fallbackTop,
-    timeoutMs: ise.timeoutMs > 0 ? ise.timeoutMs : settings.run.timeoutMs
+    timeoutMs: ise.timeoutMs > 0 ? ise.timeoutMs : settings.run.timeoutMs,
+    settings
   });
   if (runId !== state.verilogIseRunSequence) {
     return;

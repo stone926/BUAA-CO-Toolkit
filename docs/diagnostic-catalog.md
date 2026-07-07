@@ -128,7 +128,7 @@
 | `tb-readmemh` | 信息 | 测试台 Lint | `src/language/verilog/lintDiagnostics.ts` | testbench 未用 `$readmemh("code.txt", im)` |
 | `synth-*` | 信息 | 可综合性提示 | `src/language/verilog/lintDiagnostics.ts` | `initial`、声明初始化、乘除取模 |
 | `vc-001-*` 等 VC 子码 | 可配置 | 课程 Lint | `src/language/verilog/lintDiagnostics.ts`, `src/language/verilog/dataflowDiagnostics.ts` | 课程风格、组合/时序逻辑规则；基础规则见下表 |
-| `ise-syntax` | 错误/警告/信息 | 外部 ISE | `src/language/verilog/iseSyntaxCheck.ts` | ISE fuse 输出的语法诊断 |
+| `ise-syntax` | 错误/警告/信息 | 外部 ISE | `src/language/verilog/iseSyntaxCheck.ts`, `src/language/verilog/iseDiagnosticFilters.ts` | ISE fuse 输出的语法诊断；默认过滤未连接端口类 warning |
 
 ### Verilog 课程 Lint 规则目录
 

@@ -1,4 +1,4 @@
-# verilog-diagnostics | src/language/verilog/ | 10 files | parent: verilog-lsp.md
+# verilog-diagnostics | src/language/verilog/ | 11 files | parent: verilog-lsp.md
 
 多类型诊断系统: 语法错误/课程Lint(VC-001~022)/数据流宽度/实例连接/usage/赋值分析/跨文件/ISE
 
@@ -33,5 +33,6 @@ workspace:
 
 ise:
   iseSyntaxCheck.ts — ISE fuse集成: 调用fuse语法检查, 解析错误输出为Diagnostic[], 支持off/onSave/commandOnly
+  iseDiagnosticFilters.ts — ISE fuse warning降噪: 从资源加载过滤规则, 按设置过滤 ise-syntax 噪声
 
 迁移: 多数规则基于AST/model, token回退仅限语法错误边界. ARCHITECTURE_REVIEW.md

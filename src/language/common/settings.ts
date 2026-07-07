@@ -36,6 +36,7 @@ export interface CoSettings {
         enabled: boolean;
         mode: 'off' | 'onSave' | 'commandOnly';
         timeoutMs: number;
+        suppressedWarnings: string[];
       };
     };
     implicitNet: {
@@ -89,7 +90,8 @@ export const defaultCoSettings: CoSettings = {
       ise: {
         enabled: configDefault<boolean>('verilog.syntax.ise.enabled'),
         mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.ise.mode'),
-        timeoutMs: configDefault<number>('verilog.syntax.ise.timeoutMs')
+        timeoutMs: configDefault<number>('verilog.syntax.ise.timeoutMs'),
+        suppressedWarnings: configDefaultArray('verilog.syntax.ise.suppressedWarnings')
       }
     },
     implicitNet: {
@@ -172,9 +174,20 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
     ise: {
       enabled: typeof iseCandidate.enabled === 'boolean' ? iseCandidate.enabled : defaultCoSettings.verilog.syntax.ise.enabled,
       mode,
-      timeoutMs: normalizeInteger(iseCandidate.timeoutMs, defaultCoSettings.verilog.syntax.ise.timeoutMs, 0, 600000)
+      timeoutMs: normalizeInteger(iseCandidate.timeoutMs, defaultCoSettings.verilog.syntax.ise.timeoutMs, 0, 600000),
+      suppressedWarnings: normalizeStringArray(iseCandidate.suppressedWarnings, defaultCoSettings.verilog.syntax.ise.suppressedWarnings)
     }
   };
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+  return [...new Set(value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean))].sort();
 }
 
 export function isVerilogLintRuleEnabled(settings: CoSettings, rule: string): boolean {

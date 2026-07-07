@@ -1205,6 +1205,19 @@
             "description": "ISE 语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs",
             "default": 0
           },
+          "co.verilog.syntax.ise.suppressedWarnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ise-unconnected-port"
+              ]
+            },
+            "description": "默认抑制的 ISE fuse 噪声 warning。设为空数组可查看完整 ISE warning",
+            "default": [
+              "ise-unconnected-port"
+            ]
+          },
           "co.verilog.implicitNet.ignorePatterns": {
             "type": "array",
             "items": {
