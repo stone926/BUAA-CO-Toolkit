@@ -70,6 +70,15 @@
     ],
     "description": "Named Verilog module instance"
   },
+  "Begin block": {
+    "prefix": "begin",
+    "body": [
+      "begin",
+      "    ${0}",
+      "end"
+    ],
+    "description": "Verilog begin/end block"
+  },
   "Generate for": {
     "prefix": "generate_for",
     "body": [

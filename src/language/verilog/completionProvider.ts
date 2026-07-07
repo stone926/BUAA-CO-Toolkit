@@ -168,6 +168,10 @@ export function getVerilogCompletions(
 
   const contextKeywords = keywordsForContext(parsed.modules, position);
   for (const keyword of contextKeywords) {
+    if (keyword === 'begin') {
+      items.push(snippetItem('begin', 'begin\n    ${0}\nend', 'Begin/end block'));
+      continue;
+    }
     items.push({
       label: keyword,
       kind: CompletionItemKind.Keyword
