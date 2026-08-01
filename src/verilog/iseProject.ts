@@ -11,6 +11,10 @@ import {
   verilogProjectExcludeGlob
 } from '../verilogSimulationFiles';
 import { dedupeUris, normalizePathKey } from '../pathUtils';
+import {
+  orderIseProjectFiles,
+  parseXiseVerilogFileOrder
+} from './iseProjectOrder';
 
 export interface IseProjectFiles {
   prj: vscode.Uri;
@@ -75,13 +79,23 @@ export async function resolveIseProjectFiles(
   extraVerilogFiles: readonly vscode.Uri[] | undefined
 ): Promise<vscode.Uri[]> {
   const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), verilogProjectExcludeGlob, 5000);
-  return dedupeUris([...files, ...(extraVerilogFiles ?? [])]);
+  const xiseFiles = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.xise'), verilogProjectExcludeGlob, 2);
+  let xiseFileOrder: string[] = [];
+  if (xiseFiles.length === 1) {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(xiseFiles[0]);
+      xiseFileOrder = parseXiseVerilogFileOrder(Buffer.from(bytes).toString('utf8'), xiseFiles[0].fsPath);
+    } catch {
+      // An unreadable project file must not make ISim unavailable. Stable path
+      // ordering below is the deterministic fallback used without a unique XISE.
+    }
+  }
+  return orderIseProjectFiles(files, xiseFileOrder, dedupeUris(extraVerilogFiles ?? []));
 }
 
 export async function verilogProjectSignature(files: readonly vscode.Uri[], contentSignatures = new Map<string, string>()): Promise<string> {
   const entries: string[] = [];
-  const sorted = [...files].sort((left, right) => normalizePathKey(left.fsPath).localeCompare(normalizePathKey(right.fsPath)));
-  for (const uri of sorted) {
+  for (const uri of files) {
     const key = normalizePathKey(uri.fsPath);
     const contentSignature = contentSignatures.get(key);
     if (contentSignature) {

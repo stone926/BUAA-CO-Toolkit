@@ -21,20 +21,22 @@ describe('verilog simulation file helpers', () => {
 
   it('marks generated runtime testbenches', () => {
     const text = generatedRuntimeTestbenchText('module mips_tb; endmodule\n');
-    expect(text).toContain(generatedTestbenchMarker);
+    expect(text.startsWith(`${generatedTestbenchMarker}\n\`default_nettype wire\n`)).toBe(true);
     expect(isGeneratedRuntimeTestbench(text)).toBe(true);
     expect(isGeneratedRuntimeTestbench('module user_tb; endmodule\n')).toBe(false);
   });
 
-  it('builds deterministic ISE project files from explicit source lists', () => {
+  it('preserves explicit source order in ISE project files', () => {
     expect(verilogProjectExcludeGlob).toContain('.co');
+    expect(verilogProjectExcludeGlob).toContain('.vscode');
+    expect(verilogProjectExcludeGlob).toContain('.vscode-test');
     const prj = buildIseProjectText([
       'E:\\work\\src\\mips.v',
       'E:\\work\\.co\\isim\\co_generated_mips_tb.v'
     ]);
     expect(prj).toBe([
-      'Verilog work "E:/work/.co/isim/co_generated_mips_tb.v"',
       'Verilog work "E:/work/src/mips.v"',
+      'Verilog work "E:/work/.co/isim/co_generated_mips_tb.v"',
       ''
     ].join('\n'));
   });

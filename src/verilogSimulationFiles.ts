@@ -2,14 +2,14 @@ import { renderResourceTemplate } from './templates/templateRegistry';
 
 export const generatedTestbenchMarker = '// CO_GENERATED_RUNTIME_TESTBENCH';
 export const p7AutoRuntimeTestbenchName = 'co_generated_p7_auto_tb';
-export const verilogProjectExcludeGlob = '**/{node_modules,out,.git,.co}/**';
+export const verilogProjectExcludeGlob = '**/{node_modules,out,.git,.co,.vscode,.vscode-test}/**';
 
 export function runtimeTestbenchFileName(testbenchName: string): string {
   return `co_generated_${safeFileStem(testbenchName)}.v`;
 }
 
 export function generatedRuntimeTestbenchText(testbenchText: string): string {
-  return `${generatedTestbenchMarker}\n${testbenchText}`;
+  return `${generatedTestbenchMarker}\n\`default_nettype wire\n${testbenchText}`;
 }
 
 export function isGeneratedRuntimeTestbench(text: string): boolean {
@@ -19,7 +19,6 @@ export function isGeneratedRuntimeTestbench(text: string): boolean {
 export function buildIseProjectText(verilogFiles: readonly string[]): string {
   const projectEntries = verilogFiles
     .map((file) => `Verilog work "${file.replace(/\\/g, '/')}"`)
-    .sort()
     .join('\n');
   return renderResourceTemplate('isim/project.prj', { projectEntries });
 }

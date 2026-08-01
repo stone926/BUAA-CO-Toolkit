@@ -38,14 +38,15 @@ mips-commands:
 verilog-commands:
   verilog.ts — Verilog 命令入口: generateTestbench、generateIseProject、runIsim/compileIsim wrapper、lint禁用和 registerVerilog()注册7个命令
   verilog/documentContext.ts — VS Code 文档到 Verilog LSP TextDocument/CoSettings 的适配
-  verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集、项目签名
+  verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集（排除 `.co`、`.vscode`、`.vscode-test` 等非 DUT 目录）、顺序敏感的项目签名；工作区唯一 `.xise` 存在时按 FILE_VERILOG 的 BehavioralSimulation seqID 编译，未列入的普通 `.v` 稳定排序后前置，运行时生成源固定置尾；无唯一/可读 XISE 时确定性排序
+  verilog/iseProjectOrder.ts — 纯函数解析 XISE FILE_VERILOG 路径和 BehavioralSimulation seqID（全部有效且唯一时升序，否则稳定回退文档顺序），并组合普通/XISE/运行时源顺序，处理相对路径、XML 实体、去重和跨平台路径
   verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘
   verilog/simulationInputs.ts — ISim 运行前机器码源定位与复制
-  verilog/testbenchResolver.ts — ISim testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录
+  verilog/testbenchResolver.ts — ISim testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录；发现顶层/testbench 时复用 ISE 源文件排除规则，不把 `.vscode`/`.vscode-test` 内编辑器副本误判为重复模块
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
   verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper
-  verilogSimulationFiles.ts — ISE项目文本/ISim TCL(从resources/templates/isim渲染)/运行时testbench(含P7 auto/probe), isGeneratedRuntimeTestbench
+  verilogSimulationFiles.ts — 按调用方顺序渲染 ISE 项目文本/ISim TCL(从resources/templates/isim渲染)；运行时 testbench(含P7 auto/probe)开头恢复 `` `default_nettype wire ``，避免前一编译单元泄漏；isGeneratedRuntimeTestbench
   verilogWaveform.ts — openIsimWaveform(ISim GUI+wave add -r /), exportVcdWaveform(TCL批处理VCD)
 
 logisim-commands:

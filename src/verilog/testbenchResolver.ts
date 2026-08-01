@@ -29,7 +29,8 @@ import {
   generatedRuntimeTestbenchText,
   isGeneratedRuntimeTestbench,
   p7AutoRuntimeTestbenchName,
-  runtimeTestbenchFileName
+  runtimeTestbenchFileName,
+  verilogProjectExcludeGlob
 } from '../verilogSimulationFiles';
 import {
   normalizePathKey,
@@ -349,7 +350,7 @@ async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: stri
   const candidates = await findWorkspaceFileCandidates({
     folder,
     include: '**/*.v',
-    exclude: '**/{node_modules,out,.git,.co}/**',
+    exclude: verilogProjectExcludeGlob,
     maxResults: 5000
   });
   for (const { uri } of candidates) {
@@ -474,7 +475,7 @@ async function findTopModuleDefinition(
   const candidates = await findWorkspaceFileCandidates({
     folder,
     include: '**/*.v',
-    exclude: '**/{node_modules,out,.git,.co}/**',
+    exclude: verilogProjectExcludeGlob,
     maxResults: 5000,
     predicate: (uri) => resource?.toString() !== uri.toString()
   });
