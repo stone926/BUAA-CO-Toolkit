@@ -21,6 +21,9 @@ export interface GeneratorInvocation {
 export interface AsmSnapshotEntry {
   file: string;
   mtimeMs: number;
+  /** File-system change time catches rewrites whose generator preserves mtime. */
+  ctimeMs?: number;
+  size?: number;
 }
 
 const snapshotStatBatchSize = 32;
@@ -97,11 +100,11 @@ export function changedAsmFiles(
   after: readonly AsmSnapshotEntry[],
   limit = 100
 ): string[] {
-  const beforeMap = new Map(before.map((entry) => [snapshotKey(entry.file), entry.mtimeMs]));
+  const beforeMap = new Map(before.map((entry) => [snapshotKey(entry.file), entry]));
   return after
     .filter((entry) => {
-      const previousMtime = beforeMap.get(snapshotKey(entry.file));
-      return previousMtime === undefined || entry.mtimeMs > previousMtime + 1;
+      const previous = beforeMap.get(snapshotKey(entry.file));
+      return previous === undefined || snapshotEntryChanged(previous, entry);
     })
     .sort((left, right) => right.mtimeMs - left.mtimeMs || left.file.localeCompare(right.file))
     .slice(0, limit)
@@ -166,12 +169,24 @@ async function statAsmFile(file: string): Promise<AsmSnapshotEntry | undefined> 
     const stat = await fs.promises.stat(file);
     return {
       file,
-      mtimeMs: stat.mtimeMs
+      mtimeMs: stat.mtimeMs,
+      ctimeMs: stat.ctimeMs,
+      size: stat.size
     };
   } catch {
     // Ignore files that disappear while the generator is running.
     return undefined;
   }
+}
+
+function snapshotEntryChanged(before: AsmSnapshotEntry, after: AsmSnapshotEntry): boolean {
+  if (Math.abs(after.mtimeMs - before.mtimeMs) > 1) {
+    return true;
+  }
+  if (before.size !== undefined && after.size !== undefined && before.size !== after.size) {
+    return true;
+  }
+  return before.ctimeMs !== undefined && after.ctimeMs !== undefined && after.ctimeMs !== before.ctimeMs;
 }
 
 function snapshotKey(file: string): string {

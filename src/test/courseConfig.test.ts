@@ -6,6 +6,7 @@ import {
   getProfileDirectories,
   getProfileInferenceConfig,
   getProfileRequiredTools,
+  getVerilogTestbenchConfig,
   getVerilogPorts,
   profilesWithCapability
 } from '../courseConfig';
@@ -63,6 +64,13 @@ describe('course config alignment', () => {
       'memdata'
     ]);
     expect(profile?.columns.regaddr.width).toBe(5);
+  });
+
+  it('keeps tutorial IM and DM capacities distinct', () => {
+    expect(getVerilogTestbenchConfig()).toEqual({
+      externalInstructionMemoryWords: 4096,
+      externalDataMemoryWords: 3072
+    });
   });
 
   it('exposes profile inference hints as course data', () => {

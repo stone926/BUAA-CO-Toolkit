@@ -6,7 +6,7 @@ import {
   MipsInstruction
 } from '../../language/mips/resources';
 import { P7ProbeMetadata, P7ProbeOptions, P7StressMode } from './types';
-import { CpuState } from '../cpuState';
+import { CpuState, courseDataByteLength } from '../cpuState';
 import {
   p7UserTextBaseAddress,
   p7ExceptionHandlerAddress,
@@ -47,7 +47,8 @@ import {
   clo32,
   formatImmediate,
   formatUnsignedImmediate,
-  alignDown
+  alignDown,
+  courseAsmHaltLoop
 } from '../mipsUtil';
 import { Random, hashSeed } from '../random';
 
@@ -56,6 +57,7 @@ export type P7ExceptionKind = 'adel' | 'ades' | 'syscall' | 'ri' | 'ov';
 export interface BuiltinAsmGeneratorOptions extends P7ProbeOptions {
   profile: ProjectProfile;
   instructionText: string;
+  /** Randomized main-program payload count; the required two-instruction halt tail is additional. */
   instructionCount: number;
   seed?: string;
   generatedAt?: Date;
@@ -78,7 +80,9 @@ export interface BuiltinAsmGeneratorResult {
   seed: string;
   profile: CpuProfile;
   instructionSet: string[];
+  /** Random mode: counted main payload, excluding the halt scaffold. Probe mode reports its full main count. */
   instructionCount: number;
+  /** Random mode: mnemonics emitted into the counted main payload; uncounted scaffolding adds none. */
   usedInstructions: string[];
   mode?: P7StressMode;
   probe?: P7ProbeMetadata;
@@ -95,13 +99,15 @@ const generalRegisters = [
 const writableRegisters = [...generalRegisters, '$25'];
 const readRegisters = ['$0', ...writableRegisters];
 
-const dataByteLength = 1024;
-const dataWordCount = dataByteLength / 4;
 const textBaseAddress = p7UserTextBaseAddress;
 const p7PrologueInstructionCount = 2;
 const poisonRegister = '$26';
-// The unified P7 handler (interrupt + exception) needs these CP0 instructions in the set.
+// Handler helpers come from the required P7 profile. These CP0-only instructions are the pieces a
+// custom body selection can otherwise omit while still requesting exception handling.
 const p7HandlerRequiredMnemonics = ['mfc0', 'mtc0', 'eret'] as const;
+const registerTrapMnemonics = new Set(['teq', 'tne', 'tge', 'tgeu', 'tlt', 'tltu']);
+const immediateTrapMnemonics = new Set(['teqi', 'tnei', 'tgei', 'tgeiu', 'tlti', 'tltiu']);
+const trapMnemonics = new Set([...registerTrapMnemonics, ...immediateTrapMnemonics]);
 // SR value the prologue installs: IE=1 (bit0) + external interrupt mask IM[2]=1 (bit12).
 // Uses IE + IM[2] only, not the full course mask (0x1c01).
 const p7StatusEnableInterrupts = p7StatusEnableExternalInterrupt;
@@ -123,6 +129,7 @@ const p7InterruptAnchorMnemonics = [
 const p7ScratchRegisterA = '$24';
 const p7ScratchRegisterB = '$23';
 const p7InterruptAnchorRegister = '$25';
+type MemoryOperandCoverage = 'zero-offset' | 'positive-offset' | 'negative-offset' | 'negative-base';
 
 export function normalizeP7ExceptionTypes(values: readonly string[] | undefined): P7ExceptionKind[] {
   if (!values) {
@@ -267,7 +274,12 @@ function validateBuiltinGeneratorRequest(
   }
   const syscallEnabled = options.exceptionTypes.includes('syscall');
   const handlerEnabled = isP7
-    && (options.interrupt || (options.exceptionRate > 0 && options.exceptionTypes.length > 0) || (allowed.has('syscall') && syscallEnabled));
+    && (
+      options.interrupt ||
+      (options.exceptionRate > 0 && options.exceptionTypes.length > 0) ||
+      (allowed.has('syscall') && syscallEnabled) ||
+      Array.from(trapMnemonics).some((mnemonic) => allowed.has(mnemonic))
+    );
   if (handlerEnabled && count < p7PrologueInstructionCount) {
     throw new BuiltinAsmGeneratorError(`Built-in ASM generator P7 exception handler prologue requires at least ${p7PrologueInstructionCount} instruction slots.`);
   }
@@ -314,6 +326,12 @@ class ProgramGenerator {
   private labelIndex = 0;
   private emittedCount = 0;
   private nextMduProbeMode: MduReadProbeMode = 'busy';
+  private readonly nextBranchOutcome = new Map<string, boolean>();
+  private readonly nextConditionalMoveOutcome = new Map<string, boolean>();
+  private readonly nextTrapOutcome = new Map<string, boolean>();
+  private readonly pendingMemoryCoverage: MemoryOperandCoverage[] = [
+    'zero-offset', 'positive-offset', 'negative-offset', 'negative-base'
+  ];
 
   constructor(
     profile: CpuProfile,
@@ -332,7 +350,12 @@ class ProgramGenerator {
     this.exceptionRate = profile === 'P7' ? options.exceptionRate : 0;
     this.exceptionTypes = profile === 'P7' ? [...(options.exceptionTypes ?? p7ExceptionCoverageOrder)] : [];
     this.p7HandlerEnabled = profile === 'P7'
-      && (this.interruptEnabled || (this.exceptionRate > 0 && this.exceptionTypes.length > 0) || this.syscallEnabled());
+      && (
+        this.interruptEnabled ||
+        (this.exceptionRate > 0 && this.exceptionTypes.length > 0) ||
+        this.syscallEnabled() ||
+        Array.from(trapMnemonics).some((mnemonic) => this.allowed.has(mnemonic))
+      );
     this.rng = new Random(hashSeed(`${profile}:${targetCount}:${seed}:${options.interrupt ? 'i' : ''}:${this.exceptionRate}`));
     this.nextMduProbeMode = this.rng.chance(0.5) ? 'busy' : 'ready';
     this.pendingExceptionCoverage = this.buildExceptionCoverageQueue();
@@ -345,6 +368,8 @@ class ProgramGenerator {
     if (this.interruptEnabled) {
       this.emitInterruptAnchor();
     }
+    this.emitMemoryCoverageSeed();
+    this.emitControlTargetCoverage();
 
     const coverageQueue = this.shuffle(Array.from(this.allowed));
     let guard = this.targetCount * 30 + 200;
@@ -395,15 +420,17 @@ class ProgramGenerator {
       `# seed: ${this.seed}`,
       `# generated: ${this.generatedAt.toISOString()}`,
       `# instruction_count: ${this.targetCount}`,
+      '# instruction_count_scope: payload (halt tail excluded)',
       `# instruction_set: ${instructionSet}`,
       '.data',
       '.align 2',
       '_co_data:',
-      `    .space ${dataByteLength}`,
+      `    .space ${courseDataByteLength}`,
       '.text',
       '.globl main',
       'main:',
       ...this.lines,
+      ...courseAsmHaltLoop(),
       ...this.renderP7ExceptionHandler(),
       ''
     ].join('\n');
@@ -438,6 +465,75 @@ class ProgramGenerator {
     this.emitStaticInstruction('ori', `ori $k0, $0, 0x${p7StatusEnableInterrupts.toString(16)}`);
     this.emitStaticInstruction('mtc0', `mtc0 $k0, $12`);
     this.state.cp0_sr = p7StatusEnableInterrupts;
+  }
+
+  private emitMemoryCoverageSeed(): void {
+    if (![...loadMnemonics, ...storeMnemonics].some((mnemonic) => this.allowed.has(mnemonic))) {
+      return;
+    }
+    // A small negative base is required to exercise the tutorial's negative-base addressing
+    // class while keeping the final effective address inside DM. Seed it deterministically when
+    // the configured real instruction set can express -1, and leave at least one slot for memory.
+    if (this.allowed.has('addiu') && this.remaining() >= 2) {
+      this.emit('addiu', `addiu ${p7ScratchRegisterA}, $0, -1`);
+      this.state.setRegister(p7ScratchRegisterA, -1);
+      return;
+    }
+    if (this.allowed.has('addi') && this.remaining() >= 2) {
+      this.emit('addi', `addi ${p7ScratchRegisterA}, $0, -1`);
+      this.state.setRegister(p7ScratchRegisterA, -1);
+      return;
+    }
+    if (this.allowed.has('lui') && this.allowed.has('ori') && this.remaining() >= 3) {
+      this.emit('lui', `lui ${p7ScratchRegisterA}, 0xffff`);
+      this.state.setRegister(p7ScratchRegisterA, 0xffff0000);
+      this.emit('ori', `ori ${p7ScratchRegisterA}, ${p7ScratchRegisterA}, 0xffff`);
+      this.state.setRegister(p7ScratchRegisterA, -1);
+    }
+  }
+
+  private emitControlTargetCoverage(): void {
+    const required = ['ori', 'sub', 'beq', 'nop'];
+    if (!required.every((mnemonic) => this.allowed.has(mnemonic))) {
+      return;
+    }
+    const instructionCost = this.usesDelaySlot() ? 9 : 6;
+    if (this.remaining() < instructionCost) {
+      return;
+    }
+
+    const counter = '$21';
+    const step = '$22';
+    const selfLabel = this.nextLabel('self');
+    const backwardLabel = this.nextLabel('backward');
+    const doneLabel = this.nextLabel('backward_done');
+
+    this.emitStaticInstruction('ori', `ori ${step}, $0, 1`);
+    this.emitStaticInstruction('ori', `ori ${counter}, $0, 2`);
+    this.addLabel(selfLabel);
+    // A self target that is deliberately not taken catches both immediate/PC errors and an
+    // incorrectly taken condition without creating a loop on a correct CPU.
+    this.emitStaticInstruction('beq', `beq $0, ${step}, ${selfLabel}`);
+    if (this.usesDelaySlot()) {
+      this.emitStaticInstruction('nop', 'nop');
+    }
+
+    // Two bounded dynamic iterations exercise a genuinely taken negative branch offset. The
+    // first exit check falls through, the backward branch is taken, and the second exit check
+    // reaches done. NOP slots keep the final software-model state deterministic.
+    this.addLabel(backwardLabel);
+    this.emitStaticInstruction('sub', `sub ${counter}, ${counter}, ${step}`);
+    this.emitStaticInstruction('beq', `beq ${counter}, $0, ${doneLabel}`);
+    if (this.usesDelaySlot()) {
+      this.emitStaticInstruction('nop', 'nop');
+    }
+    this.emitStaticInstruction('beq', `beq $0, $0, ${backwardLabel}`);
+    if (this.usesDelaySlot()) {
+      this.emitStaticInstruction('nop', 'nop');
+    }
+    this.addLabel(doneLabel);
+    this.state.setRegister(step, 1);
+    this.state.setRegister(counter, 0);
   }
 
   private emitModeledLui(register: string, imm: number): void {
@@ -869,14 +965,28 @@ class ProgramGenerator {
   }
 
   private canEmitSingle(mnemonic: string): boolean {
-    if (this.state.mduProtectedSlots > 0 && hiLoWriteMnemonics.has(mnemonic)) {
+    if (this.state.mduProtectedSlots > 0 && (hiLoWriteMnemonics.has(mnemonic) || mnemonic === 'mul')) {
+      return false;
+    }
+    if (mnemonic === 'mfhi' && !this.state.hiInitialized) {
+      return false;
+    }
+    if (mnemonic === 'mflo' && !this.state.loInitialized) {
+      return false;
+    }
+    if (
+      (mnemonic === 'madd' || mnemonic === 'maddu' || mnemonic === 'msub' || mnemonic === 'msubu') &&
+      (!this.state.hiInitialized || !this.state.loInitialized)
+    ) {
       return false;
     }
     if (divideMnemonics.has(mnemonic)) {
       return this.nonZeroRegisters(mnemonic === 'div').length > 0;
     }
-    if (mnemonic === 'teq' || mnemonic === 'tge' || mnemonic === 'tgeu' || mnemonic === 'tlt' || mnemonic === 'tltu') {
-      return this.falseTrapRegisterOperands(mnemonic) !== undefined;
+    if (registerTrapMnemonics.has(mnemonic)) {
+      const mayRaise = this.profile === 'P7' && this.p7HandlerEnabled;
+      return this.trapRegisterOperands(mnemonic, false) !== undefined ||
+        (mayRaise && this.trapRegisterOperands(mnemonic, true) !== undefined);
     }
     if (mnemonic === 'mfc0') {
       // Body only reads Status ($12); EPC/Cause reads are left to the fixed handler.
@@ -1040,10 +1150,13 @@ class ProgramGenerator {
 
   private emitThreeRegister(mnemonic: string): void {
     const rd = this.chooseWriteRegister();
-    const rs = mnemonic === 'add' || mnemonic === 'sub'
+    // The tutorial rejects arithmetic-overflow test data in every profile. P7's deliberate Ov
+    // coverage is emitted separately by the controlled probe/exception scenarios.
+    const avoidOverflow = mnemonic === 'add' || mnemonic === 'sub';
+    const rs = avoidOverflow
       ? this.chooseSmallReadRegister()
       : this.chooseReadRegister();
-    const rt = mnemonic === 'add' || mnemonic === 'sub'
+    const rt = avoidOverflow
       ? this.chooseSmallReadRegister()
       : this.chooseReadRegister();
     this.emit(mnemonic, `${mnemonic} ${rd}, ${rs}, ${rt}`);
@@ -1083,6 +1196,13 @@ class ProgramGenerator {
         break;
     }
     this.state.setRegister(rd, value);
+    if (mnemonic === 'mul') {
+      // MIPS32 defines HI/LO as UNPREDICTABLE after MUL. Never use the host MARS choice as an
+      // oracle until each half has been initialized again by an architecturally defined writer.
+      this.state.hiInitialized = false;
+      this.state.loInitialized = false;
+      this.state.pendingHiLoRead = false;
+    }
   }
 
   private emitImmediate(mnemonic: string): void {
@@ -1174,8 +1294,10 @@ class ProgramGenerator {
       value = signExtend16(this.state.halfAt(address));
     } else if (mnemonic === 'lhu') {
       value = this.state.halfAt(address);
-    } else if (mnemonic === 'lwl' || mnemonic === 'lwr') {
-      value = this.state.wordAt(address & ~3);
+    } else if (mnemonic === 'lwl') {
+      value = this.state.loadWordLeft(address, this.state.regValue(rt));
+    } else if (mnemonic === 'lwr') {
+      value = this.state.loadWordRight(address, this.state.regValue(rt));
     } else {
       value = this.state.wordAt(address);
     }
@@ -1194,6 +1316,10 @@ class ProgramGenerator {
     } else if (mnemonic === 'sh') {
       this.state.writeByte(address, value & 0xff);
       this.state.writeByte(address + 1, (value >>> 8) & 0xff);
+    } else if (mnemonic === 'swl') {
+      this.state.storeWordLeft(address, value);
+    } else if (mnemonic === 'swr') {
+      this.state.storeWordRight(address, value);
     } else {
       this.state.memory.set(address & ~3, value);
     }
@@ -1223,7 +1349,7 @@ class ProgramGenerator {
       this.state.hi = high;
       this.state.lo = low;
     }
-    this.markHiLoWritten();
+    this.markHiLoWritten('both');
     if (longLatencyHiLoWriteMnemonics.has(mnemonic)) {
       this.state.armMduProtection(mduBusyCycles(mnemonic));
       this.maybeEmitMduReadProbe(mnemonic);
@@ -1241,7 +1367,7 @@ class ProgramGenerator {
       this.state.lo = signed32(Math.trunc(left / right));
       this.state.hi = signed32(left % right);
     }
-    this.markHiLoWritten();
+    this.markHiLoWritten('both');
     this.state.armMduProtection(mduBusyCycles(mnemonic));
     this.maybeEmitMduReadProbe(mnemonic);
   }
@@ -1258,20 +1384,26 @@ class ProgramGenerator {
     this.emit(mnemonic, `${mnemonic} ${rs}`);
     if (mnemonic === 'mthi') {
       this.state.hi = this.state.regValue(rs);
+      this.markHiLoWritten('hi');
     } else {
       this.state.lo = this.state.regValue(rs);
+      this.markHiLoWritten('lo');
     }
-    this.markHiLoWritten();
   }
 
   private emitConditionalMove(mnemonic: string): void {
-    const rd = this.chooseWriteRegister();
+    const rd = this.chooseVisibleWriteRegister();
     const rs = this.chooseReadRegister();
-    const candidates = mnemonic === 'movn' ? this.nonZeroRegisters(false) : ['$0', ...this.zeroRegisters()];
-    const rt = candidates.length ? this.rng.pick(candidates) : '$0';
+    const preferMove = this.nextConditionalMoveOutcome.get(mnemonic) ?? this.rng.chance(0.5);
+    const moveCandidates = mnemonic === 'movn' ? this.nonZeroRegisters(false) : this.zeroRegisters();
+    const noMoveCandidates = mnemonic === 'movn' ? this.zeroRegisters() : this.nonZeroRegisters(false);
+    const preferred = preferMove ? moveCandidates : noMoveCandidates;
+    const fallback = preferMove ? noMoveCandidates : moveCandidates;
+    const rt = this.rng.pick(preferred.length ? preferred : fallback);
     this.emit(mnemonic, `${mnemonic} ${rd}, ${rs}, ${rt}`);
 
     const condition = mnemonic === 'movn' ? this.state.regValue(rt) !== 0 : this.state.regValue(rt) === 0;
+    this.nextConditionalMoveOutcome.set(mnemonic, !condition);
     if (condition) {
       this.state.setRegister(rd, this.state.regValue(rs));
     }
@@ -1305,16 +1437,36 @@ class ProgramGenerator {
   }
 
   private emitTrapRegister(mnemonic: string): void {
-    const operands = this.falseTrapRegisterOperands(mnemonic);
+    const mayRaise = this.profile === 'P7' && this.p7HandlerEnabled;
+    const preferRaise = mayRaise && (this.nextTrapOutcome.get(mnemonic) ?? true);
+    const operands = this.trapRegisterOperands(mnemonic, preferRaise)
+      ?? this.trapRegisterOperands(mnemonic, !preferRaise);
     if (!operands) {
       throw new BuiltinAsmGeneratorError(`Cannot emit non-throwing ${mnemonic}; add a value-producing instruction such as ori/addiu first.`);
     }
     this.emit(mnemonic, `${mnemonic} ${operands[0]}, ${operands[1]}`);
+    const raises = this.trapRegisterWillRaise(mnemonic, operands[0], operands[1]);
+    if (mayRaise) {
+      this.nextTrapOutcome.set(mnemonic, !raises);
+      if (raises) {
+        this.noteExceptionVictim(this.emittedCount - 1);
+      }
+    }
   }
 
   private emitTrapImmediate(mnemonic: string): void {
-    const [rs, imm] = falseTrapImmediateOperands(mnemonic);
+    const mayRaise = this.profile === 'P7' && this.p7HandlerEnabled;
+    const raises = mayRaise && (this.nextTrapOutcome.get(mnemonic) ?? true);
+    const [rs, imm] = raises
+      ? this.trueTrapImmediateOperands(mnemonic)
+      : falseTrapImmediateOperands(mnemonic);
     this.emit(mnemonic, `${mnemonic} ${rs}, ${imm}`);
+    if (mayRaise) {
+      this.nextTrapOutcome.set(mnemonic, !raises);
+      if (raises) {
+        this.noteExceptionVictim(this.emittedCount - 1);
+      }
+    }
   }
 
   private emitControl(mnemonic: ControlMnemonic): void {
@@ -1336,20 +1488,26 @@ class ProgramGenerator {
   private emitBranch(mnemonic: ControlMnemonic): void {
     const label = this.nextLabel('br');
     const operands = this.branchOperands(mnemonic);
-    const skipPoison = (
+    const willTake = this.branchWillTake(mnemonic, operands);
+    const emitPathProbe = (
       this.remaining() > 1 + this.delaySlotCost() &&
-      this.branchWillTake(mnemonic, operands) &&
       this.hasStatefulPoisonCandidate()
     );
 
     this.emit(mnemonic, `${mnemonic} ${operands.join(', ')}, ${label}`);
-    if (linkBranchMnemonics.has(mnemonic) && operands.length > 0) {
-      this.state.setRegister('$31', this.currentPc() + (this.usesDelaySlot() ? 4 : 0));
+    this.nextBranchOutcome.set(mnemonic, !willTake);
+    if (linkBranchMnemonics.has(mnemonic)) {
+      // MIPS links to branch-PC+8 regardless of the condition. The trace parser repairs modified
+      // MARS' missing not-taken event, so both outcomes remain useful differential tests.
+      this.state.setRegister('$31', this.currentPc() + 4);
     }
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    if (skipPoison && this.remaining() > 0) {
+    // The instruction between the branch and label is observable on exactly one path. This makes
+    // both taken and not-taken decisions detectable; its destination ($26) is excluded from the
+    // generator's state-dependent operand pool, so a skipped instruction need not be modeled.
+    if (emitPathProbe && this.remaining() > 0) {
       this.emitSkippedPoisonInstruction();
     }
     this.addLabel(label);
@@ -1425,10 +1583,10 @@ class ProgramGenerator {
     if (candidates.length) {
       return this.rng.pick(candidates);
     }
-    // Exclude syscall: an exception in a delay slot sets Cause.BD and makes the handler's EPC+4
-    // land back on the delay slot, looping forever.
+    // Random exceptions in a delay slot need a different EPC recovery rule. Dedicated P7 probe
+    // scenarios cover that rule; keep the stateful random stream free of nested control hazards.
     return this.rng.pick(Array.from(this.allowed).filter((mnemonic) =>
-      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && this.canEmitSingle(mnemonic)));
+      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && !trapMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic)));
   }
 
   private hasStatefulPoisonCandidate(): boolean {
@@ -1446,7 +1604,6 @@ class ProgramGenerator {
       'addu', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
       'sll', 'srl', 'sra',
       'lw', 'lb', 'lbu', 'lh', 'lhu',
-      'sw', 'sb', 'sh'
     ];
     return preferred.filter((mnemonic) =>
       this.allowed.has(mnemonic) &&
@@ -1514,33 +1671,54 @@ class ProgramGenerator {
   }
 
   private branchOperands(mnemonic: ControlMnemonic): string[] {
+    const preferTaken = this.nextBranchOutcome.get(mnemonic) ?? this.rng.chance(0.5);
     if (mnemonic === 'beq') {
-      if (this.rng.chance(0.5)) {
-        const reg = this.chooseReadRegister();
-        return [reg, reg];
-      }
-      return this.differentRegisterPair() ?? ['$0', '$0'];
+      const reg = this.chooseReadRegister();
+      const different = this.differentRegisterPair();
+      return this.pickBranchOperands(preferTaken, [[reg, reg]], different ? [different] : []);
     }
     if (mnemonic === 'bne') {
-      return this.rng.chance(0.5)
-        ? (this.differentRegisterPair() ?? ['$0', '$0'])
-        : ['$0', '$0'];
+      const different = this.differentRegisterPair();
+      return this.pickBranchOperands(preferTaken, different ? [different] : [], [['$0', '$0']]);
     }
     if (mnemonic === 'bgez' || mnemonic === 'bgezal') {
-      return [this.rng.pick([...this.nonNegativeRegisters(), '$0'])];
+      return this.pickBranchOperands(
+        preferTaken,
+        this.nonNegativeRegisters().map((register) => [register]),
+        this.negativeRegisters().map((register) => [register])
+      );
     }
     if (mnemonic === 'bgtz') {
-      const positives = this.positiveRegisters();
-      return [positives.length && this.rng.chance(0.6) ? this.rng.pick(positives) : '$0'];
+      return this.pickBranchOperands(
+        preferTaken,
+        this.positiveRegisters().map((register) => [register]),
+        this.nonPositiveRegisters().map((register) => [register])
+      );
     }
     if (mnemonic === 'blez') {
-      return [this.rng.pick([...this.nonPositiveRegisters(), '$0'])];
+      return this.pickBranchOperands(
+        preferTaken,
+        this.nonPositiveRegisters().map((register) => [register]),
+        this.positiveRegisters().map((register) => [register])
+      );
     }
     if (mnemonic === 'bltz' || mnemonic === 'bltzal') {
-      const negatives = this.negativeRegisters();
-      return [negatives.length && this.rng.chance(0.6) ? this.rng.pick(negatives) : '$0'];
+      return this.pickBranchOperands(
+        preferTaken,
+        this.negativeRegisters().map((register) => [register]),
+        this.nonNegativeRegisters().map((register) => [register])
+      );
     }
     return ['$0'];
+  }
+
+  private pickBranchOperands(preferTaken: boolean, taken: string[][], notTaken: string[][]): string[] {
+    const preferred = preferTaken ? taken : notTaken;
+    const fallback = preferTaken ? notTaken : taken;
+    if (preferred.length) {
+      return this.rng.pick(preferred);
+    }
+    return fallback.length ? this.rng.pick(fallback) : ['$0'];
   }
 
   private emitAddressLoad(mnemonic: string, register: string, address: number): void {
@@ -1637,22 +1815,10 @@ class ProgramGenerator {
     return undefined;
   }
 
-  private falseTrapRegisterOperands(mnemonic: string): [string, string] | undefined {
-    if (mnemonic === 'tne') {
-      const reg = this.chooseReadRegister();
-      return [reg, reg];
-    }
+  private trapRegisterOperands(mnemonic: string, raises: boolean): [string, string] | undefined {
     for (const rs of readRegisters) {
       for (const rt of readRegisters) {
-        const left = this.state.regValue(rs);
-        const right = this.state.regValue(rt);
-        if (
-          (mnemonic === 'teq' && left !== right) ||
-          (mnemonic === 'tge' && signed32(left) < signed32(right)) ||
-          (mnemonic === 'tgeu' && unsigned32(left) < unsigned32(right)) ||
-          (mnemonic === 'tlt' && signed32(left) >= signed32(right)) ||
-          (mnemonic === 'tltu' && unsigned32(left) >= unsigned32(right))
-        ) {
+        if (this.trapRegisterWillRaise(mnemonic, rs, rt) === raises) {
           return [rs, rt];
         }
       }
@@ -1660,24 +1826,124 @@ class ProgramGenerator {
     return undefined;
   }
 
+  private trapRegisterWillRaise(mnemonic: string, rs: string, rt: string): boolean {
+    const left = this.state.regValue(rs);
+    const right = this.state.regValue(rt);
+    switch (mnemonic) {
+      case 'teq':
+        return left === right;
+      case 'tne':
+        return left !== right;
+      case 'tge':
+        return signed32(left) >= signed32(right);
+      case 'tgeu':
+        return unsigned32(left) >= unsigned32(right);
+      case 'tlt':
+        return signed32(left) < signed32(right);
+      case 'tltu':
+        return unsigned32(left) < unsigned32(right);
+      default:
+        return false;
+    }
+  }
+
+  private trueTrapImmediateOperands(mnemonic: string): [string, string] {
+    switch (mnemonic) {
+      case 'teqi':
+      case 'tgei':
+      case 'tgeiu':
+        return ['$0', '0'];
+      case 'tnei':
+      case 'tlti':
+      case 'tltiu':
+        return ['$0', '1'];
+      default:
+        return ['$0', '0'];
+    }
+  }
+
   private memoryOperand(alignment: number): { text: string; address: number } {
-    const baseCandidates = readRegisters
-      .map((register) => ({ register, value: this.state.regValue(register) }))
-      .filter((item) => item.value >= 0 && item.value < dataByteLength && item.value % alignment === 0);
-    const useBase = baseCandidates.length > 1 && this.rng.chance(0.25);
-    const base = useBase ? this.rng.pick(baseCandidates) : { register: '$0', value: 0 };
-    const maxOffset = dataByteLength - alignment - base.value;
-    const rawOffset = Math.max(0, this.rng.int(0, Math.max(0, maxOffset)));
-    const offset = alignDown(rawOffset, alignment);
-    const address = base.value + offset;
+    const lastAddress = courseDataByteLength - alignment;
+    const randomAddress = alignDown(this.rng.int(0, lastAddress), alignment);
+    const candidates: Array<{
+      register: string;
+      baseValue: number;
+      offset: number;
+      address: number;
+    }> = [];
+
+    for (const register of readRegisters) {
+      const baseValue = signed32(this.state.regValue(register));
+      const nearby = [baseValue, baseValue - alignment, baseValue + alignment];
+      const targetAddresses = new Set([
+        0,
+        Math.min(alignment, lastAddress),
+        alignDown(lastAddress / 2, alignment),
+        lastAddress,
+        randomAddress,
+        ...nearby
+      ]);
+      for (const address of targetAddresses) {
+        const offset = address - baseValue;
+        if (
+          address < 0 || address > lastAddress || address % alignment !== 0 ||
+          offset < -0x8000 || offset > 0x7fff
+        ) {
+          continue;
+        }
+        candidates.push({ register, baseValue, offset, address });
+      }
+    }
+
+    if (!candidates.length) {
+      throw new BuiltinAsmGeneratorError('Internal generator error: no legal course DM operand is available.');
+    }
+
+    let selected: typeof candidates[number] | undefined;
+    for (let index = 0; index < this.pendingMemoryCoverage.length; index++) {
+      const coverage = this.pendingMemoryCoverage[index];
+      const matching = candidates.filter((candidate) => this.matchesMemoryCoverage(candidate, coverage));
+      if (!matching.length) {
+        continue;
+      }
+      selected = this.rng.pick(matching);
+      this.pendingMemoryCoverage.splice(index, 1);
+      break;
+    }
+    const operand = selected ?? this.rng.pick(candidates);
     return {
-      text: `${offset}(${base.register})`,
-      address
+      text: `${formatImmediate(operand.offset)}(${operand.register})`,
+      address: operand.address
     };
   }
 
-  private markHiLoWritten(): void {
-    this.state.pendingHiLoRead = this.allowed.has('mfhi') || this.allowed.has('mflo');
+  private matchesMemoryCoverage(
+    operand: { baseValue: number; offset: number },
+    coverage: MemoryOperandCoverage
+  ): boolean {
+    switch (coverage) {
+      case 'zero-offset':
+        return operand.offset === 0;
+      case 'positive-offset':
+        return operand.offset > 0;
+      case 'negative-offset':
+        return operand.offset < 0;
+      case 'negative-base':
+        return operand.baseValue < 0;
+    }
+  }
+
+  private markHiLoWritten(part: 'hi' | 'lo' | 'both'): void {
+    if (part === 'hi' || part === 'both') {
+      this.state.hiInitialized = true;
+    }
+    if (part === 'lo' || part === 'both') {
+      this.state.loInitialized = true;
+    }
+    this.state.pendingHiLoRead = (
+      (this.allowed.has('mfhi') && this.state.hiInitialized) ||
+      (this.allowed.has('mflo') && this.state.loInitialized)
+    );
   }
 
   private maybeEmitMduReadProbe(sourceMnemonic: string): void {

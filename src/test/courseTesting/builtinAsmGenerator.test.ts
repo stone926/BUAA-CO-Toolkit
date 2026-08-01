@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   generateBuiltinAsmTestCase,
   resolveBuiltinInstructionSet
 } from '../../courseTesting/builtinAsmGenerator';
 import { generatorInstructionCatalog } from '../../courseTesting/generatorInstructionCatalog';
+import { CpuState } from '../../courseTesting/cpuState';
+import { signExtend16, signed32 } from '../../courseTesting/mipsUtil';
 import {
   p7ExceptionHandlerAddress,
   p7ExternalInterruptAckAddress,
@@ -54,7 +56,7 @@ describe('built-in ASM generator', () => {
       instructionCount: 48,
       seed: 'configured-set'
     });
-    const mnemonics = executableMnemonics(result.text);
+    const mnemonics = executableMnemonics(beforeGeneratedHalt(result.text));
 
     expect(result.instructionCount).toBe(48);
     expect(mnemonics).toHaveLength(48);
@@ -74,7 +76,27 @@ describe('built-in ASM generator', () => {
     });
 
     expect(resolved.mnemonics).toEqual(['nop']);
-    expect(executableMnemonics(result.text)).toEqual(Array(8).fill('nop'));
+    expect(executableMnemonics(beforeGeneratedHalt(result.text))).toEqual(Array(8).fill('nop'));
+  });
+
+  it('ends every generated CPU-profile ASM with the course halt loop', () => {
+    for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7'] as const) {
+      const result = generateBuiltinAsmTestCase({
+        profile,
+        instructionText: 'nop',
+        instructionCount: profile === 'P7' ? 1118 : 8,
+        seed: `halt-loop-${profile}`
+      });
+      const mainText = beforeKernelText(result.text);
+
+      expect(mainText).toMatch(/_co_test_end:\n\s+beq \$0, \$0, _co_test_end\n\s+nop\s*$/);
+      expect(executableMnemonics(beforeGeneratedHalt(mainText))).toHaveLength(result.instructionCount);
+      expect(result.usedInstructions).toEqual(['nop']);
+      expect(result.usedInstructions).not.toContain('beq');
+      if (profile === 'P7') {
+        expect(executableMnemonics(mainText)).toHaveLength(1120);
+      }
+    }
   });
 
   it('does not generate divide by zero', () => {
@@ -91,6 +113,181 @@ describe('built-in ASM generator', () => {
 
     expect(divLines.length).toBeGreaterThan(0);
     expect(divLines.every((line) => !/,\s*\$0\b/.test(line))).toBe(true);
+  });
+
+  it('allocates and legally addresses the complete 12 KiB course DM', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'lui ori lw sw',
+      instructionCount: 1000,
+      seed: 'memory-sign-and-boundary-coverage'
+    });
+    const coverage = inspectSimpleMemoryProgram(executableLines(result.text));
+
+    expect(result.text).toContain('.space 12288');
+    expect(coverage.addresses.some((address) => address === 0x2ffc)).toBe(true);
+    expect(coverage.offsetSigns).toEqual(new Set(['negative', 'zero', 'positive']));
+    expect(coverage.baseSigns).toContain('negative');
+  });
+
+  it('uses every byte offset for unaligned word-left/right instructions', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'lwl lwr swl swr nop',
+      instructionCount: 500,
+      seed: 'partial-word-offsets'
+    });
+    const offsets = executableLines(result.text)
+      .filter((line) => /^(?:lwl|lwr|swl|swr)\b/.test(line))
+      .map((line) => Number(/,\s*(-?(?:0x[\da-f]+|\d+))\(/i.exec(line)?.[1]) & 3);
+
+    expect(new Set(offsets)).toEqual(new Set([0, 1, 2, 3]));
+  });
+
+  it('never reads an unspecified HI/LO value, including after MUL', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'ori mul mult madd mthi mtlo mfhi mflo',
+      instructionCount: 500,
+      seed: 'defined-hilo-only'
+    });
+
+    expect(hiLoUndefinedReads(executableMnemonics(result.text))).toEqual([]);
+  });
+
+  it('makes both taken and not-taken branch decisions observable', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'beq lui ori',
+      instructionCount: 100,
+      seed: 'observable-branch-outcomes'
+    });
+    const lines = executableLines(result.text);
+    const branches = lines
+      .map((line, index) => ({ line, index, registers: /^beq\s+(\$\d+),\s*(\$\d+),/.exec(line) }))
+      .filter((item) => item.registers);
+
+    expect(branches.some((item) => item.registers?.[1] === item.registers?.[2])).toBe(true);
+    expect(branches.some((item) => item.registers?.[1] !== item.registers?.[2])).toBe(true);
+    expect(branches.filter((item) => item.index + 2 < lines.length).every((item) => /\$26\b/.test(lines[item.index + 2]))).toBe(true);
+  });
+
+  it('covers both link-branch outcomes while modeling their unconditional MIPS link', () => {
+    const setRegister = vi.spyOn(CpuState.prototype, 'setRegister');
+    let generatedText = '';
+    let modeledLinkAddresses: number[] = [];
+    try {
+      const result = generateBuiltinAsmTestCase({
+        profile: 'P6',
+        instructionText: 'lui bgezal bltzal nop',
+        instructionCount: 400,
+        seed: 'both-link-branch-outcomes'
+      });
+      generatedText = result.text;
+      modeledLinkAddresses = setRegister.mock.calls
+        .filter(([register]) => register === '$31')
+        .map(([, value]) => value);
+    } finally {
+      setRegister.mockRestore();
+    }
+
+    const lines = executableLines(beforeGeneratedHalt(generatedText));
+    const state = new CpuState();
+    const links: Array<{ mnemonic: string; register: string; index: number; taken: boolean }> = [];
+    for (const [index, line] of lines.entries()) {
+      const lui = /^lui\s+(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
+      if (lui) {
+        state.setRegister(lui[1], Number(lui[2]) << 16);
+        continue;
+      }
+      const link = /^(bgezal|bltzal)\s+(\$\d+),/.exec(line);
+      if (link) {
+        const value = signed32(state.regValue(link[2]));
+        links.push({
+          mnemonic: link[1],
+          register: link[2],
+          index,
+          taken: link[1] === 'bgezal' ? value >= 0 : value < 0
+        });
+      }
+    }
+
+    expect(new Set(links.map((link) => link.mnemonic))).toEqual(new Set(['bgezal', 'bltzal']));
+    for (const mnemonic of ['bgezal', 'bltzal']) {
+      const outcomes = links.filter((link) => link.mnemonic === mnemonic).map((link) => link.taken);
+      expect(outcomes).toContain(true);
+      expect(outcomes).toContain(false);
+    }
+    expect(links.every((link) => link.register !== '$31')).toBe(true);
+    expect(modeledLinkAddresses).toEqual(
+      links.map((link) => p7UserTextBaseAddress + link.index * 4 + 8)
+    );
+  });
+
+  it('includes bounded self and genuinely taken backward branch targets', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: '',
+      instructionCount: 120,
+      seed: 'control-target-directions'
+    });
+
+    expect(result.text).toMatch(/(_co_self_\d+):\n\s+beq \$0, \$22, \1/);
+    expect(result.text).toMatch(/(_co_backward_\d+):[\s\S]*beq \$0, \$0, \1/);
+    expect(result.text).toMatch(/sub \$21, \$21, \$22[\s\S]*beq \$21, \$0, _co_backward_done_/);
+  });
+
+  it('covers both write and no-write outcomes for conditional moves', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'ori movn movz',
+      instructionCount: 200,
+      seed: 'conditional-move-outcomes'
+    });
+    const outcomes = conditionalMoveOutcomes(executableLines(result.text));
+
+    expect(outcomes.get('movn')).toEqual(new Set([false, true]));
+    expect(outcomes.get('movz')).toEqual(new Set([false, true]));
+  });
+
+  it('covers both raising and non-raising outcomes for explicitly selected P7 traps', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'ori teq tne teqi tnei mfc0 mtc0 eret',
+      instructionCount: 300,
+      seed: 'trap-outcomes'
+    });
+    const body = executableLines(beforeKernelText(result.text));
+    const teq = body.filter((line) => /^teq\b/.test(line));
+    const tne = body.filter((line) => /^tne\b/.test(line));
+
+    expect(result.text).toContain(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`);
+    expect(teq.some(hasEqualTrapRegisters)).toBe(true);
+    expect(teq.some((line) => !hasEqualTrapRegisters(line))).toBe(true);
+    expect(tne.some(hasEqualTrapRegisters)).toBe(true);
+    expect(tne.some((line) => !hasEqualTrapRegisters(line))).toBe(true);
+    expect(body).toContain('teqi $0, 0');
+    expect(body).toContain('teqi $0, 1');
+    expect(body).toContain('tnei $0, 1');
+    expect(body).toContain('tnei $0, 0');
+  });
+
+  it('keeps signed arithmetic non-overflowing in every random profile', () => {
+    const p6 = generateBuiltinAsmTestCase({
+      profile: 'P6',
+      instructionText: 'lui ori add sub',
+      instructionCount: 600,
+      seed: 'non-overflowing-arithmetic'
+    });
+    const p7 = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: 'lui ori add sub',
+      instructionCount: 600,
+      seed: 'non-overflowing-arithmetic'
+    });
+
+    expect(arithmeticOverflowCount(executableLines(p6.text))).toBe(0);
+    expect(arithmeticOverflowCount(executableLines(p7.text))).toBe(0);
   });
 
   it('uses stateful skipped poison for taken control-flow probes', () => {
@@ -128,7 +325,7 @@ describe('built-in ASM generator', () => {
       instructionCount: 96,
       seed: 'p7-default'
     });
-    const mainMnemonics = executableMnemonics(beforeKernelText(result.text));
+    const mainMnemonics = executableMnemonics(beforeGeneratedHalt(result.text));
 
     expect(result.instructionCount).toBe(96);
     expect(mainMnemonics).toHaveLength(96);
@@ -136,7 +333,7 @@ describe('built-in ASM generator', () => {
     expect(result.text).toContain(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`);
     expect(result.text).toContain('mfc0 $k0, $13');
     expect(result.text).toContain('mtc0 $k0, $14');
-    expect(result.text).toContain('sb $0, 0($k0)');
+    expect(result.text).toContain(`sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
     expect(result.text).toContain('eret');
   });
 
@@ -210,13 +407,13 @@ describe('built-in ASM generator', () => {
     const handler = result.text.slice(result.text.indexOf(`.ktext ${p7Hex(p7ExceptionHandlerAddress)}`));
     const firstEntryFlag = handler.indexOf('    ori $k1, $0, 1');
     const branchToException = handler.indexOf('    bne $k1, $0, _co_excep_skip');
-    const interruptAck = handler.indexOf(`    ori $k0, $0, ${p7Hex(p7ExternalInterruptAckAddress)}`);
+    const interruptAck = handler.indexOf(`    sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
     const exceptionPath = handler.indexOf('_co_excep_skip:');
     expect(handler).not.toContain('    mfc0 $k0, $13');
     expect(branchToException).toBeGreaterThanOrEqual(0);
     expect(firstEntryFlag).toBeGreaterThan(branchToException);
     expect(interruptAck).toBeGreaterThan(firstEntryFlag);
-    expect(handler).toContain('    sb $0, 0($k0)');
+    expect(handler).toContain(`    sb $0, ${p7Hex(p7ExternalInterruptAckAddress)}($0)`);
     expect(exceptionPath).toBeGreaterThan(interruptAck);
     expect(handler).toContain('    mtc0 $k0, $14');
   });
@@ -342,6 +539,80 @@ describe('built-in ASM generator', () => {
     expect(new Set(result.probe?.scenarios.map((scenario) => scenario.kind))).toEqual(new Set([
       'external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'
     ]));
+    expect(new Set(result.probe?.scenarios.filter((scenario) => scenario.expectedBd).map((scenario) => scenario.kind))).toEqual(new Set([
+      'external', 'syscall', 'ri'
+    ]));
+    const internalScenarios = result.probe?.scenarios.filter((scenario) =>
+      ['adel', 'ades', 'syscall', 'ri', 'ov'].includes(scenario.kind)) ?? [];
+    expect(internalScenarios.every((scenario) => Number.isFinite(scenario.victimPc))).toBe(true);
+    expect(internalScenarios.every((scenario) => scenario.victimPc === scenario.allowedEpc[0] + (scenario.expectedBd ? 4 : 0))).toBe(true);
+    const adelVariants = [
+      'misaligned-load', 'misaligned-half-load', 'ea-overflow-load', 'dm-out-of-range-load',
+      'timer-byte-load', 'timer-half-load', 'invalid-fetch', 'misaligned-fetch'
+    ];
+    const adesVariants = [
+      'misaligned-store', 'misaligned-half-store', 'ea-overflow-store', 'dm-out-of-range-store',
+      'timer0-ctrl-byte-store', 'timer1-ctrl-byte-store',
+      'timer0-ctrl-half-store', 'timer1-ctrl-half-store',
+      'timer0-preset-byte-store', 'timer1-preset-byte-store',
+      'timer0-preset-half-store', 'timer1-preset-half-store',
+      'timer0-count-store', 'timer1-count-store'
+    ];
+    const ovVariants = [
+      'add-overflow', 'addi-overflow', 'sub-overflow'
+    ];
+    const generatedAdelVariants = result.probe?.scenarios.filter((scenario) => scenario.kind === 'adel').map((scenario) => scenario.variant) ?? [];
+    const generatedAdesVariants = result.probe?.scenarios.filter((scenario) => scenario.kind === 'ades').map((scenario) => scenario.variant) ?? [];
+    const generatedOvVariants = result.probe?.scenarios.filter((scenario) => scenario.kind === 'ov').map((scenario) => scenario.variant) ?? [];
+    expect(generatedAdelVariants.slice(0, adelVariants.length)).toEqual(adelVariants);
+    expect(generatedAdesVariants.slice(0, adesVariants.length)).toEqual(adesVariants);
+    expect(generatedOvVariants.slice(0, ovVariants.length)).toEqual(ovVariants);
+    expect(new Set(generatedAdelVariants)).toEqual(new Set(adelVariants));
+    expect(new Set(generatedAdesVariants)).toEqual(new Set(adesVariants));
+    expect(new Set(generatedOvVariants)).toEqual(new Set(ovVariants));
+    const variantPatterns = new Map<string, RegExp>([
+      ['misaligned-load', /\blw \$\d+, 1\(\$0\)/],
+      ['misaligned-half-load', /\blh \$\d+, 1\(\$0\)/],
+      ['ea-overflow-load', /lui \$20, 0x7fff[\s\S]*ori \$20, \$20, 0xffff[\s\S]*lw \$\d+, 1\(\$20\)/],
+      ['dm-out-of-range-load', /\blw \$\d+, 0x3000\(\$0\)/],
+      ['timer-byte-load', /\blb \$\d+, 0x7f00\(\$0\)/],
+      ['timer-half-load', /\blh \$\d+, 0x7f00\(\$0\)/],
+      ['invalid-fetch', /ori \$20, \$0, 0x7000[\s\S]*jr \$20\s*\n\s*nop/],
+      ['misaligned-fetch', /ori \$20, \$0, 0x3002[\s\S]*jr \$20\s*\n\s*nop/],
+      ['misaligned-store', /\bsw \$\d+, 1\(\$0\)/],
+      ['misaligned-half-store', /\bsh \$\d+, 1\(\$0\)/],
+      ['ea-overflow-store', /lui \$20, 0x7fff[\s\S]*ori \$20, \$20, 0xffff[\s\S]*sw \$\d+, 1\(\$20\)/],
+      ['dm-out-of-range-store', /\bsw \$\d+, 0x3000\(\$0\)/],
+      ['timer0-ctrl-byte-store', /\bsb \$20, 0x7f00\(\$0\)/],
+      ['timer1-ctrl-byte-store', /\bsb \$20, 0x7f10\(\$0\)/],
+      ['timer0-ctrl-half-store', /\bsh \$20, 0x7f00\(\$0\)/],
+      ['timer1-ctrl-half-store', /\bsh \$20, 0x7f10\(\$0\)/],
+      ['timer0-preset-byte-store', /\bsb \$20, 0x7f04\(\$0\)/],
+      ['timer1-preset-byte-store', /\bsb \$20, 0x7f14\(\$0\)/],
+      ['timer0-preset-half-store', /\bsh \$20, 0x7f04\(\$0\)/],
+      ['timer1-preset-half-store', /\bsh \$20, 0x7f14\(\$0\)/],
+      ['timer0-count-store', /\bsw \$20, 0x7f08\(\$0\)/],
+      ['timer1-count-store', /\bsw \$20, 0x7f18\(\$0\)/],
+      ['add-overflow', /add \$22, \$20, \$21/],
+      ['addi-overflow', /addi \$22, \$20, 1/],
+      ['sub-overflow', /sub \$22, \$20, \$21/],
+      ['delay-slot', /beq \$0, \$0, _co_probe_s\d+_done[\s\S]*syscall/],
+      ['young-mult', /syscall\s*\n\s*mult \$20, \$21/],
+      ['young-div', /syscall\s*\n\s*div \$20, \$21/],
+      ['young-mthi', /syscall\s*\n\s*mthi \$20/],
+      ['young-mtlo', /syscall\s*\n\s*mtlo \$21/]
+    ]);
+    for (const scenario of internalScenarios) {
+      if (scenario.variant) {
+        const pattern = variantPatterns.get(scenario.variant);
+        if (!pattern) {
+          throw new Error(`missing probe variant pattern for ${scenario.variant}`);
+        }
+        expect(probeScenarioBlock(result.text, scenario.id)).toMatch(pattern);
+      }
+    }
+    const invalidFetch = result.probe?.scenarios.find((scenario) => scenario.variant === 'invalid-fetch');
+    expect(invalidFetch).toMatchObject({ expectedBd: false, allowedEpc: [0x7000], victimPc: 0x7000 });
     expect(result.text).toContain('mfc0 $24, $13');
     expect(result.text).toContain('mfc0 $25, $12');
     expect(result.text).toContain('mfc0 $23, $14');
@@ -355,6 +626,29 @@ describe('built-in ASM generator', () => {
     expect(result.text).not.toContain(`sw $26, ${p7Hex(p7Timer1Count)}($0)`);
     expect(result.text).toContain(`sw $26, ${p7Hex(p7ProbeExternalArmAddress)}($0)`);
     expect(result.text).toContain('_co_internal_unknown_instruction');
+
+    const timerAdesScenarios = result.probe?.scenarios.filter((scenario) =>
+      scenario.kind === 'ades' && scenario.variant?.startsWith('timer')) ?? [];
+    expect(timerAdesScenarios).toHaveLength(10);
+    for (const scenario of timerAdesScenarios) {
+      const expected = scenario.expectedRecords?.[0];
+      expect(expected?.requireEqualAuxPair).toBe(true);
+      expect(expected?.auxPairDescription).toContain('before/after invalid store');
+      const target = scenario.variant?.includes('timer1')
+        ? scenario.variant.includes('ctrl') ? 0x7f10 : scenario.variant.includes('preset') ? 0x7f14 : 0x7f18
+        : scenario.variant?.includes('ctrl') ? 0x7f00 : scenario.variant?.includes('preset') ? 0x7f04 : 0x7f08;
+      expect(probeScenarioBlock(result.text, scenario.id)).toContain(`lw $21, ${p7Hex(target)}($0)`);
+      if (scenario.variant?.includes('ctrl')) {
+        expect(expected?.allowedAuxPairs).toEqual([[0, 0]]);
+      } else if (scenario.variant?.includes('preset')) {
+        expect(expected?.allowedAuxPairs).toEqual([[0x13579bdf, 0x13579bdf]]);
+      } else {
+        expect(expected?.allowedAuxPairs).toBeUndefined();
+      }
+    }
+    for (const address of [0x7f00, 0x7f04, 0x7f08, 0x7f10, 0x7f14, 0x7f18]) {
+      expect(result.text).toContain(`lw $22, ${p7Hex(address)}($0)`);
+    }
   });
 
   it('arms P7 probe timers only after the return PC is staged', () => {
@@ -386,10 +680,87 @@ describe('built-in ASM generator', () => {
     expect(enableStatus).toBeGreaterThan(doneStore);
     expect(waitLabel).toBeGreaterThan(enableStatus);
     expect(scenario.allowedEpc).toContain(scenario.waitPc);
-    expect(scenario.allowedEpc).toContain((scenario.waitPc ?? 0) + 4);
+    expect(scenario.allowedEpc).not.toContain((scenario.waitPc ?? 0) + 4);
     expect(scenario.allowedEpc.some((pc) => pc < (scenario.waitPc ?? 0))).toBe(true);
     expect(scenario.timerPreset).toBeGreaterThanOrEqual(p7ProbeTimerPresetMin);
     expect(scenario.timerPreset).toBeLessThanOrEqual(p7ProbeTimerPresetMax);
+  });
+
+  it('packs interrupt-priority replay into one physical probe record', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-priority-replay',
+      interrupt: true,
+      externalInterruptIntensity: 1,
+      p7StressMode: 'probe',
+      timerInterrupt: true,
+      probeScenarioCount: p7ProbeDefaultScenarioCount
+    });
+    const scenario = result.probe?.scenarios.find((item) => item.variant === 'priority-syscall');
+
+    expect(result.probe?.scenarios).toHaveLength(64);
+    expect(result.probe?.scenarios.every((item) => item.requireCompletion)).toBe(true);
+    expect(scenario?.kind).toBe('external');
+    expect(scenario?.expectedRecords).toEqual([
+      expect.objectContaining({ expectedIpMask: 0x1000, expectedExcCode: 0, expectedBd: false, allowedEpc: [scenario?.victimPc] }),
+      expect.objectContaining({ expectedIpMask: 0, expectedExcCode: 8, expectedBd: false, allowedEpc: [scenario?.victimPc] })
+    ]);
+    expect(scenario?.externalDelayCycles).toBe(0);
+    expect(scenario?.requireCompletion).toBe(true);
+    expect(result.text).toContain('_co_probe_capture_priority_interrupt:');
+    expect(result.text).toContain('_co_probe_record_priority_exception:');
+    for (const variant of ['retry-store', 'retry-load-dependency', 'retry-jal', 'retry-delay-slot-store']) {
+      const retry = result.probe?.scenarios.find((item) => item.variant === variant);
+      expect(retry?.externalDelayCycles).toBe(0);
+      expect(retry?.requiredCommits).toHaveLength(1);
+      expect(retry?.requireCompletion).toBe(true);
+    }
+  });
+
+  it('covers every younger state-changing MDU instruction with exact HI/LO sentinels', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-younger-mdu',
+      interrupt: true,
+      p7StressMode: 'probe',
+      timerInterrupt: true,
+      probeScenarioCount: p7ProbeDefaultScenarioCount
+    });
+    const variants = ['young-mult', 'young-div', 'young-mthi', 'young-mtlo'];
+
+    for (const variant of variants) {
+      const scenario = result.probe?.scenarios.find((item) => item.variant === variant);
+      expect(scenario?.kind).toBe('syscall');
+      expect(scenario?.expectedBd).toBe(false);
+      expect(scenario?.expectedRecords?.[0].allowedAuxPairs).toEqual([[0x13579bdf, 0x2468ace0]]);
+      expect(scenario?.requireCompletion).toBe(true);
+      expect(probeScenarioBlock(result.text, scenario?.id ?? 0)).toMatch(new RegExp(`syscall\\s*\\n\\s*${variant.slice(6)}`));
+    }
+    expect(result.text).toContain('mfhi $22');
+    expect(result.text).toContain('mflo $22');
+  });
+
+  it('restricts an external P7 probe EPC to its macroscopic-PC wait target', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-probe-external-epc',
+      interrupt: true,
+      externalInterruptIntensity: 1,
+      p7StressMode: 'probe',
+      timerInterrupt: false,
+      probeScenarioCount: 1,
+      exceptionTypes: []
+    });
+    const scenario = result.probe?.scenarios[0];
+
+    expect(scenario?.kind).toBe('external');
+    expect(scenario?.allowedEpc).toEqual([scenario?.waitPc]);
   });
 
   it('records the actual syscall PC for internal P7 probe scenarios', () => {
@@ -407,10 +778,67 @@ describe('built-in ASM generator', () => {
     const scenario = result.probe?.scenarios[0];
     const bodyLines = instructionSlotLines(beforeKernelText(result.text));
     const syscallIndex = bodyLines.indexOf('syscall');
+    const branchIndex = syscallIndex - 1;
+    const scenarioStart = result.text.indexOf('# probe scenario 1: syscall');
+    const syscallTextIndex = result.text.indexOf('\n    syscall', scenarioStart);
 
     expect(scenario?.kind).toBe('syscall');
     expect(scenario?.expectedExcCode).toBe(8);
-    expect(scenario?.allowedEpc).toEqual([p7UserTextBaseAddress + syscallIndex * 4]);
+    expect(scenario?.expectedBd).toBe(true);
+    expect(bodyLines[branchIndex]).toBe('beq $0, $0, _co_probe_s1_done');
+    expect(scenario?.allowedEpc).toEqual([p7UserTextBaseAddress + branchIndex * 4]);
+    expect(scenario?.victimPc).toBe(p7UserTextBaseAddress + syscallIndex * 4);
+    expect(scenario?.donePc).toBe(p7UserTextBaseAddress + (syscallIndex + 1) * 4);
+    expect(result.text.slice(scenarioStart, syscallTextIndex)).toContain('mtc0 $26, $12');
+    expect(result.text.slice(scenarioStart, syscallTextIndex)).toContain(`sw $26, ${p7Hex(p7ProbeStateDonePc)}($0)`);
+    expect(result.text.slice(result.text.indexOf('_co_probe_record_internal:'))).toContain(`lw $23, ${p7Hex(p7ProbeStateDonePc)}($0)`);
+    expect(result.text).not.toContain('addi $23, $23, 4');
+    expect(result.text.trimEnd().endsWith('eret')).toBe(true);
+  });
+
+  it('puts the RI probe in a not-taken branch delay slot', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-probe-ri-delay-slot',
+      interrupt: false,
+      p7StressMode: 'probe',
+      timerInterrupt: false,
+      probeScenarioCount: 1,
+      exceptionTypes: ['RI']
+    });
+    const scenario = result.probe?.scenarios[0];
+    const bodyLines = instructionSlotLines(beforeKernelText(result.text));
+    const riIndex = bodyLines.indexOf('_co_internal_unknown_instruction');
+    const branchIndex = riIndex - 1;
+
+    expect(scenario?.kind).toBe('ri');
+    expect(scenario?.expectedBd).toBe(true);
+    expect(bodyLines[branchIndex]).toBe('bne $0, $0, _co_probe_s1_done');
+    expect(scenario?.allowedEpc).toEqual([p7UserTextBaseAddress + branchIndex * 4]);
+    expect(scenario?.victimPc).toBe(p7UserTextBaseAddress + riIndex * 4);
+    expect(scenario?.donePc).toBe(p7UserTextBaseAddress + (riIndex + 1) * 4);
+  });
+
+  it('marks non-delay-slot internal probe exceptions with expectedBd false', () => {
+    const result = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-probe-adel-bd',
+      interrupt: false,
+      p7StressMode: 'probe',
+      timerInterrupt: false,
+      probeScenarioCount: 1,
+      exceptionTypes: ['AdEL']
+    });
+    const scenario = result.probe?.scenarios[0];
+
+    expect(scenario?.kind).toBe('adel');
+    expect(scenario?.expectedBd).toBe(false);
+    expect(scenario?.allowedEpc).toHaveLength(1);
+    expect(scenario?.victimPc).toBe(scenario?.allowedEpc[0]);
   });
 
   it('caps P7 probe scenario count at the log capacity without overlapping the handler', () => {
@@ -424,10 +852,12 @@ describe('built-in ASM generator', () => {
       timerInterrupt: true,
       probeScenarioCount: 99
     });
-    const mainLines = instructionSlotLines(beforeKernelText(result.text));
+    const mainText = beforeKernelText(result.text);
+    const mainLines = instructionSlotLines(mainText);
 
     expect(result.probe?.scenarios).toHaveLength(p7ProbeMaxScenarioCount);
-    expect(mainLines.length).toBeLessThanOrEqual((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4 - 2);
+    expect(mainLines.length).toBeLessThanOrEqual((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4);
+    expect(mainText).toMatch(/_co_probe_all_done:\s*\n\s*beq \$0, \$0, _co_probe_all_done\s*\n\s*nop\s*$/);
   });
 });
 
@@ -482,6 +912,10 @@ function instructionSlotLines(text: string): string[] {
 
 function beforeKernelText(text: string): string {
   return text.split(/^\.ktext\b/m)[0];
+}
+
+function beforeGeneratedHalt(text: string): string {
+  return beforeKernelText(text).split(/^_co_test_end:\s*$/m)[0];
 }
 
 function exceptionVictimIndices(lines: string[]): number[] {
@@ -543,4 +977,149 @@ function mduWriteViolationsDuringStartOrBusy(mnemonics: string[]): string[] {
     }
   }
   return violations;
+}
+
+function inspectSimpleMemoryProgram(lines: string[]): {
+  addresses: number[];
+  offsetSigns: Set<string>;
+  baseSigns: string[];
+} {
+  const state = new CpuState();
+  const addresses: number[] = [];
+  const offsetSigns = new Set<string>();
+  const baseSigns: string[] = [];
+
+  for (const line of lines) {
+    const lui = /^lui\s+(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
+    if (lui) {
+      state.setRegister(lui[1], Number(lui[2]) << 16);
+      continue;
+    }
+    const ori = /^ori\s+(\$\d+),\s*(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
+    if (ori) {
+      state.setRegister(ori[1], state.regValue(ori[2]) | (Number(ori[3]) & 0xffff));
+      continue;
+    }
+    const memory = /^(lw|sw)\s+(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))\((\$\d+)\)$/i.exec(line);
+    if (!memory) {
+      continue;
+    }
+    const offset = signExtend16(Number(memory[3]));
+    const base = signed32(state.regValue(memory[4]));
+    const address = base + offset;
+    if (address < 0 || address > 0x2ffc || address % 4 !== 0) {
+      throw new Error(`illegal generated memory operand: ${line} -> ${address}`);
+    }
+    addresses.push(address);
+    offsetSigns.add(offset < 0 ? 'negative' : offset > 0 ? 'positive' : 'zero');
+    baseSigns.push(base < 0 ? 'negative' : base > 0 ? 'positive' : 'zero');
+    if (memory[1] === 'lw') {
+      state.setRegister(memory[2], state.wordAt(address));
+    } else {
+      state.memory.set(address, state.regValue(memory[2]));
+    }
+  }
+  return { addresses, offsetSigns, baseSigns };
+}
+
+function hiLoUndefinedReads(mnemonics: string[]): string[] {
+  const violations: string[] = [];
+  let hiInitialized = false;
+  let loInitialized = false;
+  for (const mnemonic of mnemonics) {
+    if (mnemonic === 'mfhi' && !hiInitialized) {
+      violations.push('mfhi');
+    }
+    if (mnemonic === 'mflo' && !loInitialized) {
+      violations.push('mflo');
+    }
+    if ((mnemonic === 'madd' || mnemonic === 'maddu' || mnemonic === 'msub' || mnemonic === 'msubu') &&
+      (!hiInitialized || !loInitialized)) {
+      violations.push(mnemonic);
+    }
+    if (mnemonic === 'mul') {
+      hiInitialized = false;
+      loInitialized = false;
+    } else if (mnemonic === 'mthi') {
+      hiInitialized = true;
+    } else if (mnemonic === 'mtlo') {
+      loInitialized = true;
+    } else if (
+      mnemonic === 'mult' || mnemonic === 'multu' || mnemonic === 'div' || mnemonic === 'divu' ||
+      mnemonic === 'madd' || mnemonic === 'maddu' || mnemonic === 'msub' || mnemonic === 'msubu'
+    ) {
+      hiInitialized = true;
+      loInitialized = true;
+    }
+  }
+  return violations;
+}
+
+function arithmeticOverflowCount(lines: string[]): number {
+  const state = new CpuState();
+  let overflows = 0;
+  for (const line of lines) {
+    const lui = /^lui\s+(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
+    if (lui) {
+      state.setRegister(lui[1], Number(lui[2]) << 16);
+      continue;
+    }
+    const ori = /^ori\s+(\$\d+),\s*(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
+    if (ori) {
+      state.setRegister(ori[1], state.regValue(ori[2]) | (Number(ori[3]) & 0xffff));
+      continue;
+    }
+    const arithmetic = /^(add|sub)\s+(\$\d+),\s*(\$\d+),\s*(\$\d+)$/i.exec(line);
+    if (!arithmetic) {
+      continue;
+    }
+    const left = signed32(state.regValue(arithmetic[3]));
+    const right = signed32(state.regValue(arithmetic[4]));
+    const result = arithmetic[1] === 'add' ? left + right : left - right;
+    if (result > 0x7fffffff || result < -0x80000000) {
+      overflows++;
+    }
+    state.setRegister(arithmetic[2], result);
+  }
+  return overflows;
+}
+
+function conditionalMoveOutcomes(lines: string[]): Map<string, Set<boolean>> {
+  const state = new CpuState();
+  const outcomes = new Map<string, Set<boolean>>([
+    ['movn', new Set<boolean>()],
+    ['movz', new Set<boolean>()]
+  ]);
+  for (const line of lines) {
+    const ori = /^ori\s+(\$\d+),\s*(\$\d+),\s*(-?(?:0x[\da-f]+|\d+))$/i.exec(line);
+    if (ori) {
+      state.setRegister(ori[1], state.regValue(ori[2]) | (Number(ori[3]) & 0xffff));
+      continue;
+    }
+    const move = /^(movn|movz)\s+(\$\d+),\s*(\$\d+),\s*(\$\d+)$/i.exec(line);
+    if (!move) {
+      continue;
+    }
+    const condition = move[1] === 'movn'
+      ? state.regValue(move[4]) !== 0
+      : state.regValue(move[4]) === 0;
+    outcomes.get(move[1])?.add(condition);
+    if (condition) {
+      state.setRegister(move[2], state.regValue(move[3]));
+    }
+  }
+  return outcomes;
+}
+
+function probeScenarioBlock(text: string, scenarioId: number): string {
+  const start = text.indexOf(`# probe scenario ${scenarioId}:`);
+  const next = text.indexOf('\n# probe scenario ', start + 1);
+  const allDone = text.indexOf('\n_co_probe_all_done:', start + 1);
+  const end = next >= 0 ? next : allDone >= 0 ? allDone : text.length;
+  return start >= 0 ? text.slice(start, end) : '';
+}
+
+function hasEqualTrapRegisters(line: string): boolean {
+  const match = /^t(?:eq|ne)\s+(\$\d+),\s*(\$\d+)$/.exec(line);
+  return Boolean(match && match[1] === match[2]);
 }

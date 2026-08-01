@@ -12,6 +12,7 @@ import {
   p7ProbeDefaultScenarioCount,
   p7ProbeMaxScenarioCount
 } from './constants';
+import { probeVariantCount } from './probeVariants';
 
 export interface ProbeScenarioPlanOptions {
   count: number;
@@ -34,27 +35,34 @@ export function clampProbeScenarioCount(value: number | undefined): number {
 export function planProbeScenarioKinds(options: ProbeScenarioPlanOptions, rng: Random): P7ProbeScenarioKind[] {
   const count = clampProbeScenarioCount(options.count);
   const enabledExceptions = enabledProbeExceptions(options.exceptionTypes);
-  const coverage: P7ProbeScenarioKind[] = [];
+  const requiredKinds: P7ProbeScenarioKind[] = [];
 
   if (options.externalInterrupt && options.externalIntensity > 0) {
-    pushRepeated(coverage, 'external', 4);
+    requiredKinds.push('external');
   }
   if (options.timerInterrupt && options.timerIntensity > 0) {
-    pushRepeated(coverage, 'timer0', 6);
-    pushRepeated(coverage, 'timer1', 6);
+    requiredKinds.push('timer0', 'timer1');
   }
-  for (const kind of enabledExceptions) {
-    pushRepeated(coverage, kind, 2);
-  }
-  if (!coverage.length) {
-    coverage.push('syscall');
+  requiredKinds.push(...enabledExceptions);
+  if (!requiredKinds.length) {
+    requiredKinds.push('syscall');
   }
 
-  const result = shuffle(coverage, rng).slice(0, count);
+  const result = shuffle(requiredKinds, rng).slice(0, count);
+  if (result.length < count) {
+    const variantCoverage = requiredKinds.flatMap((kind) =>
+      Array.from({ length: probeVariantCount(kind) - 1 }, () => kind));
+    for (const kind of shuffle(variantCoverage, rng)) {
+      if (result.length >= count) {
+        break;
+      }
+      result.push(kind);
+    }
+  }
   while (result.length < count) {
     result.push(pickFillerScenario(options, enabledExceptions, rng));
   }
-  return result;
+  return shuffle(result, rng);
 }
 
 export function expectedIpMask(kind: P7ProbeScenarioKind): number {
@@ -138,12 +146,6 @@ function pickFillerScenario(
     weighted.push(rng.pick(enabledExceptions.length ? enabledExceptions : ['syscall']));
   }
   return rng.pick(weighted);
-}
-
-function pushRepeated<T>(target: T[], value: T, count: number): void {
-  for (let i = 0; i < count; i++) {
-    target.push(value);
-  }
 }
 
 function shuffle<T>(items: readonly T[], rng: Random): T[] {

@@ -8,7 +8,14 @@ import {
   compareTraceIterables,
   firstTraceDiffSnapshot
 } from '../language/mips/traceCompare';
-import { iterCpuTraceEvents } from '../language/mips/traceParser';
+import {
+  iterCpuTraceEvents,
+  iterMarsDetailedTraceEvents,
+  machineCodeNeedsDetailedMarsTrace,
+  machineCodeNeedsLinkBranchOracleRepairTrace,
+  machineCodeNeedsUndefinedBehaviorTrace,
+  marsDetailedUndefinedBehaviorError
+} from '../language/mips/traceParser';
 import { parseSimOutput } from '../language/verilog/traceParser';
 import { runMarsFile } from '../mips';
 import { defaultTraceCompareMode } from '../traceCompare';
@@ -16,6 +23,7 @@ import { runIsim } from '../verilog';
 import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
+import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from './marsStepLimit';
 import {
   AsmCase,
   asmCaseArtifactUri,
@@ -125,13 +133,41 @@ export async function runCourseTraceCase(
     };
   }
 
+  const machineCodeText = await readTextFile(asmCase.machineCode);
+  const profile = getProfile(asmCase.sourceAsm);
+  const delayedBranching = profile === 'P5' || profile === 'P6' || profile === 'P7';
+  const partialStoreTrace = machineCodeNeedsDetailedMarsTrace(machineCodeText);
+  const linkBranchRepairTrace = machineCodeNeedsLinkBranchOracleRepairTrace(machineCodeText);
+  const undefinedBehaviorTrace = machineCodeNeedsUndefinedBehaviorTrace(machineCodeText, delayedBranching);
+  const detailedMarsTrace = partialStoreTrace || linkBranchRepairTrace || undefinedBehaviorTrace;
+  if (detailedMarsTrace) {
+    services.output.appendLine(partialStoreTrace
+      ? '检测到 SWL/SWR：MARS 使用逐指令 Trace，并按动态指令保留最终 DM 写值'
+      : linkBranchRepairTrace
+        ? '检测到 BGEZAL/BLTZAL：MARS 使用逐指令 Trace，按 MIPS 规范修复 not-taken 时遗漏的 $31=PC+8 写回，并拒绝动态执行的 $31 源寄存器 UNPREDICTABLE 输入'
+        : '检测到潜在未定义行为：MARS 使用逐指令 Trace，仅在实际执行 DivZero/JalrSame/DoubleDelay 或读取未定义 HI/LO 时拒绝用例');
+  }
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
+  const maxSteps = generatedCourseTraceMarsStepLimit(
+    profile,
+    await readTextFile(asmCase.sourceAsm),
+    asmCase.manifest.source.kind === 'builtin',
+    machineCodeText
+  );
+  const haltPc = asmCase.manifest.machineCode?.haltPc;
+  if (!Number.isSafeInteger(haltPc)) {
+    return failedCase(item, 'dump', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
+  }
+  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（修改版 MARS 原生停机自环上限）`);
   const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
     showMessages: false,
     revealOutput: options.revealOutput,
     stdin: stdinText,
     stdinSource: item.stdin,
     traceOutput: true,
+    ...(detailedMarsTrace ? { traceLevel: 2 as const } : {}),
+    maxSteps,
+    haltPc,
     runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined,
     interruptSchedule
   });
@@ -142,6 +178,20 @@ export async function runCourseTraceCase(
     await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });
   } else {
     await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+  }
+
+  const marsText = await readTextFile(mars.outputFile);
+  const haltError = courseTraceMarsHaltError(marsText, haltPc!);
+  if (haltError) {
+    services.output.appendLine(haltError);
+    return failedCase(item, 'mars', haltError, asmCase.machineCode, mars.outputFile, asmCase);
+  }
+  if (undefinedBehaviorTrace) {
+    const undefinedBehaviorError = marsDetailedUndefinedBehaviorError(marsText, delayedBranching);
+    if (undefinedBehaviorError) {
+      services.output.appendLine(undefinedBehaviorError);
+      return failedCase(item, 'mars', undefinedBehaviorError, asmCase.machineCode, mars.outputFile, asmCase);
+    }
   }
 
   const isim = await runIsim(services, {
@@ -158,21 +208,26 @@ export async function runCourseTraceCase(
     return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, mars.outputFile, asmCase);
   }
 
-  const marsText = await readTextFile(mars.outputFile);
   const simText = await readTextFile(isim.simOut);
-  const diff = compareTraceIterables(iterCpuTraceEvents(marsText), iterCpuTraceEvents(simText), {
+  const marsEvents = detailedMarsTrace
+    ? iterMarsDetailedTraceEvents(marsText)
+    : iterCpuTraceEvents(marsText);
+  const diff = compareTraceIterables(marsEvents, iterCpuTraceEvents(simText), {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
 
   if (!diff.summary.marsEvents || !diff.summary.simEvents) {
+    const emptyTraceMessage = !diff.summary.marsEvents && !diff.summary.simEvents
+      ? 'MARS 与仿真均无可解析的写回 Trace 事件，现有观测结果无法判定 CPU 是否实际执行了程序'
+      : 'MARS 与仿真仅有一端没有可解析的 Trace 事件';
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
       ...caseResultFields(asmCase),
       status: 'error',
       stage: 'compare',
-      message: '某一端没有可解析的 Trace 事件',
+      message: emptyTraceMessage,
       machineCode: asmCase.machineCode.fsPath,
       marsOut: mars.outputFile.fsPath,
       simOut: isim.simOut.fsPath,

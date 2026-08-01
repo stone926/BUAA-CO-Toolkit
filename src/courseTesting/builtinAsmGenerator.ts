@@ -13,6 +13,8 @@ export type {
   BuiltinAsmGeneratorResult,
   BuiltinInstructionSet,
   P7ExceptionKind,
+  P7ProbeCommitExpectation,
+  P7ProbeExpectedRecord,
   P7ProbeMetadata,
   P7ProbeOptions,
   P7ProbeScenario,

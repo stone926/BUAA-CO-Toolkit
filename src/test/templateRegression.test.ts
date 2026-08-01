@@ -58,11 +58,11 @@ module mips(
 );
 endmodule
 `.trim());
-    const externalMemoryWords = getVerilogTestbenchConfig().externalMemoryWords;
+    const { externalInstructionMemoryWords, externalDataMemoryWords } = getVerilogTestbenchConfig();
     const text = buildTestbench(module, 'mips_tb', { profile: 'P6' });
 
-    expect(text).toContain(`reg [31:0] inst[0:${externalMemoryWords - 1}];`);
-    expect(text).toContain(`reg [31:0] data[0:${externalMemoryWords - 1}];`);
-    expect(text).toContain(`for (i = 0; i < ${externalMemoryWords}; i = i + 1) begin`);
+    expect(text).toContain(`reg [31:0] inst[0:${externalInstructionMemoryWords - 1}];`);
+    expect(text).toContain(`reg [31:0] data[0:${externalDataMemoryWords - 1}];`);
+    expect(text).toContain(`for (i = 0; i < ${externalDataMemoryWords}; i = i + 1) begin`);
   });
 });

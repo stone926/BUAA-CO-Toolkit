@@ -67,17 +67,23 @@ export function emitStoreImmediate(writer: ProgramWriter, value: number, address
 }
 
 export function emitLoadImmediate(writer: ProgramWriter, register: string, value: number): void {
+  for (const instruction of loadImmediateInstructions(register, value)) {
+    writer.emit(instruction);
+  }
+}
+
+export function loadImmediateInstructions(register: string, value: number): string[] {
   const normalized = value >>> 0;
   const hi = (normalized >>> 16) & 0xffff;
   const lo = normalized & 0xffff;
   if (hi) {
-    writer.emit(`lui ${register}, 0x${hi.toString(16)}`);
+    const instructions = [`lui ${register}, 0x${hi.toString(16)}`];
     if (lo) {
-      writer.emit(`ori ${register}, ${register}, 0x${lo.toString(16)}`);
+      instructions.push(`ori ${register}, ${register}, 0x${lo.toString(16)}`);
     }
-  } else {
-    writer.emit(`ori ${register}, $0, 0x${lo.toString(16)}`);
+    return instructions;
   }
+  return [`ori ${register}, $0, 0x${lo.toString(16)}`];
 }
 
 function emitSafeNoiseInstruction(writer: ProgramWriter, rng: Random): void {

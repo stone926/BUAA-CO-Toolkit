@@ -6,7 +6,6 @@ import {
   BuiltinAsmGeneratorOptions,
   BuiltinAsmGeneratorResult,
   normalizeP7ExceptionTypes,
-  p7InternalUnknownInstructionMnemonic,
   resolveBuiltinInstructionSet
 } from '../randomBody';
 import { ProgramWriter } from '../programWriter';
@@ -20,6 +19,15 @@ import {
   p7ExternalInterruptAckAddress,
   p7ProbeDefaultScenarioCount,
   p7ProbeExternalArmAddress,
+  p7ProbeFlagRecordHiLo,
+  p7ProbeFlagRecordTimer0Count,
+  p7ProbeFlagRecordTimer0Ctrl,
+  p7ProbeFlagRecordTimer0Preset,
+  p7ProbeFlagRecordTimer1Count,
+  p7ProbeFlagRecordTimer1Ctrl,
+  p7ProbeFlagRecordTimer1Preset,
+  p7ProbeFlagResumeInterruptEpc,
+  p7ProbeFlagRetryInterruptEpc,
   p7ProbeKindAdel,
   p7ProbeKindAdes,
   p7ProbeKindExternal,
@@ -33,6 +41,10 @@ import {
   p7ProbeMagic,
   p7ProbeRecordWords,
   p7ProbeStateDonePc,
+  p7ProbeStateFlags,
+  p7ProbeStateFirstCause,
+  p7ProbeStateFirstEpc,
+  p7ProbeStateFirstStatus,
   p7ProbeStateKind,
   p7ProbeStateRecordPtr,
   p7ProbeStateScenarioId,
@@ -54,24 +66,33 @@ import {
   planProbeScenarioKinds,
   scenarioWithLocations
 } from './probeScenarios';
+import { probeVariantAt } from './probeVariants';
+import {
+  P7ProbeTimerObservation,
+  planInternalExceptionVictim,
+  resolveInternalExceptionVictim
+} from './probeVictims';
+import { emitExternalRetryScenario, isExternalRetryVariant } from './probeExternalScenarios';
 import {
   ProbePaddingProfile,
   emitClearTimers,
   emitDisableInterrupts,
   emitEnableInterrupts,
-  emitLoadImmediate,
   emitPadding,
   emitPaddingCount,
   emitStoreImmediate,
-  paddingProfile,
-  probeUserScratchRegisters
+  loadImmediateInstructions,
+  paddingProfile
 } from './probeAsm';
 import { renderResourceTemplate } from '../../../templates/templateRegistry';
 
 const requiredProbeMnemonics = [
-  'nop', 'ori', 'lui', 'addi', 'andi', 'beq', 'bne', 'jal', 'jr',
-  'lw', 'sw', 'sb', 'mfc0', 'mtc0', 'eret', 'syscall'
+  'nop', 'add', 'sub', 'ori', 'lui', 'addi', 'andi', 'beq', 'bne', 'jal', 'jr',
+  'lb', 'lh', 'lw', 'sb', 'sh', 'sw', 'mult', 'div', 'mfhi', 'mflo', 'mthi', 'mtlo',
+  'mfc0', 'mtc0', 'eret', 'syscall'
 ] as const;
+// Probe user text stays below 0x10000, so storing donePc is one ORI plus one SW.
+const internalDonePcStoreInstructionCount = 2;
 
 export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions): BuiltinAsmGeneratorResult {
   if (options.profile !== 'P7' as ProjectProfile) {
@@ -87,7 +108,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
     ? options.seed.trim()
     : `${Date.now()}-${randomBytes(4).toString('hex')}`;
   const scenarioCount = clampProbeScenarioCount(options.probeScenarioCount ?? p7ProbeDefaultScenarioCount);
-  const rng = new Random(hashSeed(`P7:probe:v2:${seed}:${scenarioCount}`));
+  const rng = new Random(hashSeed(`P7:probe:v3:${seed}:${scenarioCount}`));
   const exceptionTypes = normalizeP7ExceptionTypes(options.exceptionTypes);
   const scenarioKinds = planProbeScenarioKinds({
     count: scenarioCount,
@@ -105,15 +126,23 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
   emitHeader(main, instructionSet.mnemonics.join(' '), seed, options.generatedAt ?? new Date());
   emitProbePrologue(main);
 
+  const occurrences = new Map<P7ProbeScenarioKind, number>();
   scenarioKinds.forEach((kind, index) => {
-    const scenario = emitScenario(main, index + 1, kind, rng, padding);
+    const occurrence = occurrences.get(kind) ?? 0;
+    occurrences.set(kind, occurrence + 1);
+    const scenario = emitScenario(main, index + 1, kind, occurrence, rng, padding);
     scenarios.push(scenario);
   });
 
-  main.label('_co_probe_all_done');
+  // Skip the callable guard on ordinary fall-through, then place the tutorial-mandated halt loop
+  // at the physical end of user text. This keeps the assembled source and hardware image
+  // identical and lets the common course-trace preflight recognize the tail.
   main.emit('beq $0, $0, _co_probe_all_done');
   main.emit('nop');
   emitProbeGuardSubroutine(main);
+  main.label('_co_probe_all_done');
+  main.emit('beq $0, $0, _co_probe_all_done');
+  main.emit('nop');
 
   if (main.count() > p7ProbeMainInstructionMaximum()) {
     throw new BuiltinAsmGeneratorError(`P7 probe generated ${main.count()} user-text instructions, exceeding the ${p7ProbeMainInstructionMaximum()} instruction budget before 0x${p7ExceptionHandlerAddress.toString(16)}. Reduce co.test.p7.probeScenarioCount.`);
@@ -125,6 +154,10 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
     recordWords: p7ProbeRecordWords,
     scenarios
   };
+  const probeLogCapacity = Math.floor((p7UserTextBaseAddress - p7ProbeLogBase) / (p7ProbeRecordWords * 4));
+  if (scenarios.length > probeLogCapacity) {
+    throw new BuiltinAsmGeneratorError(`P7 probe requires ${scenarios.length} records, exceeding the ${probeLogCapacity}-record data-memory budget.`);
+  }
   const text = [
     ...main.render(),
     ...renderProbeHandler()
@@ -136,10 +169,9 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
     profile: 'P7',
     instructionSet: instructionSet.mnemonics,
     instructionCount: main.count(),
-    usedInstructions: Array.from(new Set([
-      'nop', 'ori', 'lui', 'addi', 'andi', 'beq', 'bne', 'jal', 'jr',
-      'lw', 'sw', 'sb', 'mfc0', 'mtc0', 'eret', 'syscall'
-    ].filter((mnemonic) => instructionSet.mnemonics.includes(mnemonic)))).sort(),
+    usedInstructions: Array.from(new Set(
+      requiredProbeMnemonics.filter((mnemonic) => instructionSet.mnemonics.includes(mnemonic))
+    )).sort(),
     interruptSchedule: [],
     mode: 'probe',
     probe
@@ -171,8 +203,12 @@ function emitHeader(writer: ProgramWriter, instructionSet: string, seed: string,
 function emitProbePrologue(writer: ProgramWriter): void {
   emitInstructionTemplate(writer, 'asm/p7_probe_prologue.asm', {
     externalArmAddressHex: asmHex(p7ProbeExternalArmAddress),
-    loadProbeLogBase: loadImmediateLines('$26', p7ProbeLogBase).join('\n'),
+    loadProbeLogBase: loadImmediateInstructions('$26', p7ProbeLogBase).join('\n'),
     stateDonePcHex: asmHex(p7ProbeStateDonePc),
+    stateFlagsHex: asmHex(p7ProbeStateFlags),
+    stateFirstCauseHex: asmHex(p7ProbeStateFirstCause),
+    stateFirstEpcHex: asmHex(p7ProbeStateFirstEpc),
+    stateFirstStatusHex: asmHex(p7ProbeStateFirstStatus),
     stateKindHex: asmHex(p7ProbeStateKind),
     stateRecordPtrHex: asmHex(p7ProbeStateRecordPtr),
     stateScenarioIdHex: asmHex(p7ProbeStateScenarioId),
@@ -185,18 +221,27 @@ function emitScenario(
   writer: ProgramWriter,
   id: number,
   kind: P7ProbeScenarioKind,
+  occurrence: number,
   rng: Random,
   padding: ProbePaddingProfile
 ): P7ProbeScenario {
+  const variant = probeVariantAt(kind, occurrence);
   writer.raw('');
-  writer.raw(`# probe scenario ${id}: ${kind}`);
+  writer.raw(`# probe scenario ${id}: ${kind}${variant ? `/${variant}` : ''}`);
   emitScenarioGuardCall(writer);
   emitStoreImmediate(writer, id, p7ProbeStateScenarioId);
   emitStoreImmediate(writer, probeKindCode(kind), p7ProbeStateKind);
   emitPadding(writer, rng, 0, padding.setupMax);
 
+  if (kind === 'external' && variant === 'priority-syscall') {
+    return emitInterruptPriorityScenario(writer, id, variant, rng, padding);
+  }
+  if (kind === 'external' && isExternalRetryVariant(variant)) {
+    return emitExternalRetryScenario(writer, id, variant!, rng, padding);
+  }
+
   if (isInternalProbeKind(kind)) {
-    return emitInternalScenario(writer, id, kind, rng, padding);
+    return emitInternalScenario(writer, id, kind, variant, rng, padding);
   }
   return emitInterruptScenario(writer, id, kind, rng, padding);
 }
@@ -205,17 +250,99 @@ function emitInternalScenario(
   writer: ProgramWriter,
   id: number,
   kind: P7ProbeScenarioKind,
+  variant: string | undefined,
   rng: Random,
   padding: ProbePaddingProfile
 ): P7ProbeScenario {
-  const victimPc = emitInternalExceptionVictim(writer, kind, rng);
+  emitEnableInterrupts(writer);
+  const doneLabel = `_co_probe_s${id}_done`;
+  const victimPlan = planInternalExceptionVictim(kind, variant, rng, doneLabel);
+  if (victimPlan.recordHiLo) {
+    emitStoreImmediate(writer, p7ProbeFlagRecordHiLo, p7ProbeStateFlags);
+  } else if (victimPlan.timerObservation) {
+    emitStoreImmediate(writer, timerObservationFlag(victimPlan.timerObservation), p7ProbeStateFlags);
+  }
+  const donePc = writer.pc() + (internalDonePcStoreInstructionCount + victimPlan.instructions.length) * 4;
+  emitStoreImmediate(writer, donePc, p7ProbeStateDonePc);
+  const victimSequencePc = writer.pc();
+  for (const instruction of victimPlan.instructions) {
+    writer.emit(instruction);
+  }
+  const victim = resolveInternalExceptionVictim(victimPlan, victimSequencePc);
+  if (writer.pc() !== donePc) {
+    throw new BuiltinAsmGeneratorError(`Internal generator error: P7 probe scenario ${id} return PC was miscalculated.`);
+  }
+  writer.label(doneLabel);
+  writer.emit(`ori $1, $0, ${id}`);
+  emitPadding(writer, rng, padding.postMin, padding.postMax);
+  return {
+    ...scenarioWithLocations(id, kind, victim.epc, donePc),
+    expectedExcCode: expectedExcCode(kind),
+    expectedBd: victim.expectedBd,
+    allowedEpc: [victim.epc],
+    variant,
+    victimPc: victim.victimPc,
+    requireCompletion: true,
+    ...(victimPlan.allowedAuxPairs || victimPlan.requireEqualAuxPair ? {
+      expectedRecords: [{
+        expectedIpMask: 0,
+        expectedExcCode: expectedExcCode(kind),
+        expectedBd: victim.expectedBd,
+        allowedEpc: [victim.epc],
+        allowedAuxPairs: victimPlan.allowedAuxPairs,
+        auxPairDescription: victimPlan.auxPairDescription,
+        requireEqualAuxPair: victimPlan.requireEqualAuxPair
+      }]
+    } : {})
+  };
+}
+
+function emitInterruptPriorityScenario(
+  writer: ProgramWriter,
+  id: number,
+  variant: string,
+  rng: Random,
+  padding: ProbePaddingProfile
+): P7ProbeScenario {
+  emitStoreImmediate(writer, p7ProbeFlagResumeInterruptEpc, p7ProbeStateFlags);
+  // donePc follows: done-PC store, arm store, interrupt enable, and the syscall victim.
+  const donePc = writer.pc() + 7 * 4;
+  emitStoreImmediate(writer, donePc, p7ProbeStateDonePc);
+  emitStoreImmediate(writer, id, p7ProbeExternalArmAddress);
+  emitEnableInterrupts(writer);
+  const victimPc = writer.pc();
+  writer.emit('syscall');
+  if (writer.pc() !== donePc) {
+    throw new BuiltinAsmGeneratorError(`Internal generator error: P7 priority probe scenario ${id} return PC was miscalculated.`);
+  }
   writer.label(`_co_probe_s${id}_done`);
   writer.emit(`ori $1, $0, ${id}`);
   emitPadding(writer, rng, padding.postMin, padding.postMax);
   return {
-    ...scenarioWithLocations(id, kind, victimPc, victimPc + 4),
-    expectedExcCode: expectedExcCode(kind),
-    allowedEpc: [victimPc]
+    ...scenarioWithLocations(id, 'external', victimPc, donePc),
+    expectedBd: false,
+    allowedEpc: [victimPc],
+    variant,
+    victimPc,
+    waitPc: victimPc,
+    armAddress: p7ProbeExternalArmAddress,
+    armValue: id,
+    externalDelayCycles: 0,
+    expectedRecords: [
+      {
+        expectedIpMask: p7CauseIpExternalMask,
+        expectedExcCode: 0,
+        expectedBd: false,
+        allowedEpc: [victimPc]
+      },
+      {
+        expectedIpMask: 0,
+        expectedExcCode: 8,
+        expectedBd: false,
+        allowedEpc: [victimPc]
+      }
+    ],
+    requireCompletion: true
   };
 }
 
@@ -271,7 +398,8 @@ function emitInterruptScenario(
     timerPreset,
     armAddress: kind === 'external' ? p7ProbeExternalArmAddress : undefined,
     armValue: kind === 'external' ? id : undefined,
-    externalDelayCycles
+    externalDelayCycles,
+    requireCompletion: true
   };
 }
 
@@ -289,49 +417,20 @@ function emitProbeGuardSubroutine(writer: ProgramWriter): void {
   writer.emit(`sw $0, 0x${p7ProbeStateScenarioId.toString(16)}($0)`);
   writer.emit(`sw $0, 0x${p7ProbeStateKind.toString(16)}($0)`);
   writer.emit(`sw $0, 0x${p7ProbeStateDonePc.toString(16)}($0)`);
+  writer.emit(`sw $0, 0x${p7ProbeStateFlags.toString(16)}($0)`);
   writer.emit('jr $31');
   writer.emit('nop');
 }
 
-function emitInternalExceptionVictim(writer: ProgramWriter, kind: P7ProbeScenarioKind, rng: Random): number {
-  switch (kind) {
-    case 'adel': {
-      const victimPc = writer.pc();
-      writer.emit(`lw ${rng.pick(probeUserScratchRegisters)}, 1($0)`);
-      return victimPc;
-    }
-    case 'ades': {
-      const victimPc = writer.pc();
-      writer.emit(`sw ${rng.pick(probeUserScratchRegisters)}, 1($0)`);
-      return victimPc;
-    }
-    case 'syscall': {
-      const victimPc = writer.pc();
-      writer.emit('syscall');
-      return victimPc;
-    }
-    case 'ri': {
-      const victimPc = writer.pc();
-      writer.emit(p7InternalUnknownInstructionMnemonic);
-      return victimPc;
-    }
-    case 'ov':
-    case 'internal':
-      emitLoadImmediate(writer, '$1', 0x80000000);
-      const victimPc = writer.pc();
-      writer.emit('addi $2, $1, -1');
-      return victimPc;
-    default:
-      throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported P7 probe internal scenario ${kind}.`);
-  }
-}
-
 function interruptAllowedEpcs(kind: P7ProbeScenarioKind, enableStartPc: number, safeWindowStart: number, waitPc: number): number[] {
+  if (kind === 'external') {
+    return [waitPc];
+  }
   const startPc = kind === 'timer0' || kind === 'timer1'
     ? enableStartPc
     : safeWindowStart;
   const result: number[] = [];
-  for (let pc = startPc; pc <= waitPc + 4; pc += 4) {
+  for (let pc = startPc; pc <= waitPc; pc += 4) {
     result.push(pc);
   }
   return result;
@@ -351,15 +450,30 @@ function renderProbeHandler(): string[] {
     magicHiHex: asmHex(magicHi),
     magicLoHex: asmHex(magicLo),
     probeKindTimer1: p7ProbeKindTimer1,
+    probeFlagRecordHiLo: p7ProbeFlagRecordHiLo,
+    probeFlagRecordTimer0Count: p7ProbeFlagRecordTimer0Count,
+    probeFlagRecordTimer0Ctrl: p7ProbeFlagRecordTimer0Ctrl,
+    probeFlagRecordTimer0Preset: p7ProbeFlagRecordTimer0Preset,
+    probeFlagRecordTimer1Count: p7ProbeFlagRecordTimer1Count,
+    probeFlagRecordTimer1Ctrl: p7ProbeFlagRecordTimer1Ctrl,
+    probeFlagRecordTimer1Preset: p7ProbeFlagRecordTimer1Preset,
+    probeFlagResumeInterruptEpc: p7ProbeFlagResumeInterruptEpc,
+    probeFlagRetryInterruptEpc: p7ProbeFlagRetryInterruptEpc,
     recordByteLength,
     stateDonePcHex: asmHex(p7ProbeStateDonePc),
+    stateFlagsHex: asmHex(p7ProbeStateFlags),
+    stateFirstCauseHex: asmHex(p7ProbeStateFirstCause),
+    stateFirstEpcHex: asmHex(p7ProbeStateFirstEpc),
+    stateFirstStatusHex: asmHex(p7ProbeStateFirstStatus),
     stateKindHex: asmHex(p7ProbeStateKind),
     stateRecordPtrHex: asmHex(p7ProbeStateRecordPtr),
     stateScenarioIdHex: asmHex(p7ProbeStateScenarioId),
     timer0CountHex: asmHex(p7Timer0Count),
     timer0CtrlHex: asmHex(p7Timer0Ctrl),
+    timer0PresetHex: asmHex(p7Timer0Preset),
     timer1CountHex: asmHex(p7Timer1Count),
-    timer1CtrlHex: asmHex(p7Timer1Ctrl)
+    timer1CtrlHex: asmHex(p7Timer1Ctrl),
+    timer1PresetHex: asmHex(p7Timer1Preset)
   });
   return ['', ...rendered.trimEnd().split(/\r?\n/)];
 }
@@ -371,12 +485,6 @@ function emitInstructionTemplate(writer: ProgramWriter, relativePath: string, va
       writer.emit(instruction);
     }
   }
-}
-
-function loadImmediateLines(register: string, value: number): string[] {
-  const temp = new ProgramWriter(0);
-  emitLoadImmediate(temp, register, value);
-  return temp.render().map((line) => line.trim());
 }
 
 function asmHex(value: number): string {
@@ -407,7 +515,25 @@ function probeKindCode(kind: P7ProbeScenarioKind): number {
 }
 
 function p7ProbeMainInstructionMaximum(): number {
-  return ((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4) - 2;
+  // Probe main.count() already includes its physical two-instruction halt tail.
+  return (p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4;
+}
+
+function timerObservationFlag(observation: P7ProbeTimerObservation): number {
+  switch (observation) {
+    case 'timer0-ctrl':
+      return p7ProbeFlagRecordTimer0Ctrl;
+    case 'timer0-preset':
+      return p7ProbeFlagRecordTimer0Preset;
+    case 'timer0-count':
+      return p7ProbeFlagRecordTimer0Count;
+    case 'timer1-ctrl':
+      return p7ProbeFlagRecordTimer1Ctrl;
+    case 'timer1-preset':
+      return p7ProbeFlagRecordTimer1Preset;
+    case 'timer1-count':
+      return p7ProbeFlagRecordTimer1Count;
+  }
 }
 
 function clamp01(value: number): number {

@@ -1,4 +1,6 @@
-const dataWordCount = 256; // dataByteLength(1024) / 4
+/** Course DM range is 0x0000..0x2fff for P3-P7. */
+export const courseDataByteLength = 0x3000;
+const dataWordCount = courseDataByteLength / 4;
 
 /**
  * Software model of the MIPS CPU state used by the built-in ASM generator.
@@ -10,6 +12,8 @@ export class CpuState {
   readonly recentWrites: string[] = [];
   hi = 0;
   lo = 0;
+  hiInitialized = false;
+  loInitialized = false;
   pendingHiLoRead = false;
   mduProtectedSlots = 0;
   cp0_sr = 0;
@@ -64,6 +68,38 @@ export class CpuState {
     this.memory.set(aligned, (previous & mask) | ((value & 0xff) << shift));
   }
 
+  /** MARS/BUAA little-endian LWL merge semantics. */
+  loadWordLeft(address: number, previous: number): number {
+    let result = previous | 0;
+    for (let i = 0; i <= (address & 3); i++) {
+      result = setByte(result, 3 - i, this.byteAt(address - i));
+    }
+    return result | 0;
+  }
+
+  /** MARS/BUAA little-endian LWR merge semantics. */
+  loadWordRight(address: number, previous: number): number {
+    let result = previous | 0;
+    for (let i = 0; i <= 3 - (address & 3); i++) {
+      result = setByte(result, i, this.byteAt(address + i));
+    }
+    return result | 0;
+  }
+
+  /** MARS/BUAA little-endian SWL partial-store semantics. */
+  storeWordLeft(address: number, value: number): void {
+    for (let i = 0; i <= (address & 3); i++) {
+      this.writeByte(address - i, byteAt(value, 3 - i));
+    }
+  }
+
+  /** MARS/BUAA little-endian SWR partial-store semantics. */
+  storeWordRight(address: number, value: number): void {
+    for (let i = 0; i <= 3 - (address & 3); i++) {
+      this.writeByte(address + i, byteAt(value, i));
+    }
+  }
+
   cp0ReadValue(cp0Register: string): number {
     switch (cp0Register) {
       case '$12':
@@ -92,4 +128,14 @@ export class CpuState {
   armMduProtection(busyCycles: number): void {
     this.mduProtectedSlots = Math.max(this.mduProtectedSlots, busyCycles + 1);
   }
+}
+
+function byteAt(value: number, index: number): number {
+  return (value >>> (index * 8)) & 0xff;
+}
+
+function setByte(value: number, index: number, byte: number): number {
+  const shift = index * 8;
+  const mask = ~(0xff << shift);
+  return (value & mask) | ((byte & 0xff) << shift);
 }

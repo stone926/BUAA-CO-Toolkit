@@ -21,6 +21,7 @@ import {
   mergeAsmCaseArtifacts,
   sha256Bytes
 } from './asmCaseStoreCore';
+import { courseMachineCodeValidationError } from './courseTesting/machineCodeValidation';
 
 export interface AsmCase {
   id: string;
@@ -168,13 +169,34 @@ export async function prepareAsmCaseMachineCode(
 
   const bytes = await vscode.workspace.fs.readFile(asmCase.machineCode);
   const text = Buffer.from(bytes).toString('utf8');
+  if (options.courseTrace) {
+    const asmText = await readTextFile(asmCase.sourceAsm);
+    const validationError = courseMachineCodeValidationError(
+      getProfile(asmCase.sourceAsm),
+      text,
+      asmText,
+      asmCase.manifest.source.kind === 'builtin'
+    );
+    if (validationError) {
+      services.output.appendLine(validationError);
+      return {
+        ...dump,
+        result: {
+          ...dump.result,
+          ok: false,
+          stderr: dump.result.stderr ? `${dump.result.stderr}\n${validationError}` : validationError
+        }
+      };
+    }
+  }
   asmCase.manifest = {
     ...asmCase.manifest,
     machineCode: {
       path: asmCase.machineCode.fsPath,
       sha256: sha256Bytes(bytes),
       bytes: bytes.byteLength,
-      wordCount: machineCodeWordCount(text)
+      wordCount: machineCodeWordCount(text),
+      haltPc: dump.courseHaltPc
     },
     mars: {
       commandLine: dump.result.commandLine,

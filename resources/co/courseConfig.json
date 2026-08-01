@@ -19,7 +19,8 @@
     }
   },
   "verilogTestbench": {
-    "externalMemoryWords": 4096
+    "externalInstructionMemoryWords": 4096,
+    "externalDataMemoryWords": 3072
   },
   "profiles": {
     "P0": {

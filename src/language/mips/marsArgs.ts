@@ -11,6 +11,12 @@ import { p7InternalUnknownInstructionMnemonic } from '../../courseTesting/builti
 
 /** P7 课程约定：异常处理程序入口 0x4180 需要大内存布局。 */
 export const P7_COURSE_MEMORY_CONFIG = 'CompactLargeText';
+/** Modified-MARS flag that aligns all GPR reset values with the course tutorial. */
+export const COURSE_ZERO_GPR_FLAG = 'coZeroGpr';
+/** Modified-MARS flag that enforces the tutorial load/store address map and EA overflow rules. */
+export const COURSE_STRICT_DATA_FLAG = 'coStrictData';
+/** Modified-MARS option prefix for accepting only the validated course halt tail as termination. */
+export const COURSE_HALT_FLAG = 'coHalt';
 
 /** 支持大文本段（容纳 0x3000→0x4180+ 异常处理程序）的内存配置名称。 */
 export const LARGE_TEXT_MEMORY_CONFIGS = new Set([
@@ -31,10 +37,15 @@ export interface MarsRunOptions {
   stdinSource?: { fsPath: string };
   courseTrace?: boolean;
   traceOutput?: boolean;
+  traceLevel?: 1 | 2;
   dumpOutputFile?: { fsPath: string };
   runOutputFile?: { fsPath: string };
   interruptSchedule?: number[];
   p7RiInstruction?: boolean;
+  /** Native MARS maximum executed-instruction count (stand-alone positive integer argument). */
+  maxSteps?: number;
+  /** PC of the validated final `beq $0,$0,-1`; required by course-run orchestration. */
+  haltPc?: number;
 }
 
 export function buildMarsArgs(
@@ -44,20 +55,49 @@ export function buildMarsArgs(
   options: MarsRunOptions = {},
   memoryConfiguration = getMemoryConfiguration(asmUri as any)
 ): string[] {
+  const profile = getProfile(asmUri as any);
+  const courseTraceInvocation = isCourseTraceMarsRun(mode, options);
+  const courseTraceRun = mode === 'run' && courseTraceInvocation;
   const args = options.p7RiInstruction
     ? ['-cp', `${mars}${path.delimiter}${p7InternalUnknownInstructionClassDir()}`, 'Mars', 'nc', 'mc', memoryConfiguration]
     : ['-jar', mars, 'nc', 'mc', memoryConfiguration];
-  if (useDelayedBranching(asmUri as any)) {
+  const delayedBranching = courseTraceRun
+    ? profile === 'P5' || profile === 'P6' || profile === 'P7'
+    : useDelayedBranching(asmUri as any);
+  if (delayedBranching) {
     args.push('db');
   }
   if (options.p7RiInstruction) {
     args.push('cl', `${p7InternalUnknownInstructionMnemonic}.class`);
   }
-  args.push(...getMipsExtraArgs(asmUri as any));
-  if (mode === 'run' && options.traceOutput && !hasMarsArg(args, 'coL1')) {
-    args.push('coL1');
+  // Course traces are a fixed golden-model invocation. Even an otherwise harmless-looking user
+  // argument can change execution, output shape, loaded classes, or self-modifying-code policy.
+  // Keep user launch overrides for ordinary MARS runs, but never pass them to the oracle.
+  if (!courseTraceInvocation) {
+    args.push(...getMipsExtraArgs(asmUri as any));
   }
-  if (mode === 'run' && getProfile(asmUri as any) === 'P7' && isCourseTraceMarsRun(mode, options)) {
+  if (courseTraceInvocation) {
+    // MARS reports assembly/simulation failures in text but otherwise exits with code 0.  The
+    // automated oracle must make those failures visible to runTool instead of accepting an empty
+    // or truncated trace as a valid execution.
+    args.push('ae1', 'se1');
+  }
+  if (courseTraceInvocation) {
+    // coStrictData is also present during course dumps: it has no simulated load/store to police,
+    // but selects the exact course Compact* boundary semantics so the final legal IM/DM word is
+    // assemblable and dumpable. This keeps the 4096-word hardware image aligned with MARS.
+    args.push(COURSE_STRICT_DATA_FLAG);
+  }
+  if (courseTraceRun) {
+    // Compact MARS configurations conventionally seed $gp/$sp, while the tutorial resets every
+    // GPR to zero. The strict-data flag above also keeps Compact*'s extra mapped data from becoming
+    // an oracle and rejects signed effective-address overflow before its wrapped address is used.
+    args.push(COURSE_ZERO_GPR_FLAG);
+  }
+  if (mode === 'run' && options.traceOutput) {
+    args.push(options.traceLevel === 2 ? 'coL2' : 'coL1');
+  }
+  if (courseTraceRun && profile === 'P7') {
     // efc = enable P7 exception/interrupt handling (dispatch to 0x4180, BUAA CP0 semantics).
     if (!hasMarsArg(args, 'efc')) {
       args.push('efc');
@@ -71,6 +111,14 @@ export function buildMarsArgs(
     if (schedule.length && !args.some((arg) => arg.toLowerCase().startsWith('p7irq='))) {
       args.push(`p7irq=${schedule.map((pc) => `0x${((pc - 4) >>> 0).toString(16)}`).join(',')}`);
     }
+  }
+  if (courseTraceRun && Number.isSafeInteger(options.maxSteps) && (options.maxSteps ?? 0) > 0) {
+    // MarsLaunch checks bare register names before stand-alone integers, so decimal 0..31 would
+    // be mistaken for $0..$31. Integer.decode accepts this unambiguous hexadecimal spelling.
+    args.push(`0x${(options.maxSteps as number).toString(16)}`);
+  }
+  if (courseTraceRun && Number.isSafeInteger(options.haltPc) && (options.haltPc ?? -1) >= 0) {
+    args.push(`${COURSE_HALT_FLAG}=0x${((options.haltPc as number) >>> 0).toString(16)}`);
   }
   if (mode === 'run') {
     args.push(asmUri.fsPath);

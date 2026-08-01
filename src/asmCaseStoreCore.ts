@@ -35,6 +35,8 @@ export interface AsmCaseMachineCode {
   sha256: string;
   bytes: number;
   wordCount: number;
+  /** PC of the validated final user-text self-branch (before any P7 kernel merge). */
+  haltPc?: number;
 }
 
 export interface AsmCaseMarsRun {

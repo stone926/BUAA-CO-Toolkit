@@ -33,7 +33,7 @@ fs:
   pathUtils.ts — normalizePathKey/samePath/dedupePaths/dedupeUris/sanitizeFileStem 纯路径工具
 
 mips-commands:
-  mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, P7内核段合并(0x4180+停机自环), P4/P5/P6自动追加停机自环, MARS兼容诊断(coL1/efc/p7irq/cl). registerMips()注册6个命令
+  mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, 课程 Trace 源码停机尾校验, P7内核段合并(0x4180), 普通 dump 兼容性补尾, MARS兼容诊断(coL1/coL2/efc/p7irq/cl). registerMips()注册6个命令
 
 verilog-commands:
   verilog.ts — Verilog 命令入口: generateTestbench、generateIseProject、runIsim/compileIsim wrapper、lint禁用和 registerVerilog()注册7个命令

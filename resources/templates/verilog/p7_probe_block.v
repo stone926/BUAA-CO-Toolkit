@@ -67,3 +67,5 @@ ${externalArmedRaiseBlock}
 ${externalArmObserverBlock}
 
 ${mmioObserverBlock}
+
+${invalidStoreObserverBlock}

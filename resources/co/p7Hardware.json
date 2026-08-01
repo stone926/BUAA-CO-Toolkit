@@ -7,8 +7,8 @@
     "probeLogBase": 10240,
     "_probeLogBase_hex": "0x2800",
     "probeRecordWords": 8,
-    "instructionMemoryWords": 5120,
-    "dataMemoryWords": 4096,
+    "instructionMemoryWords": 4096,
+    "dataMemoryWords": 3072,
     "mainTerminatorInstructionCount": 2,
     "probeState": {
       "scenarioId": 10208,
@@ -18,7 +18,15 @@
       "donePc": 10216,
       "_donePc_hex": "0x27e8",
       "recordPtr": 10220,
-      "_recordPtr_hex": "0x27ec"
+      "_recordPtr_hex": "0x27ec",
+      "flags": 10224,
+      "_flags_hex": "0x27f0",
+      "firstStatus": 10228,
+      "_firstStatus_hex": "0x27f4",
+      "firstCause": 10232,
+      "_firstCause_hex": "0x27f8",
+      "firstEpc": 10236,
+      "_firstEpc_hex": "0x27fc"
     },
     "probeExternalArmAddress": 10192,
     "_probeExternalArmAddress_hex": "0x27d0",

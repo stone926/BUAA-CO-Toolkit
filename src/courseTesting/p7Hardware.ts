@@ -16,6 +16,10 @@ export interface P7HardwareConfig {
       kind: number;
       donePc: number;
       recordPtr: number;
+      flags: number;
+      firstStatus: number;
+      firstCause: number;
+      firstEpc: number;
     };
     probeExternalArmAddress: number;
     exceptionFlushShadowSlots: number;
@@ -86,12 +90,17 @@ export const p7ExceptionFlushShadowSlots = p7Hardware.memoryLayout.exceptionFlus
 export const p7InterruptAnchorInstructionCount = p7Hardware.memoryLayout.interruptAnchorInstructionCount;
 export const p7CourseInstructionCountMaximum =
   ((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4) - p7MainTerminatorInstructionCount;
-export const p7KernelTextDumpEndAddress = p7InstructionMemoryWords * 4 - 4;
+export const p7KernelTextDumpEndAddress =
+  p7UserTextBaseAddress + p7InstructionMemoryWords * 4 - 4;
 
 export const p7ProbeStateScenarioId = p7Hardware.memoryLayout.probeState.scenarioId;
 export const p7ProbeStateKind = p7Hardware.memoryLayout.probeState.kind;
 export const p7ProbeStateDonePc = p7Hardware.memoryLayout.probeState.donePc;
 export const p7ProbeStateRecordPtr = p7Hardware.memoryLayout.probeState.recordPtr;
+export const p7ProbeStateFlags = p7Hardware.memoryLayout.probeState.flags;
+export const p7ProbeStateFirstStatus = p7Hardware.memoryLayout.probeState.firstStatus;
+export const p7ProbeStateFirstCause = p7Hardware.memoryLayout.probeState.firstCause;
+export const p7ProbeStateFirstEpc = p7Hardware.memoryLayout.probeState.firstEpc;
 export const p7ProbeExternalArmAddress = p7Hardware.memoryLayout.probeExternalArmAddress;
 
 export const p7StatusEnableAllCourseInterrupts = p7Hardware.cp0.status.enableAllCourseInterrupts;
@@ -174,6 +183,10 @@ function validateP7Hardware(value: unknown): asserts value is P7HardwareConfig {
   integerAt(probeState, 'kind');
   integerAt(probeState, 'donePc');
   integerAt(probeState, 'recordPtr');
+  integerAt(probeState, 'flags');
+  integerAt(probeState, 'firstStatus');
+  integerAt(probeState, 'firstCause');
+  integerAt(probeState, 'firstEpc');
 
   for (const registers of [timer0, timer1]) {
     integerAt(registers, 'ctrl');
@@ -218,7 +231,7 @@ function validateP7Hardware(value: unknown): asserts value is P7HardwareConfig {
   if (mainTerminatorInstructionCount >= userInstructionSlots) {
     throw new Error('Invalid P7 terminator reservation.');
   }
-  if ((memoryLayout.exceptionHandlerAddress as number) > instructionMemoryWords * 4 - 4) {
+  if ((memoryLayout.exceptionHandlerAddress as number) > userText + instructionMemoryWords * 4 - 4) {
     throw new Error('P7 exception handler must be inside instruction memory.');
   }
   if ((timer.presetMin as number) > (timer.presetMax as number)) {

@@ -71,7 +71,7 @@ function deriveP7Values(p7Hardware) {
   const memory = p7Hardware.memoryLayout;
   const userSlots = (memory.exceptionHandlerAddress - memory.userTextBaseAddress) / 4;
   const instructionCountMaximum = userSlots - memory.mainTerminatorInstructionCount;
-  const kernelDumpEndAddress = memory.instructionMemoryWords * 4 - 4;
+  const kernelDumpEndAddress = memory.userTextBaseAddress + memory.instructionMemoryWords * 4 - 4;
   return {
     exceptionHandlerAddress: memory.exceptionHandlerAddress,
     instructionCountMaximum,
@@ -161,10 +161,10 @@ function applyGeneratedSchema(groups, defaults, resources) {
   p7InstructionCount.minimum = 1;
   p7InstructionCount.maximum = p7Values.instructionCountMaximum;
   p7InstructionCount.description =
-    `P7 内置 ASM 生成器为每个 ASM 文件生成的主程序指令数。P7 课程异常入口为 ${shortHex(p7Values.exceptionHandlerAddress)}，因此最大为 ${p7Values.instructionCountMaximum} 条，以保留停机自环并避免覆盖处理程序`;
+    `P7 内置 ASM 生成器的主程序有效载荷指令数。停机自环 beq 及其 nop 延迟槽额外占 2 条；${p7Values.instructionCountMaximum} + 2 条恰好填满到 ${shortHex(p7Values.exceptionHandlerAddress - 4)}，不覆盖 ${shortHex(p7Values.exceptionHandlerAddress)} 异常入口`;
 
   properties['co.toolchain.marsP7'].description =
-    `P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coL1 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension），内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
+    `P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coZeroGpr / coStrictData / coHalt / coL1 和课程 load-store 地址桥，并在 SWL/SWR、REGIMM 链接分支修复或动态未定义行为检查时支持 coL2 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension）；内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
   properties['co.mips.memoryConfiguration'].description =
     `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
   properties['co.test.builtinGenerator.instructions'].description = generatorInstructionDescription();

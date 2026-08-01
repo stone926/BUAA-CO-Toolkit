@@ -20,6 +20,10 @@ _co_probe_check_external:
     beq $26, $0, _co_probe_record_interrupt
     nop
     sb $0, ${externalInterruptAckHex}($0)
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagResumeInterruptEpc}
+    bne $22, $0, _co_probe_capture_priority_interrupt
+    nop
 _co_probe_record_interrupt:
     lw $26, ${stateRecordPtrHex}($0)
     lui $27, ${magicHiHex}
@@ -50,10 +54,24 @@ _co_probe_aux_timer1:
 _co_probe_record_done:
     addi $26, $26, ${recordByteLength}
     sw $26, ${stateRecordPtrHex}($0)
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRetryInterruptEpc}
+    bne $22, $0, _co_probe_eret_current_epc
+    nop
     lw $23, ${stateDonePcHex}($0)
     mtc0 $23, $14
+_co_probe_eret_current_epc:
+    eret
+_co_probe_capture_priority_interrupt:
+    sw $25, ${stateFirstStatusHex}($0)
+    sw $24, ${stateFirstCauseHex}($0)
+    sw $23, ${stateFirstEpcHex}($0)
     eret
 _co_probe_record_internal:
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagResumeInterruptEpc}
+    bne $22, $0, _co_probe_record_priority_exception
+    nop
     lw $26, ${stateRecordPtrHex}($0)
     lui $27, ${magicHiHex}
     ori $27, $27, ${magicLoHex}
@@ -65,10 +83,107 @@ _co_probe_record_internal:
     sw $25, 12($26)
     sw $24, 16($26)
     sw $23, 20($26)
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordHiLo}
+    bne $22, $0, _co_probe_internal_aux_hilo
+    nop
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordTimer0Ctrl}
+    bne $22, $0, _co_probe_internal_aux_timer0_ctrl
+    nop
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordTimer0Preset}
+    bne $22, $0, _co_probe_internal_aux_timer0_preset
+    nop
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordTimer0Count}
+    bne $22, $0, _co_probe_internal_aux_timer0_count
+    nop
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordTimer1Ctrl}
+    bne $22, $0, _co_probe_internal_aux_timer1_ctrl
+    nop
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordTimer1Preset}
+    bne $22, $0, _co_probe_internal_aux_timer1_preset
+    nop
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordTimer1Count}
+    bne $22, $0, _co_probe_internal_aux_timer1_count
+    nop
+    beq $0, $0, _co_probe_internal_aux_zero
+    nop
+_co_probe_internal_aux_hilo:
+    mfhi $22
+    sw $22, 24($26)
+    mflo $22
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_timer0_ctrl:
+    sw $21, 24($26)
+    lw $22, ${timer0CtrlHex}($0)
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_timer0_preset:
+    sw $21, 24($26)
+    lw $22, ${timer0PresetHex}($0)
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_timer0_count:
+    sw $21, 24($26)
+    lw $22, ${timer0CountHex}($0)
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_timer1_ctrl:
+    sw $21, 24($26)
+    lw $22, ${timer1CtrlHex}($0)
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_timer1_preset:
+    sw $21, 24($26)
+    lw $22, ${timer1PresetHex}($0)
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_timer1_count:
+    sw $21, 24($26)
+    lw $22, ${timer1CountHex}($0)
+    sw $22, 28($26)
+    beq $0, $0, _co_probe_internal_record_done
+    nop
+_co_probe_internal_aux_zero:
     sw $0, 24($26)
     sw $0, 28($26)
+_co_probe_internal_record_done:
     addi $26, $26, ${recordByteLength}
     sw $26, ${stateRecordPtrHex}($0)
-    addi $23, $23, 4
+    lw $23, ${stateDonePcHex}($0)
+    mtc0 $23, $14
+    eret
+_co_probe_record_priority_exception:
+    lw $26, ${stateRecordPtrHex}($0)
+    lui $27, ${magicHiHex}
+    ori $27, $27, ${magicLoHex}
+    sw $27, 0($26)
+    lw $27, ${stateScenarioIdHex}($0)
+    sw $27, 4($26)
+    lw $27, ${stateKindHex}($0)
+    sw $27, 8($26)
+    lw $27, ${stateFirstStatusHex}($0)
+    sw $27, 12($26)
+    lw $27, ${stateFirstCauseHex}($0)
+    sw $27, 16($26)
+    lw $27, ${stateFirstEpcHex}($0)
+    sw $27, 20($26)
+    sw $24, 24($26)
+    sw $23, 28($26)
+    addi $26, $26, ${recordByteLength}
+    sw $26, ${stateRecordPtrHex}($0)
+    lw $23, ${stateDonePcHex}($0)
     mtc0 $23, $14
     eret

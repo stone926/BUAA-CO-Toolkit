@@ -33,6 +33,7 @@ vi.mock('vscode', () => ({
 const profileStore = new Map<string, ProjectProfile>();
 const memoryConfigStore = new Map<string, string>();
 const delayedBranchingStore = new Map<string, boolean>();
+const extraArgsStore = new Map<string, string[]>();
 
 vi.mock('../../config', () => ({
   getProfile(resource?: any): ProjectProfile {
@@ -47,8 +48,8 @@ vi.mock('../../config', () => ({
     const key = resource?.fsPath ?? '';
     return delayedBranchingStore.get(key) ?? false;
   },
-  getMipsExtraArgs(_resource?: any): string[] {
-    return [];
+  getMipsExtraArgs(resource?: any): string[] {
+    return extraArgsStore.get(resource?.fsPath ?? '') ?? [];
   },
   getJava() { return 'java'; },
   getMarsJar() { return '/opt/mars/Mars.jar'; },
@@ -57,7 +58,7 @@ vi.mock('../../config', () => ({
 }));
 
 import { p7ExceptionHandlerAddress, p7KernelTextDumpEndAddress } from '../../courseTesting/p7Hardware';
-import { buildMarsArgs, p7KernelTextDumpRange } from '../../mips';
+import { buildMarsArgs, courseUserTextDumpRange, p7KernelTextDumpRange } from '../../mips';
 
 function makeUri(fsPath = '/test/asm.asm'): any {
   return { scheme: 'file', fsPath, path: fsPath };
@@ -75,6 +76,10 @@ function setDelayedBranching(uri: any, value: boolean): void {
   delayedBranchingStore.set(uri?.fsPath ?? '', value);
 }
 
+function setExtraArgs(uri: any, value: string[]): void {
+  extraArgsStore.set(uri?.fsPath ?? '', value);
+}
+
 function hasFlag(args: string[], flag: string): boolean {
   return args.some((a) => a.toLowerCase() === flag.toLowerCase());
 }
@@ -87,6 +92,7 @@ describe('buildMarsArgs', () => {
     profileStore.clear();
     memoryConfigStore.clear();
     delayedBranchingStore.clear();
+    extraArgsStore.clear();
     // All stores cleared above
   });
 
@@ -129,12 +135,123 @@ describe('buildMarsArgs', () => {
       expect(hasFlag(args, 'db')).toBe(false);
     });
 
+    it('forces profile delay-slot semantics for course traces', () => {
+      setProfile(asmUri, 'P5');
+      setDelayedBranching(asmUri, false);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'db')).toBe(true);
+
+      setProfile(asmUri, 'P4');
+      setDelayedBranching(asmUri, true);
+      setExtraArgs(asmUri, ['db']);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'db')).toBe(false);
+    });
+
+    it('never masks signed-overflow failures in a course-trace oracle', () => {
+      for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7'] as const) {
+        setProfile(asmUri, profile);
+        if (profile === 'P7') {
+          setMemoryConfig(asmUri, 'CompactLargeText');
+        }
+        setExtraArgs(asmUri, ['ig']);
+        expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'ig'), profile).toBe(false);
+      }
+    });
+
+    it('makes modified-MARS assembly and simulation failures nonzero for course traces', () => {
+      setProfile(asmUri, 'P6');
+      const courseArgs = buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true });
+      expect(courseArgs).toContain('ae1');
+      expect(courseArgs).toContain('se1');
+
+      const ordinaryArgs = buildMarsArgs(asmUri, marsJar, 'run', {});
+      expect(ordinaryArgs).not.toContain('ae1');
+      expect(ordinaryArgs).not.toContain('se1');
+    });
+
+    it('forces modified-MARS GPR reset and data-map semantics to the tutorial values', () => {
+      setProfile(asmUri, 'P6');
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'coZeroGpr')).toBe(true);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'coStrictData')).toBe(true);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', {}), 'coZeroGpr')).toBe(false);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', {}), 'coStrictData')).toBe(false);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'coZeroGpr')).toBe(false);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'coStrictData')).toBe(true);
+    });
+
     it('appends coL1 when traceOutput is requested', () => {
       setProfile(asmUri, 'P5');
 
       const args = buildMarsArgs(asmUri, marsJar, 'run', { traceOutput: true });
 
       expect(hasFlag(args, 'coL1')).toBe(true);
+    });
+
+    it('appends coL2 instead of coL1 when detailed trace is requested', () => {
+      setProfile(asmUri, 'P5');
+
+      const args = buildMarsArgs(asmUri, marsJar, 'run', { traceOutput: true, traceLevel: 2 });
+
+      expect(hasFlag(args, 'coL2')).toBe(true);
+      expect(hasFlag(args, 'coL1')).toBe(false);
+    });
+
+    it('passes a deterministic native max-step limit only to course-trace runs', () => {
+      for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7'] as const) {
+        setProfile(asmUri, profile);
+        if (profile === 'P7') {
+          setMemoryConfig(asmUri, 'CompactLargeText');
+        }
+        const courseArgs = buildMarsArgs(asmUri, marsJar, 'run', {
+          traceOutput: true,
+          maxSteps: 8064,
+          haltPc: 0x3ffc
+        });
+
+        expect(courseArgs, profile).toContain('0x1f80');
+        expect(courseArgs, profile).toContain('coHalt=0x3ffc');
+        expect(courseArgs[courseArgs.length - 1], profile).toBe('/test/asm/test.asm');
+      }
+
+      setProfile(asmUri, 'P5');
+      const ordinaryArgs = buildMarsArgs(asmUri, marsJar, 'run', { maxSteps: 8064 });
+
+      expect(ordinaryArgs).not.toContain('0x1f80');
+      expect(ordinaryArgs.some((arg) => arg.toLowerCase().startsWith('cohalt='))).toBe(false);
+    });
+
+    it('does not pass any user extra arguments to a course-trace oracle', () => {
+      setProfile(asmUri, 'P6');
+      setExtraArgs(asmUri, [
+        'mc', 'InjectedConfig', 'cl', 'Injected.class', 'coL1', 'coL2',
+        'p7irq=0x3000', 'efc', 'smc', 'db', 'ig', 'coZeroGpr', 'coStrictData', 'coHalt=0x6666'
+      ]);
+
+      const args = buildMarsArgs(asmUri, marsJar, 'run', { traceOutput: true, traceLevel: 2 });
+
+      expect(args.filter((arg) => arg.toLowerCase() === 'mc')).toHaveLength(1);
+      expect(args.filter((arg) => arg.toLowerCase() === 'db')).toHaveLength(1);
+      expect(args.filter((arg) => arg.toLowerCase() === 'ig')).toHaveLength(0);
+      expect(args.filter((arg) => arg.toLowerCase() === 'col2')).toHaveLength(1);
+      expect(args.filter((arg) => arg.toLowerCase() === 'cozerogpr')).toHaveLength(1);
+      expect(args.filter((arg) => arg.toLowerCase() === 'costrictdata')).toHaveLength(1);
+      expect(args.some((arg) => arg.toLowerCase().startsWith('cohalt='))).toBe(false);
+      expect(args).not.toContain('InjectedConfig');
+      expect(args).not.toContain('Injected.class');
+      expect(hasFlag(args, 'cl')).toBe(false);
+      expect(hasFlag(args, 'coL1')).toBe(false);
+      expect(hasFlag(args, 'efc')).toBe(false);
+      expect(hasFlag(args, 'smc')).toBe(false);
+      expect(args.some((arg) => arg.toLowerCase().startsWith('p7irq='))).toBe(false);
+    });
+
+    it('keeps user extra arguments for ordinary MARS runs', () => {
+      setProfile(asmUri, 'P4');
+      setExtraArgs(asmUri, ['smc', 'custom-option']);
+
+      const args = buildMarsArgs(asmUri, marsJar, 'run', {});
+
+      expect(args).toContain('smc');
+      expect(args).toContain('custom-option');
     });
 
     it('does not append coL1 when traceOutput is false', () => {
@@ -246,12 +363,28 @@ describe('buildMarsArgs', () => {
       expect(hasFlag(args, 'efc')).toBe(false);
       expect(args.some((a) => a.startsWith('p7irq='))).toBe(false);
     });
+
+    it('does not pass user extra arguments while preparing a course-trace dump', () => {
+      setProfile(asmUri, 'P5');
+      setExtraArgs(asmUri, ['smc', 'coL2', 'cl', 'Injected.class']);
+
+      const args = buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true });
+
+      expect(args).not.toContain('smc');
+      expect(args).not.toContain('coL2');
+      expect(args).not.toContain('cl');
+      expect(args).not.toContain('Injected.class');
+      expect(args).toContain('ae1');
+      expect(args).toContain('se1');
+    });
   });
 
   describe('dumpKernel mode', () => {
-    it('derives the P7 kernel dump range from the hardware resource', () => {
+    it('uses exclusive course dump bounds without mixing contiguous P7 user and kernel text', () => {
       const format = (value: number) => `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
-      expect(p7KernelTextDumpRange()).toBe(`${format(p7ExceptionHandlerAddress)}-${format(p7KernelTextDumpEndAddress)}`);
+      expect(courseUserTextDumpRange('P6')).toBe(`${format(0x3000)}-${format(p7KernelTextDumpEndAddress + 4)}`);
+      expect(courseUserTextDumpRange('P7')).toBe(`${format(0x3000)}-${format(p7ExceptionHandlerAddress)}`);
+      expect(p7KernelTextDumpRange()).toBe(`${format(p7ExceptionHandlerAddress)}-${format(p7KernelTextDumpEndAddress + 4)}`);
     });
 
     it('does not append asm file path', () => {

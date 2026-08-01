@@ -11,7 +11,8 @@ import {
 } from './config';
 import { basenameNoExt, cleanupCoTmp, coTmpDir, dirname, ensureDirectory, isFile, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
-import { appendHaltLoop, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from './courseTesting/mipsUtil';
+import { appendHaltLoop, courseTraceHaltLoopError, courseTraceHaltPc, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from './courseTesting/mipsUtil';
+import { courseDataDumpChunks, courseDataInitializationError } from './courseTesting/courseDataInitialization';
 import { p7ExceptionHandlerAddress, p7KernelTextDumpEndAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
 import { AppServices, ProjectProfile, RunResult } from './types';
 import { pickOneFile } from './workflowInputs';
@@ -38,15 +39,20 @@ export interface MarsRunOptions {
   stdinSource?: vscode.Uri;
   courseTrace?: boolean;
   traceOutput?: boolean;
+  traceLevel?: 1 | 2;
   dumpOutputFile?: vscode.Uri;
   runOutputFile?: vscode.Uri;
   interruptSchedule?: number[];
   p7RiInstruction?: boolean;
+  maxSteps?: number;
+  haltPc?: number;
 }
 
 export interface MarsRunOutput {
   result: RunResult;
   outputFile?: vscode.Uri;
+  /** Halt PC derived from the pre-merge user-text dump. */
+  courseHaltPc?: number;
 }
 
 export function registerMips(context: vscode.ExtensionContext, services: AppServices): void {
@@ -158,11 +164,14 @@ export async function runMarsFile(
   if (mode === 'dumpText') {
     outputFile = options.dumpOutputFile ?? vscode.Uri.file(path.join(cwd, getMachineCode(asmUri)));
     await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
-    args.push('a', 'dump', '.text', 'HexText', outputFile.fsPath, asmUri.fsPath);
+    const textRange = isCourseTraceMarsRun(mode, effectiveOptions)
+      ? courseUserTextDumpRange(getProfile(asmUri))
+      : '.text';
+    args.push('a', 'dump', textRange, 'HexText', outputFile.fsPath);
   } else if (mode === 'dumpKernel') {
     outputFile = options.dumpOutputFile ?? vscode.Uri.file(path.join(cwd, `${basenameNoExt(asmUri)}.kernel.txt`));
     await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
-    args.push('a', 'dump', p7KernelTextDumpRange(), 'HexText', outputFile.fsPath, asmUri.fsPath);
+    args.push('a', 'dump', p7KernelTextDumpRange(), 'HexText', outputFile.fsPath);
   }
 
   const setupError = await marsRunSetupError(asmUri, mode, effectiveOptions, memoryConfiguration);
@@ -175,18 +184,61 @@ export async function runMarsFile(
     return { result, outputFile };
   }
 
-  let result = await runTool(java, args, {
-    cwd,
-    output: services.output,
-    resource: asmUri,
-    stdin: options.stdin
-  });
-  result = withMarsCompatibilityDiagnostics(result, services, mode, effectiveOptions, memoryConfiguration);
+  let result: RunResult;
+  let validatedCourseHaltPc: number | undefined;
+  let courseDataDump: CourseDataDumpFiles | undefined;
+  const requiresCourseDataPreflight = mode === 'dumpText' && isCourseTraceMarsRun(mode, effectiveOptions);
+  try {
+    if (requiresCourseDataPreflight) {
+      courseDataDump = await prepareCourseDataDumpFiles(asmUri, args);
+    }
+    if (mode === 'dumpText' || mode === 'dumpKernel') {
+      args.push(asmUri.fsPath);
+    }
+    result = await runTool(java, args, {
+      cwd,
+      output: services.output,
+      resource: asmUri,
+      stdin: options.stdin
+    });
+    result = withMarsCompatibilityDiagnostics(result, services, mode, effectiveOptions, memoryConfiguration);
+    if (result.ok && courseDataDump) {
+      const dumpError = await validateCourseDataDumpFiles(courseDataDump, result);
+      if (dumpError) {
+        services.output.appendLine(dumpError);
+        result = localMarsRunFailureFrom(result, dumpError);
+      }
+    }
+  } catch (error) {
+    if (!requiresCourseDataPreflight) {
+      throw error;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = `课程 DM 初始化 dump 预检失败：${detail}。无法安全确认 MARS 与 P3–P7 硬件的全零 DM 初态一致，已终止课程 Trace。`;
+    services.output.appendLine(message);
+    result = localMarsRunFailure(java, args, cwd, message);
+  } finally {
+    if (courseDataDump) {
+      await cleanupCoTmp(courseDataDump.tempDirPath);
+    }
+  }
 
-  if (mode === 'dumpText' && result.ok && outputFile && getProfile(asmUri) === 'P7') {
-    result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result, effectiveOptions);
-  } else if (mode === 'dumpText' && result.ok && outputFile && cpuHaltProfiles.has(getProfile(asmUri))) {
-    await appendHaltLoopToTextDump(outputFile, services);
+  if (mode === 'dumpText' && result.ok && outputFile) {
+    if (isCourseTraceMarsRun(mode, effectiveOptions)) {
+      const userTextDump = await readTextFile(outputFile);
+      const haltError = courseTraceHaltLoopError(userTextDump);
+      if (haltError) {
+        services.output.appendLine(haltError);
+        result = localMarsRunFailureFrom(result, haltError);
+      } else {
+        validatedCourseHaltPc = courseTraceHaltPc(userTextDump);
+      }
+    }
+    if (result.ok && getProfile(asmUri) === 'P7') {
+      result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result, effectiveOptions);
+    } else if (result.ok && cpuHaltProfiles.has(getProfile(asmUri))) {
+      await appendHaltLoopToTextDump(outputFile, services);
+    }
   }
 
   if (mode === 'run') {
@@ -202,7 +254,7 @@ export async function runMarsFile(
   }
 
   if (!showMessages) {
-    return { result, outputFile };
+    return { result, outputFile, courseHaltPc: validatedCourseHaltPc };
   }
 
   if (result.ok) {
@@ -218,7 +270,53 @@ export async function runMarsFile(
     vscode.window.showErrorMessage(`MARS 运行失败${result.exitCode === null ? '' : `，退出码 ${result.exitCode}`}`);
   }
 
-  return { result, outputFile };
+  return { result, outputFile, courseHaltPc: validatedCourseHaltPc };
+}
+
+interface CourseDataDumpFiles {
+  tempDirPath: string;
+  files: vscode.Uri[];
+}
+
+async function prepareCourseDataDumpFiles(asmUri: vscode.Uri, args: string[]): Promise<CourseDataDumpFiles> {
+  const tempDirPath = coTmpDir(asmUri, 'co-mars-dm-init-');
+  try {
+    const files = courseDataDumpChunks.map((chunk) => vscode.Uri.file(path.join(
+      tempDirPath,
+      `${basenameNoExt(asmUri)}.dm-${chunk.index}.txt`
+    )));
+    // MARS does not create a file for an entirely unallocated 4 KiB data block. Pre-creating an
+    // empty file makes that legitimate all-zero state distinguishable from a missing path/read
+    // failure, both of which are handled explicitly below.
+    for (const file of files) {
+      await writeTextFile(file, '');
+    }
+    for (const chunk of courseDataDumpChunks) {
+      args.push('dump', chunk.marsRange, 'HexText', files[chunk.index].fsPath);
+    }
+    return { tempDirPath, files };
+  } catch (error) {
+    await cleanupCoTmp(tempDirPath);
+    throw error;
+  }
+}
+
+async function validateCourseDataDumpFiles(
+  dump: CourseDataDumpFiles,
+  marsResult: RunResult
+): Promise<string | undefined> {
+  const dumpDiagnostic = `${marsResult.stdout}\n${marsResult.stderr}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => /Error while attempting to save dump|segment\/address-range .* is invalid|dump, format .* was not found/i.test(line));
+  if (dumpDiagnostic) {
+    return `课程 DM 初始化 dump 失败：MARS 报告“${dumpDiagnostic}”。无法安全确认 MARS 与 P3–P7 硬件的全零 DM 初态一致，已终止课程 Trace。`;
+  }
+  const texts: string[] = [];
+  for (const file of dump.files) {
+    texts.push(await readTextFile(file));
+  }
+  return courseDataInitializationError(texts);
 }
 
 function localMarsRunFailure(command: string, args: readonly string[], cwd: string, message: string): RunResult {
@@ -233,12 +331,30 @@ function localMarsRunFailure(command: string, args: readonly string[], cwd: stri
   };
 }
 
+function localMarsRunFailureFrom(previous: RunResult, message: string): RunResult {
+  return {
+    ...previous,
+    ok: false,
+    exitCode: null,
+    stderr: previous.stderr ? `${previous.stderr}\n${message}` : message,
+    timedOut: false
+  };
+}
+
 async function marsRunSetupError(
   asmUri: vscode.Uri,
   mode: MarsRunMode,
   options: MarsRunOptions,
   memoryConfiguration: string
 ): Promise<string | undefined> {
+  if (mode === 'run' && isCourseTraceMarsRun(mode, options)) {
+    if (!Number.isSafeInteger(options.maxSteps) || (options.maxSteps ?? 0) <= 0) {
+      return '课程 MARS 黄金模型必须设置正整数 maxSteps，作为未到达标准停机尾时的有限执行预算。';
+    }
+    if (!Number.isSafeInteger(options.haltPc) || (options.haltPc ?? -1) < 0) {
+      return '课程 MARS 黄金模型缺少由最终用户 .text dump 验证得到的 haltPc，无法区分标准停机尾与跳出程序/错误自环。';
+    }
+  }
   const profile = getProfile(asmUri);
   if (profile === 'P7') {
     if (options.p7RiInstruction && !await isFile(p7InternalUnknownInstructionClassPath())) {
@@ -285,8 +401,20 @@ function marsCompatibilityMessage(
   memoryConfiguration: string
 ): string | undefined {
   const output = `${result.stdout}\n${result.stderr}`;
-  if (options.traceOutput && /Invalid Command Argument:\s*coL1/i.test(output)) {
-    return '当前 MARS 不支持 coL1 trace 参数。课程自动对拍默认需要 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 修改版 Mars，请检查 co.toolchain.mars / co.toolchain.marsP7。';
+  if (mode === 'run' && isCourseTraceMarsRun(mode, options)
+    && /Invalid Command Argument:\s*coZeroGpr/i.test(output)) {
+    return '当前修改版 MARS 不支持 coZeroGpr，无法将 $gp/$sp 等 GPR 初态对齐到教程规定的全 0。请更新 Mars-with-BUAA-CO-extension 并重新配置 co.toolchain.mars / co.toolchain.marsP7。';
+  }
+  if (mode === 'run' && isCourseTraceMarsRun(mode, options)
+    && /Invalid Command Argument:\s*coStrictData/i.test(output)) {
+    return '当前修改版 MARS 不支持 coStrictData，无法按教程限制 DM/MMIO 地址范围并拒绝有效地址溢出。请更新 Mars-with-BUAA-CO-extension 并重新配置 co.toolchain.mars / co.toolchain.marsP7。';
+  }
+  if (mode === 'run' && isCourseTraceMarsRun(mode, options)
+    && /Invalid Command Argument:\s*coHalt=/i.test(output)) {
+    return '当前修改版 MARS 不支持 coHalt，无法确认程序实际到达教程规定的最终停机自环。请更新 Mars-with-BUAA-CO-extension 并重新配置 co.toolchain.mars / co.toolchain.marsP7。';
+  }
+  if (options.traceOutput && /Invalid Command Argument:\s*coL[12]/i.test(output)) {
+    return '当前 MARS 不支持 coL1/coL2 trace 参数。课程自动对拍需要 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 修改版 Mars，请检查 co.toolchain.mars / co.toolchain.marsP7。';
   }
   if (isCourseTraceMarsRun(mode, options) && /Invalid Command Argument:\s*(efc|p7irq)/i.test(output)) {
     return '当前 MARS 不支持 efc / p7irq（P7 异常与外部中断）参数。P7 自动对拍需要含该功能的修改版 Mars 构建，请重新构建并配置 co.toolchain.marsP7。';
@@ -323,28 +451,74 @@ async function mergeP7KernelTextDump(
   const args = buildMarsArgs(asmUri, mars, 'dumpKernel', options, P7_COURSE_MEMORY_CONFIG);
   args.push('a', 'dump', p7KernelTextDumpRange(), 'HexText', kernelOutputFile.fsPath, asmUri.fsPath);
 
-  const kernelResult = await runTool(java, args, {
-    cwd,
-    output: services.output,
-    resource: asmUri
-  });
+  let kernelResult: RunResult;
+  try {
+    kernelResult = await runTool(java, args, {
+      cwd,
+      output: services.output,
+      resource: asmUri
+    });
+  } catch (error) {
+    await cleanupCoTmp(tempDirPath);
+    throw error;
+  }
   if (!kernelResult.ok) {
+    await cleanupCoTmp(tempDirPath);
     return kernelResult;
   }
 
   try {
+    const kernelOutput = `${kernelResult.stdout}\n${kernelResult.stderr}`;
+    const dumpDiagnostic = kernelOutput.split(/\r?\n/).map((line) => line.trim()).find((line) =>
+      /Error while attempting to save dump|segment\/address-range .* is invalid|dump, format .* was not found/i.test(line));
+    if (dumpDiagnostic) {
+      const message = `P7 内核机器码导出失败：MARS 报告“${dumpDiagnostic}”。不能以缺失异常处理程序的 code.txt 继续测试。`;
+      services.output.appendLine(message);
+      return localMarsRunFailureFrom(kernelResult, message);
+    }
+    const explicitlyEmpty = /This segment has not been written to, there is nothing to dump\./i.test(kernelOutput);
     if (!await workspaceFileExists(kernelOutputFile)) {
-      return previousResult;
+      if (explicitlyEmpty) {
+        return previousResult;
+      }
+      const message = 'P7 内核机器码导出失败：MARS 未生成 kernel HexText，也未明确报告内核文本段为空。';
+      services.output.appendLine(message);
+      return localMarsRunFailureFrom(kernelResult, message);
+    }
+    let kernelText: string;
+    try {
+      kernelText = await readTextFile(kernelOutputFile);
+    } catch (error) {
+      const message = `P7 内核机器码导出失败：无法读取 kernel HexText（${error instanceof Error ? error.message : String(error)}）。`;
+      services.output.appendLine(message);
+      return localMarsRunFailureFrom(kernelResult, message);
+    }
+    const invalidKernelLine = kernelText.split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0 && !/^[0-9a-fA-F]{8}$/.test(line));
+    if (invalidKernelLine) {
+      const message = `P7 内核机器码导出失败：kernel HexText 包含非法行 ${JSON.stringify(invalidKernelLine)}。`;
+      services.output.appendLine(message);
+      return localMarsRunFailureFrom(kernelResult, message);
     }
     const textLines = machineCodeLines(await readTextFile(textOutputFile));
-    const kernelLines = machineCodeLines(await readTextFile(kernelOutputFile));
+    const kernelLines = machineCodeLines(kernelText);
     if (!kernelLines.length) {
-      return previousResult;
+      if (explicitlyEmpty) {
+        return previousResult;
+      }
+      const message = 'P7 内核机器码导出失败：kernel HexText 为空，但 MARS 未明确报告内核文本段未写入。';
+      services.output.appendLine(message);
+      return localMarsRunFailureFrom(kernelResult, message);
     }
 
-    const maxTextLinesBeforeStopLoop = p7KernelTextStartIndex - 2;
-    if (textLines.length > maxTextLinesBeforeStopLoop) {
-      const message = `P7 机器码导出失败：用户文本段已有 ${textLines.length} 条指令，无法在 0x${p7ExceptionHandlerAddress.toString(16)} 异常入口前插入安全停机自环。`;
+    // Course-trace sources were already required to carry the tutorial-mandated halt loop, so
+    // MARS and hardware execute the same user text. Ordinary dumps retain the legacy append.
+    const terminatedTextLines = textLines.length
+      ? machineCodeLines(appendHaltLoop(`${textLines.join('\n')}\n`))
+      : [MIPS_SELF_BRANCH_HEX, MIPS_NOP_HEX];
+    if (terminatedTextLines.length > p7KernelTextStartIndex) {
+      const message = `P7 机器码导出失败：用户文本段及停机自环共有 ${terminatedTextLines.length} 条指令，已覆盖 0x${p7ExceptionHandlerAddress.toString(16)} 异常入口。`;
       services.output.appendLine(message);
       return {
         ...previousResult,
@@ -355,7 +529,7 @@ async function mergeP7KernelTextDump(
       };
     }
 
-    const merged = [...textLines, MIPS_SELF_BRANCH_HEX, MIPS_NOP_HEX];
+    const merged = [...terminatedTextLines];
     while (merged.length < p7KernelTextStartIndex) {
       merged.push(MIPS_NOP_HEX);
     }
@@ -387,8 +561,8 @@ function machineCodeLines(text: string): string[] {
 const cpuHaltProfiles = CPU_HALT_PROFILES;
 
 /**
- * 给 dump 出的机器码追加停机自环（与 P7 一致）。仅改 code.txt，不改源 ASM，所以 MARS 黄金 trace
- * 直接运行 ASM 时仍按原样在末尾自然停机，两端写事件不变。
+ * 给普通（非课程 Trace）dump 出的机器码追加停机自环（与 P7 一致）。课程 Trace 会先要求
+ * ASM 自身具备该尾部，禁止只改 code.txt 造成 MARS 与硬件程序不一致。
  */
 async function appendHaltLoopToTextDump(outputFile: vscode.Uri, services: AppServices): Promise<void> {
   try {
@@ -434,5 +608,17 @@ function formatMarsDumpAddress(value: number): string {
 }
 
 export function p7KernelTextDumpRange(): string {
-  return `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-${formatMarsDumpAddress(p7KernelTextDumpEndAddress)}`;
+  return `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-${formatMarsDumpAddress(p7KernelTextDumpEndAddress + 4)}`;
+}
+
+/**
+ * MARS treats an explicit dump upper bound as exclusive. Keep the P7 user dump below the
+ * 0x4180 handler even when user text and kernel text are physically contiguous; other CPU
+ * profiles may use the complete 16 KiB course IM through 0x6ffc.
+ */
+export function courseUserTextDumpRange(profile: ProjectProfile): string {
+  const endExclusive = profile === 'P7'
+    ? p7ExceptionHandlerAddress
+    : p7KernelTextDumpEndAddress + 4;
+  return `${formatMarsDumpAddress(p7UserTextBaseAddress)}-${formatMarsDumpAddress(endExclusive)}`;
 }

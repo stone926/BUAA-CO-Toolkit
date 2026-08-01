@@ -29,11 +29,18 @@ import {
   CourseTraceCaseResult,
   renderContinuousTraceMonitor
 } from './courseTestReport';
-import { courseTraceMemoryConfigurationError, formatToolchainFailure } from './courseTestToolchain';
+import {
+  courseTraceMemoryConfigurationError,
+  formatToolchainFailure,
+  MARS_COURSE_IM_CHECK,
+  MARS_P7_CONTRACT_CHECK,
+  requiredToolchainFailures
+} from './courseTestToolchain';
 import { normalizePathKey } from './pathUtils';
 
 interface ContinuousTraceSession {
   stopRequested: boolean;
+  wakeIntervalWait?: () => void;
   report: ContinuousTraceReport;
   reportFile: vscode.Uri;
   panel: vscode.WebviewPanel;
@@ -98,88 +105,102 @@ export interface ContinuousGeneratedTraceDependencies<TSetup, TCase extends Cont
 }
 
 let activeContinuousTraceSession: ContinuousTraceSession | undefined;
+let continuousTraceStartReserved = false;
+let continuousTraceStartupStopRequested = false;
 const continuousMonitorFlushIntervalMs = 1000;
 
 export async function startContinuousGeneratedTraceTests<TSetup, TCase extends ContinuousTraceCaseLike, TAsmCase, TRunOptions extends object>(
   services: AppServices,
   deps: ContinuousGeneratedTraceDependencies<TSetup, TCase, TAsmCase, TRunOptions>
 ): Promise<void> {
-  if (activeContinuousTraceSession) {
+  if (activeContinuousTraceSession || continuousTraceStartReserved) {
     vscode.window.showWarningMessage('已有一个持续课程 Trace 测试会话正在运行');
     return;
   }
 
-  await vscode.workspace.saveAll(false);
-  const setup = await deps.resolveGeneratorRunSetup();
-  if (!setup) {
-    return;
-  }
-  const resource = deps.generatorResource(setup);
-  if (!await ensureContinuousTraceToolchainReady(services, resource)) {
-    return;
-  }
-  const baseRunOptions = await deps.resolveCourseTraceRunOptions(services, resource, {
-    revealOutput: false,
-    artifactOutputMode: 'case'
-  });
-  if (!baseRunOptions) {
-    return;
-  }
-
-  const intervalMs = getContinuousIntervalMs(resource);
-  const maxIterations = getContinuousMaxIterations(resource);
-  const stopOnFailure = getContinuousStopOnFailure(resource);
-  const retention: ContinuousTraceRetention = {
-    retainedPassingCases: getContinuousRetainedPassingCases(resource),
-    reportRetainedIterations: getContinuousReportRetainedIterations(resource)
-  };
-  const outDir = vscode.Uri.file(path.join(deps.generatorFolder(setup).uri.fsPath, CO_OUT_DIR));
-  await ensureDirectory(outDir);
-  const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
-  const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
-    enableScripts: false,
-    retainContextWhenHidden: true
-  });
-  const session: ContinuousTraceSession = {
-    stopRequested: false,
-    reportFile,
-    panel,
-    lastMonitorFlushMs: 0,
-    retainedPassingArtifacts: [],
-    retention,
-    report: {
-      generatedAt: new Date().toISOString(),
-      running: true,
-      stopRequested: false,
-      totalIterations: 0,
-      generator: deps.generatorLabel(setup),
-      commandLine: deps.generatorCommandLine(setup),
-      cwd: deps.generatorCwd(setup),
-      options: {
-        intervalMs,
-        maxIterations,
-        stopOnFailure
-      },
-      retention: {
-        retainedPassingCases: retention.retainedPassingCases,
-        reportRetainedIterations: retention.reportRetainedIterations,
-        artifactOutputMode: 'case'
-      },
-      iterations: []
-    }
-  };
-  activeContinuousTraceSession = session;
-  panel.onDidDispose(() => {
-    session.stopRequested = true;
-  });
-
-  services.output.appendLine('');
-  services.output.appendLine('正在启动持续生成 Trace 测试');
-  services.output.appendLine(`生成器: ${deps.generatorLabel(setup)}`);
-  services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大轮数: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
-  services.output.appendLine(`产物: 通过 case 仅保留最近 ${retention.retainedPassingCases} 个，失败/异常 case 始终保留`);
-
+  continuousTraceStartReserved = true;
+  continuousTraceStartupStopRequested = false;
+  let session: ContinuousTraceSession | undefined;
   try {
+    await vscode.workspace.saveAll(false);
+    if (continuousTraceStartupStopRequested) {
+      return;
+    }
+    const setup = await deps.resolveGeneratorRunSetup();
+    if (!setup || continuousTraceStartupStopRequested) {
+      return;
+    }
+    const resource = deps.generatorResource(setup);
+    if (!await ensureContinuousTraceToolchainReady(services, resource)) {
+      return;
+    }
+    if (continuousTraceStartupStopRequested) {
+      return;
+    }
+    const baseRunOptions = await deps.resolveCourseTraceRunOptions(services, resource, {
+      revealOutput: false,
+      artifactOutputMode: 'case'
+    });
+    if (!baseRunOptions || continuousTraceStartupStopRequested) {
+      return;
+    }
+
+    const intervalMs = getContinuousIntervalMs(resource);
+    const maxIterations = getContinuousMaxIterations(resource);
+    const stopOnFailure = getContinuousStopOnFailure(resource);
+    const retention: ContinuousTraceRetention = {
+      retainedPassingCases: getContinuousRetainedPassingCases(resource),
+      reportRetainedIterations: getContinuousReportRetainedIterations(resource)
+    };
+    const outDir = vscode.Uri.file(path.join(deps.generatorFolder(setup).uri.fsPath, CO_OUT_DIR));
+    await ensureDirectory(outDir);
+    if (continuousTraceStartupStopRequested) {
+      return;
+    }
+    const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
+    const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
+      enableScripts: false,
+      retainContextWhenHidden: true
+    });
+    session = {
+      stopRequested: false,
+      reportFile,
+      panel,
+      lastMonitorFlushMs: 0,
+      retainedPassingArtifacts: [],
+      retention,
+      report: {
+        generatedAt: new Date().toISOString(),
+        running: true,
+        stopRequested: false,
+        totalIterations: 0,
+        generator: deps.generatorLabel(setup),
+        commandLine: deps.generatorCommandLine(setup),
+        cwd: deps.generatorCwd(setup),
+        options: {
+          intervalMs,
+          maxIterations,
+          stopOnFailure
+        },
+        retention: {
+          retainedPassingCases: retention.retainedPassingCases,
+          reportRetainedIterations: retention.reportRetainedIterations,
+          artifactOutputMode: 'case'
+        },
+        iterations: []
+      }
+    };
+    activeContinuousTraceSession = session;
+    continuousTraceStartReserved = false;
+    continuousTraceStartupStopRequested = false;
+    panel.onDidDispose(() => requestContinuousTraceStop(session!));
+
+    services.output.appendLine('');
+    services.output.appendLine('正在启动持续生成 Trace 测试');
+    services.output.appendLine(`生成器: ${deps.generatorLabel(setup)}`);
+    services.output.appendLine(`间隔: ${intervalMs} 毫秒, 最大轮数: ${maxIterations || '无限制'}, 失败时停止: ${stopOnFailure}`);
+    services.output.appendLine(`产物: 通过 case 仅保留最近 ${retention.retainedPassingCases} 个，失败/异常 case 始终保留`);
+
     await updateContinuousTraceMonitor(session, { force: true });
     let index = 0;
     while (!session.stopRequested && (maxIterations === 0 || index < maxIterations)) {
@@ -198,11 +219,13 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
 
       services.output.appendLine('');
       services.output.appendLine(`Continuous iteration #${index}`);
+      let iterationLevelError = false;
       try {
         const generated = await deps.runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
         if (!generated?.asms.length) {
           iteration.status = 'error';
           iteration.message = '生成器已完成，但未检测到新建或修改的 ASM 文件';
+          iterationLevelError = true;
           services.output.appendLine(iteration.message);
         } else {
           iteration.source = generated.source;
@@ -239,6 +262,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       } catch (error) {
         iteration.status = 'error';
         iteration.message = error instanceof Error ? error.message : String(error);
+        iterationLevelError = true;
       }
 
       iteration.finishedAt = new Date().toISOString();
@@ -248,30 +272,55 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       await applyContinuousRetention(session, iteration);
       await updateContinuousTraceMonitor(session, { force: true });
 
-      if (session.stopRequested || shouldStopAfterIterationCounts(iteration.summary, stopOnFailure) || iteration.status === 'error') {
+      const reachedMaxIterations = maxIterations > 0 && index >= maxIterations;
+      if (
+        session.stopRequested
+        || iterationLevelError
+        || shouldStopAfterIterationCounts(iteration.summary, stopOnFailure)
+        || reachedMaxIterations
+      ) {
         break;
       }
-      await delay(intervalMs);
+      await waitForNextContinuousIteration(session, intervalMs);
     }
   } finally {
-    session.report.running = false;
-    session.report.stopRequested = session.stopRequested;
-    services.statusBar.text = 'CO: Continuous stopped';
-    await updateContinuousTraceMonitor(session, { force: true });
-    if (activeContinuousTraceSession === session) {
-      activeContinuousTraceSession = undefined;
+    continuousTraceStartReserved = false;
+    continuousTraceStartupStopRequested = false;
+    if (session) {
+      session.report.running = false;
+      session.report.stopRequested = session.stopRequested;
+      services.statusBar.text = 'CO: Continuous stopped';
+      try {
+        await updateContinuousTraceMonitor(session, { force: true });
+      } catch (error) {
+        services.output.appendLine(`持续测试最终报告写入失败: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        if (activeContinuousTraceSession === session) {
+          activeContinuousTraceSession = undefined;
+        }
+      }
     }
   }
 }
 
 export function stopContinuousTests(): void {
   if (!activeContinuousTraceSession) {
+    if (continuousTraceStartReserved) {
+      continuousTraceStartupStopRequested = true;
+      vscode.window.showInformationMessage('已请求取消正在启动的持续测试');
+      return;
+    }
     vscode.window.showInformationMessage('当前没有正在运行的持续测试');
     return;
   }
-  activeContinuousTraceSession.stopRequested = true;
-  activeContinuousTraceSession.report.stopRequested = true;
+  requestContinuousTraceStop(activeContinuousTraceSession);
   vscode.window.showInformationMessage('将在当前工具运行完成后停止持续测试');
+}
+
+function requestContinuousTraceStop(session: ContinuousTraceSession): void {
+  session.stopRequested = true;
+  session.report.stopRequested = true;
+  session.wakeIntervalWait?.();
 }
 
 async function ensureContinuousTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {
@@ -293,7 +342,7 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
 
   const checks = await checkToolchain(services.output, resource, profile === 'P3' ? { tools: ['java', 'mars', 'logisim'] } : {});
   const required = requiredContinuousTraceChecks(profile, memoryConfiguration);
-  const failed = checks.filter((check) => required.has(check.name) && !check.ok);
+  const failed = requiredToolchainFailures(checks, required);
   if (!failed.length) {
     return true;
   }
@@ -306,11 +355,14 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
 
 function requiredContinuousTraceChecks(profile: ProjectProfile, memoryConfiguration: string): Set<string> {
   if (profile === 'P3') {
-    return new Set(['Java', 'MARS', 'MARS coL1', 'Logisim', `MARS ${memoryConfiguration}`]);
+    return new Set(['Java', 'MARS', 'MARS coL1', 'MARS coStrictData', MARS_COURSE_IM_CHECK, 'Logisim', `MARS ${memoryConfiguration}`]);
   }
-  const names = new Set(['Java', 'MARS', 'MARS coL1', 'ISE fuse']);
-  if (profile !== 'P7') {
-    names.add(`MARS ${memoryConfiguration}`);
+  // coL2 is required only by cases which actually contain SWL/SWR or need dynamic undefined-
+  // behavior checks. Those cases request it at run time; standard tutorial profiles use coL1.
+  const names = new Set(['Java', 'MARS', 'MARS coL1', 'MARS coStrictData', 'ISE fuse', `MARS ${memoryConfiguration}`]);
+  names.add(MARS_COURSE_IM_CHECK);
+  if (profile === 'P7') {
+    names.add(MARS_P7_CONTRACT_CHECK);
   }
   return names;
 }
@@ -501,6 +553,31 @@ function isPathInside(file: string, directory: string): boolean {
   return relative === '' || Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+async function waitForNextContinuousIteration(session: ContinuousTraceSession, ms: number): Promise<void> {
+  if (session.stopRequested) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+      if (session.wakeIntervalWait === finish) {
+        session.wakeIntervalWait = undefined;
+      }
+      resolve();
+    };
+    session.wakeIntervalWait = finish;
+    if (session.stopRequested) {
+      finish();
+      return;
+    }
+    timer = setTimeout(finish, ms);
+  });
 }

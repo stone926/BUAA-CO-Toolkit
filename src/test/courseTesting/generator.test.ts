@@ -80,6 +80,30 @@ describe('course test generator helpers', () => {
     expect(changed).toEqual(['/work/modified.asm', '/work/new-old-time.asm']);
   });
 
+  it('detects same-mtime rewrites by file-system change time or size', () => {
+    const changed = changedAsmFiles(
+      [
+        { file: '/work/same-size.asm', mtimeMs: 100, ctimeMs: 1000, size: 20 },
+        { file: '/work/new-size.asm', mtimeMs: 100, ctimeMs: 1000, size: 20 }
+      ],
+      [
+        { file: '/work/same-size.asm', mtimeMs: 100, ctimeMs: 1001, size: 20 },
+        { file: '/work/new-size.asm', mtimeMs: 100, ctimeMs: 1000, size: 24 }
+      ]
+    );
+
+    expect(changed).toEqual(['/work/new-size.asm', '/work/same-size.asm']);
+  });
+
+  it('detects a generator that replaces output with an older timestamp', () => {
+    const changed = changedAsmFiles(
+      [{ file: '/work/replaced.asm', mtimeMs: 200, ctimeMs: 200, size: 20 }],
+      [{ file: '/work/replaced.asm', mtimeMs: 100, ctimeMs: 300, size: 20 }]
+    );
+
+    expect(changed).toEqual(['/work/replaced.asm']);
+  });
+
   it('orders changed ASM files by newest mtime and then path before applying the limit', () => {
     const changed = changedAsmFiles(
       [],

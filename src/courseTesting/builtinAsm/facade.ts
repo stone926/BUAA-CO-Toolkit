@@ -22,6 +22,8 @@ export type {
 } from './randomBody';
 
 export type {
+  P7ProbeCommitExpectation,
+  P7ProbeExpectedRecord,
   P7ProbeMetadata,
   P7ProbeOptions,
   P7ProbeScenario,
@@ -42,4 +44,3 @@ export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions):
   }
   return generateRandomAsmTestCase({ ...options, p7StressMode: 'anchor' });
 }
-

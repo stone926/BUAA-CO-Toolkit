@@ -1,5 +1,5 @@
 import { CpuTraceEvent, formatTraceEvent } from '../language/mips/traceParser';
-import { appendHaltLoop } from './mipsUtil';
+import { appendHaltLoop, machineCodeHasHaltLoop } from './mipsUtil';
 import { findLogisimRomTargets, LogisimRomTarget, parseMachineCodeWords } from '../language/logisim/rom';
 import {
   canonicalizeP3LogisimTraceLabel,
@@ -290,15 +290,17 @@ export function prepareP3LogisimMachineCode(machineCodeText: string): P3LogisimM
   if (!words.length) {
     throw new Error('MARS dump produced no machine-code words.');
   }
-  if (words.length > p3LogisimMaxProgramWords) {
-    throw new Error(`P3 Logisim test has ${words.length} words before halt loop; maximum is ${p3LogisimMaxProgramWords}.`);
+  const alreadyTerminated = machineCodeHasHaltLoop(words);
+  const programWordCount = alreadyTerminated ? words.length - p3LogisimHaltWords : words.length;
+  if (programWordCount > p3LogisimMaxProgramWords) {
+    throw new Error(`P3 Logisim test has ${programWordCount} words before halt loop; maximum is ${p3LogisimMaxProgramWords}.`);
   }
   const text = appendHaltLoop(words.join('\n') + '\n');
   const terminatedWordCount = parseMachineCodeWords(text).length;
   if (terminatedWordCount > p3LogisimMaxWords) {
     throw new Error(`P3 Logisim machine code has ${terminatedWordCount} words after halt loop; maximum is ${p3LogisimMaxWords}.`);
   }
-  const haltPc = p3TextBase + words.length * 4;
+  const haltPc = p3TextBase + programWordCount * 4;
   return {
     originalWordCount: words.length,
     terminatedWordCount,

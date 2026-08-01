@@ -317,7 +317,9 @@ async function runBuiltinGeneratorAndCollectAsms(
   services.output.appendLine(`模式: ${modes.map((mode) => mode ?? 'default').join(', ')}`);
   for (let i = 0; i < generatedCases.length; i++) {
     const generated = generatedCases[i];
-    services.output.appendLine(`指令数量: ${generated.instructionCount}`);
+    services.output.appendLine(generated.mode === 'probe'
+      ? `Probe 主程序指令数量: ${generated.instructionCount}（含固定终止尾部）`
+      : `有效载荷指令数量: ${generated.instructionCount}（另有 2 条停机自环尾指令）`);
     services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
     services.output.appendLine(`种子: ${generated.seed}`);
     if (generated.interruptSchedule.length) {

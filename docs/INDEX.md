@@ -10,7 +10,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   verilog-lsp    | docs/modules/verilog-lsp.md    | 60 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~48 files| 扩展宿主层
-  course-testing | docs/modules/course-testing.md | 31 files | 自动化测试框架
+  course-testing | docs/modules/course-testing.md | 42 files | 自动化测试框架
   test-suite     | docs/modules/test-suite.md     | ~70 files| Vitest 测试
   resources      | docs/modules/resources.md      | ~15 files| 静态资源
 
@@ -25,6 +25,7 @@ P7 test modes: anchor(MARS+ISim精确对拍), probe(DM探针黑盒检查), hybri
   diagnostic-catalog.md: MIPS/Verilog 诊断代码注册表
   syntax-coverage-matrix.md: 语法覆盖矩阵
   semantic-colors.md: 语义着色配置
+  course-testing-review-decisions.md: 自动测试审查中无规范唯一答案的待产品决策
   功能完整说明.md: 用户功能说明
   ../ARCHITECTURE_REVIEW.md: Parser/AST 迁移状态
   ../CODE_REVIEW_REPORT.md: 最近代码审查

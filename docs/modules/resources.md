@@ -21,8 +21,8 @@ resources/verilog/:
 resources/co/:
   configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐
   configManifest.json — co.* VS Code settings schema 源: 分组/类型/描述/枚举/范围, default 由 configDefaults.json 注入
-  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/工具/端口/内存/教程/指令描述/Profile推断hints
-  p7Hardware.json — P7 课程硬件布局: 文本段/异常入口/probe/Timer/CP0/中断确认/testbench容量
+  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/工具/端口；外置测试台 IM=4096 words、DM=3072 words；教程/指令描述/Profile推断hints
+  p7Hardware.json — P7 课程硬件布局: 0x3000 起 4096-word IM、3072-word DM、0x4180 异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
 
 配置资源维护:

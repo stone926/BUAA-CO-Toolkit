@@ -79,7 +79,7 @@ module ${tbName};
     // ----------- For Data Memory -----------
 
     always @(*) begin
-        fixed_wdata = data[(m_data_addr >> 2) & ${dataMemoryLastIndex}];
+        fixed_wdata = data[(m_data_addr >> 2) % ${dataMemoryWords}];
         fixed_addr = m_data_addr & 32'hfffffffc;
         if (m_data_byteen[3]) fixed_wdata[31:24] = m_data_wdata[31:24];
         if (m_data_byteen[2]) fixed_wdata[23:16] = m_data_wdata[23:16];
@@ -110,4 +110,3 @@ ${interruptBlock}
     always #2 clk <= ~clk;
 
 endmodule
-

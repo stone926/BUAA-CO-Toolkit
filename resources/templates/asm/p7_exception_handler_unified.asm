@@ -4,8 +4,7 @@ _co_excep:
     andi $k1, $k0, 0x7c
     bne $k1, $0, _co_excep_skip
     nop
-    ori $k0, $0, ${intAckHex}
-    sb $0, 0($k0)
+    sb $0, ${intAckHex}($0)
     eret
 _co_excep_skip:
     mfc0 $k0, $14

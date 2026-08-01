@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendHaltLoop, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from '../../courseTesting/mipsUtil';
+import { appendHaltLoop, courseTraceHaltLoopError, courseTraceHaltPc, MIPS_NOP_HEX, MIPS_SELF_BRANCH_HEX } from '../../courseTesting/mipsUtil';
 
 describe('appendHaltLoop', () => {
   it('appends a self-branch + nop halt loop to plain machine code', () => {
@@ -30,6 +30,21 @@ describe('appendHaltLoop', () => {
   it('leaves empty input unchanged', () => {
     expect(appendHaltLoop('')).toBe('');
     expect(appendHaltLoop('\n\n')).toBe('\n\n');
+  });
+});
+
+describe('courseTraceHaltLoopError', () => {
+  it('accepts only a source-level standard halt tail in the final user text dump', () => {
+    expect(courseTraceHaltLoopError(`24010001\n${MIPS_SELF_BRANCH_HEX}\n${MIPS_NOP_HEX}\n`)).toBeUndefined();
+    expect(courseTraceHaltLoopError(`24010001\n${MIPS_SELF_BRANCH_HEX}\n`)).toContain('必须以');
+    expect(courseTraceHaltLoopError('')).toContain('必须以');
+  });
+
+  it('locates the halt branch in the final user-text dump', () => {
+    const text = `24010001\n${MIPS_SELF_BRANCH_HEX}\n${MIPS_NOP_HEX}\n`;
+    expect(courseTraceHaltPc(text)).toBe(0x3004);
+    expect(courseTraceHaltPc(text, 0x1000)).toBe(0x1004);
+    expect(courseTraceHaltPc('24010001\n')).toBeUndefined();
   });
 });
 

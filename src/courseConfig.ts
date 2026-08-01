@@ -79,7 +79,8 @@ export interface MemoryRange {
 export interface CourseConfig {
   memoryLayout: Record<string, Record<string, MemoryRange>>;
   verilogTestbench?: {
-    externalMemoryWords?: number;
+    externalInstructionMemoryWords?: number;
+    externalDataMemoryWords?: number;
   };
   profiles: Record<string, ProfileConfig>;
   verilogPorts: Record<string, PortConfig[]>;
@@ -178,13 +179,19 @@ export function getProfileInferenceConfig(): ProfileInferenceConfig {
   return loadCourseConfig().profileInference ?? {};
 }
 
-export function getVerilogTestbenchConfig(): { externalMemoryWords: number } {
-  const externalMemoryWords = loadCourseConfig().verilogTestbench?.externalMemoryWords;
+export function getVerilogTestbenchConfig(): {
+  externalInstructionMemoryWords: number;
+  externalDataMemoryWords: number;
+} {
+  const configured = loadCourseConfig().verilogTestbench;
   return {
-    externalMemoryWords: typeof externalMemoryWords === 'number' && Number.isInteger(externalMemoryWords) && externalMemoryWords > 0
-      ? externalMemoryWords
-      : 4096
+    externalInstructionMemoryWords: positiveIntegerOr(configured?.externalInstructionMemoryWords, 4096),
+    externalDataMemoryWords: positiveIntegerOr(configured?.externalDataMemoryWords, 3072)
   };
+}
+
+function positiveIntegerOr(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 /**

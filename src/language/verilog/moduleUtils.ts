@@ -12,7 +12,10 @@ import { getVerilogTestbenchConfig } from '../../courseConfig';
 import { renderResourceTemplate } from '../../templates/templateRegistry';
 import { VerilogDecl, VerilogModule } from './model';
 
-const courseExternalMemoryWords = getVerilogTestbenchConfig().externalMemoryWords;
+const {
+  externalInstructionMemoryWords: courseExternalInstructionMemoryWords,
+  externalDataMemoryWords: courseExternalDataMemoryWords
+} = getVerilogTestbenchConfig();
 
 export function moduleAtPosition(modules: VerilogModule[], position: Position): VerilogModule | undefined {
   return modules.find((module) => containsPosition(module.range, position));
@@ -37,6 +40,7 @@ interface P7ProbeTestbenchMetadata {
     armAddress?: number;
     armValue?: number;
     externalDelayCycles?: number;
+    victimPc?: number;
   }>;
 }
 
@@ -142,11 +146,11 @@ interface ExternalMemoryTestbenchViewModel {
 function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): string {
   const memoryDeclarations: string[] = [];
   if (view.hasExternalInstructionMemory) {
-    memoryDeclarations.push(`    reg [31:0] inst[0:${view.isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseExternalMemoryWords - 1}];`);
+    memoryDeclarations.push(`    reg [31:0] inst[0:${view.isP7ExternalInterface ? p7InstructionMemoryWords - 1 : courseExternalInstructionMemoryWords - 1}];`);
   }
   if (view.hasExternalDataMemory) {
     memoryDeclarations.push(
-      `    reg [31:0] data[0:${view.isP7ExternalInterface ? p7DataMemoryWords - 1 : courseExternalMemoryWords - 1}];`,
+      `    reg [31:0] data[0:${view.isP7ExternalInterface ? p7DataMemoryWords - 1 : courseExternalDataMemoryWords - 1}];`,
       '    integer i;',
       '    reg [31:0] fixed_addr;',
       '    reg [31:0] fixed_wdata;'
@@ -160,9 +164,8 @@ function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): 
       : `    assign i_inst_rdata = inst[(i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2];`);
   }
   if (view.hasExternalDataMemory) {
-    memoryReadLines.push(view.isP7ExternalInterface
-      ? `    assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`
-      : '    assign m_data_rdata = data[m_data_addr >> 2];');
+    const dataWords = view.isP7ExternalInterface ? p7DataMemoryWords : courseExternalDataMemoryWords;
+    memoryReadLines.push(`    assign m_data_rdata = data[(m_data_addr >> 2) % ${dataWords}];`);
   }
 
   return renderResourceTemplate('verilog/external_memory_testbench.v', {
@@ -239,6 +242,13 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
       legacyFlag: scenario.legacy ? 1 : 0
     }))
     .join('\n');
+  const invalidStoreVictimCases = probe.scenarios
+    .filter((scenario) => scenario.kind === 'ades' && Number.isFinite(scenario.victimPc))
+    .map((scenario) => renderResourceTemplate('verilog/p7_probe_invalid_store_case.v', {
+      scenarioId: scenario.id,
+      victimPcHex: hex32NoPrefix(scenario.victimPc ?? 0)
+    }))
+    .join('\n');
   return renderResourceTemplate('verilog/p7_probe_block.v', {
     externalScenarioCases,
     externalInterruptAckAddress: verilogHex32(p7ExternalInterruptAckAddress),
@@ -254,7 +264,10 @@ function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
     mmioObserverBlock: renderResourceTemplate('verilog/p7_probe_mmio_observer.v', {
       timer0CtrlAddress: verilogHex32(p7Timer0Ctrl),
       externalInterruptMmioMaxAddress: verilogHex32(p7ExternalInterruptAckAddress + 0xf)
-    })
+    }),
+    invalidStoreObserverBlock: invalidStoreVictimCases
+      ? renderResourceTemplate('verilog/p7_probe_invalid_store_observer.v', { invalidStoreVictimCases })
+      : ''
   });
 }
 
@@ -334,15 +347,16 @@ function externalMemoryInitialLines(hasInstructionMemory: boolean, hasDataMemory
     lines.push('        $readmemh("code.txt", inst);');
   }
   if (hasDataMemory) {
-    lines.push(`        for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseExternalMemoryWords}; i = i + 1) begin`, '            data[i] <= 0;', '        end');
+    lines.push(`        for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseExternalDataMemoryWords}; i = i + 1) begin`, '            data[i] <= 0;', '        end');
   }
   lines.push('    end');
   return lines;
 }
 
 function externalDataMemoryWriteLines(hasReset: boolean, isP7ExternalInterface: boolean, hasDataMemoryTrace: boolean): string[] {
-  const fixedReadIndex = isP7ExternalInterface ? `(m_data_addr >> 2) & ${p7DataMemoryWords - 1}` : 'm_data_addr >> 2';
-  const writeCondition = isP7ExternalInterface ? `|m_data_byteen && fixed_addr >> 2 < ${p7DataMemoryWords}` : '|m_data_byteen';
+  const dataMemoryWords = isP7ExternalInterface ? p7DataMemoryWords : courseExternalDataMemoryWords;
+  const fixedReadIndex = `(m_data_addr >> 2) % ${dataMemoryWords}`;
+  const writeCondition = `|m_data_byteen && fixed_addr >> 2 < ${dataMemoryWords}`;
   const lines = ['    always @(posedge clk) begin'];
   const combinational = [
     '    always @(*) begin',
@@ -358,7 +372,7 @@ function externalDataMemoryWriteLines(hasReset: boolean, isP7ExternalInterface: 
   if (hasReset) {
     lines.push(
       '        if (reset) begin',
-      `            for (i = 0; i < ${isP7ExternalInterface ? p7DataMemoryWords : courseExternalMemoryWords}; i = i + 1) begin`,
+      `            for (i = 0; i < ${dataMemoryWords}; i = i + 1) begin`,
       '                data[i] <= 0;',
       '            end',
       `        end else if (${writeCondition}) begin`

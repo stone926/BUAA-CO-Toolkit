@@ -458,7 +458,7 @@ describe('Logisim trace helpers', () => {
     expect(() => parseLogisimTraceOutput(text, spec)).toThrow('unknown regdata');
   });
 
-  it('computes the P3 halt PC and enforces the 4094-word program limit', () => {
+  it('computes the P3 halt PC and enforces the 4094-word payload limit', () => {
     const ok = prepareP3LogisimMachineCode('34010001\n34020002\n');
     expect(ok.originalWordCount).toBe(2);
     expect(ok.terminatedWordCount).toBe(4);
@@ -470,6 +470,19 @@ describe('Logisim trace helpers', () => {
 
     const tooLong = `${maxProgram}\n00000000\n`;
     expect(() => prepareP3LogisimMachineCode(tooLong)).toThrow('maximum is 4094');
+  });
+
+  it('recognizes a source-provided halt loop without moving the monitored halt PC', () => {
+    const terminated = prepareP3LogisimMachineCode('34010001\n1000ffff\n00000000\n');
+    expect(terminated.originalWordCount).toBe(3);
+    expect(terminated.terminatedWordCount).toBe(3);
+    expect(terminated.haltPcHex).toBe('00003004');
+
+    const fullImage = `${'00000000\n'.repeat(p3LogisimMaxProgramWords)}1000ffff\n00000000\n`;
+    const full = prepareP3LogisimMachineCode(fullImage);
+    expect(full.originalWordCount).toBe(4096);
+    expect(full.terminatedWordCount).toBe(4096);
+    expect(full.haltPcHex).toBe('00006FF8');
   });
 
   it('updates the command-line main circuit without touching the original circuit body', () => {

@@ -70,7 +70,7 @@ describe('P7 hardware memory layout', () => {
 
   it('exception handler does not overlap with user text', () => {
     // User text: 0x3000 to 0x4180-1. Exception handler: starts at 0x4180.
-    // With 4 bytes per instruction, there are exactly 1632 user instructions before the handler.
+    // With 4 bytes per instruction, there are exactly 1120 user-text slots before the handler.
     const userInstructionSlots = (p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4;
     expect(userInstructionSlots).toBe(0x4180 - 0x3000 >> 2);
     expect(userInstructionSlots).toBeGreaterThan(0);
@@ -103,14 +103,14 @@ describe('P7 hardware memory layout', () => {
   });
 
   it('uses separate P7 instruction and data memory depths', () => {
-    expect(p7InstructionMemoryWords).toBe(5120);
-    expect(p7DataMemoryWords).toBe(4096);
+    expect(p7InstructionMemoryWords).toBe(4096);
+    expect(p7DataMemoryWords).toBe(3072);
     expect(p7InstructionMemoryWords).toBeGreaterThan(p7DataMemoryWords);
   });
 
   it('derives kernel text dump end from instruction memory depth', () => {
-    expect(p7KernelTextDumpEndAddress).toBe(p7InstructionMemoryWords * 4 - 4);
-    expect(p7KernelTextDumpEndAddress).toBe(0x4ffc);
+    expect(p7KernelTextDumpEndAddress).toBe(p7UserTextBaseAddress + p7InstructionMemoryWords * 4 - 4);
+    expect(p7KernelTextDumpEndAddress).toBe(0x6ffc);
     expect(p7ExceptionHandlerAddress).toBeLessThanOrEqual(p7KernelTextDumpEndAddress);
   });
 });

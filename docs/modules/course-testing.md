@@ -1,52 +1,61 @@
-# course-testing | src/ | 31 files
+# course-testing | src/ | 42 files
 
-P3-P7自动化测试: 随机ASM生成->MARS dump->MARS golden trace->ISim/Logisim仿真trace->对比->HTML报告
-P7模式: anchor(精确对拍+中断注入), probe(DM探针0x2800黑盒检查), hybrid(两者), off(无中断)
+P3-P7 自动化测试：生成 ASM -> 修改版 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
+MARS 黄金模型：课程 Trace 仅支持修改版 MARS；每次运行固定启用 coZeroGpr，使全部 GPR 初值与教程规定的全 0 复位一致，并启用 coStrictData 拒绝有效地址溢出及课程数据桥之外的访问；coHalt 只在实际到达预合并用户 `.text` 的标准最终自环时成功，拒绝 MARS 的正常 cliff exit、错误自环及预算耗尽；普通指令使用 coL1，机器码含 SWL/SWR、BGEZAL/BLTZAL 或潜在未定义行为时改用 coL2；SWL/SWR 按动态指令合并同一 DM 字的多次局部写入，BGEZAL/BLTZAL 按 MIPS 规范补齐修改版 MARS 在 not-taken 路径遗漏的 `$31=PC+8`；固定 ae/se 令汇编与运行错误以非零退出码失败；同次汇编分块 dump 0x0000..0x2fff，拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；P3-P6 的 load/store 只允许 DM，P7 的 efc 课程模式允许 DM、Timer 和 IG，避免 Compact* 的额外数据段成为错误黄金模型；P7 运行时还会按教程动态拒绝非 `sb $0,0x7f20($0)` 的 IG 访问、handler 内同步异常和 handler 执行期间新产生的中断
+生成程序边界：配置的 instruction_count 只统计修改版 MARS 最终执行的 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop，手选/外部 ASM 的最终用户 `.text` 也必须自带同一尾部；最终 IM 不得超过 4096 words
+P7 模式：anchor(精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)
 
 orchestration:
-  courseTest.ts — 总调度: 14个co.test.*命令, runCourseTraceCase串联全流程(dump->MARS->ISim/Logisim->compare), P7 probe分流
-  courseTestCases.ts — CourseTraceCaseInput类型, failedCase构造
-  courseTestContinuous.ts — 持续测试循环: 定时生成->展开->执行->监控面板+JSON报告, 按留存策略自动清理
-  courseTestMessages.ts — diffMessage中文提示, marsStageFailureMessage
-  courseTestReport.ts — HTML报告: 批量/Logisim准备/持续监控/ASM索引
-  courseTestToolchain.ts — 内存配置校验: P7须CompactLargeText, 非P7须FixedCompactLargeText或CompactLargeText
-  courseTestLogisim.ts — P3 Logisim: 电路诊断(提取Trace端口映射)->ROM注入批量准备->单用例(CLI启动->PC监控->自动kill->trace解析->对拍)
-  courseTestStdin.ts — stdin文件发现: input/inputs/test/data目录, 按文件名相似度排序
-  courseTestTraceFiles.ts — 输出命名: .co/out/{stem}.mars.out, .co/out/{stem}.sim.out
+  courseTest.ts — 总调度：14 个 co.test.* 命令；runCourseTraceCase 串联 dump->MARS->ISim/Logisim->compare，并分流 P7 probe
+  courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
+  courseTestContinuous.ts — 持续生成循环：启动阶段同步占位防重复会话，启动检查期间也可取消；每轮生成并展开全部 ASM；stopOnFailure=false 时功能失败继续，生成器异常/无新 ASM 则停止；轮数耗尽不额外等待，停止请求可打断间隔；面板关闭触发停止，最终报告写失败也保证释放会话；按策略保留通过产物和报告轮次
+  courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
+  courseTestReport.ts — HTML 报告：批量/Logisim 准备/持续监控/ASM 索引
+  courseTestToolchain.ts — 内存配置及必需能力校验：P7 须 CompactLargeText，非 P7 须 FixedCompactLargeText 或 CompactLargeText；启动前要求修改版 MARS coZeroGpr+coStrictData+coHalt+coL1，探测 0x2fff 合法边界、Compact 额外数据段 0x5000 拒绝、有效地址溢出和真实到达停机尾；P3-P6 用“跳入仅 MARS 可见的 `.ktext` 再返回 halt”负向探针确认取指始终位于已 dump 的用户 `.text`，P7 用同类 0x5000 探针确认只执行插件实际合并进 DUT 的用户/异常代码，并验证 0x417c 等 user/handler padding 会覆盖 MARS-only statement、按 code.txt 中的 NOP 执行；P7 契约能力再用“用户区精确 sb”“handler 内错误 IG 指令”“handler 二次异常”“handler 新中断”四个独立负例，以及“入场前 pending、handler 合法响应”的正例，避免半实现误过或合法中断被误拒；实际用例需要 SWL/SWR、REGIMM 链接分支修复或动态未定义行为检查时再要求 coL2；缺失或未执行的必需检查均视为失败
+  courseTestLogisim.ts — P3 Logisim：电路诊断(提取 Trace 端口映射)->ROM 注入批量准备->单用例(CLI 启动->PC 监控->自动 kill->Trace 解析->对拍)，准备前校验修改版 MARS coL1
+  courseTestStdin.ts — stdin 文件发现：input/inputs/test/data 目录，按文件名相似度排序
+  courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.mars.out、.co/out/{stem}.sim.out
 
 generation:
   courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入
-  courseTesting/generatorWorkflow.ts — 生成器工作流: 外部/内置generator setup、运行、ASM产物收集、CourseTraceBatchSource描述
-  courseTesting/traceRunner.ts — 单个课程 Trace case 的 MARS/ISim/Logisim 执行、P7 probe 校验和 P7 manifest metadata 解析
-  courseTesting/builtinAsmGenerator.ts — 入口: generateBuiltinAsmTestCase, p7StressMode分派(anchor->randomBody, probe->probeEmitter, hybrid两次调用)
-  courseTesting/generator.ts — 外部生成器: .py/.js/.jar/.ps1/.bat, snapshotAsmFiles(mtime快照)
+  courseTesting/generatorWorkflow.ts — 生成器工作流：外部/内置 generator setup、运行、ASM 产物收集、CourseTraceBatchSource 描述
+  courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、修改版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；按机器码中的 SWL/SWR、BGEZAL/BLTZAL 或未定义行为候选在 coL1 与逐指令 coL2 间选择，仅拒绝动态执行到的 DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入，并修复 MARS 的非跳转链接分支写回遗漏；任一侧空 Trace 报错，两侧都空明确标记为无法判定
+  courseTesting/builtinAsmGenerator.ts — 入口：generateBuiltinAsmTestCase；P7StressMode 分派(anchor->randomBody、probe->probeEmitter、hybrid 两次调用)
+  courseTesting/generator.ts — 外部生成器(.py/.js/.jar/.ps1/.bat 等)和 ASM 文件快照；以 mtime+ctime+size 判定新建/重写，能识别同 mtime、倒退 mtime 或尺寸变化，跳过 .co 产物目录
   courseTesting/generatorInstructionCatalog.ts — 内置 ASM 生成器指令 profile、分类、对齐和 MDU 延迟资源加载
-  courseTesting/cpuState.ts — 软件CPU模型: 32GPR+256word DM+HI/LO+CP0(SR/Cause/EPC)+MDU保护, 按字节/半字/字读写, 最近写入追踪
-  courseTesting/mnemonicSets.ts — Profile指令集(P3:8条,P4-5:+J型,P6:+MDU/load-store变体,P7:+CP0/异常), 功能分组(分支/load-store/MDU/CP0), memoryAlignment/mduBusyCycles
-  courseTesting/p7Hardware.ts — P7 硬件布局单一入口: 加载/校验 resources/co/p7Hardware.json, 导出异常入口/Timer/CP0/probe/testbench容量常量
-  courseTesting/random.ts — 32位xorshift伪随机: int(min,max)/chance/pick, hashSeed
-  courseTesting/mipsUtil.ts — appendHaltLoop(停机自环), 符号扩展, 立即数格式化
-  courseTesting/continuous.ts — ContinuousRunStatus/Counts, 按留存轮数裁剪
+  courseTesting/machineCodeValidation.ts — 对最终 HexText 完整解码，先限制 P3-P7 课程 IM 为 4096 words，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 `# instruction_set` 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
+  courseTesting/courseDataInitialization.ts — 课程 DM 初态预检：按修改版 MARS 的 4 KiB 分配块在同次汇编导出 0x0000..0x2fff，严格解析每个非空 1024-word HexText 块；允许未分配/`.space` 全零块，首个非零初值或缺失/畸形 dump 立即失败
+  courseTesting/marsStepLimit.ts — case manifest 先证明来源为内置生成器，再读取 random 标记及 payload 条数，为尚未到达停机尾的程序设置确定性 MARS 安全预算：P3-P6 max(256,2N+64)，P7 max(512,16N+256)；手选/外部 ASM 按最终机器码使用 max(65536,64*words) 的临时保守预算；另验证 coHalt marker，不能把 cliff exit/错误自环当作完成（产品预算阈值见 review decisions）
+  courseTesting/cpuState.ts — 软件 CPU 模型：32 GPR+3072-word DM(0x0000..0x2fff)+HI/LO+CP0+MDU 保护；HI/LO 初始化状态、字节/半字/字及修改版 MARS 小端 LWL/LWR/SWL/SWR 语义、最近写入追踪
+  courseTesting/mnemonicSets.ts — Profile 指令集(P3:8 条，P4-5:+J 型，P6:+MDU/load-store 变体，P7:+CP0/异常)、功能分组、memoryAlignment/mduBusyCycles
+  courseTesting/p7Hardware.ts — P7 硬件布局单一入口：加载/校验 resources/co/p7Hardware.json，导出 4096-word IM(0x3000..0x6fff)、3072-word DM(0x0000..0x2fff)、0x4180 异常入口、Timer、CP0、probe 状态/日志/testbench 常量
+  courseTesting/random.ts — 32 位 xorshift 伪随机：int(min,max)/chance/pick、hashSeed
+  courseTesting/mipsUtil.ts — 有符号/无符号与立即数工具；courseAsmHaltLoop 生成课程 ASM 停机尾，courseTraceHaltLoopError 拒绝源码与硬件机器码不一致的缺尾课程用例，appendHaltLoop 只为普通 dump/兼容流程幂等补齐尾部
+  courseTesting/continuous.ts — ContinuousRunStatus/Counts、按留存轮数裁剪、功能失败与 stopOnFailure 的停止判定
 
 builtin-asm:
   courseTesting/builtinAsm/asmTemplates.ts — 从 resources/templates/asm/*.asm 加载 P7 异常处理模板并做受控变量插值
-  courseTesting/builtinAsm/facade.ts — 高层API: generateBuiltinAsmTestCase/resolveBuiltinInstructionSet
-  courseTesting/builtinAsm/randomBody.ts — 核心引擎(1860行): 状态感知指令生成, 合法操作数选取, MDU忙周期保护, P7 anchor中断调度, 异常率控制
-  courseTesting/builtinAsm/programWriter.ts — ProgramWriter类: label/emit/raw累积汇编行, 跟踪PC
-  courseTesting/builtinAsm/types.ts — P7StressMode, P7ProbeScenarioKind, P7ProbeMetadata, P7ProbeOptions
+  courseTesting/builtinAsm/facade.ts — 高层 API：generateBuiltinAsmTestCase/resolveBuiltinInstructionSet
+  courseTesting/builtinAsm/randomBody.ts — 核心随机引擎(约 2100 行)：0x3000-byte DM、全范围正/负偏移、分支双路径与有界控制流、修改版 MARS 局部字访问；所有普通随机路径均避免有符号溢出、未初始化 HI/LO、除零等非法输入，P7 只通过受控场景制造异常；payload 后生成停机尾
+  courseTesting/builtinAsm/programWriter.ts — ProgramWriter：label/emit/raw 累积汇编行并跟踪 PC
+  courseTesting/builtinAsm/types.ts — P7StressMode、场景 kind/variant、按序 CP0 期望、精确 retry commit、完成标记与 P7ProbeMetadata
 
 p7-probe:
-  courseTesting/builtinAsm/p7/probeAsm.ts — 辅助原语: 安全噪声填充, 中断启/禁用, Timer清零
-  courseTesting/builtinAsm/p7/probeEmitter.ts — 场景代码生成: prologue(关中断/清定时器/初始化探针区), 场景循环(guard->状态写入->异常触发/中断窗口->done), 统一异常处理程序(.ktext, 8-word DM探针日志), guard子程序
-  courseTesting/builtinAsm/p7/probeScenarios.ts — planProbeScenarioKinds: external×4/timer0×6/timer1×6/异常×2, 随机排序截取, 不足加权填充
-  courseTesting/builtinAsm/p7/constants.ts — 内存映射: 用户0x3000, 异常入口0x4180, 探针0x2800(8 words/场景), Timer 0x7f00-0x7f1c, magic 0xc0a70001
+  courseTesting/builtinAsm/p7/probeAsm.ts — 安全噪声填充、中断启停、Timer 清零、立即数/探针状态写入等辅助原语
+  courseTesting/builtinAsm/p7/probeEmitter.ts — Probe 主程序和统一异常处理程序生成；每场景 guard->触发/中断窗口->完成标记，写入单个 8-word 物理记录；中断优先级重放把第二次 Cause/EPC 打包进 aux，Timer 清零和 HI/LO 精确观测也通过 aux 返回
+  courseTesting/builtinAsm/p7/probeExternalScenarios.ts — 外部中断的真实受害位置与重试路径：store、load-use 依赖、jal、已取分支延迟槽 store；描述必须且仅能在异常处理后出现一次的 GPR/DM 提交
+  courseTesting/builtinAsm/p7/probeScenarios.ts — 场景 kind 规划：先覆盖启用的 external/timer/异常类别，再依据变体数量补齐轮换，最后按强度加权填充并随机截取
+  courseTesting/builtinAsm/p7/probeVariants.ts — 场景变体目录和最小覆盖计数：外部优先级/等待/四类重试，AdEL/AdES 地址与访问宽度边界（含 Timer0/1 CTRL/PRESET 的 sb/sh 与 COUNT sw），syscall 延迟槽及年轻 MDU，Ov add/addi/sub
+  courseTesting/builtinAsm/p7/probeVictims.ts — 内部异常精确触发序列：计算 victim PC、EPC/BD，覆盖对齐/越界/MMIO 宽度/取指异常与溢出；用 handler aux 回读 Timer 前后状态捕获内部副作用；syscall 后置 mult/div/mthi/mtlo 用 HI/LO 哨兵验证年轻 MDU 指令不得启动
+  courseTesting/builtinAsm/p7/constants.ts — 课程映射常量：用户段 0x3000、异常入口 0x4180、DM 探针区 0x2800(8 words/场景)、Timer 0x7f00-0x7f1c、外部中断应答 0x7f20、magic 0xc0a70001
 
-logisim:
-  courseTesting/logisimTraceProfile.ts — P3 Logisim trace profile: 从courseConfig读取/校验text base、ROM容量、列顺序/宽度、halt和PC监控策略
-  courseTesting/logisimPrep.ts — LogisimPrepareCaseResult, preparedCircuitFileName
-  courseTesting/logisimTrace.ts — 电路分析(XML端口标注/label推导/appearance排序), Trace解析(TTY table->CpuTraceEvent), PC监控(到达停机PC自动kill), Fetch校验(逐拍比对instr列)
-  courseTesting/p7ProbeCheck.ts — 黑盒验证: 从ISim DM写事件重建探针记录, 逐场景检查kind/ExcCode/Cause.IP/EPC/时序
+logisim/verilog-observer:
+  courseTesting/logisimTraceProfile.ts — P3 Logisim Trace profile：从 courseConfig 读取/校验 text base、ROM 容量、列顺序/宽度、halt 和 PC 监控策略
+  courseTesting/logisimPrep.ts — LogisimPrepareCaseResult、preparedCircuitFileName
+  courseTesting/logisimTrace.ts — 电路分析(XML 端口标注/label 推导/appearance 排序)、Trace 解析(TTY table->CpuTraceEvent)、识别源码已有停机尾并以自环首条计算 halt PC、PC 监控自动 kill、Fetch 校验
+  courseTesting/p7ProbeCheck.ts — P7 黑盒精确检查：严格解析 DM Trace 并按物理顺序重建完整记录，拒绝未知/重复字段和 0x2fff 之外 DM 写；要求 Status 精确为 0x1c03、Cause 未实现位为 0，并校验 ExcCode/IP/BD、EPC、HI/LO、Timer 清零/异常前后回读一致、异常 victim 无提交、handler 后唯一完成/retry commit，以及外部 arm/raise/ack 顺序
+  resources/templates/verilog/p7_probe_invalid_store_observer.v + p7_probe_invalid_store_case.v — 仅通过公开的 m_inst_addr/m_data_byteen/m_int_byteen 观察 AdES victim；若无效 store 仍产生任一 byte-enable，输出 invalid_store_effect 并令 Probe 失败
 
 case-storage:
-  asmCaseStore.ts — 持久化: createAsmCaseFromAsm/FromText, prepareAsmCaseMachineCode, artifact管理(update/write/copy), listAsmCaseManifests；P7 metadata 只来自 manifest/显式参数
-  asmCaseStoreCore.ts — Manifest Schema(v1): caseId(ISO+SHA256前8位), .co/cases/{caseId}/, sha256Bytes/sha256Text, manifest-only P7 metadata
+  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText、prepareAsmCaseMachineCode、artifact 管理、manifest 列表；courseTrace dump 成功后先执行最终机器码容量/规范编码/白名单校验，并保存 P7 内核合并前验证得到的用户 haltPc；P7 metadata 只来自 manifest/显式参数
+  asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata

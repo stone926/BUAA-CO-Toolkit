@@ -1412,17 +1412,18 @@ describe('buildTestbench', () => {
       ]
     });
     const tb = buildTestbench(module, 'mips_tb');
-    const externalMemoryWords = getVerilogTestbenchConfig().externalMemoryWords;
+    const { externalDataMemoryWords } = getVerilogTestbenchConfig();
     expect(tb).toContain('wire [31:0] i_inst_rdata;');
-    expect(tb).toContain(`reg [31:0] data[0:${externalMemoryWords - 1}];`);
+    expect(tb).toContain(`reg [31:0] data[0:${externalDataMemoryWords - 1}];`);
     expect(tb).toContain('reg [31:0] fixed_addr;');
     expect(tb).toContain('reg [31:0] fixed_wdata;');
     expect(tb).toContain('$readmemh("code.txt", inst);');
-    expect(tb).toContain(`for (i = 0; i < ${externalMemoryWords}; i = i + 1) begin`);
+    expect(tb).toContain(`for (i = 0; i < ${externalDataMemoryWords}; i = i + 1) begin`);
     expect(tb).toContain('data[i] <= 0;');
     expect(tb).toContain('assign i_inst_rdata = inst[(i_inst_addr - 32\'h3000) >> 2];');
-    expect(tb).toContain('assign m_data_rdata = data[m_data_addr >> 2];');
-    expect(tb).toContain('fixed_wdata = data[m_data_addr >> 2];');
+    expect(tb).toContain(`assign m_data_rdata = data[(m_data_addr >> 2) % ${externalDataMemoryWords}];`);
+    expect(tb).toContain(`fixed_wdata = data[(m_data_addr >> 2) % ${externalDataMemoryWords}];`);
+    expect(tb).toContain(`else if (|m_data_byteen && fixed_addr >> 2 < ${externalDataMemoryWords}) begin`);
     expect(tb).toContain('data[fixed_addr >> 2] <= fixed_wdata;');
     expect(tb).toContain('$display("%d@%h: *%h <= %h", $time, m_inst_addr, fixed_addr, fixed_wdata);');
     expect(tb).toContain('$display("%d@%h: $%d <= %h", $time, w_inst_addr, w_grf_addr, w_grf_wdata);');
@@ -1464,7 +1465,7 @@ describe('buildTestbench', () => {
     expect(tb).toContain(`for (i = 0; i < ${p7DataMemoryWords}; i = i + 1) data[i] <= 0;`);
     expect(tb).toContain(`assign i_inst_rdata = inst[((i_inst_addr - ${verilogHex32(p7UserTextBaseAddress)}) >> 2) % ${p7InstructionMemoryWords}];`);
     expect(tb).toContain(`assign m_data_rdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`);
-    expect(tb).toContain(`fixed_wdata = data[(m_data_addr >> 2) & ${p7DataMemoryWords - 1}];`);
+    expect(tb).toContain(`fixed_wdata = data[(m_data_addr >> 2) % ${p7DataMemoryWords}];`);
     expect(tb).toContain(`else if (|m_data_byteen && fixed_addr >> 2 < ${p7DataMemoryWords}) begin`);
     expect(tb).toContain('// ----------- For Interrupt -----------');
     expect(tb).toContain("// parameter target_pc = 32'h00003010;");
@@ -1524,7 +1525,8 @@ describe('buildTestbench', () => {
       p7Probe: {
         scenarios: [
           { id: 1, kind: 'external', waitPc: 0x3020, armAddress: 0x27d0, armValue: 1, externalDelayCycles: 4 },
-          { id: 2, kind: 'timer0', waitPc: 0x3040 }
+          { id: 2, kind: 'timer0', waitPc: 0x3040 },
+          { id: 3, kind: 'ades', victimPc: 0x3060 }
         ]
       }
     });
@@ -1537,6 +1539,9 @@ describe('buildTestbench', () => {
     expect(tb).toContain('co_p7_external_armed && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('co_p7_external_legacy && fixed_macroscopic_pc == co_p7_external_target');
     expect(tb).not.toContain('uut.');
+    expect(tb).toContain("32'h00003060: begin");
+    expect(tb).toContain('CO_P7_PROBE invalid_store_effect scenario=3');
+    expect(tb).toContain("m_data_byteen !== 4'b0000 || m_int_byteen !== 4'b0000");
   });
 
   it('keeps legacy P7 probe external interrupt support behind legacy metadata', () => {
