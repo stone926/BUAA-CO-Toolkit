@@ -2,10 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
-import {
-  semanticColorPresets,
-  semanticColorTokenIds
-} from '../semanticColorPresets';
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
 import { getCourseConfig, getLogisimTraceProfileConfig } from '../courseConfig';
@@ -178,8 +174,8 @@ describe('package manifest', () => {
       '编辑器与诊断',
       '格式化'
     ]);
-    expect(Object.keys(properties)).toHaveLength(65);
-    expect(Object.keys(configDefaults)).toHaveLength(65);
+    expect(Object.keys(properties)).toHaveLength(64);
+    expect(Object.keys(configDefaults)).toHaveLength(64);
     for (const [key, value] of Object.entries(configDefaults)) {
       expect(properties[`co.${key}`]?.default, key).toEqual(value);
     }
@@ -313,8 +309,17 @@ describe('package manifest', () => {
   it('does not hard-code global semantic token colors', () => {
     const pkg = readPackage();
     const defaults = JSON.stringify(pkg.contributes?.configurationDefaults ?? {});
+    const properties = Object.assign({}, ...(pkg.contributes?.configuration ?? []).map((group) => group.properties ?? {}));
+    const semanticContributions = JSON.stringify({
+      types: pkg.contributes?.semanticTokenTypes,
+      scopes: pkg.contributes?.semanticTokenScopes
+    });
     expect(defaults).not.toContain('semanticTokenColorCustomizations');
     expect(pkg.contributes?.configurationDefaults?.['editor.semanticHighlighting.enabled']).toBeUndefined();
+    expect(properties).not.toHaveProperty('co.semanticColors.preset');
+    expect(readJsonFile<Record<string, unknown>>('resources/co/configDefaults.json')).not.toHaveProperty('semanticColors.preset');
+    expect(semanticContributions).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(semanticContributions).not.toContain('foreground');
   });
 
   it('enables semantic highlighting by default for CO languages only', () => {
@@ -344,12 +349,9 @@ describe('package manifest', () => {
     }
   });
 
-  it('keeps automatic semantic color presets aligned with declared token types', () => {
+  it('keeps the LSP semantic token legend aligned with declared token types', () => {
     const pkg = readPackage();
     const tokenIds = (pkg.contributes?.semanticTokenTypes ?? []).map((token) => token.id).sort();
-    expect([...semanticColorTokenIds].sort()).toEqual(tokenIds);
-    expect(Object.keys(semanticColorPresets.dark).sort()).toEqual(tokenIds);
-    expect(Object.keys(semanticColorPresets.light).sort()).toEqual(tokenIds);
     expect([...mipsSemanticTokenTypes, ...verilogSemanticTokenTypes].sort()).toEqual(tokenIds);
   });
 

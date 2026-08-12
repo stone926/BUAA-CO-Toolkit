@@ -25,7 +25,7 @@ P7 test modes: anchor(MARS+ISim精确对拍), probe(DM探针黑盒检查), hybri
 专门文档:
   diagnostic-catalog.md: MIPS/Verilog 诊断代码注册表
   syntax-coverage-matrix.md: 语法覆盖矩阵
-  semantic-colors.md: 语义着色配置
+  semantic-colors.md: 语义 token 分类与 VS Code 主题协作
   course-testing-review-decisions.md: 自动测试审查中无规范唯一答案的待产品决策
   功能完整说明.md: 用户功能说明
   ../ARCHITECTURE_REVIEW.md: Parser/AST 迁移状态

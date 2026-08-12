@@ -42,7 +42,7 @@ describe('mergeCoSettings', () => {
   it('merges a partial mips section', () => {
     const result = mergeCoSettings({ mips: { warnPseudoInstruction: false } });
     expect(result.mips.warnPseudoInstruction).toBe(false);
-    expect(result.mips.instructionColorMode).toBe(defaultCoSettings.mips.instructionColorMode);
+    expect(result.mips.instructionTokenMode).toBe(defaultCoSettings.mips.instructionTokenMode);
     expect(result.mips.warnMissingExitSyscall).toBe(defaultCoSettings.mips.warnMissingExitSyscall);
   });
 

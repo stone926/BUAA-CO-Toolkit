@@ -157,10 +157,8 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 - 生成 Testbench、ISE 语法检查、信号连线在 Verilog 右键菜单；ISE 工程生成和 VCD 导出放在「更多工具...」。
 - **信号连线面板**：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。该面板默认只在 Verilog 上下文或执行“查看信号连线”后出现。
 
-### 语义着色与主题适配
-TextMate 始终负责注释、字符串、数字、关键字、编译指令和操作符；semantic highlighting 只叠加 MIPS 指令类型/CP0 寄存器、Verilog 模块/端口/task/function 等上下文角色。默认不改写主题或全局编辑器配色，关闭语义高亮时也保留完整词法底色。
-
-可用 `co.semanticColors.preset` 显式选择 `auto` / `dark` / `light` / `off`，详见 [语法高亮与语义着色](docs/semantic-colors.md)。
+### 语义高亮与主题适配
+TextMate 始终负责注释、字符串、数字、关键字、编译指令和操作符；semantic highlighting 只叠加 MIPS 指令类型/CP0 寄存器、Verilog 模块/端口/task/function 等上下文角色。插件不提供颜色、不监听主题，运行期也不改写编辑器配色；最终显示完全由 VS Code 当前主题和用户设置决定。升级时只会一次性清理旧版本曾自动注入且仍未被用户修改的规则。关闭语义高亮时仍保留完整词法底色，详见 [语法高亮与语义分类](docs/semantic-colors.md)。
 
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
@@ -243,8 +241,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 |---|---|---|
 | `co.mips.warnPseudoInstruction` | `true` | 使用伪指令时告警 |
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
-| `co.mips.instructionColorMode` | `realVsPseudo` | 指令着色方式 |
-| `co.semanticColors.preset` | `off` | CO 自定义语义 token 配色预设；默认完全交给当前主题 |
+| `co.mips.instructionTokenMode` | `realVsPseudo` | MIPS 指令 semantic token 分类粒度；颜色由 VS Code 决定 |
 
 同组还包含：`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
 

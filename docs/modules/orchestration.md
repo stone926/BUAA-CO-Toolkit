@@ -1,6 +1,6 @@
 # orchestration | src/ | ~48 files
 
-扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/语义着色/用例存储
+扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/用例存储
 不含语言智能逻辑(在src/language/ LSP Server端)
 
 entry:
@@ -10,6 +10,9 @@ entry:
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
   config.ts — 所有co.*设置读取(getProfile/getMarsJar/getIsePath/getRunTimeout...), 分层取值(Workspace/WorkspaceFolder/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪
+
+build:
+  scripts/clean-compile-output.mjs — 编译前安全清空固定 `out/`，避免已删除模块的陈旧 JS 被打入 VSIX
   configDefaults.ts — 从resources/co/configDefaults.json加载 co.* 默认值, 供扩展宿主/LSP/测试共享
   courseConfig.ts — Profile定义(P0-P7): 名称/描述/语言/目录/必需工具/端口/内存布局/P3 Logisim trace/教程, 从resources/co/courseConfig.json加载缓存
   projectProfile.ts — ProjectProfile(auto|P0-P7), ConcreteProjectProfile, isConcreteProjectProfile
@@ -68,8 +71,7 @@ ui:
   templates/templateRegistry.ts — resources/templates 受控占位替换加载器, 用于生成可审计模板产物
 
 other:
-  semanticColors.ts — registerSemanticColorDefaults(): 默认 off；auto/dark/light 显式 opt-in，只读写 Global 配置且高对比度主题不注入颜色
-  semanticColorPresets.ts — 深色/浅色预设: hex+italic/bold按token类型
+  legacySemanticColorMigration.ts — 一次性清理旧版本曾注入且用户未修改的全局 semantic token 规则；迁移后不再触碰颜色配置
   courseLinks.ts — registerCourseLinks()3命令: 教程首页/Profile教程/工具教程. 支持本地镜像
   workflowInputs.ts — resolveWorkspaceFile(s)、resolveMachineCodeInput(智能查找code.txt), resolveActiveOrPickedTextFile, pickOneFile
   types.ts — AppServices(OutputChannel+StatusBarItem), RunResult, ToolDetection

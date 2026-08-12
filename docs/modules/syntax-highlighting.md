@@ -23,4 +23,4 @@ language ids:
   verilog — `.v` / `.vh`，TextMate + LSP semantic
   systemverilog — `.sv` / `.svh`，当前仅 TextMate；刻意不接 Verilog LSP，避免 unsupported SV AST 产生误诊断
 
-主题协作和可选预设见 `docs/semantic-colors.md`。
+主题所有权与 semantic token 分类见 `docs/semantic-colors.md`；插件不包含或写入任何颜色。

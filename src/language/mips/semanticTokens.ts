@@ -24,7 +24,7 @@ const semanticTokenCache = new DocumentResultCache<SemanticTokens>();
 export function getMipsSemanticTokens(document: TextDocument, settings: CoSettings, state: MipsServerState): SemanticTokens {
   return semanticTokenCache.getOrCreate(
     document,
-    `mips-semantic:${settings.mips.instructionColorMode}`,
+    `mips-semantic:${settings.mips.instructionTokenMode}`,
     () => buildMipsSemanticTokens(document, settings, state)
   );
 }
@@ -153,7 +153,7 @@ function collectMnemonicToken(
   const instruction = instructions[text.toLowerCase()];
   if (instruction) {
     const parsedInstruction = instructionByRange.get(key);
-    collector.add(range, instructionSemanticTokenType(instruction, settings, parsedInstruction?.usesPseudoForm));
+    collector.add(range, instructionSemanticTokenType(instruction, settings.mips.instructionTokenMode, parsedInstruction?.usesPseudoForm));
   }
 }
 

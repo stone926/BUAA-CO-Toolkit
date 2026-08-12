@@ -243,27 +243,11 @@
   {
     "title": "编辑器与诊断",
     "properties": {
-      "co.semanticColors.preset": {
-        "type": "string",
-        "enum": [
-          "auto",
-          "dark",
-          "light",
-          "off"
-        ],
-        "enumDescriptions": [
-          "根据普通深色/浅色 VS Code 主题自动选择 CO 语义着色预设；高对比度主题不写入预设",
-          "始终使用深色主题语义着色预设",
-          "始终使用浅色主题语义着色预设",
-          "不自动写入 CO 语义着色预设；保留用户和主题自己的规则"
-        ],
-        "description": "控制 CO 自定义语义 token 的可选配色。默认 off，使用当前主题通过标准 superType 和 TextMate scope 提供的颜色；auto/dark/light 会显式写入全局用户配置，但不覆盖用户已手动修改的同名 token 规则。"
-      },
       "co.mips.warnPseudoInstruction": {
         "type": "boolean",
         "description": "当 ASM 使用 MIPS 伪指令时发出警告"
       },
-      "co.mips.instructionColorMode": {
+      "co.mips.instructionTokenMode": {
         "type": "string",
         "enum": [
           "realVsPseudo",
@@ -271,11 +255,11 @@
           "byType"
         ],
         "enumDescriptions": [
-          "真实指令和伪指令使用不同颜色",
-          "所有指令使用相同颜色",
-          "R 型、I 型、J 型、特殊指令和伪指令分别使用不同颜色"
+          "真实指令和伪指令使用不同的语义 token 类型",
+          "所有指令使用同一种语义 token 类型",
+          "R 型、I 型、J 型、特殊指令和伪指令分别使用不同的语义 token 类型"
         ],
-        "description": "控制 ASM 指令语义高亮的着色方式"
+        "description": "控制 ASM 指令的语义 token 分类粒度；具体颜色完全由 VS Code 当前主题和用户设置决定"
       },
       "co.mips.warnMissingExitSyscall": {
         "type": "boolean",

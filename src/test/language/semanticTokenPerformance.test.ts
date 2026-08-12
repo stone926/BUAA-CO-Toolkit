@@ -34,7 +34,7 @@ describe('semantic token performance', () => {
     const state = mipsState();
     const settings = mergeCoSettings({
       mips: {
-        instructionColorMode: 'byType'
+        instructionTokenMode: 'byType'
       }
     });
 

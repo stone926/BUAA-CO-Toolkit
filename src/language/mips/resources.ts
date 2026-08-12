@@ -122,7 +122,7 @@ export const mipsSemanticTokenTypes = [
 ] as const;
 
 export type MipsSemanticTokenType = typeof mipsSemanticTokenTypes[number];
-export type MipsInstructionColorMode = CoSettings['mips']['instructionColorMode'];
+export type MipsInstructionTokenMode = CoSettings['mips']['instructionTokenMode'];
 
 const mipsResourceData = loadMipsResourceData();
 const mipsInstructionMeta = loadMipsInstructionMeta();
@@ -188,12 +188,15 @@ export function instructionTypeLabel(type: MipsInstructionType): string {
   }
 }
 
-export function instructionSemanticTokenType(instruction: MipsInstruction, settings: CoSettings, usesPseudoForm = false): MipsSemanticTokenType {
-  const colorMode = settings.mips.instructionColorMode;
-  if (colorMode === 'same') {
+export function instructionSemanticTokenType(
+  instruction: MipsInstruction,
+  tokenMode: MipsInstructionTokenMode,
+  usesPseudoForm = false
+): MipsSemanticTokenType {
+  if (tokenMode === 'same') {
     return 'mipsInstruction';
   }
-  if (colorMode === 'realVsPseudo') {
+  if (tokenMode === 'realVsPseudo') {
     return usesPseudoForm || instruction.type === 'pseudo' ? 'mipsPseudoInstruction' : 'mipsRealInstruction';
   }
   if (usesPseudoForm) {

@@ -28,12 +28,12 @@ import { registerHazard } from './hazard';
 import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
 import { registerCourseLinks } from './courseLinks';
-import { registerSemanticColorDefaults } from './semanticColors';
 import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 import { getProfileName } from './courseConfig';
 import { html, renderReportPage, renderTable } from './webview/reportLayout';
 import { timeStartup, traceStartup } from './startupTrace';
+import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
 
 const escapeHtml = html.text;
 const verilogModuleRegistryStartupDelayMs = 1000;
@@ -53,7 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar
   };
 
-  registerSemanticColorDefaults(context, output);
+  void migrateLegacySemanticColorRules(context, output);
 
   // Register sidebar
   const sidebarProvider = new CoSidebarProvider(context);

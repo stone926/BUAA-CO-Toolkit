@@ -36,7 +36,7 @@ lsp-providers:
   signatureHelp.ts — 指令格式(rd,rs,rt)+类型标签, 宏参数, 自动高亮当前操作数
   folding.ts — .macro/.end_macro, #region/#endregion
   rename.ts — 标签/数据符号/EQV/宏重命名
-  semanticTokens.ts — 仅输出上下文 semantic token（指令类别/寄存器/宏/符号）, 支持 instructionColorMode；词法类别由 TextMate 提供
+  semanticTokens.ts — 仅输出上下文 semantic token（指令类别/寄存器/宏/符号）, 支持 instructionTokenMode；词法类别由 TextMate 提供，颜色由 VS Code 决定
   inlayHints.ts — syscall服务名/CP0寄存器名/分支目标 inlay
   codeActions.ts — pseudo-instruction:* QuickFix
 

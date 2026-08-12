@@ -27,7 +27,7 @@ export interface CoSettings {
   };
   mips: {
     warnPseudoInstruction: boolean;
-    instructionColorMode: 'realVsPseudo' | 'same' | 'byType';
+    instructionTokenMode: 'realVsPseudo' | 'same' | 'byType';
     warnMissingExitSyscall: boolean;
   };
   verilog: {
@@ -82,7 +82,7 @@ export const defaultCoSettings: CoSettings = {
   },
   mips: {
     warnPseudoInstruction: configDefault<boolean>('mips.warnPseudoInstruction'),
-    instructionColorMode: configDefault<'realVsPseudo' | 'same' | 'byType'>('mips.instructionColorMode'),
+    instructionTokenMode: configDefault<'realVsPseudo' | 'same' | 'byType'>('mips.instructionTokenMode'),
     warnMissingExitSyscall: configDefault<boolean>('mips.warnMissingExitSyscall')
   },
   verilog: {

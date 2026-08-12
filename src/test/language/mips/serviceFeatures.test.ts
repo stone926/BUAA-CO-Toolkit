@@ -45,10 +45,10 @@ function decode(data: number[]): DecodedToken[] {
 }
 
 describe('MIPS instruction-backed language features', () => {
-  it('exposes P7 trap instructions through completion, signature help, and semantic coloring', () => {
+  it('exposes P7 trap instructions through completion, signature help, and semantic token classification', () => {
     const settings = mergeCoSettings({
       mips: {
-        instructionColorMode: 'byType'
+        instructionTokenMode: 'byType'
       }
     });
     const document = doc('    teq $t0, $t1\n    teqi $t0, 1');
