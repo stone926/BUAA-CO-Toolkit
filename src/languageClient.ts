@@ -36,7 +36,7 @@ export function startLanguageServer(context: vscode.ExtensionContext, output?: S
     ],
     synchronize: {
       configurationSection: 'co',
-      fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{v,asm,s,mips}')
+      fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{v,vh,asm,s,mips}')
     }
   };
 

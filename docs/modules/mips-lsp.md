@@ -36,12 +36,12 @@ lsp-providers:
   signatureHelp.ts — 指令格式(rd,rs,rt)+类型标签, 宏参数, 自动高亮当前操作数
   folding.ts — .macro/.end_macro, #region/#endregion
   rename.ts — 标签/数据符号/EQV/宏重命名
-  semanticTokens.ts — 语义高亮, 支持instructionColorMode
+  semanticTokens.ts — 仅输出上下文 semantic token（指令类别/寄存器/宏/符号）, 支持 instructionColorMode；词法类别由 TextMate 提供
   inlayHints.ts — syscall服务名/CP0寄存器名/分支目标 inlay
   codeActions.ts — pseudo-instruction:* QuickFix
 
 infra:
-  parseCache.ts — 解析缓存: URI+version+discriminator, FNV-1a text shortcut
+  parseCache.ts — diagnostics/semantic 共享解析；每 URI/设置只保留最新一代，跨 version 精确文本复用
   state.ts — MipsServerState: ignoredPseudoInstructionFiles/Mnemonics
   commands.ts — 内部命令ID: co.server.mips.ignorePseudoWarningsForFile/ForMnemonic
   text.ts — getMipsWordRange, 字符分类

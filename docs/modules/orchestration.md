@@ -4,7 +4,7 @@
 不含语言智能逻辑(在src/language/ LSP Server端)
 
 entry:
-  extension.ts — activate(): 注册全部命令/侧边栏/StatusBar/FileWatcher(.v/.asm/.circ)/工具链缓存, deactivate()停止LSP
+  extension.ts — activate(): 注册全部命令/侧边栏/StatusBar/FileWatcher(.v/.vh/.asm/.circ)/工具链缓存, deactivate()停止LSP
   languageClient.ts — startLanguageServer(IPC模式), stopLanguageServer, executeLanguageServerCommand
 
 config:
@@ -68,7 +68,7 @@ ui:
   templates/templateRegistry.ts — resources/templates 受控占位替换加载器, 用于生成可审计模板产物
 
 other:
-  semanticColors.ts — registerSemanticColorDefaults(): auto/dark/light/off preset
+  semanticColors.ts — registerSemanticColorDefaults(): 默认 off；auto/dark/light 显式 opt-in，只读写 Global 配置且高对比度主题不注入颜色
   semanticColorPresets.ts — 深色/浅色预设: hex+italic/bold按token类型
   courseLinks.ts — registerCourseLinks()3命令: 教程首页/Profile教程/工具教程. 支持本地镜像
   workflowInputs.ts — resolveWorkspaceFile(s)、resolveMachineCodeInput(智能查找code.txt), resolveActiveOrPickedTextFile, pickOneFile

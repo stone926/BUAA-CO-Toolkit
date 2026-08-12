@@ -82,7 +82,11 @@ function collectModuleUsage(
     addWrite(usage, writeRangeKeys, driver.name, driver.range);
   }
   for (const reference of parsed.semantic.references) {
-    if (!referenceBelongsToModule(reference, module) || reference.kind === 'portConnection') {
+    if (
+      !referenceBelongsToModule(reference, module) ||
+      reference.kind === 'portConnection' ||
+      reference.kind === 'parameterConnection'
+    ) {
       continue;
     }
     if (writeRangeKeys.has(rangeKey(reference.range))) {
@@ -111,7 +115,12 @@ function parameterReadRanges(semantic: VerilogSemanticModel, module: VerilogModu
     }
   };
   for (const reference of semantic.references) {
-    if (referenceBelongsToModule(reference, module) && reference.name === decl.name && reference.kind !== 'portConnection') {
+    if (
+      referenceBelongsToModule(reference, module) &&
+      reference.name === decl.name &&
+      reference.kind !== 'portConnection' &&
+      reference.kind !== 'parameterConnection'
+    ) {
       add(reference.range);
     }
   }

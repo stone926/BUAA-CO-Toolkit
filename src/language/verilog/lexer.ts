@@ -1,4 +1,4 @@
-import { verilogKeywords } from './model';
+import { verilogKeywords, verilogLanguageCatalog } from './model';
 
 export type VerilogTokenKind =
   | 'identifier'
@@ -32,43 +32,10 @@ export interface VerilogLexResult {
   diagnostics: VerilogLexDiagnostic[];
 }
 
-const twoCharOperators = new Set([
-  '==',
-  '!=',
-  '<=',
-  '>=',
-  '&&',
-  '||',
-  '<<',
-  '>>',
-  '**',
-  '->',
-  '=>',
-  '+=',
-  '-=',
-  '*=',
-  '/=',
-  '%=',
-  '&=',
-  '|=',
-  '^=',
-  '~^',
-  '^~',
-  '~&',
-  '~|',
-  '+:',
-  '-:'
-]);
-
-const threeCharOperators = new Set([
-  '===',
-  '!==',
-  '<<<',
-  '>>>'
-]);
-
-const punctuation = new Set(['(', ')', '[', ']', '{', '}', ';', ',', '.', ':', '?', '#', '@']);
-const singleOperators = new Set(['+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '=', '<', '>']);
+const punctuation = new Set(['(', ')', '[', ']', '{', '}', ';', ',', '.', '#', '@']);
+const operatorsByLength = buildOperatorsByLength();
+const operatorLengths = [...operatorsByLength.keys()].filter((length) => length > 1).sort((left, right) => right - left);
+const singleOperators = operatorsByLength.get(1) ?? new Set<string>();
 
 export function lexVerilog(text: string): VerilogLexResult {
   const scanned = scanVerilog(text, false);
@@ -171,17 +138,10 @@ function scanVerilog(text: string, includeComments: boolean): VerilogLexResult {
       continue;
     }
 
-    const three = text.slice(index, index + 3);
-    if (threeCharOperators.has(three)) {
-      tokens.push({ kind: 'operator', value: three, start: index, end: index + 3 });
-      index += 3;
-      continue;
-    }
-
-    const two = text.slice(index, index + 2);
-    if (twoCharOperators.has(two)) {
-      tokens.push({ kind: 'operator', value: two, start: index, end: index + 2 });
-      index += 2;
+    const operator = readCompoundOperator(text, index);
+    if (operator) {
+      tokens.push({ kind: 'operator', value: operator, start: index, end: index + operator.length });
+      index += operator.length;
       continue;
     }
 
@@ -218,10 +178,18 @@ function skipLineComment(text: string, index: number): number {
 
 function readString(text: string, start: number, diagnostics: VerilogLexDiagnostic[]): VerilogToken {
   let index = start + 1;
-  let escaped = false;
   while (index < text.length) {
     const char = text[index];
-    if ((char === '\n' || char === '\r') && !escaped) {
+    if (char === '\\') {
+      if (text[index + 1] === '\r' && text[index + 2] === '\n') {
+        index += 3;
+      } else {
+        // Includes ordinary escapes and a backslash + LF/CR continuation.
+        index = Math.min(index + 2, text.length);
+      }
+      continue;
+    }
+    if (char === '\n' || char === '\r') {
       diagnostics.push({
         start,
         end: index,
@@ -230,12 +198,8 @@ function readString(text: string, start: number, diagnostics: VerilogLexDiagnost
       });
       return { kind: 'string', value: text.slice(start, index), start, end: index };
     }
-    if (char === '"' && !escaped) {
+    if (char === '"') {
       return { kind: 'string', value: text.slice(start, index + 1), start, end: index + 1 };
-    }
-    escaped = char === '\\' && !escaped;
-    if (char !== '\\') {
-      escaped = false;
     }
     index++;
   }
@@ -324,4 +288,27 @@ function isIdentifierStart(char: string): boolean {
 
 function isIdentifierPart(char: string): boolean {
   return /[A-Za-z0-9_$]/.test(char);
+}
+
+function buildOperatorsByLength(): Map<number, Set<string>> {
+  const result = new Map<number, Set<string>>();
+  for (const operator of Object.values(verilogLanguageCatalog.operators).flat()) {
+    if (punctuation.has(operator)) {
+      continue;
+    }
+    const operators = result.get(operator.length) ?? new Set<string>();
+    operators.add(operator);
+    result.set(operator.length, operators);
+  }
+  return result;
+}
+
+function readCompoundOperator(text: string, start: number): string | undefined {
+  for (const length of operatorLengths) {
+    const candidate = text.slice(start, start + length);
+    if (operatorsByLength.get(length)?.has(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
 }

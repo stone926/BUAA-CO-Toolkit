@@ -21,6 +21,8 @@ import {
   defaultDisabledVerilogLintRuleIds
 } from '../language/verilog/lintRuleCatalog';
 import { Commands } from '../constants';
+import { mipsSemanticTokenTypes } from '../language/mips/resources';
+import { verilogSemanticTokenTypes } from '../language/verilog/model';
 
 interface PackageJson {
   activationEvents?: string[];
@@ -295,6 +297,19 @@ describe('package manifest', () => {
     expect(logisimGrammar).toBeUndefined();
   });
 
+  it('keeps SystemVerilog lexical support separate from the Verilog LSP language id', () => {
+    const pkg = readPackage();
+    const verilog = pkg.contributes?.languages?.find((language) => language.id === 'verilog');
+    const systemVerilog = pkg.contributes?.languages?.find((language) => language.id === 'systemverilog');
+    const systemVerilogGrammar = pkg.contributes?.grammars?.find((grammar) => grammar.language === 'systemverilog');
+
+    expect(verilog?.extensions).toEqual(expect.arrayContaining(['.v', '.vh']));
+    expect(verilog?.extensions).not.toEqual(expect.arrayContaining(['.sv', '.svh']));
+    expect(systemVerilog?.extensions).toEqual(['.sv', '.svh']);
+    expect(systemVerilogGrammar?.scopeName).toBe('source.systemverilog.co');
+    expect(pkg.contributes?.configurationDefaults?.['[systemverilog]']).toBeUndefined();
+  });
+
   it('does not hard-code global semantic token colors', () => {
     const pkg = readPackage();
     const defaults = JSON.stringify(pkg.contributes?.configurationDefaults ?? {});
@@ -335,6 +350,7 @@ describe('package manifest', () => {
     expect([...semanticColorTokenIds].sort()).toEqual(tokenIds);
     expect(Object.keys(semanticColorPresets.dark).sort()).toEqual(tokenIds);
     expect(Object.keys(semanticColorPresets.light).sort()).toEqual(tokenIds);
+    expect([...mipsSemanticTokenTypes, ...verilogSemanticTokenTypes].sort()).toEqual(tokenIds);
   });
 
   it('keeps TextMate grammar coverage for basic highlighting without semantic tokens', () => {

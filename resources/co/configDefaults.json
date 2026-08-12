@@ -17,7 +17,7 @@
   "run.revealOutput": false,
   "run.showCommandBeforeRun": false,
   "run.timeoutMs": 120000,
-  "semanticColors.preset": "auto",
+  "semanticColors.preset": "off",
   "test.builtinGenerator.enabled": true,
   "test.builtinGenerator.instructionCount": 4000,
   "test.builtinGenerator.instructions": "",

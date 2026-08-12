@@ -76,6 +76,19 @@ afterEach(() => {
 });
 
 describe('WorkspaceModuleRegistry', () => {
+  it('accepts Verilog header files but leaves SystemVerilog to its lexical language', () => {
+    const root = makeTempDir();
+    const header = writeVerilog(root, 'include/defs.vh', 'module HeaderModule; endmodule\n');
+    const systemVerilog = writeVerilog(root, 'src/design.sv', 'module SystemVerilogModule; endmodule\n');
+    const registry = new WorkspaceModuleRegistry();
+
+    registry.updateUri(vscodeMock.MockUri.file(header) as never);
+    registry.updateUri(vscodeMock.MockUri.file(systemVerilog) as never);
+
+    expect(registry.getModule('HeaderModule')).toBeDefined();
+    expect(registry.getModule('SystemVerilogModule')).toBeUndefined();
+  });
+
   it('returns all same-name module candidates', () => {
     const root = makeTempDir();
     const first = writeVerilog(root, 'test/a.v', 'module mips_tb; endmodule\n');

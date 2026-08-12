@@ -70,6 +70,7 @@ import {
   getMipsRenamePrepare,
   getMipsSemanticTokens,
   getMipsSignatureHelp,
+  clearMipsSemanticTokenCache,
   clearMipsParseCache,
   mipsIgnorePseudoFileCommand,
   mipsIgnorePseudoMnemonicCommand,
@@ -90,7 +91,6 @@ import {
   getVerilogRenameEdits,
   getVerilogRenamePrepare,
   getVerilogSemanticTokens,
-  clearVerilogSemanticTokenCache,
   getVerilogSignatureHelp
 } from './language/verilog/service';
 import { runIseSyntaxCheck } from './language/verilog/iseSyntaxCheck';
@@ -156,7 +156,7 @@ const languageServices = new Map<string, CoLanguageService>([
     getCodeActions: (document, range, diagnostics, settings) => getVerilogCodeActions(document, range, diagnostics, settings, verilogIndex),
     getFormattingEdits: (document, settings, options) => getVerilogFormattingEdits(document, settings, options),
     getInlayHints: (document, range, settings) => getVerilogInlayHints(document, range, settings, verilogIndex),
-    getSemanticTokens: (document, settings) => getVerilogSemanticTokens(document, settings, verilogIndex),
+    getSemanticTokens: (document, settings) => getVerilogSemanticTokens(document, settings),
     getFoldingRanges: getVerilogFoldingRanges,
     getSignatureHelp: (document, position, settings) => getVerilogSignatureHelp(document, position, settings, verilogIndex),
     getRenameEdits: (document, position, newName, settings) => getVerilogRenameEdits(document, position, newName, settings, verilogIndex),
@@ -174,6 +174,7 @@ const languageServices = new Map<string, CoLanguageService>([
 interface ServerState {
   hasConfigurationCapability: boolean;
   hasFormattingDynamicRegistration: boolean;
+  hasSemanticTokensRefreshSupport: boolean;
   workspaceFolders: WorkspaceFolder[] | null | undefined;
   globalSettings: CoSettings;
   documentSettings: Map<string, Thenable<CoSettings>>;
@@ -198,6 +199,7 @@ interface VerilogProfileSnapshot {
 const state: ServerState = {
   hasConfigurationCapability: false,
   hasFormattingDynamicRegistration: false,
+  hasSemanticTokensRefreshSupport: false,
   workspaceFolders: undefined,
   globalSettings: defaultCoSettings,
   documentSettings: new Map(),
@@ -228,6 +230,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   traceServerStartup('server initialize begin');
   state.hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
   state.hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
+  state.hasSemanticTokensRefreshSupport = Boolean(params.capabilities.workspace?.semanticTokens?.refreshSupport);
   state.workspaceFolders = params.workspaceFolders;
 
   return {
@@ -294,15 +297,13 @@ connection.onDidChangeConfiguration((change) => {
   state.configurationVersion++;
   state.effectiveSettingsCache.clear();
   state.verilogProfileSnapshot = undefined;
+  clearMipsSemanticTokenCache();
+  refreshSemanticTokens();
   void validateAllDocuments();
 });
 
 connection.onDidChangeWatchedFiles((params) => {
   void handleWatchedFilesChanged(params.changes).then((languageIds) => {
-    if (languageIds.has('verilog')) {
-      clearVerilogSemanticTokenCache();
-      refreshSemanticTokens();
-    }
     return languageIds.has('*')
       ? validateAllDocuments()
       : validateDocuments((document) => languageIds.has(document.languageId));
@@ -645,8 +646,6 @@ async function rebuildVerilogIndex(): Promise<void> {
     for (const document of documents.all()) {
       serviceForDocument(document)?.updateDocument?.(document, settings);
     }
-    clearVerilogSemanticTokenCache();
-    refreshSemanticTokens();
     await validateOpenVerilogDocuments();
   } finally {
     finishTrace?.();
@@ -654,8 +653,13 @@ async function rebuildVerilogIndex(): Promise<void> {
 }
 
 function refreshSemanticTokens(): void {
+  if (!state.hasSemanticTokensRefreshSupport) {
+    return;
+  }
   try {
-    connection.languages.semanticTokens.refresh();
+    void Promise.resolve(connection.languages.semanticTokens.refresh()).catch((error) => {
+      traceServerStartup(`semantic tokens refresh skipped: ${error instanceof Error ? error.message : String(error)}`);
+    });
   } catch (error) {
     traceServerStartup(`semantic tokens refresh skipped: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -867,7 +871,7 @@ async function settingsForUri(uri: string): Promise<CoSettings> {
     return settings;
   }
   return cachedEffectiveSettings(effectiveSettingsCacheKey(uri, 0), () => {
-    const languageId = uri.toLowerCase().endsWith('.v') ? 'verilog' : '';
+    const languageId = isVerilogUri(uri) ? 'verilog' : '';
     const snapshot = verilogProfileSnapshot();
     return applyResolvedProfile(settings, {
       activeLanguageId: languageId,

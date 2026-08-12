@@ -6,6 +6,10 @@
     [
       "(",
       ")"
+    ],
+    [
+      "[",
+      "]"
     ]
   ],
   "autoClosingPairs": [
@@ -14,8 +18,20 @@
       "close": ")"
     },
     {
+      "open": "[",
+      "close": "]"
+    },
+    {
       "open": "\"",
       "close": "\"",
+      "notIn": [
+        "string",
+        "comment"
+      ]
+    },
+    {
+      "open": "'",
+      "close": "'",
       "notIn": [
         "string",
         "comment"
@@ -28,15 +44,27 @@
       ")"
     ],
     [
+      "[",
+      "]"
+    ],
+    [
       "\"",
       "\""
+    ],
+    [
+      "'",
+      "'"
     ]
   ],
+  "wordPattern": "(-?\\d+(?:\\.\\d+)?)|(?:[$%]?[A-Za-z_][A-Za-z0-9_.$]*)|(?:\\.[A-Za-z_][A-Za-z0-9_.$]*)",
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*\\.[mM][aA][cC][rR][oO]\\b.*$",
+    "decreaseIndentPattern": "^\\s*\\.[eE][nN][dD]_[mM][aA][cC][rR][oO]\\b.*$"
+  },
   "folding": {
     "markers": {
-      "start": "^\\s*#\\s*region\\b",
-      "end": "^\\s*#\\s*endregion\\b"
-    },
-    "offSide": true
+      "start": "^\\s*(?:#\\s*region\\b|\\.[mM][aA][cC][rR][oO]\\b)",
+      "end": "^\\s*(?:#\\s*endregion\\b|\\.[eE][nN][dD]_[mM][aA][cC][rR][oO]\\b)"
+    }
   }
 }

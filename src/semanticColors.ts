@@ -11,6 +11,7 @@ type SemanticRuleValue = string | { foreground?: string; fontStyle?: string; bol
 
 const lastAppliedKey = 'semanticColors.lastAppliedRules';
 const initialApplyDelayMs = 1500;
+const managedTokenIds = new Set<string>(semanticColorTokenIds);
 
 export function registerSemanticColorDefaults(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
   const controller = new SemanticColorController(context, output);
@@ -64,22 +65,33 @@ class SemanticColorController implements vscode.Disposable {
     if (this.applying) {
       return;
     }
-    const mode = vscode.workspace.getConfiguration('co').get<SemanticColorMode>(semanticColorPresetSetting, 'auto');
+    const mode = vscode.workspace.getConfiguration('co').get<SemanticColorMode>(semanticColorPresetSetting, 'off');
     if (mode === 'off') {
       await this.clearAppliedRules();
       return;
     }
 
     const presetName = mode === 'dark' || mode === 'light' ? mode : activeThemePreset();
+    if (!presetName) {
+      await this.clearAppliedRules();
+      return;
+    }
     const preset = semanticColorPresets[presetName];
     const editorConfig = vscode.workspace.getConfiguration('editor');
-    const current = editorConfig.get<Record<string, unknown>>('semanticTokenColorCustomizations', {});
+    const current = editorConfig.inspect<Record<string, unknown>>('semanticTokenColorCustomizations')?.globalValue ?? {};
     const next = isPlainObject(current) ? { ...current } : {};
     const currentRules = isPlainObject(next.rules) ? next.rules as Record<string, SemanticRuleValue> : {};
     const rules: Record<string, SemanticRuleValue> = { ...currentRules };
     const previous = this.context.globalState.get<Record<string, string>>(lastAppliedKey, {});
     const applied: Record<string, string> = {};
     let changed = false;
+
+    for (const [token, previousColor] of Object.entries(previous)) {
+      if (!managedTokenIds.has(token) && ruleMatchesColor(rules[token], previousColor)) {
+        delete rules[token];
+        changed = true;
+      }
+    }
 
     for (const token of semanticColorTokenIds) {
       const color = preset[token];
@@ -121,15 +133,14 @@ class SemanticColorController implements vscode.Disposable {
     }
 
     const editorConfig = vscode.workspace.getConfiguration('editor');
-    const current = editorConfig.get<Record<string, unknown>>('semanticTokenColorCustomizations', {});
+    const current = editorConfig.inspect<Record<string, unknown>>('semanticTokenColorCustomizations')?.globalValue ?? {};
     const next = isPlainObject(current) ? { ...current } : {};
     const currentRules = isPlainObject(next.rules) ? next.rules as Record<string, SemanticRuleValue> : {};
     const rules: Record<string, SemanticRuleValue> = { ...currentRules };
     let changed = false;
 
-    for (const token of semanticColorTokenIds) {
-      const previousColor = previous[token];
-      if (previousColor && ruleMatchesColor(rules[token], previousColor)) {
+    for (const [token, previousColor] of Object.entries(previous)) {
+      if (ruleMatchesColor(rules[token], previousColor)) {
         delete rules[token];
         changed = true;
       }
@@ -152,15 +163,17 @@ class SemanticColorController implements vscode.Disposable {
   }
 }
 
-function activeThemePreset(): SemanticColorPresetName {
+function activeThemePreset(): SemanticColorPresetName | undefined {
   switch (vscode.window.activeColorTheme.kind) {
     case vscode.ColorThemeKind.Light:
-    case vscode.ColorThemeKind.HighContrastLight:
       return 'light';
     case vscode.ColorThemeKind.Dark:
-    case vscode.ColorThemeKind.HighContrast:
-    default:
       return 'dark';
+    case vscode.ColorThemeKind.HighContrast:
+    case vscode.ColorThemeKind.HighContrastLight:
+      return undefined;
+    default:
+      return undefined;
   }
 }
 

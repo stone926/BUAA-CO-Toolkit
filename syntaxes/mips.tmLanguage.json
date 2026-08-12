@@ -2,42 +2,79 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "MIPS ASM",
   "scopeName": "source.mips",
+  "fileTypes": [
+    "asm",
+    "s",
+    "mips"
+  ],
+  "x-generated-from": [
+    "resources/mips/instructions.json",
+    "resources/mips/directives.json",
+    "resources/mips/registers.json"
+  ],
   "patterns": [
     {
-      "include": "#comments"
-    },
-    {
-      "include": "#strings"
-    },
-    {
-      "include": "#macroDefinitions"
-    },
-    {
-      "include": "#eqvDefinitions"
-    },
-    {
-      "include": "#macroParameters"
-    },
-    {
-      "include": "#macroCalls"
-    },
-    {
-      "include": "#directives"
-    },
-    {
-      "include": "#labels"
-    },
-    {
-      "include": "#registers"
-    },
-    {
-      "include": "#numbers"
-    },
-    {
-      "include": "#instructions"
+      "include": "#line"
     }
   ],
   "repository": {
+    "line": {
+      "begin": "^(?=.)",
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#labels"
+        },
+        {
+          "include": "#macroDefinitionStatement"
+        },
+        {
+          "include": "#eqvDefinitionStatement"
+        },
+        {
+          "include": "#instructionStatement"
+        },
+        {
+          "include": "#knownDirectiveStatement"
+        },
+        {
+          "include": "#unknownDirectiveStatement"
+        },
+        {
+          "include": "#bareMacroStatement"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {
@@ -51,45 +88,607 @@
         {
           "name": "string.quoted.double.mips",
           "begin": "\"",
-          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.mips"
+            }
+          },
+          "end": "\"|(?=$)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.mips"
+            }
+          },
           "patterns": [
             {
               "name": "constant.character.escape.mips",
-              "match": "\\\\."
+              "match": "\\\\(?:x[0-9A-Fa-f]{1,8}|u[0-9A-Fa-f]{4}|[^\\r\\n])"
             }
           ]
         }
       ]
     },
-    "macroDefinitions": {
+    "labels": {
+      "name": "meta.label.mips",
+      "begin": "\\G[\\t ]*([A-Za-z_.$][A-Za-z0-9_.$]*)(?:[\\t ]*)(:)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.label.mips"
+        },
+        "2": {
+          "name": "punctuation.separator.label.mips"
+        }
+      },
+      "end": "(?=$)",
       "patterns": [
         {
-          "name": "meta.macro.definition.mips",
-          "match": "^\\s*(\\.macro)\\s+([A-Za-z_.$][\\w.$]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.directive.macro.mips"
-            },
-            "2": {
-              "name": "entity.name.function.macro.mips"
-            }
-          }
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#labels"
+        },
+        {
+          "include": "#macroDefinitionStatement"
+        },
+        {
+          "include": "#eqvDefinitionStatement"
+        },
+        {
+          "include": "#instructionStatement"
+        },
+        {
+          "include": "#knownDirectiveStatement"
+        },
+        {
+          "include": "#unknownDirectiveStatement"
+        },
+        {
+          "include": "#bareMacroStatement"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
         }
       ]
     },
-    "eqvDefinitions": {
+    "macroLabels": {
+      "name": "meta.label.mips",
+      "begin": "\\G[\\t ]*([A-Za-z_.$][A-Za-z0-9_.$]*)(?:[\\t ]*)(:)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.label.mips"
+        },
+        "2": {
+          "name": "punctuation.separator.label.mips"
+        }
+      },
+      "end": "(?=$)",
       "patterns": [
         {
-          "name": "meta.eqv.definition.mips",
-          "match": "^\\s*(\\.eqv)\\s+([A-Za-z_.$][\\w.$]*)",
-          "captures": {
-            "1": {
-              "name": "keyword.directive.eqv.mips"
-            },
-            "2": {
-              "name": "variable.other.constant.eqv.mips"
-            }
-          }
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroLabels"
+        },
+        {
+          "include": "#macroEqvDefinitionStatement"
+        },
+        {
+          "include": "#macroInstructionStatement"
+        },
+        {
+          "include": "#macroKnownDirectiveStatement"
+        },
+        {
+          "include": "#macroUnknownDirectiveStatement"
+        },
+        {
+          "include": "#macroBareMacroStatement"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroDefinitionStatement": {
+      "name": "meta.macro.definition.mips",
+      "begin": "\\G[\\t ]*((?i:\\.macro))[\\t ]+([A-Za-z_.][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.macro.mips"
+        },
+        "2": {
+          "name": "entity.name.function.macro.mips"
+        }
+      },
+      "end": "^[\\t ]*((?i:\\.end_macro))(?![A-Za-z0-9_.$])",
+      "endCaptures": {
+        "1": {
+          "name": "keyword.directive.macro.mips"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroLabels"
+        },
+        {
+          "include": "#macroEqvDefinitionStatement"
+        },
+        {
+          "include": "#macroInstructionStatement"
+        },
+        {
+          "include": "#macroKnownDirectiveStatement"
+        },
+        {
+          "include": "#macroUnknownDirectiveStatement"
+        },
+        {
+          "include": "#macroBareMacroStatement"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "eqvDefinitionStatement": {
+      "name": "meta.eqv.definition.mips",
+      "begin": "\\G[\\t ]*((?i:\\.eqv))[\\t ]+([A-Za-z_.$][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.eqv.mips"
+        },
+        "2": {
+          "name": "variable.other.constant.eqv.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "instructionStatement": {
+      "name": "meta.instruction.mips",
+      "begin": "\\G[\\t ]*((?i:syscall|bgezal|bltzal|addiu|break|maddu|msubu|multu|sltiu|subiu|tgeiu|tltiu|addi|addu|andi|beqz|bgeu|bgez|bgtu|bgtz|bleu|blez|bltu|bltz|bnez|divu|eret|jalr|madd|mfc0|mfhi|mflo|move|movn|movz|msub|mtc0|mthi|mtlo|mult|negu|remu|sgeu|sgtu|sleu|sllv|slti|sltu|srav|srlv|subi|subu|teqi|tgei|tgeu|tlti|tltu|tnei|xori|abs|add|and|beq|bge|bgt|ble|blt|bne|clo|clz|div|jal|lbu|lhu|lui|lwl|lwr|mul|neg|nop|nor|not|ori|rem|seq|sge|sgt|sle|sll|slt|sne|sra|srl|sub|swl|swr|teq|tge|tlt|tne|xor|jr|la|lb|lh|li|lw|or|sb|sh|sw|b|j))(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.instruction.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "knownDirectiveStatement": {
+      "name": "meta.directive.mips",
+      "begin": "\\G[\\t ]*((?i:\\.end_macro|\\.include|\\.asciiz|\\.double|\\.extern|\\.align|\\.ascii|\\.float|\\.globl|\\.kdata|\\.ktext|\\.macro|\\.space|\\.byte|\\.data|\\.half|\\.text|\\.word|\\.eqv|\\.set))(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "unknownDirectiveStatement": {
+      "name": "meta.directive.unknown.mips",
+      "begin": "\\G[\\t ]*(\\.[A-Za-z_][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.unknown.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "bareMacroStatement": {
+      "name": "meta.macro.invocation.mips",
+      "begin": "\\G[\\t ]*(?!(?i:_co_internal_unknown_instruction)(?![A-Za-z0-9_.$]))([A-Za-z_.][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.function.macro-call.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroEqvDefinitionStatement": {
+      "name": "meta.eqv.definition.mips",
+      "begin": "\\G[\\t ]*((?i:\\.eqv))[\\t ]+([A-Za-z_.$][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.eqv.mips"
+        },
+        "2": {
+          "name": "variable.other.constant.eqv.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroInstructionStatement": {
+      "name": "meta.instruction.mips",
+      "begin": "\\G[\\t ]*((?i:syscall|bgezal|bltzal|addiu|break|maddu|msubu|multu|sltiu|subiu|tgeiu|tltiu|addi|addu|andi|beqz|bgeu|bgez|bgtu|bgtz|bleu|blez|bltu|bltz|bnez|divu|eret|jalr|madd|mfc0|mfhi|mflo|move|movn|movz|msub|mtc0|mthi|mtlo|mult|negu|remu|sgeu|sgtu|sleu|sllv|slti|sltu|srav|srlv|subi|subu|teqi|tgei|tgeu|tlti|tltu|tnei|xori|abs|add|and|beq|bge|bgt|ble|blt|bne|clo|clz|div|jal|lbu|lhu|lui|lwl|lwr|mul|neg|nop|nor|not|ori|rem|seq|sge|sgt|sle|sll|slt|sne|sra|srl|sub|swl|swr|teq|tge|tlt|tne|xor|jr|la|lb|lh|li|lw|or|sb|sh|sw|b|j))(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.instruction.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroKnownDirectiveStatement": {
+      "name": "meta.directive.mips",
+      "begin": "\\G[\\t ]*((?i:\\.end_macro|\\.include|\\.asciiz|\\.double|\\.extern|\\.align|\\.ascii|\\.float|\\.globl|\\.kdata|\\.ktext|\\.macro|\\.space|\\.byte|\\.data|\\.half|\\.text|\\.word|\\.eqv|\\.set))(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroUnknownDirectiveStatement": {
+      "name": "meta.directive.unknown.mips",
+      "begin": "\\G[\\t ]*(\\.[A-Za-z_][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.directive.unknown.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroBareMacroStatement": {
+      "name": "meta.macro.invocation.mips",
+      "begin": "\\G[\\t ]*(?!(?i:_co_internal_unknown_instruction)(?![A-Za-z0-9_.$]))([A-Za-z_.][A-Za-z0-9_.$]*)(?![A-Za-z0-9_.$])",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.function.macro-call.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
         }
       ]
     },
@@ -97,75 +696,87 @@
       "patterns": [
         {
           "name": "variable.parameter.macro.mips",
-          "match": "%[A-Za-z_.$][\\w.$]*\\b"
+          "match": "%[A-Za-z_.$][A-Za-z0-9_.$]*"
         }
       ]
     },
-    "macroCalls": {
+    "dollarMacroParameters": {
       "patterns": [
         {
-          "name": "entity.name.function.macro-call.mips",
-          "match": "\\b[A-Za-z_.$][\\w.$]*(?=\\s*\\()"
-        }
-      ]
-    },
-    "directives": {
-      "patterns": [
-        {
-          "name": "keyword.directive.mips",
-          "match": "\\B\\.(?:data|text|ktext|kdata|word|half|byte|float|double|space|ascii|asciiz|align|globl|extern|eqv|macro|end_macro|include)\\b"
-        }
-      ]
-    },
-    "labels": {
-      "patterns": [
-        {
-          "name": "entity.name.label.mips",
-          "match": "^\\s*([A-Za-z_.$][\\w.$]*)(:)",
-          "captures": {
-            "1": {
-              "name": "entity.name.label.mips"
-            },
-            "2": {
-              "name": "punctuation.separator.label.mips"
-            }
-          }
+          "name": "variable.parameter.macro.mips",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_.$]*"
         }
       ]
     },
     "registers": {
       "patterns": [
         {
+          "name": "variable.language.register.floating-point.mips",
+          "match": "(?i:\\$f(?:[0-9]|[12][0-9]|3[01]))(?![A-Za-z0-9_])"
+        },
+        {
           "name": "variable.language.register.mips",
-          "match": "\\$(?:zero|at|v[01]|a[0-3]|t[0-9]|s[0-8]|k[01]|gp|sp|fp|ra|[0-9]|[12][0-9]|3[01])\\b"
+          "match": "(?i:\\$zero|\\$10|\\$11|\\$12|\\$13|\\$14|\\$15|\\$16|\\$17|\\$18|\\$19|\\$20|\\$21|\\$22|\\$23|\\$24|\\$25|\\$26|\\$27|\\$28|\\$29|\\$30|\\$31|\\$a0|\\$a1|\\$a2|\\$a3|\\$at|\\$fp|\\$gp|\\$k0|\\$k1|\\$ra|\\$s0|\\$s1|\\$s2|\\$s3|\\$s4|\\$s5|\\$s6|\\$s7|\\$s8|\\$sp|\\$t0|\\$t1|\\$t2|\\$t3|\\$t4|\\$t5|\\$t6|\\$t7|\\$t8|\\$t9|\\$v0|\\$v1|\\$0|\\$1|\\$2|\\$3|\\$4|\\$5|\\$6|\\$7|\\$8|\\$9)(?![A-Za-z0-9_])"
+        }
+      ]
+    },
+    "characters": {
+      "patterns": [
+        {
+          "name": "constant.character.mips",
+          "match": "'(?:\\\\(?:x[0-9A-Fa-f]{1,8}|u[0-9A-Fa-f]{4}|[^\\r\\n])|[^\\\\'\\r\\n])'"
         }
       ]
     },
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.float.mips",
+          "match": "(?<![A-Za-z0-9_.$])[-+]?(?:(?:[0-9][0-9_]*\\.[0-9_]*|\\.[0-9][0-9_]*)(?:[eE][-+]?[0-9][0-9_]*)?|[0-9][0-9_]*[eE][-+]?[0-9][0-9_]*)(?![A-Za-z0-9_.$])"
+        },
+        {
           "name": "constant.numeric.hex.mips",
-          "match": "[-+]?0[xX][0-9A-Fa-f]+\\b"
+          "match": "(?<![A-Za-z0-9_.$])[-+]?0[xX][0-9A-Fa-f][0-9A-Fa-f_]*(?![A-Za-z0-9_.$])"
         },
         {
           "name": "constant.numeric.binary.mips",
-          "match": "[-+]?0[bB][01]+\\b"
+          "match": "(?<![A-Za-z0-9_.$])[-+]?0[bB][01][01_]*(?![A-Za-z0-9_.$])"
         },
         {
           "name": "constant.numeric.octal.mips",
-          "match": "[-+]?0[0-7]+\\b"
+          "match": "(?<![A-Za-z0-9_.$])[-+]?0[0-7][0-7_]*(?![A-Za-z0-9_.$])"
         },
         {
-          "name": "constant.numeric.decimal.mips",
-          "match": "[-+]?\\b\\d+\\b"
+          "name": "constant.numeric.mips",
+          "match": "(?<![A-Za-z0-9_.$])[-+]?[0-9][0-9_]*(?![A-Za-z0-9_.$])"
         }
       ]
     },
-    "instructions": {
+    "operators": {
       "patterns": [
         {
-          "name": "keyword.control.instruction.mips",
-          "match": "\\b(?i:abs|add|addi|addiu|addu|and|andi|b|beq|beqz|bge|bgeu|bgez|bgezal|bgt|bgtu|bgtz|ble|bleu|blez|blt|bltu|bltz|bltzal|bne|bnez|break|clo|clz|div|divu|eret|j|jal|jalr|jr|la|lb|lbu|lh|lhu|li|lui|lw|lwl|lwr|madd|maddu|mfc0|mfhi|mflo|move|movn|movz|msub|msubu|mtc0|mthi|mtlo|mul|mult|multu|neg|negu|nop|nor|not|or|ori|rem|remu|sb|seq|sge|sgeu|sgt|sgtu|sh|sle|sleu|sll|sllv|slt|slti|sltiu|sltu|sne|sra|srav|srl|srlv|sub|subi|subiu|subu|sw|swl|swr|syscall|xor|xori)\\b"
+          "name": "keyword.operator.mips",
+          "match": "<<|>>|[-+*/%&|^~]"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.mips",
+          "match": ","
+        },
+        {
+          "name": "punctuation.section.parens.mips",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.section.brackets.mips",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.separator.colon.mips",
+          "match": ":"
         }
       ]
     }

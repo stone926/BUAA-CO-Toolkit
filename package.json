@@ -77,7 +77,20 @@
           "verilog"
         ],
         "extensions": [
-          ".v"
+          ".v",
+          ".vh"
+        ],
+        "configuration": "./language-configuration/verilog.json"
+      },
+      {
+        "id": "systemverilog",
+        "aliases": [
+          "SystemVerilog",
+          "systemverilog"
+        ],
+        "extensions": [
+          ".sv",
+          ".svh"
         ],
         "configuration": "./language-configuration/verilog.json"
       }
@@ -92,6 +105,11 @@
         "language": "verilog",
         "scopeName": "source.verilog",
         "path": "./syntaxes/verilog.tmLanguage.json"
+      },
+      {
+        "language": "systemverilog",
+        "scopeName": "source.systemverilog.co",
+        "path": "./syntaxes/systemverilog.tmLanguage.json"
       }
     ],
     "snippets": [
@@ -105,11 +123,6 @@
       }
     ],
     "semanticTokenTypes": [
-      {
-        "id": "mipsDirective",
-        "superType": "keyword",
-        "description": "MIPS 汇编器指令，如 .data、.text、.eqv 或 .macro"
-      },
       {
         "id": "mipsInstruction",
         "superType": "function",
@@ -157,7 +170,7 @@
       },
       {
         "id": "mipsMacro",
-        "superType": "function",
+        "superType": "macro",
         "description": "MIPS 汇编器宏定义或宏调用"
       },
       {
@@ -181,26 +194,6 @@
         "description": "MIPS .eqv 符号"
       },
       {
-        "id": "mipsNumber",
-        "superType": "number",
-        "description": "MIPS 数值字面量"
-      },
-      {
-        "id": "mipsString",
-        "superType": "string",
-        "description": "MIPS 字符串字面量"
-      },
-      {
-        "id": "mipsComment",
-        "superType": "comment",
-        "description": "MIPS 行注释"
-      },
-      {
-        "id": "mipsPunctuation",
-        "superType": "operator",
-        "description": "MIPS 标点符号，如逗号、冒号和括号"
-      },
-      {
         "id": "verilogModule",
         "superType": "class",
         "description": "Verilog 模块声明和模块类型引用"
@@ -217,7 +210,7 @@
       },
       {
         "id": "verilogParameter",
-        "superType": "enumMember",
+        "superType": "parameter",
         "description": "Verilog 参数和局部参数"
       },
       {
@@ -227,53 +220,23 @@
       },
       {
         "id": "verilogMacro",
-        "superType": "function",
+        "superType": "macro",
         "description": "Verilog 预处理器宏"
       },
       {
-        "id": "verilogSystemTask",
+        "id": "verilogTask",
         "superType": "function",
-        "description": "Verilog 系统任务，如 $display 和 $readmemh"
+        "description": "Verilog task 声明和调用"
       },
       {
-        "id": "verilogNumber",
-        "superType": "number",
-        "description": "Verilog 数值字面量"
-      },
-      {
-        "id": "verilogKeyword",
-        "superType": "keyword",
-        "description": "Verilog 关键字"
-      },
-      {
-        "id": "verilogComment",
-        "superType": "comment",
-        "description": "Verilog 注释"
-      },
-      {
-        "id": "verilogString",
-        "superType": "string",
-        "description": "Verilog 字符串字面量"
-      },
-      {
-        "id": "verilogFormatSpecifier",
-        "superType": "regexp",
-        "description": "Verilog 显示格式说明符，如 %d、%h 或 %0d"
-      },
-      {
-        "id": "verilogPunctuation",
-        "superType": "operator",
-        "description": "Verilog 标点符号"
+        "id": "verilogFunction",
+        "superType": "function",
+        "description": "Verilog function 声明和调用"
       }
     ],
     "semanticTokenScopes": [
       {
         "scopes": {
-          "mipsDirective": [
-            "keyword.directive.mips",
-            "keyword.control.directive",
-            "keyword.other"
-          ],
           "mipsInstruction": [
             "keyword.control.instruction.mips",
             "entity.name.function.mips",
@@ -320,7 +283,7 @@
           ],
           "mipsMacro": [
             "entity.name.function.macro.mips",
-            "entity.name.function"
+            "entity.name.function.preprocessor"
           ],
           "mipsMacroParameter": [
             "variable.parameter.macro.mips",
@@ -338,24 +301,6 @@
             "variable.other.constant.eqv.mips",
             "variable.other.constant",
             "constant.other"
-          ],
-          "mipsNumber": [
-            "constant.numeric.mips",
-            "constant.numeric"
-          ],
-          "mipsString": [
-            "string.quoted.double.mips",
-            "string.quoted.double"
-          ],
-          "mipsComment": [
-            "comment.line.number-sign.mips",
-            "comment.line",
-            "comment"
-          ],
-          "mipsPunctuation": [
-            "punctuation.separator.mips",
-            "punctuation.definition.mips",
-            "punctuation"
           ],
           "verilogModule": [
             "entity.name.type.module.verilog",
@@ -383,39 +328,15 @@
           ],
           "verilogMacro": [
             "entity.name.function.preprocessor.verilog",
-            "keyword.control.directive.verilog",
             "entity.name.function.preprocessor"
           ],
-          "verilogSystemTask": [
-            "support.function.system-task.verilog",
-            "support.function"
+          "verilogTask": [
+            "entity.name.function.task.verilog",
+            "entity.name.function"
           ],
-          "verilogNumber": [
-            "constant.numeric.verilog",
-            "constant.numeric"
-          ],
-          "verilogKeyword": [
-            "keyword.control.verilog",
-            "keyword.control"
-          ],
-          "verilogComment": [
-            "comment.line.double-slash.verilog",
-            "comment.block.verilog",
-            "comment"
-          ],
-          "verilogString": [
-            "string.quoted.double.verilog",
-            "string.quoted.double"
-          ],
-          "verilogFormatSpecifier": [
-            "constant.other.placeholder.verilog",
-            "constant.character.format.placeholder.verilog",
-            "constant.other"
-          ],
-          "verilogPunctuation": [
-            "punctuation.definition.verilog",
-            "punctuation.separator.verilog",
-            "punctuation"
+          "verilogFunction": [
+            "entity.name.function.verilog",
+            "entity.name.function"
           ]
         }
       }
@@ -1135,13 +1056,13 @@
               "off"
             ],
             "enumDescriptions": [
-              "根据当前 VS Code 主题明暗自动选择 CO 语义着色预设",
+              "根据普通深色/浅色 VS Code 主题自动选择 CO 语义着色预设；高对比度主题不写入预设",
               "始终使用深色主题语义着色预设",
               "始终使用浅色主题语义着色预设",
               "不自动写入 CO 语义着色预设；保留用户和主题自己的规则"
             ],
-            "description": "控制 CO 自定义语义 token 的默认配色。auto 会按当前主题明暗切换，同时不覆盖用户已手动修改的 token 规则。",
-            "default": "auto"
+            "description": "控制 CO 自定义语义 token 的可选配色。默认 off，使用当前主题通过标准 superType 和 TextMate scope 提供的颜色；auto/dark/light 会显式写入全局用户配置，但不覆盖用户已手动修改的同名 token 规则。",
+            "default": "off"
           },
           "co.mips.warnPseudoInstruction": {
             "type": "boolean",
@@ -1382,17 +1303,21 @@
     ]
   },
   "scripts": {
-    "compile": "npm run sync:manifest-config && tsc -p ./",
+    "compile": "npm run sync:generated && tsc -p ./",
     "vscode:prepublish": "npm run compile",
-    "package:vsix": "npm run sync:manifest-config && vsce package",
+    "package:vsix": "npm run sync:generated && vsce package",
     "publish": "node scripts/release.mjs",
     "generate:manifest-config": "node scripts/generate-manifest-config.mjs",
     "check:manifest-config": "node scripts/generate-manifest-config.mjs --check",
     "sync:manifest-config": "npm run generate:manifest-config && npm run check:manifest-config",
+    "generate:syntaxes": "node scripts/generate-syntaxes.mjs",
+    "check:syntaxes": "node scripts/generate-syntaxes.mjs --check",
+    "sync:syntaxes": "npm run generate:syntaxes && npm run check:syntaxes",
+    "sync:generated": "npm run sync:manifest-config && npm run sync:syntaxes",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",
     "check:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs --check",
-    "test": "npm run sync:manifest-config && vitest run",
-    "test:coverage": "npm run sync:manifest-config && vitest run --coverage",
+    "test": "npm run sync:generated && vitest run",
+    "test:coverage": "npm run sync:generated && vitest run --coverage",
     "test:all": "npm run compile && npm test && npm run test:coverage && node scripts/check-index.mjs"
   },
   "devDependencies": {
@@ -1401,7 +1326,9 @@
     "@vitest/coverage-v8": "^4.1.9",
     "@vscode/vsce": "^3.9.2",
     "typescript": "^5.5.2",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",

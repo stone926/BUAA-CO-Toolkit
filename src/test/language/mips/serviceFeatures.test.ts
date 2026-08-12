@@ -85,23 +85,28 @@ describe('MIPS instruction-backed language features', () => {
     });
   });
 
-  it('builds semantic tokens from AST ranges for literals, comments, punctuation, and references', () => {
+  it('does not disguise an invalid register as a valid semantic register', () => {
+    const semantic = decode(getMipsSemanticTokens(doc('add $bad, $t0, $t1'), mergeCoSettings({}), state()).data);
+    const registerType = mipsSemanticTokenTypes.indexOf('mipsRegister');
+
+    expect(semantic.some((token) => token.character === 4 && token.type === registerType)).toBe(false);
+    expect(semantic.filter((token) => token.type === registerType)).toHaveLength(2);
+  });
+
+  it('keeps lexical tokens in TextMate and emits only contextual symbol roles', () => {
     const source = [
       'msg: .asciiz "hi" # comment',
       'main: lw $t0, msg+4($sp)'
     ].join('\n');
     const semantic = decode(getMipsSemanticTokens(doc(source), mergeCoSettings({}), state()).data);
-    const stringType = mipsSemanticTokenTypes.indexOf('mipsString');
-    const commentType = mipsSemanticTokenTypes.indexOf('mipsComment');
-    const punctuationType = mipsSemanticTokenTypes.indexOf('mipsPunctuation');
-    const numberType = mipsSemanticTokenTypes.indexOf('mipsNumber');
     const labelType = mipsSemanticTokenTypes.indexOf('mipsLabel');
+    const registerType = mipsSemanticTokenTypes.indexOf('mipsRegister');
 
-    expect(semantic).toContainEqual({ line: 0, character: 13, length: 4, type: stringType });
-    expect(semantic).toContainEqual({ line: 0, character: 18, length: 9, type: commentType });
-    expect(semantic).toContainEqual({ line: 1, character: 12, length: 1, type: punctuationType });
-    expect(semantic).toContainEqual({ line: 1, character: 17, length: 2, type: numberType });
+    expect(semantic).toContainEqual({ line: 0, character: 0, length: 3, type: labelType });
+    expect(semantic).toContainEqual({ line: 1, character: 0, length: 4, type: labelType });
     expect(semantic).toContainEqual({ line: 1, character: 14, length: 3, type: labelType });
+    expect(semantic).toContainEqual({ line: 1, character: 9, length: 3, type: registerType });
+    expect(semantic.some((token) => token.line === 0 && token.character >= 13)).toBe(false);
   });
 
   it('uses prefix AST context for syscall and CP0 operand completions', () => {

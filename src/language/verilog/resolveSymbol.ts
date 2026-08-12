@@ -147,7 +147,12 @@ export function mapSemanticResolution(
   index: VerilogWorkspaceIndex
 ): ResolvedVerilogSymbol | undefined {
   const reference = resolved.reference;
-  if (reference?.kind === 'portConnection' && reference.module && reference.instance && reference.portConnection?.name) {
+  if (
+    (reference?.kind === 'portConnection' || reference?.kind === 'parameterConnection') &&
+    reference.module &&
+    reference.instance &&
+    reference.portConnection?.name
+  ) {
     const listKind = connectionListKindForInstanceConnection(reference.instance, reference.portConnection);
     const target = resolveInstanceConnectionTarget(index, modules, reference.instance, reference.portConnection, listKind);
     if (target) {

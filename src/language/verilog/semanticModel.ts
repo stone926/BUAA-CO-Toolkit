@@ -36,6 +36,7 @@ export type VerilogSemanticReferenceKind =
   | 'instance'
   | 'task'
   | 'portConnection'
+  | 'parameterConnection'
   | 'macro'
   | 'include'
   | 'unresolved';
@@ -328,7 +329,14 @@ function collectReferences(
         module,
         instance
       });
-      for (const connection of [...instance.portConnections, ...instance.parameterConnections]) {
+      const connections: Array<{
+        connection: VerilogPortConnection;
+        kind: 'portConnection' | 'parameterConnection';
+      }> = [
+        ...instance.portConnections.map((connection) => ({ connection, kind: 'portConnection' as const })),
+        ...instance.parameterConnections.map((connection) => ({ connection, kind: 'parameterConnection' as const }))
+      ];
+      for (const { connection, kind } of connections) {
         const connectionScope = scopeAtPosition(scope, blockScopes, connection.expressionRange.start);
         if (!connection.name || !connection.nameRange) {
           collectReferencesFromConnectionExpression(document, references, declarationRangeKeys, connectionScope, module, connection);
@@ -336,7 +344,7 @@ function collectReferences(
         }
         references.push({
           name: connection.name,
-          kind: 'portConnection',
+          kind,
           uri: document.uri,
           range: connection.nameRange,
           scope,
@@ -760,6 +768,14 @@ function collectReferencesFromExpressionAst(
   baseOffset: number
 ): void {
   walkVerilogExpression(expression, (candidate) => {
+    if (candidate.kind === 'callExpression' && !candidate.system) {
+      const range = Range.create(
+        document.positionAt(baseOffset + candidate.start),
+        document.positionAt(baseOffset + candidate.start + candidate.callee.length)
+      );
+      addIdentifierReference(document, references, declarationRangeKeys, scope, module, candidate.callee, range);
+      return;
+    }
     if (candidate.kind !== 'identifier') {
       return;
     }

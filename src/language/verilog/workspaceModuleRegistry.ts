@@ -52,7 +52,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
 
   /** 公开的单文件更新入口。用于生成用户 TB 后立即刷新索引。 */
   updateUri(uri: vscode.Uri): void {
-    if (uri.scheme !== 'file' || !uri.fsPath.toLowerCase().endsWith('.v') || shouldSkipPath(uri.fsPath)) {
+    if (uri.scheme !== 'file' || !isVerilogFileName(uri.fsPath) || shouldSkipPath(uri.fsPath)) {
       return;
     }
     this.indexFile(uri.fsPath);
@@ -235,7 +235,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       for (const entry of entries) {
         if (entry.isDirectory() && !shouldSkipDirectory(entry.name)) {
           stack.push(path.join(current, entry.name));
-        } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.v')) {
+        } else if (entry.isFile() && isVerilogFileName(entry.name)) {
           yield path.join(current, entry.name);
         }
       }
@@ -275,6 +275,11 @@ function shouldSkipDirectory(name: string): boolean {
     name === 'build' ||
     name === 'coverage'
   );
+}
+
+function isVerilogFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.v') || lower.endsWith('.vh');
 }
 
 function shouldSkipPath(filePath: string): boolean {

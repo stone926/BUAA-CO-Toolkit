@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SystemVerilog",
+  "scopeName": "source.systemverilog.co",
+  "fileTypes": [
+    "sv",
+    "svh"
+  ],
+  "x-generated-from": [
+    "resources/verilog/keywords.json",
+    "resources/verilog/systemverilog.json",
+    "syntaxes/verilog.tmLanguage.json"
+  ],
+  "patterns": [
+    {
+      "include": "#systemVerilogKeywords"
+    },
+    {
+      "include": "#systemVerilogOperators"
+    },
+    {
+      "include": "source.verilog"
+    }
+  ],
+  "repository": {
+    "systemVerilogKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.systemverilog",
+          "match": "(?<![A-Za-z0-9_$])(?:sync_accept_on|sync_reject_on|always_latch|s_until_with|always_comb|first_match|throughout|until_with|wait_order|accept_on|always_ff|reject_on|continue|priority|restrict|foreach|implies|s_until|unique0|assert|assume|before|expect|return|strong|unique|within|break|cover|final|until|weak|iff|do)(?![A-Za-z0-9_$])"
+        },
+        {
+          "name": "keyword.declaration.systemverilog",
+          "match": "(?<![A-Za-z0-9_$])(?:endinterface|endclocking|endproperty|endsequence|covergroup|endchecker|endpackage|endprogram|interface|clocking|endclass|endgroup|property|sequence|checker|modport|package|program|typedef|class|let)(?![A-Za-z0-9_$])"
+        },
+        {
+          "name": "storage.type.systemverilog",
+          "match": "(?<![A-Za-z0-9_$])(?:interconnect|shortreal|shortint|chandle|longint|string|struct|logic|union|byte|enum|void|bit|int)(?![A-Za-z0-9_$])"
+        },
+        {
+          "name": "storage.modifier.systemverilog",
+          "match": "(?<![A-Za-z0-9_$])(?:protected|context|virtual|extern|packed|static|const|local|randc|pure|rand|ref)(?![A-Za-z0-9_$])"
+        },
+        {
+          "name": "keyword.other.systemverilog",
+          "match": "(?<![A-Za-z0-9_$])(?:timeprecision|illegal_bins|randsequence|ignore_bins|constraint|implements|intersect|join_none|join_any|randcase|timeunit|wildcard|extends|matches|binsof|import|inside|tagged|alias|cross|solve|super|bind|bins|dist|null|soft|this|type|with|new|var)(?![A-Za-z0-9_$])"
+        }
+      ]
+    },
+    "systemVerilogOperators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.systemverilog",
+          "match": "<<<=|>>>=|!=\\?|!==|<<<|<<=|==\\?|===|>>=|>>>|\\|->|\\|=>|--|-:|-=|::|\\.\\*|\\*=|/=|&=|%=|\\^=|\\+:|\\+\\+|\\+=|\\|="
+        }
+      ]
+    }
+  }
+}

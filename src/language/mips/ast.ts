@@ -204,6 +204,7 @@ export function buildMipsAst(
   const astLines = lines.map((line) => buildLineAst(line));
   const statements = astLines.filter((line): line is MipsStatementAst => line.kind === 'statement');
   const macros = collectMacroDefinitions(document, statements);
+  classifyMacroParameterOperands(macros);
   return {
     kind: 'program',
     uri: document.uri,
@@ -212,6 +213,33 @@ export function buildMipsAst(
     statements,
     macros
   };
+}
+
+function classifyMacroParameterOperands(macros: MipsMacroDefinitionAst[]): void {
+  for (const macro of macros) {
+    const parameterNames = new Set(macro.params.map((parameter) => parameter.name));
+    for (const statement of macro.body) {
+      const operands = statement.executable?.operands ?? statement.dataContinuation?.operands ?? [];
+      for (let index = 0; index < operands.length; index++) {
+        operands[index] = classifyMacroParameterOperand(operands[index], parameterNames);
+      }
+    }
+  }
+}
+
+function classifyMacroParameterOperand(operand: MipsOperandAst, parameterNames: ReadonlySet<string>): MipsOperandAst {
+  if (parameterNames.has(operand.text)) {
+    return {
+      kind: 'macroParameter',
+      text: operand.text,
+      range: operand.range
+    };
+  }
+  if (operand.kind === 'memory') {
+    operand.offset = classifyMacroParameterOperand(operand.offset, parameterNames);
+    operand.base = classifyMacroParameterOperand(operand.base, parameterNames);
+  }
+  return operand;
 }
 
 function buildLineAst(line: MipsParsedLine): MipsAstLine {

@@ -1,4 +1,4 @@
-# common-lsp | src/language/common/ | 5 files
+# common-lsp | src/language/common/ | 6 files
 
 各语言共用基础设施: 配置合并、诊断过滤、LSP 辅助、缓存
 
@@ -10,9 +10,10 @@ diagnostic-actions:
 
 lsp-helpers:
   lsp.ts — Position/Range辅助: lineAt, containsPosition, rangesEqual, makeDiagnostic | exports: lineAt, containsPosition, rangesEqual, makeDiagnostic
+  semanticTokens.ts — SemanticTokenCollector: 单行边界校验、去重、排序、重叠保护和 LSP 相对位置编码 | exports: SemanticTokenCollector
 
 utilities:
   util.ts — rangeKey(去重键), escapeRegExp, escapeHtml, createMipsTokenRegex | exports: rangeKey, escapeRegExp, escapeHtml, createMipsTokenRegex
 
 parse-cache:
-  documentResultCache.ts — 文档版本感知通用缓存，含文本content shortcut，LRU 16条目 | exports: DocumentResultCache
+  documentResultCache.ts — 每个 URI/discriminator 仅保留最新一代；跨 version 精确文本复用；LRU 16条目 | exports: DocumentResultCache

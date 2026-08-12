@@ -18,15 +18,7 @@ export function getCachedMipsParse(document: TextDocument, settings: CoSettings,
 }
 
 export function getCachedMipsSemanticParse(document: TextDocument, settings: CoSettings, state: MipsServerState): MipsParseResult {
-  const settingKey = `semantic:${cacheKey(settings, state)}`;
-  return parseCache.getOrCreate(document, settingKey, () => {
-    const options: MipsParseOptions = {
-      includeDiagnostics: false,
-      ignoredPseudoInstructionFiles: state.ignoredPseudoInstructionFiles,
-      ignoredPseudoInstructionMnemonics: state.ignoredPseudoInstructionMnemonics
-    };
-    return parseMips(document, settings, options);
-  });
+  return getCachedMipsParse(document, settings, state);
 }
 
 export function clearCachedMipsParse(uri?: string): void {

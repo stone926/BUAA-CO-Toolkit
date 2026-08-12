@@ -6,29 +6,12 @@ import { lexVerilog, VerilogToken } from './lexer';
 import {
   VerilogDirective,
   VerilogInclude,
+  verilogLanguageCatalog,
   VerilogMacro,
   VerilogMacroUse
 } from './model';
 
-export const preprocessorDirectives = new Set([
-  'define',
-  'undef',
-  'ifdef',
-  'ifndef',
-  'elsif',
-  'else',
-  'endif',
-  'include',
-  'timescale',
-  'default_nettype',
-  'resetall',
-  'undefineall',
-  'begin_keywords',
-  'end_keywords',
-  'celldefine',
-  'endcelldefine',
-  'pragma'
-]);
+export const preprocessorDirectives = new Set(verilogLanguageCatalog.compilerDirectives);
 
 export function parseMacros(document: TextDocument, text: string): VerilogMacro[] {
   return parseMacrosFromTokens(document, lexVerilog(text).tokens);

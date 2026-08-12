@@ -81,7 +81,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(disableDiagnosticCodeCommand, (languageId?: string, code?: string, documentUri?: string) => disableDiagnosticCode(languageId, code, documentUri))
   );
 
-  // 工作空间模块注册表：后台解析所有 .v 文件，供 sidebar 连线分析跨文件查找模块
+  // 工作空间模块注册表：后台解析所有 .v/.vh 文件，供 sidebar 连线分析跨文件查找模块
   const moduleRegistry = new WorkspaceModuleRegistry({
     initialScanDelayMs: verilogModuleRegistryStartupDelayMs
   });
@@ -104,7 +104,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
-  const verilogWatcher = vscode.workspace.createFileSystemWatcher('**/*.v');
+  const verilogWatcher = vscode.workspace.createFileSystemWatcher('**/*.{v,vh}');
   context.subscriptions.push(
     verilogWatcher,
     verilogWatcher.onDidCreate((uri) => {

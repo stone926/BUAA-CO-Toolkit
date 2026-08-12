@@ -7,7 +7,10 @@ import type { VerilogParseResult } from './model';
 interface CachedVerilogParse {
   parsed: VerilogParseResult;
   strippedText: string;
-  diagnosticsBySettings: Map<string, VerilogParseResult>;
+  diagnostics?: {
+    settingsKey: string;
+    parsed: VerilogParseResult;
+  };
 }
 
 const parseCache = new DocumentResultCache<CachedVerilogParse>();
@@ -26,12 +29,11 @@ export function getCachedVerilogParse(document: TextDocument, settings: CoSettin
     return cached.parsed;
   }
   const settingKey = settingsKey(settings);
-  const existing = cached.diagnosticsBySettings.get(settingKey);
-  if (existing) {
-    return existing;
+  if (cached.diagnostics?.settingsKey === settingKey) {
+    return cached.diagnostics.parsed;
   }
   const parsed = addVerilogDiagnostics(document, settings, cached.parsed, document.getText());
-  cached.diagnosticsBySettings.set(settingKey, parsed);
+  cached.diagnostics = { settingsKey: settingKey, parsed };
   return parsed;
 }
 
@@ -52,6 +54,6 @@ function createCachedVerilogParse(document: TextDocument): CachedVerilogParse {
   return {
     parsed: parseVerilog(document, defaultCoSettings, false),
     strippedText: stripCommentsAndStrings(text),
-    diagnosticsBySettings: new Map()
+    diagnostics: undefined
   };
 }

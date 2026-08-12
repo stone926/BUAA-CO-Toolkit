@@ -379,6 +379,17 @@ function classifyReference(
   if (name.startsWith('.') && directives.has(name.toLowerCase())) {
     return undefined;
   }
+  const macroParameter = scope.macroParams.get(name);
+  if (macroParameter) {
+    return {
+      name,
+      kind: 'macroParam',
+      range,
+      statement,
+      scope,
+      symbol: macroParameter
+    };
+  }
   if (name.startsWith('$') && (isRegister(name) || isFloatingPointRegister(name))) {
     return {
       name,

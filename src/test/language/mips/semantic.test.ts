@@ -37,6 +37,26 @@ describe('MIPS AST and semantic model', () => {
     }
   });
 
+  it('distinguishes SPIM-style $ macro parameters from registers inside macro bodies', () => {
+    const result = parseMips(doc([
+      '.macro inc($x)',
+      '  addi $x, $x, 1',
+      '.end_macro',
+      'inc($t0)'
+    ].join('\n')), defaultCoSettings);
+
+    const bodyOperands = result.ast.macros[0].body[0].executable?.operands ?? [];
+    expect(bodyOperands.slice(0, 2).map((operand) => operand.kind)).toEqual([
+      'macroParameter',
+      'macroParameter'
+    ]);
+    expect(result.semantic.references.filter((reference) => reference.name === '$x').map((reference) => reference.kind)).toEqual([
+      'macroParam',
+      'macroParam'
+    ]);
+    expect(result.ast.statements[3].executable?.operands[0].kind).toBe('register');
+  });
+
   it('stores parsed integer values on typed AST operands', () => {
     const result = parseMips(doc([
       'li $v0, 0x2a',

@@ -1,6 +1,6 @@
 # verilog-lsp | src/language/verilog/ | 60 files
 
-Verilog HDL(.v) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex
+Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
 
 数据流: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts(调度): syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag -> service.ts(provider barrel)
 跨文件: workspaceModuleRegistry.ts(VSCode端) <-> workspaceIndex.ts(LSP端) -> signalWiring.ts
@@ -49,14 +49,14 @@ lsp-providers:
   inlayHints.ts — 实例连接端口方向/宽度与参数提示
   resolveSymbol.ts — 语义模型+语法 fallback 的 Verilog symbol resolution, 实例连接上下文
   display.ts — hover/inlay/signature markdown 文案、宽度/参数显示 helper
-  semanticTokens.ts — 语义高亮: module/port/signal/parameter/instance/macro/systemTask/number/keyword/comment/string/formatSpecifier/punctuation
+  semanticTokens.ts — 上下文语义高亮: module/port/signal/parameter/instance/macro/task/function；命名端口/参数按语法稳定分类，不依赖 workspace index；词法类别由 TextMate 提供
   formatting.ts — Verilog 细项格式化配置
   folding.ts — module/always/initial/function/task/generate/case/预处理条件块
   symbols.ts — 文档符号树(模块->端口/参数/声明/实例)
   traceParser.ts — ISim $display输出解析为CpuTraceEvent[]
 
 cross-file:
-  workspaceModuleRegistry.ts — VSCode端后台索引: FileSystemWatcher **/*.v, onDidSaveTextDocument增量更新
+  workspaceModuleRegistry.ts — VSCode端后台索引: FileSystemWatcher `.v/.vh`, onDidSaveTextDocument增量更新
   workspaceIndex.ts — LSP端模块数据库: 索引模块/宏/引用/display格式, 跨文件查找, 增量更新(≤50逐文件,>50全量)
   signalWiring.ts — 跨模块信号driver/reader追踪
 

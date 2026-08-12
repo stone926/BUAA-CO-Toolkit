@@ -439,6 +439,10 @@ describe('findCommentIndex', () => {
     expect(findCommentIndex('.asciiz "hello # world"')).toBe(-1);
   });
 
+  it('does not start a comment inside a character literal', () => {
+    expect(findCommentIndex(".byte '#', '\\n' # comment")).toBe(16);
+  });
+
   it('returns the correct index for # after a string', () => {
     expect(findCommentIndex('.asciiz "hello" # comment')).toBe(16);
   });

@@ -3,7 +3,6 @@ export type SemanticColorPresetName = 'dark' | 'light';
 export const semanticColorPresetSetting = 'semanticColors.preset';
 
 export const semanticColorTokenIds = [
-  'mipsDirective',
   'mipsInstruction',
   'mipsRealInstruction',
   'mipsRInstruction',
@@ -18,30 +17,20 @@ export const semanticColorTokenIds = [
   'mipsLabel',
   'mipsDataSymbol',
   'mipsEqvSymbol',
-  'mipsNumber',
-  'mipsString',
-  'mipsComment',
-  'mipsPunctuation',
   'verilogModule',
   'verilogPort',
   'verilogSignal',
   'verilogParameter',
   'verilogInstance',
   'verilogMacro',
-  'verilogSystemTask',
-  'verilogNumber',
-  'verilogKeyword',
-  'verilogComment',
-  'verilogString',
-  'verilogFormatSpecifier',
-  'verilogPunctuation'
+  'verilogTask',
+  'verilogFunction'
 ] as const;
 
 export type SemanticColorTokenId = typeof semanticColorTokenIds[number];
 
 export const semanticColorPresets: Record<SemanticColorPresetName, Record<SemanticColorTokenId, string>> = {
   dark: {
-    mipsDirective: '#C586C0',
     mipsInstruction: '#9CDCFE',
     mipsRealInstruction: '#9CDCFE',
     mipsRInstruction: '#9CDCFE',
@@ -56,26 +45,16 @@ export const semanticColorPresets: Record<SemanticColorPresetName, Record<Semant
     mipsLabel: '#C586C0',
     mipsDataSymbol: '#DCDCAA',
     mipsEqvSymbol: '#C3E88D',
-    mipsNumber: '#B5CEA8',
-    mipsString: '#CE9178',
-    mipsComment: '#6A9955',
-    mipsPunctuation: '#D4D4D4',
     verilogModule: '#4EC9B0',
     verilogPort: '#9CDCFE',
     verilogSignal: '#9CDCFE',
     verilogParameter: '#D7BA7D',
     verilogInstance: '#DCDCAA',
     verilogMacro: '#C586C0',
-    verilogSystemTask: '#D7BA7D',
-    verilogNumber: '#B5CEA8',
-    verilogKeyword: '#569CD6',
-    verilogComment: '#6A9955',
-    verilogString: '#CE9178',
-    verilogFormatSpecifier: '#D7BA7D',
-    verilogPunctuation: '#D4D4D4'
+    verilogTask: '#DCDCAA',
+    verilogFunction: '#DCDCAA'
   },
   light: {
-    mipsDirective: '#AF00DB',
     mipsInstruction: '#001080',
     mipsRealInstruction: '#001080',
     mipsRInstruction: '#001080',
@@ -90,22 +69,13 @@ export const semanticColorPresets: Record<SemanticColorPresetName, Record<Semant
     mipsLabel: '#AF00DB',
     mipsDataSymbol: '#795E26',
     mipsEqvSymbol: '#098658',
-    mipsNumber: '#098658',
-    mipsString: '#A31515',
-    mipsComment: '#008000',
-    mipsPunctuation: '#000000',
     verilogModule: '#267F99',
     verilogPort: '#001080',
     verilogSignal: '#001080',
     verilogParameter: '#795E26',
     verilogInstance: '#795E26',
     verilogMacro: '#AF00DB',
-    verilogSystemTask: '#795E26',
-    verilogNumber: '#098658',
-    verilogKeyword: '#0000FF',
-    verilogComment: '#008000',
-    verilogString: '#A31515',
-    verilogFormatSpecifier: '#795E26',
-    verilogPunctuation: '#000000'
+    verilogTask: '#795E26',
+    verilogFunction: '#795E26'
   }
 };

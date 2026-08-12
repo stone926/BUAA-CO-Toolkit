@@ -87,7 +87,7 @@
 | `tri`, `tri0`, `tri1`, `supply0`, `supply1`, `wand`, `wor`, `triand`, `trior`, `trireg` | 按 wire 类声明建模，同时发 `syntax-unsupported-construct` 信息提示 | 合法 Verilog，但 CO 项目很少需要 |
 | 驱动强度，例如 `assign (weak1, weak0) y = a;` | 剥离强度元组后继续解析赋值，并发 `syntax-unsupported-construct` 信息提示 | 合法 Verilog，但超出课程子集 |
 | `specify`, `primitive`, `defparam`, `fork`, `event` | 发 `syntax-unsupported-construct`；可恢复时继续做周边语法分析 | 仿真/库建模或高级行为构造，不属于课程常用子集 |
-| SystemVerilog 特性，例如 `always_ff`、interface、package、typedef/enum/struct | 没有专门建模；根据可恢复程度表现为普通标识符、畸形声明/实例或 `syntax-unexpected-token` | 本地 parser 面向 Verilog 课程子集 |
+| SystemVerilog 特性，例如 `always_ff`、interface、package、typedef/enum/struct | `.sv/.svh` 使用独立 SystemVerilog language id 和 TextMate 词法高亮，不进入 Verilog parser/LSP | 本地 parser 面向 Verilog 课程子集；隔离语言可避免错误 AST 与误诊断 |
 
 ### 性能基线
 

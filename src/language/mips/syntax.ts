@@ -841,13 +841,13 @@ function isMipsDirective(line: MipsFormatLine, directive: string): boolean {
 }
 
 export function findCommentIndex(line: string): number {
-  let inString = false;
+  let quote: '"' | "'" | undefined;
   let escaped = false;
   for (let index = 0; index < line.length; index++) {
     const char = line[index];
-    if (inString) {
-      if (char === '"' && !escaped) {
-        inString = false;
+    if (quote) {
+      if (char === quote && !escaped) {
+        quote = undefined;
         escaped = false;
         continue;
       }
@@ -857,8 +857,8 @@ export function findCommentIndex(line: string): number {
       }
       continue;
     }
-    if (char === '"') {
-      inString = true;
+    if (char === '"' || char === "'") {
+      quote = char;
       escaped = false;
       continue;
     }

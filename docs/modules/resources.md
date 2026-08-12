@@ -15,7 +15,8 @@ resources/mips/:
   加载: src/language/mips/resources.ts
 
 resources/verilog/:
-  keywords.json — Verilog保留字(IEEE 1364-2001, 1365+词条)
+  keywords.json — Verilog keyword group、compiler directive、system task、operator 单一目录，供 lexer/TextMate generator 共用
+  systemverilog.json — 独立 SystemVerilog TextMate keyword/operator 目录；不进入 Verilog parser
   lintRules.json — Verilog course lint 规则 catalog: id/title/severity/default/configurable/quickFix
 
 resources/co/:
@@ -29,7 +30,7 @@ resources/co/:
   源文件: resources/co/configManifest.json + resources/co/configDefaults.json + courseConfig/p7Hardware/generatorProfiles/lintRules 等派生输入
   派生产物: package.json contributes.configuration 与 resources/co/configDefaults.json 中的派生默认值
   命令: npm run generate:manifest-config 生成, npm run check:manifest-config 检查, npm run sync:manifest-config 生成后检查
-  自动流程: compile/watch/test/test:coverage/package:vsix/publish/release CI 都会先运行 sync:manifest-config
+  自动流程: compile/test/test:coverage/package:vsix 都会先运行 sync:generated（manifest config + syntaxes）
   规则: 不手写 package.json contributes.configuration; 修改配置资源后提交生成结果
 
 resources/templates/verilog/:
@@ -65,8 +66,10 @@ resources/templates/asm/:
   加载: templateRegistry 受控占位替换
 
 syntaxes/:
-  mips.tmLanguage.json — TextMate语法: MIPS标记分类
-  verilog.tmLanguage.json — TextMate语法: Verilog标记分类
+  mips.tmLanguage.json — 从 MIPS 资源生成的 TextMate grammar
+  verilog.tmLanguage.json — 从 Verilog catalog 生成的 TextMate grammar
+  systemverilog.tmLanguage.json — 复用/扩展 Verilog 的 SystemVerilog 词法 grammar
+  维护: npm run generate:syntaxes 生成，npm run check:syntaxes 检查漂移
 
 snippets/:
   mipsasm.json — MIPS代码片段(指令/模板/syscall)

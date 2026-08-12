@@ -173,6 +173,7 @@ describe('VerilogWorkspaceIndex', () => {
 
   it('recognizes Verilog file URIs case-insensitively', () => {
     expect(isVerilogUri(URI.file(path.join('C:', 'work', 'CPU.V')).toString())).toBe(true);
+    expect(isVerilogUri(URI.file(path.join('C:', 'work', 'defines.VH')).toString())).toBe(true);
     expect(isVerilogUri(URI.file(path.join('C:', 'work', 'CPU.sv')).toString())).toBe(false);
   });
 });

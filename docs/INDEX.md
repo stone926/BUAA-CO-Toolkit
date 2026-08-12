@@ -13,6 +13,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   course-testing | docs/modules/course-testing.md | 42 files | 自动化测试框架
   test-suite     | docs/modules/test-suite.md     | ~70 files| Vitest 测试
   resources      | docs/modules/resources.md      | ~15 files| 静态资源
+  highlighting   | docs/modules/syntax-highlighting.md | ~8 files | TextMate/semantic 分层高亮
 
 数据流:
   MIPS: Text -> syntax.ts -> ast.ts -> semantic.ts -> parser.ts -> diagnostics, cache: parseCache.ts

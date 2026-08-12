@@ -105,7 +105,6 @@ export interface MipsInstructionMeta {
 }
 
 export const mipsSemanticTokenTypes = [
-  'mipsDirective',
   'mipsInstruction',
   'mipsRealInstruction',
   'mipsRInstruction',
@@ -119,11 +118,7 @@ export const mipsSemanticTokenTypes = [
   'mipsMacroParameter',
   'mipsLabel',
   'mipsDataSymbol',
-  'mipsEqvSymbol',
-  'mipsNumber',
-  'mipsString',
-  'mipsComment',
-  'mipsPunctuation'
+  'mipsEqvSymbol'
 ] as const;
 
 export type MipsSemanticTokenType = typeof mipsSemanticTokenTypes[number];

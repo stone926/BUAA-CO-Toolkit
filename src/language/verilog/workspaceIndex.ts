@@ -169,7 +169,10 @@ export class VerilogWorkspaceIndex {
     if (existing && existing.textKey === key && existing.text === text) {
       return;
     }
-    this.removeIndexed(document.uri);
+    // Keep the structural parse cache while replacing this URI. Its exact-text
+    // guard will either reuse the parse already produced by diagnostics or
+    // semantic highlighting, or replace an older generation safely.
+    this.removeIndexed(document.uri, false);
     const parsed = getCachedVerilogParse(document, defaultCoSettings, false);
     const file: VerilogIndexedFile = {
       uri: document.uri,
@@ -208,13 +211,17 @@ export class VerilogWorkspaceIndex {
     this.removeIndexed(uri);
   }
 
-  private removeIndexed(uri: string): void {
+  private removeIndexed(uri: string, clearParseCache = true): void {
     const existing = this.files.get(uri);
     if (!existing) {
-      clearCachedVerilogParse(uri);
+      if (clearParseCache) {
+        clearCachedVerilogParse(uri);
+      }
       return;
     }
-    clearCachedVerilogParse(uri);
+    if (clearParseCache) {
+      clearCachedVerilogParse(uri);
+    }
     this.files.delete(uri);
     this.removeReferenceIndexEntries(uri);
     for (const module of existing.modules) {
@@ -526,7 +533,7 @@ async function* scanVerilogFiles(root: string, limit: number): AsyncGenerator<st
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(fullPath);
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.v')) {
+      } else if (entry.isFile() && isVerilogFileName(entry.name)) {
         yield fullPath;
         files++;
         if (files >= limit) {
@@ -552,9 +559,14 @@ function shouldSkipDirectory(name: string): boolean {
 
 export function isVerilogUri(uri: string): boolean {
   try {
-    return URI.parse(uri).fsPath.toLowerCase().endsWith('.v');
+    return isVerilogFileName(URI.parse(uri).fsPath);
   } catch {
     // URI 格式异常时按非 Verilog 文件处理
     return false;
   }
+}
+
+function isVerilogFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.v') || lower.endsWith('.vh');
 }

@@ -1,46 +1,43 @@
-// @index parse-cache — 文档版本感知通用缓存，含文本content shortcut
+// @index document-result-cache — 每文档/判别器仅保留最新结果的 LRU 缓存
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 interface CacheEntry<T> {
   uri: string;
-  version: number;
   discriminator: string;
+  version: number;
   text: string;
-  textKey: string;
   value: T;
 }
 
+/**
+ * Keeps one current generation for each URI/discriminator pair.
+ *
+ * LSP document versions grow on every edit, so version must not be part of the
+ * map key: retaining every version keeps several complete ASTs for a large file.
+ * Exact text equality also permits safe reuse when a client recreates a document
+ * with a different version; unlike a short hash it cannot return a false hit.
+ */
 export class DocumentResultCache<T> {
   private readonly entries = new Map<string, CacheEntry<T>>();
 
   constructor(private readonly maxEntries = 16) {}
 
   getOrCreate(document: TextDocument, discriminator: string, create: () => T): T {
-    const text = document.getText();
-    const key = documentCacheKey(document.uri, document.version, discriminator);
+    const key = documentCacheKey(document.uri, discriminator);
     const cached = this.entries.get(key);
-    let currentTextKey: string | undefined;
-    if (cached) {
-      if (cached.text === text) {
-        this.touch(key, cached);
-        return cached.value;
-      }
-      if (cached.text.length === text.length) {
-        currentTextKey = textKey(text);
-        if (cached.textKey === currentTextKey) {
-          this.touch(key, cached);
-          return cached.value;
-        }
-      }
+    const text = document.getText();
+    if (cached && cached.text === text) {
+      cached.version = document.version;
+      this.touch(key, cached);
+      return cached.value;
     }
 
     const value = create();
     this.store(key, {
       uri: document.uri,
-      version: document.version,
       discriminator,
+      version: document.version,
       text,
-      textKey: currentTextKey ?? textKey(text),
       value
     });
     return value;
@@ -59,9 +56,7 @@ export class DocumentResultCache<T> {
   }
 
   private store(key: string, value: CacheEntry<T>): void {
-    if (this.entries.has(key)) {
-      this.entries.delete(key);
-    }
+    this.entries.delete(key);
     this.entries.set(key, value);
     while (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;
@@ -78,15 +73,6 @@ export class DocumentResultCache<T> {
   }
 }
 
-function documentCacheKey(uri: string, version: number, discriminator: string): string {
-  return `${uri}\u0000${version}\u0000${discriminator}`;
-}
-
-function textKey(text: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index++) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `${text.length}:${hash >>> 0}`;
+function documentCacheKey(uri: string, discriminator: string): string {
+  return `${uri}\u0000${discriminator}`;
 }
