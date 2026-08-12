@@ -2,6 +2,16 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [1.0.1] - 2026-08-12
+
+- refactor(highlighting)!: delegate semantic colors to VS Code (661dc00)
+- feat(highlighting): rebuild syntax and semantic coloring (42c9c8a)
+- fix(verilog): preserve ISE project compilation order (57173f5)
+- docs: 移除冗余审查文档 (0bcc7bc)
+- fix(course-testing): align automatic tests with course semantics (27b73ce)
+- fix(verilog): expand begin completion to block (23f90d6)
+- feat(verilog): filter noisy ISE port warnings (314b4e1)
+
 ## [1.0.0] - 2026-07-03
 
 - 微调默认指令集 (98aa6c0)
