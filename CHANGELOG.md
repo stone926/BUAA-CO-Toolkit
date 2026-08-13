@@ -2,6 +2,10 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [1.0.2] - 2026-08-13
+
+- fix(course-testing): target stable Mars v0.6.3 (a026eab)
+
 ## [1.0.1] - 2026-08-12
 
 - refactor(highlighting)!: delegate semantic colors to VS Code (661dc00)
