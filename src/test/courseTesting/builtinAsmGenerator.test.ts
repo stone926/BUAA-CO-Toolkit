@@ -130,6 +130,65 @@ describe('built-in ASM generator', () => {
     expect(coverage.baseSigns).toContain('negative');
   });
 
+  it('does not issue a stable-MARS byte access from the exclusive 0x2fff limit', () => {
+    const byteAt = vi.spyOn(CpuState.prototype, 'byteAt');
+    const writeByte = vi.spyOn(CpuState.prototype, 'writeByte');
+    let addresses: number[] = [];
+    try {
+      generateBuiltinAsmTestCase({
+        profile: 'P6',
+        instructionText: 'lui ori lb lbu sb',
+        instructionCount: 1000,
+        seed: 'stable-mars-data-limit'
+      });
+      addresses = [
+        ...byteAt.mock.calls.map(([address]) => address),
+        ...writeByte.mock.calls.map(([address]) => address)
+      ];
+    } finally {
+      byteAt.mockRestore();
+      writeByte.mockRestore();
+    }
+
+    expect(addresses.length).toBeGreaterThan(0);
+    expect(Math.max(...addresses)).toBeLessThanOrEqual(0x2ffe);
+  });
+
+  it('keeps stable-MARS partial-word spans below the exclusive 0x2fff limit', () => {
+    const byteAt = vi.spyOn(CpuState.prototype, 'byteAt');
+    const writeByte = vi.spyOn(CpuState.prototype, 'writeByte');
+    const loadWordRight = vi.spyOn(CpuState.prototype, 'loadWordRight');
+    const storeWordRight = vi.spyOn(CpuState.prototype, 'storeWordRight');
+    let byteAddresses: number[] = [];
+    let rightEffectiveAddresses: number[] = [];
+    try {
+      generateBuiltinAsmTestCase({
+        profile: 'P6',
+        instructionText: 'lwl lwr swl swr nop',
+        instructionCount: 500,
+        seed: 'partial-word-offsets'
+      });
+      byteAddresses = [
+        ...byteAt.mock.calls.map(([address]) => address),
+        ...writeByte.mock.calls.map(([address]) => address)
+      ];
+      rightEffectiveAddresses = [
+        ...loadWordRight.mock.calls.map(([address]) => address),
+        ...storeWordRight.mock.calls.map(([address]) => address)
+      ];
+    } finally {
+      byteAt.mockRestore();
+      writeByte.mockRestore();
+      loadWordRight.mockRestore();
+      storeWordRight.mockRestore();
+    }
+
+    expect(byteAddresses.length).toBeGreaterThan(0);
+    expect(Math.max(...byteAddresses)).toBe(0x2ffe);
+    expect(rightEffectiveAddresses.length).toBeGreaterThan(0);
+    expect(Math.max(...rightEffectiveAddresses)).toBeLessThanOrEqual(0x2ffb);
+  });
+
   it('uses every byte offset for unaligned word-left/right instructions', () => {
     const result = generateBuiltinAsmTestCase({
       profile: 'P6',

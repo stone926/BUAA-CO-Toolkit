@@ -164,7 +164,7 @@ function applyGeneratedSchema(groups, defaults, resources) {
     `P7 内置 ASM 生成器的主程序有效载荷指令数。停机自环 beq 及其 nop 延迟槽额外占 2 条；${p7Values.instructionCountMaximum} + 2 条恰好填满到 ${shortHex(p7Values.exceptionHandlerAddress - 4)}，不覆盖 ${shortHex(p7Values.exceptionHandlerAddress)} 异常入口`;
 
   properties['co.toolchain.marsP7'].description =
-    `P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coZeroGpr / coStrictData / coHalt / coL1 和课程 load-store 地址桥，并在 SWL/SWR、REGIMM 链接分支修复或动态未定义行为检查时支持 coL2 的修改版 Mars（如 Toby-Shi-cloud/Mars-with-BUAA-CO-extension）；内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
+    `P7 专用 Mars jar 路径。P7 自动测试以已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）为兼容基线，除 coL1/coL2 外还需要 efc、p7irq 和 cl；内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）。未配置时回退到 co.toolchain.mars`;
   properties['co.mips.memoryConfiguration'].description =
     `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
   properties['co.test.builtinGenerator.instructions'].description = generatorInstructionDescription();

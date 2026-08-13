@@ -1,8 +1,8 @@
-# course-testing | src/ | 42 files
+# course-testing | src/ | 44 files
 
-P3-P7 自动化测试：生成 ASM -> 修改版 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
-MARS 黄金模型：课程 Trace 仅支持修改版 MARS；每次运行固定启用 coZeroGpr，使全部 GPR 初值与教程规定的全 0 复位一致，并启用 coStrictData 拒绝有效地址溢出及课程数据桥之外的访问；coHalt 只在实际到达预合并用户 `.text` 的标准最终自环时成功，拒绝 MARS 的正常 cliff exit、错误自环及预算耗尽；普通指令使用 coL1，机器码含 SWL/SWR、BGEZAL/BLTZAL 或潜在未定义行为时改用 coL2；SWL/SWR 按动态指令合并同一 DM 字的多次局部写入，BGEZAL/BLTZAL 按 MIPS 规范补齐修改版 MARS 在 not-taken 路径遗漏的 `$31=PC+8`；固定 ae/se 令汇编与运行错误以非零退出码失败；同次汇编分块 dump 0x0000..0x2fff，拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；P3-P6 的 load/store 只允许 DM，P7 的 efc 课程模式允许 DM、Timer 和 IG，避免 Compact* 的额外数据段成为错误黄金模型；P7 运行时还会按教程动态拒绝非 `sb $0,0x7f20($0)` 的 IG 访问、handler 内同步异常和 handler 执行期间新产生的中断
-生成程序边界：配置的 instruction_count 只统计修改版 MARS 最终执行的 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop，手选/外部 ASM 的最终用户 `.text` 也必须自带同一尾部；最终 IM 不得超过 4096 words
+P3-P7 自动化测试：生成 ASM -> 稳定版修改 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
+MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）。课程 oracle 运行一律强制 coL2；coL1 只在工具链检查中作为兼容能力探针。非 P7 另依赖 FixedCompactLargeText/CompactLargeText，P7 另依赖 efc、p7irq、cl 与 CompactLargeText；固定 ae/se 令汇编与运行错误以非零退出码失败。课程 dump 先静态确认最终 `_co_test_end` 是自分支+nop，运行时再用 coL2 逐指令块确认该自分支确实执行，并用 MARS 原生 max-step 结束永久自环；不依赖未发布的专用停机 marker。SWL/SWR 按动态指令合并同一 DM 字的多次局部写入；BGEZAL/BLTZAL 按 MIPS 规范补齐分支自身在 not-taken 路径遗漏的 `$31=PC+8` Trace，但稳定版 MARS 的后续执行状态仍是旧值，因此在显式重写 `$31` 前继续读取会被拒绝。同一详细 Trace 还只拒绝实际执行到的 oracle 初态差异/未定义行为。同次汇编仍分块 dump 0x0000..0x2fff，以拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；内置生成器约束普通测试数据，手写/外部用例须自行遵守教程地址映射和下述稳定版边界，不假定 MARS 提供额外的课程地址或 handler 契约开关
+生成程序边界：配置的 instruction_count 只统计修改版 MARS 最终执行的 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop，手选/外部 ASM 的最终用户 `.text` 也必须自带同一尾部。教程硬件 IM 是 4096 words，但稳定版 MARS v0.6.3 把 Compact* 的 0x6ffc 上界当作排他值，因此课程 oracle 最终机器码上限为 4095 words（0x3000..0x6ff8）
 P7 模式：anchor(精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)
 
 orchestration:
@@ -11,21 +11,23 @@ orchestration:
   courseTestContinuous.ts — 持续生成循环：启动阶段同步占位防重复会话，启动检查期间也可取消；每轮生成并展开全部 ASM；stopOnFailure=false 时功能失败继续，生成器异常/无新 ASM 则停止；轮数耗尽不额外等待，停止请求可打断间隔；面板关闭触发停止，最终报告写失败也保证释放会话；按策略保留通过产物和报告轮次
   courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
   courseTestReport.ts — HTML 报告：批量/Logisim 准备/持续监控/ASM 索引
-  courseTestToolchain.ts — 内存配置及必需能力校验：P7 须 CompactLargeText，非 P7 须 FixedCompactLargeText 或 CompactLargeText；启动前要求修改版 MARS coZeroGpr+coStrictData+coHalt+coL1，探测 0x2fff 合法边界、Compact 额外数据段 0x5000 拒绝、有效地址溢出和真实到达停机尾；P3-P6 用“跳入仅 MARS 可见的 `.ktext` 再返回 halt”负向探针确认取指始终位于已 dump 的用户 `.text`，P7 用同类 0x5000 探针确认只执行插件实际合并进 DUT 的用户/异常代码，并验证 0x417c 等 user/handler padding 会覆盖 MARS-only statement、按 code.txt 中的 NOP 执行；P7 契约能力再用“用户区精确 sb”“handler 内错误 IG 指令”“handler 二次异常”“handler 新中断”四个独立负例，以及“入场前 pending、handler 合法响应”的正例，避免半实现误过或合法中断被误拒；实际用例需要 SWL/SWR、REGIMM 链接分支修复或动态未定义行为检查时再要求 coL2；缺失或未执行的必需检查均视为失败
-  courseTestLogisim.ts — P3 Logisim：电路诊断(提取 Trace 端口映射)->ROM 注入批量准备->单用例(CLI 启动->PC 监控->自动 kill->Trace 解析->对拍)，准备前校验修改版 MARS coL1
+  courseTestToolchain.ts — 稳定版能力校验：P7 须 CompactLargeText，非 P7 须 FixedCompactLargeText 或 CompactLargeText；启动前用 coL1/coL2 兼容探针验证输出可解析及 Compact 初始 `$gp=0x1800`、`$sp=0x2ffc`，实际课程 oracle 只运行 coL2；P7 另验证 efc/p7irq，RI 用例运行时使用 cl 加载插件内置指令类；不要求未发布的课程取指域、数据桥或 handler 契约能力
+  courseTestLogisim.ts — P3 Logisim：电路诊断(提取 Trace 端口映射)->ROM 注入批量准备->单用例(CLI 启动->PC 监控->自动 kill->Trace 解析->对拍)，准备前校验稳定版 MARS coL2，并在启动 Logisim 前执行 oracle 初态兼容检查
   courseTestStdin.ts — stdin 文件发现：input/inputs/test/data 目录，按文件名相似度排序
   courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.mars.out、.co/out/{stem}.sim.out
 
 generation:
   courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入
   courseTesting/generatorWorkflow.ts — 生成器工作流：外部/内置 generator setup、运行、ASM 产物收集、CourseTraceBatchSource 描述
-  courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、修改版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；按机器码中的 SWL/SWR、BGEZAL/BLTZAL 或未定义行为候选在 coL1 与逐指令 coL2 间选择，仅拒绝动态执行到的 DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入，并修复 MARS 的非跳转链接分支写回遗漏；任一侧空 Trace 报错，两侧都空明确标记为无法判定
+  courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、稳定版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；用 coL2 逐指令块校验实际到达标准停机尾、合并 SWL/SWR 局部写、修复 REGIMM 链接分支自身的遗漏事件，并拒绝未跳转链接分支后继续读取旧 `$31`、稳定版 `$gp/$sp` 初态差异、DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入；任一侧空 Trace 报错，两侧都空明确标记为无法判定
+  courseTesting/marsOracleCompatibility.ts — 统一 P3-P7 稳定版 oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
+  courseTesting/marsImageCompatibility.ts — 将每个 coL2 动态 PC/机器码绑定到最终硬件 HexText（含 P7 padding/handler merge），并只允许 handler 内精确 `sb $0,0x7f20($0)` 访问 IG；用跨分支/跳转及延迟槽的静态常量数据流兜底无 victim header 的非对齐 IG 访问
   courseTesting/builtinAsmGenerator.ts — 入口：generateBuiltinAsmTestCase；P7StressMode 分派(anchor->randomBody、probe->probeEmitter、hybrid 两次调用)
   courseTesting/generator.ts — 外部生成器(.py/.js/.jar/.ps1/.bat 等)和 ASM 文件快照；以 mtime+ctime+size 判定新建/重写，能识别同 mtime、倒退 mtime 或尺寸变化，跳过 .co 产物目录
   courseTesting/generatorInstructionCatalog.ts — 内置 ASM 生成器指令 profile、分类、对齐和 MDU 延迟资源加载
-  courseTesting/machineCodeValidation.ts — 对最终 HexText 完整解码，先限制 P3-P7 课程 IM 为 4096 words，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 `# instruction_set` 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
+  courseTesting/machineCodeValidation.ts — 对最终 HexText 完整解码，先校验教程 IM 的 4096-word 物理容量及稳定版 oracle 的 4095-word 排他上界，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 `# instruction_set` 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
   courseTesting/courseDataInitialization.ts — 课程 DM 初态预检：按修改版 MARS 的 4 KiB 分配块在同次汇编导出 0x0000..0x2fff，严格解析每个非空 1024-word HexText 块；允许未分配/`.space` 全零块，首个非零初值或缺失/畸形 dump 立即失败
-  courseTesting/marsStepLimit.ts — case manifest 先证明来源为内置生成器，再读取 random 标记及 payload 条数，为尚未到达停机尾的程序设置确定性 MARS 安全预算：P3-P6 max(256,2N+64)，P7 max(512,16N+256)；手选/外部 ASM 按最终机器码使用 max(65536,64*words) 的临时保守预算；另验证 coHalt marker，不能把 cliff exit/错误自环当作完成（产品预算阈值见 review decisions）
+  courseTesting/marsStepLimit.ts — case manifest 先证明来源为内置生成器，再读取 random 标记及 payload 条数，设置确定性 MARS 原生执行预算：P3-P6 max(256,2N+64)，P7 max(512,16N+256)；手选/外部 ASM 按最终机器码使用 max(65536,64*words) 的保守预算；预算结束后由插件解析 coL2 动态指令块，确认标准停机尾已实际执行，拒绝 cliff exit、错误自环和未到达尾部
   courseTesting/cpuState.ts — 软件 CPU 模型：32 GPR+3072-word DM(0x0000..0x2fff)+HI/LO+CP0+MDU 保护；HI/LO 初始化状态、字节/半字/字及修改版 MARS 小端 LWL/LWR/SWL/SWR 语义、最近写入追踪
   courseTesting/mnemonicSets.ts — Profile 指令集(P3:8 条，P4-5:+J 型，P6:+MDU/load-store 变体，P7:+CP0/异常)、功能分组、memoryAlignment/mduBusyCycles
   courseTesting/p7Hardware.ts — P7 硬件布局单一入口：加载/校验 resources/co/p7Hardware.json，导出 4096-word IM(0x3000..0x6fff)、3072-word DM(0x0000..0x2fff)、0x4180 异常入口、Timer、CP0、probe 状态/日志/testbench 常量
@@ -36,7 +38,7 @@ generation:
 builtin-asm:
   courseTesting/builtinAsm/asmTemplates.ts — 从 resources/templates/asm/*.asm 加载 P7 异常处理模板并做受控变量插值
   courseTesting/builtinAsm/facade.ts — 高层 API：generateBuiltinAsmTestCase/resolveBuiltinInstructionSet
-  courseTesting/builtinAsm/randomBody.ts — 核心随机引擎(约 2100 行)：0x3000-byte DM、全范围正/负偏移、分支双路径与有界控制流、修改版 MARS 局部字访问；所有普通随机路径均避免有符号溢出、未初始化 HI/LO、除零等非法输入，P7 只通过受控场景制造异常；payload 后生成停机尾
+  courseTesting/builtinAsm/randomBody.ts — 核心随机引擎(约 2100 行)：课程 DM 内的对齐访存、正/负偏移、分支双路径与有界控制流、稳定版 MARS 局部字访问；所有普通随机路径均避免有符号溢出、未初始化 HI/LO、除零等非法输入，P7 只通过受控场景制造异常；payload 后生成停机尾
   courseTesting/builtinAsm/programWriter.ts — ProgramWriter：label/emit/raw 累积汇编行并跟踪 PC
   courseTesting/builtinAsm/types.ts — P7StressMode、场景 kind/variant、按序 CP0 期望、精确 retry commit、完成标记与 P7ProbeMetadata
 

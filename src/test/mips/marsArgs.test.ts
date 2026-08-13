@@ -168,14 +168,14 @@ describe('buildMarsArgs', () => {
       expect(ordinaryArgs).not.toContain('se1');
     });
 
-    it('forces modified-MARS GPR reset and data-map semantics to the tutorial values', () => {
+    it('does not require unreleased course-only flags from stable modified MARS', () => {
       setProfile(asmUri, 'P6');
-      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'coZeroGpr')).toBe(true);
-      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'coStrictData')).toBe(true);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'coZeroGpr')).toBe(false);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', { courseTrace: true }), 'coStrictData')).toBe(false);
       expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', {}), 'coZeroGpr')).toBe(false);
       expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'run', {}), 'coStrictData')).toBe(false);
       expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'coZeroGpr')).toBe(false);
-      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'coStrictData')).toBe(true);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'coStrictData')).toBe(false);
     });
 
     it('appends coL1 when traceOutput is requested', () => {
@@ -207,16 +207,39 @@ describe('buildMarsArgs', () => {
           haltPc: 0x3ffc
         });
 
-        expect(courseArgs, profile).toContain('0x1f80');
-        expect(courseArgs, profile).toContain('coHalt=0x3ffc');
+        expect(courseArgs, profile).toContain('8064');
+        expect(courseArgs.some((arg) => arg.toLowerCase().startsWith('cohalt=')), profile).toBe(false);
         expect(courseArgs[courseArgs.length - 1], profile).toBe('/test/asm/test.asm');
       }
 
       setProfile(asmUri, 'P5');
       const ordinaryArgs = buildMarsArgs(asmUri, marsJar, 'run', { maxSteps: 8064 });
 
-      expect(ordinaryArgs).not.toContain('0x1f80');
+      expect(ordinaryArgs).not.toContain('8064');
       expect(ordinaryArgs.some((arg) => arg.toLowerCase().startsWith('cohalt='))).toBe(false);
+    });
+
+    it('raises max-step values 1..31 above stable MARS register-display ambiguity', () => {
+      setProfile(asmUri, 'P6');
+      for (let maxSteps = 1; maxSteps <= 31; maxSteps++) {
+        const args = buildMarsArgs(asmUri, marsJar, 'run', {
+          traceOutput: true,
+          traceLevel: 2,
+          maxSteps,
+          haltPc: 0x3000
+        });
+        expect(args[args.length - 2], `maxSteps=${maxSteps}`).toBe('32');
+      }
+
+      for (const maxSteps of [32, 33]) {
+        const unambiguous = buildMarsArgs(asmUri, marsJar, 'run', {
+          traceOutput: true,
+          traceLevel: 2,
+          maxSteps,
+          haltPc: 0x3000
+        });
+        expect(unambiguous[unambiguous.length - 2]).toBe(String(maxSteps));
+      }
     });
 
     it('does not pass any user extra arguments to a course-trace oracle', () => {
@@ -232,8 +255,8 @@ describe('buildMarsArgs', () => {
       expect(args.filter((arg) => arg.toLowerCase() === 'db')).toHaveLength(1);
       expect(args.filter((arg) => arg.toLowerCase() === 'ig')).toHaveLength(0);
       expect(args.filter((arg) => arg.toLowerCase() === 'col2')).toHaveLength(1);
-      expect(args.filter((arg) => arg.toLowerCase() === 'cozerogpr')).toHaveLength(1);
-      expect(args.filter((arg) => arg.toLowerCase() === 'costrictdata')).toHaveLength(1);
+      expect(args.filter((arg) => arg.toLowerCase() === 'cozerogpr')).toHaveLength(0);
+      expect(args.filter((arg) => arg.toLowerCase() === 'costrictdata')).toHaveLength(0);
       expect(args.some((arg) => arg.toLowerCase().startsWith('cohalt='))).toBe(false);
       expect(args).not.toContain('InjectedConfig');
       expect(args).not.toContain('Injected.class');
@@ -382,9 +405,9 @@ describe('buildMarsArgs', () => {
   describe('dumpKernel mode', () => {
     it('uses exclusive course dump bounds without mixing contiguous P7 user and kernel text', () => {
       const format = (value: number) => `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
-      expect(courseUserTextDumpRange('P6')).toBe(`${format(0x3000)}-${format(p7KernelTextDumpEndAddress + 4)}`);
+      expect(courseUserTextDumpRange('P6')).toBe(`${format(0x3000)}-${format(p7KernelTextDumpEndAddress)}`);
       expect(courseUserTextDumpRange('P7')).toBe(`${format(0x3000)}-${format(p7ExceptionHandlerAddress)}`);
-      expect(p7KernelTextDumpRange()).toBe(`${format(p7ExceptionHandlerAddress)}-${format(p7KernelTextDumpEndAddress + 4)}`);
+      expect(p7KernelTextDumpRange()).toBe(`${format(p7ExceptionHandlerAddress)}-${format(p7KernelTextDumpEndAddress)}`);
     });
 
     it('does not append asm file path', () => {

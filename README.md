@@ -25,15 +25,15 @@
 
 ### 第一步：装好外部工具并填路径
 
-先下载 [`MARS P7` 魔改版](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases)
+先下载已发布的 [`Mars-with-BUAA-CO-extension v0.6.3`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/tag/v0.6.3)（commit `8b53a49`）。插件课程测试以此稳定版本为兼容基线。
 
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
 ```jsonc
 {
-  // MIPS / 对拍黄金模型（建议用修改版 Mars，支持 coL1 对拍输出）
+  // MIPS / 对拍黄金模型（稳定版 v0.6.3；课程 oracle 固定 coL2，coL1 仅作兼容探针）
   "co.toolchain.mars": "修改版 Mars 的路径",
-  // P7 专用 Mars（需支持 efc / p7irq / coL1）；不填则回退到上面的 mars
+  // P7 专用 Mars（需支持 efc / p7irq / cl / coL1 / coL2）；不填则回退到上面的 mars
   "co.toolchain.marsP7": "修改版 Mars P7 的路径",
   // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
   "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 bin 等文件夹",
@@ -123,7 +123,7 @@ P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。
 - **外部中断**（`co.test.p7.interrupt`，默认开）：anchor 使用安全 PC 注入；probe 使用“软件 arm 标记 `0x27d0` + wait PC”双条件触发，避免内部异常 flush 后宏观 PC 不确定导致误拉高中断。
 - **Timer**：anchor 不做 Timer 中断精确对拍，因为 MARS 与 Verilog 的计时基准不同。probe 可在 `co.test.p7.timerInterrupt: true` 时测试 Timer0/Timer1 中断性质，但只检查课程可观察语义，不检查精确触发周期。
 - **内存布局**：P7 固定用 `CompactLargeText`（异常入口 0x4180），机器码 dump 会自动合并用户段 + 0x4180 内核段。
-- **必须使用修改版 Mars**（支持 `efc`/`p7irq`/`coL1`，RI 还需要 `cl _co_internal_unknown_instruction.class`），配在 `co.toolchain.marsP7`。
+- **必须使用已发布的修改版 Mars v0.6.3（8b53a49）**（支持 `efc`/`p7irq`/`coL1`/`coL2`，RI 还需要 `cl _co_internal_unknown_instruction.class`），配在 `co.toolchain.marsP7`。
 
 Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`，不读取、不检查 `BadVAddr($8)`。外部中断响应使用 `sb $0, 0x7f20($0)`；Timer 只通过 `lw/sw` 访问 CTRL/PRESET/COUNT，不写 Count，不用 byte/half 访问 Timer。
 
@@ -195,8 +195,8 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `co.toolchain.mars` | — | Mars jar（非 P7 对拍） |
-| `co.toolchain.marsP7` | — | P7 专用 Mars（需 efc/p7irq/coL1） |
+| `co.toolchain.mars` | — | 稳定版 Mars v0.6.3 jar（需 coL1/coL2 和 large-text 内存配置） |
+| `co.toolchain.marsP7` | — | P7 专用稳定版 Mars（另需 efc/p7irq/cl） |
 | `co.mips.delayedBranching` | `profile` | MARS 延迟槽（profile：P5/P6/P7 自动追加 `db`） |
 | `co.mips.memoryConfiguration` | `auto` | MARS 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
 | `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
@@ -225,7 +225,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
 | `co.test.continuousRetainedPassingCases` | `20` | 持续测试保留的最近通过 case 数；失败/异常 case 始终保留 |
 | `co.test.continuousReportRetainedIterations` | `200` | 持续测试 JSON 报告保留的最近轮数；失败/异常轮始终保留 |
-| `co.mips.extraArgs` | `[]` | 按列表追加 MARS/修改版 MARS 支持的参数，如 `sm`、`smc`、`np`、`ae1`、`se1`、`me`、`coERR`；`coL1`/`efc`/`p7irq`/`cl`/`db`/`mc` 通常由插件自动拼接 |
+| `co.mips.extraArgs` | `[]` | 按列表追加 MARS/修改版 MARS 支持的参数，如 `sm`、`smc`、`np`、`ae1`、`se1`、`me`、`coERR`；`coL1`/`coL2`/`efc`/`p7irq`/`cl`/`db`/`mc` 由插件按场景拼接，课程 oracle 固定使用 `coL2` |
 | `co.test.generatorArgs` | `[]` | 按列表追加外部生成器支持的参数，如 `--seed` `1234`、`--count` `100`、`--profile` `P6`、输出路径参数；内置生成器用 `co.test.builtinGenerator.*` / `co.test.p7.*` 配置 |
 | `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
 | `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
@@ -253,7 +253,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 ## 5. ⚠️ 特别注意事项
 
-1. **P7 必须用修改版 Mars**：普通 Mars 不支持 `efc`/`p7irq`/`coL1`，不输出寄存器和内存写入日志，**不能**当 P7 黄金模型。请把 `co.toolchain.marsP7` 指向支持这些参数的 `Mars.jar`。插件会在检测到不支持时给出明确提示。
+1. **P7 必须用已发布的修改版 Mars v0.6.3（8b53a49）**：普通 Mars 不支持 `efc`/`p7irq`/`coL1`/`coL2`，不输出课程测试需要的写回和逐指令日志，**不能**当 P7 黄金模型。请把 `co.toolchain.marsP7` 指向该稳定版本的 `Mars.jar`。
 2. **RI 异常依赖 Mars 额外指令加载**：插件用 `_co_internal_unknown_instruction` 作为 MARS 可识别、CPU 不应识别的未知指令，并通过 `cl _co_internal_unknown_instruction.class` 加载。该 class 打包在此插件中，若 Mars 不支持 `cl`，RI 测试会失败或无法 dump。
 3. **ISE 路径要指到 `.../ISE_DS/ISE`**，此目录下有 `bin`。例如 `D:/ISE/14.7/ISE_DS/ISE`。`fuse` 会编译工作区里**所有** `.v`；P7 自动测试会生成一个**专用 testbench**（不会覆盖你自己的 `mips_tb.v`）。
 4. **anchor 外部中断对拍仍依赖宏观 PC 约定**：testbench 只能从官方 `mips` 顶层端口看到宏观写回/访存信息，无法读取学生内部流水级。若你的实现对异常 flush 后的宏观 PC 暴露方式不同，anchor 外部中断可能出现假阳性；可切到 `probe` 或关闭 `co.test.p7.interrupt`。
@@ -263,6 +263,9 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 8. **延迟槽**：P5/P6/P7 默认开启延迟槽（MARS 加 `db`）。
 9. **对拍默认忽略周期**，只比较 PC/目标/值——这与课程评测一致；它**抓不到**“不体现在 GRF/DM 写上的错误”（如从不被读取的寄存器/CP0 位算错、纯时序问题）。
 10. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
+11. **稳定版 MARS 有两个排他边界**：教程 IM 物理容量仍是 4096 words，但 v0.6.3 的 Compact* 文本上界 `0x6ffc` 不可用，所以课程 oracle 最多接受 4095 words（末址 `0x6ff8`）。数据地址 `0x2fff` 也被稳定版当作排他上界：对齐的 `lw/sw 0x2ffc`、`lh/sh 0x2ffe` 仍可覆盖最后物理字，但 byte 访问及 `LWL/SWL` 的有效地址不能取 `0x2fff`；`LWR/SWR` 会向高地址访问至所在整字末端，其整个 4-byte 对齐跨度都不能触及 `0x2fff`，所以最高有效地址为 `0x2ffb`。内置生成器已避开这些边界；插件还会用 coL2 重建实际访存地址，拒绝课程映射之外的 MARS 私有数据段。
+12. **手写/外部用例使用 `$gp/$sp` 前要显式初始化**：教程 CPU 复位所有 GPR 为 0，而 v0.6.3 Compact* 默认 `$gp=0x1800`、`$sp=0x2ffc`。插件用 coL2 在实际执行路径上检查首次写入前读取；P7 中可能先抛异常、因而没有 coL2 victim 头的指令，还要求在对应入口的直线前缀中先用 `ori/lui` 等不读取旧值的指令初始化。
+13. **未跳转的 `BLTZAL/BGEZAL` 后不要直接读取 `$31`**：插件能为该分支的对拍事件补出规范要求的 `PC+8`，但 v0.6.3 内部仍保留旧 `$31`，无法修复其后续执行语义。若后续需要读取，请先显式重写 `$31`；否则用例会被拒绝。
 
 ---
 
@@ -338,20 +341,20 @@ tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 ## 与 MARS 在 P7 对拍中协作
 
-Mars 的 `coL1` 输出被本插件自动解析和对拍。`anchor` 精确对拍流程：
+课程 `anchor` 运行强制使用并解析 `coL2`；`coL1` 只在工具链检查中作为稳定版兼容能力探针。插件先从 dump 静态确认最终尾部为自分支+nop，再用 `coL2` 逐指令块确认该自分支已实际执行，并由 MARS 原生 max-step 结束永久自环；`anchor` 精确对拍流程：
 
 1. **插件** 调用修改版 Mars（普通路径为 `java -jar Mars.jar ...`；RI 路径为 `java -cp <Mars.jar;resources/mars> Mars ... cl _co_internal_unknown_instruction.class`），捕获 stdout 为 `.mars.out`
 2. **插件** 生成 Verilog testbench 并运行 ISim 仿真，捕获 `$display` 输出为 `.sim.out`
 3. **插件** 用同一正则解析两路输出，逐事件比对 PC、目标寄存器/地址、写入值
 
-`probe` 流程不同：Mars 只用于 `dump .text`/内核段机器码；不会运行 `coL1` trace，也不会用 MARS 判断 Timer 或外部中断发生在哪个周期。判定来自 ISim trace 中重建出的 probe log 和 `CO_P7_PROBE ...` 诊断行。
+`probe` 流程不同：Mars 只用于 `dump .text`/内核段机器码；不会运行任何 MARS trace，也不会用 MARS 判断 Timer 或外部中断发生在哪个周期。判定来自 ISim trace 中重建出的 probe log 和 `CO_P7_PROBE ...` 诊断行。
 
 ### 对拍约定（插件依赖的 Mars 行为）
 
 | 行为 | 说明 |
 |------|------|
-| 输出目标 | `coL1` → stdout，`coERR` → stderr。插件默认解析 stdout |
-| 事件格式 | `@<8位hex>: <$|*><target> <= <8位hex>`（每行一个事件） |
+| 输出目标 | `coL1`/`coL2` → stdout，`coERR` → stderr；课程 oracle 只消费 `coL2`，`coL1` 仅用于工具链兼容探针 |
+| 事件格式 | `coL1` 为 `@<8位hex>: <$|*><target> <= <8位hex>`；`coL2` 额外用 `@PC... -> ... (机器码)` 标记每条动态指令 |
 | 事件顺序 | 按指令执行顺序输出；同一指令的多笔写操作在同一 PC 下分行输出 |
 | $0 写入 | **不输出**（与 testbench `$0` 过滤一致） |
 | hi/lo 写入 | **不输出**（MDU 内部寄存器，testbench 不追踪） |
@@ -369,4 +372,5 @@ Mars 的 `coL1` 输出被本插件自动解析和对拍。`anchor` 精确对拍�
 | Profile `P4/P5/P6` | `mc FixedCompactLargeText` |
 | `co.mips.delayedBranching` = `on` / `profile:P5+` | `db` |
 | `co.test.p7.interrupt` = `true` 且 `stressMode=anchor` | `p7irq=<target_pc-4>` |
-| `co.mips.extraArgs` | 按列表逐项附加到命令行 |
+| 课程自动 Trace | 固定 `coL2 ae1 se1 <max-step>`；P7 按需追加 `efc`/`p7irq`/`cl` |
+| `co.mips.extraArgs` | 仅普通 MARS 命令按列表逐项附加；课程自动 Trace 会忽略 |

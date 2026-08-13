@@ -59,11 +59,11 @@
       },
       "co.toolchain.mars": {
         "type": "string",
-        "description": "Mars jar 包路径。课程 Trace 对拍要求修改版 MARS 支持 coZeroGpr、coStrictData、coHalt、coL1 和 large text 内存配置；SWL/SWR、REGIMM 链接分支修复或动态未定义行为检查还会按需使用 coL2"
+        "description": "Mars jar 包路径。课程 Trace 以已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）为兼容基线，要求支持 coL1、coL2 和 FixedCompactLargeText/CompactLargeText；插件通过 coL2 逐指令输出和 MARS 原生 max-step 在本地校验课程停机尾"
       },
       "co.toolchain.marsP7": {
         "type": "string",
-        "description": "P7 专用 Mars jar 路径。P7 自动对拍需要支持 efc / p7irq / coZeroGpr / coStrictData / coHalt / coL1、课程 load-store/取指地址桥，以及教程测试数据契约（IG 仅允许 handler 内的指定 sb、handler 内无异常或新中断）；在 SWL/SWR、REGIMM 链接分支修复或动态未定义行为检查时还需支持 coL2。内存配置使用 CompactLargeText（课程异常入口固定 0x4180）。未配置时回退到 co.toolchain.mars"
+        "description": "P7 专用 Mars jar 路径。P7 自动测试以已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）为兼容基线，除 coL1/coL2 外还需要 efc、p7irq 和 cl；内存配置使用 CompactLargeText（课程异常入口固定 0x4180）。未配置时回退到 co.toolchain.mars"
       },
       "co.mips.delayedBranching": {
         "type": "string",
@@ -112,7 +112,7 @@
         "items": {
           "type": "string"
         },
-        "description": "普通 MARS 命令追加的参数列表；每个参数或参数值单独一项。课程自动 Trace 将忽略此配置并固定 mc/db/efc/p7irq/coZeroGpr/coStrictData/coHalt/coL1/coL2/ae/se/max-step 等黄金模型参数，避免用户参数改变测评语义；不会使用 ig 掩盖教程禁止的算术溢出"
+        "description": "普通 MARS 命令追加的参数列表；每个参数或参数值单独一项。课程自动 Trace 将忽略此配置，并由插件固定 mc/db/efc/p7irq/cl/coL1/coL2/ae/se/max-step 等已发布版本支持的参数，避免用户参数改变测评语义；不会使用 ig 掩盖教程禁止的算术溢出"
       },
       "co.test.generatorArgs": {
         "type": "array",

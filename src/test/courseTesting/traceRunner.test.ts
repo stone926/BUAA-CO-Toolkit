@@ -146,10 +146,15 @@ describe('course trace runner orchestration', () => {
         simOut: URI.file('E:/work/sim.out')
       };
     });
-    vi.mocked(readTextFile).mockImplementation(async (uri) =>
-      uri.fsPath.endsWith('mars.out')
-        ? 'trace\nProgram reached course halt loop at 0x00003004.\n'
-        : 'trace\n');
+    vi.mocked(readTextFile).mockImplementation(async (uri) => {
+      if (uri.fsPath.endsWith('mars.out')) {
+        return '@PC00003004 -> beq $0, $0, -1 (1000ffff)\n';
+      }
+      if (uri.fsPath.endsWith('code.txt')) {
+        return '00000000\n1000ffff\n';
+      }
+      return 'trace\n';
+    });
     vi.mocked(compareTraceIterables).mockImplementation(() => {
       callOrder.push('compare');
       return {
@@ -171,10 +176,9 @@ describe('course trace runner orchestration', () => {
     expect(callOrder.indexOf('mars')).toBeLessThan(callOrder.indexOf('isim'));
     expect(callOrder.indexOf('isim')).toBeLessThan(callOrder.indexOf('compare'));
     const marsOptions = vi.mocked(runMarsFile).mock.calls[0][3];
-    expect(marsOptions).not.toHaveProperty('traceLevel');
-    expect(marsOptions).toMatchObject({ haltPc: 0x3004 });
-    expect(machineCodeNeedsDetailedMarsTrace).toHaveBeenCalledWith('trace\n');
-    expect(iterMarsDetailedTraceEvents).not.toHaveBeenCalled();
+    expect(marsOptions).toMatchObject({ traceLevel: 2, haltPc: 0x3004 });
+    expect(machineCodeNeedsDetailedMarsTrace).toHaveBeenCalledWith('00000000\n1000ffff\n');
+    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
   });
 
   it('uses coL2 and the instruction-block parser when machine code contains SWL/SWR', async () => {
@@ -187,10 +191,10 @@ describe('course trace runner orchestration', () => {
       traceOutput: true,
       traceLevel: 2
     }));
-    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('Program reached course halt loop'));
+    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
     expect(iterCpuTraceEvents).toHaveBeenCalledTimes(1);
     expect(compareTraceIterables).toHaveBeenCalledWith(
-      ['detailed:trace'],
+      ['detailed:@PC00003004 -> beq $0, $0, -1 (1000ffff)'],
       ['trace'],
       expect.objectContaining({ retainedEntryLimit: 1 })
     );
@@ -206,7 +210,7 @@ describe('course trace runner orchestration', () => {
       traceOutput: true,
       traceLevel: 2
     }));
-    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('Program reached course halt loop'));
+    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
   });
 
   it('rejects an actually executed tutorial undefined behavior before running ISim', async () => {

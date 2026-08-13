@@ -401,18 +401,6 @@ function marsCompatibilityMessage(
   memoryConfiguration: string
 ): string | undefined {
   const output = `${result.stdout}\n${result.stderr}`;
-  if (mode === 'run' && isCourseTraceMarsRun(mode, options)
-    && /Invalid Command Argument:\s*coZeroGpr/i.test(output)) {
-    return '当前修改版 MARS 不支持 coZeroGpr，无法将 $gp/$sp 等 GPR 初态对齐到教程规定的全 0。请更新 Mars-with-BUAA-CO-extension 并重新配置 co.toolchain.mars / co.toolchain.marsP7。';
-  }
-  if (mode === 'run' && isCourseTraceMarsRun(mode, options)
-    && /Invalid Command Argument:\s*coStrictData/i.test(output)) {
-    return '当前修改版 MARS 不支持 coStrictData，无法按教程限制 DM/MMIO 地址范围并拒绝有效地址溢出。请更新 Mars-with-BUAA-CO-extension 并重新配置 co.toolchain.mars / co.toolchain.marsP7。';
-  }
-  if (mode === 'run' && isCourseTraceMarsRun(mode, options)
-    && /Invalid Command Argument:\s*coHalt=/i.test(output)) {
-    return '当前修改版 MARS 不支持 coHalt，无法确认程序实际到达教程规定的最终停机自环。请更新 Mars-with-BUAA-CO-extension 并重新配置 co.toolchain.mars / co.toolchain.marsP7。';
-  }
   if (options.traceOutput && /Invalid Command Argument:\s*coL[12]/i.test(output)) {
     return '当前 MARS 不支持 coL1/coL2 trace 参数。课程自动对拍需要 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 修改版 Mars，请检查 co.toolchain.mars / co.toolchain.marsP7。';
   }
@@ -608,17 +596,18 @@ function formatMarsDumpAddress(value: number): string {
 }
 
 export function p7KernelTextDumpRange(): string {
-  return `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-${formatMarsDumpAddress(p7KernelTextDumpEndAddress + 4)}`;
+  return `${formatMarsDumpAddress(p7ExceptionHandlerAddress)}-${formatMarsDumpAddress(p7KernelTextDumpEndAddress)}`;
 }
 
 /**
  * MARS treats an explicit dump upper bound as exclusive. Keep the P7 user dump below the
- * 0x4180 handler even when user text and kernel text are physically contiguous; other CPU
- * profiles may use the complete 16 KiB course IM through 0x6ffc.
+ * 0x4180 handler even when user text and kernel text are physically contiguous. Stable MARS
+ * v0.6.3 also treats Compact*'s configured 0x6ffc text limit as exclusive, so course dumps end at
+ * 0x6ff8 even though the physical course IM has one additional word at 0x6ffc.
  */
 export function courseUserTextDumpRange(profile: ProjectProfile): string {
   const endExclusive = profile === 'P7'
     ? p7ExceptionHandlerAddress
-    : p7KernelTextDumpEndAddress + 4;
+    : p7KernelTextDumpEndAddress;
   return `${formatMarsDumpAddress(p7UserTextBaseAddress)}-${formatMarsDumpAddress(endExclusive)}`;
 }

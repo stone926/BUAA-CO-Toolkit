@@ -75,9 +75,9 @@ import { runTool } from '../../process';
 import { courseDataDumpChunkWordCount } from '../../courseTesting/courseDataInitialization';
 
 const zeroChunk = '00000000\n'.repeat(courseDataDumpChunkWordCount);
-const courseTextRange = '0x00003000-0x00007000';
+const courseTextRange = '0x00003000-0x00006ffc';
 const p7UserTextRange = '0x00003000-0x00004180';
-const p7KernelTextRange = '0x00004180-0x00007000';
+const p7KernelTextRange = '0x00004180-0x00006ffc';
 const roots: string[] = [];
 
 describe('runMarsFile course DM initialization preflight', () => {

@@ -41,17 +41,17 @@ import {
   parseMachineCodeWords
 } from './language/logisim/rom';
 import { compareTraceIterables, firstTraceDiffSnapshot } from './language/mips/traceCompare';
-import { iterCpuTraceEvents } from './language/mips/traceParser';
+import { iterMarsDetailedTraceEvents } from './language/mips/traceParser';
 import { commandLine, revealOutputChannel } from './process';
 import { runProcessCore } from './processCore';
 import { checkToolchain } from './toolchain';
 import { AppServices, RunResult } from './types';
 import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from './courseTesting/marsStepLimit';
+import { courseMarsOracleCompatibilityError } from './courseTesting/marsOracleCompatibility';
 import { resolveWorkspaceFile } from './workflowInputs';
 import {
   courseTraceMemoryConfigurationError,
   formatToolchainFailure,
-  MARS_COURSE_IM_CHECK,
   requiredToolchainFailures
 } from './courseTestToolchain';
 import {
@@ -268,9 +268,10 @@ export async function runP3LogisimTraceCase(
   }
   services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
 
+  const machineCodeText = await readTextFile(asmCase.machineCode);
   let logisimCode: P3LogisimMachineCode;
   try {
-    logisimCode = prepareP3LogisimMachineCode(await readTextFile(asmCase.machineCode));
+    logisimCode = prepareP3LogisimMachineCode(machineCodeText);
     const capacityError = p3LogisimRomCapacityError(setup.romTarget, logisimCode.terminatedWordCount);
     if (capacityError) {
       return failedCase(item, 'logisim', capacityError, asmCase.machineCode, undefined, asmCase);
@@ -318,11 +319,12 @@ export async function runP3LogisimTraceCase(
     asmCase.manifest.source.kind === 'builtin',
     logisimCode.text
   );
-  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（修改版 MARS 原生停机自环上限）`);
+  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);
   const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
     showMessages: false,
     revealOutput: options.revealOutput,
     traceOutput: true,
+    traceLevel: 2,
     maxSteps,
     haltPc: logisimCode.haltPc,
     runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined
@@ -340,6 +342,16 @@ export async function runP3LogisimTraceCase(
   if (haltError) {
     services.output.appendLine(haltError);
     return failedCase(item, 'mars', haltError, asmCase.machineCode, mars.outputFile, asmCase);
+  }
+  const oracleCompatibilityError = courseMarsOracleCompatibilityError(
+    'P3',
+    machineCodeText,
+    marsText,
+    false
+  );
+  if (oracleCompatibilityError) {
+    services.output.appendLine(oracleCompatibilityError);
+    return failedCase(item, 'mars', oracleCompatibilityError, asmCase.machineCode, mars.outputFile, asmCase);
   }
 
   const logisimRun = await runLogisimTraceCli(
@@ -416,7 +428,7 @@ export async function runP3LogisimTraceCase(
     await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
   }
 
-  const diff = compareTraceIterables(iterCpuTraceEvents(marsText), parsedLogisim.events, {
+  const diff = compareTraceIterables(iterMarsDetailedTraceEvents(marsText), parsedLogisim.events, {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
@@ -766,7 +778,7 @@ async function ensureP3LogisimTraceToolchainReady(services: AppServices, resourc
   }
 
   const checks = await checkToolchain(services.output, resource, { tools: ['java', 'mars', 'logisim'] });
-  const required = new Set(['Java', 'MARS', 'MARS coL1', 'MARS coStrictData', MARS_COURSE_IM_CHECK, 'Logisim', `MARS ${memoryConfiguration}`]);
+  const required = new Set(['Java', 'MARS', 'MARS coL2', 'Logisim', `MARS ${memoryConfiguration}`]);
   const failed = requiredToolchainFailures(checks, required);
   if (!failed.length) {
     return true;

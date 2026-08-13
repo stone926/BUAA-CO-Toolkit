@@ -130,6 +130,11 @@ const p7ScratchRegisterA = '$24';
 const p7ScratchRegisterB = '$23';
 const p7InterruptAnchorRegister = '$25';
 type MemoryOperandCoverage = 'zero-offset' | 'positive-offset' | 'negative-offset' | 'negative-base';
+// Stable Mars v0.6.3 treats the configured data-segment limit (0x2fff) as exclusive when
+// validating an instruction's effective address. Wider accesses based at 0x2ffc/0x2ffe still
+// cover the final hardware word, but LWR/SWR validate each byte while walking toward the
+// aligned word end, so their effective address must leave room through 0x2ffe.
+const stableMarsDataAddressExclusiveLimit = courseDataByteLength - 1;
 
 export function normalizeP7ExceptionTypes(values: readonly string[] | undefined): P7ExceptionKind[] {
   if (!values) {
@@ -1281,7 +1286,7 @@ class ProgramGenerator {
 
   private emitLoad(mnemonic: string): void {
     const rt = this.chooseWriteRegister();
-    const operand = this.memoryOperand(memoryAlignment(mnemonic));
+    const operand = this.memoryOperand(mnemonic);
     this.emit(mnemonic, `${mnemonic} ${rt}, ${operand.text}`);
 
     const address = operand.address;
@@ -1306,7 +1311,7 @@ class ProgramGenerator {
 
   private emitStore(mnemonic: string): void {
     const rt = this.chooseReadRegister();
-    const operand = this.memoryOperand(memoryAlignment(mnemonic));
+    const operand = this.memoryOperand(mnemonic);
     this.emit(mnemonic, `${mnemonic} ${rt}, ${operand.text}`);
 
     const value = this.state.regValue(rt);
@@ -1862,8 +1867,15 @@ class ProgramGenerator {
     }
   }
 
-  private memoryOperand(alignment: number): { text: string; address: number } {
-    const lastAddress = courseDataByteLength - alignment;
+  private memoryOperand(mnemonic: string): { text: string; address: number } {
+    const alignment = memoryAlignment(mnemonic);
+    const stableMarsLastAddress = mnemonic === 'lwr' || mnemonic === 'swr'
+      ? stableMarsDataAddressExclusiveLimit - 4
+      : stableMarsDataAddressExclusiveLimit - 1;
+    const lastAddress = Math.min(
+      courseDataByteLength - alignment,
+      stableMarsLastAddress
+    );
     const randomAddress = alignDown(this.rng.int(0, lastAddress), alignment);
     const candidates: Array<{
       register: string;

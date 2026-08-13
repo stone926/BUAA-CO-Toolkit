@@ -3,14 +3,17 @@ import {
   courseMachineCodeCapacityError,
   courseMachineCodeValidationError,
   decodeCourseMachineInstruction,
+  stableMarsCourseInstructionMemoryWords,
   validateCourseMachineCode
 } from '../../courseTesting/machineCodeValidation';
 
 describe('course machine-code validation', () => {
   it.each(['P3', 'P4', 'P5', 'P6', 'P7'] as const)(
-    'accepts exactly the %s tutorial instruction-memory capacity',
+    'accepts the largest %s image supported by stable MARS',
     (profile) => {
-      expect(courseMachineCodeCapacityError(profile, 4096)).toBeUndefined();
+      expect(courseMachineCodeCapacityError(profile, stableMarsCourseInstructionMemoryWords)).toBeUndefined();
+      expect(courseMachineCodeCapacityError(profile, 4096)).toContain('稳定版 MARS v0.6.3');
+      expect(courseMachineCodeCapacityError(profile, 4096)).toContain('4095 words');
     }
   );
 
@@ -24,10 +27,12 @@ describe('course machine-code validation', () => {
   );
 
   it('applies the capacity guard through the final course machine-code preflight', () => {
-    const withinCapacity = `${'00000000\n'.repeat(4095)}1000ffff\n`;
-    const beyondCapacity = `${withinCapacity}00000000\n`;
+    const withinCapacity = `${'00000000\n'.repeat(4094)}1000ffff\n`;
+    const beyondStableMars = `${withinCapacity}00000000\n`;
+    const beyondCapacity = `${beyondStableMars}00000000\n`;
 
     expect(courseMachineCodeValidationError('P4', withinCapacity)).toBeUndefined();
+    expect(courseMachineCodeValidationError('P4', beyondStableMars)).toContain('稳定版 MARS v0.6.3');
     expect(courseMachineCodeValidationError('P4', beyondCapacity)).toContain('最终机器码共有 4097 words');
   });
 

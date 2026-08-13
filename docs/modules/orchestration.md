@@ -20,7 +20,7 @@ build:
   profileResolver.ts — 推断核心: 端口签名(P6外部存储器/P7中断外设), display格式(P4 vs P5时间戳), P7结构(CP0+Bridge+Timer), 文件类型分布, 四级置信度(explicit/strong/weak/none)
 
 toolchain:
-  toolchain.ts — checkToolchain: Java(-version)/Python(--version)/MARS(coL1 trace+CompactLargeText+FixedCompactLargeText内存配置兼容)/ISE(fuse+ISim GUI可执行)/Logisim jar/Hazard Calculator
+  toolchain.ts — checkToolchain: Java(-version)/Python(--version)/已发布 MARS v0.6.3/8b53a49（coL1/coL2 兼容探针同时确认 Compact `$gp/$sp` 初值；课程 oracle 固定 coL2；检查 CompactLargeText/FixedCompactLargeText，P7 的 efc/p7irq）/ISE(fuse+ISim GUI可执行)/Logisim jar/Hazard Calculator
   iseCommon.ts — buildIseEnvironment, findFuse, findIsimGui, isimExecutableName
   python.ts — pythonCandidates(win32:python/py/python3, other:python3/python), firstWorkingCommand, commandResponds
 
@@ -36,7 +36,7 @@ fs:
   pathUtils.ts — normalizePathKey/samePath/dedupePaths/dedupeUris/sanitizeFileStem 纯路径工具
 
 mips-commands:
-  mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, 课程 Trace 源码停机尾校验, P7内核段合并(0x4180), 普通 dump 兼容性补尾, MARS兼容诊断(coL1/coL2/efc/p7irq/cl). registerMips()注册6个命令
+  mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, 课程 Trace 源码停机尾校验, coL2 动态停机尾验证+原生 max-step, P7内核段合并(0x4180), 普通 dump 兼容性补尾, 稳定版 MARS兼容诊断(coL1/coL2/efc/p7irq/cl). registerMips()注册6个命令
 
 verilog-commands:
   verilog.ts — Verilog 命令入口: generateTestbench、generateIseProject、runIsim/compileIsim wrapper、lint禁用和 registerVerilog()注册7个命令

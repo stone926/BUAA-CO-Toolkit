@@ -4,7 +4,7 @@ MIPS汇编(.asm/.s/.mips) LSP: 解析->AST->语义->诊断->补全/hover/跳转/
 
 数据流: Text -> syntax.ts(词法行) -> ast.ts -> semantic.ts -> parser.ts(编排) -> diagnostics -> service.ts
   LSP层: service.ts -> parseCache.ts -> completions/hover/navigation/formatting/signatureHelp/folding/rename/semanticTokens/inlayHints/codeActions
-  Trace: traceParser.ts(MARS coL1) -> traceCompare.ts(事件对比)
+  Trace: traceParser.ts(MARS coL1/coL2；课程 oracle 固定 coL2) -> traceCompare.ts(事件对比)
 
 core:
   parser.ts — 解析编排: source->parsed lines->AST->semantic model->diagnostics | exports: parseMips
@@ -47,7 +47,7 @@ infra:
   text.ts — getMipsWordRange, 字符分类
 
 trace:
-  traceParser.ts — MARS coL1 trace解析为CpuTraceEvent[]
+  traceParser.ts — 解析 coL1 写回行及 coL2 动态指令块为 CpuTraceEvent[]；课程 oracle 固定使用 coL2，以支持停机尾证明、SWL/SWR 合并、REGIMM 分支事件修复/后续状态限制和动态兼容检查，coL1 仅用于工具链能力探针
   traceCompare.ts — 事件对比引擎, TraceDiffResult
 
 迁移状态: 已从CST完全迁移到AST, Cst*和parseOperands为deprecated. 详见 ARCHITECTURE_REVIEW.md

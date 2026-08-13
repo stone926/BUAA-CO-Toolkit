@@ -159,7 +159,8 @@ export function machineCodeNeedsUndefinedBehaviorTrace(text: string, delayedBran
   for (let index = 0; index < words.length; index++) {
     const word = words[index];
     const hiLoEffect = instructionHiLoEffect(word);
-    if (isDivideInstruction(word)
+    if (mipsInstructionReadRegisters(word).some(isStableMarsNonzeroResetRegister)
+      || isDivideInstruction(word)
       || isJalrSameInstruction(word)
       || isRegimmLinkWithLinkRegisterSource(word)
       || hiLoEffect === 'read-hi'
@@ -187,10 +188,21 @@ export function marsDetailedUndefinedBehaviorError(
   delayedBranching: boolean
 ): string | undefined {
   const registers = new Uint32Array(32);
+  // Course automation currently targets the released Mars v0.6.3 Compact* configurations.
+  // Unlike the hardware reset, that stable oracle seeds $gp/$sp from its memory map.
+  registers[28] = 0x00001800;
+  registers[29] = 0x00002ffc;
+  const resetCompatible = new Uint8Array(32);
+  resetCompatible.fill(1);
+  resetCompatible[28] = 0;
+  resetCompatible[29] = 0;
   let hiInitialized = false;
   let loInitialized = false;
   let currentPc: number | undefined;
   let previous: { pc: number; word: number } | undefined;
+  let currentInstructionIsRegimmLink = false;
+  let currentInstructionWroteLinkRegister = false;
+  let linkRegisterOracleCompatible = true;
   let lineNumber = 0;
 
   for (const rawLine of text.split(/\r?\n/)) {
@@ -199,6 +211,24 @@ export function marsDetailedUndefinedBehaviorError(
     if (header) {
       const pc = Number.parseInt(header[1], 16) >>> 0;
       const word = Number.parseInt(header[2], 16) >>> 0;
+      // Stable v0.6.3 implements REGIMM link only on the taken path. The trace iterator can
+      // synthesize the missing architectural write for comparison, but it cannot change the
+      // value which MARS itself supplies to later instructions. Reject a later read until an
+      // actual MARS write makes $31 identical again.
+      if (currentInstructionIsRegimmLink && !currentInstructionWroteLinkRegister) {
+        linkRegisterOracleCompatible = false;
+      }
+      const readRegisters = mipsInstructionReadRegisters(word);
+      if (!linkRegisterOracleCompatible && readRegisters.includes(31)) {
+        return `测试程序在 0x${pc.toString(16)} 读取 $31，但此前未跳转的 BLTZAL/BGEZAL 在稳定版 MARS v0.6.3 中没有实际写入 PC+8；插件只能修复该分支自身的 Trace，无法修复 MARS 后续执行语义。请在读取前显式重写 $31，或避免依赖该未跳转链接值`;
+      }
+      const incompatibleResetRead = readRegisters.find((register) =>
+        isStableMarsNonzeroResetRegister(register) && resetCompatible[register] === 0);
+      if (incompatibleResetRead !== undefined) {
+        const name = incompatibleResetRead === 28 ? '$gp/$28' : '$sp/$29';
+        const marsValue = registers[incompatibleResetRead].toString(16).padStart(8, '0');
+        return `测试程序在 0x${pc.toString(16)} 首次写入前读取 ${name}；课程 CPU 复位值为 0，但稳定版 MARS v0.6.3 的初值为 0x${marsValue}。请先用不读取旧值的指令显式初始化该寄存器`;
+      }
       if (isRegimmLinkWithLinkRegisterSource(word)) {
         return `测试程序在 0x${pc.toString(16)} 实际执行 ${instructionName(word)} 且源寄存器为 $31；该指令同时写 $31，MIPS 将此输入定义为 UNPREDICTABLE`;
       }
@@ -252,6 +282,8 @@ export function marsDetailedUndefinedBehaviorError(
       }
       currentPc = pc;
       previous = { pc, word };
+      currentInstructionIsRegimmLink = isRegimmLinkBranch(word);
+      currentInstructionWroteLinkRegister = false;
       continue;
     }
 
@@ -265,6 +297,11 @@ export function marsDetailedUndefinedBehaviorError(
     const register = Number(event.target);
     if (Number.isInteger(register) && register > 0 && register < 32) {
       registers[register] = Number.parseInt(event.value, 16) >>> 0;
+      resetCompatible[register] = 1;
+      if (register === 31) {
+        currentInstructionWroteLinkRegister = true;
+        linkRegisterOracleCompatible = true;
+      }
     }
   }
   return undefined;
@@ -324,6 +361,69 @@ function machineCodeWords(text: string): number[] {
 
 function isDivideInstruction(word: number): boolean {
   return (word >>> 26) === 0 && divideFuncts.has(word & 0x3f);
+}
+
+function isStableMarsNonzeroResetRegister(register: number): boolean {
+  return register === 28 || register === 29;
+}
+
+/** Return GPR operands whose current values are consumed by one canonical MIPS instruction. */
+export function mipsInstructionReadRegisters(word: number): number[] {
+  const opcode = word >>> 26;
+  const rs = (word >>> 21) & 0x1f;
+  const rt = (word >>> 16) & 0x1f;
+  const funct = word & 0x3f;
+
+  if (opcode === 0) {
+    switch (funct) {
+      case 0x00: // sll
+      case 0x02: // srl
+      case 0x03: // sra
+        return [rt];
+      case 0x08: // jr
+      case 0x09: // jalr
+      case 0x11: // mthi
+      case 0x13: // mtlo
+        return [rs];
+      case 0x10: // mfhi
+      case 0x12: // mflo
+      case 0x0c: // syscall (used as a P7 exception trigger)
+        return [];
+      default:
+        return [rs, rt];
+    }
+  }
+  if (opcode === 0x01) {
+    return [rs]; // REGIMM branches and immediate traps
+  }
+  if (opcode === 0x02 || opcode === 0x03) {
+    return []; // j / jal
+  }
+  if (opcode >= 0x04 && opcode <= 0x07) {
+    return opcode === 0x04 || opcode === 0x05 ? [rs, rt] : [rs];
+  }
+  if (opcode >= 0x08 && opcode <= 0x0e) {
+    return [rs];
+  }
+  if (opcode === 0x0f) {
+    return []; // lui
+  }
+  if (opcode === 0x10) {
+    if (word === 0x42000018) {
+      return []; // eret
+    }
+    return rs === 4 ? [rt] : []; // mtc0 consumes rt; mfc0 produces it
+  }
+  if (opcode === 0x1c) {
+    return funct === 0x20 || funct === 0x21 ? [rs] : [rs, rt]; // clz/clo vs MDU ops
+  }
+  if (opcode >= 0x20 && opcode <= 0x26) {
+    return opcode === 0x22 || opcode === 0x26 ? [rs, rt] : [rs]; // LWL/LWR merge old rt
+  }
+  if (opcode === 0x28 || opcode === 0x29 || opcode === 0x2a || opcode === 0x2b || opcode === 0x2e) {
+    return [rs, rt];
+  }
+  return [];
 }
 
 function isJalrSameInstruction(word: number): boolean {

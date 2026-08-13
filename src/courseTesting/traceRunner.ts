@@ -12,9 +12,7 @@ import {
   iterCpuTraceEvents,
   iterMarsDetailedTraceEvents,
   machineCodeNeedsDetailedMarsTrace,
-  machineCodeNeedsLinkBranchOracleRepairTrace,
-  machineCodeNeedsUndefinedBehaviorTrace,
-  marsDetailedUndefinedBehaviorError
+  machineCodeNeedsLinkBranchOracleRepairTrace
 } from '../language/mips/traceParser';
 import { parseSimOutput } from '../language/verilog/traceParser';
 import { runMarsFile } from '../mips';
@@ -24,6 +22,10 @@ import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
 import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from './marsStepLimit';
+import {
+  courseMarsOracleCompatibilityError,
+  machineCodeNeedsMarsOracleCompatibilityTrace
+} from './marsOracleCompatibility';
 import {
   AsmCase,
   asmCaseArtifactUri,
@@ -138,14 +140,14 @@ export async function runCourseTraceCase(
   const delayedBranching = profile === 'P5' || profile === 'P6' || profile === 'P7';
   const partialStoreTrace = machineCodeNeedsDetailedMarsTrace(machineCodeText);
   const linkBranchRepairTrace = machineCodeNeedsLinkBranchOracleRepairTrace(machineCodeText);
-  const undefinedBehaviorTrace = machineCodeNeedsUndefinedBehaviorTrace(machineCodeText, delayedBranching);
-  const detailedMarsTrace = partialStoreTrace || linkBranchRepairTrace || undefinedBehaviorTrace;
-  if (detailedMarsTrace) {
+  const oracleCompatibilityTrace = machineCodeNeedsMarsOracleCompatibilityTrace(machineCodeText, delayedBranching);
+  const specializedDetailedTrace = partialStoreTrace || linkBranchRepairTrace || oracleCompatibilityTrace;
+  if (specializedDetailedTrace) {
     services.output.appendLine(partialStoreTrace
       ? '检测到 SWL/SWR：MARS 使用逐指令 Trace，并按动态指令保留最终 DM 写值'
       : linkBranchRepairTrace
-        ? '检测到 BGEZAL/BLTZAL：MARS 使用逐指令 Trace，按 MIPS 规范修复 not-taken 时遗漏的 $31=PC+8 写回，并拒绝动态执行的 $31 源寄存器 UNPREDICTABLE 输入'
-        : '检测到潜在未定义行为：MARS 使用逐指令 Trace，仅在实际执行 DivZero/JalrSame/DoubleDelay 或读取未定义 HI/LO 时拒绝用例');
+        ? '检测到 BGEZAL/BLTZAL：MARS 使用逐指令 Trace 修复分支自身遗漏的 $31=PC+8 写回；若稳定版未实际写入，则在显式重写 $31 前拒绝后续读取'
+        : '检测到潜在 oracle 初态不兼容或未定义行为：MARS 使用逐指令 Trace，仅在实际执行首次初始化前的 $gp/$sp 读取、DivZero/JalrSame/DoubleDelay 或未定义 HI/LO 读取时拒绝用例');
   }
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
   const maxSteps = generatedCourseTraceMarsStepLimit(
@@ -158,14 +160,14 @@ export async function runCourseTraceCase(
   if (!Number.isSafeInteger(haltPc)) {
     return failedCase(item, 'dump', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
   }
-  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（修改版 MARS 原生停机自环上限）`);
+  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);
   const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
     showMessages: false,
     revealOutput: options.revealOutput,
     stdin: stdinText,
     stdinSource: item.stdin,
     traceOutput: true,
-    ...(detailedMarsTrace ? { traceLevel: 2 as const } : {}),
+    traceLevel: 2,
     maxSteps,
     haltPc,
     runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined,
@@ -186,12 +188,15 @@ export async function runCourseTraceCase(
     services.output.appendLine(haltError);
     return failedCase(item, 'mars', haltError, asmCase.machineCode, mars.outputFile, asmCase);
   }
-  if (undefinedBehaviorTrace) {
-    const undefinedBehaviorError = marsDetailedUndefinedBehaviorError(marsText, delayedBranching);
-    if (undefinedBehaviorError) {
-      services.output.appendLine(undefinedBehaviorError);
-      return failedCase(item, 'mars', undefinedBehaviorError, asmCase.machineCode, mars.outputFile, asmCase);
-    }
+  const oracleCompatibilityError = courseMarsOracleCompatibilityError(
+    profile,
+    machineCodeText,
+    marsText,
+    delayedBranching
+  );
+  if (oracleCompatibilityError) {
+    services.output.appendLine(oracleCompatibilityError);
+    return failedCase(item, 'mars', oracleCompatibilityError, asmCase.machineCode, mars.outputFile, asmCase);
   }
 
   const isim = await runIsim(services, {
@@ -209,9 +214,7 @@ export async function runCourseTraceCase(
   }
 
   const simText = await readTextFile(isim.simOut);
-  const marsEvents = detailedMarsTrace
-    ? iterMarsDetailedTraceEvents(marsText)
-    : iterCpuTraceEvents(marsText);
+  const marsEvents = iterMarsDetailedTraceEvents(marsText);
   const diff = compareTraceIterables(marsEvents, iterCpuTraceEvents(simText), {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries

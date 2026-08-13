@@ -11,18 +11,16 @@ import { p7InternalUnknownInstructionMnemonic } from '../../courseTesting/builti
 
 /** P7 课程约定：异常处理程序入口 0x4180 需要大内存布局。 */
 export const P7_COURSE_MEMORY_CONFIG = 'CompactLargeText';
-/** Modified-MARS flag that aligns all GPR reset values with the course tutorial. */
-export const COURSE_ZERO_GPR_FLAG = 'coZeroGpr';
-/** Modified-MARS flag that enforces the tutorial load/store address map and EA overflow rules. */
-export const COURSE_STRICT_DATA_FLAG = 'coStrictData';
-/** Modified-MARS option prefix for accepting only the validated course halt tail as termination. */
-export const COURSE_HALT_FLAG = 'coHalt';
 
 /** 支持大文本段（容纳 0x3000→0x4180+ 异常处理程序）的内存配置名称。 */
 export const LARGE_TEXT_MEMORY_CONFIGS = new Set([
   'FixedCompactLargeText',
   'CompactLargeText'
 ]);
+
+// Stable MARS resolves bare tokens 1..31 as GPR display selectors before it considers the
+// maximum-step option. 32 is the smallest positive integer which unambiguously reaches maxSteps.
+const STABLE_MARS_MINIMUM_UNAMBIGUOUS_MAX_STEPS = 32;
 
 // ────────────────────────────────────────────────────────────────────────────────
 // buildMarsArgs
@@ -42,9 +40,9 @@ export interface MarsRunOptions {
   runOutputFile?: { fsPath: string };
   interruptSchedule?: number[];
   p7RiInstruction?: boolean;
-  /** Native MARS maximum executed-instruction count (stand-alone positive integer argument). */
+  /** Requested native MARS instruction limit; stable CLI values 1..31 are conservatively raised to 32. */
   maxSteps?: number;
-  /** PC of the validated final `beq $0,$0,-1`; required by course-run orchestration. */
+  /** PC of the validated final `beq $0,$0,-1`; checked against captured coL2 output by the caller. */
   haltPc?: number;
 }
 
@@ -82,18 +80,6 @@ export function buildMarsArgs(
     // or truncated trace as a valid execution.
     args.push('ae1', 'se1');
   }
-  if (courseTraceInvocation) {
-    // coStrictData is also present during course dumps: it has no simulated load/store to police,
-    // but selects the exact course Compact* boundary semantics so the final legal IM/DM word is
-    // assemblable and dumpable. This keeps the 4096-word hardware image aligned with MARS.
-    args.push(COURSE_STRICT_DATA_FLAG);
-  }
-  if (courseTraceRun) {
-    // Compact MARS configurations conventionally seed $gp/$sp, while the tutorial resets every
-    // GPR to zero. The strict-data flag above also keeps Compact*'s extra mapped data from becoming
-    // an oracle and rejects signed effective-address overflow before its wrapped address is used.
-    args.push(COURSE_ZERO_GPR_FLAG);
-  }
   if (mode === 'run' && options.traceOutput) {
     args.push(options.traceLevel === 2 ? 'coL2' : 'coL1');
   }
@@ -112,13 +98,9 @@ export function buildMarsArgs(
       args.push(`p7irq=${schedule.map((pc) => `0x${((pc - 4) >>> 0).toString(16)}`).join(',')}`);
     }
   }
-  if (courseTraceRun && Number.isSafeInteger(options.maxSteps) && (options.maxSteps ?? 0) > 0) {
-    // MarsLaunch checks bare register names before stand-alone integers, so decimal 0..31 would
-    // be mistaken for $0..$31. Integer.decode accepts this unambiguous hexadecimal spelling.
-    args.push(`0x${(options.maxSteps as number).toString(16)}`);
-  }
-  if (courseTraceRun && Number.isSafeInteger(options.haltPc) && (options.haltPc ?? -1) >= 0) {
-    args.push(`${COURSE_HALT_FLAG}=0x${((options.haltPc as number) >>> 0).toString(16)}`);
+  const maxSteps = options.maxSteps;
+  if (courseTraceRun && typeof maxSteps === 'number' && Number.isSafeInteger(maxSteps) && maxSteps > 0) {
+    args.push(String(Math.max(maxSteps, STABLE_MARS_MINIMUM_UNAMBIGUOUS_MAX_STEPS)));
   }
   if (mode === 'run') {
     args.push(asmUri.fsPath);

@@ -60,8 +60,7 @@ vi.mock('../toolchain', () => ({
 }));
 
 vi.mock('../courseTestToolchain', () => ({
-  MARS_COURSE_IM_CHECK: 'MARS course IM',
-  MARS_P7_CONTRACT_CHECK: 'MARS P7 contract',
+  MARS_P7_CHECK: 'MARS P7 efc/p7irq',
   courseTraceMemoryConfigurationError: vi.fn(() => undefined),
   formatToolchainFailure: vi.fn(() => 'failure'),
   requiredToolchainFailures: vi.fn(() => [])

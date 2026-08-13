@@ -32,8 +32,7 @@ import {
 import {
   courseTraceMemoryConfigurationError,
   formatToolchainFailure,
-  MARS_COURSE_IM_CHECK,
-  MARS_P7_CONTRACT_CHECK,
+  MARS_P7_CHECK,
   requiredToolchainFailures
 } from './courseTestToolchain';
 import { normalizePathKey } from './pathUtils';
@@ -355,14 +354,13 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
 
 function requiredContinuousTraceChecks(profile: ProjectProfile, memoryConfiguration: string): Set<string> {
   if (profile === 'P3') {
-    return new Set(['Java', 'MARS', 'MARS coL1', 'MARS coStrictData', MARS_COURSE_IM_CHECK, 'Logisim', `MARS ${memoryConfiguration}`]);
+    return new Set(['Java', 'MARS', 'MARS coL2', 'Logisim', `MARS ${memoryConfiguration}`]);
   }
-  // coL2 is required only by cases which actually contain SWL/SWR or need dynamic undefined-
-  // behavior checks. Those cases request it at run time; standard tutorial profiles use coL1.
-  const names = new Set(['Java', 'MARS', 'MARS coL1', 'MARS coStrictData', 'ISE fuse', `MARS ${memoryConfiguration}`]);
-  names.add(MARS_COURSE_IM_CHECK);
+  // Stable MARS has no dedicated course-halt marker, so every course run uses coL2 to prove that
+  // the validated final self-branch was actually executed before the native step limit stops it.
+  const names = new Set(['Java', 'MARS', 'MARS coL2', 'ISE fuse', `MARS ${memoryConfiguration}`]);
   if (profile === 'P7') {
-    names.add(MARS_P7_CONTRACT_CHECK);
+    names.add(MARS_P7_CHECK);
   }
   return names;
 }

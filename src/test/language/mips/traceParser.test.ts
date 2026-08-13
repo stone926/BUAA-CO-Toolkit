@@ -170,7 +170,7 @@ MARS 4.5
     expect(machineCodeNeedsUndefinedBehaviorTrace('00000810\n', true)).toBe(true); // mfhi $1
     expect(machineCodeNeedsUndefinedBehaviorTrace('70430000\n', true)).toBe(true); // madd $2,$3
     expect(machineCodeNeedsUndefinedBehaviorTrace('07f00001\n', true)).toBe(true); // bltzal $31,target
-    expect(machineCodeNeedsUndefinedBehaviorTrace('03800821\n37a10000\n', true)).toBe(false); // $gp/$sp are reset by coZeroGpr.
+    expect(machineCodeNeedsUndefinedBehaviorTrace('03800821\n37a10000\n', true)).toBe(true); // reads $gp/$sp
 
     const unreachableTrace = '@PC00003020 -> ori $1, $0, 1 (34010001)\n\t\t$ 1 <= 00000001\n';
     expect(marsDetailedUndefinedBehaviorError(unreachableTrace, true)).toBeUndefined();
@@ -191,6 +191,31 @@ MARS 4.5
     )).toBeUndefined();
   });
 
+  it('rejects reads after stable MARS omits a not-taken REGIMM link until $31 is explicitly rewritten', () => {
+    const omittedLinkThenRead = [
+      '@PC00003000 -> bgezal $1, target (04310001)',
+      '@PC00003004 -> addu $2, $31, $0 (03e01021)'
+    ].join('\n');
+    expect(marsDetailedUndefinedBehaviorError(omittedLinkThenRead, true)).toContain('后续执行语义');
+
+    const explicitRewriteThenRead = [
+      '@PC00003000 -> bgezal $1, target (04310001)',
+      '@PC00003004 -> ori $31, $0, 7 (341f0007)',
+      '\t\t$31 <= 00000007',
+      '@PC00003008 -> addu $2, $31, $0 (03e01021)',
+      '\t\t$ 2 <= 00000007'
+    ].join('\n');
+    expect(marsDetailedUndefinedBehaviorError(explicitRewriteThenRead, true)).toBeUndefined();
+
+    const takenLinkThenRead = [
+      '@PC00003000 -> bgezal $1, target (04310001)',
+      '\t\t$31 <= 00003008',
+      '@PC00003004 -> addu $2, $31, $0 (03e01021)',
+      '\t\t$ 2 <= 00003008'
+    ].join('\n');
+    expect(marsDetailedUndefinedBehaviorError(takenLinkThenRead, true)).toBeUndefined();
+  });
+
   it('rejects only an actually executed divide by zero', () => {
     const invalid = [
       '@PC00003000 -> ori $3, $0, 0 (34030000)',
@@ -205,6 +230,24 @@ MARS 4.5
 
     expect(marsDetailedUndefinedBehaviorError(invalid, true)).toContain('DivZero');
     expect(marsDetailedUndefinedBehaviorError(valid, true)).toBeUndefined();
+  });
+
+  it('rejects stable-MARS $gp/$sp reads until the program explicitly initializes them', () => {
+    expect(marsDetailedUndefinedBehaviorError(
+      '@PC00003000 -> addu $1, $gp, $0 (03800821)\n',
+      true
+    )).toContain('稳定版 MARS v0.6.3');
+    expect(marsDetailedUndefinedBehaviorError([
+      '@PC00003000 -> ori $gp, $0, 0 (341c0000)',
+      '\t\t$28 <= 00000000',
+      '@PC00003004 -> addu $1, $gp, $0 (03800821)',
+      '\t\t$ 1 <= 00000000'
+    ].join('\n'), true)).toBeUndefined();
+    expect(marsDetailedUndefinedBehaviorError([
+      '@PC00003000 -> lui $sp, 0 (3c1d0000)',
+      '\t\t$29 <= 00000000',
+      '@PC00003004 -> div $2, $sp (005d001a)'
+    ].join('\n'), true)).toContain('DivZero');
   });
 
   it('rejects actually executed JalrSame and DoubleDelay', () => {

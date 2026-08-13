@@ -36,9 +36,20 @@ describe('generated course-trace MARS step limit', () => {
     expect(generatedCourseTraceMarsStepLimit('P6', spoofed, false, '1000ffff\n00000000\n')).toBe(65_536);
   });
 
-  it('accepts only the exact modified-MARS course-halt marker', () => {
+  it('accepts stable coL2 proof of the validated halt branch and the newer marker', () => {
+    expect(courseTraceMarsHaltError([
+      '@PC0000303c -> ori $1, $0, 1 (34010001)',
+      '@PC00003040 -> beq $0, $0, -1 (1000ffff)',
+      'Program terminated when maximum step limit 256 reached.'
+    ].join('\n'), 0x3040)).toBeUndefined();
+    expect(courseTraceMarsHaltError(
+      '@PC0x00003040 -> beq $0, $0, -1 (1000FFFF)\n',
+      0x3040
+    )).toBeUndefined();
     expect(courseTraceMarsHaltError('Program reached course halt loop at 0x00003040.\n', 0x3040)).toBeUndefined();
     expect(courseTraceMarsHaltError('Program reached course halt loop at 0x00003044.\n', 0x3040)).toContain('不一致');
+    expect(courseTraceMarsHaltError('@PC00003040 -> nop (00000000)\n', 0x3040)).toContain('1000ffff');
+    expect(courseTraceMarsHaltError('@PC00003044 -> beq $0, $0, -1 (1000ffff)\n', 0x3040)).toContain('1000ffff');
     expect(courseTraceMarsHaltError('Program terminated when maximum step limit 256 reached.\n', 0x3040)).toContain('执行预算');
     expect(courseTraceMarsHaltError('@00003000: $ 1 <= 1\n', 0x3040)).toContain('跳出已装载文本');
   });

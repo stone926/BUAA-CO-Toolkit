@@ -5,13 +5,17 @@ import * as vscode from 'vscode';
 import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, resolvePython } from './config';
 import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
 import { getProfileRequiredTools } from './courseConfig';
-import { courseInstructionAddressCapability, p7CourseContractCapability } from './courseTestToolchain';
+import { MARS_P7_CHECK } from './courseTestToolchain';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 import { iterCpuTraceEvents, iterMarsDetailedTraceEvents } from './language/mips/traceParser';
-import { COURSE_HALT_FLAG, COURSE_STRICT_DATA_FLAG, COURSE_ZERO_GPR_FLAG } from './language/mips/marsArgs';
 export { buildIseEnvironment, findFuse, findIsimGui, isimExecutableName } from './iseCommon';
 import { findFuse, findIsimGui } from './iseCommon';
+
+const marsCapabilityGpCopyRegister = '3';
+const marsCapabilitySpCopyRegister = '4';
+const stableCompactGpResetValue = '00001800';
+const stableCompactSpResetValue = '00002FFC';
 
 export async function checkToolchain(
   output: vscode.OutputChannel,
@@ -122,38 +126,28 @@ async function marsCapabilityChecks(
   const tempDir = coTmpDir(resource, 'co-mars-check-');
   try {
     const asm = path.join(tempDir, 'capability.asm');
-    const sourceLines = [
-      '.text',
-      'ori $2, $gp, 0',
-      'ori $3, $sp, 0',
+    const sourceLines = ['.text'];
+    if (profile === 'P7') {
+      sourceLines.push(
+        'ori $26, $0, 0x1001',
+        'mtc0 $26, $12'
+      );
+    }
+    sourceLines.push(
       'lui $1, 0x1122',
       'ori $1, $1, 0x3344',
       'sw $1, 0($0)',
       'swl $1, 1($0)',
-      'swr $1, 2($0)'
-    ];
-    if (profile === 'P7') {
-      sourceLines.push(
-        // The P7 tutorial exposes only DM/Timer/IG through the load-store bridge. Both accesses
-        // must raise an exception even though CompactLargeText itself maps 0x5000 as kernel data.
-        'lw $4, 0x5000($0)',
-        'sw $4, 0x5000($0)',
-        'ori $6, $0, 1'
-      );
-    }
-    const haltPc = profile === 'P7' ? 0x3028 : 0x301c;
-    sourceLines.push(
-      '_co_capability_halt:',
-      'beq $0, $0, _co_capability_halt',
-      'nop'
+      'swr $1, 2($0)',
+      `addu $${marsCapabilityGpCopyRegister}, $gp, $0`,
+      `addu $${marsCapabilitySpCopyRegister}, $sp, $0`,
+      'ori $2, $0, 2'
     );
     if (profile === 'P7') {
       sourceLines.push(
         '.ktext 0x4180',
-        'mfc0 $26, $14',
-        'addiu $26, $26, 4',
-        'mtc0 $26, $14',
-        'addiu $5, $5, 1',
+        'mfc0 $8, $13',
+        'sb $0, 0x7f20($0)',
         'eret',
         'nop'
       );
@@ -162,17 +156,13 @@ async function marsCapabilityChecks(
     await fs.promises.writeFile(asm, sourceLines.join('\n'), 'utf8');
     const java = getJava(resource);
     const traceMemory = profile === 'P7' ? 'CompactLargeText' : 'CompactDataAtZero';
-    const traceBaseArgs = [
-      '-jar', mars, 'nc', 'mc', traceMemory, 'ae1', 'se1',
-      COURSE_ZERO_GPR_FLAG, COURSE_STRICT_DATA_FLAG, `${COURSE_HALT_FLAG}=0x${haltPc.toString(16)}`
-    ];
+    const traceBaseArgs = ['-jar', mars, 'nc', 'mc', traceMemory, 'ae1', 'se1'];
     if (profile === 'P5' || profile === 'P6' || profile === 'P7') {
       traceBaseArgs.push('db');
     }
     if (profile === 'P7') {
-      traceBaseArgs.push('efc');
+      traceBaseArgs.push('efc', 'p7irq=0x3008');
     }
-    traceBaseArgs.push('0x80');
     const traceL1 = await runTool(java, [...traceBaseArgs, 'coL1', asm], {
       cwd,
       output,
@@ -186,13 +176,11 @@ async function marsCapabilityChecks(
       timeoutMs: 10000
     });
     const checks: ToolDetection[] = [
-      traceCapabilityCheck(traceL1, 1, profile === 'P7'),
-      traceCapabilityCheck(traceL2, 2, profile === 'P7'),
-      await strictDataCapabilityCheck(output, resource, cwd, java, mars, tempDir)
+      marsTraceCapabilityCheck(traceL1, 1),
+      marsTraceCapabilityCheck(traceL2, 2)
     ];
-    checks.push(await courseInstructionAddressCapabilityCheck(output, resource, cwd, java, mars, tempDir, profile));
     if (profile === 'P7') {
-      checks.push(await p7CourseContractCapabilityCheck(output, resource, cwd, java, mars, tempDir));
+      checks.push(p7InterruptCapabilityCheck(traceL1));
     }
     if (profile !== 'P7') {
       checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'FixedCompactLargeText'));
@@ -204,215 +192,34 @@ async function marsCapabilityChecks(
   }
 }
 
-async function courseInstructionAddressCapabilityCheck(
-  output: vscode.OutputChannel,
-  resource: vscode.Uri | undefined,
-  cwd: string,
-  java: string,
-  mars: string,
-  tempDir: string,
-  profile: string
-): Promise<ToolDetection> {
-  const asm = path.join(tempDir, 'course-im-range.asm');
-  const p7PaddingAsm = path.join(tempDir, 'course-im-p7-padding.asm');
-  const haltPc = 0x3010;
-  const isP7 = profile === 'P7';
-  const escapeAddress = isP7 ? 0x5000 : 0x4000;
-  await fs.promises.writeFile(asm, [
-    '.text',
-    `ori $2, $0, 0x${escapeAddress.toString(16)}`,
-    `ori $3, $0, 0x${haltPc.toString(16)}`,
-    'jr $2',
-    'nop',
-    '_co_course_im_halt:',
-    'beq $0, $0, _co_course_im_halt',
-    'nop',
-    `.ktext 0x${escapeAddress.toString(16)}`,
-    'jr $3',
-    'nop',
-    ''
-  ].join('\n'), 'utf8');
-  if (isP7) {
-    await fs.promises.writeFile(p7PaddingAsm, [
-      '.text',
-      'ori $2, $0, 0x417c',
-      `ori $3, $0, 0x${haltPc.toString(16)}`,
-      'jr $2',
-      'nop',
-      '_co_course_padding_halt:',
-      'beq $0, $0, _co_course_padding_halt',
-      'nop',
-      // This statement is present in MARS memory but omitted from code.txt: the plugin fills the
-      // entire user/kernel gap with NOPs. A capable oracle must therefore ignore this write.
-      '.ktext 0x417c',
-      'ori $4, $0, 1',
-      '.ktext 0x4180',
-      'beq $4, $0, _co_padding_good',
-      'nop',
-      'ori $5, $0, 0x0bad',
-      'jr $3',
-      'nop',
-      '_co_padding_good:',
-      'sb $0, 0x7f20($0)',
-      'ori $5, $0, 0x600d',
-      'jr $3',
-      'nop',
-      ''
-    ].join('\n'), 'utf8');
-  }
-  const args = [
-    '-jar', mars, 'nc', 'mc', isP7 ? 'CompactLargeText' : 'CompactDataAtZero', 'ae1', 'se1',
-    COURSE_ZERO_GPR_FLAG, COURSE_STRICT_DATA_FLAG, `${COURSE_HALT_FLAG}=0x${haltPc.toString(16)}`
-  ];
-  if (profile === 'P5' || profile === 'P6' || isP7) {
-    args.push('db');
-  }
-  if (isP7) {
-    args.push('efc');
-  }
-  args.push('coL1', '0x40');
-  const runOptions = { cwd, output, resource, timeoutMs: 20000 };
-  const [result, p7PaddingResult] = await Promise.all([
-    runTool(java, [...args, asm], runOptions),
-    isP7 ? runTool(java, [...args, p7PaddingAsm], runOptions) : Promise.resolve(undefined)
-  ]);
-  return courseInstructionAddressCapability(result, p7PaddingResult);
-}
-
-async function p7CourseContractCapabilityCheck(
-  output: vscode.OutputChannel,
-  resource: vscode.Uri | undefined,
-  cwd: string,
-  java: string,
-  mars: string,
-  tempDir: string
-): Promise<ToolDetection> {
-  const userIgAsm = path.join(tempDir, 'course-p7-user-ig.asm');
-  const invalidHandlerIgAsm = path.join(tempDir, 'course-p7-invalid-handler-ig.asm');
-  const handlerExceptionAsm = path.join(tempDir, 'course-p7-handler-exception.asm');
-  const handlerInterruptAsm = path.join(tempDir, 'course-p7-handler-interrupt.asm');
-  const validPendingInterruptAsm = path.join(tempDir, 'course-p7-valid-pending-interrupt.asm');
-  await Promise.all([
-    fs.promises.writeFile(userIgAsm, [
-      '.text',
-      'sb $0, 0x7f20($0)',
-      '_co_p7_contract_halt:',
-      'beq $0, $0, _co_p7_contract_halt',
-      'nop',
-      ''
-    ].join('\n'), 'utf8'),
-    fs.promises.writeFile(invalidHandlerIgAsm, [
-      '.text',
-      'ori $1, $0, 0x4180',
-      'ori $3, $0, 0x3010',
-      'jr $1',
-      'nop',
-      '_co_p7_handler_ig_contract_halt:',
-      'beq $0, $0, _co_p7_handler_ig_contract_halt',
-      'nop',
-      '.ktext 0x4180',
-      'sw $0, 0x7f20($0)',
-      'jr $3',
-      'nop',
-      ''
-    ].join('\n'), 'utf8'),
-    fs.promises.writeFile(handlerExceptionAsm, [
-      '.text',
-      'lw $1, 0x5000($0)',
-      '_co_p7_handler_contract_halt:',
-      'beq $0, $0, _co_p7_handler_contract_halt',
-      'nop',
-      '.ktext 0x4180',
-      'lw $2, 0x5000($0)',
-      'eret',
-      'nop',
-      ''
-    ].join('\n'), 'utf8'),
-    fs.promises.writeFile(handlerInterruptAsm, [
-      '.text',
-      'syscall',
-      '_co_p7_interrupt_contract_halt:',
-      'beq $0, $0, _co_p7_interrupt_contract_halt',
-      'nop',
-      '.ktext 0x4180',
-      'mfc0 $2, $14',
-      'addiu $2, $2, 4',
-      'mtc0 $2, $14',
-      'eret',
-      ''
-    ].join('\n'), 'utf8'),
-    fs.promises.writeFile(validPendingInterruptAsm, [
-      '.text',
-      'ori $26, $0, 0x1001',
-      'mtc0 $26, $12',
-      'nop',
-      'ori $6, $0, 1',
-      '_co_p7_pending_contract_halt:',
-      'beq $0, $0, _co_p7_pending_contract_halt',
-      'nop',
-      '.ktext 0x4180',
-      'mfc0 $8, $13',
-      'ori $7, $0, 0x600d',
-      'sb $0, 0x7f20($0)',
-      'eret',
-      'nop',
-      ''
-    ].join('\n'), 'utf8')
-  ]);
-  const commonArgs = [
-    '-jar', mars, 'nc', 'mc', 'CompactLargeText', 'ae1', 'se1',
-    COURSE_ZERO_GPR_FLAG, COURSE_STRICT_DATA_FLAG, 'db', 'efc', 'coL1', '0x40'
-  ];
-  const runOptions = { cwd, output, resource, timeoutMs: 20000 };
-  const [
-    userIgResult,
-    invalidHandlerIgResult,
-    handlerExceptionResult,
-    handlerInterruptResult,
-    validPendingInterruptResult
-  ] = await Promise.all([
-    runTool(java, [...commonArgs, `${COURSE_HALT_FLAG}=0x3004`, userIgAsm], runOptions),
-    runTool(java, [...commonArgs, `${COURSE_HALT_FLAG}=0x3010`, invalidHandlerIgAsm], runOptions),
-    runTool(java, [...commonArgs, `${COURSE_HALT_FLAG}=0x3004`, handlerExceptionAsm], runOptions),
-    runTool(java, [...commonArgs, 'p7irq=0x4180', `${COURSE_HALT_FLAG}=0x3004`, handlerInterruptAsm], runOptions),
-    runTool(java, [...commonArgs, 'p7irq=0x3008', `${COURSE_HALT_FLAG}=0x3010`, validPendingInterruptAsm], runOptions)
-  ]);
-  return p7CourseContractCapability(
-    userIgResult,
-    invalidHandlerIgResult,
-    handlerExceptionResult,
-    handlerInterruptResult,
-    validPendingInterruptResult
-  );
-}
-
-function traceCapabilityCheck(
+/** Exported so the stable-MARS trace contract can be covered without launching Java in unit tests. */
+export function marsTraceCapabilityCheck(
   result: Awaited<ReturnType<typeof runTool>>,
-  level: 1 | 2,
-  requireP7AddressGuard: boolean
+  level: 1 | 2
 ): ToolDetection {
   const output = `${result.stdout}\n${result.stderr}`;
   const flag = `coL${level}`;
-  const unsupported = new RegExp(
-    `Invalid Command Argument:\\s*(?:${flag}|${COURSE_ZERO_GPR_FLAG}|${COURSE_STRICT_DATA_FLAG}|${COURSE_HALT_FLAG}=)`,
-    'i'
-  ).test(output);
+  const unsupported = new RegExp(`Invalid Command Argument:\\s*${flag}`, 'i').test(output);
   const hasBasicTrace = level === 1
     ? /@(?:0x)?[0-9a-f]{4,8}:\s*(?:\$|\*)/i.test(output)
     : /@PC(?:0x)?[0-9a-f]{4,8}\s*->/i.test(output) && /(?:\$|\*)[0-9a-f ]+\s*<=/i.test(output);
   const events = Array.from(level === 1 ? iterCpuTraceEvents(output) : iterMarsDetailedTraceEvents(output));
-  const hasCourseZeroGprs = [2, 3].every((register) => events.some((event) =>
-    event.kind === 'grf' && event.target === String(register) && event.value === '00000000'));
-  const hasP7AddressGuard = !requireP7AddressGuard || (
-    events.some((event) => event.kind === 'grf' && event.target === '5' && event.value === '00000002')
-    && events.some((event) => event.kind === 'grf' && event.target === '6' && event.value === '00000001')
-    && !events.some((event) => event.kind === 'dm' && event.target === '00005000')
-  );
-  const reachedCourseHalt = /Program reached course halt loop at\s+(?:0x)?[0-9a-f]{1,8}\b/i.test(output);
+  const hasExpectedRegister = events.some((event) =>
+    event.kind === 'grf' && event.target === '1' && event.value === '11223344');
+  const hasExpectedStore = events.some((event) =>
+    event.kind === 'dm' && event.target === '00000000' && event.value === '11223344');
+  const hasExpectedCompactResetRegisters = [
+    [marsCapabilityGpCopyRegister, stableCompactGpResetValue],
+    [marsCapabilitySpCopyRegister, stableCompactSpResetValue]
+  ].every(([target, value]) => events.some((event) =>
+    event.kind === 'grf' && event.target === target && event.value === value));
+  const completedProgram = events.some((event) =>
+    event.kind === 'grf' && event.target === '2' && event.value === '00000002');
   const hasTrace = hasBasicTrace
-    && hasCourseZeroGprs
-    && hasP7AddressGuard
-    && reachedCourseHalt
+    && hasExpectedRegister
+    && hasExpectedStore
+    && hasExpectedCompactResetRegisters
+    && completedProgram
     && (level === 1 || hasUsablePartialWordDetailedTrace(output));
   return {
     name: `MARS ${flag}`,
@@ -420,69 +227,29 @@ function traceCapabilityCheck(
     detail: firstLine(output) || '无 trace 输出',
     suggestion: result.ok && !unsupported && hasTrace
       ? undefined
-      : `请使用支持 ${flag} / ${COURSE_ZERO_GPR_FLAG} / ${COURSE_STRICT_DATA_FLAG} / ${COURSE_HALT_FLAG}${requireP7AddressGuard ? ' / P7 课程地址桥' : ''} 的 Mars-with-BUAA-CO-extension 修改版 MARS`
+      : `请使用支持 ${flag} 的 Mars-with-BUAA-CO-extension 稳定版 MARS`
   };
 }
 
-async function strictDataCapabilityCheck(
-  output: vscode.OutputChannel,
-  resource: vscode.Uri | undefined,
-  cwd: string,
-  java: string,
-  mars: string,
-  tempDir: string
-): Promise<ToolDetection> {
-  const rangeAsm = path.join(tempDir, 'strict-data-range.asm');
-  const overflowAsm = path.join(tempDir, 'strict-data-overflow.asm');
-  await Promise.all([
-    fs.promises.writeFile(rangeAsm, [
-      '.data',
-      '.byte 0xa5',
-      '.space 12286',
-      '.byte 0x5a',
-      '.text',
-      'lbu $4, 0x2fff($0)',
-      'addiu $9, $0, -1',
-      'lbu $10, 1($9)',
-      // CompactDataAtZero maps 0x5000 as data, so vanilla MARS succeeds here; only the course
-      // bridge may reject it. 0x3000 would be text and could fail for unrelated SMC policy.
-      'lbu $5, 0x5000($0)',
-      ''
-    ].join('\n'), 'utf8'),
-    fs.promises.writeFile(overflowAsm, [
-      '.text',
-      'lui $7, 0x7fff',
-      'ori $7, $7, 0xffff',
-      'lbu $8, 1($7)',
-      ''
-    ].join('\n'), 'utf8')
-  ]);
-  const args = [
-    '-jar', mars, 'nc', 'mc', 'CompactDataAtZero', 'ae1', 'se1',
-    COURSE_ZERO_GPR_FLAG, COURSE_STRICT_DATA_FLAG, 'coL1', '0x40'
-  ];
-  const [rangeResult, overflowResult] = await Promise.all([
-    runTool(java, [...args, rangeAsm], { cwd, output, resource, timeoutMs: 10000 }),
-    runTool(java, [...args, overflowAsm], { cwd, output, resource, timeoutMs: 10000 })
-  ]);
-  const rangeOutput = `${rangeResult.stdout}\n${rangeResult.stderr}`;
-  const overflowOutput = `${overflowResult.stdout}\n${overflowResult.stderr}`;
-  const combined = `${rangeOutput}\n${overflowOutput}`;
-  const unsupported = new RegExp(`Invalid Command Argument:\\s*${COURSE_STRICT_DATA_FLAG}`, 'i').test(combined);
-  const boundaryEvent = Array.from(iterCpuTraceEvents(rangeOutput)).some((event) =>
-    event.kind === 'grf' && event.target === '4' && event.value === '0000005A');
-  const signedAddressRecoveryEvent = Array.from(iterCpuTraceEvents(rangeOutput)).some((event) =>
-    event.kind === 'grf' && event.target === '10' && event.value === '000000A5');
-  const rangeRejected = !rangeResult.ok && /address|range|exception/i.test(rangeOutput);
-  const overflowRejected = !overflowResult.ok && /address|range|overflow|exception/i.test(overflowOutput);
-  const ok = !unsupported && boundaryEvent && signedAddressRecoveryEvent && rangeRejected && overflowRejected;
+function p7InterruptCapabilityCheck(result: Awaited<ReturnType<typeof runTool>>): ToolDetection {
+  const output = `${result.stdout}\n${result.stderr}`;
+  const unsupported = /Invalid Command Argument:\s*(?:efc|p7irq(?:=|\b))/i.test(output);
+  const events = Array.from(iterCpuTraceEvents(output));
+  const enteredHandler = events.some((event) =>
+    event.pc === '00004180'
+    && event.kind === 'grf'
+    && event.target === '8'
+    && (Number.parseInt(event.value, 16) & 0x1000) !== 0);
+  const resumedUserProgram = events.some((event) =>
+    event.kind === 'grf' && event.target === '2' && event.value === '00000002');
+  const ok = result.ok && !unsupported && enteredHandler && resumedUserProgram;
   return {
-    name: `MARS ${COURSE_STRICT_DATA_FLAG}`,
+    name: MARS_P7_CHECK,
     ok,
-    detail: [firstLine(rangeOutput), firstLine(overflowOutput)].filter(Boolean).join('；') || '无地址校验输出',
+    detail: ok ? 'efc + p7irq 外部中断探针通过' : firstLine(output) || '无 P7 中断 trace 输出',
     suggestion: ok
       ? undefined
-      : `请使用支持 ${COURSE_STRICT_DATA_FLAG} 课程 DM 边界与有效地址溢出检查的 Mars-with-BUAA-CO-extension 修改版 MARS`
+      : '请使用支持 efc 与 p7irq 的 Mars-with-BUAA-CO-extension 稳定版 MARS'
   };
 }
 
