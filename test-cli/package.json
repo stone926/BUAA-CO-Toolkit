@@ -1,0 +1,32 @@
+{
+  "name": "buaa-co-test-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless continuous P7 course trace test pipeline extracted from BUAA CO Toolkit",
+  "bin": {
+    "test-cli": "dist/test-cli/src/cli.js",
+    "co-test": "dist/test-cli/src/cli.js",
+    "buaa-co-test": "dist/test-cli/src/cli.js"
+  },
+  "main": "dist/test-cli/src/pipeline.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/build.mjs --typecheck-only",
+    "clean": "node scripts/build.mjs --clean",
+    "test": "npm run build && node --test test/smoke.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-uri": "^3.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.2",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1"
+  }
+}
