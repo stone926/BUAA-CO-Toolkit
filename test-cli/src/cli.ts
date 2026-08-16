@@ -344,9 +344,14 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
 }
 
 function validateCliOptions(options: CliOptions): void {
-  const projectStat = fs.statSync(options.projectRoot);
+  let projectStat: fs.Stats;
+  try {
+    projectStat = fs.statSync(options.projectRoot);
+  } catch {
+    throw new Error(`项目目录不存在或无法访问: ${options.projectRoot}`);
+  }
   if (!projectStat.isDirectory()) {
-    throw new Error(`项目目录不存在或不是目录: ${options.projectRoot}`);
+    throw new Error(`项目路径不是目录: ${options.projectRoot}`);
   }
   if (!Number.isInteger(options.instructionCount) || options.instructionCount <= 0) {
     throw new Error('--count 必须是正整数');
