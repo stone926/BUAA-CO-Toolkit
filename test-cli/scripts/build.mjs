@@ -60,7 +60,7 @@ if (!existsSync(vscodeShimSource)) {
 {
   const nl = String.fromCharCode(10);
   const verilogEntry = path.join(buildDir, 'src', 'verilog.ts');
-  const text = readFileSync(verilogEntry, 'utf8');
+  const text = readFileSync(verilogEntry, 'utf8').split(String.fromCharCode(13) + nl).join(nl);
   const withoutImport = text.replace("import { executeLanguageServerCommand } from './languageClient';" + nl, '');
   const fnStart = withoutImport.indexOf('async function checkSyntaxWithIse()');
   const fnEnd = withoutImport.indexOf(nl + 'async function disableLintRule', fnStart);
