@@ -10,6 +10,7 @@
   },
   "main": "dist/test-cli/src/pipeline.js",
   "scripts": {
+    "prepare": "npm run build",
     "build": "node scripts/build.mjs",
     "typecheck": "node scripts/build.mjs --typecheck-only",
     "clean": "node scripts/build.mjs --clean",
