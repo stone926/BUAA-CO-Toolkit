@@ -19,10 +19,12 @@ npm install
 npm run build
 ```
 
-构建产物位于 `test-cli/dist`。入口：
+构建产物位于 `test-cli/dist`，入口：
 
 - `test-cli/dist/cli.js`（推荐）
 - `test-cli/dist/test-cli/src/cli.js`
+
+构建脚本只读取 `../src` 与 `../resources` 复制到 `test-cli/.build-src` 和 `dist`，不修改插件原有代码；`dist/node_modules/vscode` 是注入的无头 shim，使 `dist` 脱离 VS Code 运行。
 
 ## 运行
 
