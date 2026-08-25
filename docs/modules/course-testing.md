@@ -59,5 +59,6 @@ logisim/verilog-observer:
   resources/templates/verilog/p7_probe_invalid_store_observer.v + p7_probe_invalid_store_case.v — 仅通过公开的 m_inst_addr/m_data_byteen/m_int_byteen 观察 AdES victim；若无效 store 仍产生任一 byte-enable，输出 invalid_store_effect 并令 Probe 失败
 
 case-storage:
-  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText、prepareAsmCaseMachineCode、artifact 管理、manifest 列表；courseTrace dump 成功后先执行最终机器码容量/规范编码/白名单校验，并保存 P7 内核合并前验证得到的用户 haltPc；P7 metadata 只来自 manifest/显式参数
-  asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata
+  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText（新 case 写 manifest v2）、prepareAsmCaseMachineCode（经 assembler provider）、artifact 管理、manifest 列表（v1/v2 兼容读取）；courseTrace dump 成功后先执行最终机器码容量/规范编码/白名单校验，并保存 P7 内核合并前验证得到的用户 haltPc；P7 metadata 只来自 manifest/显式参数
+  asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata；v1 永久只读兼容
+  courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts 分组、case-relative 路径、原子写、replay 闭包最小校验、v1/v2 归一化视图
