@@ -1,0 +1,41 @@
+{
+  "schemaRevision": 1,
+  "description": "固定 MARS reference 资产清单。资产不进入仓库：download-references.mjs 按本清单下载到 conformance/.cache/ 并校验名称、大小、SHA-256，任一不符 fail closed。cacheDir 相对本文件所在目录。",
+  "cacheDir": "../../.cache",
+  "assets": [
+    {
+      "role": "mars-assembler-v0.6.3",
+      "purpose": "汇编兼容/image dump 和历史运行基线；assembly differential lane 的固定汇编器。",
+      "fileName": "Mars_CO_v0.6.3.jar",
+      "url": "https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3/Mars_CO_v0.6.3.jar",
+      "bytes": 3544465,
+      "sha256": "599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31",
+      "sourceTag": "v0.6.3",
+      "sourceCommit": "8b53a492dddc4fe1c62a7a02c55bea6fc4fb49d8",
+      "status": "released"
+    },
+    {
+      "role": "mars-regression-v0.6.3",
+      "purpose": "不随本地 fork 漂移的 frozen regression 语料。",
+      "fileName": "Mars_Test_CO_v0.6.3.zip",
+      "url": "https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3/Mars_Test_CO_v0.6.3.zip",
+      "bytes": 8771,
+      "sha256": "0b7f705de67bbd5a4060c03a4425aad84c8be1e257ff4e049290484aa3d7987e",
+      "sourceTag": "v0.6.3",
+      "sourceCommit": "8b53a492dddc4fe1c62a7a02c55bea6fc4fb49d8",
+      "status": "released"
+    },
+    {
+      "role": "legacy-course-executor",
+      "purpose": "对拍当前 fork 新增课程语义的 legacy 执行 reference；新 tag v0.6.3-course1 的构建产物。审查结论见 c6197f4-review.md，构建流程见 legacy-executor-build.md。",
+      "fileName": "Mars_CO_v0.6.3-course1.jar",
+      "url": "https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3-course1/Mars_CO_v0.6.3-course1.jar",
+      "bytes": null,
+      "sha256": null,
+      "sourceTag": "v0.6.3-course1",
+      "sourceCommit": "c6197f433e20ac0800a48ea1255053147ade5a77",
+      "status": "pending-release",
+      "note": "待用户 push tag v0.6.3-course1 并上传 release 资产后，回填 bytes/sha256 并将 status 改为 released。在此之前 conformance 不得解析该角色。"
+    }
+  ]
+}
