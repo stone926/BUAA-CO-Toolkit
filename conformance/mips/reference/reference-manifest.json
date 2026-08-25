@@ -30,12 +30,12 @@
       "purpose": "对拍当前 fork 新增课程语义的 legacy 执行 reference；新 tag v0.6.3-course1 的构建产物。审查结论见 c6197f4-review.md，构建流程见 legacy-executor-build.md。",
       "fileName": "Mars_CO_v0.6.3-course1.jar",
       "url": "https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3-course1/Mars_CO_v0.6.3-course1.jar",
-      "bytes": null,
-      "sha256": null,
+      "bytes": 3599004,
+      "sha256": "d134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64",
       "sourceTag": "v0.6.3-course1",
       "sourceCommit": "c6197f433e20ac0800a48ea1255053147ade5a77",
-      "status": "pending-release",
-      "note": "待用户 push tag v0.6.3-course1 并上传 release 资产后，回填 bytes/sha256 并将 status 改为 released。在此之前 conformance 不得解析该角色。"
+      "status": "released",
+      "note": "2026-08-25 由干净 checkout（tag v0.6.3-course1）构建：javac 25.0.3 + jar cmf mainclass.txt；构建细节见 release notes。"
     }
   ]
 }
