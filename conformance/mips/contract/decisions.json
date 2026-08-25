@@ -1,0 +1,179 @@
+{
+  "schemaRevision": 1,
+  "entries": [
+    {
+      "id": "COURSE-P7-ISA-EXT-001",
+      "subject": "P7 指令集分层（addu/addiu/subu）",
+      "question": "P7 必做表不含 addu/addiu/subu，但官方 handler 示例实际使用 addu/addiu；subu 只能作为另行决定的常见扩展。",
+      "decision": "frozen",
+      "resolution": "指令集拆为三层：required（教程必做表）、commonExtensions（官方资源实际使用、课程测试需要支持的，含 addu/addiu）、marsCompatibility（仅 MARS 兼容层，含 subu 等）。ISA catalog 以三层标注每条指令；generator 默认只产生 required 层指令，官方 handler 模板允许 commonExtensions。",
+      "rationale": "教程 P7-2-6 指令约束表是评测必做面；P7-2-5 的官方 handler 示例直接使用 addu/addiu，若不允许则无法汇编官方示例；三层拆分避免把 MARS 兼容面误当课程要求。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [94, 102],
+          "quote": "处理器应支持如下指令集（不含 addu/addiu/subu）。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-5.md",
+          "quote": "官方 handler 示例使用 addu/addiu。"
+        }
+      ],
+      "freezeRequires": [],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-PRIORITY-001",
+      "subject": "同一指令多个内部异常的优先级",
+      "question": "同一指令可能产生多个内部异常时，教程未完整给出优先级（如同时取指不对齐与访存越界不可能，但访存对齐错误与加法溢出的次序、IF AdEL 与 RI 的次序等未明文）。",
+      "decision": "pending",
+      "resolution": "倾向方案：取指 AdEL > RI > 内部（访存 AdEL/AdES、Ov、Syscall）按流水级自然顺序流水到 CP0；具体优先级表必须以官方向量和人工审阅的课程契约冻结后写入本条目。",
+      "rationale": "教程只规定中断高于异常、精确异常要求先老后新；同一指令内部多异常未覆盖，不能靠实现顺序偶然定义。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [115, 115],
+          "quote": "优先级：中断优先级高于异常优先级。"
+        }
+      ],
+      "freezeRequires": [
+        "对每个异常源组合构造 directed vector 并对照官方评测反馈/人工审阅",
+        "覆盖取指 AdEL × RI × 访存异常 × Ov × Syscall 的全部可达组合"
+      ],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-CP0-SAME-CYCLE-001",
+      "subject": "mtc0 SR/EPC、eret 与 Req 同周期更新的优先级",
+      "question": "mtc0 SR/EPC、eret 与 Req 同周期发生时的更新优先级教程未规定；不得让 TS 语句执行顺序偶然定义。",
+      "decision": "pending",
+      "resolution": "倾向方案：Req 优先（进入异常时以异常写入为准），eret 时清 EXL 与跳 EPC 在 mtc0 写之后生效；具体规则必须覆盖 Req×mtc0/eret×delay-slot 的 directed vectors 后冻结。",
+      "rationale": "CP0 在同一流水级被多个事件写入，硬件参考 CP0 端口（en/EXLClr/Req）语义没有给出组合优先级；实现前必须冻结。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [37, 51],
+          "quote": "CP0 参考端口：en（写使能）、EXLClr（复位 EXL）、Req（进入处理程序请求）。"
+        }
+      ],
+      "freezeRequires": [
+        "Req × mtc0 SR、Req × mtc0 EPC、eret × mtc0 SR、eret × mtc0 EPC、各组合 × 延迟槽的 directed vectors"
+      ],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-MODE-001",
+      "subject": "Timer Mode 2/3",
+      "question": "CTRL Mode bits2:1 的 2/3 组合未定义。",
+      "decision": "frozen",
+      "resolution": "Mode 2/3 为 undefined：生成器不得产生；执行器遇到时返回明确的 undefined/unsupported 事件（带 contract ID），不按任一模式猜测执行。",
+      "rationale": "官方 Timer Verilog 未实现 2/3 的行为语义，教程与 PDF 也未定义；静默按 Mode 0/1 执行会制造伪 golden。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "COURSE-P7-TIMER-MODE-001：Mode 2/3 为 undefined；生成器不得产生，执行器返回明确的 undefined/unsupported 事件。"
+        }
+      ],
+      "freezeRequires": [],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-RESTART-001",
+      "subject": "Mode 0 中断重启时 pending IRQ 的清除时机",
+      "question": "PDF 表述 Mode 0 IRQ 持续到 IM 清零，而官方 Verilog 在重新 Enable 后进入 IDLE→LOAD 时也会清 IRQ；测试 Mode 0 restart 前必须冻结采用的行为。",
+      "decision": "pending",
+      "resolution": "倾向方案：以官方 Verilog（P7_standard_timer_2019.v）为准——重新 Enable 进入 LOAD 时清 pending IRQ；PDF 作为补充语义。冻结前须用官方 Verilog cycle vector 验证两种表述在可观测行为上的差异点。",
+      "rationale": "规范优先级中官方下发组件源码（Timer 状态转移）高于 PDF 文字表述；且实际评测使用官方 Verilog。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "quote": "重新 Enable 后 IDLE→LOAD 路径清 IRQ（见状态机 case）。"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/COCO定时器设计规范-1.0.0.4.pdf",
+          "quote": "Mode 0 IRQ 持续到 IM 清零的表述。"
+        }
+      ],
+      "freezeRequires": [
+        "对照官方 Verilog 的 Mode 0 restart cycle vector",
+        "确认 PDF 表述与 Verilog 的可观测差异场景并记录裁决"
+      ],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P3-IM-001",
+      "subject": "P3 IM 容量：课程 4096 words 与 legacy MARS 4095 words",
+      "question": "旧 MARS 教程限制不等于 4096-word 硬件限制。",
+      "decision": "frozen",
+      "resolution": "course 模式支持完整 4096-word IM 到 0x6ffc；legacy MARS provider 因其 Compact* 把 0x6ffc 当排他上界而单独记录 4095-word（末址 0x6ff8）边界，该边界只属于 legacy 兼容层，不得进入 course profile。",
+      "rationale": "教程 P3-2/P7-2-6 均规定 IM 4096×32bit；stable MARS v0.6.3 的 Compact* 上界是排他值（machineCodeValidation.ts 注释确认），是 MARS 实现边界而非课程规范。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [17, 19],
+          "quote": "地址范围：0x00003000 ~ 0x00006FFF。容量为 4096 × 32bit。"
+        },
+        {
+          "source": "extension/src/courseTesting/machineCodeValidation.ts",
+          "lines": [48, 49],
+          "quote": "Stable Mars v0.6.3 Compact* uses 0x6ffc as an exclusive text limit."
+        }
+      ],
+      "freezeRequires": [],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P3-DELAY-001",
+      "subject": "P3 延迟槽",
+      "question": "P3 教程没有明文定义延迟槽。",
+      "decision": "frozen",
+      "resolution": "产品冻结 P3 无延迟槽，并用 P3 模板、评测 trace 和 P4 明确的无延迟槽规则交叉验证。",
+      "rationale": "P3 是单周期 Logisim CPU，P4-1 明确不考虑延迟槽；无任何课程材料要求 P3 延迟槽。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P4/P4-1.md",
+          "lines": [42, 42],
+          "quote": "处理器为 32 位单周期处理器，不考虑延迟槽。"
+        }
+      ],
+      "freezeRequires": [],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-MDU-PRECISE-001",
+      "subject": "P7 MDU 精确异常容许项",
+      "question": "精确异常要求受害指令像从未开始，但教程对 MDU 给出了容许例外；架构 oracle 如何建模。",
+      "decision": "frozen",
+      "resolution": "已经改变 MDU 状态的动作允许不恢复；当较老 victim 在 M 级、年轻 mult/mthi 仍在 E 级且本周期尚未发生动作时，必须抑制启动/写入。架构 oracle 不假装模拟唯一微结构，容许集合由 P7 DUT scenario policy 判断（顺序 ISA 状态机不建模该容许项）。",
+      "rationale": "教程 P7-2-6 明确列出四种容许/禁止情形；不同学生微结构下 CP0/MDU 位置不同，任何单一微结构 golden 都是伪造的。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [118, 124],
+          "quote": "如果受害指令及其后续指令已经改变了 MDU 的状态，则无需恢复；mult 在 E 级，受害指令在 M 级，此时还未改变 MDU 状态，不应开始乘法计算。"
+        }
+      ],
+      "freezeRequires": [],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-UNLOADED-IM-001",
+      "subject": "合法 IM 范围内但 ProgramImage 未加载 word 的执行行为",
+      "question": "运行期 PC 落在合法 IM（0x3000..0x6ffc）但 ProgramImage 未提供该 word 时，是 zero-fill 还是 out-of-domain。",
+      "decision": "pending",
+      "resolution": "倾向方案：执行器确定化为 zero-fill（0x00000000=nop）并继续，但 case classification 将『实际执行到未加载 word』标记为 out-of-domain（官方场景保证不发生）；在阶段 2 实现执行核心前用 directed vector 冻结。",
+      "rationale": "官方场景不跳转到未加载 word（P7-2-6），但架构上合法 IM 内缺失 word 不是 AdEL；零填充可确定化且与硬件 ROM 未初始化行为一致，out-of-domain 标记防止把该行为当 strict golden。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [184, 184],
+          "quote": "测试时不会出现跳转到未加载指令的位置的情况。"
+        }
+      ],
+      "freezeRequires": [
+        "阶段 2 执行核心实现前的 directed vector（未加载 word 执行/访问）"
+      ],
+      "revision": 1
+    }
+  ]
+}

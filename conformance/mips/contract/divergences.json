@@ -1,0 +1,205 @@
+{
+  "schemaRevision": 1,
+  "entries": [
+    {
+      "id": "MARS-DIV-GPSP-001",
+      "subject": "$gp/$sp Compact 初态",
+      "category": "mars-bug",
+      "domain": "execution",
+      "marsBehavior": "稳定版 MARS v0.6.3 在 Compact* 内存配置下按内存映射播种 $gp=0x00001800、$sp=0x00002ffc。",
+      "courseBehavior": "课程 CPU 复位所有 GPR 为 0。",
+      "pluginHandling": "courseTestToolchain 启动探针校验 Compact 初值（marsCapabilityGpCopyRegister/SpCopyRegister）；traceRunner 逐指令 Trace 只在实际执行首次初始化前的 $gp/$sp 读取时拒绝用例；P7 另用 entry-prefix 常量数据流静态兜底（stableMarsP7UnobservableResetReadError）。",
+      "sources": [
+        {
+          "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
+          "lines": [46, 50],
+          "quote": "Stable Mars v0.6.3 seeds $gp/$sp from the Compact* memory map while every course CPU resets every GPR to zero."
+        },
+        {
+          "source": "extension/src/toolchain.ts",
+          "lines": [15, 18],
+          "quote": "stableCompactGpResetValue='00001800'; stableCompactSpResetValue='00002FFC'"
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-REGIMM-001",
+      "subject": "BGEZAL/BLTZAL not-taken 遗漏 $31=PC+8",
+      "category": "mars-bug",
+      "domain": "execution",
+      "marsBehavior": "稳定版 MARS v0.6.3 只在 taken 路径实现 REGIMM link，not-taken 的 BGEZAL/BLTZAL 不写 $31=PC+8，且后续执行仍使用旧值。",
+      "courseBehavior": "按 MIPS 规范，REGIMM link 分支无论 taken 与否都应写 $31=PC+8。",
+      "pluginHandling": "iterMarsDetailedTraceEvents 按 MIPS 规范补齐分支自身遗漏的 $31 写回 Trace 事件；动态检查在显式重写 $31 前拒绝读取 $31（linkRegisterOracleCompatible 状态机）。",
+      "sources": [
+        {
+          "source": "extension/src/language/mips/traceParser.ts",
+          "lines": [54, 60],
+          "quote": "Modified MARS incorrectly omits the architectural $31 write for a not-taken BGEZAL/BLTZAL, so repair that block to the unconditional MIPS PC+8 link."
+        },
+        {
+          "source": "extension/docs/modules/course-testing.md",
+          "lines": [4, 4],
+          "quote": "BGEZAL/BLTZAL 按 MIPS 规范补齐分支自身在 not-taken 路径遗漏的 $31=PC+8 Trace，但稳定版 MARS 的后续执行状态仍是旧值，因此在显式重写 $31 前继续读取会被拒绝。"
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-COMPACT-001",
+      "subject": "Compact* 文本上界排他",
+      "category": "mars-bug",
+      "domain": "assembler",
+      "marsBehavior": "稳定版 MARS v0.6.3 把 Compact* 配置的 0x6ffc 文本上界当作排他值，课程 oracle 机器码上限因此是 4095 words（0x3000..0x6ff8）。",
+      "courseBehavior": "教程 IM 为 4096 words，末字地址 0x6ffc。",
+      "pluginHandling": "courseMachineCodeCapacityError 分别校验 4096-word 硬件容量与 4095-word legacy oracle 上限，超 4095 时给出明确缩短提示。",
+      "sources": [
+        {
+          "source": "extension/src/courseTesting/machineCodeValidation.ts",
+          "lines": [48, 49],
+          "quote": "Stable Mars v0.6.3 Compact* uses 0x6ffc as an exclusive text limit."
+        },
+        {
+          "source": "extension/src/mips.ts",
+          "lines": [602, 607],
+          "quote": "MARS treats an explicit dump upper bound as exclusive ... Stable MARS v0.6.3 also treats Compact*'s configured 0x6ffc text limit as exclusive."
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-SWLSWR-001",
+      "subject": "coL2 中 SWL/SWR 逐字节 DM 事件",
+      "category": "format-only",
+      "domain": "trace-format",
+      "marsBehavior": "coL2 对 SWL/SWR 输出同一对齐字的多次局部字节写事件。",
+      "courseBehavior": "课程 TB 只观测一次合并后的架构写事件。",
+      "pluginHandling": "iterMarsDetailedTraceEvents 按动态指令保留每个 DM 字的最终写值，合并为单一事件（latestDmEvent 覆盖语义）。",
+      "sources": [
+        {
+          "source": "extension/src/language/mips/traceParser.ts",
+          "lines": [54, 60],
+          "quote": "SWL/SWR update one aligned word byte by byte inside that block; retain only the final value for each DM word to match the course TB's single architectural write event."
+        },
+        {
+          "source": "extension/docs/modules/course-testing.md",
+          "lines": [4, 4],
+          "quote": "SWL/SWR 按动态指令合并同一 DM 字的多次局部写入。"
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-VICTIM-001",
+      "subject": "efc 处理异常时不输出 victim 指令头",
+      "category": "format-only",
+      "domain": "trace-format",
+      "marsBehavior": "稳定版 efc 处理 AdEL/AdES/Ov/trap/syscall 时可能不输出 victim 指令的 coL2 指令头（在派发异常前处理）。",
+      "courseBehavior": "课程需要 victim 无提交的精确异常证据。",
+      "pluginHandling": "P7 用保守静态兜底（entry-prefix 常量数据流 + 常量传播）补齐无 header 场景的检查（stableMarsP7UnobservableResetReadError / unobservableP7InterruptGeneratorError）。",
+      "sources": [
+        {
+          "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
+          "lines": [46, 50],
+          "quote": "P7 needs one conservative static fallback because efc-handled AdEL/AdES, Ov, trap, and syscall instructions emit no header at all in that release."
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-DATASEG-001",
+      "subject": "MARS-only 数据段",
+      "category": "mars-bug",
+      "domain": "execution",
+      "marsBehavior": "稳定版 MARS v0.6.3 Compact* 还映射课程硬件不存在的数据段（如 kernel data 0x8000 等）。",
+      "courseBehavior": "课程 P3–P7 只有 DM 0x00000000..0x00002fff；P7 另有 Timer/IG 设备窗口。",
+      "pluginHandling": "stableMarsCourseAddressError 从成功 coL2 块重建访存有效地址并拒绝 MARS-only 段的访问，防止其成为 golden。",
+      "sources": [
+        {
+          "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
+          "lines": [83, 91],
+          "quote": "Stable Mars v0.6.3 accepts several Compact* memory segments which do not exist in the course CPU. Reconstruct the pre-instruction GPR state ... and reject those Mars-only accesses."
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-EAOVERFLOW-001",
+      "subject": "访存有效地址加法溢出",
+      "category": "course-correct",
+      "domain": "execution",
+      "marsBehavior": "MARS 按 32 位环绕计算 base+offset 的有效地址。",
+      "courseBehavior": "教程规定 load/store 计算地址时加法溢出产生 AdEL/AdES。",
+      "pluginHandling": "stableMarsCourseAddressError 在数学地址超出 32 位有符号范围时拒绝采用 MARS 环绕结果作为课程 oracle。",
+      "sources": [
+        {
+          "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
+          "lines": [120, 124],
+          "quote": "有效地址计算发生 32 位有符号溢出；不能采用稳定版 MARS 的环绕结果作为课程 oracle。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [71, 77],
+          "quote": "load 型指令计算地址时加法溢出（AdEL）；store 型指令计算地址加法溢出（AdES）。"
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-UNDEFINED-001",
+      "subject": "未定义行为初值域",
+      "category": "mars-bug",
+      "domain": "execution",
+      "marsBehavior": "MARS 为 DivZero（除数 0）、JalrSame（jalr 两寄存器相同）、DoubleDelay（延迟槽内控制转移）、未初始化 HI/LO 读取提供实现特定结果。",
+      "courseBehavior": "教程未定义这些行为（P7-2-4 思考题明确 jalr 两寄存器不能相同；DivZero 属教程未定义域）。",
+      "pluginHandling": "marsDetailedUndefinedBehaviorError 在动态执行路径上拒绝这些输入（除数 0、jalr 同寄存器、延迟槽控制转移、HI/LO 未定义读取、REGIMM link 源为 $31），不采用 MARS 结果。",
+      "sources": [
+        {
+          "source": "extension/src/language/mips/traceParser.ts",
+          "lines": [152, 179],
+          "quote": "A coL2 run is also needed when the final program could execute undefined behavior forbidden by the tutorial/MIPS contract."
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-4.md",
+          "lines": [78, 78],
+          "quote": "为什么 jalr 指令的两个寄存器不能相同，例如 jalr $31, $31？"
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-P7SYSCALL-001",
+      "subject": "P7 syscall 语义",
+      "category": "course-correct",
+      "domain": "execution",
+      "marsBehavior": "MARS syscall 实现输入输出等服务调用。",
+      "courseBehavior": "课程 syscall 只直接产生 Syscall 异常并进入内核态，无 IO 功能。",
+      "pluginHandling": "课程 oracle 只用 syscall 触发异常（P7 场景），不依赖 MARS 的 syscall IO；差异以本条目登记。",
+      "sources": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [107, 107],
+          "quote": "syscall 指令行为与 MARS 不同，无需实现特定的输入输出功能，只需直接产生异常并进入内核态。"
+        }
+      ],
+      "revision": 1
+    },
+    {
+      "id": "MARS-DIV-HALT-001",
+      "subject": "停机尾验证方式",
+      "category": "format-only",
+      "domain": "trace-format",
+      "marsBehavior": "MARS 成功退出不代表到达停机尾：跌出已汇编文本也按正常终止处理；稳定版靠 max-step 限制永久自环。",
+      "courseBehavior": "标准 completion 是末尾 0x1000ffff 自环 + nop 实际执行。",
+      "pluginHandling": "courseTraceMarsHaltError 要求 coL2 输出中实际出现期望 haltPc 的 0x1000ffff 指令，或新构建的 course-halt marker；拒绝 cliff exit、错误自环、未到达尾部。",
+      "sources": [
+        {
+          "source": "extension/src/courseTesting/marsStepLimit.ts",
+          "lines": [46, 52],
+          "quote": "A successful process exit alone is insufficient because MARS also treats falling off assembled text as normal termination."
+        }
+      ],
+      "revision": 1
+    }
+  ]
+}

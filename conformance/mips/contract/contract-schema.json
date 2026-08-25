@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BUAA CO course contract ledger schema",
+  "description": "机器可读课程契约账本。contracts.json / decisions.json / divergences.json 各自是 { schemaRevision, entries: [...] }；entry 校验使用本文件 definitions 中的 contractEntry / decisionEntry / divergenceEntry。source 路径均相对于 BUAA-CO 仓库根（extension 与 cscore 的父目录），如 cscore/markdown/P7/implement/P7-2-3.md 或 extension/resources/co/p7Hardware.json。",
+  "definitions": {
+    "normativeReference": {
+      "type": "object",
+      "required": ["source", "quote"],
+      "properties": {
+        "source": { "type": "string" },
+        "lines": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 1,
+          "maxItems": 2,
+          "description": "引用行号（单行或闭区间 [start, end]）"
+        },
+        "quote": { "type": "string", "description": "条款摘录或概括，用于离线核对" },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "contractEntry": {
+      "type": "object",
+      "required": ["id", "profile", "domain", "statement", "normativeReference", "status", "revision"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^COURSE-(P[2-7]|P56|COMMON)-[A-Z0-9-]+-[0-9]{3}$" },
+        "profile": { "enum": ["P2", "P3", "P4", "P5", "P6", "P7", "P56", "common"] },
+        "domain": {
+          "enum": [
+            "address-space", "reset-state", "isa", "delay-slot", "overflow",
+            "trace-projection", "cp0", "exception", "interrupt", "timer",
+            "device", "memory", "completion", "undefined-domain", "diagnostics"
+          ]
+        },
+        "statement": { "type": "string" },
+        "normativeReference": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/normativeReference" },
+          "minItems": 1
+        },
+        "status": { "enum": ["frozen", "pending", "superseded"] },
+        "revision": { "type": "integer", "minimum": 1 },
+        "supersededBy": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "decisionEntry": {
+      "type": "object",
+      "required": ["id", "subject", "question", "decision", "rationale", "normativeReference", "revision"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^COURSE-(P[2-7]|P56|COMMON)-[A-Z0-9-]+-[0-9]{3}$" },
+        "subject": { "type": "string" },
+        "question": { "type": "string", "description": "需要裁决的歧义" },
+        "decision": { "enum": ["frozen", "pending"] },
+        "resolution": { "type": "string", "description": "已冻结的裁决内容；pending 时写明倾向方案" },
+        "rationale": { "type": "string" },
+        "normativeReference": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/normativeReference" },
+          "minItems": 1
+        },
+        "freezeRequires": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "冻结前必须完成的验证/向量"
+        },
+        "revision": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "divergenceEntry": {
+      "type": "object",
+      "required": ["id", "category", "domain", "subject", "marsBehavior", "courseBehavior", "pluginHandling", "sources", "revision"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^MARS-DIV-[A-Z0-9-]+-[0-9]{3}$" },
+        "category": { "enum": ["mars-bug", "course-correct", "format-only"] },
+        "domain": { "enum": ["assembler", "execution", "device", "trace-format"] },
+        "subject": { "type": "string" },
+        "marsBehavior": { "type": "string" },
+        "courseBehavior": { "type": "string" },
+        "pluginHandling": { "type": "string", "description": "插件当前如何检测/拒绝/修复" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/normativeReference" },
+          "minItems": 1
+        },
+        "revision": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schemaRevision": 1,
+  "description": "计划第 7.6 节四种不可混算 evidence kind 的机器可读 gate 骨架。数值为计划初始门槛；本文件在阶段 0 只冻结结构，规模计数自阶段 2 起在对应 runner 中强制执行。",
+  "evidenceKinds": [
+    {
+      "kind": "assembly",
+      "unit": "去重 source graph（valid/invalid 各半）、diagnostic、逐段 image words",
+      "fingerprintExcludes": ["executor"],
+      "fingerprintIncludes": ["assembler", "catalog", "contract", "diagnostic-schema"],
+      "initialGate": {
+        "graphsPerProfile": 100000,
+        "syntaxBinsMinHits": 100
+      },
+      "coverageBins": ["per-profile", "per-advertised-syntax-feature", "accept", "reject", "diagnostic"]
+    },
+    {
+      "kind": "execution",
+      "unit": "去重 raw image、meaningful architectural transition",
+      "fingerprintExcludes": ["ts-assembler"],
+      "fingerprintIncludes": ["executor", "catalog", "contract", "event-schema", "observability-schema"],
+      "initialGate": {
+        "imagesPerProfile": 100000,
+        "transitions": 100000000
+      },
+      "coverageBins": ["per-profile", "instruction", "branch-taken-untaken", "byte-lane", "address-boundary", "exception-irq-timer-scenario"]
+    },
+    {
+      "kind": "device",
+      "unit": "directed cycle vector、状态边、fuzz cycle",
+      "fingerprintExcludes": ["assembler", "machine-instruction-count"],
+      "fingerprintIncludes": ["device-build", "cycle-contract", "vector-revision"],
+      "initialGate": {
+        "directedBins": "全覆盖",
+        "fuzzCycles": 10000000
+      },
+      "coverageBins": ["timer-state", "timer-mode", "write-priority", "irq-width", "irq-restart"]
+    },
+    {
+      "kind": "full-stack",
+      "unit": "去重 source graph、program image、meaningful transition",
+      "fingerprintExcludes": [],
+      "fingerprintIncludes": ["assembler", "executor", "catalog", "contract", "event-schema", "observability-schema", "diagnostic-schema"],
+      "initialGate": {
+        "validGraphsPerProfile": 100000,
+        "transitions": 100000000,
+        "handwrittenCorpusGate": "阶段 0 冻结 feature-distribution 后生效"
+      },
+      "coverageBins": ["per-profile", "instruction", "branch-taken-untaken", "byte-lane", "address-boundary", "exception-irq-timer-scenario", "handwritten-feature-distribution"]
+    }
+  ],
+  "seedManifestFields": ["sourceWordLimit", "meaningfulTransitionLimit", "stepPolicy", "haltPolicy", "jobWallClockMs", "shard", "runnerRevision"],
+  "invalidTransitionPolicy": "halt-loop 重复、invalid、out-of-domain、inconclusive 和 waiver 命中的 transition 不计有效覆盖。",
+  "status": "structure-frozen",
+  "revision": 1
+}

@@ -1,0 +1,1033 @@
+{
+  "schemaRevision": 1,
+  "entries": [
+    {
+      "id": "COURSE-P3-ADDR-001",
+      "profile": "P3",
+      "domain": "address-space",
+      "statement": "指令存储器（IM）起始地址 0x00003000，地址范围 0x00003000..0x00006FFF，ROM 容量 4096×32bit，字对齐取指。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [17, 19],
+          "quote": "起始地址：0x00003000。地址范围：0x00003000 ~ 0x00006FFF。IM 用 ROM 实现，容量为 4096 × 32bit。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P3-ADDR-002",
+      "profile": "P3",
+      "domain": "address-space",
+      "statement": "数据存储器（DM）地址范围 0x00000000..0x00002FFF，RAM 容量 3072×32bit，异步复位，复位值为 0。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [38, 38],
+          "quote": "使用 RAM 实现，容量为 3072 × 32bit，应具有异步复位功能，复位值为 0x00000000。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P3-RESET-001",
+      "profile": "P3",
+      "domain": "reset-state",
+      "statement": "PC 初始值 0x00003000；全部 GPR 复位为 0；DM 复位全零。P3 reset 为异步，核心只建模 reset 后的架构态。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [17, 38],
+          "quote": "起始地址 0x00003000；DM 复位值为 0x00000000。"
+        },
+        {
+          "source": "extension/resources/mips/generatorProfiles.json",
+          "quote": "P3 初态/地址契约：PC=0x3000；GPR/DM 全零。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P3-ISA-001",
+      "profile": "P3",
+      "domain": "isa",
+      "statement": "P3 指令集为 8 条：add、sub、ori、lw、sw、beq、lui、nop。",
+      "normativeReference": [
+        {
+          "source": "extension/resources/mips/generatorProfiles.json",
+          "quote": "profiles.P3 = [add, sub, ori, lw, sw, beq, lui, nop]"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P3-ARITH-001",
+      "profile": "P3",
+      "domain": "overflow",
+      "statement": "P3 运算为 32 位环绕，不产生溢出异常。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P3：溢出 32 位环绕，不异常。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P4-ISA-001",
+      "profile": "P4",
+      "domain": "isa",
+      "statement": "P4 指令集为 P3 的 8 条加 jal、jr，共 10 条；单周期 CPU。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P4/P4-1.md",
+          "lines": [42, 42],
+          "quote": "处理器为 32 位单周期处理器，不考虑延迟槽，应支持的指令集为：add, sub, ori, lw, sw, beq, lui, jal, jr, nop"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P4-DELAY-001",
+      "profile": "P4",
+      "domain": "delay-slot",
+      "statement": "P4 无延迟槽。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P4/P4-1.md",
+          "lines": [42, 42],
+          "quote": "不考虑延迟槽。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P4-ARITH-001",
+      "profile": "P4",
+      "domain": "overflow",
+      "statement": "P4 运算 32 位环绕，不产生异常。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P4：溢出 32 位环绕，不异常。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P4-TRACE-001",
+      "profile": "P4",
+      "domain": "trace-projection",
+      "statement": "P4 GRF/DM commit 文本无时间前缀。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P4：GRF/DM commit 文本无时间前缀。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P5-ISA-001",
+      "profile": "P5",
+      "domain": "isa",
+      "statement": "P5 指令集与 P4 最低集相同（10 条），五级流水线实现。",
+      "normativeReference": [
+        {
+          "source": "extension/resources/mips/generatorProfiles.json",
+          "quote": "profiles.P5 = [add, sub, ori, lw, sw, beq, lui, jal, jr, nop]"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P5-DELAY-001",
+      "profile": "P5",
+      "domain": "delay-slot",
+      "statement": "P5 的 b 类与 j 类指令支持一条延迟槽；link 写回 PC+8（设计注意使用 PC@D+8 或 PC@I+4）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P5/project/P5-5-1.md",
+          "lines": [21, 21],
+          "quote": "对于 b 类和 j 类指令，流水线设计必须支持延迟槽，因此设计需要注意使用 PC@D + 8 或 PC@I + 4。"
+        },
+        {
+          "source": "cscore/markdown/P5/project/P5-5-3.md",
+          "lines": [6, 6],
+          "quote": "因为延迟槽的存在，对于 jal 等需要将指令地址写入寄存器的指令，要写回 PC + 8。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P5-TRACE-001",
+      "profile": "P5",
+      "domain": "trace-projection",
+      "statement": "P5 trace 有时间前缀，比较时忽略周期。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P5：trace 有时间前缀，比较忽略周期。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P6-ISA-001",
+      "profile": "P6",
+      "domain": "isa",
+      "statement": "P6 指令集为教程列出的 28 条加 nop=0：add、sub、and、or、slt、sltu、lui、addi、andi、ori、lb、lh、lw、sb、sh、sw、mult、multu、div、divu、mfhi、mflo、mthi、mtlo、beq、bne、jal、jr、nop。",
+      "normativeReference": [
+        {
+          "source": "extension/resources/mips/generatorProfiles.json",
+          "quote": "profiles.P6 列表（28 条 + nop）"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P6-DELAY-001",
+      "profile": "P6",
+      "domain": "delay-slot",
+      "statement": "P6 控制转移支持一条延迟槽。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P6：延迟槽一条。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P6-ENDIAN-001",
+      "profile": "P6",
+      "domain": "memory",
+      "statement": "P6 访存按小端 byte lane 语义（lb/lh/lw 与 sb/sh/sw 的字节/半字位于低地址侧）。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P6：小端 byte lane。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P6-ARITH-001",
+      "profile": "P6",
+      "domain": "overflow",
+      "statement": "P6 所有运算暂不产生异常。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "P6：所有运算暂不产生异常。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P6-MDU-001",
+      "profile": "P6",
+      "domain": "device",
+      "statement": "MDU 乘 5 周期/除 10 周期属于 DUT 时序检查，不属于纯 ISA 结果；架构 oracle 不模拟该时序。",
+      "normativeReference": [
+        {
+          "source": "extension/resources/mips/generatorProfiles.json",
+          "quote": "mduBusyCycles: div/divu=10, default=5"
+        },
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "MDU 乘 5/除 10 周期属于 DUT 时序检查，不属于纯 ISA 结果。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-001",
+      "profile": "P7",
+      "domain": "address-space",
+      "statement": "P7 DM 地址空间 0x00000000..0x00002FFF。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [40, 40],
+          "quote": "数据存储器 0x00000000 ~ 0x00002FFF"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-002",
+      "profile": "P7",
+      "domain": "address-space",
+      "statement": "P7 IM 地址空间 0x00003000..0x00006FFF，有效字地址末端 0x6ffc（4096 words，16KiB）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [41, 41],
+          "quote": "指令存储器 0x00003000 ~ 0x00006FFF"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [66, 66],
+          "quote": "IM：容量为 16KiB（4096 × 32bit）。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-003",
+      "profile": "P7",
+      "domain": "reset-state",
+      "statement": "P7 初始 PC 为 0x00003000。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [42, 42],
+          "quote": "PC 初始值 0x00003000"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-004",
+      "profile": "P7",
+      "domain": "address-space",
+      "statement": "P7 异常处理程序入口地址 0x00004180（所有异常与中断的统一入口，与 MARS 保持一致）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [43, 43],
+          "quote": "异常处理程序入口地址 0x00004180"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [113, 113],
+          "quote": "考虑到简化设计以及与 MARS 保持一致，我们只支持 0x4180 一个入口地址。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-005",
+      "profile": "P7",
+      "domain": "address-space",
+      "statement": "Timer0 寄存器地址 0x00007F00..0x00007F0B（CTRL +0、PRESET +4、COUNT +8）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [44, 44],
+          "quote": "计时器 0 寄存器地址 0x00007F00 ~ 0x00007F0B，计时器 0 的 3 个寄存器"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [32, 58],
+          "quote": "input [31:2] Addr; Dout = mem[Addr[3:2]]; load = Addr[3:2] == 0 ? {28'h0, Din[3:0]} : Din; mem[Addr[3:2]] <= load"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-006",
+      "profile": "P7",
+      "domain": "address-space",
+      "statement": "Timer1 寄存器地址 0x00007F10..0x00007F1B（CTRL +0、PRESET +4、COUNT +8）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [45, 45],
+          "quote": "计时器 1 寄存器地址 0x00007F10 ~ 0x00007F1B，计时器 1 的 3 个寄存器"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ADDR-007",
+      "profile": "P7",
+      "domain": "address-space",
+      "statement": "中断发生器响应地址 0x00007F20..0x00007F23；通过 store 类指令访问 0x7F20 响应中断（m_int_addr/m_int_byteen）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-2.md",
+          "lines": [19, 26],
+          "quote": "通过 store 类指令访问地址 0x7F20，就可以达到响应中断的目的。微系统可以通过访问地址 0x7F20 的 store 类指令，改变对应的微系统输出信号（m_int_addr，m_int_byteen）。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-CP0-001",
+      "profile": "P7",
+      "domain": "cp0",
+      "statement": "必做 CP0 寄存器为 SR(12)、Cause(13)、EPC(14)；复位为 0；未实现位恒为零。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [9, 15],
+          "quote": "我们只需要实现其中的几个：SR | 12、Cause | 13、EPC | 14。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [81, 83],
+          "quote": "CP0 寄存器的初始值均为 0，未实现位始终保持 0。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-CP0-002",
+      "profile": "P7",
+      "domain": "cp0",
+      "statement": "SR 位域：IM=15:10、EXL=1、IE=0；IM 只能通过 mtc0 修改。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [22, 24],
+          "quote": "IM（Interrupt Mask）| 15:10；EXL（Exception Level）| 1；IE（Interrupt Enable）| 0"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-CP0-003",
+      "profile": "P7",
+      "domain": "cp0",
+      "statement": "Cause 位域：BD=31、IP=15:10（每周期写入 HWInt 对应位）、ExcCode=6:2。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [25, 27],
+          "quote": "BD | 31；IP（Interrupt Pending）| 15:10，将会每个周期被修改一次；ExcCode | 6:2"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [85, 85],
+          "quote": "Cause 寄存器的 IP 域每周期写入 HWint 对应位的值。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-001",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "进入异常/中断置 EXL=1（屏蔽中断）；eret 清 EXL 并跳转 EPC。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [84, 84],
+          "quote": "当进入中断或异常状态时，均需要将 EXL 置为 1，用以屏蔽中断信号；当退出中断或异常状态时，也均需要将 EXL 置为 0。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-002",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "ExcCode 编码：Int=0、AdEL=4、AdES=5、Syscall=8、RI=10、Ov=12；编码必须遵守规范。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [63, 81],
+          "quote": "0 Int、4 AdEL、5 AdES、8 Syscall、10 RI、12 Ov。ExcCode 的编码必须遵守规范。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-003",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "每次接受 Req 都覆盖 Cause.BD 与 ExcCode：非延迟槽受害必须把 BD 清 0；中断必须把 ExcCode 写 0，不得保留上一次事件的字段。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "每次接受 Req 都覆盖 Cause.BD 与 ExcCode：非延迟槽必须把 BD 清 0，中断必须把 ExcCode 写 0。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [83, 86],
+          "quote": "未实现位始终保持 0；进入中断或异常状态时需要将受害指令的 PC 写入 EPC。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-004",
+      "profile": "P7",
+      "domain": "interrupt",
+      "statement": "中断请求成立条件必须同时满足 IE=1、EXL=0 且 (IM & HWInt)!=0；三者组合建立独立真值表。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "中断请求成立条件必须同时满足 IE=1、EXL=0 和 (IM & HWInt) != 0。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [22, 24],
+          "quote": "IM 相应位置 1 表示允许中断；EXL 任何异常发生时置位并禁止中断；IE 全局中断使能。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-005",
+      "profile": "P7",
+      "domain": "interrupt",
+      "statement": "Timer0 接 HWInt[0]（最低位）、Timer1 接 HWInt[1]、中断发生器接 HWInt[2]。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [129, 129],
+          "quote": "Timer0 输出的中断信号接入 HWInt[0]，Timer1 接入 HWInt[1]，来自中断发生器的中断信号接入 HWInt[2]。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-006",
+      "profile": "P7",
+      "domain": "interrupt",
+      "statement": "课程不要求支持嵌套异常/中断。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [114, 114],
+          "quote": "嵌套中断异常：本实验不要求支持中断异常嵌套的情况。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-007",
+      "profile": "P7",
+      "domain": "interrupt",
+      "statement": "中断与当前指令异常同时存在时中断优先；返回后重新执行受害指令。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [115, 115],
+          "quote": "优先级：中断优先级高于异常优先级，即当有异常提交至 CP0 寄存器时，若有中断发生，则硬件应先响应中断，并重新执行受害指令及其后续指令。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-008",
+      "profile": "P7",
+      "domain": "interrupt",
+      "statement": "中断 victim 是宏观 PC 对应、原本将要提交的指令；非延迟槽时 EPC 保存该宏观 PC。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [130, 130],
+          "quote": "规定中断产生时的受害指令为宏观 PC 对应的指令，此时应将宏观 PC 写入 EPC。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-009",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "延迟槽受害指令置 BD=1 且 EPC=victimPC-4，无论分支是否 taken。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [172, 172],
+          "quote": "分支跳转指令无论跳转与否，延迟槽指令为受害指令时 BD 均需要置位。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-4.md",
+          "lines": [67, 67],
+          "quote": "如果是延迟槽指令，那么存的是异常指令的 PC - 4，如果不是，那么就存异常指令的 PC。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-010",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "跳到未对齐 PC 时，EPC 保存错误的新 PC（受害指令是 PC 值不正确的指令）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [174, 174],
+          "quote": "跳转到不对齐的地址时，受害指令是 PC 值不正确的指令（即需要向 EPC 写入不对齐的地址）。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-011",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "IF 阶段 PC 未 4-byte 对齐或不在 0x3000..0x6ffc：取指 AdEL。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [66, 67],
+          "quote": "AdEL（取指异常）| 所有指令 | PC 地址未字对齐。PC 地址超过 0x3000 ~ 0x6ffc。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-012",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "lw/sw 未 4-byte 对齐、lh/sh 未 2-byte 对齐：load 产生 AdEL，store 产生 AdES。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [68, 75],
+          "quote": "lw 取数地址未与 4 字节对齐（AdEL）；sw 存数地址未 4 字节对齐（AdES）；lh/sh 未与 2 字节对齐。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-013",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "lh/lb 取 Timer 寄存器值、load 有效地址加法溢出、load 地址超出 DM/Timer0/Timer1/IG 范围：AdEL；sh/sb 存 Timer、store 加法溢出、store 超出范围：AdES。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [70, 78],
+          "quote": "lh, lb 取 Timer 寄存器的值（AdEL）；load 型指令计算地址时加法溢出；取数地址超出 DM、Timer0、Timer1、中断发生器的范围；sh, sb 存 Timer 寄存器的值（AdES）；store 型指令计算地址加法溢出；存数地址超出范围。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-014",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "任意 store 写 Timer COUNT：AdES，并且必须在设备 commit 前抑制事务；课程不规定该检查位于 Bridge 还是 CPU 内部。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [77, 77],
+          "quote": "store 型指令向计时器的 Count 寄存器存值（AdES）。"
+        },
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "任意 store 写 Timer COUNT：AdES，并且必须在设备 commit 前抑制事务。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-015",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "add/addi/sub 有符号溢出产生 Ov。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [81, 81],
+          "quote": "12 Ov（溢出异常）| add, addi, sub | 算术溢出。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-016",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "syscall 只产生 Syscall 异常并进入内核态，无需实现 MARS 的输入输出功能。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [107, 107],
+          "quote": "syscall 指令行为与 MARS 不同，无需实现特定的输入输出功能，只需直接产生异常并进入内核态。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-017",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "未实现 opcode 或 R-type funct 产生 RI；runtime recognition 只按 opcode 与 R-type funct 判断，且只需判断是否出现在 P7 要求的指令集中；官方非法向量保证组合不属于 MARS 基本指令集。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [175, 175],
+          "quote": "对于未知指令的判断仅需考虑 opcode（和 R 型指令的 funct），且仅需判断是否出现在 P7 要求的指令集中，同时保证未知指令的测试用例中 opcode 和 funct 码的组合一定没有在 MARS 的基本指令集中出现。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-018",
+      "profile": "P7",
+      "domain": "diagnostics",
+      "statement": "assembler/机器码 validator 可以诊断非 canonical 保留位，但 P7 runtime recognition 只按 opcode 和 R-type funct；其他保留字段异常不得额外触发 RI。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "assembler/机器码 validator 可以诊断非 canonical 保留位，但 P7 runtime recognition 只按 opcode 和 R-type funct；其他保留字段异常不得额外触发 RI。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-019",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "取指 AdEL 与 RI 的 victim 作为无副作用 nop 流到统一 CP0 仲裁点，保证异常前没有部分提交。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [173, 173],
+          "quote": "发生取指异常或 RI 异常后视为 nop 直至提交到 CP0。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-020",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "从 0x417c 自然顺序执行到 0x4180 是普通执行，不能仅凭 PC=0x4180 推断发生异常。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [181, 181],
+          "quote": "为便于进行测试，我们允许从 0x417C 直接前进到 0x4180，此种情况下 CPU 行为与 P6 一致，不应有中断响应等其他行为。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-021",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "官方场景不跳到合法 IM 范围内但未加载的 word，并保证 handler 内不再发生异常/中断；真正越过 IM 合法范围仍必须进入架构 AdEL，不能由 host 提前终止。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [183, 190],
+          "quote": "测试时不会出现跳转到未加载指令的位置的情况；中断处理程序执行过程中保证不出现异常，且不会产生中断。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-022",
+      "profile": "P7",
+      "domain": "cp0",
+      "statement": "官方场景不写 Cause，但可能通过 mtc0 修改 SR/EPC；测试不得错误地把所有 CP0 写都当非法。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [186, 186],
+          "quote": "测试程序保证不会写入 Cause，但可能写入 SR 和 EPC。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-EXC-023",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "区分三个边界：运行期 PC 超出合法 IM 是架构 AdEL；运行期访存超出合法 region 是架构 AdEL/AdES；assembler 试图放置越界 segment 是汇编诊断。合法 IM 范围内但 ProgramImage 未提供该 word 的行为由 COURSE-P7-UNLOADED-IM-001 冻结。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "必须区分三个边界：运行期 PC 超出合法 IM 是架构 AdEL，运行期访存超出合法 region 是架构 AdEL/AdES，assembler 试图放置越界 segment 才是汇编诊断。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ISA-001",
+      "profile": "P7",
+      "domain": "isa",
+      "statement": "P7 在 P6 基础上新增 mfc0、mtc0、eret、syscall 四条指令。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [94, 105],
+          "quote": "处理器应支持如下指令集：nop, add, sub, ...（列表）。在 P6 基础上新增了 mfc0, mtc0, eret, syscall 四条新指令。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ERET-001",
+      "profile": "P7",
+      "domain": "delay-slot",
+      "statement": "eret 具有跳转功能但没有延迟槽，后续指令不被执行（测试数据中 eret 后可能紧跟另一条非 nop 指令）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [106, 106],
+          "quote": "eret 具有跳转的功能但是没有延迟槽，你的设计应该保证 eret 的后续指令不被执行。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-5.md",
+          "lines": [7, 7],
+          "quote": "eret 是没有延迟槽的。也就是说测试数据中可能出现 eret 指令后紧跟另一条非 nop 指令的情况。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-ERET-002",
+      "profile": "P7",
+      "domain": "diagnostics",
+      "statement": "测试规范：eret 只会出现在中断处理程序中，后可能紧跟另一条非 nop 指令。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [185, 185],
+          "quote": "eret 只会出现在中断处理程序中，后可能紧跟另一条非 nop 的指令。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-001",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "CTRL(+0)、PRESET(+4) 可读写；COUNT(+8) 只读。非法 COUNT 写必须产生 AdES，并在到达 Timer commit 前被抑制。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [45, 58],
+          "quote": "Dout = mem[Addr[3:2]]（只读读出 COUNT）；load = Addr[3:2] == 0 ? {28'h0, Din[3:0]} : Din；mem[Addr[3:2]] <= load"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-3.md",
+          "lines": [77, 77],
+          "quote": "store 型指令向计时器的 Count 寄存器存值（AdES）。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-002",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "CTRL bit3 为 IM（中断使能门控）、bits2:1 为 Mode、bit0 为 Enable；Mode 0=单次、1=周期、2/3 未定义。CTRL 高 28 位读零、写忽略（官方 Verilog load 只取低 4 位）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [43, 58],
+          "quote": "assign IRQ = ctrl[3] & _IRQ; load = Addr[3:2] == 0 ? {28'h0, Din[3:0]} : Din"
+        },
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "CTRL bit3 为 IM，bits2:1 为 Mode，bit0 为 Enable；Mode 0/1 分别为单次/周期，2/3 未定义。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-003",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "CTRL/PRESET/COUNT reset 均为 0；对外 IRQ 受 CTRL.IM 门控；清 IM 必须立即撤销可见请求。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [43, 43],
+          "quote": "assign IRQ = ctrl[3] & _IRQ"
+        },
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "CTRL/PRESET/COUNT reset 均为 0；对外 IRQ 受 CTRL.IM 门控；清 IM 必须立即撤销可见请求。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-004",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "CycleContract 状态机（按官方状态机冻结）：IDLE && Enable -> LOAD 并清 pending IRQ；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "CycleContract 按官方状态机冻结：IDLE && Enable -> LOAD 并清 pending IRQ；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/COCO定时器设计规范-1.0.0.4.pdf",
+          "quote": "COCO 定时器设计规范 1.0.0.4 状态转移描述。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-005",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "INT 的下一边沿：Mode 0 清 Enable、回 IDLE 且 pending IRQ 保持；Mode 1 清 pending IRQ、回 IDLE，随后还需经历 IDLE -> LOAD -> CNT 才重新装载；不得实现为到零同边沿立即 reload。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "INT 的下一边沿：Mode 0 清 Enable、回 IDLE 且 pending IRQ 保持；Mode 1 清 pending IRQ、回 IDLE，随后还需经历 IDLE -> LOAD -> CNT 才重新装载。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-006",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "计数中清 Enable 会停止；再次置 Enable 从 PRESET 重新加载。所有寄存器写均优先于设备同周期自动更新。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "计数中清 Enable 会停止；再次置 Enable 从 PRESET 重新加载。所有寄存器写均优先于设备同周期自动更新。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-007",
+      "profile": "P7",
+      "domain": "interrupt",
+      "statement": "Timer 按时钟周期推进；外部中断按宏观 PC 产生，并保持到对 0x7f20 的有效写。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [51, 71],
+          "quote": "我们保证评测过程中宏观 PC 仅用于定位指令，作为产生外部中断信号的条件；中断信号依据宏观 PC 产生，依据相应的待写入地址和字节使能信号关闭。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-IG-001",
+      "profile": "P7",
+      "domain": "device",
+      "statement": "中断发生器内部无存储单元：读出数据恒为 0，写入除响应中断外不产生其他影响；官方测试只通过 handler 中的 sb $0,0x7f20($0) 应答 IRQ。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [72, 72],
+          "quote": "由于其内部并没有真正的存储单元，我们规定读出的数据始终保持 0，且写入时除了响应中断外不会产生其他影响。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [187, 187],
+          "quote": "测试程序只会通过指令 sb $0, 0x7f20($0) 访问中断发生器（响应中断），且只会在中断处理程序中访问。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P7-MDU-001",
+      "profile": "P7",
+      "domain": "device",
+      "statement": "P7 精确异常的 MDU 容许项：受害指令及其后续指令已经改变 MDU 状态的动作允许不恢复；当较老 victim 在 M 级、年轻 mult/mthi 仍在 E 级且本周期尚未发生动作时，必须抑制启动/写入。架构 oracle 不假装模拟唯一微结构，容许集合由 P7 DUT scenario policy 判断。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [118, 124],
+          "quote": "在进入中断或异常状态时，如果受害指令及其后续指令已经改变了 MDU 的状态，则无需恢复；mult 在 E 级，受害指令在 M 级，此时还未改变 MDU 状态，不应开始乘法计算。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P56-DOMAIN-001",
+      "profile": "common",
+      "domain": "undefined-domain",
+      "statement": "P5/P6 可比较域同时约束 generator、shrinker、preflight 和 differential 计数：macro/pseudo 展开后的每条真实指令必须属于对应 profile；IM/DM 分别限制在 0x3000..0x6fff 与 0..0x2fff；生成语料不得产生 AdEL/AdES/RI；div/divu 除零、jalr 两寄存器相同、delay slot 内再次执行 branch/jump 属于 undefined 域（执行器可确定化以便诊断，但不得作为严格 expected）；标准 completion 为末尾自环 beq + delay-slot nop，halt detector 识别 profile 指定的完整二指令序列并在 nop 成功提交后停止。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "COURSE-P56-DOMAIN-001 同时约束 generator、shrinker、preflight 和 differential 计数。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-COMMON-HALT-001",
+      "profile": "common",
+      "domain": "completion",
+      "statement": "标准 completion 为末尾自环（beq $0,$0,-1 = 0x1000ffff）加 delay-slot nop；halt 检测必须在 nop 成功提交后停止，不能仅看到 branch PC 就提前结束。真实学生程序超出可比较域时必须由 capability/preflight 明确分类，不能悄悄进入 strict differential 或依靠 step limit 假装通过。",
+      "normativeReference": [
+        {
+          "source": "extension/src/courseTesting/mipsUtil.ts",
+          "quote": "courseAsmHaltLoop 生成课程 ASM 停机尾；courseTraceHaltPc 从 dump 验证 0x1000ffff 自分支。"
+        },
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "标准 completion 为末尾自环 beq 加 delay-slot nop。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    }
+  ]
+}
