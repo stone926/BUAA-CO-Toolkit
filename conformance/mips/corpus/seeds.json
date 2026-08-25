@@ -1,0 +1,32 @@
+{
+  "schemaRevision": 1,
+  "description": "Fixed random seed manifest. Seeds are stable strings hashed with the production xorshift hashSeed (FNV-1a over UTF-8 code units); the seed manifest never reads the production generator or catalog. Per-case limits follow the plan's seed manifest fields; stop/halt policy is the standard beq-self+nop halt loop (COURSE-COMMON-HALT-001).",
+  "seedHashFunction": "fnv1a-utf8-u32",
+  "firstSeedBatch": [
+    {
+      "id": "SEED-P3-0001",
+      "profile": "P3",
+      "seed": "conformance-p3-v1",
+      "sourceWordLimit": 4096,
+      "meaningfulTransitionLimit": 4096,
+      "stepPolicy": "max(256, 2N+64)",
+      "haltPolicy": "standard-halt-loop",
+      "jobWallClockMs": 120000,
+      "shard": 0,
+      "runnerRevision": 1
+    },
+    {
+      "id": "SEED-P7-0001",
+      "profile": "P7",
+      "seed": "conformance-p7-v1",
+      "sourceWordLimit": 4096,
+      "meaningfulTransitionLimit": 16384,
+      "stepPolicy": "max(512, 16N+256)",
+      "haltPolicy": "standard-halt-loop",
+      "jobWallClockMs": 300000,
+      "shard": 0,
+      "runnerRevision": 1
+    }
+  ],
+  "status": "structure-frozen"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "buaa-co-mips-conformance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Independent conformance harness for the BUAA CO MIPS engine migration. Never imports production implementation code; the production TS engine is only invoked through its versioned CLI/JSONL interface (planned for later phases).",
+  "type": "module",
+  "scripts": {
+    "verify:contracts": "node contract/validate-contracts.mjs",
+    "verify:references": "node reference/download-references.mjs",
+    "verify:dependencies": "node check-dependency-whitelist.mjs",
+    "run": "node runner/run-conformance.mjs",
+    "test": "node --test",
+    "verify": "npm run verify:dependencies && npm run verify:contracts && npm run verify:references && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
