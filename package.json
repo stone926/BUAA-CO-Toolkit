@@ -1296,13 +1296,16 @@
     "generate:syntaxes": "node scripts/generate-syntaxes.mjs",
     "check:syntaxes": "node scripts/generate-syntaxes.mjs --check",
     "sync:syntaxes": "npm run generate:syntaxes && npm run check:syntaxes",
-    "sync:generated": "npm run sync:manifest-config && npm run sync:syntaxes",
+    "sync:generated": "npm run sync:manifest-config && npm run sync:syntaxes && npm run sync:isa-catalog",
     "clean:compile": "node scripts/clean-compile-output.mjs",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",
     "check:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs --check",
     "test": "npm run sync:generated && vitest run",
     "test:coverage": "npm run sync:generated && vitest run --coverage",
-    "test:all": "npm run compile && npm test && npm run test:coverage && node scripts/check-index.mjs"
+    "test:all": "npm run compile && npm test && npm run test:coverage && node scripts/check-index.mjs",
+    "generate:isa-catalog": "node scripts/generate-mips-isa.mjs",
+    "check:isa-catalog": "node scripts/generate-mips-isa.mjs --check",
+    "sync:isa-catalog": "npm run generate:isa-catalog && npm run check:isa-catalog"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",

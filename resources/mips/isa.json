@@ -1,0 +1,3905 @@
+{
+  "schemaRevision": 1,
+  "description": "BUAA CO 课程唯一 ISA catalog（计划第 5.2 节）。runtimeMatch 定义 profile 执行期识别（P7 RI 只按 opcode 与 R-type funct）；canonicalEncodingConstraints 定义 assembler/validator 的固定保留位规则，不得被 runtime decoder 误用。availability.layer 三层：required（教程必做表）/ commonExtensions（官方资源实际使用，如 addu/addiu）/ marsCompatibility（仅 MARS 兼容层）。",
+  "instructions": [
+    {
+      "mnemonic": "nop",
+      "semanticHandlerId": "nop",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 0
+      },
+      "runtimeMatch": {
+        "mask": "0xffffffff",
+        "value": "0x00000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "add",
+      "semanticHandlerId": "add",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 32
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000020"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ov"
+      ],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "addu",
+      "semanticHandlerId": "addu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 33
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000021"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "commonExtensions",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sub",
+      "semanticHandlerId": "sub",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 34
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000022"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ov"
+      ],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "subu",
+      "semanticHandlerId": "subu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 35
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000023"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "and",
+      "semanticHandlerId": "and",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 36
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000024"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "or",
+      "semanticHandlerId": "or",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 37
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000025"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "xor",
+      "semanticHandlerId": "xor",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 38
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000026"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "nor",
+      "semanticHandlerId": "nor",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 39
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000027"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "slt",
+      "semanticHandlerId": "slt",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 42
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000002a"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sltu",
+      "semanticHandlerId": "sltu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 43
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000002b"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sll",
+      "semanticHandlerId": "sll",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 0
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x03e00000",
+            "label": "rs"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "srl",
+      "semanticHandlerId": "srl",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 2
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000002"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x03e00000",
+            "label": "rs"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sra",
+      "semanticHandlerId": "sra",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 3
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000003"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x03e00000",
+            "label": "rs"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sllv",
+      "semanticHandlerId": "sllv",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 4
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000004"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "srlv",
+      "semanticHandlerId": "srlv",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 6
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000006"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "srav",
+      "semanticHandlerId": "srav",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 7
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000007"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "jr",
+      "semanticHandlerId": "jr",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 8
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000008"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "jump-register"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "jalr",
+      "semanticHandlerId": "jalr",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 9
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000009"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "jump-register"
+      },
+      "delaySlot": true,
+      "link": true,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "movz",
+      "semanticHandlerId": "movz",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 10
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000000a"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "movn",
+      "semanticHandlerId": "movn",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 11
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000000b"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "syscall",
+      "semanticHandlerId": "syscall",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 12
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000000c"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "syscall"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "syscall"
+      ],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mfhi",
+      "semanticHandlerId": "mfhi",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 16
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000010"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x03e00000",
+            "label": "rs"
+          },
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [],
+        "hiloReads": [
+          "hi"
+        ],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mthi",
+      "semanticHandlerId": "mthi",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 17
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000011"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [
+          "hi"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mflo",
+      "semanticHandlerId": "mflo",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 18
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000012"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x03e00000",
+            "label": "rs"
+          },
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [],
+        "hiloReads": [
+          "lo"
+        ],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mtlo",
+      "semanticHandlerId": "mtlo",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 19
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000013"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mult",
+      "semanticHandlerId": "mult",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 24
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000018"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "multu",
+      "semanticHandlerId": "multu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 25
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000019"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "div",
+      "semanticHandlerId": "div",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 26
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000001a"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "divu",
+      "semanticHandlerId": "divu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 27
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x0000001b"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tge",
+      "semanticHandlerId": "tge",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 48
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000030"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tgeu",
+      "semanticHandlerId": "tgeu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 49
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000031"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tlt",
+      "semanticHandlerId": "tlt",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 50
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000032"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tltu",
+      "semanticHandlerId": "tltu",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 51
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000033"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "teq",
+      "semanticHandlerId": "teq",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 52
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000034"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tne",
+      "semanticHandlerId": "tne",
+      "format": {
+        "kind": "r",
+        "opcode": 0,
+        "funct": 54
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x00000036"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "bltz",
+      "semanticHandlerId": "bltz",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 0
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "bgez",
+      "semanticHandlerId": "bgez",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 1
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "bltzal",
+      "semanticHandlerId": "bltzal",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 16
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "ra"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": true,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "bgezal",
+      "semanticHandlerId": "bgezal",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 17
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "ra"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": true,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tgei",
+      "semanticHandlerId": "tgei",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 8
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tgeiu",
+      "semanticHandlerId": "tgeiu",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 9
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tlti",
+      "semanticHandlerId": "tlti",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 10
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tltiu",
+      "semanticHandlerId": "tltiu",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 11
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "teqi",
+      "semanticHandlerId": "teqi",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 12
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "tnei",
+      "semanticHandlerId": "tnei",
+      "format": {
+        "kind": "regimm",
+        "opcode": 1,
+        "rt": 14
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x04000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "trap"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "trap"
+      ],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "j",
+      "semanticHandlerId": "j",
+      "format": {
+        "kind": "j",
+        "opcode": 2
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x08000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "jump"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "jal",
+      "semanticHandlerId": "jal",
+      "format": {
+        "kind": "j",
+        "opcode": 3
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x0c000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "ra"
+        ],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "jump"
+      },
+      "delaySlot": true,
+      "link": true,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "beq",
+      "semanticHandlerId": "beq",
+      "format": {
+        "kind": "branch",
+        "opcode": 4
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x10000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "bne",
+      "semanticHandlerId": "bne",
+      "format": {
+        "kind": "branch",
+        "opcode": 5
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x14000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "blez",
+      "semanticHandlerId": "blez",
+      "format": {
+        "kind": "branch",
+        "opcode": 6
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x18000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "bgtz",
+      "semanticHandlerId": "bgtz",
+      "format": {
+        "kind": "branch",
+        "opcode": 7
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x1c000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "branch"
+      },
+      "delaySlot": true,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "addi",
+      "semanticHandlerId": "addi",
+      "format": {
+        "kind": "imm",
+        "opcode": 8
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x20000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ov"
+      ],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "addiu",
+      "semanticHandlerId": "addiu",
+      "format": {
+        "kind": "imm",
+        "opcode": 9
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x24000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "commonExtensions",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "slti",
+      "semanticHandlerId": "slti",
+      "format": {
+        "kind": "imm",
+        "opcode": 10
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x28000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sltiu",
+      "semanticHandlerId": "sltiu",
+      "format": {
+        "kind": "imm",
+        "opcode": 11
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x2c000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "andi",
+      "semanticHandlerId": "andi",
+      "format": {
+        "kind": "imm",
+        "opcode": 12
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x30000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "ori",
+      "semanticHandlerId": "ori",
+      "format": {
+        "kind": "imm",
+        "opcode": 13
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x34000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "xori",
+      "semanticHandlerId": "xori",
+      "format": {
+        "kind": "imm",
+        "opcode": 14
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x38000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lui",
+      "semanticHandlerId": "lui",
+      "format": {
+        "kind": "imm",
+        "opcode": 15
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x3c000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x03e00000",
+            "label": "rs"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mfc0",
+      "semanticHandlerId": "mfc0",
+      "format": {
+        "kind": "cop0",
+        "opcode": 16,
+        "rs": 0
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x40000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007ff",
+            "label": "sel"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [
+          "rd"
+        ],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mtc0",
+      "semanticHandlerId": "mtc0",
+      "format": {
+        "kind": "cop0",
+        "opcode": 16,
+        "rs": 4
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x40000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007ff",
+            "label": "sel"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": [
+          "rd"
+        ]
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "eret",
+      "semanticHandlerId": "eret",
+      "format": {
+        "kind": "eret",
+        "opcode": 16
+      },
+      "runtimeMatch": {
+        "mask": "0xffffffff",
+        "value": "0x42000018"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [
+          "epc"
+        ],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "eret"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lb",
+      "semanticHandlerId": "lb",
+      "format": {
+        "kind": "load",
+        "opcode": 32
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x80000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "load",
+        "width": 1,
+        "signExtend": true
+      },
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lh",
+      "semanticHandlerId": "lh",
+      "format": {
+        "kind": "load",
+        "opcode": 33
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x84000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "load",
+        "width": 2,
+        "signExtend": true
+      },
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lwl",
+      "semanticHandlerId": "lwl",
+      "format": {
+        "kind": "load",
+        "opcode": 34
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x88000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "partial-load",
+        "width": 4,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lw",
+      "semanticHandlerId": "lw",
+      "format": {
+        "kind": "load",
+        "opcode": 35
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x8c000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "load",
+        "width": 4,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lbu",
+      "semanticHandlerId": "lbu",
+      "format": {
+        "kind": "load",
+        "opcode": 36
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x90000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "load",
+        "width": 1,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lhu",
+      "semanticHandlerId": "lhu",
+      "format": {
+        "kind": "load",
+        "opcode": 37
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x94000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "load",
+        "width": 2,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "lwr",
+      "semanticHandlerId": "lwr",
+      "format": {
+        "kind": "load",
+        "opcode": 38
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0x98000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [
+          "rt"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "adel"
+      ],
+      "memoryAccess": {
+        "kind": "partial-load",
+        "width": 4,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sb",
+      "semanticHandlerId": "sb",
+      "format": {
+        "kind": "store",
+        "opcode": 40
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0xa0000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ades"
+      ],
+      "memoryAccess": {
+        "kind": "store",
+        "width": 1,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sh",
+      "semanticHandlerId": "sh",
+      "format": {
+        "kind": "store",
+        "opcode": 41
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0xa4000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ades"
+      ],
+      "memoryAccess": {
+        "kind": "store",
+        "width": 2,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "swl",
+      "semanticHandlerId": "swl",
+      "format": {
+        "kind": "store",
+        "opcode": 42
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0xa8000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ades"
+      ],
+      "memoryAccess": {
+        "kind": "partial-store",
+        "width": 4,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "sw",
+      "semanticHandlerId": "sw",
+      "format": {
+        "kind": "store",
+        "opcode": 43
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0xac000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ades"
+      ],
+      "memoryAccess": {
+        "kind": "store",
+        "width": 4,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "required",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "swr",
+      "semanticHandlerId": "swr",
+      "format": {
+        "kind": "store",
+        "opcode": 46
+      },
+      "runtimeMatch": {
+        "mask": "0xfc000000",
+        "value": "0xb8000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": []
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [
+        "ades"
+      ],
+      "memoryAccess": {
+        "kind": "partial-store",
+        "width": 4,
+        "signExtend": false
+      },
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "madd",
+      "semanticHandlerId": "madd",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 0
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000000"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [
+          "hi",
+          "lo"
+        ],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "maddu",
+      "semanticHandlerId": "maddu",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 1
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000001"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [
+          "hi",
+          "lo"
+        ],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "mul",
+      "semanticHandlerId": "mul",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 2
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000002"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "msub",
+      "semanticHandlerId": "msub",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 4
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000004"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [
+          "hi",
+          "lo"
+        ],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "msubu",
+      "semanticHandlerId": "msubu",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 5
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000005"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x0000f800",
+            "label": "rd"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [],
+        "gprReads": [
+          "rs",
+          "rt"
+        ],
+        "hiloReads": [
+          "hi",
+          "lo"
+        ],
+        "hiloWrites": [
+          "hi",
+          "lo"
+        ],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "clz",
+      "semanticHandlerId": "clz",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 32
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000020"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    },
+    {
+      "mnemonic": "clo",
+      "semanticHandlerId": "clo",
+      "format": {
+        "kind": "special2",
+        "opcode": 28,
+        "funct": 33
+      },
+      "runtimeMatch": {
+        "mask": "0xfc00003f",
+        "value": "0x70000021"
+      },
+      "canonicalEncodingConstraints": {
+        "fixedZeroBits": [
+          {
+            "mask": "0x001f0000",
+            "label": "rt"
+          },
+          {
+            "mask": "0x000007c0",
+            "label": "shamt"
+          }
+        ]
+      },
+      "effects": {
+        "gprWrites": [
+          "rd"
+        ],
+        "gprReads": [
+          "rs"
+        ],
+        "hiloReads": [],
+        "hiloWrites": [],
+        "cp0Reads": [],
+        "cp0Writes": []
+      },
+      "control": {
+        "kind": "none"
+      },
+      "delaySlot": false,
+      "link": false,
+      "possibleExceptions": [],
+      "availability": {
+        "layer": "marsCompatibility",
+        "profiles": [
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7"
+        ]
+      }
+    }
+  ]
+}

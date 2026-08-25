@@ -1,6 +1,7 @@
 import { TRACE_PROFILES } from '../constants';
 import { ProjectProfile } from '../projectProfile';
 import { generatorInstructionCatalog, type CpuProfile } from './generatorInstructionCatalog';
+import { requiredMnemonicsForProfile } from '../mips/core/generated/isaCatalog';
 
 export type { CpuProfile } from './generatorInstructionCatalog';
 export type MduReadProbeMode = 'busy' | 'ready';
@@ -21,7 +22,22 @@ export type ControlMnemonic =
 
 export const cpuProfiles = TRACE_PROFILES;
 
-export const defaultInstructionSets: Record<CpuProfile, string[]> = cloneProfiles(generatorInstructionCatalog.profiles);
+/**
+ * Course profile instruction whitelists. P3 content is consumed from the
+ * generated ISA catalog (end-to-end phase-1 convergence: isa.json ->
+ * isaCatalog.ts -> production); display/generator order follows the generator
+ * catalog so existing outputs stay byte-identical. The other profiles keep
+ * the generator catalog until their convergence lands in later phases.
+ */
+const p3RequiredMnemonics = new Set(requiredMnemonicsForProfile('P3'));
+
+export const defaultInstructionSets: Record<CpuProfile, string[]> = {
+  P3: generatorInstructionCatalog.profiles.P3.filter((mnemonic) => p3RequiredMnemonics.has(mnemonic)),
+  P4: [...generatorInstructionCatalog.profiles.P4],
+  P5: [...generatorInstructionCatalog.profiles.P5],
+  P6: [...generatorInstructionCatalog.profiles.P6],
+  P7: [...generatorInstructionCatalog.profiles.P7]
+};
 
 export const supportedMnemonics = new Set(generatorInstructionCatalog.categories.supported);
 export const controlMnemonics = new Set<string>(generatorInstructionCatalog.categories.control);
@@ -52,14 +68,4 @@ export function mduBusyCycles(mnemonic: string): number {
   return generatorInstructionCatalog.mduBusyCycles[mnemonic]
     ?? generatorInstructionCatalog.mduBusyCycles.default
     ?? 5;
-}
-
-function cloneProfiles(profiles: Record<CpuProfile, string[]>): Record<CpuProfile, string[]> {
-  return {
-    P3: [...profiles.P3],
-    P4: [...profiles.P4],
-    P5: [...profiles.P5],
-    P6: [...profiles.P6],
-    P7: [...profiles.P7]
-  };
 }

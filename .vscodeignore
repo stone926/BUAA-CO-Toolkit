@@ -66,6 +66,13 @@ out/language/verilog/tokenNavigation.js
 # Runtime uses the compiled class only.
 resources/mars/_co_internal_unknown_instruction.java
 
+# ISA catalog is compiled into out/mips/core/generated/isaCatalog.js; the JSON
+# is a build input only.
+resources/mips/isa.json
+
+# Conformance harness and pinned-reference cache are development artifacts.
+conformance/**
+
 # Dependency files that are useful for development but not runtime.
 node_modules/**/*.d.ts
 node_modules/**/*.map
