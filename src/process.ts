@@ -23,6 +23,8 @@ export interface RunToolOptions {
   timeoutMs?: number;
   stdin?: string;
   launchSuccessDelayMs?: number;
+  /** Cancellation with process-tree termination (plan section 1.6). */
+  signal?: AbortSignal;
 }
 
 export function quoteArg(arg: string): string {
@@ -63,6 +65,7 @@ export async function runTool(command: string, args: string[], options: RunToolO
     env: options.env,
     timeoutMs,
     stdin: options.stdin,
+    signal: options.signal,
     commandLine: display,
     onStdout: (text) => options.output.append(text),
     onStderr: (text) => options.output.append(text),

@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { LineChunkScanner, TextChunkAccumulator } from './textChunks';
-// @index orchestration — 无 VS Code 依赖的 spawn/stdout/stderr/timeout 进程执行核心
+// @index orchestration — 无 VS Code 依赖的 spawn/stdout/stderr/timeout/AbortSignal 进程执行核心
 
 export interface RunProcessCoreOptions {
   cwd: string;
@@ -8,6 +8,14 @@ export interface RunProcessCoreOptions {
   timeoutMs?: number;
   stdin?: string;
   commandLine?: string;
+  /**
+   * External cancellation (plan section 1.6): on abort the child is first
+   * stopped gracefully, then force-killed with its whole process tree after
+   * cancelGraceMs. Idempotent; the promise settles exactly once.
+   */
+  signal?: AbortSignal;
+  /** Grace period between the graceful stop and force termination (ms). */
+  cancelGraceMs?: number;
   onStdout?: (text: string) => void;
   onStderr?: (text: string) => void;
   onStdoutLine?: (line: string, control: RunProcessCoreControl) => void;
@@ -35,6 +43,8 @@ export interface RunProcessCoreResult extends RunProcessCoreBaseResult {
   cwd: string;
 }
 
+const DEFAULT_CANCEL_GRACE_MS = 2000;
+
 export function runProcessCore(
   command: string,
   args: readonly string[],
@@ -47,6 +57,9 @@ export function runProcessCore(
     let timedOut = false;
     let stopped = false;
     let stopReason: string | undefined;
+    let forceTimer: NodeJS.Timeout | undefined;
+    let lastExitCode: number | null = null;
+
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: {
@@ -54,16 +67,84 @@ export function runProcessCore(
         ...(options.env ?? {})
       },
       shell: false,
-      windowsHide: true
+      windowsHide: true,
+      // On POSIX this puts the child into its own process group so the whole
+      // tree can be signalled; Windows uses taskkill /t instead.
+      detached: process.platform !== 'win32'
     });
+
+    const resolveOnce = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      if (forceTimer) {
+        clearTimeout(forceTimer);
+      }
+      options.signal?.removeEventListener('abort', onAbort);
+      child.stdout.destroy();
+      child.stderr.destroy();
+      resolve(finalResult({
+        exitCode: lastExitCode,
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+        timedOut,
+        stopped,
+        stopReason
+      }, options));
+    };
+
+    const forceKillProcessTree = (): void => {
+      if (settled || child.pid === undefined) {
+        return;
+      }
+      if (process.platform === 'win32') {
+        // taskkill /t /f terminates the child and every descendant; the close
+        // event below settles the promise.
+        const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
+          windowsHide: true,
+          stdio: 'ignore'
+        });
+        killer.on('error', () => {
+          // Last resort when taskkill itself is unavailable.
+          child.kill();
+        });
+      } else {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          child.kill();
+        }
+      }
+    };
+
+    const gracefulStop = (reason?: string): void => {
+      if (settled || stopped) {
+        return;
+      }
+      stopped = true;
+      stopReason = reason;
+      if (child.pid !== undefined) {
+        if (process.platform === 'win32') {
+          child.kill();
+        } else {
+          try {
+            process.kill(-child.pid, 'SIGTERM');
+          } catch {
+            child.kill();
+          }
+        }
+      }
+      forceTimer = setTimeout(() => forceKillProcessTree(), options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS);
+      forceTimer.unref?.();
+    };
+
     const control: RunProcessCoreControl = {
       stop(reason?: string): void {
-        if (settled || stopped) {
-          return;
-        }
-        stopped = true;
-        stopReason = reason;
-        child.kill();
+        gracefulStop(reason);
       }
     };
     const stdoutLines = options.onStdoutLine
@@ -75,10 +156,21 @@ export function runProcessCore(
         if (!stopped) {
           timedOut = true;
           options.onTimeout?.();
-          child.kill();
+          gracefulStop('timeout');
         }
       }, options.timeoutMs)
       : undefined;
+
+    const onAbort = (): void => {
+      gracefulStop('aborted');
+    };
+    if (options.signal) {
+      if (options.signal.aborted) {
+        gracefulStop('aborted');
+      } else {
+        options.signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
@@ -93,43 +185,19 @@ export function runProcessCore(
       options.onStderr?.(text);
     });
 
+    // The child may exit before stdin is consumed; swallow the resulting EPIPE.
+    child.stdin.on('error', () => undefined);
+
     child.on('error', (error: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-      stderr.append(error.message);
       options.onError?.(error);
-      resolve(finalResult({
-        exitCode: null,
-        stdout: stdout.toString(),
-        stderr: stderr.toString(),
-        timedOut,
-        stopped,
-        stopReason
-      }, options));
+      stderr.append(error.message);
+      resolveOnce();
     });
 
     child.on('close', (code: number | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
+      lastExitCode = code;
       stdoutLines?.flush();
-      resolve(finalResult({
-        exitCode: code,
-        stdout: stdout.toString(),
-        stderr: stderr.toString(),
-        timedOut,
-        stopped,
-        stopReason
-      }, options));
+      resolveOnce();
     });
 
     if (options.stdin !== undefined) {

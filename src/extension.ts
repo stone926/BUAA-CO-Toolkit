@@ -17,6 +17,7 @@ import {
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
 import { registerMips } from './mips';
+import { MipsRuntimeManager } from './mips/host/runtimeManager';
 import { CoSidebarProvider } from './sidebar';
 import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
@@ -144,6 +145,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerMips(context, services);
+  // Lazy worker host skeleton: construction only, the worker starts on first
+  // builtin assemble/execute (later phases). Never started in phase 1.
+  context.subscriptions.push(new MipsRuntimeManager());
   registerVerilog(context, services, moduleRegistry);
   registerVerilogSignalView(context, moduleRegistry);
   registerLogisim(context, services);

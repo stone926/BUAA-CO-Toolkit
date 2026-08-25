@@ -9,6 +9,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   mips-lsp       | docs/modules/mips-lsp.md       | 29 files | MIPS 汇编语言支持
   mips-core      | docs/modules/mips-core.md      | 5 files  | 纯 TS MIPS 引擎核心
   mips-providers | docs/modules/mips-providers.md | 3 files  | Provider-neutral 引擎契约
+  mips-host      | docs/modules/mips-host.md      | 4 files  | 懒启动 Worker 宿主骨架
   verilog-lsp    | docs/modules/verilog-lsp.md    | 60 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~48 files| 扩展宿主层
