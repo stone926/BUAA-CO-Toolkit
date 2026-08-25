@@ -22,7 +22,7 @@ import type { MutableVerilogModuleProvider } from '../language/verilog/modulePro
 import {
   AsmCase,
   copyAsmCaseArtifact,
-  updateAsmCaseArtifacts
+  updateAsmCaseMetadata
 } from '../asmCaseStore';
 import { sha256Bytes } from '../asmCaseStoreCore';
 import {
@@ -224,22 +224,21 @@ export async function findExistingTestbenchResolution(
 
 export async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: TestbenchResolution): Promise<void> {
   const source = resolution.sourceUri ?? resolution.generatedUri;
-  const artifacts: Record<string, string> = {
-    testbenchModule: resolution.moduleName,
-    testbenchKind: resolution.kind
+  const metadata: Record<string, string> = {
+    'dut.verilog.testbenchModule': resolution.moduleName,
+    'dut.verilog.testbenchKind': resolution.kind
   };
   if (source) {
-    const snapshot = await copyAsmCaseArtifact(asmCase, 'verilog', source, 'testbench.v', 'testbenchSnapshot');
+    await copyAsmCaseArtifact(asmCase, 'verilog', source, 'testbench.v', 'testbenchSnapshot');
     const sha256 = await fileSha256(source);
-    artifacts.testbenchSource = source.fsPath;
-    artifacts.testbenchSnapshot = snapshot.fsPath;
+    metadata['dut.verilog.testbenchSource'] = source.fsPath;
     if (sha256) {
-      artifacts.testbenchSha256 = sha256;
+      metadata['dut.verilog.testbenchSha256'] = sha256;
     }
   } else if (resolution.sha256) {
-    artifacts.testbenchSha256 = resolution.sha256;
+    metadata['dut.verilog.testbenchSha256'] = resolution.sha256;
   }
-  await updateAsmCaseArtifacts(asmCase, 'verilog', artifacts);
+  await updateAsmCaseMetadata(asmCase, metadata);
 }
 
 async function ensureActiveModuleTestbench(

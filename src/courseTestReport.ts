@@ -4,7 +4,11 @@ import { continuousCounts, ContinuousCounts, ContinuousRunStatus } from './cours
 import { logisimPrepSummary, LogisimPrepareCaseResult } from './courseTesting/logisimPrep';
 import { P7ProbeCheckResult } from './courseTesting/p7ProbeCheck';
 import { LogisimRomTarget } from './language/logisim/rom';
-import { TraceDiffSnapshot, TraceEventSnapshot } from './language/mips/traceCompare';
+import {
+  NeutralTraceDiffSnapshot,
+  TraceDiffSnapshot,
+  TraceEventSnapshot
+} from './language/mips/traceCompare';
 import {
   AsmCaseManifestUnion,
   manifestArtifactsOf,
@@ -16,7 +20,10 @@ import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from 
 const escapeHtml = html.text;
 
 export type CourseTraceStatus = 'passed' | 'failed' | 'error';
-export type CourseTraceStage = 'dump' | 'mars' | 'isim' | 'logisim' | 'compare' | 'probe';
+export type NeutralCourseTraceStage = 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe';
+/** Stage values emitted by v1 reports and accepted indefinitely when reading. */
+export type LegacyCourseTraceStage = 'dump' | 'mars' | 'isim' | 'logisim';
+export type CourseTraceStage = NeutralCourseTraceStage | LegacyCourseTraceStage;
 
 export interface CourseTraceCaseResult {
   asm: string;
@@ -26,22 +33,44 @@ export interface CourseTraceCaseResult {
   asmSnapshot?: string;
   artifactsPruned?: boolean;
   status: CourseTraceStatus;
+  /** True when an in-flight case ended only because its session was stopped. */
+  cancelled?: true;
   stage: CourseTraceStage;
   message: string;
   machineCode?: string;
+  oracleOut?: string;
+  dutOut?: string;
+  /** Optional raw DUT process output when dutOut is the normalized trace. */
+  dutRawOut?: string;
+  /** @deprecated v1 alias for oracleOut. */
   marsOut?: string;
+  /** @deprecated v1 alias for dutOut. */
   simOut?: string;
+  /** @deprecated v1 Logisim-specific alias for dutRawOut. */
   logisimOut?: string;
   logisimCircuit?: string;
   logisimRows?: number;
   firstDiffIndex?: number;
   firstDiff?: TraceDiffSnapshot;
+  oracleEvents?: number;
+  dutEvents?: number;
+  /** @deprecated v1 alias for oracleEvents. */
   marsEvents?: number;
+  /** @deprecated v1 alias for dutEvents. */
   simEvents?: number;
   matchedEvents?: number;
   diffEvents?: number;
   probe?: P7ProbeCheckResult;
 }
+
+/** Canonical result emitted by new pipeline code; v1 aliases exist only on the read model above. */
+export type NeutralCourseTraceCaseResult = Omit<
+  CourseTraceCaseResult,
+  'stage' | 'marsOut' | 'simOut' | 'logisimOut' | 'marsEvents' | 'simEvents' | 'firstDiff'
+> & {
+  stage: NeutralCourseTraceStage;
+  firstDiff?: NeutralTraceDiffSnapshot;
+};
 
 export interface CourseTraceBatchSummary {
   total: number;
@@ -51,6 +80,8 @@ export interface CourseTraceBatchSummary {
 }
 
 export interface CourseTraceBatchReport {
+  /** Missing means a legacy v1 report. New writes use schema 2. */
+  schemaVersion?: 1 | 2;
   generatedAt: string;
   source?: CourseTraceBatchSource;
   summary: CourseTraceBatchSummary;
@@ -92,6 +123,8 @@ export interface ContinuousTraceIteration {
 }
 
 export interface ContinuousTraceReport {
+  /** Missing means a legacy report. New writes use the role-neutral v2 shape. */
+  schemaVersion?: 1 | 2;
   generatedAt: string;
   running: boolean;
   stopRequested: boolean;
@@ -121,6 +154,106 @@ export const continuousTraceMonitorMaxRows = 100;
 
 /** Typed empty map so Object.entries keeps its string value overload. */
 const EMPTY_STRING_MAP: Record<string, string> = {};
+
+/** Map v1 engine/tool names to the stable pipeline role used by new reports. */
+export function neutralCourseTraceStage(stage: CourseTraceStage): NeutralCourseTraceStage {
+  switch (stage) {
+    case 'dump':
+      return 'assemble';
+    case 'mars':
+      return 'oracle';
+    case 'isim':
+    case 'logisim':
+      return 'dut';
+    default:
+      return stage;
+  }
+}
+
+export function courseTraceOracleOutput(item: CourseTraceCaseResult): string | undefined {
+  return item.oracleOut ?? item.marsOut;
+}
+
+export function courseTraceDutOutput(item: CourseTraceCaseResult): string | undefined {
+  // Legacy Logisim reports used `logisimOut` for the raw CLI stream, not the
+  // normalized commit trace. Treating it as `dutOut` fabricates a canonical
+  // trace when parsing failed before one was produced.
+  return item.dutOut ?? item.simOut;
+}
+
+export function courseTraceDutRawOutput(item: CourseTraceCaseResult): string | undefined {
+  return item.dutRawOut ?? item.logisimOut;
+}
+
+export function courseTraceOracleEvents(item: CourseTraceCaseResult): number | undefined {
+  return item.oracleEvents ?? item.marsEvents;
+}
+
+export function courseTraceDutEvents(item: CourseTraceCaseResult): number | undefined {
+  return item.dutEvents ?? item.simEvents;
+}
+
+/**
+ * Convert either report generation into the v2 role-neutral wire shape.
+ * Legacy aliases remain accepted by the renderer but are not written anew.
+ */
+export function neutralCourseTraceCaseResult(item: CourseTraceCaseResult): NeutralCourseTraceCaseResult {
+  const {
+    marsOut: _marsOut,
+    simOut: _simOut,
+    logisimOut: _logisimOut,
+    marsEvents: _marsEvents,
+    simEvents: _simEvents,
+    firstDiff,
+    ...rest
+  } = item;
+  const oracleOut = courseTraceOracleOutput(item);
+  const dutOut = courseTraceDutOutput(item);
+  const dutRawOut = courseTraceDutRawOutput(item);
+  const oracleEvents = courseTraceOracleEvents(item);
+  const dutEvents = courseTraceDutEvents(item);
+  return {
+    ...rest,
+    stage: neutralCourseTraceStage(item.stage),
+    ...(oracleOut === undefined ? {} : { oracleOut }),
+    ...(dutOut === undefined ? {} : { dutOut }),
+    ...(dutRawOut === undefined ? {} : { dutRawOut }),
+    ...(oracleEvents === undefined ? {} : { oracleEvents }),
+    ...(dutEvents === undefined ? {} : { dutEvents }),
+    ...(firstDiff ? { firstDiff: neutralTraceDiffSnapshot(firstDiff) } : {})
+  };
+}
+
+export function createCourseTraceBatchReport(
+  results: CourseTraceCaseResult[],
+  source?: CourseTraceBatchSource,
+  generatedAt = new Date().toISOString()
+): CourseTraceBatchReport {
+  const neutralResults = results.map(neutralCourseTraceCaseResult);
+  return {
+    schemaVersion: 2,
+    generatedAt,
+    ...(source ? { source } : {}),
+    summary: batchSummary(neutralResults),
+    results: neutralResults
+  };
+}
+
+function neutralTraceDiffSnapshot(snapshot: TraceDiffSnapshot): NeutralTraceDiffSnapshot {
+  const { mars, sim, ...rest } = snapshot;
+  const oracle = snapshot.oracle ?? mars;
+  const dut = snapshot.dut ?? sim;
+  return {
+    ...rest,
+    status: snapshot.status === 'mars-only'
+      ? 'oracle-only'
+      : snapshot.status === 'sim-only'
+        ? 'dut-only'
+        : snapshot.status,
+    ...(oracle ? { oracle } : {}),
+    ...(dut ? { dut } : {})
+  };
+}
 
 const traceStatusCss = `
     .passed td:nth-child(2) {
@@ -246,7 +379,7 @@ export function renderBatchTraceReport(
       item.caseId ? html.code(item.caseId) : '',
       escapeHtml(path.basename(item.asm)),
       item.stdin ? escapeHtml(path.basename(item.stdin)) : '',
-      escapeHtml(item.stage),
+      escapeHtml(neutralCourseTraceStage(item.stage)),
       item.firstDiffIndex === undefined ? '' : String(item.firstDiffIndex + 1),
       renderFirstDiffSummary(item),
       renderCaseArtifacts(item),
@@ -379,18 +512,23 @@ function summaryText(item: CourseTraceCaseResult): string {
   if (item.probe) {
     return `Probe records ${item.probe.records.length}, failures ${item.probe.failures.length}`;
   }
-  if (item.marsEvents === undefined || item.simEvents === undefined) {
+  const oracleEvents = courseTraceOracleEvents(item);
+  const dutEvents = courseTraceDutEvents(item);
+  if (oracleEvents === undefined || dutEvents === undefined) {
     return '';
   }
-  return `MARS ${item.marsEvents}, SIM ${item.simEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
+  return `Oracle ${oracleEvents}, DUT ${dutEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
 }
 
 function renderCaseArtifacts(item: CourseTraceCaseResult): SafeHtml {
+  const dutOut = courseTraceDutOutput(item);
+  const dutRawOut = courseTraceDutRawOutput(item);
   const entries = [
     ['ASM Snapshot', item.asmSnapshot],
     ['Machine Code', item.machineCode],
-    ['Mars', item.marsOut],
-    ['ISim', item.simOut]
+    ['Oracle', courseTraceOracleOutput(item)],
+    ['DUT', dutOut],
+    ['DUT Raw', dutRawOut === dutOut ? undefined : dutRawOut]
   ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
   if (!entries.length) {
     return html.raw('');
@@ -408,10 +546,12 @@ function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
     return html.raw('');
   }
   const reason = item.firstDiff.reason ?? item.firstDiff.status;
+  const oracle = item.firstDiff.oracle ?? item.firstDiff.mars;
+  const dut = item.firstDiff.dut ?? item.firstDiff.sim;
   return html.raw([
     `<div>${html.text(reason)}</div>`,
-    `<div><code>MARS ${html.text(traceEventSummary(item.firstDiff.mars))}</code></div>`,
-    `<div><code>SIM ${html.text(traceEventSummary(item.firstDiff.sim))}</code></div>`
+    `<div><code>Oracle ${html.text(traceEventSummary(oracle))}</code></div>`,
+    `<div><code>DUT ${html.text(traceEventSummary(dut))}</code></div>`
   ].join(''));
 }
 

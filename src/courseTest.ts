@@ -33,6 +33,8 @@ import {
   prepareAsmCaseMachineCode,
 } from './asmCaseStore';
 import {
+  courseTraceDutOutput,
+  courseTraceOracleOutput,
   renderAsmCaseIndex,
   showBatchTraceReport
 } from './courseTestReport';
@@ -52,7 +54,7 @@ import type {
   CourseTraceBatchReport,
   CourseTraceBatchSource
 } from './courseTestReport';
-import { marsStageFailureMessage } from './courseTestMessages';
+import { engineStageFailureMessage } from './courseTestMessages';
 import {
   findStdinCandidatesForAsm,
   resolveSingleStdinInput
@@ -110,15 +112,17 @@ async function runFullCourseTraceTest(services: AppServices): Promise<void> {
     vscode.window.showErrorMessage(result.message);
     return;
   }
-  if (!result.marsOut || !result.simOut) {
+  const oracleOut = courseTraceOracleOutput(result);
+  const dutOut = courseTraceDutOutput(result);
+  if (!oracleOut || !dutOut) {
     vscode.window.showErrorMessage('测试中止：Trace 输出未生成');
     return;
   }
 
   await compareTracePair(
     {
-      mars: vscode.Uri.file(result.marsOut),
-      sim: vscode.Uri.file(result.simOut)
+      oracle: vscode.Uri.file(oracleOut),
+      dut: vscode.Uri.file(dutOut)
     },
     services,
     defaultTraceCompareMode
@@ -313,7 +317,7 @@ async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
     });
     const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
     if (!dump?.ok || !dump.outputFile) {
-      const detail = marsStageFailureMessage('MARS 导出机器码失败', dump?.status);
+      const detail = engineStageFailureMessage('汇编器导出机器码失败', dump?.status);
       vscode.window.showErrorMessage(detail);
       return;
     }

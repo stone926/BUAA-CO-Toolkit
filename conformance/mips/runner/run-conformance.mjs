@@ -1,69 +1,84 @@
 #!/usr/bin/env node
-/**
- * Conformance runner CLI (JSONL).
- *
- * Usage:
- *   node runner/run-conformance.mjs [--lane legacy-baseline|course-vector|assembly-diff]
- *                                  [--filter <case-id-substring>] [--max-steps N]
- *                                  [--record-golden]
- *
- * Prints one JSON line per case result, then a summary line:
- *   {"type":"case-result","caseId":...,"lane":...,"status":"passed|failed|skipped|error",...}
- *   {"type":"summary","lanes":...,"passed":N,"failed":N,"skipped":N,"error":N}
- *
- * Exit code 0 when no case failed or errored; 1 otherwise.
- *
- * Regular runs never update expected data; `--record-golden` is the only
- * command that writes marsGolden files and must be run explicitly.
- */
+/** Fail-closed conformance runner CLI (JSONL). */
 import { loadCorpusManifest } from './caseManifest.mjs';
 import { runLegacyBaselineCase } from './lanes/legacy-baseline.mjs';
 import { runCourseVectorCase } from './lanes/course-vector.mjs';
 import { runAssemblyDiffCase } from './lanes/assembly-diff.mjs';
+
+const laneRunners = Object.freeze({
+  'legacy-baseline': runLegacyBaselineCase,
+  'course-vector': runCourseVectorCase,
+  'assembly-diff': runAssemblyDiffCase
+});
+const defaultRequiredLanes = ['legacy-baseline', 'course-vector'];
+const resultStatuses = new Set(['passed', 'failed', 'skipped', 'error', 'recorded']);
+
+function nextValue(argv, index, flag) {
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith('--')) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
+}
 
 function parseArgs(argv) {
   const options = { lanes: new Set(), filter: undefined, maxSteps: undefined, recordGolden: false };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--lane') {
-      options.lanes.add(argv[++index]);
+      options.lanes.add(nextValue(argv, index, arg));
+      index++;
     } else if (arg === '--filter') {
-      options.filter = argv[++index];
+      options.filter = nextValue(argv, index, arg);
+      index++;
     } else if (arg === '--max-steps') {
-      options.maxSteps = Number(argv[++index]);
+      const raw = nextValue(argv, index, arg);
+      options.maxSteps = Number(raw);
+      if (!Number.isSafeInteger(options.maxSteps) || options.maxSteps <= 0) {
+        throw new Error(`--max-steps must be a positive safe integer, got ${raw}`);
+      }
+      index++;
     } else if (arg === '--record-golden') {
       options.recordGolden = true;
     } else {
       throw new Error(`unknown argument: ${arg}`);
     }
   }
-  return options;
-}
-
-const laneRunners = {
-  'legacy-baseline': runLegacyBaselineCase,
-  'course-vector': runCourseVectorCase,
-  'assembly-diff': runAssemblyDiffCase
-};
-
-function main() {
-  const options = parseArgs(process.argv.slice(2));
   if (!options.lanes.size) {
-    for (const lane of Object.keys(laneRunners)) {
+    for (const lane of defaultRequiredLanes) {
       options.lanes.add(lane);
     }
   }
   for (const lane of options.lanes) {
     if (!laneRunners[lane]) {
-      console.error(`Unknown lane: ${lane}. Available: ${Object.keys(laneRunners).join(', ')}`);
-      process.exitCode = 2;
-      return;
+      throw new Error(`unknown lane: ${lane}. Available: ${Object.keys(laneRunners).join(', ')}`);
     }
   }
+  if (options.recordGolden && (options.lanes.size !== 1 || !options.lanes.has('legacy-baseline'))) {
+    throw new Error('--record-golden requires exactly --lane legacy-baseline');
+  }
+  return options;
+}
 
-  const manifest = loadCorpusManifest();
+function emptyLaneCounts() {
+  return { selected: 0, passed: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
+}
+
+function main() {
+  let options;
+  let manifest;
+  try {
+    options = parseArgs(process.argv.slice(2));
+    manifest = loadCorpusManifest();
+  } catch (error) {
+    process.stderr.write(`Conformance configuration error: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 2;
+    return;
+  }
+
   const runnerOptions = { maxSteps: options.maxSteps, recordGolden: options.recordGolden };
   const counts = { passed: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
+  const perLane = Object.fromEntries([...options.lanes].map((lane) => [lane, emptyLaneCounts()]));
 
   for (const manifestCase of manifest.cases) {
     if (options.filter && !manifestCase.caseId.includes(options.filter)) {
@@ -73,14 +88,57 @@ function main() {
       if (!options.lanes.has(lane)) {
         continue;
       }
-      const result = laneRunners[lane](manifestCase, runnerOptions);
-      counts[result.status === 'recorded' ? 'recorded' : result.status]++;
+      perLane[lane].selected++;
+      let result;
+      try {
+        result = laneRunners[lane](manifestCase, runnerOptions);
+      } catch (error) {
+        result = {
+          caseId: manifestCase.caseId,
+          lane,
+          status: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        };
+      }
+      if (!result || result.caseId !== manifestCase.caseId || result.lane !== lane || !resultStatuses.has(result.status)) {
+        result = {
+          caseId: manifestCase.caseId,
+          lane,
+          status: 'error',
+          message: 'lane returned an invalid result schema/status'
+        };
+      }
+      counts[result.status]++;
+      perLane[lane][result.status]++;
       process.stdout.write(`${JSON.stringify({ type: 'case-result', ...result })}\n`);
     }
   }
 
-  process.stdout.write(`${JSON.stringify({ type: 'summary', lanes: [...options.lanes].sort(), ...counts })}\n`);
-  if (counts.failed > 0 || counts.error > 0) {
+  let gateFailed = counts.failed > 0 || counts.error > 0 || counts.skipped > 0;
+  for (const [lane, laneCounts] of Object.entries(perLane)) {
+    if (laneCounts.selected === 0) {
+      gateFailed = true;
+      counts.error++;
+      laneCounts.error++;
+      process.stdout.write(`${JSON.stringify({
+        type: 'lane-error',
+        lane,
+        status: 'error',
+        message: 'required lane selected zero cases'
+      })}\n`);
+    }
+  }
+  if (!options.recordGolden && counts.recorded > 0) {
+    gateFailed = true;
+  }
+  process.stdout.write(`${JSON.stringify({
+    type: 'summary',
+    lanes: [...options.lanes].sort(),
+    required: true,
+    perLane,
+    ...counts
+  })}\n`);
+  if (gateFailed) {
     process.exitCode = 1;
   }
 }

@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { encodeInstructionWord } from '../../mips/core/isa/encoder';
 import { decodeCourseInstructionWord, matchRuntimeInstruction } from '../../mips/core/isa/decoder';
-import { isaInstructionByMnemonic, isaMnemonicsForProfile } from '../../mips/core/generated/isaCatalog';
+import {
+  instructionExceptionsForProfile,
+  instructionHasDelaySlot,
+  isaInstructionByMnemonic,
+  isaMnemonicsForProfile
+} from '../../mips/core/generated/isaCatalog';
+
+const p7Required = { profile: 'P7', enabledLayers: ['required'] } as const;
+const p7All = {
+  profile: 'P7',
+  enabledLayers: ['required', 'commonExtensions', 'marsCompatibility']
+} as const;
 
 /**
  * Encode/decode golden values, hand-checked against the MIPS encoding spec and
@@ -105,6 +116,12 @@ describe('ISA catalog encode golden', () => {
     expect(() => encodeInstructionWord('not-an-instruction')).toThrow();
     expect(() => encodeInstructionWord('add', { rd: 32 })).toThrow();
     expect(() => encodeInstructionWord('beq', { immediate: 0x10000 })).toThrow();
+    expect(() => encodeInstructionWord('nop', { rd: 1 })).toThrow();
+    expect(() => encodeInstructionWord('add', { rd: 1, rs: 2, rt: 3, shamt: 1 })).toThrow();
+    expect(() => encodeInstructionWord('add', { rd: 1, rs: 2, rt: 3, immediate: 1 })).toThrow();
+    expect(() => encodeInstructionWord('j', { index: 0xc00, rs: 1 })).toThrow();
+    expect(() => encodeInstructionWord('lui', { rs: 0, rt: 1, immediate: 1 })).toThrow();
+    expect(() => encodeInstructionWord('mtc0', { rt: 8, rd: 13 })).toThrow();
   });
 
   it('round-trips every golden word through the canonical decoder', () => {
@@ -119,15 +136,15 @@ describe('ISA catalog runtime recognition vs canonical decode', () => {
     // add with non-zero shamt: runtime recognition must still name `add`,
     // while the canonical validator rejects the word.
     const nonCanonicalAdd = 0x014b48e0; // add $t1,$t2,$t3 with shamt=3
-    expect(matchRuntimeInstruction(nonCanonicalAdd)?.mnemonic).toBe('add');
+    expect(matchRuntimeInstruction(nonCanonicalAdd, p7Required)?.exactInstruction?.mnemonic).toBe('add');
     expect(decodeCourseInstructionWord(nonCanonicalAdd)).toBeUndefined();
     // jr with non-zero rt field
     const nonCanonicalJr = 0x03e90008; // rt=9
-    expect(matchRuntimeInstruction(nonCanonicalJr)?.mnemonic).toBe('jr');
+    expect(matchRuntimeInstruction(nonCanonicalJr, p7Required)?.exactInstruction?.mnemonic).toBe('jr');
     expect(decodeCourseInstructionWord(nonCanonicalJr)).toBeUndefined();
     // lui with non-zero rs field
     const nonCanonicalLui = 0x3d291234; // rs=9
-    expect(matchRuntimeInstruction(nonCanonicalLui)?.mnemonic).toBe('lui');
+    expect(matchRuntimeInstruction(nonCanonicalLui, p7Required)?.exactInstruction?.mnemonic).toBe('lui');
     expect(decodeCourseInstructionWord(nonCanonicalLui)).toBeUndefined();
   });
 
@@ -138,17 +155,48 @@ describe('ISA catalog runtime recognition vs canonical decode', () => {
     expect(decodeCourseInstructionWord(0x40087800)).toBeUndefined(); // rd=15 not required
     expect(decodeCourseInstructionWord(0x40887800)).toBeUndefined(); // mtc0 rd=15
     // Runtime recognition is opcode/rs based and must not reject those.
-    expect(matchRuntimeInstruction(0x40087800)?.mnemonic).toBe('mfc0');
+    expect(matchRuntimeInstruction(0x40087800, p7Required)?.exactInstruction?.mnemonic).toBe('mfc0');
+  });
+
+  it('dispatches shared REGIMM/COP0 recognition groups without first-entry bias', () => {
+    const bgez = matchRuntimeInstruction(0x05010000, p7All);
+    expect(bgez?.candidates.map((entry) => entry.mnemonic)).toContain('bltz');
+    expect(bgez?.candidates.map((entry) => entry.mnemonic)).toContain('bgez');
+    expect(bgez?.exactInstruction?.mnemonic).toBe('bgez');
+
+    const mtc0 = matchRuntimeInstruction(0x40886000, p7Required);
+    expect(mtc0?.candidates.map((entry) => entry.mnemonic)).toEqual(expect.arrayContaining(['mfc0', 'mtc0']));
+    expect(mtc0?.exactInstruction?.mnemonic).toBe('mtc0');
+  });
+
+  it('keeps MARS compatibility instructions out of the P7 required runtime scope', () => {
+    expect(matchRuntimeInstruction(0x00000026, p7Required)).toBeUndefined(); // xor
+    expect(matchRuntimeInstruction(0x00000026, p7All)?.exactInstruction?.mnemonic).toBe('xor');
+    expect(decodeCourseInstructionWord(0x00000026, p7Required)).toBeUndefined();
   });
 
   it('recognizes an unimplemented encoding as unknown (RI source)', () => {
     // opcode 0x3f (not in the catalog), and R-type funct 0x3f.
-    expect(matchRuntimeInstruction(0xfc000000)).toBeUndefined();
-    expect(matchRuntimeInstruction(0x0000003f)).toBeUndefined();
+    expect(matchRuntimeInstruction(0xfc000000, p7All)).toBeUndefined();
+    expect(matchRuntimeInstruction(0x0000003f, p7All)).toBeUndefined();
   });
 });
 
 describe('ISA catalog profile availability', () => {
+  it('qualifies delay-slot and architectural-exception facts by profile', () => {
+    const beq = isaInstructionByMnemonic.get('beq')!;
+    const add = isaInstructionByMnemonic.get('add')!;
+    const lw = isaInstructionByMnemonic.get('lw')!;
+    expect(instructionHasDelaySlot(beq, 'P3')).toBe(false);
+    expect(instructionHasDelaySlot(beq, 'P4')).toBe(false);
+    expect(instructionHasDelaySlot(beq, 'P5')).toBe(true);
+    expect(instructionHasDelaySlot(beq, 'P7')).toBe(true);
+    expect(instructionExceptionsForProfile(add, 'P3')).toEqual([]);
+    expect(instructionExceptionsForProfile(add, 'P6')).toEqual([]);
+    expect(instructionExceptionsForProfile(add, 'P7')).toEqual(['ov']);
+    expect(instructionExceptionsForProfile(lw, 'P7')).toEqual(['adel']);
+  });
+
   it('matches the generator profiles for every course profile (required layer only)', () => {
     // Expected sets come from resources/mips/generatorProfiles.json, the
     // pre-existing machine-readable course instruction fact.
@@ -172,7 +220,7 @@ describe('ISA catalog profile availability', () => {
         'mfc0', 'mtc0', 'eret', 'syscall', 'nop'
       ]
     };
-    for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7']) {
+    for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7'] as const) {
       const requiredFromCatalog = [...isaInstructionByMnemonic.values()]
         .filter((entry) => entry.layer === 'required' && entry.profiles.includes(profile))
         .map((entry) => entry.mnemonic)

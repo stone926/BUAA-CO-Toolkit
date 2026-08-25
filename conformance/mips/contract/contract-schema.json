@@ -7,7 +7,7 @@
       "type": "object",
       "required": ["source", "quote"],
       "properties": {
-        "source": { "type": "string" },
+        "source": { "type": "string", "minLength": 1 },
         "lines": {
           "type": "array",
           "items": { "type": "integer", "minimum": 1 },
@@ -15,8 +15,8 @@
           "maxItems": 2,
           "description": "引用行号（单行或闭区间 [start, end]）"
         },
-        "quote": { "type": "string", "description": "条款摘录或概括，用于离线核对" },
-        "note": { "type": "string" }
+        "quote": { "type": "string", "minLength": 1, "description": "条款摘录或概括，用于离线核对" },
+        "note": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },
@@ -33,7 +33,7 @@
             "device", "memory", "completion", "undefined-domain", "diagnostics"
           ]
         },
-        "statement": { "type": "string" },
+        "statement": { "type": "string", "minLength": 1 },
         "normativeReference": {
           "type": "array",
           "items": { "$ref": "#/definitions/normativeReference" },
@@ -41,21 +41,21 @@
         },
         "status": { "enum": ["frozen", "pending", "superseded"] },
         "revision": { "type": "integer", "minimum": 1 },
-        "supersededBy": { "type": "string" },
-        "note": { "type": "string" }
+        "supersededBy": { "type": "string", "minLength": 1 },
+        "note": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },
     "decisionEntry": {
       "type": "object",
-      "required": ["id", "subject", "question", "decision", "rationale", "normativeReference", "revision"],
+      "required": ["id", "subject", "question", "decision", "resolution", "rationale", "normativeReference", "freezeRequires", "revision"],
       "properties": {
         "id": { "type": "string", "pattern": "^COURSE-(P[2-7]|P56|COMMON)-[A-Z0-9-]+-[0-9]{3}$" },
-        "subject": { "type": "string" },
-        "question": { "type": "string", "description": "需要裁决的歧义" },
+        "subject": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1, "description": "需要裁决的歧义" },
         "decision": { "enum": ["frozen", "pending"] },
-        "resolution": { "type": "string", "description": "已冻结的裁决内容；pending 时写明倾向方案" },
-        "rationale": { "type": "string" },
+        "resolution": { "type": "string", "minLength": 1, "description": "已冻结的裁决内容；pending 时写明倾向方案" },
+        "rationale": { "type": "string", "minLength": 1 },
         "normativeReference": {
           "type": "array",
           "items": { "$ref": "#/definitions/normativeReference" },
@@ -63,7 +63,8 @@
         },
         "freezeRequires": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
           "description": "冻结前必须完成的验证/向量"
         },
         "revision": { "type": "integer", "minimum": 1 }
@@ -77,16 +78,108 @@
         "id": { "type": "string", "pattern": "^MARS-DIV-[A-Z0-9-]+-[0-9]{3}$" },
         "category": { "enum": ["mars-bug", "course-correct", "format-only"] },
         "domain": { "enum": ["assembler", "execution", "device", "trace-format"] },
-        "subject": { "type": "string" },
-        "marsBehavior": { "type": "string" },
-        "courseBehavior": { "type": "string" },
-        "pluginHandling": { "type": "string", "description": "插件当前如何检测/拒绝/修复" },
+        "subject": { "type": "string", "minLength": 1 },
+        "marsBehavior": { "type": "string", "minLength": 1 },
+        "courseBehavior": { "type": "string", "minLength": 1 },
+        "pluginHandling": { "type": "string", "minLength": 1, "description": "插件当前如何检测/拒绝/修复" },
         "sources": {
           "type": "array",
           "items": { "$ref": "#/definitions/normativeReference" },
           "minItems": 1
         },
         "revision": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "contractLedger": {
+      "type": "object",
+      "required": ["schemaRevision", "entries"],
+      "properties": {
+        "schemaRevision": { "type": "integer", "minimum": 1 },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/contractEntry" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "decisionLedger": {
+      "type": "object",
+      "required": ["schemaRevision", "entries"],
+      "properties": {
+        "schemaRevision": { "type": "integer", "minimum": 1 },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/decisionEntry" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "divergenceLedger": {
+      "type": "object",
+      "required": ["schemaRevision", "entries"],
+      "properties": {
+        "schemaRevision": { "type": "integer", "minimum": 1 },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/divergenceEntry" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "uniqueStringArray": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "nonEmptyUniqueStringArray": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "evidenceGateValue": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "evidenceKind": {
+      "type": "object",
+      "required": ["kind", "unit", "fingerprintExcludes", "fingerprintIncludes", "initialGate", "coverageBins"],
+      "properties": {
+        "kind": { "enum": ["assembly", "execution", "device", "full-stack"] },
+        "unit": { "type": "string", "minLength": 1 },
+        "fingerprintExcludes": { "$ref": "#/definitions/uniqueStringArray" },
+        "fingerprintIncludes": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+        "initialGate": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/definitions/evidenceGateValue" }
+        },
+        "coverageBins": { "$ref": "#/definitions/nonEmptyUniqueStringArray" }
+      },
+      "additionalProperties": false
+    },
+    "evidenceGateDocument": {
+      "type": "object",
+      "required": ["schemaRevision", "description", "evidenceKinds", "seedManifestFields", "invalidTransitionPolicy", "status", "revision"],
+      "properties": {
+        "schemaRevision": { "enum": [1] },
+        "description": { "type": "string", "minLength": 1 },
+        "evidenceKinds": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/evidenceKind" },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "seedManifestFields": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+        "invalidTransitionPolicy": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["structure-frozen"] },
+        "revision": { "enum": [1] }
       },
       "additionalProperties": false
     }

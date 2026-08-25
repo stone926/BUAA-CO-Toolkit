@@ -9,10 +9,10 @@ import { launchTool } from './process';
 import { AppServices } from './types';
 import { pickOneFile, resolveActiveOrPickedTextFile } from './workflowInputs';
 import {
+  copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
   resolveAsmCaseInput,
-  updateAsmCaseArtifacts,
   writeAsmCaseArtifact
 } from './asmCaseStore';
 
@@ -83,7 +83,7 @@ async function injectRomIntoCircuit(services: AppServices): Promise<void> {
     injected.text,
     'injectedCircuit'
   );
-  await updateAsmCaseArtifacts(asmCase, 'logisim', { circuitTemplate: circuit.fsPath });
+  await copyAsmCaseArtifact(asmCase, 'logisim', circuit, 'circuit-template.circ', 'circuitTemplate');
   await vscode.window.showTextDocument(output);
   vscode.window.showInformationMessage(`已向 ${path.basename(output.fsPath)} 注入 ${injected.wordCount} 个机器码字`);
 }

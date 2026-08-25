@@ -34,6 +34,12 @@ export class MipsRuntimeManager implements vscode.Disposable {
     if (this.disposed) {
       throw new Error('MipsRuntimeManager is disposed.');
     }
+    // A forced client-side cancellation detaches immediately while
+    // Worker.terminate() finishes asynchronously. Do not keep that stale
+    // Worker object as the current generation.
+    if (this.worker && !this.client.started) {
+      this.worker = undefined;
+    }
     if (!this.worker) {
       const worker = new Worker(this.workerPath);
       this.worker = worker;
@@ -43,15 +49,21 @@ export class MipsRuntimeManager implements vscode.Disposable {
         dispose: () => worker.terminate().catch(() => undefined)
       };
       this.client.attach(port);
-      worker.on('error', () => {
+      worker.on('error', (error) => {
+        if (this.worker !== worker) {
+          return;
+        }
         this.worker = undefined;
         // Settles pending requests with an error result; the next request
         // rebuilds a fresh worker.
-        this.client.dispose();
+        this.client.handlePortFailure(port, `worker error: ${error.message}`);
       });
-      worker.on('exit', () => {
+      worker.on('exit', (code) => {
+        if (this.worker !== worker) {
+          return;
+        }
         this.worker = undefined;
-        this.client.dispose();
+        this.client.handlePortFailure(port, `worker exited with code ${code}`);
       });
     }
     return this.worker;
@@ -64,10 +76,18 @@ export class MipsRuntimeManager implements vscode.Disposable {
    */
   async runJob(
     job: WorkerJob,
-    options: { signal?: AbortSignal } = {}
+    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void } = {}
   ): Promise<WorkerOutboundMessage> {
+    if (this.disposed) {
+      throw new Error('MipsRuntimeManager is disposed.');
+    }
+    if (options.signal?.aborted) {
+      // WorkerClient creates the protocol-shaped cancelled result without
+      // requiring an attached port, so a pre-cancelled job stays fully lazy.
+      return await this.client.start(job, options);
+    }
     this.ensureWorker();
-    return await this.client.start(job, { signal: options.signal });
+    return await this.client.start(job, options);
   }
 
   dispose(): void {

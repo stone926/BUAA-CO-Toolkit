@@ -50,6 +50,16 @@ export function runProcessCore(
   args: readonly string[],
   options: RunProcessCoreOptions
 ): Promise<RunProcessCoreResult> {
+  if (options.signal?.aborted) {
+    return Promise.resolve(finalResult({
+      exitCode: null,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+      stopped: true,
+      stopReason: 'aborted'
+    }, options));
+  }
   return new Promise((resolve) => {
     const stdout = new TextChunkAccumulator();
     const stderr = new TextChunkAccumulator();
@@ -57,8 +67,10 @@ export function runProcessCore(
     let timedOut = false;
     let stopped = false;
     let stopReason: string | undefined;
-    let forceTimer: NodeJS.Timeout | undefined;
     let lastExitCode: number | null = null;
+    let childClosed = false;
+    let treeTerminationComplete = true;
+    let timer: NodeJS.Timeout | undefined;
 
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -72,6 +84,7 @@ export function runProcessCore(
       // tree can be signalled; Windows uses taskkill /t instead.
       detached: process.platform !== 'win32'
     });
+    const rootPid = child.pid;
 
     const resolveOnce = (): void => {
       if (settled) {
@@ -80,9 +93,6 @@ export function runProcessCore(
       settled = true;
       if (timer) {
         clearTimeout(timer);
-      }
-      if (forceTimer) {
-        clearTimeout(forceTimer);
       }
       options.signal?.removeEventListener('abort', onAbort);
       child.stdout.destroy();
@@ -97,28 +107,11 @@ export function runProcessCore(
       }, options));
     };
 
-    const forceKillProcessTree = (): void => {
-      if (settled || child.pid === undefined) {
+    const maybeResolve = (): void => {
+      if (settled || !childClosed || (stopped && !treeTerminationComplete)) {
         return;
       }
-      if (process.platform === 'win32') {
-        // taskkill /t /f terminates the child and every descendant; the close
-        // event below settles the promise.
-        const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
-          windowsHide: true,
-          stdio: 'ignore'
-        });
-        killer.on('error', () => {
-          // Last resort when taskkill itself is unavailable.
-          child.kill();
-        });
-      } else {
-        try {
-          process.kill(-child.pid, 'SIGKILL');
-        } catch {
-          child.kill();
-        }
-      }
+      resolveOnce();
     };
 
     const gracefulStop = (reason?: string): void => {
@@ -127,19 +120,23 @@ export function runProcessCore(
       }
       stopped = true;
       stopReason = reason;
-      if (child.pid !== undefined) {
-        if (process.platform === 'win32') {
-          child.kill();
-        } else {
-          try {
-            process.kill(-child.pid, 'SIGTERM');
-          } catch {
-            child.kill();
-          }
-        }
+      treeTerminationComplete = false;
+      if (rootPid === undefined) {
+        treeTerminationComplete = true;
+        maybeResolve();
+        return;
       }
-      forceTimer = setTimeout(() => forceKillProcessTree(), options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS);
-      forceTimer.unref?.();
+      // This lifecycle is intentionally independent from the root child's
+      // `close` event. A parent may exit on the graceful signal while a
+      // descendant ignores it; the force phase must still run for the group.
+      void terminateProcessTree(
+        rootPid,
+        () => child.kill(),
+        options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS
+      ).catch(() => undefined).finally(() => {
+        treeTerminationComplete = true;
+        maybeResolve();
+      });
     };
 
     const control: RunProcessCoreControl = {
@@ -150,7 +147,7 @@ export function runProcessCore(
     const stdoutLines = options.onStdoutLine
       ? new LineChunkScanner((line) => options.onStdoutLine?.(line, control))
       : undefined;
-    const timer = options.timeoutMs && options.timeoutMs > 0
+    timer = options.timeoutMs && options.timeoutMs > 0
       ? setTimeout(() => {
         stdoutLines?.flush();
         if (!stopped) {
@@ -161,15 +158,8 @@ export function runProcessCore(
       }, options.timeoutMs)
       : undefined;
 
-    const onAbort = (): void => {
+    function onAbort(): void {
       gracefulStop('aborted');
-    };
-    if (options.signal) {
-      if (options.signal.aborted) {
-        gracefulStop('aborted');
-      } else {
-        options.signal.addEventListener('abort', onAbort, { once: true });
-      }
     }
 
     child.stdout.on('data', (chunk: Buffer) => {
@@ -191,16 +181,26 @@ export function runProcessCore(
     child.on('error', (error: Error) => {
       options.onError?.(error);
       stderr.append(error.message);
-      resolveOnce();
+      childClosed = true;
+      maybeResolve();
     });
 
     child.on('close', (code: number | null) => {
       lastExitCode = code;
       stdoutLines?.flush();
-      resolveOnce();
+      childClosed = true;
+      maybeResolve();
     });
 
-    if (options.stdin !== undefined) {
+    if (options.signal) {
+      if (options.signal.aborted) {
+        gracefulStop('aborted');
+      } else {
+        options.signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
+    if (!stopped && options.stdin !== undefined) {
       child.stdin.write(options.stdin);
     }
     child.stdin.end();
@@ -211,13 +211,141 @@ function finalResult(
   base: RunProcessCoreBaseResult,
   options: RunProcessCoreOptions
 ): RunProcessCoreResult {
-  const ok = options.successPredicate
-    ? options.successPredicate(base)
-    : base.exitCode === 0 && !base.timedOut;
+  const ok = base.timedOut || base.stopReason === 'aborted'
+    ? false
+    : options.successPredicate
+      ? options.successPredicate(base)
+      : base.exitCode === 0 && !base.stopped;
   return {
     ...base,
     ok,
     commandLine: options.commandLine ?? '',
     cwd: options.cwd
   };
+}
+
+async function terminateProcessTree(
+  rootPid: number,
+  fallbackKill: () => boolean,
+  graceMs: number
+): Promise<void> {
+  if (process.platform === 'win32') {
+    await terminateWindowsProcessTree(rootPid, fallbackKill, graceMs);
+    return;
+  }
+  signalPosixProcessGroup(rootPid, 'SIGTERM', fallbackKill);
+  if (await waitForPosixProcessGroupExit(rootPid, graceMs)) {
+    return;
+  }
+  signalPosixProcessGroup(rootPid, 'SIGKILL', fallbackKill);
+  await waitForPosixProcessGroupExit(rootPid, Math.max(1000, Math.min(Math.max(graceMs, 0), 5000)));
+}
+
+async function terminateWindowsProcessTree(
+  rootPid: number,
+  fallbackKill: () => boolean,
+  graceMs: number
+): Promise<void> {
+  // Start `/t` before touching the root so taskkill snapshots descendants while
+  // their parent relationship still exists. Without this, a quickly exiting
+  // parent can orphan a grandchild before the force phase discovers it.
+  const graceful = await settleWithin(runTaskkill(rootPid, false), graceMs);
+  if (graceful === true) {
+    return;
+  }
+  const forced = await settleWithin(
+    runTaskkill(rootPid, true),
+    Math.max(1000, Math.min(Math.max(graceMs, 0), 5000))
+  );
+  if (forced !== true) {
+    try {
+      fallbackKill();
+    } catch {
+      // The root may already be gone; both taskkill attempts above still ran.
+    }
+  }
+}
+
+function runTaskkill(rootPid: number, force: boolean): Promise<boolean> {
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (ok: boolean): void => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      resolve(ok);
+    };
+    const args = ['/pid', String(rootPid), '/t', ...(force ? ['/f'] : [])];
+    const killer = spawn('taskkill', args, {
+      windowsHide: true,
+      stdio: 'ignore'
+    });
+    killer.once('error', () => finish(false));
+    killer.once('close', (code) => finish(code === 0));
+  });
+}
+
+function signalPosixProcessGroup(
+  rootPid: number,
+  signal: NodeJS.Signals,
+  fallbackKill: () => boolean
+): void {
+  try {
+    process.kill(-rootPid, signal);
+  } catch {
+    try {
+      fallbackKill();
+    } catch {
+      // The group may already have exited between the liveness check and kill.
+    }
+  }
+}
+
+async function waitForPosixProcessGroupExit(rootPid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (posixProcessGroupAlive(rootPid)) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return false;
+    }
+    await delay(Math.min(25, remaining));
+  }
+  return true;
+}
+
+function posixProcessGroupAlive(rootPid: number): boolean {
+  try {
+    process.kill(-rootPid, 0);
+    return true;
+  } catch (error) {
+    return !isErrnoCode(error, 'ESRCH');
+  }
+}
+
+async function settleWithin(promise: Promise<boolean>, timeoutMs: number): Promise<boolean | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), Math.max(0, timeoutMs));
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isErrnoCode(error: unknown, code: string): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: unknown }).code === code;
 }

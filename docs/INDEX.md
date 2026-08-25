@@ -21,7 +21,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 数据流:
   MIPS: Text -> syntax.ts -> ast.ts -> semantic.ts -> parser.ts -> diagnostics, cache: parseCache.ts
   Verilog: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts 调度: syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag, cache: parseCache.ts
-  Test: 生成 ASM -> MARS dump -> MARS run -> ISim/Logisim run -> traceCompare -> HTML report
+  Test: 生成 ASM -> assembler provider -> oracle provider -> ISim/Logisim DUT -> traceCompare -> HTML/JSON v2 report（阶段 1 provider 默认仍为 legacy MARS）
 
 P7 test modes: anchor(MARS+ISim精确对拍), probe(DM探针黑盒检查), hybrid(两者), off(无中断)
 

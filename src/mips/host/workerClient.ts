@@ -29,7 +29,10 @@ export interface WorkerClientRequest {
   jobId: string;
   promise: Promise<WorkerOutboundMessage>;
   settle: (message: WorkerOutboundMessage) => void;
-  abortController: AbortController;
+  onProgress?: (batch: unknown[]) => void;
+  signal?: AbortSignal;
+  abortListener?: () => void;
+  cancelTimer?: NodeJS.Timeout;
 }
 
 export interface WorkerClientOptions {
@@ -60,7 +63,11 @@ export class WorkerClient {
       throw new Error('WorkerClient already has a worker; dispose it first.');
     }
     this.worker = worker;
-    worker.onMessage((message) => this.handleMessage(message));
+    worker.onMessage((message) => {
+      if (this.worker === worker) {
+        this.handleMessage(message);
+      }
+    });
   }
 
   /** Start a job. Resolves exactly once; rejections come only from worker death. */
@@ -68,11 +75,15 @@ export class WorkerClient {
     job: WorkerJob,
     options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void } = {}
   ): Promise<WorkerOutboundMessage> {
-    if (!this.worker) {
-      throw new Error('WorkerClient has no worker. attach() first.');
-    }
     const requestId = `req-${this.requestCounter++}`;
     const jobId = `job-${requestId}`;
+    if (options.signal?.aborted) {
+      return cancelledResult(requestId, 'job was cancelled before dispatch');
+    }
+    const worker = this.worker;
+    if (!worker) {
+      throw new Error('WorkerClient has no worker. attach() first.');
+    }
     let settle!: (message: WorkerOutboundMessage) => void;
     const promise = new Promise<WorkerOutboundMessage>((resolve) => {
       settle = resolve;
@@ -82,7 +93,8 @@ export class WorkerClient {
       jobId,
       promise,
       settle,
-      abortController: new AbortController()
+      onProgress: options.onProgress,
+      signal: options.signal
     };
     this.pending.set(requestId, entry);
 
@@ -93,13 +105,18 @@ export class WorkerClient {
       jobId,
       job
     };
-    this.worker.postMessage(message);
-
-    if (options.signal) {
+    try {
+      worker.postMessage(message);
+    } catch (error) {
+      this.disposeWorker(error instanceof Error ? error.message : String(error));
+    }
+    // Register after dispatch so an abort can never put `cancel` ahead of its
+    // request. The post-registration check closes the already-aborted race.
+    if (options.signal && this.pending.has(requestId)) {
+      entry.abortListener = () => this.cancel(requestId);
+      options.signal.addEventListener('abort', entry.abortListener, { once: true });
       if (options.signal.aborted) {
         this.cancel(requestId);
-      } else {
-        options.signal.addEventListener('abort', () => this.cancel(requestId), { once: true });
       }
     }
 
@@ -111,40 +128,59 @@ export class WorkerClient {
     if (!entry || !this.worker) {
       return;
     }
+    if (entry.cancelTimer) {
+      return;
+    }
     const message: WorkerCancelMessage = {
       protocolVersion: workerProtocolVersion,
       kind: 'cancel',
       requestId
     };
-    this.worker.postMessage(message);
+    try {
+      this.worker.postMessage(message);
+    } catch (error) {
+      this.disposeWorker(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (!this.pending.has(requestId)) {
+      return;
+    }
     // After the grace period, force-terminate the worker so a wedged job can
     // never hold the session; the next job recreates a fresh worker.
-    const timer = setTimeout(() => {
+    entry.cancelTimer = setTimeout(() => {
       if (this.pending.has(requestId)) {
         this.disposeWorker(`cancelled job ${requestId} did not settle within the grace period`);
       }
     }, this.options.cancelGraceMs);
-    if (typeof timer.unref === 'function') {
-      timer.unref();
+    if (typeof entry.cancelTimer.unref === 'function') {
+      entry.cancelTimer.unref();
     }
   }
 
   private handleMessage(raw: unknown): void {
     if (!isWorkerOutboundMessage(raw)) {
-      // Protocol violations are dropped; a stuck request times out or is cancelled.
+      // Fail closed. Silently dropping malformed terminal data would leave a
+      // request pending forever because the phase-1 client has no job timeout.
+      this.disposeWorker('worker protocol violation: malformed outbound message');
       return;
     }
     if (raw.kind === 'progress') {
-      // Progress batches are folded into the final result for phase 1; the
-      // streaming consumer shape lands with real jobs.
+      const entry = this.pending.get(raw.requestId);
+      if (!entry) {
+        return;
+      }
+      try {
+        entry.onProgress?.(raw.batch);
+      } catch {
+        // A UI/progress consumer must not corrupt the worker protocol lifecycle.
+      }
       return;
     }
     const entry = this.pending.get(raw.requestId);
     if (!entry) {
       return;
     }
-    this.pending.delete(raw.requestId);
-    entry.settle(raw);
+    this.settleEntry(entry, raw);
   }
 
   /** Force-stop the worker; every pending request settles with an error result. */
@@ -152,20 +188,31 @@ export class WorkerClient {
     this.disposeWorker('worker disposed');
   }
 
+  /** Ignore stale worker events; only the currently attached port may fail the client. */
+  handlePortFailure(worker: MipsWorkerPort, reason: string): void {
+    if (this.worker !== worker) {
+      return;
+    }
+    this.disposeWorker(reason);
+  }
+
   private disposeWorker(reason: string): void {
     const worker = this.worker;
     this.worker = undefined;
     const crashedWithPending = this.pending.size > 0;
-    for (const [requestId, entry] of this.pending) {
-      this.pending.delete(requestId);
-      entry.abortController.abort();
-      entry.settle({
-        protocolVersion: workerProtocolVersion,
-        kind: 'result',
-        requestId,
-        ok: false,
-        error: reason
-      });
+    for (const entry of [...this.pending.values()]) {
+      this.settleEntry(
+        entry,
+        entry.cancelTimer
+          ? cancelledResult(entry.requestId, reason)
+          : {
+            protocolVersion: workerProtocolVersion,
+            kind: 'result',
+            requestId: entry.requestId,
+            ok: false,
+            error: reason
+          }
+      );
     }
     try {
       worker?.dispose();
@@ -176,4 +223,30 @@ export class WorkerClient {
       this.onWorkerCrash?.(reason);
     }
   }
+
+  private settleEntry(entry: WorkerClientRequest, message: WorkerOutboundMessage): void {
+    if (!this.pending.delete(entry.requestId)) {
+      return;
+    }
+    if (entry.cancelTimer) {
+      clearTimeout(entry.cancelTimer);
+      entry.cancelTimer = undefined;
+    }
+    if (entry.signal && entry.abortListener) {
+      entry.signal.removeEventListener('abort', entry.abortListener);
+      entry.abortListener = undefined;
+    }
+    entry.settle(message);
+  }
+}
+
+function cancelledResult(requestId: string, error: string): WorkerOutboundMessage {
+  return {
+    protocolVersion: workerProtocolVersion,
+    kind: 'result',
+    requestId,
+    ok: false,
+    error,
+    cancelled: true
+  };
 }

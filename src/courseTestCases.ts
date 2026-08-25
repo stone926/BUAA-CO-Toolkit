@@ -3,8 +3,8 @@ import { AsmCase } from './asmCaseStore';
 import { AsmCaseSource } from './asmCaseStoreCore';
 import {
   CourseTraceBatchSource,
-  CourseTraceCaseResult,
-  CourseTraceStage
+  NeutralCourseTraceCaseResult,
+  NeutralCourseTraceStage
 } from './courseTestReport';
 
 export interface CourseTraceCaseInput {
@@ -15,21 +15,23 @@ export interface CourseTraceCaseInput {
 
 export function failedCase(
   item: CourseTraceCaseInput,
-  stage: CourseTraceStage,
+  stage: NeutralCourseTraceStage,
   message: string,
   machineCode?: vscode.Uri,
-  marsOut?: vscode.Uri,
-  asmCase?: AsmCase
-): CourseTraceCaseResult {
+  oracleOut?: vscode.Uri,
+  asmCase?: AsmCase,
+  cancelled = false
+): NeutralCourseTraceCaseResult {
   return {
     asm: item.asm.fsPath,
     stdin: item.stdin?.fsPath,
     ...(asmCase ? caseResultFields(asmCase) : {}),
     status: 'error',
+    ...(cancelled ? { cancelled: true as const } : {}),
     stage,
     message,
     machineCode: machineCode?.fsPath,
-    marsOut: marsOut?.fsPath
+    oracleOut: oracleOut?.fsPath
   };
 }
 
@@ -45,7 +47,7 @@ export function asmCaseSourceFromBatchSource(source: CourseTraceBatchSource): As
   return { kind: 'selected' };
 }
 
-export function caseResultFields(asmCase: AsmCase): Pick<CourseTraceCaseResult, 'caseId' | 'caseManifest' | 'asmSnapshot'> {
+export function caseResultFields(asmCase: AsmCase): Pick<NeutralCourseTraceCaseResult, 'caseId' | 'caseManifest' | 'asmSnapshot'> {
   return {
     caseId: asmCase.id,
     caseManifest: asmCase.manifestUri.fsPath,

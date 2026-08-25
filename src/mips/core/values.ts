@@ -98,5 +98,11 @@ export function addSigned32WithOverflow(left: number, right: number): { result: 
 
 /** Signed 32-bit subtraction with overflow flag. */
 export function subSigned32WithOverflow(left: number, right: number): { result: number; overflow: boolean } {
-  return addSigned32WithOverflow(left, u32(-s32(right)));
+  const lhs = s32(left);
+  const rhs = s32(right);
+  const difference = lhs - rhs;
+  return {
+    result: u32(difference),
+    overflow: difference < -0x80000000 || difference > 0x7fffffff
+  };
 }

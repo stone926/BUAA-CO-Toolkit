@@ -36,8 +36,8 @@ vi.mock('../fsUtil', () => ({
   workspaceFolderForOrFirst: vi.fn()
 }));
 
-vi.mock('../mips', () => ({
-  runMarsFile: vi.fn()
+vi.mock('../mips/providers/providerResolver', () => ({
+  assembleWithPreflight: vi.fn()
 }));
 
 vi.mock('../process', () => ({

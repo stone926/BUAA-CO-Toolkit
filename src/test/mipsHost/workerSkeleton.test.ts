@@ -28,6 +28,15 @@ describe('worker host skeleton', () => {
     expect(runtime.started).toBe(false);
   });
 
+  it('does not dispatch or start a worker for a pre-aborted job', async () => {
+    const runtime = manager();
+    const controller = new AbortController();
+    controller.abort();
+    const result = await runtime.runJob({ kind: 'ping', payload: 'must-not-run' }, { signal: controller.signal });
+    expect(result).toMatchObject({ ok: false, cancelled: true });
+    expect(runtime.started).toBe(false);
+  });
+
   it('round-trips a ping job through a real worker thread', async () => {
     const runtime = manager();
     const result = await runtime.runJob({ kind: 'ping', payload: 'hello-worker' });
@@ -61,7 +70,151 @@ describe('worker host skeleton', () => {
     controller.abort();
     const result = await promise;
     expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ cancelled: true });
     expect(dispose).toHaveBeenCalled();
+    client.dispose();
+  });
+
+  it('fails closed on malformed worker output and ignores stale-port messages', async () => {
+    const client = new WorkerClient();
+    let oldReceive: ((value: unknown) => void) | undefined;
+    const oldDispose = vi.fn();
+    client.attach({
+      postMessage: vi.fn(),
+      onMessage: (listener) => { oldReceive = listener; },
+      dispose: oldDispose
+    });
+    const malformedPending = client.start({ kind: 'ping' });
+    oldReceive?.({ protocolVersion: 1, kind: 'result', requestId: 'req-0', ok: false });
+    await expect(malformedPending).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining('protocol violation')
+    });
+    expect(oldDispose).toHaveBeenCalledOnce();
+
+    let currentReceive: ((value: unknown) => void) | undefined;
+    const currentDispose = vi.fn();
+    const currentPost = vi.fn();
+    client.attach({
+      postMessage: currentPost,
+      onMessage: (listener) => { currentReceive = listener; },
+      dispose: currentDispose
+    });
+    const currentPending = client.start({ kind: 'ping' });
+    oldReceive?.({ nonsense: true });
+    expect(currentDispose).not.toHaveBeenCalled();
+    const request = currentPost.mock.calls[0][0];
+    currentReceive?.({
+      protocolVersion: 1,
+      kind: 'result',
+      requestId: request.requestId,
+      ok: true,
+      payload: 'fresh'
+    });
+    await expect(currentPending).resolves.toMatchObject({ ok: true, payload: 'fresh' });
+    client.dispose();
+  });
+
+  it('closes the abort race after dispatching the request', async () => {
+    const client = new WorkerClient({ cancelGraceMs: 100 });
+    const posted: unknown[] = [];
+    let receive: ((value: unknown) => void) | undefined;
+    client.attach({
+      postMessage: (message) => posted.push(message),
+      onMessage: (listener) => { receive = listener; },
+      dispose: vi.fn()
+    });
+    let abortChecks = 0;
+    const racedSignal = {
+      get aborted() { return abortChecks++ > 0; },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    } as unknown as AbortSignal;
+    const pending = client.start({ kind: 'ping' }, { signal: racedSignal });
+    expect((posted[0] as { kind: string }).kind).toBe('request');
+    expect((posted[1] as { kind: string }).kind).toBe('cancel');
+    const requestId = (posted[0] as { requestId: string }).requestId;
+    receive?.({
+      protocolVersion: 1,
+      kind: 'result',
+      requestId,
+      ok: false,
+      error: 'cancelled',
+      cancelled: true
+    });
+    await expect(pending).resolves.toMatchObject({ ok: false, cancelled: true });
+    client.dispose();
+  });
+
+  it('rebuilds immediately after forced cancellation and ignores the old worker exit', async () => {
+    const runtime = manager();
+    const controller = new AbortController();
+    const pending = runtime.runJob({ kind: 'wedge' } as never, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    controller.abort();
+    const cancelled = await pending;
+    expect(cancelled).toMatchObject({ ok: false, cancelled: true });
+
+    const immediate = await runtime.runJob({ kind: 'ping', payload: 'new-generation' });
+    expect(immediate).toMatchObject({ ok: true, payload: { token: 'new-generation' } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const afterOldExit = await runtime.runJob({ kind: 'ping', payload: 'still-alive' });
+    expect(afterOldExit).toMatchObject({ ok: true, payload: { token: 'still-alive' } });
+  });
+
+  it('delivers progress and removes abort/timer hooks after a terminal result', async () => {
+    const client = new WorkerClient({ cancelGraceMs: 25 });
+    const postMessage = vi.fn();
+    const dispose = vi.fn();
+    let receive: ((value: unknown) => void) | undefined;
+    const port: MipsWorkerPort = {
+      postMessage,
+      onMessage: (listener) => {
+        receive = listener;
+      },
+      dispose
+    };
+    client.attach(port);
+    const controller = new AbortController();
+    const progress = vi.fn();
+    const pending = client.start({ kind: 'ping' }, { signal: controller.signal, onProgress: progress });
+    const request = postMessage.mock.calls[0][0];
+    receive?.({
+      protocolVersion: 1,
+      kind: 'progress',
+      requestId: request.requestId,
+      batch: ['a', 'b']
+    });
+    receive?.({
+      protocolVersion: 1,
+      kind: 'result',
+      requestId: request.requestId,
+      ok: true,
+      payload: 'done'
+    });
+    await expect(pending).resolves.toMatchObject({ ok: true, payload: 'done' });
+    expect(progress).toHaveBeenCalledWith(['a', 'b']);
+
+    controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(dispose).not.toHaveBeenCalled();
+
+    const cancelledController = new AbortController();
+    const cancelledPending = client.start({ kind: 'ping' }, { signal: cancelledController.signal });
+    const cancelledRequest = postMessage.mock.calls[1][0];
+    cancelledController.abort();
+    receive?.({
+      protocolVersion: 1,
+      kind: 'result',
+      requestId: cancelledRequest.requestId,
+      ok: false,
+      error: 'cancelled',
+      cancelled: true
+    });
+    await expect(cancelledPending).resolves.toMatchObject({ ok: false, cancelled: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(dispose).not.toHaveBeenCalled();
     client.dispose();
   });
 

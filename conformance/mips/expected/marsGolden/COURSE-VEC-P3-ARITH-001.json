@@ -1,0 +1,57 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P3-ARITH-001",
+  "provenance": {
+    "role": "legacy-course-executor",
+    "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
+    "referenceSha256": "d134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64",
+    "sourceFile": "spec-microprograms/p3-arith.asm",
+    "sourceSha256": "64ea043f26bb15d9bf867682f546c060253f960760e67b2ce3823d736a78df89",
+    "sourceHashNormalization": "utf8-lf-v1",
+    "sourceTag": "v0.6.3-course1",
+    "sourceCommit": "c6197f433e20ac0800a48ea1255053147ade5a77",
+    "runnerRevision": 2,
+    "normalizerRevision": 1,
+    "profile": "P3",
+    "maxSteps": 4096,
+    "cliOptions": [
+      "nc",
+      "mc",
+      "FixedCompactLargeText",
+      "ae1",
+      "se1",
+      "coZeroGpr",
+      "coStrictData",
+      "coHalt=0x00003020",
+      "coL2",
+      "4096",
+      "<SOURCE>"
+    ],
+    "corpusReviewer": "stone926",
+    "corpusReviewedAt": "2026-08-25"
+  },
+  "normalized": {
+    "gpr": {
+      "8": "00000000",
+      "9": "00001234",
+      "10": "12340000",
+      "11": "12341234",
+      "12": "1233EDCC",
+      "13": "24680000",
+      "14": "FFFFEDCC"
+    },
+    "dm": {}
+  },
+  "writes": {
+    "gpr": [
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14"
+    ],
+    "dm": []
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P3-BRANCH-001",
+  "provenance": {
+    "role": "legacy-course-executor",
+    "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
+    "referenceSha256": "d134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64",
+    "sourceFile": "spec-microprograms/p3-branch.asm",
+    "sourceSha256": "6b5601c0ef9958a5f685c03ea607bd9d1be6fbda782ead5d9e878cb0d47308d0",
+    "sourceHashNormalization": "utf8-lf-v1",
+    "sourceTag": "v0.6.3-course1",
+    "sourceCommit": "c6197f433e20ac0800a48ea1255053147ade5a77",
+    "runnerRevision": 2,
+    "normalizerRevision": 1,
+    "profile": "P3",
+    "maxSteps": 4096,
+    "cliOptions": [
+      "nc",
+      "mc",
+      "FixedCompactLargeText",
+      "ae1",
+      "se1",
+      "coZeroGpr",
+      "coStrictData",
+      "coHalt=0x00003028",
+      "coL2",
+      "4096",
+      "<SOURCE>"
+    ],
+    "corpusReviewer": "stone926",
+    "corpusReviewedAt": "2026-08-25"
+  },
+  "normalized": {
+    "gpr": {
+      "8": "00000000",
+      "9": "00000001",
+      "11": "00000007",
+      "12": "00010000"
+    },
+    "dm": {}
+  },
+  "writes": {
+    "gpr": [
+      "8",
+      "9",
+      "11",
+      "12"
+    ],
+    "dm": []
+  }
+}

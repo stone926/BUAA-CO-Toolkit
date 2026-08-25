@@ -2,7 +2,7 @@ import { CO_ISIM_DIR } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getIsePath, getSimTime, getTestbench } from './config';
-import { copyAsmCaseArtifact, updateAsmCaseArtifacts } from './asmCaseStore';
+import { copyAsmCaseArtifact, updateAsmCaseMetadata } from './asmCaseStore';
 import type { AsmCase } from './asmCaseStore';
 import { pathExists, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { launchTool, runTool } from './process';
@@ -69,9 +69,9 @@ export async function openIsimWaveform(
   });
   if (result.ok) {
     if (compiled.asmCase) {
-      await updateAsmCaseArtifacts(compiled.asmCase, 'verilog', {
-        waveTcl: compiled.generated.tcl.fsPath,
-        isimExecutable: compiled.exePath
+      await copyAsmCaseArtifact(compiled.asmCase, 'verilog', compiled.generated.tcl, 'wave.tcl', 'waveTcl');
+      await updateAsmCaseMetadata(compiled.asmCase, {
+        'dut.verilog.isimExecutable': compiled.exePath
       });
     }
     vscode.window.showInformationMessage('已启动 ISim 波形窗口');

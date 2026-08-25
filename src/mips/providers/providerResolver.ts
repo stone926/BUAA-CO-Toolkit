@@ -25,24 +25,34 @@ interface ProviderRegistry {
   executionProviders: MipsExecutionProvider[];
 }
 
-let defaultRegistry: ProviderRegistry | undefined;
-let legacyProvider: LegacyMarsProvider | undefined;
+let registryOverride: ProviderRegistry | undefined;
+let defaultRegistries = new WeakMap<AppServices, ProviderRegistry>();
 
 /** Register the default provider set (currently legacy only). Idempotent per services instance. */
 export function registerDefaultProviders(services: AppServices): ProviderRegistry {
-  if (!defaultRegistry) {
-    legacyProvider = new LegacyMarsProvider(services);
-    defaultRegistry = {
-      assemblerProviders: [legacyProvider],
-      executionProviders: [legacyProvider]
-    };
+  if (registryOverride) {
+    return registryOverride;
   }
-  return defaultRegistry;
+  const existing = defaultRegistries.get(services);
+  if (existing) {
+    return existing;
+  }
+  const legacyProvider = new LegacyMarsProvider(services);
+  const registry = {
+    assemblerProviders: [legacyProvider],
+    executionProviders: [legacyProvider]
+  };
+  defaultRegistries.set(services, registry);
+  return registry;
 }
 
 /** Registry for tests; production code uses registerDefaultProviders + resolve. */
 export function setProviderRegistry(registry: ProviderRegistry | undefined): void {
-  defaultRegistry = registry;
+  registryOverride = registry;
+  if (!registry) {
+    // Test isolation: do not retain providers bound to a previous AppServices.
+    defaultRegistries = new WeakMap<AppServices, ProviderRegistry>();
+  }
 }
 
 export function resolveAssemblerProvider(
@@ -50,8 +60,7 @@ export function resolveAssemblerProvider(
   request: AssembleRequest
 ): { provider: MipsAssemblerProvider; preflight: ProviderPreflight } {
   const registry = registerDefaultProviders(services);
-  const provider = registry.assemblerProviders[0];
-  return { provider, preflight: provider.preflight(request) };
+  return resolveFirstCapable(registry.assemblerProviders, request, 'assembler');
 }
 
 export function resolveExecutionProvider(
@@ -59,8 +68,26 @@ export function resolveExecutionProvider(
   request: ExecuteRequest
 ): { provider: MipsExecutionProvider; preflight: ProviderPreflight } {
   const registry = registerDefaultProviders(services);
-  const provider = registry.executionProviders[0];
-  return { provider, preflight: provider.preflight(request) };
+  return resolveFirstCapable(registry.executionProviders, request, 'execution');
+}
+
+function resolveFirstCapable<R, T extends { preflight(request: R): ProviderPreflight }>(
+  providers: readonly T[],
+  request: R,
+  kind: 'assembler' | 'execution'
+): { provider: T; preflight: ProviderPreflight } {
+  if (!providers.length) {
+    throw new Error(`No ${kind} provider is registered.`);
+  }
+  let firstFailure: { provider: T; preflight: ProviderPreflight } | undefined;
+  for (const provider of providers) {
+    const preflight = provider.preflight(request);
+    if (preflight.ok) {
+      return { provider, preflight };
+    }
+    firstFailure ??= { provider, preflight };
+  }
+  return firstFailure!;
 }
 
 /** Convenience: run preflight, fail closed with a structured result when unsupported. */

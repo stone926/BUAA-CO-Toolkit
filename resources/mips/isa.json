@@ -1,6 +1,13 @@
 {
   "schemaRevision": 1,
-  "description": "BUAA CO 课程唯一 ISA catalog（计划第 5.2 节）。runtimeMatch 定义 profile 执行期识别（P7 RI 只按 opcode 与 R-type funct）；canonicalEncodingConstraints 定义 assembler/validator 的固定保留位规则，不得被 runtime decoder 误用。availability.layer 三层：required（教程必做表）/ commonExtensions（官方资源实际使用，如 addu/addiu）/ marsCompatibility（仅 MARS 兼容层）。",
+  "description": "BUAA CO 课程唯一 ISA catalog（计划第 5.2 节）。runtimeMatch 定义 profile 执行期识别（P7 RI 只按 opcode 与 R-type funct）；canonicalEncodingConstraints 定义 assembler/validator 的固定保留位规则，不得被 runtime decoder 误用。delaySlot 表示控制转移是否具备延迟槽语义，最终是否启用由 profilePolicies 决定；possibleExceptions 同理只在 profile 启用架构异常时生效。availability.layer 三层：required（教程必做表）/ commonExtensions（官方资源实际使用，如 addu/addiu）/ marsCompatibility（仅 MARS 兼容层）。",
+  "profilePolicies": {
+    "P3": { "controlTransferDelaySlot": false, "architecturalExceptions": false },
+    "P4": { "controlTransferDelaySlot": false, "architecturalExceptions": false },
+    "P5": { "controlTransferDelaySlot": true, "architecturalExceptions": false },
+    "P6": { "controlTransferDelaySlot": true, "architecturalExceptions": false },
+    "P7": { "controlTransferDelaySlot": true, "architecturalExceptions": true }
+  },
   "instructions": [
     {
       "mnemonic": "nop",

@@ -87,6 +87,7 @@
       "normativeReference": [
         {
           "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [62, 84],
           "quote": "重新 Enable 后 IDLE→LOAD 路径清 IRQ（见状态机 case）。"
         },
         {
@@ -98,6 +99,28 @@
         "对照官方 Verilog 的 Mode 0 restart cycle vector",
         "确认 PDF 表述与 Verilog 的可观测差异场景并记录裁决"
       ],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-COMMON-REFERENCE-001",
+      "subject": "汇编 reference 与 legacy 课程执行 reference 的角色冻结",
+      "question": "v0.6.3 之后的 c6197f4 课程修复能否直接替代固定 v0.6.3，并同时充当汇编与执行 reference。",
+      "decision": "frozen",
+      "resolution": "不能替代。汇编兼容和 frozen regression 固定使用 v0.6.3；只接受干净构建并独立发布的 c6197f4（tag v0.6.3-course1）作为 legacy-course-executor。两类角色分别按 manifest 中的大小、SHA-256、tag 与 commit 解析，用户配置 JAR 不得进入 conformance。",
+      "rationale": "c6197f4 改变了课程停机、复位、地址域和 fetch/IG 行为；把它冒充 v0.6.3 会污染汇编历史基线，而拒绝这些修复又无法为当前课程执行路径建立可复现基线。角色拆分保留两者各自可审计的用途。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "lines": [184, 194],
+          "quote": "MARS reference 必须按角色解析；legacy-course-executor 由阶段 0 决定并归档，接受时必须发布不可变、可重建的 reference artifact。"
+        },
+        {
+          "source": "extension/conformance/mips/reference/c6197f4-review.md",
+          "lines": [4, 8],
+          "quote": "结论：接受，作为 legacy-course-executor 角色归档，发布新 tag v0.6.3-course1。"
+        }
+      ],
+      "freezeRequires": [],
       "revision": 1
     },
     {

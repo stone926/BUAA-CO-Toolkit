@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AppServices } from '../types';
 import type { ContinuousGeneratedTraceDependencies } from '../courseTestContinuous';
+import type { CourseTraceCaseResult } from '../courseTestReport';
 
 const vscodeMocks = vi.hoisted(() => ({
   disposeListeners: [] as Array<() => void>,
@@ -66,7 +67,8 @@ vi.mock('../courseTestToolchain', () => ({
   requiredToolchainFailures: vi.fn(() => [])
 }));
 
-vi.mock('../courseTestReport', () => ({
+vi.mock('../courseTestReport', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../courseTestReport')>(),
   renderContinuousTraceMonitor: vi.fn(() => '<html></html>')
 }));
 
@@ -168,6 +170,39 @@ describe('continuous generated trace orchestration', () => {
     expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(2);
   });
 
+  it('writes continuous results with the role-neutral v2 schema', async () => {
+    const deps = createDependencies({
+      runCourseTraceCase: vi.fn(async (_services, item) => ({
+        asm: item.asm.fsPath,
+        status: 'failed' as const,
+        stage: 'mars' as const,
+        message: 'mismatch',
+        marsOut: 'E:/work/oracle.out',
+        simOut: 'E:/work/dut.out',
+        marsEvents: 1,
+        simEvents: 2
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
+    const report = reports.at(-1) as {
+      schemaVersion: number;
+      iterations: Array<{ results: Array<Record<string, unknown>> }>;
+    };
+    expect(report.schemaVersion).toBe(2);
+    expect(report.iterations[0].results[0]).toMatchObject({
+      stage: 'oracle',
+      oracleOut: 'E:/work/oracle.out',
+      dutOut: 'E:/work/dut.out',
+      oracleEvents: 1,
+      dutEvents: 2
+    });
+    expect(report.iterations[0].results[0]).not.toHaveProperty('marsOut');
+    expect(report.iterations[0].results[0]).not.toHaveProperty('simOut');
+  });
+
   it('still stops on generator and iteration-level errors when stop-on-failure is disabled', async () => {
     configMocks.getContinuousMaxIterations.mockReturnValue(3);
     configMocks.getContinuousStopOnFailure.mockReturnValue(false);
@@ -211,6 +246,40 @@ describe('continuous generated trace orchestration', () => {
 
     expect(deps.runGeneratorAndCollectAsms).toHaveBeenCalledTimes(1);
     expect(vscodeMocks.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('停止持续测试'));
+  });
+
+  it('does not count an in-flight user cancellation as a test error', async () => {
+    configMocks.getContinuousMaxIterations.mockReturnValue(0);
+    const pending = deferred<CourseTraceCaseResult>();
+    const deps = createDependencies({
+      runCourseTraceCase: vi.fn(async () => await pending.promise)
+    });
+    const run = startContinuousGeneratedTraceTests(createServices(), deps);
+
+    await waitFor(() => vi.mocked(deps.runCourseTraceCase).mock.calls.length === 1);
+    stopContinuousTests();
+    pending.resolve({
+      asm: asm.fsPath,
+      status: 'error',
+      cancelled: true,
+      stage: 'oracle',
+      message: 'aborted'
+    });
+    await run;
+
+    const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
+    const finalReport = reports.at(-1) as {
+      iterations: Array<{
+        status: string;
+        summary: { total: number; errors: number };
+        results: unknown[];
+      }>;
+    };
+    expect(finalReport.iterations[0]).toMatchObject({
+      status: 'stopped',
+      summary: { total: 0, errors: 0 },
+      results: []
+    });
   });
 
   it('releases the active session even when the final report write fails', async () => {

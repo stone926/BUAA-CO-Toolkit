@@ -1,7 +1,7 @@
 // @index course-trace-runner — 单个课程 Trace case 的 MARS/ISim/Logisim 执行与比较
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getProfile } from '../config';
+import { getMemoryConfiguration, getProfile } from '../config';
 import { P7ProbeMetadata } from './builtinAsmGenerator';
 import { checkP7Probe } from './p7ProbeCheck';
 import {
@@ -15,7 +15,7 @@ import {
   machineCodeNeedsLinkBranchOracleRepairTrace
 } from '../language/mips/traceParser';
 import { parseSimOutput } from '../language/verilog/traceParser';
-import { executeWithPreflight } from '../mips/providers/providerResolver';
+import { executeWithPreflight, preflightFailureMessage } from '../mips/providers/providerResolver';
 import { defaultTraceCompareMode } from '../traceCompare';
 import { runIsim } from '../verilog';
 import { IsimCompileCache } from '../verilogIsimCache';
@@ -29,10 +29,12 @@ import {
 import {
   AsmCase,
   asmCaseArtifactUri,
+  asmCaseSourceSnapshotIssue,
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
   readAsmCaseManifestForAsm,
+  recordAsmCaseOracleResult,
   updateAsmCaseArtifacts
 } from '../asmCaseStore';
 import {
@@ -49,13 +51,13 @@ import {
 import type { CourseTraceCaseInput } from '../courseTestCases';
 import type {
   CourseTraceBatchSource,
-  CourseTraceCaseResult
+  NeutralCourseTraceCaseResult
 } from '../courseTestReport';
 import {
   marsOutputFileNameForCase,
   simOutputFileNameForCase
 } from '../courseTestTraceFiles';
-import { diffMessage, marsStageFailureMessage } from '../courseTestMessages';
+import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from '../courseTestMessages';
 import { runP3LogisimTraceCase } from '../courseTestLogisim';
 import type { P3LogisimTraceSetup } from '../courseTestLogisim';
 
@@ -67,13 +69,15 @@ export interface CourseTraceRunOptions {
   logisim?: P3LogisimTraceSetup;
   isimCompileCache?: IsimCompileCache;
   artifactOutputMode?: 'workspace' | 'case';
+  /** Cancels the oracle and DUT processes as one logical course-test job. */
+  signal?: AbortSignal;
 }
 
 export async function runCourseTraceCase(
   services: AppServices,
   item: CourseTraceCaseInput,
   options: CourseTraceRunOptions = {}
-): Promise<CourseTraceCaseResult> {
+): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
   if (getProfile(asm) === 'P3') {
     return await runP3LogisimTraceCase(services, item, options);
@@ -97,10 +101,19 @@ export async function runCourseTraceCase(
   const dump = await prepareAsmCaseMachineCode(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
-    courseTrace: true
+    courseTrace: true,
+    signal: options.signal
   });
   if (!dump?.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.status), undefined, undefined, asmCase);
+    return failedCase(
+      item,
+      'assemble',
+      engineStageFailureMessage('测试中止：汇编器导出机器码失败', dump?.status),
+      undefined,
+      undefined,
+      asmCase,
+      engineRunWasCancelled(dump?.status, options.signal)
+    );
   }
   services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
 
@@ -119,10 +132,19 @@ export async function runCourseTraceCase(
       simOutputFileName: simOutputFileNameForCase(item),
       simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
-      compileCache: options.isimCompileCache
+      compileCache: options.isimCompileCache,
+      signal: options.signal
     });
     if (!isim?.simResult.ok || !isim.simOut) {
-      return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, undefined, asmCase);
+      return failedCase(
+        item,
+        'dut',
+        '测试中止：DUT 运行失败',
+        asmCase.machineCode,
+        undefined,
+        asmCase,
+        engineRunWasCancelled(isim?.simResult, options.signal)
+      );
     }
     const simText = await readTextFile(isim.simOut);
     const simEvents = parseSimOutput(simText);
@@ -135,8 +157,8 @@ export async function runCourseTraceCase(
       stage: 'probe',
       message: probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
       machineCode: asmCase.machineCode.fsPath,
-      simOut: isim.simOut.fsPath,
-      simEvents: simEvents.length,
+      dutOut: isim.simOut.fsPath,
+      dutEvents: simEvents.length,
       probe: probeResult
     };
   }
@@ -156,6 +178,10 @@ export async function runCourseTraceCase(
         : '检测到潜在 oracle 初态不兼容或未定义行为：MARS 使用逐指令 Trace，仅在实际执行首次初始化前的 $gp/$sp 读取、DivZero/JalrSame/DoubleDelay 或未定义 HI/LO 读取时拒绝用例');
   }
   const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
+  const preOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
+  if (preOracleSourceIssue) {
+    return failedCase(item, 'oracle', preOracleSourceIssue, asmCase.machineCode, undefined, asmCase);
+  }
   const maxSteps = generatedCourseTraceMarsStepLimit(
     profile,
     await readTextFile(asmCase.sourceAsm),
@@ -164,7 +190,7 @@ export async function runCourseTraceCase(
   );
   const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc;
   if (!Number.isSafeInteger(haltPc)) {
-    return failedCase(item, 'dump', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
+    return failedCase(item, 'assemble', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
   }
   services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);
   const marsInvocation = await executeWithPreflight(services, {
@@ -180,10 +206,25 @@ export async function runCourseTraceCase(
     interruptSchedule,
     courseTrace: true,
     revealOutput: options.revealOutput
-  });
+  }, { signal: options.signal });
   const mars = marsInvocation.result;
+  const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
+  if (postOracleSourceIssue) {
+    return failedCase(item, 'oracle', postOracleSourceIssue, asmCase.machineCode, mars?.outputFile, asmCase);
+  }
   if (!mars?.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.status), asmCase.machineCode, undefined, asmCase);
+    const detail = mars
+      ? engineStageFailureMessage('测试中止：oracle 运行失败', mars.status)
+      : `测试中止：oracle preflight 失败: ${preflightFailureMessage(marsInvocation.preflight)}`;
+    return failedCase(
+      item,
+      'oracle',
+      detail,
+      asmCase.machineCode,
+      undefined,
+      asmCase,
+      engineRunWasCancelled(mars?.status, options.signal)
+    );
   }
   if (caseOutputMode) {
     await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });
@@ -195,7 +236,7 @@ export async function runCourseTraceCase(
   const haltError = courseTraceMarsHaltError(marsText, haltPc!);
   if (haltError) {
     services.output.appendLine(haltError);
-    return failedCase(item, 'mars', haltError, asmCase.machineCode, mars.outputFile, asmCase);
+    return failedCase(item, 'oracle', haltError, asmCase.machineCode, mars.outputFile, asmCase);
   }
   const oracleCompatibilityError = courseMarsOracleCompatibilityError(
     profile,
@@ -205,8 +246,18 @@ export async function runCourseTraceCase(
   );
   if (oracleCompatibilityError) {
     services.output.appendLine(oracleCompatibilityError);
-    return failedCase(item, 'mars', oracleCompatibilityError, asmCase.machineCode, mars.outputFile, asmCase);
+    return failedCase(item, 'oracle', oracleCompatibilityError, asmCase.machineCode, mars.outputFile, asmCase);
   }
+  await recordAsmCaseOracleResult(asmCase, mars, {
+    profile,
+    memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
+    courseTrace: true,
+    traceLevel: 2,
+    maxSteps,
+    haltPc,
+    interruptSchedule,
+    stdinSha256: asmCase.manifest.stdin?.sha256
+  }, { stopReason: 'halt-loop' });
 
   const isim = await runIsim(services, {
     resource: asm,
@@ -216,10 +267,19 @@ export async function runCourseTraceCase(
     simOutputFileName: simOutputFileNameForCase(item),
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
-    compileCache: options.isimCompileCache
+    compileCache: options.isimCompileCache,
+    signal: options.signal
   });
   if (!isim?.simResult.ok || !isim.simOut) {
-    return failedCase(item, 'isim', '测试中止：ISim 运行失败', asmCase.machineCode, mars.outputFile, asmCase);
+    return failedCase(
+      item,
+      'dut',
+      '测试中止：DUT 运行失败',
+      asmCase.machineCode,
+      mars.outputFile,
+      asmCase,
+      engineRunWasCancelled(isim?.simResult, options.signal)
+    );
   }
 
   const simText = await readTextFile(isim.simOut);
@@ -229,10 +289,10 @@ export async function runCourseTraceCase(
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
 
-  if (!diff.summary.marsEvents || !diff.summary.simEvents) {
-    const emptyTraceMessage = !diff.summary.marsEvents && !diff.summary.simEvents
-      ? 'MARS 与仿真均无可解析的写回 Trace 事件，现有观测结果无法判定 CPU 是否实际执行了程序'
-      : 'MARS 与仿真仅有一端没有可解析的 Trace 事件';
+  if (!diff.summary.oracleEvents || !diff.summary.dutEvents) {
+    const emptyTraceMessage = !diff.summary.oracleEvents && !diff.summary.dutEvents
+      ? 'Oracle 与 DUT 均无可解析的写回 Trace 事件，现有观测结果无法判定 CPU 是否实际执行了程序'
+      : 'Oracle 与 DUT 仅有一端没有可解析的 Trace 事件';
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
@@ -241,10 +301,10 @@ export async function runCourseTraceCase(
       stage: 'compare',
       message: emptyTraceMessage,
       machineCode: asmCase.machineCode.fsPath,
-      marsOut: mars.outputFile.fsPath,
-      simOut: isim.simOut.fsPath,
-      marsEvents: diff.summary.marsEvents,
-      simEvents: diff.summary.simEvents,
+      oracleOut: mars.outputFile.fsPath,
+      dutOut: isim.simOut.fsPath,
+      oracleEvents: diff.summary.oracleEvents,
+      dutEvents: diff.summary.dutEvents,
       matchedEvents: diff.summary.matchedEvents,
       diffEvents: diff.summary.diffEvents
     };
@@ -258,12 +318,12 @@ export async function runCourseTraceCase(
     stage: 'compare',
     message: diffMessage(diff),
     machineCode: asmCase.machineCode.fsPath,
-    marsOut: mars.outputFile.fsPath,
-    simOut: isim.simOut.fsPath,
+    oracleOut: mars.outputFile.fsPath,
+    dutOut: isim.simOut.fsPath,
     firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
     firstDiff: firstTraceDiffSnapshot(diff),
-    marsEvents: diff.summary.marsEvents,
-    simEvents: diff.summary.simEvents,
+    oracleEvents: diff.summary.oracleEvents,
+    dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,
     diffEvents: diff.summary.diffEvents
   };

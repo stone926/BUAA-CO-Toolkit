@@ -14,6 +14,8 @@ export interface RunResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  stopped?: boolean;
+  stopReason?: string;
 }
 
 export interface ToolDetection {

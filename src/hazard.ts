@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ensureConcreteProfile, getHazardCalculator, getMachineCode, getProfile, resolvePython } from './config';
 import { ensureDirectory, fileMtimeMs, isDirectory, isFile, readTextFile, workspaceFolderForOrFirst } from './fsUtil';
-import { runMarsFile } from './mips';
+import { assembleWithPreflight } from './mips/providers/providerResolver';
 import { revealOutputChannel, runTool } from './process';
 import { AppServices, ProjectProfile } from './types';
 import { resolveFileInput } from './workflowInputs';
@@ -163,12 +163,13 @@ async function resolveMachineCodeForHazard(
 ): Promise<vscode.Uri | undefined> {
   const active = vscode.window.activeTextEditor?.document;
   if (active && active.uri.scheme === 'file' && active.languageId === 'mipsasm') {
-    const dump = await runMarsFile(services, active.uri, 'dumpText', {
-      showMessages: false,
+    const invocation = await assembleWithPreflight(services, {
+      sourceUri: active.uri,
+      target: { kind: 'userText' },
       revealOutput: false
     });
-    if (dump?.result.ok && dump.outputFile) {
-      return dump.outputFile;
+    if (invocation.result?.ok && invocation.result.outputFile) {
+      return invocation.result.outputFile;
     }
     vscode.window.showWarningMessage('MARS 导出机器码失败，将尝试使用已有机器码文件');
   }

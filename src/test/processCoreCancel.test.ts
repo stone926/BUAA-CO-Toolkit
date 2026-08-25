@@ -8,6 +8,20 @@ const nodeExecutable = process.execPath;
 const foreverScript = 'setInterval(() => {}, 1000)';
 
 describe('cancellable process supervisor', () => {
+  it('does not spawn when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let processError: Error | undefined;
+    const result = await runProcessCore('definitely-not-a-real-executable', [], {
+      cwd: os.tmpdir(),
+      signal: controller.signal,
+      successPredicate: () => true,
+      onError: (error) => { processError = error; }
+    });
+    expect(result).toMatchObject({ ok: false, stopped: true, stopReason: 'aborted' });
+    expect(processError).toBeUndefined();
+  });
+
   it('aborts a running child and settles exactly once', async () => {
     const controller = new AbortController();
     const startedAt = Date.now();
@@ -26,50 +40,49 @@ describe('cancellable process supervisor', () => {
     expect(Date.now() - startedAt).toBeLessThan(5000);
   });
 
-  it('terminates a grandchild process tree on Windows cancellation', async () => {
-    if (process.platform !== 'win32') {
-      return; // POSIX tree signalling is covered by the process-group path.
-    }
+  it('terminates a stubborn grandchild after its parent exits first', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-tree-'));
     const pidFile = path.join(dir, 'grandchild.pid');
-    // Parent fixture spawns a grandchild that records its pid and loops forever.
+    // Parent exits on the graceful phase; the grandchild ignores POSIX SIGTERM.
     const parentScript = path.join(__dirname, 'fixtures', 'processTree', 'grandchildParent.js');
     const controller = new AbortController();
+    let grandchildPid: number | undefined;
     const promise = runProcessCore(nodeExecutable, [parentScript, pidFile], {
       cwd: os.tmpdir(),
       signal: controller.signal,
-      cancelGraceMs: 1000
+      cancelGraceMs: 250
     });
-    // Wait for the grandchild pid to appear.
-    let grandchildPid: number | undefined;
-    for (let attempt = 0; attempt < 100 && grandchildPid === undefined; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      try {
-        grandchildPid = Number(fs.readFileSync(pidFile, 'utf8'));
-      } catch {
-        // not written yet
+    try {
+      // Wait for the grandchild pid to appear.
+      for (let attempt = 0; attempt < 100 && grandchildPid === undefined; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        try {
+          grandchildPid = Number(fs.readFileSync(pidFile, 'utf8'));
+        } catch {
+          // not written yet
+        }
       }
-    }
-    expect(grandchildPid).toBeDefined();
+      expect(grandchildPid).toBeDefined();
 
-    controller.abort();
-    const result = await promise;
-    expect(result.stopped).toBe(true);
+      controller.abort();
+      const result = await promise;
+      expect(result.stopped).toBe(true);
+      expect(result.ok).toBe(false);
 
-    // The whole tree must be gone after the grace period; process.kill with
-    // signal 0 only checks existence.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    let alive = true;
-    for (let attempt = 0; attempt < 20 && alive; attempt++) {
-      try {
-        process.kill(grandchildPid!, 0);
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch {
-        alive = false;
+      // The promise must not settle merely because the parent closed.
+      expect(await waitForProcessExit(grandchildPid!, 2000)).toBe(true);
+    } finally {
+      controller.abort();
+      await promise.catch(() => undefined);
+      if (grandchildPid !== undefined && isProcessAlive(grandchildPid)) {
+        try {
+          process.kill(grandchildPid, 'SIGKILL');
+        } catch {
+          // Already gone.
+        }
       }
+      fs.rmSync(dir, { recursive: true, force: true });
     }
-    expect(alive).toBe(false);
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it('keeps the timeout path with force termination and idempotent stop', async () => {
@@ -95,4 +108,43 @@ describe('cancellable process supervisor', () => {
     });
     expect(result.exitCode).toBe(0);
   });
+
+  it('does not report an intentionally stopped process as successful by default', async () => {
+    const result = await runProcessCore(nodeExecutable, ['-e', `
+      if (process.platform !== 'win32') process.on('SIGTERM', () => process.exit(0));
+      console.log('ready');
+      setInterval(() => {}, 1000);
+    `], {
+      cwd: os.tmpdir(),
+      cancelGraceMs: 250,
+      onStdoutLine: (line, control) => {
+        if (line === 'ready') {
+          control.stop('test-stop');
+        }
+      }
+    });
+    expect(result.stopped).toBe(true);
+    expect(result.stopReason).toBe('test-stop');
+    expect(result.ok).toBe(false);
+  });
 });
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return !isProcessAlive(pid);
+}

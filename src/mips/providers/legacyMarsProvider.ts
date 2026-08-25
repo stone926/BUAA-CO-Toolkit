@@ -49,20 +49,45 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
         message: 'MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7'
       });
     }
+    if ('imageRef' in request && request.imageRef.kind === 'program-image') {
+      diagnostics.push({
+        code: 'legacy-mars.program-image-unsupported',
+        capability: 'program-image-execution',
+        message: 'legacy MARS provider 不能执行 ProgramImage；它只能运行与已验证 MARS dump 对应的源文件'
+      });
+    }
+    if ('imageRef' in request && request.courseTrace) {
+      const haltPc = request.haltPc ?? (request.imageRef.kind === 'mars-dump' ? request.imageRef.haltPc : undefined);
+      if (!Number.isSafeInteger(request.maxSteps) || (request.maxSteps ?? 0) <= 0) {
+        diagnostics.push({
+          code: 'legacy-mars.max-steps-required',
+          capability: 'bounded-execution',
+          message: '课程 oracle 运行必须提供正整数 maxSteps'
+        });
+      }
+      if (!Number.isSafeInteger(haltPc) || (haltPc ?? -1) < 0 || (haltPc ?? 0) > 0xffff_ffff) {
+        diagnostics.push({
+          code: 'legacy-mars.halt-pc-required',
+          capability: 'halt-loop-detection',
+          message: '课程 oracle 运行必须提供由机器码 dump 验证得到的 haltPc'
+        });
+      }
+    }
     if (diagnostics.length) {
       return failedPreflight(this.descriptor, diagnostics);
     }
     return okPreflight(this.descriptor);
   }
 
-  async assemble(request: AssembleRequest, _context?: ProviderRunContext): Promise<AssembleResult> {
+  async assemble(request: AssembleRequest, context?: ProviderRunContext): Promise<AssembleResult> {
     const mode = request.target.kind === 'kernelText' ? 'dumpKernel' : 'dumpText';
     const marsOptions: MarsRunOptions = {
       showMessages: false,
       revealOutput: request.revealOutput ?? false,
       courseTrace: request.courseTrace,
       p7RiInstruction: request.p7RiInstruction,
-      dumpOutputFile: request.target.outputFile
+      dumpOutputFile: request.target.outputFile,
+      signal: context?.signal
     };
     const output = await runMarsFile(this.services, request.sourceUri, mode, marsOptions);
     return {
@@ -70,11 +95,12 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
       outputFile: output?.outputFile,
       courseHaltPc: output?.courseHaltPc,
       status: engineRunStatus(output?.result),
-      descriptor: this.descriptor
+      descriptor: this.descriptor,
+      engineArtifact: output?.engineArtifact
     };
   }
 
-  async execute(request: ExecuteRequest, _context?: ProviderRunContext): Promise<ExecuteResult> {
+  async execute(request: ExecuteRequest, context?: ProviderRunContext): Promise<ExecuteResult> {
     // The legacy engine re-assembles and re-executes from source; the validated
     // dump reference stays available to callers for image-level checking.
     const marsOptions: MarsRunOptions = {
@@ -89,14 +115,16 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
       interruptSchedule: request.interruptSchedule,
       p7RiInstruction: request.p7RiInstruction,
       maxSteps: request.maxSteps,
-      haltPc: request.haltPc
+      haltPc: request.haltPc ?? (request.imageRef.kind === 'mars-dump' ? request.imageRef.haltPc : undefined),
+      signal: context?.signal
     };
     const output = await runMarsFile(this.services, request.sourceUri, 'run', marsOptions);
     return {
       ok: output?.result.ok ?? false,
       outputFile: output?.outputFile,
       status: engineRunStatus(output?.result),
-      descriptor: this.descriptor
+      descriptor: this.descriptor,
+      engineArtifact: output?.engineArtifact
     };
   }
 }
@@ -107,6 +135,8 @@ function engineRunStatus(result: {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  stopped?: boolean;
+  stopReason?: string;
   commandLine?: string;
   cwd?: string;
 } | undefined): EngineRunStatus {
@@ -117,6 +147,8 @@ function engineRunStatus(result: {
       stdout: result.stdout,
       stderr: result.stderr,
       timedOut: result.timedOut,
+      stopped: result.stopped,
+      stopReason: result.stopReason,
       commandLine: result.commandLine,
       cwd: result.cwd
     };

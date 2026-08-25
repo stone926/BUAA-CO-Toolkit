@@ -27,6 +27,7 @@ import {
   ContinuousTraceReport,
   CourseTraceBatchSource,
   CourseTraceCaseResult,
+  neutralCourseTraceCaseResult,
   renderContinuousTraceMonitor
 } from './courseTestReport';
 import {
@@ -39,6 +40,7 @@ import { normalizePathKey } from './pathUtils';
 
 interface ContinuousTraceSession {
   stopRequested: boolean;
+  abortController: AbortController;
   wakeIntervalWait?: () => void;
   report: ContinuousTraceReport;
   reportFile: vscode.Uri;
@@ -63,6 +65,7 @@ interface ContinuousIterationRunOptions {
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   artifactOutputMode?: 'workspace' | 'case';
+  signal?: AbortSignal;
 }
 
 interface ContinuousTraceRetention {
@@ -163,12 +166,14 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
     });
     session = {
       stopRequested: false,
+      abortController: new AbortController(),
       reportFile,
       panel,
       lastMonitorFlushMs: 0,
       retainedPassingArtifacts: [],
       retention,
       report: {
+        schemaVersion: 2,
         generatedAt: new Date().toISOString(),
         running: true,
         stopRequested: false,
@@ -240,9 +245,14 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
               result = await deps.runCourseTraceCase(services, item, {
                 ...baseRunOptions,
                 revealOutput: false,
-                source: generated.source
+                source: generated.source,
+                signal: session.abortController.signal
               });
             } catch (error) {
+              if (session.stopRequested) {
+                iteration.status = 'stopped';
+                break;
+              }
               result = {
                 asm: item.asm.fsPath,
                 stdin: item.stdin?.fsPath,
@@ -250,6 +260,11 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
                 stage: 'compare',
                 message: error instanceof Error ? error.message : String(error)
               };
+            }
+            result = neutralCourseTraceCaseResult(result);
+            if (session.stopRequested && result.cancelled) {
+              iteration.status = 'stopped';
+              break;
             }
             iteration.results.push(result);
             addContinuousResult(iteration.summary, result);
@@ -313,12 +328,13 @@ export function stopContinuousTests(): void {
     return;
   }
   requestContinuousTraceStop(activeContinuousTraceSession);
-  vscode.window.showInformationMessage('将在当前工具运行完成后停止持续测试');
+  vscode.window.showInformationMessage('已请求取消当前工具并停止持续测试');
 }
 
 function requestContinuousTraceStop(session: ContinuousTraceSession): void {
   session.stopRequested = true;
   session.report.stopRequested = true;
+  session.abortController.abort();
   session.wakeIntervalWait?.();
 }
 
@@ -507,6 +523,9 @@ function continuousResultFiles(result: CourseTraceCaseResult): string[] {
     result.asmSnapshot,
     result.caseManifest,
     result.machineCode,
+    result.oracleOut,
+    result.dutOut,
+    result.dutRawOut,
     result.marsOut,
     result.simOut,
     result.logisimOut,
@@ -519,6 +538,9 @@ function markContinuousArtifactsPruned(result: CourseTraceCaseResult): void {
   delete result.caseManifest;
   delete result.asmSnapshot;
   delete result.machineCode;
+  delete result.oracleOut;
+  delete result.dutOut;
+  delete result.dutRawOut;
   delete result.marsOut;
   delete result.simOut;
   delete result.logisimOut;

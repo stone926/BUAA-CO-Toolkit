@@ -18,10 +18,10 @@ import { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
 import {
   AsmCase,
+  copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
   resolveAsmCaseInput,
-  updateAsmCaseArtifacts,
   writeAsmCaseArtifact
 } from '../asmCaseStore';
 import { buildIsimRunTcl } from '../verilogSimulationFiles';
@@ -68,6 +68,8 @@ export interface IsimRunOptions extends IseProjectOptions {
   /** P7: black-box probe metadata; when set, a dedicated probe testbench is generated. */
   p7Probe?: P7ProbeMetadata;
   compileCache?: IsimCompileCache;
+  /** Cancels both compile and simulation subprocess trees. */
+  signal?: AbortSignal;
 }
 
 export interface IsimRunOutput {
@@ -97,7 +99,7 @@ export async function runIsim(
 ): Promise<IsimRunOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = options.showMessages !== false;
-  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, showMessages);
+  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, showMessages, options.signal);
   if (requiresAsmCase(activeUri) && !asmCase) {
     return undefined;
   }
@@ -112,7 +114,8 @@ export async function runIsim(
     cwd: compiled.generated.outDir.fsPath,
     output: services.output,
     resource: activeUri,
-    env: iseEnv
+    env: iseEnv,
+    signal: options.signal
   });
   let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
@@ -126,7 +129,7 @@ export async function runIsim(
     await writeTextFile(simOut, simResult.stdout);
     if (asmCase) {
       if (options.simOutputUri) {
-        await updateAsmCaseArtifacts(asmCase, 'verilog', { simOut: simOut.fsPath });
+        await copyAsmCaseArtifact(asmCase, 'verilog', simOut, path.basename(simOut.fsPath), 'simOut');
       } else {
         await writeAsmCaseArtifact(asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
       }
@@ -243,7 +246,8 @@ export async function compileIsim(
     cwd: generated.outDir.fsPath,
     output: services.output,
     resource: activeUri,
-    env: iseEnv
+    env: iseEnv,
+    signal: options.signal
   });
   if (!fuseResult.ok) {
     if (showMessages) {
@@ -281,11 +285,15 @@ async function prepareIsimRunInputs(
     await copyMachineCodeToSimDirectory(machineCodeSource, compiled.generated.outDir, activeUri);
     services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
     if (asmCase) {
-      await updateAsmCaseArtifacts(asmCase, 'verilog', {
-        machineCodeInSim: path.join(compiled.generated.outDir.fsPath, getMachineCode(activeUri)),
-        prj: compiled.generated.prj.fsPath,
-        tcl: compiled.generated.tcl.fsPath
-      });
+      await copyAsmCaseArtifact(
+        asmCase,
+        'verilog',
+        vscode.Uri.file(path.join(compiled.generated.outDir.fsPath, getMachineCode(activeUri))),
+        'machine-code-in-sim.txt',
+        'machineCodeInSim'
+      );
+      await copyAsmCaseArtifact(asmCase, 'verilog', compiled.generated.prj, 'isim-project.prj', 'prj');
+      await copyAsmCaseArtifact(asmCase, 'verilog', compiled.generated.tcl, 'isim-run.tcl', 'tcl');
     }
   } else if (machineCodeExpected) {
     services.output.appendLine(`未找到可复制到 ${compiled.generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
@@ -302,7 +310,8 @@ async function prepareIsimRunInputs(
 async function ensureSimulationAsmCase(
   services: AppServices,
   resource: vscode.Uri | undefined,
-  showMessages: boolean
+  showMessages: boolean,
+  signal?: AbortSignal
 ): Promise<AsmCase | undefined> {
   if (!requiresAsmCase(resource)) {
     return undefined;
@@ -318,7 +327,10 @@ async function ensureSimulationAsmCase(
     resource,
     source: { kind: 'selected' }
   });
-  const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+  const dump = await prepareAsmCaseMachineCode(services, asmCase, {
+    showMessages: false,
+    signal
+  });
   if (!dump?.ok || !dump.outputFile) {
     if (showMessages) {
       vscode.window.showErrorMessage('MARS 导出机器码失败，无法继续 Verilog 仿真');

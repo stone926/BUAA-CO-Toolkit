@@ -1,10 +1,23 @@
 import { firstTraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
 
 /** Accepts both legacy RunResult and provider-neutral EngineRunStatus. */
-export function marsStageFailureMessage(prefix: string, result?: { stdout: string; stderr: string }): string {
+export function engineStageFailureMessage(prefix: string, result?: { stdout: string; stderr: string }): string {
   const detail = firstNonEmptyLine(result?.stderr) ?? firstNonEmptyLine(result?.stdout);
   return detail ? `${prefix}: ${detail}` : prefix;
 }
+
+export function engineRunWasCancelled(
+  result?: { stopped?: boolean; stopReason?: string },
+  signal?: AbortSignal
+): boolean {
+  if (result !== undefined) {
+    return result.stopped === true && result.stopReason === 'aborted';
+  }
+  return signal?.aborted === true;
+}
+
+/** @deprecated Compatibility export for callers not yet migrated to provider-neutral naming. */
+export const marsStageFailureMessage = engineStageFailureMessage;
 
 export function diffMessage(diff: TraceDiffResult): string {
   if (diff.matched) {

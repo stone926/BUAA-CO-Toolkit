@@ -14,8 +14,10 @@ describe('catalog decoder matches the established course validator decoder', () 
   it('agrees on every catalog instruction encoding', () => {
     for (const entry of isaInstructions) {
       const word = buildWordForEntry(entry);
-      expect(decodeCourseInstructionWord(word), entry.mnemonic)
-        .toBe(decodeCourseMachineInstruction(word));
+      const catalogDecoded = decodeCourseInstructionWord(word);
+      expect(catalogDecoded, `${entry.mnemonic} must have a genuinely canonical witness`)
+        .toBe(entry.mnemonic);
+      expect(catalogDecoded, entry.mnemonic).toBe(decodeCourseMachineInstruction(word));
     }
   });
 
@@ -50,28 +52,34 @@ describe('catalog decoder matches the established course validator decoder', () 
 
 /** Build one canonical word for a catalog entry using the layout-agnostic encoder rules. */
 function buildWordForEntry(entry: (typeof isaInstructions)[number]): number {
-  const rs = entry.formatKind === 'regimm' ? 8 : entry.formatRs !== 0 ? entry.formatRs : 0;
-  const rt = entry.formatRt !== 0 ? entry.formatRt : 0;
+  const reads = new Set(entry.gprReads);
+  const writes = new Set(entry.gprWrites);
+  const rs = reads.has('rs') || writes.has('rs') ? 8 : 0;
+  const rt = reads.has('rt') || writes.has('rt') ? 9 : 0;
+  const rd = reads.has('rd') || writes.has('rd') ? 10 : 0;
   switch (entry.formatKind) {
-    case 'nop':
-      return 0;
     case 'eret':
       return 0x42000018;
     case 'r':
-      return ((rs << 21) | (8 << 16) | (9 << 11) | (3 << 6) | entry.formatFunct) >>> 0;
+      if (entry.mnemonic === 'nop') {
+        return 0;
+      }
+      return ((rs << 21) | (rt << 16) | (rd << 11)
+        | ((['sll', 'srl', 'sra'].includes(entry.mnemonic) ? 3 : 0) << 6)
+        | entry.formatFunct) >>> 0;
     case 'regimm':
-      return ((0x01 << 26) | (8 << 21) | (entry.formatRt << 16) | 4) >>> 0;
+      return ((entry.formatOpcode << 26) | (rs << 21) | (entry.formatRt << 16) | 4) >>> 0;
     case 'j':
       return ((entry.formatOpcode << 26) | 0xc00) >>> 0;
     case 'branch':
     case 'imm':
     case 'load':
     case 'store':
-      return ((entry.formatOpcode << 26) | (8 << 21) | (9 << 16) | 4) >>> 0;
+      return ((entry.formatOpcode << 26) | (rs << 21) | (rt << 16) | 4) >>> 0;
     case 'cop0':
-      return ((entry.formatOpcode << 26) | (entry.formatRs << 21) | (8 << 16) | (12 << 11)) >>> 0;
+      return ((entry.formatOpcode << 26) | (entry.formatRs << 21) | (rt << 16) | (12 << 11)) >>> 0;
     case 'special2':
-      return ((entry.formatOpcode << 26) | (rs << 21) | (rt << 16) | (9 << 11) | (3 << 6) | entry.formatFunct) >>> 0;
+      return ((entry.formatOpcode << 26) | (rs << 21) | (rt << 16) | (rd << 11) | entry.formatFunct) >>> 0;
     default:
       throw new Error(`unexpected format kind ${entry.formatKind}`);
   }

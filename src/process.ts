@@ -79,7 +79,9 @@ export async function runTool(command: string, args: string[], options: RunToolO
     cwd,
     stdout: result.stdout,
     stderr: result.stderr,
-    timedOut: result.timedOut
+    timedOut: result.timedOut,
+    stopped: result.stopped,
+    stopReason: result.stopReason
   };
 }
 

@@ -21,6 +21,12 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Setup Java 25 for pinned legacy course executor
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
       - name: Install dependencies
         run: npm ci
 
@@ -34,13 +40,22 @@ jobs:
         run: node conformance/mips/contract/validate-contracts.mjs
 
       - name: Reference asset verification (fail closed)
-        run: node conformance/mips/reference/download-references.mjs
+        run: node conformance/mips/reference/download-references.mjs --require-all
+
+      - name: Frozen MARS v0.6.3 regression
+        run: node conformance/mips/reference/verify-regression.mjs
 
       - name: Conformance smoke sentinels
         run: npm --prefix conformance/mips test
 
+      - name: Required conformance lanes
+        run: npm --prefix conformance/mips run run:required
+
       - name: Test
         run: npm test
+
+      - name: Headless test CLI smoke
+        run: npm --prefix test-cli test
 
       - name: Compile
         run: npm run compile

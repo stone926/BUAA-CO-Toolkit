@@ -24,8 +24,8 @@
       "normativeReference": [
         {
           "source": "cscore/markdown/P3/P3-2.md",
-          "lines": [38, 38],
-          "quote": "使用 RAM 实现，容量为 3072 × 32bit，应具有异步复位功能，复位值为 0x00000000。"
+          "lines": [38, 40],
+          "quote": "使用 RAM 实现，容量为 3072 × 32bit，应具有异步复位功能，复位值为 0x00000000；起始地址 0x00000000，地址范围 0x00000000 ~ 0x00002FFF。"
         }
       ],
       "status": "frozen",
@@ -39,12 +39,18 @@
       "normativeReference": [
         {
           "source": "cscore/markdown/P3/P3-2.md",
-          "lines": [17, 38],
-          "quote": "起始地址 0x00003000；DM 复位值为 0x00000000。"
+          "lines": [16, 17],
+          "quote": "PC 用寄存器实现，应具有异步复位功能，复位值为起始地址 0x00003000。"
         },
         {
-          "source": "extension/resources/mips/generatorProfiles.json",
-          "quote": "P3 初态/地址契约：PC=0x3000；GPR/DM 全零。"
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [24, 27],
+          "quote": "GRF 寄存器总数为 32 个，应具有异步复位功能；0 号寄存器始终为 0，其他寄存器复位后均为 0。"
+        },
+        {
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [36, 40],
+          "quote": "DM 应具有异步复位功能，复位值为 0x00000000。"
         }
       ],
       "status": "frozen",
@@ -57,8 +63,9 @@
       "statement": "P3 指令集为 8 条：add、sub、ori、lw、sw、beq、lui、nop。",
       "normativeReference": [
         {
-          "source": "extension/resources/mips/generatorProfiles.json",
-          "quote": "profiles.P3 = [add, sub, ori, lw, sw, beq, lui, nop]"
+          "source": "cscore/markdown/P3/P3-1.md",
+          "lines": [43, 45],
+          "quote": "处理器应支持 add, sub, ori, lw, sw, beq, lui, nop；nop 的机器码为 0x00000000。"
         }
       ],
       "status": "frozen",
@@ -71,8 +78,9 @@
       "statement": "P3 运算为 32 位环绕，不产生溢出异常。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "P3：溢出 32 位环绕，不异常。"
+          "source": "cscore/markdown/P3/P3-1.md",
+          "lines": [43, 46],
+          "quote": "add, sub 按无符号加减法处理（不考虑溢出）。"
         }
       ],
       "status": "frozen",
@@ -115,8 +123,9 @@
       "statement": "P4 运算 32 位环绕，不产生异常。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "P4：溢出 32 位环绕，不异常。"
+          "source": "cscore/markdown/P4/P4-1.md",
+          "lines": [42, 45],
+          "quote": "add, sub 按无符号加减法处理（不考虑溢出）。"
         }
       ],
       "status": "frozen",
@@ -129,8 +138,54 @@
       "statement": "P4 GRF/DM commit 文本无时间前缀。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "P4：GRF/DM commit 文本无时间前缀。"
+          "source": "cscore/markdown/P4/P4-7.md",
+          "lines": [25, 72],
+          "quote": "P4 GRF 输出格式为 @%h: $%d <= %h，DM 输出格式为 @%h: *%h <= %h，均无 $time 前缀。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P4-ADDR-001",
+      "profile": "P4",
+      "domain": "address-space",
+      "statement": "P4 沿用 P3 的课程存储布局：IM 为 0x00003000..0x00006FFF（4096×32bit），DM 为 0x00000000..0x00002FFF（3072×32bit）。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P4/P4-2.md",
+          "lines": [13, 16],
+          "quote": "P4 数据通路在 P3 已完成的 MIPS 单周期处理器基础上实现。"
+        },
+        {
+          "source": "cscore/markdown/P4/P4-7.md",
+          "lines": [95, 98],
+          "quote": "P4 的 IM 容量为 4096×32bit、DM 容量为 3072×32bit，PC 从 0x00003000 开始。"
+        },
+        {
+          "source": "cscore/markdown/P3/P3-2.md",
+          "lines": [17, 40],
+          "quote": "P3 基础布局的 IM 范围为 0x00003000~0x00006FFF，DM 范围为 0x00000000~0x00002FFF。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P4-RESET-001",
+      "profile": "P4",
+      "domain": "reset-state",
+      "statement": "P4 使用同步 reset；复位后 PC=0x00003000，全部 GPR 与 DM 数据清零。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P4/P4-1.md",
+          "lines": [47, 47],
+          "quote": "有效驱动信号包括同步复位信号 reset 和时钟信号 clk。"
+        },
+        {
+          "source": "cscore/markdown/P4/P4-7.md",
+          "lines": [95, 105],
+          "quote": "复位后 PC 指向 0x00003000，GRF 和 DM 中的所有数据清零；各部件使用同步复位。"
         }
       ],
       "status": "frozen",
@@ -143,8 +198,9 @@
       "statement": "P5 指令集与 P4 最低集相同（10 条），五级流水线实现。",
       "normativeReference": [
         {
-          "source": "extension/resources/mips/generatorProfiles.json",
-          "quote": "profiles.P5 = [add, sub, ori, lw, sw, beq, lui, jal, jr, nop]"
+          "source": "cscore/markdown/P5/project/P5-5-1.md",
+          "lines": [13, 14],
+          "quote": "处理器应支持 add, sub, ori, lw, sw, beq, lui, jal, jr, nop，并采用五级流水线设计。"
         }
       ],
       "status": "frozen",
@@ -177,8 +233,43 @@
       "statement": "P5 trace 有时间前缀，比较时忽略周期。",
       "normativeReference": [
         {
+          "source": "cscore/markdown/P5/project/P5-5-2.md",
+          "lines": [25, 55],
+          "quote": "P5 GRF/DM 输出格式均以 $time 开头。"
+        },
+        {
           "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "P5：trace 有时间前缀，比较忽略周期。"
+          "quote": "P5 架构差分的 trace projection 忽略周期。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P5-ARITH-001",
+      "profile": "P5",
+      "domain": "overflow",
+      "statement": "P5 的 add/sub 按 32 位结果执行，不考虑溢出且不产生 Ov 异常。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P5/project/P5-5-2.md",
+          "lines": [61, 67],
+          "quote": "加减法按无符号处理（不考虑溢出）。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P5-RESET-001",
+      "profile": "P5",
+      "domain": "reset-state",
+      "statement": "P5 复位后 PC=0x00003000，全部 GPR 与 DM 数据清零。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P5/project/P5-5-2.md",
+          "lines": [61, 64],
+          "quote": "复位后 PC 指向 0x00003000，GRF 和 DM 中的所有数据清零。"
         }
       ],
       "status": "frozen",
@@ -191,8 +282,14 @@
       "statement": "P6 指令集为教程列出的 28 条加 nop=0：add、sub、and、or、slt、sltu、lui、addi、andi、ori、lb、lh、lw、sb、sh、sw、mult、multu、div、divu、mfhi、mflo、mthi、mtlo、beq、bne、jal、jr、nop。",
       "normativeReference": [
         {
-          "source": "extension/resources/mips/generatorProfiles.json",
-          "quote": "profiles.P6 列表（28 条 + nop）"
+          "source": "cscore/markdown/P6/P6-1.md",
+          "lines": [13, 26],
+          "quote": "五级流水线处理器支持 add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr；所有运算类指令暂不考虑溢出异常。"
+        },
+        {
+          "source": "cscore/markdown/P3/P3-1.md",
+          "lines": [43, 45],
+          "quote": "课程处理器约定 nop 的机器码为 0x00000000，且不产生有效行为。"
         }
       ],
       "status": "frozen",
@@ -204,6 +301,11 @@
       "domain": "delay-slot",
       "statement": "P6 控制转移支持一条延迟槽。",
       "normativeReference": [
+        {
+          "source": "cscore/markdown/P5/project/P5-5-1.md",
+          "lines": [20, 21],
+          "quote": "流水线基础约定：b 类和 j 类指令必须支持延迟槽。"
+        },
         {
           "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
           "quote": "P6：延迟槽一条。"
@@ -219,8 +321,9 @@
       "statement": "P6 访存按小端 byte lane 语义（lb/lh/lw 与 sb/sh/sw 的字节/半字位于低地址侧）。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "P6：小端 byte lane。"
+          "source": "cscore/markdown/P6/P6-4.md",
+          "lines": [10, 59],
+          "quote": "byteen[0] 对应 word 的 [7:0] 低地址字节，sb 地址低位 00/01/10/11 分别选择 byte0/1/2/3；lb/lh 按所选字节/半字符号扩展。"
         }
       ],
       "status": "frozen",
@@ -233,8 +336,9 @@
       "statement": "P6 所有运算暂不产生异常。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "P6：所有运算暂不产生异常。"
+          "source": "cscore/markdown/P6/P6-1.md",
+          "lines": [13, 26],
+          "quote": "所有运算类指令均暂不考虑因溢出而产生的异常。"
         }
       ],
       "status": "frozen",
@@ -247,12 +351,38 @@
       "statement": "MDU 乘 5 周期/除 10 周期属于 DUT 时序检查，不属于纯 ISA 结果；架构 oracle 不模拟该时序。",
       "normativeReference": [
         {
-          "source": "extension/resources/mips/generatorProfiles.json",
-          "quote": "mduBusyCycles: div/divu=10, default=5"
+          "source": "cscore/markdown/P6/P6-2.md",
+          "lines": [21, 42],
+          "quote": "乘法执行时间为 5 个时钟周期，除法为 10 个时钟周期，并通过 Busy/Start 反映与阻塞相关指令。"
         },
         {
           "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
           "quote": "MDU 乘 5/除 10 周期属于 DUT 时序检查，不属于纯 ISA 结果。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1
+    },
+    {
+      "id": "COURSE-P6-RESET-001",
+      "profile": "P6",
+      "domain": "reset-state",
+      "statement": "P6 复位后 PC=0x00003000，全部 GPR 数据清零；DM 位于 CPU 外部，官方 testbench 在初始化与 reset 时将其清零。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P6/P6-6.md",
+          "lines": [53, 56],
+          "quote": "复位后 PC 指向 0x00003000，GRF 中的所有数据清零。"
+        },
+        {
+          "source": "cscore/markdown/P6/P6-1.md",
+          "lines": [32, 36],
+          "quote": "P6 的 IM 和 DM 外置并由官方 testbench 实现。"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/mips_tb.v",
+          "lines": [45, 75],
+          "quote": "外置 data 数组在 initial 和 reset 分支中逐字清零。"
         }
       ],
       "status": "frozen",
@@ -712,6 +842,11 @@
       "statement": "assembler/机器码 validator 可以诊断非 canonical 保留位，但 P7 runtime recognition 只按 opcode 和 R-type funct；其他保留字段异常不得额外触发 RI。",
       "normativeReference": [
         {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [175, 175],
+          "quote": "未知指令的判断仅需考虑 opcode（和 R 型指令的 funct），且仅需判断是否出现在 P7 要求的指令集中。"
+        },
+        {
           "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
           "quote": "assembler/机器码 validator 可以诊断非 canonical 保留位，但 P7 runtime recognition 只按 opcode 和 R-type funct；其他保留字段异常不得额外触发 RI。"
         }
@@ -890,12 +1025,8 @@
       "normativeReference": [
         {
           "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
-          "lines": [43, 43],
-          "quote": "assign IRQ = ctrl[3] & _IRQ"
-        },
-        {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "CTRL/PRESET/COUNT reset 均为 0；对外 IRQ 受 CTRL.IM 门控；清 IM 必须立即撤销可见请求。"
+          "lines": [43, 54],
+          "quote": "assign IRQ = ctrl[3] & _IRQ；reset 时 state、三个寄存器和 _IRQ 均清零。"
         }
       ],
       "status": "frozen",
@@ -905,11 +1036,12 @@
       "id": "COURSE-P7-TIMER-004",
       "profile": "P7",
       "domain": "timer",
-      "statement": "CycleContract 状态机（按官方状态机冻结）：IDLE && Enable -> LOAD 并清 pending IRQ；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。",
+      "statement": "CycleContract 的主状态边按官方 RTL 冻结：IDLE && Enable -> LOAD；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。IDLE -> LOAD 对 _IRQ 的写入在普通启动下不可见；Mode 0 中断后的 restart 清除时机不由本条冻结，而由 COURSE-P7-TIMER-RESTART-001 待决。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "CycleContract 按官方状态机冻结：IDLE && Enable -> LOAD 并清 pending IRQ；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。"
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [62, 84],
+          "quote": "IDLE 在 Enable 时进入 LOAD；LOAD 把 PRESET 装入 COUNT 后进入 CNT；CNT 停止、递减或进入 INT；INT 根据 Mode 回到 IDLE。"
         },
         {
           "source": "cscore/markdown/assets/cscore-assets/COCO定时器设计规范-1.0.0.4.pdf",
@@ -917,7 +1049,8 @@
         }
       ],
       "status": "frozen",
-      "revision": 1
+      "revision": 1,
+      "note": "Mode 0 restart 时 pending IRQ 的可观测清除语义仍为 COURSE-P7-TIMER-RESTART-001（pending）；在该 decision 冻结前，严格 device golden 不得覆盖此组合。"
     },
     {
       "id": "COURSE-P7-TIMER-005",
@@ -926,8 +1059,9 @@
       "statement": "INT 的下一边沿：Mode 0 清 Enable、回 IDLE 且 pending IRQ 保持；Mode 1 清 pending IRQ、回 IDLE，随后还需经历 IDLE -> LOAD -> CNT 才重新装载；不得实现为到零同边沿立即 reload。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "INT 的下一边沿：Mode 0 清 Enable、回 IDLE 且 pending IRQ 保持；Mode 1 清 pending IRQ、回 IDLE，随后还需经历 IDLE -> LOAD -> CNT 才重新装载。"
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [62, 84],
+          "quote": "INT/default 状态下 Mode 0 清 Enable，否则清 _IRQ，随后 state 回 IDLE。"
         }
       ],
       "status": "frozen",
@@ -937,15 +1071,17 @@
       "id": "COURSE-P7-TIMER-006",
       "profile": "P7",
       "domain": "timer",
-      "statement": "计数中清 Enable 会停止；再次置 Enable 从 PRESET 重新加载。所有寄存器写均优先于设备同周期自动更新。",
+      "statement": "计数中清 Enable 会回到 IDLE 停止；再次置 Enable 后经 LOAD 从 PRESET 重新装载。WE 对寄存器的写优先于设备同周期自动更新。本条不冻结 Mode 0 restart 时 pending IRQ 的清除时机。",
       "normativeReference": [
         {
-          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
-          "quote": "计数中清 Enable 会停止；再次置 Enable 从 PRESET 重新加载。所有寄存器写均优先于设备同周期自动更新。"
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [56, 84],
+          "quote": "WE 分支位于状态机更新之前；CNT 中 Enable=0 回 IDLE，随后 Enable=1 经 IDLE、LOAD 将 PRESET 装入 COUNT。"
         }
       ],
       "status": "frozen",
-      "revision": 1
+      "revision": 1,
+      "note": "Mode 0 restart 的 pending IRQ 清除行为由 COURSE-P7-TIMER-RESTART-001 保持 pending。"
     },
     {
       "id": "COURSE-P7-TIMER-007",
@@ -1004,6 +1140,11 @@
       "statement": "P5/P6 可比较域同时约束 generator、shrinker、preflight 和 differential 计数：macro/pseudo 展开后的每条真实指令必须属于对应 profile；IM/DM 分别限制在 0x3000..0x6fff 与 0..0x2fff；生成语料不得产生 AdEL/AdES/RI；div/divu 除零、jalr 两寄存器相同、delay slot 内再次执行 branch/jump 属于 undefined 域（执行器可确定化以便诊断，但不得作为严格 expected）；标准 completion 为末尾自环 beq + delay-slot nop，halt detector 识别 profile 指定的完整二指令序列并在 nop 成功提交后停止。",
       "normativeReference": [
         {
+          "source": "cscore/markdown/P5/testcases/P5-4-5.md",
+          "lines": [10, 77],
+          "quote": "覆盖率工具适用于 P5 & P6：宏展开后的真实指令受指令集约束；IM 为 0x3000-0x6fff，DM 为 0x0000-0x2fff；不得产生异常或 DivZero/JalrSame/DoubleDelay；程序以自环 beq 加 nop 结束。"
+        },
+        {
           "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
           "quote": "COURSE-P56-DOMAIN-001 同时约束 generator、shrinker、preflight 和 differential 计数。"
         }
@@ -1017,6 +1158,11 @@
       "domain": "completion",
       "statement": "标准 completion 为末尾自环（beq $0,$0,-1 = 0x1000ffff）加 delay-slot nop；halt 检测必须在 nop 成功提交后停止，不能仅看到 branch PC 就提前结束。真实学生程序超出可比较域时必须由 capability/preflight 明确分类，不能悄悄进入 strict differential 或依靠 step limit 假装通过。",
       "normativeReference": [
+        {
+          "source": "cscore/markdown/P5/testcases/P5-4-5.md",
+          "lines": [51, 65],
+          "quote": "程序必须以 test_end: beq $0, $0, test_end；nop 的二指令序列结束。"
+        },
         {
           "source": "extension/src/courseTesting/mipsUtil.ts",
           "quote": "courseAsmHaltLoop 生成课程 ASM 停机尾；courseTraceHaltPc 从 dump 验证 0x1000ffff 自分支。"

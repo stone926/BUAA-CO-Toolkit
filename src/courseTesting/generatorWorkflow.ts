@@ -25,7 +25,7 @@ import {
 import {
   AsmCase,
   createAsmCaseFromText,
-  updateAsmCaseArtifacts
+  updateAsmCaseMetadata
 } from '../asmCaseStore';
 import {
   BuiltinAsmGeneratorError,
@@ -288,10 +288,10 @@ async function runBuiltinGeneratorAndCollectAsms(
           probe: generated.probe
         }
       });
-      await updateAsmCaseArtifacts(asmCase, 'source', {
-        generatedName: fileName,
-        seed: generated.seed,
-        mode: generated.mode ?? mode ?? 'default'
+      await updateAsmCaseMetadata(asmCase, {
+        'source.generatedName': fileName,
+        'source.seed': generated.seed,
+        'source.mode': generated.mode ?? mode ?? 'default'
       });
       asms.push(asmCase.sourceAsm);
       asmCases.push(asmCase);

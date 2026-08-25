@@ -17,12 +17,18 @@ export interface WorkerJob {
   payload?: unknown;
 }
 
+/** Wire-level envelope; unknown string kinds are structurally valid and get a structured worker error. */
+export interface WorkerJobEnvelope {
+  kind: string;
+  payload?: unknown;
+}
+
 export interface WorkerRequestMessage {
   protocolVersion: typeof workerProtocolVersion;
   kind: 'request';
   requestId: string;
   jobId: string;
-  job: WorkerJob;
+  job: WorkerJobEnvelope;
 }
 
 export interface WorkerCancelMessage {
@@ -46,6 +52,8 @@ export interface WorkerResultMessage {
   ok: boolean;
   payload?: unknown;
   error?: string;
+  /** True only for the single terminal result produced by an accepted cancel. */
+  cancelled?: true;
 }
 
 export type WorkerInboundMessage = WorkerRequestMessage | WorkerCancelMessage;
@@ -53,19 +61,71 @@ export type WorkerInboundMessage = WorkerRequestMessage | WorkerCancelMessage;
 export type WorkerOutboundMessage = WorkerProgressMessage | WorkerResultMessage;
 
 export function isWorkerInboundMessage(value: unknown): value is WorkerInboundMessage {
-  if (!value || typeof value !== 'object') {
+  if (!isRecord(value)
+    || !hasOwn(value, 'protocolVersion')
+    || !hasOwn(value, 'kind')
+    || !hasOwn(value, 'requestId')
+    || value.protocolVersion !== workerProtocolVersion
+    || !isNonEmptyString(value.requestId)) {
     return false;
   }
-  const message = value as { protocolVersion?: unknown; kind?: unknown };
-  return message.protocolVersion === workerProtocolVersion
-    && (message.kind === 'request' || message.kind === 'cancel');
+  if (value.kind === 'cancel') {
+    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId']);
+  }
+  if (value.kind !== 'request'
+    || !hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'jobId', 'job'])
+    || !hasOwn(value, 'jobId')
+    || !hasOwn(value, 'job')
+    || !isNonEmptyString(value.jobId)
+    || !isRecord(value.job)
+    || !hasOnlyKeys(value.job, ['kind', 'payload'])
+    || !hasOwn(value.job, 'kind')
+    || !isNonEmptyString(value.job.kind)) {
+    return false;
+  }
+  return true;
 }
 
 export function isWorkerOutboundMessage(value: unknown): value is WorkerOutboundMessage {
-  if (!value || typeof value !== 'object') {
+  if (!isRecord(value)
+    || !hasOwn(value, 'protocolVersion')
+    || !hasOwn(value, 'kind')
+    || !hasOwn(value, 'requestId')
+    || value.protocolVersion !== workerProtocolVersion
+    || !isNonEmptyString(value.requestId)) {
     return false;
   }
-  const message = value as { protocolVersion?: unknown; kind?: unknown };
-  return message.protocolVersion === workerProtocolVersion
-    && (message.kind === 'result' || message.kind === 'progress');
+  if (value.kind === 'progress') {
+    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'batch'])
+      && hasOwn(value, 'batch')
+      && Array.isArray(value.batch);
+  }
+  if (value.kind !== 'result'
+    || !hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'ok', 'payload', 'error', 'cancelled'])
+    || !hasOwn(value, 'ok')
+    || typeof value.ok !== 'boolean') {
+    return false;
+  }
+  if (value.ok) {
+    return value.error === undefined && value.cancelled === undefined;
+  }
+  return isNonEmptyString(value.error)
+    && (value.cancelled === undefined || value.cancelled === true);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }

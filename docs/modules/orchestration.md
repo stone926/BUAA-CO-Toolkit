@@ -25,8 +25,8 @@ toolchain:
   python.ts — pythonCandidates(win32:python/py/python3, other:python3/python), firstWorkingCommand, commandResponds
 
 process:
-  process.ts — runTool(同步等待,stdout/stderr流式写入OutputChannel,超时kill), launchTool(GUI分离启动,spawn延迟判定,unref), commandLine, quoteArg
-  processCore.ts — 无VS Code依赖的spawn/timeout/stdout/stderr/逐行监控核心, 供扩展宿主和LSP复用
+  process.ts — runTool(同步等待,stdout/stderr流式写入OutputChannel,透传 stopped/stopReason), launchTool(GUI分离启动,spawn延迟判定,unref), commandLine, quoteArg
+  processCore.ts — 无VS Code依赖的spawn/stdout/stderr/逐行监控核心：timeout/AbortSignal 幂等 settle，Windows taskkill /t 与 Unix process group 执行 grace→force 整树终止；供扩展宿主和LSP复用
   startupTrace.ts — CO_TRACE_STARTUP/BUAA_CO_TRACE_STARTUP 启动耗时追踪 helper
   textChunks.ts — TextChunkAccumulator(零拷贝chunk收集), LineChunkScanner(流式逐行CRLF兼容)
 

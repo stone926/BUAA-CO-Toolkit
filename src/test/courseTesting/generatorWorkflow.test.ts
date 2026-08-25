@@ -4,7 +4,7 @@ import {
   runGeneratorAndCollectAsms,
   type BuiltinGeneratorRunSetup
 } from '../../courseTesting/generatorWorkflow';
-import { createAsmCaseFromText, updateAsmCaseArtifacts } from '../../asmCaseStore';
+import { createAsmCaseFromText, updateAsmCaseMetadata } from '../../asmCaseStore';
 import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
 
 vi.mock('vscode', async () => {
@@ -26,7 +26,7 @@ vi.mock('../../process', () => ({
 
 vi.mock('../../asmCaseStore', () => ({
   createAsmCaseFromText: vi.fn(),
-  updateAsmCaseArtifacts: vi.fn(async () => undefined)
+  updateAsmCaseMetadata: vi.fn(async () => undefined)
 }));
 
 vi.mock('../../courseTesting/builtinAsmGenerator', () => ({
@@ -122,11 +122,11 @@ describe('builtin generator workflow', () => {
         p7: { interruptSchedule: [0x4180], probe: undefined }
       })
     );
-    expect(updateAsmCaseArtifacts).toHaveBeenCalledWith(expect.anything(), 'source', expect.objectContaining({
-      generatedName: expect.stringMatching(/^builtin-p7-anchor-/),
-      seed: 'seed-1',
-      mode: 'anchor'
-    }));
+    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), {
+      'source.generatedName': expect.stringMatching(/^builtin-p7-anchor-/),
+      'source.seed': 'seed-1',
+      'source.mode': 'anchor'
+    });
   });
 
   it('emits both anchor and probe cases for hybrid P7 stress mode', async () => {
@@ -157,7 +157,13 @@ describe('builtin generator workflow', () => {
     expect(batch?.asmCases).toHaveLength(2);
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(1, expect.objectContaining({ p7StressMode: 'anchor' }));
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(2, expect.objectContaining({ p7StressMode: 'probe', exceptionRate: 0 }));
-    expect(updateAsmCaseArtifacts).toHaveBeenCalledWith(expect.anything(), 'source', expect.objectContaining({ seed: 'anchor-seed', mode: 'anchor' }));
-    expect(updateAsmCaseArtifacts).toHaveBeenCalledWith(expect.anything(), 'source', expect.objectContaining({ seed: 'probe-seed', mode: 'probe' }));
+    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      'source.seed': 'anchor-seed',
+      'source.mode': 'anchor'
+    }));
+    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      'source.seed': 'probe-seed',
+      'source.mode': 'probe'
+    }));
   });
 });

@@ -52,13 +52,13 @@ describe('course test case helpers', () => {
     const asm = vscode.Uri.file('E:/workspace/test.asm');
     const stdin = vscode.Uri.file('E:/workspace/test.in');
     const machineCode = vscode.Uri.file('E:/workspace/code.txt');
-    const marsOut = vscode.Uri.file('E:/workspace/mars.out');
+    const oracleOut = vscode.Uri.file('E:/workspace/oracle.out');
     const result = failedCase(
       { asm, stdin },
-      'mars',
-      'MARS failed',
+      'oracle',
+      'Oracle failed',
       machineCode,
-      marsOut,
+      oracleOut,
       fakeAsmCase()
     );
 
@@ -67,11 +67,12 @@ describe('course test case helpers', () => {
       stdin: stdin.fsPath,
       caseId: 'case-1',
       status: 'error',
-      stage: 'mars',
-      message: 'MARS failed',
+      stage: 'oracle',
+      message: 'Oracle failed',
       machineCode: machineCode.fsPath,
-      marsOut: marsOut.fsPath
+      oracleOut: oracleOut.fsPath
     });
+    expect(result).not.toHaveProperty('marsOut');
   });
 });
 

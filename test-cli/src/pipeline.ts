@@ -13,7 +13,7 @@ import type {
 import {
   AsmCase,
   createAsmCaseFromText,
-  updateAsmCaseArtifacts
+  updateAsmCaseMetadata
 } from '../../src/asmCaseStore';
 import {
   addContinuousResult,
@@ -81,6 +81,7 @@ interface GeneratedP7Case {
 
 interface Session {
   stopRequested: boolean;
+  abortController: AbortController;
   wakeIntervalWait?: () => void;
 }
 
@@ -107,11 +108,12 @@ export function startContinuousP7Pipeline(
   services: AppServices,
   options: ContinuousPipelineOptions
 ): ContinuousPipelineController {
-  const session: Session = { stopRequested: false };
+  const session: Session = { stopRequested: false, abortController: new AbortController() };
   return {
     result: runContinuousP7PipelineWithSession(services, options, session),
     requestStop: () => {
       session.stopRequested = true;
+      session.abortController.abort();
       session.wakeIntervalWait?.();
     }
   };
@@ -140,6 +142,7 @@ async function runContinuousP7PipelineWithSession(
   };
 
   const report: ContinuousTraceReport = {
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     running: true,
     stopRequested: false,
@@ -212,9 +215,14 @@ async function runContinuousP7PipelineWithSession(
             revealOutput: false,
             source: iteration.source,
             artifactOutputMode: 'case',
-            isimCompileCache: compileCache
+            isimCompileCache: compileCache,
+            signal: session.abortController.signal
           } as CourseTraceRunOptions);
         } catch (error) {
+          if (session.stopRequested) {
+            iteration.status = 'stopped';
+            break;
+          }
           result = {
             asm: asmCase.sourceAsm.fsPath,
             caseId: asmCase.id,
@@ -224,6 +232,10 @@ async function runContinuousP7PipelineWithSession(
             stage: 'compare',
             message: error instanceof Error ? error.message : String(error)
           };
+        }
+        if (session.stopRequested && result.cancelled) {
+          iteration.status = 'stopped';
+          break;
         }
         iteration.results.push(result);
         addContinuousResult(iteration.summary, result);
@@ -361,10 +373,10 @@ async function generateP7CasesAsync(
         probe: generated.probe
       }
     });
-    await updateAsmCaseArtifacts(asmCase, 'source', {
-      generatedName: fileName,
-      seed: generated.seed,
-      mode: generated.mode ?? mode ?? 'default'
+    await updateAsmCaseMetadata(asmCase, {
+      'source.generatedName': fileName,
+      'source.seed': generated.seed,
+      'source.mode': generated.mode ?? mode ?? 'default'
     });
     services.output.appendLine(generated.mode === 'probe'
       ? `Probe 主程序指令数量: ${generated.instructionCount}（含固定终止尾部）`
@@ -465,6 +477,9 @@ function markArtifactsPruned(result: CourseTraceCaseResult): void {
   delete result.caseManifest;
   delete result.asmSnapshot;
   delete result.machineCode;
+  delete result.oracleOut;
+  delete result.dutOut;
+  delete result.dutRawOut;
   delete result.marsOut;
   delete result.simOut;
   delete result.logisimOut;

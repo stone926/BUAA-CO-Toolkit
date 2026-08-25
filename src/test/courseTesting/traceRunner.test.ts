@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AsmCase } from '../../asmCaseStore';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
-import { prepareAsmCaseMachineCode, createAsmCaseFromAsm } from '../../asmCaseStore';
+import {
+  asmCaseSourceSnapshotIssue,
+  prepareAsmCaseMachineCode,
+  createAsmCaseFromAsm,
+  recordAsmCaseOracleResult
+} from '../../asmCaseStore';
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
 import { runIsim } from '../../verilog';
 import { readTextFile } from '../../fsUtil';
@@ -23,14 +28,17 @@ vi.mock('vscode', async () => {
 });
 
 vi.mock('../../config', () => ({
-  getProfile: vi.fn(() => 'P5')
+  getProfile: vi.fn(() => 'P5'),
+  getMemoryConfiguration: vi.fn(() => 'Default')
 }));
 
 vi.mock('../../asmCaseStore', () => ({
   asmCaseArtifactUri: vi.fn((_asmCase, kind: string, fileName: string) => URI.file(`E:/work/.co/cases/case-1/${kind}/${fileName}`)),
+  asmCaseSourceSnapshotIssue: vi.fn(async () => undefined),
   copyAsmCaseArtifact: vi.fn(async () => undefined),
   createAsmCaseFromAsm: vi.fn(),
   prepareAsmCaseMachineCode: vi.fn(),
+  recordAsmCaseOracleResult: vi.fn(async () => undefined),
   readAsmCaseManifestForAsm: vi.fn(async () => undefined),
   updateAsmCaseArtifacts: vi.fn(async () => undefined)
 }));
@@ -49,7 +57,7 @@ vi.mock('../../fsUtil', () => ({
 
 vi.mock('../../language/mips/traceCompare', () => ({
   compareTraceIterables: vi.fn(),
-  firstTraceDiffSnapshot: vi.fn(() => ({ index: 0 }))
+  firstTraceDiffSnapshot: vi.fn(() => ({ index: 0, status: 'diff' }))
 }));
 
 vi.mock('../../language/mips/traceParser', () => ({
@@ -123,6 +131,8 @@ function makeAsmCase(overrides: Partial<AsmCase['manifest']> = {}): AsmCase {
 describe('course trace runner orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(recordAsmCaseOracleResult).mockResolvedValue(undefined);
+    vi.mocked(asmCaseSourceSnapshotIssue).mockResolvedValue(undefined);
     callOrder.splice(0);
     const currentCase = makeAsmCase();
     vi.mocked(createAsmCaseFromAsm).mockImplementation(async () => {
@@ -175,7 +185,7 @@ describe('course trace runner orchestration', () => {
       return {
         matched: true,
         firstDiffIndex: -1,
-        summary: { marsEvents: 1, simEvents: 1, matchedEvents: 1, diffEvents: 0 }
+        summary: { oracleEvents: 1, dutEvents: 1, matchedEvents: 1, diffEvents: 0 }
       } as never;
     });
     vi.mocked(checkP7Probe).mockReturnValue({ passed: true, failures: [] } as never);
@@ -194,6 +204,43 @@ describe('course trace runner orchestration', () => {
     expect(executeRequest).toMatchObject({ traceLevel: 2, haltPc: 0x3004 });
     expect(machineCodeNeedsDetailedMarsTrace).toHaveBeenCalledWith('00000000\n1000ffff\n');
     expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
+    expect(result).toMatchObject({
+      stage: 'compare',
+      oracleOut: expect.stringContaining('mars.out'),
+      dutOut: expect.stringContaining('sim.out'),
+      oracleEvents: 1,
+      dutEvents: 1
+    });
+    expect(result).not.toHaveProperty('marsOut');
+    expect(result).not.toHaveProperty('simOut');
+    expect(result).not.toHaveProperty('marsEvents');
+    expect(result).not.toHaveProperty('simEvents');
+  });
+
+  it('marks an aborted oracle run as a cancelled case', async () => {
+    const descriptor = { id: 'legacy-mars-v0.6.3' } as never;
+    vi.mocked(executeWithPreflight).mockResolvedValueOnce({
+      ok: false,
+      result: {
+        ok: false,
+        status: {
+          ok: false,
+          exitCode: null,
+          stdout: '',
+          stderr: '',
+          timedOut: false,
+          stopped: true,
+          stopReason: 'aborted'
+        },
+        descriptor
+      },
+      preflight: { ok: true, diagnostics: [], descriptor }
+    } as never);
+
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+
+    expect(result).toMatchObject({ status: 'error', stage: 'oracle', cancelled: true });
+    expect(runIsim).not.toHaveBeenCalled();
   });
 
   it('uses coL2 and the instruction-block parser when machine code contains SWL/SWR', async () => {
@@ -202,10 +249,11 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
-    expect(executeWithPreflight).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      traceOutput: true,
-      traceLevel: 2
-    }));
+    expect(executeWithPreflight).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ traceOutput: true, traceLevel: 2 }),
+      expect.objectContaining({ signal: undefined })
+    );
     expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
     expect(iterCpuTraceEvents).toHaveBeenCalledTimes(1);
     expect(compareTraceIterables).toHaveBeenCalledWith(
@@ -221,10 +269,11 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
-    expect(executeWithPreflight).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      traceOutput: true,
-      traceLevel: 2
-    }));
+    expect(executeWithPreflight).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ traceOutput: true, traceLevel: 2 }),
+      expect.objectContaining({ signal: undefined })
+    );
     expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
   });
 
@@ -234,9 +283,13 @@ describe('course trace runner orchestration', () => {
 
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
-    expect(result).toMatchObject({ status: 'error', stage: 'mars' });
+    expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
     expect(result.message).toContain('DivZero');
-    expect(executeWithPreflight).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ traceLevel: 2 }));
+    expect(executeWithPreflight).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ traceLevel: 2 }),
+      expect.objectContaining({ signal: undefined })
+    );
     expect(runIsim).not.toHaveBeenCalled();
   });
 
@@ -245,7 +298,7 @@ describe('course trace runner orchestration', () => {
 
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
-    expect(result).toMatchObject({ status: 'error', stage: 'mars' });
+    expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
     expect(result.message).toContain('跳出已装载文本');
     expect(runIsim).not.toHaveBeenCalled();
   });
@@ -260,12 +313,12 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('error');
-    expect(result.stage).toBe('dump');
+    expect(result.stage).toBe('assemble');
     expect(executeWithPreflight).not.toHaveBeenCalled();
     expect(runIsim).not.toHaveBeenCalled();
   });
 
-  it('returns an ISim-stage failure with case metadata and prior Mars output', async () => {
+  it('returns a DUT-stage failure with case metadata and prior oracle output', async () => {
     vi.mocked(runIsim).mockResolvedValueOnce({
       generated: {} as never,
       fuseResult: { ok: true, code: 0, stdout: '', stderr: '' },
@@ -275,17 +328,18 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('error');
-    expect(result.stage).toBe('isim');
+    expect(result.stage).toBe('dut');
     expect(result.caseId).toBe('case-1');
     expect(result.machineCode).toContain('code.txt');
-    expect(result.marsOut).toContain('mars.out');
+    expect(result.oracleOut).toContain('mars.out');
+    expect(result).not.toHaveProperty('marsOut');
   });
 
   it('reports two empty writeback traces as indeterminate instead of blaming one side', async () => {
     vi.mocked(compareTraceIterables).mockReturnValueOnce({
       matched: true,
       firstDiffIndex: -1,
-      summary: { marsEvents: 0, simEvents: 0, matchedEvents: 0, diffEvents: 0 }
+      summary: { oracleEvents: 0, dutEvents: 0, matchedEvents: 0, diffEvents: 0 }
     } as never);
 
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
@@ -299,7 +353,7 @@ describe('course trace runner orchestration', () => {
     vi.mocked(compareTraceIterables).mockReturnValueOnce({
       matched: false,
       firstDiffIndex: 0,
-      summary: { marsEvents: 1, simEvents: 0, matchedEvents: 0, diffEvents: 1 }
+      summary: { oracleEvents: 1, dutEvents: 0, matchedEvents: 0, diffEvents: 1 }
     } as never);
 
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });

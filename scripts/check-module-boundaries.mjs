@@ -11,17 +11,19 @@
  * Exit code 0 when clean; 1 on any violation.
  */
 import * as fs from 'node:fs';
+import { builtinModules } from 'node:module';
 import * as path from 'node:path';
 import * as url from 'node:url';
 
 const root = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const coreDir = path.join(root, 'src', 'mips', 'core');
-const importPattern = /import\s+(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]|import\s*\(['"]([^'"]+)['"]\)|require\(\s*['"]([^'"]+)['"]\s*\)/g;
+const moduleSpecifierPattern = /\b(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]|\bimport\s*\(['"]([^'"]+)['"]\)|\brequire\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 const forbiddenBare = new Set([
   'vscode', 'vscode-languageserver', 'vscode-languageserver-textdocument',
   'vscode-uri', 'fs', 'path', 'worker_threads', 'child_process', 'os'
 ]);
+const nodeBuiltins = new Set(builtinModules.map((name) => name.replace(/^node:/, '').split('/')[0]));
 
 const violations = [];
 
@@ -37,23 +39,25 @@ function walk(dir) {
     }
     const text = fs.readFileSync(file, 'utf8');
     const relative = path.relative(coreDir, file).split(path.sep).join('/');
-    for (const match of text.matchAll(importPattern)) {
+    for (const match of text.matchAll(moduleSpecifierPattern)) {
       const specifier = match[1] ?? match[2] ?? match[3];
       if (!specifier) {
         continue;
       }
       const bare = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier;
-      if (specifier.startsWith('node:') && forbiddenBare.has(bare)) {
+      const bareRoot = bare.split('/')[0];
+      if (specifier.startsWith('node:') || nodeBuiltins.has(bareRoot)) {
         violations.push(`${relative}: imports forbidden module "${specifier}"`);
         continue;
       }
-      if (!specifier.startsWith('.') && forbiddenBare.has(specifier)) {
+      if (!specifier.startsWith('.') && forbiddenBare.has(bareRoot)) {
         violations.push(`${relative}: imports forbidden module "${specifier}"`);
         continue;
       }
       if (specifier.startsWith('.')) {
         const resolved = path.resolve(path.dirname(file), specifier);
-        if (!resolved.startsWith(coreDir + path.sep)) {
+        const fromCore = path.relative(coreDir, resolved);
+        if (fromCore === '..' || fromCore.startsWith('..' + path.sep) || path.isAbsolute(fromCore)) {
           violations.push(`${relative}: relative import "${specifier}" escapes src/mips/core`);
         }
       }

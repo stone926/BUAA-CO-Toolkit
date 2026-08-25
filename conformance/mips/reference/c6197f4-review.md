@@ -17,7 +17,7 @@
 | `mars/mips/hardware/Memory.java` | +51：`validateCourseDataAddress`（DM `0..0x2fff` + P7 Timer/IG 窗口）、segment 上界从排他改含端点（课程模式） | 地址域 |
 | `mars/mips/instructions/InstructionSet.java` | +74：`effectiveAddress` 增加 length 参数并接入课程地址校验 | 地址域 |
 | `mars/mips/hardware/RegisterFile.java` | +14：`resetGeneralPurposeRegisters`（全部 GPR 复位为 0） | 复位态 |
-| `mars/MarsLaunch.java` | +100：CLI 参数 `coHalt=<addr>` / `coGprZero` / `coStrictData`；课程调用自动启用 efc/p7irq；coHalt 目标必须是标准 beq-self+nop 环 | CLI |
+| `mars/MarsLaunch.java` | +100：CLI 参数 `coHalt=<addr>` / `coZeroGpr` / `coStrictData`；课程调用自动启用 efc/p7irq；coHalt 目标必须是标准 beq-self+nop 环 | CLI |
 | `mars/ProcessingException.java` | +27：`courseContractViolation` 工厂 | P7 契约 |
 | `mars/Settings.java` | +13：新设置项 | CLI |
 | `README.md`、`help/MarsHelpCommand.html` | 文档同步 | 文档 |
@@ -43,13 +43,13 @@ Timer0 `0x7f00..0x7f0b`、Timer1 `0x7f10..0x7f1b`、IG `0x7f20..0x7f23`）。
 实现同样的拒绝（并额外覆盖 EA 加法溢出、SWL/SWR 跨度、P7 只有 word 宽 Timer 访问）。
 二者互为双保险，行为方向一致（拒绝 MARS-only 段访问作为 oracle）。
 
-### 2.3 课程复位态（coGprZero）
+### 2.3 课程复位态（coZeroGpr）
 
 全部 GPR 复位值改 0，消除 `$gp=0x1800/$sp=0x2ffc` 的 Compact 播种。
 
 **与插件对照**：插件不依赖该参数——`courseTestToolchain.ts` 探针校验 Compact 初值存在、
 `marsDetailedUndefinedBehaviorError` 动态拒绝首次初始化前的 `$gp/$sp` 读取。若 legacy executor
-切换为 coGprZero 运行，该初态差异将不再存在，但 TS 侧检查保持兼容两种构建。
+切换为 coZeroGpr 运行，该初态差异将不再存在，但 TS 侧检查保持兼容两种构建。
 
 ### 2.4 P7 fetch 域与 IG 契约
 
@@ -73,6 +73,6 @@ c6197f4 的 JVM 侧实现与之等价，且直接产生 ProcessingException 而�
 - 全部改动方向与课程契约（`contracts.json`）一致，无逆向改动；新增测试向量覆盖停机尾、
   P7 数据地址映射与 strict data 边界。
 - 发布：以 `c6197f4` 打 tag `v0.6.3-course1`，构建产物作为不可变 `legacy-course-executor` 资产。
-- 遗留：`reference-manifest.json` 中该角色的 `bytes/sha256` 待构建后回填；
+- 归档：`reference-manifest.json` 已记录 release 资产的精确字节数与 SHA-256；
   `MARS-DIV-COMPACT-001` 与 `MARS-DIV-GPSP-001` 在 legacy-course-executor 上的表现变化
-  须在 assembly/execution differential lane 中重核。
+  仍须在 assembly/execution differential lane 中重核。

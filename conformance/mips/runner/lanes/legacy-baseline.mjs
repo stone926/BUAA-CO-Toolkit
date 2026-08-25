@@ -1,88 +1,165 @@
-/**
- * legacy-baseline lane: pinned MARS ASM -> pinned MARS image/execution.
- *
- * Phase 0 assertion: MARS runs, the trace reaches the standard halt loop at
- * the expected PC with the expected word, and (when a marsGolden file exists)
- * the normalized final state matches the recorded golden. Divergence cases
- * (e.g. MARS-BASELINE-GPSP-001) also check the hand-reviewed expected state in
- * corpus/manifest.json, which documents MARS behavior only.
- */
-import { finalState, haltReached, parseCoL2Trace, runMarsReference } from '../marsRunner.mjs';
-import { corpusCaseFile, loadMarsGolden, recordMarsGolden } from '../caseManifest.mjs';
+/** legacy-course-executor baseline against reviewed corpus expectations and deterministic goldens. */
+import {
+  finalState,
+  haltReached,
+  legacyCourseExecutorRole,
+  nativeCourseHaltReached,
+  normalizerRevision,
+  parseCoL2Trace,
+  runMarsReference,
+  runnerRevision
+} from '../marsRunner.mjs';
+import {
+  corpusCaseFile,
+  corpusCaseSha256,
+  loadMarsGolden,
+  recordMarsGolden
+} from '../caseManifest.mjs';
+import {
+  compareExpected,
+  normalizedState,
+  normalizedWrites,
+  sameNormalizedState
+} from '../stateOracle.mjs';
 
 const defaultMaxSteps = 4096;
 
-export function runLegacyBaselineCase(manifestCase, options = {}) {
-  const asmFile = corpusCaseFile(manifestCase);
-  const profile = manifestCase.profile;
-  const maxSteps = options.maxSteps ?? defaultMaxSteps;
+function expectedProvenance(manifestCase, run, sourceSha256) {
+  return {
+    role: legacyCourseExecutorRole,
+    referenceFileName: run.reference.fileName,
+    referenceSha256: run.reference.verifiedSha256,
+    sourceFile: manifestCase.file,
+    sourceSha256,
+    sourceHashNormalization: 'utf8-lf-v1',
+    sourceTag: run.reference.sourceTag,
+    sourceCommit: run.reference.sourceCommit,
+    runnerRevision,
+    normalizerRevision,
+    profile: manifestCase.profile,
+    maxSteps: run.effectiveMaxSteps,
+    cliOptions: run.cliOptions,
+    corpusReviewer: manifestCase.provenance.reviewer,
+    corpusReviewedAt: manifestCase.provenance.reviewedAt
+  };
+}
 
-  const run = runMarsReference({ asmFile, profile, maxSteps });
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function runLegacyBaselineCase(manifestCase, options = {}) {
+  const maxSteps = options.maxSteps ?? defaultMaxSteps;
+  const asmFile = corpusCaseFile(manifestCase);
+  const sourceSha256BeforeRun = corpusCaseSha256(manifestCase);
+  const run = runMarsReference({
+    asmFile,
+    profile: manifestCase.profile,
+    maxSteps,
+    role: legacyCourseExecutorRole,
+    haltPc: manifestCase.expected.haltPc
+  });
   if (!run.ok) {
     return {
       caseId: manifestCase.caseId,
       lane: 'legacy-baseline',
       status: 'error',
-      message: `MARS exited ${run.exitCode}`,
+      message: `legacy course executor failed: ${run.error ?? `exit ${run.exitCode}`}`,
       stderr: run.stderr.slice(0, 500)
     };
   }
+  const sourceSha256AfterRun = corpusCaseSha256(manifestCase);
+  if (sourceSha256BeforeRun !== sourceSha256AfterRun) {
+    return {
+      caseId: manifestCase.caseId,
+      lane: 'legacy-baseline',
+      status: 'error',
+      message: 'assembly source changed while the reference was running'
+    };
+  }
 
-  const blocks = parseCoL2Trace(run.stdout);
+  let blocks;
+  try {
+    blocks = parseCoL2Trace(run.stdout);
+  } catch (error) {
+    return { caseId: manifestCase.caseId, lane: 'legacy-baseline', status: 'error', message: error.message };
+  }
   const expected = manifestCase.expected;
-  if (!haltReached(blocks, expected.haltPc, expected.haltWord)) {
+  if (!haltReached(blocks, expected.haltPc, expected.haltWord) || !nativeCourseHaltReached(run.stdout, expected.haltPc)) {
     return {
       caseId: manifestCase.caseId,
       lane: 'legacy-baseline',
       status: 'failed',
-      message: `halt loop not reached at ${expected.haltPc} (${expected.haltWord})`
+      message: `native course halt was not proven at ${expected.haltPc} (${expected.haltWord})`
     };
   }
 
+  // The legacy executor uses coZeroGpr; no Compact* $gp/$sp seed is injected.
   const state = finalState(blocks);
-  const normalized = { gpr: Object.fromEntries([...state.gpr.entries()].sort()), dm: Object.fromEntries([...state.dm.entries()].sort()) };
-  const recorded = loadMarsGolden(manifestCase.caseId);
-  if (recorded) {
-    if (JSON.stringify(recorded.normalized) !== JSON.stringify(normalized)) {
-      return {
-        caseId: manifestCase.caseId,
-        lane: 'legacy-baseline',
-        status: 'failed',
-        message: 'final state differs from recorded marsGolden',
-        expected: recorded.normalized,
-        actual: normalized
-      };
-    }
-  } else if (!options.recordGolden) {
+  const expectationMismatches = compareExpected(expected, state);
+  if (expectationMismatches.length > 0) {
     return {
       caseId: manifestCase.caseId,
       lane: 'legacy-baseline',
-      status: 'passed',
-      message: 'halt loop reached; no marsGolden recorded yet',
-      normalized
+      status: 'failed',
+      message: `state differs from reviewed corpus expectation: ${expectationMismatches.join('; ')}`
     };
   }
 
-  // The challenge case documents MARS behavior in corpus/manifest.json; check
-  // it directly (it never becomes a course vector).
+  const normalized = normalizedState(state);
+  const writes = normalizedWrites(state);
+  const provenance = expectedProvenance(manifestCase, run, sourceSha256AfterRun);
   if (options.recordGolden) {
     const goldenFile = recordMarsGolden(manifestCase.caseId, {
       schemaRevision: 1,
       caseId: manifestCase.caseId,
-      provenance: {
-        role: 'mars-assembler-v0.6.3',
-        sourceTag: 'v0.6.3',
-        cliOptions: { profile, maxSteps },
-        recordedAt: new Date().toISOString()
-      },
-      normalized
+      provenance,
+      normalized,
+      writes
     });
     return {
       caseId: manifestCase.caseId,
       lane: 'legacy-baseline',
       status: 'recorded',
-      message: `marsGolden written to ${goldenFile} (review raw and normalized diff before committing)`,
-      normalized
+      message: `deterministic marsGolden written to ${goldenFile}`,
+      normalized,
+      writes
+    };
+  }
+
+  let recorded;
+  try {
+    recorded = loadMarsGolden(manifestCase.caseId);
+  } catch (error) {
+    return { caseId: manifestCase.caseId, lane: 'legacy-baseline', status: 'error', message: error.message };
+  }
+  if (!recorded) {
+    return {
+      caseId: manifestCase.caseId,
+      lane: 'legacy-baseline',
+      status: 'error',
+      message: `required reviewed marsGolden is missing for ${manifestCase.caseId}`
+    };
+  }
+  if (!sameJson(recorded.provenance, provenance)) {
+    return {
+      caseId: manifestCase.caseId,
+      lane: 'legacy-baseline',
+      status: 'failed',
+      message: 'marsGolden provenance/fingerprint is stale',
+      expected: provenance,
+      actual: recorded.provenance
+    };
+  }
+  const comparison = sameNormalizedState(recorded.normalized, recorded.writes, state);
+  if (!comparison.matches) {
+    return {
+      caseId: manifestCase.caseId,
+      lane: 'legacy-baseline',
+      status: 'failed',
+      message: 'state or write set differs from recorded marsGolden',
+      expected: { normalized: recorded.normalized, writes: recorded.writes },
+      actual: { normalized: comparison.normalized, writes: comparison.writes }
     };
   }
 
@@ -90,7 +167,9 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
     caseId: manifestCase.caseId,
     lane: 'legacy-baseline',
     status: 'passed',
-    message: 'matches recorded marsGolden',
-    normalized
+    message: 'matches reviewed corpus expectation and fingerprinted marsGolden',
+    normalized,
+    writes,
+    referenceSha256: run.reference.verifiedSha256
   };
 }

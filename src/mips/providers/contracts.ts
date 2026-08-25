@@ -38,9 +38,20 @@ export interface EngineRunStatus {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  /** The process was stopped before its natural exit (for example by a halt detector or abort). */
+  stopped?: boolean;
+  /** Stable stop reason propagated from the process supervisor. */
+  stopReason?: string;
   /** Process-level provenance; only meaningful for engines that spawn a process. */
   commandLine?: string;
   cwd?: string;
+}
+
+/** Content identity of the exact engine artifact used for one provider run. */
+export interface EngineArtifactIdentity {
+  sha256: string;
+  role?: string;
+  fileName?: string;
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -67,6 +78,7 @@ export interface AssembleResult {
   courseHaltPc?: number;
   status: EngineRunStatus;
   descriptor: EngineDescriptor;
+  engineArtifact?: EngineArtifactIdentity;
 }
 
 export interface MipsAssemblerProvider {
@@ -108,6 +120,7 @@ export interface ExecuteResult {
   outputFile?: vscode.Uri;
   status: EngineRunStatus;
   descriptor: EngineDescriptor;
+  engineArtifact?: EngineArtifactIdentity;
 }
 
 export interface MipsExecutionProvider {
@@ -121,9 +134,12 @@ export interface MipsExecutionProvider {
 
 /** Legacy MARS engine: user-configured fork build, course-trace semantics. */
 export const LEGACY_MARS_DESCRIPTOR: EngineDescriptor = {
-  id: 'legacy-mars-v0.6.3',
+  // This is deliberately not a pinned-reference id. Production executes the
+  // user-configured JAR; conformance roles such as mars-assembler-v0.6.3 are
+  // resolved and hash-verified separately.
+  id: 'legacy-mars-configured',
   kind: 'full-stack',
-  build: 'user-configured Mars-with-BUAA-CO-extension (v0.6.3 course semantics)',
+  build: 'user-configured MARS artifact (unverified identity)',
   semanticsRevision: 1,
   capabilitiesRevision: 1
 };

@@ -1,5 +1,7 @@
 // @index mips-commands — MARS运行/dump/终端/P7内核段合并
 import * as path from 'path';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import {
   getJava,
@@ -26,6 +28,7 @@ import {
   P7_COURSE_MEMORY_CONFIG
 } from './language/mips/marsArgs';
 import { Commands, CO_OUT_DIR, CPU_HALT_PROFILES } from './constants';
+import type { EngineArtifactIdentity } from './mips/providers/contracts';
 
 // Re-export for testability
 export { buildMarsArgs } from './language/mips/marsArgs';
@@ -46,6 +49,8 @@ export interface MarsRunOptions {
   p7RiInstruction?: boolean;
   maxSteps?: number;
   haltPc?: number;
+  /** Cancels every external MARS process started for this logical run. */
+  signal?: AbortSignal;
 }
 
 export interface MarsRunOutput {
@@ -53,6 +58,8 @@ export interface MarsRunOutput {
   outputFile?: vscode.Uri;
   /** Halt PC derived from the pre-merge user-text dump. */
   courseHaltPc?: number;
+  /** Exact primary JAR identity verified before and after this run. */
+  engineArtifact?: EngineArtifactIdentity;
 }
 
 export function registerMips(context: vscode.ExtensionContext, services: AppServices): void {
@@ -155,6 +162,20 @@ export async function runMarsFile(
   }
   const java = getJava(asmUri);
   const cwd = dirname(asmUri);
+  let engineArtifact: EngineArtifactIdentity;
+  try {
+    engineArtifact = await fingerprintMarsArtifact(mars);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = `无法读取已配置的 MARS artifact，运行已终止：${detail}`;
+    services.output.appendLine(message);
+    if (showMessages) {
+      vscode.window.showErrorMessage(message);
+    }
+    return {
+      result: localMarsRunFailure(java, ['-jar', mars], cwd, message)
+    };
+  }
   const memoryConfiguration = getMemoryConfiguration(asmUri);
   const p7RiInstruction = options.p7RiInstruction ?? await p7RiInstructionNeeded(asmUri);
   const effectiveOptions: MarsRunOptions = { ...options, p7RiInstruction };
@@ -181,7 +202,7 @@ export async function runMarsFile(
     if (showMessages) {
       vscode.window.showErrorMessage(setupError);
     }
-    return { result, outputFile };
+    return { result, outputFile, engineArtifact };
   }
 
   let result: RunResult;
@@ -199,7 +220,8 @@ export async function runMarsFile(
       cwd,
       output: services.output,
       resource: asmUri,
-      stdin: options.stdin
+      stdin: options.stdin,
+      signal: options.signal
     });
     result = withMarsCompatibilityDiagnostics(result, services, mode, effectiveOptions, memoryConfiguration);
     if (result.ok && courseDataDump) {
@@ -241,6 +263,12 @@ export async function runMarsFile(
     }
   }
 
+  const artifactDriftError = await marsArtifactDriftError(mars, engineArtifact.sha256);
+  if (artifactDriftError) {
+    services.output.appendLine(artifactDriftError);
+    result = localMarsRunFailureFrom(result, artifactDriftError);
+  }
+
   if (mode === 'run') {
     outputFile = options.runOutputFile;
     if (!outputFile) {
@@ -254,7 +282,7 @@ export async function runMarsFile(
   }
 
   if (!showMessages) {
-    return { result, outputFile, courseHaltPc: validatedCourseHaltPc };
+    return { result, outputFile, courseHaltPc: validatedCourseHaltPc, engineArtifact };
   }
 
   if (result.ok) {
@@ -270,7 +298,27 @@ export async function runMarsFile(
     vscode.window.showErrorMessage(`MARS 运行失败${result.exitCode === null ? '' : `，退出码 ${result.exitCode}`}`);
   }
 
-  return { result, outputFile, courseHaltPc: validatedCourseHaltPc };
+  return { result, outputFile, courseHaltPc: validatedCourseHaltPc, engineArtifact };
+}
+
+async function fingerprintMarsArtifact(file: string): Promise<EngineArtifactIdentity> {
+  const bytes = await fs.promises.readFile(file);
+  return {
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+    role: 'user-configured-mars',
+    fileName: path.basename(file)
+  };
+}
+
+async function marsArtifactDriftError(file: string, expectedSha256: string): Promise<string | undefined> {
+  try {
+    const current = await fingerprintMarsArtifact(file);
+    return current.sha256 === expectedSha256
+      ? undefined
+      : `MARS artifact 在运行期间发生变化（期望 SHA-256 ${expectedSha256}，实际 ${current.sha256}），本次结果已拒绝。`;
+  } catch (error) {
+    return `MARS artifact 在运行结束前变得不可用，本次结果已拒绝：${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 interface CourseDataDumpFiles {
@@ -444,7 +492,8 @@ async function mergeP7KernelTextDump(
     kernelResult = await runTool(java, args, {
       cwd,
       output: services.output,
-      resource: asmUri
+      resource: asmUri,
+      signal: options.signal
     });
   } catch (error) {
     await cleanupCoTmp(tempDirPath);

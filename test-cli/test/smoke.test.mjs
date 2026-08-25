@@ -44,7 +44,10 @@ test('one P7 iteration writes a JSON report when MARS fails', () => {
 
   assert.equal(result.status, 1, result.stderr || result.stdout);
   const report = JSON.parse(fs.readFileSync(path.join(project, '.co', 'out', 'continuous-trace-report.json'), 'utf8'));
+  assert.equal(report.schemaVersion, 2);
   assert.equal(report.iterations.length, 1);
   assert.equal(report.iterations[0].summary.errors, 1);
-  assert.equal(report.iterations[0].results[0].stage, 'dump');
+  assert.equal(report.iterations[0].results[0].stage, 'assemble');
+  assert.equal('marsOut' in report.iterations[0].results[0], false);
+  assert.equal('simOut' in report.iterations[0].results[0], false);
 });

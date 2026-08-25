@@ -5,7 +5,7 @@ vi.mock('vscode', () => ({
   workspace: {}
 }));
 
-import { p3LogisimRomCapacityError } from '../courseTestLogisim';
+import { p3LogisimRomCapacityError, runP3LogisimTraceCase } from '../courseTestLogisim';
 import type { LogisimRomTarget } from '../language/logisim/rom';
 
 describe('course test Logisim helpers', () => {
@@ -24,5 +24,24 @@ describe('course test Logisim helpers', () => {
   it('accepts unknown or large ROM capacities', () => {
     expect(p3LogisimRomCapacityError({ index: 0 } as LogisimRomTarget, 128)).toBeUndefined();
     expect(p3LogisimRomCapacityError({ index: 0, addrWidth: 31 } as LogisimRomTarget, 4096)).toBeUndefined();
+  });
+
+  it('returns a neutral DUT-stage result for an unsupported stdin case', async () => {
+    const result = await runP3LogisimTraceCase(
+      { output: { appendLine: vi.fn() } } as never,
+      {
+        asm: { fsPath: 'E:/workspace/test.asm' } as never,
+        stdin: { fsPath: 'E:/workspace/test.in' } as never
+      }
+    );
+
+    expect(result).toMatchObject({
+      asm: 'E:/workspace/test.asm',
+      stdin: 'E:/workspace/test.in',
+      status: 'error',
+      stage: 'dut'
+    });
+    expect(result).not.toHaveProperty('logisimOut');
+    expect(result).not.toHaveProperty('simOut');
   });
 });

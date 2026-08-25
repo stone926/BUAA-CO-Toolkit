@@ -6,7 +6,7 @@
       "caseId": "COURSE-VEC-P3-ARITH-001",
       "file": "spec-microprograms/p3-arith.asm",
       "profile": "P3",
-      "lanes": ["course-vector", "legacy-baseline"],
+      "lanes": ["course-vector", "legacy-baseline", "assembly-diff"],
       "provenance": {
         "kind": "spec-microprogram",
         "reviewer": "stone926",
@@ -17,14 +17,15 @@
         "haltPc": "0x00003020",
         "haltWord": "0x1000ffff",
         "gpr": { "8": "0x00000000", "9": "0x00001234", "10": "0x12340000", "11": "0x12341234", "12": "0x1233edcc", "13": "0x24680000", "14": "0xffffedcc" },
-        "dm": {}
+        "dm": {},
+        "writes": { "gpr": ["8", "9", "10", "11", "12", "13", "14"], "dm": [] }
       }
     },
     {
       "caseId": "COURSE-VEC-P3-MEMORY-001",
       "file": "spec-microprograms/p3-memory.asm",
       "profile": "P3",
-      "lanes": ["course-vector", "legacy-baseline"],
+      "lanes": ["course-vector", "legacy-baseline", "assembly-diff"],
       "provenance": {
         "kind": "spec-microprogram",
         "reviewer": "stone926",
@@ -35,14 +36,15 @@
         "haltPc": "0x00003024",
         "haltWord": "0x1000ffff",
         "gpr": { "8": "0x000000ff", "9": "0x000000ff", "10": "0x000000ff", "11": "0x00005aa5", "12": "0x00005aa5", "13": "0x00000000" },
-        "dm": { "0x00000000": "0x000000ff", "0x00002ffc": "0x000000ff", "0x00001004": "0x00005aa5" }
+        "dm": { "0x00000000": "0x000000ff", "0x00002ffc": "0x000000ff", "0x00001004": "0x00005aa5" },
+        "writes": { "gpr": ["8", "9", "10", "11", "12", "13"], "dm": ["0x00000000", "0x00002ffc", "0x00001004"] }
       }
     },
     {
       "caseId": "COURSE-VEC-P3-BRANCH-001",
       "file": "spec-microprograms/p3-branch.asm",
       "profile": "P3",
-      "lanes": ["course-vector", "legacy-baseline"],
+      "lanes": ["course-vector", "legacy-baseline", "assembly-diff"],
       "provenance": {
         "kind": "spec-microprogram",
         "reviewer": "stone926",
@@ -53,7 +55,8 @@
         "haltPc": "0x00003028",
         "haltWord": "0x1000ffff",
         "gpr": { "8": "0x00000000", "9": "0x00000001", "10": "0x00000000", "11": "0x00000007", "12": "0x00010000" },
-        "dm": {}
+        "dm": {},
+        "writes": { "gpr": ["8", "9", "11", "12"], "dm": [] }
       }
     },
     {
@@ -65,13 +68,14 @@
         "kind": "challenge",
         "reviewer": "stone926",
         "reviewedAt": "2026-08-25",
-        "note": "Minimal repro of MARS-DIV-GPSP-001. Legacy baseline must observe 0x00001800/0x00002ffc in DM[0]/DM[4]; a course vector for this program would be a category error."
+        "note": "Minimal repro of MARS-DIV-GPSP-001. The stock assembler/course-vector path exposes the historical Compact* reset, while legacy-course-executor with coZeroGpr must write the course-correct zero reset into DM[0]/DM[4]."
       },
       "expected": {
         "haltPc": "0x00003008",
         "haltWord": "0x1000ffff",
         "gpr": {},
-        "dm": { "0x00000000": "0x00001800", "0x00000004": "0x00002ffc" }
+        "dm": { "0x00000000": "0x00000000", "0x00000004": "0x00000000" },
+        "writes": { "gpr": [], "dm": ["0x00000000", "0x00000004"] }
       }
     }
   ]

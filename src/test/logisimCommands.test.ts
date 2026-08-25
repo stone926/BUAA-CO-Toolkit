@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { Commands } from '../constants';
 import { registerLogisim } from '../logisim';
 import {
+  copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
   resolveAsmCaseInput,
@@ -51,6 +52,8 @@ vi.mock('../workflowInputs', () => ({
 }));
 
 vi.mock('../asmCaseStore', () => ({
+  asmCaseSourceSnapshotIssue: vi.fn(async () => undefined),
+  copyAsmCaseArtifact: vi.fn(async () => vscode.Uri.file('E:/work/.co/cases/case-1/logisim/circuit-template.circ')),
   createAsmCaseFromAsm: vi.fn(),
   prepareAsmCaseMachineCode: vi.fn(),
   resolveAsmCaseInput: vi.fn(),
@@ -129,7 +132,13 @@ describe('Logisim command workflows', () => {
 
     expect(injectMachineCodeIntoLogisimRom).toHaveBeenCalledWith('v2.0 raw\n00000000\n', 'v2.0 raw\n00000000\n', 0);
     expect(writeAsmCaseArtifact).toHaveBeenCalledWith(expect.anything(), 'logisim', 'cpu.main.circ', '<project>updated</project>', 'injectedCircuit');
-    expect(updateAsmCaseArtifacts).toHaveBeenCalledWith(expect.anything(), 'logisim', { circuitTemplate: circuit.fsPath });
+    expect(copyAsmCaseArtifact).toHaveBeenCalledWith(
+      expect.anything(),
+      'logisim',
+      circuit,
+      'circuit-template.circ',
+      'circuitTemplate'
+    );
     expect(vscode.window.showTextDocument).toHaveBeenCalled();
   });
 });

@@ -16,12 +16,83 @@ vi.mock('vscode', () => ({
 import {
   batchSummary,
   continuousTraceMonitorMaxRows,
+  createCourseTraceBatchReport,
+  neutralCourseTraceCaseResult,
+  neutralCourseTraceStage,
   renderBatchTraceReport,
   renderContinuousTraceMonitor
 } from '../courseTestReport';
 import type { ContinuousTraceReport, CourseTraceCaseResult } from '../courseTestReport';
 
 describe('course test reports', () => {
+  it('writes role-neutral v2 results while preserving v1 input compatibility', () => {
+    const legacy: CourseTraceCaseResult = {
+      asm: 'legacy.asm',
+      status: 'failed',
+      stage: 'mars',
+      message: 'legacy mismatch',
+      marsOut: 'legacy.mars.out',
+      simOut: 'legacy.sim.out',
+      logisimOut: 'legacy.logisim.raw.out',
+      marsEvents: 2,
+      simEvents: 3,
+      firstDiff: {
+        index: 0,
+        status: 'diff',
+        mars: { pc: '00003000', kind: 'grf', target: '1', value: '00000001', raw: '', lineNumber: 1 },
+        sim: { pc: '00003000', kind: 'grf', target: '1', value: '00000002', raw: '', lineNumber: 1 }
+      }
+    };
+
+    const normalized = neutralCourseTraceCaseResult(legacy);
+    expect(normalized).toMatchObject({
+      stage: 'oracle',
+      oracleOut: 'legacy.mars.out',
+      dutOut: 'legacy.sim.out',
+      dutRawOut: 'legacy.logisim.raw.out',
+      oracleEvents: 2,
+      dutEvents: 3,
+      firstDiff: {
+        oracle: { value: '00000001' },
+        dut: { value: '00000002' }
+      }
+    });
+    expect(normalized).not.toHaveProperty('marsOut');
+    expect(normalized).not.toHaveProperty('simOut');
+    expect(normalized).not.toHaveProperty('logisimOut');
+    expect(normalized).not.toHaveProperty('marsEvents');
+    expect(normalized).not.toHaveProperty('simEvents');
+    expect(normalized.firstDiff).not.toHaveProperty('mars');
+    expect(normalized.firstDiff).not.toHaveProperty('sim');
+
+    const report = createCourseTraceBatchReport([legacy], undefined, '2026-08-26T00:00:00.000Z');
+    expect(report.schemaVersion).toBe(2);
+    expect(report.results[0]).toEqual(normalized);
+    expect(neutralCourseTraceStage('dump')).toBe('assemble');
+    expect(neutralCourseTraceStage('isim')).toBe('dut');
+    expect(neutralCourseTraceStage('logisim')).toBe('dut');
+
+    const oldReportHtml = renderBatchTraceReport(
+      [legacy],
+      { fsPath: 'E:/out/legacy-report.json' } as unknown as import('vscode').Uri
+    );
+    expect(oldReportHtml).toContain('<td>oracle</td>');
+    expect(oldReportHtml).toContain('Oracle 2, DUT 3');
+  });
+
+  it('keeps a legacy raw-only Logisim output out of the canonical DUT slot', () => {
+    const normalized = neutralCourseTraceCaseResult({
+      asm: 'legacy-logisim.asm',
+      status: 'error',
+      stage: 'logisim',
+      message: 'trace parsing failed',
+      logisimOut: 'legacy.logisim.raw.out'
+    });
+
+    expect(normalized.dutOut).toBeUndefined();
+    expect(normalized.dutRawOut).toBe('legacy.logisim.raw.out');
+  });
+
   it('summarizes trace results by status', () => {
     const results: CourseTraceCaseResult[] = [
       { asm: 'case1.asm', status: 'passed', stage: 'compare', message: 'OK' },
@@ -63,6 +134,8 @@ describe('course test reports', () => {
     expect(html).toContain('code&amp;latest.txt');
     expect(html).toContain('mars&quot;out.txt');
     expect(html).toContain('sim&lt;out&gt;.txt');
+    expect(html).toContain('Oracle');
+    expect(html).toContain('DUT');
     expect(html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
     expect(html).toContain('report&amp;latest.json');
   });

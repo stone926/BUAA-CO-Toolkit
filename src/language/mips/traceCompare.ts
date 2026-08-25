@@ -1,6 +1,13 @@
 import { CpuTraceEvent } from './traceParser';
 
-export type TraceDiffStatus = 'ok' | 'diff' | 'cycle-diff' | 'mars-only' | 'sim-only';
+export type NeutralTraceDiffStatus =
+  | 'ok'
+  | 'diff'
+  | 'cycle-diff'
+  | 'oracle-only'
+  | 'dut-only';
+export type LegacyTraceDiffStatus = 'mars-only' | 'sim-only';
+export type TraceDiffStatus = NeutralTraceDiffStatus | LegacyTraceDiffStatus;
 
 export interface TraceCompareOptions {
   compareCycles?: boolean;
@@ -10,7 +17,11 @@ export interface TraceCompareOptions {
 export interface TraceDiffEntry {
   index: number;
   status: TraceDiffStatus;
+  oracle?: CpuTraceEvent;
+  dut?: CpuTraceEvent;
+  /** @deprecated v1 alias for oracle. */
   mars?: CpuTraceEvent;
+  /** @deprecated v1 alias for dut. */
   sim?: CpuTraceEvent;
   reason?: string;
 }
@@ -29,8 +40,20 @@ export interface TraceDiffSnapshot {
   index: number;
   status: TraceDiffStatus;
   reason?: string;
+  oracle?: TraceEventSnapshot;
+  dut?: TraceEventSnapshot;
+  /** @deprecated v1 alias for oracle. */
   mars?: TraceEventSnapshot;
+  /** @deprecated v1 alias for dut. */
   sim?: TraceEventSnapshot;
+}
+
+export interface NeutralTraceDiffSnapshot {
+  index: number;
+  status: NeutralTraceDiffStatus;
+  reason?: string;
+  oracle?: TraceEventSnapshot;
+  dut?: TraceEventSnapshot;
 }
 
 export interface TraceDiffResult {
@@ -40,14 +63,18 @@ export interface TraceDiffResult {
   entriesTruncated?: boolean;
   entries: TraceDiffEntry[];
   summary: {
-    marsEvents: number;
-    simEvents: number;
+    oracleEvents: number;
+    dutEvents: number;
+    /** @deprecated v1 alias for oracleEvents. */
+    marsEvents?: number;
+    /** @deprecated v1 alias for dutEvents. */
+    simEvents?: number;
     matchedEvents: number;
     diffEvents: number;
   };
 }
 
-export function firstTraceDiffSnapshot(diff: TraceDiffResult): TraceDiffSnapshot | undefined {
+export function firstTraceDiffSnapshot(diff: TraceDiffResult): NeutralTraceDiffSnapshot | undefined {
   return traceDiffSnapshot(firstTraceDiffEntry(diff));
 }
 
@@ -58,17 +85,29 @@ export function firstTraceDiffEntry(diff: TraceDiffResult): TraceDiffEntry | und
   return diff.firstDiffEntry ?? diff.entries.find((entry) => entry.index === diff.firstDiffIndex);
 }
 
-export function traceDiffSnapshot(entry: TraceDiffEntry | undefined): TraceDiffSnapshot | undefined {
+export function traceDiffSnapshot(entry: TraceDiffEntry | undefined): NeutralTraceDiffSnapshot | undefined {
   if (!entry) {
     return undefined;
   }
+  const oracle = traceEventSnapshot(entry.oracle ?? entry.mars);
+  const dut = traceEventSnapshot(entry.dut ?? entry.sim);
   return {
     index: entry.index,
-    status: entry.status,
+    status: neutralTraceDiffStatus(entry.status),
     reason: entry.reason,
-    mars: traceEventSnapshot(entry.mars),
-    sim: traceEventSnapshot(entry.sim)
+    oracle,
+    dut
   };
+}
+
+function neutralTraceDiffStatus(status: TraceDiffStatus): NeutralTraceDiffStatus {
+  if (status === 'mars-only') {
+    return 'oracle-only';
+  }
+  if (status === 'sim-only') {
+    return 'dut-only';
+  }
+  return status;
 }
 
 export function compareTraces(
@@ -147,8 +186,8 @@ export function compareTraceIterables(
     entriesTruncated,
     entries,
     summary: {
-      marsEvents: marsState.seen,
-      simEvents: simState.seen,
+      oracleEvents: marsState.seen,
+      dutEvents: simState.seen,
       matchedEvents,
       diffEvents
     }
@@ -265,10 +304,10 @@ function compareAtIndex(
   options: TraceCompareOptions
 ): TraceDiffEntry {
   if (!mars && sim) {
-    return { index, status: 'sim-only', sim, reason: 'Simulator has an extra event.' };
+    return diffEntry(index, 'dut-only', undefined, sim, 'DUT has an extra event.');
   }
   if (mars && !sim) {
-    return { index, status: 'mars-only', mars, reason: 'MARS has an extra event.' };
+    return diffEntry(index, 'oracle-only', mars, undefined, 'Oracle has an extra event.');
   }
   if (!mars || !sim) {
     return { index, status: 'ok' };
@@ -276,12 +315,28 @@ function compareAtIndex(
 
   const reason = firstSemanticDifference(mars, sim);
   if (reason) {
-    return { index, status: 'diff', mars, sim, reason };
+    return diffEntry(index, 'diff', mars, sim, reason);
   }
   if (options.compareCycles && mars.cycle !== sim.cycle) {
-    return { index, status: 'cycle-diff', mars, sim, reason: 'Cycle/time differs.' };
+    return diffEntry(index, 'cycle-diff', mars, sim, 'Cycle/time differs.');
   }
-  return { index, status: 'ok', mars, sim };
+  return diffEntry(index, 'ok', mars, sim);
+}
+
+function diffEntry(
+  index: number,
+  status: NeutralTraceDiffStatus,
+  oracle: CpuTraceEvent | undefined,
+  dut: CpuTraceEvent | undefined,
+  reason?: string
+): TraceDiffEntry {
+  return {
+    index,
+    status,
+    oracle,
+    dut,
+    reason
+  };
 }
 
 function firstSemanticDifference(mars: CpuTraceEvent, sim: CpuTraceEvent): string | undefined {

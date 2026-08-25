@@ -1,0 +1,47 @@
+{
+  "schemaRevision": 1,
+  "caseId": "MARS-BASELINE-GPSP-001",
+  "provenance": {
+    "role": "legacy-course-executor",
+    "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
+    "referenceSha256": "d134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64",
+    "sourceFile": "challenge/gp-sp-divergence.asm",
+    "sourceSha256": "577024ca0f8136e67213058ffdaffee8e3719b6c349996d5fc59c3f3846a4b08",
+    "sourceHashNormalization": "utf8-lf-v1",
+    "sourceTag": "v0.6.3-course1",
+    "sourceCommit": "c6197f433e20ac0800a48ea1255053147ade5a77",
+    "runnerRevision": 2,
+    "normalizerRevision": 1,
+    "profile": "P3",
+    "maxSteps": 4096,
+    "cliOptions": [
+      "nc",
+      "mc",
+      "FixedCompactLargeText",
+      "ae1",
+      "se1",
+      "coZeroGpr",
+      "coStrictData",
+      "coHalt=0x00003008",
+      "coL2",
+      "4096",
+      "<SOURCE>"
+    ],
+    "corpusReviewer": "stone926",
+    "corpusReviewedAt": "2026-08-25"
+  },
+  "normalized": {
+    "gpr": {},
+    "dm": {
+      "00000000": "00000000",
+      "00000004": "00000000"
+    }
+  },
+  "writes": {
+    "gpr": [],
+    "dm": [
+      "00000000",
+      "00000004"
+    ]
+  }
+}

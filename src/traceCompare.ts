@@ -17,10 +17,10 @@ export interface CompareMode {
   compareCycles: boolean;
 }
 
-export interface TraceFilePair {
-  mars: vscode.Uri;
-  sim: vscode.Uri;
-}
+export type TraceFilePair =
+  | { oracle: vscode.Uri; dut: vscode.Uri; mars?: never; sim?: never }
+  /** Legacy API shape retained for callers and reports created before schema v2. */
+  | { mars: vscode.Uri; sim: vscode.Uri; oracle?: never; dut?: never };
 
 export const defaultTraceCompareMode: CompareMode = {
   label: '忽略周期/时间',
@@ -36,29 +36,29 @@ export function registerTraceCompare(context: vscode.ExtensionContext, services:
 }
 
 async function compareTraceFiles(services: AppServices): Promise<void> {
-  const mars = await resolveFileInput({
-    title: '选择 MARS 答案 Trace 输出',
+  const oracle = await resolveFileInput({
+    title: '选择 Oracle Trace 输出',
     active: false,
     filters: {
       Text: ['txt', 'out', 'log'],
       All: ['*']
     }
   });
-  if (!mars) {
+  if (!oracle) {
     return;
   }
-  const sim = await resolveFileInput({
-    title: '选择仿真器 Trace 输出',
+  const dut = await resolveFileInput({
+    title: '选择 DUT Trace 输出',
     active: false,
     filters: {
       Text: ['txt', 'out', 'log'],
       All: ['*']
     }
   });
-  if (!sim) {
+  if (!dut) {
     return;
   }
-  await compareTracePair({ mars, sim }, services);
+  await compareTracePair({ oracle, dut }, services);
 }
 
 async function compareLatestOutputs(services: AppServices): Promise<void> {
@@ -70,7 +70,7 @@ async function compareLatestOutputs(services: AppServices): Promise<void> {
   const pair = await findLatestTracePair(folder);
   if (!pair) {
     const choice = await vscode.window.showWarningMessage(
-      '在当前工作区中未找到 .co/out/*.mars.out 和 .co/out/*.sim.out',
+      '在当前工作区中未找到现有 Oracle/DUT Trace 产物（*.mars.out / *.sim.out）',
       '手动选择文件'
     );
     if (choice === '手动选择文件') {
@@ -91,26 +91,27 @@ export async function compareTracePair(
     return undefined;
   }
 
-  const marsText = await readTextFile(pair.mars);
-  const simText = await readTextFile(pair.sim);
-  const marsEvents = parseMarsOutput(marsText);
-  const simEvents = parseSimOutput(simText);
-  const diff = compareTraces(marsEvents, simEvents, { compareCycles: selectedMode.compareCycles });
+  const { oracle, dut } = traceFileSides(pair);
+  const oracleText = await readTextFile(oracle);
+  const dutText = await readTextFile(dut);
+  const oracleEvents = parseMarsOutput(oracleText);
+  const dutEvents = parseSimOutput(dutText);
+  const diff = compareTraces(oracleEvents, dutEvents, { compareCycles: selectedMode.compareCycles });
 
   revealOutputChannel(services.output);
   services.output.appendLine('');
   services.output.appendLine('Trace 比较');
-  services.output.appendLine(`MARS: ${pair.mars.fsPath}`);
-  services.output.appendLine(`SIM:  ${pair.sim.fsPath}`);
+  services.output.appendLine(`Oracle: ${oracle.fsPath}`);
+  services.output.appendLine(`DUT:    ${dut.fsPath}`);
   services.output.appendLine(`模式: ${selectedMode.label}`);
-  services.output.appendLine(`事件: MARS ${diff.summary.marsEvents}, SIM ${diff.summary.simEvents}, 匹配 ${diff.summary.matchedEvents}, 差异 ${diff.summary.diffEvents}`);
+  services.output.appendLine(`事件: Oracle ${diff.summary.oracleEvents}, DUT ${diff.summary.dutEvents}, 匹配 ${diff.summary.matchedEvents}, 差异 ${diff.summary.diffEvents}`);
   if (diff.firstDiffIndex >= 0) {
     const first = firstTraceDiffEntry(diff);
     services.output.appendLine(`首个差异位于事件 #${diff.firstDiffIndex + 1}: ${first?.reason ?? first?.status ?? 'unknown diff'}`);
   }
 
-  showTraceCompareReport(pair, diff, selectedMode, marsEvents, simEvents);
-  if (!marsEvents.length || !simEvents.length) {
+  showTraceCompareReport(pair, diff, selectedMode, oracleEvents, dutEvents);
+  if (!oracleEvents.length || !dutEvents.length) {
     vscode.window.showWarningMessage('Trace 比较完成，但其中一侧没有可解析的 Trace 事件');
   } else if (diff.matched) {
     vscode.window.showInformationMessage(`Trace 比较通过：${diff.summary.matchedEvents} 个事件匹配`);
@@ -137,12 +138,22 @@ async function pickCompareMode(): Promise<CompareMode | undefined> {
 }
 
 async function findLatestTracePair(folder: vscode.WorkspaceFolder): Promise<TraceFilePair | undefined> {
-  const mars = await findLatestFile(folder, '.co/out/*.mars.out');
-  const sim = await findLatestFile(folder, '.co/out/*.sim.out');
-  if (!mars || !sim) {
+  const oracle = await findLatestFile(folder, '.co/out/*.mars.out');
+  const dut = await findLatestFile(folder, '.co/out/*.sim.out');
+  if (!oracle || !dut) {
     return undefined;
   }
-  return { mars, sim };
+  return { oracle, dut };
+}
+
+function traceFileSides(pair: TraceFilePair): { oracle: vscode.Uri; dut: vscode.Uri } {
+  if (pair.oracle && pair.dut) {
+    return { oracle: pair.oracle, dut: pair.dut };
+  }
+  if (pair.mars && pair.sim) {
+    return { oracle: pair.mars, dut: pair.sim };
+  }
+  throw new Error('Trace comparison requires both oracle and DUT files.');
 }
 
 async function findLatestFile(folder: vscode.WorkspaceFolder, pattern: string): Promise<vscode.Uri | undefined> {
@@ -160,29 +171,30 @@ function showTraceCompareReport(
   pair: TraceFilePair,
   diff: TraceDiffResult,
   mode: CompareMode,
-  marsEvents: CpuTraceEvent[],
-  simEvents: CpuTraceEvent[]
+  oracleEvents: CpuTraceEvent[],
+  dutEvents: CpuTraceEvent[]
 ): void {
   const panel = vscode.window.createWebviewPanel('coTraceCompare', 'CO Trace 比较', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
-  panel.webview.html = renderTraceCompareReport(pair, diff, mode, marsEvents, simEvents);
+  panel.webview.html = renderTraceCompareReport(pair, diff, mode, oracleEvents, dutEvents);
 }
 
 function renderTraceCompareReport(
   pair: TraceFilePair,
   diff: TraceDiffResult,
   mode: CompareMode,
-  marsEvents: CpuTraceEvent[],
-  simEvents: CpuTraceEvent[]
+  oracleEvents: CpuTraceEvent[],
+  dutEvents: CpuTraceEvent[]
 ): string {
+  const sides = traceFileSides(pair);
   const visible = visibleEntries(diff);
   const rows = visible.entries.map(renderDiffRow);
   const firstDiff = diff.firstDiffIndex >= 0 ? `#${diff.firstDiffIndex + 1}` : '无';
   const hiddenNote = visible.hidden
     ? `<p class="muted">显示首个差异附近的 ${visible.entries.length} / ${totalEntryCount(diff)} 个事件。</p>`
     : '';
-  const parseWarning = !marsEvents.length || !simEvents.length
+  const parseWarning = !oracleEvents.length || !dutEvents.length
     ? '<p class="warn-text">其中一侧没有可解析的 Trace 事件。请检查输出是否包含类似 <code>@00003000: $3 &lt;= 00000000</code> 或 <code>100@00003000: *00001004 &lt;= 00000000</code> 的行。</p>'
     : '';
 
@@ -192,18 +204,18 @@ function renderTraceCompareReport(
     body: html.raw(`
   ${renderMetricGrid([
     { label: '状态', value: diff.matched ? '匹配' : '不同' },
-    { label: 'MARS 事件', value: diff.summary.marsEvents },
-    { label: 'SIM 事件', value: diff.summary.simEvents },
+    { label: 'Oracle 事件', value: diff.summary.oracleEvents ?? diff.summary.marsEvents },
+    { label: 'DUT 事件', value: diff.summary.dutEvents ?? diff.summary.simEvents },
     { label: '首个差异', value: firstDiff }
   ])}
   <div class="paths">
     <div>模式: ${escapeHtml(mode.label)}</div>
-    <div>MARS: <code>${escapeHtml(pair.mars.fsPath)}</code></div>
-    <div>SIM: <code>${escapeHtml(pair.sim.fsPath)}</code></div>
+    <div>Oracle: <code>${escapeHtml(sides.oracle.fsPath)}</code></div>
+    <div>DUT: <code>${escapeHtml(sides.dut.fsPath)}</code></div>
   </div>
   ${parseWarning}
   ${hiddenNote}
-  ${renderTable(['状态', '#', '原因', 'MARS', 'SIM'], rows)}
+  ${renderTable(['状态', '#', '原因', 'Oracle', 'DUT'], rows)}
 `)
   });
 }
@@ -228,7 +240,10 @@ function visibleEntries(diff: TraceDiffResult): { entries: TraceDiffEntry[]; hid
 }
 
 function totalEntryCount(diff: TraceDiffResult): number {
-  return Math.max(diff.summary.marsEvents, diff.summary.simEvents);
+  return Math.max(
+    diff.summary.oracleEvents ?? diff.summary.marsEvents,
+    diff.summary.dutEvents ?? diff.summary.simEvents
+  );
 }
 
 function renderDiffRow(entry: TraceDiffEntry): ReportTableRow {
@@ -238,8 +253,8 @@ function renderDiffRow(entry: TraceDiffEntry): ReportTableRow {
       escapeHtml(entry.status.toUpperCase()),
       String(entry.index + 1),
       escapeHtml(entry.reason ?? ''),
-      renderEvent(entry.mars),
-      renderEvent(entry.sim)
+      renderEvent(entry.oracle ?? entry.mars),
+      renderEvent(entry.dut ?? entry.sim)
     ]
   };
 }
@@ -261,7 +276,8 @@ const traceCompareCss = `
     .ok td:first-child {
       color: var(--vscode-testing-iconPassed);
     }
-    .diff td:first-child, .mars-only td:first-child, .sim-only td:first-child, .cycle-diff td:first-child {
+    .diff td:first-child, .oracle-only td:first-child, .dut-only td:first-child,
+    .mars-only td:first-child, .sim-only td:first-child, .cycle-diff td:first-child {
       color: var(--vscode-testing-iconFailed);
       font-weight: 600;
     }

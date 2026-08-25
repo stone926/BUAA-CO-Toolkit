@@ -8,6 +8,8 @@ import { AppServices } from '../types';
 import { CourseTraceCaseInput } from '../courseTestCases';
 import {
   batchSummary,
+  createCourseTraceBatchReport,
+  neutralCourseTraceCaseResult,
   showBatchTraceReport
 } from '../courseTestReport';
 import type {
@@ -51,7 +53,7 @@ export async function runCourseTraceBatch(
       services.output.appendLine(`stdin: ${item.stdin.fsPath}`);
     }
     try {
-      results.push(await runCourseTraceCase(services, item, runOptions));
+      results.push(neutralCourseTraceCaseResult(await runCourseTraceCase(services, item, runOptions)));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       results.push({
@@ -89,11 +91,10 @@ async function writeBatchTraceReport(
   const outDir = vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
   await ensureDirectory(outDir);
   const report = vscode.Uri.file(path.join(outDir.fsPath, 'trace-batch-report.json'));
-  await writeTextFile(report, JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    source,
-    summary: batchSummary(results),
-    results
-  }, null, 2) + '\n');
+  await writeTextFile(report, JSON.stringify(
+    createCourseTraceBatchReport(results, source),
+    null,
+    2
+  ) + '\n');
   return report;
 }

@@ -1,9 +1,10 @@
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const runnerState = vi.hoisted(() => ({ root: '', profile: 'P6' }));
+const runnerState = vi.hoisted(() => ({ root: '', profile: 'P6', marsJar: '' }));
 
 vi.mock('vscode', async () => {
   const fsModule = await import('fs');
@@ -56,7 +57,7 @@ vi.mock('../../config', () => ({
   ensureConcreteProfile: vi.fn(async () => runnerState.profile),
   getJava: vi.fn(() => 'java'),
   getMachineCode: vi.fn(() => 'code.txt'),
-  getMarsJar: vi.fn(() => '/tool/Mars.jar'),
+  getMarsJar: vi.fn(() => runnerState.marsJar),
   getMemoryConfiguration: vi.fn(() => runnerState.profile === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText'),
   getMipsExtraArgs: vi.fn(() => []),
   getProfile: vi.fn(() => runnerState.profile),
@@ -85,12 +86,15 @@ describe('runMarsFile course DM initialization preflight', () => {
     vi.clearAllMocks();
     runnerState.profile = 'P6';
     runnerState.root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-mars-dm-runner-'));
+    runnerState.marsJar = path.join(runnerState.root, 'Mars.jar');
     roots.push(runnerState.root);
     fs.writeFileSync(path.join(runnerState.root, 'case.asm'), '.text\nmain:\nbeq $0,$0,main\nnop\n');
+    fs.writeFileSync(runnerState.marsJar, 'pinned-mars-a');
   });
 
   afterEach(() => {
     runnerState.root = '';
+    runnerState.marsJar = '';
     for (const root of roots.splice(0)) {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -118,6 +122,11 @@ describe('runMarsFile course DM initialization preflight', () => {
 
     expect(output?.result.ok).toBe(true);
     expect(output?.courseHaltPc).toBe(0x3000);
+    expect(output?.engineArtifact).toMatchObject({
+      sha256: crypto.createHash('sha256').update('pinned-mars-a').digest('hex'),
+      role: 'user-configured-mars',
+      fileName: 'Mars.jar'
+    });
     const args = vi.mocked(runTool).mock.calls[0][1];
     expect(dumpTriples(args).map((dump) => dump.range)).toEqual([
       courseTextRange,
@@ -142,6 +151,25 @@ describe('runMarsFile course DM initialization preflight', () => {
     const output = await runCourseDump();
 
     expect(output?.result.ok).toBe(true);
+  });
+
+  it('rejects output when the configured MARS artifact changes during the run', async () => {
+    const expectedSha256 = crypto.createHash('sha256').update('pinned-mars-a').digest('hex');
+    vi.mocked(runTool).mockImplementation(async (_command, args) => {
+      const dumps = dumpTriples(args);
+      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
+      for (const dump of dumps.filter((item) => item.range !== courseTextRange)) {
+        fs.writeFileSync(dump.file, zeroChunk);
+      }
+      fs.writeFileSync(runnerState.marsJar, 'replaced-mars-b');
+      return successResult();
+    });
+
+    const output = await runCourseDump();
+
+    expect(output?.result.ok).toBe(false);
+    expect(output?.result.stderr).toMatch(/artifact 在运行期间发生变化/);
+    expect(output?.engineArtifact?.sha256).toBe(expectedSha256);
   });
 
   it('rejects the first nonzero initialized word and still cleans the dump directory', async () => {

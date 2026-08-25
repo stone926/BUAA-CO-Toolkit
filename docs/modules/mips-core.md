@@ -5,5 +5,5 @@
 - api.ts — 核心数据契约：SourceUnit、ProgramImage、EngineDescriptor、EngineCapabilities、指令分层
 - values.ts — 32/64 位值边界 helper（u32/s32/signExtend16/乘除 64 位/溢出标志）与固定宽度 hex 格式化
 - generated/isaCatalog.ts — 由 scripts/generate-mips-isa.mjs 从 resources/mips/isa.json 生成（勿手改）
-- isa/decoder.ts — 基于生成 catalog 的三层机器码解码（runtime RI / exact / 课程 canonical）
-- isa/encoder.ts — 基于生成 catalog 的真实指令编码
+- isa/decoder.ts — 基于生成 catalog、profile 与 layer scope 的三层机器码解码（runtime RI candidate group / REGIMM-COP0 exact dispatch / 课程 canonical）
+- isa/encoder.ts — 基于生成 catalog 的真实指令编码；拒绝未使用 operand、非 canonical 保留字段和课程外 CP0 rd

@@ -6,18 +6,18 @@ MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extensio
 P7 模式：anchor(精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)
 
 orchestration:
-  courseTest.ts — 总调度：14 个 co.test.* 命令；runCourseTraceCase 串联 dump->MARS->ISim/Logisim->compare，并分流 P7 probe
+  courseTest.ts — 总调度：14 个 co.test.* 命令；runCourseTraceCase 串联 assemble provider->oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe；阶段 1 默认 provider 仍为 legacy MARS
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
-  courseTestContinuous.ts — 持续生成循环：启动阶段同步占位防重复会话，启动检查期间也可取消；每轮生成并展开全部 ASM；stopOnFailure=false 时功能失败继续，生成器异常/无新 ASM 则停止；轮数耗尽不额外等待，停止请求可打断间隔；面板关闭触发停止，最终报告写失败也保证释放会话；按策略保留通过产物和报告轮次
+  courseTestContinuous.ts — 持续生成循环：启动阶段同步占位防重复会话，启动检查期间也可取消；每轮生成并展开全部 ASM；stopOnFailure=false 时功能失败继续，生成器异常/无新 ASM 则停止；轮数耗尽不额外等待，停止请求可打断间隔或在途外部工具，用户取消的未完成 case 不计为测试 error；面板关闭触发停止，最终报告写失败也保证释放会话；按策略保留通过产物和报告轮次
   courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
-  courseTestReport.ts — HTML 报告：批量/Logisim 准备/持续监控/ASM 索引
+  courseTestReport.ts — HTML 报告：批量/Logisim 准备/持续监控/ASM 索引；读取时兼容旧 mars/sim/logisim 字段，新结果只使用 oracle/dut；legacy logisimOut 只解释为原始 CLI 输出，不伪装成已解析 DUT trace
   courseTestToolchain.ts — 稳定版能力校验：P7 须 CompactLargeText，非 P7 须 FixedCompactLargeText 或 CompactLargeText；启动前用 coL1/coL2 兼容探针验证输出可解析及 Compact 初始 `$gp=0x1800`、`$sp=0x2ffc`，实际课程 oracle 只运行 coL2；P7 另验证 efc/p7irq，RI 用例运行时使用 cl 加载插件内置指令类；不要求未发布的课程取指域、数据桥或 handler 契约能力
   courseTestLogisim.ts — P3 Logisim：电路诊断(提取 Trace 端口映射)->ROM 注入批量准备->单用例(CLI 启动->PC 监控->自动 kill->Trace 解析->对拍)，准备前校验稳定版 MARS coL2，并在启动 Logisim 前执行 oracle 初态兼容检查
   courseTestStdin.ts — stdin 文件发现：input/inputs/test/data 目录，按文件名相似度排序
   courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.mars.out、.co/out/{stem}.sim.out
 
 generation:
-  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入
+  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe 中立 stage
   courseTesting/generatorWorkflow.ts — 生成器工作流：外部/内置 generator setup、运行、ASM 产物收集、CourseTraceBatchSource 描述
   courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、稳定版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；用 coL2 逐指令块校验实际到达标准停机尾、合并 SWL/SWR 局部写、修复 REGIMM 链接分支自身的遗漏事件，并拒绝未跳转链接分支后继续读取旧 `$31`、稳定版 `$gp/$sp` 初态差异、DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入；任一侧空 Trace 报错，两侧都空明确标记为无法判定
   courseTesting/marsOracleCompatibility.ts — 统一 P3-P7 稳定版 oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
@@ -59,6 +59,6 @@ logisim/verilog-observer:
   resources/templates/verilog/p7_probe_invalid_store_observer.v + p7_probe_invalid_store_case.v — 仅通过公开的 m_inst_addr/m_data_byteen/m_int_byteen 观察 AdES victim；若无效 store 仍产生任一 byte-enable，输出 invalid_store_effect 并令 Probe 失败
 
 case-storage:
-  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText（新 case 写 manifest v2）、prepareAsmCaseMachineCode（经 assembler provider）、artifact 管理、manifest 列表（v1/v2 兼容读取）；courseTrace dump 成功后先执行最终机器码容量/规范编码/白名单校验，并保存 P7 内核合并前验证得到的用户 haltPc；P7 metadata 只来自 manifest/显式参数
+  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText（新 case 写 manifest v2）、prepareAsmCaseMachineCode（经 assembler provider）、artifact 管理、manifest 列表（v1/v2 兼容读取）；v1 严格只读，新 artifact 必须先复制到 case 内并记录相对路径/bytes/SHA-256，非文件 provenance 进入独立 metadata；汇编与 legacy oracle 前后均核对实际根源文件和 case-local program.asm 未偏离 immutable asmSnapshot；courseTrace dump 成功后先执行最终机器码容量/规范编码/白名单校验，并保存 P7 内核合并前验证得到的用户 haltPc
   asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata；v1 永久只读兼容
-  courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts 分组、case-relative 路径、原子写、replay 闭包最小校验、v1/v2 归一化视图
+  courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts 分组、严格字段与 case-relative 路径、artifact/sourceMap 内容指纹、并发安全原子写、symlink escape/bytes/hash bundle 校验、v1/v2 归一化视图；早期 v2 字符串引用可读但不能通过 replay closure，未绑定的 probe/DUT metadata 也 fail closed

@@ -12,11 +12,13 @@ describe('CPU trace compare', () => {
     expect(result.matched).toBe(true);
     expect(result.firstDiffIndex).toBe(-1);
     expect(result.summary).toMatchObject({
-      marsEvents: 2,
-      simEvents: 2,
+      oracleEvents: 2,
+      dutEvents: 2,
       matchedEvents: 2,
       diffEvents: 0
     });
+    expect(result.summary).not.toHaveProperty('marsEvents');
+    expect(result.summary).not.toHaveProperty('simEvents');
   });
 
   it('can require cycle equality in strict mode', () => {
@@ -46,14 +48,18 @@ describe('CPU trace compare', () => {
     expect(result.summary.matchedEvents).toBe(2);
     expect(result.entries[0]).toMatchObject({
       status: 'ok',
-      mars: { kind: 'dm', pc: '00003004' },
-      sim: { kind: 'dm', pc: '00003004' }
+      oracle: { kind: 'dm', pc: '00003004' },
+      dut: { kind: 'dm', pc: '00003004' }
     });
+    expect(result.entries[0]).not.toHaveProperty('mars');
+    expect(result.entries[0]).not.toHaveProperty('sim');
     expect(result.entries[1]).toMatchObject({
       status: 'ok',
-      mars: { kind: 'grf', pc: '00003000' },
-      sim: { kind: 'grf', pc: '00003000' }
+      oracle: { kind: 'grf', pc: '00003000' },
+      dut: { kind: 'grf', pc: '00003000' }
     });
+    expect(result.entries[1]).not.toHaveProperty('mars');
+    expect(result.entries[1]).not.toHaveProperty('sim');
   });
 
   it('does not hide reordered events from different cycles', () => {
@@ -94,7 +100,7 @@ describe('CPU trace compare', () => {
     const result = compareTraces(mars, sim);
 
     expect(result.matched).toBe(false);
-    expect(result.entries[1].status).toBe('mars-only');
+    expect(result.entries[1].status).toBe('oracle-only');
   });
 
   it('serializes the first difference for batch reports', () => {
@@ -107,14 +113,14 @@ describe('CPU trace compare', () => {
       index: 1,
       status: 'diff',
       reason: 'Write value differs.',
-      mars: {
+      oracle: {
         pc: '00003004',
         kind: 'grf',
         target: '2',
         value: '00000002',
         lineNumber: 2
       },
-      sim: {
+      dut: {
         pc: '00003004',
         kind: 'grf',
         target: '2',
@@ -122,6 +128,8 @@ describe('CPU trace compare', () => {
         lineNumber: 2
       }
     });
+    expect(snapshot).not.toHaveProperty('mars');
+    expect(snapshot).not.toHaveProperty('sim');
   });
 
   it('does not serialize a first difference for matching traces', () => {
@@ -148,8 +156,8 @@ describe('CPU trace compare', () => {
     expect(result.entries).toHaveLength(1);
     expect(result.entriesTruncated).toBe(true);
     expect(result.summary).toMatchObject({
-      marsEvents: 3,
-      simEvents: 3,
+      oracleEvents: 3,
+      dutEvents: 3,
       matchedEvents: 2,
       diffEvents: 1
     });
@@ -161,8 +169,8 @@ describe('CPU trace compare', () => {
     });
     expect(firstTraceDiffSnapshot(result)).toMatchObject({
       index: 2,
-      mars: { value: '00000003' },
-      sim: { value: '00000004' }
+      oracle: { value: '00000003' },
+      dut: { value: '00000004' }
     });
   });
 
@@ -181,10 +189,35 @@ describe('CPU trace compare', () => {
     expect(result.entries).toEqual([]);
     expect(result.entriesTruncated).toBe(true);
     expect(result.summary).toMatchObject({
-      marsEvents: 2,
-      simEvents: 2,
+      oracleEvents: 2,
+      dutEvents: 2,
       matchedEvents: 2,
       diffEvents: 0
+    });
+    expect(result.summary).not.toHaveProperty('marsEvents');
+    expect(result.summary).not.toHaveProperty('simEvents');
+  });
+
+  it('upgrades legacy trace-side aliases when snapshotting old report entries', () => {
+    const oracle = parseMarsOutput('@00003000: $1 <= 00000001\n')[0];
+    const dut = parseMarsOutput('@00003000: $1 <= 00000002\n')[0];
+
+    expect(firstTraceDiffSnapshot({
+      matched: false,
+      firstDiffIndex: 0,
+      entries: [{ index: 0, status: 'mars-only', mars: oracle, sim: dut }],
+      summary: {
+        oracleEvents: 1,
+        dutEvents: 1,
+        marsEvents: 1,
+        simEvents: 1,
+        matchedEvents: 0,
+        diffEvents: 1
+      }
+    })).toMatchObject({
+      status: 'oracle-only',
+      oracle: { value: '00000001' },
+      dut: { value: '00000002' }
     });
   });
 });

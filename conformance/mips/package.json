@@ -6,13 +6,17 @@
   "type": "module",
   "scripts": {
     "verify:contracts": "node contract/validate-contracts.mjs",
-    "verify:references": "node reference/download-references.mjs",
+    "verify:contract-sources": "node contract/validate-contracts.mjs --verify-sources",
+    "verify:references": "node reference/download-references.mjs --require-all",
+    "verify:regression": "node reference/verify-regression.mjs",
     "verify:dependencies": "node check-dependency-whitelist.mjs",
     "run": "node runner/run-conformance.mjs",
+    "run:required": "node runner/run-conformance.mjs --lane legacy-baseline --lane course-vector",
+    "record:goldens": "node runner/run-conformance.mjs --lane legacy-baseline --record-golden",
     "test": "node --test",
-    "verify": "npm run verify:dependencies && npm run verify:contracts && npm run verify:references && npm test"
+    "verify": "npm run verify:dependencies && npm run verify:contracts && npm run verify:references && npm run verify:regression && npm test && npm run run:required"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11"
   }
 }
