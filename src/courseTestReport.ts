@@ -5,7 +5,12 @@ import { logisimPrepSummary, LogisimPrepareCaseResult } from './courseTesting/lo
 import { P7ProbeCheckResult } from './courseTesting/p7ProbeCheck';
 import { LogisimRomTarget } from './language/logisim/rom';
 import { TraceDiffSnapshot, TraceEventSnapshot } from './language/mips/traceCompare';
-import { AsmCaseManifest } from './asmCaseStoreCore';
+import {
+  AsmCaseManifestUnion,
+  manifestArtifactsOf,
+  manifestMachineCodeOf,
+  manifestSourceOf
+} from './courseTesting/manifestCodec';
 import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
 
 const escapeHtml = html.text;
@@ -108,11 +113,14 @@ export interface ContinuousTraceReport {
 }
 
 export interface AsmCaseManifestEntry {
-  manifest: AsmCaseManifest;
+  manifest: AsmCaseManifestUnion;
   uri: vscode.Uri;
 }
 
 export const continuousTraceMonitorMaxRows = 100;
+
+/** Typed empty map so Object.entries keeps its string value overload. */
+const EMPTY_STRING_MAP: Record<string, string> = {};
 
 const traceStatusCss = `
     .passed td:nth-child(2) {
@@ -324,18 +332,26 @@ export function renderBatchSource(source: CourseTraceBatchSource | undefined): S
 
 export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
   const rows = cases.map(({ manifest, uri }) => {
-    const artifacts = Object.entries(manifest.artifacts ?? {})
-      .flatMap(([kind, items]) => Object.entries(items ?? {}).map(([name, value]) => `${kind}.${name}: ${value}`))
+    // v2 stores case-relative artifact paths; restore absolute ones for display.
+    const caseDir = path.dirname(uri.fsPath);
+    const resolveArtifact = (value: string): string =>
+      path.isAbsolute(value) ? value : path.join(caseDir, value);
+    // Record-shaped view keeps Object.entries on its string overload.
+    const artifactGroups: Record<string, Record<string, string> | undefined> = manifestArtifactsOf(manifest);
+    const artifacts = Object.entries(artifactGroups)
+      .flatMap(([kind, items]) => Object.entries(items ?? EMPTY_STRING_MAP)
+        .map(([name, value]) => `${kind}.${name}: ${resolveArtifact(value)}`))
       .slice(0, 6);
+    const machineCode = manifestMachineCodeOf(manifest);
     return {
       cells: [
         html.code(manifest.caseId),
         escapeHtml(manifest.createdAt),
         escapeHtml(manifest.profile),
-        escapeHtml(manifest.source.kind),
+        escapeHtml(manifestSourceOf(manifest).kind),
         html.code(manifest.originalAsmPath),
         html.code(manifest.asmSnapshot.path),
-        manifest.machineCode ? html.code(manifest.machineCode.path) : '',
+        machineCode ? html.code(resolveArtifact(machineCode.path)) : '',
         html.raw(artifacts.map((item) => `<div>${html.code(item)}</div>`).join('')),
         html.code(uri.fsPath)
       ]

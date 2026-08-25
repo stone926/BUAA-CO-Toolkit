@@ -17,12 +17,21 @@ import {
   AsmCaseP7Metadata,
   AsmCaseSource,
   asmCaseId,
-  asmCaseManifestVersion,
   asmCasePaths,
   machineCodeWordCount,
   mergeAsmCaseArtifacts,
   sha256Bytes
 } from './asmCaseStoreCore';
+import {
+  AsmCaseManifestUnion,
+  AsmCaseManifestV2,
+  asmCaseManifestVersion2,
+  isKnownManifest,
+  isManifestV2,
+  v2ArtifactGroup,
+  writeManifestAtomic
+} from './courseTesting/manifestCodec';
+import { LEGACY_MARS_DESCRIPTOR } from './mips/providers/contracts';
 import { courseMachineCodeValidationError } from './courseTesting/machineCodeValidation';
 
 export interface AsmCase {
@@ -33,7 +42,7 @@ export interface AsmCase {
   machineCode: vscode.Uri;
   sourceAsm: vscode.Uri;
   stdin?: vscode.Uri;
-  manifest: AsmCaseManifest;
+  manifest: AsmCaseManifestUnion;
 }
 
 export interface CreateAsmCaseOptions {
@@ -78,23 +87,22 @@ export async function createAsmCaseFromAsm(
   const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
 
-  const manifest: AsmCaseManifest = {
-    version: asmCaseManifestVersion,
-    caseId: path.basename(paths.caseDir),
-    createdAt: createdAt.toISOString(),
-    profile: getProfile(options.resource ?? asm),
-    originalAsmPath: asm.fsPath,
-    asmSnapshot: {
+  const manifest = createV2Manifest(
+    path.basename(paths.caseDir),
+    createdAt,
+    getProfile(options.resource ?? asm),
+    asm.fsPath,
+    {
       path: caseAsm.fsPath,
       sha256: asmHash,
       bytes: asmBytes.byteLength
     },
-    source: options.source ?? { kind: 'selected' },
-    stdin: stdin?.snapshot,
+    options.source ?? { kind: 'selected' },
+    stdin?.snapshot,
     p7
-  };
+  );
   const manifestUri = vscode.Uri.file(paths.manifest);
-  await writeTextFile(manifestUri, JSON.stringify(manifest, null, 2) + '\n');
+  await writeManifestAtomic(paths.manifest, manifest);
 
   return {
     id: manifest.caseId,
@@ -125,23 +133,22 @@ export async function createAsmCaseFromText(
   await vscode.workspace.fs.writeFile(caseAsm, bytes);
   const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
-  const manifest: AsmCaseManifest = {
-    version: asmCaseManifestVersion,
-    caseId: path.basename(paths.caseDir),
-    createdAt: createdAt.toISOString(),
-    profile: getProfile(options.resource),
-    originalAsmPath: fileName,
-    asmSnapshot: {
+  const manifest = createV2Manifest(
+    path.basename(paths.caseDir),
+    createdAt,
+    getProfile(options.resource),
+    fileName,
+    {
       path: caseAsm.fsPath,
       sha256: asmHash,
       bytes: bytes.byteLength
     },
-    source: options.source ?? { kind: 'builtin' },
-    stdin: stdin?.snapshot,
+    options.source ?? { kind: 'builtin' },
+    stdin?.snapshot,
     p7
-  };
+  );
   const manifestUri = vscode.Uri.file(paths.manifest);
-  await writeTextFile(manifestUri, JSON.stringify(manifest, null, 2) + '\n');
+  await writeManifestAtomic(paths.manifest, manifest);
 
   return {
     id: manifest.caseId,
@@ -204,21 +211,42 @@ export async function prepareAsmCaseMachineCode(
       };
     }
   }
-  asmCase.manifest = {
-    ...asmCase.manifest,
-    machineCode: {
-      path: asmCase.machineCode.fsPath,
-      sha256: sha256Bytes(bytes),
-      bytes: bytes.byteLength,
-      wordCount: machineCodeWordCount(text),
-      haltPc: dump.courseHaltPc
-    },
-    mars: {
-      commandLine: dump.status.commandLine ?? dump.descriptor.id,
-      cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
-      memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm)
-    }
+  const machineCode: AsmCaseManifest['machineCode'] = {
+    path: asmCase.machineCode.fsPath,
+    sha256: sha256Bytes(bytes),
+    bytes: bytes.byteLength,
+    wordCount: machineCodeWordCount(text),
+    haltPc: dump.courseHaltPc
   };
+  const legacyProvenance = {
+    commandLine: dump.status.commandLine ?? dump.descriptor.id,
+    cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
+    memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm)
+  };
+  if (isManifestV2(asmCase.manifest)) {
+    asmCase.manifest = {
+      ...asmCase.manifest,
+      program: {
+        ...asmCase.manifest.program,
+        machineCode: { ...machineCode, path: 'code.txt' },
+        imageFingerprint: machineCode.sha256,
+        assembler: {
+          ...asmCase.manifest.program.assembler,
+          legacyProvenance
+        }
+      },
+      oracle: {
+        ...asmCase.manifest.oracle,
+        stopReason: 'halt-loop'
+      }
+    };
+  } else {
+    asmCase.manifest = {
+      ...asmCase.manifest,
+      machineCode,
+      mars: legacyProvenance
+    };
+  }
   await writeAsmCaseManifest(asmCase);
   return dump;
 }
@@ -228,8 +256,37 @@ export async function updateAsmCaseArtifacts(
   kind: AsmCaseArtifactKind,
   artifacts: Record<string, string>
 ): Promise<void> {
-  asmCase.manifest = mergeAsmCaseArtifacts(asmCase.manifest, kind, artifacts);
+  if (isManifestV2(asmCase.manifest)) {
+    // v2 stores case-relative paths grouped by role.
+    const relative = Object.fromEntries(
+      Object.entries(artifacts).map(([name, value]) => [name, caseRelativePath(asmCase, value)])
+    );
+    const groups = new Map<string, Record<string, string>>();
+    for (const [name, value] of Object.entries(relative)) {
+      const { group, key } = v2ArtifactGroup(kind, name);
+      const entry = groups.get(group) ?? {};
+      entry[key] = value;
+      groups.set(group, entry);
+    }
+    const merged: NonNullable<AsmCaseManifestV2['artifacts']> = { ...(asmCase.manifest.artifacts ?? {}) };
+    for (const [group, values] of groups) {
+      const key = group as keyof NonNullable<AsmCaseManifestV2['artifacts']>;
+      merged[key] = { ...(merged[key] ?? {}), ...values };
+    }
+    asmCase.manifest = { ...asmCase.manifest, artifacts: merged };
+  } else {
+    asmCase.manifest = mergeAsmCaseArtifacts(asmCase.manifest, kind, artifacts);
+  }
   await writeAsmCaseManifest(asmCase);
+}
+
+function caseRelativePath(asmCase: AsmCase, absolutePath: string): string {
+  const relative = path.relative(asmCase.dir.fsPath, absolutePath);
+  if (!relative || relative.startsWith('..')) {
+    // Artifacts outside the case directory stay absolute (provenance-only).
+    return absolutePath;
+  }
+  return relative.split(path.sep).join('/');
 }
 
 export async function writeAsmCaseArtifact(
@@ -273,7 +330,7 @@ export async function copyAsmCaseArtifact(
   return target;
 }
 
-export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array<{ manifest: AsmCaseManifest; uri: vscode.Uri }>> {
+export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array<{ manifest: AsmCaseManifestUnion; uri: vscode.Uri }>> {
   const root = caseWorkspaceRoot(resource);
   const casesDir = path.join(root, CO_CASES_DIR);
   let entries: fs.Dirent[];
@@ -283,15 +340,15 @@ export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array
     return [];
   }
 
-  const manifests: Array<{ manifest: AsmCaseManifest; uri: vscode.Uri }> = [];
+  const manifests: Array<{ manifest: AsmCaseManifestUnion; uri: vscode.Uri }> = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
     }
     const uri = vscode.Uri.file(path.join(casesDir, entry.name, 'case.json'));
     try {
-      const manifest = JSON.parse(await readTextFile(uri)) as AsmCaseManifest;
-      if (manifest?.version === asmCaseManifestVersion && manifest.caseId) {
+      const manifest = JSON.parse(await readTextFile(uri)) as unknown;
+      if (isKnownManifest(manifest)) {
         manifests.push({ manifest, uri });
       }
     } catch {
@@ -301,14 +358,14 @@ export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array
   return manifests.sort((left, right) => right.manifest.createdAt.localeCompare(left.manifest.createdAt));
 }
 
-export async function readAsmCaseManifestForAsm(asm: vscode.Uri): Promise<AsmCaseManifest | undefined> {
+export async function readAsmCaseManifestForAsm(asm: vscode.Uri): Promise<AsmCaseManifestUnion | undefined> {
   if (path.basename(asm.fsPath).toLowerCase() !== 'program.asm') {
     return undefined;
   }
   const manifestPath = path.join(path.dirname(asm.fsPath), 'case.json');
   try {
-    const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as AsmCaseManifest;
-    return manifest?.version === asmCaseManifestVersion ? manifest : undefined;
+    const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as unknown;
+    return isKnownManifest(manifest) ? manifest : undefined;
   } catch {
     // 元数据文件不存在或格式异常时按普通 ASM 处理
     return undefined;
@@ -383,5 +440,59 @@ function artifactDirectory(asmCase: AsmCase, kind: 'verilog' | 'logisim' | 'mars
 }
 
 async function writeAsmCaseManifest(asmCase: AsmCase): Promise<void> {
-  await writeTextFile(asmCase.manifestUri, JSON.stringify(asmCase.manifest, null, 2) + '\n');
+  await writeManifestAtomic(asmCase.manifestUri.fsPath, asmCase.manifest);
+}
+
+/**
+ * Build a fresh v2 manifest. The program fingerprint starts as the ASM snapshot
+ * hash until the machine-code dump lands in prepareAsmCaseMachineCode; the
+ * oracle stop reason is filled there too (halt-loop is validated before being
+ * recorded).
+ */
+function createV2Manifest(
+  caseId: string,
+  createdAt: Date,
+  profile: string,
+  originalAsmPath: string,
+  asmSnapshot: AsmCaseManifest['asmSnapshot'],
+  source: AsmCaseSource,
+  stdin: AsmCaseManifest['stdin'],
+  p7: AsmCaseP7Metadata | undefined
+): AsmCaseManifestV2 {
+  const manifest: AsmCaseManifestV2 = {
+    version: asmCaseManifestVersion2,
+    caseId,
+    createdAt: createdAt.toISOString(),
+    profile,
+    originalAsmPath,
+    asmSnapshot,
+    source,
+    stdin,
+    p7,
+    program: {
+      assembler: {
+        id: LEGACY_MARS_DESCRIPTOR.id,
+        build: LEGACY_MARS_DESCRIPTOR.build,
+        semanticsRevision: LEGACY_MARS_DESCRIPTOR.semanticsRevision,
+        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision
+      },
+      imageFingerprint: asmSnapshot.sha256
+    },
+    oracle: {
+      engine: {
+        id: LEGACY_MARS_DESCRIPTOR.id,
+        build: LEGACY_MARS_DESCRIPTOR.build,
+        semanticsRevision: LEGACY_MARS_DESCRIPTOR.semanticsRevision,
+        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision
+      },
+      configurationHash: configurationHashFor(profile),
+      stopReason: 'unknown'
+    }
+  };
+  return manifest;
+}
+
+function configurationHashFor(profile: string): string {
+  // Legacy run configuration digest: the fields that change MARS behavior.
+  return sha256Bytes(Buffer.from(JSON.stringify({ profile, engine: LEGACY_MARS_DESCRIPTOR.id }), 'utf8'));
 }

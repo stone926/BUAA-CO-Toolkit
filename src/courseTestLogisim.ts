@@ -75,6 +75,7 @@ import {
   failedCase
 } from './courseTestCases';
 import { executeWithPreflight } from './mips/providers/providerResolver';
+import { manifestSourceOf } from './courseTesting/manifestCodec';
 import { defaultTraceCompareMode } from './traceCompare';
 import {
   courseTraceOutputDirectory,
@@ -316,7 +317,7 @@ export async function runP3LogisimTraceCase(
   const maxSteps = generatedCourseTraceMarsStepLimit(
     getProfile(asmCase.sourceAsm),
     await readTextFile(asmCase.sourceAsm),
-    asmCase.manifest.source.kind === 'builtin',
+    manifestSourceOf(asmCase.manifest).kind === 'builtin',
     logisimCode.text
   );
   services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);

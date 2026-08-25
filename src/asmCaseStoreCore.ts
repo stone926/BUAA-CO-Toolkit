@@ -55,6 +55,11 @@ export interface AsmCaseArtifacts {
   logisim?: Record<string, string>;
   mars?: Record<string, string>;
   source?: Record<string, string>;
+  /** v2-only groups surfaced through the normalized v1 view. */
+  program?: Record<string, string>;
+  referenceMars?: Record<string, string>;
+  /** All groups share one shape; keeps Object.entries on its string overload. */
+  [kind: string]: Record<string, string> | undefined;
 }
 
 export interface AsmCaseManifest {

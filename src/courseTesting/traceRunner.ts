@@ -36,6 +36,12 @@ import {
   updateAsmCaseArtifacts
 } from '../asmCaseStore';
 import {
+  AsmCaseManifestUnion,
+  manifestMachineCodeOf,
+  manifestP7Of,
+  manifestSourceOf
+} from './manifestCodec';
+import {
   asmCaseSourceFromBatchSource,
   caseResultFields,
   failedCase
@@ -153,10 +159,10 @@ export async function runCourseTraceCase(
   const maxSteps = generatedCourseTraceMarsStepLimit(
     profile,
     await readTextFile(asmCase.sourceAsm),
-    asmCase.manifest.source.kind === 'builtin',
+    manifestSourceOf(asmCase.manifest).kind === 'builtin',
     machineCodeText
   );
-  const haltPc = asmCase.manifest.machineCode?.haltPc;
+  const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc;
   if (!Number.isSafeInteger(haltPc)) {
     return failedCase(item, 'dump', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
   }
@@ -265,23 +271,24 @@ export async function runCourseTraceCase(
 
 export async function p7MetadataFromManifest(asm: vscode.Uri): Promise<{ interruptSchedule?: number[]; probe?: P7ProbeMetadata } | undefined> {
   const manifest = await readAsmCaseManifestForAsm(asm);
-  if (!manifest?.p7) {
+  const p7 = manifest ? manifestP7Of(manifest) : undefined;
+  if (!p7) {
     return undefined;
   }
-  const interruptSchedule = Array.isArray(manifest.p7.interruptSchedule)
-    ? manifest.p7.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+  const interruptSchedule = Array.isArray(p7.interruptSchedule)
+    ? p7.interruptSchedule.map((value) => Number(value)).filter((value) => Number.isFinite(value))
     : undefined;
-  const probe = isProbeMetadata(manifest.p7.probe) ? manifest.p7.probe : undefined;
+  const probe = isProbeMetadata(p7.probe) ? p7.probe : undefined;
   return interruptSchedule?.length || probe ? { interruptSchedule, probe } : undefined;
 }
 
 function resolveCaseInterruptScheduleFromCase(asmCase: AsmCase): number[] | undefined {
-  const schedule = asmCase.manifest.p7?.interruptSchedule;
+  const schedule = manifestP7Of(asmCase.manifest)?.interruptSchedule;
   return Array.isArray(schedule) && schedule.length ? schedule : undefined;
 }
 
 function resolveCaseProbeMetadataFromCase(asmCase: AsmCase): P7ProbeMetadata | undefined {
-  const probe = asmCase.manifest.p7?.probe;
+  const probe = manifestP7Of(asmCase.manifest)?.probe;
   return isProbeMetadata(probe) ? probe : undefined;
 }
 
