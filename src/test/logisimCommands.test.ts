@@ -95,8 +95,10 @@ describe('Logisim command workflows', () => {
     vi.mocked(resolveAsmCaseInput).mockResolvedValue(vscode.Uri.file('E:/work/main.asm'));
     vi.mocked(createAsmCaseFromAsm).mockResolvedValue(asmCase() as never);
     vi.mocked(prepareAsmCaseMachineCode).mockResolvedValue({
-      result: { ok: true, code: 0, stdout: '', stderr: '' },
-      outputFile: vscode.Uri.file('E:/work/.co/cases/case-1/code.txt')
+      ok: true,
+      status: { ok: true, exitCode: 0, stdout: '', stderr: '', timedOut: false },
+      outputFile: vscode.Uri.file('E:/work/.co/cases/case-1/code.txt'),
+      descriptor: { id: 'legacy-mars-v0.6.3' }
     } as never);
     vi.mocked(readTextFile).mockResolvedValue('v2.0 raw\n00000000\n');
     vi.mocked(writeAsmCaseArtifact).mockResolvedValue(vscode.Uri.file('E:/work/.co/cases/case-1/logisim/out.circ') as never);
@@ -104,7 +106,11 @@ describe('Logisim command workflows', () => {
 
   it('stops ROM generation when machine-code dump fails', async () => {
     const commands = commandMap();
-    vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({ result: { ok: false, code: 1, stdout: '', stderr: 'bad' } } as never);
+    vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({
+      ok: false,
+      status: { ok: false, exitCode: 1, stdout: '', stderr: 'bad', timedOut: false },
+      descriptor: { id: 'legacy-mars-v0.6.3' }
+    } as never);
     registerLogisim({ subscriptions: [] } as never, services());
 
     await commands.get(Commands.Logisim.GenerateRom)!();

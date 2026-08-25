@@ -312,8 +312,8 @@ async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
       p7: await p7MetadataFromManifest(item.asm)
     });
     const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
-    if (!dump?.result.ok || !dump.outputFile) {
-      const detail = marsStageFailureMessage('MARS 导出机器码失败', dump?.result);
+    if (!dump?.ok || !dump.outputFile) {
+      const detail = marsStageFailureMessage('MARS 导出机器码失败', dump?.status);
       vscode.window.showErrorMessage(detail);
       return;
     }

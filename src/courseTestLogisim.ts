@@ -74,7 +74,7 @@ import {
   CourseTraceCaseInput,
   failedCase
 } from './courseTestCases';
-import { runMarsFile } from './mips';
+import { executeWithPreflight } from './mips/providers/providerResolver';
 import { defaultTraceCompareMode } from './traceCompare';
 import {
   courseTraceOutputDirectory,
@@ -173,7 +173,7 @@ export async function runLogisimPrepareBatch(
         resource: circuit
       });
       const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
-      if (!dump?.result.ok || !dump.outputFile) {
+      if (!dump?.ok || !dump.outputFile) {
         results.push({
           asm: asm.fsPath,
           ...caseResultFields(asmCase),
@@ -263,8 +263,8 @@ export async function runP3LogisimTraceCase(
     revealOutput: options.revealOutput,
     courseTrace: true
   });
-  if (!dump?.result.ok || !dump.outputFile) {
-    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.result), undefined, undefined, asmCase);
+  if (!dump?.ok || !dump.outputFile) {
+    return failedCase(item, 'dump', marsStageFailureMessage('测试中止：MARS 导出机器码失败', dump?.status), undefined, undefined, asmCase);
   }
   services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
 
@@ -320,17 +320,20 @@ export async function runP3LogisimTraceCase(
     logisimCode.text
   );
   services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);
-  const mars = await runMarsFile(services, asmCase.sourceAsm, 'run', {
-    showMessages: false,
-    revealOutput: options.revealOutput,
+  const marsInvocation = await executeWithPreflight(services, {
+    sourceUri: asmCase.sourceAsm,
+    imageRef: { kind: 'mars-dump', machineCodeUri: asmCase.machineCode, haltPc: logisimCode.haltPc },
     traceOutput: true,
     traceLevel: 2,
     maxSteps,
     haltPc: logisimCode.haltPc,
-    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined
+    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined,
+    courseTrace: true,
+    revealOutput: options.revealOutput
   });
-  if (!mars?.result.ok || !mars.outputFile) {
-    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.result), asmCase.machineCode, undefined, asmCase);
+  const mars = marsInvocation.result;
+  if (!mars?.ok || !mars.outputFile) {
+    return failedCase(item, 'mars', marsStageFailureMessage('测试中止：MARS 黄金模型运行失败', mars?.status), asmCase.machineCode, undefined, asmCase);
   }
   if (caseOutputMode) {
     await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });

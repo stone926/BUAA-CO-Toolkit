@@ -319,7 +319,7 @@ async function ensureSimulationAsmCase(
     source: { kind: 'selected' }
   });
   const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
-  if (!dump?.result.ok || !dump.outputFile) {
+  if (!dump?.ok || !dump.outputFile) {
     if (showMessages) {
       vscode.window.showErrorMessage('MARS 导出机器码失败，无法继续 Verilog 仿真');
     }

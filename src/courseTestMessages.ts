@@ -1,7 +1,7 @@
 import { firstTraceDiffEntry, TraceDiffResult } from './language/mips/traceCompare';
-import { RunResult } from './types';
 
-export function marsStageFailureMessage(prefix: string, result?: RunResult): string {
+/** Accepts both legacy RunResult and provider-neutral EngineRunStatus. */
+export function marsStageFailureMessage(prefix: string, result?: { stdout: string; stderr: string }): string {
   const detail = firstNonEmptyLine(result?.stderr) ?? firstNonEmptyLine(result?.stdout);
   return detail ? `${prefix}: ${detail}` : prefix;
 }

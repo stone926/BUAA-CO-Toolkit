@@ -6,9 +6,11 @@ import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
 import { ensureDirectory, pathExists, readTextFile, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
-import { runMarsFile, MarsRunOptions, MarsRunOutput } from './mips';
+import { MarsRunOptions } from './mips';
 import { AppServices } from './types';
 import { resolveFileInput } from './workflowInputs';
+import { assembleWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
+import { AssembleResult } from './mips/providers/contracts';
 import {
   AsmCaseArtifactKind,
   AsmCaseManifest,
@@ -157,13 +159,25 @@ export async function prepareAsmCaseMachineCode(
   services: AppServices,
   asmCase: AsmCase,
   options: MarsRunOptions = {}
-): Promise<MarsRunOutput | undefined> {
-  const dump = await runMarsFile(services, asmCase.sourceAsm, 'dumpText', {
-    ...options,
-    showMessages: options.showMessages ?? false,
-    dumpOutputFile: asmCase.machineCode
+): Promise<AssembleResult | undefined> {
+  const invocation = await assembleWithPreflight(services, {
+    sourceUri: asmCase.sourceAsm,
+    target: { kind: 'userText', outputFile: asmCase.machineCode },
+    courseTrace: options.courseTrace,
+    revealOutput: options.revealOutput
   });
-  if (!dump?.result.ok || !dump.outputFile) {
+  const dump = invocation.result ?? {
+    ok: false,
+    status: {
+      ok: false,
+      exitCode: null,
+      stdout: '',
+      stderr: preflightFailureMessage(invocation.preflight),
+      timedOut: false
+    },
+    descriptor: invocation.preflight.descriptor
+  };
+  if (!dump.ok || !dump.outputFile) {
     return dump;
   }
 
@@ -181,10 +195,11 @@ export async function prepareAsmCaseMachineCode(
       services.output.appendLine(validationError);
       return {
         ...dump,
-        result: {
-          ...dump.result,
+        ok: false,
+        status: {
+          ...dump.status,
           ok: false,
-          stderr: dump.result.stderr ? `${dump.result.stderr}\n${validationError}` : validationError
+          stderr: dump.status.stderr ? `${dump.status.stderr}\n${validationError}` : validationError
         }
       };
     }
@@ -199,8 +214,8 @@ export async function prepareAsmCaseMachineCode(
       haltPc: dump.courseHaltPc
     },
     mars: {
-      commandLine: dump.result.commandLine,
-      cwd: dump.result.cwd,
+      commandLine: dump.status.commandLine ?? dump.descriptor.id,
+      cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
       memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm)
     }
   };
