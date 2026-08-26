@@ -85,7 +85,7 @@ describe('worker host skeleton', () => {
       dispose: oldDispose
     });
     const malformedPending = client.start({ kind: 'ping' });
-    oldReceive?.({ protocolVersion: 1, kind: 'result', requestId: 'req-0', ok: false });
+    oldReceive?.({ protocolVersion: 2, kind: 'result', requestId: 'req-0', ok: false });
     await expect(malformedPending).resolves.toMatchObject({
       ok: false,
       error: expect.stringContaining('protocol violation')
@@ -105,7 +105,7 @@ describe('worker host skeleton', () => {
     expect(currentDispose).not.toHaveBeenCalled();
     const request = currentPost.mock.calls[0][0];
     currentReceive?.({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'result',
       requestId: request.requestId,
       ok: true,
@@ -135,7 +135,7 @@ describe('worker host skeleton', () => {
     expect((posted[1] as { kind: string }).kind).toBe('cancel');
     const requestId = (posted[0] as { requestId: string }).requestId;
     receive?.({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'result',
       requestId,
       ok: false,
@@ -180,13 +180,19 @@ describe('worker host skeleton', () => {
     const pending = client.start({ kind: 'ping' }, { signal: controller.signal, onProgress: progress });
     const request = postMessage.mock.calls[0][0];
     receive?.({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'progress',
       requestId: request.requestId,
+      sequence: 0,
       batch: ['a', 'b']
     });
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'ack', requestId: request.requestId, sequence: 0
+      }));
+    });
     receive?.({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'result',
       requestId: request.requestId,
       ok: true,
@@ -197,15 +203,16 @@ describe('worker host skeleton', () => {
 
     controller.abort();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledTimes(2);
     expect(dispose).not.toHaveBeenCalled();
 
     const cancelledController = new AbortController();
     const cancelledPending = client.start({ kind: 'ping' }, { signal: cancelledController.signal });
-    const cancelledRequest = postMessage.mock.calls[1][0];
+    const cancelledRequest = postMessage.mock.calls.find((call, index) =>
+      index > 0 && call[0]?.kind === 'request')![0];
     cancelledController.abort();
     receive?.({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'result',
       requestId: cancelledRequest.requestId,
       ok: false,
@@ -218,7 +225,124 @@ describe('worker host skeleton', () => {
     client.dispose();
   });
 
+  it('fails and cancels without ACK when the progress consumer rejects', async () => {
+    const client = new WorkerClient({ cancelGraceMs: 100 });
+    const postMessage = vi.fn();
+    const dispose = vi.fn();
+    let receive: ((value: unknown) => void) | undefined;
+    client.attach({
+      postMessage,
+      onMessage: (listener) => { receive = listener; },
+      dispose
+    });
+    const pending = client.start({ kind: 'ping' }, {
+      onProgress: async () => { throw new Error('sink failed'); }
+    });
+    const request = postMessage.mock.calls[0][0];
+
+    receive?.({
+      protocolVersion: 2,
+      kind: 'progress',
+      requestId: request.requestId,
+      sequence: 0,
+      batch: ['must-not-be-acked']
+    });
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'cancel', requestId: request.requestId
+      }));
+    });
+    expect(postMessage.mock.calls.map((call) => call[0])).not.toContainEqual(expect.objectContaining({
+      kind: 'ack', requestId: request.requestId
+    }));
+
+    receive?.({
+      protocolVersion: 2,
+      kind: 'result',
+      requestId: request.requestId,
+      ok: false,
+      error: 'cancelled',
+      cancelled: true
+    });
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      error: 'progress consumer failed: sink failed'
+    });
+    expect(dispose).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
+  it('rejects a nonzero first progress sequence and disposes the bad generation', async () => {
+    const client = new WorkerClient();
+    const postMessage = vi.fn();
+    const dispose = vi.fn();
+    let receive: ((value: unknown) => void) | undefined;
+    client.attach({
+      postMessage,
+      onMessage: (listener) => { receive = listener; },
+      dispose
+    });
+    const pending = client.start({ kind: 'ping' });
+    const request = postMessage.mock.calls[0][0];
+
+    receive?.({
+      protocolVersion: 2,
+      kind: 'progress',
+      requestId: request.requestId,
+      sequence: 1,
+      batch: ['out-of-order']
+    });
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining('expected progress sequence 0, received 1')
+    });
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects repeated and skipped progress sequences after an acknowledged batch', async () => {
+    for (const badSequence of [0, 2]) {
+      const client = new WorkerClient();
+      const postMessage = vi.fn();
+      const dispose = vi.fn();
+      let receive: ((value: unknown) => void) | undefined;
+      client.attach({
+        postMessage,
+        onMessage: (listener) => { receive = listener; },
+        dispose
+      });
+      const pending = client.start({ kind: 'ping' });
+      const request = postMessage.mock.calls[0][0];
+      receive?.({
+        protocolVersion: 2,
+        kind: 'progress',
+        requestId: request.requestId,
+        sequence: 0,
+        batch: ['accepted']
+      });
+      await vi.waitFor(() => {
+        expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+          kind: 'ack', requestId: request.requestId, sequence: 0
+        }));
+      });
+
+      receive?.({
+        protocolVersion: 2,
+        kind: 'progress',
+        requestId: request.requestId,
+        sequence: badSequence,
+        batch: ['invalid']
+      });
+      await expect(pending).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringContaining(`expected progress sequence 1, received ${badSequence}`)
+      });
+      expect(dispose).toHaveBeenCalledOnce();
+    }
+  });
+
   it('keeps the protocol version stable', () => {
-    expect(workerProtocolVersion).toBe(1);
+    expect(workerProtocolVersion).toBe(2);
   });
 });

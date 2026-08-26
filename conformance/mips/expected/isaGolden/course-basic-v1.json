@@ -1,0 +1,59 @@
+{
+  "schemaRevision": 1,
+  "description": "Independent encode/decode words for every tutorial-required P3-P7 real instruction. Expected words are frozen here and never read from the production catalog.",
+  "cliProtocolVersion": 1,
+  "catalogSha256": "f480ea2e44e26ce284ab0216ed4dbf04eee10c6bc17a8fd9d42071b7b45efdad",
+  "review": {
+    "status": "candidate",
+    "author": "codex-gpt-5",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "cases": [
+    { "id": "ISA-NOP", "mnemonic": "nop", "operands": {}, "word": "0x00000000", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-ADD", "mnemonic": "add", "operands": { "rd": 9, "rs": 10, "rt": 11 }, "word": "0x014b4820", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-SUB", "mnemonic": "sub", "operands": { "rd": 9, "rs": 10, "rt": 11 }, "word": "0x014b4822", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-ORI", "mnemonic": "ori", "operands": { "rs": 0, "rt": 8, "immediate": 4660 }, "word": "0x34081234", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-LW", "mnemonic": "lw", "operands": { "rs": 9, "rt": 8, "immediate": 4 }, "word": "0x8d280004", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-SW", "mnemonic": "sw", "operands": { "rs": 9, "rt": 8, "immediate": 8 }, "word": "0xad280008", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-BEQ", "mnemonic": "beq", "operands": { "rs": 8, "rt": 9, "immediate": -4 }, "word": "0x1109fffc", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-LUI", "mnemonic": "lui", "operands": { "rt": 9, "immediate": 4660 }, "word": "0x3c091234", "profiles": ["P3", "P4", "P5", "P6", "P7"] },
+    { "id": "ISA-JAL", "mnemonic": "jal", "operands": { "index": 3072 }, "word": "0x0c000c00", "profiles": ["P4", "P5", "P6", "P7"] },
+    { "id": "ISA-JR", "mnemonic": "jr", "operands": { "rs": 31 }, "word": "0x03e00008", "profiles": ["P4", "P5", "P6", "P7"] },
+    { "id": "ISA-AND", "mnemonic": "and", "operands": { "rd": 8, "rs": 9, "rt": 10 }, "word": "0x012a4024", "profiles": ["P6", "P7"] },
+    { "id": "ISA-OR", "mnemonic": "or", "operands": { "rd": 8, "rs": 9, "rt": 10 }, "word": "0x012a4025", "profiles": ["P6", "P7"] },
+    { "id": "ISA-SLT", "mnemonic": "slt", "operands": { "rd": 8, "rs": 9, "rt": 10 }, "word": "0x012a402a", "profiles": ["P6", "P7"] },
+    { "id": "ISA-SLTU", "mnemonic": "sltu", "operands": { "rd": 8, "rs": 9, "rt": 10 }, "word": "0x012a402b", "profiles": ["P6", "P7"] },
+    { "id": "ISA-ADDI", "mnemonic": "addi", "operands": { "rs": 9, "rt": 8, "immediate": 4660 }, "word": "0x21281234", "profiles": ["P6", "P7"] },
+    { "id": "ISA-ANDI", "mnemonic": "andi", "operands": { "rs": 9, "rt": 8, "immediate": 4660 }, "word": "0x31281234", "profiles": ["P6", "P7"] },
+    { "id": "ISA-LB", "mnemonic": "lb", "operands": { "rs": 9, "rt": 8, "immediate": 0 }, "word": "0x81280000", "profiles": ["P6", "P7"] },
+    { "id": "ISA-LH", "mnemonic": "lh", "operands": { "rs": 9, "rt": 8, "immediate": 0 }, "word": "0x85280000", "profiles": ["P6", "P7"] },
+    { "id": "ISA-SB", "mnemonic": "sb", "operands": { "rs": 9, "rt": 8, "immediate": 0 }, "word": "0xa1280000", "profiles": ["P6", "P7"] },
+    { "id": "ISA-SH", "mnemonic": "sh", "operands": { "rs": 9, "rt": 8, "immediate": 0 }, "word": "0xa5280000", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MULT", "mnemonic": "mult", "operands": { "rs": 8, "rt": 9 }, "word": "0x01090018", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MULTU", "mnemonic": "multu", "operands": { "rs": 8, "rt": 9 }, "word": "0x01090019", "profiles": ["P6", "P7"] },
+    { "id": "ISA-DIV", "mnemonic": "div", "operands": { "rs": 8, "rt": 9 }, "word": "0x0109001a", "profiles": ["P6", "P7"] },
+    { "id": "ISA-DIVU", "mnemonic": "divu", "operands": { "rs": 8, "rt": 9 }, "word": "0x0109001b", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MFHI", "mnemonic": "mfhi", "operands": { "rd": 8 }, "word": "0x00004010", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MFLO", "mnemonic": "mflo", "operands": { "rd": 8 }, "word": "0x00004012", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MTHI", "mnemonic": "mthi", "operands": { "rs": 8 }, "word": "0x01000011", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MTLO", "mnemonic": "mtlo", "operands": { "rs": 8 }, "word": "0x01000013", "profiles": ["P6", "P7"] },
+    { "id": "ISA-BNE", "mnemonic": "bne", "operands": { "rs": 8, "rt": 9, "immediate": 0 }, "word": "0x15090000", "profiles": ["P6", "P7"] },
+    { "id": "ISA-MFC0", "mnemonic": "mfc0", "operands": { "rt": 8, "rd": 12 }, "word": "0x40086000", "profiles": ["P7"] },
+    { "id": "ISA-MTC0", "mnemonic": "mtc0", "operands": { "rt": 8, "rd": 12 }, "word": "0x40886000", "profiles": ["P7"] },
+    { "id": "ISA-ERET", "mnemonic": "eret", "operands": {}, "word": "0x42000018", "profiles": ["P7"] },
+    { "id": "ISA-SYSCALL", "mnemonic": "syscall", "operands": {}, "word": "0x0000000c", "profiles": ["P7"] }
+  ],
+  "runtimeCounterexamples": [
+    { "id": "ISA-RUNTIME-NONCANONICAL-ADD", "word": "0x014b48e0", "profile": "P7", "enabledLayers": ["required"], "exactMnemonic": "add", "canonicalMnemonic": null },
+    { "id": "ISA-RUNTIME-NONCANONICAL-JR", "word": "0x03e90008", "profile": "P7", "enabledLayers": ["required"], "exactMnemonic": "jr", "canonicalMnemonic": null },
+    { "id": "ISA-RUNTIME-NONCANONICAL-LUI", "word": "0x3d291234", "profile": "P7", "enabledLayers": ["required"], "exactMnemonic": "lui", "canonicalMnemonic": null },
+    { "id": "ISA-RUNTIME-NONCANONICAL-CP0", "word": "0x40087800", "profile": "P7", "enabledLayers": ["required"], "exactMnemonic": "mfc0", "canonicalMnemonic": null },
+    { "id": "ISA-RUNTIME-RI", "word": "0xfc000000", "profile": "P7", "enabledLayers": ["required", "commonExtensions", "marsCompatibility"], "exactMnemonic": null, "canonicalMnemonic": null }
+  ],
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "e596c9a7a1488835e7245a5c83a5279daa15f453b745bc33d8899e7bc2aa01ef"
+  }
+}

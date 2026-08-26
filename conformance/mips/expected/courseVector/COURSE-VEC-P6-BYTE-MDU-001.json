@@ -1,0 +1,110 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P6-BYTE-MDU-001",
+  "profile": "P6",
+  "vectorKind": "program-final-state",
+  "source": {
+    "corpusFile": "spec-microprograms/p6-byte-mdu.asm",
+    "sha256": "108b5a7f56b9741891349f4454eddc5978ab9a677bd5a1a48bdeb308fee7f20d",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P6-ISA-001",
+      "COURSE-P6-ENDIAN-001",
+      "COURSE-P6-MDU-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P6-BYTE-MDU-001"
+    ],
+    "note": "Covers all byte lanes, signed extension, signed multiply, and truncating signed divide.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "mars-compatible-final-state",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "halt-loop",
+      "minimumHits": 2
+    },
+    "stepLimit": 4096
+  },
+  "expected": {
+    "kind": "final-state",
+    "haltPc": "0x00003050",
+    "haltWord": "0x1000ffff",
+    "gpr": {
+      "8": "0x80ff7f01",
+      "9": "0x00000001",
+      "10": "0x0000007f",
+      "11": "0xffffffff",
+      "12": "0xffff80ff",
+      "13": "0x000000aa",
+      "14": "0x00001234",
+      "15": "0x1234aa01",
+      "16": "0x00000006",
+      "17": "0xfffffffd",
+      "18": "0xffffffff",
+      "19": "0xffffffee",
+      "20": "0xfffffffd",
+      "21": "0x00000000"
+    },
+    "dm": {
+      "0x00000000": "0x1234aa01"
+    },
+    "writes": {
+      "gpr": [
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "21"
+      ],
+      "dm": [
+        "0x00000000"
+      ]
+    }
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "gpr.writes",
+      "dm.writes",
+      "hi-lo.results",
+      "halt.pc"
+    ],
+    "undefinedExcluded": [
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "95ed69fd1f00ae12c7a9b1022305bf79a8b7c8961d65befa390675aaa96d1b04"
+  }
+}

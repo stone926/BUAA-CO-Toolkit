@@ -400,6 +400,17 @@ describe('buildMarsArgs', () => {
       expect(args).toContain('ae1');
       expect(args).toContain('se1');
     });
+
+    it('uses the profile delay-slot contract for course dumps instead of user settings', () => {
+      setProfile(asmUri, 'P4');
+      setDelayedBranching(asmUri, true);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'db')).toBe(false);
+
+      setProfile(asmUri, 'P6');
+      setDelayedBranching(asmUri, false);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', { courseTrace: true }), 'db')).toBe(true);
+      expect(hasFlag(buildMarsArgs(asmUri, marsJar, 'dumpText', {}), 'db')).toBe(false);
+    });
   });
 
   describe('dumpKernel mode', () => {

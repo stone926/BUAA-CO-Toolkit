@@ -1,0 +1,26 @@
+{
+  "schemaRevision": 1,
+  "matrixRevision": 1,
+  "description": "Frozen section-8.1 performance matrix. Stage 0 records pinned-MARS cold end-to-end cells; TS lifecycle rows activate when the builtin engine exists.",
+  "marsCold": {
+    "lifecycle": "cold-end-to-end",
+    "processModel": "fresh-jvm-per-sample",
+    "assemblyWordCounts": [10, 200, 1000, 4096],
+    "executionStepCounts": [1000, 65536, 1000000],
+    "traceModes": ["off", "commit", "canonical-full"],
+    "workloads": ["plain", "memory-intensive", "p7-exception-dense", "p7-timer-dense", "p7-irq-directed"],
+    "warmSupported": false,
+    "warmExclusionReason": "Stock/pinned MARS CLI has no verified persistent process with complete case-state reset; no MARS result may be labeled warm."
+  },
+  "builtinTs": {
+    "activationStage": 2,
+    "lifecycles": ["cold-end-to-end", "first-worker", "warm-assemble", "warm-execute", "extension-activation"],
+    "absoluteSloIds": ["worker-first-10-word", "warm-assemble-1000-word", "warm-assemble-4096-word", "trace-off-1000000-step", "extension-activation-delta", "peak-host-worker-rss"]
+  },
+  "sampling": {
+    "minimumIndependentSamples": 7,
+    "percentiles": [50, 95],
+    "confidenceInterval": "deterministic-bootstrap-95-v1",
+    "requiredResources": ["wallClockMs", "cpuMs", "peakRssBytes"]
+  }
+}

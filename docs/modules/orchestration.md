@@ -26,7 +26,7 @@ toolchain:
 
 process:
   process.ts — runTool(同步等待,stdout/stderr流式写入OutputChannel,透传 stopped/stopReason), launchTool(GUI分离启动,spawn延迟判定,unref), commandLine, quoteArg
-  processCore.ts — 无VS Code依赖的spawn/stdout/stderr/逐行监控核心：timeout/AbortSignal 幂等 settle，Windows taskkill /t 与 Unix process group 执行 grace→force 整树终止；供扩展宿主和LSP复用
+  processCore.ts — 无VS Code依赖的spawn/stdout/stderr/逐行监控核心：timeout/AbortSignal 幂等 settle，raw-byte stdout/stderr ceiling（跨 UTF-8 chunk 用 StringDecoder），Windows taskkill /t 与 Unix process group执行 grace→force 整树终止；供扩展宿主和LSP复用
   startupTrace.ts — CO_TRACE_STARTUP/BUAA_CO_TRACE_STARTUP 启动耗时追踪 helper
   textChunks.ts — TextChunkAccumulator(零拷贝chunk收集), LineChunkScanner(流式逐行CRLF兼容)
 
@@ -36,7 +36,7 @@ fs:
   pathUtils.ts — normalizePathKey/samePath/dedupePaths/dedupeUris/sanitizeFileStem 纯路径工具
 
 mips-commands:
-  mips.ts — runMarsFile(run/dumpText/dumpKernel): 内存配置校验, 课程 Trace 源码停机尾校验, coL2 动态停机尾验证+原生 max-step, P7内核段合并(0x4180), 普通 dump 兼容性补尾, 稳定版 MARS兼容诊断(coL1/coL2/efc/p7irq/cl). registerMips()注册6个命令
+  mips.ts — runMarsFile(run/dumpText/dumpKernel): 使用 provider preflight 的 immutable launch；流式捕获/授权 MARS JAR 与 RI class 后仅执行本次运行的私有 registry staged artifact；stdout/stderr 各有 16 MiB raw ceiling，data/text/kernel dump 有界读取；课程 Trace 源码/动态停机尾、P7 0x4180 合并、原生 max-step 与共享稳定版兼容诊断(coL1/coL2/efc/p7irq/cl). registerMips()注册6个命令
 
 verilog-commands:
   verilog.ts — Verilog 命令入口: generateTestbench、generateIseProject、runIsim/compileIsim wrapper、lint禁用和 registerVerilog()注册7个命令

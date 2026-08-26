@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   getMarsJar: vi.fn(),
-  runMarsFile: vi.fn()
+  runMarsFile: vi.fn(),
+  resolveLegacyMarsLaunch: vi.fn()
 }));
 
 vi.mock('vscode', async () => {
@@ -24,11 +25,17 @@ vi.mock('../../mips', () => ({
   runMarsFile: mocks.runMarsFile
 }));
 
+vi.mock('../../mips/providers/legacyMarsLaunch', () => ({
+  resolveLegacyMarsLaunch: mocks.resolveLegacyMarsLaunch
+}));
+
 import * as vscode from 'vscode';
 import type { AppServices } from '../../types';
 import type { EngineDescriptor } from '../../mips/core/api';
 import {
+  type AssembleRequest,
   failedPreflight,
+  type ExecuteRequest,
   LEGACY_MARS_CAPABILITIES,
   MipsAssemblerProvider,
   okPreflight
@@ -52,8 +59,13 @@ describe('provider resolver preflight boundary', () => {
     mocks.getProfile.mockReset();
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
+    mocks.resolveLegacyMarsLaunch.mockReset();
     mocks.getProfile.mockReturnValue('P6');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
+    mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
+      diagnostics: [],
+      launch: resolvedLaunch(uri.fsPath, mode)
+    }));
   });
 
   it('selects a capable provider before dispatch and never invokes a rejected provider', async () => {
@@ -129,13 +141,24 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     mocks.getProfile.mockReset();
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
+    mocks.resolveLegacyMarsLaunch.mockReset();
     mocks.getProfile.mockReturnValue('P6');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
+    mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
+      diagnostics: [],
+      launch: resolvedLaunch(uri.fsPath, mode)
+    }));
   });
 
   it('reports stable profile and tool diagnostics before running MARS', async () => {
     mocks.getProfile.mockReturnValue('P1');
     mocks.getMarsJar.mockReturnValue('');
+    mocks.resolveLegacyMarsLaunch.mockResolvedValueOnce({
+      diagnostics: [
+        { code: 'legacy-mars.profile-unsupported', message: 'unsupported profile' },
+        { code: 'legacy-mars.jar-not-configured', message: 'jar missing' }
+      ]
+    });
     const provider = new LegacyMarsProvider(services());
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
 
@@ -152,6 +175,12 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
   });
 
   it('rejects ProgramImage and incomplete course execution before side effects', async () => {
+    mocks.resolveLegacyMarsLaunch.mockResolvedValueOnce({
+      diagnostics: [
+        { code: 'legacy-mars.max-steps-required', message: 'maxSteps missing' },
+        { code: 'legacy-mars.halt-pc-required', message: 'haltPc missing' }
+      ]
+    });
     const provider = new LegacyMarsProvider(services());
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
 
@@ -170,6 +199,9 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
   });
 
   it('rejects an out-of-range halt PC before running MARS', async () => {
+    mocks.resolveLegacyMarsLaunch.mockResolvedValueOnce({
+      diagnostics: [{ code: 'legacy-mars.halt-pc-required', message: 'haltPc invalid' }]
+    });
     const provider = new LegacyMarsProvider(services());
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
 
@@ -261,6 +293,128 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     expect(result.result?.status).toMatchObject({ stopped: true, stopReason: 'aborted' });
   });
 
+  it('rejects semantic request mutation after preflight without invoking MARS', async () => {
+    const provider = new LegacyMarsProvider(services());
+    const request: ExecuteRequest = {
+      sourceUri: sourceUri(),
+      imageRef: {
+        kind: 'mars-dump',
+        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
+        haltPc: 0x3010
+      },
+      courseTrace: true,
+      traceOutput: true,
+      traceLevel: 2,
+      maxSteps: 256,
+      interruptSchedule: [0x3020]
+    };
+
+    expect((await provider.preflight(request)).ok).toBe(true);
+    request.maxSteps = 512;
+    request.interruptSchedule!.push(0x3030);
+    const result = await provider.execute(request);
+
+    expect(result.ok).toBe(false);
+    expect(result.status.stderr).toContain('legacy-mars.request-changed-after-preflight');
+    expect(mocks.runMarsFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects mutation in the resolved launch continuation gap', async () => {
+    const provider = new LegacyMarsProvider(services());
+    const request: ExecuteRequest = {
+      sourceUri: sourceUri(),
+      imageRef: {
+        kind: 'mars-dump',
+        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
+        haltPc: 0x3010
+      },
+      stdin: 'before',
+      maxSteps: 256,
+      interruptSchedule: [0x3020]
+    };
+    expect((await provider.preflight(request)).ok).toBe(true);
+
+    const pending = provider.execute(request);
+    request.stdin = 'after';
+    request.interruptSchedule!.push(0x3030);
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    expect(result.status.stderr).toContain('legacy-mars.request-changed-after-preflight');
+    expect(mocks.runMarsFile).not.toHaveBeenCalled();
+  });
+
+  it('uses only the frozen execute snapshot after dispatch starts', async () => {
+    const provider = new LegacyMarsProvider(services());
+    const request: ExecuteRequest = {
+      sourceUri: sourceUri(),
+      imageRef: {
+        kind: 'mars-dump',
+        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
+        haltPc: 0x3010
+      },
+      stdin: 'captured',
+      stdinSource: vscode.Uri.file('E:/work/input.txt'),
+      maxSteps: 256,
+      interruptSchedule: [0x3020]
+    };
+    expect((await provider.preflight(request)).ok).toBe(true);
+    let finish!: () => void;
+    mocks.runMarsFile.mockImplementationOnce(() => new Promise((resolve) => {
+      finish = () => resolve({ result: successfulRunStatus() });
+    }));
+
+    const pending = provider.execute(request);
+    await vi.waitFor(() => expect(mocks.runMarsFile).toHaveBeenCalledOnce());
+    request.sourceUri = vscode.Uri.file('E:/attacker/replaced.asm');
+    request.stdin = 'replaced';
+    request.stdinSource = vscode.Uri.file('E:/attacker/input.txt');
+    request.interruptSchedule!.push(0x3030);
+
+    const [, invokedSource, , invokedOptions] = mocks.runMarsFile.mock.calls[0];
+    expect(invokedSource.fsPath).toBe(sourceUri().fsPath);
+    expect(invokedOptions).toMatchObject({
+      stdin: 'captured',
+      stdinSource: expect.objectContaining({ fsPath: vscode.Uri.file('E:/work/input.txt').fsPath }),
+      interruptSchedule: [0x3020],
+      maxSteps: 256
+    });
+    expect(Object.isFrozen(invokedOptions)).toBe(true);
+    expect(Object.isFrozen(invokedOptions.interruptSchedule)).toBe(true);
+    finish();
+    expect((await pending).ok).toBe(true);
+  });
+
+  it('rejects semantic request mutation while asynchronous preflight is resolving', async () => {
+    const provider = new LegacyMarsProvider(services());
+    const request: ExecuteRequest = {
+      sourceUri: sourceUri(),
+      imageRef: {
+        kind: 'mars-dump',
+        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
+        haltPc: 0x3010
+      },
+      courseTrace: false,
+      traceOutput: false,
+      maxSteps: 256
+    };
+    let release!: (value: { diagnostics: []; launch: ReturnType<typeof resolvedLaunch> }) => void;
+    mocks.resolveLegacyMarsLaunch.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+
+    const pending = provider.preflight(request);
+    await vi.waitFor(() => expect(mocks.resolveLegacyMarsLaunch).toHaveBeenCalledOnce());
+    request.courseTrace = true;
+    request.traceOutput = true;
+    release({ diagnostics: [], launch: resolvedLaunch(request.sourceUri.fsPath, 'run') });
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      'legacy-mars.request-changed-during-preflight'
+    );
+    expect(mocks.runMarsFile).not.toHaveBeenCalled();
+  });
+
   it('forwards cancellation and target mode to legacy assembly', async () => {
     const owner = services();
     const provider = new LegacyMarsProvider(owner);
@@ -285,10 +439,36 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
       expect.anything(),
       'dumpKernel',
       expect.objectContaining({
-        dumpOutputFile: outputFile,
+        dumpOutputFile: expect.objectContaining({ fsPath: outputFile.fsPath }),
         signal: controller.signal
       })
     );
+  });
+
+  it('rejects assemble mutation in the resolved launch continuation gap', async () => {
+    const provider = new LegacyMarsProvider(services());
+    const request: AssembleRequest = {
+      sourceUri: sourceUri(),
+      target: {
+        kind: 'kernelText',
+        outputFile: vscode.Uri.file('E:/work/kernel.txt')
+      },
+      courseTrace: true,
+      p7RiInstruction: true
+    };
+    expect((await provider.preflight(request)).ok).toBe(true);
+
+    const pending = provider.assemble(request);
+    request.target = {
+      kind: 'userText',
+      outputFile: vscode.Uri.file('E:/attacker/replaced.txt')
+    };
+    request.courseTrace = false;
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    expect(result.status.stderr).toContain('legacy-mars.request-changed-after-preflight');
+    expect(mocks.runMarsFile).not.toHaveBeenCalled();
   });
 });
 
@@ -331,5 +511,20 @@ function successfulRunStatus() {
     timedOut: false,
     commandLine: 'java -jar Mars.jar',
     cwd: 'E:/work'
+  };
+}
+
+function resolvedLaunch(sourcePath: string, mode: 'run' | 'dumpText' | 'dumpKernel') {
+  return {
+    sourcePath,
+    mode,
+    profile: 'P6',
+    configuredMars: 'E:/tools/Mars.jar',
+    memoryConfiguration: 'FixedCompactLargeText',
+    runtime: { kind: 'java' as const, command: 'java' },
+    wallClockMs: 10_000,
+    p7RiInstruction: false,
+    delayedBranching: true,
+    extraArgs: []
   };
 }

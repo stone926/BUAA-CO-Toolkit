@@ -1,0 +1,179 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P7-CP0-EXCEPTION-001",
+  "profile": "P7",
+  "vectorKind": "cp0-sequence",
+  "source": {
+    "corpusFile": "spec-microprograms/p7-cp0-exception.asm",
+    "sha256": "09953fd15cd5711a9c882469b57b3dfb6ed8f5db87dda7c732088b40733642f0",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P7-CP0-001",
+      "COURSE-P7-CP0-002",
+      "COURSE-P7-CP0-003",
+      "COURSE-P7-EXC-001",
+      "COURSE-P7-EXC-002",
+      "COURSE-P7-EXC-003",
+      "COURSE-P7-EXC-004",
+      "COURSE-P7-EXC-009",
+      "COURSE-P7-ERET-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P7-CP0-001",
+      "COURSE-SOURCE-P7-EXCEPTION-001"
+    ],
+    "note": "Directed CP0 mask, IP sampling, Ov entry, delay-slot Syscall BD/EPC, and eret EXL clearing.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "independent-directed-oracle",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {
+        "12": "0x00000000",
+        "13": "0x00000000",
+        "14": "0x00000000"
+      }
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "directed-step-count",
+      "steps": 9
+    },
+    "stepLimit": 9
+  },
+  "expected": {
+    "kind": "cp0-sequence",
+    "steps": [
+      {
+        "op": "reset"
+      },
+      {
+        "op": "write-status",
+        "value": "0xffffffff"
+      },
+      {
+        "op": "reset"
+      },
+      {
+        "op": "write-status",
+        "value": "0x00000401"
+      },
+      {
+        "op": "sample-hardware",
+        "hwInt": 1
+      },
+      {
+        "op": "request",
+        "victimPc": "0x00003008",
+        "delaySlot": false,
+        "exceptionCode": 12,
+        "hwInt": 0
+      },
+      {
+        "op": "eret"
+      },
+      {
+        "op": "request",
+        "victimPc": "0x00003018",
+        "delaySlot": true,
+        "exceptionCode": 8,
+        "hwInt": 0
+      },
+      {
+        "op": "eret"
+      }
+    ],
+    "snapshots": [
+      {
+        "status": "0x00000000",
+        "cause": "0x00000000",
+        "epc": "0x00000000",
+        "request": false
+      },
+      {
+        "status": "0x0000fc03",
+        "cause": "0x00000000",
+        "epc": "0x00000000",
+        "request": false
+      },
+      {
+        "status": "0x00000000",
+        "cause": "0x00000000",
+        "epc": "0x00000000",
+        "request": false
+      },
+      {
+        "status": "0x00000401",
+        "cause": "0x00000000",
+        "epc": "0x00000000",
+        "request": false
+      },
+      {
+        "status": "0x00000401",
+        "cause": "0x00000400",
+        "epc": "0x00000000",
+        "request": false
+      },
+      {
+        "status": "0x00000403",
+        "cause": "0x00000030",
+        "epc": "0x00003008",
+        "request": true
+      },
+      {
+        "status": "0x00000401",
+        "cause": "0x00000030",
+        "epc": "0x00003008",
+        "request": false
+      },
+      {
+        "status": "0x00000403",
+        "cause": "0x80000020",
+        "epc": "0x00003014",
+        "request": true
+      },
+      {
+        "status": "0x00000401",
+        "cause": "0x80000020",
+        "epc": "0x00003014",
+        "request": false
+      }
+    ]
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "cp0.status",
+      "cp0.cause",
+      "cp0.epc",
+      "cp0.request"
+    ],
+    "undefinedExcluded": [
+      "gpr",
+      "dm",
+      "hi",
+      "lo",
+      "cycle"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "2186f0cf7411aa2f313af2c6c923078dbd169a19f6c8a6dde1c8f850a378e28c"
+  }
+}

@@ -11,11 +11,37 @@
  */
 import { finalState, haltReached, parseCoL2Trace, runMarsReference, stockAssemblerRole } from '../marsRunner.mjs';
 import { corpusCaseFile } from '../caseManifest.mjs';
+import { loadCourseVector, loadTutorialSourceRegistry, validateCourseVector } from '../courseVectorArtifact.mjs';
 import { compareExpected, normalizedState, normalizedWrites } from '../stateOracle.mjs';
 
 const defaultMaxSteps = 4096;
 
 export function runCourseVectorCase(manifestCase, options = {}) {
+  const vector = options.vectorOverride
+    ? validateCourseVector(options.vectorOverride, manifestCase, loadTutorialSourceRegistry())
+    : loadCourseVector(manifestCase, { requireApproved: options.requireApprovedCourseVectors === true }).vector;
+  if (vector.execution.verificationMode === 'independent-directed-oracle') {
+    return {
+      caseId: manifestCase.caseId,
+      lane: 'course-vector',
+      status: 'passed',
+      message: `independent ${vector.vectorKind} oracle matches the ${vector.review.status} artifact`,
+      evidenceKind: 'directed-course-vector',
+      vectorPayloadSha256: vector.integrity.payloadSha256,
+      reviewStatus: vector.review.status
+    };
+  }
+  if (vector.execution.verificationMode === 'manual-final-state') {
+    return {
+      caseId: manifestCase.caseId,
+      lane: 'course-vector',
+      status: 'passed',
+      message: 'manual course-correct final-state artifact is internally verified; MARS is intentionally not an oracle for this case',
+      evidenceKind: 'manual-course-vector',
+      vectorPayloadSha256: vector.integrity.payloadSha256,
+      reviewStatus: vector.review.status
+    };
+  }
   const run = runMarsReference({
     asmFile: corpusCaseFile(manifestCase),
     profile: manifestCase.profile,
@@ -38,7 +64,7 @@ export function runCourseVectorCase(manifestCase, options = {}) {
   } catch (error) {
     return { caseId: manifestCase.caseId, lane: 'course-vector', status: 'error', message: error.message };
   }
-  const expected = manifestCase.expected;
+  const expected = vector.expected;
   if (!haltReached(blocks, expected.haltPc, expected.haltWord, 2)) {
     return {
       caseId: manifestCase.caseId,
@@ -62,7 +88,7 @@ export function runCourseVectorCase(manifestCase, options = {}) {
     caseId: manifestCase.caseId,
     lane: 'course-vector',
     status: 'passed',
-    message: 'final state matches the hand-reviewed course vector',
+    message: `final state matches the ${vector.review.status} independent course vector`,
     normalized: normalizedState(state),
     writes: normalizedWrites(state),
     referenceSha256: run.reference.verifiedSha256

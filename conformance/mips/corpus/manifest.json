@@ -1,24 +1,19 @@
 {
-  "schemaRevision": 1,
-  "description": "Conformance corpus case manifest. Expected values in `courseVector` entries are hand-computed and human-reviewed; `legacy-baseline` entries only assert MARS execution/reachability plus divergence documentation and are never course vectors.",
+  "schemaRevision": 2,
+  "description": "Conformance corpus manifest. Course-correct expected data lives only in physically isolated courseVector artifacts; legacyExpected exists only for the pinned legacy baseline.",
   "cases": [
     {
       "caseId": "COURSE-VEC-P3-ARITH-001",
       "file": "spec-microprograms/p3-arith.asm",
       "profile": "P3",
       "lanes": ["course-vector", "legacy-baseline", "assembly-diff"],
-      "provenance": {
-        "kind": "spec-microprogram",
-        "reviewer": "stone926",
-        "reviewedAt": "2026-08-25",
-        "note": "Hand-computed from the COURSE-P3-ISA-001 / COURSE-P3-ARITH-001 / COURSE-P3-RESET-001 contracts."
-      },
-      "expected": {
-        "haltPc": "0x00003020",
-        "haltWord": "0x1000ffff",
+      "features": ["instruction.add", "instruction.sub", "instruction.ori", "instruction.lui", "register.zero", "boundary.immediate"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "stone926", "reviewedAt": "2026-08-25", "note": "Handwritten P3 arithmetic microprogram; course expected moved to the independent vector artifact." },
+      "courseVector": "COURSE-VEC-P3-ARITH-001.json",
+      "legacyExpected": {
+        "haltPc": "0x00003020", "haltWord": "0x1000ffff",
         "gpr": { "8": "0x00000000", "9": "0x00001234", "10": "0x12340000", "11": "0x12341234", "12": "0x1233edcc", "13": "0x24680000", "14": "0xffffedcc" },
-        "dm": {},
-        "writes": { "gpr": ["8", "9", "10", "11", "12", "13", "14"], "dm": [] }
+        "dm": {}, "writes": { "gpr": ["8", "9", "10", "11", "12", "13", "14"], "dm": [] }
       }
     },
     {
@@ -26,15 +21,11 @@
       "file": "spec-microprograms/p3-memory.asm",
       "profile": "P3",
       "lanes": ["course-vector", "legacy-baseline", "assembly-diff"],
-      "provenance": {
-        "kind": "spec-microprogram",
-        "reviewer": "stone926",
-        "reviewedAt": "2026-08-25",
-        "note": "Hand-computed from the COURSE-P3-ADDR-001/002 contracts; exercises DM lower bound 0x0000, last word 0x2ffc and a middle word."
-      },
-      "expected": {
-        "haltPc": "0x00003024",
-        "haltWord": "0x1000ffff",
+      "features": ["instruction.lw", "instruction.sw", "address.dm-first", "address.dm-last", "address.dm-middle"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "stone926", "reviewedAt": "2026-08-25", "note": "Handwritten DM boundary microprogram; course expected is independently versioned." },
+      "courseVector": "COURSE-VEC-P3-MEMORY-001.json",
+      "legacyExpected": {
+        "haltPc": "0x00003024", "haltWord": "0x1000ffff",
         "gpr": { "8": "0x000000ff", "9": "0x000000ff", "10": "0x000000ff", "11": "0x00005aa5", "12": "0x00005aa5", "13": "0x00000000" },
         "dm": { "0x00000000": "0x000000ff", "0x00002ffc": "0x000000ff", "0x00001004": "0x00005aa5" },
         "writes": { "gpr": ["8", "9", "10", "11", "12", "13"], "dm": ["0x00000000", "0x00002ffc", "0x00001004"] }
@@ -45,35 +36,87 @@
       "file": "spec-microprograms/p3-branch.asm",
       "profile": "P3",
       "lanes": ["course-vector", "legacy-baseline", "assembly-diff"],
-      "provenance": {
-        "kind": "spec-microprogram",
-        "reviewer": "stone926",
-        "reviewedAt": "2026-08-25",
-        "note": "Hand-computed from the COURSE-P3-ISA-001 contract; the skipped 0x301c instruction must never write $t2."
-      },
-      "expected": {
-        "haltPc": "0x00003028",
-        "haltWord": "0x1000ffff",
+      "features": ["instruction.beq", "branch.taken", "branch.not-taken", "branch.backward", "branch.forward"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "stone926", "reviewedAt": "2026-08-25", "note": "Handwritten branch-direction microprogram with explicit no-write expectations." },
+      "courseVector": "COURSE-VEC-P3-BRANCH-001.json",
+      "legacyExpected": {
+        "haltPc": "0x00003028", "haltWord": "0x1000ffff",
         "gpr": { "8": "0x00000000", "9": "0x00000001", "10": "0x00000000", "11": "0x00000007", "12": "0x00010000" },
-        "dm": {},
-        "writes": { "gpr": ["8", "9", "11", "12"], "dm": [] }
+        "dm": {}, "writes": { "gpr": ["8", "9", "11", "12"], "dm": [] }
       }
+    },
+    {
+      "caseId": "COURSE-VEC-P3-BOUNDARY-001",
+      "file": "spec-microprograms/p3-boundaries.asm",
+      "profile": "P3",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["instruction.add", "instruction.sub", "arithmetic.wrap", "boundary.int-min", "boundary.immediate", "address.dm-last"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate course-only vector: P3 add/sub ignore overflow, so stock MARS is intentionally not the oracle." },
+      "courseVector": "COURSE-VEC-P3-BOUNDARY-001.json"
+    },
+    {
+      "caseId": "COURSE-VEC-P4-CONTROL-001",
+      "file": "spec-microprograms/p4-control.asm",
+      "profile": "P4",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["instruction.jal", "instruction.beq", "control.no-delay-slot", "link.pc-plus-4", "branch.taken"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate P4 vector proving skipped post-control words and PC+4 link." },
+      "courseVector": "COURSE-VEC-P4-CONTROL-001.json"
+    },
+    {
+      "caseId": "COURSE-VEC-P5-DELAY-LINK-001",
+      "file": "spec-microprograms/p5-delay-link.asm",
+      "profile": "P5",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["instruction.jal", "instruction.beq", "control.delay-slot", "link.pc-plus-8", "branch.taken"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate P5 vector proving exactly-once delay-slot execution and PC+8 link." },
+      "courseVector": "COURSE-VEC-P5-DELAY-LINK-001.json"
+    },
+    {
+      "caseId": "COURSE-VEC-P6-BYTE-MDU-001",
+      "file": "spec-microprograms/p6-byte-mdu.asm",
+      "profile": "P6",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["instruction.lb", "instruction.lh", "instruction.sb", "instruction.sh", "instruction.mult", "instruction.div", "memory.byte-lanes", "mdu.signed"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate P6 byte-lane/sign-extension and signed HI/LO boundary vector." },
+      "courseVector": "COURSE-VEC-P6-BYTE-MDU-001.json"
+    },
+    {
+      "caseId": "COURSE-VEC-P7-CP0-EXCEPTION-001",
+      "file": "spec-microprograms/p7-cp0-exception.asm",
+      "profile": "P7",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["instruction.mfc0", "instruction.mtc0", "instruction.eret", "exception.ov", "exception.delay-slot", "cp0.mask", "cp0.epc", "cp0.cause"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate P7 CP0 sequence checked by the independent conformance oracle." },
+      "courseVector": "COURSE-VEC-P7-CP0-EXCEPTION-001.json"
+    },
+    {
+      "caseId": "COURSE-VEC-P7-TIMER-001",
+      "file": "spec-microprograms/p7-timer.asm",
+      "profile": "P7",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["device.timer", "timer.load", "timer.count", "timer.irq", "timer.periodic", "timer.write-priority"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate cycle vector transcribed from official Timer RTL and independently replayed." },
+      "courseVector": "COURSE-VEC-P7-TIMER-001.json"
+    },
+    {
+      "caseId": "COURSE-VEC-P7-EXTERNAL-IRQ-001",
+      "file": "spec-microprograms/p7-external-irq.asm",
+      "profile": "P7",
+      "lanes": ["course-vector", "assembly-diff"],
+      "features": ["device.external-irq", "irq.assert", "irq.hold", "irq.ack", "address.interrupt-generator"],
+      "provenance": { "kind": "spec-microprogram", "reviewer": "pending:stone926", "reviewedAt": "2026-08-26", "note": "Candidate external IRQ hold/ack sequence transcribed from the official testbench." },
+      "courseVector": "COURSE-VEC-P7-EXTERNAL-IRQ-001.json"
     },
     {
       "caseId": "MARS-BASELINE-GPSP-001",
       "file": "challenge/gp-sp-divergence.asm",
       "profile": "P3",
       "lanes": ["legacy-baseline"],
-      "provenance": {
-        "kind": "challenge",
-        "reviewer": "stone926",
-        "reviewedAt": "2026-08-25",
-        "note": "Minimal repro of MARS-DIV-GPSP-001. The stock assembler/course-vector path exposes the historical Compact* reset, while legacy-course-executor with coZeroGpr must write the course-correct zero reset into DM[0]/DM[4]."
-      },
-      "expected": {
-        "haltPc": "0x00003008",
-        "haltWord": "0x1000ffff",
-        "gpr": {},
+      "features": ["divergence.gp-sp-reset", "register.gp", "register.sp"],
+      "provenance": { "kind": "challenge", "reviewer": "stone926", "reviewedAt": "2026-08-25", "note": "Minimal repro of MARS-DIV-GPSP-001; legacy coZeroGpr stores course reset zero." },
+      "legacyExpected": {
+        "haltPc": "0x00003008", "haltWord": "0x1000ffff", "gpr": {},
         "dm": { "0x00000000": "0x00000000", "0x00000004": "0x00000000" },
         "writes": { "gpr": [], "dm": ["0x00000000", "0x00000004"] }
       }

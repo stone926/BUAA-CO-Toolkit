@@ -9,19 +9,39 @@ import type { AsmCase } from '../asmCaseStore';
 import {
   asmCaseSourceSnapshotIssue,
   copyAsmCaseArtifact,
+  listAsmCaseManifests,
+  maximumAsmCaseIndexEntries,
+  maximumAsmCaseIndexManifestBytes,
+  readAsmCaseManifestForAsm,
+  readAsmCaseStdinSnapshot,
+  recordAsmCaseOracleResult,
   updateAsmCaseArtifacts,
   updateAsmCaseMetadata
 } from '../asmCaseStore';
 import type { AsmCaseManifestV2 } from '../courseTesting/manifestCodec';
+import type { ExecuteResult } from '../mips/providers/contracts';
+import {
+  maximumReplayManifestBytes,
+  maximumReplaySnapshotBytes,
+  maximumReplaySourceBytes,
+  maximumReplayStdinBytes
+} from '../mips/replay/boundedFile';
+
+const vscodeState = vi.hoisted(() => ({
+  state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined
+}));
 
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('./helpers/vscodeMock');
-  return createVscodeModuleMock(createVscodeMockState(), vi.fn);
+  vscodeState.state = createVscodeMockState();
+  return createVscodeModuleMock(vscodeState.state, vi.fn);
 });
 
 const temporaryRoots: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
+  vscodeState.state!.workspaceFolders.splice(0);
   for (const root of temporaryRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -88,6 +108,21 @@ describe('ASM case manifest v2 artifact storage', () => {
     expect(written.metadata).toEqual(manifest.metadata);
   });
 
+  it('moves DUT-affecting metadata into a typed configuration fingerprint', async () => {
+    const asmCase = createCase();
+    await updateAsmCaseMetadata(asmCase, {
+      'dut.verilog.testbenchModule': 'mips_tb',
+      'dut.verilog.testbenchSha256': 'a'.repeat(64)
+    });
+    const manifest = asmCase.manifest as AsmCaseManifestV2;
+    expect(manifest.metadata).toBeUndefined();
+    expect(manifest.dut?.configuration).toEqual({
+      'dut.verilog.testbenchModule': 'mips_tb',
+      'dut.verilog.testbenchSha256': 'a'.repeat(64)
+    });
+    expect(manifest.dut?.configurationHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it('rejects direct references outside the case directory', async () => {
     const asmCase = createCase();
     const external = path.join(path.dirname(asmCase.dir.fsPath), 'external.out');
@@ -110,6 +145,80 @@ describe('ASM case manifest v2 artifact storage', () => {
       traceOut: path.join(linkedDir, 'trace.out')
     })).rejects.toThrow(/resolves outside the case directory/);
     expect((asmCase.manifest as AsmCaseManifestV2).artifacts).toBeUndefined();
+  });
+
+  it('rejects a tampered oracle trace path before reading or chmod outside the case', async () => {
+    const asmCase = createCase();
+    makeSourceSnapshotValid(asmCase);
+    const external = path.join(path.dirname(asmCase.dir.fsPath), 'external-oracle.out');
+    const bytes = Buffer.from('@00003000: $ 1 <= 00000001\n');
+    fs.writeFileSync(external, bytes, { mode: 0o644 });
+    (asmCase.manifest as AsmCaseManifestV2).artifacts = {
+      oracle: {
+        traceOut: {
+          path: '../external-oracle.out',
+          sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+          bytes: bytes.byteLength
+        }
+      }
+    };
+
+    await expect(recordAsmCaseOracleResult(
+      asmCase,
+      successfulExecuteResult(),
+      {
+        profile: 'P7', memoryConfiguration: 'CompactLargeText', courseTrace: true, traceOutput: true,
+        traceLevel: 2, maxSteps: 64, haltPc: 0x3004
+      },
+      { stopReason: 'halt-loop' }
+    )).rejects.toThrow(/must be copied inside the case directory/);
+    expect(fs.readFileSync(external)).toEqual(bytes);
+  });
+
+  it('reads stdin only from the case-local manifest snapshot and rejects drift', async () => {
+    const asmCase = createCase();
+    const stdinDir = path.join(asmCase.dir.fsPath, 'stdin');
+    const stdinFile = path.join(stdinDir, 'input.txt');
+    const bytes = Buffer.from('sealed\n');
+    fs.mkdirSync(stdinDir);
+    fs.writeFileSync(stdinFile, bytes);
+    asmCase.stdin = URI.file(stdinFile);
+    (asmCase.manifest as AsmCaseManifestV2).stdin = {
+      originalPath: path.join(path.dirname(asmCase.dir.fsPath), 'input.txt'),
+      path: 'stdin/input.txt',
+      sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+      bytes: bytes.byteLength
+    };
+
+    await expect(readAsmCaseStdinSnapshot(asmCase)).resolves.toBe('sealed\n');
+    fs.writeFileSync(stdinFile, 'drift!\n');
+    await expect(readAsmCaseStdinSnapshot(asmCase)).rejects.toThrow(/已偏离 case manifest/);
+  });
+
+  it('rejects caller configuration that differs from the provider resolved run', async () => {
+    const asmCase = createCase();
+    makeSourceSnapshotValid(asmCase);
+    const traceDir = path.join(asmCase.dir.fsPath, 'mars');
+    fs.mkdirSync(traceDir);
+    const trace = path.join(traceDir, 'oracle.out');
+    const bytes = Buffer.from('@00003000: $ 1 <= 00000001\n');
+    fs.writeFileSync(trace, bytes);
+    (asmCase.manifest as AsmCaseManifestV2).artifacts = {
+      oracle: {
+        traceOut: {
+          path: 'mars/oracle.out',
+          sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+          bytes: bytes.byteLength
+        }
+      }
+    };
+
+    await expect(recordAsmCaseOracleResult(
+      asmCase,
+      successfulExecuteResult(),
+      { profile: 'P7', memoryConfiguration: 'Default', traceLevel: 2 },
+      { stopReason: 'halt-loop' }
+    )).rejects.toThrow(/differs from executed/);
   });
 
   it('does not mutate a legacy v1 manifest', async () => {
@@ -189,4 +298,111 @@ describe('ASM case manifest v2 artifact storage', () => {
     fs.writeFileSync(asmCase.asm.fsPath, '.text\nori $t0,$0,3\n');
     await expect(asmCaseSourceSnapshotIssue(asmCase)).resolves.toMatch(/case-local ASM snapshot 已偏离/);
   });
+
+  it('rejects oversized sparse root, stdin, and artifact files before allocating their declared size', async () => {
+    const asmCase = createCase();
+    fs.writeFileSync(asmCase.asm.fsPath, '');
+    fs.truncateSync(asmCase.asm.fsPath, maximumReplaySourceBytes + 1);
+    await expect(asmCaseSourceSnapshotIssue(asmCase)).resolves.toMatch(/hard limit|有界读取/);
+
+    const stdinDir = path.join(asmCase.dir.fsPath, 'stdin');
+    const stdinFile = path.join(stdinDir, 'input.txt');
+    fs.mkdirSync(stdinDir);
+    fs.writeFileSync(stdinFile, '');
+    asmCase.stdin = URI.file(stdinFile);
+    (asmCase.manifest as AsmCaseManifestV2).stdin = {
+      originalPath: 'captured-input.txt',
+      path: 'stdin/input.txt',
+      sha256: crypto.createHash('sha256').update('').digest('hex'),
+      bytes: maximumReplayStdinBytes + 1
+    };
+    await expect(readAsmCaseStdinSnapshot(asmCase)).rejects.toThrow(/hard limit|有界读取/);
+
+    const artifactDir = path.join(asmCase.dir.fsPath, 'verilog');
+    const artifactFile = path.join(artifactDir, 'oversized.vcd');
+    fs.mkdirSync(artifactDir);
+    fs.writeFileSync(artifactFile, '');
+    fs.truncateSync(artifactFile, maximumReplaySnapshotBytes + 1);
+    await expect(updateAsmCaseArtifacts(asmCase, 'verilog', { vcd: artifactFile }))
+      .rejects.toThrow(/hard limit/);
+  });
+
+  it('bounds an adjacent case manifest before JSON parsing', async () => {
+    const asmCase = createCase();
+    fs.writeFileSync(asmCase.asm.fsPath, 'nop\n');
+    fs.writeFileSync(asmCase.manifestUri.fsPath, '');
+    fs.truncateSync(asmCase.manifestUri.fsPath, maximumReplayManifestBytes + 1);
+
+    await expect(readAsmCaseManifestForAsm(asmCase.asm)).resolves.toBeUndefined();
+  });
+
+  it('streams case discovery and rejects an excessive directory count', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-asm-case-index-'));
+    temporaryRoots.push(root);
+    const casesDir = path.join(root, '.co', 'cases');
+    fs.mkdirSync(casesDir, { recursive: true });
+    vscodeState.state!.workspaceFolders.push({ uri: URI.file(root), name: 'test' });
+    const entries = Array.from({ length: maximumAsmCaseIndexEntries + 1 }, (_, index) => ({
+      name: `case-${index}`,
+      isDirectory: () => true
+    })) as fs.Dirent[];
+    vi.spyOn(fs.promises, 'opendir').mockResolvedValueOnce({
+      async *[Symbol.asyncIterator]() {
+        yield* entries;
+      }
+    } as fs.Dir);
+
+    await expect(listAsmCaseManifests()).rejects.toThrow(/entry limit/);
+  });
+
+  it('rejects excessive aggregate case-manifest bytes without retaining parsed manifests', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-asm-case-index-bytes-'));
+    temporaryRoots.push(root);
+    const casesDir = path.join(root, '.co', 'cases');
+    fs.mkdirSync(casesDir, { recursive: true });
+    vscodeState.state!.workspaceFolders.push({ uri: URI.file(root), name: 'test' });
+    const perManifestBytes = maximumReplayManifestBytes;
+    const count = Math.floor(maximumAsmCaseIndexManifestBytes / perManifestBytes) + 1;
+    const padding = Buffer.alloc(perManifestBytes - 2, 0x20);
+    for (let index = 0; index < count; index += 1) {
+      const caseDir = path.join(casesDir, `case-${index}`);
+      fs.mkdirSync(caseDir);
+      const manifest = path.join(caseDir, 'case.json');
+      fs.writeFileSync(manifest, '[]');
+      fs.appendFileSync(manifest, padding);
+    }
+
+    await expect(listAsmCaseManifests()).rejects.toThrow(/manifest bytes/);
+  });
 });
+
+function makeSourceSnapshotValid(asmCase: AsmCase): void {
+  const bytes = Buffer.from('.text\nnop\n');
+  fs.writeFileSync(asmCase.asm.fsPath, bytes);
+  (asmCase.manifest as AsmCaseManifestV2).asmSnapshot = {
+    path: 'program.asm',
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+    bytes: bytes.byteLength
+  };
+}
+
+function successfulExecuteResult(): ExecuteResult {
+  return {
+    ok: true,
+    descriptor: {
+      id: 'legacy-mars-configured', kind: 'full-stack', build: 'test',
+      semanticsRevision: 1, capabilitiesRevision: 1
+    },
+    status: {
+      ok: true, exitCode: 0, stdout: '', stderr: '', timedOut: false,
+      commandLine: 'java -jar Mars.jar', cwd: 'case'
+    },
+    resolvedRun: {
+      profile: 'P7',
+      memoryConfiguration: 'CompactLargeText',
+      runtime: { kind: 'java', command: 'java' },
+      wallClockMs: 10_000,
+      p7RiInstruction: false
+    }
+  };
+}

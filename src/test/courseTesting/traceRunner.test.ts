@@ -6,6 +6,7 @@ import {
   asmCaseSourceSnapshotIssue,
   prepareAsmCaseMachineCode,
   createAsmCaseFromAsm,
+  readAsmCaseStdinSnapshot,
   recordAsmCaseOracleResult
 } from '../../asmCaseStore';
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
@@ -38,6 +39,7 @@ vi.mock('../../asmCaseStore', () => ({
   copyAsmCaseArtifact: vi.fn(async () => undefined),
   createAsmCaseFromAsm: vi.fn(),
   prepareAsmCaseMachineCode: vi.fn(),
+  readAsmCaseStdinSnapshot: vi.fn(async () => undefined),
   recordAsmCaseOracleResult: vi.fn(async () => undefined),
   readAsmCaseManifestForAsm: vi.fn(async () => undefined),
   updateAsmCaseArtifacts: vi.fn(async () => undefined)
@@ -132,6 +134,7 @@ describe('course trace runner orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(recordAsmCaseOracleResult).mockResolvedValue(undefined);
+    vi.mocked(readAsmCaseStdinSnapshot).mockResolvedValue(undefined);
     vi.mocked(asmCaseSourceSnapshotIssue).mockResolvedValue(undefined);
     callOrder.splice(0);
     const currentCase = makeAsmCase();
@@ -215,6 +218,56 @@ describe('course trace runner orchestration', () => {
     expect(result).not.toHaveProperty('simOut');
     expect(result).not.toHaveProperty('marsEvents');
     expect(result).not.toHaveProperty('simEvents');
+  });
+
+  it('executes only the manifest-bound case-local stdin snapshot', async () => {
+    const currentCase = makeAsmCase({
+      stdin: {
+        originalPath: 'E:/work/input.txt',
+        path: 'stdin/input.txt',
+        sha256: 'a'.repeat(64),
+        bytes: 7
+      }
+    } as never);
+    currentCase.stdin = URI.file('E:/work/.co/cases/case-1/stdin/input.txt');
+    vi.mocked(readAsmCaseStdinSnapshot).mockResolvedValueOnce('sealed\n');
+
+    const result = await runCourseTraceCase(services(), {
+      asm: URI.file('E:/work/src/test.asm'),
+      stdin: URI.file('E:/work/input.txt'),
+      asmCase: currentCase
+    });
+
+    expect(result.status).toBe('passed');
+    expect(executeWithPreflight).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ stdin: 'sealed\n' }),
+      expect.anything()
+    );
+    expect(vi.mocked(executeWithPreflight).mock.calls[0][1]).not.toHaveProperty('stdinSource');
+  });
+
+  it('rejects replacing stdin on an existing case', async () => {
+    const currentCase = makeAsmCase({
+      stdin: {
+        originalPath: 'E:/work/input-a.txt',
+        path: 'stdin/input-a.txt',
+        sha256: 'a'.repeat(64),
+        bytes: 2
+      }
+    } as never);
+    currentCase.stdin = URI.file('E:/work/.co/cases/case-1/stdin/input-a.txt');
+
+    const result = await runCourseTraceCase(services(), {
+      asm: URI.file('E:/work/src/test.asm'),
+      stdin: URI.file('E:/work/input-b.txt'),
+      asmCase: currentCase
+    });
+
+    expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
+    expect(result.message).toContain('不能改用另一个标准输入');
+    expect(prepareAsmCaseMachineCode).not.toHaveBeenCalled();
+    expect(executeWithPreflight).not.toHaveBeenCalled();
   });
 
   it('marks an aborted oracle run as a cancelled case', async () => {

@@ -1,0 +1,3 @@
+# Preserve the byte-for-byte official Timer RTL snapshot; its normalized-LF
+# SHA-256 is a conformance trust root and includes the distributed whitespace.
+conformance/mips/decision-vectors/reference/P7_standard_timer_2019.v -whitespace

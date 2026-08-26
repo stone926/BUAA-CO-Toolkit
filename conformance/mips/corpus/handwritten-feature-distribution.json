@@ -1,0 +1,148 @@
+{
+  "schemaRevision": 1,
+  "description": "Frozen full-stack shadow distribution for genuinely handwritten/reviewed source graphs. Generated/random template cases are ineligible even if they contain the same tokens.",
+  "revision": 1,
+  "eligibility": {
+    "allowedOrigins": [
+      "course-tutorial",
+      "teaching-assistant",
+      "anonymized-student",
+      "independently-handwritten-regression"
+    ],
+    "excludedOrigins": [
+      "random-generator",
+      "template-expansion",
+      "metamorphic-clone",
+      "machine-translated-duplicate"
+    ],
+    "sourceGraphIdentity": "sha256(UTF-8 LF-normalized root plus ordered include/macro graph)",
+    "minimumTotalUniqueGraphs": 500
+  },
+  "advertisedFeatures": [
+    {
+      "id": "lex.whitespace-comment-case",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "lex.lf-crlf-bom",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "lex.non-ascii-path",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "register.numeric-abi-alias",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "literal.decimal-hex-signed",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "expression.arithmetic-bitwise-parentheses",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "label.forward-backward-self",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "section.text-data-ktext",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "directive.word-half-byte-space-align",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "directive.ascii-asciiz",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "directive.eqv",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "macro.definition-argument-expansion",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "include.single-nested",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "pseudo.li-la-move-b-nop",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "memory.offset-base-boundaries",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "control.branch-jump-delay",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "mdu.hilo-dependency",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "cp0.exception-handler-layout",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "device.timer-irq-mmio",
+      "minimumUniqueGraphs": 20
+    },
+    {
+      "id": "diagnostic.invalid-recovery",
+      "minimumUniqueGraphs": 20
+    }
+  ],
+  "criticalCombinations": [
+    {
+      "id": "combo.macro-include-eqv-expression",
+      "features": [
+        "macro.definition-argument-expansion",
+        "include.single-nested",
+        "directive.eqv",
+        "expression.arithmetic-bitwise-parentheses"
+      ],
+      "minimumUniqueGraphs": 5
+    },
+    {
+      "id": "combo.data-directives-label-pseudo",
+      "features": [
+        "section.text-data-ktext",
+        "directive.word-half-byte-space-align",
+        "label.forward-backward-self",
+        "pseudo.li-la-move-b-nop"
+      ],
+      "minimumUniqueGraphs": 5
+    },
+    {
+      "id": "combo.p7-handler-cp0-device",
+      "features": [
+        "cp0.exception-handler-layout",
+        "device.timer-irq-mmio",
+        "control.branch-jump-delay"
+      ],
+      "minimumUniqueGraphs": 5
+    },
+    {
+      "id": "combo.portable-source-graph",
+      "features": [
+        "lex.lf-crlf-bom",
+        "lex.non-ascii-path",
+        "include.single-nested"
+      ],
+      "minimumUniqueGraphs": 5
+    }
+  ],
+  "revisionInvalidation": "Changing an advertised feature, minimum, eligibility rule, or graph identity invalidates prior handwritten distribution evidence.",
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "0af5f282c74c3bda3e34b88d56833a9c125f7a5444df88a25e752942be4638f5"
+  }
+}

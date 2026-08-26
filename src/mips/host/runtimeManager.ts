@@ -70,13 +70,12 @@ export class MipsRuntimeManager implements vscode.Disposable {
   }
 
   /**
-   * Run one worker job. Never called by production phase-1 code (the default
-   * provider is legacy and runs in-process); kept as the protocol entry point
-   * for tests and later phases.
+   * Run one bounded ISA worker job. The default execution provider remains
+   * legacy MARS, while catalog encode/decode jobs use this lazy worker path.
    */
   async runJob(
     job: WorkerJob,
-    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void } = {}
+    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void | Promise<void> } = {}
   ): Promise<WorkerOutboundMessage> {
     if (this.disposed) {
       throw new Error('MipsRuntimeManager is disposed.');

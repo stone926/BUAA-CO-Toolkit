@@ -22,6 +22,12 @@
     "计算机组成"
   ],
   "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "This extension runs workspace projects with configured Java, MARS, ISE, Logisim, and other external toolchains."
+    }
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/stone926/BUAA-CO-Toolkit.git"
@@ -879,6 +885,7 @@
           },
           "co.run.timeoutMs": {
             "type": "number",
+            "minimum": 1,
             "description": "外部工具运行超时时间（毫秒）",
             "default": 120000
           },
@@ -1305,7 +1312,11 @@
     "test:all": "npm run compile && npm test && npm run test:coverage && node scripts/check-index.mjs",
     "generate:isa-catalog": "node scripts/generate-mips-isa.mjs",
     "check:isa-catalog": "node scripts/generate-mips-isa.mjs --check",
-    "sync:isa-catalog": "npm run generate:isa-catalog && npm run check:isa-catalog"
+    "sync:isa-catalog": "npm run generate:isa-catalog && npm run check:isa-catalog",
+    "mips:cli": "node out/mips/cli/main.js",
+    "verify:mips-cli": "node scripts/verify-mips-cli.mjs",
+    "verify:mips-worker": "node scripts/verify-mips-worker.mjs",
+    "verify:process-supervisor": "node scripts/verify-process-supervisor.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",

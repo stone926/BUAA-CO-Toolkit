@@ -1,0 +1,45 @@
+{
+  "schemaRevision": 1,
+  "id": "COURSE-P7-EXC-PRIORITY-001",
+  "profile": "P7",
+  "scope": "mixed",
+  "approvedBy": "stone926",
+  "approvedAt": "2026-08-26",
+  "policy": {
+    "programAge": "oldest-first",
+    "sameVictimStageOrder": ["F", "D", "E", "M"],
+    "interruptAtCommit": "override-and-retry"
+  },
+  "reachability": [
+    { "combination": "RI + Syscall on one instruction", "classification": "unreachable", "reason": "decode categories are mutually exclusive" },
+    { "combination": "Ov + load/store AdEL/AdES on one instruction", "classification": "unreachable", "reason": "instruction classes are mutually exclusive" },
+    { "combination": "multiple M-stage address predicates", "classification": "reachable-same-code", "reason": "alignment, range and address-overflow predicates can collapse to the same load/store code" }
+  ],
+  "vectors": [
+    {
+      "id": "bad-pc-illegal-word",
+      "input": { "enabledInterrupt": false, "victims": [{ "age": 0, "exceptions": [{ "stage": "F", "code": 4 }, { "stage": "D", "code": 10 }] }] },
+      "expected": { "winner": "exception", "code": 4, "victimAge": 0, "stage": "F", "retryCode": null }
+    },
+    {
+      "id": "bad-pc-syscall-word",
+      "input": { "enabledInterrupt": false, "victims": [{ "age": 0, "exceptions": [{ "stage": "F", "code": 4 }, { "stage": "D", "code": 8 }] }] },
+      "expected": { "winner": "exception", "code": 4, "victimAge": 0, "stage": "F", "retryCode": null }
+    },
+    {
+      "id": "older-store-before-younger-ri",
+      "input": { "enabledInterrupt": false, "victims": [{ "age": 0, "exceptions": [{ "stage": "M", "code": 5 }] }, { "age": 1, "exceptions": [{ "stage": "D", "code": 10 }] }] },
+      "expected": { "winner": "exception", "code": 5, "victimAge": 0, "stage": "M", "retryCode": null }
+    },
+    {
+      "id": "interrupt-over-syscall",
+      "input": { "enabledInterrupt": true, "victims": [{ "age": 0, "exceptions": [{ "stage": "D", "code": 8 }] }] },
+      "expected": { "winner": "interrupt", "code": 0, "victimAge": 0, "stage": "commit", "retryCode": 8 }
+    },
+    {
+      "id": "multiple-load-address-predicates",
+      "input": { "enabledInterrupt": false, "victims": [{ "age": 0, "exceptions": [{ "stage": "M", "code": 4 }, { "stage": "M", "code": 4 }] }] },
+      "expected": { "winner": "exception", "code": 4, "victimAge": 0, "stage": "M", "retryCode": null }
+    }
+  ]
+}

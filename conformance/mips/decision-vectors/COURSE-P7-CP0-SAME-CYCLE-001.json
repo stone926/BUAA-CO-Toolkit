@@ -1,0 +1,60 @@
+{
+  "schemaRevision": 1,
+  "id": "COURSE-P7-CP0-SAME-CYCLE-001",
+  "profile": "P7",
+  "scope": "mixed",
+  "approvedBy": "stone926",
+  "approvedAt": "2026-08-26",
+  "policy": {
+    "updateOrder": ["reset", "accepted-Req", "victim-side-effect"],
+    "interruptQualification": "pre-instruction-SR",
+    "acceptedReq": "suppress-current-victim-side-effects"
+  },
+  "excludedCartesianCells": [
+    { "cell": "eret in a branch delay slot", "classification": "undefined", "source": "MIPS32 Volume II ERET restriction" },
+    { "cell": "one instruction is both mtc0 and eret", "classification": "unreachable", "source": "disjoint instruction encodings" },
+    { "cell": "eret and accepted Req in official handler", "classification": "course-scenario-excluded", "source": "P7-2-6 lines 185 and 189" }
+  ],
+  "vectors": [
+    {
+      "id": "reset-overrides-request-and-mtc0",
+      "input": { "reset": true, "state": { "sr": "0x00000401", "cause": "0x80000020", "epc": "0x00003000" }, "hwInt": "0x01", "exceptionCode": 8, "victimPc": "0x00003010", "inDelaySlot": true, "action": { "kind": "mtc0-epc", "value": "0x00009999" } },
+      "expected": { "state": { "sr": "0x00000000", "cause": "0x00000000", "epc": "0x00000000" }, "accepted": "reset", "actionSuppressed": true, "nextPc": null, "suppressSequentialSuccessor": false }
+    },
+    {
+      "id": "interrupt-suppresses-mtc0-sr",
+      "input": { "state": { "sr": "0x00000401", "cause": "0x00000000", "epc": "0x00003000" }, "hwInt": "0x01", "exceptionCode": 0, "victimPc": "0x00003010", "inDelaySlot": false, "action": { "kind": "mtc0-sr", "value": "0x00000000" } },
+      "expected": { "state": { "sr": "0x00000403", "cause": "0x00000400", "epc": "0x00003010" }, "accepted": "interrupt", "actionSuppressed": true, "nextPc": null, "suppressSequentialSuccessor": false }
+    },
+    {
+      "id": "exception-suppresses-mtc0-epc",
+      "input": { "state": { "sr": "0x00000000", "cause": "0x00000000", "epc": "0x00003333" }, "hwInt": "0x00", "exceptionCode": 8, "victimPc": "0x00003020", "inDelaySlot": false, "action": { "kind": "mtc0-epc", "value": "0x00009999" } },
+      "expected": { "state": { "sr": "0x00000002", "cause": "0x00000020", "epc": "0x00003020" }, "accepted": "exception", "actionSuppressed": true, "nextPc": null, "suppressSequentialSuccessor": false }
+    },
+    {
+      "id": "delay-slot-interrupt-suppresses-mtc0",
+      "input": { "state": { "sr": "0x00000401", "cause": "0x00000000", "epc": "0x00000000" }, "hwInt": "0x01", "exceptionCode": 0, "victimPc": "0x00003024", "inDelaySlot": true, "action": { "kind": "mtc0-epc", "value": "0x00007777" } },
+      "expected": { "state": { "sr": "0x00000403", "cause": "0x80000400", "epc": "0x00003020" }, "accepted": "interrupt", "actionSuppressed": true, "nextPc": null, "suppressSequentialSuccessor": false }
+    },
+    {
+      "id": "mtc0-enables-only-next-victim",
+      "input": { "state": { "sr": "0x00000000", "cause": "0x00000000", "epc": "0x00000000" }, "hwInt": "0x01", "exceptionCode": 0, "victimPc": "0x00003030", "inDelaySlot": false, "action": { "kind": "mtc0-sr", "value": "0x00000401" } },
+      "expected": { "state": { "sr": "0x00000401", "cause": "0x00000400", "epc": "0x00000000" }, "accepted": "none", "actionSuppressed": false, "nextPc": null, "suppressSequentialSuccessor": false }
+    },
+    {
+      "id": "pending-interrupt-on-next-victim",
+      "input": { "state": { "sr": "0x00000401", "cause": "0x00000000", "epc": "0x00000000" }, "hwInt": "0x01", "exceptionCode": 0, "victimPc": "0x00003034", "inDelaySlot": false, "action": { "kind": "none" } },
+      "expected": { "state": { "sr": "0x00000403", "cause": "0x00000400", "epc": "0x00003034" }, "accepted": "interrupt", "actionSuppressed": false, "nextPc": null, "suppressSequentialSuccessor": false }
+    },
+    {
+      "id": "eret-clears-exl-before-next-victim",
+      "input": { "state": { "sr": "0x00000403", "cause": "0x00000000", "epc": "0x00005000" }, "hwInt": "0x01", "exceptionCode": 0, "victimPc": "0x00004180", "inDelaySlot": false, "action": { "kind": "eret" } },
+      "expected": { "state": { "sr": "0x00000401", "cause": "0x00000400", "epc": "0x00005000" }, "accepted": "none", "actionSuppressed": false, "nextPc": "0x00005000", "suppressSequentialSuccessor": true }
+    },
+    {
+      "id": "older-mtc0-epc-visible-to-eret",
+      "input": { "state": { "sr": "0x00000002", "cause": "0x00000000", "epc": "0x00005000" }, "hwInt": "0x00", "exceptionCode": 0, "victimPc": "0x00004184", "inDelaySlot": false, "action": { "kind": "eret" } },
+      "expected": { "state": { "sr": "0x00000000", "cause": "0x00000000", "epc": "0x00005000" }, "accepted": "none", "actionSuppressed": false, "nextPc": "0x00005000", "suppressSequentialSuccessor": true }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { StringDecoder } from 'string_decoder';
 import { LineChunkScanner, TextChunkAccumulator } from './textChunks';
 // @index orchestration — 无 VS Code 依赖的 spawn/stdout/stderr/timeout/AbortSignal 进程执行核心
 
@@ -22,6 +23,9 @@ export interface RunProcessCoreOptions {
   onError?: (error: Error) => void;
   onTimeout?: () => void;
   successPredicate?: (result: RunProcessCoreBaseResult) => boolean;
+  /** Trusted raw-byte ceilings. Exceeding either one terminates the process tree. */
+  maxStdoutBytes?: number;
+  maxStderrBytes?: number;
 }
 
 export interface RunProcessCoreControl {
@@ -50,6 +54,8 @@ export function runProcessCore(
   args: readonly string[],
   options: RunProcessCoreOptions
 ): Promise<RunProcessCoreResult> {
+  assertOutputLimit(options.maxStdoutBytes, 'maxStdoutBytes');
+  assertOutputLimit(options.maxStderrBytes, 'maxStderrBytes');
   if (options.signal?.aborted) {
     return Promise.resolve(finalResult({
       exitCode: null,
@@ -63,6 +69,12 @@ export function runProcessCore(
   return new Promise((resolve) => {
     const stdout = new TextChunkAccumulator();
     const stderr = new TextChunkAccumulator();
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let stdoutEnded = false;
+    let stderrEnded = false;
     let settled = false;
     let timedOut = false;
     let stopped = false;
@@ -86,6 +98,28 @@ export function runProcessCore(
     });
     const rootPid = child.pid;
 
+    const appendStdout = (text: string): void => {
+      if (!text) return;
+      stdout.append(text);
+      options.onStdout?.(text);
+      stdoutLines?.append(text);
+    };
+    const appendStderr = (text: string): void => {
+      if (!text) return;
+      stderr.append(text);
+      options.onStderr?.(text);
+    };
+    const finishDecoders = (): void => {
+      if (!stdoutEnded) {
+        stdoutEnded = true;
+        appendStdout(stdoutDecoder.end());
+      }
+      if (!stderrEnded) {
+        stderrEnded = true;
+        appendStderr(stderrDecoder.end());
+      }
+    };
+
     const resolveOnce = (): void => {
       if (settled) {
         return;
@@ -97,6 +131,7 @@ export function runProcessCore(
       options.signal?.removeEventListener('abort', onAbort);
       child.stdout.destroy();
       child.stderr.destroy();
+      finishDecoders();
       resolve(finalResult({
         exitCode: lastExitCode,
         stdout: stdout.toString(),
@@ -163,16 +198,33 @@ export function runProcessCore(
     }
 
     child.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stdout.append(text);
-      options.onStdout?.(text);
-      stdoutLines?.append(text);
+      if (stdoutEnded) return;
+      const remaining = options.maxStdoutBytes === undefined
+        ? chunk.byteLength
+        : Math.max(0, options.maxStdoutBytes - stdoutBytes);
+      const accepted = chunk.subarray(0, remaining);
+      stdoutBytes += accepted.byteLength;
+      appendStdout(stdoutDecoder.write(accepted));
+      if (accepted.byteLength !== chunk.byteLength) {
+        stdoutEnded = true;
+        appendStdout(stdoutDecoder.end());
+        gracefulStop('stdout-limit');
+      }
     });
 
     child.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr.append(text);
-      options.onStderr?.(text);
+      if (stderrEnded) return;
+      const remaining = options.maxStderrBytes === undefined
+        ? chunk.byteLength
+        : Math.max(0, options.maxStderrBytes - stderrBytes);
+      const accepted = chunk.subarray(0, remaining);
+      stderrBytes += accepted.byteLength;
+      appendStderr(stderrDecoder.write(accepted));
+      if (accepted.byteLength !== chunk.byteLength) {
+        stderrEnded = true;
+        appendStderr(stderrDecoder.end());
+        gracefulStop('stderr-limit');
+      }
     });
 
     // The child may exit before stdin is consumed; swallow the resulting EPIPE.
@@ -180,13 +232,14 @@ export function runProcessCore(
 
     child.on('error', (error: Error) => {
       options.onError?.(error);
-      stderr.append(error.message);
+      appendStderr(error.message);
       childClosed = true;
       maybeResolve();
     });
 
     child.on('close', (code: number | null) => {
       lastExitCode = code;
+      finishDecoders();
       stdoutLines?.flush();
       childClosed = true;
       maybeResolve();
@@ -222,6 +275,12 @@ function finalResult(
     commandLine: options.commandLine ?? '',
     cwd: options.cwd
   };
+}
+
+function assertOutputLimit(value: number | undefined, label: string): void {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+    throw new Error(`${label} must be a non-negative safe integer`);
+  }
 }
 
 async function terminateProcessTree(

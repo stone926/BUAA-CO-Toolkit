@@ -8,15 +8,13 @@ import {
 } from '../../config';
 import { isFile, readTextFile } from '../../fsUtil';
 import { p7InternalUnknownInstructionMnemonic } from '../../courseTesting/builtinAsmGenerator';
-
-/** P7 课程约定：异常处理程序入口 0x4180 需要大内存布局。 */
-export const P7_COURSE_MEMORY_CONFIG = 'CompactLargeText';
-
-/** 支持大文本段（容纳 0x3000→0x4180+ 异常处理程序）的内存配置名称。 */
-export const LARGE_TEXT_MEMORY_CONFIGS = new Set([
-  'FixedCompactLargeText',
-  'CompactLargeText'
-]);
+export {
+  isLargeTextMemoryConfiguration,
+  LARGE_TEXT_MEMORY_CONFIGS,
+  LEGACY_MARS_SUPPORTED_PROFILES,
+  legacyMarsConfigurationPolicyIssues,
+  P7_COURSE_MEMORY_CONFIG
+} from './legacyMarsPolicy';
 
 // Stable MARS resolves bare tokens 1..31 as GPR display selectors before it considers the
 // maximum-step option. 32 is the smallest positive integer which unambiguously reaches maxSteps.
@@ -40,10 +38,18 @@ export interface MarsRunOptions {
   runOutputFile?: { fsPath: string };
   interruptSchedule?: number[];
   p7RiInstruction?: boolean;
+  /** Immutable directory containing the exact RI instruction class selected for this run. */
+  p7InstructionClassDir?: string;
   /** Requested native MARS instruction limit; stable CLI values 1..31 are conservatively raised to 32. */
   maxSteps?: number;
   /** PC of the validated final `beq $0,$0,-1`; checked against captured coL2 output by the caller. */
   haltPc?: number;
+}
+
+export interface MarsResolvedArgumentSettings {
+  profile: string;
+  delayedBranching: boolean;
+  extraArgs: readonly string[];
 }
 
 export function buildMarsArgs(
@@ -51,17 +57,18 @@ export function buildMarsArgs(
   mars: string,
   mode: MarsRunMode,
   options: MarsRunOptions = {},
-  memoryConfiguration = getMemoryConfiguration(asmUri as any)
+  memoryConfiguration = getMemoryConfiguration(asmUri as any),
+  resolved?: MarsResolvedArgumentSettings
 ): string[] {
-  const profile = getProfile(asmUri as any);
+  const profile = resolved?.profile ?? getProfile(asmUri as any);
   const courseTraceInvocation = isCourseTraceMarsRun(mode, options);
   const courseTraceRun = mode === 'run' && courseTraceInvocation;
   const args = options.p7RiInstruction
-    ? ['-cp', `${mars}${path.delimiter}${p7InternalUnknownInstructionClassDir()}`, 'Mars', 'nc', 'mc', memoryConfiguration]
+    ? ['-cp', `${mars}${path.delimiter}${options.p7InstructionClassDir ?? p7InternalUnknownInstructionClassDir()}`, 'Mars', 'nc', 'mc', memoryConfiguration]
     : ['-jar', mars, 'nc', 'mc', memoryConfiguration];
-  const delayedBranching = courseTraceRun
+  const delayedBranching = courseTraceInvocation
     ? profile === 'P5' || profile === 'P6' || profile === 'P7'
-    : useDelayedBranching(asmUri as any);
+    : resolved?.delayedBranching ?? useDelayedBranching(asmUri as any);
   if (delayedBranching) {
     args.push('db');
   }
@@ -72,7 +79,7 @@ export function buildMarsArgs(
   // argument can change execution, output shape, loaded classes, or self-modifying-code policy.
   // Keep user launch overrides for ordinary MARS runs, but never pass them to the oracle.
   if (!courseTraceInvocation) {
-    args.push(...getMipsExtraArgs(asmUri as any));
+    args.push(...(resolved?.extraArgs ?? getMipsExtraArgs(asmUri as any)));
   }
   if (courseTraceInvocation) {
     // MARS reports assembly/simulation failures in text but otherwise exits with code 0.  The
@@ -120,10 +127,6 @@ export function hasMarsArg(args: readonly string[], value: string): boolean {
   return args.some((arg) => arg.toLowerCase() === value.toLowerCase());
 }
 
-export function isLargeTextMemoryConfiguration(value: string): boolean {
-  return LARGE_TEXT_MEMORY_CONFIGS.has(value);
-}
-
 export function p7InternalUnknownInstructionClassDir(): string {
   return path.resolve(__dirname, '..', '..', '..', 'resources', 'mars');
 }
@@ -132,8 +135,11 @@ export function p7InternalUnknownInstructionClassPath(): string {
   return path.join(p7InternalUnknownInstructionClassDir(), `${p7InternalUnknownInstructionMnemonic}.class`);
 }
 
-export async function p7RiInstructionNeeded(asmUri: { fsPath: string }): Promise<boolean> {
-  if (getProfile(asmUri as any) !== 'P7') {
+export async function p7RiInstructionNeeded(
+  asmUri: { fsPath: string },
+  resolvedProfile = getProfile(asmUri as any)
+): Promise<boolean> {
+  if (resolvedProfile !== 'P7') {
     return false;
   }
   try {

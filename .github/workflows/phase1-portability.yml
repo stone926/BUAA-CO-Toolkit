@@ -1,0 +1,84 @@
+name: Phase 1 portability evidence
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  phase1-portability:
+    name: Phase 1 evidence (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The equivalence gate creates a detached worktree at the immutable
+          # pre-migration baseline; a shallow checkout would make that evidence
+          # silently unavailable on either runner.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile production engine and worker
+        run: npm run compile
+
+      - name: Verify versioned MIPS JSONL CLI
+        run: npm run verify:mips-cli
+
+      - name: Verify real sliced Worker jobs
+        run: npm run verify:mips-worker
+
+      - name: Verify Java process-tree cancellation
+        run: npm run verify:process-supervisor
+        env:
+          CO_PROCESS_EVIDENCE_OUTPUT: ${{ github.workspace }}/phase1-evidence/process-supervisor-${{ runner.os }}.json
+
+      - name: Resolve pinned MARS references
+        run: node conformance/mips/reference/download-references.mjs --require-all
+
+      - name: Verify ISim, Logisim, and legacy MARS signal wiring
+        run: >-
+          npx vitest run
+          src/test/verilog/isimRunner.test.ts
+          src/test/courseTestLogisimSignal.test.ts
+          src/test/mipsProviders/providerResolver.test.ts
+
+      - name: Verify real legacy MARS offline replay
+        run: npx vitest run src/test/mipsReplay/realLegacyMarsReplay.integration.test.ts
+        env:
+          CO_REAL_MARS_JAR: conformance/.cache/Mars_CO_v0.6.3-course1.jar
+
+      - name: Verify old/new legacy equivalence
+        run: npm --prefix test-cli run verify:legacy-equivalence
+        env:
+          CO_LEGACY_EQUIVALENCE_OUTPUT: ${{ github.workspace }}/phase1-evidence/legacy-equivalence-${{ runner.os }}.json
+
+      - name: Upload phase 1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-evidence-${{ matrix.os }}
+          path: phase1-evidence/*.json
+          if-no-files-found: error

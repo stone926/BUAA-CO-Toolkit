@@ -58,7 +58,7 @@ export function setProviderRegistry(registry: ProviderRegistry | undefined): voi
 export function resolveAssemblerProvider(
   services: AppServices,
   request: AssembleRequest
-): { provider: MipsAssemblerProvider; preflight: ProviderPreflight } {
+): Promise<{ provider: MipsAssemblerProvider; preflight: ProviderPreflight }> {
   const registry = registerDefaultProviders(services);
   return resolveFirstCapable(registry.assemblerProviders, request, 'assembler');
 }
@@ -66,22 +66,22 @@ export function resolveAssemblerProvider(
 export function resolveExecutionProvider(
   services: AppServices,
   request: ExecuteRequest
-): { provider: MipsExecutionProvider; preflight: ProviderPreflight } {
+): Promise<{ provider: MipsExecutionProvider; preflight: ProviderPreflight }> {
   const registry = registerDefaultProviders(services);
   return resolveFirstCapable(registry.executionProviders, request, 'execution');
 }
 
-function resolveFirstCapable<R, T extends { preflight(request: R): ProviderPreflight }>(
+async function resolveFirstCapable<R, T extends { preflight(request: R): ProviderPreflight | Promise<ProviderPreflight> }>(
   providers: readonly T[],
   request: R,
   kind: 'assembler' | 'execution'
-): { provider: T; preflight: ProviderPreflight } {
+): Promise<{ provider: T; preflight: ProviderPreflight }> {
   if (!providers.length) {
     throw new Error(`No ${kind} provider is registered.`);
   }
   let firstFailure: { provider: T; preflight: ProviderPreflight } | undefined;
   for (const provider of providers) {
-    const preflight = provider.preflight(request);
+    const preflight = await provider.preflight(request);
     if (preflight.ok) {
       return { provider, preflight };
     }
@@ -96,7 +96,7 @@ export async function assembleWithPreflight(
   request: AssembleRequest,
   context?: ProviderRunContext
 ): Promise<{ ok: boolean; result?: AssembleResult; preflight: ProviderPreflight }> {
-  const { provider, preflight } = resolveAssemblerProvider(services, request);
+  const { provider, preflight } = await resolveAssemblerProvider(services, request);
   if (!preflight.ok) {
     return { ok: false, preflight };
   }
@@ -110,7 +110,7 @@ export async function executeWithPreflight(
   request: ExecuteRequest,
   context?: ProviderRunContext
 ): Promise<{ ok: boolean; result?: ExecuteResult; preflight: ProviderPreflight }> {
-  const { provider, preflight } = resolveExecutionProvider(services, request);
+  const { provider, preflight } = await resolveExecutionProvider(services, request);
   if (!preflight.ok) {
     return { ok: false, preflight };
   }

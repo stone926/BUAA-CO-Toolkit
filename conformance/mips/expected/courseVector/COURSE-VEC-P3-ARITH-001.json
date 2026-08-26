@@ -1,0 +1,94 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P3-ARITH-001",
+  "profile": "P3",
+  "vectorKind": "program-final-state",
+  "source": {
+    "corpusFile": "spec-microprograms/p3-arith.asm",
+    "sha256": "64ea043f26bb15d9bf867682f546c060253f960760e67b2ce3823d736a78df89",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P3-ISA-001",
+      "COURSE-P3-ARITH-001",
+      "COURSE-P3-RESET-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P3-RESET-ADDR-001"
+    ],
+    "note": "Arithmetic values are computed modulo 2^32 with $0 fixed at zero.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "mars-compatible-final-state",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "halt-loop",
+      "minimumHits": 2
+    },
+    "stepLimit": 4096
+  },
+  "expected": {
+    "kind": "final-state",
+    "haltPc": "0x00003020",
+    "haltWord": "0x1000ffff",
+    "gpr": {
+      "8": "0x00000000",
+      "9": "0x00001234",
+      "10": "0x12340000",
+      "11": "0x12341234",
+      "12": "0x1233edcc",
+      "13": "0x24680000",
+      "14": "0xffffedcc"
+    },
+    "dm": {},
+    "writes": {
+      "gpr": [
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14"
+      ],
+      "dm": []
+    }
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "gpr.writes",
+      "dm.writes",
+      "halt.pc",
+      "halt.word"
+    ],
+    "undefinedExcluded": [
+      "hi",
+      "lo",
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "f19b3d294ee44b217bfcbd36e3d8f87f31697efe3e0fb430345007fa7411bb63"
+  }
+}

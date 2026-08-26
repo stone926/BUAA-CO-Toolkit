@@ -1,4 +1,4 @@
-# course-testing | src/ | 44 files
+# course-testing | src/courseTesting/ 35 files + host adapters
 
 P3-P7 自动化测试：生成 ASM -> 稳定版修改 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
 MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）。课程 oracle 运行一律强制 coL2；coL1 只在工具链检查中作为兼容能力探针。非 P7 另依赖 FixedCompactLargeText/CompactLargeText，P7 另依赖 efc、p7irq、cl 与 CompactLargeText；固定 ae/se 令汇编与运行错误以非零退出码失败。课程 dump 先静态确认最终 `_co_test_end` 是自分支+nop，运行时再用 coL2 逐指令块确认该自分支确实执行，并用 MARS 原生 max-step 结束永久自环；不依赖未发布的专用停机 marker。SWL/SWR 按动态指令合并同一 DM 字的多次局部写入；BGEZAL/BLTZAL 按 MIPS 规范补齐分支自身在 not-taken 路径遗漏的 `$31=PC+8` Trace，但稳定版 MARS 的后续执行状态仍是旧值，因此在显式重写 `$31` 前继续读取会被拒绝。同一详细 Trace 还只拒绝实际执行到的 oracle 初态差异/未定义行为。同次汇编仍分块 dump 0x0000..0x2fff，以拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；内置生成器约束普通测试数据，手写/外部用例须自行遵守教程地址映射和下述稳定版边界，不假定 MARS 提供额外的课程地址或 handler 契约开关
@@ -31,6 +31,7 @@ generation:
   courseTesting/cpuState.ts — 软件 CPU 模型：32 GPR+3072-word DM(0x0000..0x2fff)+HI/LO+CP0+MDU 保护；HI/LO 初始化状态、字节/半字/字及修改版 MARS 小端 LWL/LWR/SWL/SWR 语义、最近写入追踪
   courseTesting/mnemonicSets.ts — Profile 指令集(P3:8 条，P4-5:+J 型，P6:+MDU/load-store 变体，P7:+CP0/异常)、功能分组、memoryAlignment/mduBusyCycles
   courseTesting/p7Hardware.ts — P7 硬件布局单一入口：加载/校验 resources/co/p7Hardware.json，导出 4096-word IM(0x3000..0x6fff)、3072-word DM(0x0000..0x2fff)、0x4180 异常入口、Timer、CP0、probe 状态/日志/testbench 常量
+  courseTesting/p7InterruptAnchor.ts — P7 外部中断 schedule 的共享静态契约：MARS trigger(target-4)与 DUT target 必须都是 canonical simple ALU/immediate 指令；生成器选择与 replay bundle 校验复用同一集合
   courseTesting/random.ts — 32 位 xorshift 伪随机：int(min,max)/chance/pick、hashSeed
   courseTesting/mipsUtil.ts — 有符号/无符号与立即数工具；courseAsmHaltLoop 生成课程 ASM 停机尾，courseTraceHaltLoopError 拒绝源码与硬件机器码不一致的缺尾课程用例，appendHaltLoop 只为普通 dump/兼容流程幂等补齐尾部
   courseTesting/continuous.ts — ContinuousRunStatus/Counts、按留存轮数裁剪、功能失败与 stopOnFailure 的停止判定
@@ -59,6 +60,14 @@ logisim/verilog-observer:
   resources/templates/verilog/p7_probe_invalid_store_observer.v + p7_probe_invalid_store_case.v — 仅通过公开的 m_inst_addr/m_data_byteen/m_int_byteen 观察 AdES victim；若无效 store 仍产生任一 byte-enable，输出 invalid_store_effect 并令 Probe 失败
 
 case-storage:
-  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText（新 case 写 manifest v2）、prepareAsmCaseMachineCode（经 assembler provider）、artifact 管理、manifest 列表（v1/v2 兼容读取）；v1 严格只读，新 artifact 必须先复制到 case 内并记录相对路径/bytes/SHA-256，非文件 provenance 进入独立 metadata；汇编与 legacy oracle 前后均核对实际根源文件和 case-local program.asm 未偏离 immutable asmSnapshot；courseTrace dump 成功后先执行最终机器码容量/规范编码/白名单校验，并保存 P7 内核合并前验证得到的用户 haltPc
+  asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText（新 case 写 manifest v2）、prepareAsmCaseMachineCode（经 assembler provider）、artifact 管理、manifest 列表（v1/v2 兼容读取）；v1 严格只读。创建时捕获完整 SourceUnit/include graph，后续汇编/oracle 只读取 case 内 immutable materialization；原 workspace 路径仅作 provenance。dump 后保存 serialized ProgramImage、observability、DUT exact bytes；oracle 后保存完整 run input 与 raw/event/final-state digest。新 artifact 必须先复制到 case 内并记录相对路径/bytes/SHA-256，非文件 provenance 进入独立 metadata。root/stdin/artifact/manifest 均以同句柄有界读取；manifest discovery 流式枚举并限制 2048 个条目与 16 MiB manifest 总量
   asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata；v1 永久只读兼容
-  courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts 分组、严格字段与 case-relative 路径、artifact/sourceMap 内容指纹、并发安全原子写、symlink escape/bytes/hash bundle 校验、v1/v2 归一化视图；早期 v2 字符串引用可读但不能通过 replay closure，未绑定的 probe/DUT metadata 也 fail closed
+  courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts typed alias、只接受 canonical `/` 的严格 case-relative 路径、完整 source artifact closure、assembler/oracle launch tuple、stdin/device/cycle/stop/seed/resource input、snapshot 数量/单项/总量 ceiling、大小写碰撞、symlink/bytes/hash/ProgramImage/HexText/trace evidence 校验；`p7.probe` 在 canonicalize 前以迭代式 depth/node/key/string-byte ceiling 验证。早期 v2 可读但不能 replay。exact replay/re-evaluate 见 mips-replay 模块
+
+conformance/phase-0:
+  conformance/mips/corpus — P3–P7 spec microprogram、challenge、教程引用、250 个固定 seed 与机器可读 feature distribution；freeze verifier 防 silent corpus drift
+  conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema/审批命令，candidate 不会被测试自动批准
+  conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold/warm benchmark matrix、统计 envelope、baseline candidate/approve/verify；批准者固定为 GitHub 用户名 stone926
+  conformance/mips/decision-vectors — frozen contract/decision 的独立 vectors；Timer official-RTL lane 在缺少 Icarus 时必须由 required CI 失败而不是跳过伪通过
+  conformance/mips/governance — expected/benchmark 统一 reviewer policy（stone926）与 protected-branch/CODEOWNERS 身份边界；仓库内 reviewer 字符串不当作签名
+  gate 分层 — `run:candidate`/`verify:candidate` 只生成 `required:false` 的审阅证据；`verify:formal` 才聚合 approved courseVector、ISA/TS CLI、两平台 benchmark、Timer RTL、reference 与完整 lanes，并在任一审批缺失时 fail closed

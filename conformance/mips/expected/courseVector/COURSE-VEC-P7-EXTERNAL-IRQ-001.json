@@ -1,0 +1,114 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P7-EXTERNAL-IRQ-001",
+  "profile": "P7",
+  "vectorKind": "external-irq-sequence",
+  "source": {
+    "corpusFile": "spec-microprograms/p7-external-irq.asm",
+    "sha256": "398a905e93a5914818f29363e5ca8c587a9f64cfc69f914ede7ce054814b48f6",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "official-source-transcription",
+    "contractIds": [
+      "COURSE-P7-ADDR-007",
+      "COURSE-P7-TIMER-007",
+      "COURSE-P7-IG-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P7-IRQ-001"
+    ],
+    "note": "External level interrupt remains high across unrelated/disabled stores and clears on an enabled store to aligned 0x7f20.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "independent-directed-oracle",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [
+      {
+        "edge": 1,
+        "source": "external",
+        "level": true
+      }
+    ],
+    "stopCondition": {
+      "kind": "directed-step-count",
+      "steps": 5
+    },
+    "stepLimit": 5
+  },
+  "expected": {
+    "kind": "external-irq-sequence",
+    "steps": [
+      {
+        "op": "reset"
+      },
+      {
+        "op": "raise"
+      },
+      {
+        "op": "store",
+        "address": "0x00007f00",
+        "byteEnable": 15
+      },
+      {
+        "op": "store",
+        "address": "0x00007f20",
+        "byteEnable": 0
+      },
+      {
+        "op": "store",
+        "address": "0x00007f23",
+        "byteEnable": 1
+      }
+    ],
+    "snapshots": [
+      {
+        "asserted": false
+      },
+      {
+        "asserted": true
+      },
+      {
+        "asserted": true
+      },
+      {
+        "asserted": true
+      },
+      {
+        "asserted": false
+      }
+    ]
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "externalIrq.asserted",
+      "bridge.address",
+      "bridge.byteEnable"
+    ],
+    "undefinedExcluded": [
+      "cpu.pipeline",
+      "timer"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "8ab6dcda8af805f2579af6410f779d1cd236d9b677aa829263dc49e81ed03333"
+  }
+}

@@ -1,0 +1,238 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P7-TIMER-001",
+  "profile": "P7",
+  "vectorKind": "timer-sequence",
+  "source": {
+    "corpusFile": "spec-microprograms/p7-timer.asm",
+    "sha256": "965f0e6fe5acc736aa58f503c12916de687785ac6cf888ade9b7c3e2a8e1ff6d",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "official-source-transcription",
+    "contractIds": [
+      "COURSE-P7-TIMER-002",
+      "COURSE-P7-TIMER-003",
+      "COURSE-P7-TIMER-004",
+      "COURSE-P7-TIMER-005",
+      "COURSE-P7-TIMER-006"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P7-TIMER-RTL-001"
+    ],
+    "note": "Edge-for-edge directed sequence from official P7_standard_timer_2019.v, including write priority and periodic restart.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "independent-directed-oracle",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "directed-cycle-count",
+      "cycles": 14
+    },
+    "stepLimit": 14
+  },
+  "expected": {
+    "kind": "timer-sequence",
+    "steps": [
+      {
+        "op": "reset"
+      },
+      {
+        "op": "write",
+        "register": "PRESET",
+        "value": "0x00000003"
+      },
+      {
+        "op": "write",
+        "register": "CTRL",
+        "value": "0x0000000b"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "write",
+        "register": "PRESET",
+        "value": "0x00000005"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "write",
+        "register": "CTRL",
+        "value": "0x00000000"
+      },
+      {
+        "op": "tick"
+      },
+      {
+        "op": "tick"
+      }
+    ],
+    "snapshots": [
+      {
+        "state": "IDLE",
+        "ctrl": "0x00000000",
+        "preset": "0x00000000",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "IDLE",
+        "ctrl": "0x00000000",
+        "preset": "0x00000003",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "IDLE",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000003",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "LOAD",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000003",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "CNT",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000003",
+        "count": "0x00000003",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "CNT",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000003",
+        "count": "0x00000002",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "CNT",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000005",
+        "count": "0x00000002",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "CNT",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000005",
+        "count": "0x00000001",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "INT",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000005",
+        "count": "0x00000000",
+        "irqLatched": true,
+        "irq": true
+      },
+      {
+        "state": "IDLE",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000005",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "LOAD",
+        "ctrl": "0x0000000b",
+        "preset": "0x00000005",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "LOAD",
+        "ctrl": "0x00000000",
+        "preset": "0x00000005",
+        "count": "0x00000000",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "CNT",
+        "ctrl": "0x00000000",
+        "preset": "0x00000005",
+        "count": "0x00000005",
+        "irqLatched": false,
+        "irq": false
+      },
+      {
+        "state": "IDLE",
+        "ctrl": "0x00000000",
+        "preset": "0x00000005",
+        "count": "0x00000005",
+        "irqLatched": false,
+        "irq": false
+      }
+    ]
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "timer.state",
+      "timer.ctrl",
+      "timer.preset",
+      "timer.count",
+      "timer.irq"
+    ],
+    "undefinedExcluded": [
+      "cpu.pipeline",
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "ab46f127197016ec5ebf31498377fa56ad7b2bd3d3c3b28d9a24beb8d72c0926"
+  }
+}

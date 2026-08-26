@@ -1,0 +1,87 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P4-CONTROL-001",
+  "profile": "P4",
+  "vectorKind": "program-final-state",
+  "source": {
+    "corpusFile": "spec-microprograms/p4-control.asm",
+    "sha256": "fefbdfd7287ea53cc9d750bdf7055915894e78d11c9e93ddb5a23518177e0669",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P4-ISA-001",
+      "COURSE-P4-DELAY-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P4-NO-DELAY-001"
+    ],
+    "note": "P4 has no delay slot and jal links PC+4.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "mars-compatible-final-state",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "halt-loop",
+      "minimumHits": 2
+    },
+    "stepLimit": 4096
+  },
+  "expected": {
+    "kind": "final-state",
+    "haltPc": "0x0000301c",
+    "haltWord": "0x1000ffff",
+    "gpr": {
+      "8": "0x00000001",
+      "9": "0x00003008",
+      "11": "0x00000007",
+      "31": "0x00003008"
+    },
+    "dm": {},
+    "writes": {
+      "gpr": [
+        "8",
+        "9",
+        "11",
+        "31"
+      ],
+      "dm": []
+    }
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "gpr.writes",
+      "control.no-delay",
+      "link",
+      "halt.pc"
+    ],
+    "undefinedExcluded": [
+      "hi",
+      "lo",
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "4c72ae6b369e8c5e5b06fc18d5cd7700cc35908e0f96c1265cd56c6c7c448996"
+  }
+}

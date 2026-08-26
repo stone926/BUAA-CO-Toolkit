@@ -51,6 +51,7 @@ import {
   courseAsmHaltLoop
 } from '../mipsUtil';
 import { Random, hashSeed } from '../random';
+import { p7SafeInterruptAnchorMnemonics } from '../p7InterruptAnchor';
 
 export type P7ExceptionKind = 'adel' | 'ades' | 'syscall' | 'ri' | 'ov';
 
@@ -116,11 +117,6 @@ const p7ExceptionCoverageOrder: P7ExceptionKind[] = ['adel', 'ades', 'syscall', 
 const p7ExceptionKindNames = new Set<string>(p7ExceptionCoverageOrder);
 // Simple, value-producing ALU/immediate ops that are safe to interrupt (no control/memory side
 // effects that complicate the precise-interrupt point). Used to pick the external-interrupt target.
-const safeInterruptTargetMnemonics = new Set<string>([
-  'add', 'addu', 'sub', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
-  'addi', 'addiu', 'andi', 'ori', 'xori', 'slti', 'sltiu',
-  'sll', 'srl', 'sra', 'sllv', 'srlv', 'srav', 'lui'
-]);
 const p7InterruptAnchorMnemonics = [
   'ori', 'addiu', 'addu', 'add', 'subu', 'sub', 'or', 'xor',
   'sll', 'srl', 'sra', 'sllv', 'srlv', 'srav',
@@ -759,7 +755,7 @@ class ProgramGenerator {
       return;
     }
     // Only a simple value-producing op that emitted exactly one instruction is a safe target.
-    if (safeInterruptTargetMnemonics.has(mnemonic) && this.emittedCount === startIndex + 1) {
+    if (p7SafeInterruptAnchorMnemonics.has(mnemonic) && this.emittedCount === startIndex + 1) {
       this.interruptCandidates.push(startIndex);
     }
   }

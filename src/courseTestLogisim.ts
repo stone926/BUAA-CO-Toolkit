@@ -313,8 +313,7 @@ export async function runP3LogisimTraceCase(
     await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-code.txt', logisimCode.text, 'machineCodeWithHalt');
     await copyAsmCaseArtifact(asmCase, 'logisim', setup.circuit, 'circuit-template.circ', 'circuitTemplate');
     await updateAsmCaseMetadata(asmCase, {
-      'dut.logisim.traceCircuit': setup.traceCircuit,
-      'program.haltPcHex': logisimCode.haltPcHex
+      'dut.logisim.traceCircuit': setup.traceCircuit
     });
   } catch (error) {
     return {
@@ -393,6 +392,7 @@ export async function runP3LogisimTraceCase(
     profile: 'P3',
     memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
+    traceOutput: true,
     traceLevel: 2,
     maxSteps,
     haltPc: logisimCode.haltPc

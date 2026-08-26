@@ -30,6 +30,19 @@ export const courseDataDumpChunks: readonly CourseDataDumpChunk[] = Object.freez
   })
 );
 
+/** First exit-zero MARS dump failure diagnostic, if any. */
+export function marsDumpFailureDiagnostic(stdout: string, stderr = ''): string | undefined {
+  return `${stdout}\n${stderr}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => /Error while attempting to save dump|segment\/address-range .* is invalid|dump, format .* was not found/i.test(line));
+}
+
+/** MARS's explicit, non-error indication that a segment has no allocated words. */
+export function marsDumpExplicitlyEmpty(stdout: string, stderr = ''): boolean {
+  return /This segment has not been written to, there is nothing to dump\./i.test(`${stdout}\n${stderr}`);
+}
+
 /**
  * Validate the three modified-MARS HexText files covering course DM 0x0000..0x2fff.
  * An empty file means that its 4 KiB MARS allocation block was never written and is therefore

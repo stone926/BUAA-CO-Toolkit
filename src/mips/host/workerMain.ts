@@ -1,4 +1,4 @@
-// @index mips-host — Worker 入口：版本化协议处理（阶段 1 仅 ping）
+// @index mips-host — Worker 入口：版本化协议与可取消的真实 ISA 作业
 import { parentPort } from 'worker_threads';
 import {
   isWorkerInboundMessage,
@@ -7,29 +7,38 @@ import {
   WorkerRequestMessage,
   workerProtocolVersion
 } from './workerProtocol';
+import { executeProductionWorkerJob } from './workerJobs';
 
 /**
  * Worker entry point (plan section 5.6). Phase 1 implements the protocol
- * skeleton and ping round-trip; real assemble/execute jobs are dispatched
- * here when the builtin providers land. Keep this file free of vscode imports:
+ * protocol plus bounded ISA encode/decode jobs; full assemble/execute jobs are
+ * dispatched here when the builtin providers land. Keep this file free of vscode imports:
  * it runs inside a worker thread.
  */
 
 export interface WorkerJobHandler {
-  (request: WorkerRequestMessage, signal: AbortSignal): unknown | Promise<unknown>;
+  (
+    request: WorkerRequestMessage,
+    signal: AbortSignal,
+    emitProgress: (batch: unknown[]) => Promise<void>
+  ): unknown | Promise<unknown>;
 }
 
 const jobHandlers: Map<string, WorkerJobHandler> = new Map();
 
-/** Phase-1 handler: round-trip a token to prove the protocol works. */
-jobHandlers.set('ping', (request) => ({
-  token: request.job.payload ?? null,
-  receivedAt: 'phase-1-skeleton'
-}));
+for (const kind of ['ping', 'isa-decode-batch', 'isa-encode-batch']) {
+  jobHandlers.set(kind, (request, signal, emitProgress) => executeProductionWorkerJob(
+    request.job.kind,
+    request.job.payload,
+    { signal, emitProgress }
+  ));
+}
 
 interface ActiveWorkerRequest {
   controller: AbortController;
   cancelled: boolean;
+  nextSequence: number;
+  awaitingAck?: { sequence: number; resolve: () => void };
 }
 
 const active = new Map<string, ActiveWorkerRequest>();
@@ -42,12 +51,23 @@ function handleMessage(raw: unknown): void {
   if (!isWorkerInboundMessage(raw)) {
     return;
   }
+  if (raw.kind === 'ack') {
+    const awaiting = active.get(raw.requestId)?.awaitingAck;
+    if (!awaiting || awaiting.sequence !== raw.sequence) return;
+    const entry = active.get(raw.requestId)!;
+    entry.awaitingAck = undefined;
+    awaiting.resolve();
+    return;
+  }
   if (raw.kind === 'cancel') {
     const entry = active.get(raw.requestId);
     if (!entry || entry.cancelled) {
       return;
     }
     entry.cancelled = true;
+    const awaiting = entry.awaitingAck;
+    entry.awaitingAck = undefined;
+    awaiting?.resolve();
     try {
       entry.controller.abort();
     } catch {
@@ -72,9 +92,32 @@ function handleMessage(raw: unknown): void {
     return;
   }
   const controller = new AbortController();
-  active.set(request.requestId, { controller, cancelled: false });
+  active.set(request.requestId, { controller, cancelled: false, nextSequence: 0 });
   Promise.resolve()
-    .then(() => handler(request, controller.signal))
+    .then(() => handler(request, controller.signal, async (batch) => {
+      const entry = active.get(request.requestId);
+      if (!entry || entry.cancelled || !batch.length) {
+        return;
+      }
+      if (entry.awaitingAck) {
+        throw new Error('worker progress emitted before the previous batch was acknowledged');
+      }
+      const sequence = entry.nextSequence++;
+      await new Promise<void>((resolve) => {
+        entry.awaitingAck = { sequence, resolve };
+        respond({
+          protocolVersion: workerProtocolVersion,
+          kind: 'progress',
+          requestId: request.requestId,
+          sequence,
+          batch
+        });
+        if (entry.cancelled) {
+          entry.awaitingAck = undefined;
+          resolve();
+        }
+      });
+    }))
     .then(
       (payload) => {
         const entry = active.get(request.requestId);

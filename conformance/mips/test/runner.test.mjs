@@ -10,6 +10,7 @@ import { runCourseVectorCase } from '../runner/lanes/course-vector.mjs';
 import { runLegacyBaselineCase } from '../runner/lanes/legacy-baseline.mjs';
 import { runAssemblyDiffCase } from '../runner/lanes/assembly-diff.mjs';
 import { courseUsesDelayedBranching, effectiveMarsMaxSteps, parseCoL2Trace } from '../runner/marsRunner.mjs';
+import { loadCourseVector, vectorPayloadSha256 } from '../runner/courseVectorArtifact.mjs';
 import { referenceRoles, resolveVerifiedReference } from '../reference/referenceAssets.mjs';
 
 const testRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +61,7 @@ test('coL2 parser fails closed on commit-looking lines with malformed indentatio
   );
 });
 
-test('course vectors pass on the pinned stock assembler reference', () => {
+test('course vectors pass through their declared independent verification mode', () => {
   for (const manifestCase of manifest.cases.filter((entry) => entry.lanes.includes('course-vector'))) {
     const result = runCourseVectorCase(manifestCase);
     assert.equal(result.status, 'passed', `${manifestCase.caseId}: ${result.message}`);
@@ -68,13 +69,16 @@ test('course vectors pass on the pinned stock assembler reference', () => {
 });
 
 test('wrong expected value and undeclared write are both caught', () => {
-  const wrongValue = structuredClone(caseById('COURSE-VEC-P3-ARITH-001'));
+  const manifestCase = caseById('COURSE-VEC-P3-ARITH-001');
+  const wrongValue = structuredClone(loadCourseVector(manifestCase).vector);
   wrongValue.expected.gpr['11'] = '0x12341235';
-  assert.equal(runCourseVectorCase(wrongValue).status, 'failed');
+  wrongValue.integrity.payloadSha256 = vectorPayloadSha256(wrongValue);
+  assert.equal(runCourseVectorCase(manifestCase, { vectorOverride: wrongValue }).status, 'failed');
 
-  const missingWriteDeclaration = structuredClone(caseById('COURSE-VEC-P3-ARITH-001'));
+  const missingWriteDeclaration = structuredClone(loadCourseVector(manifestCase).vector);
   missingWriteDeclaration.expected.writes.gpr = missingWriteDeclaration.expected.writes.gpr.filter((entry) => entry !== '14');
-  const result = runCourseVectorCase(missingWriteDeclaration);
+  missingWriteDeclaration.integrity.payloadSha256 = vectorPayloadSha256(missingWriteDeclaration);
+  const result = runCourseVectorCase(manifestCase, { vectorOverride: missingWriteDeclaration });
   assert.equal(result.status, 'failed');
   assert.match(result.message, /writes/);
 });
@@ -82,8 +86,9 @@ test('wrong expected value and undeclared write are both caught', () => {
 test('stock MARS reset divergence cannot pass as the course-correct challenge expectation', () => {
   const forced = structuredClone(caseById('MARS-BASELINE-GPSP-001'));
   forced.lanes = ['course-vector'];
-  const result = runCourseVectorCase(forced);
-  assert.equal(result.status, 'failed');
+  forced.courseVector = 'MARS-BASELINE-GPSP-001.json';
+  delete forced.legacyExpected;
+  assert.throws(() => runCourseVectorCase(forced), /vector file/);
 });
 
 test('legacy course executor matches every reviewed expectation and deterministic golden', () => {
@@ -95,7 +100,7 @@ test('legacy course executor matches every reviewed expectation and deterministi
 
 test('challenge expectation is checked independently of its golden', () => {
   const mutated = structuredClone(caseById('MARS-BASELINE-GPSP-001'));
-  mutated.expected.dm['0x00000000'] = '0xdeadbeef';
+  mutated.legacyExpected.dm['0x00000000'] = '0xdeadbeef';
   const result = runLegacyBaselineCase(mutated);
   assert.equal(result.status, 'failed');
   assert.match(result.message, /reviewed corpus expectation/);
@@ -125,7 +130,7 @@ test('corpus manifest rejects traversal before any case is run', () => {
 
 test('corpus manifest rejects unknown fields instead of silently accepting typos', () => {
   const invalid = structuredClone(manifest);
-  invalid.cases[0].expected.hatlPc = invalid.cases[0].expected.haltPc;
+  invalid.cases[0].legacyExpected.hatlPc = invalid.cases[0].legacyExpected.haltPc;
   assert.throws(() => validateCorpusManifest(invalid), /unknown fields: hatlPc/);
 });
 
@@ -135,13 +140,36 @@ test('assembly-diff skeleton is explicitly skipped and cannot satisfy a required
 
   const cli = spawnSync(process.execPath, [runnerCli, '--lane', 'assembly-diff'], { encoding: 'utf8' });
   assert.equal(cli.status, 1);
-  assert.match(cli.stdout, /"skipped":3/);
+  assert.match(cli.stdout, /"skipped":10/);
 });
 
-test('a required lane with a zero-case filter exits non-zero', () => {
+test('a selected candidate lane with a zero-case filter exits non-zero', () => {
   const cli = spawnSync(process.execPath, [runnerCli, '--lane', 'course-vector', '--filter', 'DOES-NOT-EXIST'], {
     encoding: 'utf8'
   });
   assert.equal(cli.status, 1);
   assert.match(cli.stdout, /selected zero cases/);
+});
+
+test('candidate lanes are executable but never identify themselves as the formal required gate', () => {
+  const cli = spawnSync(process.execPath, [
+    runnerCli,
+    '--lane', 'course-vector',
+    '--filter', 'COURSE-VEC-P7-TIMER-001'
+  ], { encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.match(cli.stdout, /"reviewStatus":"candidate"/);
+  assert.match(cli.stdout, /"gate":"candidate"/);
+  assert.match(cli.stdout, /"required":false/);
+});
+
+test('formal runner is complete-only and fails closed while course vectors remain candidates', () => {
+  const partial = spawnSync(process.execPath, [runnerCli, '--formal', '--lane', 'course-vector'], { encoding: 'utf8' });
+  assert.equal(partial.status, 2);
+  assert.match(partial.stderr, /requires exactly the complete lane set/);
+
+  const formal = spawnSync(process.execPath, [runnerCli, '--formal'], { encoding: 'utf8' });
+  assert.equal(formal.status, 2);
+  assert.match(formal.stderr, /not independently approved/);
+  assert.doesNotMatch(formal.stdout, /"required":true/);
 });

@@ -218,6 +218,21 @@ describe('Verilog ISim runner orchestration', () => {
     }));
   });
 
+  it('forwards one AbortSignal through both fuse and ISim process launches', async () => {
+    vi.mocked(getProfile).mockReturnValue('P1');
+    const controller = new AbortController();
+
+    await runIsim(services(), { resource, signal: controller.signal });
+
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(runTool).mock.calls[0][2]).toEqual(expect.objectContaining({
+      signal: controller.signal
+    }));
+    expect(vi.mocked(runTool).mock.calls[1][2]).toEqual(expect.objectContaining({
+      signal: controller.signal
+    }));
+  });
+
   it('reuses a compile cache hit without generating a project or running fuse', async () => {
     const cached = {
       generated,

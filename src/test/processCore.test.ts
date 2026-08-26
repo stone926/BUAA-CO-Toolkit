@@ -52,4 +52,33 @@ describe('process core', () => {
     expect(result.ok).toBe(false);
     expect(result.timedOut).toBe(true);
   });
+
+  it('decodes UTF-8 deterministically when a code point crosses chunk boundaries', async () => {
+    const result = await runProcessCore(process.execPath, [
+      '-e',
+      "const b=Buffer.from('中文'); process.stdout.write(b.subarray(0,2)); setTimeout(()=>process.stdout.write(b.subarray(2)),10);"
+    ], {
+      cwd: process.cwd(),
+      timeoutMs: 5000
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toBe('中文');
+  });
+
+  it('terminates the process tree at the trusted raw stdout byte ceiling', async () => {
+    const result = await runProcessCore(process.execPath, [
+      '-e',
+      "process.stdout.write('x'.repeat(65536)); setInterval(()=>process.stdout.write('x'.repeat(65536)),10);"
+    ], {
+      cwd: process.cwd(),
+      timeoutMs: 5000,
+      cancelGraceMs: 20,
+      maxStdoutBytes: 1024
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.stopReason).toBe('stdout-limit');
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThanOrEqual(1024);
+  });
 });

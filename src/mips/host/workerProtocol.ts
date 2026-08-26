@@ -1,21 +1,21 @@
 // @index mips-host — Worker 版本化消息协议（纯类型；worker 与 host 两侧共享）
 /**
  * Versioned worker protocol (plan section 5.6). Phase 1 ships the message
- * shape, ping round-trip and cancel; real assemble/execute jobs land with the
- * builtin providers. This module must stay free of host-side imports so
+ * shape, cooperative cancel, and bounded real ISA encode/decode jobs. Full
+ * assemble/execute jobs land with the corresponding builtin providers. This
+ * module must stay free of host-side imports so
  * workerMain can load it inside a worker thread.
  */
 
-export const workerProtocolVersion = 1;
+export const workerProtocolVersion = 2;
 
-/** Job kinds the worker can execute. Phase 1 supports ping only. */
-export type WorkerJobKind = 'ping';
+/** Job kinds the phase-1 worker can execute. */
+export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch';
 
-export interface WorkerJob {
-  kind: WorkerJobKind;
-  /** Structured per-kind payload; ping uses a string token for round-trip checks. */
-  payload?: unknown;
-}
+export type WorkerJob =
+  | { kind: 'ping'; payload?: unknown }
+  | { kind: 'isa-decode-batch'; payload: unknown }
+  | { kind: 'isa-encode-batch'; payload: unknown };
 
 /** Wire-level envelope; unknown string kinds are structurally valid and get a structured worker error. */
 export interface WorkerJobEnvelope {
@@ -37,11 +37,19 @@ export interface WorkerCancelMessage {
   requestId: string;
 }
 
+export interface WorkerAckMessage {
+  protocolVersion: typeof workerProtocolVersion;
+  kind: 'ack';
+  requestId: string;
+  sequence: number;
+}
+
 export interface WorkerProgressMessage {
   protocolVersion: typeof workerProtocolVersion;
   kind: 'progress';
   requestId: string;
-  /** Event batch; consumers apply backpressure before sending the next batch. */
+  /** Monotonic batch sequence; the Worker waits for the matching ACK. */
+  sequence: number;
   batch: unknown[];
 }
 
@@ -56,7 +64,7 @@ export interface WorkerResultMessage {
   cancelled?: true;
 }
 
-export type WorkerInboundMessage = WorkerRequestMessage | WorkerCancelMessage;
+export type WorkerInboundMessage = WorkerRequestMessage | WorkerCancelMessage | WorkerAckMessage;
 
 export type WorkerOutboundMessage = WorkerProgressMessage | WorkerResultMessage;
 
@@ -71,6 +79,12 @@ export function isWorkerInboundMessage(value: unknown): value is WorkerInboundMe
   }
   if (value.kind === 'cancel') {
     return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId']);
+  }
+  if (value.kind === 'ack') {
+    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'sequence'])
+      && hasOwn(value, 'sequence')
+      && Number.isSafeInteger(value.sequence)
+      && (value.sequence as number) >= 0;
   }
   if (value.kind !== 'request'
     || !hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'jobId', 'job'])
@@ -96,7 +110,10 @@ export function isWorkerOutboundMessage(value: unknown): value is WorkerOutbound
     return false;
   }
   if (value.kind === 'progress') {
-    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'batch'])
+    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'sequence', 'batch'])
+      && hasOwn(value, 'sequence')
+      && Number.isSafeInteger(value.sequence)
+      && (value.sequence as number) >= 0
       && hasOwn(value, 'batch')
       && Array.isArray(value.batch);
   }

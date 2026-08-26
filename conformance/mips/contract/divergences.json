@@ -1,5 +1,5 @@
 {
-  "schemaRevision": 1,
+  "schemaRevision": 2,
   "entries": [
     {
       "id": "MARS-DIV-GPSP-001",
@@ -9,6 +9,16 @@
       "marsBehavior": "稳定版 MARS v0.6.3 在 Compact* 内存配置下按内存映射播种 $gp=0x00001800、$sp=0x00002ffc。",
       "courseBehavior": "课程 CPU 复位所有 GPR 为 0。",
       "pluginHandling": "courseTestToolchain 启动探针校验 Compact 初值（marsCapabilityGpCopyRegister/SpCopyRegister）；traceRunner 逐指令 Trace 只在实际执行首次初始化前的 $gp/$sp 读取时拒绝用例；P7 另用 entry-prefix 常量数据流静态兜底（stableMarsP7UnobservableResetReadError）。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/gp-sp-divergence.asm",
+        "profile": "common",
+        "expectedObservation": "首次两次 store 在 stable Compact MARS 写出 $gp=0x1800、$sp=0x2ffc，而课程复位态应写 0。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["MARS first store value is 0x00001800", "course reset GPR values are zero"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
@@ -31,6 +41,16 @@
       "marsBehavior": "稳定版 MARS v0.6.3 只在 taken 路径实现 REGIMM link，not-taken 的 BGEZAL/BLTZAL 不写 $31=PC+8，且后续执行仍使用旧值。",
       "courseBehavior": "按 MIPS 规范，REGIMM link 分支无论 taken 与否都应写 $31=PC+8。",
       "pluginHandling": "iterMarsDetailedTraceEvents 按 MIPS 规范补齐分支自身遗漏的 $31 写回 Trace 事件；动态检查在显式重写 $31 前拒绝读取 $31（linkRegisterOracleCompatible 状态机）。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/regimm-not-taken-link.asm",
+        "profile": "common",
+        "expectedObservation": "bgezal 条件为假时架构仍写 $31=PC+8；stable MARS 后续 sw 读取旧的 0x1234。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["not-taken REGIMM link emits architectural PC+8", "legacy successor state retains the old register value"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/language/mips/traceParser.ts",
@@ -53,6 +73,16 @@
       "marsBehavior": "稳定版 MARS v0.6.3 把 Compact* 配置的 0x6ffc 文本上界当作排他值，课程 oracle 机器码上限因此是 4095 words（0x3000..0x6ff8）。",
       "courseBehavior": "教程 IM 为 4096 words，末字地址 0x6ffc。",
       "pluginHandling": "courseMachineCodeCapacityError 分别校验 4096-word 硬件容量与 4095-word legacy oracle 上限，超 4095 时给出明确缩短提示。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/compact-text-last-word.asm",
+        "profile": "P3",
+        "expectedObservation": "确定性展开到 4096 words 时课程末字 0x6ffc 合法，而 stable Compact MARS 在 4095-word legacy 上界拒绝。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["course capacity includes address 0x6ffc", "legacy Compact oracle uses 0x6ffc as exclusive bound"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/courseTesting/machineCodeValidation.ts",
@@ -75,6 +105,16 @@
       "marsBehavior": "coL2 对 SWL/SWR 输出同一对齐字的多次局部字节写事件。",
       "courseBehavior": "课程 TB 只观测一次合并后的架构写事件。",
       "pluginHandling": "iterMarsDetailedTraceEvents 按动态指令保留每个 DM 字的最终写值，合并为单一事件（latestDmEvent 覆盖语义）。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/swl-swr-trace.asm",
+        "profile": "common",
+        "expectedObservation": "coL2 对同一对齐 word 产生多个局部事件，课程投影只保留该动态指令的最终 word 值。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["multiple coL2 byte updates share one aligned word", "projection emits one final architectural DM event"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/language/mips/traceParser.ts",
@@ -97,6 +137,16 @@
       "marsBehavior": "稳定版 efc 处理 AdEL/AdES/Ov/trap/syscall 时可能不输出 victim 指令的 coL2 指令头（在派发异常前处理）。",
       "courseBehavior": "课程需要 victim 无提交的精确异常证据。",
       "pluginHandling": "P7 用保守静态兜底（entry-prefix 常量数据流 + 常量传播）补齐无 header 场景的检查（stableMarsP7UnobservableResetReadError / unobservableP7InterruptGeneratorError）。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/p7-victim-missing-header.asm",
+        "profile": "P7",
+        "expectedObservation": "misaligned lw victim 在 efc 异常派发前不产生普通指令 header，但课程仍要求精确异常且无 victim 提交。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["legacy efc trace lacks the victim instruction header", "course victim produces no architectural side effect"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
@@ -114,6 +164,16 @@
       "marsBehavior": "稳定版 MARS v0.6.3 Compact* 还映射课程硬件不存在的数据段（如 kernel data 0x8000 等）。",
       "courseBehavior": "课程 P3–P7 只有 DM 0x00000000..0x00002fff；P7 另有 Timer/IG 设备窗口。",
       "pluginHandling": "stableMarsCourseAddressError 从成功 coL2 块重建访存有效地址并拒绝 MARS-only 段的访问，防止其成为 golden。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/mars-only-data-segment.asm",
+        "profile": "P7",
+        "expectedObservation": "MARS 可从 0x8000 数据段读取，而课程地址图不含该段并产生 load AdEL。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["MARS maps the explicit 0x8000 data segment", "course address classifier rejects 0x8000"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
@@ -131,6 +191,16 @@
       "marsBehavior": "MARS 按 32 位环绕计算 base+offset 的有效地址。",
       "courseBehavior": "教程规定 load/store 计算地址时加法溢出产生 AdEL/AdES。",
       "pluginHandling": "stableMarsCourseAddressError 在数学地址超出 32 位有符号范围时拒绝采用 MARS 环绕结果作为课程 oracle。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/effective-address-overflow.asm",
+        "profile": "P7",
+        "expectedObservation": "0x7fffffff+1 的 load 有效地址在课程产生 AdEL，而 MARS 以 32 位环绕地址继续。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["mathematical signed addition overflows", "course outcome is AdEL rather than wrapped access"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/courseTesting/marsOracleCompatibility.ts",
@@ -153,6 +223,16 @@
       "marsBehavior": "MARS 为 DivZero（除数 0）、JalrSame（jalr 两寄存器相同）、DoubleDelay（延迟槽内控制转移）、未初始化 HI/LO 读取提供实现特定结果。",
       "courseBehavior": "教程未定义这些行为（P7-2-4 思考题明确 jalr 两寄存器不能相同；DivZero 属教程未定义域）。",
       "pluginHandling": "marsDetailedUndefinedBehaviorError 在动态执行路径上拒绝这些输入（除数 0、jalr 同寄存器、延迟槽控制转移、HI/LO 未定义读取、REGIMM link 源为 $31），不采用 MARS 结果。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/undefined-div-zero.asm",
+        "profile": "common",
+        "expectedObservation": "div 除数为零进入课程未定义域；MARS 的 HI/LO 结果不得成为 golden。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["dynamic divisor equals zero", "case is rejected before adopting implementation-specific mflo"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/language/mips/traceParser.ts",
@@ -175,6 +255,16 @@
       "marsBehavior": "MARS syscall 实现输入输出等服务调用。",
       "courseBehavior": "课程 syscall 只直接产生 Syscall 异常并进入内核态，无 IO 功能。",
       "pluginHandling": "课程 oracle 只用 syscall 触发异常（P7 场景），不依赖 MARS 的 syscall IO；差异以本条目登记。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/p7-syscall.asm",
+        "profile": "P7",
+        "expectedObservation": "课程执行器提交 ExcCode=8 并进入 0x4180；不得调用 MARS syscall 服务。",
+        "verification": {
+          "kind": "course-directed-oracle",
+          "assertions": ["syscall produces ExcCode 8", "victim has no IO side effect"]
+        }
+      },
       "sources": [
         {
           "source": "cscore/markdown/P7/implement/P7-2-6.md",
@@ -192,6 +282,16 @@
       "marsBehavior": "MARS 成功退出不代表到达停机尾：跌出已汇编文本也按正常终止处理；稳定版靠 max-step 限制永久自环。",
       "courseBehavior": "标准 completion 是末尾 0x1000ffff 自环 + nop 实际执行。",
       "pluginHandling": "courseTraceMarsHaltError 要求 coL2 输出中实际出现期望 haltPc 的 0x1000ffff 指令，或新构建的 course-halt marker；拒绝 cliff exit、错误自环、未到达尾部。",
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/cliff-exit.asm",
+        "profile": "common",
+        "expectedObservation": "MARS 跌出已汇编文本可正常退出，但用例没有执行标准自环停机尾，课程 harness 必须拒绝。",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": ["legacy process exits successfully", "no 0x1000ffff halt instruction was executed"]
+        }
+      },
       "sources": [
         {
           "source": "extension/src/courseTesting/marsStepLimit.ts",
@@ -199,6 +299,72 @@
           "quote": "A successful process exit alone is insufficient because MARS also treats falling off assembled text as normal termination."
         }
       ],
+      "revision": 1
+    },
+    {
+      "id": "COURSE-DIV-TIMER-RESTART-001",
+      "category": "source-conflict",
+      "domain": "device",
+      "subject": "Mode 0 restart 时 pending IRQ 清除时机",
+      "sourceABehavior": "COCO Timer PDF 物理页 4（印刷页 3）说明 Mode 0 的 IRQ 会一直保持到 IM 清零。",
+      "sourceBBehavior": "官方 P7_standard_timer_2019.v 在软件重新 Enable 后的第一个非 WE IDLE→LOAD 边执行 _IRQ<=0，即使 IM 仍为 1。",
+      "resolution": "official-device lane 采用课程组下发 RTL 的可执行行为；PDF 差异作为公开 divergence 保留。",
+      "pluginHandling": "Timer cycle contract 和 strict official-device golden 使用直接编译官方 RTL 的 restart vector；CI 缺少 Icarus 时失败，本地缺少时报告 unavailable 而不伪报通过。",
+      "sources": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/COCO定时器设计规范-1.0.0.4.pdf",
+          "quote": "Mode 0 IRQ 保持到 IM 清零。",
+          "note": "物理页 4（印刷页 3）；PDF 无行号。"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [62, 65],
+          "quote": "IDLE 且 Enable 时进入 LOAD 并清 _IRQ。"
+        }
+      ],
+      "reproduction": {
+        "kind": "decision-vector",
+        "file": "conformance/mips/decision-vectors/COURSE-P7-TIMER-RESTART-001.json",
+        "profile": "P7",
+        "expectedObservation": "写回 EN=1 的 WE 边 IRQ 仍为 1；紧接的非 WE IDLE→LOAD 边 IRQ 变为 0。",
+        "verification": {
+          "kind": "official-rtl",
+          "assertions": ["restart write preserves latched IRQ", "first non-WE IDLE-to-LOAD edge clears IRQ"]
+        }
+      },
+      "revision": 1
+    },
+    {
+      "id": "COURSE-DIV-L13-EXC-PRIORITY-001",
+      "category": "source-conflict",
+      "domain": "execution",
+      "subject": "L13 同一指令跨级异常码优先级表述冲突",
+      "sourceABehavior": "L13 物理页 14 的英文原则写明 earlier pipeline stages override later pipeline stages。",
+      "sourceBBehavior": "相邻物理页 15 的中文局部异常码选择示意将新检测异常置于已流水异常之前，按图面阅读会得到相反覆盖方向。",
+      "resolution": "课程明文只冻结程序年龄与中断优先；同一受害指令固定采用 F>D>E>M 是 stone926 于 2026-08-26 接受的产品裁决，不宣称 L13 两处一致。",
+      "pluginHandling": "异常仲裁器按结构化 stage priority 表执行；directed vectors 分开覆盖同一 victim、不同年龄和中断覆盖，并排除语义互斥的全笛卡尔组合。",
+      "sources": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/L13-MIPS系统结构-V1.pdf",
+          "quote": "Earlier pipeline stages override later pipeline stages.",
+          "note": "物理页 14；与下一页局部选择图冲突。"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/L13-MIPS系统结构-V1.pdf",
+          "quote": "局部异常码选择示意把新检测异常置于已流水异常之前。",
+          "note": "物理页 15；PDF 无行号。"
+        }
+      ],
+      "reproduction": {
+        "kind": "decision-vector",
+        "file": "conformance/mips/decision-vectors/COURSE-P7-EXC-PRIORITY-001.json",
+        "profile": "P7",
+        "expectedObservation": "同一 victim 保留最早阶段异常，较老 victim 先提交，已使能 Int 在提交点覆盖异常。",
+        "verification": {
+          "kind": "course-directed-oracle",
+          "assertions": ["same-victim priority is F then D then E then M", "program age precedes stage timing", "enabled interrupt overrides exception at commit"]
+        }
+      },
       "revision": 1
     }
   ]

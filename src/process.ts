@@ -25,6 +25,9 @@ export interface RunToolOptions {
   launchSuccessDelayMs?: number;
   /** Cancellation with process-tree termination (plan section 1.6). */
   signal?: AbortSignal;
+  /** Raw output ceilings. Exceeding either limit terminates the whole process tree. */
+  maxStdoutBytes?: number;
+  maxStderrBytes?: number;
 }
 
 export function quoteArg(arg: string): string {
@@ -66,6 +69,8 @@ export async function runTool(command: string, args: string[], options: RunToolO
     timeoutMs,
     stdin: options.stdin,
     signal: options.signal,
+    maxStdoutBytes: options.maxStdoutBytes,
+    maxStderrBytes: options.maxStderrBytes,
     commandLine: display,
     onStdout: (text) => options.output.append(text),
     onStderr: (text) => options.output.append(text),

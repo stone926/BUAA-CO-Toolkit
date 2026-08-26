@@ -1,0 +1,88 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P3-BRANCH-001",
+  "profile": "P3",
+  "vectorKind": "program-final-state",
+  "source": {
+    "corpusFile": "spec-microprograms/p3-branch.asm",
+    "sha256": "6b5601c0ef9958a5f685c03ea607bd9d1be6fbda782ead5d9e878cb0d47308d0",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P3-ISA-001",
+      "COURSE-P3-RESET-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P3-RESET-ADDR-001"
+    ],
+    "note": "Both branch directions are represented; skipped instructions must not write.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "mars-compatible-final-state",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "halt-loop",
+      "minimumHits": 2
+    },
+    "stepLimit": 4096
+  },
+  "expected": {
+    "kind": "final-state",
+    "haltPc": "0x00003028",
+    "haltWord": "0x1000ffff",
+    "gpr": {
+      "8": "0x00000000",
+      "9": "0x00000001",
+      "10": "0x00000000",
+      "11": "0x00000007",
+      "12": "0x00010000"
+    },
+    "dm": {},
+    "writes": {
+      "gpr": [
+        "8",
+        "9",
+        "11",
+        "12"
+      ],
+      "dm": []
+    }
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "gpr.writes",
+      "dm.writes",
+      "halt.pc",
+      "halt.word"
+    ],
+    "undefinedExcluded": [
+      "hi",
+      "lo",
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "7e704eaf0846d0e41b35f4f255fffa024cfafc275175b69fcbbfa9cc400f88c7"
+  }
+}

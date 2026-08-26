@@ -918,7 +918,7 @@
       "id": "COURSE-P7-EXC-023",
       "profile": "P7",
       "domain": "exception",
-      "statement": "区分三个边界：运行期 PC 超出合法 IM 是架构 AdEL；运行期访存超出合法 region 是架构 AdEL/AdES；assembler 试图放置越界 segment 是汇编诊断。合法 IM 范围内但 ProgramImage 未提供该 word 的行为由 COURSE-P7-UNLOADED-IM-001 冻结。",
+      "statement": "区分四个边界：运行期 PC 超出合法 IM 是架构 AdEL；运行期访存超出合法 region 是架构 AdEL/AdES；assembler 放置越界 segment 是汇编诊断；合法 IM 内 ProgramImage 缺少 word 在 strict lane 是 unloaded-instruction 域外停止（不是 AdEL，也不合成 nop）。",
       "normativeReference": [
         {
           "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
@@ -926,7 +926,73 @@
         }
       ],
       "status": "frozen",
-      "revision": 1
+      "revision": 2,
+      "note": "未加载 word 的域外策略由 frozen decision COURSE-P7-UNLOADED-IM-001 定义。"
+    },
+    {
+      "id": "COURSE-P7-EXC-024",
+      "profile": "P7",
+      "domain": "exception",
+      "statement": "异常仲裁先按程序年龄选择最老受害指令；同一受害指令固定保留最早流水级的非零异常码（F:AdEL > D:RI/Syscall > E:Ov > M:AdEL/AdES）；统一提交点若同时有已使能中断，则 Int 覆盖当前异常并在返回后重试受害指令。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-4.md",
+          "lines": [55, 61],
+          "quote": "异常信号流水后先处理较老指令的异常。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [115, 115],
+          "quote": "中断优先级高于异常优先级，并重新执行受害指令。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-EXC-PRIORITY-001.json",
+          "quote": "F>D>E>M 产品仲裁及可达 directed vectors。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1,
+      "note": "程序年龄与 Int 优先属课程明文；同一受害指令的阶段次序属 COURSE-P7-EXC-PRIORITY-001 产品裁决，L13 冲突见 COURSE-DIV-L13-EXC-PRIORITY-001。"
+    },
+    {
+      "id": "COURSE-P7-CP0-004",
+      "profile": "P7",
+      "domain": "cp0",
+      "statement": "CP0/提交边界优先级固定为 reset > accepted Req > 当前受害指令副作用；中断资格读取受害指令执行前 SR。accepted Req 抑制 victim 的 mtc0、eret 清 EXL、GPR/内存/设备写；较老已提交指令保留。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-4.md",
+          "lines": [15, 43],
+          "quote": "精确异常要求受害及年轻指令像未开始；控制优先级 reset 高于 Req，Req 高于流水控制。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-CP0-SAME-CYCLE-001.json",
+          "quote": "可达 same-cycle 状态转移及域外组合分类。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1,
+      "note": "eret 与 accepted Req 在官方 handler 场景不可达；不要求不存在的 eret×mtc0×delay-slot 全笛卡尔积。"
+    },
+    {
+      "id": "COURSE-P7-IM-001",
+      "profile": "P7",
+      "domain": "undefined-domain",
+      "statement": "strict course lane 执行到合法、对齐但未加载的 ProgramImage word 时以 unloaded-instruction 停止并标记 out-of-domain；不得产生 AdEL 或默认零填充。显式 exploratory zero-fill 结果必须标记 synthetic 且不得成为 strict golden。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [184, 184],
+          "quote": "测试时不会出现跳转到未加载指令的位置的情况。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-UNLOADED-IM-001.json",
+          "quote": "strict out-of-domain 与 opt-in synthetic policy 向量。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1,
+      "note": "这是课程明确排除输入上的产品域决策，不是课程对 ROM 缺失 word 值的定义。"
     },
     {
       "id": "COURSE-P7-ISA-001",
@@ -1036,7 +1102,7 @@
       "id": "COURSE-P7-TIMER-004",
       "profile": "P7",
       "domain": "timer",
-      "statement": "CycleContract 的主状态边按官方 RTL 冻结：IDLE && Enable -> LOAD；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。IDLE -> LOAD 对 _IRQ 的写入在普通启动下不可见；Mode 0 中断后的 restart 清除时机不由本条冻结，而由 COURSE-P7-TIMER-RESTART-001 待决。",
+      "statement": "CycleContract 按官方 RTL 冻结：IDLE && Enable -> LOAD 且清 _IRQ；LOAD -> CNT 并令 COUNT=PRESET；CNT && !Enable -> IDLE；CNT && COUNT>1 递减；CNT && COUNT<=1 -> INT、COUNT=0、pending IRQ=1。Mode 0 中断后重新 Enable 的第一个非 WE IDLE→LOAD 边清 pending IRQ。",
       "normativeReference": [
         {
           "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
@@ -1049,8 +1115,8 @@
         }
       ],
       "status": "frozen",
-      "revision": 1,
-      "note": "Mode 0 restart 时 pending IRQ 的可观测清除语义仍为 COURSE-P7-TIMER-RESTART-001（pending）；在该 decision 冻结前，严格 device golden 不得覆盖此组合。"
+      "revision": 2,
+      "note": "Mode 0 restart 已由 COURSE-P7-TIMER-RESTART-001 冻结为官方 RTL 行为；Timer PDF 的冲突表述保留在 COURSE-DIV-TIMER-RESTART-001。"
     },
     {
       "id": "COURSE-P7-TIMER-005",
@@ -1071,7 +1137,7 @@
       "id": "COURSE-P7-TIMER-006",
       "profile": "P7",
       "domain": "timer",
-      "statement": "计数中清 Enable 会回到 IDLE 停止；再次置 Enable 后经 LOAD 从 PRESET 重新装载。WE 对寄存器的写优先于设备同周期自动更新。本条不冻结 Mode 0 restart 时 pending IRQ 的清除时机。",
+      "statement": "计数中清 Enable 会回到 IDLE 停止；再次置 Enable 后经 LOAD 从 PRESET 重新装载。WE 对寄存器的写优先于设备同周期自动更新；Mode 0 restart 的写 EN 周期仍保持 pending IRQ，下一非 WE 的 IDLE→LOAD 边清除。",
       "normativeReference": [
         {
           "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
@@ -1080,8 +1146,8 @@
         }
       ],
       "status": "frozen",
-      "revision": 1,
-      "note": "Mode 0 restart 的 pending IRQ 清除行为由 COURSE-P7-TIMER-RESTART-001 保持 pending。"
+      "revision": 2,
+      "note": "restart 清除时机已由 COURSE-P7-TIMER-RESTART-001 冻结并由官方 RTL directed vector 验证。"
     },
     {
       "id": "COURSE-P7-TIMER-007",
@@ -1097,6 +1163,26 @@
       ],
       "status": "frozen",
       "revision": 1
+    },
+    {
+      "id": "COURSE-P7-TIMER-008",
+      "profile": "P7",
+      "domain": "timer",
+      "statement": "Mode 0 完成时 INT 边置 pending IRQ；下一边自动清 CTRL.EN 但保持 pending。软件写 CTRL.EN=1 的 WE 边仍保持 IRQ；随后第一个非 WE IDLE→LOAD 边清 pending IRQ，输出 IRQ 同步变低。",
+      "normativeReference": [
+        {
+          "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+          "lines": [62, 84],
+          "quote": "IDLE→LOAD 清 _IRQ；INT 的 Mode 0 分支只清 ctrl[0]，并返回 IDLE。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-TIMER-RESTART-001.json",
+          "quote": "restart 判别周期的官方 RTL snapshots。"
+        }
+      ],
+      "status": "frozen",
+      "revision": 1,
+      "note": "official-device lane 局部仲裁；PDF 的不同描述不被覆盖或隐去。"
     },
     {
       "id": "COURSE-P7-IG-001",

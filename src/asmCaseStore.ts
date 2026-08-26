@@ -4,13 +4,18 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
-import { ensureDirectory, pathExists, readTextFile, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
+import { ensureDirectory, pathExists, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
 import { MarsRunOptions } from './mips';
-import { AppServices } from './types';
+import { AppServices, ProjectProfile } from './types';
 import { resolveFileInput } from './workflowInputs';
 import { assembleWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
-import { AssembleResult, EngineArtifactIdentity, ExecuteResult } from './mips/providers/contracts';
+import {
+  AssembleResult,
+  EngineArtifactIdentity,
+  ExecuteResult,
+  type ResolvedEngineRun
+} from './mips/providers/contracts';
 import { EngineDescriptor } from './mips/core/api';
 import {
   AsmCaseArtifactKind,
@@ -32,12 +37,41 @@ import {
   asmCaseManifestVersion2,
   isKnownManifest,
   isManifestV2,
+  manifestDutConfigurationHash,
   manifestRunConfigurationHash,
   v2ArtifactGroup,
   writeManifestAtomic
 } from './courseTesting/manifestCodec';
 import { LEGACY_MARS_DESCRIPTOR } from './mips/providers/contracts';
 import { courseMachineCodeValidationError } from './courseTesting/machineCodeValidation';
+import {
+  captureSourceGraph,
+  defaultSourceCaptureLimits,
+  loadAndVerifySourceGraph,
+  type CapturedSourceBundle
+} from './mips/replay/sourceBundle';
+import {
+  createLegacyProgramImage,
+  oracleEvidenceDigests,
+  serializeObservabilitySchema,
+  serializeProgramImage
+} from './mips/replay/programImage';
+import { sha256Canonical, type CanonicalJson } from './mips/replay/canonical';
+import { assertContainedDirectoryPath, ensureContainedDirectoryPath } from './pathContainment';
+import {
+  maximumReplayManifestBytes,
+  maximumReplayMachineCodeBytes,
+  maximumReplayProgramImageBytes,
+  maximumReplaySnapshotBytes,
+  maximumReplaySourceBytes,
+  maximumReplayStdinBytes,
+  maximumReplayTraceBytes,
+  readBoundedRegularFile
+} from './mips/replay/boundedFile';
+
+/** Keep case discovery bounded even when a workspace contains an adversarial case tree. */
+export const maximumAsmCaseIndexEntries = 2048;
+export const maximumAsmCaseIndexManifestBytes = 16 * 1024 * 1024;
 
 export interface AsmCase {
   id: string;
@@ -78,16 +112,31 @@ export async function createAsmCaseFromAsm(
   asm: vscode.Uri,
   options: CreateAsmCaseOptions = {}
 ): Promise<AsmCase> {
-  const asmBytes = await vscode.workspace.fs.readFile(asm);
+  assertWorkspaceTrustedForCaseCapture();
+  if (asm.scheme !== 'file') {
+    throw new Error(`ASM case capture requires a local file URI: ${asm.toString()}`);
+  }
+  const asmBytes = await readBoundedRegularFile(asm.fsPath, {
+    maximumBytes: defaultSourceCaptureLimits.maxBytes,
+    label: 'ASM root source'
+  });
   const asmHash = sha256Bytes(asmBytes);
   const root = caseWorkspaceRoot(options.resource ?? asm);
   const createdAt = options.createdAt ?? new Date();
   const paths = await nextAsmCasePaths(root, createdAt, asmHash);
   const caseDir = vscode.Uri.file(paths.caseDir);
-  await ensureDirectory(caseDir);
+  await ensureContainedDirectoryPath(root, paths.caseDir);
 
   const caseAsm = vscode.Uri.file(paths.asm);
   await vscode.workspace.fs.writeFile(caseAsm, asmBytes);
+  const sourceBundle = await captureSourceGraph(
+    asm.fsPath,
+    paths.caseDir,
+    asmBytes,
+    { ...defaultSourceCaptureLimits },
+    { allowedRoot: root }
+  );
+  const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
 
   const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
@@ -105,9 +154,11 @@ export async function createAsmCaseFromAsm(
     },
     options.source ?? { kind: 'selected' },
     stdin?.snapshot,
-    p7
+    p7,
+    sourceBundleManifest
   );
   const manifestUri = vscode.Uri.file(paths.manifest);
+  await assertContainedDirectoryPath(root, paths.caseDir);
   await writeManifestAtomic(paths.manifest, manifest);
 
   return {
@@ -116,7 +167,7 @@ export async function createAsmCaseFromAsm(
     manifestUri,
     asm: caseAsm,
     machineCode: vscode.Uri.file(paths.machineCode),
-    sourceAsm: asm,
+    sourceAsm: vscode.Uri.file(sourceBundle.rootMaterializedPath),
     stdin: stdin?.uri,
     manifest
   };
@@ -127,16 +178,30 @@ export async function createAsmCaseFromText(
   text: string,
   options: CreateAsmCaseOptions = {}
 ): Promise<AsmCase> {
+  assertWorkspaceTrustedForCaseCapture();
   const bytes = Buffer.from(text, 'utf8');
+  if (bytes.byteLength > defaultSourceCaptureLimits.maxBytes) {
+    throw new Error(
+      `ASM root source size ${bytes.byteLength} exceeds the capture limit ${defaultSourceCaptureLimits.maxBytes}`
+    );
+  }
   const asmHash = sha256Bytes(bytes);
   const root = caseWorkspaceRoot(options.resource);
   const createdAt = options.createdAt ?? new Date();
   const paths = await nextAsmCasePaths(root, createdAt, asmHash);
   const caseDir = vscode.Uri.file(paths.caseDir);
-  await ensureDirectory(caseDir);
+  await ensureContainedDirectoryPath(root, paths.caseDir);
 
   const caseAsm = vscode.Uri.file(paths.asm);
   await vscode.workspace.fs.writeFile(caseAsm, bytes);
+  const sourceBundle = await captureSourceGraph(
+    caseAsm.fsPath,
+    paths.caseDir,
+    bytes,
+    { ...defaultSourceCaptureLimits },
+    { allowedRoot: root }
+  );
+  const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
   const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
   const manifest = createV2Manifest(
@@ -152,9 +217,11 @@ export async function createAsmCaseFromText(
     },
     options.source ?? { kind: 'builtin' },
     stdin?.snapshot,
-    p7
+    p7,
+    sourceBundleManifest
   );
   const manifestUri = vscode.Uri.file(paths.manifest);
+  await assertContainedDirectoryPath(root, paths.caseDir);
   await writeManifestAtomic(paths.manifest, manifest);
 
   return {
@@ -163,7 +230,7 @@ export async function createAsmCaseFromText(
     manifestUri,
     asm: caseAsm,
     machineCode: vscode.Uri.file(paths.machineCode),
-    sourceAsm: caseAsm,
+    sourceAsm: vscode.Uri.file(sourceBundle.rootMaterializedPath),
     stdin: stdin?.uri,
     manifest
   };
@@ -201,6 +268,25 @@ export async function prepareAsmCaseMachineCode(
   if (!dump.ok || !dump.outputFile) {
     return dump;
   }
+  if (!dump.resolvedRun) {
+    return {
+      ...dump,
+      ok: false,
+      outputFile: undefined,
+      status: failedEngineStatusFrom(dump.status, 'assembler result did not bind its resolved run configuration')
+    };
+  }
+  if (dump.resolvedRun.profile !== asmCase.manifest.profile) {
+    return {
+      ...dump,
+      ok: false,
+      outputFile: undefined,
+      status: failedEngineStatusFrom(
+        dump.status,
+        `assembler resolved profile ${dump.resolvedRun.profile} differs from captured case profile ${asmCase.manifest.profile}`
+      )
+    };
+  }
 
   try {
     // Detect edits that raced the external assembler. The generated image must
@@ -215,12 +301,18 @@ export async function prepareAsmCaseMachineCode(
     };
   }
 
-  const bytes = await vscode.workspace.fs.readFile(asmCase.machineCode);
+  const bytes = await readBoundedRegularFile(asmCase.machineCode.fsPath, {
+    maximumBytes: maximumReplayMachineCodeBytes,
+    label: 'MARS machine-code dump'
+  });
   const text = Buffer.from(bytes).toString('utf8');
   if (options.courseTrace) {
-    const asmText = await readTextFile(asmCase.sourceAsm);
+    const asmText = (await readBoundedRegularFile(asmCase.sourceAsm.fsPath, {
+      maximumBytes: maximumReplaySourceBytes,
+      label: 'case-local materialized ASM source'
+    })).toString('utf8');
     const validationError = courseMachineCodeValidationError(
-      getProfile(asmCase.sourceAsm),
+      dump.resolvedRun.profile as ProjectProfile,
       text,
       asmText,
       asmCase.manifest.source.kind === 'builtin'
@@ -249,7 +341,7 @@ export async function prepareAsmCaseMachineCode(
     };
   }
   const machineCode: AsmCaseManifest['machineCode'] = {
-    path: asmCase.machineCode.fsPath,
+    path: 'code.txt',
     sha256: sha256Bytes(bytes),
     bytes: bytes.byteLength,
     wordCount: machineCodeWordCount(text),
@@ -258,18 +350,58 @@ export async function prepareAsmCaseMachineCode(
   const legacyProvenance = {
     commandLine: dump.status.commandLine ?? dump.descriptor.id,
     cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
-    memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm)
+    memoryConfiguration: dump.resolvedRun.memoryConfiguration,
+    profile: dump.resolvedRun.profile,
+    runtime: dump.resolvedRun.runtime,
+    wallClockMs: dump.resolvedRun.wallClockMs,
+    p7RiInstruction: dump.resolvedRun.p7RiInstruction
   };
+  const graphReference = asmCase.manifest.program.sourceGraph;
+  if (!graphReference) {
+    return {
+      ...dump,
+      ok: false,
+      outputFile: undefined,
+      status: failedEngineStatusFrom(dump.status, 'v2 case has no captured SourceUnit graph')
+    };
+  }
+  const graph = await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path);
+  const programImage = createLegacyProgramImage(
+    text,
+    graph.units.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }))
+  );
+  const imageBytes = serializeProgramImage(programImage);
+  const observabilityBytes = serializeObservabilitySchema();
+  const imagePath = path.join(asmCase.dir.fsPath, 'program', 'image.json');
+  const observabilityPath = path.join(asmCase.dir.fsPath, 'program', 'observability.json');
+  await writeImmutableReplayArtifact(imagePath, imageBytes);
+  await writeImmutableReplayArtifact(observabilityPath, observabilityBytes);
+  await fs.promises.chmod(asmCase.machineCode.fsPath, 0o444).catch(() => undefined);
+  const imageSnapshot = snapshotForCaseFile(asmCase.dir.fsPath, imagePath, imageBytes);
+  const observabilitySnapshot = snapshotForCaseFile(asmCase.dir.fsPath, observabilityPath, observabilityBytes);
+  const dutInput = { ...machineCode };
   const assembler = manifestEngineInfo(dump.descriptor, dump.engineArtifact);
   asmCase.manifest = {
     ...asmCase.manifest,
     program: {
       ...asmCase.manifest.program,
-      machineCode: { ...machineCode, path: 'code.txt' },
-      imageFingerprint: machineCode.sha256,
+      machineCode,
+      image: imageSnapshot,
+      observability: observabilitySnapshot,
+      dutInput,
+      imageFingerprint: programImage.fingerprint,
       assembler: {
         ...assembler,
         legacyProvenance
+      }
+    },
+    artifacts: {
+      ...(asmCase.manifest.artifacts ?? {}),
+      program: {
+        ...(asmCase.manifest.artifacts?.program ?? {}),
+        image: imageSnapshot,
+        observability: observabilitySnapshot,
+        dutInput
       }
     }
   };
@@ -291,7 +423,43 @@ export async function recordAsmCaseOracleResult(
   assertWritableV2Case(asmCase);
   // Last-line defence against source edits that raced the oracle process.
   await assertAsmCaseSourceSnapshotCurrent(asmCase);
+  await assertAsmCaseStdinSnapshotCurrent(asmCase);
   const engine = manifestEngineInfo(result.descriptor, result.engineArtifact);
+  if (!result.resolvedRun) {
+    throw new Error('cannot record oracle result without the provider resolved run configuration');
+  }
+  const completeConfiguration = await completeReplayRunConfiguration(
+    asmCase,
+    configuration,
+    outcome.stopReason,
+    result.resolvedRun
+  );
+  const traceReference = asmCase.manifest.artifacts?.oracle?.traceOut;
+  if (!traceReference || typeof traceReference === 'string') {
+    throw new Error('cannot record oracle result without a hashed case-local traceOut artifact');
+  }
+  const tracePath = path.join(asmCase.dir.fsPath, ...traceReference.path.replace(/\\/g, '/').split('/'));
+  await caseRelativePath(asmCase, tracePath);
+  const traceBytes = await readBoundedRegularFile(tracePath, {
+    maximumBytes: maximumReplayTraceBytes,
+    expectedBytes: traceReference.bytes,
+    label: 'oracle traceOut artifact'
+  });
+  if (traceBytes.byteLength !== traceReference.bytes || sha256Bytes(traceBytes) !== traceReference.sha256.toLowerCase()) {
+    throw new Error('oracle traceOut artifact no longer matches its case-local snapshot');
+  }
+  const traceText = traceBytes.toString('utf8');
+  if (!Buffer.from(traceText, 'utf8').equals(traceBytes)) {
+    throw new Error('oracle traceOut artifact is not lossless UTF-8');
+  }
+  const evidence = oracleEvidenceDigests(traceText, completeConfiguration.traceLevel ?? 1);
+  if (outcome.steps !== undefined && outcome.steps !== evidence.steps) {
+    throw new Error(`reported oracle steps ${outcome.steps} do not match captured trace evidence ${evidence.steps}`);
+  }
+  if (outcome.finalStateDigest !== undefined && outcome.finalStateDigest !== evidence.finalStateDigest) {
+    throw new Error('reported oracle finalStateDigest does not match captured trace evidence');
+  }
+  await fs.promises.chmod(tracePath, 0o444).catch(() => undefined);
   asmCase.manifest = {
     ...asmCase.manifest,
     oracle: {
@@ -300,14 +468,17 @@ export async function recordAsmCaseOracleResult(
         legacyProvenance: {
           commandLine: result.status.commandLine,
           cwd: result.status.cwd,
-          memoryConfiguration: configuration.memoryConfiguration
+          memoryConfiguration: completeConfiguration.memoryConfiguration
         }
       },
-      configurationHash: manifestRunConfigurationHash(configuration, engine),
-      runConfiguration: configuration,
+      configurationHash: manifestRunConfigurationHash(completeConfiguration, engine),
+      runConfiguration: completeConfiguration,
       stopReason: outcome.stopReason,
-      steps: outcome.steps,
-      finalStateDigest: outcome.finalStateDigest
+      steps: evidence.steps,
+      eventCount: evidence.eventCount,
+      rawOutputDigest: evidence.rawOutputDigest,
+      eventDigest: evidence.eventDigest,
+      finalStateDigest: evidence.finalStateDigest
     }
   };
   await writeAsmCaseManifest(asmCase);
@@ -326,11 +497,10 @@ export async function updateAsmCaseArtifacts(
         throw new Error(`ASM case artifact ${name} must be an absolute file path`);
       }
       const relativePath = await caseRelativePath(asmCase, file);
-      const stat = await fs.promises.stat(file);
-      if (!stat.isFile()) {
-        throw new Error(`ASM case artifact ${name} is not a regular file: ${file}`);
-      }
-      const bytes = await fs.promises.readFile(file);
+      const bytes = await readBoundedRegularFile(file, {
+        maximumBytes: asmCaseArtifactMaximumBytes(kind, name),
+        label: `ASM case ${kind} artifact ${name}`
+      });
       return [name, {
         path: relativePath,
         sha256: sha256Bytes(bytes),
@@ -360,9 +530,22 @@ export async function updateAsmCaseMetadata(
 ): Promise<void> {
   assertWritableV2Case(asmCase);
   assertManifestEntries(metadata, 'metadata');
+  const dutEntries = Object.fromEntries(Object.entries(metadata).filter(([key]) => key.startsWith('dut.')));
+  const provenanceEntries = Object.fromEntries(Object.entries(metadata).filter(([key]) => !key.startsWith('dut.')));
+  const dutConfiguration = {
+    ...(asmCase.manifest.dut?.configuration ?? {}),
+    ...dutEntries
+  };
+  const mergedMetadata = { ...(asmCase.manifest.metadata ?? {}), ...provenanceEntries };
   asmCase.manifest = {
     ...asmCase.manifest,
-    metadata: { ...(asmCase.manifest.metadata ?? {}), ...metadata }
+    ...(Object.keys(dutConfiguration).length ? {
+      dut: {
+        configuration: dutConfiguration,
+        configurationHash: manifestDutConfigurationHash(dutConfiguration)
+      }
+    } : {}),
+    ...(Object.keys(mergedMetadata).length ? { metadata: mergedMetadata } : {})
   };
   await writeAsmCaseManifest(asmCase);
 }
@@ -383,6 +566,26 @@ async function caseRelativePath(asmCase: AsmCase, absolutePath: string): Promise
   return relative.split(path.sep).join('/');
 }
 
+async function caseSnapshotFile(asmCase: AsmCase, relativePath: string, label: string): Promise<string> {
+  if (relativePath.includes('\\') || path.posix.isAbsolute(relativePath) || path.win32.isAbsolute(relativePath)
+    || relativePath.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new Error(`${label} path is not a canonical case-relative '/' path: ${relativePath}`);
+  }
+  const file = path.join(asmCase.dir.fsPath, ...relativePath.split('/'));
+  const actualRelative = await caseRelativePath(asmCase, file);
+  if (actualRelative !== relativePath) {
+    throw new Error(`${label} path does not resolve to its manifest entry`);
+  }
+  return file;
+}
+
+function asmCaseArtifactMaximumBytes(kind: AsmCaseArtifactKind, name: string): number {
+  const { group, key } = v2ArtifactGroup(kind, name);
+  if (group === 'source') return maximumReplaySourceBytes;
+  if (group === 'oracle' && key === 'traceOut') return maximumReplayTraceBytes;
+  return maximumReplaySnapshotBytes;
+}
+
 export async function writeAsmCaseArtifact(
   asmCase: AsmCase,
   kind: 'verilog' | 'logisim' | 'mars',
@@ -391,6 +594,13 @@ export async function writeAsmCaseArtifact(
   artifactName = path.basename(fileName, path.extname(fileName))
 ): Promise<vscode.Uri> {
   assertWritableV2Case(asmCase);
+  const maximumBytes = asmCaseArtifactMaximumBytes(kind, artifactName);
+  const contentBytes = Buffer.byteLength(content, 'utf8');
+  if (contentBytes > maximumBytes) {
+    throw new Error(
+      `ASM case ${kind} artifact ${artifactName} size ${contentBytes} exceeds the hard limit ${maximumBytes}`
+    );
+  }
   const dir = artifactDirectory(asmCase, kind);
   await ensureDirectory(dir);
   const uri = vscode.Uri.file(path.join(dir.fsPath, path.basename(fileName)));
@@ -415,11 +625,17 @@ export async function copyAsmCaseArtifact(
   artifactName = path.basename(fileName, path.extname(fileName))
 ): Promise<vscode.Uri> {
   assertWritableV2Case(asmCase);
+  if (source.scheme !== 'file') {
+    throw new Error(`ASM case artifact copy requires a local file URI: ${source.toString()}`);
+  }
   const dir = artifactDirectory(asmCase, kind);
   await ensureDirectory(dir);
   const target = vscode.Uri.file(path.join(dir.fsPath, path.basename(fileName)));
   if (normalizePathKey(source.fsPath) !== normalizePathKey(target.fsPath)) {
-    const bytes = await vscode.workspace.fs.readFile(source);
+    const bytes = await readBoundedRegularFile(source.fsPath, {
+      maximumBytes: asmCaseArtifactMaximumBytes(kind, artifactName),
+      label: `ASM case ${kind} artifact copy ${artifactName}`
+    });
     await vscode.workspace.fs.writeFile(target, bytes);
   }
   await updateAsmCaseArtifacts(asmCase, kind, { [artifactName]: target.fsPath });
@@ -429,21 +645,45 @@ export async function copyAsmCaseArtifact(
 export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array<{ manifest: AsmCaseManifestUnion; uri: vscode.Uri }>> {
   const root = caseWorkspaceRoot(resource);
   const casesDir = path.join(root, CO_CASES_DIR);
-  let entries: fs.Dirent[];
+  let directory: fs.Dir;
   try {
-    entries = await fs.promises.readdir(casesDir, { withFileTypes: true });
+    await assertContainedDirectoryPath(root, casesDir);
+    directory = await fs.promises.opendir(casesDir);
   } catch {
     return [];
   }
 
   const manifests: Array<{ manifest: AsmCaseManifestUnion; uri: vscode.Uri }> = [];
-  for (const entry of entries) {
+  let caseEntries = 0;
+  let aggregateManifestBytes = 0;
+  for await (const entry of directory) {
     if (!entry.isDirectory()) {
       continue;
     }
+    caseEntries += 1;
+    if (caseEntries > maximumAsmCaseIndexEntries) {
+      throw new Error(`ASM case index exceeds the trusted ${maximumAsmCaseIndexEntries}-entry limit`);
+    }
     const uri = vscode.Uri.file(path.join(casesDir, entry.name, 'case.json'));
+    let bytes: Buffer;
     try {
-      const manifest = JSON.parse(await readTextFile(uri)) as unknown;
+      await assertContainedDirectoryPath(casesDir, path.dirname(uri.fsPath));
+      bytes = await readBoundedRegularFile(uri.fsPath, {
+        maximumBytes: maximumReplayManifestBytes,
+        label: `ASM case manifest ${entry.name}`
+      });
+    } catch {
+      // Ignore incomplete, linked, or oversized case directories.
+      continue;
+    }
+    aggregateManifestBytes += bytes.byteLength;
+    if (aggregateManifestBytes > maximumAsmCaseIndexManifestBytes) {
+      throw new Error(
+        `ASM case index manifest bytes exceed the trusted ${maximumAsmCaseIndexManifestBytes}-byte limit`
+      );
+    }
+    try {
+      const manifest = JSON.parse(bytes.toString('utf8')) as unknown;
       if (isKnownManifest(manifest)) {
         manifests.push({ manifest, uri });
       }
@@ -460,7 +700,11 @@ export async function readAsmCaseManifestForAsm(asm: vscode.Uri): Promise<AsmCas
   }
   const manifestPath = path.join(path.dirname(asm.fsPath), 'case.json');
   try {
-    const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as unknown;
+    const bytes = await readBoundedRegularFile(manifestPath, {
+      maximumBytes: maximumReplayManifestBytes,
+      label: 'adjacent ASM case manifest'
+    });
+    const manifest = JSON.parse(bytes.toString('utf8')) as unknown;
     return isKnownManifest(manifest) ? manifest : undefined;
   } catch {
     // 元数据文件不存在或格式异常时按普通 ASM 处理
@@ -503,7 +747,17 @@ async function copyStdinSnapshot(stdin: vscode.Uri, stdinDir: string): Promise<{
   uri: vscode.Uri;
   snapshot: NonNullable<AsmCaseManifest['stdin']>;
 }> {
-  const bytes = await vscode.workspace.fs.readFile(stdin);
+  if (stdin.scheme !== 'file') {
+    throw new Error(`标准输入快照要求本地文件 URI：${stdin.toString()}`);
+  }
+  const bytes = await readBoundedRegularFile(stdin.fsPath, {
+    maximumBytes: maximumReplayStdinBytes,
+    label: 'stdin snapshot'
+  });
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
+    throw new Error(`标准输入必须是无损 UTF-8 文本：${stdin.fsPath}`);
+  }
   await ensureDirectory(vscode.Uri.file(stdinDir));
   const uri = vscode.Uri.file(path.join(stdinDir, path.basename(stdin.fsPath)));
   await vscode.workspace.fs.writeFile(uri, bytes);
@@ -539,6 +793,12 @@ async function writeAsmCaseManifest(asmCase: AsmCase): Promise<void> {
   await writeManifestAtomic(asmCase.manifestUri.fsPath, asmCase.manifest);
 }
 
+function assertWorkspaceTrustedForCaseCapture(): void {
+  if (vscode.workspace.isTrusted === false) {
+    throw new Error('ASM case capture is disabled in an untrusted workspace (legacy-mars.workspace-untrusted)');
+  }
+}
+
 function assertWritableV2Case(
   asmCase: AsmCase
 ): asserts asmCase is AsmCase & { manifest: AsmCaseManifestV2 } {
@@ -548,21 +808,48 @@ function assertWritableV2Case(
 }
 
 /**
- * Verify that both the case-local root snapshot and the source consumed by the
- * legacy re-assembler still equal the immutable manifest snapshot. Relative
- * includes remain a known phase-1 closure gap; this guard prevents even an
- * include-free root file from silently drifting.
+ * Verify the case-local root plus the complete content-addressed SourceUnit graph. New cases
+ * execute only the captured materialization; the original workspace path is provenance and may
+ * be moved or deleted. Early-v2 cases without a graph retain the stricter legacy fallback.
  */
 export async function assertAsmCaseSourceSnapshotCurrent(asmCase: AsmCase): Promise<void> {
   assertWritableV2Case(asmCase);
   const expected = asmCase.manifest.asmSnapshot;
-  const snapshotBytes = await readIntegrityFile(asmCase.asm.fsPath, 'case-local ASM snapshot');
+  const snapshotFile = await caseSnapshotFile(asmCase, expected.path, 'ASM root snapshot');
+  if (normalizePathKey(asmCase.asm.fsPath) !== normalizePathKey(snapshotFile)) {
+    throw new Error('ASM case root URI is not the manifest-bound case-local snapshot');
+  }
+  const snapshotBytes = await readIntegrityFile(
+    snapshotFile,
+    'case-local ASM snapshot',
+    expected,
+    maximumReplaySourceBytes
+  );
   assertSnapshotBytes(snapshotBytes, expected, 'case-local ASM snapshot');
+
+  const graphReference = asmCase.manifest.program.sourceGraph;
+  if (graphReference) {
+    const graph = await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path);
+    const root = graph.units.find((unit) => unit.id === graph.rootId);
+    if (!root || root.contentHash !== expected.sha256 || root.bytes !== expected.bytes) {
+      throw new Error('captured SourceUnit graph root does not match case-local ASM snapshot');
+    }
+    const expectedMaterialized = path.join(asmCase.dir.fsPath, ...root.materializedPath.split('/'));
+    if (normalizePathKey(expectedMaterialized) !== normalizePathKey(asmCase.sourceAsm.fsPath)) {
+      throw new Error('ASM provider source is not the immutable SourceUnit graph root');
+    }
+    return;
+  }
 
   if (normalizePathKey(asmCase.sourceAsm.fsPath) === normalizePathKey(asmCase.asm.fsPath)) {
     return;
   }
-  const sourceBytes = await readIntegrityFile(asmCase.sourceAsm.fsPath, 'ASM source');
+  const sourceBytes = await readIntegrityFile(
+    asmCase.sourceAsm.fsPath,
+    'ASM source',
+    expected,
+    maximumReplaySourceBytes
+  );
   assertSnapshotBytes(sourceBytes, expected, 'ASM source');
 }
 
@@ -575,11 +862,62 @@ export async function asmCaseSourceSnapshotIssue(asmCase: AsmCase): Promise<stri
   }
 }
 
-async function readIntegrityFile(file: string, label: string): Promise<Buffer> {
+/**
+ * Read the only stdin bytes an archived case is allowed to execute. The original
+ * workspace path is provenance only and is never a second live input source.
+ */
+export async function readAsmCaseStdinSnapshot(asmCase: AsmCase): Promise<string | undefined> {
+  assertWritableV2Case(asmCase);
+  const expected = asmCase.manifest.stdin;
+  if (!expected) {
+    if (asmCase.stdin) throw new Error('ASM case exposes stdin bytes that are absent from its manifest');
+    return undefined;
+  }
+  const normalized = expected.path;
+  if (normalized.includes('\\') || path.posix.isAbsolute(normalized) || path.win32.isAbsolute(normalized)
+    || normalized.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new Error(`ASM case stdin snapshot path is unsafe: ${expected.path}`);
+  }
+  const file = path.join(asmCase.dir.fsPath, ...normalized.split('/'));
+  const relative = await caseRelativePath(asmCase, file);
+  if (relative !== normalized) throw new Error('ASM case stdin snapshot path does not resolve to its manifest entry');
+  if (asmCase.stdin && normalizePathKey(asmCase.stdin.fsPath) !== normalizePathKey(file)) {
+    throw new Error('ASM case stdin URI is not the manifest-bound case-local snapshot');
+  }
+  const bytes = await readIntegrityFile(
+    file,
+    'case-local stdin snapshot',
+    expected,
+    maximumReplayStdinBytes
+  );
+  assertSnapshotBytes(bytes, expected, 'case-local stdin snapshot');
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
+    throw new Error('case-local stdin snapshot is not lossless UTF-8');
+  }
+  return text;
+}
+
+export async function assertAsmCaseStdinSnapshotCurrent(asmCase: AsmCase): Promise<void> {
+  await readAsmCaseStdinSnapshot(asmCase);
+}
+
+async function readIntegrityFile(
+  file: string,
+  label: string,
+  expected: { bytes: number },
+  maximumBytes: number
+): Promise<Buffer> {
   try {
-    return await fs.promises.readFile(file);
+    return await readBoundedRegularFile(file, {
+      maximumBytes,
+      expectedBytes: expected.bytes,
+      label
+    });
   } catch (error) {
-    throw new Error(`${label} 无法读取：${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `${label} 已偏离 case manifest 或无法有界读取：${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -610,6 +948,147 @@ function sourceIntegrityAssembleFailure(error: unknown): AssembleResult {
     },
     descriptor: LEGACY_MARS_DESCRIPTOR
   };
+}
+
+async function completeReplayRunConfiguration(
+  asmCase: AsmCase & { manifest: AsmCaseManifestV2 },
+  configuration: ManifestRunConfiguration,
+  stopReason: AsmCaseManifestV2['oracle']['stopReason'],
+  resolvedRun: ResolvedEngineRun
+): Promise<ManifestRunConfiguration> {
+  const graphReference = asmCase.manifest.program.sourceGraph;
+  const graph = graphReference
+    ? await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path)
+    : undefined;
+  if (configuration.profile !== resolvedRun.profile) {
+    throw new Error(`requested profile ${configuration.profile} differs from executed profile ${resolvedRun.profile}`);
+  }
+  if (configuration.memoryConfiguration !== resolvedRun.memoryConfiguration) {
+    throw new Error(
+      `requested memory configuration ${configuration.memoryConfiguration} differs from executed ${resolvedRun.memoryConfiguration}`
+    );
+  }
+  const interrupts = [...(configuration.interruptSchedule ?? [])];
+  const probeMetadataDigest = asmCase.manifest.p7?.probe === undefined
+    ? null
+    : sha256Canonical(JSON.parse(JSON.stringify(asmCase.manifest.p7.probe)) as CanonicalJson);
+  const traceLevel = configuration.traceLevel ?? null;
+  const maxSteps = configuration.maxSteps ?? null;
+  const haltPc = configuration.haltPc ?? null;
+  const policyKind = stopReason === 'error' ? 'engine-error' : stopReason === 'unknown' ? 'engine-error' : stopReason;
+  const limits = graph?.limits ?? defaultSourceCaptureLimits;
+  return {
+    ...configuration,
+    interruptSchedule: interrupts,
+    executionOptions: {
+      delayedBranching: ['P5', 'P6', 'P7'].includes(configuration.profile),
+      courseTrace: configuration.courseTrace ?? false,
+      traceOutput: configuration.traceOutput ?? false,
+      traceLevel,
+      p7RiInstruction: resolvedRun.p7RiInstruction
+    },
+    stdin: asmCase.manifest.stdin
+      ? { sha256: asmCase.manifest.stdin.sha256, bytes: asmCase.manifest.stdin.bytes, mode: 'bytes' }
+      : { sha256: null, bytes: 0, mode: 'bytes' },
+    deviceTimeline: {
+      schemaRevision: 1,
+      events: interrupts.map((value) => ({ kind: 'external-interrupt', trigger: 'macro-pc', value })),
+      probeMetadataDigest
+    },
+    cycleContract: {
+      id: configuration.profile === 'P7' ? 'buaa-co-p7-cycle-contract' : 'architectural-commit-v1',
+      revision: 1
+    },
+    stopPolicy: { kind: policyKind, haltPc },
+    haltPolicy: stopReason === 'halt-loop'
+      ? { kind: 'course-self-branch-nop', branchWord: 0x1000ffff, delaySlotWord: 0 }
+      : { kind: 'none', branchWord: null, delaySlotWord: null },
+    stepPolicy: { unit: 'architectural-instruction', limit: maxSteps },
+    seed: asmCase.manifest.metadata?.['source.seed'] ?? null,
+    resourceLimits: {
+      wallClockMs: resolvedRun.wallClockMs,
+      maxSteps,
+      // The production MARS process runner enforces this raw stdout/stderr ceiling before retaining output.
+      maxTraceBytes: maximumReplayTraceBytes,
+      maxSourceBytes: limits.maxBytes,
+      maxIncludeDepth: limits.maxDepth,
+      maxIncludeUnits: limits.maxUnits
+    },
+    runtime: resolvedRun.runtime
+  };
+}
+
+interface SourceBundleManifestFields {
+  graph: NonNullable<AsmCaseManifestV2['program']['sourceGraph']>;
+  artifacts: NonNullable<AsmCaseManifestV2['artifacts']>['source'];
+}
+
+async function sourceBundleManifestFields(
+  captured: CapturedSourceBundle,
+  caseDir: string
+): Promise<SourceBundleManifestFields> {
+  const graphBytes = await readBoundedRegularFile(captured.graphPath, {
+    maximumBytes: maximumReplayManifestBytes,
+    label: 'captured source graph JSON'
+  });
+  const artifacts: Record<string, ManifestArtifactReference> = {
+    graph: snapshotForCaseFile(caseDir, captured.graphPath, graphBytes)
+  };
+  for (const unit of captured.graph.units) {
+    const materialized = path.join(caseDir, ...unit.materializedPath.split('/'));
+    const materializedBytes = await readBoundedRegularFile(materialized, {
+      maximumBytes: maximumReplaySourceBytes,
+      label: `captured source materialization ${unit.id}`
+    });
+    artifacts[`blob/${unit.contentHash}`] = {
+      path: unit.blobPath,
+      sha256: unit.contentHash,
+      bytes: unit.bytes
+    };
+    artifacts[`materialized/${unit.id}`] = snapshotForCaseFile(caseDir, materialized, materializedBytes);
+  }
+  return {
+    graph: snapshotForCaseFile(caseDir, captured.graphPath, graphBytes),
+    artifacts
+  };
+}
+
+function snapshotForCaseFile(caseDir: string, file: string, bytes: Uint8Array): AsmCaseManifestV2['asmSnapshot'] {
+  return {
+    path: path.relative(caseDir, file).split(path.sep).join('/'),
+    sha256: sha256Bytes(bytes),
+    bytes: bytes.byteLength
+  };
+}
+
+async function writeImmutableReplayArtifact(file: string, bytes: Uint8Array): Promise<void> {
+  if (bytes.byteLength > maximumReplayProgramImageBytes) {
+    throw new Error(
+      `immutable replay artifact size ${bytes.byteLength} exceeds the hard limit ${maximumReplayProgramImageBytes}`
+    );
+  }
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  try {
+    const existing = await readBoundedRegularFile(file, {
+      maximumBytes: maximumReplayProgramImageBytes,
+      expectedBytes: bytes.byteLength,
+      label: 'existing immutable replay artifact'
+    });
+    if (!Buffer.from(existing).equals(Buffer.from(bytes))) {
+      throw new Error(`immutable replay artifact collision: ${file}`);
+    }
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const temp = `${file}.tmp-${process.pid}-${randomBytes(8).toString('hex')}`;
+  try {
+    await fs.promises.writeFile(temp, bytes, { flag: 'wx', mode: 0o444 });
+    await fs.promises.rename(temp, file);
+    await fs.promises.chmod(file, 0o444).catch(() => undefined);
+  } finally {
+    await fs.promises.rm(temp, { force: true }).catch(() => undefined);
+  }
 }
 
 function failedEngineStatusFrom(
@@ -654,7 +1133,8 @@ function createV2Manifest(
   asmSnapshot: AsmCaseManifest['asmSnapshot'],
   source: AsmCaseSource,
   stdin: AsmCaseManifest['stdin'],
-  p7: AsmCaseP7Metadata | undefined
+  p7: AsmCaseP7Metadata | undefined,
+  replaySource: SourceBundleManifestFields
 ): AsmCaseManifestV2 {
   const manifest: AsmCaseManifestV2 = {
     version: asmCaseManifestVersion2,
@@ -667,11 +1147,16 @@ function createV2Manifest(
     stdin,
     p7,
     program: {
+      sourceGraph: replaySource.graph,
       assembler: {
         id: LEGACY_MARS_DESCRIPTOR.id,
         build: LEGACY_MARS_DESCRIPTOR.build,
         semanticsRevision: LEGACY_MARS_DESCRIPTOR.semanticsRevision,
-        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision
+        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision,
+        catalogRevision: 1,
+        courseContractRevision: 1,
+        normalizerRevision: 1,
+        eventSchemaRevision: 1
       }
     },
     oracle: {
@@ -679,7 +1164,11 @@ function createV2Manifest(
         id: LEGACY_MARS_DESCRIPTOR.id,
         build: LEGACY_MARS_DESCRIPTOR.build,
         semanticsRevision: LEGACY_MARS_DESCRIPTOR.semanticsRevision,
-        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision
+        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision,
+        catalogRevision: 1,
+        courseContractRevision: 1,
+        normalizerRevision: 1,
+        eventSchemaRevision: 1
       },
       configurationHash: manifestRunConfigurationHash(
         { profile, memoryConfiguration },
@@ -687,7 +1176,8 @@ function createV2Manifest(
       ),
       runConfiguration: { profile, memoryConfiguration },
       stopReason: 'unknown'
-    }
+    },
+    artifacts: { source: replaySource.artifacts }
   };
   return manifest;
 }
@@ -700,13 +1190,22 @@ function manifestEngineInfo(
     id: descriptor.id,
     build: descriptor.build,
     semanticsRevision: descriptor.semanticsRevision,
-    capabilitiesRevision: descriptor.capabilitiesRevision
+    capabilitiesRevision: descriptor.capabilitiesRevision,
+    catalogRevision: 1,
+    courseContractRevision: 1,
+    normalizerRevision: 1,
+    eventSchemaRevision: 1
   };
   if (artifact) {
     info.artifact = {
       sha256: artifact.sha256,
       role: artifact.role,
-      fileName: artifact.fileName
+      fileName: artifact.fileName,
+      dependencies: artifact.dependencies?.map((dependency) => ({
+        sha256: dependency.sha256,
+        role: dependency.role,
+        fileName: dependency.fileName
+      }))
     };
   }
   return info;

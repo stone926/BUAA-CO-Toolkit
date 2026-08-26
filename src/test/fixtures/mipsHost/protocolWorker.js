@@ -10,14 +10,14 @@ function respond(message) {
 }
 
 parentPort.on('message', (raw) => {
-  if (!raw || raw.protocolVersion !== 1) {
+  if (!raw || raw.protocolVersion !== 2) {
     return;
   }
   if (raw.kind === 'cancel') {
     if (wedgedRequests.has(raw.requestId)) {
       return;
     }
-    respond({ protocolVersion: 1, kind: 'result', requestId: raw.requestId, ok: false, error: 'cancelled' });
+    respond({ protocolVersion: 2, kind: 'result', requestId: raw.requestId, ok: false, error: 'cancelled' });
     return;
   }
   const payload = raw.job && raw.job.payload;
@@ -29,7 +29,7 @@ parentPort.on('message', (raw) => {
     return;
   }
   respond({
-    protocolVersion: 1,
+    protocolVersion: 2,
     kind: 'result',
     requestId: raw.requestId,
     ok: true,

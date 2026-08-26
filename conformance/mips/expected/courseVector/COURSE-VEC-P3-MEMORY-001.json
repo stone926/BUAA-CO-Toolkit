@@ -1,0 +1,100 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P3-MEMORY-001",
+  "profile": "P3",
+  "vectorKind": "program-final-state",
+  "source": {
+    "corpusFile": "spec-microprograms/p3-memory.asm",
+    "sha256": "037bb7c823bd0500bb9237ed9d50b43cfc6823a9878a17fc9bd73dcbe287cd88",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P3-ADDR-001",
+      "COURSE-P3-ADDR-002",
+      "COURSE-P3-RESET-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P3-RESET-ADDR-001"
+    ],
+    "note": "Checks first, last, and interior DM words with zero reset state.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "mars-compatible-final-state",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "halt-loop",
+      "minimumHits": 2
+    },
+    "stepLimit": 4096
+  },
+  "expected": {
+    "kind": "final-state",
+    "haltPc": "0x00003024",
+    "haltWord": "0x1000ffff",
+    "gpr": {
+      "8": "0x000000ff",
+      "9": "0x000000ff",
+      "10": "0x000000ff",
+      "11": "0x00005aa5",
+      "12": "0x00005aa5",
+      "13": "0x00000000"
+    },
+    "dm": {
+      "0x00000000": "0x000000ff",
+      "0x00002ffc": "0x000000ff",
+      "0x00001004": "0x00005aa5"
+    },
+    "writes": {
+      "gpr": [
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13"
+      ],
+      "dm": [
+        "0x00000000",
+        "0x00002ffc",
+        "0x00001004"
+      ]
+    }
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "gpr.writes",
+      "dm.writes",
+      "halt.pc",
+      "halt.word"
+    ],
+    "undefinedExcluded": [
+      "hi",
+      "lo",
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "50d071425ef2cb05c0b1ee729300831516826fa2a2ff2306ec228f34feb8f89f"
+  }
+}

@@ -20,6 +20,43 @@
       },
       "additionalProperties": false
     },
+    "decisionProvenance": {
+      "type": "object",
+      "required": ["decisionAuthority", "decidedBy", "decidedAt", "evidenceStatus", "note"],
+      "properties": {
+        "decisionAuthority": { "enum": ["course-contract", "official-component-arbitration", "product-owner"] },
+        "decidedBy": { "type": "string", "minLength": 1 },
+        "decidedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "evidenceStatus": { "enum": ["course-derived", "source-conflict-arbitrated", "out-of-domain-policy"] },
+        "note": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "divergenceReproduction": {
+      "type": "object",
+      "required": ["kind", "file", "profile", "expectedObservation", "verification"],
+      "properties": {
+        "kind": { "enum": ["minimal-repro", "decision-vector"] },
+        "file": { "type": "string", "pattern": "^conformance/mips/" },
+        "profile": { "enum": ["P3", "P4", "P5", "P6", "P7", "P56", "common"] },
+        "expectedObservation": { "type": "string", "minLength": 1 },
+        "verification": {
+          "type": "object",
+          "required": ["kind", "assertions"],
+          "properties": {
+            "kind": { "enum": ["legacy-differential", "course-directed-oracle", "official-rtl"] },
+            "assertions": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "contractEntry": {
       "type": "object",
       "required": ["id", "profile", "domain", "statement", "normativeReference", "status", "revision"],
@@ -67,13 +104,21 @@
           "uniqueItems": true,
           "description": "冻结前必须完成的验证/向量"
         },
+        "scope": { "enum": ["course-normative", "official-component", "product-policy", "mixed"] },
+        "provenance": { "$ref": "#/definitions/decisionProvenance" },
         "revision": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": false
     },
     "divergenceEntry": {
+      "oneOf": [
+        { "$ref": "#/definitions/marsDivergenceEntry" },
+        { "$ref": "#/definitions/sourceConflictDivergenceEntry" }
+      ]
+    },
+    "marsDivergenceEntry": {
       "type": "object",
-      "required": ["id", "category", "domain", "subject", "marsBehavior", "courseBehavior", "pluginHandling", "sources", "revision"],
+      "required": ["id", "category", "domain", "subject", "marsBehavior", "courseBehavior", "pluginHandling", "sources", "reproduction", "revision"],
       "properties": {
         "id": { "type": "string", "pattern": "^MARS-DIV-[A-Z0-9-]+-[0-9]{3}$" },
         "category": { "enum": ["mars-bug", "course-correct", "format-only"] },
@@ -87,6 +132,29 @@
           "items": { "$ref": "#/definitions/normativeReference" },
           "minItems": 1
         },
+        "reproduction": { "$ref": "#/definitions/divergenceReproduction" },
+        "revision": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "sourceConflictDivergenceEntry": {
+      "type": "object",
+      "required": ["id", "category", "domain", "subject", "sourceABehavior", "sourceBBehavior", "resolution", "pluginHandling", "sources", "reproduction", "revision"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^COURSE-DIV-[A-Z0-9-]+-[0-9]{3}$" },
+        "category": { "const": "source-conflict" },
+        "domain": { "enum": ["execution", "device"] },
+        "subject": { "type": "string", "minLength": 1 },
+        "sourceABehavior": { "type": "string", "minLength": 1 },
+        "sourceBBehavior": { "type": "string", "minLength": 1 },
+        "resolution": { "type": "string", "minLength": 1 },
+        "pluginHandling": { "type": "string", "minLength": 1 },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/normativeReference" },
+          "minItems": 2
+        },
+        "reproduction": { "$ref": "#/definitions/divergenceReproduction" },
         "revision": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": false

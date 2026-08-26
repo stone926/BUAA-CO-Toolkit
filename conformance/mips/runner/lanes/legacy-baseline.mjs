@@ -57,7 +57,7 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
     profile: manifestCase.profile,
     maxSteps,
     role: legacyCourseExecutorRole,
-    haltPc: manifestCase.expected.haltPc
+    haltPc: manifestCase.legacyExpected.haltPc
   });
   if (!run.ok) {
     return {
@@ -84,7 +84,7 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
   } catch (error) {
     return { caseId: manifestCase.caseId, lane: 'legacy-baseline', status: 'error', message: error.message };
   }
-  const expected = manifestCase.expected;
+  const expected = manifestCase.legacyExpected;
   if (!haltReached(blocks, expected.haltPc, expected.haltWord) || !nativeCourseHaltReached(run.stdout, expected.haltPc)) {
     return {
       caseId: manifestCase.caseId,

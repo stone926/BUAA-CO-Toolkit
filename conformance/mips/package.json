@@ -2,7 +2,7 @@
   "name": "buaa-co-mips-conformance",
   "version": "0.1.0",
   "private": true,
-  "description": "Independent conformance harness for the BUAA CO MIPS engine migration. Never imports production implementation code; the production TS engine is only invoked through its versioned CLI/JSONL interface (planned for later phases).",
+  "description": "Independent conformance harness for the BUAA CO MIPS engine migration. It never imports production implementation code and invokes the TS engine only through its versioned CLI/JSONL process boundary.",
   "type": "module",
   "scripts": {
     "verify:contracts": "node contract/validate-contracts.mjs",
@@ -10,11 +10,26 @@
     "verify:references": "node reference/download-references.mjs --require-all",
     "verify:regression": "node reference/verify-regression.mjs",
     "verify:dependencies": "node check-dependency-whitelist.mjs",
-    "run": "node runner/run-conformance.mjs",
-    "run:required": "node runner/run-conformance.mjs --lane legacy-baseline --lane course-vector",
+    "verify:decisions": "node decision-vectors/run-decision-vectors.mjs --require-rtl",
+    "verify:isa-golden": "node expected/isaGolden/manage-isa-golden.mjs --verify",
+    "verify:isa-golden:approved": "node expected/isaGolden/manage-isa-golden.mjs --verify --require-approved",
+    "verify:course-vectors": "node expected/courseVector/manage-course-vectors.mjs --verify",
+    "verify:course-vectors:approved": "node expected/courseVector/manage-course-vectors.mjs --verify --require-approved",
+    "verify:corpus-freeze": "node corpus/verify-corpus-freeze.mjs",
+    "verify:ts-cli": "node runner/verify-ts-cli.mjs",
+    "verify:ts-cli:approved": "node runner/verify-ts-cli.mjs --require-approved",
+    "benchmark:fixed": "node bench/fixed-runner-benchmark.mjs",
+    "benchmark:validate": "node bench/validate-fixed-benchmark.mjs",
+    "benchmark:verify-approved": "node bench/verify-approved-baselines.mjs",
+    "run": "npm run run:candidate",
+    "run:candidate": "node runner/run-conformance.mjs --lane legacy-baseline --lane course-vector",
+    "run:formal": "node runner/run-conformance.mjs --formal",
+    "run:required": "npm run run:formal",
     "record:goldens": "node runner/run-conformance.mjs --lane legacy-baseline --record-golden",
     "test": "node --test",
-    "verify": "npm run verify:dependencies && npm run verify:contracts && npm run verify:references && npm run verify:regression && npm test && npm run run:required"
+    "verify:candidate": "npm run verify:dependencies && npm run verify:contracts && npm run verify:decisions && npm run verify:isa-golden && npm run verify:course-vectors && npm run verify:corpus-freeze && npm run verify:references && npm run verify:regression && npm test && npm run run:candidate",
+    "verify:formal": "npm run verify:dependencies && npm run verify:contracts && npm run verify:isa-golden:approved && npm run verify:course-vectors:approved && npm run benchmark:verify-approved && npm run verify:decisions && npm run verify:corpus-freeze && npm run verify:references && npm run verify:regression && npm test && npm run verify:ts-cli:approved && npm run run:formal",
+    "verify": "npm run verify:candidate"
   },
   "engines": {
     "node": ">=20.11"

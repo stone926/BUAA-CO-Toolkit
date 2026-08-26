@@ -58,7 +58,14 @@ export function* iterCpuTraceEvents(text: string): IterableIterator<CpuTraceEven
  * single architectural write event. Modified MARS incorrectly omits the architectural $31 write
  * for a not-taken BGEZAL/BLTZAL, so repair that block to the unconditional MIPS PC+8 link.
  */
-export function* iterMarsDetailedTraceEvents(text: string): IterableIterator<CpuTraceEvent> {
+export function* iterMarsDetailedTraceEvents(
+  text: string,
+  maximumBlockEvents = Number.POSITIVE_INFINITY
+): IterableIterator<CpuTraceEvent> {
+  if (!(maximumBlockEvents === Number.POSITIVE_INFINITY
+    || (Number.isSafeInteger(maximumBlockEvents) && maximumBlockEvents > 0))) {
+    throw new Error('maximumBlockEvents must be a positive safe integer or Infinity');
+  }
   let currentPc: string | undefined;
   let currentWord: number | undefined;
   let currentHeaderLine = 1;
@@ -87,6 +94,9 @@ export function* iterMarsDetailedTraceEvents(text: string): IterableIterator<Cpu
     } else if (currentPc && rawLine.startsWith('\t\t')) {
       const event = parseCpuTraceLine(`@${currentPc}: ${line}`, lineNumber);
       if (event) {
+        if (blockEvents.length >= maximumBlockEvents) {
+          throw new Error(`MARS detailed trace instruction block exceeds the trusted limit ${maximumBlockEvents}`);
+        }
         if (event.kind === 'dm') {
           const previousIndex = latestDmEvent.get(event.target);
           if (previousIndex !== undefined) {

@@ -21,6 +21,7 @@ import { runIsim } from '../verilog';
 import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
+import { normalizePathKey } from '../pathUtils';
 import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from './marsStepLimit';
 import {
   courseMarsOracleCompatibilityError,
@@ -33,6 +34,7 @@ import {
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,
+  readAsmCaseStdinSnapshot,
   readAsmCaseManifestForAsm,
   recordAsmCaseOracleResult,
   updateAsmCaseArtifacts
@@ -97,6 +99,18 @@ export async function runCourseTraceCase(
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
   services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+
+  if (item.asmCase && item.stdin
+    && normalizePathKey(item.stdin.fsPath) !== normalizePathKey(asmCase.manifest.stdin?.originalPath ?? '')) {
+    return failedCase(
+      item,
+      'oracle',
+      '测试中止：已有 ASM case 不能改用另一个标准输入；请创建新 case',
+      undefined,
+      undefined,
+      asmCase
+    );
+  }
 
   const dump = await prepareAsmCaseMachineCode(services, asmCase, {
     showMessages: false,
@@ -177,7 +191,19 @@ export async function runCourseTraceCase(
         ? '检测到 BGEZAL/BLTZAL：MARS 使用逐指令 Trace 修复分支自身遗漏的 $31=PC+8 写回；若稳定版未实际写入，则在显式重写 $31 前拒绝后续读取'
         : '检测到潜在 oracle 初态不兼容或未定义行为：MARS 使用逐指令 Trace，仅在实际执行首次初始化前的 $gp/$sp 读取、DivZero/JalrSame/DoubleDelay 或未定义 HI/LO 读取时拒绝用例');
   }
-  const stdinText = item.stdin ? await readTextFile(item.stdin) : undefined;
+  let stdinText: string | undefined;
+  try {
+    stdinText = await readAsmCaseStdinSnapshot(asmCase);
+  } catch (error) {
+    return failedCase(
+      item,
+      'oracle',
+      error instanceof Error ? error.message : String(error),
+      asmCase.machineCode,
+      undefined,
+      asmCase
+    );
+  }
   const preOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (preOracleSourceIssue) {
     return failedCase(item, 'oracle', preOracleSourceIssue, asmCase.machineCode, undefined, asmCase);
@@ -197,7 +223,6 @@ export async function runCourseTraceCase(
     sourceUri: asmCase.sourceAsm,
     imageRef: { kind: 'mars-dump', machineCodeUri: asmCase.machineCode, haltPc },
     stdin: stdinText,
-    stdinSource: item.stdin,
     traceOutput: true,
     traceLevel: 2,
     maxSteps,
@@ -252,6 +277,7 @@ export async function runCourseTraceCase(
     profile,
     memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
+    traceOutput: true,
     traceLevel: 2,
     maxSteps,
     haltPc,

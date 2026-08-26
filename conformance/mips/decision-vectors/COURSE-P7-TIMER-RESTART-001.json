@@ -1,0 +1,29 @@
+{
+  "schemaRevision": 1,
+  "id": "COURSE-P7-TIMER-RESTART-001",
+  "profile": "P7",
+  "scope": "official-component",
+  "approvedBy": "stone926",
+  "approvedAt": "2026-08-26",
+  "oracle": {
+    "kind": "official-verilog",
+    "rtl": "reference/P7_standard_timer_2019.v",
+    "rtlNormalizedLfSha256": "047ac467b2aba1af73e2a82564706614e4a388fb5ef4ec796bd08d737622176f",
+    "testbench": "timer-restart.tb.v",
+    "localMissingToolPolicy": "unavailable",
+    "ciMissingToolPolicy": "fail"
+  },
+  "snapshots": [
+    { "label": "reset", "state": 0, "ctrl": 0, "preset": 0, "count": 0, "latchedIrq": 0, "irq": 0 },
+    { "label": "write_preset", "state": 0, "ctrl": 0, "preset": 2, "count": 0, "latchedIrq": 0, "irq": 0 },
+    { "label": "write_enable", "state": 0, "ctrl": 9, "preset": 2, "count": 0, "latchedIrq": 0, "irq": 0 },
+    { "label": "initial_load", "state": 1, "ctrl": 9, "preset": 2, "count": 0, "latchedIrq": 0, "irq": 0 },
+    { "label": "initial_count_load", "state": 2, "ctrl": 9, "preset": 2, "count": 2, "latchedIrq": 0, "irq": 0 },
+    { "label": "count_one", "state": 2, "ctrl": 9, "preset": 2, "count": 1, "latchedIrq": 0, "irq": 0 },
+    { "label": "irq_set", "state": 3, "ctrl": 9, "preset": 2, "count": 0, "latchedIrq": 1, "irq": 1 },
+    { "label": "mode0_idle", "state": 0, "ctrl": 8, "preset": 2, "count": 0, "latchedIrq": 1, "irq": 1 },
+    { "label": "restart_write", "state": 0, "ctrl": 9, "preset": 2, "count": 0, "latchedIrq": 1, "irq": 1 },
+    { "label": "restart_load", "state": 1, "ctrl": 9, "preset": 2, "count": 0, "latchedIrq": 0, "irq": 0 },
+    { "label": "restart_count_load", "state": 2, "ctrl": 9, "preset": 2, "count": 2, "latchedIrq": 0, "irq": 0 }
+  ]
+}

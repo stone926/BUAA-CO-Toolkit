@@ -105,6 +105,7 @@
       },
       "co.run.timeoutMs": {
         "type": "number",
+        "minimum": 1,
         "description": "外部工具运行超时时间（毫秒）"
       },
       "co.mips.extraArgs": {

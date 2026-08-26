@@ -1,5 +1,5 @@
 {
-  "schemaRevision": 1,
+  "schemaRevision": 2,
   "entries": [
     {
       "id": "COURSE-P7-ISA-EXT-001",
@@ -26,40 +26,79 @@
       "id": "COURSE-P7-EXC-PRIORITY-001",
       "subject": "同一指令多个内部异常的优先级",
       "question": "同一指令可能产生多个内部异常时，教程未完整给出优先级（如同时取指不对齐与访存越界不可能，但访存对齐错误与加法溢出的次序、IF AdEL 与 RI 的次序等未明文）。",
-      "decision": "pending",
-      "resolution": "倾向方案：取指 AdEL > RI > 内部（访存 AdEL/AdES、Ov、Syscall）按流水级自然顺序流水到 CP0；具体优先级表必须以官方向量和人工审阅的课程契约冻结后写入本条目。",
-      "rationale": "教程只规定中断高于异常、精确异常要求先老后新；同一指令内部多异常未覆盖，不能靠实现顺序偶然定义。",
+      "decision": "frozen",
+      "resolution": "课程明文部分：已使能中断在统一提交点高于当前异常；不同指令并存时按程序年龄，较老指令先提交。产品补全部分：同一受害指令只保留最早检测到的非零异常码，固定阶段次序为 F:AdEL > D:RI/Syscall > E:Ov > M:AdEL/AdES；同阶段互斥源按语义唯一编码，不以 TS 分支顺序仲裁。",
+      "rationale": "教程明确中断优先与精确异常的程序年龄顺序，却没有给出同一指令跨阶段异常码表。L13 英文原则与相邻中文局部选择图存在表述冲突，因此同一受害指令的阶段次序是 stone926 明示接受的产品裁决，而非伪称课程唯一答案。可达集合也不是五类异常的全笛卡尔积：RI 与 syscall 互斥，Ov 与访存异常不属于同一指令。",
       "normativeReference": [
         {
           "source": "cscore/markdown/P7/implement/P7-2-6.md",
           "lines": [115, 115],
           "quote": "优先级：中断优先级高于异常优先级。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-4.md",
+          "lines": [55, 61],
+          "quote": "异常信号应流水到 CP0；较老 sw 的异常必须先于较年轻 j 的异常处理。"
+        },
+        {
+          "source": "cscore/markdown/assets/cscore-assets/L13-MIPS系统结构-V1.pdf",
+          "quote": "物理页 14 的英文规则要求 earlier pipeline stages override later stages；物理页 15 的中文局部异常码选择顺序与其冲突。",
+          "note": "来源冲突由 COURSE-DIV-L13-EXC-PRIORITY-001 记录；PDF 无行号。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-EXC-PRIORITY-001.json",
+          "quote": "独立 directed vectors 覆盖可达的同指令冲突、跨指令年龄顺序与中断覆盖。"
         }
       ],
-      "freezeRequires": [
-        "对每个异常源组合构造 directed vector 并对照官方评测反馈/人工审阅",
-        "覆盖取指 AdEL × RI × 访存异常 × Ov × Syscall 的全部可达组合"
-      ],
-      "revision": 1
+      "freezeRequires": [],
+      "scope": "mixed",
+      "provenance": {
+        "decisionAuthority": "product-owner",
+        "decidedBy": "stone926",
+        "decidedAt": "2026-08-26",
+        "evidenceStatus": "source-conflict-arbitrated",
+        "note": "课程只冻结中断优先和程序年龄；同一受害指令的 F>D>E>M 次序是产品域补全。"
+      },
+      "revision": 2
     },
     {
       "id": "COURSE-P7-CP0-SAME-CYCLE-001",
       "subject": "mtc0 SR/EPC、eret 与 Req 同周期更新的优先级",
       "question": "mtc0 SR/EPC、eret 与 Req 同周期发生时的更新优先级教程未规定；不得让 TS 语句执行顺序偶然定义。",
-      "decision": "pending",
-      "resolution": "倾向方案：Req 优先（进入异常时以异常写入为准），eret 时清 EXL 与跳 EPC 在 mtc0 写之后生效；具体规则必须覆盖 Req×mtc0/eret×delay-slot 的 directed vectors 后冻结。",
-      "rationale": "CP0 在同一流水级被多个事件写入，硬件参考 CP0 端口（en/EXLClr/Req）语义没有给出组合优先级；实现前必须冻结。",
+      "decision": "frozen",
+      "resolution": "固定优先级为 reset > accepted Req > 当前受害指令的 CP0/架构副作用。中断资格始终从该受害指令执行前的 SR 快照计算；若 Req 被接受，当前 victim 的 mtc0、eret 清 EXL、GPR/内存/设备写均被抑制，较老已提交指令不回滚。未接受 Req 时 mtc0 或 eret 各按指令语义执行；eret 清 EXL 并跳旧 EPC，紧随其后的年轻指令不得提交。",
+      "rationale": "精确异常要求受害及年轻指令像未开始，并明确 reset 高于 Req。教程官方域保证 handler 内无中断/异常，所以 eret 与 accepted Req 同周期在官方场景不可达；eret 位于分支延迟槽以及把 mtc0 与 eret 当成同一条指令的笛卡尔组合也不是课程定义域。产品裁决只补全真实可达的时序边界。",
       "normativeReference": [
         {
           "source": "cscore/markdown/P7/implement/P7-2-3.md",
           "lines": [37, 51],
           "quote": "CP0 参考端口：en（写使能）、EXLClr（复位 EXL）、Req（进入处理程序请求）。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-4.md",
+          "lines": [15, 37],
+          "quote": "精确异常要求较老指令完成、受害及年轻指令像未开始；流水寄存器控制优先级为 reset > Req > flush/stall。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-6.md",
+          "lines": [185, 189],
+          "quote": "eret 只在 handler；handler 执行期间保证不出现异常且不会产生中断。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-CP0-SAME-CYCLE-001.json",
+          "quote": "独立状态转移向量覆盖 Req×mtc0、旧 SR 资格、eret 后下一 victim 与年轻副作用抑制。"
         }
       ],
-      "freezeRequires": [
-        "Req × mtc0 SR、Req × mtc0 EPC、eret × mtc0 SR、eret × mtc0 EPC、各组合 × 延迟槽的 directed vectors"
-      ],
-      "revision": 1
+      "freezeRequires": [],
+      "scope": "mixed",
+      "provenance": {
+        "decisionAuthority": "product-owner",
+        "decidedBy": "stone926",
+        "decidedAt": "2026-08-26",
+        "evidenceStatus": "course-derived",
+        "note": "精确异常与 reset>Req 有课程依据；pre-state 中断资格及可达同周期细则由产品冻结。"
+      },
+      "revision": 2
     },
     {
       "id": "COURSE-P7-TIMER-MODE-001",
@@ -81,25 +120,40 @@
       "id": "COURSE-P7-TIMER-RESTART-001",
       "subject": "Mode 0 中断重启时 pending IRQ 的清除时机",
       "question": "PDF 表述 Mode 0 IRQ 持续到 IM 清零，而官方 Verilog 在重新 Enable 后进入 IDLE→LOAD 时也会清 IRQ；测试 Mode 0 restart 前必须冻结采用的行为。",
-      "decision": "pending",
-      "resolution": "倾向方案：以官方 Verilog（P7_standard_timer_2019.v）为准——重新 Enable 进入 LOAD 时清 pending IRQ；PDF 作为补充语义。冻结前须用官方 Verilog cycle vector 验证两种表述在可观测行为上的差异点。",
-      "rationale": "规范优先级中官方下发组件源码（Timer 状态转移）高于 PDF 文字表述；且实际评测使用官方 Verilog。",
+      "decision": "frozen",
+      "resolution": "P7 official-device lane 采用课程组下发的 P7_standard_timer_2019.v：Mode 0 到达 INT 后 CTRL.EN 自动清零而 _IRQ 保持；软件重新写 EN=1 时该周期仍保持 IRQ，随后第一个非 WE 上升沿执行 IDLE→LOAD 并清 _IRQ/IRQ。",
+      "rationale": "Timer PDF 物理页 4（印刷页 3）写明 Mode 0 中断保持到 IM 清零，官方 RTL 却在重新启动的 IDLE→LOAD 清 _IRQ。两者可观测冲突，不能描述成一致。P7-2-1 明确 Timer 是课程组提供的实现代码，因此 official-device lane 对该局部问题仲裁为官方 RTL；独立向量必须直接编译 vendored byte-identified RTL，而不是用 TS 模型自证。",
       "normativeReference": [
         {
           "source": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
-          "lines": [62, 84],
-          "quote": "重新 Enable 后 IDLE→LOAD 路径清 IRQ（见状态机 case）。"
+          "lines": [62, 65],
+          "quote": "IDLE 且 ctrl[0] 为 1 时进入 LOAD，并执行 _IRQ <= 1'b0。"
         },
         {
           "source": "cscore/markdown/assets/cscore-assets/COCO定时器设计规范-1.0.0.4.pdf",
-          "quote": "Mode 0 IRQ 持续到 IM 清零的表述。"
+          "quote": "Mode 0 IRQ 持续到 IM 清零的表述。",
+          "note": "物理页 4（印刷页 3）；与官方 RTL 冲突，见 COURSE-DIV-TIMER-RESTART-001。"
+        },
+        {
+          "source": "cscore/markdown/P7/implement/P7-2-1.md",
+          "lines": [9, 9],
+          "quote": "计时器由课程组提供实现代码，只需要结合代码和文档理解应用。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-TIMER-RESTART-001.json",
+          "quote": "Mode 0 restart cycle snapshots 由独立 runner 直接驱动官方 Verilog。"
         }
       ],
-      "freezeRequires": [
-        "对照官方 Verilog 的 Mode 0 restart cycle vector",
-        "确认 PDF 表述与 Verilog 的可观测差异场景并记录裁决"
-      ],
-      "revision": 1
+      "freezeRequires": [],
+      "scope": "official-component",
+      "provenance": {
+        "decisionAuthority": "official-component-arbitration",
+        "decidedBy": "stone926",
+        "decidedAt": "2026-08-26",
+        "evidenceStatus": "source-conflict-arbitrated",
+        "note": "仅仲裁官方 Timer device lane；不把 PDF 文字改写成与 RTL 一致。CI 必须安装 Icarus 并直接运行 RTL 向量。"
+      },
+      "revision": 2
     },
     {
       "id": "COURSE-COMMON-REFERENCE-001",
@@ -183,20 +237,35 @@
       "id": "COURSE-P7-UNLOADED-IM-001",
       "subject": "合法 IM 范围内但 ProgramImage 未加载 word 的执行行为",
       "question": "运行期 PC 落在合法 IM（0x3000..0x6ffc）但 ProgramImage 未提供该 word 时，是 zero-fill 还是 out-of-domain。",
-      "decision": "pending",
-      "resolution": "倾向方案：执行器确定化为 zero-fill（0x00000000=nop）并继续，但 case classification 将『实际执行到未加载 word』标记为 out-of-domain（官方场景保证不发生）；在阶段 2 实现执行核心前用 directed vector 冻结。",
-      "rationale": "官方场景不跳转到未加载 word（P7-2-6），但架构上合法 IM 内缺失 word 不是 AdEL；零填充可确定化且与硬件 ROM 未初始化行为一致，out-of-domain 标记防止把该行为当 strict golden。",
+      "decision": "frozen",
+      "resolution": "strict course lane 中，PC 若字对齐且位于 0x3000..0x6ffc、但 ProgramImage 不含该 word，立即以 out-of-domain 原因 unloaded-instruction 停止该 case；不得产生 AdEL，也不得合成 0x00000000/nop 后继续。只有调用者显式选择 exploratory synthetic-zero-fill policy 时才允许零填充，并且结果必须标记 synthetic、不得作为 strict golden。",
+      "rationale": "教程明确排除跳到未加载指令的官方测试，却没有定义缺失 ROM word 的值；官方示例 TB 的 inst 寄存器/$readmemh 也未提供缺失 word 为零的保证。因此 zero-fill 不是课程规范，更不能以“硬件 ROM 未初始化即为零”论证。此处是 stone926 对教程域外输入的产品策略。",
       "normativeReference": [
         {
           "source": "cscore/markdown/P7/implement/P7-2-6.md",
           "lines": [184, 184],
           "quote": "测试时不会出现跳转到未加载指令的位置的情况。"
+        },
+        {
+          "source": "cscore/markdown/P7/assets/tb_interrupt_demo.v",
+          "lines": [67, 75],
+          "quote": "示例 testbench 声明未初始化的 reg inst 并使用 $readmemh；没有规定缺失 word 的零填充值。"
+        },
+        {
+          "source": "extension/conformance/mips/decision-vectors/COURSE-P7-UNLOADED-IM-001.json",
+          "quote": "strict 与显式 exploratory policy 的 directed vectors。"
         }
       ],
-      "freezeRequires": [
-        "阶段 2 执行核心实现前的 directed vector（未加载 word 执行/访问）"
-      ],
-      "revision": 1
+      "freezeRequires": [],
+      "scope": "product-policy",
+      "provenance": {
+        "decisionAuthority": "product-owner",
+        "decidedBy": "stone926",
+        "decidedAt": "2026-08-26",
+        "evidenceStatus": "out-of-domain-policy",
+        "note": "教程明确排除该输入但不定义值；strict fail-closed 与 opt-in synthetic zero-fill 均是产品策略。"
+      },
+      "revision": 2
     }
   ]
 }

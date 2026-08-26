@@ -1,0 +1,41 @@
+{
+  "schemaRevision": 1,
+  "runnerRevision": 1,
+  "description": "Phase-0 decision vectors. Non-RTL vectors use an independent, deliberately small policy evaluator; the Timer vector compiles the exact official RTL snapshot.",
+  "sourceFingerprints": {
+    "officialTimerRtlNormalizedLfSha256": "047ac467b2aba1af73e2a82564706614e4a388fb5ef4ec796bd08d737622176f",
+    "officialTimerRtlOrigin": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+    "timerPdfSha256": "4b130246c869f2520285ff9ea55a3b8e2732c6e2df58a9984abc8da8a931c39e",
+    "l13PdfSha256": "644f14124f5e9b172a54fdfe8023d1da8887517efac405e6c004890c59103c80"
+  },
+  "vectors": [
+    {
+      "id": "COURSE-P7-EXC-PRIORITY-001",
+      "file": "COURSE-P7-EXC-PRIORITY-001.json",
+      "normalizedLfSha256": "78e13d93afaeb2dcaea7b8ef7125b42b62ff7aee88aa39c1d37c68e4fd620cd3",
+      "kind": "exception-priority",
+      "evidence": "course-directed-oracle"
+    },
+    {
+      "id": "COURSE-P7-CP0-SAME-CYCLE-001",
+      "file": "COURSE-P7-CP0-SAME-CYCLE-001.json",
+      "normalizedLfSha256": "4f770353fe97b26347e2c5834a54271305c7f70f88b151f883870eee3548ed0b",
+      "kind": "cp0-same-cycle",
+      "evidence": "course-directed-oracle"
+    },
+    {
+      "id": "COURSE-P7-TIMER-RESTART-001",
+      "file": "COURSE-P7-TIMER-RESTART-001.json",
+      "normalizedLfSha256": "7b803e41f583429ef82b65a23f31a8418ecf396116a7b7c7a421265ff2001cc2",
+      "kind": "official-timer-rtl",
+      "evidence": "official-rtl"
+    },
+    {
+      "id": "COURSE-P7-UNLOADED-IM-001",
+      "file": "COURSE-P7-UNLOADED-IM-001.json",
+      "normalizedLfSha256": "6961f493c1f93fb5cacd04f2ee01b08969a39904b041664938273011a560d079",
+      "kind": "unloaded-im-policy",
+      "evidence": "product-directed-oracle"
+    }
+  ]
+}

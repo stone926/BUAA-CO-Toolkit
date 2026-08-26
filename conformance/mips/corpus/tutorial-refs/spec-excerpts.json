@@ -1,0 +1,98 @@
+{
+  "schemaRevision": 1,
+  "description": "Reviewable excerpts used to derive courseVector expected data. Paths are normative locators, not runtime dependencies; hashes cover the exact checked-in excerpt text.",
+  "sources": [
+    {
+      "id": "COURSE-SOURCE-P3-RESET-ADDR-001",
+      "path": "cscore/markdown/P3/P3-1.md",
+      "lines": [
+        1,
+        1
+      ],
+      "excerpt": "P3 course CPU vectors use PC=0x00003000, zeroed GPR/DM reset state, and the course IM/DM address ranges frozen by COURSE-P3-RESET-001 and COURSE-P3-ADDR-001/002.",
+      "excerptSha256": "1eb785d60564f318b520cfe8f6c70ee10b9acf38f4f8f6c3c02542e4f75d9c1a",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P4-NO-DELAY-001",
+      "path": "cscore/markdown/P4/P4-1.md",
+      "lines": [
+        42,
+        45
+      ],
+      "excerpt": "处理器为 32 位单周期处理器，不考虑延迟槽，应支持的指令集为： add, sub, ori, lw, sw, beq, lui, jal, jr, nop。add, sub 按无符号加减法处理（不考虑溢出）。",
+      "excerptSha256": "cf665f7543041731e25933999b6058537027196153cd3a71fa1c702a6816e232",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P5-DELAY-LINK-001",
+      "path": "cscore/markdown/P5/project/P5-5-1.md",
+      "lines": [
+        13,
+        21
+      ],
+      "excerpt": "处理器应支持 add, sub, ori, lw, sw, beq, lui, jal, jr, nop。对于 b 类和 j 类指令，流水线设计必须支持延迟槽，因此设计需要注意使用 PC@D + 8 或 PC@I + 4。",
+      "excerptSha256": "30a44377f7337a5319e7c65402b9679230bb8fd949293a128cd9f2960fa16b0e",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P6-BYTE-MDU-001",
+      "path": "cscore/markdown/P6/P6-1.md; cscore/markdown/P6/P6-4.md",
+      "lines": [
+        13,
+        26
+      ],
+      "excerpt": "P6 adds lb, lh, sb, sh and mult, multu, div, divu, mfhi, mflo, mthi, mtlo. Byte enables map address lanes 00/01/10/11 to 0001/0010/0100/1000; lb/lh sign-extend the selected byte/halfword.",
+      "excerptSha256": "1c00b1846707a4b1039915de802b575ffe70411c1f7743689f2f46f2c2cfd9e0",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P7-CP0-001",
+      "path": "cscore/markdown/P7/implement/P7-2-3.md; cscore/markdown/P7/implement/P7-2-6.md",
+      "lines": [
+        12,
+        31
+      ],
+      "excerpt": "CP0 implements SR(12), Cause(13), EPC(14). SR fields are IM[15:10], EXL[1], IE[0]; Cause fields are BD[31], IP[15:10], ExcCode[6:2]. CP0 reset and unimplemented bits are zero, requests set EXL, and eret clears EXL.",
+      "excerptSha256": "09c7fbbda777600438548c783c0df96d14be2c8bf04082118c085ebe6140a3f0",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P7-EXCEPTION-001",
+      "path": "cscore/markdown/P7/implement/P7-2-4.md; cscore/markdown/P7/implement/P7-2-6.md",
+      "lines": [
+        15,
+        70
+      ],
+      "excerpt": "A precise exception commits all older instructions and no victim/younger architectural effects. EPC is victim PC, or victim PC-4 with BD set for a delay-slot victim. P7 ExcCode includes Int=0, AdEL=4, AdES=5, Syscall=8, RI=10, Ov=12.",
+      "excerptSha256": "d0a978e218b7679743420cdacd7d3e224a017599ac052ceed9e73a19ed9cc849",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P7-TIMER-RTL-001",
+      "path": "cscore/markdown/assets/cscore-assets/P7_standard_timer_2019.v",
+      "lines": [
+        1,
+        75
+      ],
+      "excerpt": "Official Timer state machine: IDLE observes CTRL.enable, LOAD copies PRESET to COUNT, CNT decrements until COUNT<=1 then enters INT and raises the internal IRQ latch, and INT returns to IDLE according to CTRL mode. A write has priority over the state transition for that edge.",
+      "excerptSha256": "b652c92f02fef96aebff9ec37d2f80e935b8c27d68f788eb69d7ed6d4147d76b",
+      "sourceRevision": 1
+    },
+    {
+      "id": "COURSE-SOURCE-P7-IRQ-001",
+      "path": "cscore/markdown/P7/implement/P7-2-2.md; cscore/markdown/P7/assets/tb_interrupt_demo.v",
+      "lines": [
+        13,
+        25
+      ],
+      "excerpt": "The external interrupt stays asserted until the system responds. Any enabled store to the word-aligned response address 0x00007f20 acknowledges it; Timer0, Timer1, and the external generator connect to HWInt[0], HWInt[1], and HWInt[2].",
+      "excerptSha256": "17526414cbe1aa80d8eacc174ef8c94ab3e91a5d5be3400bac4e368f7ad04d1c",
+      "sourceRevision": 1
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "sourcesSha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  }
+}

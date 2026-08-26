@@ -1,6 +1,7 @@
 // @index mips-host — WorkerClient：host 侧消息往返、取消与崩溃恢复
 import {
   isWorkerOutboundMessage,
+  WorkerAckMessage,
   WorkerCancelMessage,
   WorkerJob,
   WorkerOutboundMessage,
@@ -29,7 +30,15 @@ export interface WorkerClientRequest {
   jobId: string;
   promise: Promise<WorkerOutboundMessage>;
   settle: (message: WorkerOutboundMessage) => void;
-  onProgress?: (batch: unknown[]) => void;
+  onProgress?: (batch: unknown[]) => void | Promise<void>;
+  /** Next progress sequence accepted from this worker generation. */
+  expectedProgressSequence: number;
+  /** True while the consumer is still applying the current progress batch. */
+  progressInFlight: boolean;
+  /** Set before posting cancel so even a synchronous terminal response observes it. */
+  cancelRequested: boolean;
+  /** Consumer failures override the worker's subsequent cancelled terminal result. */
+  terminalFailure?: WorkerOutboundMessage;
   signal?: AbortSignal;
   abortListener?: () => void;
   cancelTimer?: NodeJS.Timeout;
@@ -73,7 +82,7 @@ export class WorkerClient {
   /** Start a job. Resolves exactly once; rejections come only from worker death. */
   async start(
     job: WorkerJob,
-    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void } = {}
+    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void | Promise<void> } = {}
   ): Promise<WorkerOutboundMessage> {
     const requestId = `req-${this.requestCounter++}`;
     const jobId = `job-${requestId}`;
@@ -94,6 +103,9 @@ export class WorkerClient {
       promise,
       settle,
       onProgress: options.onProgress,
+      expectedProgressSequence: 0,
+      progressInFlight: false,
+      cancelRequested: false,
       signal: options.signal
     };
     this.pending.set(requestId, entry);
@@ -128,9 +140,10 @@ export class WorkerClient {
     if (!entry || !this.worker) {
       return;
     }
-    if (entry.cancelTimer) {
+    if (entry.cancelRequested) {
       return;
     }
+    entry.cancelRequested = true;
     const message: WorkerCancelMessage = {
       protocolVersion: workerProtocolVersion,
       kind: 'cancel',
@@ -169,18 +182,58 @@ export class WorkerClient {
       if (!entry) {
         return;
       }
-      try {
-        entry.onProgress?.(raw.batch);
-      } catch {
-        // A UI/progress consumer must not corrupt the worker protocol lifecycle.
+      if (entry.progressInFlight || raw.sequence !== entry.expectedProgressSequence) {
+        const detail = entry.progressInFlight
+          ? `received progress sequence ${raw.sequence} before sequence ${entry.expectedProgressSequence} was acknowledged`
+          : `expected progress sequence ${entry.expectedProgressSequence}, received ${raw.sequence}`;
+        this.disposeWorker(`worker protocol violation: ${detail}`);
+        return;
       }
+      const worker = this.worker;
+      entry.progressInFlight = true;
+      void (async () => {
+        try {
+          await entry.onProgress?.(raw.batch);
+        } catch (error) {
+          this.failProgressConsumer(entry, error);
+          return;
+        }
+        if (!worker
+          || this.worker !== worker
+          || this.pending.get(raw.requestId) !== entry
+          || entry.cancelRequested
+          || entry.terminalFailure) {
+          return;
+        }
+        entry.progressInFlight = false;
+        entry.expectedProgressSequence++;
+        const ack: WorkerAckMessage = {
+          protocolVersion: workerProtocolVersion,
+          kind: 'ack',
+          requestId: raw.requestId,
+          sequence: raw.sequence
+        };
+        try {
+          worker.postMessage(ack);
+        } catch (error) {
+          this.disposeWorker(error instanceof Error ? error.message : String(error));
+        }
+      })();
       return;
     }
     const entry = this.pending.get(raw.requestId);
     if (!entry) {
       return;
     }
-    this.settleEntry(entry, raw);
+    if (entry.progressInFlight
+      && !entry.terminalFailure
+      && !(entry.cancelRequested && !raw.ok && raw.cancelled === true)) {
+      this.disposeWorker(
+        `worker protocol violation: terminal result arrived before progress sequence ${entry.expectedProgressSequence} was acknowledged`
+      );
+      return;
+    }
+    this.settleEntry(entry, entry.terminalFailure ?? raw);
   }
 
   /** Force-stop the worker; every pending request settles with an error result. */
@@ -203,7 +256,8 @@ export class WorkerClient {
     for (const entry of [...this.pending.values()]) {
       this.settleEntry(
         entry,
-        entry.cancelTimer
+        entry.terminalFailure
+          ?? (entry.cancelRequested
           ? cancelledResult(entry.requestId, reason)
           : {
             protocolVersion: workerProtocolVersion,
@@ -211,7 +265,7 @@ export class WorkerClient {
             requestId: entry.requestId,
             ok: false,
             error: reason
-          }
+          })
       );
     }
     try {
@@ -238,6 +292,17 @@ export class WorkerClient {
     }
     entry.settle(message);
   }
+
+  private failProgressConsumer(entry: WorkerClientRequest, error: unknown): void {
+    if (this.pending.get(entry.requestId) !== entry || entry.terminalFailure) {
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    entry.terminalFailure = failedResult(entry.requestId, `progress consumer failed: ${detail}`);
+    // Do not ACK a batch that was not consumed. Cancelling releases the worker's ACK wait;
+    // its cancelled terminal result is then replaced with the consumer failure above.
+    this.cancel(entry.requestId);
+  }
 }
 
 function cancelledResult(requestId: string, error: string): WorkerOutboundMessage {
@@ -248,5 +313,15 @@ function cancelledResult(requestId: string, error: string): WorkerOutboundMessag
     ok: false,
     error,
     cancelled: true
+  };
+}
+
+function failedResult(requestId: string, error: string): WorkerOutboundMessage {
+  return {
+    protocolVersion: workerProtocolVersion,
+    kind: 'result',
+    requestId,
+    ok: false,
+    error
   };
 }

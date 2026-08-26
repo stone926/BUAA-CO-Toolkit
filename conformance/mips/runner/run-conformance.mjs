@@ -22,7 +22,7 @@ function nextValue(argv, index, flag) {
 }
 
 function parseArgs(argv) {
-  const options = { lanes: new Set(), filter: undefined, maxSteps: undefined, recordGolden: false };
+  const options = { lanes: new Set(), filter: undefined, maxSteps: undefined, recordGolden: false, formal: false };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--lane') {
@@ -40,6 +40,9 @@ function parseArgs(argv) {
       index++;
     } else if (arg === '--record-golden') {
       options.recordGolden = true;
+    } else if (arg === '--formal') {
+      if (options.formal) throw new Error('--formal may appear only once');
+      options.formal = true;
     } else {
       throw new Error(`unknown argument: ${arg}`);
     }
@@ -57,6 +60,16 @@ function parseArgs(argv) {
   if (options.recordGolden && (options.lanes.size !== 1 || !options.lanes.has('legacy-baseline'))) {
     throw new Error('--record-golden requires exactly --lane legacy-baseline');
   }
+  if (options.formal) {
+    const selected = [...options.lanes].sort();
+    const required = [...defaultRequiredLanes].sort();
+    if (JSON.stringify(selected) !== JSON.stringify(required)) {
+      throw new Error(`--formal requires exactly the complete lane set: ${required.join(', ')}`);
+    }
+    if (options.filter !== undefined || options.maxSteps !== undefined || options.recordGolden) {
+      throw new Error('--formal forbids --filter, --max-steps, and --record-golden');
+    }
+  }
   return options;
 }
 
@@ -69,14 +82,18 @@ function main() {
   let manifest;
   try {
     options = parseArgs(process.argv.slice(2));
-    manifest = loadCorpusManifest();
+    manifest = loadCorpusManifest({ requireApprovedCourseVectors: options.formal });
   } catch (error) {
     process.stderr.write(`Conformance configuration error: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;
     return;
   }
 
-  const runnerOptions = { maxSteps: options.maxSteps, recordGolden: options.recordGolden };
+  const runnerOptions = {
+    maxSteps: options.maxSteps,
+    recordGolden: options.recordGolden,
+    requireApprovedCourseVectors: options.formal
+  };
   const counts = { passed: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
   const perLane = Object.fromEntries([...options.lanes].map((lane) => [lane, emptyLaneCounts()]));
 
@@ -133,8 +150,9 @@ function main() {
   }
   process.stdout.write(`${JSON.stringify({
     type: 'summary',
+    gate: options.formal ? 'formal-required' : 'candidate',
     lanes: [...options.lanes].sort(),
-    required: true,
+    required: options.formal,
     perLane,
     ...counts
   })}\n`);

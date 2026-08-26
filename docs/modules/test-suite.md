@@ -1,4 +1,4 @@
-# test-suite | src/test/ | ~70 files | 框架: Vitest
+# test-suite | src/test/ | 159 files | 框架: Vitest
 
 单元/集成测试, 镜像src/结构. npm test = vitest run. 以下为<name>.test.ts
 
@@ -21,7 +21,13 @@ test/language/logisim/:
   service, rom, realProjectPatterns
 
 test/courseTesting/:
-  builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, logisimPrep, logisimTrace, continuous
+  builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous
+
+test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsReplay/:
+  ISA catalog/encode/decode golden；有界 JSONL CLI；Worker protocol v2、从 0 连续 sequence、consumer 成功后 ACK、slice 取消与 crash generation；provider preflight immutable request/launch；source graph、ProgramImage、engine trust registry、exact replay/re-evaluate、真实 MARS 可选集成
+
+进程/兼容证据:
+  processCore 覆盖 stdout/stderr raw-byte cap、UTF-8 chunk boundary、timeout/abort 与子孙进程树；`test-cli` 的 legacy-equivalence runner 在 detached provider 迁移前父提交 `044bab0` 与当前 provider 路径间比较 machine code、trace、verdict、halt PC
 
 fixtures:
   syntaxFixtures — fixture测试运行器

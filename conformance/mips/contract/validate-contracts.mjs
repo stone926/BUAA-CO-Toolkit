@@ -242,6 +242,45 @@ for (let index = 0; index < decisionEntries.length; index += 1) {
   }
 }
 
+const productFrozenDecisionIds = new Set([
+  'COURSE-P7-EXC-PRIORITY-001',
+  'COURSE-P7-CP0-SAME-CYCLE-001',
+  'COURSE-P7-TIMER-RESTART-001',
+  'COURSE-P7-UNLOADED-IM-001'
+]);
+for (const id of productFrozenDecisionIds) {
+  const index = decisionEntries.findIndex((entry) => entry?.id === id);
+  check(index >= 0, `decisions.json: missing required Phase-0 decision ${id}`);
+  if (index < 0) continue;
+  const entry = decisionEntries[index];
+  check(entry.decision === 'frozen', `decisions.json.entries[${index}]: ${id} must be frozen`);
+  check(typeof entry.scope === 'string', `decisions.json.entries[${index}]: ${id} must declare scope`);
+  check(entry.provenance?.decidedBy === 'stone926', `decisions.json.entries[${index}]: ${id} must record stone926 as decision owner`);
+  check(entry.provenance?.decidedAt === '2026-08-26', `decisions.json.entries[${index}]: ${id} must record the 2026-08-26 approval date`);
+  check(
+    entry.normativeReference?.some((reference) => reference.source === `extension/conformance/mips/decision-vectors/${id}.json`),
+    `decisions.json.entries[${index}]: ${id} must reference its independent decision-vector artifact`
+  );
+}
+
+const extensionRoot = path.resolve(here, '..', '..', '..');
+for (let index = 0; index < divergenceEntries.length; index += 1) {
+  const reproduction = divergenceEntries[index]?.reproduction;
+  if (!reproduction || typeof reproduction.file !== 'string') continue;
+  const reproductionPath = path.resolve(extensionRoot, reproduction.file);
+  const relative = path.relative(extensionRoot, reproductionPath);
+  const contained = relative.length > 0 && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+  check(contained, `divergences.json.entries[${index}].reproduction.file: ${reproduction.file} escapes extension root`);
+  if (!contained) continue;
+  check(fs.existsSync(reproductionPath), `divergences.json.entries[${index}].reproduction.file: ${reproduction.file} does not exist`);
+  if (!fs.existsSync(reproductionPath)) continue;
+  try {
+    check(fs.statSync(reproductionPath).isFile(), `divergences.json.entries[${index}].reproduction.file: ${reproduction.file} is not a file`);
+  } catch (error) {
+    violations.push(`divergences.json.entries[${index}].reproduction.file: cannot stat ${reproduction.file}: ${error.message}`);
+  }
+}
+
 // Evidence gates: schema validates all fields; these checks freeze revision-1
 // semantic structure, positive thresholds, coverage bins and fingerprints.
 const evidenceSpecifications = {

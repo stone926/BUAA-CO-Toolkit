@@ -61,6 +61,7 @@ vi.mock('../../config', () => ({
   getMemoryConfiguration: vi.fn(() => runnerState.profile === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText'),
   getMipsExtraArgs: vi.fn(() => []),
   getProfile: vi.fn(() => runnerState.profile),
+  getRunTimeout: vi.fn(() => 30_000),
   useDelayedBranching: vi.fn(() => runnerState.profile === 'P5' || runnerState.profile === 'P6' || runnerState.profile === 'P7')
 }));
 
@@ -73,7 +74,9 @@ vi.mock('../../process', () => ({
 import * as vscode from 'vscode';
 import { runMarsFile } from '../../mips';
 import { runTool } from '../../process';
+import { getProfile, getRunTimeout } from '../../config';
 import { courseDataDumpChunkWordCount } from '../../courseTesting/courseDataInitialization';
+import { maximumReplayTraceBytes } from '../../mips/replay/boundedFile';
 
 const zeroChunk = '00000000\n'.repeat(courseDataDumpChunkWordCount);
 const courseTextRange = '0x00003000-0x00006ffc';
@@ -153,9 +156,13 @@ describe('runMarsFile course DM initialization preflight', () => {
     expect(output?.result.ok).toBe(true);
   });
 
-  it('rejects output when the configured MARS artifact changes during the run', async () => {
+  it('runs only the captured registry artifact when the configured JAR changes during the run', async () => {
     const expectedSha256 = crypto.createHash('sha256').update('pinned-mars-a').digest('hex');
+    let executedJar = '';
+    let executedJarBytes = '';
     vi.mocked(runTool).mockImplementation(async (_command, args) => {
+      executedJar = args[1];
+      executedJarBytes = fs.readFileSync(executedJar, 'utf8');
       const dumps = dumpTriples(args);
       fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
       for (const dump of dumps.filter((item) => item.range !== courseTextRange)) {
@@ -167,9 +174,59 @@ describe('runMarsFile course DM initialization preflight', () => {
 
     const output = await runCourseDump();
 
-    expect(output?.result.ok).toBe(false);
-    expect(output?.result.stderr).toMatch(/artifact 在运行期间发生变化/);
+    expect(output?.result.ok).toBe(true);
     expect(output?.engineArtifact?.sha256).toBe(expectedSha256);
+    expect(executedJar).not.toBe(runnerState.marsJar);
+    expect(executedJarBytes).toBe('pinned-mars-a');
+    expect(executedJar).not.toContain(path.join('.co', 'engine-registry'));
+    expect(path.basename(path.dirname(path.dirname(executedJar)))).toMatch(/^co-mars-engine-/);
+    expect(fs.existsSync(executedJar)).toBe(false);
+  });
+
+  it('stages both the P7 JAR and RI class in one private directory and cleans them', async () => {
+    runnerState.profile = 'P7';
+    const stagedJars: string[] = [];
+    const stagedClasses: string[] = [];
+    vi.mocked(runTool).mockImplementation(async (_command, args) => {
+      expect(args[0]).toBe('-cp');
+      const [stagedJar, classDir] = args[1].split(path.delimiter);
+      const className = args[args.indexOf('cl') + 1];
+      const stagedClass = path.join(classDir, className);
+      expect(fs.readFileSync(stagedJar, 'utf8')).toBe('pinned-mars-a');
+      expect(fs.statSync(stagedClass).isFile()).toBe(true);
+      stagedJars.push(stagedJar);
+      stagedClasses.push(stagedClass);
+
+      const dumps = dumpTriples(args);
+      const userText = dumps.find((dump) => dump.range === p7UserTextRange);
+      if (userText) {
+        fs.writeFileSync(userText.file, '1000ffff\n00000000\n');
+      }
+      const kernelText = dumps.find((dump) => dump.range === p7KernelTextRange);
+      if (kernelText) {
+        fs.writeFileSync(kernelText.file, '34010001\n');
+      }
+      return successResult();
+    });
+
+    const output = await runMarsFile(
+      testServices(),
+      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
+      'dumpText',
+      { courseTrace: true, p7RiInstruction: true, showMessages: false, revealOutput: false }
+    );
+
+    expect(output?.result.ok).toBe(true);
+    expect(output?.engineArtifact?.dependencies).toMatchObject([
+      { role: 'mars-p7-ri-instruction-class', fileName: '_co_internal_unknown_instruction.class' }
+    ]);
+    expect(stagedJars).toHaveLength(2);
+    expect(new Set(stagedJars).size).toBe(1);
+    expect(new Set(stagedClasses).size).toBe(1);
+    expect(stagedJars[0]).not.toContain(path.join('.co', 'engine-registry'));
+    expect(stagedClasses[0]).not.toContain(path.join('.co', 'engine-registry'));
+    expect(fs.existsSync(stagedJars[0])).toBe(false);
+    expect(fs.existsSync(stagedClasses[0])).toBe(false);
   });
 
   it('rejects the first nonzero initialized word and still cleans the dump directory', async () => {
@@ -261,6 +318,25 @@ describe('runMarsFile course DM initialization preflight', () => {
     expect(merged[1]).toBe('00000000');
     expect(merged[2]).toBe('00000000');
     expect(merged.at(-1)).toBe('34010001');
+  });
+
+  it('uses one immutable preflight snapshot for both P7 dump subprocesses', async () => {
+    mockP7KernelDump({ kernelText: '34010001\n' });
+
+    const output = await runCourseDump();
+
+    expect(output?.result.ok).toBe(true);
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(getProfile).toHaveBeenCalledTimes(1);
+    expect(getRunTimeout).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runTool).mock.calls[0][2].timeoutMs).toBe(30_000);
+    expect(vi.mocked(runTool).mock.calls[1][2].timeoutMs).toBe(30_000);
+    for (const call of vi.mocked(runTool).mock.calls) {
+      expect(call[2]).toMatchObject({
+        maxStdoutBytes: maximumReplayTraceBytes,
+        maxStderrBytes: maximumReplayTraceBytes
+      });
+    }
   });
 
   it('preserves ordinary dump exception behavior outside course preflight', async () => {

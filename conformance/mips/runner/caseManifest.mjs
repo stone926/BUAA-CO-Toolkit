@@ -3,6 +3,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadCourseVector } from './courseVectorArtifact.mjs';
 
 const runnerRoot = path.dirname(fileURLToPath(import.meta.url));
 const corpusRoot = path.resolve(runnerRoot, '..', 'corpus');
@@ -70,8 +71,18 @@ function validateWriteSet(writes, expected, context) {
   }
 }
 
+function validateExpected(expected, context) {
+  assert(isPlainObject(expected), `${context} must be an object`);
+  assertOnlyKeys(expected, ['haltPc', 'haltWord', 'gpr', 'dm', 'writes'], context);
+  assert(hex32Pattern.test(expected.haltPc), `${context}.haltPc must be a 32-bit hex address`);
+  assert(hex32Pattern.test(expected.haltWord), `${context}.haltWord must be a 32-bit hex word`);
+  validateRegisterMap(expected.gpr, `${context}.gpr`);
+  validateMemoryMap(expected.dm, `${context}.dm`);
+  validateWriteSet(expected.writes, expected, context);
+}
+
 export function validateCorpusManifest(manifest) {
-  assert(isPlainObject(manifest) && manifest.schemaRevision === 1, 'schemaRevision must be 1');
+  assert(isPlainObject(manifest) && manifest.schemaRevision === 2, 'schemaRevision must be 2');
   assertOnlyKeys(manifest, ['schemaRevision', 'description', 'cases'], 'root');
   assert(typeof manifest.description === 'string' && manifest.description.length > 0, 'description must be non-empty');
   assert(Array.isArray(manifest.cases) && manifest.cases.length > 0, 'cases must be a non-empty array');
@@ -80,7 +91,7 @@ export function validateCorpusManifest(manifest) {
   for (const [index, manifestCase] of manifest.cases.entries()) {
     const context = `cases[${index}]`;
     assert(isPlainObject(manifestCase), `${context} must be an object`);
-    assertOnlyKeys(manifestCase, ['caseId', 'file', 'profile', 'lanes', 'provenance', 'expected'], context);
+    assertOnlyKeys(manifestCase, ['caseId', 'file', 'profile', 'lanes', 'provenance', 'legacyExpected', 'courseVector', 'features'], context);
     assert(typeof manifestCase.caseId === 'string' && caseIdPattern.test(manifestCase.caseId), `${context}.caseId is invalid`);
     assert(!seenCaseIds.has(manifestCase.caseId), `${context}.caseId is duplicated`);
     seenCaseIds.add(manifestCase.caseId);
@@ -115,23 +126,36 @@ export function validateCorpusManifest(manifest) {
         && reviewedDate.toISOString().slice(0, 10) === manifestCase.provenance.reviewedAt,
       `${context}.provenance.reviewedAt is not a real calendar date`
     );
-    assert(isPlainObject(manifestCase.expected), `${context}.expected must be an object`);
-    assertOnlyKeys(manifestCase.expected, ['haltPc', 'haltWord', 'gpr', 'dm', 'writes'], `${context}.expected`);
-    assert(hex32Pattern.test(manifestCase.expected.haltPc), `${context}.expected.haltPc must be a 32-bit hex address`);
-    assert(hex32Pattern.test(manifestCase.expected.haltWord), `${context}.expected.haltWord must be a 32-bit hex word`);
-    validateRegisterMap(manifestCase.expected.gpr, `${context}.expected.gpr`);
-    validateMemoryMap(manifestCase.expected.dm, `${context}.expected.dm`);
-    validateWriteSet(manifestCase.expected.writes, manifestCase.expected, `${context}.expected`);
+    if (manifestCase.lanes.includes('legacy-baseline')) {
+      validateExpected(manifestCase.legacyExpected, `${context}.legacyExpected`);
+    } else {
+      assert(manifestCase.legacyExpected === undefined, `${context}.legacyExpected is only valid for legacy-baseline`);
+    }
+    if (manifestCase.lanes.includes('course-vector')) {
+      assert(
+        typeof manifestCase.courseVector === 'string'
+          && manifestCase.courseVector === `${manifestCase.caseId}.json`,
+        `${context}.courseVector must be the case-ID artifact file`
+      );
+    } else {
+      assert(manifestCase.courseVector === undefined, `${context}.courseVector is only valid for course-vector`);
+    }
+    assert(Array.isArray(manifestCase.features) && manifestCase.features.length > 0, `${context}.features must be non-empty`);
+    assert(new Set(manifestCase.features).size === manifestCase.features.length, `${context}.features contains duplicates`);
+    assert(manifestCase.features.every((feature) => typeof feature === 'string' && /^[a-z0-9][a-z0-9.-]{1,63}$/.test(feature)), `${context}.features contains an invalid ID`);
   }
   return manifest;
 }
 
-export function loadCorpusManifest() {
+export function loadCorpusManifest(options = {}) {
   const manifest = validateCorpusManifest(JSON.parse(fs.readFileSync(path.join(corpusRoot, 'manifest.json'), 'utf8')));
   // Validate every declared source up front, even when a lane/filter would not
   // select it in this invocation. A broken corpus can never be partially green.
   for (const manifestCase of manifest.cases) {
     corpusCaseFile(manifestCase);
+    if (!options.skipCourseVectorValidation && manifestCase.lanes.includes('course-vector')) {
+      loadCourseVector(manifestCase, { requireApproved: options.requireApprovedCourseVectors === true });
+    }
   }
   return manifest;
 }

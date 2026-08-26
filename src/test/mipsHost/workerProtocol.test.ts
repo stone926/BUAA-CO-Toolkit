@@ -26,11 +26,12 @@ describe('worker protocol handler', () => {
   beforeEach(() => {
     postMessage.mockClear();
     setWorkerJobHandlerForTest('wait-for-cancel', undefined);
+    setWorkerJobHandlerForTest('backpressure-test', undefined);
   });
 
   it('answers ping requests with a result message', async () => {
     handleWorkerInboundMessageForTest({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'request',
       requestId: 'r1',
       jobId: 'j1',
@@ -39,7 +40,7 @@ describe('worker protocol handler', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const result = resultMessage('r1');
     expect(result).toMatchObject({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'result',
       requestId: 'r1',
       ok: true,
@@ -49,7 +50,7 @@ describe('worker protocol handler', () => {
 
   it('answers unknown job kinds with a structured error', async () => {
     handleWorkerInboundMessageForTest({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'request',
       requestId: 'r2',
       jobId: 'j2',
@@ -68,15 +69,17 @@ describe('worker protocol handler', () => {
   });
 
   it('validates every required protocol field and terminal result shape', () => {
-    expect(isWorkerInboundMessage({ protocolVersion: 1, kind: 'request', requestId: 'r', jobId: 'j', job: { kind: 'ping' } })).toBe(true);
-    expect(isWorkerInboundMessage({ protocolVersion: 1, kind: 'request', requestId: 'r', jobId: 'j' })).toBe(false);
-    expect(isWorkerInboundMessage({ protocolVersion: 1, kind: 'request', requestId: '', jobId: 'j', job: { kind: 'ping' } })).toBe(false);
-    expect(isWorkerInboundMessage({ protocolVersion: 1, kind: 'cancel', requestId: 'r', extra: true })).toBe(false);
-    expect(isWorkerOutboundMessage({ protocolVersion: 1, kind: 'progress', requestId: 'r', batch: [] })).toBe(true);
-    expect(isWorkerOutboundMessage({ protocolVersion: 1, kind: 'progress', requestId: 'r', batch: {} })).toBe(false);
-    expect(isWorkerOutboundMessage({ protocolVersion: 1, kind: 'result', requestId: 'r', ok: false })).toBe(false);
-    expect(isWorkerOutboundMessage({ protocolVersion: 1, kind: 'result', requestId: 'r', ok: false, error: 'cancelled', cancelled: true })).toBe(true);
-    expect(isWorkerOutboundMessage({ protocolVersion: 1, kind: 'result', requestId: 'r', ok: true, cancelled: true })).toBe(false);
+    expect(isWorkerInboundMessage({ protocolVersion: 2, kind: 'request', requestId: 'r', jobId: 'j', job: { kind: 'ping' } })).toBe(true);
+    expect(isWorkerInboundMessage({ protocolVersion: 2, kind: 'request', requestId: 'r', jobId: 'j' })).toBe(false);
+    expect(isWorkerInboundMessage({ protocolVersion: 2, kind: 'request', requestId: '', jobId: 'j', job: { kind: 'ping' } })).toBe(false);
+    expect(isWorkerInboundMessage({ protocolVersion: 2, kind: 'cancel', requestId: 'r', extra: true })).toBe(false);
+    expect(isWorkerInboundMessage({ protocolVersion: 2, kind: 'ack', requestId: 'r', sequence: 0 })).toBe(true);
+    expect(isWorkerInboundMessage({ protocolVersion: 2, kind: 'ack', requestId: 'r', sequence: -1 })).toBe(false);
+    expect(isWorkerOutboundMessage({ protocolVersion: 2, kind: 'progress', requestId: 'r', sequence: 0, batch: [] })).toBe(true);
+    expect(isWorkerOutboundMessage({ protocolVersion: 2, kind: 'progress', requestId: 'r', sequence: 0, batch: {} })).toBe(false);
+    expect(isWorkerOutboundMessage({ protocolVersion: 2, kind: 'result', requestId: 'r', ok: false })).toBe(false);
+    expect(isWorkerOutboundMessage({ protocolVersion: 2, kind: 'result', requestId: 'r', ok: false, error: 'cancelled', cancelled: true })).toBe(true);
+    expect(isWorkerOutboundMessage({ protocolVersion: 2, kind: 'result', requestId: 'r', ok: true, cancelled: true })).toBe(false);
   });
 
   it('responds exactly once when a production handler is cancelled', async () => {
@@ -88,15 +91,15 @@ describe('worker protocol handler', () => {
       signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
     }));
     handleWorkerInboundMessageForTest({
-      protocolVersion: 1,
+      protocolVersion: 2,
       kind: 'request',
       requestId: 'cancel-me',
       jobId: 'cancel-job',
       job: { kind: 'wait-for-cancel' }
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    handleWorkerInboundMessageForTest({ protocolVersion: 1, kind: 'cancel', requestId: 'cancel-me' });
-    handleWorkerInboundMessageForTest({ protocolVersion: 1, kind: 'cancel', requestId: 'cancel-me' });
+    handleWorkerInboundMessageForTest({ protocolVersion: 2, kind: 'cancel', requestId: 'cancel-me' });
+    handleWorkerInboundMessageForTest({ protocolVersion: 2, kind: 'cancel', requestId: 'cancel-me' });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const results = postMessage.mock.calls.map((call) => call[0]).filter(
@@ -104,5 +107,36 @@ describe('worker protocol handler', () => {
     );
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ ok: false, error: 'cancelled', cancelled: true });
+  });
+
+  it('does not produce the next/terminal message until progress is acknowledged', async () => {
+    setWorkerJobHandlerForTest('backpressure-test', async (_request, _signal, emitProgress) => {
+      await emitProgress(['batch']);
+      return 'done';
+    });
+    handleWorkerInboundMessageForTest({
+      protocolVersion: 2,
+      kind: 'request',
+      requestId: 'backpressure',
+      jobId: 'backpressure-job',
+      job: { kind: 'backpressure-test' }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(postMessage.mock.calls.map((call) => call[0])).toContainEqual(expect.objectContaining({
+      kind: 'progress', requestId: 'backpressure', sequence: 0, batch: ['batch']
+    }));
+    expect(resultMessage('backpressure')).toBeUndefined();
+
+    handleWorkerInboundMessageForTest({
+      protocolVersion: 2, kind: 'ack', requestId: 'backpressure', sequence: 1
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(resultMessage('backpressure')).toBeUndefined();
+
+    handleWorkerInboundMessageForTest({
+      protocolVersion: 2, kind: 'ack', requestId: 'backpressure', sequence: 0
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(resultMessage('backpressure')).toMatchObject({ ok: true, payload: 'done' });
   });
 });

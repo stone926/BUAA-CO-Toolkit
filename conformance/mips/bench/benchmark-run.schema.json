@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buaa-co-toolkit.invalid/conformance/fixed-benchmark-run.schema.json",
+  "title": "Controlled runner MARS benchmark candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaRevision", "runnerRevision", "matrixRevision", "measurementClass", "baselineEligible", "lifecycle", "warmMeasurementsPresent", "warmExclusionReason", "runner", "runnerFingerprint", "reference", "matrixSha256", "samplePolicy", "cells", "rawSamples", "summaries", "integrity"],
+  "properties": {
+    "schemaRevision": { "const": 1 },
+    "runnerRevision": { "const": 2 },
+    "matrixRevision": { "const": 1 },
+    "measurementClass": { "enum": ["controlled-runner-smoke", "controlled-runner-baseline-candidate"] },
+    "baselineEligible": { "type": "boolean" },
+    "lifecycle": { "const": "cold-end-to-end" },
+    "warmMeasurementsPresent": { "const": false },
+    "warmExclusionReason": { "type": "string", "minLength": 1 },
+    "runner": { "type": "object" },
+    "runnerFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "reference": { "type": "object" },
+    "matrixSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "samplePolicy": { "type": "object" },
+    "cells": { "type": "array", "minItems": 1 },
+    "rawSamples": { "type": "array", "minItems": 1 },
+    "summaries": { "type": "array", "minItems": 1 },
+    "integrity": { "type": "object" }
+  },
+  "$comment": "bench/validate-fixed-benchmark.mjs is the authoritative dependency-free discriminator and recomputes matrix, summaries, CI, fingerprints, and integrity."
+}

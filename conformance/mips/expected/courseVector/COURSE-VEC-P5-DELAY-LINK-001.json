@@ -1,0 +1,91 @@
+{
+  "schemaRevision": 1,
+  "caseId": "COURSE-VEC-P5-DELAY-LINK-001",
+  "profile": "P5",
+  "vectorKind": "program-final-state",
+  "source": {
+    "corpusFile": "spec-microprograms/p5-delay-link.asm",
+    "sha256": "3244fdfa5b1bca27dae4b24c5bda2070278ccba17f77037184cea568b37415c5",
+    "hashNormalization": "utf8-lf-v1"
+  },
+  "provenance": {
+    "derivation": "hand-computed",
+    "contractIds": [
+      "COURSE-P5-ISA-001",
+      "COURSE-P5-DELAY-001"
+    ],
+    "normativeSourceIds": [
+      "COURSE-SOURCE-P5-DELAY-LINK-001"
+    ],
+    "note": "Jal and taken beq execute one delay-slot instruction; jal links PC+8.",
+    "vectorRevision": 1,
+    "sourceRegistrySha256": "7ac3621e3b32f8e8bcdec4b6cdb04b3e13e089386872a367f396697b944b47c2"
+  },
+  "review": {
+    "status": "candidate",
+    "author": "codex-phase0-corpus",
+    "reviewer": null,
+    "reviewedAt": null,
+    "reviewRevision": 0
+  },
+  "execution": {
+    "verificationMode": "mars-compatible-final-state",
+    "initialState": {
+      "gpr": {},
+      "dm": {},
+      "hi": "0x00000000",
+      "lo": "0x00000000",
+      "cp0": {}
+    },
+    "stdin": null,
+    "interruptSchedule": [],
+    "stopCondition": {
+      "kind": "halt-loop",
+      "minimumHits": 2
+    },
+    "stepLimit": 4096
+  },
+  "expected": {
+    "kind": "final-state",
+    "haltPc": "0x00003024",
+    "haltWord": "0x1000ffff",
+    "gpr": {
+      "8": "0x00000001",
+      "9": "0x00000002",
+      "10": "0x0000300c",
+      "11": "0x00000003",
+      "13": "0x00000005",
+      "31": "0x0000300c"
+    },
+    "dm": {},
+    "writes": {
+      "gpr": [
+        "8",
+        "9",
+        "10",
+        "11",
+        "13",
+        "31"
+      ],
+      "dm": []
+    }
+  },
+  "observability": {
+    "maskRevision": 1,
+    "definedFields": [
+      "gpr.writes",
+      "control.delay-slot",
+      "link",
+      "halt.pc"
+    ],
+    "undefinedExcluded": [
+      "hi",
+      "lo",
+      "cp0"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "89108e3b36a96eb1eae2c99083335c349c4d0eec949b2d8ce2bef5d19ed42a67"
+  }
+}

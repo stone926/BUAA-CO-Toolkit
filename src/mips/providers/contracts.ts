@@ -25,6 +25,8 @@ export interface ProviderPreflight {
   descriptor: EngineDescriptor;
 }
 
+export type ProviderPreflightResult = ProviderPreflight | Promise<ProviderPreflight>;
+
 /** Per-run context shared by both provider kinds. */
 export interface ProviderRunContext {
   signal?: AbortSignal;
@@ -52,6 +54,8 @@ export interface EngineArtifactIdentity {
   sha256: string;
   role?: string;
   fileName?: string;
+  /** Immutable runtime companions (for example the pinned P7 RI instruction class). */
+  dependencies?: EngineArtifactIdentity[];
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -79,12 +83,14 @@ export interface AssembleResult {
   status: EngineRunStatus;
   descriptor: EngineDescriptor;
   engineArtifact?: EngineArtifactIdentity;
+  /** Exact process/configuration values resolved before this run produced side effects. */
+  resolvedRun?: ResolvedEngineRun;
 }
 
 export interface MipsAssemblerProvider {
   readonly descriptor: EngineDescriptor;
   readonly capabilities: EngineCapabilities;
-  preflight(request: AssembleRequest): ProviderPreflight;
+  preflight(request: AssembleRequest): ProviderPreflightResult;
   assemble(request: AssembleRequest, context?: ProviderRunContext): Promise<AssembleResult>;
 }
 
@@ -121,12 +127,22 @@ export interface ExecuteResult {
   status: EngineRunStatus;
   descriptor: EngineDescriptor;
   engineArtifact?: EngineArtifactIdentity;
+  /** Exact process/configuration values resolved before this run produced side effects. */
+  resolvedRun?: ResolvedEngineRun;
+}
+
+export interface ResolvedEngineRun {
+  profile: string;
+  memoryConfiguration: string;
+  runtime: { kind: 'java'; command: string };
+  wallClockMs: number;
+  p7RiInstruction: boolean;
 }
 
 export interface MipsExecutionProvider {
   readonly descriptor: EngineDescriptor;
   readonly capabilities: EngineCapabilities;
-  preflight(request: ExecuteRequest): ProviderPreflight;
+  preflight(request: ExecuteRequest): ProviderPreflightResult;
   execute(request: ExecuteRequest, context?: ProviderRunContext): Promise<ExecuteResult>;
 }
 
