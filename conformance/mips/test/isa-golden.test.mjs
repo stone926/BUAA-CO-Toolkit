@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  isaGoldenCandidateDescriptor,
   isaGoldenPayloadSha256,
   loadIsaGolden,
   validateIsaGolden
 } from '../runner/isaGoldenArtifact.mjs';
+import {
+  approvalEnvelopeSha256,
+  validateApprovalEnvelope
+} from '../governance/approvalEnvelope.mjs';
 import {
   parseArgs,
   refreshIsaGolden
@@ -26,7 +31,7 @@ test('independent ISA golden freezes every required profile set and counterexamp
   assert.throws(() => validateIsaGolden(narrowed), /P3 required mnemonic set is incomplete/);
 });
 
-test('approved ISA evidence is demoted whenever its reviewed payload changes', () => {
+test('legacy embedded ISA approval is always migrated to an external candidate', () => {
   const approved = structuredClone(loadIsaGolden());
   approved.review = {
     ...approved.review,
@@ -35,11 +40,9 @@ test('approved ISA evidence is demoted whenever its reviewed payload changes', (
     reviewedAt: '2026-08-26',
     reviewRevision: 1
   };
-  validateIsaGolden(approved, { requireApproved: true });
-
   const unchanged = refreshIsaGolden(structuredClone(approved));
   assert.equal(unchanged.evidenceChanged, false);
-  assert.equal(unchanged.golden.review.status, 'approved');
+  assert.equal(unchanged.golden.review.status, 'candidate');
 
   const changed = structuredClone(approved);
   changed.cases.find((entry) => entry.mnemonic === 'add').word = '0x014b4821';
@@ -66,7 +69,7 @@ test('ISA golden management arguments require GitHub reviewer identity', () => {
   assert.throws(() => parseArgs(['--refresh-integrity', '--require-approved']), /accepts no other options/);
 });
 
-test('ISA approved claims reject a syntactically valid but unauthorized reviewer', () => {
+test('embedded ISA approval is inert and the unified envelope rejects an unauthorized reviewer', () => {
   const forged = structuredClone(loadIsaGolden());
   forged.review = {
     ...forged.review,
@@ -75,7 +78,19 @@ test('ISA approved claims reject a syntactically valid but unauthorized reviewer
     reviewedAt: '2026-08-26',
     reviewRevision: 1
   };
-  assert.throws(() => validateIsaGolden(forged), /policy reviewer stone926/);
+  assert.throws(() => validateIsaGolden(forged), /must remain candidate/);
+
+  const current = loadIsaGolden();
+  const subject = isaGoldenCandidateDescriptor(current);
+  const envelope = {
+    schemaRevision: 1,
+    kind: 'phase0-artifact-approval',
+    subject,
+    review: { status: 'approved', reviewer: 'attacker-user', reviewedAt: '2026-08-26', reviewRevision: 1 },
+    integrity: { algorithm: 'sha256-canonical-json-v1', envelopeSha256: '' }
+  };
+  envelope.integrity.envelopeSha256 = approvalEnvelopeSha256(envelope);
+  assert.throws(() => validateApprovalEnvelope(envelope, subject), /policy reviewer stone926/);
 });
 
 test('candidate projection cannot satisfy the approved gate', () => {

@@ -1,7 +1,7 @@
 // @index generator-catalog — 内置 ASM 生成器指令集/分类资源加载
 import * as fs from 'fs';
 import * as path from 'path';
-import { instructions } from '../language/mips/resources';
+import { isaInstructionByMnemonic } from '../mips/core/generated/isaCatalog';
 
 export type CpuProfile = 'P3' | 'P4' | 'P5' | 'P6' | 'P7';
 
@@ -56,7 +56,7 @@ function validateCatalog(value: unknown): asserts value is GeneratorInstructionC
     stringArrayAt(categories, category);
   }
   for (const mnemonic of categories.supported as string[]) {
-    if (mnemonic !== 'nop' && !instructions[mnemonic]) {
+    if (!isaInstructionByMnemonic.has(mnemonic)) {
       throw new Error(`Generator catalog contains unsupported mnemonic: ${mnemonic}.`);
     }
   }

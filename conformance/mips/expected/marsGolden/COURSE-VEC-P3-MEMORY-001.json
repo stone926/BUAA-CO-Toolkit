@@ -1,6 +1,10 @@
 {
   "schemaRevision": 1,
   "caseId": "COURSE-VEC-P3-MEMORY-001",
+  "candidate": {
+    "author": "codex-phase0-corpus",
+    "revision": 1
+  },
   "provenance": {
     "role": "legacy-course-executor",
     "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
@@ -27,8 +31,8 @@
       "4096",
       "<SOURCE>"
     ],
-    "corpusReviewer": "stone926",
-    "corpusReviewedAt": "2026-08-25"
+    "corpusCandidateAuthor": "codex-phase0-corpus",
+    "corpusCandidateRevision": 1
   },
   "normalized": {
     "gpr": {
@@ -59,5 +63,9 @@
       "00001004",
       "00002FFC"
     ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "d4cb62f4e4f010baa1f401f10a1031920704af6c3f27a083d9992d16c97e59e6"
   }
 }

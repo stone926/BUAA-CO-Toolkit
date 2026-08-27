@@ -1,55 +1,283 @@
 {
-  "schemaRevision": 1,
-  "description": "计划第 7.6 节四种不可混算 evidence kind 的机器可读 gate 骨架。数值为计划初始门槛；本文件在阶段 0 只冻结结构，规模计数自阶段 2 起在对应 runner 中强制执行。",
+  "schemaRevision": 2,
+  "description": "P3-P7 capability-scoped evidence gates. Every coverage-bin ID is the deterministic expansion of idPrefix.member and every expanded bin has an explicit numeric minimum.",
+  "profiles": ["P3", "P4", "P5", "P6", "P7"],
+  "binIdFormat": "{idPrefix}.{member}",
+  "memberSets": [
+    {
+      "id": "assembler.syntax.advertised",
+      "members": [
+        "lex.whitespace-comment-case", "lex.lf-crlf-bom", "lex.non-ascii-path",
+        "register.numeric-abi-alias", "literal.decimal-hex-signed",
+        "expression.arithmetic-bitwise-parentheses", "label.forward-backward-self",
+        "section.text-data-ktext", "directive.word-half-byte-space-align",
+        "directive.ascii-asciiz", "directive.eqv", "macro.definition-argument-expansion",
+        "include.single-nested", "pseudo.li-la-move-b-nop", "memory.offset-base-boundaries",
+        "control.branch-jump-delay", "mdu.hilo-dependency", "cp0.exception-handler-layout",
+        "device.timer-irq-mmio", "diagnostic.invalid-recovery"
+      ]
+    },
+    { "id": "isa.p3.required", "members": ["add", "sub", "ori", "lw", "sw", "beq", "lui", "nop"] },
+    { "id": "isa.p4.required", "members": ["add", "sub", "ori", "lw", "sw", "beq", "lui", "jal", "jr", "nop"] },
+    { "id": "isa.p5.required", "members": ["add", "sub", "ori", "lw", "sw", "beq", "lui", "jal", "jr", "nop"] },
+    { "id": "isa.p6.required", "members": ["add", "sub", "and", "or", "slt", "sltu", "lui", "addi", "andi", "ori", "lb", "lh", "lw", "sb", "sh", "sw", "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo", "beq", "bne", "jal", "jr", "nop"] },
+    { "id": "isa.p7.required", "members": ["add", "sub", "and", "or", "slt", "sltu", "lui", "addi", "andi", "ori", "lb", "lh", "lw", "sb", "sh", "sw", "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo", "beq", "bne", "jal", "jr", "mfc0", "mtc0", "eret", "syscall", "nop"] },
+    { "id": "control.p3", "members": ["branch.taken", "branch.not-taken"] },
+    { "id": "control.p4", "members": ["branch.taken", "branch.not-taken", "jump.jal", "jump.jr", "delay.none", "link.pc-plus-4"] },
+    { "id": "control.p5", "members": ["branch.taken", "branch.not-taken", "jump.jal", "jump.jr", "delay.executed-once", "link.pc-plus-8"] },
+    { "id": "control.p6", "members": ["branch.taken", "branch.not-taken", "jump.jal", "jump.jr", "delay.executed-once", "link.pc-plus-8"] },
+    { "id": "control.p7", "members": ["branch.taken", "branch.not-taken", "delay.executed-once", "eret.no-delay-slot", "link.pc-plus-8"] },
+    { "id": "memory.word-boundaries", "members": ["im.first-word", "im.last-word", "dm.first-word", "dm.last-word"] },
+    { "id": "memory.byte-halfword", "members": ["byte-lane.0", "byte-lane.1", "byte-lane.2", "byte-lane.3", "halfword-lane.0", "halfword-lane.2", "load.sign-extension", "store.byte-enable"] },
+    { "id": "mdu.architectural", "members": ["mult.signed", "mult.unsigned", "div.signed", "div.unsigned", "mfhi", "mflo", "mthi", "mtlo"] },
+    { "id": "cp0.p7", "members": ["status.mask", "cause.ip", "cause.bd", "cause.exc-code", "epc.capture", "eret.clear-exl", "request.priority"] },
+    { "id": "exception.p7", "members": ["int", "adel.fetch", "adel.load", "ades.store", "syscall", "ri", "ov", "delay-slot-epc", "victim.oldest-stage", "interrupt-over-exception", "unloaded-im-out-of-domain", "suppressed-victim-side-effect"] },
+    { "id": "timer.p7", "members": ["state.idle", "state.load", "state.count", "state.int", "mode.one-shot", "mode.periodic", "write-priority.ctrl", "write-priority.preset", "write-priority.count", "irq.im-gate", "irq.deassert-on-im-clear", "restart.one-shot", "restart.periodic"] },
+    { "id": "irq.p7", "members": ["route.timer0", "route.timer1", "route.external", "external.raise", "external.hold", "external.ack"] },
+    { "id": "device.mdu.p6", "members": ["mult.five-cycle", "div.ten-cycle", "start.busy", "write-busy", "reset"] },
+    { "id": "handwritten.combinations", "members": ["macro-include-eqv-expression", "data-directives-label-pseudo", "p7-handler-cp0-device", "portable-source-graph"] }
+  ],
+  "fingerprintPolicy": {
+    "algorithm": "sha256-canonical-json-v1",
+    "commonFields": ["semanticsRevision", "courseContractRevision", "corpusSchemaRevision", "capabilityScopeRevision"],
+    "fieldsByKind": {
+      "assembly": ["assemblerRevision", "catalogRevision", "diagnosticSchemaRevision"],
+      "execution": ["executorRevision", "catalogRevision", "eventSchemaRevision", "observabilitySchemaRevision"],
+      "device": ["deviceBuildRevision", "cycleContractRevision", "vectorRevision"],
+      "full-stack": ["assemblerRevision", "executorRevision", "catalogRevision", "eventSchemaRevision", "observabilitySchemaRevision", "diagnosticSchemaRevision"]
+    },
+    "forbiddenFieldsByKind": {
+      "assembly": ["executorRevision", "deviceBuildRevision", "cycleContractRevision", "vectorRevision", "eventSchemaRevision", "observabilitySchemaRevision"],
+      "execution": ["assemblerRevision", "diagnosticSchemaRevision", "deviceBuildRevision", "cycleContractRevision", "vectorRevision"],
+      "device": ["assemblerRevision", "executorRevision", "catalogRevision", "diagnosticSchemaRevision", "eventSchemaRevision", "observabilitySchemaRevision"],
+      "full-stack": ["deviceBuildRevision", "cycleContractRevision", "vectorRevision"]
+    }
+  },
   "evidenceKinds": [
     {
       "kind": "assembly",
-      "unit": "去重 source graph（valid/invalid 各半）、diagnostic、逐段 image words",
-      "fingerprintExcludes": ["executor"],
-      "fingerprintIncludes": ["assembler", "catalog", "contract", "diagnostic-schema"],
-      "initialGate": {
-        "graphsPerProfile": 100000,
-        "syntaxBinsMinHits": 100
-      },
-      "coverageBins": ["per-profile", "per-advertised-syntax-feature", "accept", "reject", "diagnostic"]
+      "unit": "unique source graph, accept/reject diagnostic, and segment image",
+      "initialGate": { "graphsPerProfile": 100000, "validGraphsPerProfile": 50000, "invalidGraphsPerProfile": 50000, "syntaxBinMinimum": 100 },
+      "capabilities": [
+        {
+          "id": "assembly.p3.source-image", "profiles": ["P3"],
+          "contractIds": ["COURSE-P3-ISA-001", "COURSE-P3-ADDR-001", "COURSE-P3-ADDR-002"],
+          "binGroups": [
+            { "idPrefix": "assembly.p3.graph", "metric": "unique-source-graphs", "minimumEach": 50000, "members": ["valid", "invalid"] },
+            { "idPrefix": "assembly.p3.outcome", "metric": "observations", "minimumEach": 100, "members": ["accept", "reject", "diagnostic"] },
+            { "idPrefix": "assembly.p3.syntax", "metric": "unique-source-graphs", "minimumEach": 100, "memberSet": "assembler.syntax.advertised" }
+          ]
+        },
+        {
+          "id": "assembly.p4.source-image", "profiles": ["P4"],
+          "contractIds": ["COURSE-P4-ISA-001", "COURSE-P4-ADDR-001"],
+          "binGroups": [
+            { "idPrefix": "assembly.p4.graph", "metric": "unique-source-graphs", "minimumEach": 50000, "members": ["valid", "invalid"] },
+            { "idPrefix": "assembly.p4.outcome", "metric": "observations", "minimumEach": 100, "members": ["accept", "reject", "diagnostic"] },
+            { "idPrefix": "assembly.p4.syntax", "metric": "unique-source-graphs", "minimumEach": 100, "memberSet": "assembler.syntax.advertised" }
+          ]
+        },
+        {
+          "id": "assembly.p5.source-image", "profiles": ["P5"],
+          "contractIds": ["COURSE-P5-ISA-001", "COURSE-P5-DELAY-001"],
+          "binGroups": [
+            { "idPrefix": "assembly.p5.graph", "metric": "unique-source-graphs", "minimumEach": 50000, "members": ["valid", "invalid"] },
+            { "idPrefix": "assembly.p5.outcome", "metric": "observations", "minimumEach": 100, "members": ["accept", "reject", "diagnostic"] },
+            { "idPrefix": "assembly.p5.syntax", "metric": "unique-source-graphs", "minimumEach": 100, "memberSet": "assembler.syntax.advertised" }
+          ]
+        },
+        {
+          "id": "assembly.p6.source-image", "profiles": ["P6"],
+          "contractIds": ["COURSE-P6-ISA-001", "COURSE-P6-ENDIAN-001"],
+          "binGroups": [
+            { "idPrefix": "assembly.p6.graph", "metric": "unique-source-graphs", "minimumEach": 50000, "members": ["valid", "invalid"] },
+            { "idPrefix": "assembly.p6.outcome", "metric": "observations", "minimumEach": 100, "members": ["accept", "reject", "diagnostic"] },
+            { "idPrefix": "assembly.p6.syntax", "metric": "unique-source-graphs", "minimumEach": 100, "memberSet": "assembler.syntax.advertised" }
+          ]
+        },
+        {
+          "id": "assembly.p7.source-image", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-ISA-001", "COURSE-P7-ADDR-002", "COURSE-P7-EXC-018", "COURSE-P7-ERET-002"],
+          "binGroups": [
+            { "idPrefix": "assembly.p7.graph", "metric": "unique-source-graphs", "minimumEach": 50000, "members": ["valid", "invalid"] },
+            { "idPrefix": "assembly.p7.outcome", "metric": "observations", "minimumEach": 100, "members": ["accept", "reject", "diagnostic"] },
+            { "idPrefix": "assembly.p7.syntax", "metric": "unique-source-graphs", "minimumEach": 100, "memberSet": "assembler.syntax.advertised" }
+          ]
+        }
+      ]
     },
     {
       "kind": "execution",
-      "unit": "去重 raw image、meaningful architectural transition",
-      "fingerprintExcludes": ["ts-assembler"],
-      "fingerprintIncludes": ["executor", "catalog", "contract", "event-schema", "observability-schema"],
-      "initialGate": {
-        "imagesPerProfile": 100000,
-        "transitions": 100000000
-      },
-      "coverageBins": ["per-profile", "instruction", "branch-taken-untaken", "byte-lane", "address-boundary", "exception-irq-timer-scenario"]
+      "unit": "unique raw image and meaningful architectural transition",
+      "initialGate": { "imagesPerProfile": 100000, "meaningfulTransitions": 100000000, "coverageBinMinimum": 100 },
+      "capabilities": [
+        {
+          "id": "execution.p3.architecture", "profiles": ["P3"],
+          "contractIds": ["COURSE-P3-ISA-001", "COURSE-P3-ADDR-001", "COURSE-P3-ADDR-002", "COURSE-P3-RESET-001", "COURSE-P3-ARITH-001"],
+          "binGroups": [
+            { "idPrefix": "execution.p3.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p3.required" },
+            { "idPrefix": "execution.p3.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p3" },
+            { "idPrefix": "execution.p3.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" }
+          ]
+        },
+        {
+          "id": "execution.p4.architecture", "profiles": ["P4"],
+          "contractIds": ["COURSE-P4-ISA-001", "COURSE-P4-DELAY-001", "COURSE-P4-ARITH-001", "COURSE-P4-ADDR-001", "COURSE-P4-RESET-001"],
+          "binGroups": [
+            { "idPrefix": "execution.p4.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p4.required" },
+            { "idPrefix": "execution.p4.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p4" },
+            { "idPrefix": "execution.p4.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" }
+          ]
+        },
+        {
+          "id": "execution.p5.architecture", "profiles": ["P5"],
+          "contractIds": ["COURSE-P5-ISA-001", "COURSE-P5-DELAY-001", "COURSE-P5-ARITH-001", "COURSE-P5-RESET-001"],
+          "binGroups": [
+            { "idPrefix": "execution.p5.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p5.required" },
+            { "idPrefix": "execution.p5.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p5" },
+            { "idPrefix": "execution.p5.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" }
+          ]
+        },
+        {
+          "id": "execution.p6.architecture", "profiles": ["P6"],
+          "contractIds": ["COURSE-P6-ISA-001", "COURSE-P6-DELAY-001", "COURSE-P6-ENDIAN-001", "COURSE-P6-ARITH-001", "COURSE-P6-MDU-001", "COURSE-P6-RESET-001"],
+          "binGroups": [
+            { "idPrefix": "execution.p6.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p6.required" },
+            { "idPrefix": "execution.p6.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p6" },
+            { "idPrefix": "execution.p6.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" },
+            { "idPrefix": "execution.p6.memory", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "memory.byte-halfword" },
+            { "idPrefix": "execution.p6.mdu", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "mdu.architectural" }
+          ]
+        },
+        {
+          "id": "execution.p7.architecture", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-ISA-001", "COURSE-P7-ADDR-001", "COURSE-P7-ADDR-002", "COURSE-P7-ADDR-004", "COURSE-P7-ERET-001", "COURSE-P7-MDU-001"],
+          "binGroups": [
+            { "idPrefix": "execution.p7.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p7.required" },
+            { "idPrefix": "execution.p7.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p7" },
+            { "idPrefix": "execution.p7.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" },
+            { "idPrefix": "execution.p7.memory", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "memory.byte-halfword" },
+            { "idPrefix": "execution.p7.mdu", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "mdu.architectural" }
+          ]
+        },
+        {
+          "id": "execution.p7.cp0-exception", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-CP0-001", "COURSE-P7-CP0-002", "COURSE-P7-CP0-003", "COURSE-P7-CP0-004", "COURSE-P7-EXC-001", "COURSE-P7-EXC-002", "COURSE-P7-EXC-024", "COURSE-P7-IM-001"],
+          "binGroups": [
+            { "idPrefix": "execution.p7.cp0", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "cp0.p7" },
+            { "idPrefix": "execution.p7.exception", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "exception.p7" }
+          ]
+        },
+        {
+          "id": "execution.p7.timer", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-ADDR-005", "COURSE-P7-ADDR-006", "COURSE-P7-TIMER-001", "COURSE-P7-TIMER-002", "COURSE-P7-TIMER-003", "COURSE-P7-TIMER-004", "COURSE-P7-TIMER-005", "COURSE-P7-TIMER-006", "COURSE-P7-TIMER-008"],
+          "binGroups": [{ "idPrefix": "execution.p7.timer", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "timer.p7" }]
+        },
+        {
+          "id": "execution.p7.external-irq", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-ADDR-007", "COURSE-P7-EXC-004", "COURSE-P7-EXC-005", "COURSE-P7-TIMER-007", "COURSE-P7-IG-001"],
+          "binGroups": [{ "idPrefix": "execution.p7.irq", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "irq.p7" }]
+        }
+      ]
     },
     {
       "kind": "device",
-      "unit": "directed cycle vector、状态边、fuzz cycle",
-      "fingerprintExcludes": ["assembler", "machine-instruction-count"],
-      "fingerprintIncludes": ["device-build", "cycle-contract", "vector-revision"],
-      "initialGate": {
-        "directedBins": "全覆盖",
-        "fuzzCycles": 10000000
-      },
-      "coverageBins": ["timer-state", "timer-mode", "write-priority", "irq-width", "irq-restart"]
+      "unit": "directed cycle vector, state edge, and fuzz cycle",
+      "initialGate": { "directedBinMinimum": 1, "fuzzCycles": 10000000 },
+      "capabilities": [
+        {
+          "id": "device.p6.mdu-timing", "profiles": ["P6"], "contractIds": ["COURSE-P6-MDU-001"],
+          "binGroups": [{ "idPrefix": "device.p6.mdu", "metric": "directed-vectors", "minimumEach": 1, "memberSet": "device.mdu.p6" }]
+        },
+        {
+          "id": "device.p7.timer", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-TIMER-001", "COURSE-P7-TIMER-002", "COURSE-P7-TIMER-003", "COURSE-P7-TIMER-004", "COURSE-P7-TIMER-005", "COURSE-P7-TIMER-006", "COURSE-P7-TIMER-008"],
+          "binGroups": [{ "idPrefix": "device.p7.timer", "metric": "directed-vectors", "minimumEach": 1, "memberSet": "timer.p7" }]
+        },
+        {
+          "id": "device.p7.external-irq", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-ADDR-007", "COURSE-P7-EXC-005", "COURSE-P7-IG-001"],
+          "binGroups": [{ "idPrefix": "device.p7.irq", "metric": "directed-vectors", "minimumEach": 1, "memberSet": "irq.p7" }]
+        }
+      ]
     },
     {
       "kind": "full-stack",
-      "unit": "去重 source graph、program image、meaningful transition",
-      "fingerprintExcludes": [],
-      "fingerprintIncludes": ["assembler", "executor", "catalog", "contract", "event-schema", "observability-schema", "diagnostic-schema"],
-      "initialGate": {
-        "validGraphsPerProfile": 100000,
-        "transitions": 100000000,
-        "handwrittenCorpusGate": "阶段 0 冻结 feature-distribution 后生效"
-      },
-      "coverageBins": ["per-profile", "instruction", "branch-taken-untaken", "byte-lane", "address-boundary", "exception-irq-timer-scenario", "handwritten-feature-distribution"]
+      "unit": "unique valid source graph, program image, and meaningful transition",
+      "initialGate": { "validGraphsPerProfile": 100000, "meaningfulTransitions": 100000000, "handwrittenUniqueGraphs": 500, "coverageBinMinimum": 100 },
+      "capabilities": [
+        {
+          "id": "full-stack.p3.architecture", "profiles": ["P3"],
+          "contractIds": ["COURSE-P3-ISA-001", "COURSE-P3-ADDR-001", "COURSE-P3-ADDR-002", "COURSE-P3-ARITH-001"],
+          "binGroups": [
+            { "idPrefix": "full-stack.p3.graph", "metric": "unique-source-graphs", "minimumEach": 100000, "members": ["valid"] },
+            { "idPrefix": "full-stack.p3.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p3.required" },
+            { "idPrefix": "full-stack.p3.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p3" },
+            { "idPrefix": "full-stack.p3.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" }
+          ]
+        },
+        {
+          "id": "full-stack.p4.architecture", "profiles": ["P4"],
+          "contractIds": ["COURSE-P4-ISA-001", "COURSE-P4-DELAY-001", "COURSE-P4-ARITH-001", "COURSE-P4-ADDR-001"],
+          "binGroups": [
+            { "idPrefix": "full-stack.p4.graph", "metric": "unique-source-graphs", "minimumEach": 100000, "members": ["valid"] },
+            { "idPrefix": "full-stack.p4.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p4.required" },
+            { "idPrefix": "full-stack.p4.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p4" },
+            { "idPrefix": "full-stack.p4.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" }
+          ]
+        },
+        {
+          "id": "full-stack.p5.architecture", "profiles": ["P5"],
+          "contractIds": ["COURSE-P5-ISA-001", "COURSE-P5-DELAY-001", "COURSE-P5-ARITH-001"],
+          "binGroups": [
+            { "idPrefix": "full-stack.p5.graph", "metric": "unique-source-graphs", "minimumEach": 100000, "members": ["valid"] },
+            { "idPrefix": "full-stack.p5.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p5.required" },
+            { "idPrefix": "full-stack.p5.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p5" },
+            { "idPrefix": "full-stack.p5.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" }
+          ]
+        },
+        {
+          "id": "full-stack.p6.architecture", "profiles": ["P6"],
+          "contractIds": ["COURSE-P6-ISA-001", "COURSE-P6-DELAY-001", "COURSE-P6-ENDIAN-001", "COURSE-P6-ARITH-001", "COURSE-P6-MDU-001"],
+          "binGroups": [
+            { "idPrefix": "full-stack.p6.graph", "metric": "unique-source-graphs", "minimumEach": 100000, "members": ["valid"] },
+            { "idPrefix": "full-stack.p6.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p6.required" },
+            { "idPrefix": "full-stack.p6.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p6" },
+            { "idPrefix": "full-stack.p6.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" },
+            { "idPrefix": "full-stack.p6.memory", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "memory.byte-halfword" },
+            { "idPrefix": "full-stack.p6.mdu", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "mdu.architectural" }
+          ]
+        },
+        {
+          "id": "full-stack.p7.architecture", "profiles": ["P7"],
+          "contractIds": ["COURSE-P7-ISA-001", "COURSE-P7-ADDR-001", "COURSE-P7-ADDR-002", "COURSE-P7-ERET-001", "COURSE-P7-MDU-001"],
+          "binGroups": [
+            { "idPrefix": "full-stack.p7.graph", "metric": "unique-source-graphs", "minimumEach": 100000, "members": ["valid"] },
+            { "idPrefix": "full-stack.p7.instruction", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "isa.p7.required" },
+            { "idPrefix": "full-stack.p7.control", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "control.p7" },
+            { "idPrefix": "full-stack.p7.address", "metric": "unique-images", "minimumEach": 100, "memberSet": "memory.word-boundaries" },
+            { "idPrefix": "full-stack.p7.memory", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "memory.byte-halfword" },
+            { "idPrefix": "full-stack.p7.mdu", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "mdu.architectural" },
+            { "idPrefix": "full-stack.p7.cp0", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "cp0.p7" },
+            { "idPrefix": "full-stack.p7.exception", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "exception.p7" },
+            { "idPrefix": "full-stack.p7.timer", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "timer.p7" },
+            { "idPrefix": "full-stack.p7.irq", "metric": "meaningful-transitions", "minimumEach": 100, "memberSet": "irq.p7" }
+          ]
+        },
+        {
+          "id": "full-stack.handwritten-source-graphs", "profiles": ["P3", "P4", "P5", "P6", "P7"],
+          "contractIds": ["COURSE-P3-ISA-001", "COURSE-P4-ISA-001", "COURSE-P5-ISA-001", "COURSE-P6-ISA-001", "COURSE-P7-ISA-001"],
+          "binGroups": [
+            { "idPrefix": "full-stack.handwritten.total", "metric": "handwritten-unique-graphs", "minimumEach": 500, "members": ["eligible"] },
+            { "idPrefix": "full-stack.handwritten.feature", "metric": "handwritten-unique-graphs", "minimumEach": 20, "memberSet": "assembler.syntax.advertised" },
+            { "idPrefix": "full-stack.handwritten.combination", "metric": "handwritten-unique-graphs", "minimumEach": 5, "memberSet": "handwritten.combinations" }
+          ]
+        }
+      ]
     }
   ],
-  "seedManifestFields": ["sourceWordLimit", "meaningfulTransitionLimit", "stepPolicy", "haltPolicy", "jobWallClockMs", "shard", "runnerRevision"],
-  "invalidTransitionPolicy": "halt-loop 重复、invalid、out-of-domain、inconclusive 和 waiver 命中的 transition 不计有效覆盖。",
-  "status": "structure-frozen",
-  "revision": 1
+  "seedManifestFields": ["sourceWordLimit", "meaningfulTransitionLimit", "stepPolicy", "haltPolicy", "jobWallClockMs", "shard", "runnerRevision", "rendererRevision", "sourceSha256", "imageSha256", "imageWordCount", "evidenceCapabilityId"],
+  "invalidTransitionPolicy": "halt-loop repeats, invalid, out-of-domain, inconclusive, synthetic, and waived transitions are never counted as meaningful coverage.",
+  "status": "capability-bins-frozen",
+  "revision": 2
 }

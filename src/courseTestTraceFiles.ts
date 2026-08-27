@@ -8,9 +8,13 @@ export function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.sim.out`;
 }
 
-export function marsOutputFileNameForCase(item: CourseTraceCaseInput): string {
-  return `${traceOutputStem(item)}.mars.out`;
+export function oracleOutputFileNameForCase(item: CourseTraceCaseInput): string {
+  return `${traceOutputStem(item)}.oracle.out`;
 }
+
+/** @deprecated v1 artifact-name compatibility. New runs use oracleOutputFileNameForCase. */
+export const marsOutputFileNameForCase = (item: CourseTraceCaseInput): string =>
+  `${traceOutputStem(item)}.mars.out`;
 
 export function logisimRawOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.logisim.out`;

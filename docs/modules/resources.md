@@ -3,9 +3,10 @@
 静态资产, 编译打包进VSIX
 
 resources/mips/:
+  isa.json — versioned 真实指令唯一 catalog：encoding/runtime/canonical/effects/control/profile，以及 generator 稳定顺序和安全策略
   instructions.json — 指令元数据(助记符/类型R-I-J-special-pseudo/格式/操作数/描述/延迟槽/Profile)
-  instructionMeta.json — 指令附加元数据, projects字段按Profile过滤
-  generatorProfiles.json — 内置 ASM 生成器默认指令集、分类、访存对齐、MDU延迟
+  instructionMeta.json — pseudo/非 catalog 指令及 parser directive 的附加元数据；真实指令 read-write/alignment facts 由 isa.json 生成，不在此重复
+  generatorProfiles.json — 从 isa.json 生成的内置 ASM generator 投影（勿手改）：默认指令集、分类、访存对齐、MDU延迟
   pseudoExpansions.json — 伪指令展开模板
   pseudoForms.json — 伪指令操作数形式
   registers.json — 寄存器表(编号/名称/用途)
@@ -32,6 +33,11 @@ resources/co/:
   命令: npm run generate:manifest-config 生成, npm run check:manifest-config 检查, npm run sync:manifest-config 生成后检查
   自动流程: compile/test/test:coverage/package:vsix 都会先运行 sync:generated（manifest config + syntaxes）
   规则: 不手写 package.json contributes.configuration; 修改配置资源后提交生成结果
+
+ISA 生成维护:
+  源文件: resources/mips/isa.json
+  派生产物: src/mips/core/generated/isaCatalog.ts、src/language/mips/generated/isaDisplayCatalog.ts、resources/mips/generatorProfiles.json
+  命令: npm run generate:isa-catalog / npm run check:isa-catalog；CI clean checkout 可用 npm run verify:generated-tree-clean 证明 compile 后 tree clean
 
 resources/templates/verilog/:
   basic_testbench.v — 通用 Verilog testbench shell

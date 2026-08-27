@@ -1,11 +1,11 @@
-import { ProjectProfile } from '../projectProfile';
+import { ProjectProfile } from '../../projectProfile';
 import {
   machineCodeNeedsUndefinedBehaviorTrace,
   marsDetailedUndefinedBehaviorError,
   mipsInstructionReadRegisters,
   parseCpuTraceLine
-} from '../language/mips/traceParser';
-import { decodeCourseMachineInstruction } from './machineCodeValidation';
+} from '../../language/mips/traceParser';
+import { decodeCourseMachineInstruction } from '../../courseTesting/machineCodeValidation';
 import { stableMarsImageCompatibilityError } from './marsImageCompatibility';
 import {
   p7ExceptionHandlerAddress,
@@ -17,7 +17,7 @@ import {
   p7Timer1Ctrl,
   p7Timer1Preset,
   p7UserTextBaseAddress
-} from './p7Hardware';
+} from '../../courseTesting/p7Hardware';
 
 const stableMarsNonzeroResetRegisters = new Set([28, 29]);
 const memoryOpcodes = new Set([

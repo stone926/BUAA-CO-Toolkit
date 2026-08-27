@@ -5,11 +5,16 @@ import assert from 'node:assert/strict';
 import { loadCorpusManifest } from '../runner/caseManifest.mjs';
 import {
   assertCourseVectorApproved,
+  courseVectorCandidateDescriptor,
   loadCourseVector,
   loadTutorialSourceRegistry,
   validateCourseVector,
   vectorPayloadSha256
 } from '../runner/courseVectorArtifact.mjs';
+import {
+  approvalEnvelopeSha256,
+  validateApprovalEnvelope
+} from '../governance/approvalEnvelope.mjs';
 import {
   assertKnownContractReferences,
   loadKnownCourseContractIds,
@@ -82,7 +87,7 @@ test('candidate expected data cannot satisfy the approved phase gate', () => {
   );
 });
 
-test('an approved claim must name the centralized policy reviewer', () => {
+test('embedded approval is inert and the unified envelope enforces the policy reviewer', () => {
   const entry = manifestCase('COURSE-VEC-P7-TIMER-001');
   const forged = structuredClone(loadCourseVector(entry).vector);
   forged.review = {
@@ -94,8 +99,20 @@ test('an approved claim must name the centralized policy reviewer', () => {
   };
   assert.throws(
     () => validateCourseVector(forged, entry, loadTutorialSourceRegistry()),
-    /policy reviewer stone926/
+    /must remain candidate/
   );
+
+  const loaded = loadCourseVector(entry);
+  const subject = courseVectorCandidateDescriptor(loaded.vector, loaded.file);
+  const envelope = {
+    schemaRevision: 1,
+    kind: 'phase0-artifact-approval',
+    subject,
+    review: { status: 'approved', reviewer: 'attacker-user', reviewedAt: '2026-08-26', reviewRevision: 1 },
+    integrity: { algorithm: 'sha256-canonical-json-v1', envelopeSha256: '' }
+  };
+  envelope.integrity.envelopeSha256 = approvalEnvelopeSha256(envelope);
+  assert.throws(() => validateApprovalEnvelope(envelope, subject), /policy reviewer stone926/);
 });
 
 test('course-vector management CLI separates verify, refresh, and independent approval', () => {
@@ -118,7 +135,7 @@ test('course-vector management CLI separates verify, refresh, and independent ap
   assert.throws(() => parseManageArgs(['--refresh-integrity', '--require-approved']), /accepts no other/);
 });
 
-test('refreshing changed expected/source evidence always revokes prior approval', () => {
+test('refresh migrates every legacy embedded approval back to an inert candidate', () => {
   const manifestEntry = manifestCase('COURSE-VEC-P3-ARITH-001');
   const approved = structuredClone(loadCourseVector(manifestEntry).vector);
   approved.review = { status: 'approved', author: 'codex-phase0-corpus', reviewer: 'stone926', reviewedAt: '2026-08-26', reviewRevision: 1 };
@@ -126,7 +143,9 @@ test('refreshing changed expected/source evidence always revokes prior approval'
 
   const unchanged = refreshVectorDerived(structuredClone(approved), approved.source.sha256, approved.provenance.sourceRegistrySha256);
   assert.equal(unchanged.evidenceChanged, false);
-  assert.equal(unchanged.vector.review.status, 'approved');
+  assert.deepEqual(unchanged.vector.review, {
+    status: 'candidate', author: 'codex-phase0-corpus', reviewer: null, reviewedAt: null, reviewRevision: 0
+  });
 
   const mutatedExpected = structuredClone(approved);
   mutatedExpected.expected.gpr['11'] = '0x12341235';

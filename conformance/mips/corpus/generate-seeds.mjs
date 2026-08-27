@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { renderSeedProgram, seedRendererRevision } from './seed-program-renderer.mjs';
 
 const profiles = Object.freeze(['P3', 'P4', 'P5', 'P6', 'P7']);
 const countPerProfile = 50;
@@ -34,7 +35,7 @@ export function buildSeedCases() {
     for (let ordinal = 1; ordinal <= countPerProfile; ordinal++) {
       const padded = String(ordinal).padStart(4, '0');
       const seed = `conformance-${profile.toLowerCase()}-pr-v1-${padded}`;
-      cases.push({
+      const seedCase = {
         id: `SEED-${profile}-${padded}`,
         profile,
         seed,
@@ -46,6 +47,15 @@ export function buildSeedCases() {
         jobWallClockMs: profileLimits.jobWallClockMs,
         shard: (ordinal - 1) % 10,
         runnerRevision
+      };
+      const rendered = renderSeedProgram(seedCase);
+      cases.push({
+        ...seedCase,
+        rendererRevision: seedRendererRevision,
+        sourceSha256: rendered.sourceSha256,
+        imageSha256: rendered.imageSha256,
+        imageWordCount: rendered.words.length,
+        evidenceCapabilityId: rendered.evidenceCapabilityId
       });
     }
   }
@@ -62,10 +72,10 @@ export function buildSeedManifest() {
   const cases = buildSeedCases();
   const casesSha256 = crypto.createHash('sha256').update(JSON.stringify(canonical(cases)), 'utf8').digest('hex');
   return {
-    schemaRevision: 2,
-    description: 'Frozen L1 PR seeds: exactly 50 explicit cases per P3-P7 profile. This file is generated without importing production generator/catalog code.',
+    schemaRevision: 3,
+    description: 'Frozen L1 PR seeds: exactly 50 deterministic source/image cases per P3-P7 profile. Source and image hashes are rendered without importing production generator/catalog/contract code and are verified through the JSONL ISA process boundary.',
     seedHashFunction: 'fnv1a-utf8-bytes-u32',
-    batch: { id: 'L1-PR-FIXED-V1', countPerProfile, profiles, runnerRevision },
+    batch: { id: 'L1-PR-FIXED-V1', countPerProfile, profiles, runnerRevision, rendererRevision: seedRendererRevision },
     cases,
     integrity: { algorithm: 'sha256-canonical-json-v1', casesSha256 }
   };

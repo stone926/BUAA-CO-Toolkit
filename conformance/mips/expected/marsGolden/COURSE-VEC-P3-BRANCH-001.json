@@ -1,6 +1,10 @@
 {
   "schemaRevision": 1,
   "caseId": "COURSE-VEC-P3-BRANCH-001",
+  "candidate": {
+    "author": "codex-phase0-corpus",
+    "revision": 1
+  },
   "provenance": {
     "role": "legacy-course-executor",
     "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
@@ -27,8 +31,8 @@
       "4096",
       "<SOURCE>"
     ],
-    "corpusReviewer": "stone926",
-    "corpusReviewedAt": "2026-08-25"
+    "corpusCandidateAuthor": "codex-phase0-corpus",
+    "corpusCandidateRevision": 1
   },
   "normalized": {
     "gpr": {
@@ -47,5 +51,9 @@
       "12"
     ],
     "dm": []
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "89e30b160fda2e1c4fa765b182ef010edcd0e3a2fcd9556fab5a75a383501be5"
   }
 }

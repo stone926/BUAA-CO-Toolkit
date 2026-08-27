@@ -1,8 +1,12 @@
 // @index mips-host — MipsRuntimeManager：懒启动 Worker 骨架与生命周期
 import * as path from 'path';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { Worker } from 'worker_threads';
-import { WorkerClient, MipsWorkerPort } from './workerClient';
+import {
+  WorkerClient,
+  MipsWorkerPort,
+  type WorkerProtocolObservation
+} from './workerClient';
 import { WorkerJob, WorkerOutboundMessage, workerProtocolVersion } from './workerProtocol';
 
 /**
@@ -16,8 +20,15 @@ export class MipsRuntimeManager implements vscode.Disposable {
   private worker: Worker | undefined;
   private disposed = false;
 
-  constructor(options: { workerPath?: string; cancelGraceMs?: number } = {}) {
-    this.client = new WorkerClient({ cancelGraceMs: options.cancelGraceMs });
+  constructor(options: {
+    workerPath?: string;
+    cancelGraceMs?: number;
+    observeProtocol?: (observation: WorkerProtocolObservation) => void;
+  } = {}) {
+    this.client = new WorkerClient({
+      cancelGraceMs: options.cancelGraceMs,
+      observeProtocol: options.observeProtocol
+    });
     this.workerPath = options.workerPath ?? path.join(__dirname, 'workerMain.js');
   }
 

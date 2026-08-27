@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** The sole writer/validator for independent courseVector artifacts. */
-import * as fs from 'node:fs';
+import * as fs from '../guardedFs.mjs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -16,8 +16,24 @@ import {
 } from '../../runner/courseVectorArtifact.mjs';
 import { loadCorpusManifest } from '../../runner/caseManifest.mjs';
 import { assertPolicyReviewer } from '../../governance/reviewerPolicy.mjs';
+import {
+  approvalEnvelopeFile,
+  assertCandidateApproved,
+  candidateDescriptor,
+  createApprovalEnvelope
+} from '../../governance/approvalEnvelope.mjs';
 
 const contractLedgerFile = path.join(courseVectorPaths.conformanceRoot, 'contract', 'contracts.json');
+
+function writeJsonAtomic(file, value) {
+  const temporary = `${file}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(temporary, file);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
 
 function usageError(message) {
   throw new Error(`${message}\nUsage: manage-course-vectors.mjs --verify [--require-approved] | --review | --refresh-integrity | --approve --reviewer <id> --review-revision <n>`);
@@ -70,7 +86,7 @@ function refreshTutorialRegistry() {
     algorithm: 'sha256-canonical-json-v1',
     sourcesSha256: sha256Text(canonicalJson(registry.sources))
   };
-  fs.writeFileSync(file, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
+  writeJsonAtomic(file, registry);
   return registry.integrity.sourcesSha256;
 }
 
@@ -121,7 +137,9 @@ export function refreshVectorDerived(vector, newSourceSha256, newSourceRegistryS
   const evidenceChanged = previousSourceSha256 !== newSourceSha256
     || previousSourceRegistrySha256 !== newSourceRegistrySha256
     || previousPayloadSha256 !== nextPayloadSha256;
-  if (evidenceChanged && vector.review?.status === 'approved') {
+  // Migrate any legacy embedded approval claim back to an inert candidate.
+  // Authoritative approval state is external and content-addressed.
+  if (vector.review?.status !== 'candidate') {
     vector.review = { ...vector.review, status: 'candidate', reviewer: null, reviewedAt: null, reviewRevision: 0 };
   }
   vector.integrity = { algorithm: 'sha256-canonical-json-v1', payloadSha256: nextPayloadSha256 };
@@ -137,20 +155,27 @@ function refreshArtifacts(manifest, sourceRegistrySha256) {
       sourceSha256(path.join(courseVectorPaths.corpusRoot, vector.source.corpusFile)),
       sourceRegistrySha256
     );
-    fs.writeFileSync(file, `${JSON.stringify(vector, null, 2)}\n`, 'utf8');
+    writeJsonAtomic(file, vector);
   }
 }
 
 function approveArtifacts(manifest, reviewer, reviewRevision) {
-  const today = new Date().toISOString().slice(0, 10);
   for (const manifestCase of artifactCases(manifest)) {
     const file = path.join(courseVectorPaths.vectorRoot, manifestCase.courseVector);
-    const vector = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (vector.review.author === reviewer) {
-      throw new Error(`${vector.caseId}: reviewer must differ from author`);
+    const vector = loadCourseVector(manifestCase).vector;
+    const subject = candidateDescriptor({
+      artifactKind: 'courseVector',
+      artifactId: vector.caseId,
+      file,
+      candidateAuthor: vector.review.author,
+      candidateRevision: vector.provenance.vectorRevision
+    });
+    const approvalFile = approvalEnvelopeFile(subject);
+    if (fs.existsSync(approvalFile)) {
+      assertCandidateApproved(subject);
+    } else {
+      createApprovalEnvelope(subject, { reviewer, reviewRevision });
     }
-    vector.review = { ...vector.review, status: 'approved', reviewer, reviewedAt: today, reviewRevision };
-    fs.writeFileSync(file, `${JSON.stringify(vector, null, 2)}\n`, 'utf8');
   }
 }
 
@@ -182,7 +207,7 @@ export function run(argv) {
         rawSource: fs.readFileSync(path.join(courseVectorPaths.corpusRoot, item.vector.source.corpusFile), 'utf8').replace(/\r\n?/g, '\n'),
         normalizedExpected: item.vector.expected,
         provenance: item.vector.provenance,
-        review: item.vector.review,
+        candidate: item.vector.review,
         sourceSha256: item.vector.source.sha256,
         payloadSha256: item.vector.integrity.payloadSha256
       })}\n`);
@@ -191,7 +216,7 @@ export function run(argv) {
   if (options.action === 'review') {
     process.stdout.write(`${JSON.stringify({ type: 'course-vector-review-summary', artifacts: artifactCases(manifest).length })}\n`);
   } else {
-    process.stdout.write(`courseVector verification OK: ${artifactCases(manifest).length} artifacts; review=${options.requireApproved || options.action === 'approve' ? 'approved' : 'candidate-allowed'}\n`);
+    process.stdout.write(`courseVector verification OK: ${artifactCases(manifest).length} artifacts; approval=${options.requireApproved || options.action === 'approve' ? 'required' : 'candidate-allowed'}\n`);
   }
   return 0;
 }

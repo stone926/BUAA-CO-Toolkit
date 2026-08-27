@@ -182,9 +182,9 @@ describe('manifest v1/v2 codec', () => {
     expect(view.source?.original).toBe('E:/work/src/test.asm');
   });
 
-  it('maps v2 groups back to the v1-shaped view with dut prefixes', () => {
+  it('keeps v2 oracle terminology while exposing DUT compatibility prefixes', () => {
     const view = manifestArtifactsOf(v2Manifest);
-    expect(view.mars?.traceOut).toBe('oracle/mars.out');
+    expect(view.oracle?.traceOut).toBe('oracle/mars.out');
     expect(view.verilog?.traceOut).toBe('verilog/sim.out');
     expect(view.logisim?.preparedCircuit).toBe('logisim/cpu.circ');
     expect(view.source?.original).toBe('program.asm');

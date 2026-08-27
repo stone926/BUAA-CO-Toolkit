@@ -26,6 +26,15 @@ const forbiddenBare = new Set([
 const nodeBuiltins = new Set(builtinModules.map((name) => name.replace(/^node:/, '').split('/')[0]));
 
 const violations = [];
+const legacyProcessConsumers = new Set([
+  'src/mips.ts',
+  'src/mips/providers/legacyMarsProvider.ts'
+]);
+const providerNeutralOrchestration = new Set([
+  'src/courseTesting/traceRunner.ts',
+  'src/courseTestLogisim.ts'
+]);
+const legacyTraceApiPattern = /\b(?:iterMarsDetailedTraceEvents|courseTraceMarsHaltError|courseMarsOracleCompatibilityError|machineCodeNeedsDetailedMarsTrace|marsDetailedUndefinedBehaviorError|traceLevel|traceOutput|imageRef)\b/;
 
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -65,11 +74,40 @@ function walk(dir) {
   }
 }
 
+function walkProduction(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'test') continue;
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkProduction(file);
+      continue;
+    }
+    if (!entry.name.endsWith('.ts')) continue;
+    const relative = path.relative(root, file).split(path.sep).join('/');
+    const text = fs.readFileSync(file, 'utf8');
+    if (!legacyProcessConsumers.has(relative) && /\brunMarsFile\b/.test(text)) {
+      violations.push(`${relative}: consumes runMarsFile outside the legacy provider adapter`);
+    }
+    if (providerNeutralOrchestration.has(relative) && legacyTraceApiPattern.test(text)) {
+      violations.push(`${relative}: consumes a legacy MARS request/trace API in provider-neutral orchestration`);
+    }
+    if (relative.startsWith('src/courseTesting/') || relative === 'src/courseTestLogisim.ts') {
+      for (const match of text.matchAll(moduleSpecifierPattern)) {
+        const specifier = match[1] ?? match[2] ?? match[3];
+        if (specifier && /(?:^|\/)mips\/legacy(?:\/|$)/.test(specifier.replace(/\\/g, '/'))) {
+          violations.push(`${relative}: imports legacy/reference implementation "${specifier}"`);
+        }
+      }
+    }
+  }
+}
+
 if (!fs.existsSync(coreDir)) {
   console.error('src/mips/core does not exist.');
   process.exitCode = 1;
 } else {
   walk(coreDir);
+  walkProduction(path.join(root, 'src'));
 }
 
 if (violations.length) {
@@ -79,5 +117,5 @@ if (violations.length) {
   }
   process.exitCode = 1;
 } else {
-  console.log('Module boundary check OK: src/mips/core has no host dependencies.');
+  console.log('Module boundary check OK: core purity and provider-neutral legacy boundaries hold.');
 }

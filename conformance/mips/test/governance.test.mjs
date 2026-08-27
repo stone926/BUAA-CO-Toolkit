@@ -36,5 +36,8 @@ test('package scripts keep candidate and formal gates mechanically separate', ()
   assert.match(packageJson.scripts['verify:formal'], /verify:course-vectors:approved/);
   assert.match(packageJson.scripts['verify:formal'], /verify:ts-cli:approved/);
   assert.match(packageJson.scripts['verify:formal'], /benchmark:verify-approved/);
+  assert.match(packageJson.scripts['verify:formal'], /verify:seed-evidence:formal/);
+  assert.match(packageJson.scripts['verify:candidate'], /verify:seed-evidence:candidate/);
+  assert.doesNotMatch(packageJson.scripts['verify:candidate'], /seed-evidence:formal/);
   assert.doesNotMatch(packageJson.scripts['verify:candidate'], /:approved|verify:formal|run:formal/);
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from '../../courseTesting/marsStepLimit';
+import { courseExecutionInstructionBudget } from '../../courseTesting/executionBudget';
+import { courseTraceMarsHaltError } from '../../mips/legacy/haltValidation';
 
 describe('generated course-trace MARS step limit', () => {
   it('derives a bounded native MARS limit from built-in random ASM metadata', () => {
@@ -11,29 +12,29 @@ describe('generated course-trace MARS step limit', () => {
     ].join('\n');
 
     for (const profile of ['P3', 'P4', 'P5', 'P6'] as const) {
-      expect(generatedCourseTraceMarsStepLimit(profile, asm, true, '1000ffff\n00000000\n')).toBe(8064);
+      expect(courseExecutionInstructionBudget(profile, asm, true, '1000ffff\n00000000\n')).toBe(8064);
     }
-    expect(generatedCourseTraceMarsStepLimit('P7', asm, true, '1000ffff\n00000000\n')).toBe(64256);
+    expect(courseExecutionInstructionBudget('P7', asm, true, '1000ffff\n00000000\n')).toBe(64256);
   });
 
   it('uses a conservative final-machine-code limit for selected/external ASM', () => {
     const shortDump = '24010001\n1000ffff\n00000000\n';
     const fullDump = `${'00000000\n'.repeat(4094)}1000ffff\n00000000\n`;
-    expect(generatedCourseTraceMarsStepLimit('P6', '# instruction_count: 4000\n.text', true, shortDump)).toBe(65_536);
-    expect(generatedCourseTraceMarsStepLimit('P6', '# Built-in BUAA CO random ASM test\n.text', true, fullDump)).toBe(262_144);
+    expect(courseExecutionInstructionBudget('P6', '# instruction_count: 4000\n.text', true, shortDump)).toBe(65_536);
+    expect(courseExecutionInstructionBudget('P6', '# Built-in BUAA CO random ASM test\n.text', true, fullDump)).toBe(262_144);
   });
 
   it('keeps short generated programs alive long enough to reach their halt loop', () => {
     const asm = '# Built-in BUAA CO random ASM test\n# instruction_count: 1\n';
 
-    expect(generatedCourseTraceMarsStepLimit('P3', asm, true, '')).toBe(256);
-    expect(generatedCourseTraceMarsStepLimit('P7', asm, true, '')).toBe(512);
+    expect(courseExecutionInstructionBudget('P3', asm, true, '')).toBe(256);
+    expect(courseExecutionInstructionBudget('P7', asm, true, '')).toBe(512);
   });
 
   it('does not trust spoofed built-in metadata without manifest provenance', () => {
     const spoofed = '# Built-in BUAA CO random ASM test\n# instruction_count: 1\n';
 
-    expect(generatedCourseTraceMarsStepLimit('P6', spoofed, false, '1000ffff\n00000000\n')).toBe(65_536);
+    expect(courseExecutionInstructionBudget('P6', spoofed, false, '1000ffff\n00000000\n')).toBe(65_536);
   });
 
   it('accepts stable coL2 proof of the validated halt branch and the newer marker', () => {

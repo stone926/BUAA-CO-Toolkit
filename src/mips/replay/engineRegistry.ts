@@ -6,6 +6,7 @@ import type { EngineArtifactIdentity } from '../providers/contracts';
 import { canonicalJson, sha256Bytes, type CanonicalJson } from './canonical';
 
 export const engineArtifactRegistrySchemaRevision = 1;
+export const engineArtifactTrustManifestSchemaRevision = 1;
 export const maximumEngineArtifactBytes = 256 * 1024 * 1024;
 export const maximumEngineRegistryMetadataBytes = 16 * 1024;
 const streamBufferBytes = 1024 * 1024;
@@ -16,6 +17,70 @@ const streamBufferBytes = 1024 * 1024;
  * role+digest set by scanning every retained case manifest.
  */
 export const engineArtifactRetentionPolicy = 'retain-until-explicit-live-manifest-gc' as const;
+
+/**
+ * A trust manifest is application input, not registry metadata. The current production root is
+ * compiled into the extension. A future dynamic receipt API must verify a signature before adding
+ * an identity; a workspace file must never gain authority merely by being adjacent to a case.
+ */
+export interface EngineArtifactTrustManifest {
+  schemaRevision: typeof engineArtifactTrustManifestSchemaRevision;
+  authority: string;
+  revision: string;
+  artifacts: readonly EngineArtifactTrustEntry[];
+}
+
+export interface EngineArtifactTrustEntry {
+  role: string;
+  sha256: string;
+  bytes: number;
+  /** Omit only for a digest alias whose source may legitimately have been renamed by the user. */
+  fileName?: string;
+}
+
+/**
+ * Release-reviewed identities compiled into the shipped JavaScript. This is the persistent trust
+ * root used by a fresh process; registry-local `artifact.json` files are deliberately not one.
+ *
+ * The `user-configured-mars` aliases let an archived case remain replayable when the configured
+ * file was one of the reviewed releases, even if that file had a local basename. Exact bytes and
+ * byte count are still checked on every resolve and every private staging copy.
+ */
+export const fixedReferenceEngineArtifactTrustManifest: Readonly<EngineArtifactTrustManifest> = Object.freeze({
+  schemaRevision: engineArtifactTrustManifestSchemaRevision,
+  authority: 'stone926/Mars-with-BUAA-CO-extension releases + BUAA-CO-Toolkit packaged runtime',
+  revision: '2026-08-26',
+  artifacts: Object.freeze([
+    Object.freeze({
+      role: 'mars-assembler-v0.6.3',
+      sha256: '599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31',
+      bytes: 3_544_465,
+      fileName: 'Mars_CO_v0.6.3.jar'
+    }),
+    Object.freeze({
+      role: 'user-configured-mars',
+      sha256: '599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31',
+      bytes: 3_544_465
+    }),
+    Object.freeze({
+      role: 'legacy-course-executor',
+      sha256: 'd134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64',
+      bytes: 3_599_004,
+      fileName: 'Mars_CO_v0.6.3-course1.jar'
+    }),
+    Object.freeze({
+      role: 'user-configured-mars',
+      sha256: 'd134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64',
+      bytes: 3_599_004
+    }),
+    Object.freeze({
+      role: 'mars-p7-ri-instruction-class',
+      sha256: '2add0891caacf2f29c683a6afedd859891bceeb22937174f8480b4390ba125f6',
+      bytes: 891,
+      fileName: '_co_internal_unknown_instruction.class'
+    })
+  ])
+});
 
 interface RegistryMetadata {
   schemaRevision: typeof engineArtifactRegistrySchemaRevision;
@@ -34,12 +99,15 @@ export interface ResolvedEngineArtifact {
 
 export class ImmutableEngineArtifactRegistry {
   private readonly executionAuthorizations = new Set<string>();
+  private readonly persistentTrust: ReadonlyMap<string, TrustedExecutionIdentity>;
 
   constructor(
     readonly root: string,
     /** Trusted lexical anchor. Production passes the workspace root. */
     readonly containmentRoot: string = path.dirname(path.resolve(root))
-  ) {}
+  ) {
+    this.persistentTrust = buildPersistentTrust([fixedReferenceEngineArtifactTrustManifest]);
+  }
 
   async registerFile(role: string, sourceFile: string, fileName = path.basename(sourceFile)): Promise<ResolvedEngineArtifact> {
     assertRole(role);
@@ -164,10 +232,19 @@ export class ImmutableEngineArtifactRegistry {
   /** Copy a verified registry entry into a fresh private execution directory. */
   async stageForExecution(identity: EngineArtifactIdentity, destinationDir: string): Promise<ResolvedEngineArtifact> {
     const role = identity.role;
-    if (!role || !this.executionAuthorizations.has(authorizationKey(role, identity.sha256))) {
-      throw registryError('engine artifact is not authorized for execution by this registry instance; register trusted input first', 'INVALID');
+    const key = role ? authorizationKey(role, identity.sha256) : '';
+    const sessionAuthorized = Boolean(role && this.executionAuthorizations.has(key));
+    const persistentAuthorization = role ? this.persistentTrust.get(key) : undefined;
+    if (!sessionAuthorized && !persistentAuthorization) {
+      throw registryError(
+        'engine artifact is not authorized for execution; register trusted input in this session or use a fixed application-owned trust identity',
+        'INVALID'
+      );
     }
     const resolved = await this.resolve(identity);
+    if (!sessionAuthorized && persistentAuthorization) {
+      assertPersistentAuthorization(resolved, persistentAuthorization);
+    }
     await fs.promises.mkdir(destinationDir, { recursive: true });
     const target = path.join(destinationDir, safeFileName(resolved.identity.fileName ?? 'engine.bin'));
     let source: fs.promises.FileHandle | undefined;
@@ -254,6 +331,81 @@ export class ImmutableEngineArtifactRegistry {
       // A concurrent writer may have won. Its complete entry is independently verified below.
     }
     return await this.resolve({ sha256: digest, role });
+  }
+}
+
+interface TrustedExecutionIdentity extends EngineArtifactTrustEntry {
+  authority: string;
+  revision: string;
+}
+
+function buildPersistentTrust(
+  manifests: readonly EngineArtifactTrustManifest[]
+): ReadonlyMap<string, TrustedExecutionIdentity> {
+  const trust = new Map<string, TrustedExecutionIdentity>();
+  for (const manifest of manifests) {
+    assertTrustManifest(manifest);
+    for (const artifact of manifest.artifacts) {
+      const key = authorizationKey(artifact.role, artifact.sha256);
+      if (trust.has(key)) {
+        throw registryError(`duplicate engine trust identity: ${key}`, 'INVALID');
+      }
+      trust.set(key, Object.freeze({
+        role: artifact.role,
+        sha256: artifact.sha256,
+        bytes: artifact.bytes,
+        ...(artifact.fileName === undefined ? {} : { fileName: artifact.fileName }),
+        authority: manifest.authority,
+        revision: manifest.revision
+      }));
+    }
+  }
+  return trust;
+}
+
+function assertTrustManifest(manifest: EngineArtifactTrustManifest): void {
+  if (!isRecord(manifest)) throw registryError('engine artifact trust manifest must be an object', 'INVALID');
+  const allowedManifestKeys = new Set(['schemaRevision', 'authority', 'revision', 'artifacts']);
+  if (!Object.keys(manifest).every((key) => allowedManifestKeys.has(key))
+    || manifest.schemaRevision !== engineArtifactTrustManifestSchemaRevision
+    || !validTrustLabel(manifest.authority)
+    || !validTrustLabel(manifest.revision)
+    || !Array.isArray(manifest.artifacts)
+    || manifest.artifacts.length === 0
+    || manifest.artifacts.length > 1_024) {
+    throw registryError('engine artifact trust manifest failed schema validation', 'INVALID');
+  }
+  for (const artifact of manifest.artifacts) {
+    if (!isRecord(artifact)) throw registryError('engine artifact trust entry must be an object', 'INVALID');
+    const allowedArtifactKeys = new Set(['role', 'sha256', 'bytes', 'fileName']);
+    if (!Object.keys(artifact).every((key) => allowedArtifactKeys.has(key))
+      || typeof artifact.role !== 'string' || !validRole(artifact.role)
+      || typeof artifact.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(artifact.sha256)
+      || !Number.isSafeInteger(artifact.bytes) || (artifact.bytes as number) <= 0
+      || (artifact.bytes as number) > maximumEngineArtifactBytes
+      || (artifact.fileName !== undefined
+        && (typeof artifact.fileName !== 'string' || safeFileName(artifact.fileName) !== artifact.fileName))) {
+      throw registryError('engine artifact trust entry failed schema validation', 'INVALID');
+    }
+  }
+}
+
+function validTrustLabel(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 512 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function assertPersistentAuthorization(
+  resolved: ResolvedEngineArtifact,
+  authorization: TrustedExecutionIdentity
+): void {
+  if (resolved.bytes !== authorization.bytes
+    || resolved.identity.role !== authorization.role
+    || resolved.identity.sha256 !== authorization.sha256
+    || (authorization.fileName !== undefined && resolved.identity.fileName !== authorization.fileName)) {
+    throw registryError(
+      `engine registry entry does not match persistent trust ${authorization.authority}@${authorization.revision}`,
+      'CORRUPT'
+    );
   }
 }
 

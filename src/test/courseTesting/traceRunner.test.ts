@@ -14,12 +14,7 @@ import { runIsim } from '../../verilog';
 import { readTextFile } from '../../fsUtil';
 import { compareTraceIterables } from '../../language/mips/traceCompare';
 import {
-  iterCpuTraceEvents,
-  iterMarsDetailedTraceEvents,
-  machineCodeNeedsDetailedMarsTrace,
-  machineCodeNeedsLinkBranchOracleRepairTrace,
-  machineCodeNeedsUndefinedBehaviorTrace,
-  marsDetailedUndefinedBehaviorError
+  iterCpuTraceEvents
 } from '../../language/mips/traceParser';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
 
@@ -63,12 +58,7 @@ vi.mock('../../language/mips/traceCompare', () => ({
 }));
 
 vi.mock('../../language/mips/traceParser', () => ({
-  iterCpuTraceEvents: vi.fn((text: string) => text.split('\n').filter((line) => line === 'trace')),
-  iterMarsDetailedTraceEvents: vi.fn((text: string) => [`detailed:${text.split('\n')[0]}`]),
-  machineCodeNeedsDetailedMarsTrace: vi.fn(() => false),
-  machineCodeNeedsLinkBranchOracleRepairTrace: vi.fn(() => false),
-  machineCodeNeedsUndefinedBehaviorTrace: vi.fn(() => false),
-  marsDetailedUndefinedBehaviorError: vi.fn(() => undefined)
+  iterCpuTraceEvents: vi.fn((text: string) => text.split('\n').filter((line) => line === 'trace'))
 }));
 
 vi.mock('../../language/verilog/traceParser', () => ({
@@ -88,6 +78,13 @@ vi.mock('../../courseTesting/p7ProbeCheck', () => ({
 }));
 
 const callOrder: string[] = [];
+const testProgramImage = {
+  formatVersion: 1,
+  fingerprint: 'a'.repeat(64),
+  entryPc: 0x3000,
+  segments: [{ name: 'text', baseAddress: 0x3000, words: [0, 0x1000ffff] }],
+  symbols: [], sourceMap: [], inputGraph: [{ id: 'root', contentHash: 'b'.repeat(64) }]
+} as const;
 
 function services() {
   return {
@@ -149,18 +146,31 @@ describe('course trace runner orchestration', () => {
         ok: true,
         status: { ok: true, exitCode: 0, stdout: '', stderr: '', timedOut: false },
         outputFile: currentCase.machineCode,
-        descriptor
+        descriptor,
+        image: testProgramImage,
+        executionBinding: {
+          kind: 'source-reassembly', providerId: descriptor.id,
+          sourceUri: currentCase.sourceAsm, imageFingerprint: testProgramImage.fingerprint
+        }
       } as never;
     });
     vi.mocked(executeWithPreflight).mockImplementation(async () => {
-      callOrder.push('mars');
+      callOrder.push('oracle');
       return {
         ok: true,
         result: {
           ok: true,
           status: { ok: true, exitCode: 0, stdout: '', stderr: '', timedOut: false },
-          outputFile: URI.file('E:/work/mars.out'),
-          descriptor
+          outputFile: URI.file('E:/work/oracle.out'),
+          descriptor,
+          trace: {
+            schemaRevision: 1,
+            eventSchema: 'buaa-co-architectural-write-v1',
+            events: ['canonical-oracle-event'],
+            rawText: '@PC00003004 -> beq $0, $0, -1 (1000ffff)\n',
+            rawTraceRevision: 2
+          },
+          stop: { kind: 'halt-loop', haltPc: 0x3004 }
         },
         preflight: { ok: true, diagnostics: [], descriptor }
       } as never;
@@ -175,9 +185,6 @@ describe('course trace runner orchestration', () => {
       };
     });
     vi.mocked(readTextFile).mockImplementation(async (uri) => {
-      if (uri.fsPath.endsWith('mars.out')) {
-        return '@PC00003004 -> beq $0, $0, -1 (1000ffff)\n';
-      }
       if (uri.fsPath.endsWith('code.txt')) {
         return '00000000\n1000ffff\n';
       }
@@ -194,22 +201,24 @@ describe('course trace runner orchestration', () => {
     vi.mocked(checkP7Probe).mockReturnValue({ passed: true, failures: [] } as never);
   });
 
-  it('creates a case, dumps machine code, runs Mars and ISim, then compares traces', async () => {
+  it('creates a case, assembles a ProgramImage, runs an oracle and ISim, then compares canonical traces', async () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
-    expect(callOrder).toEqual(expect.arrayContaining(['create-case', 'dump', 'mars', 'isim', 'compare']));
+    expect(callOrder).toEqual(expect.arrayContaining(['create-case', 'dump', 'oracle', 'isim', 'compare']));
     expect(callOrder.indexOf('create-case')).toBeLessThan(callOrder.indexOf('dump'));
-    expect(callOrder.indexOf('dump')).toBeLessThan(callOrder.indexOf('mars'));
-    expect(callOrder.indexOf('mars')).toBeLessThan(callOrder.indexOf('isim'));
+    expect(callOrder.indexOf('dump')).toBeLessThan(callOrder.indexOf('oracle'));
+    expect(callOrder.indexOf('oracle')).toBeLessThan(callOrder.indexOf('isim'));
     expect(callOrder.indexOf('isim')).toBeLessThan(callOrder.indexOf('compare'));
     const executeRequest = vi.mocked(executeWithPreflight).mock.calls[0][1];
-    expect(executeRequest).toMatchObject({ traceLevel: 2, haltPc: 0x3004 });
-    expect(machineCodeNeedsDetailedMarsTrace).toHaveBeenCalledWith('00000000\n1000ffff\n');
-    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
+    expect(executeRequest).toMatchObject({
+      image: testProgramImage,
+      trace: { kind: 'architectural-writes', courseCorrect: true },
+      haltPc: 0x3004
+    });
     expect(result).toMatchObject({
       stage: 'compare',
-      oracleOut: expect.stringContaining('mars.out'),
+      oracleOut: expect.stringContaining('oracle.out'),
       dutOut: expect.stringContaining('sim.out'),
       oracleEvents: 1,
       dutEvents: 1
@@ -296,58 +305,82 @@ describe('course trace runner orchestration', () => {
     expect(runIsim).not.toHaveBeenCalled();
   });
 
-  it('uses coL2 and the instruction-block parser when machine code contains SWL/SWR', async () => {
-    vi.mocked(machineCodeNeedsDetailedMarsTrace).mockReturnValueOnce(true);
-
+  it('compares the canonical provider projection without interpreting provider-private trace text', async () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
     expect(executeWithPreflight).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ traceOutput: true, traceLevel: 2 }),
+      expect.objectContaining({ trace: { kind: 'architectural-writes', courseCorrect: true } }),
       expect.objectContaining({ signal: undefined })
     );
-    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
     expect(iterCpuTraceEvents).toHaveBeenCalledTimes(1);
     expect(compareTraceIterables).toHaveBeenCalledWith(
-      ['detailed:@PC00003004 -> beq $0, $0, -1 (1000ffff)'],
+      ['canonical-oracle-event'],
       ['trace'],
       expect.objectContaining({ retainedEntryLimit: 1 })
     );
   });
 
-  it('uses coL2 so REGIMM link writes can be repaired to MIPS semantics', async () => {
-    vi.mocked(machineCodeNeedsLinkBranchOracleRepairTrace).mockReturnValueOnce(true);
-
+  it('passes only ProgramImage and a provider-neutral execution binding across the orchestration boundary', async () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
-    expect(executeWithPreflight).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ traceOutput: true, traceLevel: 2 }),
-      expect.objectContaining({ signal: undefined })
-    );
-    expect(iterMarsDetailedTraceEvents).toHaveBeenCalledWith(expect.stringContaining('@PC00003004'));
+    const request = vi.mocked(executeWithPreflight).mock.calls[0][1];
+    expect(request.image).toEqual(testProgramImage);
+    expect(request.executionBinding).toMatchObject({
+      kind: 'source-reassembly',
+      providerId: 'legacy-mars-v0.6.3',
+      imageFingerprint: testProgramImage.fingerprint
+    });
+    expect(request).not.toHaveProperty('sourceUri');
+    expect(request).not.toHaveProperty('imageRef');
+    expect(request).not.toHaveProperty('traceLevel');
+    expect(request).not.toHaveProperty('traceOutput');
   });
 
   it('rejects an actually executed tutorial undefined behavior before running ISim', async () => {
-    vi.mocked(machineCodeNeedsUndefinedBehaviorTrace).mockReturnValueOnce(true);
-    vi.mocked(marsDetailedUndefinedBehaviorError).mockReturnValueOnce('教程未定义行为 DivZero');
+    const descriptor = { id: 'legacy-mars-v0.6.3' } as never;
+    vi.mocked(executeWithPreflight).mockResolvedValueOnce({
+      ok: false,
+      result: {
+        ok: false,
+        status: {
+          ok: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: '教程未定义行为 DivZero',
+          timedOut: false
+        },
+        descriptor
+      },
+      preflight: { ok: true, diagnostics: [], descriptor }
+    } as never);
 
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
     expect(result.message).toContain('DivZero');
-    expect(executeWithPreflight).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ traceLevel: 2 }),
-      expect.objectContaining({ signal: undefined })
-    );
     expect(runIsim).not.toHaveBeenCalled();
   });
 
-  it('rejects a normal MARS cliff exit that never reached the validated halt tail', async () => {
-    vi.mocked(readTextFile).mockResolvedValue('trace\n');
+  it('surfaces a provider stop-validation failure without knowing its legacy trace format', async () => {
+    const descriptor = { id: 'legacy-mars-v0.6.3' } as never;
+    vi.mocked(executeWithPreflight).mockResolvedValueOnce({
+      ok: false,
+      result: {
+        ok: false,
+        status: {
+          ok: false,
+          exitCode: 0,
+          stdout: '',
+          stderr: 'MARS 正常退出但跳出已装载文本，未到达标准停机尾',
+          timedOut: false
+        },
+        descriptor
+      },
+      preflight: { ok: true, diagnostics: [], descriptor }
+    } as never);
 
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
@@ -356,7 +389,7 @@ describe('course trace runner orchestration', () => {
     expect(runIsim).not.toHaveBeenCalled();
   });
 
-  it('stops after a failed dump without running Mars or ISim', async () => {
+  it('stops after a failed assembly without running the oracle or ISim', async () => {
     vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({
       ok: false,
       status: { ok: false, exitCode: 1, stdout: '', stderr: 'bad', timedOut: false },
@@ -384,7 +417,7 @@ describe('course trace runner orchestration', () => {
     expect(result.stage).toBe('dut');
     expect(result.caseId).toBe('case-1');
     expect(result.machineCode).toContain('code.txt');
-    expect(result.oracleOut).toContain('mars.out');
+    expect(result.oracleOut).toContain('oracle.out');
     expect(result).not.toHaveProperty('marsOut');
   });
 

@@ -1,6 +1,6 @@
 {
-  "schemaRevision": 2,
-  "description": "Frozen L1 PR seeds: exactly 50 explicit cases per P3-P7 profile. This file is generated without importing production generator/catalog code.",
+  "schemaRevision": 3,
+  "description": "Frozen L1 PR seeds: exactly 50 deterministic source/image cases per P3-P7 profile. Source and image hashes are rendered without importing production generator/catalog/contract code and are verified through the JSONL ISA process boundary.",
   "seedHashFunction": "fnv1a-utf8-bytes-u32",
   "batch": {
     "id": "L1-PR-FIXED-V1",
@@ -12,7 +12,8 @@
       "P6",
       "P7"
     ],
-    "runnerRevision": 1
+    "runnerRevision": 1,
+    "rendererRevision": 1
   },
   "cases": [
     {
@@ -26,7 +27,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b6ae72bc83968c4ec6dd3347d8910acd8964d33b182251d00bae00cecbbf1138",
+      "imageSha256": "ab8b827664900836d81a1445c30489bd8519a97512233d6272924ba197f4ee52",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0002",
@@ -39,7 +45,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a6eaa7408784494d517bae664c0d50e8e3d6262de2333b027f7ba7819c3b46dd",
+      "imageSha256": "0460a46fc0ac1b76f836c5d8938c762ead1c4f5b1ff42e44396bee28c965a47b",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0003",
@@ -52,7 +63,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f2ad37e175ca0cab13ba37927574b8e666d0a6be87df25047b20aa7f39ba219d",
+      "imageSha256": "7cb74cd5ca9c4e142bdd3c4122fa42f047985c73903182134025da528bb0e8ca",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0004",
@@ -65,7 +81,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7cc4155bc209ca673e6fa3d4247ca717b67946bcfad6af49f55e028f9b622451",
+      "imageSha256": "854b16a30e06370ac6c8ea468320dc183d0d5fba69a22c661565f662d8b58665",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0005",
@@ -78,7 +99,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "db74b4318edda8b77bb2ac6ab3b41995e6003bc4f9b61ffc7f52bf8ccff37fef",
+      "imageSha256": "bd49ec23cc63e9f9b21c7900ed18d68eb41b966cf3e8ffba6bf05592499d4655",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0006",
@@ -91,7 +117,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6ba41b53ed3dc306fbf683077391bfafcfd40030913ea4e3e19e25f904d11fa5",
+      "imageSha256": "eef3cb5c691efe35331379f88f1a6b4867f71a48864c79800454bc88a6ea458b",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0007",
@@ -104,7 +135,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "aef58deaa76a2a1465b57ea597b5c45b1264cf0a39a9b0dcca87908491524d9c",
+      "imageSha256": "ed80c20eedc6c70de31a85a036f78116240758e449f6c9303a31cfddeba667f9",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0008",
@@ -117,7 +153,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "14ee90e1f2d6519c94e972bc570ffb7912336b1c3c7decd6c512ed47b28dab23",
+      "imageSha256": "dd07594bf98429b0d2cbc8798c612a3b2bc2881eb204d71836451d4921c3ce22",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0009",
@@ -130,7 +171,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ac60a945a1e726e2707fe4572e027ad652ef450172bd705dda69666bcb80c42a",
+      "imageSha256": "b4b746b538eb8cd58e27fe4e3a04f8aabdd5d90bfb1039e77ec4459a63d5aacf",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0010",
@@ -143,7 +189,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "c55850b153ce783a8e140f96683cac23764924e7312b1d9c70fa61c1ab0c5907",
+      "imageSha256": "2aa7ee73f0c7f4ce19737cb062e882daeae558de5af8d6c376b3ebe198dcb6f2",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0011",
@@ -156,7 +207,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "23da4c616efbf9ec3b9e8e838266aa8ab5266ba171a120b9e1846ad5e9189d82",
+      "imageSha256": "6186c4224fbad77855ac31051346174528f3005b84e67ab1395f743f8ecefc98",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0012",
@@ -169,7 +225,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "961409a24c726cbd535a7ca09deb82760731c708f429417885a91e6904ad6a74",
+      "imageSha256": "ceae669a61791eb7c51a26b5f71434a48db885b3f46525d79a7338f04d2ed4f2",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0013",
@@ -182,7 +243,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "5bfad963448c54dd34ce22eee2f112a41b58e6f170d68e827bf48d66a877cffd",
+      "imageSha256": "c51e7540acec29f8978d3dfe1bfe84fe4c2ea738fa2f828063f128209db49188",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0014",
@@ -195,7 +261,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6ef75b0cd0eec51e8ca04cf8e3593430e1012a74fecf04536bc86573eeed7127",
+      "imageSha256": "cbde4b2fa20b56917ef6e1f8da850fa582f4b66f9eb31bf0b771d1dcded51afb",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0015",
@@ -208,7 +279,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d18c901f3fb6053839e2aa9a98f7aa465489f10ad0e4461057ae6bcbb0982be2",
+      "imageSha256": "ef1af7ca850a14e5e202e835f9d2b31422b475dec490e90b422cfad08986a21d",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0016",
@@ -221,7 +297,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "72f572b740c71071ad05e878334ef5b3c23b7cd852706372456bf83f8babc417",
+      "imageSha256": "f1ecfa29ce774e0d85a7675775c22bb389b7c63f2e5c6e4ddcaab10d79a2227b",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0017",
@@ -234,7 +315,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2645af795e1a3c95710d7f7a54c1324a2a784c9de3555aec729334f5a9f74977",
+      "imageSha256": "d6f4ce28e2852734bcbb1c323575a5ef80bd98fafc22f7b01fbc1abc7166adf8",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0018",
@@ -247,7 +333,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9d4dd562224738d7d5fc9f1aecd13e24735136b62472923b05ac051f8d1f6180",
+      "imageSha256": "08a6a6da767f5e3dcc2f8edea3230e5872a88a910fb8fd39a99a5aaf2dc87f2a",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0019",
@@ -260,7 +351,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "296bc863c9997e7535a1ed33a6abce4915664e1a2f0fb0e77ecc9f978e23b82c",
+      "imageSha256": "7f4158f0ecaa4c6ba820e2652f5bf25d39b9651e2556ff1f80d1ad8a21e54581",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0020",
@@ -273,7 +369,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "864a60815504a422f2b302d9738843cfe4908592327ac7e57475997e43643cdd",
+      "imageSha256": "0979d3952a93af28276b8ca3609e9020b9fdc12298524a8664abaa130fab152b",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0021",
@@ -286,7 +387,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1f2f42662ffe5f0698172a0d59b12f63645d1a71c5b96195a776f96bf1ba27b0",
+      "imageSha256": "d43f6e3b161119798a50fc723de6a70be38660cd931d2c1854e30d1908ed2507",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0022",
@@ -299,7 +405,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e39dfb47321b932f7e3f1520f356b6d90948055fd13884d08a302ed3301c0009",
+      "imageSha256": "b5c47c81111a1ba1c3405c747e8b790bb069610c1b06ea6da784be71df3d6829",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0023",
@@ -312,7 +423,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9e9362036195578b9a679db111a51d2fc194d80e9e833e82a88295cb23d28c7f",
+      "imageSha256": "fd59042b3cecdb7d1c07318090d1ff6d76ed930442a68a58f075ae7b626b92d9",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0024",
@@ -325,7 +441,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6d9f8f308aa19692a21fe6f6fa92996f1a3a8cfe2140743cf2b35ef723ea223b",
+      "imageSha256": "95b71e87a8d895d2e1337afd3baff75ed9f79fd9a0fc5827f31d54dbf36719be",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0025",
@@ -338,7 +459,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "456c2ca8955db06e277673832b83920fe7a55fa571fdff42bb8edba238dd1747",
+      "imageSha256": "e850ad01055cb9de3f789796c6a172868e475e63b7f0eca92b134e9d904cbbd7",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0026",
@@ -351,7 +477,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1bc843eee2c42744be5332d8e9432c25b038f595a916350427fdc392007d09a6",
+      "imageSha256": "a13ff5dd3fa09fe52eccd5734f0f8e60d967bbb4e31bad1b58fd5b6136b3e03e",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0027",
@@ -364,7 +495,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "c51b8a17a1cb41ec9225135f86971d504219ef2df03f43741ef1975db8c3843c",
+      "imageSha256": "ac70a11f945491325bf9c5c75be29ed36ae5340b55d89d52ce2282ddbd4a7bdf",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0028",
@@ -377,7 +513,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "85b548b5c2a6863e225de8c5a9f09c6eb2bf9c92b6cdead4af3d004ad162721d",
+      "imageSha256": "f523afb1083fbf5c35dff609fad03a94df0b95b725cf493c777699dbb07000d3",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0029",
@@ -390,7 +531,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "637b974219f99085e7e4c1ebdda4b2794d6c209c731dbc8dec97c3b9dd6bd40a",
+      "imageSha256": "ed6ad83742ccc42a86cb573b2b427371f5503cff2a1b4f7c04cb9971e8da7eb6",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0030",
@@ -403,7 +549,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "aa1c026e9cf6417df5c856534d175b8c3e9262c1db5e513eee8eb51993602def",
+      "imageSha256": "4d879b71fabb9b4fc81f9d5e2f3d8b9431b51e32f539561f76d55cfd46273328",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0031",
@@ -416,7 +567,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "675acadb147d26e61a3c9e7875fed366218a157d7ca52a9afe0439e3309f0872",
+      "imageSha256": "d0ad80c65f289d7bc64952ab0de55c0cc5afc823795cdca8c77af3c36533b96a",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0032",
@@ -429,7 +585,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "5e4100f1086dfaa47f096b43f5ca867aef45ed17c1066a38febb3fc8e3f2a56f",
+      "imageSha256": "d81089596978915f67b42b4f5ba1488e0b23538f0d938204a19abe80b38fa383",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0033",
@@ -442,7 +603,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d23bbe90c78c65fc3716297eed4d1b74d41ae2b08cafd091b00d3a87297f8184",
+      "imageSha256": "711817b7e992a0c7e65b2db68f7fce9c159fc74482d97617e2e239f3ece22f78",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0034",
@@ -455,7 +621,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e03edf06e3625e24a87d0f8d3fde48a21a5b90dbd4de1f4239c9dde0bfa4bb38",
+      "imageSha256": "606a9e0b376bd729b3a593abd40b68e5431adcbbf46ade7bec5dc6ea6dc02953",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0035",
@@ -468,7 +639,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d9a1faf5df280a667bfb98ea2709d697a674db5bf7540537dd0dc1d09d05aca2",
+      "imageSha256": "87cba6e7df1d64f628a182fbe74a48ac0aab54c22af486e4c7e4dcdc35180ed0",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0036",
@@ -481,7 +657,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "98166b5aa58b3438b9c7e9257293521c9e0436ec904eaca9505f0bc54dc4a0cc",
+      "imageSha256": "ee7d80d982388926c06479510bae6479e4432d44d593853e4e5df2e3c405f081",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0037",
@@ -494,7 +675,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "91fb2972016955a9467e9a3859369f1a57105436c08fe1c5ca3baf9d914d13e4",
+      "imageSha256": "b965974c698997ae2662ed373a07d4c70ed01f89274bb9c1ca74407145cf27a3",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0038",
@@ -507,7 +693,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "69b330bc1d1e28e78e31f0f06141395401ac7576e9299ec297af09d37c0f696c",
+      "imageSha256": "430e0060a5e0e2dca9bd6798f7526a81ba10f0950bcf893c7a93cc48519615b1",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0039",
@@ -520,7 +711,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b26334b82fc02876de2a21464aafeabeedd3861acdd265b40b748425ababd9b6",
+      "imageSha256": "68736d2663b4c4e6d7f91cd3d10ece38f5aad104cd270a300fffb25e13c1f503",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0040",
@@ -533,7 +729,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1d799fc898fafbe9d94eb9bf6b720c56b1d4660a40d90836c14ca4a4dd62a733",
+      "imageSha256": "2c32b4b0abcc2a1ec29b404a0b1ed8d64641f1ca4628187f94fc7f221ac51c52",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0041",
@@ -546,7 +747,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a500a2b1163668732c53530f1fbf97042df5c9a3fd72c684b3df8107f74b4100",
+      "imageSha256": "89c51840998bc8ea0e6ac0dbd53c9018d04667d055b91a816f32e4351c1d3d8f",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0042",
@@ -559,7 +765,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "05782f7fae5bb1917389a95d7e1f206f4e56d1aa4014e8fa939d1c9fd7e0ba31",
+      "imageSha256": "c0df8db20908955445ebebe9208a9c1a28157cdfa942035ec91f8c84ee5228d0",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0043",
@@ -572,7 +783,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b6fd76c19b95db6637c5c9dde3c11399e607e995369f0c27c8edebfe0d012548",
+      "imageSha256": "9fe642a65ad4569f79a7c993f1e5dc0e9372f23f307bd20dac346188dc2d49b2",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0044",
@@ -585,7 +801,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "bfa3ea16a10b8c8a765ddbd3f3c3603b5e85d55a5b0b3ee1e966d0c4f90c3b4b",
+      "imageSha256": "b44fb5eba981ab8d39c1d713bd980c8e1121786f82eef488b3896b3a5de2c9ed",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0045",
@@ -598,7 +819,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "92bbbddfd47338d23f3eb67c0f2a47c679937dc878c9fa1a9f9ada64b9b2ba5b",
+      "imageSha256": "980ac70d706e191cd00d20a9bbe62f569fc7d47ba6cbe4ef409c12124415626e",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0046",
@@ -611,7 +837,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "58970c549ad87bd3201f8341d81bbb5d4c56116a087896c6a8ea3c8a34c3ada2",
+      "imageSha256": "3f1cbb966cc2347d3a2e9509314d06a94fca75d43b3488084728e4904722cd61",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0047",
@@ -624,7 +855,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "5378275953181c2da19e12d78aabb710c6ce5b43cda3c359926a93a57ef09ff4",
+      "imageSha256": "15d9bf34fa2bed23eb775749c5cb5522268507d045b1da80463c9164f1771e3e",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0048",
@@ -637,7 +873,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a1e4896b2b76b4b767ceea305172b81cf712492af762fece59e33253dbb5614e",
+      "imageSha256": "48765c7eaacff6016a5c54425ec122b75857c2b2173c467de7d2608e2349a081",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0049",
@@ -650,7 +891,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d95dcbf299e4e296dca8ee0cb92058481e2c032cc35b95ced80576c92208e3fb",
+      "imageSha256": "0c859fe9f57a6026df5264365f19268dd371c701cd133e979cd1d475b3521aa8",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P3-0050",
@@ -663,7 +909,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e09d09e19db1e390250ff31ac3fa86c8d680e7a942a7d60a15e0f63aff9e8db2",
+      "imageSha256": "9aa1970829f927010ddff34765d124697636908de95043406653d2978a63ca3c",
+      "imageWordCount": 10,
+      "evidenceCapabilityId": "assembly.p3.source-image"
     },
     {
       "id": "SEED-P4-0001",
@@ -676,7 +927,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "fc81f861c0a95db44a4912354a210f4b4d869fc2916ec02025806f86e20613d4",
+      "imageSha256": "138ffc3418b4ed33fda8f4eb6438b591f643823398113f31f770780e32742bbc",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0002",
@@ -689,7 +945,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6abf5b1e6ea06bb93cdabc9f234a9952f8f0b027c276f79e4c1496db6d432255",
+      "imageSha256": "f49175e47262813f3b02c7249d08cd2e0ad70b0d58fcd6395756107aad59cbe3",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0003",
@@ -702,7 +963,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b96491256c032c7a9d3ee8f8b1b9ce9a2f1df2db659b594c541b804cc128b6f6",
+      "imageSha256": "9b925771aa861e27d6ae4c9e25ee69ac7be8556cdc534ca908b6b04079874715",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0004",
@@ -715,7 +981,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d8af29947cb44ba1ff5dd217691c458595cf1500a26e16c5ad89ce8af5ab2932",
+      "imageSha256": "00faa4dc41af884483e16a9d17ba9c9865aa6e9fe87e2ca6460499734e01afbd",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0005",
@@ -728,7 +999,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0a87a0d275d871b8afcb675708bf997fcc92c3ed3a6c911a977ba2ce70637313",
+      "imageSha256": "778ed76b8a3e96eb4b1ceb301a991be3033d2156e0316d6e0e7f9eb1457eb8bc",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0006",
@@ -741,7 +1017,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "82b9c671d1273140a1b113c395beeec76dc1b3598696877f882ce46373e7e991",
+      "imageSha256": "617fbb8164e125411b2fd359b15037c1e80e8e066bb88f025dd85e9683f5fbb8",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0007",
@@ -754,7 +1035,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e09bbdabd1711136f2bdc0439a4a3e8c657828ffc41372d016d7788bac1e6107",
+      "imageSha256": "32f02a46c6794b7539dd6e3bb3f761fc085fcb3fd45e4f4fdbe78649439791b7",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0008",
@@ -767,7 +1053,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "56473dd561ebc0f20311f1d7b57c25521cdef1cc75c09f1e615dad9c623d4e7a",
+      "imageSha256": "6208fd3031369c617dadd5a9d9c0ed5478bc6f1719af74856ce619ec69741cff",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0009",
@@ -780,7 +1071,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "fabffc864659a19a3d2e4a4af9d8613b414379052ce7081a07cbaf52a44b1b63",
+      "imageSha256": "f623603ebfb1b62e06c453385faa4183eafdb5100cc8d38e7d6e3823178f55bb",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0010",
@@ -793,7 +1089,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6de7972a089e563c68c11d8fab2597ce69021ab3ee79359b333d343ac0e7c155",
+      "imageSha256": "9ee8e49851395b102e21372d5c3c849816c9b6d6c2df46bbde28328e171a084b",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0011",
@@ -806,7 +1107,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8be57ea04b50c17f9c884ef3a555cf5988a3460017082f4f8b95a563b67ee86a",
+      "imageSha256": "013dbaac172baa44896ff13a0083fffb5dbd26e71920700613d51f14344fac7f",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0012",
@@ -819,7 +1125,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0315afd3d9406b2c4bc7eca5bbd697057f473b00348440103229ca60b521cf1e",
+      "imageSha256": "86d71fc4bcc93664e7a90fb53b1a4f8454ca4808dd4add66721d6c111bb2568a",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0013",
@@ -832,7 +1143,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e6529d43e2592210f4c438ea87da355528a770811bf503866a5778e241d58503",
+      "imageSha256": "beddbe9dcf2348a4e7fb6b48e8f100edf96e4b7590ed8029faa5148e3f129c2a",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0014",
@@ -845,7 +1161,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9a546eb9210429c3283a2c7b45c294dab56ecdadcc93cd9bb0fbbbf61e3801d9",
+      "imageSha256": "f85b33d655c3fe92db868ac7c9c592ffb57d9dfe61d845115d4488ceffd4e0de",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0015",
@@ -858,7 +1179,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "36bdfc8c431da411dd22b9159320a48ab3ffb1a6f7814cefda409c3c784e2acc",
+      "imageSha256": "16541dcd6d601ab114e37abbdd3dbf57c114042a798acf81acdba3dd2ec0efbe",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0016",
@@ -871,7 +1197,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ff8f541a55912c7fdabcdc24a989ef1c26910074b311d3f1ad09be30782b110f",
+      "imageSha256": "9d91d8c869581b78e089376392561c9dabd909c1e82e1f1b561e0056d42ea682",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0017",
@@ -884,7 +1215,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ba0cad932bcfbfc46304e81b3d4b1e992fc32d8bd16c215973beefaad6616724",
+      "imageSha256": "6f678444d818d37500043b5758f0946aabd97c34f7ce1d6f63fa425974560846",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0018",
@@ -897,7 +1233,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a5c3b4687685be03d48ba31f3f5b4778e027e1176ae7a45a9462786734fc8901",
+      "imageSha256": "14c84503ed85ab54e7abbee7da2f0c718560918a95d62489df2eb63ed6bdbd56",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0019",
@@ -910,7 +1251,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b76dc4df1f9e6e710d97be4c84b55868da6ede0071b7b2d7eb0528980ece7a67",
+      "imageSha256": "e62492bbd526d113a7e6e3b45e868eb3914c381f60e3d5e5794f759b161b622b",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0020",
@@ -923,7 +1269,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "68fbcc7c0f5df185b7927b50d9b0fe9360b9dc628ea85b702c955dbc09fe2f85",
+      "imageSha256": "b1b53f4d7893e2e4a89225958bd6056b55310eb6a5881300a0bddbf4b5a785d2",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0021",
@@ -936,7 +1287,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f1175a40ca9b736e8e24f80adda15b7fbf046b3e694649e149a478849787407a",
+      "imageSha256": "3dbb215fff5fe8180b671d218b6ff20e6e19f4f0dfb72a4abc8c5ae5496dfa61",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0022",
@@ -949,7 +1305,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9be282c19c2bb2ec7a10701352ea29cb2c81b99617a676f504d93c2449e5f9d7",
+      "imageSha256": "9cdb5cb9fd345ba1ad247a6f589148b2ab781657ed74ef8f22c2123285000063",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0023",
@@ -962,7 +1323,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0f80860fca3647921a74b9625b2538d328c2d63f5c579b14cea246ce057899a2",
+      "imageSha256": "0b52bfacabad118f6b71b2375876741bc55748a5669d0be6f0ca99013edfc692",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0024",
@@ -975,7 +1341,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "09d5ddfd8832686fd9bc87c76af0da71e7231612f19705afc90326ea68b4faa4",
+      "imageSha256": "090d886ba5579a71b120d4807800ed42a7ce4a67c9b018089b1760a6a716ffb2",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0025",
@@ -988,7 +1359,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "666d1ab3031274b9bbdf2cc3b3516aa74eedb609a8c1352520c710e39e7e5db5",
+      "imageSha256": "0e645e88e2003027ef1164bd1d2ff09cb1296df9fee79bcbfc603428c5c72511",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0026",
@@ -1001,7 +1377,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4193b5ddeabea739d0312da4047d473bf9c60cefe2b4730af581c1c97b948944",
+      "imageSha256": "4b145d6b53df012799a013ce1dc3102acd7327bcea7c3497174ba815812c5375",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0027",
@@ -1014,7 +1395,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "898f6b8a9275f5360bf27d576b70f360323dfdf4e0dc5eadda8fa369d70e8f56",
+      "imageSha256": "138c556b2db7602973686f6abc5f31064dff4dba70b5f652f8a41342ad6549e2",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0028",
@@ -1027,7 +1413,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "517668f047cdd29349c7a93d659366d8337a938f1c1362e8afa3e5ab5ebf0e89",
+      "imageSha256": "dfb86883f9ea76590c61d19724665c26a70ebe3518dfb4ada265299984fc79c5",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0029",
@@ -1040,7 +1431,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4111d26cfc68eae360a0727ee624c0bb9b669decb46c2a33ab91b5ec50f6b801",
+      "imageSha256": "abec7f37cb68581c9fc70c520de162a3da52d7cc475bb325bb1d950ac31f858e",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0030",
@@ -1053,7 +1449,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b19e0280a20572badf84f5195659400060a482a896fca97275fc04f821a7793b",
+      "imageSha256": "eafe69a4249f56e0b21e44a10c5fe6d8417527cb91a996a1ded37f193efd88b5",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0031",
@@ -1066,7 +1467,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "77c551da6564f86169dbede528c9963cf2dac5d069f52048d3c0f5fe50e7d73f",
+      "imageSha256": "00898cece38f69f8e2d5332a4d69325ef07dc0f646453f2c3f41dbcd0d267a73",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0032",
@@ -1079,7 +1485,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9d4e043d56d149081cf6d0d650b2a5ceb314e63c7a8feb9daa5d5495f11ff5bd",
+      "imageSha256": "baf312ec562a1cc04fb8f21ac806b61896af63dca4d61de0044af050c9a4d417",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0033",
@@ -1092,7 +1503,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f00ecef4dd0f37cc10fc08bc4f1833c4bd6c6cdd94b6b029cfe83fc3a8917c57",
+      "imageSha256": "777e6d49c3bd4448975618a66b9234d179f504de2006fa31060b0f1ed87ca34c",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0034",
@@ -1105,7 +1521,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b68c9b3f057f0bd128011bb1488f7bdf239e254f4a7cc5e6d3b548501d432d94",
+      "imageSha256": "ccbd4cee9d56ea7fe356bffad43cce7a6c446b3c39f910e18ab2883c4280a735",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0035",
@@ -1118,7 +1539,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "58c0adacd51c1807cb187a0f6a9cea1f97a9634ad45385fb38a2dce9b49ec224",
+      "imageSha256": "f43bcb29e8aaf1d9865972fcd93e71670740f7d3086bcdc2ed7583824551c788",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0036",
@@ -1131,7 +1557,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "65220085028a5d305524e351fc680647bd025d758072379261a3a603213fce8f",
+      "imageSha256": "3cc632ffd871f91a2a116b60230c935e2cd8f70af88ab5c64c6619d0d54aa48b",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0037",
@@ -1144,7 +1575,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9730bea8b175cfced7456606fbd3fe264c4288908e8a88d5f6351d42ba48464d",
+      "imageSha256": "6ec4f58624abf29c56d72f0c2fd3639ad21f10d05f6ef0a3529893bc1214e8dd",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0038",
@@ -1157,7 +1593,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e79b28b9d9674310d06ceecbe9faf90e863e51183b397cbd58392385a36f1163",
+      "imageSha256": "fb351622b3769600fc3bb5e0715852566ce096f9320eb43a18d6103b42644208",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0039",
@@ -1170,7 +1611,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1caa8988fe7bfa9ffbc8cc16b5ec9632af83760d0bd9228e526e7804ee60125c",
+      "imageSha256": "0ed51b433ff35b29ad29eab9f8a49fe255918477fb71e8c4d5a45f0e96839e66",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0040",
@@ -1183,7 +1629,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f6a295c16b66d6b53e269774d51566cddb47ce201ab3032da6b80d1fc803b185",
+      "imageSha256": "c58664bb9b31b351af8a7f94117c32a85fa0cc70b0f6ead19fbfb8c5314659f4",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0041",
@@ -1196,7 +1647,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "52e3f6c7b376fd2377426b4b0a50aff300accaa699158e29516d93ae5515cad2",
+      "imageSha256": "88d7e7efe7f2c9182a3f36a16da0c8f93f9a89e53fc8335ab5b768563b5dd7ce",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0042",
@@ -1209,7 +1665,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3b7ce7d67a7f4731c9d63caf0d76961e45196421fdf6ed64e3dfdd37f283ccb4",
+      "imageSha256": "e71c3f1e51645576f97cb6bc456565c781d4d5516c83fec6360cf19b9095b367",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0043",
@@ -1222,7 +1683,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0e01ca90fd53ccb30d8c82c9fa6cf24a17b80c723481ee74de9870b5df3c1d01",
+      "imageSha256": "8f88e1ca97c087b0663e207e0d25ea14693bcf7ee27d4073a50294d04689037d",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0044",
@@ -1235,7 +1701,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3e3dced57bb4a89e81fe07a34ff893681ea1ac3c903d7b0d9ccf010dfb2b7cbd",
+      "imageSha256": "c5cabb0380e92577526bdf3cb4bdef2fd3e7f1b1689c43fc3f03261693b5001a",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0045",
@@ -1248,7 +1719,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9af84933b6fdbad8f484321b58f7e9b1896715c87c0743118ba48daf75fe9f97",
+      "imageSha256": "e6e4052cd41fc3e4e8041a234017d7393aca984da5e0cc5429d66812fe8122aa",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0046",
@@ -1261,7 +1737,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8717ad457abc509c81fc54cfc577ecec72e6a4d7a89f8dab60caf19b91c1dffa",
+      "imageSha256": "49a72cac3d10c02762a74f6816b1678d030f0802bcce354e90ab0d085ab1dfcc",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0047",
@@ -1274,7 +1755,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "912ebd0061ac4e2b4be8c7f57464b5de9f93a63871cf62cc78e4022f6777ec1e",
+      "imageSha256": "b4ee69d058830c5d7a789e733c0cf9eb3c11d2b73a3fb49f14b6aa6d3953ced9",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0048",
@@ -1287,7 +1773,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2fc2039b9fc223ee07fe64e211447343f73e5c3fca27f93f902b2685bcb8b094",
+      "imageSha256": "39dda93c537b766578931e677fdac0024928ce90ba19753241504e66ab2af6d0",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0049",
@@ -1300,7 +1791,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "59abd8c98ed6f835d74e29d6661e9d186d763ed5188a272930289ee1df870193",
+      "imageSha256": "ca6ef1a908db5496563b53ab260128e38518b27f42daf9f6d5ad27ce21d1bf03",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P4-0050",
@@ -1313,7 +1809,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ce65fdef3d6574d768ebd7bd13af170e99939197ed4d045b6b6b844780845906",
+      "imageSha256": "7adef60538138e2ba857e0d7cad22b3d92467df6b99135d8bda204448cfce395",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p4.source-image"
     },
     {
       "id": "SEED-P5-0001",
@@ -1326,7 +1827,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4b1877bf48455c336d10ee924766376d931a6833a4487574e83f569d99430b52",
+      "imageSha256": "79b983810b4e170da09551fb577485ba9617abdbf2482823111cf721e343281c",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0002",
@@ -1339,7 +1845,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ed42f8e18ac506271c6608cb91838d5e9eb31b60c935ff061c923361b953b410",
+      "imageSha256": "f5a37510df42929d104a60987e207b543986c62082d7942526e401107b398baa",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0003",
@@ -1352,7 +1863,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7d3fba86aeeaa4e3ff94939a1a99cc5e2d2fdaa3882e4b5d5943dd2beafc71d1",
+      "imageSha256": "162d42a2f4927d62008f52f4565568e7cae490efdbab387df06e70087809d9f2",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0004",
@@ -1365,7 +1881,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b751241e708bf9404f05e3d51cb9c0e6d294d7d0f77d4097921f77d7773caac6",
+      "imageSha256": "0107b9503f60a9b660cfa8cd4f57305e4b84792ed4178d7089c13d670beb1495",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0005",
@@ -1378,7 +1899,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6d4f5802e576eac56416b077383feebfaa351e25d457800dcd0f3efd89d1d595",
+      "imageSha256": "c043463e7003882dc7aded0db46c17f5967dd4dcbe6784850dfecd68aeacee08",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0006",
@@ -1391,7 +1917,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ab498be932e6541cd6758ed10cfa1a96a0f66b54ef38e788c71edcf79573bc2a",
+      "imageSha256": "7967c3ed262ca31ea65dd539e1bd22eec6c0870397291d65d009b5b735ccca79",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0007",
@@ -1404,7 +1935,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "04a08694b1f26a6015eab82e61667177d0a3e1c605fc2a10a15ead4118323d25",
+      "imageSha256": "0453ad368a23930dc72289e71eaa825facce613248c33cdc251e68283e4092a2",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0008",
@@ -1417,7 +1953,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f1d9426b2d12d7aa0cb9924739bccb3425064692dcee4bd2df6a9c6c77f7780c",
+      "imageSha256": "c4f7c6e21f55d4dffc9028d24ee36c1e2f6e9bf3a7c3845b5f96ccc291224a71",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0009",
@@ -1430,7 +1971,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1142b4d26cd49f2a084bca14ce294512b4309a8f7860aa54b1c499efb3233ac2",
+      "imageSha256": "3be08bc3cc2dd3951996f98a0596fbd14da8ebc5220c7a3bc45f45262a1bcd16",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0010",
@@ -1443,7 +1989,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "580311d3332245d7e51f05c28210ffa8f3c5be80851f7063231fbb996a93add2",
+      "imageSha256": "cd64be9aef3cf1ce4d566f94cb527b5e614fd18988fc6b78f856d9ce2729cf0b",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0011",
@@ -1456,7 +2007,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b4516d47233f5f3edfddfefe6699841bc9bc0e1c9869530be27359dddc31793e",
+      "imageSha256": "e0b621b65525b06aaac432c3424519b3db22a053f977cac9c1ac10900b541d93",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0012",
@@ -1469,7 +2025,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "c03a6dc13ce8382bdb959333928637bad9425233647d5ece2b05f5716fb19aab",
+      "imageSha256": "9187d953812b9f18e6ce8fee0a53688db9d1f9fb6c3f0a5bd4d3502ac6c9dd38",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0013",
@@ -1482,7 +2043,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7f8bc23b082c15ec39521db067159237cba578413dc9a64f273951cd81e21e2d",
+      "imageSha256": "ed84692ea7bc3c155d728777f0f833d12cca92df63919df67ba93e5667dbac5c",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0014",
@@ -1495,7 +2061,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b62929fc5814fb54993a7426337c58bc5b4e68fbef0d61b575e77100f6e3a64a",
+      "imageSha256": "09e10f654662a8dcb42d9effb1f0d93fa25585707a2db9fc11ef6f5bf5bd2214",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0015",
@@ -1508,7 +2079,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4d9610a266ac6d7007ce6ab1433e64ebafe53484f47f721dd303d94aacdfe751",
+      "imageSha256": "feb12182f71ba79f3a332c6eec2442a20ddd5863ff8d1ea3d89f5ce6ef26ac8a",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0016",
@@ -1521,7 +2097,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f4eefd3c6e19f5caf68c92848efc49dc3bd21d835a26194f37f948fb431c2ee2",
+      "imageSha256": "99f5bcc8bc0b2223ceef1769ab29b38744b3c87da85b3be470df90943d6fd980",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0017",
@@ -1534,7 +2115,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6dd9bd869782cde45ce658143f3f21e60c5f654cc897edf50697d9d3e2f7cb83",
+      "imageSha256": "9fa4b4932fa1e5bd0e341eafcfb7369761119dae288b12e124d4a9762121383f",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0018",
@@ -1547,7 +2133,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0cde8f83657dabe0539935018d36407dc4c42f49201554b19f72f04fd80ca03a",
+      "imageSha256": "97a6f87df71d0775b409a8b6b16f19ba391a4877c47ef90eadd89c0ab67e11a1",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0019",
@@ -1560,7 +2151,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "384f3355190c1713d812a59db1cd8eea22bfa921d06c2e00ae871673ca74b4e5",
+      "imageSha256": "9f98d1972104aba91d0cef14d383770da8422b5c62bacdc01442729eca65fda7",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0020",
@@ -1573,7 +2169,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "bd19c0deaa3c1dbe71ffc612b6d2c9bee7e5215cacaa988a21ecad29d62c5d1e",
+      "imageSha256": "b7180d60ee7e895ada29c1629b6f48c388cc0fafea8141533beb9f31bc29f1c8",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0021",
@@ -1586,7 +2187,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8a52a6226666c6111fece23a86a777c6e5ab5b94d5ec7ef53dd531df62695c88",
+      "imageSha256": "1f9b6c0a777c9253946223dbba4e9a585d7531e2d81816701a35ff2f5f6fd550",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0022",
@@ -1599,7 +2205,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6623c71edf68296ede88627637b75f44ad08f42887bb64c27a57b43b9e7c6594",
+      "imageSha256": "a7e6a581dac84bd2a6c45b96ad1003d9517d17a8c581f794c2c8119bb5f720a5",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0023",
@@ -1612,7 +2223,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "eb16d90543c91868b9237e80cfb8536864b723f40941f63166318684f62450e4",
+      "imageSha256": "7ae3bd5b854ab4c9479e51c75ebed9baf19a2ca6e40687f4712dfbf50d1e691f",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0024",
@@ -1625,7 +2241,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3ede3ab231fb6c1cd5d5fd454230955bf774cb84a77e23cfbab22ba525aec3ff",
+      "imageSha256": "4b418dd58d278ac3245275c6d2c4e490eac543ef191cc781d501dcc9ba7ad569",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0025",
@@ -1638,7 +2259,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1c746614b6f85237ca71f023981d1c9ed84fbc63dc460728cafb37fff81940c2",
+      "imageSha256": "0dd38cda2147fb519048ad899eb72d3a3df30dc7ed4b146bee0868cfa2719f20",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0026",
@@ -1651,7 +2277,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f92a963ae081bb2057fc9e3de314e0514aff8b731a95af71ea632538d4c72f5c",
+      "imageSha256": "16d35c667415dd8b7f43696b4d1479bfd05ec79bdcac12880434734c773793eb",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0027",
@@ -1664,7 +2295,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "57f24cd245b74428f93bc5ab5626a2462c2e912691d70d0d4a4263459032bcc6",
+      "imageSha256": "bd02c0ebf39353390f4b40016a15c8619d7133d70d7f4a0ba91c1887cbacb895",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0028",
@@ -1677,7 +2313,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "c39e5f37225558e8a09f9b09dd02faab61aeb8178c7de5b9b266e10d21ccb64c",
+      "imageSha256": "c43c9d17b85b520467fee62b106cf5ad5f68c9bae9114c51cef2cb7c35ebf35d",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0029",
@@ -1690,7 +2331,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e0e165d6f7b17b24d6e5df71e1545a595cca113d0589b13b0ca844ed2f07157f",
+      "imageSha256": "ad3cc1b4df2857eb806863c33fd7559d2eeda120e3518ab12849fd8d6533b6e1",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0030",
@@ -1703,7 +2349,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a07377edcd14a47b36ff1add8c3d6fa2360ca1c5f5ba6e10be6ae6a99c531d5d",
+      "imageSha256": "3f776309a89e3db6a5e65ec8796d68ebda23372fb2fa831983db06919f4843a5",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0031",
@@ -1716,7 +2367,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0b078d31e0525dab4bc03459dd5df8c11fdf7f27aae90e0ede90f8e7d891daea",
+      "imageSha256": "7a6002a4cd6820cf000fe78eb6dd21e5cd92d3262167115b2e3324d8bcc7fd1e",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0032",
@@ -1729,7 +2385,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2adcf51fc2a9bc0151067bf442aedb3d835b17a8ef211935de0785484f0c52c2",
+      "imageSha256": "3795c499569ae69dc7e7a93f540b4ccf6c2f31c29aaa97fe9539f7cfec2721f9",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0033",
@@ -1742,7 +2403,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f2f3fe49cf00b74a549a60b5ae9e08bc49ba4f8eedb2f09c45497de0139830c0",
+      "imageSha256": "4f55357be81d4a8f178e2a642966c1887f472e0684ff9484f34b20964dd0ad72",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0034",
@@ -1755,7 +2421,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "21afb0a988bda94df75595d99349f207262800faf910c654a69fe2ff50ad3a88",
+      "imageSha256": "bdcb9f6dcd5af1027319a18fddfc3447df037caeb6589d3e790d5e875408e297",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0035",
@@ -1768,7 +2439,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "75713ef605deb14358573a1a88080c58e3a476db73b5ee89f50e9268532386f0",
+      "imageSha256": "7526017315e33139f896aa38e48e1838c143afb180005bebe4c6531792e2490d",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0036",
@@ -1781,7 +2457,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b1dfc079e5270321b73a5b0f881bc5161248e9a214c9eb9a23e36166291dda6e",
+      "imageSha256": "4fb3646b39ae9930ec170d55309f984d1327c81b4933237350b378be6e996ea1",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0037",
@@ -1794,7 +2475,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "207fc6eb27afb49076b4069921622d318f4af190b49a66c2cca4b10206cd56c5",
+      "imageSha256": "10f08e26c3e6a18290f2ca6648895fdf009bbe8277aa96ed2a7df11defb6bc41",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0038",
@@ -1807,7 +2493,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "028ca3bd5e648bdfc59bbbda65ff22f58e15e55198aeb7581d7f09e8944620de",
+      "imageSha256": "177d61979fdefab8f34383f35824b97454141e507f7232c65f1b833fe613e34b",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0039",
@@ -1820,7 +2511,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8fa43bb27783af7709a5bee27bcc1ab8ae1b7b0af0e3cf3004f4ac61a961901c",
+      "imageSha256": "691259d0fb846a701f0ed37d6e2a9fb6aa31dd28b06088f792991b3cce8bcd13",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0040",
@@ -1833,7 +2529,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "803e16f05c2013f020fb6fa55f159ba8b6a76706658448ce5f1ed6689ffa31cb",
+      "imageSha256": "c33ccf4bbbeb68e6f1ea6d16b135cbdc5f439b8c72721fd545aaeaa7fa0ceb58",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0041",
@@ -1846,7 +2547,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4f58216b751909516704cab9fd82d564c46330f637b0137473c5bbb0ffe1b3dc",
+      "imageSha256": "89455d5017e811350bf4ddfe1a69bff963e0e181d3b892382567d1f58fa8f2ab",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0042",
@@ -1859,7 +2565,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "91e311168c0f796ea3c3ddef582cdd4544910343078cba75a3bbd63145e05e74",
+      "imageSha256": "de3b4d01784c0a48c825db8be056b5afac1dec43b21a427d1b7cb260ebd9d946",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0043",
@@ -1872,7 +2583,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2665683ac27a586f56a2f3f764493acc4b9baffa6d4529c619425f69b0ceeffb",
+      "imageSha256": "27dcac53b67b4f921a749375466ff19ab1802c369d789c988e0e1425471ebf56",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0044",
@@ -1885,7 +2601,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "81046d0064d6e0cc3b0fc5b0c6d6a30a475e0cef310ea4f239b1bcb7d6e3aa19",
+      "imageSha256": "255843c66fed7d459d671caa4a934a2d1418f8e9892475106eec7abd2ac1e308",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0045",
@@ -1898,7 +2619,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0e4506cb418b0dd73abcb68d79c4c81eee81ae224ff4975faee83625a1bb42ab",
+      "imageSha256": "9db72539de07f8e2d84b82c602b063409d89ecd5c7ed1a2e0ca4f3385f474222",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0046",
@@ -1911,7 +2637,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7c5626830fcfd13335357177444721c42d1905f130fc9e5f593193f1a53b9a20",
+      "imageSha256": "4b522d23b8054b87708a66d0867a5deed7b2b4e84136042a88c008d40ef7692e",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0047",
@@ -1924,7 +2655,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7f13934c3b86f01895e9a31ad3e4cda7b33058cc16fb2757c99fe9d48556e28c",
+      "imageSha256": "eaa776cd5daa5a288e79584b1b553e0e5b7e81fa30f7e8cd9fe7fa7c4420be42",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0048",
@@ -1937,7 +2673,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "37d90f8c8d352c6778841ab23b84d72accc2baefdae8d2d29a94257c8e391fb5",
+      "imageSha256": "dbebfb3f0006fee74898a559e4e7836e06e4a683e39b7ad7d26d42117a5dac9a",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0049",
@@ -1950,7 +2691,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f7dcbc1f466e6a17d22eaf60b5d96a67f22ab979272470d72c640fc94bd65633",
+      "imageSha256": "42fb6f205b66a6d49a677561890e999b2c9bf14ebc6c4081c979b189e061c053",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P5-0050",
@@ -1963,7 +2709,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7220aa42b1fd51f3659160c081bf555f7facc313b1ead6181722ef10a48831d8",
+      "imageSha256": "789ef0509593702f7f698367a3b9aa3f21c7bba3b5fc4837f5943266aef20f49",
+      "imageWordCount": 12,
+      "evidenceCapabilityId": "assembly.p5.source-image"
     },
     {
       "id": "SEED-P6-0001",
@@ -1976,7 +2727,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9d9c88f71540a2917e765b52e6e13168061af946f92c9cee952d54aded3608fc",
+      "imageSha256": "03a0ddd818fbf6d9294003226786296f445915f5ed4fad21677a77aed79e752f",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0002",
@@ -1989,7 +2745,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "31c0509718209299227aa018ee34a8bf81c629b4907121d4d3d31f92578f8cc5",
+      "imageSha256": "8f5b713ca67917d83e8052b558f502b8721a66fc4a50aa2367d5fc6e357a7e6c",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0003",
@@ -2002,7 +2763,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "bb0d8f55fc44a76335e75c191c772ca59527ae8624e9650a0995deab3fde5952",
+      "imageSha256": "74a87b6b6353a34d7c565b2d5cfdb07be2233d7926c530c676786b516667b7d7",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0004",
@@ -2015,7 +2781,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8a6fdeec855610cb7daba9e3172789b8fbe73fb54ad91ca0ac86252a7192ff3b",
+      "imageSha256": "ba0553c7eb9b29b78c5e4451f7b8f5de50b8d87779423e98fe8fb1441569fafc",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0005",
@@ -2028,7 +2799,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "47ac6c16d768a040dfba2f043a38332379fcea978b47756dbe2baf10d8679df7",
+      "imageSha256": "2f02c01430dc793bac4f5f9ad6d20b019771456516fcc30d40825d8e38a30dbb",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0006",
@@ -2041,7 +2817,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "729ac9b1de4522c76974cee086af8a01f3a5de6c6af8a33206a4984e3b49a8e7",
+      "imageSha256": "9571aa06cb20bd58d3e592955bb228de154e7c9b358c8c6898c029a03b7cb63e",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0007",
@@ -2054,7 +2835,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "99036c0b581e79d20fa93f72036ee4d89b2c11bcebb99d871c35cfc9ecda1648",
+      "imageSha256": "1eac8106e5b2d15fac652add0ad3d295fe0033c0de904ce6985adf9a9e999f59",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0008",
@@ -2067,7 +2853,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3d5798de8826551217a68578cd76c2f9a392ea58762439dcbfaadcffa8bca66b",
+      "imageSha256": "a6e1c4a3df9af29b910d6f6f71a99c6764c9a9f2f96602417c79b95c78d74bb4",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0009",
@@ -2080,7 +2871,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8583b2b18ebdd7c965673f4e43308b02faf9d16674fedc96d9c2f1a774a013c2",
+      "imageSha256": "28c0742683e1f000f8612e92ee57640320f5e098a8de292c03646c006fd5208f",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0010",
@@ -2093,7 +2889,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3dbea13f8ce32c950a6b083188f26597e94fd4c8f605c9a42e60b084d1b359d1",
+      "imageSha256": "ea9fde5764d3cbd54372a671b42bb4945c8b3d39efd78af162ecc9487b048cb2",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0011",
@@ -2106,7 +2907,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a1c5a679f1fd68b9ab8b2b3e74ae0df4b27d5ab4f8ffbd49f1621c0a0d6e5e17",
+      "imageSha256": "c50dc8b6dd0de6516260555456c2dc3df9a32db980ab6c36c11dea6f2f17b19f",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0012",
@@ -2119,7 +2925,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2eee7c1de4100b7730c732af02dbb994b4c88b301651e0fe19051ba2b093c624",
+      "imageSha256": "da4723b7565c80b030098fc6f5093ee6d34afdc6f53e49ba41a2b56e74c388c9",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0013",
@@ -2132,7 +2943,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "7daa292a6a19c908b376b589629bb8fca6b6b84f9aa9122b77fb7a9c35316bb4",
+      "imageSha256": "5bb4144c261bae2eda0065458a5145e33b99948ca7e544a89f963a203942bf95",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0014",
@@ -2145,7 +2961,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ee5847cb3234e73716472edc470153ad97b59006d4c569414270be21cd380d15",
+      "imageSha256": "290fbd2cffc3aaae856203197e9d5fc144e63427b01348ad652ca414f8476169",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0015",
@@ -2158,7 +2979,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e74d6324f534e6047820385440ee24b9806cc6643c7ed5e586b7702a0d4bb7c8",
+      "imageSha256": "55c5857dae23144433d07b62f139ca4d55a4667048e94d640aed5e2e9cf27181",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0016",
@@ -2171,7 +2997,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "5b0004dc621cbc6d40d81dac7ab48c32b5f071fc791235da6922a63e66c27c90",
+      "imageSha256": "92ab077ca6537748a75d1e2bfadab81210c5e918ca1a87bed62e785aabb0110a",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0017",
@@ -2184,7 +3015,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2bfda96ea40a44938edd4c321bb6a21a341d045548b22a2e029fb34937e48fd0",
+      "imageSha256": "92fcff80ab0ca2ec381ff3d61b95cf3524f96ffd0e031b668f7f712691a236e8",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0018",
@@ -2197,7 +3033,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0877fb9ed9ec59feacc4afbd510c5e3b17690ae95696c088227c245f99dad80e",
+      "imageSha256": "563525c8b40cde09f8259e136e2b3b043097c2b1ee45b0cdd91476186db9213e",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0019",
@@ -2210,7 +3051,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8afbccdf1c5596d14144b01820e382347094a40504fb35a6f1ead6ed3ade07e5",
+      "imageSha256": "29f0a73c41f6e1593ad8ecf2b302b097bee005d3c2cfb3e58d189b4cc1aa8fdd",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0020",
@@ -2223,7 +3069,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "40510644e76fa933419a81a6a3a2f07859eb658bd6851c1175570608f8d03b4d",
+      "imageSha256": "2846b413c224b8a89047e51f78c5c5e988c12962ba3d4bdbddc0aa128e581933",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0021",
@@ -2236,7 +3087,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1118adfa87584c7a6067d45ff79c5cfebf331c9a57c6a528c7535bf479a34098",
+      "imageSha256": "28795c7236b792a379c1c29baaf7ce81c20a2caa0bbfc6b4ca65e00ed1255269",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0022",
@@ -2249,7 +3105,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "496b245244596d2eb305343fb5ca6b1c7897944650b0397dd25fda1c795196cb",
+      "imageSha256": "daa235231bec295aca0ddda1ee0676e4a30f728bf9e0b540613c2e115316f4ad",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0023",
@@ -2262,7 +3123,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "484c0ee77b74f8066d8f8d45293c4ea4a3d8499ae6a1533f8ceea8b31c07fd17",
+      "imageSha256": "bc649a328fee2584e69fcccaa15887d09e01432724e37a8facaa152e3096cdf2",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0024",
@@ -2275,7 +3141,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "bac79267a8007adcc9b5d0515cbfc6f1c48474e060edd8eca474b6136ff2818f",
+      "imageSha256": "0400f4bb6749758fee01861df7f22978de5707c1bbd1c9f6c96a5a5a77ed52db",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0025",
@@ -2288,7 +3159,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6ee6835cc6c31148584fa41255a06b69d91de969513f1f60282aca2961c48da7",
+      "imageSha256": "8bc3ac7849b34cd27692bd4e54acee464d7c0143c9bb8b8aa38e465046c569d4",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0026",
@@ -2301,7 +3177,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "92f798d97a5369008bfafce5b11e3c4227d75b8fce4e09118dea226b567e4508",
+      "imageSha256": "39af19b2de63a2d183703ae877f37db449fc4948c8fb279ea8bd08cd44d408d2",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0027",
@@ -2314,7 +3195,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "964d029ad80ae498b0b0a115c31b2455639877c0f1b5f108c85c498829ba1d84",
+      "imageSha256": "3d180e2f409618b510ea5bf2a78dd07bfde7b6a8a410aa13b56d0340a338ebc4",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0028",
@@ -2327,7 +3213,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "df0bfc4ff54039d212fbe1f0af0c68c0133b63cfda3aee62a36fc44d3e9e16ec",
+      "imageSha256": "c4136a654ca09fc794d08f67af8a13e5c381eeb38cadb23b38b29461fde77e44",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0029",
@@ -2340,7 +3231,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e63228858d9456cebdc9a3f305bf2653b94e5aad90efe46105ef7afc27dcd2bb",
+      "imageSha256": "2c48c4c98723a9e1f047dc3fb9f9e0e5644f2d0c6299520f4776dc856f5c6ab6",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0030",
@@ -2353,7 +3249,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "551d024806db209f1abaca4583e7e1170b2c72e0d27c746333d5dbbb7e67144b",
+      "imageSha256": "723f2850640868f411052502e8b74da9ff93516afb7069041213fe4c1ebf72b0",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0031",
@@ -2366,7 +3267,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "93d5cbf41e58b9c884fa59864b505e93769bff5557d045d008c5ae20449fcdea",
+      "imageSha256": "c6394a82da63188d020e22162935883ae562d65e0502cc08ffcee3303a59b023",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0032",
@@ -2379,7 +3285,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "04638a3d8b7868595a1e6cdc0c7e9df8a6a244bb6b3441c4c954cae5b052111e",
+      "imageSha256": "39355b7b8b321209648c34c532a059cfad0bc21f650242955ca845d03ced59b5",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0033",
@@ -2392,7 +3303,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f586b141e823f56bd4eb1063c04c6c04e63a53c39d053ed302b0a229bb06621e",
+      "imageSha256": "5581579036f9542912d6cbf9fa51edb4648e16879b556314265685e95601304e",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0034",
@@ -2405,7 +3321,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "25c072aed69ceae7bf87a3f70903640f3f3bf022c4d2812775e14248c3ec142e",
+      "imageSha256": "c3c1628e05cb20b8c1df79cf93418a817c91a770121a99767eb5353dd7f6b79b",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0035",
@@ -2418,7 +3339,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "ea240f047ff2d36e0c8b5f89742ec2b1ab5ca573d1dbe1d12d7429566d1b89e6",
+      "imageSha256": "d852e61d5a902693f7c01b8405e9e1c535918acb1143006e051fedd7d68bcdff",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0036",
@@ -2431,7 +3357,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b24037a309b6af6fad267c25070447cfa701fc4d872d2c66783d33396a58366d",
+      "imageSha256": "727b61e91679f5b8621c7d3e525671e0dc8590d32b3822351caf252fa10c6618",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0037",
@@ -2444,7 +3375,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e0e6329e31b6cf4b3d359f6372afe9d7498c600124d190cc8105a532a516784b",
+      "imageSha256": "19ce41cc8f5f2e8733159a8021668bcc39bd67d8c51db0f769f4dd6a85edf919",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0038",
@@ -2457,7 +3393,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "35ee602a617e6c214b8f400bd081beb471cbfe0900a4174047da38761cd6a605",
+      "imageSha256": "dddc8c555023e2f89ff5cd83e3ddf30e1874b441cec56d0236f4e9a36e66e162",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0039",
@@ -2470,7 +3411,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d008020b0339aae53fa74299ead3e0c054f7c47cbeb394ad0035df876995de95",
+      "imageSha256": "5b36bb29d210da4a870c298f151d9957d1a0a8a349621c796b721609a328a1d6",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0040",
@@ -2483,7 +3429,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "921293ba0825d736e92f53f0ea51e392c5985039185f63adfa9627085e866d39",
+      "imageSha256": "3ed0219394648f43de12f96dc5cda2a7d9bf4383772c6207edc090910711497b",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0041",
@@ -2496,7 +3447,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "071a6a6348cf54315bfa04d88520e12bc0fd2eb25ba4576f8bd54feab813cd01",
+      "imageSha256": "97ea2b502e60f28cf7d699697f15e67951864b9af2f0f38954d6c8c497687f9d",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0042",
@@ -2509,7 +3465,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "072c5c2ca0f37886a53e760ec4f4343733c3b34a2ae599fd102ac00a3539d8b8",
+      "imageSha256": "6cbc90b8b9c970e305cdaf63c9371fc693d91beccc50a7434cafa2adaeb5356f",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0043",
@@ -2522,7 +3483,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9e0304676015f54e16140b38e8eabea91beef873de115bd5fc515f62714e2df8",
+      "imageSha256": "e5d346c3f672901a790deab6b94fc27cee908484a34a67bb30c427692c184522",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0044",
@@ -2535,7 +3501,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e3bffce98631b2d54477a19de43a7e15b90d17d1a2226059df3d2697507697ab",
+      "imageSha256": "1bb95ba7d8fb75e085a70d6fb0651c4aa65dfbd91baa4e6618bd4f1bf36e7dfb",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0045",
@@ -2548,7 +3519,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "2af520d628d9683a551069393fe96c99914478a881f726fdcddf023151843be0",
+      "imageSha256": "fba8b5bd8525c6d705f732c49d63d02305cedfc13395a0d76928fb1dcd99c023",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0046",
@@ -2561,7 +3537,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d639eafb95da6659078e587addd7b81a3ab26846af33b3db0d263c55bbef261a",
+      "imageSha256": "572738e93a16925031b6c55b30f7e3067c650ffa3efd7a910525b564daf6c208",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0047",
@@ -2574,7 +3555,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d0a9dee51fd893634b6827f35fd69b9ef226efa29bf6ead83f66990126a2621c",
+      "imageSha256": "7804dfb9919d998ec01e121978fc1bdfabe39f59c00b41033f3e7ad787525ebd",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0048",
@@ -2587,7 +3573,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4d2d802c89d4f2255684d36355fb2717c3b54a1a935bfe5d6ee6f7832c74ce24",
+      "imageSha256": "f16d698a2a0c7935e65896d87b371638a762fa9bd13daef4f903f3447ec16c58",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0049",
@@ -2600,7 +3591,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "281f0e7b0571c0f042ce0ab84963f146ea529f231e3c75740d0b69afe827be46",
+      "imageSha256": "0a196b514a199dde453794691e76653bbc0809d87bdd3d018d8f68cc4f8d38d2",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P6-0050",
@@ -2613,7 +3609,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 120000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d5965ef055a6fbc35c103feaa527ccba56f22d79c84ca46387d8aeb26c40add0",
+      "imageSha256": "2f3d7a3726232b584b96e37dcfb4a7d29e3de8318a724f1b34b2e4b4e0e2dec0",
+      "imageWordCount": 31,
+      "evidenceCapabilityId": "assembly.p6.source-image"
     },
     {
       "id": "SEED-P7-0001",
@@ -2626,7 +3627,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1b624bacd18827bbaa54185ec65dc3b83ba74182161f1f38c922abc922b40027",
+      "imageSha256": "a022246eef4ccd5e6a7e287a51b3aa72038b53e1a136e37392f03f14e234c382",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0002",
@@ -2639,7 +3645,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "5bf73dae77db41972e47c0c6fa1ae4267a344582ece297bee2fa9f0d3ebf85be",
+      "imageSha256": "7adeed4c4abd3115c3b6e32962d291f2bac18b673b322d7c825ebd60e0005848",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0003",
@@ -2652,7 +3663,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f125597a063c26cbd34b5f0bfe65e6d50e22a202c74bb857cf920ed1aa461e2d",
+      "imageSha256": "131e047122a624e35cfe2f6624e9592ede24557ceaf3d97bfd320947e2f5447a",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0004",
@@ -2665,7 +3681,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a52c302904fba2d665be3a9fa14e86441f74e364ad489be4b5e8e7a3e2e19033",
+      "imageSha256": "447e04e2ef48f06315da5c296667e8389db7be1a4bda0b4620d4651400b80fe7",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0005",
@@ -2678,7 +3699,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "25b8958a2ad2453da76d0b3208e63a3553e918580edbd8524868b44f44d56313",
+      "imageSha256": "acca8eb1f29162385d8551d47a07c49bdfc1bc4205ebe26e2fb89990323091b7",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0006",
@@ -2691,7 +3717,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f8b19d5fdfb14eaa1b946a98952bb423a8f9ba398dee03b669750c757842673d",
+      "imageSha256": "66ca0839b9884a7775a23464852d625b0fca62f9b5cbfe191ae7730fea7ae39c",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0007",
@@ -2704,7 +3735,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e6f98c49f396d76f795ed04b7a93f1a55eafef800baa9c92e12140ad6254694d",
+      "imageSha256": "b31abb40ae16408e6bf82c5c85d302e5827a32c645dd0372ab3e3eb32485d54e",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0008",
@@ -2717,7 +3753,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "051c025547512cf62fcdde0959f4fdb2776fea9ab2fc35abb043fb8e5953eeef",
+      "imageSha256": "8955ad5abdf477aa12b3980e98047f63cadc722ac3d59cbf9b2a10953afb74f3",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0009",
@@ -2730,7 +3771,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "fcf8e838e4e6f3829b0ca8c482b1e87acf57ddd4b0b2eb38350356dafb409963",
+      "imageSha256": "4087932f1a85c15db34ce00b5aa518a0c486aa2b42e3239ed48a65936ff5d33d",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0010",
@@ -2743,7 +3789,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1875e31f701ae3d2e0b5523b6f751830d68f013fccb3483f98e5da5f67648236",
+      "imageSha256": "db35e54e5767988f16dc7c6129dcde0da8401ca68c58408cf54768789121064b",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0011",
@@ -2756,7 +3807,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "256c172ffe5813bcfdd56f77e8b49156208f2e78353ee100b00dfe864016d203",
+      "imageSha256": "e37058eede385c706648235cdbc5faf2abb6e9aefc94764c63195da0552322c0",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0012",
@@ -2769,7 +3825,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4b9fece4c9c33a43a4d587cfa4028ef2a3e81697e45aeb195c27195c1cac639d",
+      "imageSha256": "361aaae3632033350be2576e207bdd20e8f3811bc82bebeb1a16bc95efaa8cbc",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0013",
@@ -2782,7 +3843,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "a73fd63e03d95deaf7fbac08f16ac67ca141fd188e8b44294c2c5ec11bacda9e",
+      "imageSha256": "5fe063813ee8342213afee0d0bcc112317dab3a1a7e91fb8f3a5e13f78afa94d",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0014",
@@ -2795,7 +3861,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8ecee9e1b18aa9128218911ea93cd9cc6e9c2c0d85b96fefc3b183b499fcc60a",
+      "imageSha256": "72e24bbeca8db41a7358f726cbf60b26fba665648f303f92d7659786ea00fc84",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0015",
@@ -2808,7 +3879,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1a5c6e097bcc93b9d815877469cb62512116ecc05079cd0c0d5166f724acd624",
+      "imageSha256": "fa47dc2fed07a2a25a8d593ec16183794963d7c8f3712325ab85eb6aaa9596a0",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0016",
@@ -2821,7 +3897,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "13352df422444258a583c40d46d1b7bc2f294ac36f7cdf348f14da3bcd58f895",
+      "imageSha256": "032936297822d427bd1a924b23e7b3214f61861aad247c10452bcfa3ea28d708",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0017",
@@ -2834,7 +3915,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "8c087cae8cd6bea57228d30ad583e641d44fc0e3cf8c702dd5ff444c6e81258a",
+      "imageSha256": "5b47572c2b549ed92d82a197cb6a7b157db5f7ed93275a04d1c0b05a4c26e6fd",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0018",
@@ -2847,7 +3933,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e9a3d65e876eb7cfb63f4326010fe85d1776a3ec49c7881b3eb2f77f45b03ddb",
+      "imageSha256": "4ce037d67ccea1aba588d9252177cd39789c9ed2feaaeec86740da59cdb563c1",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0019",
@@ -2860,7 +3951,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "0bf6fb56a7f109694ac01faa818b626cb9d456148cff2e77148f56c4a5fcf9f4",
+      "imageSha256": "d940e1b017026da372d4d78fc62c424e2c2f057eaaa30351d42b396b26d5e274",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0020",
@@ -2873,7 +3969,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4db3735385cbd0892c23b79a64aa00c9b512c5bc87a31f1de39ceba22c49ea8e",
+      "imageSha256": "0eb98db96725a8a095646ba9e891d0e0ae5812d347636475f5dddd94ac9bb565",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0021",
@@ -2886,7 +3987,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4dd8d12e33f62aa23eab10dbd670419636b75ba59cfcc8ea3939ba7a24cdb294",
+      "imageSha256": "e88a7e3243fdd05744441c76cf334db3a72c42b28aa591df80cecfd1af9818d1",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0022",
@@ -2899,7 +4005,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "fb2664b2ace91bcddc5b8afc6f2f886c287ace5e5657df3320bde3057704512c",
+      "imageSha256": "2f5e59c06424180675135e70eb9ffd9a132b35292434ae939b82c48b6b5da348",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0023",
@@ -2912,7 +4023,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3024c99afa046e9eac24a4f8ca0c5b847a446c3e210f1cecf31f8092db8ea5fb",
+      "imageSha256": "053b3fba28408d91d8031651f264ed1b620fe268f2de1ab5b9d967f140b9b79b",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0024",
@@ -2925,7 +4041,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f5146c282b1173512e5622b4f9482367e2d03c9a15930aab590952e1fe73b566",
+      "imageSha256": "8e802380c1f2e2c061a05a0cff6fe36cd59e6972601e28469e94d88a79b7c0ac",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0025",
@@ -2938,7 +4059,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f8cfa247389cf32007a61abc10390f8cd821b2db001beb3f1a806acfe90d4b20",
+      "imageSha256": "560ac7659098edc58dfa09c902b2c423d95e85117b52ac0ae29d9e0c4fd80829",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0026",
@@ -2951,7 +4077,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "34874d13f1258075cc395e2e4f8915db0f5b7e1a2b5a2b43bd30cf1f6b91eaae",
+      "imageSha256": "41cfd9a78b5c21cba03716f127df1bfcc3d33149fedad8b82f86506b644c3d22",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0027",
@@ -2964,7 +4095,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9f271b772a05c4e2e0ebb702cc27293c0efc09fbbd102c964a0f520a3f0a0ab3",
+      "imageSha256": "d544424e2e8bfa08b4608064f2f377546b7031ffde16a9df4cb67934664f480b",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0028",
@@ -2977,7 +4113,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "81c22173db94a7034c9909e6c7c1bf7a4fc31806d284bbdce43e2f3b8930393a",
+      "imageSha256": "ba13f03132f6c5598a2f4548a65380a1b199a44bd8845534ff36717be610618d",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0029",
@@ -2990,7 +4131,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4b9ff84131def45e91d140f371aaf9b0ed2eb72addf07bf8c763b1f20695c82e",
+      "imageSha256": "837d25ec90a31645f160c5f62f63905a4cad30bb4f284b23938720d0d78e01b6",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0030",
@@ -3003,7 +4149,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "592a07241f40befc26d6b095f1bc4967411e29c1dc68b6d3a224d9172f95ea12",
+      "imageSha256": "cf7547eb87d434c136bc0e07dfc0fa23a21eea3b7d9ff6ab5c9867b4cdefba68",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0031",
@@ -3016,7 +4167,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "de38b5733ba2cdfc53528c95ef832045d0b364f6191763885059916aabea5423",
+      "imageSha256": "10b996e5b88a28fd7806e5449014d6e94f611da305283b66b2716fd47c4b765e",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0032",
@@ -3029,7 +4185,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "29b4000007c6edc9dcfa1bd3320ac6eeeff4224a9dd6bb404fc53e21737badd3",
+      "imageSha256": "df050dcaef7067171092e9f133f89de373401a2d0deee3a2532a7c2978cb744d",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0033",
@@ -3042,7 +4203,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b3a9719cc6bc071de3f37f19e7efddffbc6c9c5a2480213a6dba4c0d6d06213f",
+      "imageSha256": "77243c813d688b94cfb308861d227a43789f6ac8951e42c174753cb006720f5e",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0034",
@@ -3055,7 +4221,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "e1fc58d822fbed0961f731b032163871b2b4162fa36e436ddb503d2a58905230",
+      "imageSha256": "dca0ac7ebf39ef4776bb0092b8bb43873b84fe375ee99edc9a1ab20c6515b40b",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0035",
@@ -3068,7 +4239,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "58c0a910ac4622d8610013f80f92a7671dc148edfff01e77511ce6d94b5175a6",
+      "imageSha256": "447d01eb4ed4caa9a5e6419c7c628d4051a2a502f427f10d015fcd42c0934f07",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0036",
@@ -3081,7 +4257,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d422ebc8d88a6e144848253f8a357d6b7cf3511a0d4a452dc577678980408d9a",
+      "imageSha256": "0d9f229924a2a3ab23f1685f0b01556f7801eee7b82e95b6f7571bac960971b6",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0037",
@@ -3094,7 +4275,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "32690dbf2a19df752186fae4d0f049fde3ccc834c7df5f07709deaa94fb9caee",
+      "imageSha256": "7370db175f91da633616b3cb9d89ecb27fcdb280e05352accc2d4018cad3f545",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0038",
@@ -3107,7 +4293,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "f1f835ce6997cefabcfdb793a2abef29ccdb287f7189fc8680d0c076e23ab953",
+      "imageSha256": "29186cd33db790c3df77129c5ea0181004553bb9b30254a67ff25634c692d6df",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0039",
@@ -3120,7 +4311,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "fd59c1064dfaef06d298b873ca1020d9acfabc02119ae8e00919dde814830f37",
+      "imageSha256": "d7db7255a13c564c074c36a51c6670a154071749aeb3d3f5ff44cf5035d3e4d0",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0040",
@@ -3133,7 +4329,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "3f8fc033804e854d35ea358ec801d30e94447ffa711a9d687f6586851726cdf6",
+      "imageSha256": "7cef0e7ee6da2423253ecdae5e1f489dffd9d95660067750d36ccd818e61d8b8",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0041",
@@ -3146,7 +4347,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 0,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "dd676d4c80efb1db927d3708f87f41f564f3f111dc305e6f9567ed8632688162",
+      "imageSha256": "0391dcf19c7209626ee9001d2d59e07ced8007774b669cb9873167321a42f3cc",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0042",
@@ -3159,7 +4365,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 1,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "65e8791eb8a8755784931de27485e471787a81e597c2a82a61799a0caf601e39",
+      "imageSha256": "f005f792dce59b2341b510ee138f9ce0776d16b1d2fddd69c338b90aa6dd584f",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0043",
@@ -3172,7 +4383,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 2,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "d5ce1fd82e6b2f2c75d20aa13b7f96aa26b5600c26a9dddad74fcfd4baebcefa",
+      "imageSha256": "3c4df947a0247d06802ddaa82ba61e8f6ae86ab823390fd24103ffece3709fe9",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0044",
@@ -3185,7 +4401,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 3,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "6e0eb34add332405591da999c57c1ac809622ed6d016c9c47b3cf9c31badf192",
+      "imageSha256": "f7f2dca5a327e3cc9a608388faace09cceb9dc87bc4b16ea879f21a08ca2854a",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0045",
@@ -3198,7 +4419,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 4,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "9f1b7c4a000d34e7330f62056c57bcb7e4a3e2200dfb08c054894aebdf5daf9d",
+      "imageSha256": "f57d13c17c7e7fc93356e716f09675109d5515c8ff34cfa44c50cca9bbf78e4a",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0046",
@@ -3211,7 +4437,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 5,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "941299b90f0919f448fa3e5094ef70e2a2e9ad4f1c0ebd87014239f195e0d88f",
+      "imageSha256": "e3178cfd73b5689604e075c33cb511e2b3dfa51790e9339ebf810cb30b7bde89",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0047",
@@ -3224,7 +4455,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 6,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "b638a67acc8ccd32fcd5210069b1b4e312a4b0c681f9a2db64f683de02ab9844",
+      "imageSha256": "eafe92f76621fc48ef890dd463f287021da9a926a542a099f6b17d7ae5911dbd",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0048",
@@ -3237,7 +4473,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 7,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "99a835a92dfd3cebd618b61a2cbda24749732e61d0b9d9281b8c8e13b2272fcc",
+      "imageSha256": "d56ef47bfd152713583268004feca473180ac6bee7ad055c68b4a894687b5013",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0049",
@@ -3250,7 +4491,12 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 8,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "1dc38a10aba1686a1bcd136e8e57f9a042d4f25d09c1b6a50c0628150521e2f4",
+      "imageSha256": "cf692c068f04f89a4a8b9002f06cae0097f5af7c681e8e7aa477f5748744da97",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     },
     {
       "id": "SEED-P7-0050",
@@ -3263,11 +4509,16 @@
       "haltPolicy": "standard-beq-self-plus-nop",
       "jobWallClockMs": 300000,
       "shard": 9,
-      "runnerRevision": 1
+      "runnerRevision": 1,
+      "rendererRevision": 1,
+      "sourceSha256": "4fb873854196eaffb41b283fa9585ce5b68094da8fc85c695ca4ea480117814c",
+      "imageSha256": "605dd7f315f691fb48b7805e7ce3467c06cb7281614a0be70ee8d6c65472174f",
+      "imageWordCount": 35,
+      "evidenceCapabilityId": "assembly.p7.source-image"
     }
   ],
   "integrity": {
     "algorithm": "sha256-canonical-json-v1",
-    "casesSha256": "2881ca2de74bf84dea7c18512cd83969256d1c9826672a108ed7e850231c171a"
+    "casesSha256": "6e58b0251134bceeefe78b9cab6dabe388a915e3d1fe8da0a988aeda1bc4d179"
   }
 }

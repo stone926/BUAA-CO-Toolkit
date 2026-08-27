@@ -1,9 +1,14 @@
 /** Independent ISA golden schema, completeness and review-integrity checks. */
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
+import * as fs from '../expected/guardedFs.mjs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertIndependentPolicyReviewer, isGithubUsername } from '../governance/reviewerPolicy.mjs';
+import { isGithubUsername } from '../governance/reviewerPolicy.mjs';
+import {
+  assertCandidateApproved,
+  candidateDescriptor,
+  sha256CanonicalJson
+} from '../governance/approvalEnvelope.mjs';
 
 const runnerRoot = path.dirname(fileURLToPath(import.meta.url));
 export const isaGoldenFile = path.resolve(runnerRoot, '..', 'expected', 'isaGolden', 'course-basic-v1.json');
@@ -93,23 +98,12 @@ export function validateIsaGolden(golden, options = {}) {
   invariant(typeof golden.catalogSha256 === 'string' && sha256.test(golden.catalogSha256), 'catalogSha256 is invalid');
 
   onlyKeys(golden.review, ['status', 'author', 'reviewer', 'reviewedAt', 'reviewRevision'], 'review');
-  invariant(['candidate', 'approved'].includes(golden.review.status), 'review.status is invalid');
+  invariant(golden.review.status === 'candidate', 'review.status must remain candidate; approvals live in governance/approvals');
   invariant(isGithubUsername(golden.review.author), 'review.author must be a GitHub username');
-  if (golden.review.status === 'approved') {
-    try {
-      assertIndependentPolicyReviewer(golden.review.reviewer, golden.review.author, 'review.reviewer');
-    } catch (error) {
-      invariant(false, error instanceof Error ? error.message : String(error));
-    }
-    invariant(/^\d{4}-\d{2}-\d{2}$/.test(golden.review.reviewedAt), 'reviewedAt is invalid');
-    invariant(Number.isSafeInteger(golden.review.reviewRevision) && golden.review.reviewRevision > 0, 'reviewRevision is invalid');
-  } else {
-    invariant(golden.review.reviewer === null
-      && golden.review.reviewedAt === null
-      && golden.review.reviewRevision === 0,
-    'candidate review fields must be null/null/0');
-  }
-  if (options.requireApproved) invariant(golden.review.status === 'approved', 'independent ISA golden is not approved');
+  invariant(golden.review.reviewer === null
+    && golden.review.reviewedAt === null
+    && golden.review.reviewRevision === 0,
+  'candidate review fields must be null/null/0');
 
   invariant(Array.isArray(golden.cases) && golden.cases.length > 0, 'cases must be non-empty');
   invariant(Array.isArray(golden.runtimeCounterexamples) && golden.runtimeCounterexamples.length > 0, 'runtimeCounterexamples must be non-empty');
@@ -166,7 +160,22 @@ export function validateIsaGolden(golden, options = {}) {
     invariant(typeof golden.integrity.payloadSha256 === 'string' && sha256.test(golden.integrity.payloadSha256), 'integrity.payloadSha256 is invalid');
     invariant(golden.integrity.payloadSha256 === isaGoldenPayloadSha256(golden), 'integrity.payloadSha256 is stale');
   }
+  if (options.requireApproved) {
+    assertCandidateApproved(isaGoldenCandidateDescriptor(golden, options.file ?? isaGoldenFile), options);
+  }
   return golden;
+}
+
+export function isaGoldenCandidateDescriptor(golden, file = isaGoldenFile) {
+  const descriptor = candidateDescriptor({
+    artifactKind: 'isaGolden',
+    artifactId: path.basename(file, '.json'),
+    file,
+    candidateAuthor: golden.review.author,
+    candidateRevision: golden.schemaRevision
+  });
+  invariant(descriptor.candidateSha256 === sha256CanonicalJson(golden), 'in-memory ISA golden differs from the candidate file');
+  return descriptor;
 }
 
 export function loadIsaGolden(options = {}) {

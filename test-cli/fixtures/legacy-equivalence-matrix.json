@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "description": "Fixed pre-provider/direct-runMarsFile versus LegacyMarsProvider equivalence matrix for the phase-1 gate.",
+  "cases": [
+    {
+      "id": "p3-user-basic",
+      "profile": "P3",
+      "scenario": "success",
+      "families": ["user-text", "arithmetic", "memory", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "P3 memory commit", "match": { "pc": "0000300c", "kind": "dm", "target": "00000000", "value": "00000003" }, "count": 1 }
+      ],
+      "source": ".text\nori $1, $0, 1\nori $2, $0, 2\nadd $3, $1, $2\nsw $3, 0($0)\nlw $4, 0($0)\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p3-assembly-failure",
+      "profile": "P3",
+      "scenario": "assembly-failure",
+      "families": ["user-text", "assembly-diagnostic"],
+      "expected": { "assemble": "failed", "execute": "not-started", "verdict": "failed", "stop": "not-started" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [],
+      "source": ".text\nori $1, $0, 1\nco_intentionally_invalid_instruction $2, $1, $1\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p4-user-basic",
+      "profile": "P4",
+      "scenario": "success",
+      "families": ["user-text", "branch", "memory", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "P4 taken branch target", "match": { "pc": "00003010", "kind": "grf", "target": "4", "value": "00000004" }, "count": 1 }
+      ],
+      "source": ".text\nori $1, $0, 1\nori $2, $0, 1\nbeq $1, $2, taken\nori $3, $0, 0xdead\ntaken:\nori $4, $0, 4\nsw $4, 0($0)\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p4-runtime-failure",
+      "profile": "P4",
+      "scenario": "runtime-failure",
+      "families": ["user-text", "execution-budget", "wrong-loop", "runtime-diagnostic"],
+      "expected": { "assemble": "passed", "execute": "failed", "verdict": "failed", "stop": "engine-error" },
+      "maxSteps": 24,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [],
+      "source": ".text\nori $1, $0, 1\n_wrong_loop:\nbeq $0, $0, _wrong_loop\nnop\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p4-assembly-failure",
+      "profile": "P4",
+      "scenario": "assembly-failure",
+      "families": ["user-text", "assembly-diagnostic"],
+      "expected": { "assemble": "failed", "execute": "not-started", "verdict": "failed", "stop": "not-started" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [],
+      "source": ".text\nori $1, $0, 1\nco_intentionally_invalid_instruction $2, $1, $1\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p5-regimm-link-repair",
+      "profile": "P5",
+      "scenario": "success",
+      "families": ["user-text", "delay-slot", "regimm-link-repair", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "not-taken BLTZAL unconditional link repair", "match": { "pc": "00003004", "kind": "grf", "target": "31", "value": "0000300c" }, "count": 1 }
+      ],
+      "source": ".text\nori $1, $0, 1\nbltzal $1, not_taken_target\nori $2, $0, 2\nori $3, $0, 3\nnot_taken_target:\nsw $3, 0($0)\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p5-assembly-failure",
+      "profile": "P5",
+      "scenario": "assembly-failure",
+      "families": ["user-text", "assembly-diagnostic"],
+      "expected": { "assemble": "failed", "execute": "not-started", "verdict": "failed", "stop": "not-started" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [],
+      "source": ".text\nori $1, $0, 1\nco_intentionally_invalid_instruction $2, $1, $1\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p6-partial-store-repair",
+      "profile": "P6",
+      "scenario": "success",
+      "families": ["user-text", "delay-slot", "swl-swr-final-write-repair", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "SWL emits one final architectural word", "match": { "pc": "0000300c", "kind": "dm", "target": "00000000" }, "count": 1 },
+        { "label": "SWR emits one final architectural word", "match": { "pc": "00003010", "kind": "dm", "target": "00000000" }, "count": 1 }
+      ],
+      "source": ".text\nori $1, $0, 0x1122\nsw $1, 0($0)\nori $2, $0, 0x3344\nswl $2, 1($0)\nswr $2, 2($0)\nmult $1, $2\nmflo $3\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p6-stdin-console",
+      "profile": "P6",
+      "scenario": "stdin",
+      "families": ["user-text", "stdin", "syscall-console", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": "37\n",
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "stdin value reaches DM", "match": { "pc": "00003008", "kind": "dm", "target": "00000000", "value": "00000025" }, "count": 1 }
+      ],
+      "source": ".text\nori $2, $0, 5\nsyscall\nsw $2, 0($0)\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p6-assembly-failure",
+      "profile": "P6",
+      "scenario": "assembly-failure",
+      "families": ["user-text", "assembly-diagnostic"],
+      "expected": { "assemble": "failed", "execute": "not-started", "verdict": "failed", "stop": "not-started" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [],
+      "source": ".text\nori $1, $0, 1\nco_intentionally_invalid_instruction $2, $1, $1\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n"
+    },
+    {
+      "id": "p7-user-kernel-dump",
+      "profile": "P7",
+      "scenario": "success",
+      "families": ["user-text", "kernel-text", "cp0", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 64,
+      "dumpKernel": true,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "P7 user commit", "match": { "pc": "00003004", "kind": "dm", "target": "00000000", "value": "00000007" }, "count": 1 }
+      ],
+      "source": ".text\nori $1, $0, 7\nsw $1, 0($0)\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n.ktext 0x4180\nmfc0 $26, $14\nmtc0 $26, $14\neret\nnop\n"
+    },
+    {
+      "id": "p7-reserved-instruction",
+      "profile": "P7",
+      "scenario": "p7-ri",
+      "families": ["user-text", "kernel-text", "reserved-instruction", "exception-return", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 96,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": true,
+      "canonicalExpectations": [
+        { "label": "RI enters the 0x4180 handler", "match": { "pc": "00004180", "kind": "grf", "target": "26" }, "count": 1 },
+        { "label": "execution resumes after RI victim", "match": { "pc": "00003008", "kind": "grf", "target": "2", "value": "00000002" }, "count": 1 }
+      ],
+      "source": ".text\nori $1, $0, 1\n_co_internal_unknown_instruction\nori $2, $0, 2\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n.ktext 0x4180\nmfc0 $26, $14\naddiu $26, $26, 4\nmtc0 $26, $14\neret\nnop\n"
+    },
+    {
+      "id": "p7-external-interrupt",
+      "profile": "P7",
+      "scenario": "p7-interrupt",
+      "families": ["user-text", "kernel-text", "external-interrupt", "interrupt-ack", "exception-return", "halt-loop"],
+      "expected": { "assemble": "passed", "execute": "passed", "verdict": "passed", "stop": "halt-loop" },
+      "maxSteps": 96,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [12304],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [
+        { "label": "interrupt enters the 0x4180 handler", "match": { "pc": "00004180", "kind": "grf", "target": "8" }, "count": 1 },
+        { "label": "handler acknowledges the external interrupt", "match": { "pc": "00004184", "kind": "dm", "target": "00007f20", "value": "00000000" }, "count": 1 },
+        { "label": "interrupted user instruction is retried", "match": { "pc": "00003010", "kind": "grf", "target": "3", "value": "00000003" }, "count": 1 }
+      ],
+      "source": ".text\nori $26, $0, 0x1001\nmtc0 $26, $12\nori $1, $0, 1\nori $2, $0, 2\nori $3, $0, 3\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n.ktext 0x4180\nmfc0 $8, $13\nsb $0, 0x7f20($0)\neret\nnop\n"
+    },
+    {
+      "id": "p7-assembly-failure",
+      "profile": "P7",
+      "scenario": "assembly-failure",
+      "families": ["user-text", "assembly-diagnostic"],
+      "expected": { "assemble": "failed", "execute": "not-started", "verdict": "failed", "stop": "not-started" },
+      "maxSteps": 64,
+      "dumpKernel": false,
+      "stdin": null,
+      "interruptSchedule": [],
+      "p7RiInstruction": false,
+      "canonicalExpectations": [],
+      "source": ".text\nori $1, $0, 1\nco_intentionally_invalid_instruction $2, $1, $1\n_co_test_end:\nbeq $0, $0, _co_test_end\nnop\n.ktext 0x4180\neret\nnop\n"
+    }
+  ],
+  "controlContracts": [
+    {
+      "id": "cancellation",
+      "comparison": "not-comparable",
+      "baselineSurface": "The fixed pre-provider runMarsFile signature has no AbortSignal input.",
+      "currentSurface": "LegacyMarsProvider accepts ProviderRunContext.signal.",
+      "reason": "Inventing cancellation on the historical lane would not execute the fixed baseline API.",
+      "requiredIndependentGate": "phase1-process-supervisor-cancel"
+    },
+    {
+      "id": "wall-clock-timeout",
+      "comparison": "not-comparable",
+      "baselineSurface": "The fixed pre-provider path reads a workspace timeout and exposes only timedOut on RunResult.",
+      "currentSurface": "LegacyMarsProvider propagates provider-neutral timeout/stop status from the process supervisor.",
+      "reason": "A wall-clock race between two separate JVMs is not deterministic equivalence evidence; timeout semantics require the dedicated process-supervisor gate.",
+      "requiredIndependentGate": "phase1-process-supervisor-timeout"
+    }
+  ]
+}

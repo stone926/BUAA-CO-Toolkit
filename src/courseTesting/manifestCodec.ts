@@ -635,7 +635,7 @@ export function manifestArtifactsOf(manifest: AsmCaseManifestUnion): AsmCaseArti
     result.program = artifactPathMap(artifacts.program);
   }
   if (artifacts.oracle) {
-    result.mars = artifactPathMap(artifacts.oracle);
+    result.oracle = artifactPathMap(artifacts.oracle);
   }
   if (artifacts.referenceMars) {
     result.referenceMars = artifactPathMap(artifacts.referenceMars);
@@ -671,6 +671,7 @@ export function v2ArtifactGroup(
   name: string
 ): { group: keyof AsmCaseArtifactsV2; key: string } {
   switch (kind) {
+    case 'oracle':
     case 'mars':
       return { group: 'oracle', key: name };
     case 'source':

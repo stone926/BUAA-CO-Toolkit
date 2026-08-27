@@ -15,3 +15,6 @@ additional
 AGENTS.md
 CLAUDE.md
 conformance/.cache/
+
+# 会话临时产物（PDF 页面渲染等），不进入仓库
+tmp/

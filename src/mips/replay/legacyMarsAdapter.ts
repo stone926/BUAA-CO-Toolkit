@@ -13,7 +13,7 @@ import {
   p7KernelTextDumpEndAddress,
   p7UserTextBaseAddress
 } from '../../courseTesting/p7Hardware';
-import { courseTraceMarsHaltError } from '../../courseTesting/marsStepLimit';
+import { courseTraceMarsHaltError } from '../legacy/haltValidation';
 import { legacyMarsConfigurationPolicyIssues } from '../../language/mips/legacyMarsPolicy';
 import { legacyMarsCompatibilityDiagnostic } from '../../language/mips/legacyMarsDiagnostics';
 import {

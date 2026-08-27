@@ -15,6 +15,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as url from 'node:url';
+import { validateEvidenceGateDocument } from './validate-evidence-gates.mjs';
 
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const rawArgs = process.argv.slice(2);
@@ -281,64 +282,17 @@ for (let index = 0; index < divergenceEntries.length; index += 1) {
   }
 }
 
-// Evidence gates: schema validates all fields; these checks freeze revision-1
-// semantic structure, positive thresholds, coverage bins and fingerprints.
-const evidenceSpecifications = {
-  assembly: {
-    gate: { graphsPerProfile: 'positiveInteger', syntaxBinsMinHits: 'positiveInteger' },
-    includes: ['assembler', 'catalog', 'contract', 'diagnostic-schema'],
-    excludes: ['executor'],
-    bins: ['per-profile', 'per-advertised-syntax-feature', 'accept', 'reject', 'diagnostic']
-  },
-  execution: {
-    gate: { imagesPerProfile: 'positiveInteger', transitions: 'positiveInteger' },
-    includes: ['executor', 'catalog', 'contract', 'event-schema', 'observability-schema'],
-    excludes: ['ts-assembler'],
-    bins: ['per-profile', 'instruction', 'branch-taken-untaken', 'byte-lane', 'address-boundary', 'exception-irq-timer-scenario']
-  },
-  device: {
-    gate: { directedBins: 'nonEmptyString', fuzzCycles: 'positiveInteger' },
-    includes: ['device-build', 'cycle-contract', 'vector-revision'],
-    excludes: ['assembler', 'machine-instruction-count'],
-    bins: ['timer-state', 'timer-mode', 'write-priority', 'irq-width', 'irq-restart']
-  },
-  'full-stack': {
-    gate: { validGraphsPerProfile: 'positiveInteger', transitions: 'positiveInteger', handwrittenCorpusGate: 'nonEmptyString' },
-    includes: ['assembler', 'executor', 'catalog', 'contract', 'event-schema', 'observability-schema', 'diagnostic-schema'],
-    excludes: [],
-    bins: ['per-profile', 'instruction', 'branch-taken-untaken', 'byte-lane', 'address-boundary', 'exception-irq-timer-scenario', 'handwritten-feature-distribution']
+// The dedicated validator expands every idPrefix/member pair into an exact bin,
+// cross-checks course contract IDs and freezes fingerprint inclusion/exclusion.
+if (gates) {
+  try {
+    const featureDistribution = loadJson('../corpus/handwritten-feature-distribution.json');
+    validateEvidenceGateDocument(gates, { contracts, featureDistribution });
+  } catch (error) {
+    const details = Array.isArray(error?.violations) ? error.violations : [error instanceof Error ? error.message : String(error)];
+    for (const detail of details) violations.push(`evidence-gates.json: ${detail}`);
   }
-};
-
-const evidenceKinds = Array.isArray(gates?.evidenceKinds) ? gates.evidenceKinds : [];
-const kindCounts = new Map();
-for (const kind of evidenceKinds) {
-  if (typeof kind?.kind === 'string') kindCounts.set(kind.kind, (kindCounts.get(kind.kind) ?? 0) + 1);
 }
-for (const [kindName, specification] of Object.entries(evidenceSpecifications)) {
-  check(kindCounts.get(kindName) === 1, `evidence-gates.json: evidence kind ${kindName} must occur exactly once`);
-  const kind = evidenceKinds.find((candidate) => candidate?.kind === kindName);
-  if (!kind) continue;
-  const actualGateKeys = Object.keys(kind.initialGate ?? {}).sort();
-  const expectedGateKeys = Object.keys(specification.gate).sort();
-  check(jsonEqual(actualGateKeys, expectedGateKeys), `evidence-gates.json: ${kindName}.initialGate fields must be exactly ${expectedGateKeys.join(', ')}`);
-  for (const [field, expectedType] of Object.entries(specification.gate)) {
-    const value = kind.initialGate?.[field];
-    if (expectedType === 'positiveInteger') check(Number.isInteger(value) && value > 0, `evidence-gates.json: ${kindName}.initialGate.${field} must be a positive integer`);
-    else check(typeof value === 'string' && value.trim().length > 0, `evidence-gates.json: ${kindName}.initialGate.${field} must be a non-empty string`);
-  }
-  const includes = Array.isArray(kind.fingerprintIncludes) ? kind.fingerprintIncludes : [];
-  const excludes = Array.isArray(kind.fingerprintExcludes) ? kind.fingerprintExcludes : [];
-  for (const token of specification.includes) check(includes.includes(token), `evidence-gates.json: ${kindName}.fingerprintIncludes is missing ${token}`);
-  for (const token of specification.excludes) check(excludes.includes(token), `evidence-gates.json: ${kindName}.fingerprintExcludes is missing ${token}`);
-  for (const token of includes) check(!excludes.includes(token), `evidence-gates.json: ${kindName} fingerprint token ${token} is both included and excluded`);
-  const bins = Array.isArray(kind.coverageBins) ? kind.coverageBins : [];
-  for (const bin of specification.bins) check(bins.includes(bin), `evidence-gates.json: ${kindName}.coverageBins is missing ${bin}`);
-}
-
-const expectedSeedManifestFields = ['sourceWordLimit', 'meaningfulTransitionLimit', 'stepPolicy', 'haltPolicy', 'jobWallClockMs', 'shard', 'runnerRevision'].sort();
-const actualSeedManifestFields = Array.isArray(gates?.seedManifestFields) ? [...gates.seedManifestFields].sort() : [];
-check(jsonEqual(actualSeedManifestFields, expectedSeedManifestFields), `evidence-gates.json: seedManifestFields must be exactly ${expectedSeedManifestFields.join(', ')}`);
 
 function collectReferences() {
   const collected = [];

@@ -209,35 +209,122 @@
       "minItems": 1,
       "uniqueItems": true
     },
-    "evidenceGateValue": {
+    "evidenceGateValue": { "type": "integer", "minimum": 1 },
+    "evidenceMemberSet": {
+      "type": "object",
+      "required": ["id", "members"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$" },
+        "members": { "$ref": "#/definitions/nonEmptyUniqueStringArray" }
+      },
+      "additionalProperties": false
+    },
+    "evidenceBinGroup": {
+      "type": "object",
+      "required": ["idPrefix", "metric", "minimumEach"],
+      "properties": {
+        "idPrefix": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$" },
+        "metric": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$" },
+        "minimumEach": { "type": "integer", "minimum": 1 },
+        "memberSet": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$" },
+        "members": { "$ref": "#/definitions/nonEmptyUniqueStringArray" }
+      },
       "oneOf": [
-        { "type": "integer", "minimum": 1 },
-        { "type": "string", "minLength": 1 }
-      ]
+        { "required": ["memberSet"] },
+        { "required": ["members"] }
+      ],
+      "additionalProperties": false
+    },
+    "evidenceCapability": {
+      "type": "object",
+      "required": ["id", "profiles", "contractIds", "binGroups"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]+$" },
+        "profiles": {
+          "type": "array",
+          "items": { "enum": ["P3", "P4", "P5", "P6", "P7"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "contractIds": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+        "binGroups": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/evidenceBinGroup" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
     },
     "evidenceKind": {
       "type": "object",
-      "required": ["kind", "unit", "fingerprintExcludes", "fingerprintIncludes", "initialGate", "coverageBins"],
+      "required": ["kind", "unit", "initialGate", "capabilities"],
       "properties": {
         "kind": { "enum": ["assembly", "execution", "device", "full-stack"] },
         "unit": { "type": "string", "minLength": 1 },
-        "fingerprintExcludes": { "$ref": "#/definitions/uniqueStringArray" },
-        "fingerprintIncludes": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
         "initialGate": {
           "type": "object",
           "minProperties": 1,
           "additionalProperties": { "$ref": "#/definitions/evidenceGateValue" }
         },
-        "coverageBins": { "$ref": "#/definitions/nonEmptyUniqueStringArray" }
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/evidenceCapability" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidenceFingerprintPolicy": {
+      "type": "object",
+      "required": ["algorithm", "commonFields", "fieldsByKind", "forbiddenFieldsByKind"],
+      "properties": {
+        "algorithm": { "enum": ["sha256-canonical-json-v1"] },
+        "commonFields": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+        "fieldsByKind": {
+          "type": "object",
+          "required": ["assembly", "execution", "device", "full-stack"],
+          "properties": {
+            "assembly": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+            "execution": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+            "device": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
+            "full-stack": { "$ref": "#/definitions/nonEmptyUniqueStringArray" }
+          },
+          "additionalProperties": false
+        },
+        "forbiddenFieldsByKind": {
+          "type": "object",
+          "required": ["assembly", "execution", "device", "full-stack"],
+          "properties": {
+            "assembly": { "$ref": "#/definitions/uniqueStringArray" },
+            "execution": { "$ref": "#/definitions/uniqueStringArray" },
+            "device": { "$ref": "#/definitions/uniqueStringArray" },
+            "full-stack": { "$ref": "#/definitions/uniqueStringArray" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
     "evidenceGateDocument": {
       "type": "object",
-      "required": ["schemaRevision", "description", "evidenceKinds", "seedManifestFields", "invalidTransitionPolicy", "status", "revision"],
+      "required": ["schemaRevision", "description", "profiles", "binIdFormat", "memberSets", "fingerprintPolicy", "evidenceKinds", "seedManifestFields", "invalidTransitionPolicy", "status", "revision"],
       "properties": {
-        "schemaRevision": { "enum": [1] },
+        "schemaRevision": { "enum": [2] },
         "description": { "type": "string", "minLength": 1 },
+        "profiles": {
+          "type": "array",
+          "items": { "enum": ["P3", "P4", "P5", "P6", "P7"] },
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true
+        },
+        "binIdFormat": { "enum": ["{idPrefix}.{member}"] },
+        "memberSets": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/evidenceMemberSet" },
+          "minItems": 1
+        },
+        "fingerprintPolicy": { "$ref": "#/definitions/evidenceFingerprintPolicy" },
         "evidenceKinds": {
           "type": "array",
           "items": { "$ref": "#/definitions/evidenceKind" },
@@ -246,8 +333,8 @@
         },
         "seedManifestFields": { "$ref": "#/definitions/nonEmptyUniqueStringArray" },
         "invalidTransitionPolicy": { "type": "string", "minLength": 1 },
-        "status": { "enum": ["structure-frozen"] },
-        "revision": { "enum": [1] }
+        "status": { "enum": ["capability-bins-frozen"] },
+        "revision": { "enum": [2] }
       },
       "additionalProperties": false
     }

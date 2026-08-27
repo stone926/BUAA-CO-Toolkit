@@ -1,6 +1,6 @@
 // @index stable-mars-image-compatibility — 用最终硬件 HexText 约束稳定版 MARS 的动态取指与 P7 IG 应答
-import { ProjectProfile } from '../projectProfile';
-import { p7ExceptionHandlerAddress, p7UserTextBaseAddress } from './p7Hardware';
+import { ProjectProfile } from '../../projectProfile';
+import { p7ExceptionHandlerAddress, p7UserTextBaseAddress } from '../../courseTesting/p7Hardware';
 
 const detailedMarsInstructionPattern = /^@PC(?:0x)?([0-9a-f]{1,8})\s*->.*\(([0-9a-f]{8})\)\s*$/i;
 const detailedMarsRegisterWritePattern = /^\s*\$\s*(\d{1,2})\s*<=\s*(?:0x)?([0-9a-f]{1,8})\s*$/i;

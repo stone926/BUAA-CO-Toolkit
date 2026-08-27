@@ -1,7 +1,6 @@
 import { TRACE_PROFILES } from '../constants';
 import { ProjectProfile } from '../projectProfile';
 import { generatorInstructionCatalog, type CpuProfile } from './generatorInstructionCatalog';
-import { requiredMnemonicsForProfile } from '../mips/core/generated/isaCatalog';
 
 export type { CpuProfile } from './generatorInstructionCatalog';
 export type MduReadProbeMode = 'busy' | 'ready';
@@ -22,17 +21,9 @@ export type ControlMnemonic =
 
 export const cpuProfiles = TRACE_PROFILES;
 
-/**
- * Course profile instruction whitelists. P3 content is consumed from the
- * generated ISA catalog (end-to-end phase-1 convergence: isa.json ->
- * isaCatalog.ts -> production); display/generator order follows the generator
- * catalog so existing outputs stay byte-identical. The other profiles keep
- * the generator catalog until their convergence lands in later phases.
- */
-const p3RequiredMnemonics = new Set(requiredMnemonicsForProfile('P3'));
-
+/** Stable-order profile projections generated from the versioned ISA catalog. */
 export const defaultInstructionSets: Record<CpuProfile, string[]> = {
-  P3: generatorInstructionCatalog.profiles.P3.filter((mnemonic) => p3RequiredMnemonics.has(mnemonic)),
+  P3: [...generatorInstructionCatalog.profiles.P3],
   P4: [...generatorInstructionCatalog.profiles.P4],
   P5: [...generatorInstructionCatalog.profiles.P5],
   P6: [...generatorInstructionCatalog.profiles.P6],

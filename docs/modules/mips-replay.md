@@ -25,11 +25,13 @@
 
 `engineRegistry.ts` 以 `role + SHA-256` 为唯一键，流式/原子写入 `.co/engine-registry/<role>/<digest>/`，artifact 上限 256 MiB、metadata 上限 16 KiB，并拒绝路径逃逸、symlink、metadata/bytes/hash/运行中漂移。`runMarsFile` 每次先将用户配置的 JAR（以及需要时的 P7 RI class）捕获到 registry，然后只执行私有 staged copy。
 
-磁盘中“恰好具有某 digest”的文件只证明身份，不证明信任。`stageForExecution` 还要求当前 registry 实例已通过 `registerFile/registerBytes` 对可信输入显式授权同一 role+digest；新实例不能直接执行工作区预置条目。调用方需要在本次会话重新绑定用户/发行资产后再 replay。
+磁盘中“恰好具有某 digest”的文件只证明身份，不证明信任。`stageForExecution` 接受两种授权根：当前进程通过 `registerFile/registerBytes` 绑定的可信输入，或编译进插件的版本化 `EngineArtifactTrustManifest`。默认静态清单固定了已审查的 MARS v0.6.3 / course1 release SHA-256、大小和规范角色，以及插件自带 P7 RI class；同一 release SHA 还可匹配历史 case 使用的 `user-configured-mars` 角色。因而 fresh registry 能在原工具链路径消失后执行保留的固定 artifact。
+
+registry **不会**从 `.co`、case 目录或 artifact 邻近位置自动发现 authorization/receipt。那些目录可由工作区写入，`artifact.json` 只描述并约束字节身份；伪造一个叫 receipt/approval 的 JSON 不会增加执行权限。编译态清单在构造时严格校验 schema、role、SHA-256、大小、文件名和重复 key。当前没有接收任意外部 manifest 的 API；将来若增加动态 approval receipt，必须先用插件内嵌公钥验签，再转换为内部 trust identity。非固定的用户 JAR 在新进程中仍须重新绑定其原始可信文件，不能仅凭 archive 自授权。
 
 Registry artifact 不按时间自动过期。保留策略固定为 `retain-until-explicit-live-manifest-gc`；未来 GC 必须先扫描所有保留 case，建立完整 live role+digest 集合，禁止仅按 mtime 清理。
 
-一次已存在 artifact 的运行仍会读取并哈希用户配置文件以确定 digest，再完整校验 registry entry，因此成本约为两次 JAR 顺序读取；不会重复复制/启动额外 JVM。MARS JAR 约数 MiB，通常远低于 JVM 启动成本。若以后成为批量热路径，可增加“文件身份 + size/mtime 的保守缓存”，但命中前后仍须防止内容漂移，不能退回路径信任。
+一次已存在的非固定 artifact 运行仍会读取并哈希用户配置文件以确定 digest，再完整校验 registry entry，因此成本约为两次 JAR 顺序读取；固定清单命中则不依赖原配置路径，但仍完整哈希 registry entry 和私有 staged copy。不会重复启动额外 JVM。MARS JAR 约数 MiB，通常远低于 JVM 启动成本。若以后成为批量热路径，可增加“文件身份 + size/mtime 的保守缓存”，但命中前后仍须防止内容漂移，不能退回路径信任。
 
 当前扩展在 manifest 中显式声明 `untrustedWorkspaces.supported=false`，由 VS Code 在 Restricted Mode 禁用。若以后改为 `limited` 或 `true`，必须同时给 MARS 执行入口增加函数级 Workspace Trust gate，并把 Java/JAR/RI 等工具链配置列入 `restrictedConfigurations`；registry 的 role+digest 授权只证明本次绑定的字节身份，不替代发行方真实性或工作区信任。
 
@@ -49,4 +51,4 @@ $env:CO_REAL_MARS_JAR='D:\Program FIles\Mars\Mars.jar'
 npx vitest run src/test/mipsReplay/realLegacyMarsReplay.integration.test.ts
 ```
 
-该用例先用真实 MARS 建立 bundle，删除原 workspace，再从保留的 case + engine registry exact replay。
+该用例先用真实 MARS 建立 bundle，删除原 workspace，再从保留的 case + engine registry exact replay。单元回归另用 fresh registry（不继承会话授权）证明静态 trust manifest 闭包，并证明工作区自造 authorization 文件不能授权执行。

@@ -1,4 +1,4 @@
-// @index course-trace-runner — 单个课程 Trace case 的 MARS/ISim/Logisim 执行与比较
+// @index course-trace-runner — 单个课程 Trace case 的 provider-neutral oracle/DUT 执行与比较
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from '../config';
@@ -9,10 +9,7 @@ import {
   firstTraceDiffSnapshot
 } from '../language/mips/traceCompare';
 import {
-  iterCpuTraceEvents,
-  iterMarsDetailedTraceEvents,
-  machineCodeNeedsDetailedMarsTrace,
-  machineCodeNeedsLinkBranchOracleRepairTrace
+  iterCpuTraceEvents
 } from '../language/mips/traceParser';
 import { parseSimOutput } from '../language/verilog/traceParser';
 import { executeWithPreflight, preflightFailureMessage } from '../mips/providers/providerResolver';
@@ -22,11 +19,7 @@ import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
-import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from './marsStepLimit';
-import {
-  courseMarsOracleCompatibilityError,
-  machineCodeNeedsMarsOracleCompatibilityTrace
-} from './marsOracleCompatibility';
+import { courseExecutionInstructionBudget } from './executionBudget';
 import {
   AsmCase,
   asmCaseArtifactUri,
@@ -56,7 +49,7 @@ import type {
   NeutralCourseTraceCaseResult
 } from '../courseTestReport';
 import {
-  marsOutputFileNameForCase,
+  oracleOutputFileNameForCase,
   simOutputFileNameForCase
 } from '../courseTestTraceFiles';
 import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from '../courseTestMessages';
@@ -179,18 +172,6 @@ export async function runCourseTraceCase(
 
   const machineCodeText = await readTextFile(asmCase.machineCode);
   const profile = getProfile(asmCase.sourceAsm);
-  const delayedBranching = profile === 'P5' || profile === 'P6' || profile === 'P7';
-  const partialStoreTrace = machineCodeNeedsDetailedMarsTrace(machineCodeText);
-  const linkBranchRepairTrace = machineCodeNeedsLinkBranchOracleRepairTrace(machineCodeText);
-  const oracleCompatibilityTrace = machineCodeNeedsMarsOracleCompatibilityTrace(machineCodeText, delayedBranching);
-  const specializedDetailedTrace = partialStoreTrace || linkBranchRepairTrace || oracleCompatibilityTrace;
-  if (specializedDetailedTrace) {
-    services.output.appendLine(partialStoreTrace
-      ? '检测到 SWL/SWR：MARS 使用逐指令 Trace，并按动态指令保留最终 DM 写值'
-      : linkBranchRepairTrace
-        ? '检测到 BGEZAL/BLTZAL：MARS 使用逐指令 Trace 修复分支自身遗漏的 $31=PC+8 写回；若稳定版未实际写入，则在显式重写 $31 前拒绝后续读取'
-        : '检测到潜在 oracle 初态不兼容或未定义行为：MARS 使用逐指令 Trace，仅在实际执行首次初始化前的 $gp/$sp 读取、DivZero/JalrSame/DoubleDelay 或未定义 HI/LO 读取时拒绝用例');
-  }
   let stdinText: string | undefined;
   try {
     stdinText = await readAsmCaseStdinSnapshot(asmCase);
@@ -208,7 +189,7 @@ export async function runCourseTraceCase(
   if (preOracleSourceIssue) {
     return failedCase(item, 'oracle', preOracleSourceIssue, asmCase.machineCode, undefined, asmCase);
   }
-  const maxSteps = generatedCourseTraceMarsStepLimit(
+  const maxSteps = courseExecutionInstructionBudget(
     profile,
     await readTextFile(asmCase.sourceAsm),
     manifestSourceOf(asmCase.manifest).kind === 'builtin',
@@ -218,29 +199,39 @@ export async function runCourseTraceCase(
   if (!Number.isSafeInteger(haltPc)) {
     return failedCase(item, 'assemble', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
   }
-  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);
-  const marsInvocation = await executeWithPreflight(services, {
-    sourceUri: asmCase.sourceAsm,
-    imageRef: { kind: 'mars-dump', machineCodeUri: asmCase.machineCode, haltPc },
+  if (!dump.image || !dump.executionBinding) {
+    return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage/execution binding', asmCase.machineCode, undefined, asmCase);
+  }
+  services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  const oracleInvocation = await executeWithPreflight(services, {
+    image: dump.image,
+    executionBinding: dump.executionBinding,
     stdin: stdinText,
-    traceOutput: true,
-    traceLevel: 2,
+    trace: { kind: 'architectural-writes', courseCorrect: true },
     maxSteps,
     haltPc,
-    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined,
+    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
     courseTrace: true,
-    revealOutput: options.revealOutput
+    revealOutput: options.revealOutput,
+    requirements: {
+      profile,
+      instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+      syscallMode: profile === 'P7' ? 'course-exception' : undefined,
+      devices: profile === 'P7' ? ['cp0', 'timer', 'external-interrupt-generator'] : [],
+      deterministicConsole: true,
+      eventSchemaRevision: 1
+    }
   }, { signal: options.signal });
-  const mars = marsInvocation.result;
+  const oracle = oracleInvocation.result;
   const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (postOracleSourceIssue) {
-    return failedCase(item, 'oracle', postOracleSourceIssue, asmCase.machineCode, mars?.outputFile, asmCase);
+    return failedCase(item, 'oracle', postOracleSourceIssue, asmCase.machineCode, oracle?.outputFile, asmCase);
   }
-  if (!mars?.ok || !mars.outputFile) {
-    const detail = mars
-      ? engineStageFailureMessage('测试中止：oracle 运行失败', mars.status)
-      : `测试中止：oracle preflight 失败: ${preflightFailureMessage(marsInvocation.preflight)}`;
+  if (!oracle?.ok || !oracle.outputFile || !oracle.trace) {
+    const detail = oracle
+      ? engineStageFailureMessage('测试中止：oracle 运行失败或未返回 canonical trace', oracle.status)
+      : `测试中止：oracle preflight 失败: ${preflightFailureMessage(oracleInvocation.preflight)}`;
     return failedCase(
       item,
       'oracle',
@@ -248,37 +239,18 @@ export async function runCourseTraceCase(
       asmCase.machineCode,
       undefined,
       asmCase,
-      engineRunWasCancelled(mars?.status, options.signal)
+      engineRunWasCancelled(oracle?.status, options.signal)
     );
   }
   if (caseOutputMode) {
-    await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });
+    await updateAsmCaseArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
   } else {
-    await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+    await copyAsmCaseArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
   }
-
-  const marsText = await readTextFile(mars.outputFile);
-  const haltError = courseTraceMarsHaltError(marsText, haltPc!);
-  if (haltError) {
-    services.output.appendLine(haltError);
-    return failedCase(item, 'oracle', haltError, asmCase.machineCode, mars.outputFile, asmCase);
-  }
-  const oracleCompatibilityError = courseMarsOracleCompatibilityError(
-    profile,
-    machineCodeText,
-    marsText,
-    delayedBranching
-  );
-  if (oracleCompatibilityError) {
-    services.output.appendLine(oracleCompatibilityError);
-    return failedCase(item, 'oracle', oracleCompatibilityError, asmCase.machineCode, mars.outputFile, asmCase);
-  }
-  await recordAsmCaseOracleResult(asmCase, mars, {
+  await recordAsmCaseOracleResult(asmCase, oracle, {
     profile,
     memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
-    traceOutput: true,
-    traceLevel: 2,
     maxSteps,
     haltPc,
     interruptSchedule,
@@ -302,15 +274,14 @@ export async function runCourseTraceCase(
       'dut',
       '测试中止：DUT 运行失败',
       asmCase.machineCode,
-      mars.outputFile,
+      oracle.outputFile,
       asmCase,
       engineRunWasCancelled(isim?.simResult, options.signal)
     );
   }
 
   const simText = await readTextFile(isim.simOut);
-  const marsEvents = iterMarsDetailedTraceEvents(marsText);
-  const diff = compareTraceIterables(marsEvents, iterCpuTraceEvents(simText), {
+  const diff = compareTraceIterables(oracle.trace.events, iterCpuTraceEvents(simText), {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
@@ -327,7 +298,7 @@ export async function runCourseTraceCase(
       stage: 'compare',
       message: emptyTraceMessage,
       machineCode: asmCase.machineCode.fsPath,
-      oracleOut: mars.outputFile.fsPath,
+      oracleOut: oracle.outputFile.fsPath,
       dutOut: isim.simOut.fsPath,
       oracleEvents: diff.summary.oracleEvents,
       dutEvents: diff.summary.dutEvents,
@@ -344,7 +315,7 @@ export async function runCourseTraceCase(
     stage: 'compare',
     message: diffMessage(diff),
     machineCode: asmCase.machineCode.fsPath,
-    oracleOut: mars.outputFile.fsPath,
+    oracleOut: oracle.outputFile.fsPath,
     dutOut: isim.simOut.fsPath,
     firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
     firstDiff: firstTraceDiffSnapshot(diff),

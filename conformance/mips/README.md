@@ -15,5 +15,22 @@ The harness exposes two deliberately different modes:
 longer executes candidates. Compile the extension before running the formal
 aggregate because TS CLI verification crosses the built JSONL process boundary.
 
+`contract/evidence-gates.json` revision 2 expands 22 P3-P7 capability scopes
+into 589 stable coverage-bin IDs. Every bin has a numeric minimum, and the
+validator enforces kind-specific fingerprint fields (including forbidden
+assembler/executor/device cross-contamination).
+
+The 250 frozen PR seeds are executable evidence rather than seed-name metadata.
+`verify:seed-evidence:candidate` (and its formal counterpart) deterministically
+renders 250 unique ASM source graphs and HexText images, checks five combined
+profile images with the pinned MARS assembler, then verifies all 5,000 words by
+encode/decode through the compiled JSONL CLI. CI uploads the full source/image
+evidence artifact. Run `npm run compile` before either aggregate verification.
+
+Expected-data modules are in a stricter dependency closure. They may access the
+filesystem only through `expected/guardedFs.mjs`, which rejects lexical and
+real-path escapes from `conformance/mips`; the dependency check also rejects
+direct/dynamic filesystem and child-process bypasses.
+
 Approval commands never run from candidate CI. See
 `governance/README.md` for reviewer identity and protected-branch requirements.

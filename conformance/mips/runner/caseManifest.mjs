@@ -1,12 +1,19 @@
 /** Strict corpus/golden manifest access for the independent conformance runner. */
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
+import * as fs from '../expected/guardedFs.mjs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCourseVector } from './courseVectorArtifact.mjs';
+import {
+  assertCandidateApproved,
+  candidateDescriptor,
+  sha256CanonicalJson
+} from '../governance/approvalEnvelope.mjs';
+import { isGithubUsername } from '../governance/reviewerPolicy.mjs';
 
 const runnerRoot = path.dirname(fileURLToPath(import.meta.url));
 const corpusRoot = path.resolve(runnerRoot, '..', 'corpus');
+const corpusManifestFile = path.join(corpusRoot, 'manifest.json');
 const marsGoldenRoot = path.resolve(runnerRoot, '..', 'expected', 'marsGolden');
 const caseIdPattern = /^[A-Z0-9][A-Z0-9-]{2,127}$/;
 const hex32Pattern = /^0x[0-9a-fA-F]{8}$/;
@@ -83,8 +90,12 @@ function validateExpected(expected, context) {
 
 export function validateCorpusManifest(manifest) {
   assert(isPlainObject(manifest) && manifest.schemaRevision === 2, 'schemaRevision must be 2');
-  assertOnlyKeys(manifest, ['schemaRevision', 'description', 'cases'], 'root');
+  assertOnlyKeys(manifest, ['schemaRevision', 'description', 'candidate', 'cases'], 'root');
   assert(typeof manifest.description === 'string' && manifest.description.length > 0, 'description must be non-empty');
+  assert(isPlainObject(manifest.candidate), 'candidate must be an object');
+  assertOnlyKeys(manifest.candidate, ['author', 'revision'], 'candidate');
+  assert(isGithubUsername(manifest.candidate.author), 'candidate.author must be a GitHub username');
+  assert(Number.isSafeInteger(manifest.candidate.revision) && manifest.candidate.revision > 0, 'candidate.revision must be a positive integer');
   assert(Array.isArray(manifest.cases) && manifest.cases.length > 0, 'cases must be a non-empty array');
   const seenCaseIds = new Set();
   const seenFiles = new Set();
@@ -114,18 +125,11 @@ export function validateCorpusManifest(manifest) {
       assert(lanes.has(lane), `${context}.lanes contains unknown lane ${lane}`);
     }
     assert(isPlainObject(manifestCase.provenance), `${context}.provenance must be an object`);
-    assertOnlyKeys(manifestCase.provenance, ['kind', 'reviewer', 'reviewedAt', 'note'], `${context}.provenance`);
-    for (const field of ['kind', 'reviewer', 'reviewedAt', 'note']) {
+    assertOnlyKeys(manifestCase.provenance, ['kind', 'note'], `${context}.provenance`);
+    for (const field of ['kind', 'note']) {
       assert(typeof manifestCase.provenance[field] === 'string' && manifestCase.provenance[field].length > 0, `${context}.provenance.${field} is required`);
     }
     assert(provenanceKinds.has(manifestCase.provenance.kind), `${context}.provenance.kind is invalid`);
-    assert(/^\d{4}-\d{2}-\d{2}$/.test(manifestCase.provenance.reviewedAt), `${context}.provenance.reviewedAt must be YYYY-MM-DD`);
-    const reviewedDate = new Date(`${manifestCase.provenance.reviewedAt}T00:00:00Z`);
-    assert(
-      !Number.isNaN(reviewedDate.valueOf())
-        && reviewedDate.toISOString().slice(0, 10) === manifestCase.provenance.reviewedAt,
-      `${context}.provenance.reviewedAt is not a real calendar date`
-    );
     if (manifestCase.lanes.includes('legacy-baseline')) {
       validateExpected(manifestCase.legacyExpected, `${context}.legacyExpected`);
     } else {
@@ -148,7 +152,10 @@ export function validateCorpusManifest(manifest) {
 }
 
 export function loadCorpusManifest(options = {}) {
-  const manifest = validateCorpusManifest(JSON.parse(fs.readFileSync(path.join(corpusRoot, 'manifest.json'), 'utf8')));
+  const manifest = validateCorpusManifest(JSON.parse(fs.readFileSync(corpusManifestFile, 'utf8')));
+  if (options.requireApprovedCorpus) {
+    assertCandidateApproved(corpusCandidateDescriptor(manifest), options);
+  }
   // Validate every declared source up front, even when a lane/filter would not
   // select it in this invocation. A broken corpus can never be partially green.
   for (const manifestCase of manifest.cases) {
@@ -158,6 +165,18 @@ export function loadCorpusManifest(options = {}) {
     }
   }
   return manifest;
+}
+
+export function corpusCandidateDescriptor(manifest = validateCorpusManifest(JSON.parse(fs.readFileSync(corpusManifestFile, 'utf8')))) {
+  const descriptor = candidateDescriptor({
+    artifactKind: 'corpus',
+    artifactId: 'corpus-manifest',
+    file: corpusManifestFile,
+    candidateAuthor: manifest.candidate.author,
+    candidateRevision: manifest.candidate.revision
+  });
+  assert(descriptor.candidateSha256 === sha256CanonicalJson(manifest), 'in-memory manifest differs from the candidate file');
+  return descriptor;
 }
 
 export function corpusCaseFile(manifestCase) {
@@ -185,21 +204,42 @@ export function marsGoldenFile(caseId) {
   return path.join(marsGoldenRoot, `${caseId}.json`);
 }
 
+export function marsGoldenPayload(golden) {
+  return {
+    schemaRevision: golden.schemaRevision,
+    caseId: golden.caseId,
+    candidate: golden.candidate,
+    provenance: golden.provenance,
+    normalized: golden.normalized,
+    writes: golden.writes
+  };
+}
+
+export function marsGoldenPayloadSha256(golden) {
+  return sha256CanonicalJson(marsGoldenPayload(golden));
+}
+
 function validateGolden(golden, expectedCaseId) {
   assert(isPlainObject(golden) && golden.schemaRevision === 1, `golden ${expectedCaseId} schemaRevision must be 1`);
-  assertOnlyKeys(golden, ['schemaRevision', 'caseId', 'provenance', 'normalized', 'writes'], `golden ${expectedCaseId}`);
+  assertOnlyKeys(golden, ['schemaRevision', 'caseId', 'candidate', 'provenance', 'normalized', 'writes', 'integrity'], `golden ${expectedCaseId}`);
   assert(golden.caseId === expectedCaseId, `golden ${expectedCaseId} has mismatched caseId`);
+  assert(isPlainObject(golden.candidate), `golden ${expectedCaseId}.candidate is required`);
+  assertOnlyKeys(golden.candidate, ['author', 'revision'], `golden ${expectedCaseId}.candidate`);
+  assert(isGithubUsername(golden.candidate.author), `golden ${expectedCaseId}.candidate.author must be a GitHub username`);
+  assert(Number.isSafeInteger(golden.candidate.revision) && golden.candidate.revision > 0, `golden ${expectedCaseId}.candidate.revision is invalid`);
   assert(isPlainObject(golden.provenance), `golden ${expectedCaseId} provenance is required`);
   const provenance = golden.provenance;
   assertOnlyKeys(provenance, [
     'role', 'referenceFileName', 'referenceSha256', 'sourceFile', 'sourceSha256',
     'sourceHashNormalization', 'sourceTag', 'sourceCommit', 'runnerRevision',
-    'normalizerRevision', 'profile', 'maxSteps', 'cliOptions', 'corpusReviewer',
-    'corpusReviewedAt'
+    'normalizerRevision', 'profile', 'maxSteps', 'cliOptions', 'corpusCandidateAuthor',
+    'corpusCandidateRevision'
   ], `golden ${expectedCaseId}.provenance`);
-  for (const field of ['role', 'referenceFileName', 'sourceFile', 'sourceHashNormalization', 'sourceTag', 'sourceCommit', 'profile', 'corpusReviewer', 'corpusReviewedAt']) {
+  for (const field of ['role', 'referenceFileName', 'sourceFile', 'sourceHashNormalization', 'sourceTag', 'sourceCommit', 'profile', 'corpusCandidateAuthor']) {
     assert(typeof provenance[field] === 'string' && provenance[field].length > 0, `golden ${expectedCaseId} provenance.${field} is required`);
   }
+  assert(isGithubUsername(provenance.corpusCandidateAuthor), `golden ${expectedCaseId} provenance.corpusCandidateAuthor must be a GitHub username`);
+  assert(Number.isSafeInteger(provenance.corpusCandidateRevision) && provenance.corpusCandidateRevision > 0, `golden ${expectedCaseId} provenance.corpusCandidateRevision is invalid`);
   assert(sha256Pattern.test(provenance.referenceSha256), `golden ${expectedCaseId} referenceSha256 is invalid`);
   assert(sha256Pattern.test(provenance.sourceSha256), `golden ${expectedCaseId} sourceSha256 is invalid`);
   assert(Number.isSafeInteger(provenance.runnerRevision) && provenance.runnerRevision > 0, `golden ${expectedCaseId} runnerRevision is invalid`);
@@ -221,20 +261,49 @@ function validateGolden(golden, expectedCaseId) {
   assert(Array.isArray(golden.writes.dm) && golden.writes.dm.every((entry) => normalizedHex32Pattern.test(entry)), `golden ${expectedCaseId}.writes.dm is invalid`);
   assert(new Set(golden.writes.gpr).size === golden.writes.gpr.length, `golden ${expectedCaseId}.writes.gpr contains duplicates`);
   assert(new Set(golden.writes.dm).size === golden.writes.dm.length, `golden ${expectedCaseId}.writes.dm contains duplicates`);
+  assert(isPlainObject(golden.integrity), `golden ${expectedCaseId}.integrity is required`);
+  assertOnlyKeys(golden.integrity, ['algorithm', 'payloadSha256'], `golden ${expectedCaseId}.integrity`);
+  assert(golden.integrity.algorithm === 'sha256-canonical-json-v1', `golden ${expectedCaseId}.integrity.algorithm is invalid`);
+  assert(sha256Pattern.test(golden.integrity.payloadSha256), `golden ${expectedCaseId}.integrity.payloadSha256 is invalid`);
+  assert(golden.integrity.payloadSha256 === marsGoldenPayloadSha256(golden), `golden ${expectedCaseId}.integrity.payloadSha256 is stale`);
   return golden;
 }
 
-export function loadMarsGolden(caseId) {
+export function marsGoldenCandidateDescriptor(golden, file = marsGoldenFile(golden.caseId)) {
+  const descriptor = candidateDescriptor({
+    artifactKind: 'marsGolden',
+    artifactId: golden.caseId,
+    file,
+    candidateAuthor: golden.candidate.author,
+    candidateRevision: golden.candidate.revision
+  });
+  assert(descriptor.candidateSha256 === sha256CanonicalJson(golden), `golden ${golden.caseId} differs from its candidate file`);
+  return descriptor;
+}
+
+export function loadMarsGolden(caseId, options = {}) {
   const file = marsGoldenFile(caseId);
   if (!fs.existsSync(file)) {
     return undefined;
   }
-  return validateGolden(JSON.parse(fs.readFileSync(file, 'utf8')), caseId);
+  const golden = validateGolden(JSON.parse(fs.readFileSync(file, 'utf8')), caseId);
+  if (options.requireApproved) assertCandidateApproved(marsGoldenCandidateDescriptor(golden, file), options);
+  return golden;
 }
 
 export function recordMarsGolden(caseId, golden) {
   const file = marsGoldenFile(caseId);
+  golden.integrity = {
+    algorithm: 'sha256-canonical-json-v1',
+    payloadSha256: marsGoldenPayloadSha256(golden)
+  };
   validateGolden(golden, caseId);
-  fs.writeFileSync(file, `${JSON.stringify(golden, null, 2)}\n`, 'utf8');
+  const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(golden, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(temporary, file);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
   return file;
 }

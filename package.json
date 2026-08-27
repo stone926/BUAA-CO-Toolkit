@@ -1304,6 +1304,8 @@
     "check:syntaxes": "node scripts/generate-syntaxes.mjs --check",
     "sync:syntaxes": "npm run generate:syntaxes && npm run check:syntaxes",
     "sync:generated": "npm run sync:manifest-config && npm run sync:syntaxes && npm run sync:isa-catalog",
+    "check:generated": "npm run check:manifest-config && npm run check:syntaxes && npm run check:isa-catalog",
+    "verify:generated-tree-clean": "node scripts/verify-generated-tree-clean.mjs",
     "clean:compile": "node scripts/clean-compile-output.mjs",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",
     "check:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs --check",

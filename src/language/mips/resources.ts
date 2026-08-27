@@ -3,6 +3,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DocumentUri } from 'vscode-languageserver/node';
 import { CoSettings } from '../common/settings';
+import {
+  IsaDisplayInstructionFact,
+  isaDisplayInstructionByMnemonic,
+  isaDisplayInstructions
+} from './generated/isaDisplayCatalog';
 
 export interface MipsInstruction {
   mnemonic: string;
@@ -15,6 +20,8 @@ export interface MipsInstruction {
   projects?: string[];
   labelOperand?: 'first' | 'second' | 'last';
   delaySlot?: boolean;
+  /** Versioned structural facts generated from resources/mips/isa.json. */
+  isa?: IsaDisplayInstructionFact;
 }
 
 export type MipsInstructionType = 'R-type' | 'I-type' | 'J-type' | 'special' | 'pseudo';
@@ -236,7 +243,8 @@ function loadMipsResourceData(): MipsResourceData {
   const instructionList = loadedInstructions.map((instruction) => ({
     ...instruction,
     mnemonic: instruction.mnemonic.toLowerCase(),
-    operands: normalizeOperandRange(instruction.operands)
+    operands: normalizeOperandRange(instruction.operands),
+    ...generatedInstructionDisplayFacts(instruction)
   }));
 
   validateMipsResources(registers, directiveList, instructionList, syscalls, cp0Registers);
@@ -252,7 +260,43 @@ function loadMipsResourceData(): MipsResourceData {
 
 function loadMipsInstructionMeta(): MipsInstructionMeta {
   const resourceRoot = path.join(__dirname, '..', '..', '..', 'resources', 'mips');
-  return readJsonResource<MipsInstructionMeta>(path.join(resourceRoot, 'instructionMeta.json'));
+  const loaded = readJsonResource<MipsInstructionMeta>(path.join(resourceRoot, 'instructionMeta.json'));
+  return {
+    ...loaded,
+    memoryAlignment: {
+      ...loaded.memoryAlignment,
+      ...Object.fromEntries(isaDisplayInstructions
+        .filter((instruction) => instruction.memoryAlignment !== undefined)
+        .map((instruction) => [instruction.mnemonic, instruction.memoryAlignment!]))
+    },
+    writesFirstOperand: {
+      ...loaded.writesFirstOperand,
+      ...Object.fromEntries(isaDisplayInstructions
+        .map((instruction) => [instruction.mnemonic, instruction.writesFirstOperand]))
+    }
+  };
+}
+
+function generatedInstructionDisplayFacts(
+  instruction: MipsInstruction
+): Pick<MipsInstruction, 'type' | 'delaySlot' | 'isa'> {
+  const mnemonic = instruction.mnemonic.toLowerCase();
+  const fact = isaDisplayInstructionByMnemonic.get(mnemonic);
+  if (!fact) {
+    return {
+      type: instruction.type,
+      delaySlot: instruction.delaySlot,
+      isa: undefined
+    };
+  }
+  if (instruction.pseudo) {
+    throw new Error(`Real ISA instruction ${mnemonic} cannot be marked pseudo in LSP resources.`);
+  }
+  return {
+    type: fact.type,
+    delaySlot: fact.delaySlot || undefined,
+    isa: fact
+  };
 }
 
 function readJsonResource<T>(file: string): T {
@@ -294,6 +338,11 @@ function validateMipsResources(
     }
     normalizeOperandRange(instruction.operands);
     seen.add(instruction.mnemonic);
+  }
+  for (const fact of isaDisplayInstructions) {
+    if (!seen.has(fact.mnemonic)) {
+      throw new Error(`Generated ISA instruction ${fact.mnemonic} has no LSP display entry.`);
+    }
   }
 
   if (!Array.isArray(syscallList) || syscallList.some((syscall) => !Number.isInteger(syscall.code) || typeof syscall.name !== 'string')) {

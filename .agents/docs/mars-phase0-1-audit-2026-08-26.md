@@ -50,8 +50,9 @@ legacy MARS 仍是当前默认 provider。本轮没有提前宣称阶段 2–7 �
 | --- | --- | --- |
 | P3–P7 contract/decision/divergence 有稳定 ID、来源和裁决 | 73 contracts、10 frozen decisions、12 divergences；本地核对 152 个来源实例 | 实现完成 |
 | reference 角色唯一、hash 固定、fail closed | stock assembler、frozen regression、legacy course executor 三项资产逐字节验证；9/9 regression 通过 | 实现完成 |
-| 独立 conformance runner 只经 CLI/JSONL 调生产 TS ISA 服务 | versioned JSONL CLI、严格 schema/UTF-8/行长/背压；33 指令和 5 runtime counterexample 通过 | 实现完成 |
-| P3–P7 课程语料与固定随机输入 | 7 个 spec microprogram、9 个 challenge、每 profile 50 个 seed，共 250 个；20 个手写 feature、4 个组合 gate | 实现完成 |
+| 独立 conformance runner 只经 CLI/JSONL 调生产 TS ISA 服务 | versioned JSONL CLI、严格 schema/UTF-8/行长/背压；expected-data 文件系统闭包阻断 direct/dynamic production catalog/contracts 读取 | 实现完成 |
+| P3–P7 课程语料与固定随机输入 | 7 个 spec microprogram、9 个 challenge、每 profile 50 个 seed；250 个唯一 source/image、共 5,000 words 由固定 MARS image 与 TS CLI encode/decode 双重核对；20 个手写 feature、4 个组合 gate | 实现完成 |
+| evidence capability/bin/fingerprint 冻结 | 4 个 evidence kind、22 个 P3–P7 capability scope、589 个稳定 bin ID；逐 bin minimum；kind-specific required/forbidden fingerprint fields | 实现完成 |
 | `courseVector` 与 ISA golden 独立管理 | 10 个 courseVector、33 条 ISA golden；候选刷新会撤销旧审批，MARS golden 不引用 courseVector | candidate 可复核，未批准 |
 | planted mutants/sentinels 能使 harness 失败 | 错 expected、额外/遗漏写、provenance 漂移、required skip、错误 fingerprint、伪 runner 标签等负向测试通过 | 实现完成 |
 | 固定 runner benchmark policy/harness | 冻结 workload/lifecycle/sample/statistics/CPU/RSS/CI schema；只接受 Windows 2025 与 Ubuntu 24.04 成对 candidate/approval | harness 完成，远端数据未批准 |
@@ -70,7 +71,7 @@ legacy MARS 仍是当前默认 provider。本轮没有提前宣称阶段 2–7 �
 | Worker lazy start、slice cancellation、backpressure | protocol v2；真实 encode/decode job；128 项 slice；从 0 连续 sequence、单个未 ACK batch、consumer 成功后才 ACK；崩溃 generation 恢复 | 本地通过 |
 | 外部进程监督 | Abort/timeout 整棵进程树、pipe close、单次 settle、stdout/stderr raw-byte ceiling | Windows 真实 JVM fixture 通过 |
 | v2 replay closure | 完整 SourceUnit/include graph、ProgramImage、observability、DUT bytes、stdin、run input、engine identity 和 evidence digest | 本地通过 |
-| immutable engine registry | role+SHA-256、同句柄流式复制/复核、显式信任授权、每次执行独占 stage、256 MiB artifact/16 KiB metadata 上限 | 本地通过 |
+| immutable engine registry | role+SHA-256、同句柄流式复制/复核、会话绑定或插件编译态固定信任根、每次执行独占 stage、256 MiB artifact/16 KiB metadata 上限 | 本地通过 |
 | exact replay | 脱离原 workspace；assembler/oracle 独立 materialization/config/stdin/stage；前中后完整 closure 复核 | 本地与真实 MARS 通过 |
 | re-evaluate | caller selection 快照化；append-only 发布；失败删除 pending/published；原裁决不覆盖 | 本地通过 |
 | 旧/新 legacy 等价 | 真正的 provider 迁移前父提交 `044bab0` direct `runMarsFile` 对当前 provider；P3/P5/P7 × success/assembly-failure × 两种 reference role；逐字节 machine code/trace + verdict/halt PC | 12/12 本地通过 |
@@ -84,7 +85,7 @@ legacy MARS 仍是当前默认 provider。本轮没有提前宣称阶段 2–7 �
 
 - provider preflight 在第一个 `await` 前对请求取指纹，返回后再次核对；真正执行只消费不可变语义快照。
 - 用户配置 JAR 与 P7 RI companion 先注册为 role+digest，再复制到本次运行的独占 stage；Java 不直接打开 workspace registry 路径。
-- registry 磁盘中存在相同 digest 不代表可信。每个 registry 实例必须通过 `registerFile/registerBytes` 显式授权后才可执行。
+- registry 磁盘中存在相同 digest 不代表可信。执行授权只能来自本进程的 `registerFile/registerBytes` 显式绑定，或编译进插件并与 reviewed reference manifest 保持同步的 role+SHA-256+size 清单；工作区自造 metadata/receipt 不会获得权限。固定 MARS release 和插件 P7 class 因而可由 fresh registry 复核并 stage，其他用户 JAR 仍须在新进程重新绑定。
 - artifact、source graph、manifest、stdin、ProgramImage 和 trace 均在关键外部调用前后复核；re-evaluate 在发布前后再次核对原 bundle。
 - extension manifest 显式声明 `untrustedWorkspaces.supported=false`，因此 VS Code Restricted Mode 不会激活可执行外部工具的扩展入口；若未来放宽，必须同时增加函数级 trust gate 与 restricted toolchain configurations。
 
@@ -137,7 +138,7 @@ legacy MARS 仍是当前默认 provider。本轮没有提前宣称阶段 2–7 �
 | contract sources | 73 contracts、10 decisions、12 divergences；152 reference instances |
 | ISA golden / TS CLI | 33 instructions + 5 runtime counterexamples，candidate 可复核 |
 | course vectors | 10/10，candidate 可复核 |
-| corpus freeze | P3–P7 各 50 seeds；20 handwritten features；4 combinations |
+| corpus freeze / fixed seed evidence | P3–P7 各 50 seeds；250 unique source graphs + 250 unique images；5,000 words 经固定 MARS + TS JSONL CLI；20 handwritten features；4 combinations |
 | candidate conformance lanes | 14/14（4 legacy baseline + 10 course vector），summary 为 `gate:candidate, required:false` |
 | formal conformance/aggregate gate | 按设计非零退出；candidate 与缺失 approval 不能误绿 |
 | pinned references / regression | 3 个资产 hash 通过；9/9 regression |

@@ -8,7 +8,7 @@ export type RegisterRole = 'rd' | 'rs' | 'rt' | 'shamt';
 export type ExceptionKind = 'ov' | 'adel' | 'ades' | 'syscall' | 'trap';
 
 export const isaCatalogSchemaRevision = 1 as const;
-export const isaCatalogSha256 = "f480ea2e44e26ce284ab0216ed4dbf04eee10c6bc17a8fd9d42071b7b45efdad" as const;
+export const isaCatalogSha256 = "5f50a468d26537471cf007e7d2c5cc175f8218e5068e1a2d1de693eb1f645526" as const;
 
 export interface IsaInstructionEntry {
   readonly mnemonic: string;

@@ -8,6 +8,85 @@
     "P6": { "controlTransferDelaySlot": true, "architecturalExceptions": false },
     "P7": { "controlTransferDelaySlot": true, "architecturalExceptions": true }
   },
+  "generator": {
+    "description": "内置课程 generator 的稳定展示顺序与安全策略。profiles/categories 的成员资格必须与 instructions 的 availability/effects/control/memoryAccess 一致；这些数组只冻结已有 seeded-output 顺序，generate-mips-isa 会拒绝重复或漂移成员。",
+    "profiles": {
+      "P3": ["add", "sub", "ori", "lw", "sw", "beq", "lui", "nop"],
+      "P4": ["add", "sub", "ori", "lw", "sw", "beq", "lui", "jal", "jr", "nop"],
+      "P5": ["add", "sub", "ori", "lw", "sw", "beq", "lui", "jal", "jr", "nop"],
+      "P6": [
+        "add", "sub", "and", "or", "slt", "sltu", "lui",
+        "addi", "andi", "ori",
+        "lb", "lh", "lw", "sb", "sh", "sw",
+        "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo",
+        "beq", "bne", "jal", "jr", "nop"
+      ],
+      "P7": [
+        "add", "sub", "and", "or", "slt", "sltu", "lui",
+        "addi", "andi", "ori",
+        "lb", "lh", "lw", "sb", "sh", "sw",
+        "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo",
+        "beq", "bne", "jal", "jr",
+        "mfc0", "mtc0", "eret", "syscall", "nop"
+      ]
+    },
+    "categories": {
+      "supported": [
+        "add", "addu", "addi", "addiu", "sub", "subu",
+        "and", "andi", "or", "ori", "xor", "xori", "nor",
+        "slt", "sltu", "slti", "sltiu",
+        "sll", "srl", "sra", "sllv", "srlv", "srav",
+        "lui", "clz", "clo",
+        "lw", "lwl", "lwr", "sw", "swl", "swr", "lb", "lbu", "lh", "lhu", "sb", "sh",
+        "beq", "bne", "bgez", "bgtz", "blez", "bltz", "bgezal", "bltzal",
+        "j", "jal", "jr", "jalr",
+        "movn", "movz",
+        "mul", "madd", "maddu", "msub", "msubu", "mult", "multu", "div", "divu", "mfhi", "mflo", "mthi", "mtlo",
+        "mfc0", "mtc0",
+        "eret", "syscall",
+        "teq", "tne", "tge", "tgeu", "tlt", "tltu",
+        "teqi", "tnei", "tgei", "tgeiu", "tlti", "tltiu",
+        "nop"
+      ],
+      "control": ["beq", "bne", "bgez", "bgtz", "blez", "bltz", "bgezal", "bltzal", "j", "jal", "jr", "jalr"],
+      "branch": ["beq", "bne", "bgez", "bgtz", "blez", "bltz", "bgezal", "bltzal"],
+      "linkBranch": ["bgezal", "bltzal"],
+      "jumpLink": ["jal", "jalr"],
+      "divide": ["div", "divu"],
+      "hiLoWrite": ["mult", "multu", "div", "divu", "madd", "maddu", "msub", "msubu", "mthi", "mtlo"],
+      "hiLoRead": ["mfhi", "mflo"],
+      "longLatencyHiLoWrite": ["mult", "multu", "div", "divu"],
+      "load": ["lw", "lwl", "lwr", "lb", "lbu", "lh", "lhu"],
+      "store": ["sw", "swl", "swr", "sb", "sh"],
+      "cp0": ["mfc0", "mtc0"]
+    },
+    "falseTrapImmediateOperands": {
+      "teqi": ["$0", "1"],
+      "tnei": ["$0", "0"],
+      "tgei": ["$0", "1"],
+      "tgeiu": ["$0", "1"],
+      "tlti": ["$0", "-1"],
+      "tltiu": ["$0", "0"],
+      "default": ["$0", "0"]
+    },
+    "memoryAlignment": {
+      "lw": 4,
+      "sw": 4,
+      "lwl": 1,
+      "lwr": 1,
+      "swl": 1,
+      "swr": 1,
+      "lh": 2,
+      "lhu": 2,
+      "sh": 2,
+      "default": 1
+    },
+    "mduBusyCycles": {
+      "div": 10,
+      "divu": 10,
+      "default": 5
+    }
+  },
   "instructions": [
     {
       "mnemonic": "nop",

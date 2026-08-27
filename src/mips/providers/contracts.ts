@@ -1,6 +1,15 @@
 // @index mips-providers — assembler/execution provider 契约：descriptor、capabilities、preflight、request/result
 import * as vscode from 'vscode';
-import { EngineCapabilities, EngineDescriptor, ProgramImage } from '../core/api';
+import {
+  DeviceCapabilityId,
+  EngineCapabilities,
+  EngineDescriptor,
+  InstructionLayer,
+  ProgramImage,
+  SourceUnitFingerprint
+} from '../core/api';
+import type { CpuTraceEvent } from '../../language/mips/traceParser';
+import { isaInstructions } from '../core/generated/isaCatalog';
 
 /**
  * Provider-neutral engine contracts（计划第 5.3 节）。
@@ -49,6 +58,19 @@ export interface EngineRunStatus {
   cwd?: string;
 }
 
+/** Capabilities a caller relies on. Providers must reject these before starting any process. */
+export interface ProviderCapabilityRequirements {
+  profile?: string;
+  instructionLayers?: readonly InstructionLayer[];
+  directives?: readonly string[];
+  pseudoInstructions?: boolean;
+  syscallMode?: 'mars-services' | 'course-exception';
+  devices?: readonly DeviceCapabilityId[];
+  deterministicConsole?: boolean;
+  interactiveConsole?: boolean;
+  eventSchemaRevision?: number;
+}
+
 /** Content identity of the exact engine artifact used for one provider run. */
 export interface EngineArtifactIdentity {
   sha256: string;
@@ -68,11 +90,14 @@ export interface AssembleTarget {
 
 export interface AssembleRequest {
   sourceUri: vscode.Uri;
+  /** Host-verified complete source graph identity when the caller already captured one. */
+  inputGraph?: readonly SourceUnitFingerprint[];
   target: AssembleTarget;
   /** Course-trace invocation: enforces the course dump range and halt-loop validation. */
   courseTrace?: boolean;
   p7RiInstruction?: boolean;
   revealOutput?: boolean;
+  requirements?: ProviderCapabilityRequirements;
 }
 
 export interface AssembleResult {
@@ -85,6 +110,10 @@ export interface AssembleResult {
   engineArtifact?: EngineArtifactIdentity;
   /** Exact process/configuration values resolved before this run produced side effects. */
   resolvedRun?: ResolvedEngineRun;
+  /** Authoritative domain image produced by the assembly stage. */
+  image?: ProgramImage;
+  /** Opaque-to-orchestration binding needed by source-reassembling legacy engines. */
+  executionBinding?: ProviderExecutionBinding;
 }
 
 export interface MipsAssemblerProvider {
@@ -97,21 +126,40 @@ export interface MipsAssemblerProvider {
 // ── Executor ─────────────────────────────────────────────────────────────────
 
 /**
- * Execution input. The contract requires a ProgramImage in the domain model;
- * the legacy engine re-assembles from source, so `imageRef.kind === 'mars-dump'`
- * carries the validated dump plus its halt PC for that provider only.
+ * Provider-owned source binding returned by an assembler adapter. The course pipeline treats this
+ * as an identity-bound capability and never reads the source path or branches on the engine kind.
+ * A native ProgramImage executor does not need a binding.
  */
-export type ExecuteImageRef =
-  | { kind: 'mars-dump'; machineCodeUri: vscode.Uri; haltPc?: number }
-  | { kind: 'program-image'; image: ProgramImage };
+export interface ProviderExecutionBinding {
+  kind: 'source-reassembly';
+  providerId: string;
+  sourceUri: vscode.Uri;
+  imageFingerprint: string;
+}
+
+export interface ArchitecturalWriteTraceRequest {
+  kind: 'architectural-writes';
+  /** Require the provider to reject implementation-specific/undefined legacy behavior. */
+  courseCorrect: true;
+}
+
+/** Provider-neutral projection consumed by course trace comparison. */
+export interface ArchitecturalWriteTrace {
+  schemaRevision: 1;
+  eventSchema: 'buaa-co-architectural-write-v1';
+  events: readonly CpuTraceEvent[];
+  rawText: string;
+  /** Exact provider raw-trace revision, retained for replay provenance only. */
+  rawTraceRevision: number;
+}
 
 export interface ExecuteRequest {
-  sourceUri: vscode.Uri;
-  imageRef: ExecuteImageRef;
+  /** Every executor receives the immutable domain image, including legacy source adapters. */
+  image: ProgramImage;
+  executionBinding?: ProviderExecutionBinding;
   stdin?: string;
   stdinSource?: vscode.Uri;
-  traceOutput?: boolean;
-  traceLevel?: 1 | 2;
+  trace?: ArchitecturalWriteTraceRequest;
   maxSteps?: number;
   haltPc?: number;
   interruptSchedule?: number[];
@@ -119,6 +167,7 @@ export interface ExecuteRequest {
   runOutputFile?: vscode.Uri;
   courseTrace?: boolean;
   revealOutput?: boolean;
+  requirements?: ProviderCapabilityRequirements;
 }
 
 export interface ExecuteResult {
@@ -129,6 +178,11 @@ export interface ExecuteResult {
   engineArtifact?: EngineArtifactIdentity;
   /** Exact process/configuration values resolved before this run produced side effects. */
   resolvedRun?: ResolvedEngineRun;
+  trace?: ArchitecturalWriteTrace;
+  stop?: {
+    kind: 'halt-loop' | 'completed' | 'cancelled' | 'timeout' | 'engine-error';
+    haltPc?: number;
+  };
 }
 
 export interface ResolvedEngineRun {
@@ -172,11 +226,26 @@ export const BUILTIN_TS_DESCRIPTOR: EngineDescriptor = {
 /** Capabilities the legacy engine currently provides (behavior of the existing pipeline). */
 export const LEGACY_MARS_CAPABILITIES: EngineCapabilities = {
   profiles: ['P2', 'P3', 'P4', 'P5', 'P6', 'P7'],
-  instructionLayers: {
-    required: [],
-    commonExtensions: [],
-    marsCompatibility: []
+  instructionLayers: Object.fromEntries(
+    (['required', 'commonExtensions', 'marsCompatibility'] as const).map((layer) => [
+      layer,
+      [...new Set(isaInstructions.filter((instruction) => instruction.layer === layer)
+        .map((instruction) => instruction.mnemonic))].sort()
+    ])
+  ),
+  assembly: {
+    directives: [
+      '.align', '.ascii', '.asciiz', '.byte', '.data', '.double', '.eqv', '.extern',
+      '.float', '.globl', '.half', '.include', '.kdata', '.ktext', '.macro', '.set',
+      '.space', '.text', '.word'
+    ],
+    pseudoInstructions: 'mars-compatible',
+    macros: true,
+    includes: true
   },
+  syscalls: { modes: ['mars-services', 'course-exception'], deterministic: false },
+  devices: ['cp0', 'timer', 'external-interrupt-generator'],
+  console: { deterministicInput: true, deterministicOutput: true, interactive: true },
   executionFeatures: [
     'delayed-branching',
     'overflow-traps',
@@ -186,6 +255,8 @@ export const LEGACY_MARS_CAPABILITIES: EngineCapabilities = {
     'deterministic-console',
     'undefined-domain-classification'
   ],
+  catalogRevision: 1,
+  normalizerRevision: 1,
   eventSchemaRevision: 1,
   courseContractRevision: 1
 };
@@ -199,4 +270,86 @@ export function failedPreflight(
   diagnostics: CapabilityDiagnostic[]
 ): ProviderPreflight {
   return { ok: false, diagnostics, descriptor };
+}
+
+/** Deterministic, engine-name-independent capability validation used by every resolver adapter. */
+export function capabilityRequirementDiagnostics(
+  descriptor: EngineDescriptor,
+  capabilities: EngineCapabilities,
+  requirements: ProviderCapabilityRequirements | undefined,
+  resolvedProfile?: string
+): CapabilityDiagnostic[] {
+  if (!requirements) return [];
+  const diagnostics: CapabilityDiagnostic[] = [];
+  const prefix = `${descriptor.id}.capability`;
+  const profile = requirements.profile ?? resolvedProfile;
+  if (requirements.profile && resolvedProfile && requirements.profile !== resolvedProfile) {
+    diagnostics.push({
+      code: `${prefix}.profile-mismatch`, capability: 'profile',
+      message: `请求 profile ${requirements.profile} 与解析得到的 ${resolvedProfile} 不一致`
+    });
+  } else if (profile && !capabilities.profiles.includes(profile)) {
+    diagnostics.push({
+      code: `${prefix}.profile-unsupported`, capability: 'profile',
+      message: `provider 不支持 profile ${profile}`
+    });
+  }
+  for (const layer of requirements.instructionLayers ?? []) {
+    if (!(capabilities.instructionLayers[layer]?.length)) {
+      diagnostics.push({
+        code: `${prefix}.instruction-layer-unsupported`, capability: `instruction-layer:${layer}`,
+        message: `provider 未声明指令层 ${layer}`
+      });
+    }
+  }
+  const directives = new Set(capabilities.assembly.directives.map((item) => item.toLowerCase()));
+  for (const directive of requirements.directives ?? []) {
+    if (!directives.has(directive.toLowerCase())) {
+      diagnostics.push({
+        code: `${prefix}.directive-unsupported`, capability: `directive:${directive.toLowerCase()}`,
+        message: `provider 不支持 directive ${directive}`
+      });
+    }
+  }
+  if (requirements.pseudoInstructions && capabilities.assembly.pseudoInstructions === 'none') {
+    diagnostics.push({
+      code: `${prefix}.pseudo-unsupported`, capability: 'pseudo-instructions',
+      message: 'provider 不支持 pseudo instructions'
+    });
+  }
+  if (requirements.syscallMode && !capabilities.syscalls.modes.includes(requirements.syscallMode)) {
+    diagnostics.push({
+      code: `${prefix}.syscall-unsupported`, capability: `syscall:${requirements.syscallMode}`,
+      message: `provider 不支持 syscall 模式 ${requirements.syscallMode}`
+    });
+  }
+  for (const device of requirements.devices ?? []) {
+    if (!capabilities.devices.includes(device)) {
+      diagnostics.push({
+        code: `${prefix}.device-unsupported`, capability: `device:${device}`,
+        message: `provider 不支持设备 ${device}`
+      });
+    }
+  }
+  if (requirements.deterministicConsole
+    && (!capabilities.console.deterministicInput || !capabilities.console.deterministicOutput)) {
+    diagnostics.push({
+      code: `${prefix}.deterministic-console-unsupported`, capability: 'deterministic-console',
+      message: 'provider 未声明确定性输入/输出 console'
+    });
+  }
+  if (requirements.interactiveConsole && !capabilities.console.interactive) {
+    diagnostics.push({
+      code: `${prefix}.interactive-console-unsupported`, capability: 'interactive-console',
+      message: 'provider 不支持 interactive console'
+    });
+  }
+  if (requirements.eventSchemaRevision !== undefined
+    && requirements.eventSchemaRevision !== capabilities.eventSchemaRevision) {
+    diagnostics.push({
+      code: `${prefix}.event-schema-unsupported`, capability: 'event-schema',
+      message: `请求 event schema revision ${requirements.eventSchemaRevision}，provider 仅声明 ${capabilities.eventSchemaRevision}`
+    });
+  }
+  return diagnostics;
 }

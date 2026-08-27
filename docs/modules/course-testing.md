@@ -20,14 +20,14 @@ generation:
   courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe 中立 stage
   courseTesting/generatorWorkflow.ts — 生成器工作流：外部/内置 generator setup、运行、ASM 产物收集、CourseTraceBatchSource 描述
   courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、稳定版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；用 coL2 逐指令块校验实际到达标准停机尾、合并 SWL/SWR 局部写、修复 REGIMM 链接分支自身的遗漏事件，并拒绝未跳转链接分支后继续读取旧 `$31`、稳定版 `$gp/$sp` 初态差异、DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入；任一侧空 Trace 报错，两侧都空明确标记为无法判定
-  courseTesting/marsOracleCompatibility.ts — 统一 P3-P7 稳定版 oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
-  courseTesting/marsImageCompatibility.ts — 将每个 coL2 动态 PC/机器码绑定到最终硬件 HexText（含 P7 padding/handler merge），并只允许 handler 内精确 `sb $0,0x7f20($0)` 访问 IG；用跨分支/跳转及延迟槽的静态常量数据流兜底无 victim header 的非对齐 IG 访问
+  mips/legacy/marsOracleCompatibility.ts — legacy/reference 层的 P3-P7 稳定版 MARS oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
+  mips/legacy/marsImageCompatibility.ts — legacy/reference 层将每个 coL2 动态 PC/机器码绑定到最终硬件 HexText（含 P7 padding/handler merge），并只允许 handler 内精确 `sb $0,0x7f20($0)` 访问 IG；用跨分支/跳转及延迟槽的静态常量数据流兜底无 victim header 的非对齐 IG 访问
   courseTesting/builtinAsmGenerator.ts — 入口：generateBuiltinAsmTestCase；P7StressMode 分派(anchor->randomBody、probe->probeEmitter、hybrid 两次调用)
   courseTesting/generator.ts — 外部生成器(.py/.js/.jar/.ps1/.bat 等)和 ASM 文件快照；以 mtime+ctime+size 判定新建/重写，能识别同 mtime、倒退 mtime 或尺寸变化，跳过 .co 产物目录
-  courseTesting/generatorInstructionCatalog.ts — 内置 ASM 生成器指令 profile、分类、对齐和 MDU 延迟资源加载
-  courseTesting/machineCodeValidation.ts — 对最终 HexText 完整解码，先校验教程 IM 的 4096-word 物理容量及稳定版 oracle 的 4095-word 排他上界，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 `# instruction_set` 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
+  courseTesting/generatorInstructionCatalog.ts — 加载由唯一 ISA catalog 生成的内置 ASM generator profile、分类、对齐和 MDU 延迟投影；生成脚本校验成员资格与 instruction effects/control/memory facts 一致
+  courseTesting/machineCodeValidation.ts — 对最终 HexText 使用 core catalog canonical decoder（不再维护 opcode/funct 副本），先校验教程 IM 的 4096-word 物理容量及稳定版 oracle 的 4095-word 排他上界，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 `# instruction_set` 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
   courseTesting/courseDataInitialization.ts — 课程 DM 初态预检：按修改版 MARS 的 4 KiB 分配块在同次汇编导出 0x0000..0x2fff，严格解析每个非空 1024-word HexText 块；允许未分配/`.space` 全零块，首个非零初值或缺失/畸形 dump 立即失败
-  courseTesting/marsStepLimit.ts — case manifest 先证明来源为内置生成器，再读取 random 标记及 payload 条数，设置确定性 MARS 原生执行预算：P3-P6 max(256,2N+64)，P7 max(512,16N+256)；手选/外部 ASM 按最终机器码使用 max(65536,64*words) 的保守预算；预算结束后由插件解析 coL2 动态指令块，确认标准停机尾已实际执行，拒绝 cliff exit、错误自环和未到达尾部
+  courseTesting/executionBudget.ts + mips/legacy/haltValidation.ts — provider-neutral pipeline 计算确定性执行预算；legacy/reference 层单独解析 coL2/停机标记，确认标准停机尾已实际执行并拒绝 cliff exit、错误自环和未到达尾部
   courseTesting/cpuState.ts — 软件 CPU 模型：32 GPR+3072-word DM(0x0000..0x2fff)+HI/LO+CP0+MDU 保护；HI/LO 初始化状态、字节/半字/字及修改版 MARS 小端 LWL/LWR/SWL/SWR 语义、最近写入追踪
   courseTesting/mnemonicSets.ts — Profile 指令集(P3:8 条，P4-5:+J 型，P6:+MDU/load-store 变体，P7:+CP0/异常)、功能分组、memoryAlignment/mduBusyCycles
   courseTesting/p7Hardware.ts — P7 硬件布局单一入口：加载/校验 resources/co/p7Hardware.json，导出 4096-word IM(0x3000..0x6fff)、3072-word DM(0x0000..0x2fff)、0x4180 异常入口、Timer、CP0、probe 状态/日志/testbench 常量
@@ -65,9 +65,11 @@ case-storage:
   courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts typed alias、只接受 canonical `/` 的严格 case-relative 路径、完整 source artifact closure、assembler/oracle launch tuple、stdin/device/cycle/stop/seed/resource input、snapshot 数量/单项/总量 ceiling、大小写碰撞、symlink/bytes/hash/ProgramImage/HexText/trace evidence 校验；`p7.probe` 在 canonicalize 前以迭代式 depth/node/key/string-byte ceiling 验证。早期 v2 可读但不能 replay。exact replay/re-evaluate 见 mips-replay 模块
 
 conformance/phase-0:
-  conformance/mips/corpus — P3–P7 spec microprogram、challenge、教程引用、250 个固定 seed 与机器可读 feature distribution；freeze verifier 防 silent corpus drift
+  conformance/mips/corpus — P3–P7 spec microprogram、challenge、教程引用、250 个固定 seed 与机器可读 feature distribution；seed renderer 独立生成 250 个唯一 source graph/HexText image（合计 5,000 words），先由固定 MARS 分 profile 汇编核对，再经编译后的 versioned JSONL CLI 全量 encode/decode；freeze verifier 防 silent corpus drift
+  conformance/mips/contract/evidence-gates.json — revision 2 冻结 22 个 P3–P7 capability scope、589 个由 `idPrefix.member` 精确展开的 bin、逐 bin 数字 minimum 与 assembly/execution/device/full-stack 各自的 fingerprint inclusion/exclusion
   conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema/审批命令，candidate 不会被测试自动批准
   conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold/warm benchmark matrix、统计 envelope、baseline candidate/approve/verify；批准者固定为 GitHub 用户名 stone926
   conformance/mips/decision-vectors — frozen contract/decision 的独立 vectors；Timer official-RTL lane 在缺少 Icarus 时必须由 required CI 失败而不是跳过伪通过
   conformance/mips/governance — expected/benchmark 统一 reviewer policy（stone926）与 protected-branch/CODEOWNERS 身份边界；仓库内 reviewer 字符串不当作签名
+  conformance/mips/expected/guardedFs.mjs — expected-data 依赖闭包唯一文件系统入口；lexical/realpath 均限制在 conformance/mips，dependency whitelist 同时禁止 direct fs、dynamic import、child_process 等旁路读取 production catalog/contracts
   gate 分层 — `run:candidate`/`verify:candidate` 只生成 `required:false` 的审阅证据；`verify:formal` 才聚合 approved courseVector、ISA/TS CLI、两平台 benchmark、Timer RTL、reference 与完整 lanes，并在任一审批缺失时 fail closed

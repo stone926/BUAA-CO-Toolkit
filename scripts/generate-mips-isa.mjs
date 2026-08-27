@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * Generate src/mips/core/generated/isaCatalog.ts from resources/mips/isa.json.
+ * Generate every production ISA projection from resources/mips/isa.json:
+ *   - src/mips/core/generated/isaCatalog.ts (core/worker facts)
+ *   - src/language/mips/generated/isaDisplayCatalog.ts (LSP facts)
+ *   - resources/mips/generatorProfiles.json (course generator projection)
  *
  * Mirrors the check/sync pattern of scripts/generate-manifest-config.mjs:
  *   - plain run writes the generated file when content changed;
@@ -16,7 +19,10 @@ import * as url from 'node:url';
 
 const root = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const sourceFile = path.join(root, 'resources', 'mips', 'isa.json');
-const targetFile = path.join(root, 'src', 'mips', 'core', 'generated', 'isaCatalog.ts');
+const lspDisplaySourceFile = path.join(root, 'resources', 'mips', 'instructions.json');
+const coreTargetFile = path.join(root, 'src', 'mips', 'core', 'generated', 'isaCatalog.ts');
+const lspTargetFile = path.join(root, 'src', 'language', 'mips', 'generated', 'isaDisplayCatalog.ts');
+const generatorTargetFile = path.join(root, 'resources', 'mips', 'generatorProfiles.json');
 const args = new Set(process.argv.slice(2));
 const checkOnly = args.has('--check');
 
@@ -30,6 +36,10 @@ const EXCEPTION_KINDS = new Set(['ov', 'adel', 'ades', 'syscall', 'trap']);
 const HILO_NAMES = new Set(['hi', 'lo']);
 const CP0_ROLES = new Set(['rd', 'epc']);
 const MEMORY_KINDS = new Set(['load', 'store', 'partial-load', 'partial-store']);
+const GENERATOR_CATEGORIES = [
+  'supported', 'control', 'branch', 'linkBranch', 'jumpLink', 'divide',
+  'hiLoWrite', 'hiLoRead', 'longLatencyHiLoWrite', 'load', 'store', 'cp0'
+];
 
 function fail(message) {
   console.error(`generate-mips-isa: ${message}`);
@@ -139,6 +149,157 @@ function validateCatalog(catalog) {
     validated.push({ instruction, mask, value });
   }
   validateRuntimeOverlaps(validated);
+  validateGeneratorProjection(catalog.generator, catalog.instructions);
+}
+
+function validateGeneratorProjection(generator, instructions) {
+  if (!isObject(generator) || typeof generator.description !== 'string'
+    || !isObject(generator.profiles) || !isObject(generator.categories)) {
+    fail('generator must define description, profiles, and categories');
+  }
+  const byMnemonic = new Map(instructions.map((instruction) => [instruction.mnemonic, instruction]));
+  const allMnemonics = new Set(byMnemonic.keys());
+  for (const profile of COURSE_PROFILES) {
+    validateStringArray(generator.profiles[profile], allMnemonics, `generator.profiles.${profile}`, true);
+    const expected = instructions
+      .filter((instruction) => instruction.availability.layer === 'required'
+        && instruction.availability.profiles.includes(profile))
+      .map((instruction) => instruction.mnemonic);
+    validateSameMembers(generator.profiles[profile], expected, `generator.profiles.${profile}`);
+  }
+  if (Object.keys(generator.profiles).sort().join(',') !== [...COURSE_PROFILES].sort().join(',')) {
+    fail(`generator.profiles must define exactly ${COURSE_PROFILES.join(', ')}`);
+  }
+
+  const expectedCategories = generatorCategoryMembers(instructions);
+  for (const category of GENERATOR_CATEGORIES) {
+    validateStringArray(generator.categories[category], allMnemonics, `generator.categories.${category}`);
+    validateSameMembers(
+      generator.categories[category],
+      expectedCategories[category],
+      `generator.categories.${category}`
+    );
+  }
+  if (Object.keys(generator.categories).sort().join(',') !== [...GENERATOR_CATEGORIES].sort().join(',')) {
+    fail(`generator.categories must define exactly ${GENERATOR_CATEGORIES.join(', ')}`);
+  }
+
+  validateStringPairRecord(
+    generator.falseTrapImmediateOperands,
+    allMnemonics,
+    'generator.falseTrapImmediateOperands'
+  );
+  validatePositiveIntegerRecord(generator.memoryAlignment, allMnemonics, 'generator.memoryAlignment');
+  validatePositiveIntegerRecord(generator.mduBusyCycles, allMnemonics, 'generator.mduBusyCycles');
+}
+
+function validateLspDisplaySource(catalog, displayInstructions) {
+  if (!Array.isArray(displayInstructions)) {
+    fail('resources/mips/instructions.json must be an array');
+  }
+  const byMnemonic = new Map();
+  for (const display of displayInstructions) {
+    if (!isObject(display) || typeof display.mnemonic !== 'string' || byMnemonic.has(display.mnemonic)) {
+      fail('resources/mips/instructions.json contains an invalid or duplicate mnemonic');
+    }
+    byMnemonic.set(display.mnemonic, display);
+  }
+  for (const instruction of catalog.instructions) {
+    const display = byMnemonic.get(instruction.mnemonic);
+    if (!display) {
+      fail(`${instruction.mnemonic}: ISA instruction has no LSP display entry`);
+    }
+    if (display.pseudo === true) {
+      fail(`${instruction.mnemonic}: real ISA instruction cannot be marked pseudo in LSP display data`);
+    }
+    const generatedType = lspInstructionType(instruction);
+    if (display.type !== generatedType) {
+      fail(`${instruction.mnemonic}: LSP display type ${String(display.type)} disagrees with ISA type ${generatedType}`);
+    }
+    if (display.delaySlot !== undefined && display.delaySlot !== instruction.delaySlot) {
+      fail(`${instruction.mnemonic}: LSP delaySlot disagrees with ISA catalog`);
+    }
+  }
+}
+
+function generatorCategoryMembers(instructions) {
+  return {
+    supported: instructions.map((instruction) => instruction.mnemonic),
+    control: instructions
+      .filter((instruction) => ['branch', 'jump', 'jump-register'].includes(instruction.control.kind))
+      .map((instruction) => instruction.mnemonic),
+    branch: instructions
+      .filter((instruction) => instruction.control.kind === 'branch')
+      .map((instruction) => instruction.mnemonic),
+    linkBranch: instructions
+      .filter((instruction) => instruction.control.kind === 'branch' && instruction.link)
+      .map((instruction) => instruction.mnemonic),
+    jumpLink: instructions
+      .filter((instruction) => ['jump', 'jump-register'].includes(instruction.control.kind) && instruction.link)
+      .map((instruction) => instruction.mnemonic),
+    divide: instructions
+      .filter((instruction) => instruction.semanticHandlerId === 'div' || instruction.semanticHandlerId === 'divu')
+      .map((instruction) => instruction.mnemonic),
+    hiLoWrite: instructions
+      .filter((instruction) => instruction.effects.hiloWrites.length > 0)
+      .map((instruction) => instruction.mnemonic),
+    hiLoRead: instructions
+      .filter((instruction) => instruction.effects.hiloReads.length > 0
+        && instruction.effects.hiloWrites.length === 0
+        && instruction.effects.gprWrites.length > 0)
+      .map((instruction) => instruction.mnemonic),
+    longLatencyHiLoWrite: instructions
+      .filter((instruction) => ['mult', 'multu', 'div', 'divu'].includes(instruction.semanticHandlerId))
+      .map((instruction) => instruction.mnemonic),
+    load: instructions
+      .filter((instruction) => instruction.memoryAccess?.kind.endsWith('load'))
+      .map((instruction) => instruction.mnemonic),
+    store: instructions
+      .filter((instruction) => instruction.memoryAccess?.kind.endsWith('store'))
+      .map((instruction) => instruction.mnemonic),
+    cp0: instructions
+      .filter((instruction) => instruction.control.kind === 'none'
+        && (instruction.effects.cp0Reads.length > 0 || instruction.effects.cp0Writes.length > 0))
+      .map((instruction) => instruction.mnemonic)
+  };
+}
+
+function validateSameMembers(actual, expected, label) {
+  const actualSet = new Set(actual);
+  const expectedSet = new Set(expected);
+  const missing = [...expectedSet].filter((entry) => !actualSet.has(entry));
+  const extra = [...actualSet].filter((entry) => !expectedSet.has(entry));
+  if (missing.length || extra.length) {
+    fail(`${label} membership must be derived from instructions (missing: ${missing.join(', ') || '-'}; extra: ${extra.join(', ') || '-'})`);
+  }
+}
+
+function validateStringPairRecord(value, knownMnemonics, label) {
+  if (!isObject(value) || !Object.prototype.hasOwnProperty.call(value, 'default')) {
+    fail(`${label} must be an object with a default entry`);
+  }
+  for (const [mnemonic, pair] of Object.entries(value)) {
+    if (mnemonic !== 'default' && !knownMnemonics.has(mnemonic)) {
+      fail(`${label} contains unknown mnemonic ${mnemonic}`);
+    }
+    if (!Array.isArray(pair) || pair.length !== 2 || pair.some((item) => typeof item !== 'string')) {
+      fail(`${label}.${mnemonic} must be a pair of strings`);
+    }
+  }
+}
+
+function validatePositiveIntegerRecord(value, knownMnemonics, label) {
+  if (!isObject(value) || !Object.prototype.hasOwnProperty.call(value, 'default')) {
+    fail(`${label} must be an object with a default entry`);
+  }
+  for (const [mnemonic, amount] of Object.entries(value)) {
+    if (mnemonic !== 'default' && !knownMnemonics.has(mnemonic)) {
+      fail(`${label} contains unknown mnemonic ${mnemonic}`);
+    }
+    if (!Number.isInteger(amount) || amount <= 0) {
+      fail(`${label}.${mnemonic} must be a positive integer`);
+    }
+  }
 }
 
 function validateProfilePolicies(policies) {
@@ -397,23 +558,115 @@ function generateTs(catalog, sourceSha256) {
   return `${lines.join('\n')}\n`;
 }
 
+function generateLspTs(catalog, sourceSha256) {
+  const lines = [];
+  lines.push('// @generated by scripts/generate-mips-isa.mjs from resources/mips/isa.json — DO NOT EDIT.');
+  lines.push('// @index mips-lsp — LSP 消费的课程 ISA 展示事实（唯一数据源为 resources/mips/isa.json）');
+  lines.push('');
+  lines.push('export type IsaDisplayInstructionType = \'R-type\' | \'I-type\' | \'J-type\' | \'special\';');
+  lines.push('export type IsaDisplayInstructionLayer = \'required\' | \'commonExtensions\' | \'marsCompatibility\';');
+  lines.push('export type IsaDisplayCourseProfile = \'P3\' | \'P4\' | \'P5\' | \'P6\' | \'P7\';');
+  lines.push('');
+  lines.push(`export const isaDisplayCatalogSchemaRevision = ${catalog.schemaRevision} as const;`);
+  lines.push(`export const isaDisplayCatalogSha256 = ${JSON.stringify(sourceSha256)} as const;`);
+  lines.push('');
+  lines.push('export interface IsaDisplayInstructionFact {');
+  lines.push('  readonly mnemonic: string;');
+  lines.push('  readonly type: IsaDisplayInstructionType;');
+  lines.push('  readonly delaySlot: boolean;');
+  lines.push('  readonly layer: IsaDisplayInstructionLayer;');
+  lines.push('  readonly profiles: readonly IsaDisplayCourseProfile[];');
+  lines.push('  readonly gprReads: readonly (string | number)[];');
+  lines.push('  readonly gprWrites: readonly (string | number)[];');
+  lines.push('  readonly writesFirstOperand: boolean;');
+  lines.push('  readonly controlKind: string;');
+  lines.push('  readonly memoryWidth: number | undefined;');
+  lines.push('  readonly memoryAlignment: number | undefined;');
+  lines.push('}');
+  lines.push('');
+  lines.push('export const isaDisplayInstructions: readonly IsaDisplayInstructionFact[] = [');
+  for (const instruction of catalog.instructions) {
+    lines.push('  {');
+    lines.push(`    mnemonic: ${JSON.stringify(instruction.mnemonic)},`);
+    lines.push(`    type: ${JSON.stringify(lspInstructionType(instruction))},`);
+    lines.push(`    delaySlot: ${instruction.delaySlot === true},`);
+    lines.push(`    layer: ${JSON.stringify(instruction.availability.layer)},`);
+    lines.push(`    profiles: ${JSON.stringify(instruction.availability.profiles)},`);
+    lines.push(`    gprReads: ${JSON.stringify(instruction.effects.gprReads.map(normalizeDisplayOperand))},`);
+    lines.push(`    gprWrites: ${JSON.stringify(instruction.effects.gprWrites.map(normalizeDisplayOperand))},`);
+    lines.push(`    writesFirstOperand: ${instruction.effects.gprWrites.some((operand) => ROLE_REGISTERS.has(operand))},`);
+    lines.push(`    controlKind: ${JSON.stringify(instruction.control.kind)},`);
+    lines.push(`    memoryWidth: ${instruction.memoryAccess?.width ?? 'undefined'},`);
+    lines.push(`    memoryAlignment: ${instruction.memoryAccess === undefined
+      ? 'undefined'
+      : instruction.memoryAccess.kind.startsWith('partial-') ? 1 : instruction.memoryAccess.width}`);
+    lines.push('  },');
+  }
+  lines.push('];');
+  lines.push('');
+  lines.push('export const isaDisplayInstructionByMnemonic: ReadonlyMap<string, IsaDisplayInstructionFact> =');
+  lines.push('  new Map(isaDisplayInstructions.map((entry) => [entry.mnemonic, entry]));');
+  return `${lines.join('\n')}\n`;
+}
+
+function lspInstructionType(instruction) {
+  if (instruction.mnemonic === 'nop' || instruction.mnemonic === 'syscall'
+    || instruction.format.kind === 'cop0' || instruction.format.kind === 'eret') {
+    return 'special';
+  }
+  if (instruction.format.kind === 'r' || instruction.format.kind === 'special2') {
+    return 'R-type';
+  }
+  if (instruction.format.kind === 'j') {
+    return 'J-type';
+  }
+  return 'I-type';
+}
+
+function normalizeDisplayOperand(operand) {
+  return NAMED_REGISTERS.get(operand) ?? operand;
+}
+
+function generateGeneratorProfiles(catalog) {
+  const generator = catalog.generator;
+  return `${JSON.stringify({
+    profiles: generator.profiles,
+    categories: generator.categories,
+    falseTrapImmediateOperands: generator.falseTrapImmediateOperands,
+    memoryAlignment: generator.memoryAlignment,
+    mduBusyCycles: generator.mduBusyCycles
+  }, null, 2)}\n`;
+}
+
+function updateGeneratedTargets(targets) {
+  const stale = targets.filter(({ file, content }) =>
+    !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== content);
+  if (!stale.length) {
+    console.log('MIPS ISA generated projections are up to date.');
+    return;
+  }
+  if (checkOnly) {
+    const paths = stale.map(({ file }) => path.relative(root, file)).join(', ');
+    fail(`${paths} not generated from current resources/mips/isa.json. Run "npm run generate:isa-catalog".`);
+  }
+  for (const { file, content } of stale) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content, 'utf8');
+    console.log(`generated ${path.relative(root, file)}`);
+  }
+}
+
 function main() {
   const sourceBytes = fs.readFileSync(sourceFile);
   const catalog = JSON.parse(sourceBytes.toString('utf8'));
   validateCatalog(catalog);
+  validateLspDisplaySource(catalog, JSON.parse(fs.readFileSync(lspDisplaySourceFile, 'utf8')));
   const sourceSha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
-  const generated = generateTs(catalog, sourceSha256);
-  const current = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : undefined;
-  if (current === generated) {
-    console.log('isaCatalog.ts is up to date.');
-    return;
-  }
-  if (checkOnly) {
-    fail(`${path.relative(root, targetFile)} is not generated from current resources/mips/isa.json. Run "npm run generate:isa-catalog".`);
-  }
-  fs.mkdirSync(path.dirname(targetFile), { recursive: true });
-  fs.writeFileSync(targetFile, generated, 'utf8');
-  console.log(`generated ${path.relative(root, targetFile)}`);
+  updateGeneratedTargets([
+    { file: coreTargetFile, content: generateTs(catalog, sourceSha256) },
+    { file: lspTargetFile, content: generateLspTs(catalog, sourceSha256) },
+    { file: generatorTargetFile, content: generateGeneratorProfiles(catalog) }
+  ]);
 }
 
 try {

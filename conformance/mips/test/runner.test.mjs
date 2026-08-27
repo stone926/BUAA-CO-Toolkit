@@ -91,7 +91,7 @@ test('stock MARS reset divergence cannot pass as the course-correct challenge ex
   assert.throws(() => runCourseVectorCase(forced), /vector file/);
 });
 
-test('legacy course executor matches every reviewed expectation and deterministic golden', () => {
+test('legacy course executor matches every candidate expectation and deterministic golden', () => {
   for (const manifestCase of manifest.cases.filter((entry) => entry.lanes.includes('legacy-baseline'))) {
     const result = runLegacyBaselineCase(manifestCase);
     assert.equal(result.status, 'passed', `${manifestCase.caseId}: ${result.status} - ${result.message}`);
@@ -103,13 +103,14 @@ test('challenge expectation is checked independently of its golden', () => {
   mutated.legacyExpected.dm['0x00000000'] = '0xdeadbeef';
   const result = runLegacyBaselineCase(mutated);
   assert.equal(result.status, 'failed');
-  assert.match(result.message, /reviewed corpus expectation/);
+  assert.match(result.message, /candidate corpus expectation/);
 });
 
 test('golden provenance changes invalidate the baseline', () => {
   const stale = structuredClone(caseById('MARS-BASELINE-GPSP-001'));
-  stale.provenance.reviewer = 'different-reviewer';
-  const result = runLegacyBaselineCase(stale);
+  const result = runLegacyBaselineCase(stale, {
+    corpusCandidate: { ...manifest.candidate, revision: manifest.candidate.revision + 1 }
+  });
   assert.equal(result.status, 'failed');
   assert.match(result.message, /fingerprint is stale/);
 });
@@ -119,7 +120,7 @@ test('missing legacy golden is an error, never a reachability pass', () => {
   withoutGolden.caseId = 'MISSING-GOLDEN-SENTINEL';
   const result = runLegacyBaselineCase(withoutGolden);
   assert.equal(result.status, 'error');
-  assert.match(result.message, /marsGolden is missing/);
+  assert.match(result.message, /marsGolden candidate is missing/);
 });
 
 test('corpus manifest rejects traversal before any case is run', () => {
@@ -163,13 +164,13 @@ test('candidate lanes are executable but never identify themselves as the formal
   assert.match(cli.stdout, /"required":false/);
 });
 
-test('formal runner is complete-only and fails closed while course vectors remain candidates', () => {
+test('formal runner is complete-only and fails closed at the first missing approval envelope', () => {
   const partial = spawnSync(process.execPath, [runnerCli, '--formal', '--lane', 'course-vector'], { encoding: 'utf8' });
   assert.equal(partial.status, 2);
   assert.match(partial.stderr, /requires exactly the complete lane set/);
 
   const formal = spawnSync(process.execPath, [runnerCli, '--formal'], { encoding: 'utf8' });
   assert.equal(formal.status, 2);
-  assert.match(formal.stderr, /not independently approved/);
+  assert.match(formal.stderr, /is not approved/);
   assert.doesNotMatch(formal.stdout, /"required":true/);
 });

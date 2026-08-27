@@ -19,6 +19,16 @@ describe('legacy MARS production boundary', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('keeps legacy request and trace repair APIs out of provider-neutral course orchestration', () => {
+    const forbidden = /\b(?:iterMarsDetailedTraceEvents|courseTraceMarsHaltError|courseMarsOracleCompatibilityError|machineCodeNeedsDetailedMarsTrace|marsDetailedUndefinedBehaviorError|traceLevel|traceOutput|imageRef)\b/;
+    const violations = [
+      'src/courseTesting/traceRunner.ts',
+      'src/courseTestLogisim.ts'
+    ].filter((file) => forbidden.test(readFileSync(path.join(process.cwd(), file), 'utf8')));
+
+    expect(violations).toEqual([]);
+  });
 });
 
 function productionTypeScriptFiles(directory: string): string[] {

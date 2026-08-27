@@ -54,6 +54,9 @@ jobs:
       - name: Course contract ledger validation
         run: node conformance/mips/contract/validate-contracts.mjs
 
+      - name: Frozen P3-P7 evidence capability/bin matrix
+        run: node conformance/mips/contract/validate-evidence-gates.mjs
+
       - name: Frozen decision vectors (official RTL required)
         run: npm --prefix conformance/mips run verify:decisions
 
@@ -63,11 +66,25 @@ jobs:
       - name: Frozen corpus seeds and feature distribution
         run: npm --prefix conformance/mips run verify:corpus-freeze
 
+      - name: Compile production JSONL boundary for fixed seed evidence
+        run: npm run compile
+
       - name: Reference asset verification (fail closed)
         run: node conformance/mips/reference/download-references.mjs --require-all
 
       - name: Frozen MARS v0.6.3 regression
         run: node conformance/mips/reference/verify-regression.mjs
+
+      - name: Materialize and verify all 250 fixed seed source/images
+        run: npm --prefix conformance/mips run verify:seed-evidence:candidate
+
+      - name: Upload fixed seed evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixed-seed-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: conformance/.cache/fixed-seed-evidence-candidate.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Conformance smoke sentinels
         run: npm --prefix conformance/mips test
@@ -80,9 +97,6 @@ jobs:
 
       - name: Headless test CLI smoke
         run: npm --prefix test-cli test
-
-      - name: Compile
-        run: npm run compile
 
   ts-cli-conformance:
     name: Independent TS JSONL CLI conformance

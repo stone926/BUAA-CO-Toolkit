@@ -12,6 +12,7 @@ import {
 import {
   corpusCaseFile,
   corpusCaseSha256,
+  loadCorpusManifest,
   loadMarsGolden,
   recordMarsGolden
 } from '../caseManifest.mjs';
@@ -23,8 +24,10 @@ import {
 } from '../stateOracle.mjs';
 
 const defaultMaxSteps = 4096;
+const marsGoldenCandidateAuthor = 'codex-phase0-corpus';
+const marsGoldenCandidateRevision = 1;
 
-function expectedProvenance(manifestCase, run, sourceSha256) {
+function expectedProvenance(manifestCase, run, sourceSha256, corpusCandidate) {
   return {
     role: legacyCourseExecutorRole,
     referenceFileName: run.reference.fileName,
@@ -39,8 +42,8 @@ function expectedProvenance(manifestCase, run, sourceSha256) {
     profile: manifestCase.profile,
     maxSteps: run.effectiveMaxSteps,
     cliOptions: run.cliOptions,
-    corpusReviewer: manifestCase.provenance.reviewer,
-    corpusReviewedAt: manifestCase.provenance.reviewedAt
+    corpusCandidateAuthor: corpusCandidate.author,
+    corpusCandidateRevision: corpusCandidate.revision
   };
 }
 
@@ -49,6 +52,8 @@ function sameJson(left, right) {
 }
 
 export function runLegacyBaselineCase(manifestCase, options = {}) {
+  const corpusCandidate = options.corpusCandidate
+    ?? loadCorpusManifest({ skipCourseVectorValidation: true }).candidate;
   const maxSteps = options.maxSteps ?? defaultMaxSteps;
   const asmFile = corpusCaseFile(manifestCase);
   const sourceSha256BeforeRun = corpusCaseSha256(manifestCase);
@@ -102,17 +107,21 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
       caseId: manifestCase.caseId,
       lane: 'legacy-baseline',
       status: 'failed',
-      message: `state differs from reviewed corpus expectation: ${expectationMismatches.join('; ')}`
+      message: `state differs from candidate corpus expectation: ${expectationMismatches.join('; ')}`
     };
   }
 
   const normalized = normalizedState(state);
   const writes = normalizedWrites(state);
-  const provenance = expectedProvenance(manifestCase, run, sourceSha256AfterRun);
+  const provenance = expectedProvenance(manifestCase, run, sourceSha256AfterRun, corpusCandidate);
   if (options.recordGolden) {
     const goldenFile = recordMarsGolden(manifestCase.caseId, {
       schemaRevision: 1,
       caseId: manifestCase.caseId,
+      candidate: {
+        author: marsGoldenCandidateAuthor,
+        revision: marsGoldenCandidateRevision
+      },
       provenance,
       normalized,
       writes
@@ -129,7 +138,7 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
 
   let recorded;
   try {
-    recorded = loadMarsGolden(manifestCase.caseId);
+    recorded = loadMarsGolden(manifestCase.caseId, { requireApproved: options.requireApprovedMarsGoldens === true });
   } catch (error) {
     return { caseId: manifestCase.caseId, lane: 'legacy-baseline', status: 'error', message: error.message };
   }
@@ -138,7 +147,7 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
       caseId: manifestCase.caseId,
       lane: 'legacy-baseline',
       status: 'error',
-      message: `required reviewed marsGolden is missing for ${manifestCase.caseId}`
+      message: `required marsGolden candidate is missing for ${manifestCase.caseId}`
     };
   }
   if (!sameJson(recorded.provenance, provenance)) {
@@ -167,7 +176,9 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
     caseId: manifestCase.caseId,
     lane: 'legacy-baseline',
     status: 'passed',
-    message: 'matches reviewed corpus expectation and fingerprinted marsGolden',
+    message: options.requireApprovedMarsGoldens
+      ? 'matches approved corpus expectation and approved fingerprinted marsGolden'
+      : 'matches candidate corpus expectation and fingerprinted marsGolden candidate',
     normalized,
     writes,
     referenceSha256: run.reference.verifiedSha256

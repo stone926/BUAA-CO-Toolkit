@@ -41,13 +41,11 @@ import {
   parseMachineCodeWords
 } from './language/logisim/rom';
 import { compareTraceIterables, firstTraceDiffSnapshot } from './language/mips/traceCompare';
-import { iterMarsDetailedTraceEvents } from './language/mips/traceParser';
 import { commandLine, revealOutputChannel } from './process';
 import { runProcessCore } from './processCore';
 import { checkToolchain } from './toolchain';
 import { AppServices, RunResult } from './types';
-import { courseTraceMarsHaltError, generatedCourseTraceMarsStepLimit } from './courseTesting/marsStepLimit';
-import { courseMarsOracleCompatibilityError } from './courseTesting/marsOracleCompatibility';
+import { courseExecutionInstructionBudget } from './courseTesting/executionBudget';
 import { resolveWorkspaceFile } from './workflowInputs';
 import {
   courseTraceMemoryConfigurationError,
@@ -83,7 +81,7 @@ import { defaultTraceCompareMode } from './traceCompare';
 import {
   courseTraceOutputDirectory,
   logisimRawOutputFileNameForCase,
-  marsOutputFileNameForCase,
+  oracleOutputFileNameForCase,
   simOutputFileNameForCase
 } from './courseTestTraceFiles';
 import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from './courseTestMessages';
@@ -183,7 +181,7 @@ export async function runLogisimPrepareBatch(
           asm: asm.fsPath,
           ...caseResultFields(asmCase),
           status: 'error',
-          message: 'MARS 导出机器码失败'
+          message: '汇编器导出机器码失败'
         });
         continue;
       }
@@ -330,33 +328,41 @@ export async function runP3LogisimTraceCase(
   if (preOracleSourceIssue) {
     return failedCase(item, 'oracle', preOracleSourceIssue, asmCase.machineCode, undefined, asmCase);
   }
-  const maxSteps = generatedCourseTraceMarsStepLimit(
+  const maxSteps = courseExecutionInstructionBudget(
     getProfile(asmCase.sourceAsm),
     await readTextFile(asmCase.sourceAsm),
     manifestSourceOf(asmCase.manifest).kind === 'builtin',
     logisimCode.text
   );
-  services.output.appendLine(`MARS 黄金模型最多执行 ${maxSteps} 条指令（原生步数上限，使用 coL2 验证停机尾）`);
-  const marsInvocation = await executeWithPreflight(services, {
-    sourceUri: asmCase.sourceAsm,
-    imageRef: { kind: 'mars-dump', machineCodeUri: asmCase.machineCode, haltPc: logisimCode.haltPc },
-    traceOutput: true,
-    traceLevel: 2,
+  if (!dump.image || !dump.executionBinding) {
+    return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage/execution binding', asmCase.machineCode, undefined, asmCase);
+  }
+  services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  const oracleInvocation = await executeWithPreflight(services, {
+    image: dump.image,
+    executionBinding: dump.executionBinding,
+    trace: { kind: 'architectural-writes', courseCorrect: true },
     maxSteps,
     haltPc: logisimCode.haltPc,
-    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'mars', marsOutputFileNameForCase(item)) : undefined,
+    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item)) : undefined,
     courseTrace: true,
-    revealOutput: options.revealOutput
+    revealOutput: options.revealOutput,
+    requirements: {
+      profile: 'P3',
+      instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+      deterministicConsole: true,
+      eventSchemaRevision: 1
+    }
   }, { signal: options.signal });
-  const mars = marsInvocation.result;
+  const oracle = oracleInvocation.result;
   const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (postOracleSourceIssue) {
-    return failedCase(item, 'oracle', postOracleSourceIssue, asmCase.machineCode, mars?.outputFile, asmCase);
+    return failedCase(item, 'oracle', postOracleSourceIssue, asmCase.machineCode, oracle?.outputFile, asmCase);
   }
-  if (!mars?.ok || !mars.outputFile) {
-    const detail = mars
-      ? engineStageFailureMessage('测试中止：oracle 运行失败', mars.status)
-      : `测试中止：oracle preflight 失败: ${preflightFailureMessage(marsInvocation.preflight)}`;
+  if (!oracle?.ok || !oracle.outputFile || !oracle.trace) {
+    const detail = oracle
+      ? engineStageFailureMessage('测试中止：oracle 运行失败或未返回 canonical trace', oracle.status)
+      : `测试中止：oracle preflight 失败: ${preflightFailureMessage(oracleInvocation.preflight)}`;
     return failedCase(
       item,
       'oracle',
@@ -364,36 +370,18 @@ export async function runP3LogisimTraceCase(
       asmCase.machineCode,
       undefined,
       asmCase,
-      engineRunWasCancelled(mars?.status, options.signal)
+      engineRunWasCancelled(oracle?.status, options.signal)
     );
   }
   if (caseOutputMode) {
-    await updateAsmCaseArtifacts(asmCase, 'mars', { traceOut: mars.outputFile.fsPath });
+    await updateAsmCaseArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
   } else {
-    await copyAsmCaseArtifact(asmCase, 'mars', mars.outputFile, path.basename(mars.outputFile.fsPath), 'traceOut');
+    await copyAsmCaseArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
   }
-  const marsText = await readTextFile(mars.outputFile);
-  const haltError = courseTraceMarsHaltError(marsText, logisimCode.haltPc);
-  if (haltError) {
-    services.output.appendLine(haltError);
-    return failedCase(item, 'oracle', haltError, asmCase.machineCode, mars.outputFile, asmCase);
-  }
-  const oracleCompatibilityError = courseMarsOracleCompatibilityError(
-    'P3',
-    machineCodeText,
-    marsText,
-    false
-  );
-  if (oracleCompatibilityError) {
-    services.output.appendLine(oracleCompatibilityError);
-    return failedCase(item, 'oracle', oracleCompatibilityError, asmCase.machineCode, mars.outputFile, asmCase);
-  }
-  await recordAsmCaseOracleResult(asmCase, mars, {
+  await recordAsmCaseOracleResult(asmCase, oracle, {
     profile: 'P3',
     memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
-    traceOutput: true,
-    traceLevel: 2,
     maxSteps,
     haltPc: logisimCode.haltPc
   }, { stopReason: 'halt-loop' });
@@ -430,7 +418,7 @@ export async function runP3LogisimTraceCase(
       stage: 'dut',
       message: engineStageFailureMessage('测试中止：DUT 命令行运行失败', logisimRun.result),
       machineCode: asmCase.machineCode.fsPath,
-      oracleOut: mars.outputFile.fsPath,
+      oracleOut: oracle.outputFile.fsPath,
       dutRawOut: rawOut.fsPath,
       logisimCircuit: preparedCircuit.fsPath,
       logisimRows: logisimRun.rowsSeen
@@ -457,7 +445,7 @@ export async function runP3LogisimTraceCase(
       stage: 'dut',
       message: error instanceof Error ? error.message : String(error),
       machineCode: asmCase.machineCode.fsPath,
-      oracleOut: mars.outputFile.fsPath,
+      oracleOut: oracle.outputFile.fsPath,
       dutRawOut: rawOut.fsPath,
       logisimCircuit: preparedCircuit.fsPath,
       logisimRows: logisimRun.rowsSeen
@@ -474,7 +462,7 @@ export async function runP3LogisimTraceCase(
     await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
   }
 
-  const diff = compareTraceIterables(iterMarsDetailedTraceEvents(marsText), parsedLogisim.events, {
+  const diff = compareTraceIterables(oracle.trace.events, parsedLogisim.events, {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
@@ -487,7 +475,7 @@ export async function runP3LogisimTraceCase(
       stage: 'compare',
       message: 'PC/Instr 校验通过，双方没有可见 GRF/DM 写事件',
       machineCode: asmCase.machineCode.fsPath,
-      oracleOut: mars.outputFile.fsPath,
+      oracleOut: oracle.outputFile.fsPath,
       dutOut: simTrace.fsPath,
       dutRawOut: rawOut.fsPath,
       logisimCircuit: preparedCircuit.fsPath,
@@ -507,7 +495,7 @@ export async function runP3LogisimTraceCase(
       stage: 'compare',
       message: '某一端没有可解析的 Trace 事件',
       machineCode: asmCase.machineCode.fsPath,
-      oracleOut: mars.outputFile.fsPath,
+      oracleOut: oracle.outputFile.fsPath,
       dutOut: simTrace.fsPath,
       dutRawOut: rawOut.fsPath,
       logisimCircuit: preparedCircuit.fsPath,
@@ -526,7 +514,7 @@ export async function runP3LogisimTraceCase(
     stage: 'compare',
     message: diffMessage(diff),
     machineCode: asmCase.machineCode.fsPath,
-    oracleOut: mars.outputFile.fsPath,
+    oracleOut: oracle.outputFile.fsPath,
     dutOut: simTrace.fsPath,
     dutRawOut: rawOut.fsPath,
     logisimCircuit: preparedCircuit.fsPath,

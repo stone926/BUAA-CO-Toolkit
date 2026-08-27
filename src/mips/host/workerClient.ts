@@ -47,18 +47,33 @@ export interface WorkerClientRequest {
 export interface WorkerClientOptions {
   /** Grace period between a cancel message and worker termination. */
   cancelGraceMs?: number;
+  /** Test/evidence hook; observes protocol metadata but never job payload contents. */
+  observeProtocol?: (observation: WorkerProtocolObservation) => void;
+}
+
+export interface WorkerProtocolObservation {
+  direction: 'in' | 'out';
+  kind: 'request' | 'cancel' | 'ack' | 'progress' | 'result';
+  requestId: string;
+  sequence?: number;
 }
 
 export class WorkerClient {
   private worker: MipsWorkerPort | undefined;
   private readonly pending = new Map<string, WorkerClientRequest>();
-  private readonly options: Required<WorkerClientOptions>;
+  private readonly options: {
+    cancelGraceMs: number;
+    observeProtocol?: (observation: WorkerProtocolObservation) => void;
+  };
   private requestCounter = 0;
   /** Called once when the worker dies with pending requests (tests observe this). */
   onWorkerCrash: ((reason: string) => void) | undefined;
 
   constructor(options: WorkerClientOptions = {}) {
-    this.options = { cancelGraceMs: options.cancelGraceMs ?? 2000 };
+    this.options = {
+      cancelGraceMs: options.cancelGraceMs ?? 2000,
+      observeProtocol: options.observeProtocol
+    };
   }
 
   /** True while a worker instance is attached. */
@@ -119,6 +134,7 @@ export class WorkerClient {
     };
     try {
       worker.postMessage(message);
+      this.observe({ direction: 'out', kind: 'request', requestId });
     } catch (error) {
       this.disposeWorker(error instanceof Error ? error.message : String(error));
     }
@@ -151,6 +167,7 @@ export class WorkerClient {
     };
     try {
       this.worker.postMessage(message);
+      this.observe({ direction: 'out', kind: 'cancel', requestId });
     } catch (error) {
       this.disposeWorker(error instanceof Error ? error.message : String(error));
       return;
@@ -177,6 +194,12 @@ export class WorkerClient {
       this.disposeWorker('worker protocol violation: malformed outbound message');
       return;
     }
+    this.observe({
+      direction: 'in',
+      kind: raw.kind,
+      requestId: raw.requestId,
+      ...(raw.kind === 'progress' ? { sequence: raw.sequence } : {})
+    });
     if (raw.kind === 'progress') {
       const entry = this.pending.get(raw.requestId);
       if (!entry) {
@@ -215,6 +238,12 @@ export class WorkerClient {
         };
         try {
           worker.postMessage(ack);
+          this.observe({
+            direction: 'out',
+            kind: 'ack',
+            requestId: raw.requestId,
+            sequence: raw.sequence
+          });
         } catch (error) {
           this.disposeWorker(error instanceof Error ? error.message : String(error));
         }
@@ -302,6 +331,14 @@ export class WorkerClient {
     // Do not ACK a batch that was not consumed. Cancelling releases the worker's ACK wait;
     // its cancelled terminal result is then replaced with the consumer failure above.
     this.cancel(entry.requestId);
+  }
+
+  private observe(observation: WorkerProtocolObservation): void {
+    try {
+      this.options.observeProtocol?.(Object.freeze({ ...observation }));
+    } catch {
+      // Evidence instrumentation cannot affect protocol correctness or production execution.
+    }
   }
 }
 

@@ -692,13 +692,15 @@ async function workspaceFileExists(uri: vscode.Uri): Promise<boolean> {
   }
 }
 
-function marsRunOutputDirectory(asmUri: vscode.Uri): vscode.Uri {
+/** Legacy-provider output location; provider code uses the original source URI while staging execution. */
+export function marsRunOutputDirectory(asmUri: vscode.Uri): vscode.Uri {
   const folder = workspaceFolderFor(asmUri);
   const baseDir = folder?.uri.fsPath ?? dirname(asmUri);
   return vscode.Uri.file(path.join(baseDir, CO_OUT_DIR));
 }
 
-function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): string {
+/** Legacy-provider output naming kept here so private source staging does not change user-visible paths. */
+export function marsOutputFileName(asmUri: vscode.Uri, stdinSource?: vscode.Uri): string {
   const asmName = basenameNoExt(asmUri);
   if (!stdinSource) {
     return `${asmName}.mars.out`;

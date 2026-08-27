@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stableMarsImageCompatibilityError } from '../../courseTesting/marsImageCompatibility';
+import { stableMarsImageCompatibilityError } from '../../mips/legacy/marsImageCompatibility';
 
 const textBase = 0x3000;
 const handlerAddress = 0x4180;

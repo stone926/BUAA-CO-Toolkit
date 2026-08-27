@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   getMarsJar: vi.fn(),
   runMarsFile: vi.fn(),
-  resolveLegacyMarsLaunch: vi.fn()
+  resolveLegacyMarsLaunch: vi.fn(),
+  captureSourceGraph: vi.fn(),
+  readBoundedRegularFile: vi.fn()
 }));
 
 vi.mock('vscode', async () => {
@@ -12,6 +14,9 @@ vi.mock('vscode', async () => {
   return {
     Uri: {
       file: (file: string) => URI.file(file)
+    },
+    workspace: {
+      getWorkspaceFolder: vi.fn(() => undefined)
     }
   };
 });
@@ -21,12 +26,27 @@ vi.mock('../../config', () => ({
   getMarsJar: mocks.getMarsJar
 }));
 
-vi.mock('../../mips', () => ({
-  runMarsFile: mocks.runMarsFile
-}));
+vi.mock('../../mips', async () => {
+  const { URI } = await import('vscode-uri');
+  return {
+    runMarsFile: mocks.runMarsFile,
+    marsRunOutputDirectory: vi.fn(() => URI.file('E:/work/.co/out')),
+    marsOutputFileName: vi.fn(() => 'test.mars.out')
+  };
+});
 
 vi.mock('../../mips/providers/legacyMarsLaunch', () => ({
   resolveLegacyMarsLaunch: mocks.resolveLegacyMarsLaunch
+}));
+
+vi.mock('../../mips/replay/sourceBundle', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../mips/replay/sourceBundle')>(),
+  captureSourceGraph: mocks.captureSourceGraph
+}));
+
+vi.mock('../../mips/replay/boundedFile', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../mips/replay/boundedFile')>(),
+  readBoundedRegularFile: mocks.readBoundedRegularFile
 }));
 
 import * as vscode from 'vscode';
@@ -41,6 +61,7 @@ import {
   okPreflight
 } from '../../mips/providers/contracts';
 import { LegacyMarsProvider } from '../../mips/providers/legacyMarsProvider';
+import { createLegacyProgramImage } from '../../mips/replay/programImage';
 import {
   assembleWithPreflight,
   executeWithPreflight,
@@ -50,6 +71,30 @@ import {
 
 const services = (): AppServices => ({ output: {} as never, statusBar: {} as never });
 const sourceUri = () => vscode.Uri.file('E:/work/test.asm');
+const privateSourceUri = () => vscode.Uri.file('E:/private/source-bundle/source/materialized/source-0000.asm');
+
+function testProgramImage() {
+  return createLegacyProgramImage(
+    '00000000\n00000000\n00000000\n00000000\n1000ffff\n00000000\n',
+    [{ id: 'source-0000', contentHash: 'b'.repeat(64) }]
+  );
+}
+
+function executeRequest(overrides: Partial<ExecuteRequest> = {}): ExecuteRequest {
+  const image = testProgramImage();
+  return {
+    image,
+    executionBinding: {
+      kind: 'source-reassembly',
+      providerId: 'legacy-mars-configured',
+      sourceUri: sourceUri(),
+      imageFingerprint: image.fingerprint
+    },
+    maxSteps: 256,
+    haltPc: 0x3010,
+    ...overrides
+  };
+}
 
 afterEach(() => setProviderRegistry(undefined));
 
@@ -60,12 +105,19 @@ describe('provider resolver preflight boundary', () => {
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
     mocks.resolveLegacyMarsLaunch.mockReset();
+    mocks.captureSourceGraph.mockReset();
+    mocks.readBoundedRegularFile.mockReset();
     mocks.getProfile.mockReturnValue('P6');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
     mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
       diagnostics: [],
       launch: resolvedLaunch(uri.fsPath, mode)
     }));
+    mocks.captureSourceGraph.mockResolvedValue({ rootMaterializedPath: privateSourceUri().fsPath });
+    mocks.readBoundedRegularFile.mockResolvedValue(Buffer.from(
+      '00000000\n00000000\n00000000\n00000000\n1000ffff\n00000000\n',
+      'utf8'
+    ));
   });
 
   it('selects a capable provider before dispatch and never invokes a rejected provider', async () => {
@@ -142,12 +194,19 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
     mocks.resolveLegacyMarsLaunch.mockReset();
+    mocks.captureSourceGraph.mockReset();
+    mocks.readBoundedRegularFile.mockReset();
     mocks.getProfile.mockReturnValue('P6');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
     mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
       diagnostics: [],
       launch: resolvedLaunch(uri.fsPath, mode)
     }));
+    mocks.captureSourceGraph.mockResolvedValue({ rootMaterializedPath: privateSourceUri().fsPath });
+    mocks.readBoundedRegularFile.mockResolvedValue(Buffer.from(
+      '00000000\n00000000\n00000000\n00000000\n1000ffff\n00000000\n',
+      'utf8'
+    ));
   });
 
   it('reports stable profile and tool diagnostics before running MARS', async () => {
@@ -174,7 +233,7 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     expect(mocks.runMarsFile).not.toHaveBeenCalled();
   });
 
-  it('rejects ProgramImage and incomplete course execution before side effects', async () => {
+  it('rejects an invalid ProgramImage, missing source binding and incomplete course execution before side effects', async () => {
     mocks.resolveLegacyMarsLaunch.mockResolvedValueOnce({
       diagnostics: [
         { code: 'legacy-mars.max-steps-required', message: 'maxSteps missing' },
@@ -185,15 +244,13 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
 
     const result = await executeWithPreflight(services(), {
-      sourceUri: sourceUri(),
-      imageRef: { kind: 'program-image', image: {} as never },
+      image: {} as never,
       courseTrace: true
     });
 
-    expect(result.preflight.diagnostics.map((item) => item.code)).toEqual([
-      'legacy-mars.program-image-unsupported',
-      'legacy-mars.max-steps-required',
-      'legacy-mars.halt-pc-required'
+    expect([...new Set(result.preflight.diagnostics.map((item) => item.code))]).toEqual([
+      'legacy-mars.program-image-invalid',
+      'legacy-mars.source-binding-required'
     ]);
     expect(mocks.runMarsFile).not.toHaveBeenCalled();
   });
@@ -205,16 +262,11 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     const provider = new LegacyMarsProvider(services());
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
 
-    const result = await executeWithPreflight(services(), {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x1_0000_0000
-      },
+    const result = await executeWithPreflight(services(), executeRequest({
       courseTrace: true,
-      maxSteps: 32
-    });
+      maxSteps: 32,
+      haltPc: 0x1_0000_0000
+    }));
 
     expect(result.preflight.diagnostics.map((item) => item.code)).toEqual([
       'legacy-mars.halt-pc-required'
@@ -227,29 +279,24 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     const provider = new LegacyMarsProvider(owner);
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
     const outputFile = vscode.Uri.file('E:/work/oracle.out');
-    mocks.runMarsFile.mockResolvedValue({
-      result: successfulRunStatus(),
+    mocks.runMarsFile.mockImplementation(async (_services, _source, mode) => ({
+      result: mode === 'run'
+        ? successfulRunStatus('@PC00003010 -> beq $0, $0, -1 (1000ffff)\n')
+        : successfulRunStatus(),
       outputFile,
       engineArtifact: {
         sha256: 'a'.repeat(64),
         role: 'user-configured-mars',
         fileName: 'Mars.jar'
       }
-    });
+    }));
     const controller = new AbortController();
 
-    const result = await executeWithPreflight(owner, {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x3010
-      },
+    const result = await executeWithPreflight(owner, executeRequest({
       courseTrace: true,
       maxSteps: 256,
-      traceOutput: true,
-      traceLevel: 2
-    }, { signal: controller.signal });
+      trace: { kind: 'architectural-writes', courseCorrect: true }
+    }), { signal: controller.signal });
 
     expect(result.ok).toBe(true);
     expect(result.result?.engineArtifact?.sha256).toBe('a'.repeat(64));
@@ -269,45 +316,56 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     const owner = services();
     const provider = new LegacyMarsProvider(owner);
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
-    mocks.runMarsFile.mockResolvedValue({
-      result: {
-        ...successfulRunStatus(),
-        ok: false,
-        stopped: true,
-        stopReason: 'aborted'
-      }
-    });
+    mocks.runMarsFile.mockImplementation(async (_services, _source, mode) => ({
+      result: mode === 'dumpText'
+        ? successfulRunStatus()
+        : {
+          ...successfulRunStatus(),
+          ok: false,
+          stopped: true,
+          stopReason: 'aborted'
+        },
+      outputFile: vscode.Uri.file(mode === 'dumpText' ? 'E:/work/code.txt' : 'E:/work/oracle.out')
+    }));
 
-    const result = await executeWithPreflight(owner, {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x3010
-      },
+    const result = await executeWithPreflight(owner, executeRequest({
       courseTrace: true,
       maxSteps: 256
-    });
+    }));
 
     expect(result.ok).toBe(false);
     expect(result.result?.status).toMatchObject({ stopped: true, stopReason: 'aborted' });
   });
 
+  it('refuses to execute when private source reassembly differs from the authoritative ProgramImage', async () => {
+    const owner = services();
+    const provider = new LegacyMarsProvider(owner);
+    setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
+    mocks.runMarsFile.mockResolvedValue({
+      result: successfulRunStatus(),
+      outputFile: vscode.Uri.file('E:/private/verified-image.txt')
+    });
+    mocks.readBoundedRegularFile.mockResolvedValueOnce(Buffer.from(
+      '00000000\n00000000\n00000000\n00000000\n00000000\n00000000\n',
+      'utf8'
+    ));
+
+    const result = await executeWithPreflight(owner, executeRequest({ courseTrace: true }));
+
+    expect(result.ok).toBe(false);
+    expect(result.result?.status.stderr).toContain('legacy-mars.program-image-mismatch');
+    expect(mocks.runMarsFile).toHaveBeenCalledTimes(1);
+    expect(mocks.runMarsFile.mock.calls[0][2]).toBe('dumpText');
+  });
+
   it('rejects semantic request mutation after preflight without invoking MARS', async () => {
     const provider = new LegacyMarsProvider(services());
-    const request: ExecuteRequest = {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x3010
-      },
+    const request = executeRequest({
       courseTrace: true,
-      traceOutput: true,
-      traceLevel: 2,
+      trace: { kind: 'architectural-writes', courseCorrect: true },
       maxSteps: 256,
       interruptSchedule: [0x3020]
-    };
+    });
 
     expect((await provider.preflight(request)).ok).toBe(true);
     request.maxSteps = 512;
@@ -321,17 +379,11 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
 
   it('rejects mutation in the resolved launch continuation gap', async () => {
     const provider = new LegacyMarsProvider(services());
-    const request: ExecuteRequest = {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x3010
-      },
+    const request = executeRequest({
       stdin: 'before',
       maxSteps: 256,
       interruptSchedule: [0x3020]
-    };
+    });
     expect((await provider.preflight(request)).ok).toBe(true);
 
     const pending = provider.execute(request);
@@ -346,33 +398,45 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
 
   it('uses only the frozen execute snapshot after dispatch starts', async () => {
     const provider = new LegacyMarsProvider(services());
-    const request: ExecuteRequest = {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x3010
-      },
+    const request = executeRequest({
       stdin: 'captured',
       stdinSource: vscode.Uri.file('E:/work/input.txt'),
       maxSteps: 256,
       interruptSchedule: [0x3020]
-    };
+    });
     expect((await provider.preflight(request)).ok).toBe(true);
     let finish!: () => void;
-    mocks.runMarsFile.mockImplementationOnce(() => new Promise((resolve) => {
-      finish = () => resolve({ result: successfulRunStatus() });
-    }));
+    mocks.runMarsFile.mockImplementation((_services, _source, mode) => {
+      if (mode === 'dumpText') {
+        return Promise.resolve({
+          result: successfulRunStatus(),
+          outputFile: vscode.Uri.file('E:/work/code.txt')
+        });
+      }
+      return new Promise((resolve) => {
+        finish = () => resolve({
+          result: successfulRunStatus(),
+          outputFile: vscode.Uri.file('E:/work/oracle.out')
+        });
+      });
+    });
 
     const pending = provider.execute(request);
-    await vi.waitFor(() => expect(mocks.runMarsFile).toHaveBeenCalledOnce());
-    request.sourceUri = vscode.Uri.file('E:/attacker/replaced.asm');
+    await vi.waitFor(() => expect(mocks.runMarsFile).toHaveBeenCalledTimes(2));
+    request.executionBinding!.sourceUri = vscode.Uri.file('E:/attacker/replaced.asm');
     request.stdin = 'replaced';
     request.stdinSource = vscode.Uri.file('E:/attacker/input.txt');
     request.interruptSchedule!.push(0x3030);
 
-    const [, invokedSource, , invokedOptions] = mocks.runMarsFile.mock.calls[0];
-    expect(invokedSource.fsPath).toBe(sourceUri().fsPath);
+    const [, invokedSource, , invokedOptions] = mocks.runMarsFile.mock.calls[1];
+    expect(invokedSource.fsPath).toBe(privateSourceUri().fsPath);
+    expect(mocks.captureSourceGraph).toHaveBeenCalledWith(
+      sourceUri().fsPath,
+      expect.any(String),
+      undefined,
+      undefined,
+      { allowedRoot: expect.any(String) }
+    );
     expect(invokedOptions).toMatchObject({
       stdin: 'captured',
       stdinSource: expect.objectContaining({ fsPath: vscode.Uri.file('E:/work/input.txt').fsPath }),
@@ -387,25 +451,18 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
 
   it('rejects semantic request mutation while asynchronous preflight is resolving', async () => {
     const provider = new LegacyMarsProvider(services());
-    const request: ExecuteRequest = {
-      sourceUri: sourceUri(),
-      imageRef: {
-        kind: 'mars-dump',
-        machineCodeUri: vscode.Uri.file('E:/work/code.txt'),
-        haltPc: 0x3010
-      },
+    const request = executeRequest({
       courseTrace: false,
-      traceOutput: false,
       maxSteps: 256
-    };
+    });
     let release!: (value: { diagnostics: []; launch: ReturnType<typeof resolvedLaunch> }) => void;
     mocks.resolveLegacyMarsLaunch.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
 
     const pending = provider.preflight(request);
     await vi.waitFor(() => expect(mocks.resolveLegacyMarsLaunch).toHaveBeenCalledOnce());
     request.courseTrace = true;
-    request.traceOutput = true;
-    release({ diagnostics: [], launch: resolvedLaunch(request.sourceUri.fsPath, 'run') });
+    request.trace = { kind: 'architectural-writes', courseCorrect: true };
+    release({ diagnostics: [], launch: resolvedLaunch(request.executionBinding!.sourceUri.fsPath, 'run') });
     const result = await pending;
 
     expect(result.ok).toBe(false);
@@ -442,6 +499,44 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
         dumpOutputFile: expect.objectContaining({ fsPath: outputFile.fsPath }),
         signal: controller.signal
       })
+    );
+  });
+
+  it('assembles in a private source closure and returns the authoritative ProgramImage binding', async () => {
+    const owner = services();
+    const provider = new LegacyMarsProvider(owner);
+    setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
+    const outputFile = vscode.Uri.file('E:/work/code.txt');
+    const inputGraph = [{ id: 'source-0000', contentHash: 'c'.repeat(64) }];
+    mocks.captureSourceGraph.mockResolvedValueOnce({
+      rootMaterializedPath: privateSourceUri().fsPath,
+      inputGraph: [{ id: 'captured-root', contentHash: 'd'.repeat(64) }]
+    });
+    mocks.runMarsFile.mockResolvedValueOnce({
+      result: successfulRunStatus(),
+      outputFile,
+      courseHaltPc: 0x3010
+    });
+
+    const result = await assembleWithPreflight(owner, {
+      sourceUri: sourceUri(),
+      inputGraph,
+      target: { kind: 'userText', outputFile },
+      courseTrace: true
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.result?.image?.inputGraph).toEqual(inputGraph);
+    expect(result.result?.executionBinding).toMatchObject({
+      kind: 'source-reassembly',
+      providerId: 'legacy-mars-configured',
+      imageFingerprint: result.result?.image?.fingerprint
+    });
+    expect(mocks.runMarsFile).toHaveBeenCalledWith(
+      owner,
+      expect.objectContaining({ fsPath: privateSourceUri().fsPath }),
+      'dumpText',
+      expect.objectContaining({ dumpOutputFile: expect.objectContaining({ fsPath: outputFile.fsPath }) })
     );
   });
 
@@ -502,11 +597,11 @@ function engineDescriptor(id: string): EngineDescriptor {
   };
 }
 
-function successfulRunStatus() {
+function successfulRunStatus(stdout = '') {
   return {
     ok: true,
     exitCode: 0,
-    stdout: '',
+    stdout,
     stderr: '',
     timedOut: false,
     commandLine: 'java -jar Mars.jar',

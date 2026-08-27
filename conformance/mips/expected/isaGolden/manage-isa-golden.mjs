@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Sole review/integrity writer for the independent course ISA golden. */
-import * as fs from 'node:fs';
+import * as fs from '../guardedFs.mjs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -10,6 +10,12 @@ import {
   validateIsaGolden
 } from '../../runner/isaGoldenArtifact.mjs';
 import { assertPolicyReviewer } from '../../governance/reviewerPolicy.mjs';
+import {
+  approvalEnvelopeFile,
+  assertCandidateApproved,
+  createApprovalEnvelope
+} from '../../governance/approvalEnvelope.mjs';
+import { isaGoldenCandidateDescriptor } from '../../runner/isaGoldenArtifact.mjs';
 
 function usage(message) {
   throw new Error(`${message}\nUsage: manage-isa-golden.mjs --verify [--require-approved] | --refresh-integrity | --approve --reviewer <github-user> --review-revision <n>`);
@@ -56,11 +62,10 @@ function writeAtomic(file, value) {
 }
 
 export function refreshIsaGolden(golden) {
-  validateIsaGolden(golden, { skipIntegrity: true });
   const nextDigest = isaGoldenPayloadSha256(golden);
   const evidenceChanged = golden.integrity?.payloadSha256 !== nextDigest;
   const result = structuredClone(golden);
-  if (evidenceChanged && result.review.status === 'approved') {
+  if (result.review.status !== 'candidate') {
     result.review = {
       ...result.review,
       status: 'candidate',
@@ -69,6 +74,7 @@ export function refreshIsaGolden(golden) {
       reviewRevision: 0
     };
   }
+  validateIsaGolden(result, { skipIntegrity: true });
   result.integrity = { algorithm: 'sha256-canonical-json-v1', payloadSha256: nextDigest };
   validateIsaGolden(result);
   return { golden: result, evidenceChanged };
@@ -84,20 +90,16 @@ export function run(argv) {
     writeAtomic(isaGoldenFile, refreshed.golden);
   } else {
     const current = loadIsaGolden();
-    if (current.review.author === options.reviewer) throw new Error('reviewer must differ from author');
-    const approved = structuredClone(current);
-    approved.review = {
-      ...approved.review,
-      status: 'approved',
-      reviewer: options.reviewer,
-      reviewedAt: new Date().toISOString().slice(0, 10),
-      reviewRevision: options.reviewRevision
-    };
-    validateIsaGolden(approved, { requireApproved: true });
-    writeAtomic(isaGoldenFile, approved);
+    const subject = isaGoldenCandidateDescriptor(current);
+    const approvalFile = approvalEnvelopeFile(subject);
+    if (fs.existsSync(approvalFile)) {
+      assertCandidateApproved(subject);
+    } else {
+      createApprovalEnvelope(subject, { reviewer: options.reviewer, reviewRevision: options.reviewRevision });
+    }
   }
   const checked = loadIsaGolden({ requireApproved: options.requireApproved || options.action === 'approve' });
-  process.stdout.write(`ISA golden verification OK: ${checked.cases.length} instructions, review=${checked.review.status}\n`);
+  process.stdout.write(`ISA golden verification OK: ${checked.cases.length} instructions, approval=${options.requireApproved || options.action === 'approve' ? 'required' : 'candidate-allowed'}\n`);
   return 0;
 }
 

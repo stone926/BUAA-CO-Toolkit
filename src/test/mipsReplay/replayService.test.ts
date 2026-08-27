@@ -13,6 +13,7 @@ import { sha256Bytes as snapshotDigest } from '../../asmCaseStoreCore';
 import {
   ImmutableEngineArtifactRegistry,
   engineArtifactRetentionPolicy,
+  fixedReferenceEngineArtifactTrustManifest,
   maximumEngineArtifactBytes,
   maximumEngineRegistryMetadataBytes
 } from '../../mips/replay/engineRegistry';
@@ -73,8 +74,13 @@ describe('phase-1 offline replay closure', () => {
     fs.mkdirSync(caseDir, { recursive: true });
     const include = path.join(workspace, 'lib.asm');
     const original = path.join(workspace, 'main.asm');
+    const configuredEngine = path.join(workspace, '_co_internal_unknown_instruction.class');
     fs.writeFileSync(include, 'ori $1,$0,1\n');
     fs.writeFileSync(original, '.include "lib.asm"\nbeq $0,$0,-1\nnop\n');
+    fs.copyFileSync(
+      path.join(process.cwd(), 'resources', 'mars', '_co_internal_unknown_instruction.class'),
+      configuredEngine
+    );
     const rootBytes = fs.readFileSync(original);
     fs.writeFileSync(path.join(caseDir, 'program.asm'), rootBytes);
     const source = await captureSourceGraph(original, caseDir, rootBytes);
@@ -105,8 +111,14 @@ describe('phase-1 offline replay closure', () => {
     fs.writeFileSync(stdinFile, Buffer.from([0x41, 0x00, 0xff]));
     const stdinSnapshot = { ...snapshot(caseDir, stdinFile), originalPath: 'fixture-stdin.bin' };
 
-    const artifactRegistry = new ImmutableEngineArtifactRegistry(registryDir);
-    const originalArtifact = await artifactRegistry.registerBytes('test-engine', Buffer.from('engine-v1'), 'engine.bin');
+    let artifactRegistry = new ImmutableEngineArtifactRegistry(registryDir);
+    // The fixture adapter does not interpret its artifact. Reuse a real plugin-owned fixed artifact
+    // so a new process can authenticate it from the compiled trust root without a test-only bypass.
+    const originalArtifact = await artifactRegistry.registerFile(
+      'mars-p7-ri-instruction-class',
+      configuredEngine,
+      '_co_internal_unknown_instruction.class'
+    );
     const engine: ManifestEngineInfo = {
       id: 'test-replay-engine', build: 'v1', semanticsRevision: 1, capabilitiesRevision: 1,
       catalogRevision: 1, courseContractRevision: 1, normalizerRevision: 1, eventSchemaRevision: 1,
@@ -170,6 +182,11 @@ describe('phase-1 offline replay closure', () => {
     // The provenance path and every original include disappear. Only archive+registry survive.
     fs.rmSync(workspace, { recursive: true, force: true });
     expect(fs.existsSync(original)).toBe(false);
+    expect(fs.existsSync(configuredEngine)).toBe(false);
+
+    // Simulate a process restart: in-memory registerBytes authorization is gone, and the workspace
+    // source is already unavailable. Only the extension-compiled fixed trust root remains.
+    artifactRegistry = new ImmutableEngineArtifactRegistry(registryDir, archive);
 
     const adapters = new ReplayAdapterRegistry();
     adapters.register(new FixtureAdapter('test-replay-engine', code, traceText));
@@ -580,7 +597,7 @@ describe('phase-1 offline replay closure', () => {
     })).rejects.toThrow(/not registered/);
   });
 
-  it('requires trusted registration in each registry instance before staging a retained entry', async () => {
+  it('rejects retained entries in a fresh registry unless a non-workspace trust root authorizes them', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-engine-auth-test-'));
     roots.push(root);
     const registryRoot = path.join(root, 'registry');
@@ -596,7 +613,17 @@ describe('phase-1 offline replay closure', () => {
     const fresh = new ImmutableEngineArtifactRegistry(registryRoot, root);
     await expect(fresh.resolve(entry.identity)).resolves.toMatchObject({ bytes: Buffer.byteLength('trusted-engine') });
     await expect(fresh.stageForExecution(entry.identity, path.join(root, 'unauthorized-stage')))
-      .rejects.toThrow(/not authorized.*register trusted input first/);
+      .rejects.toThrow(/not authorized.*register trusted input.*fixed application-owned trust identity/);
+
+    // A workspace-writable file that calls itself an authorization receipt has no authority. The
+    // registry never discovers or consumes such files implicitly.
+    fs.writeFileSync(path.join(registryRoot, 'execution-authorization.json'), JSON.stringify({
+      role: entry.identity.role,
+      sha256: entry.identity.sha256
+    }));
+    const stillFresh = new ImmutableEngineArtifactRegistry(registryRoot, root);
+    await expect(stillFresh.stageForExecution(entry.identity, path.join(root, 'workspace-receipt-stage')))
+      .rejects.toThrow(/not authorized/);
 
     const unrelated = path.join(root, 'unrelated-engine.bin');
     fs.writeFileSync(unrelated, 'different-engine');
@@ -608,6 +635,67 @@ describe('phase-1 offline replay closure', () => {
     expect(matched.identity.sha256).toBe(entry.identity.sha256);
     await expect(fresh.stageForExecution(entry.identity, path.join(root, 'fresh-stage'))).resolves.toMatchObject({
       identity: { role: 'trusted-engine', sha256: entry.identity.sha256 }
+    });
+  });
+
+  it('stages a fixed plugin artifact in a fresh registry after its capture source is deleted', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-engine-fixed-trust-test-'));
+    roots.push(root);
+    const registryRoot = path.join(root, 'registry');
+    const source = path.join(root, '_co_internal_unknown_instruction.class');
+    fs.copyFileSync(
+      path.join(process.cwd(), 'resources', 'mars', '_co_internal_unknown_instruction.class'),
+      source
+    );
+
+    const writer = new ImmutableEngineArtifactRegistry(registryRoot, root);
+    const entry = await writer.registerFile('mars-p7-ri-instruction-class', source);
+    fs.rmSync(source);
+
+    const fresh = new ImmutableEngineArtifactRegistry(registryRoot, root);
+    const staged = await fresh.stageForExecution(entry.identity, path.join(root, 'fresh-stage'));
+    expect(staged).toMatchObject({
+      bytes: 891,
+      identity: {
+        role: 'mars-p7-ri-instruction-class',
+        sha256: '2add0891caacf2f29c683a6afedd859891bceeb22937174f8480b4390ba125f6'
+      }
+    });
+    expect(fs.readFileSync(staged.path)).toEqual(fs.readFileSync(
+      path.join(process.cwd(), 'resources', 'mars', '_co_internal_unknown_instruction.class')
+    ));
+  });
+
+  it('keeps compiled MARS trust identities synchronized with the reviewed reference manifest', () => {
+    const reference = JSON.parse(fs.readFileSync(
+      path.join(process.cwd(), 'conformance', 'mips', 'reference', 'reference-manifest.json'),
+      'utf8'
+    )) as { assets: Array<{ role: string; sha256: string; bytes: number; fileName: string; status: string }> };
+    const releasedEngines = reference.assets.filter((asset) =>
+      asset.status === 'released' && asset.fileName.toLowerCase().endsWith('.jar')
+    );
+    for (const asset of releasedEngines) {
+      expect(fixedReferenceEngineArtifactTrustManifest.artifacts).toContainEqual({
+        role: asset.role,
+        sha256: asset.sha256,
+        bytes: asset.bytes,
+        fileName: asset.fileName
+      });
+      expect(fixedReferenceEngineArtifactTrustManifest.artifacts).toContainEqual({
+        role: 'user-configured-mars',
+        sha256: asset.sha256,
+        bytes: asset.bytes
+      });
+    }
+
+    const packagedClass = fs.readFileSync(path.join(
+      process.cwd(), 'resources', 'mars', '_co_internal_unknown_instruction.class'
+    ));
+    expect(fixedReferenceEngineArtifactTrustManifest.artifacts).toContainEqual({
+      role: 'mars-p7-ri-instruction-class',
+      sha256: snapshotDigest(packagedClass),
+      bytes: packagedClass.byteLength,
+      fileName: '_co_internal_unknown_instruction.class'
     });
   });
 

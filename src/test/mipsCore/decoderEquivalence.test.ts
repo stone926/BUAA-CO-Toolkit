@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 import { decodeCourseInstructionWord } from '../../mips/core/isa/decoder';
 import { isaInstructions } from '../../mips/core/generated/isaCatalog';
 import { decodeCourseMachineInstruction } from '../../courseTesting/machineCodeValidation';
 import { Random } from '../../courseTesting/random';
 
-/**
- * Equivalence harness between the new catalog-backed canonical decoder and the
- * pre-existing course validator decoder. The expected side is the established
- * production implementation; any mismatch here is a catalog data bug or an
- * unintended semantic drift and must be fixed before convergence.
- */
-describe('catalog decoder matches the established course validator decoder', () => {
+describe('course validator delegates to the unique catalog decoder', () => {
+  it('contains no production opcode/funct tables', () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'courseTesting', 'machineCodeValidation.ts'),
+      'utf8'
+    );
+    expect(source).toContain('decodeCourseInstructionWord');
+    expect(source).not.toMatch(/(?:opcodeMnemonics|rTypeFunct|special2Funct|regimmRt)/);
+    expect(source).not.toMatch(/new Map<number, string>/);
+  });
+
   it('agrees on every catalog instruction encoding', () => {
     for (const entry of isaInstructions) {
       const word = buildWordForEntry(entry);
@@ -21,7 +27,7 @@ describe('catalog decoder matches the established course validator decoder', () 
     }
   });
 
-  it('agrees on single-bit and single-nibble mutations of every catalog encoding', () => {
+  it('keeps the compatibility export identical for encoding mutations', () => {
     for (const entry of isaInstructions) {
       const word = buildWordForEntry(entry);
       const mutants = new Set<number>([word]);
@@ -40,7 +46,7 @@ describe('catalog decoder matches the established course validator decoder', () 
     }
   });
 
-  it('agrees on a fixed random word sample', () => {
+  it('keeps the compatibility export identical for a fixed random word sample', () => {
     const random = new Random(0x1a2b3c4d);
     for (let index = 0; index < 20_000; index++) {
       const word = random.nextInt();

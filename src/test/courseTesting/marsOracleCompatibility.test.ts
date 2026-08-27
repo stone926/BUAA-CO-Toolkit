@@ -4,7 +4,7 @@ import {
   machineCodeNeedsMarsOracleCompatibilityTrace,
   stableMarsCourseAddressError,
   stableMarsP7UnobservableResetReadError
-} from '../../courseTesting/marsOracleCompatibility';
+} from '../../mips/legacy/marsOracleCompatibility';
 
 function iType(opcode: number, rs: number, rt: number, immediate: number): number {
   return ((opcode << 26) | (rs << 21) | (rt << 16) | (immediate & 0xffff)) >>> 0;

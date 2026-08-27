@@ -5,6 +5,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serializedSeedManifest } from './generate-seeds.mjs';
+import { renderSeedProgram, seedMnemonicsByProfile, seedRendererRevision } from './seed-program-renderer.mjs';
+import { loadEvidenceGates } from '../contract/validate-evidence-gates.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,10 +66,32 @@ export function run() {
   const actualSeeds = fs.readFileSync(path.join(root, 'seeds.json'), 'utf8').replace(/\r\n?/g, '\n');
   assert(actualSeeds === expectedSeeds, 'seeds.json is stale or hand-edited');
   const seedManifest = JSON.parse(actualSeeds);
+  assert(seedManifest.schemaRevision === 3, 'seed schemaRevision must be 3');
+  assert(seedManifest.batch.rendererRevision === seedRendererRevision, 'seed batch renderer revision is stale');
   const counts = Object.fromEntries(['P3', 'P4', 'P5', 'P6', 'P7'].map((profile) => [profile, seedManifest.cases.filter((entry) => entry.profile === profile).length]));
   assert(Object.values(counts).every((count) => count === 50), 'each profile must have exactly 50 fixed PR seeds');
   const distribution = validateFeatureDistribution(JSON.parse(fs.readFileSync(path.join(root, 'handwritten-feature-distribution.json'), 'utf8')));
-  process.stdout.write(`corpus freeze OK: seeds=${JSON.stringify(counts)}, handwrittenFeatures=${distribution.advertisedFeatures.length}, combinations=${distribution.criticalCombinations.length}\n`);
+  const contracts = JSON.parse(fs.readFileSync(path.join(root, '..', 'contract', 'contracts.json'), 'utf8'));
+  const gates = loadEvidenceGates({ contracts, featureDistribution: distribution });
+  const assemblyCapabilities = new Set(gates.document.evidenceKinds.find((kind) => kind.kind === 'assembly').capabilities.map((capability) => capability.id));
+  const sourceHashes = new Set();
+  const imageHashes = new Set();
+  for (const seedCase of seedManifest.cases) {
+    for (const field of gates.document.seedManifestFields) assert(Object.hasOwn(seedCase, field), `${seedCase.id} is missing frozen seed field ${field}`);
+    const rendered = renderSeedProgram(seedCase);
+    assert(rendered.sourceSha256 === seedCase.sourceSha256, `${seedCase.id} sourceSha256 is stale`);
+    assert(rendered.imageSha256 === seedCase.imageSha256, `${seedCase.id} imageSha256 is stale`);
+    assert(rendered.words.length === seedCase.imageWordCount, `${seedCase.id} imageWordCount is stale`);
+    assert(rendered.rendererRevision === seedCase.rendererRevision, `${seedCase.id} rendererRevision is stale`);
+    assert(rendered.evidenceCapabilityId === seedCase.evidenceCapabilityId && assemblyCapabilities.has(seedCase.evidenceCapabilityId), `${seedCase.id} evidence capability is invalid`);
+    const requiredMnemonics = new Set(seedMnemonicsByProfile[seedCase.profile]);
+    assert([...requiredMnemonics].every((mnemonic) => rendered.instructions.some((instruction) => instruction.mnemonic === mnemonic)), `${seedCase.id} does not render the complete required instruction set`);
+    sourceHashes.add(rendered.sourceSha256);
+    imageHashes.add(rendered.imageSha256);
+  }
+  assert(sourceHashes.size === seedManifest.cases.length, 'fixed seeds must render unique source graphs');
+  assert(imageHashes.size === seedManifest.cases.length, 'fixed seeds must render unique images');
+  process.stdout.write(`corpus freeze OK: seeds=${JSON.stringify(counts)}, renderedSources=${sourceHashes.size}, renderedImages=${imageHashes.size}, handwrittenFeatures=${distribution.advertisedFeatures.length}, combinations=${distribution.criticalCombinations.length}\n`);
   return 0;
 }
 

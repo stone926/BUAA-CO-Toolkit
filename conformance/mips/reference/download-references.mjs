@@ -33,14 +33,45 @@ const manifest = loadReferenceManifest();
 const cacheDir = manifest.cacheDir;
 fs.mkdirSync(cacheDir, { recursive: true });
 
-async function download(sourceUrl, target) {
+async function download(sourceUrl, target, expectedBytes) {
   const response = await fetch(sourceUrl, { redirect: 'follow', signal: AbortSignal.timeout(120000) });
   if (!response.ok) {
     throw new Error(`download failed: HTTP ${response.status} ${response.statusText} for ${sourceUrl}`);
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(target, bytes);
-  return bytes.byteLength;
+  const contentLength = response.headers.get('content-length');
+  if (contentLength !== null) {
+    const declaredBytes = Number(contentLength);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0) {
+      throw new Error(`download returned invalid Content-Length ${JSON.stringify(contentLength)} for ${sourceUrl}`);
+    }
+    if (declaredBytes > expectedBytes) {
+      throw new Error(`download exceeds pinned size before reading: expected ${expectedBytes}, declared ${declaredBytes}`);
+    }
+  }
+  if (!response.body) throw new Error(`download returned no response body for ${sourceUrl}`);
+
+  const handle = fs.openSync(target, 'wx');
+  const reader = response.body.getReader();
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) throw new Error('download stream produced a non-byte chunk');
+      received += value.byteLength;
+      if (received > expectedBytes) {
+        await reader.cancel('pinned reference size exceeded');
+        throw new Error(`download exceeds pinned size: expected ${expectedBytes}, received at least ${received}`);
+      }
+      fs.writeSync(handle, value);
+    }
+  } finally {
+    fs.closeSync(handle);
+  }
+  if (received !== expectedBytes) {
+    throw new Error(`download size mismatch: expected ${expectedBytes}, received ${received}`);
+  }
+  return received;
 }
 
 let failed = false;
@@ -64,10 +95,9 @@ for (const asset of manifest.assets) {
   try {
     if (!present || forceDownload) {
       temporaryFile = path.join(cacheDir, `.${asset.fileName}.${process.pid}.${Date.now()}.tmp`);
-      const bytes = await download(asset.url, temporaryFile);
+      const bytes = await download(asset.url, temporaryFile, asset.bytes);
       console.log(`  downloaded ${bytes} bytes from ${asset.url}`);
       verifyReferenceAsset(manifest, asset, temporaryFile);
-      fs.rmSync(file, { force: true });
       fs.renameSync(temporaryFile, file);
       temporaryFile = undefined;
     } else {

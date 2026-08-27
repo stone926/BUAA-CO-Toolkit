@@ -1,6 +1,10 @@
 {
   "schemaRevision": 1,
   "caseId": "COURSE-VEC-P3-ARITH-001",
+  "candidate": {
+    "author": "codex-phase0-corpus",
+    "revision": 1
+  },
   "provenance": {
     "role": "legacy-course-executor",
     "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
@@ -27,8 +31,8 @@
       "4096",
       "<SOURCE>"
     ],
-    "corpusReviewer": "stone926",
-    "corpusReviewedAt": "2026-08-25"
+    "corpusCandidateAuthor": "codex-phase0-corpus",
+    "corpusCandidateRevision": 1
   },
   "normalized": {
     "gpr": {
@@ -53,5 +57,9 @@
       "14"
     ],
     "dm": []
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "1807ba2bbc8dee2c57c0ae2f34380303727f2e982ba0691ff652ae7f9243e9b0"
   }
 }

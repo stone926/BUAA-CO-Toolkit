@@ -91,14 +91,46 @@ export type ExecutionFeatureId =
   | 'deterministic-console'
   | 'undefined-domain-classification';
 
+/** Stable device capabilities used during provider preflight. */
+export type DeviceCapabilityId = 'cp0' | 'timer' | 'external-interrupt-generator';
+
+export interface AssemblyLanguageCapabilities {
+  /** Directives accepted by the strict/source front-end (lowercase, including the leading dot). */
+  directives: readonly string[];
+  /** Whether source-level pseudo instructions are accepted and, if so, under which compatibility model. */
+  pseudoInstructions: 'none' | 'course' | 'mars-compatible';
+  macros: boolean;
+  includes: boolean;
+}
+
+export interface SyscallCapabilities {
+  /** MARS service calls and the P7 architectural Syscall exception are deliberately distinct. */
+  modes: readonly ('mars-services' | 'course-exception')[];
+  deterministic: boolean;
+}
+
+export interface ConsoleCapabilities {
+  deterministicInput: boolean;
+  deterministicOutput: boolean;
+  interactive: boolean;
+}
+
 /** Versioned capability data shared by assembler and executor descriptors. */
 export interface EngineCapabilities {
   /** Profiles the engine claims to support. */
   profiles: string[];
   /** Real instructions by availability layer. */
   instructionLayers: Partial<Record<InstructionLayer, string[]>>;
+  /** Source-language surface; explicit so preflight need not infer it from an engine name. */
+  assembly: AssemblyLanguageCapabilities;
+  syscalls: SyscallCapabilities;
+  devices: readonly DeviceCapabilityId[];
+  console: ConsoleCapabilities;
   /** Execution features the engine implements. */
   executionFeatures: ExecutionFeatureId[];
+  /** ISA catalog and normalizer revisions participating in evidence identity. */
+  catalogRevision: number;
+  normalizerRevision: number;
   /** Revision of the event schema produced by the engine. */
   eventSchemaRevision: number;
   /** Revision of the course contract this engine claims to implement. */

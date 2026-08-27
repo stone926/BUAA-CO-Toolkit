@@ -41,14 +41,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Compile production engine and worker
-        run: npm run compile
+      - name: Reject stale generated sources before compile
+        run: npm run check:generated
+
+      - name: Compile and prove the checked-out tree stays unchanged
+        run: npm run verify:generated-tree-clean
+
+      - name: Run the complete existing test suite on this platform
+        run: npm test
 
       - name: Verify versioned MIPS JSONL CLI
         run: npm run verify:mips-cli
 
       - name: Verify real sliced Worker jobs
         run: npm run verify:mips-worker
+        env:
+          CO_MIPS_WORKER_EVIDENCE_OUTPUT: ${{ github.workspace }}/phase1-evidence/mips-worker-${{ runner.os }}.json
 
       - name: Verify Java process-tree cancellation
         run: npm run verify:process-supervisor

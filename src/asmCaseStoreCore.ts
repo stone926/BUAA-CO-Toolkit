@@ -8,7 +8,7 @@ export const asmCaseMachineCodeFileName = 'code.txt';
 export const asmCaseManifestFileName = 'case.json';
 
 export type AsmCaseSourceKind = 'selected' | 'generator' | 'builtin';
-export type AsmCaseArtifactKind = 'verilog' | 'logisim' | 'mars' | 'source';
+export type AsmCaseArtifactKind = 'verilog' | 'logisim' | 'oracle' | 'mars' | 'source';
 
 export interface AsmCaseSource {
   kind: AsmCaseSourceKind;
@@ -54,6 +54,7 @@ export interface AsmCaseArtifacts {
   verilog?: Record<string, string>;
   logisim?: Record<string, string>;
   mars?: Record<string, string>;
+  oracle?: Record<string, string>;
   source?: Record<string, string>;
   /** v2-only groups surfaced through the normalized v1 view. */
   program?: Record<string, string>;

@@ -1,6 +1,6 @@
 // @index mips-replay — legacy MARS 课程 machine/trace 契约的 replay adapter hook
 import { courseMachineCodeValidationError } from '../../courseTesting/machineCodeValidation';
-import { courseMarsOracleCompatibilityError } from '../../courseTesting/marsOracleCompatibility';
+import { courseMarsOracleCompatibilityError } from '../legacy/marsOracleCompatibility';
 import type { ProjectProfile } from '../../projectProfile';
 import { maximumReplaySourceBytes, readBoundedRegularFile } from './boundedFile';
 import type {

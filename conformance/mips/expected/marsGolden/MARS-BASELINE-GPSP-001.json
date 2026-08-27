@@ -1,6 +1,10 @@
 {
   "schemaRevision": 1,
   "caseId": "MARS-BASELINE-GPSP-001",
+  "candidate": {
+    "author": "codex-phase0-corpus",
+    "revision": 1
+  },
   "provenance": {
     "role": "legacy-course-executor",
     "referenceFileName": "Mars_CO_v0.6.3-course1.jar",
@@ -27,8 +31,8 @@
       "4096",
       "<SOURCE>"
     ],
-    "corpusReviewer": "stone926",
-    "corpusReviewedAt": "2026-08-25"
+    "corpusCandidateAuthor": "codex-phase0-corpus",
+    "corpusCandidateRevision": 1
   },
   "normalized": {
     "gpr": {},
@@ -43,5 +47,9 @@
       "00000000",
       "00000004"
     ]
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "1b8f716c4edc7e73e52b947a30005d1280b042e32beea2628ac5f13a59d5eaa1"
   }
 }

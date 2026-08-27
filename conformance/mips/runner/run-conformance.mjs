@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Fail-closed conformance runner CLI (JSONL). */
-import { loadCorpusManifest } from './caseManifest.mjs';
+import { corpusCandidateDescriptor, loadCorpusManifest } from './caseManifest.mjs';
 import { runLegacyBaselineCase } from './lanes/legacy-baseline.mjs';
 import { runCourseVectorCase } from './lanes/course-vector.mjs';
 import { runAssemblyDiffCase } from './lanes/assembly-diff.mjs';
@@ -82,7 +82,10 @@ function main() {
   let manifest;
   try {
     options = parseArgs(process.argv.slice(2));
-    manifest = loadCorpusManifest({ requireApprovedCourseVectors: options.formal });
+    manifest = loadCorpusManifest({
+      requireApprovedCorpus: options.formal,
+      requireApprovedCourseVectors: options.formal
+    });
   } catch (error) {
     process.stderr.write(`Conformance configuration error: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;
@@ -92,7 +95,10 @@ function main() {
   const runnerOptions = {
     maxSteps: options.maxSteps,
     recordGolden: options.recordGolden,
-    requireApprovedCourseVectors: options.formal
+    requireApprovedCourseVectors: options.formal,
+    requireApprovedMarsGoldens: options.formal,
+    corpusCandidate: manifest.candidate,
+    corpusApprovalSubject: corpusCandidateDescriptor(manifest)
   };
   const counts = { passed: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
   const perLane = Object.fromEntries([...options.lanes].map((lane) => [lane, emptyLaneCounts()]));

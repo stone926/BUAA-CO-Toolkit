@@ -6,7 +6,6 @@ import * as vscode from 'vscode';
 import { getMemoryConfiguration, getProfile } from './config';
 import { ensureDirectory, pathExists, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
-import { MarsRunOptions } from './mips';
 import { AppServices, ProjectProfile } from './types';
 import { resolveFileInput } from './workflowInputs';
 import { assembleWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
@@ -239,7 +238,7 @@ export async function createAsmCaseFromText(
 export async function prepareAsmCaseMachineCode(
   services: AppServices,
   asmCase: AsmCase,
-  options: MarsRunOptions = {}
+  options: PrepareAsmCaseOptions = {}
 ): Promise<AssembleResult | undefined> {
   assertWritableV2Case(asmCase);
   try {
@@ -247,12 +246,30 @@ export async function prepareAsmCaseMachineCode(
   } catch (error) {
     return sourceIntegrityAssembleFailure(error);
   }
+  const graphReference = asmCase.manifest.program.sourceGraph;
+  if (!graphReference) {
+    return sourceIntegrityAssembleFailure('v2 case has no captured SourceUnit graph');
+  }
+  let graph: Awaited<ReturnType<typeof loadAndVerifySourceGraph>>;
+  try {
+    graph = await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path);
+  } catch (error) {
+    return sourceIntegrityAssembleFailure(error);
+  }
+  const inputGraph = graph.units.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }));
   const invocation = await assembleWithPreflight(services, {
     sourceUri: asmCase.sourceAsm,
+    inputGraph,
     target: { kind: 'userText', outputFile: asmCase.machineCode },
     courseTrace: options.courseTrace,
     p7RiInstruction: options.p7RiInstruction,
-    revealOutput: options.revealOutput
+    revealOutput: options.revealOutput,
+    requirements: {
+      profile: asmCase.manifest.profile,
+      instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+      pseudoInstructions: true,
+      eventSchemaRevision: 1
+    }
   }, { signal: options.signal });
   const dump = invocation.result ?? {
     ok: false,
@@ -356,20 +373,22 @@ export async function prepareAsmCaseMachineCode(
     wallClockMs: dump.resolvedRun.wallClockMs,
     p7RiInstruction: dump.resolvedRun.p7RiInstruction
   };
-  const graphReference = asmCase.manifest.program.sourceGraph;
-  if (!graphReference) {
+  const reconstructedImage = createLegacyProgramImage(text, inputGraph);
+  if (!dump.image || !dump.executionBinding
+    || dump.image.fingerprint !== reconstructedImage.fingerprint
+    || dump.executionBinding.providerId !== dump.descriptor.id
+    || dump.executionBinding.imageFingerprint !== dump.image.fingerprint) {
     return {
       ...dump,
       ok: false,
       outputFile: undefined,
-      status: failedEngineStatusFrom(dump.status, 'v2 case has no captured SourceUnit graph')
+      status: failedEngineStatusFrom(
+        dump.status,
+        'assembler did not return a ProgramImage/source binding matching the captured source graph and exact dump bytes'
+      )
     };
   }
-  const graph = await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path);
-  const programImage = createLegacyProgramImage(
-    text,
-    graph.units.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }))
-  );
+  const programImage = dump.image;
   const imageBytes = serializeProgramImage(programImage);
   const observabilityBytes = serializeObservabilitySchema();
   const imagePath = path.join(asmCase.dir.fsPath, 'program', 'image.json');
@@ -406,7 +425,19 @@ export async function prepareAsmCaseMachineCode(
     }
   };
   await writeAsmCaseManifest(asmCase);
-  return dump;
+  return {
+    ...dump,
+    image: programImage,
+    executionBinding: dump.executionBinding
+  };
+}
+
+export interface PrepareAsmCaseOptions {
+  showMessages?: boolean;
+  revealOutput?: boolean;
+  courseTrace?: boolean;
+  p7RiInstruction?: boolean;
+  signal?: AbortSignal;
 }
 
 /** Record a completed oracle run only after its halt/error policy has been verified. */
@@ -428,9 +459,18 @@ export async function recordAsmCaseOracleResult(
   if (!result.resolvedRun) {
     throw new Error('cannot record oracle result without the provider resolved run configuration');
   }
+  const traceRevision = result.trace?.rawTraceRevision;
+  if (traceRevision !== undefined && traceRevision !== 1 && traceRevision !== 2) {
+    throw new Error(`unsupported provider raw trace revision ${traceRevision}`);
+  }
+  const providerBoundConfiguration: ManifestRunConfiguration = {
+    ...configuration,
+    traceOutput: result.trace !== undefined,
+    traceLevel: traceRevision as 1 | 2 | undefined
+  };
   const completeConfiguration = await completeReplayRunConfiguration(
     asmCase,
-    configuration,
+    providerBoundConfiguration,
     outcome.stopReason,
     result.resolvedRun
   );
@@ -588,7 +628,7 @@ function asmCaseArtifactMaximumBytes(kind: AsmCaseArtifactKind, name: string): n
 
 export async function writeAsmCaseArtifact(
   asmCase: AsmCase,
-  kind: 'verilog' | 'logisim' | 'mars',
+  kind: 'verilog' | 'logisim' | 'oracle' | 'mars',
   fileName: string,
   content: string,
   artifactName = path.basename(fileName, path.extname(fileName))
@@ -611,7 +651,7 @@ export async function writeAsmCaseArtifact(
 
 export function asmCaseArtifactUri(
   asmCase: AsmCase,
-  kind: 'verilog' | 'logisim' | 'mars',
+  kind: 'verilog' | 'logisim' | 'oracle' | 'mars',
   fileName: string
 ): vscode.Uri {
   return vscode.Uri.file(path.join(artifactDirectory(asmCase, kind).fsPath, path.basename(fileName)));
@@ -619,7 +659,7 @@ export function asmCaseArtifactUri(
 
 export async function copyAsmCaseArtifact(
   asmCase: AsmCase,
-  kind: 'verilog' | 'logisim' | 'mars',
+  kind: 'verilog' | 'logisim' | 'oracle' | 'mars',
   source: vscode.Uri,
   fileName = path.basename(source.fsPath),
   artifactName = path.basename(fileName, path.extname(fileName))
@@ -785,7 +825,7 @@ function normalizeP7Metadata(explicit: AsmCaseP7Metadata | undefined): AsmCaseP7
   return merged.interruptSchedule || merged.probe ? merged : undefined;
 }
 
-function artifactDirectory(asmCase: AsmCase, kind: 'verilog' | 'logisim' | 'mars'): vscode.Uri {
+function artifactDirectory(asmCase: AsmCase, kind: 'verilog' | 'logisim' | 'oracle' | 'mars'): vscode.Uri {
   return vscode.Uri.file(path.join(asmCase.dir.fsPath, kind));
 }
 
