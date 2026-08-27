@@ -1,0 +1,14 @@
+{
+  "schemaRevision": 1,
+  "kind": "approved-mars-performance-baseline",
+  "candidateFile": "mars-ubuntu-24.04-candidate.json",
+  "candidateSha256": "6f1f4fc408f07b5f9e9475e51e1cffc791e3fef99f3722b9d5e6fe575de0d72e",
+  "candidatePayloadSha256": "2225e6c9908d3e7cfaa33633ebb305a82ff9828d2666ff288eef58014459791a",
+  "runnerFingerprint": "4acbdb014dec6f6c8c5282bf16f61a43e21e9ce45a6883796d9f44a8711f9048",
+  "referenceSha256": "599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31",
+  "matrixRevision": 1,
+  "reviewer": "stone926",
+  "reviewedAt": "2026-08-27",
+  "reviewRevision": 1,
+  "adr": "docs/adr/0001-mips-performance-baseline-policy.md"
+}

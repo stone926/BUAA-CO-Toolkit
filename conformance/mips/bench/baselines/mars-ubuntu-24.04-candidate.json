@@ -1,0 +1,5893 @@
+{
+  "schemaRevision": 1,
+  "runnerRevision": 2,
+  "matrixRevision": 1,
+  "measurementClass": "controlled-runner-baseline-candidate",
+  "baselineEligible": true,
+  "lifecycle": "cold-end-to-end",
+  "warmMeasurementsPresent": false,
+  "warmExclusionReason": "Stock/pinned MARS CLI has no verified persistent process with complete case-state reset; no MARS result may be labeled warm.",
+  "runner": {
+    "id": "github-hosted:ubuntu-24.04",
+    "imageVersion": "ubuntu24:20260823.283.1",
+    "cpuPolicy": "github-managed;governor=github-managed-unavailable",
+    "concurrency": 1,
+    "platform": "linux",
+    "arch": "x64",
+    "cpuModel": "AMD EPYC 7763 64-Core Processor",
+    "logicalCpuCount": 4,
+    "totalMemoryBytes": 16766414848,
+    "nodeVersion": "v24.19.0",
+    "javaVersion": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "ci": {
+      "provider": "github-actions",
+      "repository": "stone926/BUAA-CO-Toolkit",
+      "workflowRef": "stone926/BUAA-CO-Toolkit/.github/workflows/ci.yml@refs/heads/main",
+      "eventName": "workflow_dispatch",
+      "job": "fixed-mars-benchmark",
+      "runId": "33074237426",
+      "runAttempt": "1",
+      "commitSha": "795628c2a9111f04761e054ad2d68cf88c786d71",
+      "runnerEnvironment": "github-hosted",
+      "runnerName": "GitHub Actions 1000000254",
+      "runnerOs": "Linux",
+      "runnerArch": "X64",
+      "runUrl": "https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33074237426/attempts/1"
+    }
+  },
+  "runnerFingerprint": "4acbdb014dec6f6c8c5282bf16f61a43e21e9ce45a6883796d9f44a8711f9048",
+  "reference": {
+    "role": "mars-assembler-v0.6.3",
+    "fileName": "Mars_CO_v0.6.3.jar",
+    "sha256": "599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31",
+    "sourceTag": "v0.6.3",
+    "sourceCommit": "8b53a492dddc4fe1c62a7a02c55bea6fc4fb49d8"
+  },
+  "matrixSha256": "4ed8427c0c373c38ce3f9230639729b288210287b0ea520f697bdaa12c19a70b",
+  "samplePolicy": {
+    "independentSamplesPerCell": 7,
+    "percentileMethod": "nearest-rank-v1",
+    "confidenceInterval": "deterministic-bootstrap-95-v1"
+  },
+  "cells": [
+    {
+      "phase": "assembly",
+      "workload": "plain",
+      "profile": "P3",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 10,
+      "requestedSteps": 32,
+      "effectiveMaxSteps": 32,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "assembly:plain:off:10:32"
+    },
+    {
+      "phase": "assembly",
+      "workload": "plain",
+      "profile": "P3",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 32,
+      "effectiveMaxSteps": 32,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "assembly:plain:off:200:32"
+    },
+    {
+      "phase": "assembly",
+      "workload": "plain",
+      "profile": "P3",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 1000,
+      "requestedSteps": 32,
+      "effectiveMaxSteps": 32,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "assembly:plain:off:1000:32"
+    },
+    {
+      "phase": "assembly",
+      "workload": "plain",
+      "profile": "P3",
+      "memoryConfiguration": "Default",
+      "traceMode": "off",
+      "wordCount": 4096,
+      "requestedSteps": 32,
+      "effectiveMaxSteps": 32,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "assembly:plain:off:4096:32"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:off:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:off:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:off:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:commit:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:commit:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:commit:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:canonical-full:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:canonical-full:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "plain",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:plain:canonical-full:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:off:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:off:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:off:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:commit:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:commit:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:commit:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:canonical-full:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:canonical-full:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "memory-intensive",
+      "profile": "P6",
+      "memoryConfiguration": "FixedCompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:off:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:off:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:off:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:commit:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:commit:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:commit:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-exception-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:off:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:off:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:off:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:commit:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:commit:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:commit:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-timer-dense",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:off:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:off:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "off",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:off:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:commit:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:commit:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "commit",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:commit:200:1000000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000,
+      "effectiveMaxSteps": 1000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 65536,
+      "effectiveMaxSteps": 65536,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536"
+    },
+    {
+      "phase": "execution",
+      "workload": "p7-irq-directed",
+      "profile": "P7",
+      "memoryConfiguration": "CompactLargeText",
+      "traceMode": "canonical-full",
+      "wordCount": 200,
+      "requestedSteps": 1000000,
+      "effectiveMaxSteps": 1000000,
+      "lifecycle": "cold-end-to-end",
+      "processModel": "fresh-jvm-per-sample",
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000"
+    }
+  ],
+  "rawSamples": [
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 0,
+      "wallClockMs": 5420,
+      "cpuMs": 1260,
+      "peakRssBytes": 83517440,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 119,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 1,
+      "wallClockMs": 500,
+      "cpuMs": 1110,
+      "peakRssBytes": 92434432,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 2,
+      "wallClockMs": 430,
+      "cpuMs": 1130.0000000000002,
+      "peakRssBytes": 91734016,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 3,
+      "wallClockMs": 420,
+      "cpuMs": 1110,
+      "peakRssBytes": 91422720,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 4,
+      "wallClockMs": 410,
+      "cpuMs": 1080,
+      "peakRssBytes": 93782016,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 5,
+      "wallClockMs": 420,
+      "cpuMs": 1100,
+      "peakRssBytes": 93609984,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleIndex": 6,
+      "wallClockMs": 410,
+      "cpuMs": 1110,
+      "peakRssBytes": 92684288,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 0,
+      "wallClockMs": 420,
+      "cpuMs": 1090,
+      "peakRssBytes": 91332608,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 1,
+      "wallClockMs": 440,
+      "cpuMs": 1130.0000000000002,
+      "peakRssBytes": 93003776,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 2,
+      "wallClockMs": 420,
+      "cpuMs": 1120,
+      "peakRssBytes": 91709440,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 3,
+      "wallClockMs": 420,
+      "cpuMs": 1100,
+      "peakRssBytes": 92979200,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 4,
+      "wallClockMs": 430,
+      "cpuMs": 1140.0000000000002,
+      "peakRssBytes": 93216768,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 5,
+      "wallClockMs": 440,
+      "cpuMs": 1130.0000000000002,
+      "peakRssBytes": 92721152,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleIndex": 6,
+      "wallClockMs": 440,
+      "cpuMs": 1130.0000000000002,
+      "peakRssBytes": 93097984,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 0,
+      "wallClockMs": 510,
+      "cpuMs": 1470,
+      "peakRssBytes": 106676224,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 1,
+      "wallClockMs": 500,
+      "cpuMs": 1350,
+      "peakRssBytes": 100904960,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 2,
+      "wallClockMs": 480,
+      "cpuMs": 1340,
+      "peakRssBytes": 101457920,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 3,
+      "wallClockMs": 490,
+      "cpuMs": 1350,
+      "peakRssBytes": 102285312,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 4,
+      "wallClockMs": 510,
+      "cpuMs": 1350,
+      "peakRssBytes": 99926016,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 5,
+      "wallClockMs": 480,
+      "cpuMs": 1370,
+      "peakRssBytes": 104505344,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleIndex": 6,
+      "wallClockMs": 480,
+      "cpuMs": 1310,
+      "peakRssBytes": 99393536,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 0,
+      "wallClockMs": 550,
+      "cpuMs": 1640.0000000000002,
+      "peakRssBytes": 109441024,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 1,
+      "wallClockMs": 640,
+      "cpuMs": 1880.0000000000002,
+      "peakRssBytes": 119136256,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 2,
+      "wallClockMs": 630,
+      "cpuMs": 1850,
+      "peakRssBytes": 110678016,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 3,
+      "wallClockMs": 540,
+      "cpuMs": 1630.0000000000002,
+      "peakRssBytes": 110198784,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 4,
+      "wallClockMs": 630,
+      "cpuMs": 1820,
+      "peakRssBytes": 110706688,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 5,
+      "wallClockMs": 660,
+      "cpuMs": 1820,
+      "peakRssBytes": 111915008,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleIndex": 6,
+      "wallClockMs": 560,
+      "cpuMs": 1650.0000000000002,
+      "peakRssBytes": 108126208,
+      "exitCode": 0,
+      "stdoutBytes": 57,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 94003200,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 460,
+      "cpuMs": 1200,
+      "peakRssBytes": 93364224,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 93138944,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 91652096,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 450,
+      "cpuMs": 1200,
+      "peakRssBytes": 92028928,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 450,
+      "cpuMs": 1190,
+      "peakRssBytes": 92008448,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 440,
+      "cpuMs": 1190,
+      "peakRssBytes": 93200384,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 660,
+      "cpuMs": 1840,
+      "peakRssBytes": 100880384,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 650,
+      "cpuMs": 1810,
+      "peakRssBytes": 99438592,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 650,
+      "cpuMs": 1830,
+      "peakRssBytes": 100741120,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 650,
+      "cpuMs": 1830,
+      "peakRssBytes": 99958784,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 660,
+      "cpuMs": 1820,
+      "peakRssBytes": 100761600,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 650,
+      "cpuMs": 1800,
+      "peakRssBytes": 108191744,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 660,
+      "cpuMs": 1830,
+      "peakRssBytes": 106573824,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 970,
+      "cpuMs": 2280.0000000000005,
+      "peakRssBytes": 233959424,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 980,
+      "cpuMs": 2250,
+      "peakRssBytes": 210153472,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 970,
+      "cpuMs": 2369.9999999999995,
+      "peakRssBytes": 221794304,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1020,
+      "cpuMs": 2320.0000000000005,
+      "peakRssBytes": 180490240,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1000,
+      "cpuMs": 2199.9999999999995,
+      "peakRssBytes": 210284544,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 980,
+      "cpuMs": 2280.0000000000005,
+      "peakRssBytes": 187674624,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 1000,
+      "cpuMs": 2300.0000000000005,
+      "peakRssBytes": 222924800,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1250,
+      "peakRssBytes": 93405184,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 450,
+      "cpuMs": 1230,
+      "peakRssBytes": 90988544,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 480,
+      "cpuMs": 1230,
+      "peakRssBytes": 92184576,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 470,
+      "cpuMs": 1260,
+      "peakRssBytes": 93736960,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 470,
+      "cpuMs": 1260,
+      "peakRssBytes": 90910720,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 450,
+      "cpuMs": 1250,
+      "peakRssBytes": 91099136,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 460,
+      "cpuMs": 1240,
+      "peakRssBytes": 91406336,
+      "exitCode": 0,
+      "stdoutBytes": 14585,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 830,
+      "cpuMs": 2400,
+      "peakRssBytes": 140505088,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 830,
+      "cpuMs": 2380.0000000000005,
+      "peakRssBytes": 135565312,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 770,
+      "cpuMs": 2190,
+      "peakRssBytes": 144158720,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 810,
+      "cpuMs": 2330,
+      "peakRssBytes": 137142272,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 780,
+      "cpuMs": 2270,
+      "peakRssBytes": 149565440,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 810,
+      "cpuMs": 2370,
+      "peakRssBytes": 145514496,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 830,
+      "cpuMs": 2340,
+      "peakRssBytes": 138207232,
+      "exitCode": 0,
+      "stdoutBytes": 1176234,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 2240,
+      "cpuMs": 3980,
+      "peakRssBytes": 193191936,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 2230,
+      "cpuMs": 3990,
+      "peakRssBytes": 188612608,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 2270,
+      "cpuMs": 3920,
+      "peakRssBytes": 190709760,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 2240,
+      "cpuMs": 4020.0000000000005,
+      "peakRssBytes": 189599744,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 2270,
+      "cpuMs": 3889.9999999999995,
+      "peakRssBytes": 185647104,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 2250,
+      "cpuMs": 3800,
+      "peakRssBytes": 181485568,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 2280,
+      "cpuMs": 3880,
+      "peakRssBytes": 180068352,
+      "exitCode": 0,
+      "stdoutBytes": 17996588,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 480,
+      "cpuMs": 1310,
+      "peakRssBytes": 93724672,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 480,
+      "cpuMs": 1250,
+      "peakRssBytes": 91639808,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 480,
+      "cpuMs": 1320,
+      "peakRssBytes": 95617024,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 510,
+      "cpuMs": 1340,
+      "peakRssBytes": 93396992,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 480,
+      "cpuMs": 1310,
+      "peakRssBytes": 91357184,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 490,
+      "cpuMs": 1330,
+      "peakRssBytes": 95363072,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 500,
+      "cpuMs": 1320,
+      "peakRssBytes": 93368320,
+      "exitCode": 0,
+      "stdoutBytes": 47725,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 910,
+      "cpuMs": 2560,
+      "peakRssBytes": 171163648,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 930,
+      "cpuMs": 2420.0000000000005,
+      "peakRssBytes": 170287104,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 900,
+      "cpuMs": 2470,
+      "peakRssBytes": 167587840,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 890,
+      "cpuMs": 2450,
+      "peakRssBytes": 170930176,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 900,
+      "cpuMs": 2300.0000000000005,
+      "peakRssBytes": 165437440,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 900,
+      "cpuMs": 2300,
+      "peakRssBytes": 166207488,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 910,
+      "cpuMs": 2270,
+      "peakRssBytes": 172089344,
+      "exitCode": 0,
+      "stdoutBytes": 3382086,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 3970,
+      "cpuMs": 5570,
+      "peakRssBytes": 184266752,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 3950,
+      "cpuMs": 5470,
+      "peakRssBytes": 176656384,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 3920,
+      "cpuMs": 5430,
+      "peakRssBytes": 176549888,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 3960,
+      "cpuMs": 5520,
+      "peakRssBytes": 176517120,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 4010,
+      "cpuMs": 5550,
+      "peakRssBytes": 178012160,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 3970,
+      "cpuMs": 5520,
+      "peakRssBytes": 175894528,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 3910,
+      "cpuMs": 5550.000000000001,
+      "peakRssBytes": 176058368,
+      "exitCode": 0,
+      "stdoutBytes": 51662728,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 92319744,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 92868608,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 450,
+      "cpuMs": 1190,
+      "peakRssBytes": 91701248,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 440,
+      "cpuMs": 1210,
+      "peakRssBytes": 92192768,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 440,
+      "cpuMs": 1170.0000000000002,
+      "peakRssBytes": 93745152,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 440,
+      "cpuMs": 1150.0000000000002,
+      "peakRssBytes": 91254784,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 440,
+      "cpuMs": 1200,
+      "peakRssBytes": 93294592,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 620,
+      "cpuMs": 1730,
+      "peakRssBytes": 104706048,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 620,
+      "cpuMs": 1750,
+      "peakRssBytes": 106897408,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 610,
+      "cpuMs": 1730,
+      "peakRssBytes": 106741760,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 700,
+      "cpuMs": 1880.0000000000002,
+      "peakRssBytes": 103227392,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 650,
+      "cpuMs": 1800,
+      "peakRssBytes": 100278272,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 610,
+      "cpuMs": 1700,
+      "peakRssBytes": 106553344,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 640,
+      "cpuMs": 1770,
+      "peakRssBytes": 100061184,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 1040,
+      "cpuMs": 2290,
+      "peakRssBytes": 213225472,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1080,
+      "cpuMs": 2430,
+      "peakRssBytes": 222871552,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 1050,
+      "cpuMs": 2340,
+      "peakRssBytes": 211386368,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1070,
+      "cpuMs": 2369.9999999999995,
+      "peakRssBytes": 214310912,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1070,
+      "cpuMs": 2390,
+      "peakRssBytes": 212410368,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 1030,
+      "cpuMs": 2300,
+      "peakRssBytes": 211611648,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 1040,
+      "cpuMs": 2400,
+      "peakRssBytes": 203911168,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 94130176,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 460,
+      "cpuMs": 1230,
+      "peakRssBytes": 92229632,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 470,
+      "cpuMs": 1260,
+      "peakRssBytes": 91648000,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 470,
+      "cpuMs": 1270,
+      "peakRssBytes": 95039488,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 490,
+      "cpuMs": 1300,
+      "peakRssBytes": 93216768,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 95232000,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 480,
+      "cpuMs": 1300,
+      "peakRssBytes": 93413376,
+      "exitCode": 0,
+      "stdoutBytes": 19466,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 840,
+      "cpuMs": 2340,
+      "peakRssBytes": 141864960,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 800,
+      "cpuMs": 2320.0000000000005,
+      "peakRssBytes": 141758464,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 790,
+      "cpuMs": 2300,
+      "peakRssBytes": 138272768,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 840,
+      "cpuMs": 2420,
+      "peakRssBytes": 149127168,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 820,
+      "cpuMs": 2350,
+      "peakRssBytes": 142192640,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 840,
+      "cpuMs": 2310,
+      "peakRssBytes": 139927552,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 840,
+      "cpuMs": 2410,
+      "peakRssBytes": 145752064,
+      "exitCode": 0,
+      "stdoutBytes": 1568334,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 2530,
+      "cpuMs": 4160,
+      "peakRssBytes": 178376704,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 2500,
+      "cpuMs": 4310,
+      "peakRssBytes": 183521280,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 2520,
+      "cpuMs": 4130,
+      "peakRssBytes": 177651712,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 2510,
+      "cpuMs": 4260,
+      "peakRssBytes": 180703232,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 2570,
+      "cpuMs": 4140,
+      "peakRssBytes": 180256768,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 2530,
+      "cpuMs": 4090,
+      "peakRssBytes": 178368512,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 2530,
+      "cpuMs": 4250,
+      "peakRssBytes": 178413568,
+      "exitCode": 0,
+      "stdoutBytes": 23995469,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 470,
+      "cpuMs": 1290,
+      "peakRssBytes": 91217920,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 480,
+      "cpuMs": 1340,
+      "peakRssBytes": 93921280,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 500,
+      "cpuMs": 1350,
+      "peakRssBytes": 93790208,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 490,
+      "cpuMs": 1290,
+      "peakRssBytes": 91693056,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 500,
+      "cpuMs": 1360,
+      "peakRssBytes": 94023680,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 480,
+      "cpuMs": 1310,
+      "peakRssBytes": 91607040,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 490,
+      "cpuMs": 1350,
+      "peakRssBytes": 95313920,
+      "exitCode": 0,
+      "stdoutBytes": 50945,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 960,
+      "cpuMs": 2450,
+      "peakRssBytes": 174256128,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 940,
+      "cpuMs": 2320.0000000000005,
+      "peakRssBytes": 171466752,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 910,
+      "cpuMs": 2490,
+      "peakRssBytes": 174223360,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 940,
+      "cpuMs": 2400.0000000000005,
+      "peakRssBytes": 171864064,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 980,
+      "cpuMs": 2489.9999999999995,
+      "peakRssBytes": 173797376,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 910,
+      "cpuMs": 2520,
+      "peakRssBytes": 174379008,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 960,
+      "cpuMs": 2450,
+      "peakRssBytes": 176992256,
+      "exitCode": 0,
+      "stdoutBytes": 3639149,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 4180,
+      "cpuMs": 5770,
+      "peakRssBytes": 175783936,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 4240,
+      "cpuMs": 5830,
+      "peakRssBytes": 179576832,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 4240,
+      "cpuMs": 5850,
+      "peakRssBytes": 177840128,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 4220,
+      "cpuMs": 5810.000000000001,
+      "peakRssBytes": 176939008,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 4250,
+      "cpuMs": 5850,
+      "peakRssBytes": 177590272,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 4230,
+      "cpuMs": 5880,
+      "peakRssBytes": 177389568,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 4130,
+      "cpuMs": 5880,
+      "peakRssBytes": 177106944,
+      "exitCode": 0,
+      "stdoutBytes": 55595348,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 450,
+      "cpuMs": 1180.0000000000002,
+      "peakRssBytes": 91230208,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 460,
+      "cpuMs": 1210,
+      "peakRssBytes": 91598848,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 440,
+      "cpuMs": 1180,
+      "peakRssBytes": 93474816,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 460,
+      "cpuMs": 1200,
+      "peakRssBytes": 91136000,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 91758592,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 91283456,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 93528064,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 730,
+      "cpuMs": 2060,
+      "peakRssBytes": 105574400,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 660,
+      "cpuMs": 1850,
+      "peakRssBytes": 100171776,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 740,
+      "cpuMs": 2060,
+      "peakRssBytes": 104697856,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 660,
+      "cpuMs": 1860,
+      "peakRssBytes": 109166592,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 750,
+      "cpuMs": 2079.9999999999995,
+      "peakRssBytes": 112750592,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 750,
+      "cpuMs": 2050,
+      "peakRssBytes": 111628288,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 720,
+      "cpuMs": 1990,
+      "peakRssBytes": 104038400,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 1340,
+      "cpuMs": 3130,
+      "peakRssBytes": 220323840,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1360,
+      "cpuMs": 3219.9999999999995,
+      "peakRssBytes": 220307456,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 1250,
+      "cpuMs": 3200,
+      "peakRssBytes": 218767360,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1330,
+      "cpuMs": 3190,
+      "peakRssBytes": 219586560,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1310,
+      "cpuMs": 3090.0000000000005,
+      "peakRssBytes": 220766208,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 1250,
+      "cpuMs": 2840,
+      "peakRssBytes": 213843968,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 1330,
+      "cpuMs": 3110,
+      "peakRssBytes": 217329664,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1250,
+      "peakRssBytes": 93032448,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 91234304,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 470,
+      "cpuMs": 1260,
+      "peakRssBytes": 92688384,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 450,
+      "cpuMs": 1220,
+      "peakRssBytes": 91656192,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 93753344,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 93396992,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 460,
+      "cpuMs": 1250,
+      "peakRssBytes": 92090368,
+      "exitCode": 0,
+      "stdoutBytes": 6323,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 790,
+      "cpuMs": 2250,
+      "peakRssBytes": 132911104,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 870,
+      "cpuMs": 2520,
+      "peakRssBytes": 141463552,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 880,
+      "cpuMs": 2560,
+      "peakRssBytes": 140750848,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 880,
+      "cpuMs": 2500,
+      "peakRssBytes": 147189760,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 800,
+      "cpuMs": 2360,
+      "peakRssBytes": 137134080,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 900,
+      "cpuMs": 2590.0000000000005,
+      "peakRssBytes": 138862592,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 790,
+      "cpuMs": 2280.0000000000005,
+      "peakRssBytes": 132509696,
+      "exitCode": 0,
+      "stdoutBytes": 504150,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 1880,
+      "cpuMs": 4200,
+      "peakRssBytes": 226013184,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1960,
+      "cpuMs": 4080,
+      "peakRssBytes": 221421568,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 2070,
+      "cpuMs": 4420,
+      "peakRssBytes": 226095104,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1980,
+      "cpuMs": 4100,
+      "peakRssBytes": 194514944,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1980,
+      "cpuMs": 4750,
+      "peakRssBytes": 224468992,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 2090,
+      "cpuMs": 4510,
+      "peakRssBytes": 199946240,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 2070,
+      "cpuMs": 4520.000000000001,
+      "peakRssBytes": 200286208,
+      "exitCode": 0,
+      "stdoutBytes": 7712882,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 490,
+      "cpuMs": 1280,
+      "peakRssBytes": 93081600,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 470,
+      "cpuMs": 1280,
+      "peakRssBytes": 91848704,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 490,
+      "cpuMs": 1310,
+      "peakRssBytes": 93024256,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 490,
+      "cpuMs": 1330,
+      "peakRssBytes": 93409280,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 490,
+      "cpuMs": 1320,
+      "peakRssBytes": 95576064,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 470,
+      "cpuMs": 1300,
+      "peakRssBytes": 91578368,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 490,
+      "cpuMs": 1310,
+      "peakRssBytes": 91205632,
+      "exitCode": 0,
+      "stdoutBytes": 35798,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 1020,
+      "cpuMs": 2860.0000000000005,
+      "peakRssBytes": 172314624,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 1020,
+      "cpuMs": 2830,
+      "peakRssBytes": 171315200,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 1000,
+      "cpuMs": 2810,
+      "peakRssBytes": 171417600,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 930,
+      "cpuMs": 2730,
+      "peakRssBytes": 173891584,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 970,
+      "cpuMs": 2790,
+      "peakRssBytes": 167813120,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 1000,
+      "cpuMs": 2730,
+      "peakRssBytes": 168382464,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 1000,
+      "cpuMs": 2730,
+      "peakRssBytes": 165371904,
+      "exitCode": 0,
+      "stdoutBytes": 2414411,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 3600,
+      "cpuMs": 5830,
+      "peakRssBytes": 195522560,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 3490,
+      "cpuMs": 6050,
+      "peakRssBytes": 192126976,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 3590,
+      "cpuMs": 5750,
+      "peakRssBytes": 187957248,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 3500,
+      "cpuMs": 6030,
+      "peakRssBytes": 191672320,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 3550,
+      "cpuMs": 5670,
+      "peakRssBytes": 185892864,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 3540,
+      "cpuMs": 5520,
+      "peakRssBytes": 190152704,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 3570,
+      "cpuMs": 5800.000000000001,
+      "peakRssBytes": 194887680,
+      "exitCode": 0,
+      "stdoutBytes": 36856084,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 450,
+      "cpuMs": 1220,
+      "peakRssBytes": 93433856,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 450,
+      "cpuMs": 1320,
+      "peakRssBytes": 102678528,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 450,
+      "cpuMs": 1180.0000000000002,
+      "peakRssBytes": 93847552,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 430,
+      "cpuMs": 1160.0000000000002,
+      "peakRssBytes": 91987968,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 440,
+      "cpuMs": 1160.0000000000002,
+      "peakRssBytes": 91643904,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 93614080,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 450,
+      "cpuMs": 1190.0000000000002,
+      "peakRssBytes": 93138944,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 670,
+      "cpuMs": 1870,
+      "peakRssBytes": 95940608,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 670,
+      "cpuMs": 1820,
+      "peakRssBytes": 98435072,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 610,
+      "cpuMs": 1680.0000000000002,
+      "peakRssBytes": 96595968,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 670,
+      "cpuMs": 2000,
+      "peakRssBytes": 110583808,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 640,
+      "cpuMs": 1840,
+      "peakRssBytes": 98533376,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 640,
+      "cpuMs": 1750,
+      "peakRssBytes": 99745792,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 700,
+      "cpuMs": 2060,
+      "peakRssBytes": 109195264,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 1040,
+      "cpuMs": 2429.9999999999995,
+      "peakRssBytes": 185339904,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1060,
+      "cpuMs": 2599.9999999999995,
+      "peakRssBytes": 191066112,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 1040,
+      "cpuMs": 2710,
+      "peakRssBytes": 197550080,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1050,
+      "cpuMs": 2730,
+      "peakRssBytes": 193744896,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1070,
+      "cpuMs": 2530.0000000000005,
+      "peakRssBytes": 195305472,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 1060,
+      "cpuMs": 2390,
+      "peakRssBytes": 180088832,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 1050,
+      "cpuMs": 2510.0000000000005,
+      "peakRssBytes": 194023424,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1230,
+      "peakRssBytes": 91365376,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 490,
+      "cpuMs": 1390.0000000000002,
+      "peakRssBytes": 102502400,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 490,
+      "cpuMs": 1390.0000000000002,
+      "peakRssBytes": 102961152,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 450,
+      "cpuMs": 1220,
+      "peakRssBytes": 93515776,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 93769728,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 480,
+      "cpuMs": 1260,
+      "peakRssBytes": 92139520,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 91521024,
+      "exitCode": 0,
+      "stdoutBytes": 7403,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 730,
+      "cpuMs": 2090,
+      "peakRssBytes": 110170112,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 820,
+      "cpuMs": 2260.0000000000005,
+      "peakRssBytes": 116654080,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 750,
+      "cpuMs": 2119.9999999999995,
+      "peakRssBytes": 114307072,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 740,
+      "cpuMs": 2070,
+      "peakRssBytes": 112537600,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 810,
+      "cpuMs": 2290,
+      "peakRssBytes": 121675776,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 790,
+      "cpuMs": 2230,
+      "peakRssBytes": 106758144,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 750,
+      "cpuMs": 2100,
+      "peakRssBytes": 116994048,
+      "exitCode": 0,
+      "stdoutBytes": 588228,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 1820,
+      "cpuMs": 3570,
+      "peakRssBytes": 188882944,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1680,
+      "cpuMs": 3290,
+      "peakRssBytes": 189329408,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 1710,
+      "cpuMs": 3349.9999999999995,
+      "peakRssBytes": 191275008,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1720,
+      "cpuMs": 3340.0000000000005,
+      "peakRssBytes": 191303680,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1740,
+      "cpuMs": 3550,
+      "peakRssBytes": 191803392,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 1760,
+      "cpuMs": 3460,
+      "peakRssBytes": 183615488,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 1710,
+      "cpuMs": 3330,
+      "peakRssBytes": 190894080,
+      "exitCode": 0,
+      "stdoutBytes": 8998406,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 490,
+      "cpuMs": 1340,
+      "peakRssBytes": 93581312,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 530,
+      "cpuMs": 1500,
+      "peakRssBytes": 102354944,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 520,
+      "cpuMs": 1500,
+      "peakRssBytes": 103608320,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 480,
+      "cpuMs": 1320,
+      "peakRssBytes": 92057600,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 520,
+      "cpuMs": 1480,
+      "peakRssBytes": 103354368,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 490,
+      "cpuMs": 1300,
+      "peakRssBytes": 93724672,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 480,
+      "cpuMs": 1300,
+      "peakRssBytes": 93536256,
+      "exitCode": 0,
+      "stdoutBytes": 40574,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 940,
+      "cpuMs": 2780.0000000000005,
+      "peakRssBytes": 165322752,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 970,
+      "cpuMs": 2500,
+      "peakRssBytes": 155672576,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 930,
+      "cpuMs": 2350,
+      "peakRssBytes": 153972736,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 920,
+      "cpuMs": 2290,
+      "peakRssBytes": 144666624,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 970,
+      "cpuMs": 2630,
+      "peakRssBytes": 159162368,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 940,
+      "cpuMs": 2600,
+      "peakRssBytes": 160530432,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 940,
+      "cpuMs": 2390,
+      "peakRssBytes": 150552576,
+      "exitCode": 0,
+      "stdoutBytes": 2794111,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 3600,
+      "cpuMs": 5270,
+      "peakRssBytes": 182480896,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 3550,
+      "cpuMs": 5040,
+      "peakRssBytes": 178540544,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 3520,
+      "cpuMs": 5080,
+      "peakRssBytes": 179245056,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 3460,
+      "cpuMs": 5080,
+      "peakRssBytes": 177086464,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 3510,
+      "cpuMs": 5370,
+      "peakRssBytes": 190730240,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 3580,
+      "cpuMs": 5410,
+      "peakRssBytes": 191959040,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 3480,
+      "cpuMs": 5189.999999999999,
+      "peakRssBytes": 182185984,
+      "exitCode": 0,
+      "stdoutBytes": 42664577,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1210,
+      "peakRssBytes": 94318592,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 430,
+      "cpuMs": 1150.0000000000002,
+      "peakRssBytes": 94158848,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 440,
+      "cpuMs": 1210,
+      "peakRssBytes": 91258880,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 420,
+      "cpuMs": 1150.0000000000002,
+      "peakRssBytes": 93241344,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 460,
+      "cpuMs": 1220,
+      "peakRssBytes": 92848128,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 450,
+      "cpuMs": 1210,
+      "peakRssBytes": 92880896,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 450,
+      "cpuMs": 1190,
+      "peakRssBytes": 91774976,
+      "exitCode": 0,
+      "stdoutBytes": 59,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 660,
+      "cpuMs": 1850,
+      "peakRssBytes": 100220928,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 680,
+      "cpuMs": 1850,
+      "peakRssBytes": 93986816,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 660,
+      "cpuMs": 1840,
+      "peakRssBytes": 100982784,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 670,
+      "cpuMs": 1820,
+      "peakRssBytes": 100651008,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 670,
+      "cpuMs": 1850,
+      "peakRssBytes": 96956416,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 640,
+      "cpuMs": 1730,
+      "peakRssBytes": 99983360,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 630,
+      "cpuMs": 1730,
+      "peakRssBytes": 94969856,
+      "exitCode": 0,
+      "stdoutBytes": 60,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 980,
+      "cpuMs": 2310,
+      "peakRssBytes": 183119872,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1000,
+      "cpuMs": 2330,
+      "peakRssBytes": 182325248,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 990,
+      "cpuMs": 2350,
+      "peakRssBytes": 189628416,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 970,
+      "cpuMs": 2310,
+      "peakRssBytes": 189726720,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 980,
+      "cpuMs": 2360,
+      "peakRssBytes": 185540608,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 960,
+      "cpuMs": 2389.9999999999995,
+      "peakRssBytes": 186273792,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 980,
+      "cpuMs": 2300,
+      "peakRssBytes": 182906880,
+      "exitCode": 0,
+      "stdoutBytes": 62,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 460,
+      "cpuMs": 1240,
+      "peakRssBytes": 93171712,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 460,
+      "cpuMs": 1210,
+      "peakRssBytes": 93679616,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 460,
+      "cpuMs": 1250,
+      "peakRssBytes": 91373568,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 460,
+      "cpuMs": 1250,
+      "peakRssBytes": 91561984,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 450,
+      "cpuMs": 1230,
+      "peakRssBytes": 93523968,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 440,
+      "cpuMs": 1170.0000000000002,
+      "peakRssBytes": 91103232,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 470,
+      "cpuMs": 1260,
+      "peakRssBytes": 91160576,
+      "exitCode": 0,
+      "stdoutBytes": 7322,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 800,
+      "cpuMs": 2300.0000000000005,
+      "peakRssBytes": 115007488,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 750,
+      "cpuMs": 2159.9999999999995,
+      "peakRssBytes": 110211072,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 790,
+      "cpuMs": 2260.0000000000005,
+      "peakRssBytes": 116469760,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 810,
+      "cpuMs": 2290,
+      "peakRssBytes": 117010432,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 800,
+      "cpuMs": 2290,
+      "peakRssBytes": 113209344,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 770,
+      "cpuMs": 2170,
+      "peakRssBytes": 110616576,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 790,
+      "cpuMs": 2239.9999999999995,
+      "peakRssBytes": 116432896,
+      "exitCode": 0,
+      "stdoutBytes": 588147,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 1700,
+      "cpuMs": 3360.0000000000005,
+      "peakRssBytes": 190988288,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 1690,
+      "cpuMs": 3380,
+      "peakRssBytes": 189988864,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 1650,
+      "cpuMs": 3460,
+      "peakRssBytes": 198426624,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 1730,
+      "cpuMs": 3520,
+      "peakRssBytes": 189693952,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 1650,
+      "cpuMs": 3229.9999999999995,
+      "peakRssBytes": 182497280,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 1710,
+      "cpuMs": 3440,
+      "peakRssBytes": 191639552,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 1660,
+      "cpuMs": 3290,
+      "peakRssBytes": 186949632,
+      "exitCode": 0,
+      "stdoutBytes": 8998325,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 0,
+      "wallClockMs": 480,
+      "cpuMs": 1320,
+      "peakRssBytes": 92991488,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 1,
+      "wallClockMs": 480,
+      "cpuMs": 1320,
+      "peakRssBytes": 93020160,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 2,
+      "wallClockMs": 490,
+      "cpuMs": 1340,
+      "peakRssBytes": 91746304,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 3,
+      "wallClockMs": 490,
+      "cpuMs": 1310,
+      "peakRssBytes": 94621696,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 4,
+      "wallClockMs": 490,
+      "cpuMs": 1340,
+      "peakRssBytes": 93192192,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 5,
+      "wallClockMs": 510,
+      "cpuMs": 1350,
+      "peakRssBytes": 95289344,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleIndex": 6,
+      "wallClockMs": 500,
+      "cpuMs": 1320,
+      "peakRssBytes": 92971008,
+      "exitCode": 0,
+      "stdoutBytes": 40455,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 0,
+      "wallClockMs": 910,
+      "cpuMs": 2310,
+      "peakRssBytes": 153182208,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 1,
+      "wallClockMs": 940,
+      "cpuMs": 2410,
+      "peakRssBytes": 151023616,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 2,
+      "wallClockMs": 940,
+      "cpuMs": 2370,
+      "peakRssBytes": 148447232,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 3,
+      "wallClockMs": 920,
+      "cpuMs": 2320.0000000000005,
+      "peakRssBytes": 146046976,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 4,
+      "wallClockMs": 930,
+      "cpuMs": 2320,
+      "peakRssBytes": 147083264,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 5,
+      "wallClockMs": 930,
+      "cpuMs": 2320,
+      "peakRssBytes": 153083904,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleIndex": 6,
+      "wallClockMs": 920,
+      "cpuMs": 2330,
+      "peakRssBytes": 152592384,
+      "exitCode": 0,
+      "stdoutBytes": 2793992,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 0,
+      "wallClockMs": 3630,
+      "cpuMs": 5320,
+      "peakRssBytes": 179916800,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 1,
+      "wallClockMs": 3450,
+      "cpuMs": 5160,
+      "peakRssBytes": 180310016,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 2,
+      "wallClockMs": 3510,
+      "cpuMs": 5010,
+      "peakRssBytes": 178769920,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 3,
+      "wallClockMs": 3470,
+      "cpuMs": 5180,
+      "peakRssBytes": 177541120,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 4,
+      "wallClockMs": 3520,
+      "cpuMs": 5050,
+      "peakRssBytes": 178286592,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 5,
+      "wallClockMs": 3450,
+      "cpuMs": 4990,
+      "peakRssBytes": 178966528,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleIndex": 6,
+      "wallClockMs": 3490,
+      "cpuMs": 5260,
+      "peakRssBytes": 177754112,
+      "exitCode": 0,
+      "stdoutBytes": 42664458,
+      "stderrBytes": 0,
+      "ok": true,
+      "error": null
+    }
+  ],
+  "summaries": [
+    {
+      "cellId": "assembly:plain:off:10:32",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 420,
+        "p95": 5420,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 430,
+          "upper": 5420
+        }
+      },
+      "cpuMs": {
+        "p50": 1110,
+        "p95": 1260
+      },
+      "peakRssBytes": {
+        "p50": 92434432,
+        "p95": 93782016
+      }
+    },
+    {
+      "cellId": "assembly:plain:off:200:32",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 430,
+        "p95": 440,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 440,
+          "upper": 440
+        }
+      },
+      "cpuMs": {
+        "p50": 1130.0000000000002,
+        "p95": 1140.0000000000002
+      },
+      "peakRssBytes": {
+        "p50": 92979200,
+        "p95": 93216768
+      }
+    },
+    {
+      "cellId": "assembly:plain:off:1000:32",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 490,
+        "p95": 510,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 500,
+          "upper": 510
+        }
+      },
+      "cpuMs": {
+        "p50": 1350,
+        "p95": 1470
+      },
+      "peakRssBytes": {
+        "p50": 101457920,
+        "p95": 106676224
+      }
+    },
+    {
+      "cellId": "assembly:plain:off:4096:32",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 630,
+        "p95": 660,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 630,
+          "upper": 660
+        }
+      },
+      "cpuMs": {
+        "p50": 1820,
+        "p95": 1880.0000000000002
+      },
+      "peakRssBytes": {
+        "p50": 110678016,
+        "p95": 119136256
+      }
+    },
+    {
+      "cellId": "execution:plain:off:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 450,
+        "p95": 460,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 450,
+          "upper": 460
+        }
+      },
+      "cpuMs": {
+        "p50": 1200,
+        "p95": 1220
+      },
+      "peakRssBytes": {
+        "p50": 93138944,
+        "p95": 94003200
+      }
+    },
+    {
+      "cellId": "execution:plain:off:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 650,
+        "p95": 660,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 660,
+          "upper": 660
+        }
+      },
+      "cpuMs": {
+        "p50": 1830,
+        "p95": 1840
+      },
+      "peakRssBytes": {
+        "p50": 100761600,
+        "p95": 108191744
+      }
+    },
+    {
+      "cellId": "execution:plain:off:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 980,
+        "p95": 1020,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1000,
+          "upper": 1020
+        }
+      },
+      "cpuMs": {
+        "p50": 2280.0000000000005,
+        "p95": 2369.9999999999995
+      },
+      "peakRssBytes": {
+        "p50": 210284544,
+        "p95": 233959424
+      }
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 460,
+        "p95": 480,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 470,
+          "upper": 480
+        }
+      },
+      "cpuMs": {
+        "p50": 1250,
+        "p95": 1260
+      },
+      "peakRssBytes": {
+        "p50": 91406336,
+        "p95": 93736960
+      }
+    },
+    {
+      "cellId": "execution:plain:commit:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 810,
+        "p95": 830,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 830,
+          "upper": 830
+        }
+      },
+      "cpuMs": {
+        "p50": 2340,
+        "p95": 2400
+      },
+      "peakRssBytes": {
+        "p50": 140505088,
+        "p95": 149565440
+      }
+    },
+    {
+      "cellId": "execution:plain:commit:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 2250,
+        "p95": 2280,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 2270,
+          "upper": 2280
+        }
+      },
+      "cpuMs": {
+        "p50": 3920,
+        "p95": 4020.0000000000005
+      },
+      "peakRssBytes": {
+        "p50": 188612608,
+        "p95": 193191936
+      }
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 480,
+        "p95": 510,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 490,
+          "upper": 510
+        }
+      },
+      "cpuMs": {
+        "p50": 1320,
+        "p95": 1340
+      },
+      "peakRssBytes": {
+        "p50": 93396992,
+        "p95": 95617024
+      }
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 900,
+        "p95": 930,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 910,
+          "upper": 930
+        }
+      },
+      "cpuMs": {
+        "p50": 2420.0000000000005,
+        "p95": 2560
+      },
+      "peakRssBytes": {
+        "p50": 170287104,
+        "p95": 172089344
+      }
+    },
+    {
+      "cellId": "execution:plain:canonical-full:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 3960,
+        "p95": 4010,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 3970,
+          "upper": 4010
+        }
+      },
+      "cpuMs": {
+        "p50": 5520,
+        "p95": 5570
+      },
+      "peakRssBytes": {
+        "p50": 176549888,
+        "p95": 184266752
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 440,
+        "p95": 460,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 440,
+          "upper": 460
+        }
+      },
+      "cpuMs": {
+        "p50": 1200,
+        "p95": 1220
+      },
+      "peakRssBytes": {
+        "p50": 92319744,
+        "p95": 93745152
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 620,
+        "p95": 700,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 640,
+          "upper": 700
+        }
+      },
+      "cpuMs": {
+        "p50": 1750,
+        "p95": 1880.0000000000002
+      },
+      "peakRssBytes": {
+        "p50": 104706048,
+        "p95": 106897408
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:off:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1050,
+        "p95": 1080,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1050,
+          "upper": 1080
+        }
+      },
+      "cpuMs": {
+        "p50": 2369.9999999999995,
+        "p95": 2430
+      },
+      "peakRssBytes": {
+        "p50": 212410368,
+        "p95": 222871552
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 470,
+        "p95": 490,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 470,
+          "upper": 490
+        }
+      },
+      "cpuMs": {
+        "p50": 1260,
+        "p95": 1300
+      },
+      "peakRssBytes": {
+        "p50": 93413376,
+        "p95": 95232000
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 840,
+        "p95": 840,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 840,
+          "upper": 840
+        }
+      },
+      "cpuMs": {
+        "p50": 2340,
+        "p95": 2420
+      },
+      "peakRssBytes": {
+        "p50": 141864960,
+        "p95": 149127168
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:commit:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 2530,
+        "p95": 2570,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 2530,
+          "upper": 2570
+        }
+      },
+      "cpuMs": {
+        "p50": 4160,
+        "p95": 4310
+      },
+      "peakRssBytes": {
+        "p50": 178413568,
+        "p95": 183521280
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 490,
+        "p95": 500,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 490,
+          "upper": 500
+        }
+      },
+      "cpuMs": {
+        "p50": 1340,
+        "p95": 1360
+      },
+      "peakRssBytes": {
+        "p50": 93790208,
+        "p95": 95313920
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 940,
+        "p95": 980,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 960,
+          "upper": 980
+        }
+      },
+      "cpuMs": {
+        "p50": 2450,
+        "p95": 2520
+      },
+      "peakRssBytes": {
+        "p50": 174223360,
+        "p95": 176992256
+      }
+    },
+    {
+      "cellId": "execution:memory-intensive:canonical-full:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 4230,
+        "p95": 4250,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 4240,
+          "upper": 4250
+        }
+      },
+      "cpuMs": {
+        "p50": 5850,
+        "p95": 5880
+      },
+      "peakRssBytes": {
+        "p50": 177389568,
+        "p95": 179576832
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 450,
+        "p95": 460,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 450,
+          "upper": 460
+        }
+      },
+      "cpuMs": {
+        "p50": 1210,
+        "p95": 1220
+      },
+      "peakRssBytes": {
+        "p50": 91598848,
+        "p95": 93528064
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 730,
+        "p95": 750,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 740,
+          "upper": 750
+        }
+      },
+      "cpuMs": {
+        "p50": 2050,
+        "p95": 2079.9999999999995
+      },
+      "peakRssBytes": {
+        "p50": 105574400,
+        "p95": 112750592
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:off:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1330,
+        "p95": 1360,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1330,
+          "upper": 1360
+        }
+      },
+      "cpuMs": {
+        "p50": 3130,
+        "p95": 3219.9999999999995
+      },
+      "peakRssBytes": {
+        "p50": 219586560,
+        "p95": 220766208
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 450,
+        "p95": 470,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 460,
+          "upper": 470
+        }
+      },
+      "cpuMs": {
+        "p50": 1220,
+        "p95": 1260
+      },
+      "peakRssBytes": {
+        "p50": 92688384,
+        "p95": 93753344
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 870,
+        "p95": 900,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 880,
+          "upper": 900
+        }
+      },
+      "cpuMs": {
+        "p50": 2500,
+        "p95": 2590.0000000000005
+      },
+      "peakRssBytes": {
+        "p50": 138862592,
+        "p95": 147189760
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:commit:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1980,
+        "p95": 2090,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1980,
+          "upper": 2090
+        }
+      },
+      "cpuMs": {
+        "p50": 4420,
+        "p95": 4750
+      },
+      "peakRssBytes": {
+        "p50": 221421568,
+        "p95": 226095104
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 490,
+        "p95": 490,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 490,
+          "upper": 490
+        }
+      },
+      "cpuMs": {
+        "p50": 1310,
+        "p95": 1330
+      },
+      "peakRssBytes": {
+        "p50": 93024256,
+        "p95": 95576064
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1000,
+        "p95": 1020,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1000,
+          "upper": 1020
+        }
+      },
+      "cpuMs": {
+        "p50": 2790,
+        "p95": 2860.0000000000005
+      },
+      "peakRssBytes": {
+        "p50": 171315200,
+        "p95": 173891584
+      }
+    },
+    {
+      "cellId": "execution:p7-exception-dense:canonical-full:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 3550,
+        "p95": 3600,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 3570,
+          "upper": 3600
+        }
+      },
+      "cpuMs": {
+        "p50": 5800.000000000001,
+        "p95": 6050
+      },
+      "peakRssBytes": {
+        "p50": 191672320,
+        "p95": 195522560
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 450,
+        "p95": 450,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 450,
+          "upper": 450
+        }
+      },
+      "cpuMs": {
+        "p50": 1190.0000000000002,
+        "p95": 1320
+      },
+      "peakRssBytes": {
+        "p50": 93433856,
+        "p95": 102678528
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 670,
+        "p95": 700,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 670,
+          "upper": 700
+        }
+      },
+      "cpuMs": {
+        "p50": 1840,
+        "p95": 2060
+      },
+      "peakRssBytes": {
+        "p50": 98533376,
+        "p95": 110583808
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:off:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1050,
+        "p95": 1070,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1060,
+          "upper": 1070
+        }
+      },
+      "cpuMs": {
+        "p50": 2530.0000000000005,
+        "p95": 2730
+      },
+      "peakRssBytes": {
+        "p50": 193744896,
+        "p95": 197550080
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 460,
+        "p95": 490,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 480,
+          "upper": 490
+        }
+      },
+      "cpuMs": {
+        "p50": 1230,
+        "p95": 1390.0000000000002
+      },
+      "peakRssBytes": {
+        "p50": 93515776,
+        "p95": 102961152
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 750,
+        "p95": 820,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 790,
+          "upper": 820
+        }
+      },
+      "cpuMs": {
+        "p50": 2119.9999999999995,
+        "p95": 2290
+      },
+      "peakRssBytes": {
+        "p50": 114307072,
+        "p95": 121675776
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:commit:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1720,
+        "p95": 1820,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1740,
+          "upper": 1820
+        }
+      },
+      "cpuMs": {
+        "p50": 3349.9999999999995,
+        "p95": 3570
+      },
+      "peakRssBytes": {
+        "p50": 190894080,
+        "p95": 191803392
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 490,
+        "p95": 530,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 520,
+          "upper": 530
+        }
+      },
+      "cpuMs": {
+        "p50": 1340,
+        "p95": 1500
+      },
+      "peakRssBytes": {
+        "p50": 93724672,
+        "p95": 103608320
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 940,
+        "p95": 970,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 940,
+          "upper": 970
+        }
+      },
+      "cpuMs": {
+        "p50": 2500,
+        "p95": 2780.0000000000005
+      },
+      "peakRssBytes": {
+        "p50": 155672576,
+        "p95": 165322752
+      }
+    },
+    {
+      "cellId": "execution:p7-timer-dense:canonical-full:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 3520,
+        "p95": 3600,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 3550,
+          "upper": 3600
+        }
+      },
+      "cpuMs": {
+        "p50": 5189.999999999999,
+        "p95": 5410
+      },
+      "peakRssBytes": {
+        "p50": 182185984,
+        "p95": 191959040
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 450,
+        "p95": 460,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 450,
+          "upper": 460
+        }
+      },
+      "cpuMs": {
+        "p50": 1210,
+        "p95": 1220
+      },
+      "peakRssBytes": {
+        "p50": 92880896,
+        "p95": 94318592
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 660,
+        "p95": 680,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 670,
+          "upper": 680
+        }
+      },
+      "cpuMs": {
+        "p50": 1840,
+        "p95": 1850
+      },
+      "peakRssBytes": {
+        "p50": 99983360,
+        "p95": 100982784
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:off:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 980,
+        "p95": 1000,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 980,
+          "upper": 1000
+        }
+      },
+      "cpuMs": {
+        "p50": 2330,
+        "p95": 2389.9999999999995
+      },
+      "peakRssBytes": {
+        "p50": 185540608,
+        "p95": 189726720
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 460,
+        "p95": 470,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 460,
+          "upper": 470
+        }
+      },
+      "cpuMs": {
+        "p50": 1240,
+        "p95": 1260
+      },
+      "peakRssBytes": {
+        "p50": 91561984,
+        "p95": 93679616
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 790,
+        "p95": 810,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 790,
+          "upper": 810
+        }
+      },
+      "cpuMs": {
+        "p50": 2260.0000000000005,
+        "p95": 2300.0000000000005
+      },
+      "peakRssBytes": {
+        "p50": 115007488,
+        "p95": 117010432
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:commit:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 1690,
+        "p95": 1730,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 1700,
+          "upper": 1730
+        }
+      },
+      "cpuMs": {
+        "p50": 3380,
+        "p95": 3520
+      },
+      "peakRssBytes": {
+        "p50": 189988864,
+        "p95": 198426624
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 490,
+        "p95": 510,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 490,
+          "upper": 510
+        }
+      },
+      "cpuMs": {
+        "p50": 1320,
+        "p95": 1350
+      },
+      "peakRssBytes": {
+        "p50": 93020160,
+        "p95": 95289344
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:65536",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 930,
+        "p95": 940,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 930,
+          "upper": 940
+        }
+      },
+      "cpuMs": {
+        "p50": 2320.0000000000005,
+        "p95": 2410
+      },
+      "peakRssBytes": {
+        "p50": 151023616,
+        "p95": 153182208
+      }
+    },
+    {
+      "cellId": "execution:p7-irq-directed:canonical-full:200:1000000",
+      "sampleCount": 7,
+      "wallClockMs": {
+        "p50": 3490,
+        "p95": 3630,
+        "p95ConfidenceInterval": {
+          "method": "deterministic-bootstrap-95-v1",
+          "iterations": 2000,
+          "lower": 3510,
+          "upper": 3630
+        }
+      },
+      "cpuMs": {
+        "p50": 5160,
+        "p95": 5320
+      },
+      "peakRssBytes": {
+        "p50": 178769920,
+        "p95": 180310016
+      }
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "2225e6c9908d3e7cfaa33633ebb305a82ff9828d2666ff288eef58014459791a"
+  }
+}

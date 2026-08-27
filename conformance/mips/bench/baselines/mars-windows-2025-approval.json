@@ -1,0 +1,14 @@
+{
+  "schemaRevision": 1,
+  "kind": "approved-mars-performance-baseline",
+  "candidateFile": "mars-windows-2025-candidate.json",
+  "candidateSha256": "4b98a3e51d2a526de981d1d4c69e748dcd7fafe83a871ab56b038f3d65009af7",
+  "candidatePayloadSha256": "1bb63b4d81ec42c6048871436ffccba7a9ad321986c7632916022967f9d294bf",
+  "runnerFingerprint": "7aed82a0dd79d0828cb9ab5c60ad44b8d8b4c1c2949d50f0507bc34fbb87bad8",
+  "referenceSha256": "599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31",
+  "matrixRevision": 1,
+  "reviewer": "stone926",
+  "reviewedAt": "2026-08-27",
+  "reviewRevision": 1,
+  "adr": "docs/adr/0001-mips-performance-baseline-policy.md"
+}
