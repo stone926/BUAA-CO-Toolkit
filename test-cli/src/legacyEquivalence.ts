@@ -38,17 +38,15 @@ async function runProviderCase(
   const assemble = await provider.assemble(assembleRequest);
 
   let execute: Awaited<ReturnType<LegacyMarsProvider['execute']>> | undefined;
-  if (assemble.ok && assemble.courseHaltPc !== undefined) {
+  if (assemble.ok && assemble.courseHaltPc !== undefined && assemble.image) {
+    // The executor contract takes the immutable domain image the assembler
+    // produced plus the provider-owned binding; `imageRef`/`traceLevel` were the
+    // pre-provider MARS request fields and no longer exist on ExecuteRequest.
     const executeRequest = {
-      sourceUri: item.sourceUri,
-      imageRef: {
-        kind: 'mars-dump' as const,
-        machineCodeUri: vscode.Uri.file(item.machineCodeFile),
-        haltPc: assemble.courseHaltPc
-      },
+      image: assemble.image,
+      ...(assemble.executionBinding ? { executionBinding: assemble.executionBinding } : {}),
       courseTrace: true,
-      traceOutput: true,
-      traceLevel: 2 as const,
+      trace: { kind: 'architectural-writes' as const, courseCorrect: true as const },
       maxSteps: item.maxSteps,
       haltPc: assemble.courseHaltPc,
       runOutputFile: vscode.Uri.file(item.traceFile),

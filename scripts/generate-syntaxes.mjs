@@ -909,6 +909,19 @@ async function main() {
       }
       continue;
     }
+    // Skip an unchanged file so a CRLF checkout is not rewritten to LF; the
+    // portability gate compiles and then proves the tree stayed clean.
+    let current = '';
+    try {
+      current = await readFile(filePath, 'utf8');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    if (current.replace(/\r\n/g, '\n') === content.replace(/\r\n/g, '\n')) {
+      continue;
+    }
     await writeFile(filePath, content, 'utf8');
     console.log(`generated ${path.relative(projectRoot, filePath)}`);
   }

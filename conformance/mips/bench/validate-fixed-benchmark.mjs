@@ -9,8 +9,10 @@ import { buildFixedBenchmarkMatrix, summarizeFixedSamples } from './fixed-runner
 const shaPattern = /^[0-9a-f]{64}$/;
 const allowedRunnerIds = new Set(['github-hosted:ubuntu-24.04', 'github-hosted:windows-2025']);
 const runnerContracts = Object.freeze({
-  'github-hosted:ubuntu-24.04': { platform: 'linux', imageOsPattern: /^ubuntu24:/ },
-  'github-hosted:windows-2025': { platform: 'win32', imageOsPattern: /^win25:/ }
+  // GitHub appends a toolset suffix to ImageOS (for example win25-vs2026), so the
+  // family prefix is pinned while a revision after the colon is still required.
+  'github-hosted:ubuntu-24.04': { platform: 'linux', imageOsPattern: /^ubuntu24(?:-[A-Za-z0-9.]+)?:/ },
+  'github-hosted:windows-2025': { platform: 'win32', imageOsPattern: /^win25(?:-[A-Za-z0-9.]+)?:/ }
 });
 const benchRoot = path.dirname(fileURLToPath(import.meta.url));
 const matrix = JSON.parse(fs.readFileSync(path.join(benchRoot, 'benchmark-matrix.json'), 'utf8'));
