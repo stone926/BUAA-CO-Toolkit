@@ -164,13 +164,21 @@ test('candidate lanes are executable but never identify themselves as the formal
   assert.match(cli.stdout, /"required":false/);
 });
 
-test('formal runner is complete-only and fails closed at the first missing approval envelope', () => {
+test('formal runner is complete-only and reports an approved, required gate', () => {
   const partial = spawnSync(process.execPath, [runnerCli, '--formal', '--lane', 'course-vector'], { encoding: 'utf8' });
   assert.equal(partial.status, 2);
   assert.match(partial.stderr, /requires exactly the complete lane set/);
 
+  // The expected data this lane set consumes is approved (see
+  // .agents/docs/phase0-expected-data-review-2026-08-27.md), so the formal runner
+  // must now reach a required verdict instead of failing on a missing envelope.
+  // The "no envelope means fail closed" property is owned by the artifact-level
+  // sentinels in course-vector.test.mjs and isa-golden.test.mjs, which prove it
+  // against an empty approval root rather than by relying on repository state.
   const formal = spawnSync(process.execPath, [runnerCli, '--formal'], { encoding: 'utf8' });
-  assert.equal(formal.status, 2);
-  assert.match(formal.stderr, /is not approved/);
-  assert.doesNotMatch(formal.stdout, /"required":true/);
+  assert.equal(formal.status, 0, formal.stderr);
+  assert.match(formal.stdout, /"gate":"formal-required"/);
+  assert.match(formal.stdout, /"required":true/);
+  assert.match(formal.stdout, /"failed":0/);
+  assert.match(formal.stdout, /matches approved corpus expectation and approved fingerprinted marsGolden/);
 });

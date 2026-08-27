@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P6-BYTE-MDU-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P6-BYTE-MDU-001.json",
+    "candidateSha256": "8a2543e37e3a4e2228d2b4846cdf15bc4a0578bb5d62c6bb46f4111b9d738b36",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "cf23f330e606b0e5f9ef775a69415901df3d41406db270f2ece43818771a47c0"
+  }
+}

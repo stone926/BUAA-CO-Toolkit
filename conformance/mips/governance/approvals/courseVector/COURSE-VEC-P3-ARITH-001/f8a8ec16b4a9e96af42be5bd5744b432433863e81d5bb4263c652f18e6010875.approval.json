@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P3-ARITH-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P3-ARITH-001.json",
+    "candidateSha256": "f8a8ec16b4a9e96af42be5bd5744b432433863e81d5bb4263c652f18e6010875",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "327c3db500ddb64e93694f812cae9634c912a2f5f8c6fb3e0fd370679a6f0d27"
+  }
+}

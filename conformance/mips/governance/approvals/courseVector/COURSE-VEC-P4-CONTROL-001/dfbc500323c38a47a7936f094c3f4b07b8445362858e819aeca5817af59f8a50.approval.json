@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P4-CONTROL-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P4-CONTROL-001.json",
+    "candidateSha256": "dfbc500323c38a47a7936f094c3f4b07b8445362858e819aeca5817af59f8a50",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "69ca4251087cdf0bcd43bb3faffa217a0c59d28b547d877501088863fe83424b"
+  }
+}

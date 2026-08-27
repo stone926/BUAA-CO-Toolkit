@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P7-CP0-EXCEPTION-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P7-CP0-EXCEPTION-001.json",
+    "candidateSha256": "d8a9598f3d4c504f21f732e3d979cc7a29b74ca4b6f82e0dcb9b9eb4c816dec7",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "17e7163b08d0c506df8d2e01113eca408bb2eca8e55cfc381abeb25cbe01e2b3"
+  }
+}

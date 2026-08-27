@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "corpus",
+    "artifactId": "corpus-manifest",
+    "candidatePath": "corpus/manifest.json",
+    "candidateSha256": "bd129df6d69845aa1a7c5f885edfb717963fa658a8896a67809948adfb6323a5",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "4978fa03654e0a3bec53908e677f29b4d21c656cfea56c2d383b2f0cbf4f0749"
+  }
+}

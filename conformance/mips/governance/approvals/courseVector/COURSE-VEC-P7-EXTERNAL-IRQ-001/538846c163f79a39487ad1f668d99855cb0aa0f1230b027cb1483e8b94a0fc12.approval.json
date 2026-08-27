@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P7-EXTERNAL-IRQ-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P7-EXTERNAL-IRQ-001.json",
+    "candidateSha256": "538846c163f79a39487ad1f668d99855cb0aa0f1230b027cb1483e8b94a0fc12",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "f6452c00dbdaa7e85636862c0494e639db5097b5510cdb43e616b5908a3ca186"
+  }
+}

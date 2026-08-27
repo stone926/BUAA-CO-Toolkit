@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P3-MEMORY-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P3-MEMORY-001.json",
+    "candidateSha256": "9abaf7e09c9b0bf76b272ac3d6d80e564d1e7dd9494293c85def1c72d9fb4385",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "c70198341ebafa2130fe3a3d6ae82fc5d1b2530c476bb2a8ed1e1083cb8ff2a8"
+  }
+}

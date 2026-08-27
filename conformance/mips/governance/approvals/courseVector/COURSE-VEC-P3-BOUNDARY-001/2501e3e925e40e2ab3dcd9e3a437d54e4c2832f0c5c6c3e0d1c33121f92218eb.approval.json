@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "courseVector",
+    "artifactId": "COURSE-VEC-P3-BOUNDARY-001",
+    "candidatePath": "expected/courseVector/COURSE-VEC-P3-BOUNDARY-001.json",
+    "candidateSha256": "2501e3e925e40e2ab3dcd9e3a437d54e4c2832f0c5c6c3e0d1c33121f92218eb",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "7ae1fc35839ddf90164a8b78e8f20152087f603cd6a39782a864a05e871c8a91"
+  }
+}

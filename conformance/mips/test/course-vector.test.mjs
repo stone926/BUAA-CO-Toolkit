@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -13,6 +14,7 @@ import {
 } from '../runner/courseVectorArtifact.mjs';
 import {
   approvalEnvelopeSha256,
+  conformanceRoot,
   validateApprovalEnvelope
 } from '../governance/approvalEnvelope.mjs';
 import {
@@ -78,13 +80,26 @@ test('course vectors fail closed on payload, source, and independent-oracle muta
   assert.throws(() => validateCourseVector(staleRegistry, cp0Case, sourceRegistry), /sourceRegistrySha256 is stale/);
 });
 
-test('candidate expected data cannot satisfy the approved phase gate', () => {
-  const candidate = structuredClone(loadCourseVector(manifestCase('COURSE-VEC-P7-TIMER-001')).vector);
-  candidate.review = { ...candidate.review, status: 'candidate', reviewer: null, reviewedAt: null, reviewRevision: 0 };
-  assert.throws(
-    () => assertCourseVectorApproved(candidate),
-    /not independently approved/
-  );
+test('the approved phase gate fails closed when no approval envelope exists', () => {
+  // The shipped artifacts are legitimately approved (see
+  // .agents/docs/phase0-expected-data-review-2026-08-27.md), so this sentinel must
+  // not depend on the repository staying un-approved. Point the check at an empty
+  // approval root instead: an envelope has to exist for the exact candidate
+  // payload, and the embedded `review.status` stays `candidate` by design.
+  const vector = loadCourseVector(manifestCase('COURSE-VEC-P7-TIMER-001')).vector;
+  assert.equal(vector.review.status, 'candidate');
+  const emptyRoot = fs.mkdtempSync(path.join(conformanceRoot, '.approval-sentinel-'));
+  try {
+    assert.throws(
+      () => assertCourseVectorApproved(vector, undefined, { approvalRoot: emptyRoot }),
+      /not independently approved/
+    );
+  } finally {
+    fs.rmSync(emptyRoot, { recursive: true, force: true });
+  }
+  // Against the real root the same payload is approved, which proves the check is
+  // envelope-driven rather than always-failing.
+  assert.doesNotThrow(() => assertCourseVectorApproved(vector));
 });
 
 test('embedded approval is inert and the unified envelope enforces the policy reviewer', () => {

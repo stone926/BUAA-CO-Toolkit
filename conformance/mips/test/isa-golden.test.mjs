@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import test from 'node:test';
 import {
   isaGoldenCandidateDescriptor,
@@ -8,6 +10,7 @@ import {
 } from '../runner/isaGoldenArtifact.mjs';
 import {
   approvalEnvelopeSha256,
+  conformanceRoot,
   validateApprovalEnvelope
 } from '../governance/approvalEnvelope.mjs';
 import {
@@ -93,11 +96,20 @@ test('embedded ISA approval is inert and the unified envelope rejects an unautho
   assert.throws(() => validateApprovalEnvelope(envelope, subject), /policy reviewer stone926/);
 });
 
-test('candidate projection cannot satisfy the approved gate', () => {
-  const candidate = structuredClone(loadIsaGolden());
-  candidate.review = {
-    ...candidate.review,
-    status: 'candidate', reviewer: null, reviewedAt: null, reviewRevision: 0
-  };
-  assert.throws(() => validateIsaGolden(candidate, { requireApproved: true }), /not approved/);
+test('the approved gate fails closed when no approval envelope exists', () => {
+  // Same reasoning as the courseVector sentinel: the shipped golden is legitimately
+  // approved, so prove the fail-closed path against an empty approval root rather
+  // than by assuming the repository stays un-approved.
+  const golden = loadIsaGolden();
+  assert.equal(golden.review.status, 'candidate');
+  const emptyRoot = fs.mkdtempSync(path.join(conformanceRoot, '.approval-sentinel-'));
+  try {
+    assert.throws(
+      () => loadIsaGolden({ requireApproved: true, approvalRoot: emptyRoot }),
+      /is not approved/
+    );
+  } finally {
+    fs.rmSync(emptyRoot, { recursive: true, force: true });
+  }
+  assert.doesNotThrow(() => loadIsaGolden({ requireApproved: true }));
 });

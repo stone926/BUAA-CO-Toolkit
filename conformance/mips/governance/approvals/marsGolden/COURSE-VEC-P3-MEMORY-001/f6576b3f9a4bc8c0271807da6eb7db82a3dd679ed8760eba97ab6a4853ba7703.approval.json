@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "marsGolden",
+    "artifactId": "COURSE-VEC-P3-MEMORY-001",
+    "candidatePath": "expected/marsGolden/COURSE-VEC-P3-MEMORY-001.json",
+    "candidateSha256": "f6576b3f9a4bc8c0271807da6eb7db82a3dd679ed8760eba97ab6a4853ba7703",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "7e127a8bb65da6ec5902256c43a2879899a21ee5f57bca9ba7ffb8b9dda72f06"
+  }
+}

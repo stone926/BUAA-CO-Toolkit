@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "marsGolden",
+    "artifactId": "COURSE-VEC-P3-ARITH-001",
+    "candidatePath": "expected/marsGolden/COURSE-VEC-P3-ARITH-001.json",
+    "candidateSha256": "415c8bf5af6d5ad0ef47cc85b49ddb36203835d644716cd4022e5dfb7a72c71b",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "fa78f9f35fc613c7869de95dc15170bd604c5f28da6da55f58fce1ecca0e8832"
+  }
+}

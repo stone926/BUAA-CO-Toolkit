@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "isaGolden",
+    "artifactId": "course-basic-v1",
+    "candidatePath": "expected/isaGolden/course-basic-v1.json",
+    "candidateSha256": "89d0bda8de864c1ac1915fb903a8dcbdad06a2c2b6d397563f198938b791e179",
+    "candidateAuthor": "codex-gpt-5",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "563270e7d3fddd964be592c2127f7a35a157c4325ef3bda717c334bf2fb93071"
+  }
+}

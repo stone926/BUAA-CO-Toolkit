@@ -1,0 +1,22 @@
+{
+  "schemaRevision": 1,
+  "kind": "phase0-artifact-approval",
+  "subject": {
+    "artifactKind": "marsGolden",
+    "artifactId": "MARS-BASELINE-GPSP-001",
+    "candidatePath": "expected/marsGolden/MARS-BASELINE-GPSP-001.json",
+    "candidateSha256": "2530eed32f667a1dee4e9d3811ede009a178edc0f2579d13528170e128005e3d",
+    "candidateAuthor": "codex-phase0-corpus",
+    "candidateRevision": 1
+  },
+  "review": {
+    "status": "approved",
+    "reviewer": "stone926",
+    "reviewedAt": "2026-08-27",
+    "reviewRevision": 1
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "envelopeSha256": "02125868deaddb40c82ae19e3a5e99403fc0826806e977cccdd52d2be7576e77"
+  }
+}
