@@ -187,6 +187,60 @@ try {
   if (!afterCancel.ok || afterCancel.payload?.token !== 'same-generation') {
     throw new Error('production Worker path did not remain usable after cancellation/failure');
   }
+
+  const execute = await withTimeout(manager.runJob({
+    kind: 'machine-execute',
+    payload: {
+      profile: 'P5',
+      enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+      segments: [{
+        name: 'text',
+        baseAddress: '0x00003000',
+        words: ['0x3408002a', '0x1000ffff', '0x00000000']
+      }],
+      entryPc: '0x00003000',
+      maxSteps: 64,
+      haltPc: '0x00003004',
+      collectTrace: true,
+      collectCoverage: true,
+      checkpointInterval: 128
+    }
+  }), 'production machine-execute');
+  if (!execute.ok
+    || execute.payload?.status !== 'halted'
+    || execute.payload?.instructions !== 3
+    || execute.payload?.trace?.length !== 1
+    || execute.payload?.trace?.[0] !== '@00003000: $8 <= 0000002A'
+    || !/^[0-9a-f]{64}$/.test(execute.payload?.finalStateDigest ?? '')) {
+    throw new Error(`production machine-execute proof failed: ${JSON.stringify(execute)}`);
+  }
+  const executeReplay = await withTimeout(manager.runJob({
+    kind: 'machine-execute',
+    payload: {
+      profile: 'P5',
+      enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+      segments: [{
+        name: 'text',
+        baseAddress: '0x00003000',
+        words: ['0x3408002a', '0x1000ffff', '0x00000000']
+      }],
+      entryPc: '0x00003000',
+      maxSteps: 64,
+      haltPc: '0x00003004',
+      collectTrace: true,
+      collectCoverage: true,
+      checkpointInterval: 128
+    }
+  }), 'production machine-execute replay');
+  if (!executeReplay.ok
+    || executeReplay.payload?.finalStateDigest !== execute.payload?.finalStateDigest
+    || JSON.stringify(executeReplay.payload?.trace) !== JSON.stringify(execute.payload?.trace)) {
+    throw new Error(`production machine-execute replay was not deterministic: ${JSON.stringify({
+      first: execute.payload,
+      replay: executeReplay.payload
+    })}`);
+  }
+
   const evidenceOutput = process.env.CO_MIPS_WORKER_EVIDENCE_OUTPUT;
   if (evidenceOutput) {
     const trackedStatus = git(['status', '--porcelain=v1', '--untracked-files=no']);
@@ -212,6 +266,14 @@ try {
         progressSequences,
         ackSequences,
         terminalAfterFinalAck: resultIndex > lastAckIndex,
+        machineExecute: {
+          status: execute.payload?.status,
+          instructions: execute.payload?.instructions,
+          traceLines: execute.payload?.trace?.length,
+          eventCount: execute.payload?.eventCount,
+          finalStateDigest: execute.payload?.finalStateDigest,
+          deterministicReplay: executeReplay.payload?.finalStateDigest === execute.payload?.finalStateDigest
+        },
         progressConsumerFailure: {
           progressSequences: sequences(failed.events, 'in', 'progress'),
           ackSequences: sequences(failed.events, 'out', 'ack'),
@@ -227,7 +289,7 @@ try {
       }
     });
   }
-  console.log('Compiled MIPS Worker verification passed through RuntimeManager/WorkerClient (lazy start, sequence 0..2, ACK ordering, consumer failure, one-slice cancel).');
+  console.log('Compiled MIPS Worker verification passed through RuntimeManager/WorkerClient (lazy start, sequence 0..2, ACK ordering, consumer failure, one-slice cancel, production machine-execute).');
 } finally {
   manager.dispose();
 }
