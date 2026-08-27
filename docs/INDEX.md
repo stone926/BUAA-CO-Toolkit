@@ -7,8 +7,8 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 子系统:
   common-lsp     | docs/modules/common-lsp.md     | 5 files  | 共享 LSP 基础设施
   mips-lsp       | docs/modules/mips-lsp.md       | 29 files | MIPS 汇编语言支持
-  mips-core      | docs/modules/mips-core.md      | 6 files  | 纯 TS MIPS 引擎核心
-  mips-cli       | docs/modules/mips-cli.md       | 2 files  | 独立、版本化、有界 JSONL ISA 接口
+  mips-core      | docs/modules/mips-core.md      | 25 files | 纯 TS MIPS 引擎核心（ISA/profile/machine/devices/events）
+  mips-cli       | docs/modules/mips-cli.md       | 2 files  | 独立、版本化、有界 JSONL ISA/执行/设备接口
   mips-providers | docs/modules/mips-providers.md | 4 files  | Provider-neutral 引擎契约
   mips-host      | docs/modules/mips-host.md      | 5 files  | 懒启动 Worker、真实 ISA batch 与 ACK 背压
   mips-replay    | docs/modules/mips-replay.md    | 10 files | v2 离线闭包、可信引擎注册表、exact replay/re-evaluate

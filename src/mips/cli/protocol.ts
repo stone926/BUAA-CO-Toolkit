@@ -1,4 +1,4 @@
-// @index mips-cli — 版本化 JSONL 请求校验与纯 ISA 服务分派
+// @index mips-cli — 版本化 JSONL 请求校验与纯 ISA/执行/设备服务分派
 import {
   CourseProfile,
   InstructionLayer,
@@ -13,6 +13,23 @@ import {
   encodeInstructionForService,
   parseInstructionWord
 } from '../core/isa/service';
+import { timerCycleContractRevision } from '../core/devices/timer';
+import { commitEventSchemaRevision } from '../core/events/commitEvent';
+import { executionCoverageRevision } from '../core/events/coverage';
+import { traceProjectionRevision } from '../core/events/traceProjection';
+import {
+  ExecuteRequestError,
+  executeProgramForService,
+  executeServiceRequestFields,
+  executorSemanticsRevision,
+  maximumDeviceVectorSteps,
+  maximumExecuteSegmentWords,
+  maximumExecuteSteps,
+  parseDeviceVectorSteps,
+  parseExecuteServiceRequest,
+  runDeviceCycleVectorForService
+} from '../core/machine/executeService';
+import { courseProfileIds } from '../core/profiles/courseProfiles';
 
 export const mipsEngineCliProtocolVersion = 1 as const;
 export const mipsEngineCliMaximumBatch = 4096;
@@ -85,7 +102,35 @@ function dispatch(request: Record<string, unknown>, operation: string): unknown 
           sha256: isaCatalogSha256,
           instructionCount: isaInstructions.length
         },
-        operations: ['describe', 'isa.encode', 'isa.decode', 'isa.encodeBatch', 'isa.decodeBatch'],
+        // The executor and the device model carry their own revisions: execution
+        // and device evidence buckets must not be invalidated by an assembler or
+        // catalog change, and vice versa (计划第 7.6 节).
+        executor: {
+          id: 'builtin-ts-executor',
+          build: 'extension-phase2-3',
+          semanticsRevision: executorSemanticsRevision,
+          eventSchemaRevision: commitEventSchemaRevision,
+          traceProjectionRevision,
+          coverageRevision: executionCoverageRevision,
+          profiles: [...courseProfileIds],
+          maximumSegmentWords: maximumExecuteSegmentWords,
+          maximumSteps: maximumExecuteSteps
+        },
+        device: {
+          id: 'builtin-ts-course-timer',
+          build: 'extension-phase3',
+          cycleContractRevision: timerCycleContractRevision,
+          maximumVectorSteps: maximumDeviceVectorSteps
+        },
+        operations: [
+          'describe',
+          'isa.encode',
+          'isa.decode',
+          'isa.encodeBatch',
+          'isa.decodeBatch',
+          'machine.execute',
+          'device.cycleVector'
+        ],
         profiles: [...courseProfiles],
         instructionLayers: [...instructionLayers],
         maximumBatch: mipsEngineCliMaximumBatch
@@ -115,8 +160,39 @@ function dispatch(request: Record<string, unknown>, operation: string): unknown 
       const words = requireBatch(request.words, 'words');
       return words.map((word, index) => decodeWord(word, scope, `words[${index}]`));
     }
+    case 'machine.execute': {
+      requireOnlyKeys(request, [
+        'protocolVersion', 'requestId', 'operation', ...executeServiceRequestFields
+      ]);
+      return runService(() => executeProgramForService(parseExecuteServiceRequest(request)),
+        'machine-execute-invalid');
+    }
+    case 'device.cycleVector': {
+      requireOnlyKeys(request, ['protocolVersion', 'requestId', 'operation', 'steps']);
+      return runService(() => runDeviceCycleVectorForService(parseDeviceVectorSteps(request.steps)),
+        'device-vector-invalid');
+    }
     default:
       throw new CliRequestError('unsupported-operation', `unsupported operation: ${operation}`);
+  }
+}
+
+/**
+ * Request validation lives in the host-free service so the CLI and the Worker
+ * validate one DTO shape. Malformed input keeps the protocol's stable
+ * `invalid-request` code; anything else becomes an operation-specific code.
+ */
+function runService<T>(run: () => T, failureCode: string): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof ExecuteRequestError) {
+      throw new CliRequestError('invalid-request', error.message);
+    }
+    throw new CliRequestError(
+      failureCode,
+      error instanceof Error ? error.message : String(error)
+    );
   }
 }
 

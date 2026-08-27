@@ -7,6 +7,7 @@ import {
   type CpuTraceEvent
 } from '../../language/mips/traceParser';
 import { canonicalJson, sha256Bytes, sha256Canonical, type CanonicalJson } from './canonical';
+import { programImageCanonicalPayload } from '../core/programImage';
 import {
   maximumReplayMachineCodeWords,
   maximumReplayProgramImageBytes,
@@ -315,33 +316,9 @@ export function parseStrictHexTextWords(text: string): number[] {
 }
 
 function programImagePayload(image: Omit<ProgramImage, 'fingerprint'> | ProgramImage): CanonicalJson {
-  return {
-    formatVersion: image.formatVersion,
-    entryPc: image.entryPc >>> 0,
-    segments: image.segments.map((segment) => ({
-      name: segment.name,
-      baseAddress: segment.baseAddress >>> 0,
-      words: segment.words.map((word) => word >>> 0)
-    })),
-    symbols: image.symbols.map((symbol) => ({
-      name: symbol.name,
-      ...(symbol.value === undefined ? {} : { value: symbol.value }),
-      kind: symbol.kind,
-      ...(symbol.segment === undefined ? {} : { segment: symbol.segment })
-    })),
-    sourceMap: image.sourceMap.map((entry) => ({
-      segmentIndex: entry.segmentIndex,
-      wordIndex: entry.wordIndex,
-      sourceId: entry.sourceId,
-      ...(entry.startOffset === undefined ? {} : { startOffset: entry.startOffset }),
-      ...(entry.endOffset === undefined ? {} : { endOffset: entry.endOffset })
-    })),
-    inputGraph: image.inputGraph.map((unit) => ({
-      id: unit.id,
-      ...(unit.uri === undefined ? {} : { uri: unit.uri }),
-      contentHash: unit.contentHash.toLowerCase()
-    }))
-  };
+  // The canonical payload is owned by the core contract so the builtin assembler,
+  // the executor and replay all fingerprint one image identically.
+  return programImageCanonicalPayload(image);
 }
 
 function programImageJson(image: ProgramImage): CanonicalJson {
