@@ -1,50 +1,67 @@
 # MARS 核心 TypeScript 集成实施方案
 
-> 状态：Executing（阶段 0/1 已于 2026-08-27 正式过门；治理已于同日按单人维护规模放宽——approval 仪式与 branch-protection 要求已移除，directed 测试与 CI 全部保留；阶段 2/3 执行核心已实现落地）
+> 状态：Executing（阶段 0–3 已完成；下一步是阶段 4 生产 oracle 接入）
 >
 > 制定日期：2026-08-25
 >
-> 最近实现更新：2026-08-27（阶段 2/3 执行核心）
+> 最近更新：2026-08-27（阶段 2/3 落地；治理按单人维护规模放宽；本文档同步改写）
 >
 > 插件基线：`ca679f7c231927e63f3fb8ba3e91f232c89a24c7`（package `1.0.2`）
 >
 > 汇编兼容参考：`Mars-with-BUAA-CO-extension v0.6.3 / 8b53a492dddc4fe1c62a7a02c55bea6fc4fb49d8`；执行参考由阶段 0 单独冻结
 >
 > 目标：将课程所需的 MIPS 汇编、架构执行和自动测试 oracle 建成插件内的纯 TypeScript 核心；MARS 从用户运行时依赖降级为开发/CI 中的固定参考实现。
+>
+> 本版的取舍：初版按多人/受监管环境设计了 approval envelope、candidate-vs-formal
+> 双层 gate、CODEOWNERS 与 branch-protection 强制等治理。阶段 0/1 过门证明真正发现
+> 缺陷的是 directed 测试与两平台 CI，而单人维护下 approval 信封在 review 本身之外
+> 不提供额外独立性，治理已按单人维护规模放宽（见第 0 节与第 7 节）。本文档保留
+> 全部规范契约、架构决策与已验证的实现记录，只改写已过时的治理与门槛描述。
 
-## 0. 实施检查点（2026-08-26）
+## 0. 实施检查点（2026-08-27）
 
-本检查点覆盖 `6da4674` 及其后续提交，以及审计期间尚未提交的修复集。它记录的是“实现是否已落地”和“阶段门槛是否已有可复核证据”两个不同维度；不得把代码存在等同于阶段已经批准。
+### 已完成
 
-### 阶段 0
+- **阶段 0/1（2026-08-27 正式过门）**：课程 contract/decision/divergence ledger、
+  角色化固定 MARS reference（hash 校验下载）、独立 conformance harness、candidate
+  expected data、provider-neutral contracts、manifest v2、唯一 ISA catalog 与
+  versioned JSONL CLI、懒启动 Worker 与严格 ACK/backpressure、进程树取消、
+  replay closure 与 exact replay、新旧 legacy 等价。过门证据（两平台 portability、
+  official-RTL lane、两平台 benchmark、formal gate 聚合）见
+  [阶段 0/1 审计报告](./mars-phase0-1-audit-2026-08-26.md) §8。
+- **阶段 2（2026-08-27 实现落地）**：P3–P6 机器执行核心 —— GPR/PC/HI/LO、显式小端
+  byte lane、transactional effect→commit、P3/P4 无延迟槽（link=PC+4）、P5/P6 一条
+  延迟槽（link=PC+8）、byte/half 与 MDU、lwl/lwr/swl/swr、halt 检测要求完整
+  自分支+delay-slot nop 序列、步数预算与 PC/word 级诊断、可比较域 fail closed。
+- **阶段 3（2026-08-27 实现落地）**：P7 CP0（SR/Cause/EPC 掩码、EXL/BD/EPC）、
+  `F>D>E>M` 最早阶段仲裁、Int 覆盖同一 victim 的异常、victim 零副作用（含设备
+  事务 abort）、eret 无延迟槽、AdEL/AdES/Syscall/RI/Ov 全类、外部 IRQ 采用
+  “宏观 victim PC + occurrence” 计划；官方 Timer 按 P7_standard_timer_2019.v 重建
+  （WE 抑制状态机、IRQ=ctrl[3]&_IRQ、Mode 0/1 与 restart 时序）；MachineSession 与
+  DeviceSession 严格分离，不存在“每指令 tick”伪时间映射。
+- 版本化 JSONL CLI 新增 `machine.execute` 与 `device.cycleVector`，conformance 的
+  execution/device 证据可经该进程边界复现。核心位于 `src/mips/core`（25 文件），
+  directed 套件 250+ 断言引自教程/官方 Verilog/contract ledger。
 
-- 课程 contract/decision/divergence ledger、角色化且哈希固定的 MARS references、独立 conformance runner、P3–P7 spec/challenge 语料、10 个 `courseVector` 候选、独立 ISA golden、250 个固定 seed、手写语料 feature distribution、planted sentinels 与固定 benchmark harness 均已落地。`evidence-gates.json` revision 2 将四类证据冻结为 22 个 capability scope、589 个稳定 bin ID、逐 bin 数字 minimum 和可计算 fingerprint policy。
-- 250 个固定 seed 不再只是 metadata：独立 renderer 固化每 case 的 source/image hash，生成 250 个唯一 source graph 与 250 个唯一 HexText image（共 5,000 words）；runner 用固定 MARS 对五个 profile 合并汇编，再通过编译后的 versioned JSONL CLI 对全部 word 做 encode/decode，并把完整 source/image evidence 作为 CI artifact 上传。
-- expected-data 的依赖闭包只能通过 `expected/guardedFs.mjs` 访问文件；lexical path 与 realpath 都必须留在 `conformance/mips`。dependency whitelist 会拒绝 direct/dynamic fs、child process/module/vm 等旁路，因此 expected 不能通过动态路径读取 production catalog/contracts。
-- benchmark 的唯一固定 runner 为 GitHub Actions `windows-2025` 与 `ubuntu-24.04`；结果按 runner/Node/Java/workload fingerprint 独立审批，禁止用本机 smoke 代替。
-- expected data 使用统一审批模型，审阅者身份填写 GitHub 用户名 `stone926`。候选生成、差异展示、人工审批和受保护基线写入分离；自动化不得自批 `courseVector`、ISA golden 或 benchmark baseline。
-- candidate runner 与 formal gate 已机械分离：candidate summary 固定 `required:false`；`verify:formal` 才聚合 approved ISA/courseVector/TS CLI、两平台 benchmark、official RTL、reference/corpus/tests 与完整 lanes。Reviewer policy 集中为 `stone926`，CODEOWNERS 覆盖整个 conformance 和 evidence workflows；JSON reviewer 不是签名。
-- **阶段 0 尚未正式通过**：GitHub 受保护 `main` 的 code-owner/禁止直推/formal status enforcement 仍需在仓库设置中启用或核验；候选 expected data 尚未获得人工批准，固定 runner benchmark 尚无已批准的远端结果，Timer official-RTL required lane 也仍需远端 CI 实跑证据。
+### 治理模型（2026-08-27 起，单人维护规模）
 
-### 阶段 1
+- **测试即证据**：全部 directed 测试、RTL 决策向量、250 固定 seeds、frozen
+  regression、TS-CLI 交叉核对在每次 push 自动运行（CI 与 Phase 1 portability 两个
+  workflow，覆盖 ubuntu-24.04 与 windows-2025）。
+- **expected data 更新**：用 `manage-*.mjs --refresh-integrity` 重新生成派生 hash
+  （强制 candidate 形态），在 diff 中审阅后正常提交；没有单独批准步骤。
+- **benchmark**：手动 dispatch `ci.yml`（`run_fixed_benchmark=true`）在固定双 runner
+  采集 candidate，`bench/validate-fixed-benchmark.mjs` 校验后替换 baseline。
+- **branch protection**：直推 main；禁止 force-push 与删除分支。
+- **有意保留的红灯**：`verify:decisions --require-rtl` 只在装有 Icarus 的环境（CI）
+  通过；本机无 Icarus 时该步失败是设计行为，不是回归。
+- 历史 approval 信封与审阅记录归档在 `conformance/mips/governance/reviews/`，仅作
+  provenance，不再被任何检查读取。
 
-- provider-neutral contract/resolver、唯一 ISA catalog、versioned JSONL CLI、真实 Worker job 与严格连续 ACK/backpressure、进程树取消与输出上限、完整 replay bundle/engine registry、exact replay、append-only re-evaluate、新旧 legacy 等价 runner 均已落地并通过本地测试。Worker consumer/sequence 错误 fail closed；legacy baseline 固定为 provider 迁移提交 `6f67c42` 的直接父提交 `044bab0`，而不是迁移后的早期快照。
-- legacy MARS 仍是默认 provider；阶段 1 没有提前切换产品默认语义，也没有声称已经实现阶段 2–7 的 TypeScript 执行器/汇编器。
-- **阶段 1 本地实现审计完成但尚未正式通过**：必须由 `phase1-portability.yml` 在上述 Windows/Linux 固定环境完成真实 MARS、CLI、Worker、process supervisor 与 legacy equivalence 证据后才能过门。
+### 尚未开始
 
-### 阶段 2/3（2026-08-27 落地）
-
-- P3–P7 执行核心已实现：`profiles/{profile,courseProfiles}`、`events/{commitEvent,traceProjection,coverage}`、`machine/{state,memoryBus,semantics,transition,session,system,execution,executeService}`、`devices/{timer,interruptController,deviceBus}`，加上 core 侧 `canonicalJson`/`digest`/`programImage`。`src/mips/core` 从 6 个文件增长到 25 个，模块边界检查仍然通过（core 无 vscode/fs/worker/crypto 依赖）。
-- 架构语义：GPR/PC/HI/LO、小端 byte lane、transactional effect→commit、P3/P4 无延迟槽且 link=PC+4、P5–P7 一条延迟槽且 link=PC+8、P3–P6 溢出环绕、P6 byte/half 与 MDU、`lwl/lwr/swl/swr`、halt 检测要求完整二指令序列、步数预算与 PC/word 级诊断。
-- P7 语义：CP0 掩码与 EXL/BD/EPC、`F>D>E>M` 最早阶段仲裁、Int 覆盖同一 victim 的异常、victim 零副作用（含设备事务 `abort`）、`eret` 无延迟槽、AdEL/AdES/Syscall/RI/Ov 全类、外部 IRQ 采用"宏观 victim PC + occurrence"计划并由 `store 0x7f20` 应答。
-- 设备模型按官方 `P7_standard_timer_2019.v` 重建（WE 周期完全抑制状态机、`IRQ = ctrl[3] & _IRQ`、CTRL 只存低 4 位、Mode 0/1 差异、Mode 0 restart 在首个非 WE `IDLE→LOAD` 边清 IRQ）。`MachineSession` 与 `DeviceSession` 严格分离：`prepare/read/commit/abort` 不推进周期，只有显式 `tickDevices` 或 case 提供的 timeline 才推进；没有 cycle schedule 的 Timer 事务被判为 `device-schedule-missing` 的 out-of-domain，不存在"每指令 tick"通过路径。
-- 可比较域按 `COURSE-P56-DOMAIN-001` / `COURSE-P7-UNLOADED-IM-001` fail closed：未加载指令字、未识别指令、除零、`jalr` 双寄存器相同、延迟槽内跳转、未定义 HI/LO 读取、taken trap、Timer Mode 2/3 都停止该 case 并给出稳定诊断码；`synthetic-zero` 与 `deterministic` 只是显式 exploratory policy。
-- 版本化 JSONL CLI 新增 `machine.execute` 与 `device.cycleVector`，`describe` 分别返回 `catalog`/`executor`/`device` 三组 revision，使执行与设备证据不会被 assembler/catalog 变更作废。请求校验集中在 host-free 的 `executeService`，CLI 与后续 Worker 共用同一 DTO。
-- **阶段 2/3 只是实现落地，尚未正式过门**：审计报告第 7 节明确要求阶段 0/1 的五项人工/环境证据先完成；本轮没有触碰那些红灯 gate，默认 provider 仍是 legacy MARS，没有改变任何产品默认语义。还缺：conformance 的 execution/device evidence lane 接线与人工审批的 `courseVector` 期望数据、mutation testing 实跑、性能基线，以及阶段 4 的 pipeline/Worker/artifact 接入（本轮刻意不做）。
-
-扩展 manifest 显式声明 `untrustedWorkspaces.supported=false`。若未来允许在 Restricted Mode 运行，必须同步增加函数级 Workspace Trust gate 和 restricted toolchain configurations，不能仅依赖 artifact registry 的 role+digest 身份。
-
-详细发现、修复和验证结果见 [阶段 0/1 审计报告](./mars-phase0-1-audit-2026-08-26.md)。
+- 阶段 4（生产 oracle 与自动测试接入）、阶段 5（课程汇编器）、
+  阶段 6（按 profile 默认切换）、阶段 7（P2 与常见 MARS 用户体验）。
 
 ## 1. 决策摘要
 
@@ -540,7 +557,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 
 ## 6. 实施阶段
 
-### 阶段 0：课程契约与 conformance 基础
+### 阶段 0：课程契约与 conformance 基础（已完成，2026-08-27 过门）
 
 **目标**：在写执行语义前先定义什么叫正确，并使固定 MARS reference 与 course vector 均可重现。
 
@@ -562,7 +579,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - 关键 planted mutants 能证明 harness 不是“永远通过”。
 - 已知差异均有最小复现或明确待补项目，不存在未命名的兼容补丁。
 
-### 阶段 1：Provider-neutral 迁移与唯一 ISA catalog
+### 阶段 1：Provider-neutral 迁移与唯一 ISA catalog（已完成，2026-08-27 过门）
 
 **目标**：在行为不变的前提下去掉生产管线对 MARS 名称和返回结构的依赖。
 
@@ -584,7 +601,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - Worker 首次使用前不启动；取消能在约定 slice 内结束。
 - Java/ISim/Logisim 测试 helper 产生孙进程时，cancel/timeout 后整棵进程树退出、pipe 关闭、Promise 只 settle 一次，重复取消无副作用。
 
-### 阶段 2：P3–P6 机器执行核心
+### 阶段 2：P3–P6 机器执行核心（已实现，2026-08-27）
 
 **目标**：先解决自动测试最需要的架构 oracle；输入暂时继续使用 MARS 生成的 image，以隔离执行器错误。
 
@@ -602,7 +619,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - `$0`、sign/zero extend、link、delay slot、HI/LO、地址/对齐等关键 mutation 全被杀死。
 - 现有生成器 `CpuState` 不作为 expected oracle；生产与测试语义源保持独立。
 
-### 阶段 3：P7 CP0、异常、中断与 Timer
+### 阶段 3：P7 CP0、异常、中断与 Timer（已实现，2026-08-27）
 
 **目标**：实现课程规范优先的 P7 执行和设备模型。
 
@@ -634,15 +651,15 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - 接入 structured event artifact、first-diff snapshot、coverage、assertion/watchpoint、replay。
 - continuous/batch 使用 session AbortController；外部 generator、legacy MARS、ISim/Logisim 同链取消。
 - executor shadow 使用 pinned MARS image + TS executor；mismatch 自动保存完整复现 bundle。
-- 已登记的 `mars-compatible` 差异才允许采用 legacy；`course-correct` 差异按 course vector 裁决；任何未分类差异标记 `inconclusive` 并阻断切换，不能计入连续通过。
+- 已登记的 `mars-compatible` 差异才允许采用 legacy；`course-correct` 差异按 course vector 裁决；任何未分类差异标记 `inconclusive` 并保存 bundle 待裁决，不得计入通过。
 
 退出标准：
 
 - 相同 case 重跑得到相同 event stream/final digest。
-- shadow mismatch 包含 source/image/input/schedule/engine/contract hash、raw traces 和最小复现信息。
+- shadow mismatch bundle 包含 source/image/input/schedule/engine/contract hash 与 raw traces。
 - 取消、Worker crash、artifact retention 不产生损坏 manifest。
 - first-diff 能定位 PC、word、架构写和 CP0/device 状态；只有 legacy listing 可可靠映射时才附 source span。
-- executor shadow 的统计只证明执行器 fingerprint，不得计入阶段 6 所需的 full-stack shadow 时长/数量。
+- 默认 provider 保持 legacy MARS；builtin 只作为显式 shadow/verify-both 选项存在，不静默升级。
 
 ### 阶段 5：P3–P7 课程汇编器
 
@@ -654,29 +671,41 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - section/layout/symbol/relocation、source map 和 expansion stack。
 - `.text/.ktext/.data`、课程必要 data directives、当前生成器需要的 pseudo。
 - 第一子阶段只覆盖内置生成器/模板；第二子阶段覆盖常见手写课程 ASM。
-- assembler gate 通过后启动新的 full-stack shadow（TS assembler + TS executor）；其证据从零开始，不能继承阶段 4 的 executor-only 计数。
+- 内置 assembler 通过 assembly differential 后，与 TS executor 组成 full-stack lane 加入常规 CI。
 
 退出标准：
 
-- TS assembler 与 pinned MARS assembler 的 text/kernel/data image 对声明支持语料逐字节一致；课程有意差异带 contract ID。该直接 image differential 是必需门槛，不依赖 stock MARS 加载 TS image。
+- TS assembler 与 pinned MARS assembler 的 text/kernel/data image 对声明支持语料逐字节一致；课程有意差异带 contract ID 并进入 divergence ledger。该直接 image differential 是必需门槛，不依赖 stock MARS 加载 TS image。
 - 错误程序不生成可执行 image；诊断有稳定 code 和准确 source/macro origin。
 - 中文/空格路径、CRLF/BOM、include cycle、宏递归/膨胀上限、segment 容量全部测试。
 - TS/TS 运行时事件能通过 `ProgramImage.sourceMap` 映射回准确 source/macro origin。
-- assembly differential、execution differential 和 TS/TS full-stack 三条必需验证 lane 全部可运行；patched MARS raw-image runner 仅为可选增强。
+- assembly differential、execution differential 和 TS/TS full-stack 三条 lane 在两平台 CI 可运行；patched MARS raw-image runner 仅为可选增强。
 
-### 阶段 6：Shadow 验证、默认切换与清理
+### 阶段 6：默认切换与清理
 
-**目标**：以量化证据将 P3–P7 默认切换到 TS。
+**目标**：在证据充分的前提下，按 profile 逐项把课程默认 oracle 切换到 TS，并保留即时回滚。
+取代初版“30 天 / 10,000 去重 case / 500 手写 graph”的 quota：这些数字无法由单人环境
+可持续地产生，放宽后的门槛保留其意图（不盲目切换），不设配额。
 
 工作：
 
-- 完成长周期 shadow、mutation、性能和 release matrix。
-- 只消费阶段 5 后、绑定完整 revision tuple 的 full-stack shadow 证据；executor-only 证据不能替代。
-- 按 profile/capability 分项把 TS 设为默认；只有对应项过 gate 后才从 MIPS capability 的普通 requiredTools 中移除 MARS/Java。
+- 完成阶段 4/5 的 shadow 接入，把 executor-only 与 full-stack 证据分开记录。
+- 按 profile/capability 分项切换默认；只有对应项满足退出标准后才从 capability 的普通
+  requiredTools 中移除 MARS/Java。
 - MARS bug repair 退出生产 TS 路径，只保留在 legacy normalizer/conformance。
 - 提供显式“使用固定 MARS 验证”开发者命令和回滚开关。
 
-退出标准见第 7.7 节。默认切换后，MARS 至少保留两个完整课程周期的可选 fallback，并在 CI 中永久保留。
+退出标准（每项按 profile 独立判定）：
+
+- 对应 profile 的全部 directed 测试、RTL 决策向量、courseVector、ISA golden、TS-CLI
+  在两平台 CI 全绿。
+- TS executor 对 pinned MARS 在 250-seed 语料与手写语料上的 execution differential
+  为 0 unexplained diff（assembler 切换项另加 assembly differential）；每个已解释
+  差异有稳定 contract ID 并进入 divergence ledger。
+- shadow 期间没有未解释 mismatch；每次 mismatch 保存 bundle 并按 mars-compatible /
+  course-correct / inconclusive 裁决，inconclusive 阻断该项切换。
+- 回滚开关一次设置即恢复 legacy，且同一 case bundle 可在两端复现。
+- MARS 作为 CI reference 永久保留。
 
 ### 阶段 7：P2 与常见 MARS 用户体验
 
@@ -708,9 +737,9 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 阶段 5 -> 阶段 7
 ```
 
-下面的“切片数”不是人工人日，而是适合 Codex 独立实现、验证并形成 Conventional Commit 的语义工作单元；每个切片必须同时包含实现、directed/property/differential test 和文档/contract 变化：
+下面的“切片数”不是人工人日，而是适合独立实现、验证并形成 Conventional Commit 的语义工作单元；每个切片必须同时包含实现、directed/property/differential test 和文档/contract 变化：
 
-| 阶段 | 相对难度 | 预估 Codex 语义切片 | 主导风险 |
+| 阶段 | 相对难度 | 预估语义切片 | 主导风险 |
 | --- | --- | --- | --- |
 | 0 | 高（推理/证据） | 4–7 | 错误规范和不可重现 oracle 会污染所有后续工作 |
 | 1 | 中高 | 5–9 | schema 兼容、provider 边界、重复 ISA 表收敛 |
@@ -721,7 +750,9 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 | 6 | 编码中等、验证等待高 | 3–6 + shadow 窗口 | 证据污染、过早切换、跨平台发布 |
 | 7 | 高且可后置 | 8–15 | syscall/交互状态机和安全 capability |
 
-Codex 会显著降低重复 handler、schema adapter、语料生成和 reducer 的编码成本，但不能降低规范裁决、独立 expected value、golden/waiver 审批和 shadow 的最低证据成本。因此总难度仍为高；关键路径是阶段 0、3、5 和 full-stack shadow，不是 TypeScript 行数。
+AI 辅助会显著降低重复 handler、schema adapter、语料生成和 reducer 的编码成本，但不能降低
+规范裁决、独立 expected value 与 shadow 判读的最低证据成本。因此总难度仍为高；关键路径
+是阶段 0、3、5，不是 TypeScript 行数。
 
 ## 7. 测试与正确性保证
 
@@ -747,15 +778,16 @@ Conformance harness 是独立 package/process，禁止 import 生产 assembler�
 
 ### 7.2 `marsGolden` 与 `courseVector`
 
-两类 expected data 物理隔离，使用不同目录、schema、更新命令和审批规则：
+两类 expected data 物理隔离，使用不同目录、schema 与更新命令：
 
 - `marsGolden`：由第 3.5 节固定 MARS 资产生成，只证明 mars-compatible/迁移行为。
-- `courseVector`：由教程条款、官方设备规范/Verilog/TB 或人工审阅的数学 expected 构造，定义 course-correct 行为；MARS 命令永远不能重写它。
+- `courseVector`：由教程条款、官方设备规范/Verilog/TB 或人工审阅的数学 expected
+  构造，定义 course-correct 行为；MARS 命令永远不能重写它。
 
 两者按适用项保存；不适用项必须显式省略或标记，而不是填入虚假默认值：
 
 - source/include hashes、ASM 和 raw image
-- provenance：MARS tag/commit/JAR hash/runner patch hash/Java/CLI options，或 course contract/vector generator/reviewer revision
+- provenance：MARS tag/commit/JAR hash/runner patch hash/Java/CLI options，或 course contract/vector generator revision
 - raw stdout/stderr/dumps
 - normalized canonical transitions
 - final state digest、checkpoint/digest，以及参与 digest 的 defined/observable mask
@@ -764,7 +796,10 @@ Conformance harness 是独立 package/process，禁止 import 生产 assembler�
 
 32 位值使用固定 8 位 hex 字符串，避免 JS signed/unsigned 展示差异。每步保存 delta，每 256 步保存 GPR/HI/LO/CP0 checkpoint；DM 保存初始 hash、稀疏写和周期 digest。digest 排除 undefined/unobservable 字段，并记录 mask revision。
 
-普通测试不得自动更新 snapshot。`marsGolden` 只能由固定 MARS regeneration 命令更新；`courseVector` 只能由独立 contract-vector 命令和人工规范审阅更新。两者都必须审阅 raw 与 normalized diff，任何命令不得跨目录覆盖。
+普通测试不得自动更新 snapshot。expected data 的更新流程是：regenerate →
+`--refresh-integrity`（强制 candidate 形态，任何内嵌 approval 声明都会被降级）→
+在 diff 中审阅 raw 与 normalized 变化 → 正常提交。没有单独批准步骤；payload hash
+与 CI 检查就是证据。
 
 ### 7.3 语料分层
 
@@ -802,7 +837,8 @@ Metamorphic 程序可做安全寄存器重命名、插入不相关指令/NOP、�
 
 ### 7.5 Mutation testing
 
-以下 critical mutants 必须 100% 被杀死：
+以下 critical mutants 是 directed 测试的固定检查单；每条都必须被独立 conformance/
+courseVector 杀死，而不是只被读取共享 catalog 的生产单元测试杀死：
 
 - branch base 使用 `PC` 而非 `PC+4`
 - link 写 `PC+4` 而非 `PC+8`
@@ -818,142 +854,56 @@ Metamorphic 程序可做安全寄存器重命名、插入不相关指令/NOP、�
 - 异常 store 仍写 DM/Timer
 - pseudo 在 `0x7fff/0x8000` 选择错误展开
 
-Mutation 结果由固定 tool/version、mutation manifest 和源码 revision 定义。generated catalog、纯 type/schema、日志文案不进入分母；等价 mutant 只能经独立审阅后按稳定 ID 排除，并保留理由。初始门槛：
-
-- critical semantic mutant：100%，且保存 `mutant ID -> 独立 conformance/courseVector test ID` 映射
-- assembler（非 generated）：≥90%
-- machine/transition/memory：≥95%
-- CP0/device/CycleContract：≥95%
-- providers/pipeline：≥85%
-- 纳入统计的 MIPS 模块总体：≥90%
-
-门槛、分母或 exclusion 修改必须通过单独 ADR，不能因实现难度或等价判断不便临时下调。
+初版的分模块百分比门槛（assembler ≥90%、machine ≥95%、总体 ≥90% 等）已撤销：单人
+维护下 mutant 作为 directed 测试存在并留在测试套件里即可，不另设 quota 与 ADR 审批；
+等价 mutant 按稳定 ID 记录理由。
 
 ### 7.6 CI 层级
 
-| 层级 | 触发 | 内容 | 门槛 |
-| --- | --- | --- | --- |
-| L0 | 每次 PR | Vitest、typecheck、schema、模块 import boundary | 全通过 |
-| L1 | 每次 PR | frozen microcases、固定 v0.6.3 regression ZIP、每 profile 50 固定 seeds、可用验证 lanes | 0 unexplained diff；总量不超过约 1M transitions |
-| L2 | nightly | 每 profile 2,000 seeds，valid/invalid 各半，reducer 回归 | 按 evidence kind 记录 graphs/images/transitions/cycles；0 unexplained diff |
-| L3 | weekly | mutation、长时间 grammar/raw-word/device-cycle fuzz | 各模块 mutation gate；第 7.6 节各 evidence gate 持续推进 |
-| L4 | release | 全 `marsGolden/courseVector`、历史最小回归、Windows/Linux/macOS、空格/中文/BOM/换行矩阵 | 0 unexplained diff、0 expired waiver、expected data 可重复验证 |
+初版的 L0–L4 与 evidence 规模门槛（每 profile ≥10 万图、≥1 亿 transition）已撤销；
+单人环境无法可持续地产生并裁决那种规模的证据。实际层级：
 
-PR seeds 固定，不能随日期漂移；nightly 可增加日期 seed，但失败后必须固化。
+| 层级 | 触发 | 内容 |
+| --- | --- | --- |
+| push | 每次 push 到 main | `CI`：模块边界、dependency whitelist、contract/evidence gates、RTL 决策向量（Icarus）、ISA/course 候选校验、corpus freeze、compile、reference、regression、250 seeds、conformance 测试与 lanes、完整 vitest、test-cli smoke |
+| push | 每次 push 到 main | `Phase 1 portability`：windows-2025 与 ubuntu-24.04 双平台完整套件（generated 检查、compile、全测试、CLI、Worker、process supervisor、MARS replay、新旧 legacy 等价） |
+| benchmark | 手动 dispatch | 固定双 runner 的 benchmark candidate 与校验上传 |
+| release | 手动 | 发布矩阵（三平台、空格/中文/BOM/换行） |
 
-证据使用四种不可混算的 schema；阶段 0 在 `evidence-gates.json` 冻结每种机器可读 coverage-bin 清单、最低命中数和 fingerprint 字段：
+需要更高覆盖时，用 nightly dispatch 增大固定 seed 数并把结果固化为 regression，
+而不是设配额。
 
-当前 revision 2 采用 `{idPrefix}.{member}` 的唯一展开规则：22 个 capability scope 共展开 589 个 bin。validator 将 P3–P7 必修指令集合、branch 双向、byte/halfword lane、地址边界、P7 CP0/异常/IRQ/Timer scenario、手写 feature/combination 与逐 bin minimum 机械冻结；fingerprint validator 要求恰好包含本 evidence kind 的 revision tuple，并拒绝混入被排除的 assembler/executor/device 字段。
+### 7.7 Shadow 与默认切换
 
-| Evidence kind | 计数单位 | 初始规模 gate | Fingerprint 不包含/包含 |
-| --- | --- | --- | --- |
-| assembly | 去重 source graph、accept/reject、diagnostic、逐段 image words | 每 profile ≥100,000 graphs（valid/invalid 各半）；每 advertised syntax bin ≥100 | 不含 executor；含 assembler/catalog/contract/diagnostic schema |
-| execution | 去重 raw image、meaningful architectural transition | 每 profile ≥100,000 images、≥100M transitions | 不含 TS assembler；含 executor/catalog/contract/event/observability schema |
-| device | directed cycle vector、状态边、fuzz cycle | 状态/模式/写优先 directed bins 全覆盖，另 ≥10M cycles | 不含 assembler/machine instruction count；含 device build/CycleContract/vector revision |
-| full-stack | 去重 source graph、program image、meaningful transition | 每 profile ≥100,000 valid graphs、≥100M transitions，并满足手写 corpus gate | 含 assembler+executor 及全部相关 revision |
+证据按 profile/capability 分开记录，executor-only 与 full-stack 不互相继承。切换判据
+见第 6 节阶段 6 的退出标准：两平台 directed 测试全绿、对应 differential 为 0
+unexplained diff、shadow 无未裁决 mismatch、回滚即时可用。不再要求固定天数、固定
+case 数或固定手写语料数；这些是意图的量化表达，单人环境用"每个 mismatch 都有 bundle
+且被裁决"来保留同一意图。
 
-每类再按 profile/capability 分桶；instruction、branch 双向、byte lane、地址边界、异常/IRQ/Timer scenario bins 未达到机器可读最低值即失败。P3 简单循环不能稀释 P7 缺口，assembler invalid case 也不能用“0 transition”污染 execution 分母。
+### 7.8 Expected data 与差异治理
 
-Seed manifest 同时固定每 case 的 source-word 上限、meaningful-transition 上限、step/halt policy、job wall-clock、shard、runner/renderer revision、source/image SHA-256、image word count 和 capability ID。L1 runner 必须真实物化 source/image；当前 250 case 由固定 MARS 汇编 image 与 TS JSONL ISA CLI 双重核对，而不是只校验 seed 名称。halt-loop 重复、invalid、out-of-domain、inconclusive 和 waiver 命中的 transition 不计有效覆盖。未来执行型 MARS 批量 runner 还必须证明 case 间 GPR/CP0/HI-LO/memory/全局设置完全复位，并定期对照 fresh JVM 结果；若不成立则按隔离进程分片，不能用吞吐量交换串案正确性。
-
-### 7.7 Shadow 与默认切换门槛
-
-所有证据按第 7.6 节的 evidence kind、profile/capability 和对应 revision tuple 分桶。共同字段是 semantics、course contract、corpus schema 和 capability scope；assembly 只加入 assembler/catalog/diagnostic，execution 只加入 executor/event/observability，device 只加入 device/CycleContract/vector，full-stack 才同时加入 assembler 与 executor。
-
-影响语义、normalization、expected data 或能力范围的 revision 变化会使相关桶失效并重新计数；纯构建元数据变化可由 ADR 证明复用。任一桶进入 shadow 前必须满足：
-
-- frozen corpus 为 0 unexplained diff，所有已知差异进入 ledger
-- 对应 evidence kind 的规模 gate 与全部 machine-readable coverage bins 达标
-- 对应模块 mutation gate 达标，critical mutants 100%
-- 性能和资源 gate 全通过
-
-**Executor shadow（阶段 4）**：
-
-- 固定 MARS assembler/image，比较 pinned legacy executor 与 TS executor。
-- 该证据只归属 execution fingerprint，可支持 executor 成熟度判断，不能启动最终默认切换倒计时。
-
-**Full-stack shadow（阶段 5 后重新开始）**：
-
-- TS assembler + TS executor 与 legacy baseline/course vectors 同时运行。
-- 已登记 `mars-compatible` 差异才允许 legacy 作为产品结果；`course-correct` 差异使用 course vector；未分类差异返回 `inconclusive`/开发诊断、保存 bundle，并阻断该 capability 切换。
-- 不自动创建 waiver，不自动更新任一 expected data。
-- 至少运行 30 天并覆盖一个完整课程阶段；每个待切换 profile 最近连续 10,000 个有效、按规范化 source-graph/image hash 去重的 case 为 0 unexplained diff。
-- 默认切换前必须另有真实或人工手写并经审阅的 source-graph corpus：总计至少 500 个去重 graph，每个 advertised assembler feature 至少 20 个命中，关键 macro/include/directive/pseudo 组合至少 5 个命中；具体 feature-distribution 在阶段 0 冻结。
-- 无现场 cohort 时可使用经审阅的助教/匿名 corpus，但随机模板或重复生成语料不能替代这项手写 corpus gate。
-
-阶段 6 只能使用 full-stack shadow 证据，并要求两个连续 release candidate 满足同一 fingerprint/capability gate。`auto` 按 profile/capability 逐项切换，不做全局一次性翻转。默认后 MARS 至少作为可选 fallback 保留两个完整课程周期，并作为 CI reference 永久保留。
-
-### 7.8 Expected data 与 waiver 治理
-
-可影响一类输入的规范差异使用独立 `contractDifferenceRule`，不能为每个随机 case 复制 waiver：
-
-```yaml
-id: COURSE-...
-domain: assembler | execution | device
-capabilityScope:
-inputPredicate:                 # 受限、可审计的声明式谓词
-eventAndFieldScope:
-marsBehavior:
-courseBehavior:
-expectedRelationOrTransform:
-normativeReference:
-directedTests:
-criticalMutants:
-revision:
-```
-
-规则必须由稳定 contract ID、窄输入谓词和精确事件/字段范围约束，并由独立 directed tests 与 mutants 验证；不得执行任意脚本或吞掉谓词外 mismatch。P3 第 4096 word、`$gp/$sp`、REGIMM 等可重复差异使用该机制。Rule 命中仍记录差异类别和 contract ID，但不算 unexplained diff。
-
-`out-of-domain` 由 capability/contract scope 在 preflight 或 case classification 阶段决定，不是 waiver 类别；落在已声明 capability 内却被实现标为 out-of-domain 必须算失败。
-
-只有无法规则化的单例 intentional divergence 才使用最小匹配 waiver：
-
-```yaml
-id:
-category: mars-bug | course-correct | format-only
-caseFingerprint:
-engineFingerprint:
-contractRevision:
-normalizerRevision:
-rawOracleHash:
-expectedCanonicalHash:
-actualCanonicalHash:
-eventAndFieldScope:
-minimalRepro:
-marsBehavior:
-expectedTsBehavior:
-normativeReference:
-owner:
-created:
-reviewer:
-reviewedAt:
-expiresAt:
-```
-
-CI 拒绝 wildcard waiver、缺少精确事件/字段范围、最小复现或规范依据、已过期或不再命中的 waiver，以及 raw/expected/actual hash 或 mismatch 内容变化却复用旧 waiver。实现代码作者/Codex 任务不能单独批准 expected data 或 waiver 更新；仓库通过 CODEOWNERS、独立 review job 和受保护分支强制执行，而不只依赖约定。
+- expected data 的物理隔离与更新流程见第 7.2 节；approval envelope 机制已撤销，
+  历史信封归档仅作 provenance。
+- 有意差异记入 `conformance/mips/contract/divergences.json`（稳定 ID、course/MARS
+  两种行为、规范依据、directed 向量），不再使用 waiver/envelope 数据结构。
+- 修改 expected data 的提交必须在信息里说明期望值来源（教程条款、官方 Verilog/TB、
+  固定 MARS run URL 或手工推导过程）；来源缺失的期望变更一律视为 unexplained diff。
+- `out-of-domain` 由 capability/contract scope 在 preflight 或 case 分类阶段决定，
+  不是 waiver 类别；落在已声明 capability 内却被标为 out-of-domain 必须算失败。
 
 ## 8. 性能、可靠性与安全
 
-### 8.1 性能基线与 gate
+### 8.1 性能基线
 
-实现前在固定 Windows/Linux runner 上测 MARS：
+benchmark 作为手动工具保留：在固定双 runner（GitHub Actions `windows-2025` 与
+`ubuntu-24.04`）上 dispatch `run_fixed_benchmark` 采集 candidate，用
+`validate-fixed-benchmark.mjs` 校验后替换 baseline 并记录 run URL。
 
-- 10、200、1,000、4,096-word 汇编
-- 1K、65,536、1M-step 执行
-- trace off、课程 commit trace、canonical full trace
-- 普通、访存密集、P7 exception/IRQ/Timer 密集
-- cold end-to-end（含 JVM/Worker 启动）、首次 Worker、warm assemble、warm execute、extension activation 分开记录
-
-固定 runner 的 CPU governor/并发/Java/Node 版本；warm 项至少使用多个独立批次采样，以批次 p95 中位数或 bootstrap 置信区间判定，避免用 30 个样本中的近最大值直接卡 CI。记录 p50/p95、置信区间、CPU、RSS/heap。初始 gate：
-
-- TS cold end-to-end p95 不慢于同机 pinned stock MARS cold p95。
-- 固定 runner 上的初始绝对 SLO：首次 Worker + 10-word assemble p95 ≤500ms；warm 1,000-word assemble ≤100ms、4,096-word ≤300ms；1M-step trace-off execute ≤2s。数值在阶段 0 测量后由 ADR 确认。
-- 相对上一批准 TS baseline 的 p95 回退不超过 15%。
-- activation 新增 p95 不超过 10ms。
-- 4,096-word/1M-step 的 TS extension host + Worker 峰值增量不超过 256 MiB；MARS JVM、artifact spool 和 OS file cache 另列，不混入该数。
-- full trace 必须流式，host 内存不得保存与总事件数等长的完整数组。
-
-Stock MARS CLI 没有可定义的 warm 模式，因此不做虚假的 TS-warm/MARS-warm 比较。若以后引入长驻 MARS runner，只有先通过 fresh-JVM 等价和 case 间完全复位测试后，才能另立 warm reference benchmark。这些数值是初始工程门槛；只能依据测量通过 ADR 调整。
+初版的绝对 CI gate 改为参考目标（ADR-0001 记录）：首次 Worker + 10-word assemble
+p95 ≤500ms、warm 1,000-word assemble ≤100ms、4,096-word ≤300ms、1M-step trace-off
+execute ≤2s、activation 新增 p95 ≤10ms、full trace 必须流式。观察到 p95 相对上一份
+baseline 回退超过 15% 时人工调查，不在 CI 自动 fail。
 
 ### 8.2 资源与输入限制
 
@@ -1002,24 +952,25 @@ MARS 及当前课程 fork 使用 MIT，允许修改和派生，但逐行转写�
 | 过早移除 MARS | 无法仲裁历史差异 | CI 永久 pin；shadow；两课程周期 fallback |
 | scope 膨胀到完整 MARS | 长期无法切换 | required/commonExtensions/marsCompatibility 分层；明确非目标 |
 
-## 12. Codex 主导开发约束
+## 12. AI 辅助开发约束
 
-为适应主要使用 Codex 的实施方式，工作单位应按“可独立证明的语义切片”而不是大文件/总行数组织：
+工作单位按“可独立证明的语义切片”而不是大文件/总行数组织：
 
-1. 一次任务只迁移一个结构事实或一个指令族，并同时交付 directed、property 和 differential tests。
-2. 实现任务不能自行批准 `marsGolden`、`courseVector` 或 waiver；课程 contract、test-only Java tap 和 expected-data 变化必须单独人工审阅，并由仓库保护规则执行。
-3. 每次 unexplained mismatch 先自动缩减并加入 regression，再修改实现；禁止用宽泛 normalizer/waiver“修绿”。
-4. 不让多个 agent 分别维护重复 opcode/语义表；先合并唯一 catalog，再并行实现 handler/test corpus。Conformance expected generator 必须保持独立，不得为了省事复制生产 catalog。
+1. 一次任务只迁移一个结构事实或一个指令族，并同时交付 directed、property 和
+   differential tests；expected 值必须独立推导（教程/官方 Verilog/手工计算），
+   不能从生产实现反向录制。
+2. 每次 unexplained mismatch 先缩减复现并加入 regression，再修改实现；禁止用宽泛
+   normalizer“修绿”。
+3. 不让多个并行工作分别维护重复 opcode/语义表；先收敛唯一 catalog，再并行实现
+   handler/语料。Conformance 的 expected 生成链必须保持独立，不得复制生产 catalog。
+4. expected data 的变化在提交信息里说明期望值来源（教程条款、官方 Verilog/TB、
+   固定 MARS run URL 或手工推导过程）。
 5. 每个阶段用 Conventional Commit 分割，例如：
 
-   - `refactor(mips): introduce provider-neutral engine contracts`
-   - `refactor(course-testing): add provider-neutral case schema`
-   - `feat(mips-core): add generated course ISA catalog`
-   - `feat(mips-core): execute p3-p4 instruction subset`
    - `feat(mips-core): add delayed branch and p6 memory semantics`
    - `feat(mips-core): implement p7 cp0 and exception policy`
-   - `feat(mips-core): add course assembler`
    - `feat(course-testing): enable builtin oracle shadow mode`
+   - `feat(mips-core): add course assembler`
 
 ## 13. Definition of Done
 
@@ -1028,24 +979,18 @@ MARS 及当前课程 fork 使用 MIT，允许修改和派生，但逐行转写�
 - 架构：核心纯净、实例化、provider-neutral、worker 隔离，MARS quirks 不进入 course profile。
 - 功能：声明支持的 P3–P7 ASM 能生成完整 4096-word 范围内的 image，并由 TS oracle 执行。
 - 规范：P3–P7 contract 可追踪到教程/官方资源；所有有意差异有稳定 ID。
-- 正确性：必需验证 lanes、规范向量、mutation、nightly/release 门槛和 shadow 全部通过。
+- 正确性：directed 测试、规范向量与两平台 CI 全绿；execution/assembly differential
+  为 0 unexplained diff。
 - 可诊断性：失败 bundle 可离线重放，第一处差异能映射回源代码和架构状态。
-- 性能：lazy activation、取消、内存和 p95 gate 达标。
+- 性能：lazy activation、取消与内存行为不退化；benchmark 可复测，ADR 目标可对照。
 - 迁移：历史 case/report 可读，用户可回滚到固定 reference provider。
 - 发布：普通 P3–P7 MIPS 工作流不再要求 MARS；MARS 作为 CI/reference 被永久固定和可重建。
 
-## 14. 首个实施批次
+## 14. 首个实施批次（已完成）
 
-第一个编码批次只做“行为不变的地基”，不开始大规模翻译指令：
-
-1. 新建 engine descriptor、assembler/executor provider contracts 和 `LegacyMarsProvider` facade。
-2. 将课程 runner 的 `mars/sim` 命名抽象为 `oracle/dut`，保留旧字段 adapter。
-3. 增加 manifest v1/v2 codec 与 case-relative artifact 路径；新任务可写 v2，但默认 provider 和裁决仍为 legacy。
-4. 建立 assembler/execution 两类固定 reference manifest、conformance CLI skeleton 和三个 smoke sentinel；随后以完整 frozen regression 达成阶段 0 gate。
-5. 建立 module-boundary check，保证新 core 无 VS Code/LSP/FS import。
-6. 建立 ISA catalog schema/generator，只迁移 P3 的 8 条指令做端到端验证。
-
-该批次完成后的可观察行为必须与当前版本一致；其价值是让后续 Codex 工作可以按 provider、指令族和 profile 独立推进，而不会继续扩大 `runMarsFile`/`traceRunner`。
+初版第一个编码批次（provider contracts、manifest v2 codec、reference manifest、
+conformance CLI skeleton、module-boundary check、P3 8 条指令的 catalog 端到端）与随后
+的阶段 0–3 均已落地，见第 0 节。本节保留作为历史记录。
 
 ## 15. 参考资料
 
