@@ -76,6 +76,8 @@ import {
   failedCase
 } from './courseTestCases';
 import { executeWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
+import { runExecutorShadow, type ExecutorShadowOutcome } from './courseTesting/executorShadowRunner';
+import { CourseTracePipeline } from './courseTesting/pipeline/courseTracePipeline';
 import { manifestSourceOf } from './courseTesting/manifestCodec';
 import { defaultTraceCompareMode } from './traceCompare';
 import {
@@ -112,6 +114,9 @@ export interface P3LogisimTraceRunOptions {
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
   artifactOutputMode?: 'workspace' | 'case';
+  oracleMode?: 'verify-both';
+  shadowOutputRoot?: vscode.Uri;
+  pipeline?: CourseTracePipeline;
   signal?: AbortSignal;
 }
 
@@ -229,6 +234,7 @@ export async function runP3LogisimTraceCase(
   options: P3LogisimTraceRunOptions = {}
 ): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
+  const pipeline = options.pipeline ?? defaultP3TracePipeline();
   services.output.appendLine('P3 Logisim Trace 测试');
   services.output.appendLine(`ASM: ${asm.fsPath}`);
   if (item.stdin) {
@@ -251,7 +257,7 @@ export async function runP3LogisimTraceCase(
     };
   }
 
-  const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
+  const asmCase = item.asmCase ?? await pipeline.createCase(asm, {
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     resource: setup.circuit
   });
@@ -261,7 +267,7 @@ export async function runP3LogisimTraceCase(
   services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
   await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-diagnostic.txt', setup.traceDiagnostic, 'traceDiagnostic');
 
-  const dump = await prepareAsmCaseMachineCode(services, asmCase, {
+  const dump = await pipeline.prepareProgram(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
     courseTrace: true,
@@ -338,7 +344,7 @@ export async function runP3LogisimTraceCase(
     return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage/execution binding', asmCase.machineCode, undefined, asmCase);
   }
   services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
-  const oracleInvocation = await executeWithPreflight(services, {
+  const oracleInvocation = await pipeline.runOracle(services, {
     image: dump.image,
     executionBinding: dump.executionBinding,
     trace: { kind: 'architectural-writes', courseCorrect: true },
@@ -374,11 +380,11 @@ export async function runP3LogisimTraceCase(
     );
   }
   if (caseOutputMode) {
-    await updateAsmCaseArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
+    await pipeline.updateArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
   } else {
-    await copyAsmCaseArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
+    await pipeline.copyArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
   }
-  await recordAsmCaseOracleResult(asmCase, oracle, {
+  await pipeline.recordOracle(asmCase, oracle, {
     profile: 'P3',
     memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
@@ -386,7 +392,37 @@ export async function runP3LogisimTraceCase(
     haltPc: logisimCode.haltPc
   }, { stopReason: 'halt-loop' });
 
-  const logisimRun = await runLogisimTraceCli(
+  const shadow = options.oracleMode === 'verify-both'
+    ? await runExecutorShadow(services, asmCase, {
+      profile: 'P3',
+      image: dump.image,
+      maxSteps,
+      haltPc: logisimCode.haltPc,
+      legacy: oracle,
+      outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
+      signal: options.signal
+    })
+    : undefined;
+  if (shadow) {
+    const shadowSummary = shadowSummaryFromOutcome(shadow);
+    if (shadow.status === 'inconclusive' || shadow.status === 'not-comparable') {
+      return {
+        ...failedCase(
+          item,
+          'oracle',
+          `测试中止：executor shadow ${shadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${shadow.message}`,
+          asmCase.machineCode,
+          oracle.outputFile,
+          asmCase,
+          engineRunWasCancelled(oracle.status, options.signal)
+        ),
+        shadow: shadowSummary
+      };
+    }
+    services.output.appendLine(shadow.message);
+  }
+
+  const logisimRun = await pipeline.runLogisimDut(
     services,
     setup,
     preparedCircuit,
@@ -404,9 +440,9 @@ export async function runP3LogisimTraceCase(
     : vscode.Uri.file(path.join(outDir!.fsPath, logisimRawOutputFileNameForCase(item)));
   await writeTextFile(rawOut, logisimRun.stdout);
   if (caseOutputMode) {
-    await updateAsmCaseArtifacts(asmCase, 'logisim', { logisimOut: rawOut.fsPath });
+    await pipeline.updateArtifacts(asmCase, 'logisim', { logisimOut: rawOut.fsPath });
   } else {
-    await copyAsmCaseArtifact(asmCase, 'logisim', rawOut, path.basename(rawOut.fsPath), 'logisimOut');
+    await pipeline.copyArtifact(asmCase, 'logisim', rawOut, path.basename(rawOut.fsPath), 'logisimOut');
   }
 
   if (!logisimRun.result.ok) {
@@ -457,12 +493,12 @@ export async function runP3LogisimTraceCase(
     : vscode.Uri.file(path.join(outDir!.fsPath, simOutputFileNameForCase(item)));
   await writeTextFile(simTrace, formatLogisimTraceEvents(parsedLogisim.events));
   if (caseOutputMode) {
-    await updateAsmCaseArtifacts(asmCase, 'logisim', { traceOut: simTrace.fsPath });
+    await pipeline.updateArtifacts(asmCase, 'logisim', { traceOut: simTrace.fsPath });
   } else {
-    await copyAsmCaseArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
+    await pipeline.copyArtifact(asmCase, 'logisim', simTrace, path.basename(simTrace.fsPath), 'traceOut');
   }
 
-  const diff = compareTraceIterables(oracle.trace.events, parsedLogisim.events, {
+  const diff = pipeline.compareTraces(oracle.trace.events, parsedLogisim.events, {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
@@ -483,7 +519,8 @@ export async function runP3LogisimTraceCase(
       oracleEvents: 0,
       dutEvents: 0,
       matchedEvents: 0,
-      diffEvents: 0
+      diffEvents: 0,
+      ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
     };
   }
 
@@ -503,7 +540,8 @@ export async function runP3LogisimTraceCase(
       oracleEvents: diff.summary.oracleEvents,
       dutEvents: parsedLogisim.events.length,
       matchedEvents: diff.summary.matchedEvents,
-      diffEvents: diff.summary.diffEvents
+      diffEvents: diff.summary.diffEvents,
+      ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
     };
   }
 
@@ -524,7 +562,45 @@ export async function runP3LogisimTraceCase(
     oracleEvents: diff.summary.oracleEvents,
     dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,
-    diffEvents: diff.summary.diffEvents
+    diffEvents: diff.summary.diffEvents,
+    ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+  };
+}
+
+function defaultP3TracePipeline(): CourseTracePipeline {
+  return new CourseTracePipeline({
+    createCase: createAsmCaseFromAsm,
+    prepareProgram: prepareAsmCaseMachineCode,
+    runOracle: executeWithPreflight,
+    runLogisimDut: runLogisimTraceCli,
+    compareTraces: compareTraceIterables,
+    recordOracle: recordAsmCaseOracleResult,
+    updateArtifacts: updateAsmCaseArtifacts,
+    copyArtifact: copyAsmCaseArtifact
+  });
+}
+
+function shadowSummaryFromOutcome(shadow: ExecutorShadowOutcome): {
+  status: ExecutorShadowOutcome['status'];
+  message: string;
+  bundleDir?: string;
+  resultFile?: string;
+  legacyEvents: number;
+  builtinEvents: number;
+  disposition?: string;
+  contractId?: string;
+} {
+  return {
+    status: shadow.status,
+    message: shadow.message,
+    ...(shadow.bundleDir ? { bundleDir: shadow.bundleDir } : {}),
+    ...(shadow.resultFile ? { resultFile: shadow.resultFile } : {}),
+    legacyEvents: shadow.differential.legacyEvents,
+    builtinEvents: shadow.differential.builtinEvents,
+    disposition: shadow.differential.disposition,
+    ...(shadow.differential.classification?.contractId
+      ? { contractId: shadow.differential.classification.contractId }
+      : {})
   };
 }
 

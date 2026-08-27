@@ -10,6 +10,7 @@ import {
   ProviderPreflight,
   ProviderRunContext
 } from './contracts';
+import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
 import { LegacyMarsProvider } from './legacyMarsProvider';
 
 /**
@@ -38,9 +39,13 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
     return existing;
   }
   const legacyProvider = new LegacyMarsProvider(services);
+  // Phase 4: the builtin executor is registered behind legacy so the default
+  // course pipeline stays on MARS. It is only reachable through explicit
+  // provider-id resolution (shadow / verify-both).
+  const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
   const registry = {
     assemblerProviders: [legacyProvider],
-    executionProviders: [legacyProvider]
+    executionProviders: [legacyProvider, builtinExecutionProvider]
   };
   defaultRegistries.set(services, registry);
   return registry;
@@ -69,6 +74,27 @@ export function resolveExecutionProvider(
 ): Promise<{ provider: MipsExecutionProvider; preflight: ProviderPreflight }> {
   const registry = registerDefaultProviders(services);
   return resolveFirstCapable(registry.executionProviders, request, 'execution');
+}
+/** Resolve a specific execution engine for explicit shadow / verify-both runs. */
+export function resolveExecutionProviderById(
+  services: AppServices,
+  engineId: string,
+  request: ExecuteRequest
+): Promise<{ provider: MipsExecutionProvider; preflight: ProviderPreflight }> {
+  const registry = registerDefaultProviders(services);
+  const provider = registry.executionProviders.find((entry) => entry.descriptor.id === engineId);
+  if (!provider) {
+    throw new Error(`No execution provider is registered for engine "${engineId}".`);
+  }
+  return resolveFirstCapable([provider], request, 'execution');
+}
+
+/** Convenience for the phase-4 builtin executor shadow lane. */
+export function resolveBuiltinExecutionProvider(
+  services: AppServices,
+  request: ExecuteRequest
+): Promise<{ provider: MipsExecutionProvider; preflight: ProviderPreflight }> {
+  return resolveExecutionProviderById(services, 'builtin-ts', request);
 }
 
 async function resolveFirstCapable<R, T extends { preflight(request: R): ProviderPreflight | Promise<ProviderPreflight> }>(

@@ -20,6 +20,18 @@ import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from 
 const escapeHtml = html.text;
 
 export type CourseTraceStatus = 'passed' | 'failed' | 'error';
+export type ExecutorShadowReportStatus = 'matched' | 'not-comparable' | 'course-correct' | 'mars-compatible' | 'inconclusive';
+
+export interface CourseTraceShadowSummary {
+  status: ExecutorShadowReportStatus;
+  message: string;
+  bundleDir?: string;
+  resultFile?: string;
+  legacyEvents?: number;
+  builtinEvents?: number;
+  disposition?: string;
+  contractId?: string;
+}
 export type NeutralCourseTraceStage = 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe';
 /** Stage values emitted by v1 reports and accepted indefinitely when reading. */
 export type LegacyCourseTraceStage = 'dump' | 'mars' | 'isim' | 'logisim';
@@ -60,6 +72,8 @@ export interface CourseTraceCaseResult {
   simEvents?: number;
   matchedEvents?: number;
   diffEvents?: number;
+  /** Phase-4 executor shadow evidence; absent unless verify-both was requested. */
+  shadow?: CourseTraceShadowSummary;
   probe?: P7ProbeCheckResult;
 }
 

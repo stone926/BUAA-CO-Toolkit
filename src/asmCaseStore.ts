@@ -364,12 +364,15 @@ export async function prepareAsmCaseMachineCode(
     wordCount: machineCodeWordCount(text),
     haltPc: dump.courseHaltPc
   };
+  const assemblerRuntime = dump.resolvedRun.runtime.kind === 'java'
+    ? dump.resolvedRun.runtime
+    : (() => { throw new Error('legacy assembler result did not bind a Java runtime'); })();
   const legacyProvenance = {
     commandLine: dump.status.commandLine ?? dump.descriptor.id,
     cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
     memoryConfiguration: dump.resolvedRun.memoryConfiguration,
     profile: dump.resolvedRun.profile,
-    runtime: dump.resolvedRun.runtime,
+    runtime: assemblerRuntime,
     wallClockMs: dump.resolvedRun.wallClockMs,
     p7RiInstruction: dump.resolvedRun.p7RiInstruction
   };
@@ -505,11 +508,15 @@ export async function recordAsmCaseOracleResult(
     oracle: {
       engine: {
         ...engine,
-        legacyProvenance: {
-          commandLine: result.status.commandLine,
-          cwd: result.status.cwd,
-          memoryConfiguration: completeConfiguration.memoryConfiguration
-        }
+        ...(result.resolvedRun.runtime.kind === 'java'
+          ? {
+            legacyProvenance: {
+              commandLine: result.status.commandLine,
+              cwd: result.status.cwd,
+              memoryConfiguration: completeConfiguration.memoryConfiguration
+            }
+          }
+          : {})
       },
       configurationHash: manifestRunConfigurationHash(completeConfiguration, engine),
       runConfiguration: completeConfiguration,

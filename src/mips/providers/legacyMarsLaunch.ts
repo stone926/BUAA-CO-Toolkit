@@ -21,7 +21,9 @@ import {
 import { legacyMarsConfigurationPolicyIssues } from '../../language/mips/legacyMarsPolicy';
 import type { CapabilityDiagnostic, ResolvedEngineRun } from './contracts';
 
-export interface ResolvedLegacyMarsLaunch extends ResolvedEngineRun {
+export interface ResolvedLegacyMarsLaunch extends Omit<ResolvedEngineRun, 'runtime'> {
+  /** Legacy MARS is always a Java process; keep the narrower runtime for old consumers. */
+  runtime: { kind: 'java'; command: string };
   sourcePath: string;
   mode: MarsRunMode;
   configuredMars: string;

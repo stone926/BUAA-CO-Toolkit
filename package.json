@@ -498,6 +498,10 @@
         "title": "CO: 运行完整课程 Trace 测试"
       },
       {
+        "command": "co.test.runExecutorShadow",
+        "title": "CO: 运行 Executor Shadow 验证"
+      },
+      {
         "command": "co.test.runBatchTraceTests",
         "title": "CO: 运行批量课程 Trace 测试"
       },
@@ -508,6 +512,10 @@
       {
         "command": "co.test.startContinuousGeneratedTraceTests",
         "title": "CO: 启动持续生成的课程 Trace 测试"
+      },
+      {
+        "command": "co.test.stopBatchTraceTests",
+        "title": "CO: 停止批量课程 Trace 测试"
       },
       {
         "command": "co.test.generateAsmTests",
@@ -609,6 +617,9 @@
         },
         {
           "command": "co.test.startContinuousGeneratedTraceTests"
+        },
+        {
+          "command": "co.test.stopBatchTraceTests"
         },
         {
           "command": "co.test.stopContinuousTests"
@@ -713,6 +724,10 @@
         },
         {
           "command": "co.test.runFullTest",
+          "when": "false"
+        },
+        {
+          "command": "co.test.runExecutorShadow",
           "when": "false"
         },
         {
@@ -1318,7 +1333,9 @@
     "mips:cli": "node out/mips/cli/main.js",
     "verify:mips-cli": "node scripts/verify-mips-cli.mjs",
     "verify:mips-worker": "node scripts/verify-mips-worker.mjs",
-    "verify:process-supervisor": "node scripts/verify-process-supervisor.mjs"
+    "verify:process-supervisor": "node scripts/verify-process-supervisor.mjs",
+    "verify:phase4": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && vitest run src/test/courseTesting/builtinExecutionProvider.test.ts src/test/courseTesting/oracleDifferential.test.ts src/test/courseTesting/executorShadowRunner.test.ts src/test/courseTesting/executionAssertions.test.ts src/test/mipsReplay/builtinExecutionAdapter.test.ts src/test/mipsProviders/phase4ProviderResolver.test.ts src/test/courseTesting/traceRunner.test.ts src/test/courseTestLogisim.test.ts src/test/courseTestLogisimSignal.test.ts src/test/mipsHost/workerExecutionJobs.test.ts src/test/courseTesting/batchRunner.test.ts src/test/courseTesting/courseTracePipeline.test.ts",
+    "verify:phase4-real-cpu": "npm run compile && node scripts/verify-real-cpu-shadow.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",

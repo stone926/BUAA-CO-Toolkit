@@ -19,7 +19,8 @@ import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
-import { courseExecutionInstructionBudget } from './executionBudget';
+import { courseExecutionInstructionBudget } from './pipeline/executionBudget';
+import { CourseTracePipeline } from './pipeline/courseTracePipeline';
 import {
   AsmCase,
   asmCaseArtifactUri,
@@ -53,6 +54,7 @@ import {
   simOutputFileNameForCase
 } from '../courseTestTraceFiles';
 import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from '../courseTestMessages';
+import { runExecutorShadow, type ExecutorShadowOutcome } from './executorShadowRunner';
 import { runP3LogisimTraceCase } from '../courseTestLogisim';
 import type { P3LogisimTraceSetup } from '../courseTestLogisim';
 
@@ -64,6 +66,12 @@ export interface CourseTraceRunOptions {
   logisim?: P3LogisimTraceSetup;
   isimCompileCache?: IsimCompileCache;
   artifactOutputMode?: 'workspace' | 'case';
+  /** Phase-4 executor shadow: run legacy + builtin and adjudicate the difference. */
+  oracleMode?: 'verify-both';
+  /** Trusted root for shadow bundles; defaults to the immutable ASM case directory. */
+  shadowOutputRoot?: vscode.Uri;
+  /** Phase-4 full-trace stage injection; tests and future lanes can replace one stage. */
+  pipeline?: CourseTracePipeline;
   /** Cancels the oracle and DUT processes as one logical course-test job. */
   signal?: AbortSignal;
 }
@@ -74,8 +82,9 @@ export async function runCourseTraceCase(
   options: CourseTraceRunOptions = {}
 ): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
+  const pipeline = options.pipeline ?? defaultCourseTracePipeline();
   if (getProfile(asm) === 'P3') {
-    return await runP3LogisimTraceCase(services, item, options);
+    return await runP3LogisimTraceCase(services, item, { ...options, pipeline });
   }
 
   services.output.appendLine('完整课程 Trace 测试');
@@ -84,7 +93,7 @@ export async function runCourseTraceCase(
     services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
   }
 
-  const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
+  const asmCase = item.asmCase ?? await pipeline.createCase(asm, {
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     stdin: item.stdin,
     resource: asm,
@@ -105,7 +114,7 @@ export async function runCourseTraceCase(
     );
   }
 
-  const dump = await prepareAsmCaseMachineCode(services, asmCase, {
+  const dump = await pipeline.prepareProgram(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
     courseTrace: true,
@@ -131,7 +140,7 @@ export async function runCourseTraceCase(
   const probe = resolveCaseProbeMetadataFromCase(asmCase);
   if (probe) {
     services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
-    const isim = await runIsim(services, {
+    const isim = await pipeline.runDut(services, {
       resource: asm,
       showMessages: false,
       revealOutput: options.revealOutput,
@@ -203,7 +212,7 @@ export async function runCourseTraceCase(
     return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage/execution binding', asmCase.machineCode, undefined, asmCase);
   }
   services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
-  const oracleInvocation = await executeWithPreflight(services, {
+  const oracleInvocation = await pipeline.runOracle(services, {
     image: dump.image,
     executionBinding: dump.executionBinding,
     stdin: stdinText,
@@ -243,11 +252,11 @@ export async function runCourseTraceCase(
     );
   }
   if (caseOutputMode) {
-    await updateAsmCaseArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
+    await pipeline.updateArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
   } else {
-    await copyAsmCaseArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
+    await pipeline.copyArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
   }
-  await recordAsmCaseOracleResult(asmCase, oracle, {
+  await pipeline.recordOracle(asmCase, oracle, {
     profile,
     memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
@@ -257,7 +266,38 @@ export async function runCourseTraceCase(
     stdinSha256: asmCase.manifest.stdin?.sha256
   }, { stopReason: 'halt-loop' });
 
-  const isim = await runIsim(services, {
+  const shadow = options.oracleMode === 'verify-both'
+    ? await runExecutorShadow(services, asmCase, {
+      profile,
+      image: dump.image,
+      maxSteps,
+      haltPc: haltPc!,
+      interruptSchedule,
+      legacy: oracle,
+      outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
+      signal: options.signal
+    })
+    : undefined;
+  if (shadow) {
+    const shadowSummary = shadowSummaryFromOutcome(shadow);
+    if (shadow.status === 'inconclusive' || shadow.status === 'not-comparable') {
+      return {
+        ...failedCase(
+          item,
+          'oracle',
+          `测试中止：executor shadow ${shadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${shadow.message}`,
+          asmCase.machineCode,
+          oracle.outputFile,
+          asmCase,
+          engineRunWasCancelled(oracle.status, options.signal)
+        ),
+        shadow: shadowSummary
+      };
+    }
+    services.output.appendLine(shadow.message);
+  }
+
+  const isim = await pipeline.runDut(services, {
     resource: asm,
     showMessages: false,
     revealOutput: options.revealOutput,
@@ -281,7 +321,7 @@ export async function runCourseTraceCase(
   }
 
   const simText = await readTextFile(isim.simOut);
-  const diff = compareTraceIterables(oracle.trace.events, iterCpuTraceEvents(simText), {
+  const diff = pipeline.compareTraces(oracle.trace.events, iterCpuTraceEvents(simText), {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
@@ -303,7 +343,8 @@ export async function runCourseTraceCase(
       oracleEvents: diff.summary.oracleEvents,
       dutEvents: diff.summary.dutEvents,
       matchedEvents: diff.summary.matchedEvents,
-      diffEvents: diff.summary.diffEvents
+      diffEvents: diff.summary.diffEvents,
+      ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
     };
   }
 
@@ -322,7 +363,45 @@ export async function runCourseTraceCase(
     oracleEvents: diff.summary.oracleEvents,
     dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,
-    diffEvents: diff.summary.diffEvents
+    diffEvents: diff.summary.diffEvents,
+    ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+  };
+}
+
+function defaultCourseTracePipeline(): CourseTracePipeline {
+  return new CourseTracePipeline({
+    createCase: createAsmCaseFromAsm,
+    prepareProgram: prepareAsmCaseMachineCode,
+    runOracle: executeWithPreflight,
+    runDut: runIsim,
+    compareTraces: compareTraceIterables,
+    recordOracle: recordAsmCaseOracleResult,
+    updateArtifacts: updateAsmCaseArtifacts,
+    copyArtifact: copyAsmCaseArtifact
+  });
+}
+
+function shadowSummaryFromOutcome(shadow: ExecutorShadowOutcome): {
+  status: ExecutorShadowOutcome['status'];
+  message: string;
+  bundleDir?: string;
+  resultFile?: string;
+  legacyEvents: number;
+  builtinEvents: number;
+  disposition?: string;
+  contractId?: string;
+} {
+  return {
+    status: shadow.status,
+    message: shadow.message,
+    ...(shadow.bundleDir ? { bundleDir: shadow.bundleDir } : {}),
+    ...(shadow.resultFile ? { resultFile: shadow.resultFile } : {}),
+    legacyEvents: shadow.differential.legacyEvents,
+    builtinEvents: shadow.differential.builtinEvents,
+    disposition: shadow.differential.disposition,
+    ...(shadow.differential.classification?.contractId
+      ? { contractId: shadow.differential.classification.contractId }
+      : {})
   };
 }
 

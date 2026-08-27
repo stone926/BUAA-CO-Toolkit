@@ -23,7 +23,7 @@
 - machine/session.ts — MachineSession：原子提交、异常/中断仲裁、停机检测、步数预算与 canonical 状态快照/摘要
 - machine/system.ts — CourseSystemSession：组合架构 step 与显式设备周期推进；不提供"每指令 tick"伪时间映射
 - machine/execution.ts — 有界执行驱动：slice/yield、结构化取消、checkpoint、流式事件与 trace/覆盖率收集
-- machine/executeService.ts — CLI/Worker 共用的执行与设备周期向量服务 DTO（固定字宽输出、显式上限）
+- machine/executeService.ts — CLI/Worker 共用的执行与设备周期向量服务 DTO（固定字宽输出、显式上限）；阶段 4 增加异步 worker 驱动：按 slice 流式 CommitEvent 并支持 ACK/取消
 - devices/timer.ts — 官方 P7 计时器 CycleContract（依据 P7_standard_timer_2019.v：WE 抑制状态机、IRQ = ctrl[3] & _IRQ）
 - devices/interruptController.ts — 中断发生器（宏观 victim PC + occurrence 计划、store 0x7f20 应答）与 HWInt 聚合
 - devices/deviceBus.ts — DeviceBusPort：MMIO prepare/read/commit/abort 与显式 tickDevices；COUNT 只读在设备提交前抑制

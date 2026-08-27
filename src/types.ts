@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
+import type { MipsRuntimeManager } from './mips/host/runtimeManager';
 export type { ProjectProfile } from './projectProfile';
 
 export interface AppServices {
   output: vscode.OutputChannel;
   statusBar: vscode.StatusBarItem;
+  /** Optional lazy worker host. When present, builtin execute jobs run off the extension-host thread. */
+  mipsRuntime?: MipsRuntimeManager;
 }
 
 export interface RunResult {

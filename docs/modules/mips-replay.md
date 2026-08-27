@@ -1,14 +1,17 @@
-# mips-replay | src/mips/replay/ | 10 files
+# mips-replay | src/mips/replay/ | 13 files
 
 阶段 1 的离线 case closure。这里负责把“工作区路径 + 用户配置工具”转换为可验证的不可变输入，并提供 exact replay / re-evaluate API；不负责 VS Code 命令 UI。
 
 - `canonical.ts`：递归 key 排序的 canonical JSON 与 SHA-256 helper。
+- `atomicFile.ts`：跨平台原子文件替换（Windows 备份/回滚语义），供 builtin artifact 与 shadow bundle 共用。
 - `boundedFile.ts`：对不可信 bundle 使用同一 FileHandle 的 stat/read/extra-byte/stat 有界读取，以及 manifest/source/image/trace/stdin/机器码/运行时硬上限。
 - `sourceBundle.ts`：SourceUnit/include graph 捕获、验证与重建；扫描和重写均受 directive/bytes/unit 上限约束。
 - `programImage.ts`：有基数上限的 ProgramImage/observability 序列化，以及流式 oracle evidence digest。
 - `engineRegistry.ts`：不可变 engine artifact registry。
 - `types.ts`：adapter context/result/selection 契约和 adapter registry。
 - `legacyMarsAdapter.ts`：无 VS Code 依赖的真实 Java/MARS adapter。
+- `builtinEngineArtifact.ts`：builtin executor 的逻辑不可变 artifact（revision 元组 + ISA catalog SHA-256），registry 缺失时明确拒绝 exact replay。
+- `builtinExecutionAdapter.ts`：builtin-ts executor 的 exact replay/re-evaluate adapter；直接执行 ProgramImage，不读取原 workspace，stdin 与不匹配 artifact 均 fail closed。
 - `legacyMarsContract.ts`：legacy adapter 自有的机器码与 oracle 兼容检查 hook，避免 orchestration 假定未来引擎都使用 MARS 文本。
 - `replayService.ts`：exact replay 与 append-only re-evaluate orchestration。
 - `index.ts`：公开 facade 和默认 adapter registry。
@@ -42,7 +45,7 @@ Registry artifact 不按时间自动过期。保留策略固定为 `retain-until
 - execution adapter 明确接收 assembler 的 `ProgramImage`/DUT bytes。legacy MARS 不能直接加载 image，因此会在隔离目录重新汇编并先证明 fingerprint/bytes 完全相同，再运行源文件。
 - assembler 结果先 canonical serialize/deserialize、重算 fingerprint 并形成权威深冻结副本；execute、validation hook 和最终比较只消费该副本及独立 DUT byte copy。adapter 另收到深克隆/冻结的配置和 input graph、独立 stdin copy、独立 materialized source；返回后 source tree 与 executable byte copy 都会复核，避免跨 stage 污染。
 - stock/legacy MARS 没有可信的“因 max-step 耗尽退出”信号；因此 replay 只有在 trace 证明标准自分支+nop halt-loop 时接受正常停止，记录为 `step-limit` 的 legacy case 会在启动 JVM 前 fail closed。
-- `index.ts`：公开 facade；`createDefaultReplayAdapterRegistry()` 当前注册 legacy MARS，builtin-ts 在后续 assembler/executor 阶段注册。
+- `index.ts`：公开 facade；`createDefaultReplayAdapterRegistry()` 注册 legacy MARS 与 builtin executor；builtin assembler replay 等待阶段 5。
 
 外部工具真实回归默认跳过，可显式运行：
 

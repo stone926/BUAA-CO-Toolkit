@@ -96,7 +96,7 @@ export interface ContinuousGeneratedTraceDependencies<TSetup, TCase extends Cont
   runGeneratorAndCollectAsms: (
     services: AppServices,
     setup: TSetup,
-    options: { revealOutput: false }
+    options: { revealOutput: false; signal?: AbortSignal }
   ) => Promise<ContinuousGeneratedBatch<TAsmCase> | undefined>;
   expandTraceCases: (asms: vscode.Uri[], asmCases?: TAsmCase[]) => Promise<TCase[]>;
   runCourseTraceCase: (
@@ -225,7 +225,10 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       services.output.appendLine(`Continuous iteration #${index}`);
       let iterationLevelError = false;
       try {
-        const generated = await deps.runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
+        const generated = await deps.runGeneratorAndCollectAsms(services, setup, {
+          revealOutput: false,
+          signal: session.abortController.signal
+        });
         if (!generated?.asms.length) {
           iteration.status = 'error';
           iteration.message = '生成器已完成，但未检测到新建或修改的 ASM 文件';

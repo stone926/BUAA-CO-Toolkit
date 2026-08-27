@@ -84,6 +84,7 @@ describe('package manifest', () => {
       'co.checkToolchain',
       'co.course.openTutorial',
       'co.test.startContinuousGeneratedTraceTests',
+      'co.test.stopBatchTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex',
       'co.tools.openAdvanced'

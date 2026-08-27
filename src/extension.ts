@@ -49,9 +49,12 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar.command = Commands.CheckToolchain;
   context.subscriptions.push(output, statusBar);
 
+  const mipsRuntime = new MipsRuntimeManager();
+
   const services: AppServices = {
     output,
-    statusBar
+    statusBar,
+    mipsRuntime
   };
 
   void migrateLegacySemanticColorRules(context, output);
@@ -145,9 +148,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerMips(context, services);
-  // Lazy worker host skeleton: construction only, the worker starts on first
-  // builtin assemble/execute (later phases). Never started in phase 1.
-  context.subscriptions.push(new MipsRuntimeManager());
+  // Lazy worker host: construction only; the worker starts on first builtin
+  // assemble/execute and is shared by every provider through AppServices.
+  context.subscriptions.push(mipsRuntime);
   registerVerilog(context, services, moduleRegistry);
   registerVerilogSignalView(context, moduleRegistry);
   registerLogisim(context, services);

@@ -8,6 +8,8 @@ import {
   ProgramImage,
   SourceUnitFingerprint
 } from '../core/api';
+import type { CommitEvent } from '../core/events/commitEvent';
+import type { CoverageBin } from '../core/events/coverage';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
 import { isaInstructions } from '../core/generated/isaCatalog';
 
@@ -156,6 +158,10 @@ export interface ArchitecturalWriteTrace {
 export interface ExecuteRequest {
   /** Every executor receives the immutable domain image, including legacy source adapters. */
   image: ProgramImage;
+  /** Course profile when the caller already resolved one; legacy derives it from its launch. */
+  profile?: string;
+  /** Memory configuration only as provenance/validation; the builtin core ignores it. */
+  memoryConfiguration?: string;
   executionBinding?: ProviderExecutionBinding;
   stdin?: string;
   stdinSource?: vscode.Uri;
@@ -170,6 +176,15 @@ export interface ExecuteRequest {
   requirements?: ProviderCapabilityRequirements;
 }
 
+export type EngineStopKind =
+  | 'halt-loop'
+  | 'completed'
+  | 'cancelled'
+  | 'timeout'
+  | 'engine-error'
+  | 'out-of-domain'
+  | 'step-limit';
+
 export interface ExecuteResult {
   ok: boolean;
   outputFile?: vscode.Uri;
@@ -180,15 +195,28 @@ export interface ExecuteResult {
   resolvedRun?: ResolvedEngineRun;
   trace?: ArchitecturalWriteTrace;
   stop?: {
-    kind: 'halt-loop' | 'completed' | 'cancelled' | 'timeout' | 'engine-error';
+    kind: EngineStopKind;
     haltPc?: number;
   };
+  /**
+   * Phase-4 builtin evidence. Providers without structured commit events omit it;
+   * callers must never assume two different engines expose the same schema.
+   */
+  events?: readonly CommitEvent[];
+  eventCount?: number;
+  eventDigest?: string;
+  coverage?: readonly CoverageBin[];
+  finalStateDigest?: string;
+  checkpoints?: readonly { readonly instruction: number; readonly digest: string }[];
+  /** Canonical structured event artifact produced by the provider, when one exists. */
+  eventArtifact?: vscode.Uri;
 }
 
 export interface ResolvedEngineRun {
   profile: string;
   memoryConfiguration: string;
-  runtime: { kind: 'java'; command: string };
+  /** In-process TS runs have no command line; the runtime kind makes that explicit. */
+  runtime: { kind: 'java'; command: string } | { kind: 'builtin-ts' };
   wallClockMs: number;
   p7RiInstruction: boolean;
 }
@@ -217,10 +245,10 @@ export const LEGACY_MARS_DESCRIPTOR: EngineDescriptor = {
 /** Builtin TS engine; registered only when its phases land (assembler: 5, executor: 2-3). */
 export const BUILTIN_TS_DESCRIPTOR: EngineDescriptor = {
   id: 'builtin-ts',
-  kind: 'full-stack',
-  build: 'in-extension pure TypeScript course engine',
-  semanticsRevision: 0,
-  capabilitiesRevision: 0
+  kind: 'executor',
+  build: 'in-extension pure TypeScript course executor (phase 2-3 core)',
+  semanticsRevision: 1,
+  capabilitiesRevision: 1
 };
 
 /** Capabilities the legacy engine currently provides (behavior of the existing pipeline). */

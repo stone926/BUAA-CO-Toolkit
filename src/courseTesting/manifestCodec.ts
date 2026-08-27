@@ -103,6 +103,9 @@ export interface AsmCaseArtifactsV2 {
   referenceMars?: Record<string, ManifestArtifactReference>;
 }
 
+/** Runtime kind recorded with one oracle run; Java is legacy MARS, builtin-ts is in-process. */
+export type ManifestRuntime = { kind: 'java'; command: string } | { kind: 'builtin-ts' };
+
 /** Exact inputs that affect one oracle run; optional fields are absent only before execution. */
 export interface ManifestRunConfiguration {
   profile: string;
@@ -145,7 +148,7 @@ export interface ManifestRunConfiguration {
     maxIncludeDepth: number;
     maxIncludeUnits: number;
   };
-  runtime?: { kind: 'java'; command: string };
+  runtime?: ManifestRuntime;
 }
 
 export interface AsmCaseManifestV2 {
@@ -387,9 +390,11 @@ function isResourceLimits(value: unknown): boolean {
     && (value.maxIncludeUnits as number) <= maximumReplaySourceUnits;
 }
 
-function isRuntime(value: unknown): boolean {
-  return isRecord(value) && hasOnlyKeys(value, ['kind', 'command']) && value.kind === 'java'
-    && isNonEmptyString(value.command);
+function isRuntime(value: unknown): value is ManifestRuntime {
+  return isRecord(value)
+    && (value.kind === 'java'
+      ? hasOnlyKeys(value, ['kind', 'command']) && isNonEmptyString(value.command)
+      : value.kind === 'builtin-ts' && hasOnlyKeys(value, ['kind']));
 }
 
 function isSnapshot(value: unknown, extraKeys: readonly string[] = []): value is AsmCaseSnapshot {
@@ -1017,13 +1022,20 @@ function completeRunConfigurationIssues(
   if (configuration.seed === undefined) issues.push('oracle.runConfiguration.seed missing (use null when absent)');
   if (!configuration.resourceLimits) issues.push('oracle.runConfiguration.resourceLimits missing');
   if (!configuration.runtime) issues.push('oracle.runConfiguration.runtime missing');
-  for (const policyIssue of legacyMarsConfigurationPolicyIssues(
-    configuration.profile,
-    configuration.memoryConfiguration,
-    'run',
-    true
-  )) {
-    issues.push(`oracle.runConfiguration violates production launch policy: [${policyIssue.code}] ${policyIssue.message}`);
+  if (configuration.runtime?.kind === 'java') {
+    for (const policyIssue of legacyMarsConfigurationPolicyIssues(
+      configuration.profile,
+      configuration.memoryConfiguration,
+      'run',
+      true
+    )) {
+      issues.push(`oracle.runConfiguration violates production launch policy: [${policyIssue.code}] ${policyIssue.message}`);
+    }
+  } else if (configuration.runtime?.kind === 'builtin-ts') {
+    if (configuration.resourceLimits?.maxSteps !== null
+      && configuration.resourceLimits?.maxSteps !== configuration.stepPolicy?.limit) {
+      issues.push('oracle.runConfiguration.resourceLimits.maxSteps does not match stepPolicy.limit');
+    }
   }
 
   const expectedStdin = manifest.stdin

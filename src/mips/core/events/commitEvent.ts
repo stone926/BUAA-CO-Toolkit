@@ -188,8 +188,97 @@ export interface RunSliceResult {
   readonly committed: number;
 }
 
+import { CanonicalJson } from '../canonicalJson';
+
 /** Event-schema revision embedded in every execution evidence fingerprint. */
 export const commitEventSchemaRevision = 1 as const;
+
+/**
+ * Canonical projection of one commit event. Optional fields are omitted rather
+ * than represented as `undefined`, so two engines can compare/digest the same
+ * observable event without agreeing on in-memory object shape.
+ */
+export function commitEventCanonical(event: CommitEvent): CanonicalJson {
+  return {
+    sequence: event.sequence,
+    kind: event.kind,
+    pcBefore: event.pcBefore >>> 0,
+    ...(event.instructionWord === undefined ? {} : { instructionWord: event.instructionWord >>> 0 }),
+    pcAfter: event.pcAfter >>> 0,
+    ...(event.delaySlot === undefined ? {} : { delaySlot: event.delaySlot }),
+    ...(event.branchOriginPc === undefined ? {} : { branchOriginPc: event.branchOriginPc >>> 0 }),
+    gprWrites: event.gprWrites.map((write) => ({
+      register: write.register,
+      value: write.value >>> 0,
+      ...(write.defined === undefined ? {} : { defined: write.defined })
+    })),
+    hiLoWrites: event.hiLoWrites.map((write) => ({
+      register: write.register,
+      value: write.value >>> 0,
+      ...(write.defined === undefined ? {} : { defined: write.defined })
+    })),
+    cp0Writes: event.cp0Writes.map((write) => ({
+      register: write.register,
+      value: write.value >>> 0,
+      valueBefore: write.valueBefore >>> 0
+    })),
+    memoryWrites: event.memoryWrites.map((write) => ({
+      address: write.address >>> 0,
+      rawValue: write.rawValue >>> 0,
+      wordAddress: write.wordAddress >>> 0,
+      byteMask: write.byteMask >>> 0,
+      valueBefore: write.valueBefore >>> 0,
+      valueAfter: write.valueAfter >>> 0,
+      region: write.region
+    })),
+    ...(event.memoryReads
+      ? {
+        memoryReads: event.memoryReads.map((read) => ({
+          address: read.address >>> 0,
+          wordAddress: read.wordAddress >>> 0,
+          width: read.width,
+          wordValue: read.wordValue >>> 0,
+          value: read.value >>> 0,
+          region: read.region
+        }))
+      }
+      : {}),
+    deviceEvents: event.deviceEvents.map((device) => ({
+      kind: device.kind,
+      device: device.device,
+      ...(device.address === undefined ? {} : { address: device.address >>> 0 }),
+      ...(device.value === undefined ? {} : { value: device.value >>> 0 }),
+      ...(device.cycle === undefined ? {} : { cycle: device.cycle }),
+      ...(device.detail === undefined ? {} : { detail: device.detail })
+    })),
+    ...(event.branchTaken === undefined ? {} : { branchTaken: event.branchTaken }),
+    ...(event.controlTarget === undefined ? {} : { controlTarget: event.controlTarget >>> 0 }),
+    ...(event.trap
+      ? {
+        trap: {
+          kind: event.trap.kind,
+          name: event.trap.name,
+          code: event.trap.code,
+          victimPc: event.trap.victimPc >>> 0,
+          branchDelay: event.trap.branchDelay,
+          epc: event.trap.epc >>> 0,
+          ...(event.trap.stage === undefined ? {} : { stage: event.trap.stage }),
+          handlerPc: event.trap.handlerPc >>> 0,
+          ...(event.trap.hardwareInterrupts === undefined
+            ? {}
+            : { hardwareInterrupts: event.trap.hardwareInterrupts >>> 0 })
+        }
+      }
+      : {}),
+    ...(event.haltReason ? { haltReason: event.haltReason } : {}),
+    ...(event.mnemonic ? { mnemonic: event.mnemonic } : {})
+  };
+}
+
+/** Canonical event array; sequence order is semantic and stays stable. */
+export function commitEventsCanonical(events: readonly CommitEvent[]): CanonicalJson {
+  return events.map(commitEventCanonical);
+}
 
 /** Stable diagnostic code prefix owned by the execution core. */
 export const executionDiagnosticPrefix = 'mips-core.exec';

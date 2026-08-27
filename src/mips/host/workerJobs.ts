@@ -7,6 +7,12 @@ import {
   encodeInstructionForService,
   parseInstructionWord
 } from '../core/isa/service';
+import {
+  executeProgramForServiceAsync,
+  parseExecuteServiceRequest,
+  parseDeviceVectorSteps,
+  runDeviceCycleVectorForService
+} from '../core/machine/executeService';
 
 export const mipsWorkerSliceSize = 128;
 export const mipsWorkerMaximumBatch = 65_536;
@@ -35,9 +41,29 @@ export async function executeProductionWorkerJob(
       return await executeDecodeBatch(payload, context);
     case 'isa-encode-batch':
       return await executeEncodeBatch(payload, context);
+    case 'machine-execute':
+      // Bounded DTO validation is shared with the CLI; execution then streams
+      // CommitEvent slices under worker protocol ACK/backpressure.
+      return await executeMachineJob(payload, context);
+    case 'device-cycle-vector':
+      return runDeviceCycleVectorForService(parseDeviceVectorSteps(payload));
     default:
       throw new Error(`unknown job kind: ${kind}`);
   }
+}
+
+async function executeMachineJob(
+  payload: unknown,
+  context: WorkerJobExecutionContext
+): Promise<unknown> {
+  const request = parseExecuteServiceRequest(payload);
+  return await executeProgramForServiceAsync(request, {
+    aborted: () => context.signal.aborted,
+    onSlice: async (events) => {
+      await context.emitProgress([...events]);
+    },
+    retainEvents: false
+  });
 }
 
 async function executeDecodeBatch(payload: unknown, context: WorkerJobExecutionContext): Promise<unknown> {

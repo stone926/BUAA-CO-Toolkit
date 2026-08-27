@@ -1,10 +1,10 @@
 # MARS 核心 TypeScript 集成实施方案
 
-> 状态：Executing（阶段 0–3 已完成；下一步是阶段 4 生产 oracle 接入）
+> 状态：Executing（阶段 0–4 已完成；下一步是阶段 5 课程汇编器）
 >
 > 制定日期：2026-08-25
 >
-> 最近更新：2026-08-27（阶段 2/3 落地；治理按单人维护规模放宽；本文档同步改写）
+> 最近更新：2026-08-27（阶段 4 正式落地：full-stack CourseTracePipeline 全分支注入、Worker CommitEvent 流式回传、batch stop、CI 双平台 gate）
 >
 > 插件基线：`ca679f7c231927e63f3fb8ba3e91f232c89a24c7`（package `1.0.2`）
 >
@@ -40,6 +40,17 @@
 - 版本化 JSONL CLI 新增 `machine.execute` 与 `device.cycleVector`，conformance 的
   execution/device 证据可经该进程边界复现。核心位于 `src/mips/core`（25 文件），
   directed 套件 250+ 断言引自教程/官方 Verilog/contract ledger。
+- **阶段 4（2026-08-27 实现落地）**：生产 oracle 与自动测试能力接入。
+  `BuiltinTsExecutionProvider` 注册在 legacy 之后且默认解析仍为 MARS，仅供显式
+  shadow/verify-both；`CourseTracePipeline` 在 P3 Logisim 与 P4–P7 traceRunner
+  全分支注入 createCase/prepareProgram/runOracle/runDut(或 runLogisimDut)/
+  compareTraces/recordOracle/updateArtifacts/copyArtifact；builtin 产出 raw trace、
+  canonical CommitEvent、event digest、coverage、checkpoint 与原子 event artifact；
+  Worker lane 按 128 条/slice 流式回传 CommitEvent 并在 ACK/backpressure 下由
+  provider 重建；executor shadow 保存 source/image/raw traces/input/schedule/
+  engines/contracts 复现 bundle，未登记差异固定 inconclusive；batch/continuous
+  使用会话 AbortController，batch stop 命令可用；builtin replay adapter 进入默认
+  registry；CI 的 ubuntu/windows 双平台 `verify:phase4` gate 已配置。
 
 ### 治理模型（2026-08-27 起，单人维护规模）
 
@@ -58,8 +69,7 @@
 
 ### 尚未开始
 
-- 阶段 4（生产 oracle 与自动测试接入）、阶段 5（课程汇编器）、
-  阶段 6（按 profile 默认切换）、阶段 7（P2 与常见 MARS 用户体验）。
+- 阶段 5（课程汇编器）、阶段 6（按 profile 默认切换）、阶段 7（P2 与常见 MARS 用户体验）。
 
 ## 1. 决策摘要
 

@@ -26,7 +26,7 @@ export interface WorkerJobHandler {
 
 const jobHandlers: Map<string, WorkerJobHandler> = new Map();
 
-for (const kind of ['ping', 'isa-decode-batch', 'isa-encode-batch']) {
+for (const kind of ['ping', 'isa-decode-batch', 'isa-encode-batch', 'machine-execute', 'device-cycle-vector']) {
   jobHandlers.set(kind, (request, signal, emitProgress) => executeProductionWorkerJob(
     request.job.kind,
     request.job.payload,

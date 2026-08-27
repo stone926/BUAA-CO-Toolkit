@@ -157,7 +157,7 @@ export async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | un
 export async function runGeneratorAndCollectAsms(
   services: AppServices,
   setup: GeneratorRunSetup,
-  options: { revealOutput?: boolean } = {}
+  options: { revealOutput?: boolean; signal?: AbortSignal } = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   if (setup.kind === 'builtin') {
     return await runBuiltinGeneratorAndCollectAsms(services, setup, options);
@@ -172,7 +172,8 @@ export async function runGeneratorAndCollectAsms(
   const result = await runTool(setup.invocation.command, setup.invocation.args, {
     cwd: setup.invocation.cwd,
     output: services.output,
-    resource: setup.generator
+    resource: setup.generator,
+    signal: options.signal
   });
   if (!result.ok) {
     vscode.window.showErrorMessage('测试生成器运行失败。请查看插件输出面板');

@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ 35 files + host adapters
+# course-testing | src/courseTesting/ 42 files + host adapters
 
 P3-P7 自动化测试：生成 ASM -> 稳定版修改 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
 MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）。课程 oracle 运行一律强制 coL2；coL1 只在工具链检查中作为兼容能力探针。非 P7 另依赖 FixedCompactLargeText/CompactLargeText，P7 另依赖 efc、p7irq、cl 与 CompactLargeText；固定 ae/se 令汇编与运行错误以非零退出码失败。课程 dump 先静态确认最终 `_co_test_end` 是自分支+nop，运行时再用 coL2 逐指令块确认该自分支确实执行，并用 MARS 原生 max-step 结束永久自环；不依赖未发布的专用停机 marker。SWL/SWR 按动态指令合并同一 DM 字的多次局部写入；BGEZAL/BLTZAL 按 MIPS 规范补齐分支自身在 not-taken 路径遗漏的 `$31=PC+8` Trace，但稳定版 MARS 的后续执行状态仍是旧值，因此在显式重写 `$31` 前继续读取会被拒绝。同一详细 Trace 还只拒绝实际执行到的 oracle 初态差异/未定义行为。同次汇编仍分块 dump 0x0000..0x2fff，以拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；内置生成器约束普通测试数据，手写/外部用例须自行遵守教程地址映射和下述稳定版边界，不假定 MARS 提供额外的课程地址或 handler 契约开关
@@ -6,7 +6,7 @@ MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extensio
 P7 模式：anchor(精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)
 
 orchestration:
-  courseTest.ts — 总调度：14 个 co.test.* 命令；runCourseTraceCase 串联 assemble provider->oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe；阶段 1 默认 provider 仍为 legacy MARS
+  courseTest.ts — 总调度：16 个 co.test.* 命令；runCourseTraceCase 串联 assemble provider->oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe；阶段 4 通过 `CourseTracePipeline` 注入 createCase/assembler/oracle/DUT/comparator/case-store 全阶段，默认 provider 仍为 legacy MARS
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
   courseTestContinuous.ts — 持续生成循环：启动阶段同步占位防重复会话，启动检查期间也可取消；每轮生成并展开全部 ASM；stopOnFailure=false 时功能失败继续，生成器异常/无新 ASM 则停止；轮数耗尽不额外等待，停止请求可打断间隔或在途外部工具，用户取消的未完成 case 不计为测试 error；面板关闭触发停止，最终报告写失败也保证释放会话；按策略保留通过产物和报告轮次
   courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
@@ -17,9 +17,19 @@ orchestration:
   courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.mars.out、.co/out/{stem}.sim.out
 
 generation:
-  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe 中立 stage
+  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/ISim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe 中立 stage
   courseTesting/generatorWorkflow.ts — 生成器工作流：外部/内置 generator setup、运行、ASM 产物收集、CourseTraceBatchSource 描述
-  courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、稳定版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；用 coL2 逐指令块校验实际到达标准停机尾、合并 SWL/SWR 局部写、修复 REGIMM 链接分支自身的遗漏事件，并拒绝未跳转链接分支后继续读取旧 `$31`、稳定版 `$gp/$sp` 初态差异、DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入；任一侧空 Trace 报错，两侧都空明确标记为无法判定
+  courseTesting/executorShadowRunner.ts — executor shadow 宿主：legacy + builtin 双跑、image policy、course-correct/mars-compatible/inconclusive 分类，mismatch 自动保存含 source closure、ProgramImage、raw traces、engines、contracts 的复现 bundle；
+
+  courseTesting/pipeline/courseTracePipeline.ts — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle 执行与差分比较）；
+  courseTesting/pipeline/courseImagePolicy.ts + haltPolicy.ts + executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；
+
+  courseTesting/oracle/commitProjection.ts — CommitEvent 到结构化 first-diff 摘要（PC、word、GPR/HI-LO/CP0、memory/device）与 canonical event digest；
+  courseTesting/oracle/differentialRunner.ts — legacy/builtin 架构写 trace、first-diff、final digest 的确定性差分；
+  courseTesting/oracle/shadowPolicy.ts — 已登记 divergence 策略；未登记差异固定为 inconclusive；
+  courseTesting/oracle/executionAssertions.ts — CommitEvent assertion/watchpoint 观察器；
+
+  courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、稳定版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；默认构造 full-stage `CourseTracePipeline`，测试可通过 `CourseTraceRunOptions.pipeline` 替换任意阶段；`oracleMode='verify-both'` 会先记录 legacy oracle，再运行 phase-4 executor shadow。用 coL2 逐指令块校验实际到达标准停机尾、合并 SWL/SWR 局部写、修复 REGIMM 链接分支自身的遗漏事件，并拒绝未跳转链接分支后继续读取旧 `$31`、稳定版 `$gp/$sp` 初态差异、DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入；任一侧空 Trace 报错，两侧都空明确标记为无法判定
   mips/legacy/marsOracleCompatibility.ts — legacy/reference 层的 P3-P7 稳定版 MARS oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
   mips/legacy/marsImageCompatibility.ts — legacy/reference 层将每个 coL2 动态 PC/机器码绑定到最终硬件 HexText（含 P7 padding/handler merge），并只允许 handler 内精确 `sb $0,0x7f20($0)` 访问 IG；用跨分支/跳转及延迟槽的静态常量数据流兜底无 victim header 的非对齐 IG 访问
   courseTesting/builtinAsmGenerator.ts — 入口：generateBuiltinAsmTestCase；P7StressMode 分派(anchor->randomBody、probe->probeEmitter、hybrid 两次调用)

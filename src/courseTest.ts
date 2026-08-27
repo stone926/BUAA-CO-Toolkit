@@ -21,6 +21,7 @@ import {
   runCourseTraceCase
 } from './courseTesting/traceRunner';
 import { runCourseTraceBatch } from './courseTesting/batchRunner';
+import { isCourseTraceBatchRunning, stopCourseTraceBatch } from './courseTesting/batchRunner';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
 import { createIsimCompileCache } from './verilogIsimCache';
 import { AppServices } from './types';
@@ -65,12 +66,14 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
   const continuousTraceDependencies = createContinuousTraceDependencies();
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Test.RunFullTest, () => runFullCourseTraceTest(services)),
+    vscode.commands.registerCommand(Commands.Test.RunExecutorShadow, () => runExecutorShadowTest(services)),
     vscode.commands.registerCommand(Commands.Test.RunBatchTraceTests, () => runBatchCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.RunGeneratedTraceTests, () => runGeneratedCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.GenerateAsmTests, () => generateAsmTests(services)),
     vscode.commands.registerCommand(Commands.Test.GenerateAndDumpAsmTests, () => generateAndDumpAsmTests(services)),
     vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopContinuousTests()),
+    vscode.commands.registerCommand(Commands.Test.StopBatchTraceTests, () => stopBatchCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.PrepareLogisimCases, () => prepareLogisimCases(services)),
     vscode.commands.registerCommand(Commands.Test.DiagnoseP3LogisimTraceCircuit, () => diagnoseP3LogisimTraceCircuit(services)),
     vscode.commands.registerCommand(Commands.Test.PrepareGeneratedLogisimCases, () => prepareGeneratedLogisimCases(services)),
@@ -92,6 +95,16 @@ function createContinuousTraceDependencies(): ContinuousGeneratedTraceDependenci
     expandTraceCases,
     runCourseTraceCase
   };
+}
+
+function stopBatchCourseTraceTests(services: AppServices): void {
+  if (!isCourseTraceBatchRunning()) {
+    vscode.window.showInformationMessage('当前没有运行中的批量课程 Trace 测试');
+    return;
+  }
+  if (stopCourseTraceBatch()) {
+    services.output.appendLine('正在停止批量课程 Trace 测试…');
+  }
 }
 
 async function runFullCourseTraceTest(services: AppServices): Promise<void> {
@@ -127,6 +140,39 @@ async function runFullCourseTraceTest(services: AppServices): Promise<void> {
     services,
     defaultTraceCompareMode
   );
+}
+
+async function runExecutorShadowTest(services: AppServices): Promise<void> {
+  await vscode.workspace.saveAll(false);
+
+  const asm = await resolveAsmInput();
+  if (!asm) {
+    return;
+  }
+  const stdin = await resolveSingleStdinInput(asm);
+  if (stdin) {
+    vscode.window.showWarningMessage('builtin executor 尚未实现 stdin syscall host，无法对带 stdin 的用例运行 shadow。');
+    return;
+  }
+  const runOptions = await resolveCourseTraceRunOptions(services, asm, {
+    source: { kind: 'selected', asmFiles: [asm.fsPath] },
+    artifactOutputMode: 'case',
+    oracleMode: 'verify-both'
+  });
+  if (!runOptions) {
+    return;
+  }
+  const result = await runCourseTraceCase(services, { asm }, runOptions);
+  const shadow = result.shadow;
+  if (shadow?.bundleDir) {
+    vscode.window.showWarningMessage(`Executor shadow: ${shadow.status}。bundle: ${shadow.bundleDir}`);
+    return;
+  }
+  if (shadow?.status === 'matched') {
+    vscode.window.showInformationMessage('Executor shadow 通过：legacy 与 builtin 架构 trace 一致');
+    return;
+  }
+  vscode.window.showErrorMessage(`Executor shadow 测试中止：${result.message}`);
 }
 
 async function runBatchCourseTraceTests(services: AppServices): Promise<void> {

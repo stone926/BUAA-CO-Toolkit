@@ -50,6 +50,9 @@ jobs:
       - name: Run the complete existing test suite on this platform
         run: npm test
 
+      - name: Phase 4 executor shadow gate on this platform
+        run: npm run verify:phase4
+
       - name: Verify versioned MIPS JSONL CLI
         run: npm run verify:mips-cli
 

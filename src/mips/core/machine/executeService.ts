@@ -1,10 +1,15 @@
 // @index mips-core — CLI/Worker 共用的执行与设备周期服务 DTO（固定字宽输出，无宿主依赖）
-import { ProgramSegment } from '../api';
+import { ProgramImage, ProgramSegment } from '../api';
 import { CourseDeviceBus } from '../devices/deviceBus';
 import { ExternalInterruptRequest } from '../devices/interruptController';
 import { TimerRegisterIndex, timerRegisterIndex, TimerSnapshot } from '../devices/timer';
-import { CoverageBin } from '../events/coverage';
-import { formatArchitecturalWrite } from '../events/traceProjection';
+import { CommitEvent, ExecutionDiagnostic, HaltReason, StepStatus } from '../events/commitEvent';
+import { CoverageBin, ExecutionCoverageCollector } from '../events/coverage';
+import {
+  ArchitecturalWriteRecord,
+  formatArchitecturalWrite,
+  projectCommitEvent
+} from '../events/traceProjection';
 import { CourseProfile, InstructionLayer } from '../generated/isaCatalog';
 import { courseProfileIds, resolveCourseProfile } from '../profiles/courseProfiles';
 import { hex8 } from '../values';
@@ -89,8 +94,13 @@ export interface ExecuteServiceResult {
   readonly checkpoints?: readonly { readonly instruction: number; readonly digest: string }[];
 }
 
-/** Execute one ProgramImage built from raw segments and project the result. */
-export function executeProgramForService(request: ExecuteServiceRequest): ExecuteServiceResult {
+export interface PreparedCourseExecution {
+  readonly session: CourseSystemSession;
+  readonly image: ProgramImage;
+}
+
+/** Build the bounded session/image pair shared by the sync, worker and CLI boundaries. */
+export function prepareCourseExecution(request: ExecuteServiceRequest): PreparedCourseExecution {
   const profile = resolveCourseProfile(request.profile);
   const segments: ProgramSegment[] = request.segments.map((segment) => {
     if (segment.words.length > maximumExecuteSegmentWords) {
@@ -119,16 +129,14 @@ export function executeProgramForService(request: ExecuteServiceRequest): Execut
     ...(request.externalInterrupts ? { externalInterrupts: request.externalInterrupts } : {}),
     ...(request.deviceSchedule ? { deviceSchedule: request.deviceSchedule } : {})
   });
+  return { session, image };
+}
 
-  const outcome = runCourseProgram(session, {
-    ...(request.collectTrace ? { collectTrace: true } : {}),
-    ...(request.collectCoverage ? { collectCoverage: true } : {}),
-    ...(request.checkpointInterval === undefined
-      ? {}
-      : { checkpointInterval: request.checkpointInterval }),
-    finalSnapshotLevel: 'full'
-  });
-
+/** Project one `runCourseProgram` outcome to the fixed-width service DTO. */
+export function projectCourseExecutionOutcome(
+  prepared: PreparedCourseExecution,
+  outcome: ReturnType<typeof runCourseProgram>
+): ExecuteServiceResult {
   const snapshot = outcome.finalSnapshot;
   const trace = outcome.trace?.slice(0, maximumExecuteTraceLines)
     .map((record) => formatArchitecturalWrite(record));
@@ -140,7 +148,7 @@ export function executeProgramForService(request: ExecuteServiceRequest): Execut
     eventCount: outcome.eventCount,
     ...(outcome.haltPc === undefined ? {} : { haltPc: word(outcome.haltPc) }),
     finalStateDigest: outcome.finalStateDigest,
-    imageFingerprint: image.fingerprint,
+    imageFingerprint: prepared.image.fingerprint,
     finalState: {
       pc: word(snapshot.pc),
       gpr: snapshot.gpr.map(word),
@@ -183,6 +191,118 @@ export function executeProgramForService(request: ExecuteServiceRequest): Execut
     ...(outcome.coverage ? { coverage: outcome.coverage } : {}),
     ...(outcome.checkpoints.length ? { checkpoints: outcome.checkpoints } : {})
   };
+}
+
+/** Execute one ProgramImage built from raw segments and project the result. */
+export function executeProgramForService(request: ExecuteServiceRequest): ExecuteServiceResult {
+  const prepared = prepareCourseExecution(request);
+  const outcome = runCourseProgram(prepared.session, {
+    ...(request.collectTrace ? { collectTrace: true } : {}),
+    ...(request.collectCoverage ? { collectCoverage: true } : {}),
+    ...(request.checkpointInterval === undefined
+      ? {}
+      : { checkpointInterval: request.checkpointInterval }),
+    finalSnapshotLevel: 'full'
+  });
+  return projectCourseExecutionOutcome(prepared, outcome);
+}
+
+export interface ExecuteServiceAsyncHooks {
+  /** Cooperative cancellation checked before every slice. */
+  readonly aborted?: () => boolean;
+  /** Called after each slice; worker implementations await progress ACK here. */
+  readonly onSlice?: (events: readonly CommitEvent[]) => void | Promise<void>;
+  /** Keep the full stream in the returned result as well; workers stream instead. */
+  readonly retainEvents?: boolean;
+}
+
+export interface ExecuteServiceAsyncResult extends ExecuteServiceResult {
+  /** Full canonical commit stream; present because the worker streams it back. */
+  readonly events: readonly CommitEvent[];
+}
+
+/**
+ * Worker-only async driver. It runs the same bounded session/image and projects
+ * the same DTO as `executeProgramForService`, but yields to the worker message
+ * loop between slices and forwards each slice's CommitEvents for backpressure.
+ */
+export async function executeProgramForServiceAsync(
+  request: ExecuteServiceRequest,
+  hooks: ExecuteServiceAsyncHooks = {}
+): Promise<ExecuteServiceAsyncResult> {
+  const prepared = prepareCourseExecution(request);
+  const session = prepared.session;
+  const coverage = request.collectCoverage
+    ? new ExecutionCoverageCollector(session.profile)
+    : undefined;
+  const trace: ArchitecturalWriteRecord[] | undefined = request.collectTrace ? [] : undefined;
+  const events: CommitEvent[] = [];
+  const checkpoints: { instruction: number; digest: string }[] = [];
+  const sliceSize = 128;
+  let outcomeStatus: StepStatus = 'committed';
+  let outcomeHaltReason: HaltReason | undefined;
+  let outcomeDiagnostic: ExecutionDiagnostic | undefined;
+  let eventCount = 0;
+
+  for (;;) {
+    if (hooks.aborted?.()) {
+      outcomeStatus = 'halted';
+      outcomeHaltReason = 'cancelled';
+      break;
+    }
+    const slice: CommitEvent[] = [];
+    let sliceStatus: StepStatus = 'committed';
+    for (let index = 0; index < sliceSize; index++) {
+      const result = session.stepInstruction();
+      if (result.event) {
+        eventCount++;
+        slice.push(result.event);
+        coverage?.observe(result.event);
+        if (trace) trace.push(...projectCommitEvent(result.event, session.profile));
+      }
+      if (request.checkpointInterval !== undefined
+        && request.checkpointInterval > 0
+        && session.instructionsExecuted > 0
+        && session.instructionsExecuted % request.checkpointInterval === 0
+        && result.status === 'committed') {
+        checkpoints.push({
+          instruction: session.instructionsExecuted,
+          digest: session.snapshot('registers').digest
+        });
+      }
+      if (result.status !== 'committed') {
+        sliceStatus = result.status;
+        outcomeHaltReason = result.event?.haltReason ?? outcomeHaltReason;
+        outcomeDiagnostic = result.diagnostic ?? outcomeDiagnostic;
+        break;
+      }
+    }
+    if (slice.length) {
+      if (hooks.retainEvents !== false) events.push(...slice);
+      await hooks.onSlice?.(slice);
+    }
+    if (sliceStatus !== 'committed') {
+      outcomeStatus = sliceStatus;
+      break;
+    }
+  }
+
+  const finalSnapshot = session.snapshot('full');
+  const projected = projectCourseExecutionOutcome(prepared, {
+    status: outcomeStatus,
+    ...(outcomeHaltReason ? { haltReason: outcomeHaltReason } : {}),
+    ...(outcomeDiagnostic ? { diagnostic: outcomeDiagnostic } : {}),
+    instructions: session.instructionsExecuted,
+    ...(session.courseHaltPc === undefined ? {} : { haltPc: session.courseHaltPc }),
+    finalSnapshot,
+    finalStateDigest: finalSnapshot.digest,
+    checkpoints,
+    ...(trace ? { trace } : {}),
+    ...(coverage ? { coverage: coverage.bins() } : {}),
+    retainedEvents: [],
+    eventCount
+  });
+  return { ...projected, events };
 }
 
 // ── Device cycle vectors ─────────────────────────────────────────────────────

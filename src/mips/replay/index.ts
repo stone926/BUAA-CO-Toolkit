@@ -7,11 +7,13 @@ export * from './sourceBundle';
 export * from './types';
 
 import { LegacyMarsReplayAdapter } from './legacyMarsAdapter';
+import { BuiltinTsReplayAdapter } from './builtinExecutionAdapter';
 import { ReplayAdapterRegistry } from './types';
 
-/** Registry used by commands/CLI until builtin-ts registers its own phase-2/5 adapter. */
+/** Registry used by commands/CLI. Builtin assembler replay still waits for phase 5. */
 export function createDefaultReplayAdapterRegistry(trustedJavaCommand: string): ReplayAdapterRegistry {
   const registry = new ReplayAdapterRegistry();
   registry.register(new LegacyMarsReplayAdapter({ javaCommand: trustedJavaCommand }));
+  registry.register(new BuiltinTsReplayAdapter());
   return registry;
 }

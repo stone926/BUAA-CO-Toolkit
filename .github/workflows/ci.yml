@@ -90,6 +90,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Phase 4 executor shadow gate
+        run: npm run verify:phase4
+
       - name: Headless test CLI smoke
         run: npm --prefix test-cli test
 

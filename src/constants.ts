@@ -101,9 +101,11 @@ export const Commands = {
 
   Test: {
     RunFullTest: 'co.test.runFullTest',
+    RunExecutorShadow: 'co.test.runExecutorShadow',
     RunBatchTraceTests: 'co.test.runBatchTraceTests',
     RunGeneratedTraceTests: 'co.test.runGeneratedTraceTests',
     StartContinuousGeneratedTraceTests: 'co.test.startContinuousGeneratedTraceTests',
+    StopBatchTraceTests: 'co.test.stopBatchTraceTests',
     GenerateAsmTests: 'co.test.generateAsmTests',
     GenerateAndDumpAsmTests: 'co.test.generateAndDumpAsmTests',
     StopContinuousTests: 'co.test.stopContinuousTests',
