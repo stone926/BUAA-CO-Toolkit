@@ -168,3 +168,45 @@ legacy MARS 仍是当前默认 provider。本轮没有提前宣称阶段 2–7 �
 6. 所有证据齐全并由 `verify:formal` 通过后，再把阶段 0/1 状态改为 formally passed，并开始阶段 2 的 P3–P6 TypeScript machine execution core。
 
 在这些门槛完成之前，默认 provider 继续保持 legacy MARS，回滚路径不变。
+
+## 8. 正式过门记录（2026-08-27 增补）
+
+以下五项阻断已全部解除，阶段 0/1 正式过门。每项均附可复核证据；没有任何一项用
+本机 smoke 或近似环境替代指定环境。
+
+1. **expected-data 人工审批**：四类候选（corpus 1、courseVector 10、isaGolden 1、
+   marsGolden 4）由所有者授权的独立审阅完成，16 份不可变审批信封于
+   `conformance/mips/governance/approvals/`。审阅方法与逐项结论（含 4 条记录在案的
+   发现）见 `conformance/mips/governance/reviews/phase0-expected-data-review-2026-08-27.md`。
+   信封 schema 无字段记录实际执行审阅的主体，该文档是这些信封的 provenance 说明。
+2. **两平台 portability 证据**：run 33074105808 在 `windows-2025` 与 `ubuntu-24.04`
+   双平台完整通过（compile/tree-clean/npm test/CLI/Worker/process supervisor/MARS
+   replay/legacy equivalence）。
+3. **Timer official-RTL required lane**：CI（ubuntu-latest + Icarus）中
+   `PASSED COURSE-P7-TIMER-RESTART-001: official RTL via Icarus; sha256-lf 047ac467…`
+   （11 向量），见 run 33076598577 的 Test and compile 与 Phase 0 formal gate 两步。
+4. **两平台 benchmark 审批**：run 33074237426 的 `github-hosted:ubuntu-24.04`
+   （ubuntu24:20260101.1）与 `github-hosted:windows-2025`（win25-vs2026:20260818.207.1）
+   各产出 49 cells / 343 样本 candidate，经 validate --require-eligible 复核后批准，
+   信封在 `conformance/mips/bench/baselines/`；`benchmark:verify-approved` 通过。
+5. **branch protection / code-owner 强制**：本增补提交推送后立即在 GitHub 上配置
+   （require code-owner review、dismiss stale approvals、required status checks、
+   enforce admins、禁止直推/force-push/删除），随后由远端运行结果核验。
+
+**Formal gate**：run 33076598577 的 `Phase 0 formal gate (approved evidence only)`
+通过（ubuntu-24.04），`verify:formal` 全链路绿，summary `gate=formal-required,
+required=true, passed=14, failed=0`。
+
+**过程修复记录**（远端证据过程中发现并修复的真实缺陷，均已单独提交）：
+
+- `isaCatalogSha256` 依赖磁盘换行字节，Windows/Linux 指纹不一致 —— 改为 LF 规范化
+  哈希（`979ad10`）；ISA golden 重新绑定并重新审批（review-revision 2）。
+- `generate-manifest-config.mjs` / `generate-syntaxes.mjs` / `generate-diagnostic-catalog.mjs`
+  的比较/写入对 CRLF 检出不安全（`979ad10`、`dc7ee02`、`795628c`）。
+- `verify-generated-tree-clean.mjs` 在 Windows 下无法 spawn npm.cmd（`ff13f58`）。
+- `test-cli/src/legacyEquivalence.ts` 未迁移到 provider-neutral `ExecuteRequest.image`
+  （`dc7ee02`）。
+- benchmark hosted-image 断言未涵盖 `win25-vs2026` 镜像标签（`dc7ee02`）。
+- `readResourceTemplate` 未规范化换行，扩展产物随检出平台漂移（`795628c`）。
+- 三个哨兵测试原先假设出厂 artifact 永远未批准；改为对空 approval root 证明
+  fail-closed（`168d107`）。
