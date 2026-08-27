@@ -50,7 +50,7 @@
   provider 重建；executor shadow 保存 source/image/raw traces/input/schedule/
   engines/contracts 复现 bundle，未登记差异固定 inconclusive；batch/continuous
   使用会话 AbortController，batch stop 命令可用；builtin replay adapter 进入默认
-  registry；CI 的 ubuntu/windows 双平台 `verify:phase4` gate 已配置。
+  registry；CI 的 ubuntu/windows 双平台 `verify:phase4` gate 已配置，并在 e38d508 的 GitHub Actions 远端运行全部 success（Test and compile、ubuntu/windows Phase 1 portability、独立 TS CLI conformance）。
 
 ### 治理模型（2026-08-27 起，单人维护规模）
 
