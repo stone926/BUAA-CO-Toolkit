@@ -78,7 +78,9 @@ function main() {
   }
   const previous = fs.readFileSync(docPath, 'utf8');
   const next = replaceGeneratedSection(previous, generatedLintCatalog(rules));
-  if (previous === next) {
+  // The generated section is written with LF; a CRLF checkout must still
+  // compare equal, otherwise `--check` can only pass on one platform.
+  if (previous.replace(/\r\n/g, '\n') === next.replace(/\r\n/g, '\n')) {
     return;
   }
   if (checkOnly) {

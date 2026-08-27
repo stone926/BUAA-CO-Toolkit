@@ -27,7 +27,9 @@ function readResourceTemplate(relativePath: string): string {
     return cached;
   }
   const templatePath = path.join(__dirname, '..', '..', 'resources', 'templates', ...normalized.split('/'));
-  const text = fs.readFileSync(templatePath, 'utf8');
+  // Normalize to LF at load: the extension's rendered outputs (Tcl scripts,
+  // project files, Verilog) must not depend on whether the checkout used CRLF.
+  const text = fs.readFileSync(templatePath, 'utf8').replace(/\r\n/g, '\n');
   templateCache.set(normalized, text);
   return text;
 }
