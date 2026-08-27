@@ -210,3 +210,21 @@ required=true, passed=14, failed=0`。
 - `readResourceTemplate` 未规范化换行，扩展产物随检出平台漂移（`795628c`）。
 - 三个哨兵测试原先假设出厂 artifact 永远未批准；改为对空 approval root 证明
   fail-closed（`168d107`）。
+
+## 9. 治理放宽记录（2026-08-27 晚间）
+
+在阶段 0/1 正式过门后，所有者决定项目按单人维护的实际规模放宽治理：
+
+- **branch protection**：移除 PR/review/required-checks 要求，允许直接 push；保留
+  禁止 force-push 与禁止删除分支。直推实测通过。
+- **approval 仪式**：移除 approval envelope 机制、reviewer 硬编码、candidate-vs-formal
+  双重门槛、CODEOWNERS 与 `verify:formal`。16 份 expected-data 信封与 2 份 benchmark
+  信封移入 `conformance/mips/governance/reviews/archived-approvals-2026-08-27/` 仅作
+  历史 provenance；审阅记录文档保留。
+- **保留**：全部 directed 测试（courseVector、ISA golden、RTL 决策向量、250 seeds、
+  regression、TS-CLI 交叉核对、62→54 个 conformance 单测）、guardedFs 依赖膜、
+  pinned reference fail-closed 下载、benchmark 采集/校验 harness（手动工具）。
+
+理由：审阅者与批准者同为所有者本人时，approval 信封在 review 本身之外不提供任何
+额外独立性；而全部 directed 测试与交叉核对才是实际上发现错误的机制（本次过门过程中
+发现的 8 个真实缺陷全部由它们或远端 CI 抓到）。

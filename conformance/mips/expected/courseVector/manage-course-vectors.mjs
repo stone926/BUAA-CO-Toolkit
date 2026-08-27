@@ -15,13 +15,6 @@ import {
   vectorPayloadSha256
 } from '../../runner/courseVectorArtifact.mjs';
 import { loadCorpusManifest } from '../../runner/caseManifest.mjs';
-import { assertPolicyReviewer } from '../../governance/reviewerPolicy.mjs';
-import {
-  approvalEnvelopeFile,
-  assertCandidateApproved,
-  candidateDescriptor,
-  createApprovalEnvelope
-} from '../../governance/approvalEnvelope.mjs';
 
 const contractLedgerFile = path.join(courseVectorPaths.conformanceRoot, 'contract', 'contracts.json');
 
@@ -36,43 +29,22 @@ function writeJsonAtomic(file, value) {
 }
 
 function usageError(message) {
-  throw new Error(`${message}\nUsage: manage-course-vectors.mjs --verify [--require-approved] | --review | --refresh-integrity | --approve --reviewer <id> --review-revision <n>`);
+  throw new Error(`${message}\nUsage: manage-course-vectors.mjs --verify | --review | --refresh-integrity`);
 }
 
 export function parseArgs(argv) {
   if (!Array.isArray(argv) || argv.some((entry) => typeof entry !== 'string')) usageError('arguments must be strings');
-  const options = { action: undefined, requireApproved: false, reviewer: undefined, reviewRevision: undefined };
+  const options = { action: undefined };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-    if (['--verify', '--review', '--refresh-integrity', '--approve'].includes(arg)) {
+    if (['--verify', '--review', '--refresh-integrity'].includes(arg)) {
       if (options.action) usageError('select exactly one action');
       options.action = arg.slice(2);
-    } else if (arg === '--require-approved') {
-      options.requireApproved = true;
-    } else if (arg === '--reviewer') {
-      options.reviewer = argv[++index];
-      if (!options.reviewer || options.reviewer.startsWith('--')) usageError('--reviewer requires a value');
-    } else if (arg === '--review-revision') {
-      const raw = argv[++index];
-      options.reviewRevision = Number(raw);
-      if (!Number.isSafeInteger(options.reviewRevision) || options.reviewRevision <= 0) usageError('--review-revision requires a positive integer');
     } else {
       usageError(`unknown argument: ${arg}`);
     }
   }
   if (!options.action) usageError('an action is required');
-  if (['verify', 'review'].includes(options.action) && (options.requireApproved || options.reviewer || options.reviewRevision)) {
-    if (!(options.action === 'verify' && options.requireApproved && !options.reviewer && !options.reviewRevision)) usageError('review fields are only valid with --approve');
-  }
-  if (options.action === 'refresh-integrity' && (options.requireApproved || options.reviewer || options.reviewRevision)) usageError('--refresh-integrity accepts no other options');
-  if (options.action === 'approve' && (!options.reviewer || !options.reviewRevision || options.requireApproved)) usageError('--approve requires reviewer and review revision');
-  if (options.reviewer) {
-    try {
-      assertPolicyReviewer(options.reviewer, '--reviewer');
-    } catch (error) {
-      usageError(error instanceof Error ? error.message : String(error));
-    }
-  }
   return options;
 }
 
@@ -159,26 +131,6 @@ function refreshArtifacts(manifest, sourceRegistrySha256) {
   }
 }
 
-function approveArtifacts(manifest, reviewer, reviewRevision) {
-  for (const manifestCase of artifactCases(manifest)) {
-    const file = path.join(courseVectorPaths.vectorRoot, manifestCase.courseVector);
-    const vector = loadCourseVector(manifestCase).vector;
-    const subject = candidateDescriptor({
-      artifactKind: 'courseVector',
-      artifactId: vector.caseId,
-      file,
-      candidateAuthor: vector.review.author,
-      candidateRevision: vector.provenance.vectorRevision
-    });
-    const approvalFile = approvalEnvelopeFile(subject);
-    if (fs.existsSync(approvalFile)) {
-      assertCandidateApproved(subject);
-    } else {
-      createApprovalEnvelope(subject, { reviewer, reviewRevision });
-    }
-  }
-}
-
 export function run(argv) {
   const options = parseArgs(argv);
   let manifest = loadCorpusManifest({ skipCourseVectorValidation: true });
@@ -186,15 +138,13 @@ export function run(argv) {
   if (options.action === 'refresh-integrity') {
     const sourceRegistrySha256 = refreshTutorialRegistry();
     refreshArtifacts(manifest, sourceRegistrySha256);
-  } else if (options.action === 'approve') {
-    approveArtifacts(manifest, options.reviewer, options.reviewRevision);
   }
   const sourceRegistry = loadTutorialSourceRegistry();
   const knownContractIds = loadKnownCourseContractIds();
   manifest = loadCorpusManifest({ skipCourseVectorValidation: true });
   const loaded = [];
   for (const manifestCase of artifactCases(manifest)) {
-    const artifact = loadCourseVector(manifestCase, { sourceRegistry, requireApproved: options.requireApproved || options.action === 'approve' });
+    const artifact = loadCourseVector(manifestCase, { sourceRegistry });
     assertKnownContractReferences(artifact.vector, knownContractIds);
     loaded.push({ manifestCase, ...artifact });
   }
@@ -216,7 +166,7 @@ export function run(argv) {
   if (options.action === 'review') {
     process.stdout.write(`${JSON.stringify({ type: 'course-vector-review-summary', artifacts: artifactCases(manifest).length })}\n`);
   } else {
-    process.stdout.write(`courseVector verification OK: ${artifactCases(manifest).length} artifacts; approval=${options.requireApproved || options.action === 'approve' ? 'required' : 'candidate-allowed'}\n`);
+    process.stdout.write(`courseVector verification OK: ${artifactCases(manifest).length} artifacts\n`);
   }
   return 0;
 }

@@ -10,12 +10,7 @@ import * as crypto from 'node:crypto';
 import * as fs from '../expected/guardedFs.mjs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isGithubUsername } from '../governance/reviewerPolicy.mjs';
-import {
-  assertCandidateApproved,
-  candidateDescriptor,
-  sha256CanonicalJson
-} from '../governance/approvalEnvelope.mjs';
+import { sha256CanonicalJson } from './canonicalJson.mjs';
 
 const runnerRoot = path.dirname(fileURLToPath(import.meta.url));
 const conformanceRoot = path.resolve(runnerRoot, '..');
@@ -394,7 +389,7 @@ export function validateCourseVector(vector, manifestCase, sourceRegistry = load
   assert(isPlainObject(vector.review), `${context}.review is required`);
   assertOnlyKeys(vector.review, ['status', 'author', 'reviewer', 'reviewedAt', 'reviewRevision'], `${context}.review`);
   assert(vector.review.status === 'candidate', `${context}.review.status must remain candidate; approvals live in governance/approvals`);
-  assert(isGithubUsername(vector.review.author), `${context}.review.author must be a GitHub username`);
+  assert(typeof vector.review.author === 'string' && vector.review.author.length > 0, `${context}.review.author must be non-empty`);
   assert(vector.review.reviewer === null && vector.review.reviewedAt === null && vector.review.reviewRevision === 0, `${context}.candidate review fields must be null/null/0`);
 
   assert(isPlainObject(vector.execution), `${context}.execution is required`);
@@ -439,38 +434,7 @@ export function loadCourseVector(manifestCase, options = {}) {
   assert(typeof manifestCase.courseVector === 'string', `${manifestCase.caseId} has no courseVector artifact`);
   const file = resolveVectorFile(manifestCase.courseVector);
   const vector = validateCourseVector(JSON.parse(fs.readFileSync(file, 'utf8')), manifestCase, options.sourceRegistry);
-  if (options.requireApproved) assertCourseVectorApproved(vector, file, options);
   return { vector, file };
-}
-
-export function courseVectorCandidateDescriptor(vector, file = resolveVectorFile(`${vector.caseId}.json`)) {
-  validateCourseVector(vector, {
-    caseId: vector.caseId,
-    profile: vector.profile,
-    file: vector.source.corpusFile
-  });
-  const descriptor = candidateDescriptor({
-    artifactKind: 'courseVector',
-    artifactId: vector.caseId,
-    file,
-    candidateAuthor: vector.review.author,
-    candidateRevision: vector.provenance.vectorRevision
-  });
-  assert(descriptor.candidateSha256 === sha256CanonicalJson(vector), `${vector.caseId} differs from its candidate file`);
-  return descriptor;
-}
-
-export function assertCourseVectorApproved(vector, file, options = {}) {
-  if (!isPlainObject(vector) || vector.review?.status !== 'candidate') {
-    throw new Error(`courseVector: ${vector?.caseId ?? '<unknown>'} is not a valid candidate`);
-  }
-  const subject = courseVectorCandidateDescriptor(vector, file ?? resolveVectorFile(`${vector.caseId}.json`));
-  try {
-    assertCandidateApproved(subject, options);
-  } catch (error) {
-    throw new Error(`courseVector: ${vector.caseId} is not independently approved: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return vector;
 }
 
 export function listCourseVectorJsonFiles() {

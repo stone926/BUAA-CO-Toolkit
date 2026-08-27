@@ -1,26 +1,18 @@
-# Phase-0 approval governance
+# Conformance reviews and archived governance artifacts
 
-Phase-0 expected data and performance baselines use one workflow:
+The phase-0 approval workflow (candidate → independent review → immutable
+approval envelope → formal gate) was used exactly once, to close phases 0/1 on
+2026-08-27. For a single-maintainer project it turned out to be ceremony: the
+reviewer and the approver were the same person, so the envelope could never add
+independence beyond what the review itself already provided.
 
-1. automation creates or verifies a `candidate`;
-2. `stone926` reviews the raw source, normalized expected data or benchmark
-   samples, hashes, and diff;
-3. a dedicated approval command records reviewer, date, and revision;
-4. the formal gate accepts only the reviewed artifact and its exact hashes.
+What remains here:
 
-The reviewer string inside JSON is audit metadata, not a signature and not
-proof of the caller's GitHub identity. Repository authority comes from all of
-the following controls:
+- `phase0-expected-data-review-2026-08-27.md` — the review record for the only
+  approval round (method, per-artifact findings, four recorded notes).
+- `archived-approvals-2026-08-27/` — the 16 expected-data envelopes and the two
+  benchmark envelopes created in that round, kept read-only for provenance.
 
-- `.github/CODEOWNERS` assigns the trust-root paths to `@stone926`;
-- the protected default branch must require code-owner approval, dismiss stale
-  approvals after new commits, and require the formal status check when phase 0
-  is being closed;
-- approved artifacts are merged only through that protected branch. Direct
-  pushes to the protected paths must be disabled.
-
-GitHub branch-protection settings are external repository state and cannot be
-created by this source tree. A checkout can validate hashes and the allowed
-reviewer claim, but it cannot authenticate who typed a local `--reviewer`
-argument. Candidate verification is therefore useful before review but never
-counts as the formal phase gate.
+Nothing in the conformance harness reads these files anymore. Refreshing
+expected data or a benchmark candidate is an ordinary change reviewed in the
+diff and backed by the CI checks; see the top-level README in `conformance/mips`.

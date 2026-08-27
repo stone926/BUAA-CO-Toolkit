@@ -138,7 +138,7 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
 
   let recorded;
   try {
-    recorded = loadMarsGolden(manifestCase.caseId, { requireApproved: options.requireApprovedMarsGoldens === true });
+    recorded = loadMarsGolden(manifestCase.caseId);
   } catch (error) {
     return { caseId: manifestCase.caseId, lane: 'legacy-baseline', status: 'error', message: error.message };
   }
@@ -176,9 +176,7 @@ export function runLegacyBaselineCase(manifestCase, options = {}) {
     caseId: manifestCase.caseId,
     lane: 'legacy-baseline',
     status: 'passed',
-    message: options.requireApprovedMarsGoldens
-      ? 'matches approved corpus expectation and approved fingerprinted marsGolden'
-      : 'matches candidate corpus expectation and fingerprinted marsGolden candidate',
+    message: 'matches corpus expectation and fingerprinted marsGolden',
     normalized,
     writes,
     referenceSha256: run.reference.verifiedSha256

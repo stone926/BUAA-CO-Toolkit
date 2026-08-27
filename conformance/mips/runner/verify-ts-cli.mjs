@@ -23,15 +23,11 @@ function invariant(condition, message) {
 
 export function parseTsCliVerificationArgs(argv) {
   const options = {
-    requireApproved: false,
     cli: process.env.BUAA_CO_MIPS_ENGINE_CLI || defaultCli
   };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-    if (arg === '--require-approved') {
-      if (options.requireApproved) fail('--require-approved may appear only once', 2);
-      options.requireApproved = true;
-    } else if (arg === '--cli') {
+    if (arg === '--cli') {
       options.cli = argv[++index];
       if (!options.cli || options.cli.startsWith('--')) fail('--cli requires a path', 2);
     } else {
@@ -42,7 +38,7 @@ export function parseTsCliVerificationArgs(argv) {
 }
 
 export function verifyTsCli(options) {
-  const golden = loadIsaGolden({ requireApproved: options.requireApproved });
+  const golden = loadIsaGolden();
   invariant(fs.existsSync(options.cli) && fs.statSync(options.cli).isFile(), `compiled CLI is missing: ${options.cli}`);
 
   const requests = [{ protocolVersion: 1, requestId: 'describe', operation: 'describe' }];

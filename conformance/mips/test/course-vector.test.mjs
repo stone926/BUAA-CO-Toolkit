@@ -5,23 +5,18 @@ import assert from 'node:assert/strict';
 
 import { loadCorpusManifest } from '../runner/caseManifest.mjs';
 import {
-  assertCourseVectorApproved,
-  courseVectorCandidateDescriptor,
   loadCourseVector,
   loadTutorialSourceRegistry,
   validateCourseVector,
   vectorPayloadSha256
 } from '../runner/courseVectorArtifact.mjs';
 import {
-  approvalEnvelopeSha256,
-  conformanceRoot,
-  validateApprovalEnvelope
-} from '../governance/approvalEnvelope.mjs';
-import {
-  assertKnownContractReferences,
-  loadKnownCourseContractIds,
   parseArgs as parseManageArgs,
   refreshVectorDerived
+} from '../expected/courseVector/manage-course-vectors.mjs';
+import {
+  assertKnownContractReferences,
+  loadKnownCourseContractIds
 } from '../expected/courseVector/manage-course-vectors.mjs';
 
 const manifest = loadCorpusManifest();
@@ -80,74 +75,15 @@ test('course vectors fail closed on payload, source, and independent-oracle muta
   assert.throws(() => validateCourseVector(staleRegistry, cp0Case, sourceRegistry), /sourceRegistrySha256 is stale/);
 });
 
-test('the approved phase gate fails closed when no approval envelope exists', () => {
-  // The shipped artifacts are legitimately approved (see
-  // .agents/docs/phase0-expected-data-review-2026-08-27.md), so this sentinel must
-  // not depend on the repository staying un-approved. Point the check at an empty
-  // approval root instead: an envelope has to exist for the exact candidate
-  // payload, and the embedded `review.status` stays `candidate` by design.
-  const vector = loadCourseVector(manifestCase('COURSE-VEC-P7-TIMER-001')).vector;
-  assert.equal(vector.review.status, 'candidate');
-  const emptyRoot = fs.mkdtempSync(path.join(conformanceRoot, '.approval-sentinel-'));
-  try {
-    assert.throws(
-      () => assertCourseVectorApproved(vector, undefined, { approvalRoot: emptyRoot }),
-      /not independently approved/
-    );
-  } finally {
-    fs.rmSync(emptyRoot, { recursive: true, force: true });
-  }
-  // Against the real root the same payload is approved, which proves the check is
-  // envelope-driven rather than always-failing.
-  assert.doesNotThrow(() => assertCourseVectorApproved(vector));
-});
 
-test('embedded approval is inert and the unified envelope enforces the policy reviewer', () => {
-  const entry = manifestCase('COURSE-VEC-P7-TIMER-001');
-  const forged = structuredClone(loadCourseVector(entry).vector);
-  forged.review = {
-    ...forged.review,
-    status: 'approved',
-    reviewer: 'attacker-user',
-    reviewedAt: '2026-08-26',
-    reviewRevision: 1
-  };
-  assert.throws(
-    () => validateCourseVector(forged, entry, loadTutorialSourceRegistry()),
-    /must remain candidate/
-  );
 
-  const loaded = loadCourseVector(entry);
-  const subject = courseVectorCandidateDescriptor(loaded.vector, loaded.file);
-  const envelope = {
-    schemaRevision: 1,
-    kind: 'phase0-artifact-approval',
-    subject,
-    review: { status: 'approved', reviewer: 'attacker-user', reviewedAt: '2026-08-26', reviewRevision: 1 },
-    integrity: { algorithm: 'sha256-canonical-json-v1', envelopeSha256: '' }
-  };
-  envelope.integrity.envelopeSha256 = approvalEnvelopeSha256(envelope);
-  assert.throws(() => validateApprovalEnvelope(envelope, subject), /policy reviewer stone926/);
-});
-
-test('course-vector management CLI separates verify, refresh, and independent approval', () => {
-  assert.deepEqual(parseManageArgs(['--verify']), {
-    action: 'verify', requireApproved: false, reviewer: undefined, reviewRevision: undefined
-  });
-  assert.deepEqual(parseManageArgs(['--verify', '--require-approved']), {
-    action: 'verify', requireApproved: true, reviewer: undefined, reviewRevision: undefined
-  });
-  assert.deepEqual(parseManageArgs(['--review']), {
-    action: 'review', requireApproved: false, reviewer: undefined, reviewRevision: undefined
-  });
-  assert.deepEqual(parseManageArgs(['--approve', '--reviewer', 'stone926', '--review-revision', '1']), {
-    action: 'approve', requireApproved: false, reviewer: 'stone926', reviewRevision: 1
-  });
-  assert.throws(() => parseManageArgs(['--approve']), /requires reviewer/);
-  assert.throws(() => parseManageArgs(['--approve', '--reviewer', 'not a user', '--review-revision', '1']), /GitHub username/);
-  assert.throws(() => parseManageArgs(['--approve', '--reviewer', 'attacker-user', '--review-revision', '1']), /policy reviewer stone926/);
-  assert.throws(() => parseManageArgs(['--verify', '--approve']), /exactly one/);
-  assert.throws(() => parseManageArgs(['--refresh-integrity', '--require-approved']), /accepts no other/);
+test('course-vector management CLI verifies, reviews, and refreshes integrity', () => {
+  assert.deepEqual(parseManageArgs(['--verify']), { action: 'verify' });
+  assert.deepEqual(parseManageArgs(['--review']), { action: 'review' });
+  assert.deepEqual(parseManageArgs(['--refresh-integrity']), { action: 'refresh-integrity' });
+  assert.throws(() => parseManageArgs(['--approve']), /unknown argument/);
+  assert.throws(() => parseManageArgs(['--verify', '--approve']), /exactly one|unknown argument/);
+  assert.throws(() => parseManageArgs(['--require-approved']), /an action is required|unknown argument/);
 });
 
 test('refresh migrates every legacy embedded approval back to an inert candidate', () => {

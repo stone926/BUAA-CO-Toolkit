@@ -3,12 +3,7 @@ import * as crypto from 'node:crypto';
 import * as fs from '../expected/guardedFs.mjs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isGithubUsername } from '../governance/reviewerPolicy.mjs';
-import {
-  assertCandidateApproved,
-  candidateDescriptor,
-  sha256CanonicalJson
-} from '../governance/approvalEnvelope.mjs';
+import { sha256CanonicalJson } from './canonicalJson.mjs';
 
 const runnerRoot = path.dirname(fileURLToPath(import.meta.url));
 export const isaGoldenFile = path.resolve(runnerRoot, '..', 'expected', 'isaGolden', 'course-basic-v1.json');
@@ -99,7 +94,7 @@ export function validateIsaGolden(golden, options = {}) {
 
   onlyKeys(golden.review, ['status', 'author', 'reviewer', 'reviewedAt', 'reviewRevision'], 'review');
   invariant(golden.review.status === 'candidate', 'review.status must remain candidate; approvals live in governance/approvals');
-  invariant(isGithubUsername(golden.review.author), 'review.author must be a GitHub username');
+  invariant(typeof golden.review.author === 'string' && golden.review.author.length > 0, 'review.author must be non-empty');
   invariant(golden.review.reviewer === null
     && golden.review.reviewedAt === null
     && golden.review.reviewRevision === 0,
@@ -160,23 +155,9 @@ export function validateIsaGolden(golden, options = {}) {
     invariant(typeof golden.integrity.payloadSha256 === 'string' && sha256.test(golden.integrity.payloadSha256), 'integrity.payloadSha256 is invalid');
     invariant(golden.integrity.payloadSha256 === isaGoldenPayloadSha256(golden), 'integrity.payloadSha256 is stale');
   }
-  if (options.requireApproved) {
-    assertCandidateApproved(isaGoldenCandidateDescriptor(golden, options.file ?? isaGoldenFile), options);
-  }
   return golden;
 }
 
-export function isaGoldenCandidateDescriptor(golden, file = isaGoldenFile) {
-  const descriptor = candidateDescriptor({
-    artifactKind: 'isaGolden',
-    artifactId: path.basename(file, '.json'),
-    file,
-    candidateAuthor: golden.review.author,
-    candidateRevision: golden.schemaRevision
-  });
-  invariant(descriptor.candidateSha256 === sha256CanonicalJson(golden), 'in-memory ISA golden differs from the candidate file');
-  return descriptor;
-}
 
 export function loadIsaGolden(options = {}) {
   const golden = JSON.parse(fs.readFileSync(options.file ?? isaGoldenFile, 'utf8'));

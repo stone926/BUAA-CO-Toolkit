@@ -67,9 +67,9 @@ case-storage:
 conformance/phase-0:
   conformance/mips/corpus — P3–P7 spec microprogram、challenge、教程引用、250 个固定 seed 与机器可读 feature distribution；seed renderer 独立生成 250 个唯一 source graph/HexText image（合计 5,000 words），先由固定 MARS 分 profile 汇编核对，再经编译后的 versioned JSONL CLI 全量 encode/decode；freeze verifier 防 silent corpus drift
   conformance/mips/contract/evidence-gates.json — revision 2 冻结 22 个 P3–P7 capability scope、589 个由 `idPrefix.member` 精确展开的 bin、逐 bin 数字 minimum 与 assembly/execution/device/full-stack 各自的 fingerprint inclusion/exclusion
-  conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema/审批命令，candidate 不会被测试自动批准
-  conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold/warm benchmark matrix、统计 envelope、baseline candidate/approve/verify；批准者固定为 GitHub 用户名 stone926
+  conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema；`manage-*.mjs --refresh-integrity` 会强制把内嵌 approval 声明降级回 candidate，因此 artifact 永远保持 candidate 形态，不存在单独的批准步骤
+  conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold benchmark matrix、统计与 candidate 校验；baseline 仅来自受保护 main 的 CI dispatch
   conformance/mips/decision-vectors — frozen contract/decision 的独立 vectors；Timer official-RTL lane 在缺少 Icarus 时必须由 required CI 失败而不是跳过伪通过
-  conformance/mips/governance — expected/benchmark 统一 reviewer policy（stone926）与 protected-branch/CODEOWNERS 身份边界；仓库内 reviewer 字符串不当作签名
+  conformance/mips/governance — 只保留 2026-08-27 审阅记录与归档的历史 approval 信封（provenance）；approval 机制已随单人维护放宽撤销
   conformance/mips/expected/guardedFs.mjs — expected-data 依赖闭包唯一文件系统入口；lexical/realpath 均限制在 conformance/mips，dependency whitelist 同时禁止 direct fs、dynamic import、child_process 等旁路读取 production catalog/contracts
-  gate 分层 — `run:candidate`/`verify:candidate` 只生成 `required:false` 的审阅证据；`verify:formal` 才聚合 approved courseVector、ISA/TS CLI、两平台 benchmark、Timer RTL、reference 与完整 lanes，并在任一审批缺失时 fail closed
+  gate — `npm run verify` 聚合全部检查（候选与正式层已于 2026-08-27 合并）；Timer RTL lane 只在装有 Icarus 的环境（CI）通过

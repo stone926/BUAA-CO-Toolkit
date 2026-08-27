@@ -9,45 +9,23 @@ import {
   loadIsaGolden,
   validateIsaGolden
 } from '../../runner/isaGoldenArtifact.mjs';
-import { assertPolicyReviewer } from '../../governance/reviewerPolicy.mjs';
-import {
-  approvalEnvelopeFile,
-  assertCandidateApproved,
-  createApprovalEnvelope
-} from '../../governance/approvalEnvelope.mjs';
-import { isaGoldenCandidateDescriptor } from '../../runner/isaGoldenArtifact.mjs';
 
 function usage(message) {
-  throw new Error(`${message}\nUsage: manage-isa-golden.mjs --verify [--require-approved] | --refresh-integrity | --approve --reviewer <github-user> --review-revision <n>`);
+  throw new Error(`${message}\nUsage: manage-isa-golden.mjs --verify | --refresh-integrity`);
 }
 
 export function parseArgs(argv) {
-  const result = { action: undefined, requireApproved: false, reviewer: undefined, reviewRevision: undefined };
+  const result = { action: undefined };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-    if (['--verify', '--refresh-integrity', '--approve'].includes(arg)) {
+    if (['--verify', '--refresh-integrity'].includes(arg)) {
       if (result.action) usage('select exactly one action');
       result.action = arg.slice(2);
-    } else if (arg === '--require-approved') {
-      result.requireApproved = true;
-    } else if (arg === '--reviewer') {
-      result.reviewer = argv[++index];
-      try {
-        assertPolicyReviewer(result.reviewer, '--reviewer');
-      } catch (error) {
-        usage(error instanceof Error ? error.message : String(error));
-      }
-    } else if (arg === '--review-revision') {
-      result.reviewRevision = Number(argv[++index]);
-      if (!Number.isSafeInteger(result.reviewRevision) || result.reviewRevision <= 0) usage('--review-revision must be a positive integer');
     } else {
       usage(`unknown argument: ${arg}`);
     }
   }
   if (!result.action) usage('an action is required');
-  if (result.action === 'verify' && (result.reviewer || result.reviewRevision)) usage('review fields are only valid with --approve');
-  if (result.action === 'refresh-integrity' && (result.requireApproved || result.reviewer || result.reviewRevision)) usage('--refresh-integrity accepts no other options');
-  if (result.action === 'approve' && (!result.reviewer || !result.reviewRevision || result.requireApproved)) usage('--approve requires reviewer and review revision');
   return result;
 }
 
@@ -83,23 +61,14 @@ export function refreshIsaGolden(golden) {
 export function run(argv) {
   const options = parseArgs(argv);
   if (options.action === 'verify') {
-    loadIsaGolden({ requireApproved: options.requireApproved });
+    loadIsaGolden();
   } else if (options.action === 'refresh-integrity') {
     const current = JSON.parse(fs.readFileSync(isaGoldenFile, 'utf8'));
     const refreshed = refreshIsaGolden(current);
     writeAtomic(isaGoldenFile, refreshed.golden);
-  } else {
-    const current = loadIsaGolden();
-    const subject = isaGoldenCandidateDescriptor(current);
-    const approvalFile = approvalEnvelopeFile(subject);
-    if (fs.existsSync(approvalFile)) {
-      assertCandidateApproved(subject);
-    } else {
-      createApprovalEnvelope(subject, { reviewer: options.reviewer, reviewRevision: options.reviewRevision });
-    }
   }
-  const checked = loadIsaGolden({ requireApproved: options.requireApproved || options.action === 'approve' });
-  process.stdout.write(`ISA golden verification OK: ${checked.cases.length} instructions, approval=${options.requireApproved || options.action === 'approve' ? 'required' : 'candidate-allowed'}\n`);
+  const checked = loadIsaGolden();
+  process.stdout.write(`ISA golden verification OK: ${checked.cases.length} instructions\n`);
   return 0;
 }
 

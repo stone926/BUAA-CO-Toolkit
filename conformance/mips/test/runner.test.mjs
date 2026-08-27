@@ -152,33 +152,26 @@ test('a selected candidate lane with a zero-case filter exits non-zero', () => {
   assert.match(cli.stdout, /selected zero cases/);
 });
 
-test('candidate lanes are executable but never identify themselves as the formal required gate', () => {
+test('a single lane runs its cases and reports the plain runner gate', () => {
   const cli = spawnSync(process.execPath, [
     runnerCli,
     '--lane', 'course-vector',
     '--filter', 'COURSE-VEC-P7-TIMER-001'
   ], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
-  assert.match(cli.stdout, /"reviewStatus":"candidate"/);
-  assert.match(cli.stdout, /"gate":"candidate"/);
+  assert.match(cli.stdout, /"gate":"runner"/);
   assert.match(cli.stdout, /"required":false/);
+  assert.match(cli.stdout, /"failed":0/);
 });
 
-test('formal runner is complete-only and reports an approved, required gate', () => {
-  const partial = spawnSync(process.execPath, [runnerCli, '--formal', '--lane', 'course-vector'], { encoding: 'utf8' });
+test('the runner no longer carries a formal approval gate and rejects the flag', () => {
+  const partial = spawnSync(process.execPath, [runnerCli, '--formal'], { encoding: 'utf8' });
   assert.equal(partial.status, 2);
-  assert.match(partial.stderr, /requires exactly the complete lane set/);
+  assert.match(partial.stderr, /unknown argument: --formal/);
 
-  // The expected data this lane set consumes is approved (see
-  // .agents/docs/phase0-expected-data-review-2026-08-27.md), so the formal runner
-  // must now reach a required verdict instead of failing on a missing envelope.
-  // The "no envelope means fail closed" property is owned by the artifact-level
-  // sentinels in course-vector.test.mjs and isa-golden.test.mjs, which prove it
-  // against an empty approval root rather than by relying on repository state.
-  const formal = spawnSync(process.execPath, [runnerCli, '--formal'], { encoding: 'utf8' });
-  assert.equal(formal.status, 0, formal.stderr);
-  assert.match(formal.stdout, /"gate":"formal-required"/);
-  assert.match(formal.stdout, /"required":true/);
-  assert.match(formal.stdout, /"failed":0/);
-  assert.match(formal.stdout, /matches approved corpus expectation and approved fingerprinted marsGolden/);
+  const full = spawnSync(process.execPath, [runnerCli], { encoding: 'utf8' });
+  assert.equal(full.status, 0, full.stderr);
+  assert.match(full.stdout, /"gate":"runner"/);
+  assert.match(full.stdout, /"passed":14/);
+  assert.match(full.stdout, /"failed":0/);
 });

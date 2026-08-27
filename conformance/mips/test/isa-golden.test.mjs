@@ -3,16 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import test from 'node:test';
 import {
-  isaGoldenCandidateDescriptor,
   isaGoldenPayloadSha256,
   loadIsaGolden,
   validateIsaGolden
 } from '../runner/isaGoldenArtifact.mjs';
-import {
-  approvalEnvelopeSha256,
-  conformanceRoot,
-  validateApprovalEnvelope
-} from '../governance/approvalEnvelope.mjs';
+
 import {
   parseArgs,
   refreshIsaGolden
@@ -60,56 +55,12 @@ test('legacy embedded ISA approval is always migrated to an external candidate',
   });
 });
 
-test('ISA golden management arguments require GitHub reviewer identity', () => {
-  assert.deepEqual(parseArgs(['--verify', '--require-approved']), {
-    action: 'verify', requireApproved: true, reviewer: undefined, reviewRevision: undefined
-  });
-  assert.deepEqual(parseArgs(['--approve', '--reviewer', 'stone926', '--review-revision', '1']), {
-    action: 'approve', requireApproved: false, reviewer: 'stone926', reviewRevision: 1
-  });
-  assert.throws(() => parseArgs(['--approve', '--reviewer', 'not a user', '--review-revision', '1']), /GitHub username/);
-  assert.throws(() => parseArgs(['--approve', '--reviewer', 'attacker-user', '--review-revision', '1']), /policy reviewer stone926/);
-  assert.throws(() => parseArgs(['--refresh-integrity', '--require-approved']), /accepts no other options/);
+test('ISA golden management CLI verifies and refreshes integrity', () => {
+  assert.deepEqual(parseArgs(['--verify']), { action: 'verify' });
+  assert.deepEqual(parseArgs(['--refresh-integrity']), { action: 'refresh-integrity' });
+  assert.throws(() => parseArgs(['--approve', '--reviewer', 'stone926', '--review-revision', '1']), /unknown argument/);
+  assert.throws(() => parseArgs(['--require-approved']), /unknown argument|an action is required/);
+  assert.throws(() => parseArgs(['--verify', '--refresh-integrity']), /exactly one/);
 });
 
-test('embedded ISA approval is inert and the unified envelope rejects an unauthorized reviewer', () => {
-  const forged = structuredClone(loadIsaGolden());
-  forged.review = {
-    ...forged.review,
-    status: 'approved',
-    reviewer: 'attacker-user',
-    reviewedAt: '2026-08-26',
-    reviewRevision: 1
-  };
-  assert.throws(() => validateIsaGolden(forged), /must remain candidate/);
 
-  const current = loadIsaGolden();
-  const subject = isaGoldenCandidateDescriptor(current);
-  const envelope = {
-    schemaRevision: 1,
-    kind: 'phase0-artifact-approval',
-    subject,
-    review: { status: 'approved', reviewer: 'attacker-user', reviewedAt: '2026-08-26', reviewRevision: 1 },
-    integrity: { algorithm: 'sha256-canonical-json-v1', envelopeSha256: '' }
-  };
-  envelope.integrity.envelopeSha256 = approvalEnvelopeSha256(envelope);
-  assert.throws(() => validateApprovalEnvelope(envelope, subject), /policy reviewer stone926/);
-});
-
-test('the approved gate fails closed when no approval envelope exists', () => {
-  // Same reasoning as the courseVector sentinel: the shipped golden is legitimately
-  // approved, so prove the fail-closed path against an empty approval root rather
-  // than by assuming the repository stays un-approved.
-  const golden = loadIsaGolden();
-  assert.equal(golden.review.status, 'candidate');
-  const emptyRoot = fs.mkdtempSync(path.join(conformanceRoot, '.approval-sentinel-'));
-  try {
-    assert.throws(
-      () => loadIsaGolden({ requireApproved: true, approvalRoot: emptyRoot }),
-      /is not approved/
-    );
-  } finally {
-    fs.rmSync(emptyRoot, { recursive: true, force: true });
-  }
-  assert.doesNotThrow(() => loadIsaGolden({ requireApproved: true }));
-});

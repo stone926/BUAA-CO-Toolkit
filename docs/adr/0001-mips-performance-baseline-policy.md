@@ -1,6 +1,6 @@
 # ADR-0001：MIPS 引擎性能基线采集与批准策略
 
-- 状态：已接受策略；阶段 0 的外部 baseline 数值仍待采集和独立批准
+- 状态：已接受策略；阶段 0 的 baseline 已采集；批准机制已于 2026-08-27 简化（见“产物与维护”）
 - 日期：2026-08-26
 - 决策者：stone926
 - 对应计划：MARS TypeScript Core 实施方案 §8.1
@@ -32,25 +32,24 @@ MARS CLI 没有已经证明完整复位的常驻进程，所以所有 MARS 数�
 进程的第二个 case 标成 warm。TS 引擎落地后，first Worker、warm assemble、warm
 execute 和 extension activation 使用 matrix 中另立的生命周期桶。
 
-## 产物与批准
+## 产物与维护
 
 CI 只产生 candidate，不自动更新 baseline。`validate-fixed-benchmark.mjs` 会重新计算
-matrix、p50/p95/CI、CPU/RSS 汇总和所有 hash。独立审阅 raw samples 与汇总后，审阅者用
-`approve-baseline.mjs` 创建只写一次的 approval envelope；候选 JSON 和 envelope 一同
-进入 `bench/baselines/`。任何重新测量、runner fingerprint、matrix 或 reference hash
-变化都需要新 envelope/revision。
+matrix、p50/p95/CI、CPU/RSS 汇总和所有 hash。审阅 raw samples 与汇总后，把 candidate
+替换进 `bench/baselines/` 并在提交信息里记录 run URL。任何重新测量、runner fingerprint、
+matrix 或 reference hash 变化都对应一次新的替换与说明。
 
-审批 envelope 的 reviewer 只允许 GitHub 用户名 `stone926`。该字符串仍不是签名：仓库必须
-为 conformance trust-root 路径启用 `.github/CODEOWNERS`，并在 GitHub 受保护默认分支上要求
-code-owner review、禁止直接 push、在新提交后撤销陈旧审批。源码只能声明这项要求，不能替代
-GitHub 仓库设置本身。
+> 历史说明：阶段 0 过门时曾使用 `approve-baseline.mjs` 生成的 immutable approval
+> envelope 作为正式证据；该机制对单人维护没有增加独立性，已于 2026-08-27 撤销，
+> 当时的 envelope 归档在 `conformance/mips/governance/reviews/archived-approvals-2026-08-27/benchmark/`。
+> 撤销的只是"批准"这个形式步骤，**采集环境的约束全部保留**：baseline 只能来自
+> 受保护 `main` 的 CI dispatch。
 
 不得填写估算值、复制另一操作系统的数字或以本地开发机 smoke 代替 controlled-runner
-候选。当前目录没有 approved baseline，因此阶段 0 性能证据门仍保持未通过，直到两套
-CI candidate 均经 `stone926` 审阅批准。
+候选。阶段 0 使用的两套 candidate（run 33074237426）仍保留在本目录。
 
 ## 后续 gate
 
 阶段 2 首次 TS runner 数据到齐后，在本 ADR 的后续 revision 中确认或调整计划给出的绝对
-SLO；调整必须引用批准数据，不能为了让实现过线而回填。相对 gate 固定为同 fingerprint
-下 p95 相对上一批准 TS baseline 回退不超过 15%。
+SLO；调整必须引用 CI candidate 数据，不能为了让实现过线而回填。相对 gate 固定为同
+fingerprint 下 p95 相对上一份 TS baseline 回退不超过 15%。

@@ -12,12 +12,7 @@ on:
         required: true
         default: false
         type: boolean
-      run_phase0_formal_gate:
-        description: Run the fail-closed phase-0 formal gate (requires all checked-in approvals)
-        required: true
-        default: false
-        type: boolean
-
+      
 jobs:
   test:
     name: Test and compile
@@ -76,21 +71,21 @@ jobs:
         run: node conformance/mips/reference/verify-regression.mjs
 
       - name: Materialize and verify all 250 fixed seed source/images
-        run: npm --prefix conformance/mips run verify:seed-evidence:candidate
+        run: npm --prefix conformance/mips run verify:seed-evidence
 
       - name: Upload fixed seed evidence
         uses: actions/upload-artifact@v4
         with:
           name: fixed-seed-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: conformance/.cache/fixed-seed-evidence-candidate.json
+          path: conformance/.cache/fixed-seed-evidence.json
           if-no-files-found: error
           retention-days: 30
 
       - name: Conformance smoke sentinels
         run: npm --prefix conformance/mips test
 
-      - name: Candidate conformance lanes (not a formal gate)
-        run: npm --prefix conformance/mips run run:candidate
+      - name: Conformance lanes
+        run: npm --prefix conformance/mips run run
 
       - name: Test
         run: npm test
@@ -120,40 +115,6 @@ jobs:
 
       - name: Verify only through the versioned JSONL process boundary
         run: npm --prefix conformance/mips run verify:ts-cli
-
-  phase0-formal-gate:
-    name: Phase 0 formal gate (approved evidence only)
-    if: github.event_name == 'workflow_dispatch' && inputs.run_phase0_formal_gate
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Checkout protected main
-        uses: actions/checkout@v4
-
-      - name: Reject non-main formal evidence
-        shell: bash
-        run: test "$GITHUB_REF" = "refs/heads/main"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Setup Java 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - name: Install Icarus Verilog
-        run: sudo apt-get update && sudo apt-get install -y iverilog
-
-      - name: Install, compile, and verify pinned references
-        run: npm ci && npm run compile && node conformance/mips/reference/download-references.mjs --require-all
-
-      - name: Run fail-closed formal gate
-        run: npm --prefix conformance/mips run verify:formal
 
   fixed-mars-benchmark:
     name: MARS baseline candidate (${{ matrix.runner_id }})

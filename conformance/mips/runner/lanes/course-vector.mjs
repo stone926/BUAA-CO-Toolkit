@@ -19,7 +19,7 @@ const defaultMaxSteps = 4096;
 export function runCourseVectorCase(manifestCase, options = {}) {
   const vector = options.vectorOverride
     ? validateCourseVector(options.vectorOverride, manifestCase, loadTutorialSourceRegistry())
-    : loadCourseVector(manifestCase, { requireApproved: options.requireApprovedCourseVectors === true }).vector;
+    : loadCourseVector(manifestCase).vector;
   if (vector.execution.verificationMode === 'independent-directed-oracle') {
     return {
       caseId: manifestCase.caseId,

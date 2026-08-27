@@ -4,7 +4,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { phase0ApprovalReviewer } from '../governance/reviewerPolicy.mjs';
+// The frozen product-owner decisions were reviewed on 2026-08-26; the id string is
+// historical provenance inside the pinned artifacts, not a live reviewer policy.
+const frozenDecisionReviewer = 'stone926';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const expectedDecisionIds = new Set([
@@ -46,7 +48,7 @@ function validateArtifact(entry, artifact) {
   invariant(artifact?.schemaRevision === 1, `${entry.file}: unsupported schemaRevision`);
   invariant(artifact.id === entry.id, `${entry.file}: id does not match manifest`);
   invariant(artifact.profile === 'P7', `${entry.file}: decision vector must use P7 profile`);
-  invariant(artifact.approvedBy === phase0ApprovalReviewer && artifact.approvedAt === '2026-08-26', `${entry.file}: missing product-owner approval provenance`);
+  invariant(artifact.approvedBy === frozenDecisionReviewer && artifact.approvedAt === '2026-08-26', `${entry.file}: missing product-owner approval provenance`);
 }
 
 export function evaluateExceptionCase(policy, input) {

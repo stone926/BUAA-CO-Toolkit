@@ -8,7 +8,6 @@ import {
   summarizeFixedSamples
 } from '../bench/fixed-runner-benchmark.mjs';
 import { parseArgs as parseValidationArgs, validateFixedBenchmark, validateRunnerMetadata } from '../bench/validate-fixed-benchmark.mjs';
-import { assertApprovedBaselineFileSet, requiredBaselinePairs } from '../bench/verify-approved-baselines.mjs';
 
 test('fixed benchmark matrix freezes all section-8.1 MARS dimensions without fake warm rows', () => {
   const cells = buildFixedBenchmarkMatrix(false);
@@ -69,13 +68,6 @@ test('statistics include p50, p95, deterministic 95% CI, CPU, and RSS', () => {
 
 test('candidate validator fails closed rather than accepting partial metadata', () => {
   assert.throws(() => validateFixedBenchmark({}), /schema\/runner\/matrix revision/);
-});
-
-test('approved baseline gate requires exact Windows and Linux candidate/envelope pairs', () => {
-  const required = requiredBaselinePairs.flatMap((pair) => [pair.candidate, pair.approval]);
-  assert.doesNotThrow(() => assertApprovedBaselineFileSet(required));
-  assert.throws(() => assertApprovedBaselineFileSet(required.slice(1)), /file set mismatch/);
-  assert.throws(() => assertApprovedBaselineFileSet([...required, 'unreviewed-copy.json']), /orphaned/);
 });
 
 test('runner labels cannot be forged across OS/runtime/image contracts', () => {
