@@ -26,9 +26,7 @@
   角色化固定 MARS reference（hash 校验下载）、独立 conformance harness、candidate
   expected data、provider-neutral contracts、manifest v2、唯一 ISA catalog 与
   versioned JSONL CLI、懒启动 Worker 与严格 ACK/backpressure、进程树取消、
-  replay closure 与 exact replay、新旧 legacy 等价。过门证据（两平台 portability、
-  official-RTL lane、两平台 benchmark、formal gate 聚合）见
-  [阶段 0/1 审计报告](./mars-phase0-1-audit-2026-08-26.md) §8。
+  replay closure 与 exact replay、新旧 legacy 等价。
 - **阶段 2（2026-08-27 实现落地）**：P3–P6 机器执行核心 —— GPR/PC/HI/LO、显式小端
   byte lane、transactional effect→commit、P3/P4 无延迟槽（link=PC+4）、P5/P6 一条
   延迟槽（link=PC+8）、byte/half 与 MDU、lwl/lwr/swl/swr、halt 检测要求完整
@@ -474,6 +472,10 @@ Canonical expectation 另带字段级 `definedMask`、`observableMask` 和可选
 P3/P4/P5/P6/P7 不得通过散落的 `if (profile === ...)` 修改状态机。P7 非 Timer anchor 使用架构 session；Timer 单元契约使用 `DeviceSession`；真实 CPU+Timer 集成使用 cycle/event scheduler 与 probe/property。MARS 的“每指令 tick”只能作为 legacy behavior，不能作为课程 Timer 真值或最终 shadow 通过证据。
 
 ### 5.6 Worker、取消与缓存
+
+> 落地提示（2026-08-27）：本节的 include-graph 两级缓存索引、独立 LSP worker 与
+> Worker 池设计属于偏重的前置设计。阶段 4 实际动手时按当时的真实负载重新评估
+> 必要性，能用无缓存/单 Worker 就先做简单正确版本，测量证明有收益后再加层。
 
 - activation 只构造轻量 `MipsRuntimeManager`，第一次 assemble/execute 时才启动 `out/mips/host/workerMain.js`。
 - 第一版默认一个 Worker；测量证明有收益后，后台批跑最多两个。交互任务优先于 continuous 任务。
