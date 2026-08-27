@@ -15,7 +15,10 @@ function run(command, args, options = {}) {
     cwd: process.cwd(),
     encoding: 'utf8',
     stdio: options.inherit ? 'inherit' : 'pipe',
-    shell: false
+    // Windows can only execute .cmd/.bat through a shell (Node >= 20.12 rejects
+    // spawnSync('npm.cmd', ...) with EINVAL). The arguments below are static
+    // literals, so there is no injection surface.
+    shell: options.shell === true
   });
   if (result.error) {
     throw result.error;
@@ -46,7 +49,7 @@ try {
     process.exit(1);
   }
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  run(npm, ['run', 'compile'], { inherit: true });
+  run(npm, ['run', 'compile'], { inherit: true, shell: process.platform === 'win32' });
   if (!assertClean('after compile')) {
     process.exit(1);
   }
