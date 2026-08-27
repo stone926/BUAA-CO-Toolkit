@@ -638,9 +638,14 @@ function generateGeneratorProfiles(catalog) {
   }, null, 2)}\n`;
 }
 
+/** Generated files are written with LF; a CRLF checkout must still compare equal. */
+function normalizeToLf(text) {
+  return text.replace(/\r\n/g, '\n');
+}
+
 function updateGeneratedTargets(targets) {
   const stale = targets.filter(({ file, content }) =>
-    !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== content);
+    !fs.existsSync(file) || normalizeToLf(fs.readFileSync(file, 'utf8')) !== normalizeToLf(content));
   if (!stale.length) {
     console.log('MIPS ISA generated projections are up to date.');
     return;
@@ -661,7 +666,15 @@ function main() {
   const catalog = JSON.parse(sourceBytes.toString('utf8'));
   validateCatalog(catalog);
   validateLspDisplaySource(catalog, JSON.parse(fs.readFileSync(lspDisplaySourceFile, 'utf8')));
-  const sourceSha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
+  // The catalog fingerprint is an evidence trust root: the ISA golden binds to it
+  // and the JSONL `describe` publishes it. Hashing the raw on-disk bytes made it
+  // depend on the checkout's line endings, so the same commit produced different
+  // fingerprints on Windows (CRLF) and Linux (LF) and `--check` could not pass on
+  // both. Hash the LF-normalized source instead (`utf8-lf-v1`, the same
+  // normalization the courseVector artifacts already declare).
+  const sourceSha256 = crypto.createHash('sha256')
+    .update(normalizeToLf(sourceBytes.toString('utf8')), 'utf8')
+    .digest('hex');
   updateGeneratedTargets([
     { file: coreTargetFile, content: generateTs(catalog, sourceSha256) },
     { file: lspTargetFile, content: generateLspTs(catalog, sourceSha256) },

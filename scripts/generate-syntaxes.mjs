@@ -902,7 +902,9 @@ async function main() {
           throw error;
         }
       }
-      if (existing !== content) {
+      // Generated grammars are written with LF; a CRLF checkout must still
+      // compare equal, otherwise `--check` can only pass on one platform.
+      if (existing.replace(/\r\n/g, '\n') !== content.replace(/\r\n/g, '\n')) {
         staleFiles.push(path.relative(projectRoot, filePath));
       }
       continue;

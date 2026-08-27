@@ -6,7 +6,7 @@ export type IsaDisplayInstructionLayer = 'required' | 'commonExtensions' | 'mars
 export type IsaDisplayCourseProfile = 'P3' | 'P4' | 'P5' | 'P6' | 'P7';
 
 export const isaDisplayCatalogSchemaRevision = 1 as const;
-export const isaDisplayCatalogSha256 = "5f50a468d26537471cf007e7d2c5cc175f8218e5068e1a2d1de693eb1f645526" as const;
+export const isaDisplayCatalogSha256 = "115f33799954e9d5bbd8b0dfa0b225263487e964edf3ad70ed5f5bb4303f4fcf" as const;
 
 export interface IsaDisplayInstructionFact {
   readonly mnemonic: string;

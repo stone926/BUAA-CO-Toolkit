@@ -18,10 +18,15 @@ function stableJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+/** Generated files are written with LF; a CRLF checkout must still compare equal. */
+function normalizeToLf(text) {
+  return text.replace(/\r\n/g, '\n');
+}
+
 function writeJsonIfChanged(filePath, value) {
   const next = stableJson(value);
   const previous = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-  if (previous === next) {
+  if (normalizeToLf(previous) === normalizeToLf(next)) {
     return false;
   }
   if (checkOnly) {

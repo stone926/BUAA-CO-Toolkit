@@ -2,7 +2,7 @@
   "schemaRevision": 1,
   "description": "Independent encode/decode words for every tutorial-required P3-P7 real instruction. Expected words are frozen here and never read from the production catalog.",
   "cliProtocolVersion": 1,
-  "catalogSha256": "5f50a468d26537471cf007e7d2c5cc175f8218e5068e1a2d1de693eb1f645526",
+  "catalogSha256": "115f33799954e9d5bbd8b0dfa0b225263487e964edf3ad70ed5f5bb4303f4fcf",
   "review": {
     "status": "candidate",
     "author": "codex-gpt-5",
@@ -523,6 +523,6 @@
   ],
   "integrity": {
     "algorithm": "sha256-canonical-json-v1",
-    "payloadSha256": "6e2eedf5b99120e4de40a42e9fa683194a744b888fb33162c0469ea358011a86"
+    "payloadSha256": "731936cf9728a432ec5ca0847386f486ec599e98531ebc6274be2e97cd5266fa"
   }
 }
