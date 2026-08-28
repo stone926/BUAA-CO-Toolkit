@@ -2,7 +2,7 @@
 
 import { CourseProfile } from '../generated/isaCatalog';
 import { SourceSpan } from './diagnostics';
-import { parseInstructionOperand, ParsedInstructionOperand } from './operands';
+import { ParsedInstructionOperand } from './operands';
 import { ParsedStatement } from './syntax';
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 
@@ -142,7 +142,7 @@ function expandLoadImmediate(
   mnemonic: 'li' | 'la',
   operands: readonly ParsedInstructionOperand[],
   origin: WorkInstruction['origin'],
-  statement: ParsedStatement,
+  _statement: ParsedStatement,
   options: PseudoExpansionOptions
 ): WorkInstruction[] {
   requireCount(mnemonic, operands, 2);
@@ -282,8 +282,8 @@ function expandBranchComparison(
     throw new Error(`${mnemonic} 的立即数形式仅支持 16 位有符号立即数`);
   }
   const value = signedValue | 0;
-  const slti = unsigned ? 'sltiu' : 'slti';
   const slt = unsigned ? 'sltu' : 'slt';
+  const slti = unsigned ? 'sltiu' : 'slti';
   switch (base) {
     case 'blt':
       return [real(slti, [at(), first, immediateOperand(String(value), operandSpan(operands[1]))], origin, mnemonic), real('bne', [at(), zero(), label], origin, mnemonic)];
@@ -323,10 +323,8 @@ function expandSetComparison(
   const unsigned = mnemonic.endsWith('u');
   const base = mnemonic.slice(0, 3);
   const at = (): WorkOperand => ({ kind: 'register', register: 1, span: operandSpan(operands[1]) } as WorkOperand);
-  const one = (): WorkOperand => registerNumber(1, operandSpan(operands[1]));
   const zero = (): WorkOperand => registerNumber(0, operandSpan(operands[1]));
   const slt = unsigned ? 'sltu' : 'slt';
-  const slti = unsigned ? 'sltiu' : 'slti';
 
   if (operands[1].kind === 'register' && operands[2].kind === 'register') {
     const first = registerOperand(operands[1]);
@@ -606,10 +604,6 @@ function operandText(operand: ParsedInstructionOperand): string {
 
 function registerNumber(register: number, span: SourceSpan): WorkOperand {
   return { kind: 'register', register, span };
-}
-
-function registerText(register: number): string {
-  return `$${register}`;
 }
 
 function operandSpan(operand: ParsedInstructionOperand): SourceSpan {

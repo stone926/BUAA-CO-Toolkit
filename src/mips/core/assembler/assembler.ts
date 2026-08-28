@@ -14,13 +14,12 @@ import {
 import {
   CourseSourceResolver,
   defaultAssemblerSourceLimits,
-  ExpandedSourceGraph,
   ExpandedSourceLine,
   expandAssemblerSourceGraph,
   SourceGraphLimits
 } from './sourceGraph';
 import { evaluateExpression } from './expression';
-import { parseCharacterLiteral, parseIntegerLiteral, parseNonNegativeIntegerLiteral, parseStringLiteralBytes } from './literals';
+import { parseIntegerLiteral, parseStringLiteralBytes } from './literals';
 import { parseInstructionOperand } from './operands';
 import { parseCp0Register, parseGprRegister } from './registers';
 import {
@@ -37,7 +36,6 @@ import {
   MacroDefinition
 } from './macros';
 import {
-  ParsedLine,
   ParsedOperand,
   ParsedStatement,
   parseAssemblerLine
@@ -88,8 +86,6 @@ interface EqvSymbol {
   readonly expression: string;
   readonly span: SourceSpan;
 }
-
-type AssemblerSymbol = LabelSymbol | EqvSymbol;
 
 interface InstructionPatch {
   readonly instruction: WorkInstruction;
@@ -417,7 +413,6 @@ function defineLabels(statement: ParsedStatement, state: AssemblyState): void {
 
 function processDirective(statement: ParsedStatement, mnemonic: string, state: AssemblyState): void {
   const span = statementSpan(statement);
-  const origin = workOriginFor(statement);
   const operands = statement.operands;
   switch (mnemonic) {
     case '.text':
@@ -840,14 +835,14 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
     if (pseudoExpansion) return { ok: true, instructions: pseudoExpansion };
   }
 
-  const immediateExpansion = oversizedImmediatePseudo(mnemonic, parsedOperands, state);
+  const immediateExpansion = oversizedImmediatePseudo(mnemonic, parsedOperands);
   if (immediateExpansion.ok) return immediateExpansion;
 
   const real = tryRealInstruction(mnemonic, entry, parsedOperands, statement);
   if (real.ok && real.instructions) return { ok: true, instructions: real.instructions };
 
   // MARS pseudo forms sharing a real mnemonic.
-  const pseudoExpansion = expandSharedMnemonicPseudo(mnemonic, parsedOperands, statement, state);
+  const pseudoExpansion = expandSharedMnemonicPseudo(mnemonic, parsedOperands, statement);
   if (pseudoExpansion.ok) return pseudoExpansion;
 
   return {
@@ -959,8 +954,7 @@ function parseBareMemoryOperand(text: string, span: SourceSpan): WorkOperand | u
 function expandSharedMnemonicPseudo(
   mnemonic: string,
   operands: readonly ReturnType<typeof parseInstructionOperand>[],
-  statement: ParsedStatement,
-  state: AssemblyState
+  statement: ParsedStatement
 ): WorkResult {
   const instructionSet = new Set([
     'add', 'addu', 'sub', 'subu', 'and', 'or', 'xor',
@@ -1039,8 +1033,7 @@ function expandSharedMnemonicPseudo(
 
 function oversizedImmediatePseudo(
   mnemonic: string,
-  operands: readonly ParsedInstructionOperand[],
-  state: AssemblyState
+  operands: readonly ParsedInstructionOperand[]
 ): WorkResult {
   const immediateMnemonics = new Set(['addi', 'addiu', 'andi', 'ori', 'xori']);
   if (!immediateMnemonics.has(mnemonic) || operands.length !== 3 || operands[2].kind !== 'immediate') {
@@ -1068,7 +1061,7 @@ function oversizedImmediatePseudo(
     expansionStack: []
   } satisfies ParsedStatement;
   // expandSharedMnemonicPseudo only needs operands and statement origin fields.
-  return expandSharedMnemonicPseudo(mnemonic, operands, statement, state);
+  return expandSharedMnemonicPseudo(mnemonic, operands, statement);
 }
 
 function isLoadStoreMnemonic(mnemonic: string): boolean {

@@ -10,18 +10,18 @@ export type RealOperandForm =
   | { readonly kind: 'memory' }
   | { readonly kind: 'cp0' };
 
-const rStandard = (entry: IsaInstructionEntry): RealOperandForm[] => [
+const rStandard: RealOperandForm[] = [
   { kind: 'register', role: 'rd' },
   { kind: 'register', role: 'rs' },
   { kind: 'register', role: 'rt' }
 ];
 
-const rStandardRs = (entry: IsaInstructionEntry): RealOperandForm[] => [
+const rStandardRs: RealOperandForm[] = [
   { kind: 'register', role: 'rd' },
   { kind: 'register', role: 'rs' }
 ];
 
-const rStandardRsRt = (entry: IsaInstructionEntry): RealOperandForm[] => [
+const rStandardRsRt: RealOperandForm[] = [
   { kind: 'register', role: 'rs' },
   { kind: 'register', role: 'rt' }
 ];
@@ -53,14 +53,14 @@ export function realInstructionForms(mnemonic: string, entry: IsaInstructionEntr
       if (mnemonic === 'mult' || mnemonic === 'multu' || mnemonic === 'div' || mnemonic === 'divu'
         || mnemonic === 'tge' || mnemonic === 'tgeu' || mnemonic === 'tlt' || mnemonic === 'tltu'
         || mnemonic === 'teq' || mnemonic === 'tne') {
-        return rStandardRsRt(entry);
+        return rStandardRsRt;
       }
-      return rStandard(entry);
+      return rStandard;
     }
     case 'special2': {
-      if (mnemonic === 'clz' || mnemonic === 'clo') return rStandardRs(entry);
-      if (mnemonic === 'mul') return rStandard(entry);
-      return rStandardRsRt(entry);
+      if (mnemonic === 'clz' || mnemonic === 'clo') return rStandardRs;
+      if (mnemonic === 'mul') return rStandard;
+      return rStandardRsRt;
     }
     case 'regimm':
       return entry.controlKind === 'trap'

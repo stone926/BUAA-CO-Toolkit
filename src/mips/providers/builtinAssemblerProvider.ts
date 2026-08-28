@@ -27,11 +27,11 @@ import {
   AssemblerServiceResult
 } from '../core/assembler/assemblyService';
 import { findCourseHaltPc, imageSegmentWords, wordsToHexText } from '../core/assembler/artifacts';
-import { sourceUnitFingerprint } from '../core/programImage';
+
 import { builtinAssemblerEngineArtifact } from '../replay/builtinAssemblerEngineArtifact';
 import { captureSourceGraph, defaultSourceCaptureLimits, SourceGraphBundle } from '../replay/sourceBundle';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
-import { maximumReplayProgramImageBytes, readBoundedRegularFile } from '../replay/boundedFile';
+import { readBoundedRegularFile } from '../replay/boundedFile';
 import type { WorkerJob, WorkerOutboundMessage } from '../host/workerProtocol';
 
 /** Phase-5 assembler descriptor; same engine id as the executor, assembler role. */

@@ -132,7 +132,7 @@ function statement(
   };
 }
 
-export function tokenizeCode(text: string, sourceId: string, baseOffset: number): StatementToken[] {
+export function tokenizeCode(text: string, _sourceId: string, baseOffset: number): StatementToken[] {
   const tokens: StatementToken[] = [];
   let index = 0;
   while (index < text.length) {

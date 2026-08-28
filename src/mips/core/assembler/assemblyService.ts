@@ -1,7 +1,7 @@
 // @index mips-core — CLI/Worker 共用的纯汇编服务 DTO：显式 source/include graph 上限与稳定错误投影
 
 import { CourseProfile, InstructionLayer } from '../generated/isaCatalog';
-import { ProgramImage, SourceUnit } from '../api';
+import { ProgramImage } from '../api';
 import { AssemblerDiagnostic } from './diagnostics';
 import {
   assembleCourseSource,
@@ -10,7 +10,7 @@ import {
 } from './assembler';
 
 export { courseAssemblerSemanticsRevision };
-import { defaultAssemblerSourceLimits, SourceGraphLimits } from './sourceGraph';
+import { defaultAssemblerSourceLimits } from './sourceGraph';
 
 export const maximumAssemblerSourceUnits = defaultAssemblerSourceLimits.maxUnits;
 export const maximumAssemblerSourceBytes = defaultAssemblerSourceLimits.maxBytes;
