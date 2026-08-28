@@ -266,6 +266,34 @@
         "note": "教程明确排除该输入但不定义值；strict fail-closed 与 opt-in synthetic zero-fill 均是产品策略。"
       },
       "revision": 2
+    },
+    {
+      "id": "COURSE-COMMON-ASM-RAW-WORD-001",
+      "subject": ".text/.ktext 中的原始 .word 32-bit data 注入",
+      "question": "为今后生成未知指令并参与 P7 RI 异常测试，builtin TS 汇编器是否允许在 .text/.ktext 段使用 .word 注入任意 raw 32-bit data？固定 MARS 汇编器拒绝该形式。",
+      "decision": "frozen",
+      "resolution": "builtin TS 汇编器允许 .word 出现在 .text/.ktext，每个操作数按小端原始 32-bit word 写入当前字地址并推进 PC；支持 value:count 与可重定位表达式。该能力保留给后续测试点生成器注入未知指令；本阶段只实现汇编器侧，不实现生成器的注入点。固定 MARS 仍拒绝该形式，因此声明支持语料与 assembly-diff corpus 不得依赖此扩展。",
+      "rationale": "P7 RI 测试需要可控的未知机器码注入；legacy 路径依赖自定义 Java class 和 MARS 外部进程，builtin 全 TS 路径需要纯汇编器侧的原语。保持差异显式登记，避免静默扩大 MARS 兼容面。",
+      "normativeReference": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "COURSE-COMMON-ASM-RAW-WORD-001：builtin TS 汇编器允许 .word 出现在 .text/.ktext，作为后续 RI 测试点生成的内部扩展；固定 MARS 拒绝该形式。"
+        },
+        {
+          "source": "extension/src/mips/core/assembler/assembler.ts",
+          "quote": "processRawTextWordDirective/allocateRawTextWord：.word 在 text/ktext 段分配一个指令字并记录 rawTextPatch；pass 2 以 u32 写回段字。"
+        }
+      ],
+      "freezeRequires": [],
+      "scope": "product-policy",
+      "provenance": {
+        "decisionAuthority": "product-owner",
+        "decidedBy": "stone926",
+        "decidedAt": "2026-08-28",
+        "evidenceStatus": "out-of-domain-policy",
+        "note": "测试点生成器注入侧后续实现；当前仅冻结汇编器语法与 image 语义。"
+      },
+      "revision": 1
     }
   ]
 }

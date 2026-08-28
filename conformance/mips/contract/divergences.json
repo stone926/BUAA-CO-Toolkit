@@ -366,6 +366,40 @@
         }
       },
       "revision": 1
+    },
+    {
+      "id": "MARS-DIV-RAW-TEXT-WORD-001",
+      "category": "course-correct",
+      "domain": "assembler",
+      "subject": "fixed MARS 拒绝 .text/.ktext 中的 .word raw data，而 builtin TS 课程汇编器有意支持",
+      "marsBehavior": "pinned MARS v0.6.3 assembler reports '\".word\" directive cannot appear in text segment' and produces no image.",
+      "courseBehavior": "builtin TS assembler accepts .word in .text/.ktext as an arbitrary raw 32-bit little-endian word occupying one instruction slot and advancing PC；该形式用于今后 RI 未知指令测试点注入。",
+      "pluginHandling": "builtin TS assembler 支持并通过 processRawTextWordDirective 生成 ProgramImage；assembly-diff 声明语料不包含该形式；legacy P7 RI 路径继续使用自定义 instruction class，直到测试点生成器完成迁移。",
+      "sources": [
+        {
+          "source": "extension/.agents/docs/mars-typescript-core-implementation-plan.md",
+          "quote": "COURSE-COMMON-ASM-RAW-WORD-001：builtin TS 汇编器允许 .word 出现在 .text/.ktext，作为后续 RI 测试点生成的内部扩展；固定 MARS 拒绝该形式。"
+        },
+        {
+          "source": "extension/src/mips/core/assembler/assembler.ts",
+          "quote": "case '.word': if (state.currentSection !== 'data') processRawTextWordDirective(statement, state);"
+        }
+      ],
+      "reproduction": {
+        "kind": "minimal-repro",
+        "file": "conformance/mips/corpus/challenge/raw-text-word.asm",
+        "profile": "common",
+        "expectedObservation": "MARS assembler rejects the fixture with no dump；builtin TS assembler produces a text image whose first word is 0x12345678 followed by the normal ori/nop encoding.",
+        "verification": {
+          "kind": "legacy-differential",
+          "assertions": [
+            "pinned MARS reports .word cannot appear in text segment",
+            "builtin TS image text[0] is 0x12345678",
+            "builtin TS image text[1..] equals normal ori/nop encoding"
+          ]
+        }
+      },
+      "revision": 1
     }
   ]
 }

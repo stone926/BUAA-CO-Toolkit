@@ -186,6 +186,23 @@ describe('course assembler directives and pseudo', () => {
     ]);
   });
 
+  it('injects raw .word data in .text as the future RI test-point extension', () => {
+    const asm = [
+      '.text',
+      'main:',
+      '    .word 0x12345678',
+      '    .word 0xffffffff, 0x0000003f',
+      '    .word main+4',
+      '    ori $t0, $0, 1',
+      '    nop'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P7' });
+    expect(result.ok).toBe(true);
+    expect(result.image!.segments.find((segment) => segment.name === 'text')!.words.map((word) => word.toString(16).padStart(8, '0')))
+      .toEqual(['12345678', 'ffffffff', '0000003f', '00003004', '34080001', '00000000']);
+    expect(result.image!.sourceMap).toHaveLength(6);
+  });
+
   it('supports the P7 generator RI victim mnemonic', () => {
     const asm = '_co_internal_unknown_instruction\n.text\n    beq $0, $0, end\n    nop\nend:\n    nop\n';
     const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P7', p7RiInstruction: true });

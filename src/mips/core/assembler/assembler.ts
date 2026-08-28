@@ -103,6 +103,15 @@ interface DataPatch {
   readonly float?: boolean;
 }
 
+interface RawTextPatch {
+  readonly section: 'text' | 'ktext';
+  readonly wordIndex: number;
+  readonly address: number;
+  readonly expression: string;
+  readonly span: SourceSpan;
+  readonly origin: WorkInstruction['origin'];
+}
+
 interface MacroFrame {
   readonly definition: MacroDefinition;
   readonly callSpan: SourceSpan;
@@ -131,6 +140,7 @@ interface AssemblyState {
   readonly diagnostics: AssemblerDiagnostic[];
   readonly instructionPatches: InstructionPatch[];
   readonly dataPatches: DataPatch[];
+  readonly rawTextPatches: RawTextPatch[];
   currentSection: CourseSectionId;
   expandedInstructionCount: number;
   macroCounter: number;
@@ -186,6 +196,7 @@ export function assembleCourseSource(
     diagnostics: [],
     instructionPatches: [],
     dataPatches: [],
+    rawTextPatches: [],
     currentSection: 'text',
     expandedInstructionCount: 0,
     macroCounter: 0,
@@ -296,6 +307,15 @@ export function assembleCourseSource(
       state.diagnostics.push(encoded.diagnostic);
       continue;
     }
+    (segment.words as number[])[patch.wordIndex] = encoded.word!;
+  }
+  for (const patch of state.rawTextPatches) {
+    const encoded = encodeRawTextPatch(patch, state);
+    if (encoded.diagnostic) {
+      state.diagnostics.push(encoded.diagnostic);
+      continue;
+    }
+    const segment = segmentsBeforePatch[segmentIndexByName.get(patch.section)!];
     (segment.words as number[])[patch.wordIndex] = encoded.word!;
   }
   for (const patch of state.dataPatches) {
@@ -512,6 +532,12 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       }
       break;
     case '.word':
+      if (state.currentSection !== 'data') {
+        processRawTextWordDirective(statement, state);
+        break;
+      }
+      processNumericDataDirective(statement, mnemonic, state);
+      break;
     case '.half':
     case '.byte':
       if (state.currentSection !== 'data') {
@@ -659,6 +685,77 @@ function processEqv(statement: ParsedStatement, state: AssemblyState): void {
     expression,
     span: expressionSpan
   });
+}
+
+function processRawTextWordDirective(statement: ParsedStatement, state: AssemblyState): void {
+  if (!statement.operands.length) {
+    state.diagnostics.push(assemblerDiagnostic('asm.operand.wrong-count', '.word 至少需要一个操作数', statementSpan(statement), statement.expansionStack));
+    return;
+  }
+  const origin = workOriginFor(statement);
+  const section = state.currentSection === 'ktext' ? 'ktext' : 'text';
+  for (const operand of statement.operands) {
+    const repetition = parseDataRepetition(operand.text);
+    if (repetition) {
+      const count = requiredInteger({ text: repetition.count, span: repetition.span } as ParsedOperand, state, 1, 0x0010_0000);
+      if (!count.ok) {
+        state.diagnostics.push(assemblerDiagnostic('asm.data.value-out-of-range', `.word 重复次数无效：${repetition.count}`, operand.span, statement.expansionStack));
+        continue;
+      }
+      for (let index = 0; index < count.value; index++) {
+        allocateRawTextWord(state, section, repetition.value, operand.span, origin);
+      }
+      continue;
+    }
+    allocateRawTextWord(state, section, operand.text, operand.span, origin);
+  }
+}
+
+function allocateRawTextWord(
+  state: AssemblyState,
+  section: 'text' | 'ktext',
+  expression: string,
+  span: SourceSpan,
+  origin: WorkInstruction['origin']
+): void {
+  try {
+    const appended = state.builder.appendInstruction(section, 0, origin);
+    state.rawTextPatches.push({
+      section,
+      wordIndex: appended.wordIndex,
+      address: state.builder.cursor(section) - 4,
+      expression,
+      span,
+      origin
+    });
+  } catch (error) {
+    state.diagnostics.push(diagnosticForError(
+      error instanceof Error && /重叠/.test(error.message) ? 'asm.section.segment-overlap' : 'asm.section.outside-course-address-space',
+      error,
+      span,
+      origin.expansionStack
+    ));
+  }
+}
+
+function encodeRawTextPatch(
+  patch: RawTextPatch,
+  state: AssemblyState
+): { word?: number; diagnostic?: AssemblerDiagnostic } {
+  const evaluation = evaluateExpression(patch.expression, makeSymbolResolver(state), { unresolvedIsError: true });
+  if (!evaluation.ok) {
+    return {
+      diagnostic: assemblerDiagnostic(
+        evaluation.unresolvedSymbols?.length ? 'asm.symbol.undefined' : 'asm.operand.invalid-immediate',
+        evaluation.unresolvedSymbols?.length
+          ? `未定义符号 ${evaluation.unresolvedSymbols.join(', ')}`
+          : evaluation.error ?? 'raw text word 表达式求值失败',
+        patch.span,
+        patch.origin.expansionStack
+      )
+    };
+  }
+  return { word: evaluation.value! >>> 0 };
 }
 
 function processNumericDataDirective(statement: ParsedStatement, mnemonic: '.word' | '.half' | '.byte', state: AssemblyState): void {

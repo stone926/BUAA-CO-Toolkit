@@ -49,7 +49,8 @@
   额外对 stone-cpu/alh-cpu/gyc-co/hlc-cpu/kimi-cpu/ds-cpu 中 603 个 P3–P7 ASM
   做兼容审计：全部成功汇编；对可比较部分做 pinned MARS 批量差分，text/ktext 无
   差异（仅 5 个旧 P5 自动测试出现 MARS `.data` 稀疏块 dump 与其模拟器真实内存
-  不一致的已知限制）。
+  不一致的已知限制）。按 `COURSE-COMMON-ASM-RAW-WORD-001` 支持 `.text/.ktext`
+  中的原始 `.word` 注入，为后续 RI 未知指令测试点生成保留汇编器能力。
 - **阶段 4（2026-08-27 实现落地）**：生产 oracle 与自动测试能力接入。
   `BuiltinTsExecutionProvider` 注册在 legacy 之后且默认解析仍为 MARS，仅供显式
   shadow/verify-both；`CourseTracePipeline` 在 P3 Logisim 与 P4–P7 traceRunner
@@ -250,6 +251,7 @@ P7 教程明确说明 MARS 与 SMRL/课程规范存在差异，正式测试不�
 - `COURSE-P3-DELAY-001`：P3 教程没有明文定义延迟槽；产品冻结为无延迟槽，并用 P3 模板、评测 trace 和 P4 明确的无延迟槽规则交叉验证。
 - `COURSE-P7-MDU-PRECISE-001`：已经改变 MDU 状态的动作允许不恢复；当较老 victim 在 M 级、年轻 `mult/mthi` 仍在 E 级且本周期尚未发生动作时，必须抑制启动/写入。架构 oracle 不假装模拟唯一微结构，容许集合由 P7 DUT scenario policy 判断。
 - `COURSE-P7-UNLOADED-IM-001`（2026-08-26 frozen）：教程只排除该输入而未定义 ROM 值；stone926 将 strict lane 冻结为 out-of-domain，zero-fill 仅允许显式 exploratory synthetic 模式。
+- `COURSE-COMMON-ASM-RAW-WORD-001`（2026-08-28 frozen）：builtin TS 汇编器允许 `.word` 出现在 `.text`/`.ktext`，把每个操作数按小端原始 32-bit word 注入当前段并推进 PC（例如 `.text; .word 0x12345678; ori ...`）。这是为后续测试点生成器注入未知指令、参与 P7 RI 异常测试而保留的内部扩展；测试点生成的注入侧尚未实现。固定 MARS 汇编器拒绝该形式，作为 `MARS-DIV-RAW-TEXT-WORD-001` 登记为有意差异；assembly-diff 声明语料不得依赖该扩展，P7 RI 生成路径在本阶段仍走 legacy `cl` 自定义 class。
 
 ### 3.5 Reference artifact 基线
 
