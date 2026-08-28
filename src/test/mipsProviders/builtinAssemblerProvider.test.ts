@@ -16,11 +16,33 @@ vi.mock('vscode', () => ({
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { BuiltinTsAssemblerProvider } from '../../mips/providers/builtinAssemblerProvider';
+import {
+  BUILTIN_TS_ASSEMBLER_DESCRIPTOR,
+  BuiltinTsAssemblerProvider
+} from '../../mips/providers/builtinAssemblerProvider';
 import { wordsToHexText } from '../../mips/core/assembler/artifacts';
+import {
+  assembleProgramForService,
+  courseAssemblerSemanticsRevision
+} from '../../mips/core/assembler/assemblyService';
+import { builtinAssemblerEngineDocument } from '../../mips/replay/builtinAssemblerEngineArtifact';
 import type { AssembleRequest } from '../../mips/providers/contracts';
 
 describe('BuiltinTsAssemblerProvider', () => {
+  it('uses one assembler semantics revision across service, descriptor, and artifact identity', () => {
+    const service = assembleProgramForService({
+      profile: 'P3',
+      sources: [{ id: 'root', text: '.text\n    nop\n' }]
+    });
+    const artifact = builtinAssemblerEngineDocument();
+
+    expect(courseAssemblerSemanticsRevision).toBe(2);
+    expect(service.semanticsRevision).toBe(courseAssemblerSemanticsRevision);
+    expect(BUILTIN_TS_ASSEMBLER_DESCRIPTOR.semanticsRevision).toBe(courseAssemblerSemanticsRevision);
+    expect(artifact.engine.semanticsRevision).toBe(courseAssemblerSemanticsRevision);
+    expect(artifact.assemblerSemanticsRevision).toBe(courseAssemblerSemanticsRevision);
+  });
+
   it('assembles a course source into user-text and a full ProgramImage', async () => {
     const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-builtin-assembler-test-'));
     try {

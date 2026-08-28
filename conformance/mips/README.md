@@ -21,6 +21,14 @@ assembler, then verifies all 5,000 words by encode/decode through the compiled
 JSONL CLI. CI uploads the full source/image evidence artifact. Run
 `npm run compile` before the aggregate verification.
 
+The course-vector lane now runs every P3-P6 program-final-state artifact through
+the TS assembler and executor CLI, and replays the official Timer sequence
+through `device.cycleVector`. The CP0-sequence and external-IRQ-sequence artifacts
+remain explicitly labelled `directed-artifact-only` until a versioned production
+CLI operation can consume those unit-level vectors; they are not reported as TS
+execution evidence and use the separate `validated` result status rather than
+incrementing the runner's `passed` count.
+
 Expected-data modules are in a stricter dependency closure. They may access the
 filesystem only through `expected/guardedFs.mjs`, which rejects lexical and
 real-path escapes from `conformance/mips`; the dependency check also rejects

@@ -98,7 +98,7 @@ describe('course assembler directives and pseudo', () => {
       '    la $t1, value',
       '    lw $t2, value',
       '    sw $t2, value',
-      '    beq $t0, -1, main',
+      '    beq $t0, $t0, main',
       '    nop'
     ].join('\n');
     const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P3' });
@@ -246,6 +246,96 @@ describe('course assembler directives and pseudo', () => {
     // First line is parsed as text (default section), so word 0 is the RI cell.
     expect(result.image!.segments.find((segment) => segment.name === 'text')!.words[0].toString(16).padStart(8, '0')).toBe('0000003f');
   });
+
+  it('applies nested MARS-style .eqv substitutions to registers and pseudo operands', () => {
+    const asm = [
+      '.eqv DEST $t0',
+      '.eqv VALUE NEXT_VALUE',
+      '.eqv NEXT_VALUE -1',
+      '.text',
+      '    li DEST, VALUE'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P3' });
+    expect(result.ok).toBe(true);
+    expect(result.image!.segments.find((segment) => segment.name === 'text')!.words)
+      .toEqual([0x2408ffff]);
+    expect(result.image!.symbols.find((symbol) => symbol.name === 'DEST')).toBeUndefined();
+    expect(result.image!.symbols.find((symbol) => symbol.name === 'VALUE')?.value).toBe(-1);
+  });
+
+  it('keeps explicit text cursors absolute across forward holes and ktext switches', () => {
+    const asm = [
+      '.text 0x3010',
+      '    ori $t0, $0, 1',
+      '.ktext 0x4180',
+      '    eret',
+      '.text',
+      '    ori $t1, $0, 2'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P7' });
+    expect(result.ok).toBe(true);
+    const text = result.image!.segments.find((segment) => segment.name === 'text')!;
+    const ktext = result.image!.segments.find((segment) => segment.name === 'ktext')!;
+    expect(text.baseAddress).toBe(0x3000);
+    expect(text.words).toEqual([0, 0, 0, 0, 0x34080001, 0x34090002]);
+    expect(ktext.baseAddress).toBe(0x4180);
+    expect(ktext.words).toEqual([0x42000018]);
+    expect(result.image!.sourceMap.filter((entry) => entry.segmentIndex === 0).map((entry) => entry.wordIndex))
+      .toEqual([4, 5]);
+  });
+});
+
+describe('course assembler source provenance', () => {
+  it('keeps source offsets in the original BOM-prefixed source', () => {
+    const asm = '\ufeff.text\n    ori $t0, $0, 1\n';
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P3' });
+    expect(result.ok).toBe(true);
+    expect(result.image!.sourceMap[0]).toMatchObject({
+      sourceId: 'root',
+      startOffset: asm.indexOf('    ori')
+    });
+  });
+
+  it('retains every nested include frame from leaf to root', () => {
+    const units = new Map([
+      ['a', { id: 'a', text: '.include "b.asm"\n' }],
+      ['b', { id: 'b', text: '.text\n    ori $t0, $0, 1\n' }]
+    ]);
+    const result = assembleCourseSource(
+      { id: 'root', text: '.include "a.asm"\n' },
+      {
+        profile: 'P3',
+        sourceResolver: {
+          resolve: ({ specifier }) => units.get(specifier === 'a.asm' ? 'a' : specifier === 'b.asm' ? 'b' : '')
+        }
+      }
+    );
+    expect(result.ok).toBe(true);
+    expect(result.image!.sourceMap[0].sourceId).toBe('b');
+    expect(result.image!.sourceMap[0].expansionStack?.map((span) => span.sourceId))
+      .toEqual(['a', 'root']);
+  });
+
+  it('retains outer macro calls through nested macros and oversized pseudo expansion', () => {
+    const asm = [
+      '.macro inner()',
+      '    ori $t0, $0, 0x12345678',
+      '.end_macro',
+      '.macro outer()',
+      '    inner()',
+      '.end_macro',
+      '.text',
+      '    outer()'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P6' });
+    expect(result.ok).toBe(true);
+    expect(result.image!.sourceMap).toHaveLength(3);
+    const expectedFrames = [asm.indexOf('    inner()'), asm.lastIndexOf('    outer()')];
+    for (const entry of result.image!.sourceMap) {
+      expect(entry.startOffset).toBe(asm.indexOf('    ori'));
+      expect(entry.expansionStack?.map((span) => span.startOffset)).toEqual(expectedFrames);
+    }
+  });
 });
 
 describe('course assembler fail-closed diagnostics', () => {
@@ -273,7 +363,7 @@ describe('course assembler fail-closed diagnostics', () => {
     expect(overlap.diagnostics.some((diagnostic) => diagnostic.code === 'asm.section.segment-overlap')).toBe(true);
   });
 
-  it('bounds include depth and source bytes', () => {
+  it('reports recursive includes', () => {
     const result = assembleCourseSource(
       { id: 'root', text: '.include "self.asm"\n' },
       {
@@ -284,5 +374,141 @@ describe('course assembler fail-closed diagnostics', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.diagnostics.some((diagnostic) => diagnostic.code === 'asm.include.cycle')).toBe(true);
+  });
+
+  it('enforces include depth and source-byte limits independently', () => {
+    const root = { id: 'root', text: '.include "a.asm"\n' };
+    const units = new Map([
+      ['a.asm', { id: 'a', text: '.include "b.asm"\n' }],
+      ['b.asm', { id: 'b', text: '.text\n    nop\n' }]
+    ]);
+    const sourceResolver = {
+      resolve: ({ specifier }: { specifier: string }) => units.get(specifier)
+    };
+
+    const tooDeep = assembleCourseSource(root, {
+      profile: 'P3',
+      sourceResolver,
+      sourceLimits: { maxDepth: 1, maxUnits: 4, maxBytes: 1024 }
+    });
+    expect(tooDeep.ok).toBe(false);
+    expect(tooDeep.image).toBeUndefined();
+    expect(tooDeep.diagnostics.some((diagnostic) => diagnostic.code === 'asm.include.too-deep')).toBe(true);
+
+    const tooManyBytes = assembleCourseSource(root, {
+      profile: 'P3',
+      sourceResolver,
+      sourceLimits: { maxDepth: 4, maxUnits: 4, maxBytes: root.text.length }
+    });
+    expect(tooManyBytes.ok).toBe(false);
+    expect(tooManyBytes.image).toBeUndefined();
+    expect(tooManyBytes.diagnostics.some((diagnostic) => diagnostic.code === 'asm.limit.source-bytes')).toBe(true);
+  });
+
+  it('enforces macro recursion and total expansion limits', () => {
+    const recursive = assembleCourseSource({
+      id: 'root',
+      text: [
+        '.macro recurse()',
+        '    recurse()',
+        '.end_macro',
+        '.text',
+        '    recurse()'
+      ].join('\n')
+    }, { profile: 'P3' });
+    expect(recursive.ok).toBe(false);
+    expect(recursive.image).toBeUndefined();
+    expect(recursive.diagnostics.some((diagnostic) => diagnostic.code === 'asm.macro.recursion-limit')).toBe(true);
+
+    const expansion = assembleCourseSource({
+      id: 'root',
+      text: [
+        '.macro pair()',
+        '    nop',
+        '    nop',
+        '.end_macro',
+        '.text',
+        '    pair()'
+      ].join('\n')
+    }, { profile: 'P3', maximumExpandedInstructions: 1 });
+    expect(expansion.ok).toBe(false);
+    expect(expansion.image).toBeUndefined();
+    expect(expansion.diagnostics.some((diagnostic) => diagnostic.code === 'asm.macro.expansion-limit')).toBe(true);
+  });
+
+  it('accepts the final text word and rejects one word beyond segment capacity', () => {
+    const sourceWithNops = (count: number) => ({
+      id: 'root',
+      text: ['.text', ...Array.from({ length: count }, () => '    nop')].join('\n')
+    });
+    const full = assembleCourseSource(sourceWithNops(4096), { profile: 'P3' });
+    expect(full.ok).toBe(true);
+    expect(full.image!.segments.find((segment) => segment.name === 'text')?.words).toHaveLength(4096);
+
+    const overflow = assembleCourseSource(sourceWithNops(4097), { profile: 'P3' });
+    expect(overflow.ok).toBe(false);
+    expect(overflow.image).toBeUndefined();
+    expect(overflow.diagnostics.some((diagnostic) => diagnostic.code === 'asm.section.outside-course-address-space')).toBe(true);
+  });
+
+  it('validates the profile and enabled layer of every final real instruction', () => {
+    const p3Jr = assembleCourseSource({ id: 'root', text: '.text\n    jr $ra\n' }, { profile: 'P3' });
+    expect(p3Jr.ok).toBe(false);
+    expect(p3Jr.diagnostics.some((diagnostic) => diagnostic.code === 'asm.instruction.profile-unsupported')).toBe(true);
+
+    const p3Blt = assembleCourseSource({
+      id: 'root',
+      text: '.text\n    blt $t0, $t1, target\ntarget:\n    nop\n'
+    }, { profile: 'P3' });
+    expect(p3Blt.ok).toBe(false);
+    expect(p3Blt.diagnostics.some((diagnostic) => diagnostic.code === 'asm.instruction.profile-unsupported')).toBe(true);
+
+    const requiredOnlyLi = assembleCourseSource(
+      { id: 'root', text: '.text\n    li $t0, -1\n' },
+      { profile: 'P3', layers: ['required'] }
+    );
+    expect(requiredOnlyLi.ok).toBe(false);
+    expect(requiredOnlyLi.diagnostics.some((diagnostic) => diagnostic.code === 'asm.instruction.layer-unsupported')).toBe(true);
+  });
+
+  it('rejects integer and pseudo magnitudes with trailing junk', () => {
+    for (const instruction of ['ori $t0, $0, 0x12junk', 'li $t0, 0x12junk']) {
+      const result = assembleCourseSource({ id: 'root', text: `.text\n    ${instruction}\n` }, { profile: 'P3' });
+      expect(result.ok, instruction).toBe(false);
+      expect(result.image, instruction).toBeUndefined();
+    }
+  });
+
+  it('uses signed 32-bit expression results and left-associative shifts', () => {
+    const result = assembleCourseSource({
+      id: 'root',
+      text: [
+        '.data',
+        '    .word 16 << 1 >> 2',
+        '.text',
+        '    addi $t0, $0, 0x7fffffff + 0x80000000'
+      ].join('\n')
+    }, { profile: 'P6' });
+    expect(result.ok).toBe(true);
+    expect(result.image!.segments.find((segment) => segment.name === 'data')!.words[0]).toBe(8);
+    expect(result.image!.segments.find((segment) => segment.name === 'text')!.words[0].toString(16).padStart(8, '0'))
+      .toBe('2008ffff');
+  });
+
+  it('classifies direct and nested undefined symbols consistently', () => {
+    const direct = assembleCourseSource(
+      { id: 'root', text: '.text\n    ori $t0, $0, MISSING\n' },
+      { profile: 'P3' }
+    );
+    expect(direct.ok).toBe(false);
+    expect(direct.diagnostics.some((diagnostic) => diagnostic.code === 'asm.symbol.undefined')).toBe(true);
+
+    const nestedEqv = assembleCourseSource(
+      { id: 'root', text: '.eqv BROKEN MISSING\n.text\n    ori $t0, $0, BROKEN\n' },
+      { profile: 'P3' }
+    );
+    expect(nestedEqv.ok).toBe(false);
+    expect(nestedEqv.diagnostics.some((diagnostic) => diagnostic.code === 'asm.symbol.undefined')).toBe(true);
+    expect(nestedEqv.diagnostics.some((diagnostic) => diagnostic.code === 'asm.symbol.eqv-cycle')).toBe(false);
   });
 });

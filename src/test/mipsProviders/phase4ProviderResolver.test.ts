@@ -40,11 +40,12 @@ describe('phase-4 provider resolver registration', () => {
       'legacy-mars-configured',
       'builtin-ts'
     ]);
-    // Without the provider-owned source binding, legacy preflight correctly
-    // fails and the resolver chooses the only capable executor. No execution
-    // ever starts after a failed legacy preflight.
+    // Without the provider-owned source binding, legacy preflight fails. The
+    // default resolver must still return that failure instead of silently
+    // upgrading the course pipeline to builtin-ts before phase 6.
     const selected = await resolveExecutionProvider(services, request);
-    expect(selected.preflight.descriptor.id).toBe('builtin-ts');
+    expect(selected.provider.descriptor.id).toBe('legacy-mars-configured');
+    expect(selected.preflight.ok).toBe(false);
   });
 
   it('resolves builtin explicitly for shadow/verify-both', async () => {

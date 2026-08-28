@@ -1,7 +1,7 @@
 // @index mips-core — 严格汇编器常量表达式：32 位补码求值与符号解析回调（纯 TS）
 
 import { parseCharacterLiteral, parseIntegerLiteral } from './literals';
-import { s32, u32 } from '../values';
+import { s32 } from '../values';
 
 /**
  * Symbol resolver used by both layout pass 1 and relocation pass 2. Returning
@@ -31,7 +31,7 @@ const operatorPrecedence: Readonly<Record<string, number>> = {
   '^': 2,
   '&': 3,
   '<<': 4,
-  '>>': 5,
+  '>>': 4,
   '+': 6,
   '-': 6,
   '*': 7,
@@ -164,8 +164,8 @@ class ExpressionParser {
       this.index++;
       const operand = this.parseUnary();
       if (token.text === '-') return s32(-operand);
-      if (token.text === '~') return u32(~operand);
-      return operand;
+      if (token.text === '~') return s32(~operand);
+      return s32(operand);
     }
     return this.parsePrimary();
   }
@@ -186,7 +186,7 @@ class ExpressionParser {
         this.unresolved.add(token.text);
         return 0;
       }
-      return resolved;
+      return s32(resolved);
     }
     if (token.kind === 'left') {
       this.index++;
@@ -212,20 +212,20 @@ function applyBinary(operator: string, left: number, right: number): number {
   const lhs = left | 0;
   const rhs = right | 0;
   switch (operator) {
-    case '+': return u32(lhs + rhs);
-    case '-': return u32(lhs - rhs);
-    case '*': return u32(Math.imul(lhs, rhs));
+    case '+': return s32(lhs + rhs);
+    case '-': return s32(lhs - rhs);
+    case '*': return s32(Math.imul(lhs, rhs));
     case '/':
       if (rhs === 0) throw new Error('division by zero in constant expression');
       return (lhs / rhs) | 0;
     case '%':
       if (rhs === 0) throw new Error('remainder by zero in constant expression');
       return lhs % rhs;
-    case '<<': return u32(lhs << (rhs & 31));
+    case '<<': return s32(lhs << (rhs & 31));
     case '>>': return lhs >> (rhs & 31);
-    case '&': return u32(lhs & rhs);
-    case '|': return u32(lhs | rhs);
-    case '^': return u32(lhs ^ rhs);
+    case '&': return s32(lhs & rhs);
+    case '|': return s32(lhs | rhs);
+    case '^': return s32(lhs ^ rhs);
     default: throw new Error(`unsupported operator ${operator}`);
   }
 }

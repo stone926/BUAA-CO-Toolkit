@@ -33,7 +33,7 @@ function tryParseIntegerLiteral(text: string): bigint | undefined {
   }
   if (index >= trimmed.length) return undefined;
   const magnitude = parseMagnitude(trimmed, index);
-  if (magnitude === undefined) return undefined;
+  if (magnitude === undefined || magnitude.end !== trimmed.length) return undefined;
   const value = sign * magnitude.value;
   if (value < minimumInteger || value > maximumInteger) return undefined;
   return BigInt.asIntN(32, value);

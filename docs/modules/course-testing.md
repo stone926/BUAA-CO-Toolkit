@@ -5,6 +5,10 @@ MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extensio
 生成程序边界：配置的 instruction_count 只统计修改版 MARS 最终执行的 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop，手选/外部 ASM 的最终用户 `.text` 也必须自带同一尾部。教程硬件 IM 是 4096 words，但稳定版 MARS v0.6.3 把 Compact* 的 0x6ffc 上界当作排他值，因此课程 oracle 最终机器码上限为 4095 words（0x3000..0x6ff8）
 P7 模式：anchor(精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)
 
+阶段 4/5 builtin 边界：普通课程 pipeline 的 assembler/oracle 默认仍是 legacy MARS；`verify-both` 只显式增加 builtin executor shadow，builtin assembler 通过显式 provider id、full-stack 或 replay 路径使用，不会静默替换默认。builtin executor 的 event artifact 会在 case 持久化时重新解析并校验 event count/digest、final-state digest、engine/image/profile/stop 绑定；assembler 与 executor 使用各自的逻辑 artifact/revision 身份。
+
+当前独立 conformance 的覆盖需按 evidence kind 区分：assembly-diff 通过 JSONL CLI 对 10 个单源 P3–P7 corpus 与固定 MARS 比较 text、P7 ktext 和 data 段，但这 10 例目前 data 均为空，且不含 include/macro/`.eqv`/pseudo。course-vector 中 7 个 P3–P6 `program-final-state` 用例真实执行 CLI assembler→executor，P7 Timer 通过 `device.cycleVector`；P7 CP0 exception 与 external IRQ 两个 directed vector 仍明确是 `directed-artifact-only`，runner 只记为 `validated` 而不计入 `passed`，不能表述为 CLI 独立向量已执行。P3–P7 core full-stack、复杂 source graph/data/sourceMap 则由阶段 5 Vitest 覆盖；`npm run verify:phase5` 不内嵌固定 MARS assembly-diff，CI 另行运行该 lane。
+
 orchestration:
   courseTest.ts — 总调度：16 个 co.test.* 命令；runCourseTraceCase 串联 assemble provider->oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe；阶段 4 通过 `CourseTracePipeline` 注入 createCase/assembler/oracle/DUT/comparator/case-store 全阶段，默认 provider 仍为 legacy MARS
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
@@ -76,7 +80,7 @@ case-storage:
 
 conformance/phase-0:
   conformance/mips/corpus — P3–P7 spec microprogram、challenge、教程引用、250 个固定 seed 与机器可读 feature distribution；seed renderer 独立生成 250 个唯一 source graph/HexText image（合计 5,000 words），先由固定 MARS 分 profile 汇编核对，再经编译后的 versioned JSONL CLI 全量 encode/decode；freeze verifier 防 silent corpus drift
-  conformance/mips/contract/evidence-gates.json — revision 2 冻结 22 个 P3–P7 capability scope、589 个由 `idPrefix.member` 精确展开的 bin、逐 bin 数字 minimum 与 assembly/execution/device/full-stack 各自的 fingerprint inclusion/exclusion
+  conformance/mips/contract/evidence-gates.json — revision 2 冻结 22 个 P3–P7 capability scope、589 个由 `idPrefix.member` 精确展开的 bin 与 evidence fingerprint inclusion/exclusion；当前 validator 只验证声明结构/成员闭包，不表示旧数字 minimum 已由运行证据满足，阶段 6 默认切换按计划中的无配额条件另行判定
   conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema；`manage-*.mjs --refresh-integrity` 会强制把内嵌 approval 声明降级回 candidate，因此 artifact 永远保持 candidate 形态，不存在单独的批准步骤
   conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold benchmark matrix、统计与 candidate 校验；baseline 仅来自受保护 main 的 CI dispatch
   conformance/mips/decision-vectors — frozen contract/decision 的独立 vectors；Timer official-RTL lane 在缺少 Icarus 时必须由 required CI 失败而不是跳过伪通过

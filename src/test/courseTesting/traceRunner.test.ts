@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AsmCase } from '../../asmCaseStore';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
+import { getProfile } from '../../config';
+import { runP3LogisimTraceCase } from '../../courseTestLogisim';
 import {
   asmCaseSourceSnapshotIssue,
   prepareAsmCaseMachineCode,
@@ -227,6 +229,45 @@ describe('course trace runner orchestration', () => {
     expect(result).not.toHaveProperty('simOut');
     expect(result).not.toHaveProperty('marsEvents');
     expect(result).not.toHaveProperty('simEvents');
+  });
+
+  it('accepts a native ProgramImage assembler without a legacy source-reassembly binding', async () => {
+    const currentCase = makeAsmCase();
+    vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({
+      ok: true,
+      status: { ok: true, exitCode: null, stdout: '', stderr: '', timedOut: false },
+      outputFile: currentCase.machineCode,
+      descriptor: { id: 'builtin-ts', kind: 'assembler', semanticsRevision: 2, capabilitiesRevision: 1 },
+      image: testProgramImage
+    } as never);
+
+    const result = await runCourseTraceCase(services(), {
+      asm: URI.file('E:/work/src/test.asm'),
+      asmCase: currentCase
+    });
+
+    expect(result.status).toBe('passed');
+    expect(executeWithPreflight).toHaveBeenCalled();
+    expect(vi.mocked(executeWithPreflight).mock.calls[0][1].executionBinding).toBeUndefined();
+  });
+
+  it('lets the P3 runner construct its Logisim pipeline', async () => {
+    vi.mocked(getProfile).mockReturnValueOnce('P3');
+    vi.mocked(runP3LogisimTraceCase).mockResolvedValueOnce({
+      asm: 'E:/work/src/test.asm',
+      status: 'passed',
+      stage: 'compare',
+      message: 'ok'
+    } as never);
+
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+
+    expect(result.status).toBe('passed');
+    expect(runP3LogisimTraceCase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.not.objectContaining({ pipeline: expect.anything() })
+    );
   });
 
   it('executes only the manifest-bound case-local stdin snapshot', async () => {

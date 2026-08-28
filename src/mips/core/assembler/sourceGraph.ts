@@ -86,8 +86,9 @@ export function expandAssemblerSourceGraph(
   const visit = (
     unit: SourceUnit,
     depth: number,
-    includeOrigin: SourceSpan | undefined
+    includeStack: readonly SourceSpan[]
   ): string => {
+    const includeOrigin = includeStack[0];
     if (depth > limits.maxDepth) {
       diagnostics.push(assemblerDiagnostic(
         'asm.include.too-deep',
@@ -137,8 +138,9 @@ export function expandAssemblerSourceGraph(
       return unit.id;
     }
 
+    const bomOffset = unit.text.charCodeAt(0) === 0xfeff ? 1 : 0;
     const normalized = stripBom(unit.text);
-    const sourceLines = splitSourceLines(normalized);
+    const sourceLines = splitSourceLines(normalized, bomOffset);
     const record: UnitRecord = {
       unit,
       normalized,
@@ -167,7 +169,7 @@ export function expandAssemblerSourceGraph(
             'asm.include.not-found',
             `无法解析 include "${directive.specifier}"`,
             directive.span,
-            includeOrigin ? [includeOrigin] : undefined
+            includeStack
           ));
           continue;
         }
@@ -177,33 +179,31 @@ export function expandAssemblerSourceGraph(
             'asm.include.cycle',
             `include 环：${directive.specifier} 从 ${recordId} 重新进入活动栈`,
             directive.span,
-            includeOrigin ? [includeOrigin] : undefined
+            includeStack
           ));
           continue;
         }
         activeIncludeEdges.add(edgeKey);
-        visit(target, depth + 1, directive.span);
+        visit(target, depth + 1, [directive.span, ...includeStack]);
         // MARS keeps every processed include filename for the rest of the
         // preprocessor pass; a repeated include is reported as recursive even
         // when it is sequential.
         continue;
       }
-      const stack: SourceSpan[] = [];
-      if (includeOrigin) stack.push(includeOrigin);
       lines.push({
         sourceId: recordId,
         line: sourceLine.line,
         startOffset: sourceLine.startOffset,
         endOffset: sourceLine.endOffset,
         text: sourceLine.text,
-        expansionStack: stack
+        expansionStack: includeStack
       });
     }
     return recordId;
   };
 
   const activeIncludeEdges = new Set<string>();
-  const rootId = visit(root, 0, undefined);
+  const rootId = visit(root, 0, []);
 
   return {
     rootId,
@@ -234,18 +234,18 @@ function parseIncludeDirectives(unit: SourceUnit, sourceLines: readonly SourceLi
   return directives;
 }
 
-function splitSourceLines(text: string): SourceLineRecord[] {
+function splitSourceLines(text: string, baseOffset = 0): SourceLineRecord[] {
   const result: SourceLineRecord[] = [];
   let line = 0;
   let start = 0;
   for (let index = 0; index <= text.length; index++) {
     if (index === text.length) {
-      result.push({ line, startOffset: start, endOffset: index, text: text.slice(start, index) });
+      result.push({ line, startOffset: baseOffset + start, endOffset: baseOffset + index, text: text.slice(start, index) });
       break;
     }
     const char = text[index];
     if (char === '\n' || char === '\r') {
-      result.push({ line, startOffset: start, endOffset: index, text: text.slice(start, index) });
+      result.push({ line, startOffset: baseOffset + start, endOffset: baseOffset + index, text: text.slice(start, index) });
       if (char === '\r' && text[index + 1] === '\n') index++;
       line++;
       start = index + 1;

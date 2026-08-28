@@ -382,6 +382,34 @@ describe('phase-1 offline replay closure', () => {
       eventCountMatchesOriginal: true
     });
 
+    const structuredDriftEngine = { ...currentEngine, id: 'structured-evidence-drift-engine' };
+    adapters.register(new FixtureAdapter(
+      structuredDriftEngine.id,
+      code,
+      traceText,
+      {
+        semanticsRevision: 2,
+        structuredEvidence: {
+          steps: evidence.steps,
+          eventCount: evidence.eventCount,
+          eventDigest: 'a'.repeat(64),
+          finalStateDigest: evidence.finalStateDigest
+        }
+      }
+    ));
+    const structuredDrift = await reEvaluateCase(caseDir, artifactRegistry, adapters, {
+      assembler: { engine: structuredDriftEngine, artifact: currentArtifact.identity },
+      oracle: { engine: structuredDriftEngine, artifact: currentArtifact.identity }
+    });
+    expect(structuredDrift.ok, structuredDrift.issues.join('\n')).toBe(true);
+    expect(structuredDrift.comparison).toMatchObject({
+      rawOutputDigestMatchesOriginal: true,
+      eventDigestMatchesOriginal: false,
+      finalStateDigestMatchesOriginal: true,
+      stepsMatchesOriginal: true,
+      eventCountMatchesOriginal: true
+    });
+
     const stepDriftEngine = { ...currentEngine, id: 'step-count-drift-engine' };
     adapters.register(new FixtureAdapter(
       stepDriftEngine.id,
@@ -751,6 +779,7 @@ class FixtureAdapter implements ReplayEngineAdapter {
       onExecute?: (context: ReplayAdapterContext, program: ReplayExecutableProgram) => void;
       onValidateExecution?: (assembly: ReplayAssemblyOutput, output: ReplayExecutionOutput) => void;
       stopReason?: ReplayExecutionOutput['stopReason'];
+      structuredEvidence?: ReplayExecutionOutput['structuredEvidence'];
     } = {}
   ) {}
 
@@ -783,7 +812,13 @@ class FixtureAdapter implements ReplayEngineAdapter {
 
   async execute(context: ReplayAdapterContext, program: ReplayExecutableProgram): Promise<ReplayExecutionOutput> {
     this.behavior.onExecute?.(context, program);
-    return { ok: true, stdout: this.trace, stderr: '', stopReason: this.behavior.stopReason ?? 'halt-loop' };
+    return {
+      ok: true,
+      stdout: this.trace,
+      stderr: '',
+      stopReason: this.behavior.stopReason ?? 'halt-loop',
+      ...(this.behavior.structuredEvidence ? { structuredEvidence: this.behavior.structuredEvidence } : {})
+    };
   }
 
   async validateExecution(

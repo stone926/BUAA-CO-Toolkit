@@ -64,7 +64,13 @@ test('coL2 parser fails closed on commit-looking lines with malformed indentatio
 test('course vectors pass through their declared independent verification mode', () => {
   for (const manifestCase of manifest.cases.filter((entry) => entry.lanes.includes('course-vector'))) {
     const result = runCourseVectorCase(manifestCase);
-    assert.equal(result.status, 'passed', `${manifestCase.caseId}: ${result.message}`);
+    if (manifestCase.profile !== 'P7' || manifestCase.caseId.includes('TIMER')) {
+      assert.equal(result.status, 'passed', `${manifestCase.caseId}: ${result.message}`);
+      assert.match(result.evidenceKind, /^ts-cli-/, `${manifestCase.caseId} did not execute the TS CLI`);
+    } else {
+      assert.equal(result.status, 'validated', `${manifestCase.caseId}: ${result.message}`);
+      assert.equal(result.evidenceKind, 'directed-artifact-only');
+    }
   }
 });
 
@@ -177,6 +183,7 @@ test('the runner no longer carries a formal approval gate and rejects the flag',
   const full = spawnSync(process.execPath, [runnerCli], { encoding: 'utf8' });
   assert.equal(full.status, 0, full.stderr);
   assert.match(full.stdout, /"gate":"runner"/);
-  assert.match(full.stdout, /"passed":14/);
+  assert.match(full.stdout, /"passed":12/);
+  assert.match(full.stdout, /"validated":2/);
   assert.match(full.stdout, /"failed":0/);
 });

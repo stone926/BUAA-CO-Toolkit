@@ -18,7 +18,7 @@ import {
   expandAssemblerSourceGraph,
   SourceGraphLimits
 } from './sourceGraph';
-import { evaluateExpression } from './expression';
+import { evaluateExpression, ExpressionEvaluation } from './expression';
 import { parseIntegerLiteral, parseStringLiteralBytes } from './literals';
 import { parseInstructionOperand } from './operands';
 import { parseCp0Register, parseGprRegister } from './registers';
@@ -38,14 +38,16 @@ import {
 import {
   ParsedOperand,
   ParsedStatement,
-  parseAssemblerLine
+  findCommentIndex,
+  parseAssemblerLine,
+  tokenizeCode
 } from './syntax';
 import { CourseSegmentBuilder, CourseSectionId, courseSectionLayout } from './sections';
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import type { ParsedInstructionOperand } from './operands';
 import { realInstructionForms } from './instructionForms';
 
-export const courseAssemblerSemanticsRevision = 1 as const;
+export const courseAssemblerSemanticsRevision = 2 as const;
 
 export interface CourseAssemblerOptions {
   readonly profile: CourseProfile;
@@ -212,7 +214,22 @@ export function assembleCourseSource(
   // Pass 1: layout. The queue grows in place when macro invocations expand.
   for (let index = 0; index < queue.length; index++) {
     const item = queue[index];
-    const parsed = parseAssemblerLine(item.line);
+    const original = parseAssemblerLine(item.line);
+    if (original.kind !== 'statement') continue;
+    const originalMnemonic = original.mnemonic?.toLowerCase() ?? '';
+    if (originalMnemonic === '.eqv') {
+      defineLabels(original, state);
+      processDirective(original, originalMnemonic, state);
+      continue;
+    }
+    const substituted = substituteEqvLine(item.line, state);
+    if (substituted.diagnostic) {
+      state.diagnostics.push(substituted.diagnostic);
+      continue;
+    }
+    const parsed = substituted.line === item.line
+      ? original
+      : parseAssemblerLine(substituted.line!);
     if (parsed.kind !== 'statement') continue;
     defineLabels(parsed, state);
     const mnemonic = parsed.mnemonic?.toLowerCase() ?? '';
@@ -282,6 +299,11 @@ export function assembleCourseSource(
         break;
       }
       state.expandedInstructionCount++;
+      const scopeDiagnostic = validateFinalInstructionScope(instruction, state);
+      if (scopeDiagnostic) {
+        state.diagnostics.push(scopeDiagnostic);
+        continue;
+      }
       const section = state.currentSection === 'ktext' ? 'ktext' : 'text';
       const patch = layoutInstruction(instruction, section, state);
       if (patch.diagnostic) state.diagnostics.push(patch.diagnostic);
@@ -354,9 +376,11 @@ export function assembleCourseSource(
         value: resolveEqv(symbol.name, state)
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/循环引用/.test(message)) continue;
       state.diagnostics.push(assemblerDiagnostic(
         'asm.symbol.eqv-cycle',
-        error instanceof Error ? error.message : String(error),
+        message,
         symbol.span,
         undefined
       ));
@@ -687,6 +711,56 @@ function processEqv(statement: ParsedStatement, state: AssemblyState): void {
   });
 }
 
+function substituteEqvLine(
+  line: ExpandedSourceLine,
+  state: AssemblyState
+): { line?: ExpandedSourceLine; diagnostic?: AssemblerDiagnostic } {
+  const commentIndex = findCommentIndex(line.text);
+  const code = commentIndex >= 0 ? line.text.slice(0, commentIndex) : line.text;
+  try {
+    const substituted = substituteEqvText(code, state, new Set());
+    if (substituted === code) return { line };
+    return {
+      line: {
+        ...line,
+        text: substituted + (commentIndex >= 0 ? line.text.slice(commentIndex) : '')
+      }
+    };
+  } catch (error) {
+    return {
+      diagnostic: assemblerDiagnostic(
+        'asm.symbol.eqv-cycle',
+        error instanceof Error ? error.message : String(error),
+        { sourceId: line.sourceId, startOffset: line.startOffset, endOffset: line.endOffset },
+        line.expansionStack
+      )
+    };
+  }
+}
+
+function substituteEqvText(text: string, state: AssemblyState, stack: ReadonlySet<string>): string {
+  const replacements: Array<{ start: number; end: number; value: string }> = [];
+  for (const token of tokenizeCode(text, '', 0)) {
+    if (token.kind !== 'identifier' || !state.eqvs.has(token.text)) continue;
+    if (stack.has(token.text)) {
+      throw new Error(`.eqv 循环引用 ${[...stack, token.text].join(' -> ')}`);
+    }
+    const nextStack = new Set(stack);
+    nextStack.add(token.text);
+    replacements.push({
+      start: token.startOffset,
+      end: token.endOffset,
+      value: substituteEqvText(state.eqvs.get(token.text)!.expression, state, nextStack)
+    });
+  }
+  let result = text;
+  for (let index = replacements.length - 1; index >= 0; index--) {
+    const replacement = replacements[index];
+    result = result.slice(0, replacement.start) + replacement.value + result.slice(replacement.end);
+  }
+  return result;
+}
+
 function processRawTextWordDirective(statement: ParsedStatement, state: AssemblyState): void {
   if (!statement.operands.length) {
     state.diagnostics.push(assemblerDiagnostic('asm.operand.wrong-count', '.word 至少需要一个操作数', statementSpan(statement), statement.expansionStack));
@@ -742,14 +816,12 @@ function encodeRawTextPatch(
   patch: RawTextPatch,
   state: AssemblyState
 ): { word?: number; diagnostic?: AssemblerDiagnostic } {
-  const evaluation = evaluateExpression(patch.expression, makeSymbolResolver(state), { unresolvedIsError: true });
+  const evaluation = evaluateExpression(patch.expression, makeSymbolResolver(state));
   if (!evaluation.ok) {
     return {
       diagnostic: assemblerDiagnostic(
-        evaluation.unresolvedSymbols?.length ? 'asm.symbol.undefined' : 'asm.operand.invalid-immediate',
-        evaluation.unresolvedSymbols?.length
-          ? `未定义符号 ${evaluation.unresolvedSymbols.join(', ')}`
-          : evaluation.error ?? 'raw text word 表达式求值失败',
+        expressionDiagnosticCode(evaluation, 'asm.operand.invalid-immediate'),
+        expressionDiagnosticMessage(evaluation, 'raw text word 表达式求值失败'),
         patch.span,
         patch.origin.expansionStack
       )
@@ -914,25 +986,13 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
     return { ok: true, instructions: expansion.instructions };
   }
 
-  if (!state.layers.includes(entry.layer)) {
-    return {
-      ok: false,
-      diagnostic: assemblerDiagnostic(
-        'asm.instruction.layer-unsupported',
-        `${mnemonic} 属于未启用的指令层 ${entry.layer}`,
-        statement.mnemonicSpan,
-        statement.expansionStack
-      )
-    };
-  }
-
   if (isLoadStoreMnemonic(mnemonic) && parsedOperands.length === 2 && parsedOperands[1].kind === 'memory'
     && memoryOffsetNeedsPseudo(parsedOperands[1].offsetText, state)) {
     const pseudoExpansion = expandLoadStorePseudo(mnemonic, parsedOperands, statement, false);
     if (pseudoExpansion) return { ok: true, instructions: pseudoExpansion };
   }
 
-  const immediateExpansion = oversizedImmediatePseudo(mnemonic, parsedOperands);
+  const immediateExpansion = oversizedImmediatePseudo(mnemonic, parsedOperands, statement);
   if (immediateExpansion.ok) return immediateExpansion;
 
   const real = tryRealInstruction(mnemonic, entry, parsedOperands, statement);
@@ -1038,6 +1098,32 @@ function tryRealInstruction(
   };
 }
 
+function validateFinalInstructionScope(
+  instruction: WorkInstruction,
+  state: AssemblyState
+): AssemblerDiagnostic | undefined {
+  if (instruction.mnemonic === '_co_internal_unknown_instruction') return undefined;
+  const entry = isaInstructionByMnemonic.get(instruction.mnemonic);
+  if (!entry) return undefined;
+  if (!entry.profiles.includes(state.profile)) {
+    return assemblerDiagnostic(
+      'asm.instruction.profile-unsupported',
+      `${instruction.mnemonic} 不属于 profile ${state.profile}`,
+      instruction.origin.span,
+      instruction.origin.expansionStack
+    );
+  }
+  if (!state.layers.includes(entry.layer)) {
+    return assemblerDiagnostic(
+      'asm.instruction.layer-unsupported',
+      `${instruction.mnemonic} 属于未启用的指令层 ${entry.layer}`,
+      instruction.origin.span,
+      instruction.origin.expansionStack
+    );
+  }
+  return undefined;
+}
+
 function parseBareMemoryOperand(text: string, span: SourceSpan): WorkOperand | undefined {
   const trimmed = text.trim();
   if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
@@ -1130,7 +1216,8 @@ function expandSharedMnemonicPseudo(
 
 function oversizedImmediatePseudo(
   mnemonic: string,
-  operands: readonly ParsedInstructionOperand[]
+  operands: readonly ParsedInstructionOperand[],
+  statement: ParsedStatement
 ): WorkResult {
   const immediateMnemonics = new Set(['addi', 'addiu', 'andi', 'ori', 'xori']);
   if (!immediateMnemonics.has(mnemonic) || operands.length !== 3 || operands[2].kind !== 'immediate') {
@@ -1143,21 +1230,6 @@ function oversizedImmediatePseudo(
     ? value < -32768 || value > 32767
     : value < 0 || (value >>> 0) > 65535;
   if (!oversized) return { ok: false, diagnostic: undefined };
-  const statement = {
-    kind: 'statement',
-    sourceId: operands[0].span.sourceId,
-    line: 0,
-    startOffset: operands[0].span.startOffset,
-    endOffset: operands[operands.length - 1].span.endOffset,
-    text: '',
-    code: '',
-    labels: [],
-    mnemonic,
-    operandText: '',
-    operands: [],
-    expansionStack: []
-  } satisfies ParsedStatement;
-  // expandSharedMnemonicPseudo only needs operands and statement origin fields.
   return expandSharedMnemonicPseudo(mnemonic, operands, statement);
 }
 
@@ -1376,14 +1448,12 @@ function encodeDataPatch(
     }
     return { bytes: [...bytes] };
   }
-  const evaluation = evaluateExpression(patch.expression, makeSymbolResolver(state), { unresolvedIsError: true });
+  const evaluation = evaluateExpression(patch.expression, makeSymbolResolver(state));
   if (!evaluation.ok) {
     return {
       diagnostic: assemblerDiagnostic(
-        evaluation.unresolvedSymbols?.length ? 'asm.symbol.undefined' : 'asm.operand.invalid-immediate',
-        evaluation.unresolvedSymbols?.length
-          ? `未定义符号 ${evaluation.unresolvedSymbols.join(', ')}`
-          : evaluation.error ?? '数据表达式求值失败',
+        expressionDiagnosticCode(evaluation, 'asm.operand.invalid-immediate'),
+        expressionDiagnosticMessage(evaluation, '数据表达式求值失败'),
         patch.span,
         patch.origin.expansionStack
       )
@@ -1424,14 +1494,12 @@ function evaluateImmediate(
   }
   const expression = operand.kind === 'memory' ? operand.offsetExpression : operand.expression;
   const span = operand.kind === 'memory' ? operand.offsetSpan : operand.span;
-  const evaluation = evaluateExpression(expression, makeSymbolResolver(state), { unresolvedIsError: true });
+  const evaluation = evaluateExpression(expression, makeSymbolResolver(state));
   if (!evaluation.ok) {
     return {
       diagnostic: assemblerDiagnostic(
-        evaluation.unresolvedSymbols?.length ? 'asm.symbol.undefined' : 'asm.operand.invalid-immediate',
-        evaluation.unresolvedSymbols?.length
-          ? `未定义符号 ${evaluation.unresolvedSymbols.join(', ')}`
-          : evaluation.error ?? '表达式求值失败',
+        expressionDiagnosticCode(evaluation, 'asm.operand.invalid-immediate'),
+        expressionDiagnosticMessage(evaluation, '表达式求值失败'),
         span,
         instruction.origin.expansionStack
       )
@@ -1549,6 +1617,25 @@ function requiredInteger(
   }
   if (parsed < min || parsed > max) return { ok: false };
   return { ok: true, value: parsed };
+}
+
+function expressionDiagnosticCode(
+  evaluation: ExpressionEvaluation,
+  fallback: AssemblerDiagnosticCode
+): AssemblerDiagnosticCode {
+  return evaluation.unresolvedSymbols?.length || isUndefinedSymbolError(evaluation.error)
+    ? 'asm.symbol.undefined'
+    : fallback;
+}
+
+function expressionDiagnosticMessage(evaluation: ExpressionEvaluation, fallback: string): string {
+  return evaluation.unresolvedSymbols?.length
+    ? `未定义符号 ${evaluation.unresolvedSymbols.join(', ')}`
+    : evaluation.error ?? fallback;
+}
+
+function isUndefinedSymbolError(message: string | undefined): boolean {
+  return message !== undefined && /(?:undefined symbol|未定义符号)/i.test(message);
 }
 
 function diagnosticForError(

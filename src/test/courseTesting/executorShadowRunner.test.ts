@@ -20,7 +20,13 @@ import { resolveBuiltinExecutionProvider } from '../../mips/providers/providerRe
 import { compareExecutorShadow } from '../../courseTesting/oracle/differentialRunner';
 import { buildProgramImage } from '../../mips/core/programImage';
 import { sourceUnitFingerprint } from '../../mips/core/programImage';
-import { BUILTIN_TS_DESCRIPTOR, LEGACY_MARS_DESCRIPTOR, type ExecuteResult } from '../../mips/providers/contracts';
+import {
+  BUILTIN_TS_DESCRIPTOR,
+  LEGACY_MARS_DESCRIPTOR,
+  type ExecuteResult,
+  type ProviderRunContext
+} from '../../mips/providers/contracts';
+import type { CommitEvent } from '../../mips/core/events/commitEvent';
 import type { AsmCase } from '../../asmCaseStore';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
 
@@ -65,7 +71,56 @@ function legacyResult(): ExecuteResult {
   };
 }
 
-function builtinResult(events = [traceEvent('00003000', '8', '0000002A')]): ExecuteResult {
+function builtinCommitEvents(): CommitEvent[] {
+  return [
+    {
+      sequence: 0,
+      kind: 'instruction',
+      pcBefore: 0x3000,
+      pcAfter: 0x3004,
+      gprWrites: [{ register: 8, value: 0x2a }],
+      hiLoWrites: [],
+      cp0Writes: [],
+      memoryWrites: [],
+      deviceEvents: [],
+      mnemonic: 'ori'
+    },
+    {
+      sequence: 1,
+      kind: 'instruction',
+      pcBefore: 0x3004,
+      pcAfter: 0x3008,
+      gprWrites: [],
+      hiLoWrites: [],
+      cp0Writes: [],
+      memoryWrites: [],
+      deviceEvents: [],
+      mnemonic: 'beq',
+      branchTaken: true,
+      controlTarget: 0x3004
+    },
+    {
+      sequence: 2,
+      kind: 'instruction',
+      pcBefore: 0x3008,
+      pcAfter: 0x3004,
+      delaySlot: true,
+      branchOriginPc: 0x3004,
+      gprWrites: [],
+      hiLoWrites: [],
+      cp0Writes: [],
+      memoryWrites: [],
+      deviceEvents: [],
+      mnemonic: 'nop',
+      haltReason: 'course-halt-loop'
+    }
+  ];
+}
+
+function builtinResult(
+  events = [traceEvent('00003000', '8', '0000002A')],
+  commitEvents: readonly CommitEvent[] = builtinCommitEvents()
+): ExecuteResult {
   return {
     ok: true,
     status: { ok: true, exitCode: null, stdout: '', stderr: '', timedOut: false },
@@ -78,8 +133,19 @@ function builtinResult(events = [traceEvent('00003000', '8', '0000002A')]): Exec
       rawTraceRevision: 1
     },
     stop: { kind: 'halt-loop', haltPc: 0x3004 },
+    events: commitEvents,
+    eventCount: commitEvents.length,
     eventDigest: 'builtin-events',
     finalStateDigest: 'builtin-final'
+  };
+}
+
+function streamingProvider(result: ExecuteResult): { execute: ReturnType<typeof vi.fn> } {
+  return {
+    execute: vi.fn(async (_request: unknown, context?: ProviderRunContext) => {
+      for (const commitEvent of result.events ?? []) context?.onCommitEvent?.(commitEvent);
+      return result;
+    })
   };
 }
 
@@ -113,7 +179,7 @@ function asmCase(): AsmCase {
 describe('executor shadow runner', () => {
   it('passes when the two projected traces match and writes no bundle', async () => {
     mockedResolve.mockResolvedValue({
-      provider: { execute: vi.fn(async () => builtinResult()) },
+      provider: streamingProvider(builtinResult()),
       preflight: { ok: true, diagnostics: [], descriptor: BUILTIN_TS_DESCRIPTOR }
     } as never);
     const outcome = await runExecutorShadow(
@@ -133,9 +199,48 @@ describe('executor shadow runner', () => {
     expect(outcome.builtinResult?.stop?.kind).toBe('halt-loop');
   });
 
+  it('propagates builtin cancellation without writing a divergence bundle', async () => {
+    const cancelled: ExecuteResult = {
+      ...builtinResult([], []),
+      ok: false,
+      status: {
+        ok: false,
+        exitCode: null,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+        stopped: true,
+        stopReason: 'cancelled'
+      },
+      stop: { kind: 'cancelled' }
+    };
+    mockedResolve.mockResolvedValue({
+      provider: streamingProvider(cancelled),
+      preflight: { ok: true, diagnostics: [], descriptor: BUILTIN_TS_DESCRIPTOR }
+    } as never);
+
+    const outcome = await runExecutorShadow(
+      { output: { appendLine: vi.fn() } as never, statusBar: {} as never },
+      asmCase(),
+      {
+        profile: 'P5',
+        image: image(),
+        maxSteps: 64,
+        haltPc: 0x3004,
+        legacy: legacyResult(),
+        outputRoot: path.join(root, 'shadow')
+      }
+    );
+
+    expect(outcome.status).toBe('not-comparable');
+    expect(outcome.bundleDir).toBeUndefined();
+    expect(outcome.message).toContain('已取消');
+    expect(fs.existsSync(path.join(root, 'shadow'))).toBe(false);
+  });
+
   it('saves a complete reproduction bundle for an inconclusive mismatch', async () => {
     mockedResolve.mockResolvedValue({
-      provider: { execute: vi.fn(async () => builtinResult([traceEvent('00003000', '8', '0000002B')])) },
+      provider: streamingProvider(builtinResult([traceEvent('00003000', '8', '0000002B')])),
       preflight: { ok: true, diagnostics: [], descriptor: BUILTIN_TS_DESCRIPTOR }
     } as never);
     const caseValue = asmCase();
@@ -162,6 +267,61 @@ describe('executor shadow runner', () => {
     expect(result.kind).toBe('executor-shadow');
     expect(result.differential.disposition).toBe('inconclusive');
     expect(result.contracts.length).toBeGreaterThan(0);
+  });
+
+  it('makes a production shadow run inconclusive when its streamed assertion fails', async () => {
+    const events = builtinCommitEvents();
+    events.splice(1, 0, {
+      sequence: 1,
+      kind: 'exception',
+      pcBefore: 0x3010,
+      pcAfter: 0x4180,
+      gprWrites: [],
+      hiLoWrites: [],
+      cp0Writes: [],
+      memoryWrites: [],
+      deviceEvents: [],
+      mnemonic: 'syscall',
+      trap: {
+        kind: 'exception',
+        name: 'syscall',
+        code: 8,
+        victimPc: 0x3010,
+        branchDelay: false,
+        epc: 0x3010,
+        stage: 'decode',
+        handlerPc: 0x4180
+      }
+    });
+    events[2] = { ...events[2], sequence: 2 };
+    events[3] = { ...events[3], sequence: 3 };
+    mockedResolve.mockResolvedValue({
+      provider: streamingProvider(builtinResult(undefined, events)),
+      preflight: { ok: true, diagnostics: [], descriptor: BUILTIN_TS_DESCRIPTOR }
+    } as never);
+
+    const outcome = await runExecutorShadow(
+      { output: { appendLine: vi.fn() } as never, statusBar: {} as never },
+      asmCase(),
+      {
+        profile: 'P5',
+        image: image(),
+        maxSteps: 64,
+        haltPc: 0x3004,
+        legacy: legacyResult(),
+        outputRoot: path.join(root, 'shadow'),
+        assertions: [{ id: 'no-trap', kind: 'no-trap' }]
+      }
+    );
+
+    expect(outcome.status).toBe('inconclusive');
+    expect(outcome.differential.matched).toBe(true);
+    expect(outcome.observation?.assertionFailures).toEqual([
+      expect.objectContaining({ assertionId: 'no-trap' })
+    ]);
+    const result = JSON.parse(fs.readFileSync(outcome.resultFile!, 'utf8'));
+    expect(result.status).toBe('inconclusive');
+    expect(result.observation.assertionFailures[0].assertionId).toBe('no-trap');
   });
 
   it('is not comparable when builtin preflight fails', async () => {

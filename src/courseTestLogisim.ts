@@ -315,7 +315,7 @@ export async function runP3LogisimTraceCase(
     const circuitName = preparedCircuitFileName(setup.circuit.fsPath, asm.fsPath, baseDir);
     preparedCircuit = await writeAsmCaseArtifact(asmCase, 'logisim', circuitName, derivedText, 'preparedCircuit');
     await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-code.txt', logisimCode.text, 'machineCodeWithHalt');
-    await copyAsmCaseArtifact(asmCase, 'logisim', setup.circuit, 'circuit-template.circ', 'circuitTemplate');
+    await pipeline.copyArtifact(asmCase, 'logisim', setup.circuit, 'circuit-template.circ', 'circuitTemplate');
     await updateAsmCaseMetadata(asmCase, {
       'dut.logisim.traceCircuit': setup.traceCircuit
     });
@@ -340,8 +340,8 @@ export async function runP3LogisimTraceCase(
     manifestSourceOf(asmCase.manifest).kind === 'builtin',
     logisimCode.text
   );
-  if (!dump.image || !dump.executionBinding) {
-    return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage/execution binding', asmCase.machineCode, undefined, asmCase);
+  if (!dump.image) {
+    return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage', asmCase.machineCode, undefined, asmCase);
   }
   services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
   const oracleInvocation = await pipeline.runOracle(services, {
@@ -356,7 +356,6 @@ export async function runP3LogisimTraceCase(
     requirements: {
       profile: 'P3',
       instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
-      deterministicConsole: true,
       eventSchemaRevision: 1
     }
   }, { signal: options.signal });
@@ -380,9 +379,21 @@ export async function runP3LogisimTraceCase(
     );
   }
   if (caseOutputMode) {
-    await pipeline.updateArtifacts(asmCase, 'oracle', { traceOut: oracle.outputFile.fsPath });
+    await pipeline.updateArtifacts(asmCase, 'oracle', {
+      traceOut: oracle.outputFile.fsPath,
+      ...(oracle.eventArtifact ? { events: oracle.eventArtifact.fsPath } : {})
+    });
   } else {
     await pipeline.copyArtifact(asmCase, 'oracle', oracle.outputFile, path.basename(oracle.outputFile.fsPath), 'traceOut');
+    if (oracle.eventArtifact) {
+      await pipeline.copyArtifact(
+        asmCase,
+        'oracle',
+        oracle.eventArtifact,
+        path.basename(oracle.eventArtifact.fsPath),
+        'events'
+      );
+    }
   }
   await pipeline.recordOracle(asmCase, oracle, {
     profile: 'P3',
@@ -405,16 +416,20 @@ export async function runP3LogisimTraceCase(
     : undefined;
   if (shadow) {
     const shadowSummary = shadowSummaryFromOutcome(shadow);
-    if (shadow.status === 'inconclusive' || shadow.status === 'not-comparable') {
+    const shadowCancelled = shadow.builtinResult?.stop?.kind === 'cancelled'
+      || engineRunWasCancelled(shadow.builtinResult?.status, options.signal);
+    if (shadowCancelled || shadow.status === 'inconclusive' || shadow.status === 'not-comparable') {
       return {
         ...failedCase(
           item,
           'oracle',
-          `测试中止：executor shadow ${shadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${shadow.message}`,
+          shadowCancelled
+            ? `测试已取消：executor shadow：${shadow.message}`
+            : `测试中止：executor shadow ${shadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${shadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase,
-          engineRunWasCancelled(oracle.status, options.signal)
+          shadowCancelled
         ),
         shadow: shadowSummary
       };

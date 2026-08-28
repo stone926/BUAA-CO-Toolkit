@@ -1,5 +1,5 @@
 // @index mips-replay — exact replay/re-evaluate adapter contracts
-import type { ProgramImage, SourceUnitFingerprint } from '../core/api';
+import type { ProgramImage, SourceUnit, SourceUnitFingerprint } from '../core/api';
 import type { EngineArtifactIdentity } from '../providers/contracts';
 import type { ManifestEngineInfo, ManifestRunConfiguration } from '../../courseTesting/manifestCodec';
 import type { AsmCaseSourceKind } from '../../asmCaseStoreCore';
@@ -9,12 +9,25 @@ export interface ReplayEngineSelection {
   artifact: EngineArtifactIdentity;
 }
 
+/** Original immutable source blobs plus their explicit include edges. */
+export interface ReplaySourceGraphInput {
+  readonly rootId: string;
+  readonly sources: readonly SourceUnit[];
+  readonly includes: readonly {
+    readonly fromId: string;
+    readonly specifier: string;
+    readonly toId: string;
+  }[];
+}
+
 export interface ReplayAdapterContext {
   artifactPath: string;
   dependencies: ReadonlyMap<string, string>;
   sourceRoot: string;
   sourceKind: AsmCaseSourceKind;
   inputGraph: readonly SourceUnitFingerprint[];
+  /** Builtin assemblers consume originals; sourceRoot remains the rewritten tree for file tools. */
+  sourceGraphInput?: ReplaySourceGraphInput;
   configuration: ManifestRunConfiguration;
   stdinBytes?: Uint8Array;
   workingDirectory: string;
@@ -33,7 +46,14 @@ export interface ReplayExecutionOutput {
   ok: boolean;
   stdout: string;
   stderr: string;
-  stopReason: 'halt-loop' | 'step-limit' | 'error';
+  stopReason: 'halt-loop' | 'step-limit' | 'cancelled' | 'error';
+  /** Engine-native evidence when the adapter exposes a canonical commit stream. */
+  structuredEvidence?: {
+    steps: number;
+    eventCount: number;
+    eventDigest: string;
+    finalStateDigest: string;
+  };
 }
 
 /** Immutable assembler output consumed by an execution adapter. */

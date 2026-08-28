@@ -751,7 +751,7 @@ function parseUnsignedMagnitude(text: string, index: number): number | undefined
     value = value * radix + digit;
     digits++;
   }
-  return digits > 0 ? value : undefined;
+  return digits > 0 && cursor === text.length ? value : undefined;
 }
 
 function digitValueForPseudo(char: string): number | undefined {
@@ -779,4 +779,3 @@ export function realInstructionWithOperands(
     ...(pseudoMnemonic ? { pseudoMnemonic } : {})
   };
 }
-

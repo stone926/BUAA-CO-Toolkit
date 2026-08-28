@@ -24,9 +24,11 @@ import {
   AssemblerServiceInclude,
   AssemblerServiceSource,
   assembleProgramForService,
-  AssemblerServiceResult
+  AssemblerServiceResult,
+  courseAssemblerSemanticsRevision
 } from '../core/assembler/assemblyService';
 import { findCourseHaltPc, imageSegmentWords, wordsToHexText } from '../core/assembler/artifacts';
+import { sourceUnitFingerprint } from '../core/programImage';
 
 import { builtinAssemblerEngineArtifact } from '../replay/builtinAssemblerEngineArtifact';
 import { captureSourceGraph, defaultSourceCaptureLimits, SourceGraphBundle } from '../replay/sourceBundle';
@@ -39,7 +41,7 @@ export const BUILTIN_TS_ASSEMBLER_DESCRIPTOR = Object.freeze({
   ...BUILTIN_TS_DESCRIPTOR,
   kind: 'assembler' as const,
   build: 'in-extension pure TypeScript course assembler (phase 5)',
-  semanticsRevision: 1,
+  semanticsRevision: courseAssemblerSemanticsRevision,
   capabilitiesRevision: 1
 });
 
@@ -90,6 +92,7 @@ interface BuiltinAssembleSnapshot {
   readonly profile: CourseProfile;
   readonly signal?: AbortSignal;
   readonly layers: readonly string[];
+  readonly sourceGraphInput?: NonNullable<AssembleRequest['sourceGraphInput']>;
 }
 
 export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
@@ -126,6 +129,14 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       request.requirements,
       profile
     ));
+    const sourceGraphIssue = assembleSourceGraphIssue(request);
+    if (sourceGraphIssue) {
+      diagnostics.push({
+        code: 'builtin-ts-assembler.source-graph-invalid',
+        capability: 'source-input',
+        message: sourceGraphIssue
+      });
+    }
     if (!diagnostics.length && request.sourceUri.scheme === 'file') {
       try {
         const stat = await fs.promises.stat(request.sourceUri.fsPath);
@@ -177,23 +188,36 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
     const started = Date.now();
     let stageDir: string | undefined;
     try {
-      stageDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-builtin-assemble-'));
-      await fs.promises.chmod(stageDir, 0o700).catch(() => undefined);
-      const allowedRoot = vscode.workspace?.getWorkspaceFolder?.(snapshot.sourceUri)?.uri.fsPath
-        ?? path.dirname(snapshot.sourceUri.fsPath);
-      const captured = await captureSourceGraph(
-        snapshot.sourceUri.fsPath,
-        stageDir,
-        undefined,
-        { ...defaultSourceCaptureLimits },
-        { allowedRoot }
-      );
-      const units = await loadCapturedSourceUnits(stageDir, captured.graph);
-      const includes = captured.graph.edges.map((edge): AssemblerServiceInclude => ({
-        fromId: edge.from,
-        specifier: edge.requestedPath,
-        toId: edge.to
-      }));
+      let units: readonly SourceUnit[];
+      let includes: readonly AssemblerServiceInclude[];
+      if (snapshot.sourceGraphInput) {
+        const graph = snapshot.sourceGraphInput;
+        const rootIndex = graph.sources.findIndex((source) => source.id === graph.rootId);
+        units = [
+          graph.sources[rootIndex],
+          ...graph.sources.slice(0, rootIndex),
+          ...graph.sources.slice(rootIndex + 1)
+        ];
+        includes = graph.includes;
+      } else {
+        stageDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-builtin-assemble-'));
+        await fs.promises.chmod(stageDir, 0o700).catch(() => undefined);
+        const allowedRoot = vscode.workspace?.getWorkspaceFolder?.(snapshot.sourceUri)?.uri.fsPath
+          ?? path.dirname(snapshot.sourceUri.fsPath);
+        const captured = await captureSourceGraph(
+          snapshot.sourceUri.fsPath,
+          stageDir,
+          undefined,
+          { ...defaultSourceCaptureLimits },
+          { allowedRoot }
+        );
+        units = await loadCapturedSourceUnits(stageDir, captured.graph);
+        includes = captured.graph.edges.map((edge): AssemblerServiceInclude => ({
+          fromId: edge.from,
+          specifier: edge.requestedPath,
+          toId: edge.to
+        }));
+      }
       const result = await this.runAssembly(snapshot, units, includes);
 
       if (!result.ok || !result.image) {
@@ -224,7 +248,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
         profile: snapshot.profile,
         memoryConfiguration: 'course-contract-v1',
         runtime: { kind: 'builtin-ts' },
-        wallClockMs: Date.now() - started,
+        wallClockMs: Math.max(1, Date.now() - started),
         p7RiInstruction: snapshot.p7RiInstruction
       };
       return {
@@ -322,7 +346,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
         profile: snapshot.profile,
         memoryConfiguration: 'course-contract-v1',
         runtime: { kind: 'builtin-ts' },
-        wallClockMs: Date.now() - started,
+        wallClockMs: Math.max(1, Date.now() - started),
         p7RiInstruction: snapshot.p7RiInstruction
       }
     };
@@ -352,7 +376,14 @@ function snapshotAssembleRequest(request: AssembleRequest, signal: AbortSignal |
     p7RiInstruction: request.p7RiInstruction ?? false,
     profile,
     ...(signal ? { signal } : {}),
-    layers: request.requirements?.instructionLayers ?? ['required', 'commonExtensions', 'marsCompatibility']
+    layers: request.requirements?.instructionLayers ?? ['required', 'commonExtensions', 'marsCompatibility'],
+    ...(request.sourceGraphInput ? {
+      sourceGraphInput: {
+        rootId: request.sourceGraphInput.rootId,
+        sources: request.sourceGraphInput.sources.map((source) => ({ ...source })),
+        includes: request.sourceGraphInput.includes.map((edge) => ({ ...edge }))
+      }
+    } : {})
   };
 }
 
@@ -382,6 +413,34 @@ function builtinAssembleRequestFingerprint(request: AssembleRequest): string {
     courseTrace: request.courseTrace ?? false,
     p7RiInstruction: request.p7RiInstruction ?? false,
     requirements: request.requirements ?? null,
-    inputGraph: request.inputGraph ?? null
+    inputGraph: request.inputGraph ?? null,
+    sourceGraphInput: request.sourceGraphInput ?? null
   });
+}
+
+function assembleSourceGraphIssue(request: AssembleRequest): string | undefined {
+  const graph = request.sourceGraphInput;
+  if (!graph) return undefined;
+  const ids = graph.sources.map((source) => source.id);
+  const idSet = new Set(ids);
+  if (!graph.rootId || !idSet.has(graph.rootId) || idSet.size !== ids.length) {
+    return 'verified source graph has an invalid root or duplicate source id';
+  }
+  if (graph.includes.some((edge) => !idSet.has(edge.fromId) || !idSet.has(edge.toId) || !edge.specifier)) {
+    return 'verified source graph contains an invalid include edge';
+  }
+  if (request.inputGraph) {
+    const expected = request.inputGraph.map((unit) => ({
+      id: unit.id,
+      contentHash: unit.contentHash.toLowerCase()
+    }));
+    const actual = graph.sources.map((source) => {
+      const fingerprint = sourceUnitFingerprint(source);
+      return { id: fingerprint.id, contentHash: fingerprint.contentHash };
+    });
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      return 'verified source graph does not match the request inputGraph';
+    }
+  }
+  return undefined;
 }

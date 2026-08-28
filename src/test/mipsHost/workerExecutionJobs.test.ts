@@ -38,7 +38,8 @@ describe('phase-4 worker execution jobs', () => {
     ], context());
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(3);
-    expect(result[2].timer0.state).toBe('idle');
+    expect(result[1].timer0.state).toBe('idle');
+    expect(result[2].timer0.state).toBe('load');
     expect(result[2].timer0.ctrl).toBe('0x00000001');
   });
 });

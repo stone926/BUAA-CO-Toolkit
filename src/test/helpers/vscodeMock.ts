@@ -33,8 +33,10 @@ export interface VscodeMockModule {
     dispose: () => void;
   };
   workspace: {
+    isTrusted: boolean;
     textDocuments: VscodeMockDocument[];
     workspaceFolders: Array<{ uri: URI; name?: string }>;
+    getWorkspaceFolder: (uri: URI) => { uri: URI; name?: string } | undefined;
     fs: {
       readFile: Mock<(uri: URI) => Promise<Uint8Array>>;
       writeFile: Mock<(uri: URI, bytes: Uint8Array) => Promise<void>>;
@@ -107,11 +109,19 @@ export function createVscodeModuleMock(state: VscodeMockState, fn: MockFactory):
       }
     },
     workspace: {
+      isTrusted: true,
       get textDocuments() {
         return state.textDocuments;
       },
       get workspaceFolders() {
         return state.workspaceFolders;
+      },
+      getWorkspaceFolder(uri: URI) {
+        const normalized = path.resolve(uri.fsPath).toLowerCase();
+        return state.workspaceFolders.find((item) => {
+          const root = path.resolve(item.uri.fsPath).toLowerCase();
+          return normalized === root || normalized.startsWith(`${root}${path.sep}`);
+        });
       },
       fs: {
         readFile: fn(async () => new Uint8Array()),

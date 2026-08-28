@@ -6,6 +6,11 @@ describe('engineRunWasCancelled', () => {
     expect(engineRunWasCancelled({ stopped: true, stopReason: 'aborted' })).toBe(true);
   });
 
+  it('recognizes builtin cooperative cancellation', () => {
+    expect(engineRunWasCancelled({ stopped: true, stopReason: 'cancelled' })).toBe(true);
+    expect(engineRunWasCancelled({ stopReason: 'cancelled' })).toBe(true);
+  });
+
   it('does not relabel a completed failure when the signal aborts afterwards', () => {
     const controller = new AbortController();
     controller.abort();

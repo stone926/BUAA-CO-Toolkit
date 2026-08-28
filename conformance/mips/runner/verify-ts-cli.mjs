@@ -79,6 +79,27 @@ export function verifyTsCli(options) {
       text: '.text\nmain:\n    ori $t0, $0, 42\n    beq $0, $0, main\n    nop\n'
     }]
   });
+  requests.push({
+    protocolVersion: 1,
+    requestId: 'execute:course-p3',
+    operation: 'machine.execute',
+    profile: 'P3',
+    segments: [{
+      name: 'text',
+      baseAddress: '0x00003000',
+      words: [
+        '0x34010005', // ori $1, $0, 5
+        '0x34020003', // ori $2, $0, 3
+        '0x00221820', // add $3, $1, $2
+        '0xac030000', // sw $3, 0($0)
+        '0x1000ffff', // course halt loop
+        '0x00000000'
+      ]
+    }],
+    haltPc: '0x00003010',
+    maxSteps: 64,
+    collectTrace: true
+  });
 
   const run = spawnSync(process.execPath, [options.cli], {
     cwd: extensionRoot,
@@ -117,10 +138,46 @@ export function verifyTsCli(options) {
   invariant(assembled?.ok === true && assembled.result?.ok === true, 'course assembler smoke failed');
   invariant(assembled.result?.image?.segments?.length === 1, 'course assembler smoke image shape mismatch');
   invariant(assembled.result?.image?.segments?.[0]?.words?.[0] === 0x3408002a, 'course assembler smoke word mismatch');
+  const executed = byId.get('execute:course-p3');
+  invariant(executed?.ok === true, 'course executor request failed');
+  invariant(JSON.stringify({
+    status: executed.result?.status,
+    haltReason: executed.result?.haltReason,
+    instructions: executed.result?.instructions,
+    eventCount: executed.result?.eventCount,
+    haltPc: executed.result?.haltPc,
+    finalStateDigest: executed.result?.finalStateDigest
+  }) === JSON.stringify({
+    status: 'halted',
+    haltReason: 'course-halt-loop',
+    instructions: 5,
+    eventCount: 5,
+    haltPc: '0x00003010',
+    finalStateDigest: 'dbe59168faa6522d91de39de127406d183a5216f5cdea28a7a4398efabfe43ce'
+  }), 'course executor stop evidence mismatch');
+  invariant(JSON.stringify(executed.result?.finalState) === JSON.stringify({
+    pc: '0x00003010',
+    gpr: [
+      '0x00000000', '0x00000005', '0x00000003', '0x00000008',
+      ...Array(28).fill('0x00000000')
+    ],
+    hi: '0x00000000',
+    lo: '0x00000000',
+    hiDefined: false,
+    loDefined: false,
+    dataWords: [{ address: '0x00000000', value: '0x00000008' }]
+  }), 'course executor final state mismatch');
+  invariant(JSON.stringify(executed.result?.trace) === JSON.stringify([
+    '@00003000: $1 <= 00000005',
+    '@00003004: $2 <= 00000003',
+    '@00003008: $3 <= 00000008',
+    '@0000300C: *00000000 <= 00000008'
+  ]), 'course executor trace mismatch');
   return {
     instructions: golden.cases.length,
     runtimeCounterexamples: golden.runtimeCounterexamples.length,
     courseAssembler: 'ok',
+    courseExecutor: 'ok',
     reviewStatus: golden.review.status
   };
 }

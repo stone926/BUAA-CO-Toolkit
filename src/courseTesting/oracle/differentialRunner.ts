@@ -11,7 +11,10 @@ import {
 } from '../../language/mips/traceCompare';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
 import { sha256Canonical, type CanonicalJson } from '../../mips/replay/canonical';
-import { commitEventStreamDigest, findCommitEventAtPc, projectCommitEvent } from './commitProjection';
+import { projectCommitEvent as projectArchitecturalWrites } from '../../mips/core/events/traceProjection';
+import type { CourseProfile } from '../../mips/core/generated/isaCatalog';
+import { courseProfileIds, resolveCourseProfile } from '../../mips/core/profiles/courseProfiles';
+import { commitEventStreamDigest, projectCommitEvent } from './commitProjection';
 import {
   classifyShadowDifference,
   ShadowClassification,
@@ -127,14 +130,15 @@ export function compareExecutorShadow(
   }
 
   const firstDiff = firstTraceDiffSnapshot(traceDiff);
-  const firstPc = firstDiff?.oracle?.pc ?? firstDiff?.dut?.pc;
-  const builtinEvent = firstPc
-    ? findCommitEventAtPc(builtin.events ?? [], Number.parseInt(firstPc, 16))
-    : undefined;
+  const builtinEvent = findProjectedCommitEvent(
+    builtin.events ?? [],
+    traceDiff.firstDiffIndex,
+    options.profile,
+    firstDiff?.oracle?.pc ?? firstDiff?.dut?.pc
+  );
   const classification = classifyShadowDifference({
     profile: options.profile,
-    firstDiff: traceDiff,
-    builtinEvents: builtin.events
+    builtinEvent
   });
   return {
     ...base,
@@ -169,4 +173,47 @@ export function traceFinalStateDigest(events: readonly CpuTraceEvent[]): string 
     else dm[target] = value;
   }
   return sha256Canonical({ gpr, dm } as unknown as CanonicalJson);
+}
+
+/**
+ * Resolve a trace entry to the exact dynamic CommitEvent that projected it.
+ * PC alone is insufficient because loops and exception retries execute the same
+ * instruction address more than once. Zero-write trap events are matched at the
+ * projection boundary so registered syscall divergences remain diagnosable.
+ */
+function findProjectedCommitEvent(
+  events: readonly CommitEvent[],
+  traceIndex: number,
+  profile: string | undefined,
+  firstDiffPc: string | undefined
+): CommitEvent | undefined {
+  if (traceIndex < 0 || !profile || !courseProfileIds.includes(profile as CourseProfile)) {
+    return undefined;
+  }
+  const executionProfile = resolveCourseProfile(profile as CourseProfile);
+  const pc = parseTracePc(firstDiffPc);
+  let projectedIndex = 0;
+  let zeroWriteBoundaryMatch: CommitEvent | undefined;
+
+  for (const event of events) {
+    const writes = projectArchitecturalWrites(event, executionProfile);
+    if (!writes.length) {
+      if (projectedIndex === traceIndex && pc !== undefined && event.pcBefore === pc) {
+        zeroWriteBoundaryMatch ??= event;
+      }
+      continue;
+    }
+    if (traceIndex >= projectedIndex && traceIndex < projectedIndex + writes.length) {
+      return zeroWriteBoundaryMatch ?? event;
+    }
+    projectedIndex += writes.length;
+    if (projectedIndex > traceIndex) break;
+  }
+  return zeroWriteBoundaryMatch;
+}
+
+function parseTracePc(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 16);
+  return Number.isFinite(parsed) ? parsed >>> 0 : undefined;
 }

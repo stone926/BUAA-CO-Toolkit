@@ -47,6 +47,7 @@ import {
   captureSourceGraph,
   defaultSourceCaptureLimits,
   loadAndVerifySourceGraph,
+  loadVerifiedSourceGraphInput,
   type CapturedSourceBundle
 } from './mips/replay/sourceBundle';
 import {
@@ -67,6 +68,14 @@ import {
   maximumReplayTraceBytes,
   readBoundedRegularFile
 } from './mips/replay/boundedFile';
+import {
+  ImmutableEngineArtifactRegistry,
+  workspaceEngineRegistryRoot
+} from './mips/replay/engineRegistry';
+import { builtinAssemblerEngineArtifact } from './mips/replay/builtinAssemblerEngineArtifact';
+import { builtinExecutionEngineArtifact } from './mips/replay/builtinEngineArtifact';
+import { commitEventsCanonical } from './mips/core/events/commitEvent';
+import { parseStructuredExecutionEvidence } from './mips/replay/structuredExecutionEvidence';
 
 /** Keep case discovery bounded even when a workspace contains an adversarial case tree. */
 export const maximumAsmCaseIndexEntries = 2048;
@@ -250,16 +259,18 @@ export async function prepareAsmCaseMachineCode(
   if (!graphReference) {
     return sourceIntegrityAssembleFailure('v2 case has no captured SourceUnit graph');
   }
-  let graph: Awaited<ReturnType<typeof loadAndVerifySourceGraph>>;
+  let verifiedSource: Awaited<ReturnType<typeof loadVerifiedSourceGraphInput>>;
   try {
-    graph = await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path);
+    verifiedSource = await loadVerifiedSourceGraphInput(asmCase.dir.fsPath, graphReference.path);
   } catch (error) {
     return sourceIntegrityAssembleFailure(error);
   }
+  const graph = verifiedSource.graph;
   const inputGraph = graph.units.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }));
   const invocation = await assembleWithPreflight(services, {
     sourceUri: asmCase.sourceAsm,
     inputGraph,
+    sourceGraphInput: verifiedSource.sourceGraphInput,
     target: { kind: 'userText', outputFile: asmCase.machineCode },
     courseTrace: options.courseTrace,
     p7RiInstruction: options.p7RiInstruction,
@@ -414,8 +425,18 @@ export async function prepareAsmCaseMachineCode(
   await fs.promises.chmod(asmCase.machineCode.fsPath, 0o444).catch(() => undefined);
   const imageSnapshot = snapshotForCaseFile(asmCase.dir.fsPath, imagePath, imageBytes);
   const observabilitySnapshot = snapshotForCaseFile(asmCase.dir.fsPath, observabilityPath, observabilityBytes);
-  const dutInput = { ...machineCode };
-  const assembler = manifestEngineInfo(dump.descriptor, dump.engineArtifact);
+  const dutInput = {
+    path: machineCode.path,
+    sha256: machineCode.sha256,
+    bytes: machineCode.bytes
+  };
+  const assemblerArtifact = await persistBuiltinEngineArtifact(
+    asmCase,
+    dump.descriptor,
+    'assembler',
+    dump.engineArtifact
+  );
+  const assembler = manifestEngineInfo(dump.descriptor, assemblerArtifact);
   asmCase.manifest = {
     ...asmCase.manifest,
     program: {
@@ -471,7 +492,13 @@ export async function recordAsmCaseOracleResult(
   // Last-line defence against source edits that raced the oracle process.
   await assertAsmCaseSourceSnapshotCurrent(asmCase);
   await assertAsmCaseStdinSnapshotCurrent(asmCase);
-  const engine = manifestEngineInfo(result.descriptor, result.engineArtifact);
+  const oracleArtifact = await persistBuiltinEngineArtifact(
+    asmCase,
+    result.descriptor,
+    'executor',
+    result.engineArtifact
+  );
+  const engine = manifestEngineInfo(result.descriptor, oracleArtifact);
   if (!result.resolvedRun) {
     throw new Error('cannot record oracle result without the provider resolved run configuration');
   }
@@ -508,7 +535,75 @@ export async function recordAsmCaseOracleResult(
   if (!Buffer.from(traceText, 'utf8').equals(traceBytes)) {
     throw new Error('oracle traceOut artifact is not lossless UTF-8');
   }
-  const evidence = oracleEvidenceDigests(traceText, completeConfiguration.traceLevel ?? 1);
+  const traceEvidence = oracleEvidenceDigests(traceText, completeConfiguration.traceLevel ?? 1);
+  const structuredFields = [
+    result.events,
+    result.instructions,
+    result.eventCount,
+    result.eventDigest,
+    result.finalStateDigest,
+    result.eventArtifact
+  ];
+  const hasStructuredEvidence = structuredFields.some((value) => value !== undefined);
+  let evidence = traceEvidence;
+  if (hasStructuredEvidence) {
+    if (!result.events || result.instructions === undefined || result.eventCount === undefined
+      || result.eventDigest === undefined || result.finalStateDigest === undefined || !result.eventArtifact) {
+      throw new Error('cannot record a partial structured oracle result');
+    }
+    const eventReference = asmCase.manifest.artifacts?.oracle?.events;
+    if (!eventReference || typeof eventReference === 'string') {
+      throw new Error('cannot record structured oracle evidence without a hashed case-local events artifact');
+    }
+    const eventPath = path.join(asmCase.dir.fsPath, ...eventReference.path.replace(/\\/g, '/').split('/'));
+    await caseRelativePath(asmCase, eventPath);
+    const eventBytes = await readBoundedRegularFile(eventPath, {
+      maximumBytes: maximumReplayTraceBytes,
+      expectedBytes: eventReference.bytes,
+      label: 'oracle events artifact'
+    });
+    if (sha256Bytes(eventBytes) !== eventReference.sha256.toLowerCase()) {
+      throw new Error('oracle events artifact no longer matches its case-local snapshot');
+    }
+    const artifactEvidence = parseStructuredExecutionEvidence(eventBytes);
+    if (!asmCase.manifest.program.imageFingerprint
+      || artifactEvidence.imageFingerprint !== asmCase.manifest.program.imageFingerprint) {
+      throw new Error('structured oracle evidence does not bind the captured ProgramImage');
+    }
+    if (artifactEvidence.engine.id !== result.descriptor.id
+      || artifactEvidence.engine.kind !== result.descriptor.kind
+      || artifactEvidence.engine.semanticsRevision !== result.descriptor.semanticsRevision
+      || artifactEvidence.engine.capabilitiesRevision !== result.descriptor.capabilitiesRevision
+      || artifactEvidence.engine.build !== result.descriptor.build) {
+      throw new Error('structured oracle evidence does not bind the executed engine descriptor');
+    }
+    if (artifactEvidence.profile !== completeConfiguration.profile) {
+      throw new Error('structured oracle evidence profile differs from the executed run');
+    }
+    if (!result.stop
+      || artifactEvidence.stop.kind !== result.stop.kind
+      || artifactEvidence.stop.haltPc !== result.stop.haltPc
+      || artifactEvidence.status !== 'halted') {
+      throw new Error('structured oracle evidence stop/status differs from the executed run');
+    }
+    const resultEventDigest = sha256Canonical(commitEventsCanonical(result.events) as CanonicalJson);
+    if (resultEventDigest !== result.eventDigest || artifactEvidence.eventDigest !== result.eventDigest) {
+      throw new Error('reported oracle eventDigest does not match the structured event stream');
+    }
+    if (artifactEvidence.eventCount !== result.eventCount
+      || artifactEvidence.steps !== result.instructions
+      || artifactEvidence.finalStateDigest !== result.finalStateDigest) {
+      throw new Error('reported oracle summary does not match the structured event artifact');
+    }
+    evidence = {
+      rawOutputDigest: traceEvidence.rawOutputDigest,
+      steps: artifactEvidence.steps,
+      eventCount: artifactEvidence.eventCount,
+      eventDigest: artifactEvidence.eventDigest,
+      finalStateDigest: artifactEvidence.finalStateDigest
+    };
+    await fs.promises.chmod(eventPath, 0o444).catch(() => undefined);
+  }
   if (outcome.steps !== undefined && outcome.steps !== evidence.steps) {
     throw new Error(`reported oracle steps ${outcome.steps} do not match captured trace evidence ${evidence.steps}`);
   }
@@ -642,7 +737,7 @@ async function caseSnapshotFile(asmCase: AsmCase, relativePath: string, label: s
 function asmCaseArtifactMaximumBytes(kind: AsmCaseArtifactKind, name: string): number {
   const { group, key } = v2ArtifactGroup(kind, name);
   if (group === 'source') return maximumReplaySourceBytes;
-  if (group === 'oracle' && key === 'traceOut') return maximumReplayTraceBytes;
+  if (group === 'oracle' && (key === 'traceOut' || key === 'events')) return maximumReplayTraceBytes;
   return maximumReplaySnapshotBytes;
 }
 
@@ -1269,4 +1364,34 @@ function manifestEngineInfo(
     };
   }
   return info;
+}
+
+async function persistBuiltinEngineArtifact(
+  asmCase: AsmCase,
+  descriptor: EngineDescriptor,
+  role: 'assembler' | 'executor',
+  reported: EngineArtifactIdentity | undefined
+): Promise<EngineArtifactIdentity | undefined> {
+  if (descriptor.id !== 'builtin-ts') return reported;
+  const artifact = role === 'assembler'
+    ? builtinAssemblerEngineArtifact()
+    : builtinExecutionEngineArtifact();
+  if (!reported
+    || reported.sha256.toLowerCase() !== artifact.identity.sha256
+    || reported.role !== artifact.identity.role
+    || reported.fileName !== artifact.identity.fileName) {
+    throw new Error(`builtin-ts ${role} result did not bind the current compiled engine artifact`);
+  }
+  const caseRoot = path.resolve(asmCase.dir.fsPath);
+  const workspaceRoot = path.dirname(path.dirname(path.dirname(caseRoot)));
+  const registry = new ImmutableEngineArtifactRegistry(
+    workspaceEngineRegistryRoot(workspaceRoot),
+    workspaceRoot
+  );
+  const registered = await registry.registerBytes(
+    artifact.identity.role!,
+    artifact.bytes,
+    artifact.identity.fileName!
+  );
+  return { ...registered.identity };
 }

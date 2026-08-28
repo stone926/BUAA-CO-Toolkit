@@ -56,6 +56,40 @@ function syscallEvent(): CommitEvent {
   };
 }
 
+function writeEvent(sequence: number, value: number): CommitEvent {
+  return {
+    sequence,
+    kind: 'instruction',
+    pcBefore: 0x3000,
+    instructionWord: 0x34080000 | (value & 0xffff),
+    pcAfter: 0x3004,
+    gprWrites: [{ register: 8, value }],
+    hiLoWrites: [],
+    cp0Writes: [],
+    memoryWrites: [],
+    deviceEvents: [],
+    mnemonic: 'ori'
+  };
+}
+
+function memoryAdelEvent(): CommitEvent {
+  return {
+    ...syscallEvent(),
+    instructionWord: 0x8c080001,
+    mnemonic: 'lw',
+    trap: {
+      kind: 'exception',
+      name: 'adel',
+      code: 4,
+      victimPc: 0x3000,
+      branchDelay: false,
+      epc: 0x3000,
+      stage: 'memory',
+      handlerPc: 0x4180
+    }
+  };
+}
+
 describe('executor shadow differential', () => {
   it('matches identical ordered architectural traces', () => {
     const diff = compareExecutorShadow(evidence(), evidence({ engineId: 'builtin-ts' }), { profile: 'P5' });
@@ -93,6 +127,44 @@ describe('executor shadow differential', () => {
     expect(diff.disposition).toBe('course-correct');
     expect(diff.classification?.contractId).toBe('MARS-DIV-P7SYSCALL-001');
     expect(diff.firstDiffCommitEvent?.mnemonic).toBe('syscall');
+  });
+
+  it('keeps a memory AdEL mismatch inconclusive without exact overflow provenance', () => {
+    const diff = compareExecutorShadow(
+      evidence(),
+      evidence({
+        engineId: 'builtin-ts',
+        traceEvents: [],
+        events: [memoryAdelEvent()]
+      }),
+      { profile: 'P7' }
+    );
+    expect(diff.disposition).toBe('inconclusive');
+    expect(diff.classification?.contractId).toBeUndefined();
+    expect(diff.firstDiffCommitEvent?.trap).toContain('adel');
+  });
+
+  it('maps a loop diff to the second dynamic occurrence at the same PC', () => {
+    const diff = compareExecutorShadow(
+      evidence({
+        traceEvents: [
+          trace('00003000', '8', '00000001'),
+          trace('00003000', '8', '00000002')
+        ]
+      }),
+      evidence({
+        engineId: 'builtin-ts',
+        traceEvents: [
+          trace('00003000', '8', '00000001'),
+          trace('00003000', '8', '00000003')
+        ],
+        events: [writeEvent(0, 1), writeEvent(1, 3)]
+      }),
+      { profile: 'P5' }
+    );
+    expect(diff.firstDiff?.index).toBe(1);
+    expect(diff.firstDiffCommitEvent?.sequence).toBe(1);
+    expect(diff.firstDiffCommitEvent?.gprWrites).toEqual(['$8<=00000003']);
   });
 
   it('is not comparable when the builtin oracle did not complete', () => {

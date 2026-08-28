@@ -11,7 +11,8 @@ export function engineRunWasCancelled(
   signal?: AbortSignal
 ): boolean {
   if (result !== undefined) {
-    return result.stopped === true && result.stopReason === 'aborted';
+    return result.stopReason === 'cancelled'
+      || (result.stopped === true && result.stopReason === 'aborted');
   }
   return signal?.aborted === true;
 }

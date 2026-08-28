@@ -188,6 +188,22 @@ try {
     throw new Error('production Worker path did not remain usable after cancellation/failure');
   }
 
+  const assembly = await withTimeout(manager.runJob({
+    kind: 'assembler-assemble',
+    payload: {
+      profile: 'P3',
+      sources: [{ id: 'root', uri: 'worker-proof.asm', text: '.text\n    ori $t0, $0, 0x2a\n' }],
+      includes: [],
+      layers: ['required', 'commonExtensions', 'marsCompatibility'],
+      p7RiInstruction: false
+    }
+  }), 'production assembler-assemble');
+  if (!assembly.ok
+    || assembly.payload?.ok !== true
+    || assembly.payload?.image?.segments?.[0]?.words?.[0] !== 0x3408002a) {
+    throw new Error(`production assembler-assemble proof failed: ${JSON.stringify(assembly)}`);
+  }
+
   const execute = await withTimeout(manager.runJob({
     kind: 'machine-execute',
     payload: {
@@ -266,6 +282,10 @@ try {
         progressSequences,
         ackSequences,
         terminalAfterFinalAck: resultIndex > lastAckIndex,
+        assemblerAssemble: {
+          ok: assembly.payload?.ok,
+          firstWord: assembly.payload?.image?.segments?.[0]?.words?.[0]
+        },
         machineExecute: {
           status: execute.payload?.status,
           instructions: execute.payload?.instructions,
@@ -289,7 +309,7 @@ try {
       }
     });
   }
-  console.log('Compiled MIPS Worker verification passed through RuntimeManager/WorkerClient (lazy start, sequence 0..2, ACK ordering, consumer failure, one-slice cancel, production machine-execute).');
+  console.log('Compiled MIPS Worker verification passed through RuntimeManager/WorkerClient (lazy start, sequence 0..2, ACK ordering, consumer failure, one-slice cancel, production assembler-assemble and machine-execute).');
 } finally {
   manager.dispose();
 }

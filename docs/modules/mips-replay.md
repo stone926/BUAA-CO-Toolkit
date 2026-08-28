@@ -1,4 +1,4 @@
-# mips-replay | src/mips/replay/ | 13 files
+# mips-replay | src/mips/replay/ | 15 files
 
 阶段 1 的离线 case closure。这里负责把“工作区路径 + 用户配置工具”转换为可验证的不可变输入，并提供 exact replay / re-evaluate API；不负责 VS Code 命令 UI。
 
@@ -10,8 +10,10 @@
 - `engineRegistry.ts`：不可变 engine artifact registry。
 - `types.ts`：adapter context/result/selection 契约和 adapter registry。
 - `legacyMarsAdapter.ts`：无 VS Code 依赖的真实 Java/MARS adapter。
-- `builtinEngineArtifact.ts`：builtin executor 的逻辑不可变 artifact（revision 元组 + ISA catalog SHA-256），registry 缺失时明确拒绝 exact replay。
-- `builtinExecutionAdapter.ts`：builtin-ts executor 的 exact replay/re-evaluate adapter；直接执行 ProgramImage，不读取原 workspace，stdin 与不匹配 artifact 均 fail closed。
+- `builtinEngineArtifact.ts`：builtin executor 的逻辑不可变 artifact（revision 元组 + ISA catalog SHA-256）；当前编译版本可按该身份物化到 registry，身份不匹配时拒绝 exact replay。
+- `builtinAssemblerEngineArtifact.ts`：builtin assembler 的独立逻辑 artifact；assembler semantics revision 与 catalog hash 参与身份，避免 executor-only 修改错误作废汇编证据，反之亦然。
+- `builtinExecutionAdapter.ts`：`builtin-ts` 的双角色 exact replay/re-evaluate adapter；assembler 角色只从已验证的原始 source graph 重汇编，executor 角色直接执行 ProgramImage，两条路径分别校验 staged assembler/executor artifact。它不读取原 workspace；assembler 缺失 source graph、executor 收到 stdin，或任一角色 artifact 不匹配时均 fail closed。
+- `structuredExecutionEvidence.ts`：严格解析 builtin event artifact，复核 event count、canonical event digest 与 engine/image/profile/stop envelope；final-state digest 由 bundle closure 和 replay 结果交叉绑定。
 - `legacyMarsContract.ts`：legacy adapter 自有的机器码与 oracle 兼容检查 hook，避免 orchestration 假定未来引擎都使用 MARS 文本。
 - `replayService.ts`：exact replay 与 append-only re-evaluate orchestration。
 - `index.ts`：公开 facade 和默认 adapter registry。
@@ -40,12 +42,12 @@ Registry artifact 不按时间自动过期。保留策略固定为 `retain-until
 
 ## Replay modes
 
-- `exactReplayCase`：执行前后均以 `case.json before → 完整 bundle closure → case.json after` 复核，两个 adapter 各自使用独立 source/config/stdin/engine stage；逐项核对 image、DUT bytes、stop reason、raw output、event、final state、steps 和 event count。
+- `exactReplayCase`：执行前后均以 `case.json before → 完整 bundle closure → case.json after` 复核，assembler/executor adapter 各自使用独立 source/config/stdin/engine stage；逐项核对 image、DUT bytes、stop reason、raw output、event、final state、steps 和 event count。builtin assembler exact replay 使用 bundle 中的原始 blobs/include edges，不依赖重写后的 materialized include 文本。
 - `reEvaluateCase`：在第一个 `await` 前快照调用方选择、路径、时间和 signal，再使用显式选择的当前 assembler/oracle 与原始 run input；发布前后都复核完整原 bundle，失败删除 pending/published 结果。成功结果只追加到 `re-evaluations/<timestamp>-<id>/`，旧裁决永不覆盖。
 - execution adapter 明确接收 assembler 的 `ProgramImage`/DUT bytes。legacy MARS 不能直接加载 image，因此会在隔离目录重新汇编并先证明 fingerprint/bytes 完全相同，再运行源文件。
 - assembler 结果先 canonical serialize/deserialize、重算 fingerprint 并形成权威深冻结副本；execute、validation hook 和最终比较只消费该副本及独立 DUT byte copy。adapter 另收到深克隆/冻结的配置和 input graph、独立 stdin copy、独立 materialized source；返回后 source tree 与 executable byte copy 都会复核，避免跨 stage 污染。
 - stock/legacy MARS 没有可信的“因 max-step 耗尽退出”信号；因此 replay 只有在 trace 证明标准自分支+nop halt-loop 时接受正常停止，记录为 `step-limit` 的 legacy case 会在启动 JVM 前 fail closed。
-- `index.ts`：公开 facade；`createDefaultReplayAdapterRegistry()` 注册 legacy MARS 与 builtin executor；builtin assembler replay 等待阶段 5。
+- `index.ts`：公开 facade；`createDefaultReplayAdapterRegistry()` 注册 legacy MARS 与一个同时支持 builtin assembler/executor artifact role 的 `BuiltinTsReplayAdapter`。
 
 外部工具真实回归默认跳过，可显式运行：
 

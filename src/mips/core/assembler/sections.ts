@@ -37,6 +37,8 @@ interface RecordedOrigin {
 export class CourseSegmentBuilder {
   private textWords: number[] = [];
   private ktextWords: number[] = [];
+  private readonly textOccupied = new Set<number>();
+  private readonly ktextOccupied = new Set<number>();
   private readonly dataBytes = new Map<number, number>();
   private textCursor = courseSectionLayout.text.base;
   private ktextCursor = courseSectionLayout.ktext.base;
@@ -98,8 +100,14 @@ export class CourseSegmentBuilder {
     const address = this.cursor(section);
     this.ensureInstructionAddress(section, address);
     const words = section === 'text' ? this.textWords : this.ktextWords;
-    const wordIndex = words.length;
-    words.push(word >>> 0);
+    const occupied = section === 'text' ? this.textOccupied : this.ktextOccupied;
+    const wordIndex = (address - this.boundsFor(section).base) / 4;
+    if (occupied.has(wordIndex)) {
+      throw new Error(`段 ${section} 在 ${hex8Address(address)} 重叠`);
+    }
+    while (words.length <= wordIndex) words.push(0);
+    words[wordIndex] = word >>> 0;
+    occupied.add(wordIndex);
     this.recorded.push({
       section,
       wordIndex,
@@ -234,14 +242,14 @@ export class CourseSegmentBuilder {
     if (address < bounds.base || address > bounds.endInclusive) {
       throw new Error(`段 ${section} 指令地址 ${hex8Address(address)} 超出 ${hex8Address(bounds.base)}..${hex8Address(bounds.endInclusive)}`);
     }
-    const textStart = courseSectionLayout.text.base;
-    const textEnd = textStart + this.textWords.length * 4;
-    const ktextStart = courseSectionLayout.ktext.base;
-    const ktextEnd = ktextStart + this.ktextWords.length * 4;
-    if (section === 'text' && this.ktextWords.length && address < ktextEnd) {
+    const nextTextEnd = section === 'text'
+      ? Math.max(courseSectionLayout.text.base + this.textWords.length * 4, address + 4)
+      : courseSectionLayout.text.base + this.textWords.length * 4;
+    if (this.ktextOccupied.size && nextTextEnd > courseSectionLayout.ktext.base) {
       throw new Error(`.text 与 .ktext 在 ${hex8Address(address)} 重叠`);
     }
-    if (section === 'ktext' && this.textWords.length && address < textEnd) {
+    if (section === 'ktext' && this.textOccupied.size
+      && courseSectionLayout.text.base + this.textWords.length * 4 > courseSectionLayout.ktext.base) {
       throw new Error(`.ktext 与 .text 在 ${hex8Address(address)} 重叠`);
     }
   }

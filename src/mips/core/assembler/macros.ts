@@ -198,10 +198,28 @@ export function expandMacroInvocation(
       startOffset: line.startOffset,
       endOffset: line.endOffset,
       text,
-      expansionStack: [callSpan, ...line.expansionStack]
+      expansionStack: mergeExpansionStacks(
+        [callSpan],
+        statement.expansionStack,
+        line.expansionStack
+      )
     };
   });
   return { ok: true, lines: expanded };
+}
+
+function mergeExpansionStacks(...stacks: readonly (readonly SourceSpan[])[]): SourceSpan[] {
+  const result: SourceSpan[] = [];
+  const seen = new Set<string>();
+  for (const stack of stacks) {
+    for (const span of stack) {
+      const key = `${span.sourceId}\u0000${span.startOffset}\u0000${span.endOffset}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(span);
+    }
+  }
+  return result;
 }
 
 function substituteMacroTokens(

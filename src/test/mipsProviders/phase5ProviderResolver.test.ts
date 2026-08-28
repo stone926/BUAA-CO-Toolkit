@@ -51,10 +51,10 @@ describe('phase-5 assembler provider registration', () => {
       const selected = await resolveBuiltinAssemblerProvider(services, request);
       expect(selected.provider.descriptor.id).toBe('builtin-ts');
       expect(selected.preflight.ok).toBe(true);
-      // Default resolution still tries legacy first; with Java absent legacy fails
-      // and the resolver moves on rather than silently starting a process.
+      // Default resolution remains pinned to legacy through phase 5. A failed
+      // legacy preflight must not silently select builtin-ts.
       const resolved = await resolveAssemblerProvider(services, request);
-      expect(['legacy-mars-configured', 'builtin-ts']).toContain(resolved.provider.descriptor.id);
+      expect(resolved.provider.descriptor.id).toBe('legacy-mars-configured');
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }

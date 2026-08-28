@@ -2,7 +2,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
-import type { SourceUnitFingerprint } from '../core/api';
+import type { SourceUnit, SourceUnitFingerprint } from '../core/api';
 import { canonicalJson, sha256Bytes, sha256Canonical, type CanonicalJson } from './canonical';
 import {
   maximumReplaySourceBytes,
@@ -319,14 +319,95 @@ export async function sourceGraphBundleIssues(caseDir: string, graphRelativePath
   }
 }
 
+export interface VerifiedSourceGraphInput {
+  readonly graph: SourceGraphBundle;
+  readonly sourceGraphInput: {
+    readonly rootId: string;
+    readonly sources: readonly SourceUnit[];
+    readonly includes: readonly { readonly fromId: string; readonly specifier: string; readonly toId: string }[];
+  };
+}
+
+/** Load the immutable original source identities used by both production assembly and replay. */
+export async function loadVerifiedSourceGraphInput(
+  caseDir: string,
+  graphRelativePath: string
+): Promise<VerifiedSourceGraphInput> {
+  const { graph, rawUnits } = await loadOriginalSourceGraph(caseDir, graphRelativePath);
+  return {
+    graph,
+    sourceGraphInput: {
+      rootId: graph.rootId,
+      sources: graph.units.map((unit) => {
+        const original = rawUnits.get(unit.id)!;
+        return {
+          id: unit.id,
+          uri: unit.provenanceUri,
+          text: decodeUtf8Losslessly(original.bytes, unit.provenanceUri)
+        };
+      }),
+      includes: graph.edges.map((edge) => ({
+        fromId: edge.from,
+        specifier: edge.requestedPath,
+        toId: edge.to
+      }))
+    }
+  };
+}
+
 /** Rebuild a disposable, read-only source tree from original content-addressed blobs. */
 export async function materializeSourceGraph(
   caseDir: string,
   graphRelativePath: string,
   destination: string
-): Promise<{ graph: SourceGraphBundle; rootFile: string }> {
-  const graph = await loadAndVerifySourceGraph(caseDir, graphRelativePath);
+): Promise<{
+  graph: SourceGraphBundle;
+  rootFile: string;
+  sourceGraphInput: {
+    rootId: string;
+    sources: SourceUnit[];
+    includes: Array<{ fromId: string; specifier: string; toId: string }>;
+  };
+}> {
+  const { graph, rawUnits } = await loadOriginalSourceGraph(caseDir, graphRelativePath);
   await fs.promises.mkdir(destination, { recursive: true });
+  for (const unit of graph.units) {
+    const discovered = rawUnits.get(unit.id)!;
+    const fileName = path.basename(unit.materializedPath);
+    const bytes = rewriteIncludes(discovered, fileName, [...rawUnits.values()]);
+    if (sha256Bytes(bytes) !== unit.materializedHash) {
+      throw new Error(`source graph unit ${unit.id} cannot be deterministically materialized`);
+    }
+    await writeImmutableFile(path.join(destination, fileName), bytes);
+  }
+  const rootUnit = graph.units.find((unit) => unit.id === graph.rootId)!;
+  return {
+    graph,
+    rootFile: path.join(destination, path.basename(rootUnit.materializedPath)),
+    sourceGraphInput: {
+      rootId: graph.rootId,
+      sources: graph.units.map((unit) => {
+        const original = rawUnits.get(unit.id)!;
+        return {
+          id: unit.id,
+          uri: unit.provenanceUri,
+          text: decodeUtf8Losslessly(original.bytes, unit.provenanceUri)
+        };
+      }),
+      includes: graph.edges.map((edge) => ({
+        fromId: edge.from,
+        specifier: edge.requestedPath,
+        toId: edge.to
+      }))
+    }
+  };
+}
+
+async function loadOriginalSourceGraph(
+  caseDir: string,
+  graphRelativePath: string
+): Promise<{ graph: SourceGraphBundle; rawUnits: Map<string, DiscoveredUnit> }> {
+  const graph = await loadAndVerifySourceGraph(caseDir, graphRelativePath);
   const rawUnits = new Map<string, DiscoveredUnit>();
   for (const unit of graph.units) {
     const blob = await resolveContainedRegularFile(caseDir, unit.blobPath);
@@ -345,25 +426,17 @@ export async function materializeSourceGraph(
       bytes,
       contentHash: unit.contentHash,
       provenanceUri: unit.provenanceUri,
-      directives: graph.edges.filter((edge) => edge.from === unit.id).sort((a, b) => a.ordinal - b.ordinal).map((edge) => ({
-        requestedPath: edge.requestedPath,
-        pathStartOffset: edge.pathStartOffset,
-        pathEndOffset: edge.pathEndOffset,
-        targetId: edge.to
-      }))
+      directives: graph.edges.filter((edge) => edge.from === unit.id)
+        .sort((left, right) => left.ordinal - right.ordinal)
+        .map((edge) => ({
+          requestedPath: edge.requestedPath,
+          pathStartOffset: edge.pathStartOffset,
+          pathEndOffset: edge.pathEndOffset,
+          targetId: edge.to
+        }))
     });
   }
-  for (const unit of graph.units) {
-    const discovered = rawUnits.get(unit.id)!;
-    const fileName = path.basename(unit.materializedPath);
-    const bytes = rewriteIncludes(discovered, fileName, [...rawUnits.values()]);
-    if (sha256Bytes(bytes) !== unit.materializedHash) {
-      throw new Error(`source graph unit ${unit.id} cannot be deterministically materialized`);
-    }
-    await writeImmutableFile(path.join(destination, fileName), bytes);
-  }
-  const rootUnit = graph.units.find((unit) => unit.id === graph.rootId)!;
-  return { graph, rootFile: path.join(destination, path.basename(rootUnit.materializedPath)) };
+  return { graph, rawUnits };
 }
 
 export function sourceGraphIssues(value: unknown): string[] {

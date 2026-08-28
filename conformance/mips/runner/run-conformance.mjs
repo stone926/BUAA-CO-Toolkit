@@ -11,7 +11,7 @@ const laneRunners = Object.freeze({
   'assembly-diff': runAssemblyDiffCase
 });
 const defaultRequiredLanes = ['legacy-baseline', 'course-vector'];
-const resultStatuses = new Set(['passed', 'failed', 'skipped', 'error', 'recorded']);
+const resultStatuses = new Set(['passed', 'validated', 'failed', 'skipped', 'error', 'recorded']);
 
 function nextValue(argv, index, flag) {
   const value = argv[index + 1];
@@ -61,7 +61,7 @@ function parseArgs(argv) {
 }
 
 function emptyLaneCounts() {
-  return { selected: 0, passed: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
+  return { selected: 0, passed: 0, validated: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
 }
 
 function main() {
@@ -81,7 +81,7 @@ function main() {
     recordGolden: options.recordGolden,
     corpusCandidate: manifest.candidate
   };
-  const counts = { passed: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
+  const counts = { passed: 0, validated: 0, failed: 0, skipped: 0, error: 0, recorded: 0 };
   const perLane = Object.fromEntries([...options.lanes].map((lane) => [lane, emptyLaneCounts()]));
 
   for (const manifestCase of manifest.cases) {

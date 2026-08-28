@@ -6,6 +6,7 @@ import {
   EngineDescriptor,
   InstructionLayer,
   ProgramImage,
+  SourceUnit,
   SourceUnitFingerprint
 } from '../core/api';
 import type { CommitEvent } from '../core/events/commitEvent';
@@ -42,6 +43,8 @@ export type ProviderPreflightResult = ProviderPreflight | Promise<ProviderPrefli
 export interface ProviderRunContext {
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
+  /** Stream canonical commit events when the selected provider exposes them. */
+  onCommitEvent?: (event: CommitEvent) => void;
 }
 
 /** Engine-neutral process/run status (mirrors RunResult without the legacy name). */
@@ -94,6 +97,16 @@ export interface AssembleRequest {
   sourceUri: vscode.Uri;
   /** Host-verified complete source graph identity when the caller already captured one. */
   inputGraph?: readonly SourceUnitFingerprint[];
+  /** Verified original blobs/edges; builtin assemblers consume this instead of rewritten files. */
+  sourceGraphInput?: {
+    readonly rootId: string;
+    readonly sources: readonly SourceUnit[];
+    readonly includes: readonly {
+      readonly fromId: string;
+      readonly specifier: string;
+      readonly toId: string;
+    }[];
+  };
   target: AssembleTarget;
   /** Course-trace invocation: enforces the course dump range and halt-loop validation. */
   courseTrace?: boolean;
@@ -203,6 +216,8 @@ export interface ExecuteResult {
    * callers must never assume two different engines expose the same schema.
    */
   events?: readonly CommitEvent[];
+  /** Number of architectural instructions executed by this run. */
+  instructions?: number;
   eventCount?: number;
   eventDigest?: string;
   coverage?: readonly CoverageBin[];

@@ -364,7 +364,13 @@ async function runReplay(
       issues.push(`course oracle compatibility failed during replay: ${oracleCompatibilityIssue}`);
       return { issues, assembly: authoritativeAssemblyResult(authoritativeAssembly) };
     }
-    const evidence = oracleEvidenceDigests(executed.stdout, manifest.oracle.runConfiguration?.traceLevel ?? 1);
+    const rawEvidence = oracleEvidenceDigests(executed.stdout, manifest.oracle.runConfiguration?.traceLevel ?? 1);
+    const evidence = executed.structuredEvidence
+      ? {
+        rawOutputDigest: rawEvidence.rawOutputDigest,
+        ...executed.structuredEvidence
+      }
+      : rawEvidence;
     return {
       issues,
       assembly: authoritativeAssemblyResult(authoritativeAssembly),
@@ -429,15 +435,33 @@ function authoritativeAssemblyResult(authoritative: AuthoritativeAssembly) {
 
 function captureAuthoritativeExecution(output: ReplayExecutionOutput): Readonly<ReplayExecutionOutput> {
   if (typeof output.ok !== 'boolean' || typeof output.stdout !== 'string' || typeof output.stderr !== 'string'
-    || !['halt-loop', 'step-limit', 'error'].includes(output.stopReason)) {
+    || !['halt-loop', 'step-limit', 'cancelled', 'error'].includes(output.stopReason)) {
     throw new Error('oracle replay returned an invalid execution result');
+  }
+  const structuredEvidence = output.structuredEvidence;
+  if (structuredEvidence && (!Number.isSafeInteger(structuredEvidence.steps) || structuredEvidence.steps < 0
+    || !Number.isSafeInteger(structuredEvidence.eventCount) || structuredEvidence.eventCount < 0
+    || !isSha256(structuredEvidence.eventDigest) || !isSha256(structuredEvidence.finalStateDigest))) {
+    throw new Error('oracle replay returned invalid structured execution evidence');
   }
   return Object.freeze({
     ok: output.ok,
     stdout: output.stdout,
     stderr: output.stderr,
-    stopReason: output.stopReason
+    stopReason: output.stopReason,
+    ...(structuredEvidence ? {
+      structuredEvidence: Object.freeze({
+        steps: structuredEvidence.steps,
+        eventCount: structuredEvidence.eventCount,
+        eventDigest: structuredEvidence.eventDigest.toLowerCase(),
+        finalStateDigest: structuredEvidence.finalStateDigest.toLowerCase()
+      })
+    } : {})
   });
+}
+
+function isSha256(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value);
 }
 
 function isolatedExecutionValidationView(
@@ -502,6 +526,11 @@ async function createAdapterStage(
       sourceRoot: source.rootFile,
       sourceKind: manifest.source.kind,
       inputGraph,
+      sourceGraphInput: deepFreeze({
+        rootId: source.sourceGraphInput.rootId,
+        sources: source.sourceGraphInput.sources.map((unit) => deepFreeze({ ...unit })),
+        includes: source.sourceGraphInput.includes.map((edge) => deepFreeze({ ...edge }))
+      }),
       configuration,
       stdinBytes: stdinBytes ? Buffer.from(stdinBytes) : undefined,
       workingDirectory,

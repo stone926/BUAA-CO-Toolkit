@@ -4,8 +4,8 @@ import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 // These expected text images were captured from the pinned MARS v0.6.3
 // assembler (FixedCompactLargeText, delayed branching enabled) and re-verified
 // through conformance/mips runner lane assembly-diff.
-const cases: Array<{ name: string; profile: 'P3' | 'P5'; asm: string; words: string[] }> = [];
-cases.push({ name: "li and comparison pseudo forms", profile: 'P5', asm: ".text\nmain:\n    li $t0, -32768\n    li $t1, 32767\n    li $t2, 65535\n    li $t3, 0x80000000\n    blt $t0, $t1, next\n    nop\n    bge $t1, $t0, next\n    nop\n    ble $t0, $t1, next\n    nop\n    bgt $t1, $t0, next\n    nop\n    bltu $t0, $t1, next\n    nop\n    bgeu $t1, $t0, next\n    nop\n    bleu $t0, $t1, next\n    nop\n    bgtu $t1, $t0, next\n    nop\n    blt $t0, 5, next\n    nop\n    bge $t1, -5, next\n    nop\n    bgt $t1, 5, next\n    nop\n    ble $t0, 5, next\n    nop\n    seq $s0, $t0, $t1\n    sne $s1, $t0, $t1\n    sgt $s2, $t1, $t0\n    sge $s3, $t1, $t0\n    sle $s4, $t0, $t1\n    sgt $s5, $t1, 5\n    sle $s6, $t0, 5\nnext:\n    beq $0, $0, next\n    nop\n", words: [
+const cases: Array<{ name: string; profile: 'P3' | 'P5' | 'P6'; asm: string; words: string[] }> = [];
+cases.push({ name: "li and comparison pseudo forms", profile: 'P6', asm: ".text\nmain:\n    li $t0, -32768\n    li $t1, 32767\n    li $t2, 65535\n    li $t3, 0x80000000\n    blt $t0, $t1, next\n    nop\n    bge $t1, $t0, next\n    nop\n    ble $t0, $t1, next\n    nop\n    bgt $t1, $t0, next\n    nop\n    bltu $t0, $t1, next\n    nop\n    bgeu $t1, $t0, next\n    nop\n    bleu $t0, $t1, next\n    nop\n    bgtu $t1, $t0, next\n    nop\n    blt $t0, 5, next\n    nop\n    bge $t1, -5, next\n    nop\n    bgt $t1, 5, next\n    nop\n    ble $t0, 5, next\n    nop\n    seq $s0, $t0, $t1\n    sne $s1, $t0, $t1\n    sgt $s2, $t1, $t0\n    sge $s3, $t1, $t0\n    sle $s4, $t0, $t1\n    sgt $s5, $t1, 5\n    sle $s6, $t0, 5\nnext:\n    beq $0, $0, next\n    nop\n", words: [
     '24088000',
     '24097fff',
     '340affff',
@@ -70,7 +70,7 @@ cases.push({ name: "li and comparison pseudo forms", profile: 'P5', asm: ".text\
     '1000ffff',
     '00000000'
 ] });
-cases.push({ name: "ALU immediate pseudo forms", profile: 'P5', asm: ".text\nmain:\n    add $t0, $t1, -1\n    add $t1, $t2, 1\n    add $t2, $t3, 70000\n    addu $t3, $t4, 70000\n    sub $t4, $t5, -1\n    sub $t5, $t6, 70000\n    subu $t6, $t7, 70000\n    and $t7, $t0, 65535\n    or $s0, $t1, 65535\n    xor $s1, $t2, 65535\n    andi $s2, $t3, 70000\n    ori $s3, $t4, 70000\n    xori $s4, $t5, 70000\n    addi $s5, $t6, 70000\n    addiu $s6, $t7, 70000\n    and $s7, 255\n    or $t0, 255\n    xor $t1, 255\n    nop\n", words: [
+cases.push({ name: "ALU immediate pseudo forms", profile: 'P6', asm: ".text\nmain:\n    add $t0, $t1, -1\n    add $t1, $t2, 1\n    add $t2, $t3, 70000\n    addu $t3, $t4, 70000\n    sub $t4, $t5, -1\n    sub $t5, $t6, 70000\n    subu $t6, $t7, 70000\n    and $t7, $t0, 65535\n    or $s0, $t1, 65535\n    xor $s1, $t2, 65535\n    andi $s2, $t3, 70000\n    ori $s3, $t4, 70000\n    xori $s4, $t5, 70000\n    addi $s5, $t6, 70000\n    addiu $s6, $t7, 70000\n    and $s7, 255\n    or $t0, 255\n    xor $t1, 255\n    nop\n", words: [
     '2128ffff',
     '21490001',
     '3c010001',
@@ -110,7 +110,7 @@ cases.push({ name: "ALU immediate pseudo forms", profile: 'P5', asm: ".text\nmai
     '392900ff',
     '00000000'
 ] });
-cases.push({ name: "load/store convenience address forms", profile: 'P5', asm: ".text\nmain:\n    lw $t0, -100\n    lw $t1, 100\n    lw $t2, 70000\n    lw $t3, ($s0)\n    sw $t0, -100\n    sw $t1, 100\n    sw $t2, 70000\n    sw $t3, ($s1)\n    lh $t4, -100\n    lh $t5, 100\n    lhu $t6, 70000\n    lb $t7, -100\n    lbu $s0, 100\n    sb $s1, -100\n    sh $s2, 100\n    nop\n", words: [
+cases.push({ name: "load/store convenience address forms", profile: 'P6', asm: ".text\nmain:\n    lw $t0, -100\n    lw $t1, 100\n    lw $t2, 70000\n    lw $t3, ($s0)\n    sw $t0, -100\n    sw $t1, 100\n    sw $t2, 70000\n    sw $t3, ($s1)\n    lh $t4, -100\n    lh $t5, 100\n    lhu $t6, 70000\n    lb $t7, -100\n    lbu $s0, 100\n    sb $s1, -100\n    sh $s2, 100\n    nop\n", words: [
     '8c08ff9c',
     '8c090064',
     '3c010001',

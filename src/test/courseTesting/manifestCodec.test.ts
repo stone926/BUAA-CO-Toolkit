@@ -33,6 +33,7 @@ import {
   maximumReplayStdinBytes,
   maximumReplayTraceBytes
 } from '../../mips/replay/boundedFile';
+import { canonicalJson, sha256Canonical, type CanonicalJson } from '../../mips/replay/canonical';
 
 const v1Manifest: AsmCaseManifest = {
   version: 1,
@@ -851,6 +852,92 @@ describe('manifest v1/v2 codec', () => {
         expect.stringContaining('program.machineCode.bytes mismatch'),
         expect.stringContaining('artifacts.oracle.traceOut.bytes mismatch'),
         expect.stringContaining('oracle.rawOutputDigest does not match')
+      ]));
+
+      const structuredEventDigest = sha256Canonical([] as CanonicalJson);
+      const structuredDocument = {
+        schemaRevision: 1,
+        eventSchema: 'buaa-co-commit-event-v1',
+        engine: {
+          id: 'builtin-ts', kind: 'executor', build: 'test',
+          semanticsRevision: 1, capabilitiesRevision: 1
+        },
+        imageFingerprint: complete.program.imageFingerprint!,
+        profile: 'P7',
+        stop: { kind: 'halt-loop', haltPc: 0x3004 },
+        status: 'halted',
+        instructions: 7,
+        eventCount: 0,
+        eventDigest: structuredEventDigest,
+        finalStateDigest: 'f'.repeat(64),
+        events: []
+      };
+      const structuredBytes = Buffer.from(`${canonicalJson(structuredDocument as CanonicalJson)}\n`);
+      const structuredFile = path.join(dir, 'oracle', 'events.json');
+      fs.writeFileSync(structuredFile, structuredBytes);
+      const builtinEngine = {
+        ...testEngine,
+        id: 'builtin-ts',
+        legacyProvenance: undefined,
+        artifact: { sha256: 'b'.repeat(64), role: 'builtin-ts-executor', fileName: 'builtin-ts-executor.manifest.json' }
+      };
+      const builtinConfiguration = { ...testRunConfiguration, runtime: { kind: 'builtin-ts' as const } };
+      const structuredManifest: AsmCaseManifestV2 = {
+        ...complete,
+        oracle: {
+          ...complete.oracle,
+          engine: builtinEngine,
+          runConfiguration: builtinConfiguration,
+          configurationHash: manifestRunConfigurationHash(builtinConfiguration, builtinEngine),
+          steps: 7,
+          eventCount: 0,
+          rawOutputDigest: evidence.rawOutputDigest,
+          eventDigest: structuredEventDigest,
+          finalStateDigest: 'f'.repeat(64)
+        },
+        artifacts: {
+          ...complete.artifacts,
+          oracle: {
+            traceOut: complete.artifacts!.oracle!.traceOut,
+            events: {
+              path: 'oracle/events.json',
+              bytes: structuredBytes.byteLength,
+              sha256: crypto.createHash('sha256').update(structuredBytes).digest('hex')
+            }
+          }
+        }
+      };
+      const structuredIssues = await v2ReplayBundleIssues(structuredManifest, dir);
+      expect(structuredIssues).not.toEqual(expect.arrayContaining([
+        expect.stringContaining('oracle.eventDigest does not match captured traceOut'),
+        expect.stringContaining('oracle.steps does not match captured traceOut'),
+        expect.stringContaining('oracle.eventDigest does not match captured events')
+      ]));
+      expect(await v2ReplayBundleIssues({
+        ...structuredManifest,
+        oracle: { ...structuredManifest.oracle, eventDigest: 'e'.repeat(64) }
+      }, dir)).toContain('oracle.eventDigest does not match captured events');
+
+      const legacyEvents = Buffer.from('legacy provider sidecar, not a builtin event envelope');
+      const legacyEventsFile = path.join(dir, 'oracle', 'events.bin');
+      fs.writeFileSync(legacyEventsFile, legacyEvents);
+      const legacyWithArbitraryEvents: AsmCaseManifestV2 = {
+        ...complete,
+        artifacts: {
+          ...complete.artifacts,
+          oracle: {
+            traceOut: complete.artifacts!.oracle!.traceOut,
+            events: {
+              path: 'oracle/events.bin',
+              bytes: legacyEvents.byteLength,
+              sha256: crypto.createHash('sha256').update(legacyEvents).digest('hex')
+            }
+          }
+        }
+      };
+      expect(await v2ReplayBundleIssues(legacyWithArbitraryEvents, dir)).not.toEqual(expect.arrayContaining([
+        expect.stringContaining('oracle structured evidence'),
+        expect.stringContaining('builtin event artifact')
       ]));
 
       const invalidUtf8Trace = Buffer.concat([trace, Buffer.from([0xff])]);

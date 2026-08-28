@@ -312,7 +312,9 @@ export type DeviceVectorRegister = 'ctrl' | 'preset' | 'count';
 
 export type DeviceVectorStep =
   | { readonly kind: 'reset' }
+  /** One `WE = 0` clock edge (or an explicit bounded run of such edges). */
   | { readonly kind: 'tick'; readonly cycles?: number }
+  /** One completed `WE = 1` clock edge, including the register update. */
   | {
     readonly kind: 'write';
     readonly device: DeviceVectorTimer;
@@ -403,6 +405,11 @@ export function runDeviceCycleVectorForService(
           break;
         }
         events.push(...bus.commit(prepared).map(describeEvent));
+        // A device-vector `write` denotes the completed RTL `WE = 1` posedge,
+        // not a transaction staged for some later vector step. `commit()`
+        // updates the register and reserves that edge; consume it here so the
+        // following `tick` is the first `WE = 0` state-machine edge.
+        events.push(...bus.tickCycle({ cycles: 1 }).events.map(describeEvent));
         break;
       }
       case 'read': {

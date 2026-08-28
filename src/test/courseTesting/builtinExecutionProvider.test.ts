@@ -9,6 +9,7 @@ vi.mock('vscode', () => ({
 }));
 
 import { BuiltinTsExecutionProvider } from '../../mips/providers/builtinExecutionProvider';
+import { ExecutionAssertionObserver } from '../../courseTesting/oracle/executionAssertions';
 import { buildProgramImage } from '../../mips/core/programImage';
 import { sourceUnitFingerprint } from '../../mips/core/programImage';
 import type { ExecuteRequest } from '../../mips/providers/contracts';
@@ -57,6 +58,25 @@ describe('BuiltinTsExecutionProvider', () => {
     expect(first.coverage?.some((bin) => bin.id.endsWith('.ori') && bin.hits === 1)).toBe(true);
   });
 
+  it('streams the production provider event path into assertion/watchpoint observers', async () => {
+    const observer = new ExecutionAssertionObserver(
+      [{ id: 'gpr8', kind: 'gpr-write', register: 8 }],
+      [
+        { id: 'no-trap', kind: 'no-trap' },
+        { id: 'halt', kind: 'halt-pc', haltPc: 0x3004 }
+      ]
+    );
+    const result = await new BuiltinTsExecutionProvider().execute(request(), {
+      onCommitEvent: (commitEvent) => observer.observe(commitEvent)
+    });
+    const observation = observer.finish();
+
+    expect(result.ok).toBe(true);
+    expect(observation.watchpointHits).toHaveLength(1);
+    expect(observation.watchpointHits[0]).toMatchObject({ watchpointId: 'gpr8', sequence: 0 });
+    expect(observation.assertionFailures).toEqual([]);
+  });
+
   it('writes raw trace and canonical structured event artifacts atomically', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-builtin-provider-'));
     const outputFile = URI.file(path.join(dir, 'oracle.out'));
@@ -91,6 +111,7 @@ describe('BuiltinTsExecutionProvider', () => {
     const result = await new BuiltinTsExecutionProvider().execute(request(), { signal: controller.signal });
     expect(result.ok).toBe(false);
     expect(result.stop?.kind).toBe('cancelled');
+    expect(result.status).toMatchObject({ stopped: true, stopReason: 'cancelled' });
     expect(result.eventCount).toBe(0);
   });
 
@@ -127,7 +148,8 @@ describe('BuiltinTsExecutionProvider', () => {
         }
       };
     });
-    const result = await new BuiltinTsExecutionProvider({ runJob }).execute(request());
+    const onCommitEvent = vi.fn();
+    const result = await new BuiltinTsExecutionProvider({ runJob }).execute(request(), { onCommitEvent });
     expect(runJob).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'machine-execute' }),
       expect.objectContaining({ signal: undefined })
@@ -136,8 +158,52 @@ describe('BuiltinTsExecutionProvider', () => {
     expect(result.trace?.events).toHaveLength(1);
     expect(result.events).toHaveLength(1);
     expect(result.events?.[0].mnemonic).toBe('ori');
+    expect(onCommitEvent).toHaveBeenCalledWith(workerEvent);
     expect(result.eventDigest).toMatch(/^[0-9a-f]{64}$/);
     expect(result.stop?.kind).toBe('halt-loop');
+  });
+
+  it('normalizes worker cancellation to a stopped provider result', async () => {
+    const runJob = vi.fn(async () => ({
+      protocolVersion: 2,
+      kind: 'result',
+      requestId: 'req-cancel',
+      ok: false,
+      cancelled: true
+    }));
+
+    const result = await new BuiltinTsExecutionProvider({ runJob }).execute(request());
+    expect(result).toMatchObject({
+      ok: false,
+      status: { stopped: true, stopReason: 'cancelled' },
+      stop: { kind: 'cancelled' }
+    });
+  });
+
+  it('does not treat a cancelled worker execution payload as a successful halt', async () => {
+    const runJob = vi.fn(async () => ({
+      protocolVersion: 2,
+      kind: 'result',
+      requestId: 'req-cancel-payload',
+      ok: true,
+      payload: {
+        status: 'halted',
+        haltReason: 'cancelled',
+        instructions: 0,
+        eventCount: 0,
+        finalStateDigest: 'a'.repeat(64),
+        trace: [],
+        coverage: [],
+        checkpoints: []
+      }
+    }));
+
+    const result = await new BuiltinTsExecutionProvider({ runJob }).execute(request());
+    expect(result).toMatchObject({
+      ok: false,
+      status: { stopped: true, stopReason: 'cancelled' },
+      stop: { kind: 'cancelled' }
+    });
   });
 
   it('marks an unmapped instruction fetch as out-of-domain instead of fabricating AdEL', async () => {

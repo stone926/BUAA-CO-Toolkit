@@ -187,12 +187,12 @@ describe('MIPS engine CLI executor surface', () => {
 
 describe('MIPS engine CLI device cycle vector', () => {
   it('reproduces the official one-shot Timer sequence edge by edge', () => {
-    // Official RTL: a WE cycle never advances the state machine, so the two
-    // writes consume two edges before IDLE -> LOAD can happen.
+    // Each write step is already the RTL's WE edge. The first following tick is
+    // therefore the first non-WE state-machine edge (IDLE -> LOAD).
     const steps = [
       { kind: 'write', device: 'timer0', register: 'preset', value: '0x00000003' },
       { kind: 'write', device: 'timer0', register: 'ctrl', value: '0x00000009' },
-      ...Array.from({ length: 7 }, () => ({ kind: 'tick', cycles: 1 }))
+      ...Array.from({ length: 5 }, () => ({ kind: 'tick', cycles: 1 }))
     ];
     const response = handleMipsEngineCliValue(request('device.cycleVector', { steps })) as {
       ok: boolean;
@@ -211,8 +211,6 @@ describe('MIPS engine CLI device cycle vector', () => {
     expect(observed).toEqual([
       { state: 'idle', count: '0x00000000', irq: false },   // write preset
       { state: 'idle', count: '0x00000000', irq: false },   // write ctrl (EN|IM)
-      { state: 'idle', count: '0x00000000', irq: false },   // WE edge 1 consumed
-      { state: 'idle', count: '0x00000000', irq: false },   // WE edge 2 consumed
       { state: 'load', count: '0x00000000', irq: false },   // IDLE -> LOAD
       { state: 'cnt', count: '0x00000003', irq: false },    // LOAD -> CNT, COUNT = PRESET
       { state: 'cnt', count: '0x00000002', irq: false },

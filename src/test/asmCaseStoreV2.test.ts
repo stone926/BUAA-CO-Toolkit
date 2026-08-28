@@ -26,6 +26,8 @@ import {
   maximumReplaySourceBytes,
   maximumReplayStdinBytes
 } from '../mips/replay/boundedFile';
+import { builtinExecutionEngineArtifact } from '../mips/replay/builtinEngineArtifact';
+import { canonicalJson, sha256Canonical, type CanonicalJson } from '../mips/replay/canonical';
 
 const vscodeState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined
@@ -50,8 +52,8 @@ afterEach(() => {
 function createCase(): AsmCase {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-asm-case-v2-'));
   temporaryRoots.push(root);
-  const caseDir = path.join(root, 'case-1');
-  fs.mkdirSync(caseDir);
+  const caseDir = path.join(root, '.co', 'cases', 'case-1');
+  fs.mkdirSync(caseDir, { recursive: true });
   const engine = {
     id: 'legacy-mars-configured',
     semanticsRevision: 1,
@@ -219,6 +221,81 @@ describe('ASM case manifest v2 artifact storage', () => {
       { profile: 'P7', memoryConfiguration: 'Default', traceLevel: 2 },
       { stopReason: 'halt-loop' }
     )).rejects.toThrow(/differs from executed/);
+  });
+
+  it('records builtin structured evidence instead of deriving full state from the text trace', async () => {
+    const asmCase = createCase();
+    makeSourceSnapshotValid(asmCase);
+    const oracleDir = path.join(asmCase.dir.fsPath, 'oracle');
+    fs.mkdirSync(oracleDir);
+    const traceFile = path.join(oracleDir, 'builtin.out');
+    const eventFile = path.join(oracleDir, 'builtin.out.events.json');
+    fs.writeFileSync(traceFile, '');
+    const eventDigest = sha256Canonical([] as CanonicalJson);
+    const finalStateDigest = 'f'.repeat(64);
+    const imageFingerprint = 'c'.repeat(64);
+    (asmCase.manifest as AsmCaseManifestV2).program.imageFingerprint = imageFingerprint;
+    const eventDocument = {
+      schemaRevision: 1,
+      eventSchema: 'buaa-co-commit-event-v1',
+      engine: {
+        id: 'builtin-ts', kind: 'executor', build: 'test',
+        semanticsRevision: 1, capabilitiesRevision: 1
+      },
+      imageFingerprint,
+      profile: 'P7',
+      stop: { kind: 'halt-loop', haltPc: 0x3004 },
+      status: 'halted',
+      instructions: 7,
+      eventCount: 0,
+      eventDigest,
+      finalStateDigest,
+      events: []
+    };
+    fs.writeFileSync(eventFile, `${canonicalJson(eventDocument as CanonicalJson)}\n`);
+    await updateAsmCaseArtifacts(asmCase, 'oracle', { traceOut: traceFile, events: eventFile });
+    const artifact = builtinExecutionEngineArtifact();
+    const result: ExecuteResult = {
+      ok: true,
+      descriptor: {
+        id: 'builtin-ts', kind: 'executor', build: 'test',
+        semanticsRevision: 1, capabilitiesRevision: 1
+      },
+      engineArtifact: artifact.identity,
+      status: { ok: true, exitCode: null, stdout: '', stderr: '', timedOut: false },
+      resolvedRun: {
+        profile: 'P7', memoryConfiguration: 'course-contract-v1',
+        runtime: { kind: 'builtin-ts' }, wallClockMs: 10, p7RiInstruction: false
+      },
+      trace: {
+        schemaRevision: 1,
+        eventSchema: 'buaa-co-architectural-write-v1',
+        events: [],
+        rawText: '',
+        rawTraceRevision: 1
+      },
+      events: [],
+      instructions: 7,
+      eventCount: 0,
+      eventDigest,
+      finalStateDigest,
+      eventArtifact: URI.file(eventFile),
+      stop: { kind: 'halt-loop', haltPc: 0x3004 }
+    };
+
+    await recordAsmCaseOracleResult(asmCase, result, {
+      profile: 'P7', memoryConfiguration: 'course-contract-v1', courseTrace: true,
+      traceOutput: true, traceLevel: 1, maxSteps: 64, haltPc: 0x3004
+    }, { stopReason: 'halt-loop' });
+
+    const oracle = (asmCase.manifest as AsmCaseManifestV2).oracle;
+    expect(oracle).toMatchObject({
+      steps: 7,
+      eventCount: 0,
+      eventDigest,
+      finalStateDigest
+    });
+    expect(oracle.engine.artifact).toEqual(artifact.identity);
   });
 
   it('does not mutate a legacy v1 manifest', async () => {

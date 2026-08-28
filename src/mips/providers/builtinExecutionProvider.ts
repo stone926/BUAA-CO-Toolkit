@@ -240,7 +240,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
     }
     const started = Date.now();
     if (this.workerRuntime) {
-      return await this.executeWithWorkerRuntime(request, snapshot, started);
+      return await this.executeWithWorkerRuntime(request, snapshot, started, context?.onCommitEvent);
     }
     const session = new CourseSystemSession({
       profile: resolveCourseProfile(snapshot.profile),
@@ -258,7 +258,8 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
     });
     const outcome = await runBuiltinCourseProgram(session, {
       signal: snapshot.signal,
-      collectTrace: snapshot.trace
+      collectTrace: snapshot.trace,
+      onCommitEvent: context?.onCommitEvent
     });
     const events = outcome.events;
 
@@ -273,7 +274,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       profile: snapshot.profile,
       memoryConfiguration: request.memoryConfiguration ?? 'course-contract-v1',
       runtime: { kind: 'builtin-ts' },
-      wallClockMs: Date.now() - started,
+      wallClockMs: Math.max(1, Date.now() - started),
       p7RiInstruction: false
     };
 
@@ -319,6 +320,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       resolvedRun,
       ...(trace ? { trace } : {}),
       events,
+      instructions: outcome.instructions,
       eventCount: outcome.eventCount,
       eventDigest,
       coverage: outcome.coverage,
@@ -332,7 +334,8 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
   private async executeWithWorkerRuntime(
     request: ExecuteRequest,
     snapshot: BuiltinExecuteSnapshot,
-    started: number
+    started: number,
+    onCommitEvent?: (event: CommitEvent) => void
   ): Promise<ExecuteResult> {
     const runtime = this.workerRuntime!;
     const workerEvents: CommitEvent[] = [];
@@ -347,6 +350,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
             throw new Error('builtin worker emitted a malformed commit event batch');
           }
           workerEvents.push(item);
+          onCommitEvent?.(item);
         }
       }
     });
@@ -362,6 +366,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
           stdout: '',
           stderr: message.cancelled ? 'cancelled' : (message.error ?? 'worker execution failed'),
           timedOut: false,
+          stopped: true,
           stopReason: message.cancelled ? 'cancelled' : 'engine-error'
         },
         descriptor: this.descriptor,
@@ -370,7 +375,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
     }
     const value = workerExecutePayload(message.payload);
     const rawText = snapshot.trace ? (value.trace ?? []).join('\n') : '';
-    const success = value.status === 'halted';
+    const success = value.status === 'halted' && value.haltReason !== 'cancelled';
     const stop = builtinStop(
       value.status === 'halted' || value.status === 'out-of-domain' || value.status === 'step-limit'
         ? value.status
@@ -423,11 +428,12 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
         profile: snapshot.profile,
         memoryConfiguration: request.memoryConfiguration ?? 'course-contract-v1',
         runtime: { kind: 'builtin-ts' },
-        wallClockMs: Date.now() - started,
+        wallClockMs: Math.max(1, Date.now() - started),
         p7RiInstruction: false
       },
       ...(trace ? { trace } : {}),
       events: workerEvents,
+      instructions: value.instructions,
       eventCount: value.eventCount,
       eventDigest,
       coverage: value.coverage,
@@ -461,7 +467,11 @@ interface BuiltinRunOutcome {
  */
 async function runBuiltinCourseProgram(
   session: CourseSystemSession,
-  options: { readonly signal?: AbortSignal; readonly collectTrace: boolean }
+  options: {
+    readonly signal?: AbortSignal;
+    readonly collectTrace: boolean;
+    readonly onCommitEvent?: (event: CommitEvent) => void;
+  }
 ): Promise<BuiltinRunOutcome> {
   const profile = session.profile;
   const coverage = new ExecutionCoverageCollector(profile);
@@ -486,6 +496,7 @@ async function runBuiltinCourseProgram(
       if (result.event) {
         eventCount++;
         events.push(result.event);
+        options.onCommitEvent?.(result.event);
         coverage.observe(result.event);
         if (trace) trace.push(...projectCommitEvent(result.event, profile));
       }

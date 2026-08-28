@@ -25,6 +25,7 @@ import {
   programImageFileIssues
 } from '../mips/replay/programImage';
 import { sha256Canonical, type CanonicalJson } from '../mips/replay/canonical';
+import { parseStructuredExecutionEvidence } from '../mips/replay/structuredExecutionEvidence';
 import {
   maximumReplaySourceBytes,
   maximumReplaySourceDepth,
@@ -1295,6 +1296,13 @@ export async function v2ReplayBundleIssues(manifest: AsmCaseManifestV2, caseDir:
     }
   }
   const trace = manifest.artifacts?.oracle?.traceOut;
+  const structuredEvents = manifest.artifacts?.oracle?.events;
+  const hasStructuredEvents = manifest.oracle.engine.id === 'builtin-ts'
+    && structuredEvents !== undefined
+    && typeof structuredEvents !== 'string';
+  if (manifest.oracle.engine.id === 'builtin-ts' && !hasStructuredEvents) {
+    issues.push('artifacts.oracle.events hashed snapshot missing for builtin-ts evidence');
+  }
   if (trace && typeof trace !== 'string' && isSafeCaseRelativePath(trace.path)) {
     try {
       const traceFile = await resolveCaseFile(caseDir, trace.path);
@@ -1309,12 +1317,53 @@ export async function v2ReplayBundleIssues(manifest: AsmCaseManifestV2, caseDir:
       }
       const digests = oracleEvidenceDigests(traceText, manifest.oracle.runConfiguration?.traceLevel ?? 1);
       if (digests.rawOutputDigest !== manifest.oracle.rawOutputDigest) issues.push('oracle.rawOutputDigest does not match captured traceOut');
-      if (digests.eventDigest !== manifest.oracle.eventDigest) issues.push('oracle.eventDigest does not match captured traceOut');
-      if (digests.finalStateDigest !== manifest.oracle.finalStateDigest) issues.push('oracle.finalStateDigest does not match captured traceOut');
-      if (digests.eventCount !== manifest.oracle.eventCount) issues.push('oracle.eventCount does not match captured traceOut');
-      if (digests.steps !== manifest.oracle.steps) issues.push('oracle.steps does not match captured traceOut');
+      if (!hasStructuredEvents) {
+        if (digests.eventDigest !== manifest.oracle.eventDigest) issues.push('oracle.eventDigest does not match captured traceOut');
+        if (digests.finalStateDigest !== manifest.oracle.finalStateDigest) issues.push('oracle.finalStateDigest does not match captured traceOut');
+        if (digests.eventCount !== manifest.oracle.eventCount) issues.push('oracle.eventCount does not match captured traceOut');
+        if (digests.steps !== manifest.oracle.steps) issues.push('oracle.steps does not match captured traceOut');
+      }
     } catch (error) {
       issues.push(`oracle trace evidence could not be verified: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (hasStructuredEvents && isSafeCaseRelativePath(structuredEvents.path)) {
+    try {
+      const eventFile = await resolveCaseFile(caseDir, structuredEvents.path);
+      const evidence = parseStructuredExecutionEvidence(await readBoundedRegularFile(eventFile, {
+        maximumBytes: maximumReplayTraceBytes,
+        expectedBytes: structuredEvents.bytes,
+        label: 'artifacts.oracle.events'
+      }));
+      if (evidence.imageFingerprint !== manifest.program.imageFingerprint) {
+        issues.push('oracle structured evidence imageFingerprint does not match program.imageFingerprint');
+      }
+      if (evidence.engine.id !== manifest.oracle.engine.id
+        || evidence.engine.semanticsRevision !== manifest.oracle.engine.semanticsRevision
+        || evidence.engine.capabilitiesRevision !== manifest.oracle.engine.capabilitiesRevision
+        || evidence.engine.build !== manifest.oracle.engine.build) {
+        issues.push('oracle structured evidence engine does not match oracle.engine');
+      }
+      if (evidence.profile !== manifest.oracle.runConfiguration?.profile) {
+        issues.push('oracle structured evidence profile does not match oracle.runConfiguration.profile');
+      }
+      const expectedHaltPc = manifest.oracle.runConfiguration?.stopPolicy?.haltPc ?? undefined;
+      if (evidence.stop.haltPc !== expectedHaltPc) {
+        issues.push('oracle structured evidence haltPc does not match oracle.runConfiguration.stopPolicy');
+      }
+      if (manifest.oracle.stopReason === 'halt-loop'
+        ? evidence.stop.kind !== 'halt-loop' || evidence.status !== 'halted'
+        : manifest.oracle.stopReason === 'step-limit'
+          ? evidence.stop.kind !== 'step-limit' || evidence.status !== 'step-limit'
+          : evidence.status === 'halted') {
+        issues.push('oracle structured evidence stop/status does not match oracle.stopReason');
+      }
+      if (evidence.eventDigest !== manifest.oracle.eventDigest) issues.push('oracle.eventDigest does not match captured events');
+      if (evidence.finalStateDigest !== manifest.oracle.finalStateDigest) issues.push('oracle.finalStateDigest does not match captured events');
+      if (evidence.eventCount !== manifest.oracle.eventCount) issues.push('oracle.eventCount does not match captured events');
+      if (evidence.steps !== manifest.oracle.steps) issues.push('oracle.steps does not match captured events');
+    } catch (error) {
+      issues.push(`oracle structured evidence could not be verified: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   return [...new Set(issues)];

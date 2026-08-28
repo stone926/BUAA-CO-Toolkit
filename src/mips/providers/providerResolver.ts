@@ -67,7 +67,8 @@ export function resolveAssemblerProvider(
   request: AssembleRequest
 ): Promise<{ provider: MipsAssemblerProvider; preflight: ProviderPreflight }> {
   const registry = registerDefaultProviders(services);
-  return resolveFirstCapable(registry.assemblerProviders, request, 'assembler');
+  const providers = registryOverride ? registry.assemblerProviders : registry.assemblerProviders.slice(0, 1);
+  return resolveFirstCapable(providers, request, 'assembler');
 }
 
 export function resolveExecutionProvider(
@@ -75,7 +76,8 @@ export function resolveExecutionProvider(
   request: ExecuteRequest
 ): Promise<{ provider: MipsExecutionProvider; preflight: ProviderPreflight }> {
   const registry = registerDefaultProviders(services);
-  return resolveFirstCapable(registry.executionProviders, request, 'execution');
+  const providers = registryOverride ? registry.executionProviders : registry.executionProviders.slice(0, 1);
+  return resolveFirstCapable(providers, request, 'execution');
 }
 /** Resolve a specific assembler engine for explicit phase-5/full-stack runs. */
 export function resolveAssemblerProviderById(

@@ -4,7 +4,7 @@ import type * as vscode from 'vscode';
 
 import type { ProgramImage } from '../../mips/core/api';
 import type { CourseProfile } from '../../mips/core/generated/isaCatalog';
-import type { ExecuteResult } from '../../mips/providers/contracts';
+import type { ExecuteResult, ProviderRunContext } from '../../mips/providers/contracts';
 import type { compareTraceIterables } from '../../language/mips/traceCompare';
 import type {
   LogisimCliTraceRun,
@@ -26,6 +26,12 @@ import {
   type ExecutorShadowDifferential
 } from '../oracle/differentialRunner';
 import {
+  ExecutionAssertionObserver,
+  type CourseAssertion,
+  type CourseWatchpoint,
+  type ExecutionObservation
+} from '../oracle/executionAssertions';
+import {
   courseProgramImagePolicyIssues,
   type CourseImagePolicyIssue
 } from './courseImagePolicy';
@@ -43,13 +49,15 @@ export interface BuiltinOracleExecution {
   readonly haltPc: number;
   readonly interruptSchedule?: readonly number[];
   readonly trace?: { readonly kind: 'architectural-writes'; readonly courseCorrect: true };
+  readonly watchpoints?: readonly CourseWatchpoint[];
+  readonly assertions?: readonly CourseAssertion[];
 }
 
 export interface CourseTracePipelineDependencies {
   /** Resolve and execute the builtin oracle; the resolver stays host-side. */
   executeBuiltinOracle?: (
     request: BuiltinOracleExecution,
-    signal?: AbortSignal
+    context?: ProviderRunContext
   ) => Promise<ExecuteResult>;
 
   // ── Full course-trace stages (phase 4). traceRunner supplies defaults; tests
@@ -84,6 +92,7 @@ function missingStage(stage: string): Error {
 export interface ExecutorShadowPipelineResult {
   readonly builtin: ExecuteResult;
   readonly differential: ExecutorShadowDifferential;
+  readonly observation: ExecutionObservation;
 }
 
 export class CourseTracePipeline {
@@ -175,7 +184,15 @@ export class CourseTracePipeline {
   ): Promise<ExecutorShadowPipelineResult> {
     const executeBuiltinOracle = this.dependencies.executeBuiltinOracle;
     if (!executeBuiltinOracle) throw missingStage('executeBuiltinOracle');
-    const builtin = await executeBuiltinOracle(execution, signal);
+    const observer = new ExecutionAssertionObserver(
+      execution.watchpoints ?? [],
+      execution.assertions ?? []
+    );
+    const builtin = await executeBuiltinOracle(execution, {
+      signal,
+      onCommitEvent: (event) => observer.observe(event)
+    });
+    const observation = observer.finish();
     const differential = this.compareShadow(
       {
         engineId: legacy.descriptor.id,
@@ -198,6 +215,6 @@ export class CourseTracePipeline {
       },
       { profile: execution.profile, retainedDiffEntries: 1 }
     );
-    return { builtin, differential };
+    return { builtin, differential, observation };
   }
 }

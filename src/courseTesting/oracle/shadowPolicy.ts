@@ -1,7 +1,6 @@
 // @index course-testing-oracle — phase-4 executor shadow 差异登记策略（course-correct / mars-compatible / inconclusive）
 
 import type { CommitEvent } from '../../mips/core/events/commitEvent';
-import type { TraceDiffResult } from '../../language/mips/traceCompare';
 
 /**
  * Stable registry snapshot. A mismatch is only allowed to choose legacy when it
@@ -101,9 +100,8 @@ export const registeredShadowDivergences: readonly RegisteredShadowDivergence[] 
 
 export interface ShadowClassificationContext {
   readonly profile?: string;
-  readonly firstDiff?: TraceDiffResult;
-  readonly legacyTracePc?: string;
-  readonly builtinEvents?: readonly CommitEvent[];
+  /** Commit occurrence corresponding to the first projected builtin trace diff. */
+  readonly builtinEvent?: CommitEvent;
 }
 
 export interface ShadowClassification {
@@ -118,8 +116,7 @@ export interface ShadowClassification {
  * difference before comparison, so an unexplained diff remains inconclusive.
  */
 export function classifyShadowDifference(context: ShadowClassificationContext): ShadowClassification {
-  const firstPc = firstDiffPc(context.firstDiff);
-  const builtinEvent = findEventAtFirstDiffPc(context.builtinEvents, firstPc);
+  const builtinEvent = context.builtinEvent;
   if (builtinEvent?.trap?.name === 'syscall'
     || builtinEvent?.mnemonic === 'syscall') {
     return {
@@ -128,34 +125,8 @@ export function classifyShadowDifference(context: ShadowClassificationContext): 
       message: 'P7 syscall 按课程异常契约执行；legacy MARS 的 service 行为是已登记差异。'
     };
   }
-  if (builtinEvent?.trap
-    && (builtinEvent.trap.name === 'adel' || builtinEvent.trap.name === 'ades')
-    && builtinEvent.trap.stage === 'memory') {
-    return {
-      disposition: 'course-correct',
-      contractId: 'MARS-DIV-EAOVERFLOW-001',
-      message: '访存地址/对齐按课程地址契约进入异常；legacy 环绕或 MARS-only 数据段行为是已登记差异。'
-    };
-  }
   return {
     disposition: 'inconclusive',
     message: 'executor shadow 发现未登记差异；不得采用任何一侧结果，等待 course vector 或 ledger 裁决。'
   };
-}
-
-function firstDiffPc(diff: TraceDiffResult | undefined): number | undefined {
-  if (!diff || diff.firstDiffIndex < 0) return undefined;
-  const entry = diff.firstDiffEntry ?? diff.entries.find((item) => item.index === diff.firstDiffIndex);
-  const raw = entry?.oracle?.pc ?? entry?.dut?.pc ?? entry?.mars?.pc ?? entry?.sim?.pc;
-  if (!raw) return undefined;
-  const pc = Number.parseInt(raw, 16);
-  return Number.isFinite(pc) ? pc >>> 0 : undefined;
-}
-
-function findEventAtFirstDiffPc(
-  events: readonly CommitEvent[] | undefined,
-  pc: number | undefined
-): CommitEvent | undefined {
-  if (pc === undefined || !events) return undefined;
-  return events.find((event) => event.pcBefore === pc);
 }

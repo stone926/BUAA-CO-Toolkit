@@ -10,12 +10,15 @@ export interface CourseWatchpoint {
   readonly kind: WatchpointKind;
   /** PC matcher for instruction/trap watchpoints. */
   readonly pc?: number;
+  /** GPR matcher; omitted to watch any GPR write. */
   readonly register?: number;
+  /** CP0 matcher; omitted to watch any CP0 write. */
   readonly cp0Register?: number;
-  /** Aligned word address for memory writes. */
+  /** Aligned word address for memory writes; omitted to watch any memory write. */
   readonly memoryAddress?: number;
+  /** Device id matcher; omitted to watch any device event. */
   readonly device?: string;
-  /** Stop observing after this many hits; unbounded otherwise. */
+  /** Retain at most this many hits while continuing to count matches. */
   readonly limit?: number;
 }
 
@@ -48,8 +51,10 @@ export interface ExecutionObservation {
 
 export class ExecutionAssertionObserver {
   private readonly hits: WatchpointHit[] = [];
-  private readonly failures: AssertionFailure[] = [];
   private readonly hitCounts = new Map<string, number>();
+  private readonly trapNames = new Set<string>();
+  private firstTrapName: string | undefined;
+  private readonly haltPcs = new Set<number>();
 
   constructor(
     private readonly watchpoints: readonly CourseWatchpoint[],
@@ -57,6 +62,16 @@ export class ExecutionAssertionObserver {
   ) {}
 
   observe(event: CommitEvent): void {
+    if (event.trap) {
+      this.firstTrapName ??= event.trap.name;
+      this.trapNames.add(event.trap.name);
+    }
+    if (event.haltReason === 'course-halt-loop') {
+      const haltPc = event.delaySlot && event.branchOriginPc !== undefined
+        ? event.branchOriginPc
+        : event.pcBefore;
+      this.haltPcs.add(haltPc >>> 0);
+    }
     for (const watchpoint of this.watchpoints) {
       const hit = matchWatchpoint(watchpoint, event);
       if (!hit) continue;
@@ -73,19 +88,19 @@ export class ExecutionAssertionObserver {
   }
 
   finish(): ExecutionObservation {
-    const assertions = this.assertions;
-    for (const assertion of assertions) {
+    const failures: AssertionFailure[] = [];
+    for (const assertion of this.assertions) {
       const count = this.hitCounts.get(assertion.watchpointId ?? '') ?? 0;
       switch (assertion.kind) {
         case 'max-hits':
           if (assertion.minHits !== undefined && count < assertion.minHits) {
-            this.failures.push({
+            failures.push({
               assertionId: assertion.id,
               message: `${assertion.watchpointId} 命中 ${count} 次，少于要求 ${assertion.minHits}`
             });
           }
           if (assertion.maxHits !== undefined && count > assertion.maxHits) {
-            this.failures.push({
+            failures.push({
               assertionId: assertion.id,
               message: `${assertion.watchpointId} 命中 ${count} 次，超过上限 ${assertion.maxHits}`
             });
@@ -93,13 +108,36 @@ export class ExecutionAssertionObserver {
           break;
         case 'halt-pc':
           if (assertion.haltPc === undefined) continue;
+          if (!this.haltPcs.has(assertion.haltPc >>> 0)) {
+            failures.push({
+              assertionId: assertion.id,
+              message: `未在 ${hex8Address(assertion.haltPc)} 观察到标准停机事件`
+            });
+          }
           break;
-        case 'trap':
+        case 'trap': {
+          const found = assertion.trapName
+            ? this.trapNames.has(assertion.trapName)
+            : this.firstTrapName !== undefined;
+          if (!found) {
+            failures.push({
+              assertionId: assertion.id,
+              message: `未观察到 trap${assertion.trapName ? `:${assertion.trapName}` : ''}`
+            });
+          }
+          break;
+        }
         case 'no-trap':
+          if (this.firstTrapName !== undefined) {
+            failures.push({
+              assertionId: assertion.id,
+              message: `期望无 trap，但观察到 ${this.firstTrapName}`
+            });
+          }
           break;
       }
     }
-    return { watchpointHits: this.hits, assertionFailures: this.failures };
+    return { watchpointHits: this.hits, assertionFailures: failures };
   }
 
   observeAll(events: Iterable<CommitEvent>): ExecutionObservation {
@@ -113,67 +151,39 @@ export function evaluateCourseAssertions(
   events: readonly CommitEvent[],
   assertions: readonly CourseAssertion[]
 ): readonly AssertionFailure[] {
-  const failures: AssertionFailure[] = [];
-  const traps = events.filter((event) => event.trap);
-  for (const assertion of assertions) {
-    switch (assertion.kind) {
-      case 'trap': {
-        const found = assertion.trapName
-          ? traps.some((event) => event.trap?.name === assertion.trapName)
-          : traps.length > 0;
-        if (!found) {
-          failures.push({
-            assertionId: assertion.id,
-            message: `未观察到 trap${assertion.trapName ? `:${assertion.trapName}` : ''}`
-          });
-        }
-        break;
-      }
-      case 'no-trap':
-        if (traps.length) {
-          failures.push({
-            assertionId: assertion.id,
-            message: `期望无 trap，但观察到 ${traps[0].trap?.name}`
-          });
-        }
-        break;
-      case 'halt-pc':
-        if (assertion.haltPc === undefined) continue;
-        if (!events.some((event) => event.haltReason === 'course-halt-loop'
-          && event.pcBefore === (assertion.haltPc! >>> 0))) {
-          failures.push({
-            assertionId: assertion.id,
-            message: `未在 ${hex8Address(assertion.haltPc)} 观察到标准停机事件`
-          });
-        }
-        break;
-      case 'max-hits':
-        break;
-    }
-  }
-  return failures;
+  return new ExecutionAssertionObserver(
+    [],
+    assertions.filter((assertion) => assertion.kind !== 'max-hits')
+  ).observeAll(events).assertionFailures;
 }
 
 function matchWatchpoint(watchpoint: CourseWatchpoint, event: CommitEvent): string | undefined {
   switch (watchpoint.kind) {
     case 'instruction':
-      return watchpoint.pc === undefined || event.pcBefore === (watchpoint.pc >>> 0)
+      return event.kind === 'instruction'
+        && (watchpoint.pc === undefined || event.pcBefore === (watchpoint.pc >>> 0))
         ? `instruction ${event.mnemonic ?? event.kind}`
         : undefined;
-    case 'gpr-write':
-      return event.gprWrites.find((write) => write.register === watchpoint.register)
-        ? `gpr $${watchpoint.register}`
-        : undefined;
-    case 'memory-write':
-      return event.memoryWrites.find((write) => write.wordAddress === (watchpoint.memoryAddress! >>> 0))
-        ? `memory ${hex8Address(watchpoint.memoryAddress ?? 0)}`
-        : undefined;
-    case 'cp0-write':
-      return event.cp0Writes.find((write) => write.register === watchpoint.cp0Register)
-        ? `cp0[${watchpoint.cp0Register}]`
-        : undefined;
+    case 'gpr-write': {
+      const write = event.gprWrites.find((candidate) => watchpoint.register === undefined
+        || candidate.register === watchpoint.register);
+      return write ? `gpr $${write.register}` : undefined;
+    }
+    case 'memory-write': {
+      const write = event.memoryWrites.find((candidate) => watchpoint.memoryAddress === undefined
+        || candidate.wordAddress === (watchpoint.memoryAddress >>> 0));
+      return write ? `memory ${hex8Address(write.wordAddress)}` : undefined;
+    }
+    case 'cp0-write': {
+      const write = event.cp0Writes.find((candidate) => watchpoint.cp0Register === undefined
+        || candidate.register === watchpoint.cp0Register);
+      return write ? `cp0[${write.register}]` : undefined;
+    }
     case 'trap':
-      return event.trap ? `trap ${event.trap.kind}:${event.trap.name}` : undefined;
+      return event.trap
+        && (watchpoint.pc === undefined || event.trap.victimPc === (watchpoint.pc >>> 0))
+        ? `trap ${event.trap.kind}:${event.trap.name}`
+        : undefined;
     case 'device':
       return event.deviceEvents.find((device) => !watchpoint.device || device.device === watchpoint.device)
         ? 'device event'

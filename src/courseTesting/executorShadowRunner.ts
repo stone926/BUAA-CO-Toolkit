@@ -27,9 +27,15 @@ import {
   compareExecutorShadow,
   ExecutorShadowDifferential
 } from './oracle/differentialRunner';
+import type {
+  CourseAssertion,
+  CourseWatchpoint,
+  ExecutionObservation
+} from './oracle/executionAssertions';
 import { registeredShadowDivergences } from './oracle/shadowPolicy';
 import { isManifestV2 } from './manifestCodec';
 import { CourseTracePipeline } from './pipeline/courseTracePipeline';
+import { engineRunWasCancelled } from '../courseTestMessages';
 
 export type ExecutorShadowStatus =
   | 'matched'
@@ -45,6 +51,7 @@ export interface ExecutorShadowOutcome {
   readonly resultFile?: string;
   readonly message: string;
   readonly builtinResult?: ExecuteResult;
+  readonly observation?: ExecutionObservation;
 }
 
 export interface RunExecutorShadowOptions {
@@ -59,6 +66,8 @@ export interface RunExecutorShadowOptions {
   readonly now?: Date;
   /** Write the builtin raw trace into the case/output tree before bundle capture. */
   readonly builtinTraceUri?: vscode.Uri;
+  readonly watchpoints?: readonly CourseWatchpoint[];
+  readonly assertions?: readonly CourseAssertion[];
 }
 
 export async function runExecutorShadow(
@@ -68,9 +77,9 @@ export async function runExecutorShadow(
 ): Promise<ExecutorShadowOutcome> {
   let builtinExecution: { provider: MipsExecutionProvider; preflight: { ok: boolean } } | undefined;
   const pipeline = new CourseTracePipeline({
-    executeBuiltinOracle: async (_request, signal) => {
+    executeBuiltinOracle: async (_request, context) => {
       if (!builtinExecution) throw new Error('builtin provider was not resolved before execution');
-      return await builtinExecution.provider.execute(builtinRequest, { signal });
+      return await builtinExecution.provider.execute(builtinRequest, context);
     }
   });
   const imagePolicyIssues = pipeline.validateProgram(
@@ -133,7 +142,7 @@ export async function runExecutorShadow(
     };
   }
   builtinExecution = { provider: invocation.provider, preflight: invocation.preflight };
-  const { builtin, differential } = await pipeline.runExecutorComparison(
+  const { builtin, differential, observation } = await pipeline.runExecutorComparison(
     options.legacy,
     {
       profile: options.profile,
@@ -141,24 +150,34 @@ export async function runExecutorShadow(
       maxSteps: options.maxSteps,
       haltPc: options.haltPc,
       ...(options.interruptSchedule ? { interruptSchedule: options.interruptSchedule } : {}),
-      trace: { kind: 'architectural-writes', courseCorrect: true }
+      trace: { kind: 'architectural-writes', courseCorrect: true },
+      watchpoints: options.watchpoints,
+      assertions: [
+        { id: 'executor-shadow.halt-pc', kind: 'halt-pc', haltPc: options.haltPc },
+        ...(options.assertions ?? [])
+      ]
     },
     options.signal
   );
 
   const now = options.now ?? new Date();
-  const bundleDir = differential.matched
+  const cancelled = builtin.stop?.kind === 'cancelled'
+    || engineRunWasCancelled(builtin.status, options.signal);
+  const assertionFailed = builtin.ok && observation.assertionFailures.length > 0;
+  const status: ExecutorShadowStatus = assertionFailed ? 'inconclusive' : differential.disposition;
+  const bundleDir = cancelled || (differential.matched && !assertionFailed)
     ? undefined
-    : await writeExecutorShadowBundle(asmCase, options, builtin, differential, now);
-  const message = shadowMessage(differential, bundleDir);
+    : await writeExecutorShadowBundle(asmCase, options, builtin, differential, now, observation, status);
+  const message = shadowMessage(differential, bundleDir, observation, assertionFailed, cancelled);
   services.output.appendLine(message);
   return {
-    status: differential.disposition,
+    status,
     differential,
     ...(bundleDir ? { bundleDir } : {}),
     ...(bundleDir ? { resultFile: path.join(bundleDir, 'shadow-result.json') } : {}),
     message,
-    builtinResult: builtin
+    builtinResult: builtin,
+    observation
   };
 }
 
@@ -167,7 +186,9 @@ export async function writeExecutorShadowBundle(
   options: RunExecutorShadowOptions,
   builtin: ExecuteResult,
   differential: ExecutorShadowDifferential,
-  now = new Date()
+  now = new Date(),
+  observation?: ExecutionObservation,
+  status: ExecutorShadowStatus = differential.disposition
 ): Promise<string> {
   const root = path.resolve(options.outputRoot);
   await fs.promises.mkdir(root, { recursive: true });
@@ -238,6 +259,8 @@ export async function writeExecutorShadowBundle(
           artifact: builtin.engineArtifact ?? null
         }
       },
+      status,
+      observation: observation ?? null,
       differential,
       contracts: registeredShadowDivergences,
       contractsDigest: sha256Canonical(registeredShadowDivergences as unknown as CanonicalJson)
@@ -279,8 +302,17 @@ async function copyCaseSourceClosure(asmCase: AsmCase, destination: string): Pro
 
 function shadowMessage(
   differential: ExecutorShadowDifferential,
-  bundleDir: string | undefined
+  bundleDir: string | undefined,
+  observation?: ExecutionObservation,
+  assertionFailed = false,
+  cancelled = false
 ): string {
+  if (cancelled) {
+    return 'Executor shadow 已取消';
+  }
+  if (assertionFailed) {
+    return `Executor shadow 断言失败，结果 inconclusive：${observation?.assertionFailures[0]?.message ?? 'unknown'}，已保存 ${bundleDir}`;
+  }
   switch (differential.disposition) {
     case 'matched':
       return 'Executor shadow 通过：legacy 与 builtin 的架构写 trace/最终摘要一致';

@@ -4,6 +4,8 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import type { EngineArtifactIdentity } from '../providers/contracts';
 import { canonicalJson, sha256Bytes, type CanonicalJson } from './canonical';
+import { builtinExecutionEngineArtifact } from './builtinEngineArtifact';
+import { builtinAssemblerEngineArtifact } from './builtinAssemblerEngineArtifact';
 
 export const engineArtifactRegistrySchemaRevision = 1;
 export const engineArtifactTrustManifestSchemaRevision = 1;
@@ -46,6 +48,11 @@ export interface EngineArtifactTrustEntry {
  * file was one of the reviewed releases, even if that file had a local basename. Exact bytes and
  * byte count are still checked on every resolve and every private staging copy.
  */
+const applicationOwnedBuiltinArtifacts = Object.freeze([
+  builtinAssemblerEngineArtifact(),
+  builtinExecutionEngineArtifact()
+]);
+
 export const fixedReferenceEngineArtifactTrustManifest: Readonly<EngineArtifactTrustManifest> = Object.freeze({
   schemaRevision: engineArtifactTrustManifestSchemaRevision,
   authority: 'stone926/Mars-with-BUAA-CO-extension releases + BUAA-CO-Toolkit packaged runtime',
@@ -78,7 +85,13 @@ export const fixedReferenceEngineArtifactTrustManifest: Readonly<EngineArtifactT
       sha256: '2add0891caacf2f29c683a6afedd859891bceeb22937174f8480b4390ba125f6',
       bytes: 891,
       fileName: '_co_internal_unknown_instruction.class'
-    })
+    }),
+    ...applicationOwnedBuiltinArtifacts.map((artifact) => Object.freeze({
+      role: artifact.identity.role!,
+      sha256: artifact.identity.sha256,
+      bytes: artifact.bytes.byteLength,
+      fileName: artifact.identity.fileName!
+    }))
   ])
 });
 
@@ -231,6 +244,19 @@ export class ImmutableEngineArtifactRegistry {
 
   /** Copy a verified registry entry into a fresh private execution directory. */
   async stageForExecution(identity: EngineArtifactIdentity, destinationDir: string): Promise<ResolvedEngineArtifact> {
+    // Logical builtin artifacts are application-owned and reproducible from the
+    // compiled revision tuple. Materialize the current tuple for pre-fix cases
+    // that recorded its identity before the registry write was wired in.
+    const applicationOwned = applicationOwnedBuiltinArtifacts.find((artifact) =>
+      artifact.identity.role === identity.role
+      && artifact.identity.sha256 === identity.sha256.toLowerCase());
+    if (applicationOwned) {
+      await this.registerBytes(
+        applicationOwned.identity.role!,
+        applicationOwned.bytes,
+        applicationOwned.identity.fileName!
+      );
+    }
     const role = identity.role;
     const key = role ? authorizationKey(role, identity.sha256) : '';
     const sessionAuthorized = Boolean(role && this.executionAuthorizations.has(key));
