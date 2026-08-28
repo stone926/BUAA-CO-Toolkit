@@ -53,9 +53,9 @@ export function parseGprRegister(text: string): number | undefined {
 }
 
 const cp0Names = new Map<string, number>([
-  ['$12', 12], ['12', 12], ['$sr', 12], ['sr', 12], ['$status', 12], ['status', 12],
-  ['$13', 13], ['13', 13], ['$cause', 13], ['cause', 13],
-  ['$14', 14], ['14', 14], ['$epc', 14], ['epc', 14]
+  ['$sr', 12], ['sr', 12], ['$status', 12], ['status', 12],
+  ['$cause', 13], ['cause', 13],
+  ['$epc', 14], ['epc', 14]
 ]);
 
 /** CP0 operand surface: only the course-required SR/Cause/EPC registers. */

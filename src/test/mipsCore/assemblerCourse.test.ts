@@ -164,6 +164,28 @@ describe('course assembler directives and pseudo', () => {
     expect(result.image!.inputGraph.map((unit) => unit.id)).toEqual(['root', 'lib']);
   });
 
+  it('distinguishes bare CP0 numbers from ordinary immediate operands', () => {
+    const asm = [
+      '.text',
+      '    ori $1, $0, 12',
+      '    mfc0 $t0, 12',
+      '    mtc0 $t0, 12',
+      '    andi $t1, $0, -1024',
+      '    xori $t2, $0, -4'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P7' });
+    expect(result.ok).toBe(true);
+    const words = result.image!.segments.find((segment) => segment.name === 'text')!.words;
+    expect(words[0].toString(16).padStart(8, '0')).toBe('3401000c');
+    expect(words[1].toString(16).padStart(8, '0')).toBe('40086000');
+    expect(words[2].toString(16).padStart(8, '0')).toBe('40886000');
+    // Negative logical immediates use the MARS lui/ori/$at expansion.
+    expect(words.slice(3).map((word) => word.toString(16).padStart(8, '0'))).toEqual([
+      '3c01ffff', '3421fc00', '00014824',
+      '3c01ffff', '3421fffc', '00015026'
+    ]);
+  });
+
   it('supports the P7 generator RI victim mnemonic', () => {
     const asm = '_co_internal_unknown_instruction\n.text\n    beq $0, $0, end\n    nop\nend:\n    nop\n';
     const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P7', p7RiInstruction: true });

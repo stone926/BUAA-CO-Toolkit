@@ -41,7 +41,10 @@ export function parseInstructionOperand(text: string, span: SourceSpan): ParsedI
   if (register !== undefined) {
     return { kind: 'register', register, span };
   }
-  const cp0 = parseCp0Register(trimmed);
+  // Bare CP0 mnemonics such as `status` stay available for expression symbols
+  // (e.g. `.eqv status, ...`); only the `$sr/$cause/$epc` spellings are
+  // classified as CP0 here. mfc0/mtc0 resolve bare names contextually.
+  const cp0 = trimmed.startsWith('$') ? parseCp0Register(trimmed) : undefined;
   if (cp0 !== undefined) {
     return { kind: 'cp0', register: cp0, span };
   }

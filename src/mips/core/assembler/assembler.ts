@@ -915,14 +915,24 @@ function tryRealInstruction(
         workOperands.push(bare);
         break;
       }
-      case 'cp0':
+      case 'cp0': {
         // `$12/$13/$14` is ambiguous at the token level; MIPS course syntax uses
-        // the same spelling for the CP0 operand. Context resolves it here.
-        if (operand.kind !== 'cp0' && !(operand.kind === 'register' && operand.register <= 31)) {
-          return { ok: false, diagnostic: undefined };
+        // the same spelling for the CP0 operand. Context resolves it here, and a
+        // bare register number is accepted as the MARS CP0-number form.
+        let cp0Register: number | undefined;
+        if (operand.kind === 'cp0' || operand.kind === 'register') {
+          cp0Register = operand.register;
+        } else if (operand.kind === 'immediate') {
+          cp0Register = parseCp0Register(operand.text);
+          if (cp0Register === undefined) {
+            const parsed = parseIntegerLiteral(operand.text);
+            if (parsed !== undefined && parsed >= 0 && parsed <= 31) cp0Register = parsed;
+          }
         }
-        workOperands.push({ kind: 'cp0', register: operand.register, span: operand.span });
+        if (cp0Register === undefined) return { ok: false, diagnostic: undefined };
+        workOperands.push({ kind: 'cp0', register: cp0Register, span: operand.span });
         break;
+      }
     }
   }
   return {
@@ -981,10 +991,16 @@ function expandSharedMnemonicPseudo(
     return { ok: false, diagnostic: undefined };
   }
 
-  // addi/addiu/andi/ori/xori with a 16+ bit immediate or a two-operand form.
+  // addi/addiu/andi/ori/xori with an out-of-range immediate or a two-operand form.
   if (operands.length === 3 && operands[2].kind === 'immediate') {
     const value = parseIntegerLiteral(operands[2].text);
-    if (value !== undefined && (value < -32768 || value > 65535)) {
+    const unsignedMnemonic = ['andi', 'ori', 'xori'].includes(mnemonic);
+    const oversized = value !== undefined && (
+      unsignedMnemonic
+        ? value < 0 || (value >>> 0) > 65535
+        : value < -32768 || value > 32767
+    );
+    if (oversized) {
       const high = Math.floor((value >>> 0) / 0x10000);
       const low = (value >>> 0) & 0xffff;
       const origin = workOriginFor(statement);
@@ -1035,7 +1051,7 @@ function oversizedImmediatePseudo(
   const signedKind = ['addi', 'addiu'].includes(mnemonic) ? 'signed' : 'unsigned';
   const oversized = signedKind === 'signed'
     ? value < -32768 || value > 32767
-    : (value >>> 0) > 65535;
+    : value < 0 || (value >>> 0) > 65535;
   if (!oversized) return { ok: false, diagnostic: undefined };
   const statement = {
     kind: 'statement',
