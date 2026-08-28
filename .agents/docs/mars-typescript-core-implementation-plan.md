@@ -46,6 +46,10 @@
   注册在 legacy 之后并写入课程 HexText/kernel dump；`assembler.assemble` 进入
   JSONL CLI/Worker；assembly-diff lane 对固定 MARS v0.6.3 在全部 10 个 corpus
   用例 text/ktext/data 零差异；TS/TS full-stack 测试进入 verify:phase5 双平台 gate。
+  额外对 stone-cpu/alh-cpu/gyc-co/hlc-cpu/kimi-cpu/ds-cpu 中 603 个 P3–P7 ASM
+  做兼容审计：全部成功汇编；对可比较部分做 pinned MARS 批量差分，text/ktext 无
+  差异（仅 5 个旧 P5 自动测试出现 MARS `.data` 稀疏块 dump 与其模拟器真实内存
+  不一致的已知限制）。
 - **阶段 4（2026-08-27 实现落地）**：生产 oracle 与自动测试能力接入。
   `BuiltinTsExecutionProvider` 注册在 legacy 之后且默认解析仍为 MARS，仅供显式
   shadow/verify-both；`CourseTracePipeline` 在 P3 Logisim 与 P4–P7 traceRunner
