@@ -364,23 +364,23 @@ export async function prepareAsmCaseMachineCode(
     wordCount: machineCodeWordCount(text),
     haltPc: dump.courseHaltPc
   };
-  const assemblerRuntime = dump.resolvedRun.runtime.kind === 'java'
-    ? dump.resolvedRun.runtime
-    : (() => { throw new Error('legacy assembler result did not bind a Java runtime'); })();
-  const legacyProvenance = {
-    commandLine: dump.status.commandLine ?? dump.descriptor.id,
-    cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
-    memoryConfiguration: dump.resolvedRun.memoryConfiguration,
-    profile: dump.resolvedRun.profile,
-    runtime: assemblerRuntime,
-    wallClockMs: dump.resolvedRun.wallClockMs,
-    p7RiInstruction: dump.resolvedRun.p7RiInstruction
-  };
+  const legacyAssembler = dump.descriptor.id === LEGACY_MARS_DESCRIPTOR.id;
   const reconstructedImage = createLegacyProgramImage(text, inputGraph);
-  if (!dump.image || !dump.executionBinding
-    || dump.image.fingerprint !== reconstructedImage.fingerprint
-    || dump.executionBinding.providerId !== dump.descriptor.id
-    || dump.executionBinding.imageFingerprint !== dump.image.fingerprint) {
+  const imageMatchesDump = dump.image !== undefined && (
+    legacyAssembler
+      ? dump.image.fingerprint === reconstructedImage.fingerprint
+      : (() => {
+        const textWords = dump.image.segments.find((segment) => segment.name === 'text')?.words ?? [];
+        return textWords.length === reconstructedImage.segments[0].words.length
+          && textWords.every((word, index) => (word >>> 0) === (reconstructedImage.segments[0].words[index] >>> 0));
+      })()
+  );
+  const bindingValid = legacyAssembler
+    ? dump.executionBinding !== undefined
+      && dump.executionBinding.providerId === dump.descriptor.id
+      && dump.executionBinding.imageFingerprint === dump.image?.fingerprint
+    : true;
+  if (!dump.image || !imageMatchesDump || !bindingValid) {
     return {
       ...dump,
       ok: false,
@@ -392,6 +392,19 @@ export async function prepareAsmCaseMachineCode(
     };
   }
   const programImage = dump.image;
+  const legacyProvenance = legacyAssembler
+    ? {
+      commandLine: dump.status.commandLine ?? dump.descriptor.id,
+      cwd: dump.status.cwd ?? path.dirname(asmCase.sourceAsm.fsPath),
+      memoryConfiguration: dump.resolvedRun.memoryConfiguration,
+      profile: dump.resolvedRun.profile,
+      runtime: dump.resolvedRun.runtime.kind === 'java'
+        ? dump.resolvedRun.runtime
+        : (() => { throw new Error('legacy assembler result did not bind a Java runtime'); })(),
+      wallClockMs: dump.resolvedRun.wallClockMs,
+      p7RiInstruction: dump.resolvedRun.p7RiInstruction
+    }
+    : undefined;
   const imageBytes = serializeProgramImage(programImage);
   const observabilityBytes = serializeObservabilitySchema();
   const imagePath = path.join(asmCase.dir.fsPath, 'program', 'image.json');
@@ -414,7 +427,7 @@ export async function prepareAsmCaseMachineCode(
       imageFingerprint: programImage.fingerprint,
       assembler: {
         ...assembler,
-        legacyProvenance
+        ...(legacyProvenance ? { legacyProvenance } : {})
       }
     },
     artifacts: {

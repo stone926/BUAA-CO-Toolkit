@@ -24,7 +24,8 @@
     "run": "node runner/run-conformance.mjs --lane legacy-baseline --lane course-vector",
     "record:goldens": "node runner/run-conformance.mjs --lane legacy-baseline --record-golden",
     "test": "node --test",
-    "verify": "npm run verify:dependencies && npm run verify:contracts && npm run verify:evidence-gates && npm run verify:corpus-freeze && npm run verify:references && npm run verify:regression && npm run verify:seed-evidence && npm run verify:corpus && npm run verify:mars-goldens && npm run verify:isa-golden && npm run verify:course-vectors && npm run verify:decisions && npm test && npm run verify:ts-cli && npm run run"
+    "verify": "npm run verify:dependencies && npm run verify:contracts && npm run verify:evidence-gates && npm run verify:corpus-freeze && npm run verify:references && npm run verify:regression && npm run verify:seed-evidence && npm run verify:corpus && npm run verify:mars-goldens && npm run verify:isa-golden && npm run verify:course-vectors && npm run verify:decisions && npm test && npm run verify:ts-cli && npm run run",
+    "run:assembly-diff": "node runner/run-conformance.mjs --lane assembly-diff"
   },
   "engines": {
     "node": ">=20.11"

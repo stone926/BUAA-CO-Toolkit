@@ -13,6 +13,7 @@ import {
   parseDeviceVectorSteps,
   runDeviceCycleVectorForService
 } from '../core/machine/executeService';
+import { assembleProgramForService, parseAssemblerServiceRequest } from '../core/assembler/assemblyService';
 
 export const mipsWorkerSliceSize = 128;
 export const mipsWorkerMaximumBatch = 65_536;
@@ -41,6 +42,10 @@ export async function executeProductionWorkerJob(
       return await executeDecodeBatch(payload, context);
     case 'isa-encode-batch':
       return await executeEncodeBatch(payload, context);
+    case 'assembler-assemble':
+      // Bounded DTO validation shared with the CLI; pure layout runs quickly but
+      // keeps the same request shape as the process boundary.
+      return assembleProgramForService(parseAssemblerServiceRequest(payload as Record<string, unknown>));
     case 'machine-execute':
       // Bounded DTO validation is shared with the CLI; execution then streams
       // CommitEvent slices under worker protocol ACK/backpressure.

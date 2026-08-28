@@ -48,7 +48,16 @@ export function programImageCanonicalPayload(
       wordIndex: entry.wordIndex,
       sourceId: entry.sourceId,
       ...(entry.startOffset === undefined ? {} : { startOffset: entry.startOffset }),
-      ...(entry.endOffset === undefined ? {} : { endOffset: entry.endOffset })
+      ...(entry.endOffset === undefined ? {} : { endOffset: entry.endOffset }),
+      ...(entry.expansionStack?.length
+        ? {
+          expansionStack: entry.expansionStack.map((frame) => ({
+            sourceId: frame.sourceId,
+            ...(frame.startOffset === undefined ? {} : { startOffset: frame.startOffset }),
+            ...(frame.endOffset === undefined ? {} : { endOffset: frame.endOffset })
+          }))
+        }
+        : {})
     })),
     inputGraph: image.inputGraph.map((unit) => ({
       id: unit.id,

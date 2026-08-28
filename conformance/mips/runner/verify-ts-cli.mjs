@@ -69,6 +69,16 @@ export function verifyTsCli(options) {
       scope: { profile: item.profile, enabledLayers: item.enabledLayers }
     });
   }
+  requests.push({
+    protocolVersion: 1,
+    requestId: 'assemble:course-smoke',
+    operation: 'assembler.assemble',
+    profile: 'P3',
+    sources: [{
+      id: 'source-0000',
+      text: '.text\nmain:\n    ori $t0, $0, 42\n    beq $0, $0, main\n    nop\n'
+    }]
+  });
 
   const run = spawnSync(process.execPath, [options.cli], {
     cwd: extensionRoot,
@@ -103,9 +113,14 @@ export function verifyTsCli(options) {
     invariant((decoded.result?.exactMnemonic ?? null) === item.exactMnemonic, `${item.id} exact runtime mismatch`);
     invariant((decoded.result?.canonicalMnemonic ?? null) === item.canonicalMnemonic, `${item.id} canonical mismatch`);
   }
+  const assembled = byId.get('assemble:course-smoke');
+  invariant(assembled?.ok === true && assembled.result?.ok === true, 'course assembler smoke failed');
+  invariant(assembled.result?.image?.segments?.length === 1, 'course assembler smoke image shape mismatch');
+  invariant(assembled.result?.image?.segments?.[0]?.words?.[0] === 0x3408002a, 'course assembler smoke word mismatch');
   return {
     instructions: golden.cases.length,
     runtimeCounterexamples: golden.runtimeCounterexamples.length,
+    courseAssembler: 'ok',
     reviewStatus: golden.review.status
   };
 }

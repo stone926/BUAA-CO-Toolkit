@@ -459,7 +459,8 @@ function includeDirectives(text: string, maximumDirectives: number): IncludeDire
   for (let index = 0; index <= text.length; index++) {
     if (index < text.length && text[index] !== '\n') continue;
     const lineEnd = index > lineStart && text[index - 1] === '\r' ? index - 1 : index;
-    const directive = firstMarsIncludeDirective(text, lineStart, lineEnd);
+    const scanStart = lineStart === 0 && text.charCodeAt(0) === 0xfeff ? 1 : lineStart;
+    const directive = firstMarsIncludeDirective(text, scanStart, lineEnd);
     if (directive) {
       if (result.length >= maximumDirectives) {
         throw new Error(`source include directive count exceeds the trusted ceiling ${maximumDirectives}`);

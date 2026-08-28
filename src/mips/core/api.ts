@@ -41,6 +41,13 @@ export interface SymbolEntry {
   segment?: string;
 }
 
+/** One source-origin frame (leaf or macro/include expansion frame). */
+export interface SourceOrigin {
+  sourceId: string;
+  startOffset?: number;
+  endOffset?: number;
+}
+
 /** Maps a program word back to its source origin. */
 export interface SourceMapEntry {
   /** Index into ProgramImage.segments (segment index) and the word index inside it. */
@@ -51,6 +58,8 @@ export interface SourceMapEntry {
   /** Offset/line ranges are added with the strict assembler (phase 5). */
   startOffset?: number;
   endOffset?: number;
+  /** Innermost-first include/macro expansion frames; the entry fields are the leaf. */
+  expansionStack?: readonly SourceOrigin[];
 }
 
 /** Immutable machine image produced by an assembler and consumed by an executor. */

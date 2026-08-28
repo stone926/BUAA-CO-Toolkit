@@ -1,10 +1,10 @@
 # MARS 核心 TypeScript 集成实施方案
 
-> 状态：Executing（阶段 0–4 已完成；下一步是阶段 5 课程汇编器）
+> 状态：Executing（阶段 0–5 已完成；下一步是阶段 6 按 profile 默认切换）
 >
 > 制定日期：2026-08-25
 >
-> 最近更新：2026-08-27（阶段 4 正式落地：full-stack CourseTracePipeline 全分支注入、Worker CommitEvent 流式回传、batch stop、CI 双平台 gate）
+> 最近更新：2026-08-28（阶段 5 正式落地：纯 TS P3–P7 课程汇编器、assembly differential 10/10、TS/TS full-stack gate）
 >
 > 插件基线：`ca679f7c231927e63f3fb8ba3e91f232c89a24c7`（package `1.0.2`）
 >
@@ -38,8 +38,14 @@
   （WE 抑制状态机、IRQ=ctrl[3]&_IRQ、Mode 0/1 与 restart 时序）；MachineSession 与
   DeviceSession 严格分离，不存在“每指令 tick”伪时间映射。
 - 版本化 JSONL CLI 新增 `machine.execute` 与 `device.cycleVector`，conformance 的
-  execution/device 证据可经该进程边界复现。核心位于 `src/mips/core`（25 文件），
+  execution/device 证据可经该进程边界复现。核心现位于 `src/mips/core`（assembler + machine/devices/events/isa/profiles），
   directed 套件 250+ 断言引自教程/官方 Verilog/contract ledger。
+- **阶段 5（2026-08-28 实现落地）**：纯 TS P3–P7 课程汇编器。source/include
+  graph、`.eqv`、`.macro`、严格 parser、text/ktext/data layout、relocation、
+  sourceMap origin chain、课程常用 pseudo 与生成器 RI cell；`BuiltinTsAssemblerProvider`
+  注册在 legacy 之后并写入课程 HexText/kernel dump；`assembler.assemble` 进入
+  JSONL CLI/Worker；assembly-diff lane 对固定 MARS v0.6.3 在全部 10 个 corpus
+  用例 text/ktext/data 零差异；TS/TS full-stack 测试进入 verify:phase5 双平台 gate。
 - **阶段 4（2026-08-27 实现落地）**：生产 oracle 与自动测试能力接入。
   `BuiltinTsExecutionProvider` 注册在 legacy 之后且默认解析仍为 MARS，仅供显式
   shadow/verify-both；`CourseTracePipeline` 在 P3 Logisim 与 P4–P7 traceRunner
@@ -69,7 +75,7 @@
 
 ### 尚未开始
 
-- 阶段 5（课程汇编器）、阶段 6（按 profile 默认切换）、阶段 7（P2 与常见 MARS 用户体验）。
+- 阶段 6（按 profile 默认切换）、阶段 7（P2 与常见 MARS 用户体验）。
 
 ## 1. 决策摘要
 
@@ -673,9 +679,16 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - first-diff 能定位 PC、word、架构写和 CP0/device 状态；只有 legacy listing 可可靠映射时才附 source span。
 - 默认 provider 保持 legacy MARS；builtin 只作为显式 shadow/verify-both 选项存在，不静默升级。
 
-### 阶段 5：P3–P7 课程汇编器
+### 阶段 5：P3–P7 课程汇编器（已实现，2026-08-28）
 
 **目标**：消除普通课程测试的最后一个 MARS 运行时依赖。
+
+**落地记录**：核心位于 `src/mips/core/assembler`（14 文件），provider 位于
+`src/mips/providers/builtinAssemblerProvider.ts`；`assembler.assemble` 进入
+版本化 JSONL CLI 与 Worker。assembly-diff lane 用固定 MARS v0.6.3 对 manifest
+全部 10 个 corpus 用例直接比较 text/ktext/data image，0 unexplained diff；
+错误程序不产出 image；include cycle/限额、宏递归/局部标签、段重叠/容量、
+CRLF/BOM 与中文路径均由 provider 的 source graph capture 或核心诊断覆盖。
 
 工作：
 

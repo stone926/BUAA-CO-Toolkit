@@ -30,6 +30,15 @@ import {
   runDeviceCycleVectorForService
 } from '../core/machine/executeService';
 import { courseProfileIds } from '../core/profiles/courseProfiles';
+import {
+  assemblerServiceRequestFields,
+  assembleProgramForService,
+  courseAssemblerSemanticsRevision,
+  maximumAssemblerIncludes,
+  maximumAssemblerSourceBytes,
+  maximumAssemblerSourceUnits,
+  parseAssemblerServiceRequest
+} from '../core/assembler/assemblyService';
 
 export const mipsEngineCliProtocolVersion = 1 as const;
 export const mipsEngineCliMaximumBatch = 4096;
@@ -122,12 +131,22 @@ function dispatch(request: Record<string, unknown>, operation: string): unknown 
           cycleContractRevision: timerCycleContractRevision,
           maximumVectorSteps: maximumDeviceVectorSteps
         },
+        assembler: {
+          id: 'builtin-ts-assembler',
+          build: 'extension-phase5',
+          semanticsRevision: courseAssemblerSemanticsRevision,
+          profiles: [...courseProfileIds],
+          maximumSourceUnits: maximumAssemblerSourceUnits,
+          maximumSourceBytes: maximumAssemblerSourceBytes,
+          maximumIncludes: maximumAssemblerIncludes
+        },
         operations: [
           'describe',
           'isa.encode',
           'isa.decode',
           'isa.encodeBatch',
           'isa.decodeBatch',
+          'assembler.assemble',
           'machine.execute',
           'device.cycleVector'
         ],
@@ -159,6 +178,14 @@ function dispatch(request: Record<string, unknown>, operation: string): unknown 
       const scope = parseScope(request.scope);
       const words = requireBatch(request.words, 'words');
       return words.map((word, index) => decodeWord(word, scope, `words[${index}]`));
+    }
+    case 'assembler.assemble': {
+      requireOnlyKeys(request, ['protocolVersion', 'requestId', 'operation', ...assemblerServiceRequestFields]);
+      try {
+        return assembleProgramForService(parseAssemblerServiceRequest(request));
+      } catch (error) {
+        throw new CliRequestError('invalid-request', error instanceof Error ? error.message : String(error));
+      }
     }
     case 'machine.execute': {
       requireOnlyKeys(request, [

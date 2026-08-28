@@ -21,7 +21,10 @@ export interface CourseImagePolicyIssue {
 export const courseImagePolicy = Object.freeze({
   textBase: 0x0000_3000,
   textEndInclusive: 0x0000_6fff,
-  maximumWords: 4096
+  maximumWords: 4096,
+  dataBase: 0x0000_0000,
+  dataEndInclusive: 0x0000_2fff,
+  maximumDataWords: 3072
 });
 
 export function courseProgramImagePolicyIssues(
@@ -47,10 +50,22 @@ export function courseProgramImagePolicyIssues(
       message: `entryPc 必须是 ${hex8Address(courseImagePolicy.textBase)}`
     });
   }
-  let words = 0;
+  let instructionWords = 0;
+  let dataWords = 0;
   for (const segment of image.segments) {
     const base = segment.baseAddress >>> 0;
     const end = (base + segment.words.length * 4) >>> 0;
+    if (segment.name === 'data') {
+      if (base < courseImagePolicy.dataBase
+        || end > (courseImagePolicy.dataEndInclusive + 1) >>> 0) {
+        issues.push({
+          code: 'course-image.data-segment-outside-dm',
+          message: `data segment "${segment.name}" 超出课程 DM 地址空间`
+        });
+      }
+      dataWords += segment.words.length;
+      continue;
+    }
     if (base < courseImagePolicy.textBase
       || end > (courseImagePolicy.textEndInclusive + 1) >>> 0) {
       issues.push({
@@ -58,12 +73,18 @@ export function courseProgramImagePolicyIssues(
         message: `segment "${segment.name}" 超出课程 IM 地址空间`
       });
     }
-    words += segment.words.length;
+    instructionWords += segment.words.length;
   }
-  if (words > courseImagePolicy.maximumWords) {
+  if (instructionWords > courseImagePolicy.maximumWords) {
     issues.push({
       code: 'course-image.too-many-words',
-      message: `ProgramImage 共 ${words} 个字，超过课程 IM 上限 ${courseImagePolicy.maximumWords}`
+      message: `ProgramImage 共 ${instructionWords} 个指令字，超过课程 IM 上限 ${courseImagePolicy.maximumWords}`
+    });
+  }
+  if (dataWords > courseImagePolicy.maximumDataWords) {
+    issues.push({
+      code: 'course-image.too-many-data-words',
+      message: `ProgramImage data 段共 ${dataWords} 个字，超过课程 DM 上限 ${courseImagePolicy.maximumDataWords}`
     });
   }
   if (haltPc !== undefined) {

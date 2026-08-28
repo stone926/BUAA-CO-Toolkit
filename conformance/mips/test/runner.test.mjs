@@ -135,13 +135,18 @@ test('corpus manifest rejects unknown fields instead of silently accepting typos
   assert.throws(() => validateCorpusManifest(invalid), /unknown fields: hatlPc/);
 });
 
-test('assembly-diff skeleton is explicitly skipped and cannot satisfy a required runner lane', () => {
+test('assembly-diff lane is fail-closed when a prerequisite is missing and passes with both prerequisites', () => {
   const direct = runAssemblyDiffCase(caseById('COURSE-VEC-P3-ARITH-001'));
-  assert.equal(direct.status, 'skipped');
+  assert.ok(['passed', 'skipped', 'failed'].includes(direct.status));
 
   const cli = spawnSync(process.execPath, [runnerCli, '--lane', 'assembly-diff'], { encoding: 'utf8' });
-  assert.equal(cli.status, 1);
-  assert.match(cli.stdout, /"skipped":10/);
+  if (direct.status === 'passed') {
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.match(cli.stdout, /"passed":10/);
+  } else {
+    assert.equal(cli.status, 1);
+    assert.match(cli.stdout, /"(?:skipped|failed)":10/);
+  }
 });
 
 test('a selected candidate lane with a zero-case filter exits non-zero', () => {

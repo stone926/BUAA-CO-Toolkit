@@ -11,6 +11,7 @@ import {
   ProviderRunContext
 } from './contracts';
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
+import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
 import { LegacyMarsProvider } from './legacyMarsProvider';
 
 /**
@@ -39,12 +40,13 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
     return existing;
   }
   const legacyProvider = new LegacyMarsProvider(services);
-  // Phase 4: the builtin executor is registered behind legacy so the default
-  // course pipeline stays on MARS. It is only reachable through explicit
-  // provider-id resolution (shadow / verify-both).
+  // Phase 4/5: builtin engines are registered behind legacy so the default
+  // course pipeline stays on MARS. They are reachable through explicit
+  // provider-id resolution (shadow / verify-both) until phase 6.
+  const builtinAssemblerProvider = new BuiltinTsAssemblerProvider(services.mipsRuntime);
   const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
   const registry = {
-    assemblerProviders: [legacyProvider],
+    assemblerProviders: [legacyProvider, builtinAssemblerProvider],
     executionProviders: [legacyProvider, builtinExecutionProvider]
   };
   defaultRegistries.set(services, registry);
@@ -75,6 +77,20 @@ export function resolveExecutionProvider(
   const registry = registerDefaultProviders(services);
   return resolveFirstCapable(registry.executionProviders, request, 'execution');
 }
+/** Resolve a specific assembler engine for explicit phase-5/full-stack runs. */
+export function resolveAssemblerProviderById(
+  services: AppServices,
+  engineId: string,
+  request: AssembleRequest
+): Promise<{ provider: MipsAssemblerProvider; preflight: ProviderPreflight }> {
+  const registry = registerDefaultProviders(services);
+  const provider = registry.assemblerProviders.find((entry) => entry.descriptor.id === engineId);
+  if (!provider) {
+    throw new Error(`No assembler provider is registered for engine "${engineId}".`);
+  }
+  return resolveFirstCapable([provider], request, 'assembler');
+}
+
 /** Resolve a specific execution engine for explicit shadow / verify-both runs. */
 export function resolveExecutionProviderById(
   services: AppServices,
@@ -87,6 +103,14 @@ export function resolveExecutionProviderById(
     throw new Error(`No execution provider is registered for engine "${engineId}".`);
   }
   return resolveFirstCapable([provider], request, 'execution');
+}
+
+/** Convenience for explicit phase-5 builtin assembler / full-stack lanes. */
+export function resolveBuiltinAssemblerProvider(
+  services: AppServices,
+  request: AssembleRequest
+): Promise<{ provider: MipsAssemblerProvider; preflight: ProviderPreflight }> {
+  return resolveAssemblerProviderById(services, 'builtin-ts', request);
 }
 
 /** Convenience for the phase-4 builtin executor shadow lane. */

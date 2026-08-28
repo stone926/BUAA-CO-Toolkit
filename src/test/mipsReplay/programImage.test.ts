@@ -31,7 +31,7 @@ describe('bounded replay ProgramImage and oracle evidence', () => {
   it('rejects every attacker-sized ProgramImage collection before expansion', () => {
     expect(programImageIssues(image({
       segments: [{ name: 'text', baseAddress: 0x3000, words: new Array(maximumProgramImageWords + 1).fill(0) }]
-    }))).toContain(`segment word count exceeds the course IM limit ${maximumProgramImageWords}`);
+    }))).toContain(`segment word count exceeds the course image limit ${maximumProgramImageWords}`);
     expect(programImageIssues(image({
       segments: new Array(maximumProgramImageSegments + 1).fill({ name: 'text', baseAddress: 0x3000, words: [] })
     }))).toContain(`segments exceeds the trusted limit ${maximumProgramImageSegments}`);

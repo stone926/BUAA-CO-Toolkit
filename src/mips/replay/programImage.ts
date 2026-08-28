@@ -18,9 +18,11 @@ import {
 export const serializedProgramImageSchemaRevision = 1;
 /** Course images have one word per IM slot; the extra structural ceilings leave room for later providers. */
 export const maximumProgramImageSegments = 16;
-export const maximumProgramImageWords = maximumReplayMachineCodeWords;
+// Course images contain text/kernel (up to 4096 words) plus initialized data
+// (up to 3072 words); keep the structural ceiling above their sum.
+export const maximumProgramImageWords = maximumReplayMachineCodeWords * 4;
 export const maximumProgramImageSymbols = maximumReplayMachineCodeWords * 2;
-export const maximumProgramImageSourceMapEntries = maximumReplayMachineCodeWords;
+export const maximumProgramImageSourceMapEntries = maximumProgramImageWords;
 export const maximumProgramImageInputUnits = maximumReplaySourceUnits;
 /** The selected-source course budget is at most 4096 static words * 64 dynamic instructions. */
 export const maximumOracleEvidenceSteps = maximumReplayMachineCodeWords * 64;
@@ -277,7 +279,7 @@ function programImageCardinalityIssues(value: Record<string, unknown>): string[]
         if (!isRecord(segment) || !Array.isArray(segment.words)) continue;
         words += segment.words.length;
         if (!Number.isSafeInteger(words) || words > maximumProgramImageWords) {
-          issues.push(`segment word count exceeds the course IM limit ${maximumProgramImageWords}`);
+          issues.push(`segment word count exceeds the course image limit ${maximumProgramImageWords}`);
           break;
         }
       }
@@ -368,9 +370,21 @@ function validSymbol(value: unknown): boolean {
 }
 
 function validSourceMapEntry(value: unknown): boolean {
-  return isRecord(value) && onlyKeys(value, ['segmentIndex', 'wordIndex', 'sourceId', 'startOffset', 'endOffset'])
+  return isRecord(value) && onlyKeys(value, ['segmentIndex', 'wordIndex', 'sourceId', 'startOffset', 'endOffset', 'expansionStack'])
     && Number.isInteger(value.segmentIndex) && (value.segmentIndex as number) >= 0
     && Number.isInteger(value.wordIndex) && (value.wordIndex as number) >= 0 && nonEmpty(value.sourceId)
+    && (value.startOffset === undefined || (Number.isInteger(value.startOffset) && (value.startOffset as number) >= 0))
+    && (value.endOffset === undefined || (Number.isInteger(value.endOffset) && (value.endOffset as number) >= 0))
+    && (value.expansionStack === undefined || (
+      Array.isArray(value.expansionStack)
+      && value.expansionStack.length > 0
+      && value.expansionStack.every(validSourceOrigin)
+    ));
+}
+
+function validSourceOrigin(value: unknown): boolean {
+  return isRecord(value) && onlyKeys(value, ['sourceId', 'startOffset', 'endOffset'])
+    && nonEmpty(value.sourceId)
     && (value.startOffset === undefined || (Number.isInteger(value.startOffset) && (value.startOffset as number) >= 0))
     && (value.endOffset === undefined || (Number.isInteger(value.endOffset) && (value.endOffset as number) >= 0));
 }

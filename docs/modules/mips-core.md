@@ -1,4 +1,4 @@
-# mips-core | src/mips/core/ | 25 files
+# mips-core | src/mips/core/ | 40 files
 
 纯 TypeScript MIPS 引擎核心。无 VS Code/LSP/文件系统/Worker 依赖；模块边界由 scripts/check-module-boundaries.mjs 检查。汇编器（阶段 5）与执行器（阶段 2/3）通过不可变 ProgramImage 连接，二者可独立验证。
 
@@ -11,6 +11,17 @@
 - isa/decoder.ts — 基于生成 catalog、profile 与 layer scope 的三层机器码解码（runtime RI candidate group / REGIMM-COP0 exact dispatch / 课程 canonical）
 - isa/encoder.ts — 基于生成 catalog 的真实指令编码；拒绝未使用 operand、非 canonical 保留字段和课程外 CP0 rd
 - isa/service.ts — CLI/Worker 共用的无宿主 encode/decode 服务 DTO；固定字宽输出且不泄露 generated entry 对象
+- assembler/diagnostics.ts — 严格汇编器稳定诊断码与 offset-based SourceSpan/expansion origin
+- assembler/sourceGraph.ts — BOM/CRLF 归一化、递归 `.include` 展开、source graph fingerprint 与限额
+- assembler/syntax.ts — 注释/字符串感知行语法、标签与顶层逗号操作数拆分
+- assembler/literals.ts — 整数/字符/字符串字面量解析（dec/hex/bin/oct、转义）
+- assembler/expression.ts — 32 位补码常量表达式与符号解析回调
+- assembler/macros.ts — `.macro` 定义、形参替换、宏内标签 `_M#` 去重与展开栈
+- assembler/pseudo.ts — 课程常用 pseudo 展开（li/la/move/b/blt/... 与便捷访存寻址）
+- assembler/sections.ts — text/ktext/data 光标、容量/重叠检查、小端字节车道与 MARS 4 KiB 数据块 padding
+- assembler/assembler.ts — 两遍汇编：layout/symbol/relocation、伪指令展开、ProgramImage 生成
+- assembler/assemblyService.ts — CLI/Worker 共用的有界 assembler DTO；显式 include 边，不解释文件路径
+- assembler/artifacts.ts — ProgramImage 到课程 HexText/kernel dump 与停机 PC 检测
 - profiles/profile.ts — CourseExecutionProfile 契约：地址空间、延迟槽/link、溢出策略、CP0/异常策略、trace 投影与停机策略
 - profiles/courseProfiles.ts — 冻结的 P3–P7 profile 数据（DM 0..0x2fff、IM 0x3000..0x6fff、handler 0x4180、Timer/IG 地址、CP0 位域）
 - events/commitEvent.ts — canonical CommitEvent 事件模型、defined/observable 标记、TrapRecord、out-of-domain 分类与稳定诊断码

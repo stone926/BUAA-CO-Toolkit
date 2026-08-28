@@ -53,6 +53,9 @@ jobs:
       - name: Phase 4 executor shadow gate on this platform
         run: npm run verify:phase4
 
+      - name: Phase 5 course assembler and full-stack gate on this platform
+        run: npm run verify:phase5
+
       - name: Verify versioned MIPS JSONL CLI
         run: npm run verify:mips-cli
 
@@ -68,6 +71,9 @@ jobs:
 
       - name: Resolve pinned MARS references
         run: node conformance/mips/reference/download-references.mjs --require-all
+
+      - name: Assembly differential lane (pinned MARS vs TS assembler)
+        run: npm --prefix conformance/mips run run:assembly-diff
 
       - name: Verify ISim, Logisim, and legacy MARS signal wiring
         run: >-

@@ -46,14 +46,27 @@ const valid = run([
     operation: 'isa.decode',
     word: '0x014b48e0',
     scope: { profile: 'P7', enabledLayers: ['required'] }
+  },
+  {
+    protocolVersion: 1,
+    requestId: 'assemble',
+    operation: 'assembler.assemble',
+    profile: 'P3',
+    sources: [{
+      id: 'source-0000',
+      uri: 'file:///course/smoke.asm',
+      text: '.text\nmain:\n    ori $t0, $0, 42\n    beq $0, $0, main\n    nop\n'
+    }]
   }
 ]);
 
-if (valid.length !== 3
+if (valid.length !== 4
   || !valid.every((response) => response.protocolVersion === 1 && response.ok === true)
   || valid[1].result?.word !== '0x014b4820'
   || valid[2].result?.exactMnemonic !== 'add'
-  || valid[2].result?.canonicalMnemonic !== undefined) {
+  || valid[2].result?.canonicalMnemonic !== undefined
+  || valid[3].result?.ok !== true
+  || valid[3].result?.image?.segments?.[0]?.words?.[0] !== 872939562) {
   throw new Error(`unexpected MIPS CLI response: ${JSON.stringify(valid)}`);
 }
 
