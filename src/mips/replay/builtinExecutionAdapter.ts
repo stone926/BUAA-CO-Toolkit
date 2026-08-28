@@ -1,17 +1,21 @@
 // @index mips-replay — builtin TS executor 的 exact replay / re-evaluate adapter（进程内、无 VS Code）
 
 import * as fs from 'fs';
+import * as path from 'path';
 
-import type { ProgramImage } from '../core/api';
+import type { ProgramImage, SourceUnit } from '../core/api';
 import { CourseProfile } from '../core/generated/isaCatalog';
 import {
   executeProgramForService,
   maximumExecuteSteps
 } from '../core/machine/executeService';
+import { assembleCourseSource } from '../core/assembler/assembler';
+import { imageSegmentWords, wordsToHexText } from '../core/assembler/artifacts';
 import type { ManifestEngineInfo } from '../../courseTesting/manifestCodec';
 import {
   builtinExecutionArtifactMatchesBytes
 } from './builtinEngineArtifact';
+import { builtinAssemblerArtifactMatchesBytes } from './builtinAssemblerEngineArtifact';
 import { readBoundedRegularFile } from './boundedFile';
 import type {
   ReplayAdapterContext,
@@ -36,12 +40,93 @@ export class BuiltinTsReplayAdapter implements ReplayEngineAdapter {
       && engine.eventSchemaRevision === 1;
   }
 
-  async assemble(_context: ReplayAdapterContext): Promise<ReplayAssemblyOutput> {
-    return {
-      ok: false,
-      stdout: '',
-      stderr: 'builtin-ts is executor-only; assembler replay requires the phase-5 builtin assembler'
-    };
+  async assemble(context: ReplayAdapterContext): Promise<ReplayAssemblyOutput> {
+    try {
+      const identityIssue = await this.verifyStagedAssemblerArtifact(context);
+      if (identityIssue) return { ok: false, stdout: '', stderr: identityIssue };
+      const profile = context.configuration.profile as CourseProfile;
+      if (!supportedProfiles.has(profile)) {
+        return {
+          ok: false,
+          stdout: '',
+          stderr: `builtin-ts assembler does not support profile ${profile}`
+        };
+      }
+      const rootFile = path.resolve(context.sourceRoot);
+      const rootId = context.inputGraph[0]?.id;
+      if (!rootId) {
+        return { ok: false, stdout: '', stderr: 'builtin-ts assembler replay has no root source id' };
+      }
+      const maximumBytes = context.configuration.resourceLimits?.maxSourceBytes ?? 8 * 1024 * 1024;
+      const cache = new Map<string, SourceUnit>();
+      const readMaterialized = (file: string, id: string): SourceUnit => {
+        const cached = cache.get(id);
+        if (cached) return cached;
+        const bytes = fs.readFileSync(file);
+        if (bytes.byteLength > maximumBytes) {
+          throw new Error(`materialized source ${file} exceeds ${maximumBytes} bytes`);
+        }
+        const unit: SourceUnit = Object.freeze({ id, text: bytes.toString('utf8') });
+        cache.set(id, unit);
+        return unit;
+      };
+      const materializedId = (specifier: string): string | undefined => {
+        const base = path.basename(specifier.replace(/\\/g, '/'));
+        const extension = path.extname(base);
+        if (!extension) return base;
+        return base.slice(0, -extension.length);
+      };
+      const resolveMaterialized = (specifier: string): SourceUnit | undefined => {
+        const id = materializedId(specifier);
+        if (!id) return undefined;
+        const directory = path.dirname(rootFile);
+        for (const extension of ['.asm', '.s', '.mips']) {
+          const candidate = path.join(directory, `${id}${extension}`);
+          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            return readMaterialized(candidate, id);
+          }
+        }
+        return undefined;
+      };
+      const assembled = assembleCourseSource(readMaterialized(rootFile, rootId), {
+        profile,
+        p7RiInstruction: context.configuration.executionOptions?.p7RiInstruction ?? false,
+        sourceResolver: { resolve: ({ specifier }) => resolveMaterialized(specifier) },
+        sourceLimits: {
+          maxDepth: context.configuration.resourceLimits?.maxIncludeDepth ?? 32,
+          maxUnits: context.configuration.resourceLimits?.maxIncludeUnits ?? 256,
+          maxBytes: maximumBytes
+        }
+      });
+      if (!assembled.ok || !assembled.image) {
+        return {
+          ok: false,
+          stdout: '',
+          stderr: assembled.diagnostics.map((diagnostic) => `[${diagnostic.code}] ${diagnostic.message}`).join('\n')
+        };
+      }
+      const textWords = imageSegmentWords(assembled.image, 'text');
+      if (!textWords.length) {
+        return {
+          ok: false,
+          stdout: '',
+          stderr: 'builtin-ts assembler replay produced no user text segment'
+        };
+      }
+      return {
+        ok: true,
+        image: assembled.image,
+        dutBytes: Buffer.from(wordsToHexText(textWords), 'utf8'),
+        stdout: '',
+        stderr: ''
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        stdout: '',
+        stderr: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   async execute(
@@ -49,7 +134,7 @@ export class BuiltinTsReplayAdapter implements ReplayEngineAdapter {
     program: ReplayExecutableProgram
   ): Promise<ReplayExecutionOutput> {
     try {
-      const identityIssue = await this.verifyStagedArtifact(context);
+      const identityIssue = await this.verifyStagedExecutionArtifact(context);
       if (identityIssue) return { ok: false, stdout: '', stderr: identityIssue, stopReason: 'error' };
       if (context.stdinBytes?.length) {
         return {
@@ -118,7 +203,21 @@ export class BuiltinTsReplayAdapter implements ReplayEngineAdapter {
     return undefined;
   }
 
-  private async verifyStagedArtifact(context: ReplayAdapterContext): Promise<string | undefined> {
+  private async verifyStagedAssemblerArtifact(context: ReplayAdapterContext): Promise<string | undefined> {
+    try {
+      const bytes = await readBoundedRegularFile(context.artifactPath, {
+        maximumBytes: 1024 * 1024,
+        label: 'builtin-ts assembler logical engine artifact'
+      });
+      return builtinAssemblerArtifactMatchesBytes(bytes)
+        ? undefined
+        : 'staged builtin-ts artifact does not match this compiled assembler revision tuple';
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async verifyStagedExecutionArtifact(context: ReplayAdapterContext): Promise<string | undefined> {
     try {
       const bytes = await readBoundedRegularFile(context.artifactPath, {
         maximumBytes: 1024 * 1024,

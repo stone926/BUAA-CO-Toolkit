@@ -4,6 +4,7 @@ import * as path from 'path';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 import { findCourseHaltPc } from '../../mips/core/assembler/artifacts';
 import { programImageIssues } from '../../mips/replay/programImage';
+import { commitEventSourceMap, sourceMapEntryForAddress } from '../../mips/core/assembler/sourceMap';
 
 const corpusRoot = path.resolve(process.cwd(), 'conformance/mips/corpus/spec-microprograms');
 
@@ -201,6 +202,41 @@ describe('course assembler directives and pseudo', () => {
     expect(result.image!.segments.find((segment) => segment.name === 'text')!.words.map((word) => word.toString(16).padStart(8, '0')))
       .toEqual(['12345678', 'ffffffff', '0000003f', '00003004', '34080001', '00000000']);
     expect(result.image!.sourceMap).toHaveLength(6);
+  });
+
+  it('maps TS/TS CommitEvent PCs and memory writes back to source origins', () => {
+    const asm = [
+      '.data',
+      'value:',
+      '    .word 0x11223344',
+      '.text',
+      'main:',
+      '    lw $t0, value',
+      '_halt:',
+      '    beq $0, $0, _halt',
+      '    nop'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P3' });
+    expect(result.ok).toBe(true);
+    const image = result.image!;
+    const instruction = sourceMapEntryForAddress(image, 0x3000)!;
+    expect(instruction.entry.sourceId).toBe('root');
+    expect(instruction.entry.startOffset).toBeGreaterThan(0);
+    expect(instruction.word.toString(16).padStart(8, '0')).toBe('3c010000');
+
+    const load = sourceMapEntryForAddress(image, 0x3004)!;
+    expect(load.word.toString(16).padStart(8, '0')).toBe('8c280000');
+    expect(commitEventSourceMap(image, {
+      sequence: 1,
+      kind: 'instruction',
+      pcBefore: 0x3000,
+      pcAfter: 0x3004,
+      gprWrites: [],
+      hiLoWrites: [],
+      cp0Writes: [],
+      memoryWrites: [{ address: 0, value: 0x11223344, byteMask: 0, wordAddress: 0, valueBefore: 0, valueAfter: 0x11223344, region: 'data' }],
+      deviceEvents: []
+    }).memoryWrites).toHaveLength(1);
   });
 
   it('supports the P7 generator RI victim mnemonic', () => {

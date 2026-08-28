@@ -45,7 +45,9 @@
   sourceMap origin chain、课程常用 pseudo 与生成器 RI cell；`BuiltinTsAssemblerProvider`
   注册在 legacy 之后并写入课程 HexText/kernel dump；`assembler.assemble` 进入
   JSONL CLI/Worker；assembly-diff lane 对固定 MARS v0.6.3 在全部 10 个 corpus
-  用例 text/ktext/data 零差异；TS/TS full-stack 测试进入 verify:phase5 双平台 gate。
+  用例 text/ktext/data 零差异；TS/TS full-stack 测试进入 verify:phase5 双平台 gate；
+  `BuiltinTsReplayAdapter` 同时提供 builtin assembler 的 exact replay，新增
+  `sourceMap.ts` 将 CommitEvent/PC/访存地址映射回 source/macro origin。
   额外对 stone-cpu/alh-cpu/gyc-co/hlc-cpu/kimi-cpu/ds-cpu 中 603 个 P3–P7 ASM
   做兼容审计：全部成功汇编；对可比较部分做 pinned MARS 批量差分，text/ktext 无
   差异（仅 5 个旧 P5 自动测试出现 MARS `.data` 稀疏块 dump 与其模拟器真实内存
@@ -667,6 +669,11 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 ### 阶段 4：生产 oracle 与自动测试能力接入
 
 **目标**：让 TS executor 在真实课程 pipeline 中执行第一阶段的 executor shadow，并交付结构化诊断价值。
+
+**落地记录**：`verify-real-cpu-shadow.mjs` 已对 stone-cpu/alh-cpu/gyc-co/
+hlc-cpu/kimi-cpu/ds-cpu 的 49 个归档 `.co/cases` 运行：16 matched、
+33 not-comparable（缺少归档 trace 或稳定 out-of-domain），0 inconclusive、
+0 corrupt；未发现未登记的 trace 差异。
 
 工作：
 

@@ -69,3 +69,9 @@ export function builtinAssemblerEngineArtifact(): BuiltinAssemblerEngineArtifact
     document: builtinAssemblerEngineDocument()
   };
 }
+
+/** True when staged registry bytes still describe this compiled assembler revision tuple. */
+export function builtinAssemblerArtifactMatchesBytes(bytes: Uint8Array): boolean {
+  const expected = builtinAssemblerArtifactBytes();
+  return bytes.byteLength === expected.byteLength && sha256Bytes(bytes) === sha256Bytes(expected);
+}

@@ -62,6 +62,7 @@ export class ExecutionAssertionObserver {
       if (!hit) continue;
       const count = (this.hitCounts.get(watchpoint.id) ?? 0) + 1;
       this.hitCounts.set(watchpoint.id, count);
+      if (watchpoint.limit !== undefined && count > watchpoint.limit) continue;
       this.hits.push({
         watchpointId: watchpoint.id,
         sequence: event.sequence,

@@ -61,6 +61,19 @@ describe('execution assertion/watchpoint observers', () => {
     ]).map((item) => item.assertionId)).toEqual(['trap-adel']);
   });
 
+  it('stops recording a limited watchpoint after its limit', () => {
+    const observer = new ExecutionAssertionObserver([
+      { id: 'gpr8', kind: 'gpr-write', register: 8, limit: 1 }
+    ], []);
+    const result = observer.observeAll([
+      event(),
+      event({ sequence: 1, pcBefore: 0x3004 }),
+      event({ sequence: 2, pcBefore: 0x3008 })
+    ]);
+    expect(result.watchpointHits).toHaveLength(1);
+    expect(result.watchpointHits[0]).toMatchObject({ watchpointId: 'gpr8', sequence: 0 });
+  });
+
   it('enforces hit count bounds on a watchpoint', () => {
     const observer = new ExecutionAssertionObserver([
       { id: 'gpr8', kind: 'gpr-write', register: 8 }

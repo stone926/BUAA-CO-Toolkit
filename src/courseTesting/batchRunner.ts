@@ -44,7 +44,6 @@ export function isCourseTraceBatchRunning(): boolean {
 export function stopCourseTraceBatch(): boolean {
   if (!activeCourseTraceBatch) return false;
   activeCourseTraceBatch.controller.abort();
-  activeCourseTraceBatch.controller.abort();
   return true;
 }
 
