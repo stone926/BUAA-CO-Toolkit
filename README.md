@@ -1,6 +1,6 @@
 # BUAA CO 工具箱（VSCode 插件）
 
-面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → MARS 黄金模型 → Logisim/ISim 仿真 → 自动对拍 → 报告，循环进行）。
+面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/ISim 仿真 → 自动对拍 → 报告，循环进行）。固定 MARS 已降级为可选回滚与开发/CI 兼容参考。
 
 ---
 
@@ -15,7 +15,7 @@
 | **ISim 仿真（依赖 Xilinx ISE）** | ✅ | ⚠️ | ❌ |
 | **一键随机对拍（P3 依赖 Logisim；P4–P7 依赖 ISim）** | ✅ | ⚠️ | P3 ✅ / P4–P7 ❌ |
 
-- **ISim 仿真与 P4–P7 Verilog 自动对拍依赖 Xilinx ISE**，而 ISE 只发布过 Windows 与 Linux 版本：**macOS 无法运行 Verilog 仿真**，P1 / P4 / P5 / P6 / P7 的仿真与自动对拍均不可用；P3 Logisim 对拍不依赖 ISE（语言特性、Logisim、MARS、冲突分析仍可正常使用）。
+- **ISim 仿真与 P4–P7 Verilog 自动对拍依赖 Xilinx ISE**，而 ISE 只发布过 Windows 与 Linux 版本：**macOS 无法运行 Verilog 仿真**，P1 / P4 / P5 / P6 / P7 的仿真与自动对拍均不可用；P3 Logisim 对拍不依赖 ISE（语言特性、内置 TS 引擎、Logisim、可选 MARS、冲突分析仍可正常使用）。
 - Linux（⚠️）：ISE 14.7 可用，但在现代 64 位发行版上通常需按照指导书自行处理兼容性问题
 - 其余功能为 TS / Java / Python 实现，三平台通用。`co.toolchain.python` 留空时会自动检测（macOS / Linux 优先 `python3`，Windows 优先 `python` / `py`）。
 
@@ -25,15 +25,17 @@
 
 ### 第一步：装好外部工具并填路径
 
-先下载已发布的 [`Mars-with-BUAA-CO-extension v0.6.3`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/tag/v0.6.3)（commit `8b53a49`）。插件课程测试以此稳定版本为兼容基线。
+P3–P7 普通课程测试不再要求安装 MARS。P2 或 `co.mips.engine=mars` 使用用户配置的 legacy MARS；汇编兼容基线固定为 [`v0.6.3`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/tag/v0.6.3)（commit `8b53a49`，SHA-256 `599957…afb31`）。`verify-both`/“使用固定 MARS 验证”使用另一角色 [`v0.6.3-course1`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/tag/v0.6.3-course1)（commit `c6197f4`，SHA-256 `d13456…0c64`），二者不能互相冒充。
 
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
 ```jsonc
 {
-  // MIPS / 对拍黄金模型（稳定版 v0.6.3；课程 oracle 固定 coL2，coL1 仅作兼容探针）
+  // P3-P7 默认 auto：内置 TS 汇编器 + 执行器；mars 可一次设置回滚，verify-both 用于开发验证
+  "co.mips.engine": "auto",
+  // 仅 P2 / mars / verify-both 需要；verify-both 必须指向受信任的 v0.6.3-course1
   "co.toolchain.mars": "修改版 Mars 的路径",
-  // P7 专用 Mars（需支持 efc / p7irq / cl / coL1 / coL2）；不填则回退到上面的 mars
+  // P7：mars 接受具备课程能力的 configured legacy；verify-both 必须精确使用受信任的 course1
   "co.toolchain.marsP7": "修改版 Mars P7 的路径",
   // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
   "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 bin 等文件夹",
@@ -45,7 +47,7 @@
 }
 ```
 
-> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮），逐项确认 Java / MARS / ISE / Logisim 是否就绪。
+> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮）。检查项会随 Profile 和 `co.mips.engine` 变化；P4–P7 的 `auto`/`builtin` 不检查 Java 或 MARS。
 
 ### 第二步：告诉插件当前是哪个 Profile
 
@@ -57,11 +59,11 @@
 打开侧边栏「**BUAA CO Toolkit**」面板 →「操作」区，点：
 
 - **持续生成测试**（P3–P7）
-  → 插件自动循环执行：**生成随机测试点 → MARS dump 机器码 → Logisim/ISim 跑你的 CPU → MARS 跑黄金 trace → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
+  → 插件自动循环执行：**生成随机测试点 → TS 汇编器生成机器码 → Logisim/ISim 跑你的 CPU → TS 执行器生成课程 oracle → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
 
 低频入口（单次/批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等）统一放在侧边栏 **更多工具...** 或命令面板 **`CO: 更多工具`**。
 
-P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 probe 性质检查用例。如果切到 `probe`，流程会变成 **MARS 只负责 dump 机器码 → ISim 跑 CPU → 检查 probe 性质**，不再运行 MARS trace oracle；见下文 P7 专项说明。
+P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 probe 性质检查用例。如果切到 `probe`，流程会变成 **TS 汇编器生成机器码 → ISim 跑 CPU → 检查 probe 性质**，不运行架构 trace oracle；见下文 P7 专项说明。
 
 就这么简单。下面是细节。
 
@@ -72,10 +74,10 @@ P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 pr
 这是本插件最重要的能力。它把课程对拍流程全自动化：
 
 ```
-随机生成器  →  ASM 测试点  →  MARS dump 机器码 ──┐
-                                               ├─→ 对拍 GRF/DM 写  →  报告（首个差异定位）
-                          MARS 黄金 trace ──────┘
-                          你的 CPU（ISim/Logisim 仿真）┘
+随机生成器  →  ASM 测试点  →  TS 汇编器 / ProgramImage ──┐
+                                                        ├─→ 对拍 GRF/DM 写  →  报告（首个差异定位）
+                          TS 课程 oracle ────────────────┘
+                          你的 CPU（ISim/Logisim 仿真）──┘
 ```
 
 ### 怎么触发（侧边栏 / 更多工具）
@@ -86,6 +88,7 @@ P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 pr
 | 停止持续测试 | 侧边栏「操作」→「停止持续测试」，命令面板也保留同名入口 |
 | 查看历史 ASM case | 侧边栏「操作」→「查看 ASM 用例记录」，命令面板也保留同名入口 |
 | 单次/批量/生成后对拍 | 侧边栏「操作」→「更多工具...」 |
+| 用固定 MARS 独立复核同一 case | 「更多工具...」→「使用固定 MARS 验证」（始终保存 full-stack bundle） |
 | 只生成测试点或只 dump 机器码 | 侧边栏「操作」→「更多工具...」 |
 | 手动比较 trace 输出 / 打开批量报告 | 侧边栏「操作」→「更多工具...」 |
 
@@ -115,15 +118,15 @@ P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 pr
 
 P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。本插件的 P7 对拍：
 
-- **`anchor` 模式**：运行 MARS 黄金 trace + ISim trace，精确比较 GRF/DM 写事件。外部中断由生成器选定的安全 anchor PC 驱动，MARS 与 testbench 在同一架构点注入。此模式适合对拍。
-- **`probe` 模式**：生成黑盒 probe ASM，MARS 只 dump 机器码。CPU 运行时由软件 handler 在 DM `0x2800` 起写 probe log，checker 检查异常码、IP 位、EPC 窗口、外部中断响应、Timer CTRL 清零等课程可观察性质。此模式适合高强度测外部中断/Timer，但不是逐指令黄金模型对拍。
+- **`anchor` 模式**：运行内置 TS 课程 oracle + ISim trace，精确比较 GRF/DM 写事件。外部中断由生成器选定的安全 anchor PC 驱动，oracle 与 testbench 在同一架构点注入。此模式适合对拍。
+- **`probe` 模式**：生成黑盒 probe ASM，TS 汇编器只生成机器码。CPU 运行时由软件 handler 在 DM `0x2800` 起写 probe log，checker 检查异常码、IP 位、EPC 窗口、外部中断响应、Timer CTRL 清零等课程可观察性质。此模式适合高强度测外部中断/Timer，但不是逐指令黄金模型对拍。
 - **`hybrid` 模式（默认）**：同一轮生成一个 `anchor` 精确对拍用例和一个 `probe` 性质检查用例。
 - **`off` 模式**：关闭 P7 外部中断/Timer 压测；仍可按 `co.test.p7.exceptionRate`/`exceptionTypes` 生成普通 P7 异常与指令对拍。
 - **内部异常覆盖**：默认覆盖课程要求的 AdEL、AdES、Syscall、RI、Ov。`exceptionRate` 只影响 anchor/random body；probe 内部异常覆盖由 `co.test.p7.exceptionTypes` 控制。
 - **外部中断**（`co.test.p7.interrupt`，默认开）：anchor 使用安全 PC 注入；probe 使用“软件 arm 标记 `0x27d0` + wait PC”双条件触发，避免内部异常 flush 后宏观 PC 不确定导致误拉高中断。
-- **Timer**：anchor 不做 Timer 中断精确对拍，因为 MARS 与 Verilog 的计时基准不同。probe 可在 `co.test.p7.timerInterrupt: true` 时测试 Timer0/Timer1 中断性质，但只检查课程可观察语义，不检查精确触发周期。
-- **内存布局**：P7 固定用 `CompactLargeText`（异常入口 0x4180），机器码 dump 会自动合并用户段 + 0x4180 内核段。
-- **必须使用已发布的修改版 Mars v0.6.3（8b53a49）**（支持 `efc`/`p7irq`/`coL1`/`coL2`，RI 还需要 `cl _co_internal_unknown_instruction.class`），配在 `co.toolchain.marsP7`。
+- **Timer**：anchor 不做 Timer 中断精确对拍，因为架构指令提交与 Verilog 周期之间没有课程规定的一一映射。probe 可在 `co.test.p7.timerInterrupt: true` 时测试 Timer0/Timer1 中断性质，但只检查课程可观察语义，不检查精确触发周期。
+- **内存布局**：课程 IM 为 `0x3000..0x6fff` 共 4096 words，异常入口为 0x4180；机器码投影会按绝对地址合并用户段和内核段并用零填充空洞。
+- **MARS 只用于配置回滚或固定验证**：`mars` 运行用户配置的 legacy provider；`verify-both`/开发命令才要求并校验 v0.6.3-course1 固定执行 reference。P7 legacy 还要求 `efc`/`p7irq`/`cl`，配在 `co.toolchain.marsP7`。普通 `auto`/`builtin` 路径不读取或启动 MARS。
 
 Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`，不读取、不检查 `BadVAddr($8)`。外部中断响应使用 `sb $0, 0x7f20($0)`；Timer 只通过 `lw/sw` 访问 CTRL/PRESET/COUNT，不写 Count，不用 byte/half 访问 Timer。
 
@@ -136,8 +139,8 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ### 如何理解测试结果
 
-- `anchor`/普通 trace 对拍失败通常表示 CPU 与 Mars 在某个**可见写事件**上不一致；首个差异不一定就是根因，流水线错误常会在若干周期后才表现为 GRF/DM 写错。
-- `probe` 失败表示某个 P7 性质不满足，报告会给出 scenario、Cause、EPC、期望 IP/ExcCode、缺失的 ack/clear 等信息；它不是 Mars trace mismatch。
+- `anchor`/普通 trace 对拍失败通常表示 CPU 与当前课程 oracle（`auto`/`builtin` 为 TS）在某个**可见写事件**上不一致；首个差异不一定就是根因，流水线错误常会在若干周期后才表现为 GRF/DM 写错。
+- `probe` 失败表示某个 P7 性质不满足，报告会给出 scenario、Cause、EPC、期望 IP/ExcCode、缺失的 ack/clear 等信息；它不是架构 trace mismatch。
 - 通过不等于“完全正确”：随机测试只覆盖已生成样例，trace 只观察 GRF/DM 写，probe 只观察课程规定端口与软件日志。CP0 内部位、未被后续读取的数据、纯时序性能问题、未启用的异常类型都可能需要补充定向测试。
 - 需要复现时优先保留失败/异常报告中指向的 `.co/cases/<caseId>/` 和 `.co/out/continuous-trace-report.json`；case 目录包含 ASM 快照、机器码、trace 输出、seed、mode、中断/probe 元数据和首个差异。
 
@@ -195,8 +198,9 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
+| `co.mips.engine` | `auto` | P3–P7 课程引擎：`auto`/`builtin` 使用内置 TS，`mars` 一次设置回滚，`verify-both` 双端独立汇编执行并保存 full-stack bundle；任一失败都不隐式 fallback |
 | `co.toolchain.mars` | — | 稳定版 Mars v0.6.3 jar（需 coL1/coL2 和 large-text 内存配置） |
-| `co.toolchain.marsP7` | — | P7 专用稳定版 Mars（另需 efc/p7irq/cl） |
+| `co.toolchain.marsP7` | — | P7 的 `mars` configured legacy 回滚路径（需 coL1/coL2/efc/p7irq/cl）；`verify-both` 时必须精确为受信任的 v0.6.3-course1；不填回退到 `co.toolchain.mars` |
 | `co.mips.delayedBranching` | `profile` | MARS 延迟槽（profile：P5/P6/P7 自动追加 `db`） |
 | `co.mips.memoryConfiguration` | `auto` | MARS 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
 | `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
@@ -225,7 +229,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
 | `co.test.continuousRetainedPassingCases` | `20` | 持续测试保留的最近通过 case 数；失败/异常 case 始终保留 |
 | `co.test.continuousReportRetainedIterations` | `200` | 持续测试 JSON 报告保留的最近轮数；失败/异常轮始终保留 |
-| `co.mips.extraArgs` | `[]` | 按列表追加 MARS/修改版 MARS 支持的参数，如 `sm`、`smc`、`np`、`ae1`、`se1`、`me`、`coERR`；`coL1`/`coL2`/`efc`/`p7irq`/`cl`/`db`/`mc` 由插件按场景拼接，课程 oracle 固定使用 `coL2` |
+| `co.mips.extraArgs` | `[]` | 仅普通/legacy MARS 命令使用；课程 legacy lane 固定拼接 `coL2`/`efc`/`p7irq`/`cl`/`db`/`mc` 等，builtin oracle 不读取此项 |
 | `co.test.generatorArgs` | `[]` | 按列表追加外部生成器支持的参数，如 `--seed` `1234`、`--count` `100`、`--profile` `P6`、输出路径参数；内置生成器用 `co.test.builtinGenerator.*` / `co.test.p7.*` 配置 |
 | `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
 | `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
@@ -253,19 +257,19 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 ## 5. ⚠️ 特别注意事项
 
-1. **P7 必须用已发布的修改版 Mars v0.6.3（8b53a49）**：普通 Mars 不支持 `efc`/`p7irq`/`coL1`/`coL2`，不输出课程测试需要的写回和逐指令日志，**不能**当 P7 黄金模型。请把 `co.toolchain.marsP7` 指向该稳定版本的 `Mars.jar`。
-2. **RI 异常依赖 Mars 额外指令加载**：插件用 `_co_internal_unknown_instruction` 作为 MARS 可识别、CPU 不应识别的未知指令，并通过 `cl _co_internal_unknown_instruction.class` 加载。该 class 打包在此插件中，若 Mars 不支持 `cl`，RI 测试会失败或无法 dump。
+1. **只有 P7 的 `mars`/`verify-both` 需要修改版 MARS**：`mars` 是 configured legacy 回滚；`verify-both` 必须使用 v0.6.3-course1（c6197f4）并按插件内置信任清单校验精确 byte count 与 SHA-256。两者都通过 `co.toolchain.marsP7` 配置；文件名相同不能代替身份校验。普通 `auto`/`builtin` 不需要 MARS。
+2. **RI 的 MARS 兼容支路依赖额外指令加载**：legacy normalizer 用 `_co_internal_unknown_instruction` 和 `cl _co_internal_unknown_instruction.class` 复现固定参考行为；内置 TS 生产路径直接按课程 RI 契约处理，不加载 Java class。
 3. **ISE 路径要指到 `.../ISE_DS/ISE`**，此目录下有 `bin`。例如 `D:/ISE/14.7/ISE_DS/ISE`。`fuse` 会编译工作区里**所有** `.v`；P7 自动测试会生成一个**专用 testbench**（不会覆盖你自己的 `mips_tb.v`）。
 4. **anchor 外部中断对拍仍依赖宏观 PC 约定**：testbench 只能从官方 `mips` 顶层端口看到宏观写回/访存信息，无法读取学生内部流水级。若你的实现对异常 flush 后的宏观 PC 暴露方式不同，anchor 外部中断可能出现假阳性；可切到 `probe` 或关闭 `co.test.p7.interrupt`。
-5. **probe 不是完整黄金模型**：probe 只检查课程可观察性质，不比较每条普通指令的 MARS trace，也不判断 Timer 精确触发周期。probe 通过只能说明这些性质通过，不等价于 CPU 全部行为正确。
+5. **probe 不是完整黄金模型**：probe 只检查课程可观察性质，不比较每条普通指令的架构 trace，也不判断 Timer 精确触发周期。probe 通过只能说明这些性质通过，不等价于 CPU 全部行为正确。
 6. **probe 会占用部分 DM 地址**：log 固定从 `0x2800` 开始，每条 8 word；`0x27d0` 用作 external arm 标记，`0x27e0..0x27ec` 用作 handler 状态。随机 DM 扰动会避开 `0x27d0..0x2fff` 和 `0x7f00..0x7f2f`。手写 probe 用例或外部生成器不要覆盖这些区域。
 7. **BadVAddr 不测试**：课程不要求实现 BadVAddr，本插件的 P7 handler/probe 不读取、不记录、不检查 CP0 `$8`。如果你实现了 BadVAddr，需要另写专门测试。
-8. **延迟槽**：P5/P6/P7 默认开启延迟槽（MARS 加 `db`）。
+8. **延迟槽**：P5/P6/P7 的课程 profile 开启一条延迟槽；legacy 回滚支路等价地向 MARS 加 `db`。
 9. **对拍默认忽略周期**，只比较 PC/目标/值——这与课程评测一致；它**抓不到**“不体现在 GRF/DM 写上的错误”（如从不被读取的寄存器/CP0 位算错、纯时序问题）。
 10. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
-11. **稳定版 MARS 有两个排他边界**：教程 IM 物理容量仍是 4096 words，但 v0.6.3 的 Compact* 文本上界 `0x6ffc` 不可用，所以课程 oracle 最多接受 4095 words（末址 `0x6ff8`）。数据地址 `0x2fff` 也被稳定版当作排他上界：对齐的 `lw/sw 0x2ffc`、`lh/sh 0x2ffe` 仍可覆盖最后物理字，但 byte 访问及 `LWL/SWL` 的有效地址不能取 `0x2fff`；`LWR/SWR` 会向高地址访问至所在整字末端，其整个 4-byte 对齐跨度都不能触及 `0x2fff`，所以最高有效地址为 `0x2ffb`。内置生成器已避开这些边界；插件还会用 coL2 重建实际访存地址，拒绝课程映射之外的 MARS 私有数据段。
-12. **手写/外部用例使用 `$gp/$sp` 前要显式初始化**：教程 CPU 复位所有 GPR 为 0，而 v0.6.3 Compact* 默认 `$gp=0x1800`、`$sp=0x2ffc`。插件用 coL2 在实际执行路径上检查首次写入前读取；P7 中可能先抛异常、因而没有 coL2 victim 头的指令，还要求在对应入口的直线前缀中先用 `ori/lui` 等不读取旧值的指令初始化。
-13. **未跳转的 `BLTZAL/BGEZAL` 后不要直接读取 `$31`**：插件能为该分支的对拍事件补出规范要求的 `PC+8`，但 v0.6.3 内部仍保留旧 `$31`，无法修复其后续执行语义。若后续需要读取，请先显式重写 `$31`；否则用例会被拒绝。
+11. **课程 IM 容量与 legacy 边界分开**：内置 TS/真实硬件接受 `0x3000..0x6fff` 的完整 4096 words；仅固定 v0.6.3 legacy lane 因 Compact* 排他 bug 最多接受 4095 words（末址 `0x6ff8`）。同理，`0x2fff` 数据边界和下述 `$gp/$sp` 限制只约束 legacy 可比较域，不会污染内置课程语义。
+12. **legacy 用例使用 `$gp/$sp` 前要显式初始化**：教程 CPU 复位所有 GPR 为 0，而 v0.6.3 Compact* 默认 `$gp=0x1800`、`$sp=0x2ffc`；`mars`/`verify-both` 会保守拒绝依赖该私有初态的路径。
+13. **legacy 的未跳转 `BLTZAL/BGEZAL` 差异**：v0.6.3 会在内部保留旧 `$31`。需要固定 MARS 可比较性的用例应先显式重写 `$31`；内置课程引擎按课程/ISA 契约执行。
 
 ---
 
@@ -275,7 +279,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 |---|---|
 | `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
 | `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、MARS/ISim/Logisim trace 与复现元数据 |
-| `.co/out/*.mars.out` / `*.sim.out` | 手动单次/批量测试的 MARS / ISim 输出；持续测试默认把输出写入对应 case 目录 |
+| `.co/out/*.oracle.out` / `*.sim.out` | 手动单次/批量测试的 provider-neutral oracle / ISim 输出；持续测试默认把输出写入对应 case 目录（旧 `.mars.out` 仍可读取） |
 | `.co/out/trace-batch-report.json` | 批量测试报告（含命令、生成文件、首个差异） |
 | `.co/out/continuous-trace-report.json` | 持续测试报告；旧通过轮会按留存策略压缩，失败/异常轮保留 |
 | `.co/isim/` | ISE `.prj/.tcl`、生成的 testbench、`code.txt` |
@@ -307,7 +311,9 @@ npm run publish -- patch
 5. 创建 `chore: release vX.Y.Z` 提交和 `vX.Y.Z` annotated tag
 6. `git push origin HEAD --follow-tags`
 
-tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
+每次 main push / pull request 还会永久运行 `npm run verify:phase6`：Ubuntu 24.04 与 Windows 2025 各自执行阶段 6 定向测试、固定 `mars-assembler-v0.6.3` 的 assembly differential，以及固定 `legacy-course-executor` v0.6.3-course1 对 250 个生成用例 + 5 个手写边界用例的真实 execution differential。CI 要求 assembly lane 无未解释差异，并要求 execution lane 每个 profile 50+1、总计 255/255 通过且 0 unexplained/inconclusive/out-of-domain/error；结果以 machine-readable evidence 上传。
+
+tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别完成同一套 `verify:phase6`；Marketplace 发布 job 通过 `needs` 等待两个 matrix 结果，因此单独推 tag 或使用本地 `--skip-tests` 都不能绕过默认切换门。随后发布 job 在 Ubuntu runner 上执行：
 
 1. `npm ci`
 2. `npm run sync:manifest-config`，并确认生成文件已经提交
@@ -323,7 +329,7 @@ tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 - `npm run publish -- --dry-run`：预览下一次 release notes 和步骤，不改文件
 - `npm run publish -- minor --no-push`：只在本地创建 release commit/tag，不推送
-- `npm run publish -- patch --skip-tests`：跳过本地测试；manifest 配置生成和检查仍会执行，GitHub Actions 仍会测试
+- `npm run publish -- patch --skip-tests`：只跳过本地 `npm test`；manifest 配置生成/检查和 tag workflow 的双平台 `verify:phase6` 仍强制执行
 
 配置清单维护命令：
 
@@ -339,21 +345,24 @@ tag 推送后，GitHub Actions 会在 Ubuntu runner 上自动执行：
 
 ## 附录
 
-## 与 MARS 在 P7 对拍中协作
+## 与 MARS 在 P7 验证/回滚中协作
 
-课程 `anchor` 运行强制使用并解析 `coL2`；`coL1` 只在工具链检查中作为稳定版兼容能力探针。插件先从 dump 静态确认最终尾部为自分支+nop，再用 `coL2` 逐指令块确认该自分支已实际执行，并由 MARS 原生 max-step 结束永久自环；`anchor` 精确对拍流程：
+默认 `auto` 不进入 MARS 支路。`co.mips.engine=mars` 是 configured legacy 回滚：同一个设置让 assembler/oracle 都恢复为用户配置的 MARS provider；legacy 运行强制使用并解析 `coL2`，`coL1` 只作工具链兼容探针。插件从 dump 和动态 trace 双重确认标准停机尾，再把 `.oracle.out` 与 ISim/Logisim DUT trace 对拍。
 
-1. **插件** 调用修改版 Mars（普通路径为 `java -jar Mars.jar ...`；RI 路径为 `java -cp <Mars.jar;resources/mars> Mars ... cl _co_internal_unknown_instruction.class`），捕获 stdout 为 `.mars.out`
-2. **插件** 生成 Verilog testbench 并运行 ISim 仿真，捕获 `$display` 输出为 `.sim.out`
-3. **插件** 用同一正则解析两路输出，逐事件比对 PC、目标寄存器/地址、写入值
+`verify-both`/显式「使用固定 MARS 验证」是另一条开发证据路径：
 
-`probe` 流程不同：Mars 只用于 `dump .text`/内核段机器码；不会运行任何 MARS trace，也不会用 MARS 判断 Timer 或外部中断发生在哪个周期。判定来自 ISim trace 中重建出的 probe log 和 `CO_P7_PROBE ...` 诊断行。
+1. 先按编译内置信任清单校验 v0.6.3-course1 `legacy-course-executor` 的普通文件身份、精确大小和 SHA-256；
+2. 从同一已哈希 v2 source closure 建立隔离副本，分别运行 TS assembler→TS executor 与 fixed MARS assembler→它自己的 ProgramImage/executor；
+3. 比较两端实际 image，再比较 canonical writes、精确停机和最终摘要；汇编/执行前后复验 fixed hash，任何漂移、不可比较或未登记差异都阻断；
+4. 无论 matched、已登记差异还是 mismatch，都原子保存 source/image/raw trace/engine/contracts 的 full-stack bundle。
+
+`probe` 是 DUT-only 性质检查，不能产生 full-stack 双端 execution evidence；`verify-both` 遇到 probe 会明确阻断。普通 `auto` 下由 TS 汇编器生成用户/内核机器码，判定来自 ISim trace 中重建出的 probe log 和 `CO_P7_PROBE ...` 诊断行。
 
 ### 对拍约定（插件依赖的 Mars 行为）
 
 | 行为 | 说明 |
 |------|------|
-| 输出目标 | `coL1`/`coL2` → stdout，`coERR` → stderr；课程 oracle 只消费 `coL2`，`coL1` 仅用于工具链兼容探针 |
+| 输出目标 | `coL1`/`coL2` → stdout，`coERR` → stderr；legacy 课程 oracle 只消费 `coL2`，`coL1` 仅用于工具链兼容探针 |
 | 事件格式 | `coL1` 为 `@<8位hex>: <$|*><target> <= <8位hex>`；`coL2` 额外用 `@PC... -> ... (机器码)` 标记每条动态指令 |
 | 事件顺序 | 按指令执行顺序输出；同一指令的多笔写操作在同一 PC 下分行输出 |
 | $0 写入 | **不输出**（与 testbench `$0` 过滤一致） |

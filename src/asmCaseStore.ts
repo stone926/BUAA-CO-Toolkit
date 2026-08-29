@@ -3,12 +3,18 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { getMemoryConfiguration, getProfile } from './config';
+import { getMemoryConfiguration, getMipsEngine, getProfile } from './config';
 import { ensureDirectory, pathExists, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
 import { AppServices, ProjectProfile } from './types';
 import { resolveFileInput } from './workflowInputs';
 import { assembleWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
+import {
+  BUILTIN_TS_ENGINE_ID,
+  courseEnginePlanProfileError,
+  resolveCourseEnginePlan,
+  type CourseEnginePlan
+} from './mips/providers/courseEnginePolicy';
 import {
   AssembleResult,
   EngineArtifactIdentity,
@@ -42,7 +48,13 @@ import {
   writeManifestAtomic
 } from './courseTesting/manifestCodec';
 import { LEGACY_MARS_DESCRIPTOR } from './mips/providers/contracts';
-import { courseMachineCodeValidationError } from './courseTesting/machineCodeValidation';
+import { BUILTIN_TS_DESCRIPTOR } from './mips/providers/contracts';
+import { BUILTIN_TS_ASSEMBLER_DESCRIPTOR } from './mips/providers/builtinAssemblerProvider';
+import {
+  courseHardwareMachineCodeCapacityPolicy,
+  courseMachineCodeValidationError,
+  stableMarsMachineCodeCapacityPolicy
+} from './courseTesting/machineCodeValidation';
 import {
   captureSourceGraph,
   defaultSourceCaptureLimits,
@@ -53,9 +65,11 @@ import {
 import {
   createLegacyProgramImage,
   oracleEvidenceDigests,
+  parseStrictHexTextWords,
   serializeObservabilitySchema,
   serializeProgramImage
 } from './mips/replay/programImage';
+import { courseInstructionImageWords } from './mips/core/assembler/artifacts';
 import { sha256Canonical, type CanonicalJson } from './mips/replay/canonical';
 import { assertContainedDirectoryPath, ensureContainedDirectoryPath } from './pathContainment';
 import {
@@ -76,6 +90,7 @@ import { builtinAssemblerEngineArtifact } from './mips/replay/builtinAssemblerEn
 import { builtinExecutionEngineArtifact } from './mips/replay/builtinEngineArtifact';
 import { commitEventsCanonical } from './mips/core/events/commitEvent';
 import { parseStructuredExecutionEvidence } from './mips/replay/structuredExecutionEvidence';
+import { sourceUnitsUseP7RiInstruction } from './courseTesting/p7RiInstruction';
 
 /** Keep case discovery bounded even when a workspace contains an adversarial case tree. */
 export const maximumAsmCaseIndexEntries = 2048;
@@ -98,6 +113,8 @@ export interface CreateAsmCaseOptions {
   resource?: vscode.Uri;
   createdAt?: Date;
   p7?: AsmCaseP7Metadata;
+  /** Explicit command snapshot; otherwise capture the resource-scoped setting once. */
+  enginePlan?: CourseEnginePlan;
 }
 
 export async function resolveAsmCaseInput(title = '选择 MIPS ASM 文件'): Promise<vscode.Uri | undefined> {
@@ -149,11 +166,18 @@ export async function createAsmCaseFromAsm(
   const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
 
+  const profile = getProfile(options.resource ?? asm);
+  const initialEngine = initialCaseEngineSelection(
+    options.resource ?? asm,
+    profile,
+    options.stdin !== undefined,
+    options.enginePlan
+  );
   const manifest = createV2Manifest(
     path.basename(paths.caseDir),
     createdAt,
-    getProfile(options.resource ?? asm),
-    getMemoryConfiguration(options.resource ?? asm),
+    profile,
+    initialEngine.memoryConfiguration,
     asm.fsPath,
     {
       path: 'program.asm',
@@ -163,7 +187,9 @@ export async function createAsmCaseFromAsm(
     options.source ?? { kind: 'selected' },
     stdin?.snapshot,
     p7,
-    sourceBundleManifest
+    sourceBundleManifest,
+    initialEngine.assembler,
+    initialEngine.executor
   );
   const manifestUri = vscode.Uri.file(paths.manifest);
   await assertContainedDirectoryPath(root, paths.caseDir);
@@ -212,11 +238,18 @@ export async function createAsmCaseFromText(
   const sourceBundleManifest = await sourceBundleManifestFields(sourceBundle, paths.caseDir);
   const p7 = normalizeP7Metadata(options.p7);
   const stdin = options.stdin ? await copyStdinSnapshot(options.stdin, paths.stdinDir) : undefined;
+  const profile = getProfile(options.resource);
+  const initialEngine = initialCaseEngineSelection(
+    options.resource,
+    profile,
+    options.stdin !== undefined,
+    options.enginePlan
+  );
   const manifest = createV2Manifest(
     path.basename(paths.caseDir),
     createdAt,
-    getProfile(options.resource),
-    getMemoryConfiguration(options.resource),
+    profile,
+    initialEngine.memoryConfiguration,
     fileName,
     {
       path: 'program.asm',
@@ -226,7 +259,9 @@ export async function createAsmCaseFromText(
     options.source ?? { kind: 'builtin' },
     stdin?.snapshot,
     p7,
-    sourceBundleManifest
+    sourceBundleManifest,
+    initialEngine.assembler,
+    initialEngine.executor
   );
   const manifestUri = vscode.Uri.file(paths.manifest);
   await assertContainedDirectoryPath(root, paths.caseDir);
@@ -250,6 +285,12 @@ export async function prepareAsmCaseMachineCode(
   options: PrepareAsmCaseOptions = {}
 ): Promise<AssembleResult | undefined> {
   assertWritableV2Case(asmCase);
+  const planProfileError = options.enginePlan
+    ? courseEnginePlanProfileError(options.enginePlan, asmCase.manifest.profile)
+    : undefined;
+  if (planProfileError) {
+    return sourceIntegrityAssembleFailure(planProfileError);
+  }
   try {
     await assertAsmCaseSourceSnapshotCurrent(asmCase);
   } catch (error) {
@@ -267,13 +308,17 @@ export async function prepareAsmCaseMachineCode(
   }
   const graph = verifiedSource.graph;
   const inputGraph = graph.units.map((unit) => ({ id: unit.id, contentHash: unit.contentHash }));
+  const p7RiInstruction = options.p7RiInstruction ?? sourceUnitsUseP7RiInstruction(
+    asmCase.manifest.profile as ProjectProfile,
+    verifiedSource.sourceGraphInput.sources
+  );
   const invocation = await assembleWithPreflight(services, {
     sourceUri: asmCase.sourceAsm,
     inputGraph,
     sourceGraphInput: verifiedSource.sourceGraphInput,
     target: { kind: 'userText', outputFile: asmCase.machineCode },
     courseTrace: options.courseTrace,
-    p7RiInstruction: options.p7RiInstruction,
+    p7RiInstruction,
     revealOutput: options.revealOutput,
     requirements: {
       profile: asmCase.manifest.profile,
@@ -281,7 +326,7 @@ export async function prepareAsmCaseMachineCode(
       pseudoInstructions: true,
       eventSchemaRevision: 1
     }
-  }, { signal: options.signal });
+  }, { signal: options.signal }, options.enginePlan);
   const dump = invocation.result ?? {
     ok: false,
     status: {
@@ -331,9 +376,10 @@ export async function prepareAsmCaseMachineCode(
 
   const bytes = await readBoundedRegularFile(asmCase.machineCode.fsPath, {
     maximumBytes: maximumReplayMachineCodeBytes,
-    label: 'MARS machine-code dump'
+    label: 'assembler DUT machine-code image'
   });
   const text = Buffer.from(bytes).toString('utf8');
+  const legacyAssembler = dump.descriptor.id === LEGACY_MARS_DESCRIPTOR.id;
   if (options.courseTrace) {
     const asmText = (await readBoundedRegularFile(asmCase.sourceAsm.fsPath, {
       maximumBytes: maximumReplaySourceBytes,
@@ -343,7 +389,10 @@ export async function prepareAsmCaseMachineCode(
       dump.resolvedRun.profile as ProjectProfile,
       text,
       asmText,
-      asmCase.manifest.source.kind === 'builtin'
+      asmCase.manifest.source.kind === 'builtin',
+      legacyAssembler
+        ? stableMarsMachineCodeCapacityPolicy
+        : courseHardwareMachineCodeCapacityPolicy
     );
     if (validationError) {
       services.output.appendLine(validationError);
@@ -375,15 +424,15 @@ export async function prepareAsmCaseMachineCode(
     wordCount: machineCodeWordCount(text),
     haltPc: dump.courseHaltPc
   };
-  const legacyAssembler = dump.descriptor.id === LEGACY_MARS_DESCRIPTOR.id;
   const reconstructedImage = createLegacyProgramImage(text, inputGraph);
   const imageMatchesDump = dump.image !== undefined && (
     legacyAssembler
       ? dump.image.fingerprint === reconstructedImage.fingerprint
       : (() => {
-        const textWords = dump.image.segments.find((segment) => segment.name === 'text')?.words ?? [];
-        return textWords.length === reconstructedImage.segments[0].words.length
-          && textWords.every((word, index) => (word >>> 0) === (reconstructedImage.segments[0].words[index] >>> 0));
+        const imageWords = courseInstructionImageWords(dump.image);
+        const dumpedWords = parseStrictHexTextWords(text);
+        return imageWords.length === dumpedWords.length
+          && imageWords.every((word, index) => (word >>> 0) === (dumpedWords[index] >>> 0));
       })()
   );
   const bindingValid = legacyAssembler
@@ -474,6 +523,8 @@ export interface PrepareAsmCaseOptions {
   revealOutput?: boolean;
   courseTrace?: boolean;
   p7RiInstruction?: boolean;
+  /** One assembly-time snapshot reused by the executor; never re-read mid-case. */
+  enginePlan?: CourseEnginePlan;
   signal?: AbortSignal;
 }
 
@@ -1289,7 +1340,9 @@ function createV2Manifest(
   source: AsmCaseSource,
   stdin: AsmCaseManifest['stdin'],
   p7: AsmCaseP7Metadata | undefined,
-  replaySource: SourceBundleManifestFields
+  replaySource: SourceBundleManifestFields,
+  assemblerDescriptor: EngineDescriptor,
+  executorDescriptor: EngineDescriptor
 ): AsmCaseManifestV2 {
   const manifest: AsmCaseManifestV2 = {
     version: asmCaseManifestVersion2,
@@ -1303,31 +1356,13 @@ function createV2Manifest(
     p7,
     program: {
       sourceGraph: replaySource.graph,
-      assembler: {
-        id: LEGACY_MARS_DESCRIPTOR.id,
-        build: LEGACY_MARS_DESCRIPTOR.build,
-        semanticsRevision: LEGACY_MARS_DESCRIPTOR.semanticsRevision,
-        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision,
-        catalogRevision: 1,
-        courseContractRevision: 1,
-        normalizerRevision: 1,
-        eventSchemaRevision: 1
-      }
+      assembler: manifestEngineInfo(assemblerDescriptor, undefined)
     },
     oracle: {
-      engine: {
-        id: LEGACY_MARS_DESCRIPTOR.id,
-        build: LEGACY_MARS_DESCRIPTOR.build,
-        semanticsRevision: LEGACY_MARS_DESCRIPTOR.semanticsRevision,
-        capabilitiesRevision: LEGACY_MARS_DESCRIPTOR.capabilitiesRevision,
-        catalogRevision: 1,
-        courseContractRevision: 1,
-        normalizerRevision: 1,
-        eventSchemaRevision: 1
-      },
+      engine: manifestEngineInfo(executorDescriptor, undefined),
       configurationHash: manifestRunConfigurationHash(
         { profile, memoryConfiguration },
-        LEGACY_MARS_DESCRIPTOR
+        executorDescriptor
       ),
       runConfiguration: { profile, memoryConfiguration },
       stopReason: 'unknown'
@@ -1335,6 +1370,31 @@ function createV2Manifest(
     artifacts: { source: replaySource.artifacts }
   };
   return manifest;
+}
+
+function initialCaseEngineSelection(
+  resource: vscode.Uri | undefined,
+  profile: string,
+  deterministicConsole: boolean,
+  explicitPlan: CourseEnginePlan | undefined
+): {
+  assembler: EngineDescriptor;
+  executor: EngineDescriptor;
+  memoryConfiguration: string;
+} {
+  const plan = explicitPlan ?? resolveCourseEnginePlan(
+    getMipsEngine(resource),
+    profile,
+    { deterministicConsole }
+  );
+  const profileError = courseEnginePlanProfileError(plan, profile);
+  if (profileError) throw new Error(profileError);
+  const builtin = plan.primaryEngineId === BUILTIN_TS_ENGINE_ID;
+  return {
+    assembler: builtin ? BUILTIN_TS_ASSEMBLER_DESCRIPTOR : LEGACY_MARS_DESCRIPTOR,
+    executor: builtin ? BUILTIN_TS_DESCRIPTOR : LEGACY_MARS_DESCRIPTOR,
+    memoryConfiguration: builtin ? 'course-contract-v1' : getMemoryConfiguration(resource)
+  };
 }
 
 function manifestEngineInfo(

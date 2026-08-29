@@ -14,6 +14,7 @@ describe('advanced tool model', () => {
     expect(commands).toContain('co.verilog.generateIseProject');
     expect(commands).toContain('co.verilog.exportVcd');
     expect(commands).toContain('co.test.runGeneratedTraceTests');
+    expect(commands).toContain('co.test.verifyWithFixedMars');
     expect(commands).toContain('co.hazard.analyzeCurrentMachineCode');
     expect(commands).not.toContain('co.logisim.convertLogToCsv');
   });
@@ -39,6 +40,7 @@ describe('advanced tool model', () => {
       'co.mips.runInTerminal',
       'co.mips.dumpKernelText',
       'co.test.runFullTest',
+      'co.test.verifyWithFixedMars',
       'co.test.runBatchTraceTests',
       'co.test.runGeneratedTraceTests',
       'co.test.generateAsmTests',

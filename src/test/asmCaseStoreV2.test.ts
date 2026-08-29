@@ -12,6 +12,7 @@ import {
   listAsmCaseManifests,
   maximumAsmCaseIndexEntries,
   maximumAsmCaseIndexManifestBytes,
+  prepareAsmCaseMachineCode,
   readAsmCaseManifestForAsm,
   readAsmCaseStdinSnapshot,
   recordAsmCaseOracleResult,
@@ -27,6 +28,7 @@ import {
   maximumReplayStdinBytes
 } from '../mips/replay/boundedFile';
 import { builtinExecutionEngineArtifact } from '../mips/replay/builtinEngineArtifact';
+import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../mips/replay/canonical';
 
 const vscodeState = vi.hoisted(() => ({
@@ -87,6 +89,16 @@ function createCase(): AsmCase {
 }
 
 describe('ASM case manifest v2 artifact storage', () => {
+  it('rejects an assembly plan captured for a different case profile', async () => {
+    const asmCase = createCase();
+    const result = await prepareAsmCaseMachineCode({} as never, asmCase, {
+      enginePlan: resolveCourseEnginePlan('auto', 'P3')
+    });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(result?.status.stderr).toMatch(/plan profile P3 differs from case profile P7/);
+  });
+
   it('stores case-relative content fingerprints and keeps metadata separate', async () => {
     const asmCase = createCase();
     const artifactDir = path.join(asmCase.dir.fsPath, 'verilog');

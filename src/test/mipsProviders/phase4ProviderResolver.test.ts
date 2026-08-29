@@ -12,6 +12,11 @@ import { buildProgramImage } from '../../mips/core/programImage';
 import { sourceUnitFingerprint } from '../../mips/core/programImage';
 import type { AppServices } from '../../types';
 import type { ExecuteRequest } from '../../mips/providers/contracts';
+import {
+  BUILTIN_TS_ENGINE_ID,
+  LEGACY_MARS_ENGINE_ID,
+  resolveCourseEnginePlan
+} from '../../mips/providers/courseEnginePolicy';
 
 const services = {
   output: { appendLine: vi.fn() },
@@ -34,23 +39,43 @@ const request: ExecuteRequest = {
 };
 
 describe('phase-4 provider resolver registration', () => {
-  it('keeps legacy MARS as the default execution provider', async () => {
+  it('keeps stable registration order but defaults a gated profile to builtin', async () => {
     const registry = registerDefaultProviders(services);
     expect(registry.executionProviders.map((provider) => provider.descriptor.id)).toEqual([
       'legacy-mars-configured',
       'builtin-ts'
     ]);
-    // Without the provider-owned source binding, legacy preflight fails. The
-    // default resolver must still return that failure instead of silently
-    // upgrading the course pipeline to builtin-ts before phase 6.
     const selected = await resolveExecutionProvider(services, request);
-    expect(selected.provider.descriptor.id).toBe('legacy-mars-configured');
-    expect(selected.preflight.ok).toBe(false);
+    expect(selected.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
+    expect(selected.preflight.ok).toBe(true);
   });
 
   it('resolves builtin explicitly for shadow/verify-both', async () => {
     const selected = await resolveBuiltinExecutionProvider(services, request);
     expect(selected.provider.descriptor.id).toBe('builtin-ts');
     expect(selected.preflight.ok).toBe(true);
+  });
+
+  it('keeps P2 and auto console execution on legacy as one full-stack policy', async () => {
+    const p2 = await resolveExecutionProvider(services, { ...request, profile: 'P2' });
+    const console = await resolveExecutionProvider(services, {
+      ...request,
+      requirements: { profile: 'P5', deterministicConsole: true }
+    });
+
+    expect(p2.provider.descriptor.id).toBe(LEGACY_MARS_ENGINE_ID);
+    expect(console.provider.descriptor.id).toBe(LEGACY_MARS_ENGINE_ID);
+  });
+
+  it.each([
+    ['builtin', BUILTIN_TS_ENGINE_ID],
+    ['mars', LEGACY_MARS_ENGINE_ID],
+    ['verify-both', BUILTIN_TS_ENGINE_ID]
+  ] as const)('preserves explicit %s execution selection', async (mode, engineId) => {
+    const plan = resolveCourseEnginePlan(mode, 'P5');
+    const selected = await resolveExecutionProvider(services, request, plan);
+
+    expect(selected.provider.descriptor.id).toBe(engineId);
+    expect(selected.selection).toBe(plan);
   });
 });

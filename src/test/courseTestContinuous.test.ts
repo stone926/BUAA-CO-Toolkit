@@ -26,7 +26,8 @@ const configMocks = vi.hoisted(() => ({
   getContinuousReportRetainedIterations: vi.fn(() => 20),
   getContinuousRetainedPassingCases: vi.fn(() => 5),
   getContinuousStopOnFailure: vi.fn(() => true),
-  getMemoryConfiguration: vi.fn(() => 'FixedCompactLargeText')
+  getMemoryConfiguration: vi.fn(() => 'FixedCompactLargeText'),
+  getMipsEngine: vi.fn(() => 'auto')
 }));
 
 const fileMocks = vi.hoisted(() => ({
@@ -61,9 +62,9 @@ vi.mock('../toolchain', () => ({
 }));
 
 vi.mock('../courseTestToolchain', () => ({
-  MARS_P7_CHECK: 'MARS P7 efc/p7irq',
-  courseTraceMemoryConfigurationError: vi.fn(() => undefined),
+  courseTraceMemoryConfigurationErrorForEngine: vi.fn(() => undefined),
   formatToolchainFailure: vi.fn(() => 'failure'),
+  requiredCourseTraceToolchainChecks: vi.fn(() => new Set()),
   requiredToolchainFailures: vi.fn(() => [])
 }));
 

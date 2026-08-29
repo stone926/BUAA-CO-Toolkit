@@ -34,6 +34,23 @@ export function referenceJarPath(role = stockAssemblerRole) {
   return resolveVerifiedReference(role).file;
 }
 
+function memoryConfigurationForProfile(profile) {
+  return profile === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText';
+}
+
+function validateReferenceRequest(asmFile, profile, role) {
+  if (!supportedProfiles.has(profile)) {
+    throw new Error(`unsupported profile: ${profile}`);
+  }
+  const sourceStat = fs.statSync(asmFile);
+  if (!sourceStat.isFile()) {
+    throw new Error(`assembly source is not a regular file: ${asmFile}`);
+  }
+  if (role !== stockAssemblerRole && role !== legacyCourseExecutorRole) {
+    throw new Error(`unsupported executable reference role: ${role}`);
+  }
+}
+
 function failure(error, startedAt = Date.now(), details = {}) {
   return {
     ok: false,
@@ -49,24 +66,15 @@ function failure(error, startedAt = Date.now(), details = {}) {
 export function runMarsReference({ asmFile, profile, maxSteps, stdin, role = stockAssemblerRole, haltPc }) {
   const startedAt = Date.now();
   try {
-    if (!supportedProfiles.has(profile)) {
-      throw new Error(`unsupported profile: ${profile}`);
-    }
+    validateReferenceRequest(asmFile, profile, role);
     const effectiveMaxSteps = effectiveMarsMaxSteps(maxSteps);
     if (stdin !== undefined) {
       throw new Error('stdin is not supported by the conformance reference runner');
     }
-    const sourceStat = fs.statSync(asmFile);
-    if (!sourceStat.isFile()) {
-      throw new Error(`assembly source is not a regular file: ${asmFile}`);
-    }
-    if (role !== stockAssemblerRole && role !== legacyCourseExecutorRole) {
-      throw new Error(`unsupported executable reference role: ${role}`);
-    }
 
     // This call re-reads the manifest and re-checks bytes/SHA-256 for every JVM invocation.
     const reference = resolveVerifiedReference(role);
-    const memoryConfiguration = profile === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText';
+    const memoryConfiguration = memoryConfigurationForProfile(profile);
     // MARS otherwise reports assembler/simulator failures in text while often
     // returning process status 0, which would make a broken reference look green.
     const cliOptions = ['nc', 'mc', memoryConfiguration, 'ae1', 'se1'];
@@ -106,6 +114,59 @@ export function runMarsReference({ asmFile, profile, maxSteps, stdin, role = sto
       reference,
       javaExecutable,
       effectiveMaxSteps,
+      cliOptions: stableCliOptions
+    };
+  } catch (error) {
+    return failure(error, startedAt, { role });
+  }
+}
+
+/**
+ * Assemble and dump the reference text image without starting simulation.
+ * Phase-6 uses the same pinned legacy-course-executor bytes here and in the
+ * subsequent execution call so image identity is proven before either engine
+ * executes the case.
+ */
+export function assembleMarsReferenceImage({
+  asmFile,
+  profile,
+  dumpTextFile,
+  role = legacyCourseExecutorRole
+}) {
+  const startedAt = Date.now();
+  try {
+    validateReferenceRequest(asmFile, profile, role);
+    if (typeof dumpTextFile !== 'string' || dumpTextFile.length === 0) {
+      throw new Error('dumpTextFile must be a non-empty path');
+    }
+    const reference = resolveVerifiedReference(role);
+    const cliOptions = ['a', 'nc', 'mc', memoryConfigurationForProfile(profile), 'ae1'];
+    if (courseUsesDelayedBranching(profile)) cliOptions.push('db');
+    if (profile === 'P7') cliOptions.push('efc');
+    cliOptions.push('dump', '.text', 'HexText', dumpTextFile);
+    const stableCliOptions = [
+      ...cliOptions.map((option) => option === dumpTextFile ? '<TEXT-IMAGE>' : option),
+      '<SOURCE>'
+    ];
+    const javaExecutable = process.env.CONFORMANCE_JAVA || 'java';
+    const run = spawnSync(javaExecutable, ['-jar', reference.file, ...cliOptions, asmFile], {
+      encoding: 'utf8',
+      timeout: 600000,
+      maxBuffer: 128 * 1024 * 1024,
+      windowsHide: true
+    });
+    return {
+      ok: !run.error && run.status === 0,
+      exitCode: run.status,
+      signal: run.signal,
+      wallClockMs: Date.now() - startedAt,
+      stdout: run.stdout ?? '',
+      stderr: run.stderr ?? '',
+      error: run.error?.message,
+      role,
+      reference,
+      javaExecutable,
+      dumpTextFile,
       cliOptions: stableCliOptions
     };
   } catch (error) {

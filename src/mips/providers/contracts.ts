@@ -13,6 +13,10 @@ import type { CommitEvent } from '../core/events/commitEvent';
 import type { CoverageBin } from '../core/events/coverage';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
 import { isaInstructions } from '../core/generated/isaCatalog';
+import {
+  BUILTIN_TS_ENGINE_ID,
+  LEGACY_MARS_ENGINE_ID
+} from './courseEnginePolicy';
 
 /**
  * Provider-neutral engine contracts（计划第 5.3 节）。
@@ -250,7 +254,7 @@ export const LEGACY_MARS_DESCRIPTOR: EngineDescriptor = {
   // This is deliberately not a pinned-reference id. Production executes the
   // user-configured JAR; conformance roles such as mars-assembler-v0.6.3 are
   // resolved and hash-verified separately.
-  id: 'legacy-mars-configured',
+  id: LEGACY_MARS_ENGINE_ID,
   kind: 'full-stack',
   build: 'user-configured MARS artifact (unverified identity)',
   semanticsRevision: 1,
@@ -259,7 +263,7 @@ export const LEGACY_MARS_DESCRIPTOR: EngineDescriptor = {
 
 /** Builtin TS engine; registered only when its phases land (assembler: 5, executor: 2-3). */
 export const BUILTIN_TS_DESCRIPTOR: EngineDescriptor = {
-  id: 'builtin-ts',
+  id: BUILTIN_TS_ENGINE_ID,
   kind: 'executor',
   build: 'in-extension pure TypeScript course executor (phase 2-3 core)',
   semanticsRevision: 1,

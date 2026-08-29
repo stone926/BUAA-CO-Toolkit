@@ -64,6 +64,13 @@ export function courseProgramImagePolicyIssues(
         });
       }
       dataWords += segment.words.length;
+      const firstNonZero = segment.words.findIndex((word) => (word >>> 0) !== 0);
+      if (firstNonZero >= 0) {
+        issues.push({
+          code: 'course-image.nonzero-data-initialization',
+          message: `data segment 在 ${hex8Address(base + firstNonZero * 4)} 包含非零初值；课程 DUT 的 DM 仅按复位全零初始化`
+        });
+      }
       continue;
     }
     if (base < courseImagePolicy.textBase

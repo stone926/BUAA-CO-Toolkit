@@ -1,10 +1,10 @@
 # MARS 核心 TypeScript 集成实施方案
 
-> 状态：Executing（阶段 0–5 已完成；下一步是阶段 6 按 profile 默认切换）
+> 状态：Executing（阶段 0–6 已完成；下一步是阶段 7 的 P2/console 用户体验）
 >
 > 制定日期：2026-08-25
 >
-> 最近更新：2026-08-28（阶段 5 正式落地：纯 TS P3–P7 课程汇编器、assembly differential 10/10、TS/TS full-stack gate）
+> 最近更新：2026-08-29（阶段 6 正式落地：P3–P7 auto 默认 TS、原子回滚/full-stack shadow、固定 v0.6.3 assembly-diff、250+5 real execution differential、双平台固定 reference gate）
 >
 > 插件基线：`ca679f7c231927e63f3fb8ba3e91f232c89a24c7`（package `1.0.2`）
 >
@@ -54,7 +54,7 @@
   不一致的已知限制）。按 `COURSE-COMMON-ASM-RAW-WORD-001` 支持 `.text/.ktext`
   中的原始 `.word` 注入，为后续 RI 未知指令测试点生成保留汇编器能力。
 - 阶段 4（2026-08-27 实现落地）：生产 oracle 与自动测试能力接入。
-  `BuiltinTsExecutionProvider` 注册在 legacy 之后且默认解析仍为 MARS，仅供显式
+  `BuiltinTsExecutionProvider` 注册在 legacy 之后且阶段 4 当时默认解析仍为 MARS，仅供显式
   shadow/verify-both；`CourseTracePipeline` 在 P3 Logisim 与 P4–P7 traceRunner
   全分支注入 createCase/prepareProgram/runOracle/runDut(或 runLogisimDut)/
   compareTraces/recordOracle/updateArtifacts/copyArtifact；builtin 产出 raw trace、
@@ -64,6 +64,19 @@
   engines/contracts 复现 bundle，未登记差异固定 inconclusive；batch/continuous
   使用会话 AbortController，batch stop 命令可用；builtin replay adapter 进入默认
   registry；CI 的 ubuntu/windows 双平台 `verify:phase4` gate 已配置，并在 e38d508 的 GitHub Actions 远端运行全部 success（Test and compile、ubuntu/windows Phase 1 portability、独立 TS CLI conformance）。
+- 阶段 6（2026-08-29 实现落地）：`co.mips.engine=auto` 对 P3–P7 原子选择
+  builtin assembler/executor；`mars` 一次设置恢复 configured legacy，`verify-both`
+  用固定 v0.6.3-course1 独立汇编并执行自己的 image。P4–P7 普通 requiredTools 已移除
+  MARS/Java；P3 仅因 Logisim 保留 Java。executor-only/full-stack evidence 明确分型，
+  full-stack 从已哈希 v2 source closure 隔离 materialize，双端 image、binding、artifact
+  与 fixed hash 前后闭合，所有结论保存原子 bundle，inconclusive/not-comparable 阻断。
+  新增“使用固定 MARS 验证”开发命令和完整 4096-word P7 text/gap/ktext DUT 投影；
+  conformance 冻结每 profile 50 个生成程序加 1 个手写边界程序（250+5），实际运行
+  `machine.execute` 与 `legacy-course-executor`，先证明 image 相同，再比较 writes/stop/
+  final summary。`verify:phase6` 先以 `mars-assembler-v0.6.3` 跑 assembly-diff，再以
+  `legacy-course-executor` v0.6.3-course1 跑上述 execution gate；Ubuntu 24.04/Windows 2025
+  永久 CI matrix 要求 255/255 passed、0 unexplained/inconclusive/out-of-domain/error，
+  并上传机器可读证据。
 
 ### 治理模型（2026-08-27 起，单人维护规模）
 
@@ -80,9 +93,9 @@
 - 历史 approval 信封与审阅记录归档在 `conformance/mips/governance/reviews/`，仅作
   provenance，不再被任何检查读取。
 
-### 尚未开始
+### 待实施
 
-- 阶段 6（按 profile 默认切换）、阶段 7（P2 与常见 MARS 用户体验）。
+- 阶段 7（P2 与常见 MARS 用户体验）。
 
 ## 1. 决策摘要
 
@@ -263,15 +276,15 @@ P7 教程明确说明 MARS 与 SMRL/课程规范存在差异，正式测试不�
 | --- | --- | --- |
 | `mars-assembler-v0.6.3` | [`Mars_CO_v0.6.3.jar`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3/Mars_CO_v0.6.3.jar)，3,544,465 bytes，SHA-256 `599957c96b4e94c267a117d548eb5a1bd32d72d879a831a5f695a648c1eafb31`，tag commit `8b53a492dddc4fe1c62a7a02c55bea6fc4fb49d8` | 汇编兼容/image dump 和历史运行基线 |
 | `mars-regression-v0.6.3` | [`Mars_Test_CO_v0.6.3.zip`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3/Mars_Test_CO_v0.6.3.zip)，8,771 bytes，SHA-256 `0b7f705de67bbd5a4060c03a4425aad84c8be1e257ff4e049290484aa3d7987e` | 不随本地 fork 漂移的 frozen regression |
-| `legacy-course-executor` | 阶段 0 决定并归档；候选为 tag 之后的 `c6197f433e20ac0800a48ea1255053147ade5a77` | 对拍当前 fork 新增的课程语义；必须从干净 checkout 可重复构建并拥有独立 artifact hash |
+| `legacy-course-executor` | [`Mars_CO_v0.6.3-course1.jar`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/download/v0.6.3-course1/Mars_CO_v0.6.3-course1.jar)，3,599,004 bytes，SHA-256 `d134564d4512f192f7d583491da1ecd13810a4252d672ddaedd6ac7042e80c64`，tag commit `c6197f433e20ac0800a48ea1255053147ade5a77` | 阶段 0 已接受并从干净 checkout 构建/发布；用于真实 execution/full-stack reference，不替代 v0.6.3 assembly compatibility 角色 |
 
 制定本计划时，配置路径 `D:\Program FIles\Mars\Mars.jar` 的实测 SHA-256 为 `307ca4547d2fa8220157c212119ed41c77db34b057f79046034f75ade643aa68`，与 release asset 不同；本地 fork 也位于 `c6197f4` 且有未提交状态。因此二者只能作为现状调查输入，不能进入 conformance。CI 必须下载/读取 manifest 指定资产，校验名称、大小、hash 后 fail closed，禁止从用户路径、本地 HEAD 或脏工作树隐式替换。
 
-如果阶段 0 接受 `c6197f4` 的课程修复，应发布一个不可变、可重建的 reference artifact；若不接受，则其行为差异必须进入 course vector/ledger，不能把未发布 HEAD 伪装成 v0.6.3。
+阶段 0 已接受 `c6197f4` 的课程修复并以独立 `v0.6.3-course1` 发布；审查和构建记录位于 `conformance/mips/reference/`。它始终以独立 role/hash 解析，不能把 course1 冒充 v0.6.3，也不能让用户配置 JAR 进入 conformance。
 
-## 4. 当前系统与迁移切入点
+## 4. 系统数据流与迁移切入点
 
-当前数据流是：
+阶段 0 制定计划时的数据流是：
 
 ```text
 ASM -> runMarsFile(dump) -> HexText
@@ -280,14 +293,32 @@ ASM -> runMarsFile(dump) -> HexText
     -> compare -> report/case artifacts
 ```
 
-主要硬耦合：
+当时的主要硬耦合：
 
 - [mips.ts](../../src/mips.ts) 的 `runMarsFile` 同时处理 VS Code UI、参数、文件系统、课程预检、进程和产物。
-- [asmCaseStore.ts](../../src/asmCaseStore.ts) 直接用 MARS 准备机器码。
-- [traceRunner.ts](../../src/courseTesting/traceRunner.ts) 硬编码 dump→MARS→DUT→compare；P3 的 [courseTestLogisim.ts](../../src/courseTestLogisim.ts) 也直接跑 MARS。
+- [asmCaseStore.ts](../../src/asmCaseStore.ts) 当时直接用 MARS 准备机器码。
+- [traceRunner.ts](../../src/courseTesting/traceRunner.ts) 当时硬编码 dump→MARS→DUT→compare；P3 的 [courseTestLogisim.ts](../../src/courseTestLogisim.ts) 也直接跑 MARS。
 - [asmCaseStoreCore.ts](../../src/asmCaseStoreCore.ts) manifest v1 将 provider 和 artifact 命名为 `mars`。
 - [traceParser.ts](../../src/language/mips/traceParser.ts)、[machineCodeValidation.ts](../../src/courseTesting/machineCodeValidation.ts)、[marsImageCompatibility.ts](../../src/mips/legacy/marsImageCompatibility.ts) 和随机生成器重复实现 decoder、寄存器读集、延迟槽及部分语义。
-- 当前 `CpuState` 是生成器辅助状态，不是可独立验证的 oracle。
+- 当时 `CpuState` 只是生成器辅助状态，不是可独立验证的 oracle。
+
+阶段 6 完成后的当前生产数据流是：
+
+```text
+immutable SourceUnit closure -> one CourseEnginePlan
+  auto(P3-P7)/builtin -> builtin TS assembler -> ProgramImage/DUT HexText
+                         -> builtin TS executor -> provider-neutral oracle.out
+  mars                 -> configured legacy assembler -> its ProgramImage
+                         -> configured legacy executor -> oracle.out
+  verify-both          -> builtin 主路径
+                         + fixed course1 assembler -> its own legacy executor
+                         -> image/execution differential -> atomic full-stack bundle
+  oracle/DUT -> compare -> HTML/JSON v2 report + exact replay artifacts
+```
+
+选择后的 provider 不因 preflight 或 runtime 失败隐式 fallback；P7 probe 明确是 DUT-only，
+不会被记录为 full-stack evidence。MARS 参数、文本修复和 Compact quirks 已限制在
+legacy normalizer/conformance，builtin providers 受模块边界检查保护。
 
 可复用基础：
 
@@ -614,7 +645,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - 定义带 versioned capabilities/preflight 的 assembler/execution provider；`LegacyMarsProvider` 完整包装现有行为。
 - neutral 化 pipeline、trace compare side、report stage 和 case v2。
 - 建立 ISA catalog/generator，逐步替换重复 opcode、read-set、delay-slot 表。
-- 建立 Worker 骨架、运行时 manager、取消和模块边界检查；默认 provider 仍为 MARS。
+- 建立 Worker 骨架、运行时 manager、取消和模块边界检查；阶段 1 当时默认 provider 仍为 MARS（阶段 6 已切换）。
 - 将 `processCore` 升级为可取消 process supervisor：AbortSignal、grace→force、stdin/stream 收尾、幂等 settle，并按平台终止完整进程树（Windows Job Object/受维护实现，Unix process group）。
 
 退出标准：
@@ -690,7 +721,7 @@ hlc-cpu/kimi-cpu/ds-cpu 的 49 个归档 `.co/cases` 运行：16 matched、
 - shadow mismatch bundle 包含 source/image/input/schedule/engine/contract hash 与 raw traces。
 - 取消、Worker crash、artifact retention 不产生损坏 manifest。
 - first-diff 能定位 PC、word、架构写和 CP0/device 状态；只有 legacy listing 可可靠映射时才附 source span。
-- 默认 provider 保持 legacy MARS；builtin 只作为显式 shadow/verify-both 选项存在，不静默升级。
+- 阶段 4 当时默认 provider 保持 legacy MARS；builtin 只作为显式 shadow/verify-both 选项存在，不静默升级（阶段 6 已按 gate 切换）。
 
 ### 阶段 5：P3–P7 课程汇编器（已实现，2026-08-28）
 
@@ -719,7 +750,7 @@ CRLF/BOM 与中文路径均由 provider 的 source graph capture 或核心诊断
 - TS/TS 运行时事件能通过 `ProgramImage.sourceMap` 映射回准确 source/macro origin。
 - assembly differential、execution differential 和 TS/TS full-stack 三条 lane 在两平台 CI 可运行；patched MARS raw-image runner 仅为可选增强。
 
-### 阶段 6：默认切换与清理
+### 阶段 6：默认切换与清理（2026-08-29 完成）
 
 目标：在证据充分的前提下，按 profile 逐项把课程默认 oracle 切换到 TS，并保留即时回滚。
 
@@ -742,6 +773,14 @@ CRLF/BOM 与中文路径均由 provider 的 source graph capture 或核心诊断
   course-correct / inconclusive 裁决，inconclusive 阻断该项切换。
 - 回滚开关一次设置即恢复 legacy，且同一 case bundle 可在两端复现。
 - MARS 作为 CI reference 永久保留。
+
+落地核验：P3–P7 `auto` 已统一切换到 `builtin-ts`；Windows 本地固定 reference
+真实运行 P3–P7 各 51 例（每项 50 seed + 1 handwritten），255/255 passed，
+unexplained/failed/inconclusive/out-of-domain/error 全为 0，严格 aggregate gate 通过。
+阶段 6 定向 Vitest 213 passed/1 skipped；Ubuntu 24.04 与 Windows 2025 的永久
+`verify:phase6` CI matrix 已配置，执行 unit/module gate、固定 v0.6.3 assembly-diff、
+固定 course1 execution differential，并上传逐 profile JSON。远端两平台运行状态由
+每次 CI 具体 run 记录，不在本文伪造。
 
 ### 阶段 7：P2 与常见 MARS 用户体验
 
@@ -899,19 +938,21 @@ courseVector 杀死，而不是只被读取共享 catalog 的生产单元测试�
 | --- | --- | --- |
 | push | 每次 push 到 main | `CI`：模块边界、dependency whitelist、contract/evidence gates、RTL 决策向量（Icarus）、ISA/course 候选校验、corpus freeze、compile、reference、regression、250 seeds、conformance 测试与 lanes、完整 vitest、test-cli smoke |
 | push | 每次 push 到 main | `Phase 1 portability`：windows-2025 与 ubuntu-24.04 双平台完整套件（generated 检查、compile、全测试、CLI、Worker、process supervisor、MARS replay、新旧 legacy 等价） |
+| push/PR | 每次 push 到 main / pull request | `Phase 6 fixed MARS gate`：windows-2025 与 ubuntu-24.04 分别运行 compile/module boundary/阶段 6 directed Vitest、以 v0.6.3 跑 assembly-diff、以 v0.6.3-course1 真实执行固定 250 seed + 5 handwritten，aggregate 要求精确 case 集和 255/255 passed，上传逐 profile/summary JSON |
 | benchmark | 手动 dispatch | 固定双 runner 的 benchmark candidate 与校验上传 |
-| release | 手动 | 发布矩阵（三平台、空格/中文/BOM/换行） |
+| release | `v*` tag | `Release` 先在 windows-2025/ubuntu-24.04 重跑同一 `verify:phase6` matrix；publish job 通过 `needs` 等待两端成功后才打包/发布 VSIX，tag-only 与本地 `--skip-tests` 均不能绕过 |
 
 需要更高覆盖时，用 nightly dispatch 增大固定 seed 数并把结果固化为 regression，
 而不是设配额。
 
 ### 7.7 Shadow 与默认切换
 
-证据按 profile/capability 分开记录，executor-only 与 full-stack 不互相继承。切换判据
-见第 6 节阶段 6 的退出标准：两平台 directed 测试全绿、对应 differential 为 0
-unexplained diff、shadow 无未裁决 mismatch、回滚即时可用。不再要求固定天数、固定
-case 数或固定手写语料数；这些是意图的量化表达，单人环境用"每个 mismatch 都有 bundle
-且被裁决"来保留同一意图。
+证据按 profile/capability 分开记录，executor-only 与 full-stack 不互相继承。阶段 6
+现已冻结真实执行门槛：每个 P3–P7 profile 恰好 50 个生成 case + 至少 1 个手写
+边界 case，总计 250+5；全部必须 passed 且 unexplained/inconclusive/out-of-domain/error
+为 0。聚合器绑定 frozen corpus、精确 case ID/profile/kind、fixed reference SHA、
+assembler/executor CLI provenance，并从逐 case 记录重算计数/stop/digest。运行时 shadow
+继续要求每次结论（包括 matched）保存 bundle；未裁决 mismatch 或不可比较结果阻断。
 
 ### 7.8 Expected data 与差异治理
 
@@ -948,13 +989,13 @@ baseline 回退超过 15% 时人工调查，不在 CI 自动 fail。
 
 ## 9. 迁移、兼容与回滚
 
-- Provider 选择早期只作为内部/开发配置；稳定 shadow 后再公开 `auto | builtin | mars | verify-both`。
-- `auto` 按 request 的 profile/capability gate 解析：未过 gate 的能力使用 legacy，已过 gate 的能力使用 builtin；显式选择永不被升级静默改写。
+- Provider 选择已公开为 `auto | builtin | mars | verify-both`，由 resource-scoped 设置在 case 开始时快照一次。
+- `auto` 对已过门的 P3–P7 汇编/架构执行使用 builtin；stdin/interactive console 在阶段 7 前明确选择 legacy。`builtin`/`mars`/`verify-both` 都是显式、原子选择，preflight/runtime 失败不改写计划。
 - v1 manifest/report 永久可读，新写 v2；不自动批量重写历史 case。
 - legacy MARS 的 `$gp/$sp`、REGIMM、coL2 victim、Compact 上界修复全部保留在 reference adapter，不能污染 course profile。
 - 若 builtin 发现未支持 assembler feature，应给精确 capability diagnostic；是否允许显式 fallback 由命令语义决定，课程裁决不可无提示改变 oracle。
-- 默认切换前完成回滚演练：一项设置可恢复 legacy provider，且同一 case bundle 可在两端复现。
-- `resources/co/courseConfig.json` 的 `requiredTools` 应按 capability 迁移；只有 builtin assembler+executor 达到 release gate 后才移除 MARS/Java 要求。
+- 回滚已落地：`co.mips.engine=mars` 一项设置同时恢复 configured legacy assembler/executor；`verify-both` 对同一 case 保存双端 full-stack bundle。configured rollback 与 fixed v0.6.3-course1 验证是不同信任语义。
+- `resources/co/courseConfig.json` 已移除 P4–P7 的普通 MARS/Java；P3 因 Logisim 保留 Java。`toolchainPolicy.ts` 只在 mars/verify-both 动态追加 MARS/Java。
 
 ## 10. 许可与来源
 
@@ -1015,7 +1056,7 @@ MARS 及当前课程 fork 使用 MIT，允许修改和派生，但逐行转写�
   为 0 unexplained diff。
 - 可诊断性：失败 bundle 可离线重放，第一处差异能映射回源代码和架构状态。
 - 性能：lazy activation、取消与内存行为不退化；benchmark 可复测，ADR 目标可对照。
-- 迁移：历史 case/report 可读，用户可回滚到固定 reference provider。
+- 迁移：历史 case/report 可读；用户可一项设置回滚到 configured legacy provider，并可用独立 fixed reference 命令复核。
 - 发布：普通 P3–P7 MIPS 工作流不再要求 MARS；MARS 作为 CI/reference 被永久固定和可重建。
 
 ## 14. 首个实施批次（已完成）

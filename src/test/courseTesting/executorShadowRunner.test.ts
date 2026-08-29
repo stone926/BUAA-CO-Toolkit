@@ -177,7 +177,7 @@ function asmCase(): AsmCase {
 }
 
 describe('executor shadow runner', () => {
-  it('passes when the two projected traces match and writes no bundle', async () => {
+  it('passes when the two projected traces match and saves an executor-only evidence bundle', async () => {
     mockedResolve.mockResolvedValue({
       provider: streamingProvider(builtinResult()),
       preflight: { ok: true, diagnostics: [], descriptor: BUILTIN_TS_DESCRIPTOR }
@@ -195,7 +195,15 @@ describe('executor shadow runner', () => {
       }
     );
     expect(outcome.status).toBe('matched');
-    expect(outcome.bundleDir).toBeUndefined();
+    expect(outcome.bundleDir).toBeDefined();
+    expect(outcome.resultFile).toBe(path.join(outcome.bundleDir!, 'shadow-result.json'));
+    const result = JSON.parse(fs.readFileSync(outcome.resultFile!, 'utf8'));
+    expect(result).toMatchObject({
+      kind: 'executor-shadow',
+      evidenceKind: 'executor-only',
+      status: 'matched',
+      engines: { builtin: { completed: true } }
+    });
     expect(outcome.builtinResult?.stop?.kind).toBe('halt-loop');
   });
 
@@ -345,6 +353,39 @@ describe('executor shadow runner', () => {
       }
     );
     expect(outcome.status).toBe('not-comparable');
-    expect(outcome.bundleDir).toBeUndefined();
+    expect(outcome.bundleDir).toBeDefined();
+    const result = JSON.parse(fs.readFileSync(outcome.resultFile!, 'utf8'));
+    expect(result).toMatchObject({
+      evidenceKind: 'executor-only',
+      status: 'not-comparable',
+      engines: { builtin: { id: BUILTIN_TS_DESCRIPTOR.id, completed: false } }
+    });
+  });
+
+  it('saves a not-comparable bundle when the image policy rejects the input', async () => {
+    const outcome = await runExecutorShadow(
+      { output: { appendLine: vi.fn() } as never, statusBar: {} as never },
+      asmCase(),
+      {
+        profile: 'P5',
+        image: image(),
+        maxSteps: 64,
+        haltPc: 0x3000,
+        legacy: legacyResult(),
+        outputRoot: path.join(root, 'shadow')
+      }
+    );
+
+    expect(mockedResolve).not.toHaveBeenCalled();
+    expect(outcome.status).toBe('not-comparable');
+    expect(outcome.bundleDir).toBeDefined();
+    const result = JSON.parse(fs.readFileSync(outcome.resultFile!, 'utf8'));
+    expect(result).toMatchObject({
+      evidenceKind: 'executor-only',
+      status: 'not-comparable',
+      engines: { builtin: { completed: false } },
+      differential: { disposition: 'not-comparable' }
+    });
+    expect(result.differential.notComparableReason).toContain('image policy');
   });
 });

@@ -1,4 +1,4 @@
-// @index mips-providers — BuiltinTsExecutionProvider：phase-2/3 核心的直接 provider（仅 executor，显式 shadow/verify-both）
+// @index mips-providers — BuiltinTsExecutionProvider：P3-P7 默认 TS executor 与显式 shadow/verify-both lane
 
 import * as vscode from 'vscode';
 
@@ -98,6 +98,7 @@ interface BuiltinExecuteSnapshot {
   readonly maxSteps: number;
   readonly haltPc?: number;
   readonly interruptSchedule: readonly number[];
+  readonly p7RiInstruction: boolean;
   readonly runOutputFile?: vscode.Uri;
   readonly revealOutput?: boolean;
   readonly signal?: AbortSignal;
@@ -275,7 +276,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
       memoryConfiguration: request.memoryConfiguration ?? 'course-contract-v1',
       runtime: { kind: 'builtin-ts' },
       wallClockMs: Math.max(1, Date.now() - started),
-      p7RiInstruction: false
+      p7RiInstruction: snapshot.p7RiInstruction
     };
 
     const trace: ArchitecturalWriteTrace | undefined = snapshot.trace
@@ -429,7 +430,7 @@ export class BuiltinTsExecutionProvider implements MipsExecutionProvider {
         memoryConfiguration: request.memoryConfiguration ?? 'course-contract-v1',
         runtime: { kind: 'builtin-ts' },
         wallClockMs: Math.max(1, Date.now() - started),
-        p7RiInstruction: false
+        p7RiInstruction: snapshot.p7RiInstruction
       },
       ...(trace ? { trace } : {}),
       events: workerEvents,
@@ -629,6 +630,7 @@ function snapshotRequest(request: ExecuteRequest, signal?: AbortSignal): Builtin
     maxSteps: Math.min(request.maxSteps ?? defaultMaximumSteps, maximumExecuteSteps),
     haltPc: request.haltPc,
     interruptSchedule: Object.freeze([...(request.interruptSchedule ?? [])]),
+    p7RiInstruction: request.p7RiInstruction === true,
     runOutputFile: request.runOutputFile ? cloneUri(request.runOutputFile) : undefined,
     revealOutput: request.revealOutput,
     signal
@@ -644,6 +646,7 @@ function builtinRequestFingerprint(request: ExecuteRequest): string {
     maxSteps: request.maxSteps ?? null,
     haltPc: request.haltPc ?? null,
     interruptSchedule: request.interruptSchedule ?? null,
+    p7RiInstruction: request.p7RiInstruction ?? false,
     requirements: request.requirements ?? null
   });
 }

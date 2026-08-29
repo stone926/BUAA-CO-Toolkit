@@ -33,7 +33,6 @@ import {
   maximumReplaySteps,
   maximumReplayWallClockMs,
   maximumReplayMachineCodeBytes,
-  maximumReplayMachineCodeWords,
   maximumReplayProgramImageBytes,
   maximumReplaySnapshotBytes,
   maximumReplayStdinBytes,
@@ -42,6 +41,16 @@ import {
 } from '../mips/replay/boundedFile';
 import { legacyMarsConfigurationPolicyIssues } from '../language/mips/legacyMarsPolicy';
 import { p7InterruptAnchorPairIssue } from './p7InterruptAnchor';
+import {
+  courseInstructionImageBaseAddress,
+  courseInstructionImageWords
+} from '../mips/core/assembler/artifacts';
+import {
+  courseHardwareMachineCodeCapacityPolicy,
+  courseMachineCodeCapacityError,
+  stableMarsMachineCodeCapacityPolicy
+} from './machineCodeValidation';
+import type { ProjectProfile } from '../projectProfile';
 
 /**
  * Manifest v2（计划第 5.8 节）。v1 永久只读兼容；新 case 默认写 v2。
@@ -777,8 +786,15 @@ export function v2ReplayClosureIssues(manifest: AsmCaseManifestV2): string[] {
   if (!isSha256(manifest.program?.machineCode?.sha256)) {
     issues.push('program.machineCode.sha256 missing or invalid (image not dumped yet)');
   }
-  if ((manifest.program?.machineCode?.wordCount ?? 0) > maximumReplayMachineCodeWords) {
-    issues.push(`program.machineCode.wordCount exceeds the course IM limit ${maximumReplayMachineCodeWords}`);
+  const machineCodeCapacityError = courseMachineCodeCapacityError(
+    manifest.profile as ProjectProfile,
+    manifest.program?.machineCode?.wordCount ?? 0,
+    manifest.program?.assembler?.id === 'legacy-mars-configured'
+      ? stableMarsMachineCodeCapacityPolicy
+      : courseHardwareMachineCodeCapacityPolicy
+  );
+  if (machineCodeCapacityError) {
+    issues.push(`program.machineCode: ${machineCodeCapacityError}`);
   }
   if (manifest.program?.machineCode && !isSafeCaseRelativePath(manifest.program.machineCode.path)) {
     issues.push('program.machineCode.path must be a safe case-relative path');
@@ -1178,6 +1194,12 @@ function p7RiDependencyIssues(
   const count = (engine.artifact?.dependencies ?? [])
     .filter((dependency) => dependency.role === p7RiInstructionDependencyRole)
     .length;
+  if (engine.id !== 'legacy-mars-configured') {
+    if (count !== 0) {
+      issues.push(`${label} builtin engine must not depend on ${p7RiInstructionDependencyRole}`);
+    }
+    return;
+  }
   if (enabled && count !== 1) {
     issues.push(
       `${label} must have exactly one ${p7RiInstructionDependencyRole} dependency when p7RiInstruction is enabled`
@@ -1522,7 +1544,7 @@ function sourceArtifactClosureIssues(
   }
 }
 
-const courseTextBase = 0x3000;
+const courseTextBase = courseInstructionImageBaseAddress;
 
 async function verifyProgramArtifactSemantics(
   manifest: AsmCaseManifestV2,
@@ -1561,40 +1583,50 @@ async function verifyProgramArtifactSemantics(
     }
 
     const image = deserializeProgramImage(imageBytes);
-    const textSegments = image.segments.filter((segment) => segment.name === 'text');
-    if (textSegments.length !== 1) {
-      issues.push('program.image must contain exactly one text segment for HexText replay');
-      return;
+    if (image.entryPc !== courseTextBase) {
+      issues.push('program.image entryPc must match the course text base 0x00003000');
     }
-    const text = textSegments[0];
-    if (text.baseAddress !== courseTextBase || image.entryPc !== courseTextBase) {
-      issues.push('program.image text base and entryPc must match the course text base 0x00003000');
-    }
-    if (text.words.length !== machineWords.length
-      || text.words.some((word, index) => (word >>> 0) !== machineWords[index])) {
-      issues.push('program.image text words do not match program.machineCode/program.dutInput HexText');
+    const projectedWords = courseInstructionImageWords(image);
+    if (projectedWords.length !== machineWords.length
+      || projectedWords.some((word, index) => (word >>> 0) !== machineWords[index])) {
+      issues.push('program.image course IM projection does not match program.machineCode/program.dutInput HexText');
     }
 
     const requiresHaltLoop = manifest.oracle.runConfiguration?.haltPolicy?.kind === 'course-self-branch-nop';
-    if (machineCode.haltPc === undefined && !requiresHaltLoop) {
+    if (machineCode.haltPc === undefined) {
+      if (requiresHaltLoop) {
+        issues.push('program.machineCode.haltPc is required by the course halt-loop policy');
+      }
       return;
     }
-    if (machineWords.length < 2
-      || machineWords[machineWords.length - 2] !== 0x1000ffff
-      || machineWords[machineWords.length - 1] !== 0x00000000) {
-      issues.push('program.machineCode haltPc does not identify a final 1000ffff/00000000 halt loop');
+    const branchWordIndex = (machineCode.haltPc - courseTextBase) / 4;
+    if (!Number.isInteger(branchWordIndex) || branchWordIndex < 0 || branchWordIndex >= machineWords.length) {
+      issues.push('program.machineCode.haltPc is outside the projected course instruction image');
       return;
     }
-    const branchWordIndex = machineWords.length - 2;
-    const expectedHaltPc = courseTextBase + branchWordIndex * 4;
-    if (!Number.isSafeInteger(expectedHaltPc) || expectedHaltPc > 0xffff_ffff
-      || machineCode.haltPc !== expectedHaltPc
-      || text.baseAddress + branchWordIndex * 4 !== expectedHaltPc) {
-      issues.push('program.machineCode.haltPc does not match the final halt-loop word address/index');
+    const branchWord = manifest.oracle.runConfiguration?.haltPolicy?.branchWord ?? 0x1000ffff;
+    const delaySlotWord = manifest.oracle.runConfiguration?.haltPolicy?.delaySlotWord ?? 0x00000000;
+    if (machineWords[branchWordIndex] !== branchWord
+      || machineWords[branchWordIndex + 1] !== delaySlotWord
+      || instructionSegmentWordAt(image, 'text', machineCode.haltPc) !== branchWord
+      || instructionSegmentWordAt(image, 'text', machineCode.haltPc + 4) !== delaySlotWord) {
+      issues.push('program.machineCode.haltPc does not identify a 1000ffff/00000000 halt loop in user text');
     }
   } catch (error) {
     issues.push(`program artifact semantic closure could not be verified: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function instructionSegmentWordAt(
+  image: ReturnType<typeof deserializeProgramImage>,
+  segmentName: string,
+  address: number
+): number | undefined {
+  const segment = image.segments.find((entry) => entry.name === segmentName);
+  if (!segment || address < segment.baseAddress || (address - segment.baseAddress) % 4 !== 0) {
+    return undefined;
+  }
+  return segment.words[(address - segment.baseAddress) / 4];
 }
 
 async function readVerifiedSnapshotAtUsePoint(

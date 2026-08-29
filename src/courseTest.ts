@@ -67,6 +67,7 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Test.RunFullTest, () => runFullCourseTraceTest(services)),
     vscode.commands.registerCommand(Commands.Test.RunExecutorShadow, () => runExecutorShadowTest(services)),
+    vscode.commands.registerCommand(Commands.Test.VerifyWithFixedMars, () => verifyCourseTraceWithFixedMars(services)),
     vscode.commands.registerCommand(Commands.Test.RunBatchTraceTests, () => runBatchCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.RunGeneratedTraceTests, () => runGeneratedCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
@@ -157,6 +158,7 @@ async function runExecutorShadowTest(services: AppServices): Promise<void> {
   const runOptions = await resolveCourseTraceRunOptions(services, asm, {
     source: { kind: 'selected', asmFiles: [asm.fsPath] },
     artifactOutputMode: 'case',
+    engineMode: 'mars',
     oracleMode: 'verify-both'
   });
   if (!runOptions) {
@@ -164,15 +166,45 @@ async function runExecutorShadowTest(services: AppServices): Promise<void> {
   }
   const result = await runCourseTraceCase(services, { asm }, runOptions);
   const shadow = result.shadow;
+  if (shadow?.status === 'matched') {
+    vscode.window.showInformationMessage(
+      `Executor shadow 通过：legacy 与 builtin 架构 trace 一致。bundle: ${shadow.bundleDir}`
+    );
+    return;
+  }
   if (shadow?.bundleDir) {
     vscode.window.showWarningMessage(`Executor shadow: ${shadow.status}。bundle: ${shadow.bundleDir}`);
     return;
   }
-  if (shadow?.status === 'matched') {
-    vscode.window.showInformationMessage('Executor shadow 通过：legacy 与 builtin 架构 trace 一致');
+  vscode.window.showErrorMessage(`Executor shadow 测试中止：${result.message}`);
+}
+
+async function verifyCourseTraceWithFixedMars(services: AppServices): Promise<void> {
+  await vscode.workspace.saveAll(false);
+
+  const asm = await resolveAsmInput();
+  if (!asm) return;
+  const stdin = await resolveSingleStdinInput(asm);
+  if (stdin) {
+    vscode.window.showWarningMessage('固定 MARS full-stack 验证不支持 stdin；该能力将在阶段 7 接入。');
     return;
   }
-  vscode.window.showErrorMessage(`Executor shadow 测试中止：${result.message}`);
+  const runOptions = await resolveCourseTraceRunOptions(services, asm, {
+    source: { kind: 'selected', asmFiles: [asm.fsPath] },
+    artifactOutputMode: 'case',
+    engineMode: 'verify-both'
+  });
+  if (!runOptions) return;
+
+  const result = await runCourseTraceCase(services, { asm }, runOptions);
+  const shadow = result.shadow;
+  if (shadow?.evidenceKind === 'full-stack'
+    && shadow.status !== 'inconclusive'
+    && shadow.status !== 'not-comparable') {
+    vscode.window.showInformationMessage(`固定 MARS full-stack 验证完成：${shadow.status}。bundle: ${shadow.bundleDir}`);
+    return;
+  }
+  vscode.window.showErrorMessage(`固定 MARS full-stack 验证中止：${result.message}`);
 }
 
 async function runBatchCourseTraceTests(services: AppServices): Promise<void> {

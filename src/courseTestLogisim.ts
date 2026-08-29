@@ -7,9 +7,11 @@ import {
   getLogisimTraceColumns,
   getLogisimTraceMainCircuit,
   getMemoryConfiguration,
+  getMipsEngine,
   getProfile,
   getRunTimeout,
-  showCommandBeforeRun
+  showCommandBeforeRun,
+  type MipsEngineMode
 } from './config';
 import {
   analyzeP3LogisimTraceCircuit,
@@ -48,8 +50,9 @@ import { AppServices, RunResult } from './types';
 import { courseExecutionInstructionBudget } from './courseTesting/executionBudget';
 import { resolveWorkspaceFile } from './workflowInputs';
 import {
-  courseTraceMemoryConfigurationError,
+  courseTraceMemoryConfigurationErrorForEngine,
   formatToolchainFailure,
+  requiredCourseTraceToolchainChecks,
   requiredToolchainFailures
 } from './courseTestToolchain';
 import {
@@ -65,6 +68,7 @@ import {
 } from './asmCaseStore';
 import {
   CourseTraceBatchSource,
+  CourseTraceShadowSummary,
   LogisimPrepareReport,
   NeutralCourseTraceCaseResult,
   showLogisimPrepareReport
@@ -76,7 +80,10 @@ import {
   failedCase
 } from './courseTestCases';
 import { executeWithPreflight, preflightFailureMessage } from './mips/providers/providerResolver';
+import { resolveCourseEnginePlan } from './mips/providers/courseEnginePolicy';
+import { verifyConfiguredFixedMarsReference } from './mips/providers/fixedMarsReference';
 import { runExecutorShadow, type ExecutorShadowOutcome } from './courseTesting/executorShadowRunner';
+import { runFullStackShadow, type FullStackShadowOutcome } from './courseTesting/fullStackShadowRunner';
 import { CourseTracePipeline } from './courseTesting/pipeline/courseTracePipeline';
 import { manifestSourceOf } from './courseTesting/manifestCodec';
 import { defaultTraceCompareMode } from './traceCompare';
@@ -114,6 +121,7 @@ export interface P3LogisimTraceRunOptions {
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
   artifactOutputMode?: 'workspace' | 'case';
+  engineMode?: MipsEngineMode;
   oracleMode?: 'verify-both';
   shadowOutputRoot?: vscode.Uri;
   pipeline?: CourseTracePipeline;
@@ -246,6 +254,13 @@ export async function runP3LogisimTraceCase(
       message: 'P3 Logisim Trace 对拍不支持标准输入用例'
     };
   }
+  const enginePlan = resolveCourseEnginePlan(options.engineMode ?? getMipsEngine(asm), 'P3');
+  const fixedMars = enginePlan.mode === 'verify-both'
+    ? await verifyConfiguredFixedMarsReference(asm, { signal: options.signal })
+    : undefined;
+  if (fixedMars && !fixedMars.ok) {
+    return failedCase(item, 'oracle', `[${fixedMars.diagnostic.code}] ${fixedMars.diagnostic.message}`);
+  }
 
   const setup = options.logisim ?? await resolveP3LogisimTraceSetup(services, asm);
   if (!setup) {
@@ -259,7 +274,10 @@ export async function runP3LogisimTraceCase(
 
   const asmCase = item.asmCase ?? await pipeline.createCase(asm, {
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
-    resource: setup.circuit
+    // The ASM owns the course profile and engine snapshot. A circuit selected
+    // from another workspace folder must not alter assembler semantics.
+    resource: asm,
+    enginePlan
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
   services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
@@ -271,6 +289,7 @@ export async function runP3LogisimTraceCase(
     showMessages: false,
     revealOutput: options.revealOutput,
     courseTrace: true,
+    enginePlan,
     signal: options.signal
   });
   if (!dump?.ok || !dump.outputFile) {
@@ -343,14 +362,29 @@ export async function runP3LogisimTraceCase(
   if (!dump.image) {
     return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage', asmCase.machineCode, undefined, asmCase);
   }
+  const imagePolicyIssues = pipeline.validateProgram('P3', dump.image, logisimCode.haltPc);
+  if (imagePolicyIssues.length) {
+    return failedCase(
+      item,
+      'assemble',
+      `测试中止：ProgramImage 不符合课程硬件契约：[${imagePolicyIssues[0].code}] ${imagePolicyIssues[0].message}`,
+      asmCase.machineCode,
+      undefined,
+      asmCase
+    );
+  }
   services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  const oracleOutputUri = caseOutputMode
+    ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
+    : vscode.Uri.file(path.join(courseTraceOutputDirectory(asm).fsPath, oracleOutputFileNameForCase(item)));
   const oracleInvocation = await pipeline.runOracle(services, {
     image: dump.image,
     executionBinding: dump.executionBinding,
     trace: { kind: 'architectural-writes', courseCorrect: true },
     maxSteps,
     haltPc: logisimCode.haltPc,
-    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item)) : undefined,
+    p7RiInstruction: dump.resolvedRun?.p7RiInstruction,
+    runOutputFile: oracleOutputUri,
     courseTrace: true,
     revealOutput: options.revealOutput,
     requirements: {
@@ -358,7 +392,7 @@ export async function runP3LogisimTraceCase(
       instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
       eventSchemaRevision: 1
     }
-  }, { signal: options.signal });
+  }, { signal: options.signal }, enginePlan);
   const oracle = oracleInvocation.result;
   const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (postOracleSourceIssue) {
@@ -396,14 +430,15 @@ export async function runP3LogisimTraceCase(
     }
   }
   await pipeline.recordOracle(asmCase, oracle, {
-    profile: 'P3',
-    memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
+    profile: oracle.resolvedRun?.profile ?? 'P3',
+    memoryConfiguration: oracle.resolvedRun?.memoryConfiguration ?? getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
     maxSteps,
     haltPc: logisimCode.haltPc
   }, { stopReason: 'halt-loop' });
 
-  const shadow = options.oracleMode === 'verify-both'
+  let shadowSummary: CourseTraceShadowSummary | undefined;
+  const executorShadow = options.oracleMode === 'verify-both'
     ? await runExecutorShadow(services, asmCase, {
       profile: 'P3',
       image: dump.image,
@@ -414,18 +449,18 @@ export async function runP3LogisimTraceCase(
       signal: options.signal
     })
     : undefined;
-  if (shadow) {
-    const shadowSummary = shadowSummaryFromOutcome(shadow);
-    const shadowCancelled = shadow.builtinResult?.stop?.kind === 'cancelled'
-      || engineRunWasCancelled(shadow.builtinResult?.status, options.signal);
-    if (shadowCancelled || shadow.status === 'inconclusive' || shadow.status === 'not-comparable') {
+  if (executorShadow) {
+    shadowSummary = executorShadowSummary(executorShadow);
+    const shadowCancelled = executorShadow.builtinResult?.stop?.kind === 'cancelled'
+      || engineRunWasCancelled(executorShadow.builtinResult?.status, options.signal);
+    if (shadowCancelled || executorShadow.status === 'inconclusive' || executorShadow.status === 'not-comparable') {
       return {
         ...failedCase(
           item,
           'oracle',
           shadowCancelled
-            ? `测试已取消：executor shadow：${shadow.message}`
-            : `测试中止：executor shadow ${shadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${shadow.message}`,
+            ? `测试已取消：executor shadow：${executorShadow.message}`
+            : `测试中止：executor shadow ${executorShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${executorShadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase,
@@ -434,7 +469,36 @@ export async function runP3LogisimTraceCase(
         shadow: shadowSummary
       };
     }
-    services.output.appendLine(shadow.message);
+    services.output.appendLine(executorShadow.message);
+  }
+
+  const fullStackShadow = enginePlan.mode === 'verify-both'
+    ? await runFullStackShadow(services, asmCase, {
+      profile: 'P3',
+      builtinAssembly: dump,
+      builtinExecution: oracle,
+      maxSteps,
+      haltPc: logisimCode.haltPc,
+      outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
+      expectedLegacySha256: fixedMars?.ok ? fixedMars.identity.sha256 : undefined,
+      signal: options.signal
+    })
+    : undefined;
+  if (fullStackShadow) {
+    shadowSummary = fullStackShadowSummary(fullStackShadow);
+    if (fullStackShadow.status === 'inconclusive' || fullStackShadow.status === 'not-comparable') {
+      return {
+        ...failedCase(
+          item,
+          'oracle',
+          `测试中止：full-stack shadow ${fullStackShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${fullStackShadow.message}`,
+          asmCase.machineCode,
+          oracle.outputFile,
+          asmCase
+        ),
+        shadow: shadowSummary
+      };
+    }
   }
 
   const logisimRun = await pipeline.runLogisimDut(
@@ -535,7 +599,7 @@ export async function runP3LogisimTraceCase(
       dutEvents: 0,
       matchedEvents: 0,
       diffEvents: 0,
-      ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+      ...(shadowSummary ? { shadow: shadowSummary } : {})
     };
   }
 
@@ -556,7 +620,7 @@ export async function runP3LogisimTraceCase(
       dutEvents: parsedLogisim.events.length,
       matchedEvents: diff.summary.matchedEvents,
       diffEvents: diff.summary.diffEvents,
-      ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+      ...(shadowSummary ? { shadow: shadowSummary } : {})
     };
   }
 
@@ -578,7 +642,7 @@ export async function runP3LogisimTraceCase(
     dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,
     diffEvents: diff.summary.diffEvents,
-    ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+    ...(shadowSummary ? { shadow: shadowSummary } : {})
   };
 }
 
@@ -595,17 +659,9 @@ function defaultP3TracePipeline(): CourseTracePipeline {
   });
 }
 
-function shadowSummaryFromOutcome(shadow: ExecutorShadowOutcome): {
-  status: ExecutorShadowOutcome['status'];
-  message: string;
-  bundleDir?: string;
-  resultFile?: string;
-  legacyEvents: number;
-  builtinEvents: number;
-  disposition?: string;
-  contractId?: string;
-} {
+function executorShadowSummary(shadow: ExecutorShadowOutcome): CourseTraceShadowSummary {
   return {
+    evidenceKind: 'executor-only',
     status: shadow.status,
     message: shadow.message,
     ...(shadow.bundleDir ? { bundleDir: shadow.bundleDir } : {}),
@@ -616,6 +672,23 @@ function shadowSummaryFromOutcome(shadow: ExecutorShadowOutcome): {
     ...(shadow.differential.classification?.contractId
       ? { contractId: shadow.differential.classification.contractId }
       : {})
+  };
+}
+
+function fullStackShadowSummary(shadow: FullStackShadowOutcome): CourseTraceShadowSummary {
+  return {
+    evidenceKind: 'full-stack',
+    status: shadow.status,
+    message: shadow.message,
+    bundleDir: shadow.bundleDir,
+    resultFile: shadow.resultFile,
+    legacyEvents: shadow.execution?.legacyEvents,
+    builtinEvents: shadow.execution?.builtinEvents,
+    disposition: shadow.execution?.disposition ?? shadow.assembly.disposition,
+    contractId: shadow.execution?.classification?.contractId ?? shadow.assembly.contractId,
+    assemblyMatched: shadow.assembly.matched,
+    builtinWords: shadow.assembly.builtinWords,
+    legacyWords: shadow.assembly.legacyWords
   };
 }
 
@@ -898,16 +971,17 @@ async function ensureP3LogisimTraceToolchainReady(services: AppServices, resourc
   services.output.appendLine('');
   services.output.appendLine('正在检查 P3 Logisim Trace 对拍工具链');
 
+  const engineMode = getMipsEngine(resource);
   const memoryConfiguration = getMemoryConfiguration(resource);
-  const configurationError = courseTraceMemoryConfigurationError('P3', memoryConfiguration);
+  const configurationError = courseTraceMemoryConfigurationErrorForEngine('P3', engineMode, memoryConfiguration);
   if (configurationError) {
     services.output.appendLine(configurationError);
     vscode.window.showErrorMessage(configurationError);
     return false;
   }
 
-  const checks = await checkToolchain(services.output, resource, { tools: ['java', 'mars', 'logisim'] });
-  const required = new Set(['Java', 'MARS', 'MARS coL2', 'Logisim', `MARS ${memoryConfiguration}`]);
+  const checks = await checkToolchain(services.output, resource);
+  const required = requiredCourseTraceToolchainChecks('P3', engineMode, memoryConfiguration);
   const failed = requiredToolchainFailures(checks, required);
   if (!failed.length) {
     return true;

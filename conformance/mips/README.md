@@ -21,6 +21,20 @@ assembler, then verifies all 5,000 words by encode/decode through the compiled
 JSONL CLI. CI uploads the full source/image evidence artifact. Run
 `npm run compile` before the aggregate verification.
 
+Phase 6 has a separate execution corpus because the assembly seeds intentionally
+include arbitrary jumps and exception-oriented cases that are unsafe for a
+bounded differential run. `verify:execution-corpus` freezes 50 terminating
+programs for each of P3-P7 plus one handwritten boundary program per profile.
+`run:execution-diff` first proves each TS/fixed-MARS text image identical, then
+executes the fixed `legacy-course-executor` and versioned TS `machine.execute`
+and writes one machine-readable JSON result per profile. The fail-closed
+`verify:phase6-aggregate` gate recomputes corpus membership, counts, reference
+identity, trace/stop/final-state evidence, and rejects missing, `validated`,
+inconclusive, out-of-domain, or unexplained results. `npm run verify:phase6`
+first runs the pinned `mars-assembler-v0.6.3` assembly-diff lane, then the
+v0.6.3-course1 execution differential and aggregate, so both fixed-reference
+roles are part of the same default-switch gate.
+
 The course-vector lane now runs every P3-P6 program-final-state artifact through
 the TS assembler and executor CLI, and replays the official Timer sequence
 through `device.cycleVector`. The CP0-sequence and external-IRQ-sequence artifacts

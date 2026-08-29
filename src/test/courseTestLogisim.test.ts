@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const p3PipelineState = vi.hoisted(() => ({
   directCopyArtifact: vi.fn(),
@@ -12,7 +12,9 @@ const p3PipelineState = vi.hoisted(() => ({
 
 vi.mock('vscode', () => ({
   window: {},
-  workspace: {}
+  workspace: {
+    getConfiguration: vi.fn(() => ({ inspect: vi.fn(() => undefined) }))
+  }
 }));
 
 vi.mock('../asmCaseStore', async (importOriginal) => ({
@@ -41,6 +43,10 @@ import { p3LogisimRomCapacityError, runP3LogisimTraceCase } from '../courseTestL
 import type { LogisimRomTarget } from '../language/logisim/rom';
 
 describe('course test Logisim helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('reports the course IFU capacity limit first', () => {
     const target = { index: 0, addrWidth: 20 } as LogisimRomTarget;
 
@@ -75,6 +81,48 @@ describe('course test Logisim helpers', () => {
     });
     expect(result).not.toHaveProperty('logisimOut');
     expect(result).not.toHaveProperty('simOut');
+  });
+
+  it('captures the P3 case profile from the ASM instead of a cross-root circuit', async () => {
+    const asm = { fsPath: 'E:/asm-root/test.asm' };
+    const circuit = { fsPath: 'F:/circuit-root/cpu.circ' };
+    const asmCase = {
+      id: 'case-profile',
+      dir: { fsPath: 'E:/asm-root/.co/cases/case-profile' },
+      manifestUri: { fsPath: 'E:/asm-root/.co/cases/case-profile/case.json' },
+      asm: { fsPath: 'E:/asm-root/.co/cases/case-profile/program.asm' },
+      sourceAsm: { fsPath: 'E:/asm-root/.co/cases/case-profile/source/main.asm' },
+      machineCode: { fsPath: 'E:/asm-root/.co/cases/case-profile/code.txt' },
+      manifest: {}
+    };
+    const createCase = vi.fn(async () => asmCase);
+    const pipeline = {
+      createCase,
+      prepareProgram: vi.fn(async () => undefined)
+    };
+    p3PipelineState.writeArtifact.mockResolvedValue({ fsPath: 'diagnostic.txt' });
+
+    const result = await runP3LogisimTraceCase(
+      { output: { appendLine: vi.fn() } } as never,
+      { asm: asm as never },
+      {
+        pipeline: pipeline as never,
+        logisim: {
+          circuit,
+          circuitText: '<circuit />',
+          traceCircuit: 'main',
+          traceSpec: {},
+          traceDiagnostic: 'ok',
+          romTarget: { index: 0, addrWidth: 12 }
+        } as never
+      }
+    );
+
+    expect(result).toMatchObject({ status: 'error', stage: 'assemble' });
+    expect(createCase).toHaveBeenCalledWith(asm, expect.objectContaining({
+      resource: asm,
+      enginePlan: expect.objectContaining({ profile: 'P3' })
+    }));
   });
 
   it('copies the P3 circuit template through the injected pipeline', async () => {

@@ -175,8 +175,8 @@ describe('package manifest', () => {
       '编辑器与诊断',
       '格式化'
     ]);
-    expect(Object.keys(properties)).toHaveLength(64);
-    expect(Object.keys(configDefaults)).toHaveLength(64);
+    expect(Object.keys(properties)).toHaveLength(65);
+    expect(Object.keys(configDefaults)).toHaveLength(65);
     for (const [key, value] of Object.entries(configDefaults)) {
       expect(properties[`co.${key}`]?.default, key).toEqual(value);
     }
@@ -187,6 +187,11 @@ describe('package manifest', () => {
     expect(properties['co.test.continuousRetainedPassingCases'].default).toBe(20);
     expect(properties['co.test.continuousReportRetainedIterations'].default).toBe(200);
     expect(properties['co.test.p7.stressMode'].default).toBe('hybrid');
+    expect(properties['co.mips.engine']).toMatchObject({
+      type: 'string',
+      default: 'auto',
+      enum: ['auto', 'builtin', 'mars', 'verify-both']
+    });
     expect(properties['co.test.p7.probeScenarioCount'].default).toBe(p7ProbeDefaultScenarioCount);
     expect(properties['co.test.p7.probeScenarioCount'].maximum).toBe(p7ProbeMaxScenarioCount);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
@@ -198,6 +203,7 @@ describe('package manifest', () => {
 
     const groupProperties = (title: string) => Object.keys(groups.find((group) => group.title === title)?.properties ?? {});
     expect(groupProperties('工具链')).toEqual(expect.arrayContaining([
+      'co.mips.engine',
       'co.mips.delayedBranching',
       'co.mips.memoryConfiguration'
     ]));

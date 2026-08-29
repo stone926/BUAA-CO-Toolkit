@@ -1,3 +1,5 @@
+import type { MipsEngineMode } from './config';
+import { getEffectiveRequiredTools } from './toolchainPolicy';
 import { ProjectProfile, ToolDetection } from './types';
 
 export const MARS_P7_CHECK = 'MARS P7 efc/p7irq';
@@ -11,6 +13,49 @@ export function courseTraceMemoryConfigurationError(profile: ProjectProfile, mem
   return memoryConfiguration === 'FixedCompactLargeText' || memoryConfiguration === 'CompactLargeText'
     ? undefined
     : `非 P7 Trace 测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 ${memoryConfiguration}`;
+}
+
+/** Memory-layout compatibility matters only when a legacy MARS lane will run. */
+export function courseTraceMemoryConfigurationErrorForEngine(
+  profile: ProjectProfile,
+  mode: MipsEngineMode,
+  memoryConfiguration: string
+): string | undefined {
+  const tools = normalizedEffectiveTools(profile, mode);
+  return hasMarsTool(tools)
+    ? courseTraceMemoryConfigurationError(profile, memoryConfiguration)
+    : undefined;
+}
+
+/** Detection names required by the course trace preflight for the effective tool policy. */
+export function requiredCourseTraceToolchainChecks(
+  profile: ProjectProfile,
+  mode: MipsEngineMode,
+  memoryConfiguration: string
+): Set<string> {
+  const tools = normalizedEffectiveTools(profile, mode);
+  const required = new Set<string>();
+  if (tools.has('java')) {
+    required.add('Java');
+  }
+  if (hasMarsTool(tools)) {
+    required.add('MARS');
+    // coL2 proves the validated final self-branch executed before MARS reaches its step limit.
+    required.add('MARS coL2');
+  }
+  if (tools.has('logisim')) {
+    required.add('Logisim');
+  }
+  if (tools.has('ise')) {
+    required.add('ISE fuse');
+  }
+  if (hasMarsTool(tools)) {
+    required.add(`MARS ${memoryConfiguration}`);
+  }
+  if (tools.has('marsp7')) {
+    required.add(MARS_P7_CHECK);
+  }
+  return required;
 }
 
 export function formatToolchainFailure(check: ToolDetection): string {
@@ -37,4 +82,12 @@ export function requiredToolchainFailures(
     }
   }
   return failures;
+}
+
+function normalizedEffectiveTools(profile: ProjectProfile, mode: MipsEngineMode): Set<string> {
+  return new Set(getEffectiveRequiredTools(profile, mode).map((tool) => tool.trim().toLowerCase()));
+}
+
+function hasMarsTool(tools: ReadonlySet<string>): boolean {
+  return tools.has('mars') || tools.has('marsp7');
 }

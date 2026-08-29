@@ -52,6 +52,9 @@ import {
 } from '../mipsUtil';
 import { Random, hashSeed } from '../random';
 import { p7SafeInterruptAnchorMnemonics } from '../p7InterruptAnchor';
+import { p7InternalUnknownInstructionMnemonic } from '../p7RiInstruction';
+
+export { p7InternalUnknownInstructionMnemonic } from '../p7RiInstruction';
 
 export type P7ExceptionKind = 'adel' | 'ades' | 'syscall' | 'ri' | 'ov';
 
@@ -112,7 +115,6 @@ const trapMnemonics = new Set([...registerTrapMnemonics, ...immediateTrapMnemoni
 // SR value the prologue installs: IE=1 (bit0) + external interrupt mask IM[2]=1 (bit12).
 // Uses IE + IM[2] only, not the full course mask (0x1c01).
 const p7StatusEnableInterrupts = p7StatusEnableExternalInterrupt;
-export const p7InternalUnknownInstructionMnemonic = '_co_internal_unknown_instruction';
 const p7ExceptionCoverageOrder: P7ExceptionKind[] = ['adel', 'ades', 'syscall', 'ri', 'ov'];
 const p7ExceptionKindNames = new Set<string>(p7ExceptionCoverageOrder);
 // Simple, value-producing ALU/immediate ops that are safe to interrupt (no control/memory side

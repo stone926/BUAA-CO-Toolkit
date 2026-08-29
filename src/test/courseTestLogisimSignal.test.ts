@@ -12,7 +12,9 @@ vi.mock('../config', () => ({
   getLogisimJar: vi.fn(() => 'E:/tools/logisim.jar'),
   getLogisimTraceColumns: vi.fn(),
   getLogisimTraceMainCircuit: vi.fn(),
+  getMarsJar: vi.fn(() => 'E:/tools/Mars.jar'),
   getMemoryConfiguration: vi.fn(),
+  getMipsEngine: vi.fn(() => 'auto'),
   getProfile: vi.fn(),
   getRunTimeout: vi.fn(() => 10_000),
   showCommandBeforeRun: vi.fn(() => false)

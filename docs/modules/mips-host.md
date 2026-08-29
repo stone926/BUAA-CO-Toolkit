@@ -1,6 +1,6 @@
 # mips-host | src/mips/host/ | 5 files
 
-懒启动 Worker 宿主（计划第 5.6 节）。默认课程 provider 仍为 legacy；阶段 4 的 builtin executor 经 `AppServices.mipsRuntime` 在生产路径运行于 Worker，direct lane 仅用于测试/回退。
+懒启动 Worker 宿主（计划第 5.6 节）。阶段 6 后 P3–P7 默认 builtin assembler/executor 经 `AppServices.mipsRuntime` 在生产路径运行于 Worker；激活阶段仍只构造 manager，首次任务才启动 Worker。direct lane 仅用于定向测试/无 runtime host，不是运行中 fallback。
 
 - runtimeManager.ts — MipsRuntimeManager：激活时仅构造并注入 `AppServices.mipsRuntime`，首次非预取消任务才启动 Worker；dispose/crash/强制取消后按 generation 重建并忽略旧 Worker 事件
 - workerProtocol.ts — protocol v2（request/cancel/progress/ack/result）；未知/多余/畸形字段 fail closed，progress sequence 单调且每批必须获 ACK

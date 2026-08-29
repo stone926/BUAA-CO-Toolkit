@@ -47,6 +47,7 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
   if (traceProfiles.has(context.profile)) {
     items.push(
       tool('trace.single', '单 ASM Trace 测试', '课程测试', '选择一个 ASM，创建 case 并对拍', Commands.Test.RunFullTest),
+      tool('trace.fixedMars', '使用固定 MARS 验证', '开发者验证', '独立双端汇编与执行，并保存 full-stack bundle', Commands.Test.VerifyWithFixedMars),
       tool('trace.batch', '多 ASM 批量 Trace 测试', '课程测试', '选择多个 ASM，生成批量报告', Commands.Test.RunBatchTraceTests),
       tool('trace.generatedBatch', '生成并批量 Trace 测试', '课程测试', '生成 ASM 后批量对拍', Commands.Test.RunGeneratedTraceTests),
       tool('trace.generateAsm', '生成 ASM 测试点', '课程测试', '只生成并记录 ASM case', Commands.Test.GenerateAsmTests),

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CourseTracePipeline } from '../../courseTesting/pipeline/courseTracePipeline';
+import { createLegacyProgramImage, programImageFingerprint } from '../../mips/replay/programImage';
 
 describe('CourseTracePipeline full-stage injection', () => {
   it('delegates every course-trace stage through the injected dependency', async () => {
@@ -48,5 +49,26 @@ describe('CourseTracePipeline full-stage injection', () => {
     const issues = pipeline.validateProgram('P3', {} as never, 0x3000);
     expect(Array.isArray(issues)).toBe(true);
     expect(issues.length).toBeGreaterThan(0);
+  });
+
+  it('rejects non-zero assembler data because the course DUT only resets DM to zero', () => {
+    const text = createLegacyProgramImage(
+      '1000ffff\n00000000\n',
+      [{ id: 'root', contentHash: 'a'.repeat(64) }]
+    );
+    const withoutFingerprint = {
+      ...text,
+      segments: [...text.segments, { name: 'data', baseAddress: 0, words: [0, 0x1234] }]
+    };
+    const image = {
+      ...withoutFingerprint,
+      fingerprint: programImageFingerprint(withoutFingerprint)
+    };
+
+    const issues = new CourseTracePipeline({}).validateProgram('P3', image, 0x3000);
+
+    expect(issues).toContainEqual(expect.objectContaining({
+      code: 'course-image.nonzero-data-initialization'
+    }));
   });
 });

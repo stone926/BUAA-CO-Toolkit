@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
+  getMipsEngine: vi.fn(),
   getMarsJar: vi.fn(),
   runMarsFile: vi.fn(),
   resolveLegacyMarsLaunch: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../config', () => ({
   getProfile: mocks.getProfile,
+  getMipsEngine: mocks.getMipsEngine,
   getMarsJar: mocks.getMarsJar
 }));
 
@@ -58,14 +60,22 @@ import {
   type ExecuteRequest,
   LEGACY_MARS_CAPABILITIES,
   MipsAssemblerProvider,
+  MipsExecutionProvider,
   okPreflight
 } from '../../mips/providers/contracts';
+import {
+  BUILTIN_TS_ENGINE_ID,
+  LEGACY_MARS_ENGINE_ID,
+  resolveCourseEnginePlan
+} from '../../mips/providers/courseEnginePolicy';
 import { LegacyMarsProvider } from '../../mips/providers/legacyMarsProvider';
 import { createLegacyProgramImage } from '../../mips/replay/programImage';
 import {
   assembleWithPreflight,
   executeWithPreflight,
   registerDefaultProviders,
+  resolveAssemblerProvider,
+  resolveExecutionProvider,
   setProviderRegistry
 } from '../../mips/providers/providerResolver';
 
@@ -102,12 +112,14 @@ describe('provider resolver preflight boundary', () => {
   beforeEach(() => {
     setProviderRegistry(undefined);
     mocks.getProfile.mockReset();
+    mocks.getMipsEngine.mockReset();
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
     mocks.resolveLegacyMarsLaunch.mockReset();
     mocks.captureSourceGraph.mockReset();
     mocks.readBoundedRegularFile.mockReset();
     mocks.getProfile.mockReturnValue('P6');
+    mocks.getMipsEngine.mockReturnValue('auto');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
     mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
       diagnostics: [],
@@ -178,6 +190,81 @@ describe('provider resolver preflight boundary', () => {
     expect(second.assemble).not.toHaveBeenCalled();
   });
 
+  it('does not preflight-fallback after a standard phase-6 engine is selected', async () => {
+    const builtin = assemblerProvider(BUILTIN_TS_ENGINE_ID, false);
+    const legacy = assemblerProvider(LEGACY_MARS_ENGINE_ID, true);
+    setProviderRegistry({
+      assemblerProviders: [legacy, builtin],
+      executionProviders: []
+    });
+
+    const result = await assembleWithPreflight(services(), {
+      sourceUri: sourceUri(),
+      target: { kind: 'userText' },
+      requirements: { profile: 'P6' }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.preflight.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
+    expect(builtin.preflight).toHaveBeenCalledOnce();
+    expect(builtin.assemble).not.toHaveBeenCalled();
+    expect(legacy.preflight).not.toHaveBeenCalled();
+    expect(legacy.assemble).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'gated auto',
+      selection: resolveCourseEnginePlan('auto', 'P6'),
+      expected: BUILTIN_TS_ENGINE_ID
+    },
+    {
+      name: 'console auto',
+      selection: resolveCourseEnginePlan('auto', 'P6', { deterministicConsole: true }),
+      expected: LEGACY_MARS_ENGINE_ID
+    },
+    {
+      name: 'explicit mars rollback',
+      selection: resolveCourseEnginePlan('mars', 'P6'),
+      expected: LEGACY_MARS_ENGINE_ID
+    },
+    {
+      name: 'explicit builtin',
+      selection: resolveCourseEnginePlan('builtin', 'P2'),
+      expected: BUILTIN_TS_ENGINE_ID
+    },
+    {
+      name: 'verify-both primary',
+      selection: resolveCourseEnginePlan('verify-both', 'P7'),
+      expected: BUILTIN_TS_ENGINE_ID
+    }
+  ])('uses one atomic assembler/executor engine for $name', async ({ selection, expected }) => {
+    const builtinAssembler = assemblerProvider(BUILTIN_TS_ENGINE_ID, true);
+    const legacyAssembler = assemblerProvider(LEGACY_MARS_ENGINE_ID, true);
+    const builtinExecution = executionProvider(BUILTIN_TS_ENGINE_ID, true);
+    const legacyExecution = executionProvider(LEGACY_MARS_ENGINE_ID, true);
+    setProviderRegistry({
+      assemblerProviders: [legacyAssembler, builtinAssembler],
+      executionProviders: [legacyExecution, builtinExecution]
+    });
+
+    const [assembler, executor] = await Promise.all([
+      resolveAssemblerProvider(services(), {
+        sourceUri: sourceUri(),
+        target: { kind: 'userText' },
+        requirements: { profile: selection.profile }
+      }, selection),
+      resolveExecutionProvider(services(), executeRequest({
+        profile: selection.profile
+      }), selection)
+    ]);
+
+    expect(assembler.provider.descriptor.id).toBe(expected);
+    expect(executor.provider.descriptor.id).toBe(expected);
+    expect(assembler.selection).toBe(selection);
+    expect(executor.selection).toBe(selection);
+  });
+
   it('keeps default provider instances scoped to their AppServices owner', () => {
     const firstServices = services();
     const secondServices = services();
@@ -191,12 +278,14 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
   beforeEach(() => {
     setProviderRegistry(undefined);
     mocks.getProfile.mockReset();
+    mocks.getMipsEngine.mockReset();
     mocks.getMarsJar.mockReset();
     mocks.runMarsFile.mockReset();
     mocks.resolveLegacyMarsLaunch.mockReset();
     mocks.captureSourceGraph.mockReset();
     mocks.readBoundedRegularFile.mockReset();
     mocks.getProfile.mockReturnValue('P6');
+    mocks.getMipsEngine.mockReturnValue('auto');
     mocks.getMarsJar.mockReturnValue('E:/tools/Mars.jar');
     mocks.resolveLegacyMarsLaunch.mockImplementation(async (uri, mode) => ({
       diagnostics: [],
@@ -582,6 +671,25 @@ function assemblerProvider(
     assemble: vi.fn(async () => ({
       ok: resultOk,
       status: { ...successfulRunStatus(), ok: resultOk },
+      descriptor
+    }))
+  };
+}
+
+function executionProvider(
+  id: string,
+  capable: boolean
+): MipsExecutionProvider & { preflight: ReturnType<typeof vi.fn>; execute: ReturnType<typeof vi.fn> } {
+  const descriptor = { ...engineDescriptor(id), kind: 'executor' as const };
+  return {
+    descriptor,
+    capabilities: LEGACY_MARS_CAPABILITIES,
+    preflight: vi.fn(() => capable
+      ? okPreflight(descriptor)
+      : failedPreflight(descriptor, [{ code: `${id}.unsupported`, message: 'unsupported' }])),
+    execute: vi.fn(async () => ({
+      ok: true,
+      status: successfulRunStatus(),
       descriptor
     }))
   };

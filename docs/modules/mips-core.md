@@ -25,7 +25,7 @@
 - assembler/work.ts — 两遍汇编的中间 WorkInstruction/WorkOperand 表示——text/data 指令统一为可编码/编码前居中的对象
 - assembler/assembler.ts — 两遍汇编：MARS 风格递归 `.eqv` token substitution、layout/symbol/relocation、伪指令展开、ProgramImage 生成；任一诊断存在时不返回 image
 - assembler/assemblyService.ts — CLI/Worker 共用的有界 assembler DTO；显式 include 边，不解释文件路径
-- assembler/artifacts.ts — ProgramImage 到课程 HexText/kernel dump 与停机 PC 检测
+- assembler/artifacts.ts — ProgramImage 到课程 HexText/kernel dump 与停机 PC 检测；DUT user image 将 text/ktext 等所有非 data 段按绝对地址投影到 0x3000..0x6fff，空洞补零，严格拒绝错位/重叠/越界并保留末尾零 word
 - assembler/sourceMap.ts — CommitEvent/PC/访存地址到 source/macro origin 的查询；include、嵌套 macro 与 pseudo 生成的每个真实 word 都保留 expansion stack
 - profiles/profile.ts — CourseExecutionProfile 契约：地址空间、延迟槽/link、溢出策略、CP0/异常策略、trace 投影与停机策略
 - profiles/courseProfiles.ts — 冻结的 P3–P7 profile 数据（DM 0..0x2fff、IM 0x3000..0x6fff、handler 0x4180、Timer/IG 地址、CP0 位域）
@@ -55,3 +55,7 @@
 ## 阶段 5 验证边界
 
 核心 full-stack 回归直接覆盖 P3–P7 的 ProgramImage 与最终状态，并有一条 include + macro + `.eqv` + pseudo + data 用例用真实 executor CommitEvent 验证 sourceMap provenance。独立 assembly-diff 另通过 JSONL CLI 与固定 MARS 对当前 10 个单源 corpus 比较 text、P7 ktext 和 data 段；这些 corpus 当前只含直接指令、data 均为空，因而该 lane 不单独证明 include/macro/`.eqv`/pseudo 或非空 data，相关能力由核心/provider 回归覆盖。
+
+## 阶段 6 默认与证据边界
+
+P3–P7 的课程 `auto` 现在以 builtin assembler/executor 为默认；核心仍不读取设置或选择 provider，宿主通过一次性 `CourseEnginePlan` 负责。执行 differential 冻结 250 个生成程序和 5 个手写边界程序，通过 versioned JSONL `assembler.assemble`/`machine.execute` 与 fixed legacy-course-executor 的真实运行交叉核对；只有 actual image fingerprint 相同的 case 才比较 canonical writes、精确 halt 与 final observable summary。MARS 修复和 Compact 4095-word bug 不进入核心，课程硬件 policy 保持完整 4096 words。

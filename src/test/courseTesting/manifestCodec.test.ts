@@ -34,6 +34,12 @@ import {
   maximumReplayTraceBytes
 } from '../../mips/replay/boundedFile';
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../../mips/replay/canonical';
+import { buildProgramImage } from '../../mips/core/programImage';
+import {
+  courseInstructionImageWords,
+  wordsToHexText
+} from '../../mips/core/assembler/artifacts';
+import type { ProgramImage } from '../../mips/core/api';
 
 const v1Manifest: AsmCaseManifest = {
   version: 1,
@@ -542,11 +548,17 @@ describe('manifest v1/v2 codec', () => {
     try {
       async function bundleIssues(
         machineText: string,
-        options: { imageText?: string; dutText?: string; wordCount?: number; haltPc?: number } = {}
+        options: {
+          imageText?: string;
+          image?: ProgramImage;
+          dutText?: string;
+          wordCount?: number;
+          haltPc?: number;
+        } = {}
       ): Promise<string[]> {
         const machineBytes = Buffer.from(machineText, 'utf8');
         const dutBytes = Buffer.from(options.dutText ?? machineText, 'utf8');
-        const image = createLegacyProgramImage(
+        const image = options.image ?? createLegacyProgramImage(
           options.imageText ?? machineText,
           [{ id: 'source-0000', contentHash: 'a'.repeat(64) }]
         );
@@ -600,14 +612,14 @@ describe('manifest v1/v2 codec', () => {
       expect(await bundleIssues(valid)).not.toEqual(expect.arrayContaining([
         expect.stringContaining('program.machineCode is not strict HexText'),
         expect.stringContaining('program.machineCode.wordCount mismatch'),
-        expect.stringContaining('program.image text words do not match'),
-        expect.stringContaining('program.machineCode.haltPc does not match')
+        expect.stringContaining('program.image course IM projection does not match'),
+        expect.stringContaining('program.machineCode.haltPc does not identify')
       ]));
       expect(await bundleIssues(valid, { wordCount: 2 })).toContain(
         'program.machineCode.wordCount mismatch: expected 2, parsed 3'
       );
       expect(await bundleIssues(valid, { imageText: '34020002\n1000ffff\n00000000\n' })).toContain(
-        'program.image text words do not match program.machineCode/program.dutInput HexText'
+        'program.image course IM projection does not match program.machineCode/program.dutInput HexText'
       );
       expect(await bundleIssues(valid, { dutText: '34020002\n1000ffff\n00000000\n' })).toEqual(
         expect.arrayContaining([
@@ -619,14 +631,61 @@ describe('manifest v1/v2 codec', () => {
         expect.arrayContaining([expect.stringContaining('program.machineCode is not strict HexText')])
       );
       expect(await bundleIssues('34010001\n00000000\n00000000\n')).toContain(
-        'program.machineCode haltPc does not identify a final 1000ffff/00000000 halt loop'
+        'program.machineCode.haltPc does not identify a 1000ffff/00000000 halt loop in user text'
       );
       expect(await bundleIssues(valid, { haltPc: 0x3000 })).toContain(
-        'program.machineCode.haltPc does not match the final halt-loop word address/index'
+        'program.machineCode.haltPc does not identify a 1000ffff/00000000 halt loop in user text'
       );
+
+      const p7Image = buildProgramImage({
+        entryPc: 0x3000,
+        segments: [
+          { name: 'text', baseAddress: 0x3000, words: [0x34010001, 0x1000ffff, 0] },
+          { name: 'ktext', baseAddress: 0x4180, words: [0x42000018] }
+        ],
+        inputGraph: [{ id: 'source-0000', contentHash: 'a'.repeat(64) }]
+      });
+      const p7MachineText = wordsToHexText(courseInstructionImageWords(p7Image));
+      const p7Issues = await bundleIssues(p7MachineText, {
+        image: p7Image,
+        wordCount: courseInstructionImageWords(p7Image).length,
+        haltPc: 0x3004
+      });
+      expect(p7Issues).not.toEqual(expect.arrayContaining([
+        expect.stringContaining('program.image course IM projection does not match'),
+        expect.stringContaining('program.machineCode.haltPc')
+      ]));
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('derives the 4095/4096 capacity boundary from the captured assembler descriptor', () => {
+    const withCountAndAssembler = (wordCount: number, assembler: AsmCaseManifestV2['program']['assembler']) => ({
+      ...v2Manifest,
+      program: {
+        ...v2Manifest.program,
+        assembler,
+        machineCode: { ...v2Manifest.program.machineCode!, wordCount }
+      }
+    });
+    const builtinAssembler = {
+      ...testEngine,
+      id: 'builtin-ts',
+      legacyProvenance: undefined,
+      artifact: {
+        sha256: 'b'.repeat(64), role: 'builtin-ts-assembler', fileName: 'builtin-ts-assembler.manifest.json'
+      }
+    };
+
+    expect(v2ReplayClosureIssues(withCountAndAssembler(4095, testEngine)))
+      .not.toEqual(expect.arrayContaining([expect.stringContaining('稳定版 MARS')]));
+    expect(v2ReplayClosureIssues(withCountAndAssembler(4096, builtinAssembler)))
+      .not.toEqual(expect.arrayContaining([expect.stringContaining('最终机器码共有 4096 words')]));
+    expect(v2ReplayClosureIssues(withCountAndAssembler(4096, testEngine)))
+      .toEqual(expect.arrayContaining([expect.stringContaining('稳定版 MARS v0.6.3')]));
+    expect(v2ReplayClosureIssues(withCountAndAssembler(4097, builtinAssembler)))
+      .toEqual(expect.arrayContaining([expect.stringContaining('超过教程 IM 4096 words 容量')]));
   });
 
   it('writes manifests atomically without leaving temp files', async () => {
@@ -1003,7 +1062,7 @@ describe('manifest v1/v2 codec', () => {
         }
       };
       expect(v2ReplayClosureIssues(oversizedMachineCode)).toEqual(expect.arrayContaining([
-        `program.machineCode.wordCount exceeds the course IM limit ${maximumReplayMachineCodeWords}`,
+        expect.stringContaining(`超过教程 IM ${maximumReplayMachineCodeWords} words 容量`),
         expect.stringMatching(/program\.machineCode declared size .* exceeds the hard limit/)
       ]));
 

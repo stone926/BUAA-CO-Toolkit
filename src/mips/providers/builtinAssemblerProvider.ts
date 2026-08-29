@@ -1,4 +1,4 @@
-// @index mips-providers — BuiltinTsAssemblerProvider：阶段 5 纯 TS 课程汇编器（显式/后续默认切换）
+// @index mips-providers — BuiltinTsAssemblerProvider：P3-P7 默认纯 TS 课程汇编器
 
 import * as fs from 'fs';
 import * as os from 'os';
@@ -27,7 +27,12 @@ import {
   AssemblerServiceResult,
   courseAssemblerSemanticsRevision
 } from '../core/assembler/assemblyService';
-import { findCourseHaltPc, imageSegmentWords, wordsToHexText } from '../core/assembler/artifacts';
+import {
+  courseInstructionImageWords,
+  findCourseHaltPc,
+  imageSegmentWords,
+  wordsToHexText
+} from '../core/assembler/artifacts';
 import { sourceUnitFingerprint } from '../core/programImage';
 
 import { builtinAssemblerEngineArtifact } from '../replay/builtinAssemblerEngineArtifact';
@@ -228,8 +233,9 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
         );
       }
 
-      const segmentName = snapshot.targetKind === 'kernelText' ? 'ktext' : 'text';
-      const words = imageSegmentWords(result.image, segmentName);
+      const words = snapshot.targetKind === 'kernelText'
+        ? imageSegmentWords(result.image, 'ktext')
+        : courseInstructionImageWords(result.image);
       const haltPc = snapshot.courseTrace && snapshot.targetKind === 'userText'
         ? findCourseHaltPc(result.image, snapshot.profile)
         : undefined;

@@ -1,19 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
+  courseHardwareMachineCodeCapacityPolicy,
   courseMachineCodeCapacityError,
   courseMachineCodeValidationError,
   decodeCourseMachineInstruction,
   stableMarsCourseInstructionMemoryWords,
+  stableMarsMachineCodeCapacityPolicy,
   validateCourseMachineCode
 } from '../../courseTesting/machineCodeValidation';
 
 describe('course machine-code validation', () => {
   it.each(['P3', 'P4', 'P5', 'P6', 'P7'] as const)(
-    'accepts the largest %s image supported by stable MARS',
+    'separates the %s hardware capacity from the stable MARS boundary',
     (profile) => {
       expect(courseMachineCodeCapacityError(profile, stableMarsCourseInstructionMemoryWords)).toBeUndefined();
-      expect(courseMachineCodeCapacityError(profile, 4096)).toContain('稳定版 MARS v0.6.3');
-      expect(courseMachineCodeCapacityError(profile, 4096)).toContain('4095 words');
+      expect(courseMachineCodeCapacityError(
+        profile, 4096, courseHardwareMachineCodeCapacityPolicy
+      )).toBeUndefined();
+      expect(courseMachineCodeCapacityError(
+        profile, 4096, stableMarsMachineCodeCapacityPolicy
+      )).toContain('稳定版 MARS v0.6.3');
+      expect(courseMachineCodeCapacityError(
+        profile, 4096, stableMarsMachineCodeCapacityPolicy
+      )).toContain('4095 words');
     }
   );
 
@@ -21,7 +30,7 @@ describe('course machine-code validation', () => {
     'rejects a %s image one word beyond the tutorial instruction memory',
     (profile) => {
       expect(courseMachineCodeCapacityError(profile, 4097)).toBe(
-        `${profile} 最终机器码共有 4097 words，超过教程 IM 4096 words 容量（0x3000..0x6ffc）。MARS large-text 内存配置可执行超出部分，但课程硬件无法装载。`
+        `${profile} 最终机器码共有 4097 words，超过教程 IM 4096 words 容量（0x3000..0x6ffc），课程硬件无法装载。`
       );
     }
   );
@@ -32,7 +41,10 @@ describe('course machine-code validation', () => {
     const beyondCapacity = `${beyondStableMars}00000000\n`;
 
     expect(courseMachineCodeValidationError('P4', withinCapacity)).toBeUndefined();
-    expect(courseMachineCodeValidationError('P4', beyondStableMars)).toContain('稳定版 MARS v0.6.3');
+    expect(courseMachineCodeValidationError('P4', beyondStableMars)).toBeUndefined();
+    expect(courseMachineCodeValidationError(
+      'P4', beyondStableMars, '', false, stableMarsMachineCodeCapacityPolicy
+    )).toContain('稳定版 MARS v0.6.3');
     expect(courseMachineCodeValidationError('P4', beyondCapacity)).toContain('最终机器码共有 4097 words');
   });
 

@@ -1,29 +1,33 @@
-# course-testing | src/courseTesting/ | 42 files + host adapters
+# course-testing | src/courseTesting/ | 44 files + host adapters
 
-P3-P7 自动化测试：生成 ASM -> 稳定版修改 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
-MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）。课程 oracle 运行一律强制 coL2；coL1 只在工具链检查中作为兼容能力探针。非 P7 另依赖 FixedCompactLargeText/CompactLargeText，P7 另依赖 efc、p7irq、cl 与 CompactLargeText；固定 ae/se 令汇编与运行错误以非零退出码失败。课程 dump 先静态确认最终 `_co_test_end` 是自分支+nop，运行时再用 coL2 逐指令块确认该自分支确实执行，并用 MARS 原生 max-step 结束永久自环；不依赖未发布的专用停机 marker。SWL/SWR 按动态指令合并同一 DM 字的多次局部写入；BGEZAL/BLTZAL 按 MIPS 规范补齐分支自身在 not-taken 路径遗漏的 `$31=PC+8` Trace，但稳定版 MARS 的后续执行状态仍是旧值，因此在显式重写 `$31` 前继续读取会被拒绝。同一详细 Trace 还只拒绝实际执行到的 oracle 初态差异/未定义行为。同次汇编仍分块 dump 0x0000..0x2fff，以拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；内置生成器约束普通测试数据，手写/外部用例须自行遵守教程地址映射和下述稳定版边界，不假定 MARS 提供额外的课程地址或 handler 契约开关
-生成程序边界：配置的 instruction_count 只统计修改版 MARS 最终执行的 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop，手选/外部 ASM 的最终用户 `.text` 也必须自带同一尾部。教程硬件 IM 是 4096 words，但稳定版 MARS v0.6.3 把 Compact* 的 0x6ffc 上界当作排他值，因此课程 oracle 最终机器码上限为 4095 words（0x3000..0x6ff8）
-P7 模式：anchor(精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)
+P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。阶段 6 的 `auto` 默认使用 TS full stack；`mars` 是一次设置即可恢复的 legacy 回滚；`verify-both` 和显式开发者命令才启动固定 MARS reference。
 
-阶段 4/5 builtin 边界：普通课程 pipeline 的 assembler/oracle 默认仍是 legacy MARS；`verify-both` 只显式增加 builtin executor shadow，builtin assembler 通过显式 provider id、full-stack 或 replay 路径使用，不会静默替换默认。builtin executor 的 event artifact 会在 case 持久化时重新解析并校验 event count/digest、final-state digest、engine/image/profile/stop 绑定；assembler 与 executor 使用各自的逻辑 artifact/revision 身份。
+MARS reference 按角色严格拆分：assembly compatibility 使用 `mars-assembler-v0.6.3`（8b53a49，SHA-256 `599957…afb31`）；真实 execution/full-stack gate 使用 `legacy-course-executor` v0.6.3-course1（c6197f4，SHA-256 `d13456…0c64`）。`mars` 模式是 configured legacy 回滚，只有 `verify-both`/开发命令要求后一固定身份。legacy 课程 oracle 强制 coL2，coL1 仅作兼容探针；P7 按需使用 efc/p7irq/cl。MARS 的 dump、停机尾、SWL/SWR、REGIMM link、Compact 初态/边界 bug 修复只存在于 `mips/legacy` normalizer 和 conformance，不进入 builtin provider/core。任一含非零 `.data` 初值的课程 case 会在 provider-neutral ProgramImage policy 处拒绝，因为 DUT 复位内存为全零。
 
-当前独立 conformance 的覆盖需按 evidence kind 区分：assembly-diff 通过 JSONL CLI 对 10 个单源 P3–P7 corpus 与固定 MARS 比较 text、P7 ktext 和 data 段，但这 10 例目前 data 均为空，且不含 include/macro/`.eqv`/pseudo。course-vector 中 7 个 P3–P6 `program-final-state` 用例真实执行 CLI assembler→executor，P7 Timer 通过 `device.cycleVector`；P7 CP0 exception 与 external IRQ 两个 directed vector 仍明确是 `directed-artifact-only`，runner 只记为 `validated` 而不计入 `passed`，不能表述为 CLI 独立向量已执行。P3–P7 core full-stack、复杂 source graph/data/sourceMap 则由阶段 5 Vitest 覆盖；`npm run verify:phase5` 不内嵌固定 MARS assembly-diff，CI 另行运行该 lane。
+生成程序边界：配置的 instruction_count 只统计 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop，手选/外部 ASM 的最终用户 text 也必须自带同一尾部。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；仅 legacy v0.6.3 因 Compact* 排他 bug 使用 4095-word policy（末址 0x6ff8）。P7 DUT image 把 text/ktext 等非 data 段按绝对地址合并并用零填补空洞，不再丢失 0x4180 内核段。
+
+P7 模式：anchor(TS 课程 oracle 精确对拍+中断注入)、probe(DM 探针黑盒检查)、hybrid(两者)、off(无中断)。probe 为 DUT-only，不能冒充 full-stack reference evidence。
+
+阶段 6 引擎边界：case 开始时读取一次 resource-scoped `co.mips.engine` 并生成原子 `CourseEnginePlan`；prepare 与 oracle 必须复用同一计划，不能形成混合主路径。`auto` 对 P3–P7 选 builtin，stdin/交互能力在阶段 7 前明确选 legacy；`builtin` 强制 builtin 且不回退；`mars` 强制 configured legacy；`verify-both` 主路径 builtin，并用固定 reference 的独立汇编结果喂给独立 legacy executor。builtin event artifact 在持久化时复核 event count/digest、final-state digest、engine/image/profile/stop 绑定；assembler 与 executor 使用各自逻辑 artifact/revision 身份。
+
+独立 conformance 严格按 evidence kind 区分：既有 assembly-diff 通过 JSONL CLI 对 10 个 P3–P7 corpus 与固定 MARS 比较 text/ktext/data；阶段 6 新增真实 execution differential，冻结 P3–P7 各 50 个确定性 seed（合计 250）和各 1 个手写边界用例。每例先证明 TS/MARS 实际执行 image fingerprint 完全相同，再比较 canonical architectural writes、精确停机和最终 observable summary。聚合 gate 重算 profile/result payload，要求每 profile 50+1、总 255、0 failed/inconclusive/out-of-domain/error/unexplained，拒绝 artifact-only `validated` 冒充执行证据。固定 MARS reference 永久在 Ubuntu 24.04/Windows 2025 CI matrix 中运行。
 
 orchestration:
-  courseTest.ts — 总调度：16 个 co.test.* 命令；runCourseTraceCase 串联 assemble provider->oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe；阶段 4 通过 `CourseTracePipeline` 注入 createCase/assembler/oracle/DUT/comparator/case-store 全阶段，默认 provider 仍为 legacy MARS
+  courseTest.ts — 总调度；runCourseTraceCase 串联 plan->assemble provider->同 plan oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe；新增隐藏在「更多工具」的“使用固定 MARS 验证”开发命令，强制 verify-both 并报告 full-stack bundle
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
   courseTestContinuous.ts — 持续生成循环：启动阶段同步占位防重复会话，启动检查期间也可取消；每轮生成并展开全部 ASM；stopOnFailure=false 时功能失败继续，生成器异常/无新 ASM 则停止；轮数耗尽不额外等待，停止请求可打断间隔或在途外部工具，用户取消的未完成 case 不计为测试 error；面板关闭触发停止，最终报告写失败也保证释放会话；按策略保留通过产物和报告轮次
   courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
   courseTestReport.ts — HTML 报告：批量/Logisim 准备/持续监控/ASM 索引；读取时兼容旧 mars/sim/logisim 字段，新结果只使用 oracle/dut；legacy logisimOut 只解释为原始 CLI 输出，不伪装成已解析 DUT trace
-  courseTestToolchain.ts — 稳定版能力校验：P7 须 CompactLargeText，非 P7 须 FixedCompactLargeText 或 CompactLargeText；启动前用 coL1/coL2 兼容探针验证输出可解析及 Compact 初始 `$gp=0x1800`、`$sp=0x2ffc`，实际课程 oracle 只运行 coL2；P7 另验证 efc/p7irq，RI 用例运行时使用 cl 加载插件内置指令类；不要求未发布的课程取指域、数据桥或 handler 契约能力
-  courseTestLogisim.ts — P3 Logisim：电路诊断(提取 Trace 端口映射)->ROM 注入批量准备->单用例(CLI 启动->PC 监控->自动 kill->Trace 解析->对拍)，准备前校验稳定版 MARS coL2，并在启动 Logisim 前执行 oracle 初态兼容检查
+  courseTestToolchain.ts — mode-aware 校验：auto/builtin 的 P4–P7 不要求 Java/MARS；mars/verify-both 才检查稳定版 Compact/coL1/coL2/efc/p7irq/cl 与内存配置。固定验证另在执行前按编译内置信任身份校验 course1 bytes/SHA-256
+  courseTestLogisim.ts — P3 Logisim：与 traceRunner 共享原子 engine plan/ProgramImage policy/full-stack shadow；电路诊断(提取 Trace 端口映射)->ROM 注入批量准备->单用例(CLI 启动->PC 监控->自动 kill->Trace 解析->对拍)。只有 legacy lane 才运行 MARS coL2/初态兼容检查
   courseTestStdin.ts — stdin 文件发现：input/inputs/test/data 目录，按文件名相似度排序
-  courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.mars.out、.co/out/{stem}.sim.out
+  courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.oracle.out、.co/out/{stem}.sim.out；手动比较仍兼容读取旧 `.mars.out`
 
 generation:
   courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/ISim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe 中立 stage
   courseTesting/generatorWorkflow.ts — 生成器工作流：外部/内置 generator setup、运行、ASM 产物收集、CourseTraceBatchSource 描述
-  courseTesting/executorShadowRunner.ts — executor shadow 宿主：legacy + builtin 双跑、image policy、course-correct/mars-compatible/inconclusive 分类，mismatch 自动保存含 source closure、ProgramImage、raw traces、engines、contracts 的复现 bundle；
+  courseTesting/executorShadowRunner.ts — executor-only shadow 宿主：同一 legacy ProgramImage 证据上对比 builtin executor；结果显式标为 `executor-only`，不能计入 full-stack gate
+  courseTesting/fullStackShadowRunner.ts + shadowBundleArtifacts.ts — full-stack shadow：从已哈希 v2 source closure 建立隔离 materialization，builtin assembler→builtin executor 与 fixed legacy assembler→其自身 legacy executor 双端独立运行；前后复验 fixed hash、逐字比较实际 image，matched/mismatch/inconclusive 都原子保存 source/image/raw trace/engine/contracts/result bundle，未登记或不可比较结果阻断
 
   courseTesting/pipeline/courseTracePipeline.ts — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle 执行与差分比较）；
   courseTesting/pipeline/courseImagePolicy.ts + courseTesting/pipeline/haltPolicy.ts + courseTesting/pipeline/executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；
@@ -33,13 +37,14 @@ generation:
   courseTesting/oracle/shadowPolicy.ts — 已登记 divergence 策略；未登记差异固定为 inconclusive；
   courseTesting/oracle/executionAssertions.ts — CommitEvent assertion/watchpoint 观察器；
 
-  courseTesting/traceRunner.ts — 单 case 执行：课程 dump 机器码校验、稳定版 MARS/ISim/Logisim、P7 probe 和 manifest metadata；默认构造 full-stage `CourseTracePipeline`，测试可通过 `CourseTraceRunOptions.pipeline` 替换任意阶段；`oracleMode='verify-both'` 会先记录 legacy oracle，再运行 phase-4 executor shadow。用 coL2 逐指令块校验实际到达标准停机尾、合并 SWL/SWR 局部写、修复 REGIMM 链接分支自身的遗漏事件，并拒绝未跳转链接分支后继续读取旧 `$31`、稳定版 `$gp/$sp` 初态差异、DivZero/JalrSame/DoubleDelay/未定义 HI/LO 读取及链接分支读取 `$31` 的 UNPREDICTABLE 输入；任一侧空 Trace 报错，两侧都空明确标记为无法判定
+  courseTesting/traceRunner.ts — 单 case 执行：一次快照 engine plan，依次校验 source closure、assembler image、课程 ProgramImage policy、oracle、DUT 与 manifest metadata；provider-neutral 输出为 `.oracle.out`。旧 `oracleMode='verify-both'` 仅保留 executor-only shadow；新 `engineMode='verify-both'` 运行独立 full stack。probe/DUT-only、stdin、hash 变化、任一 inconclusive/not-comparable 均阻断固定验证
   mips/legacy/marsOracleCompatibility.ts — legacy/reference 层的 P3-P7 稳定版 MARS oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
   mips/legacy/marsImageCompatibility.ts — legacy/reference 层将每个 coL2 动态 PC/机器码绑定到最终硬件 HexText（含 P7 padding/handler merge），并只允许 handler 内精确 `sb $0,0x7f20($0)` 访问 IG；用跨分支/跳转及延迟槽的静态常量数据流兜底无 victim header 的非对齐 IG 访问
   courseTesting/builtinAsmGenerator.ts — 入口：generateBuiltinAsmTestCase；P7StressMode 分派(anchor->randomBody、probe->probeEmitter、hybrid 两次调用)
   courseTesting/generator.ts — 外部生成器(.py/.js/.jar/.ps1/.bat 等)和 ASM 文件快照；以 mtime+ctime+size 判定新建/重写，能识别同 mtime、倒退 mtime 或尺寸变化，跳过 .co 产物目录
+  courseTesting/p7RiInstruction.ts — 仅对 P7 使用严格 assembler line parser 识别实际 `_co_internal_unknown_instruction` mnemonic；注释、字符串、operand、同名 label 及 P3–P6 均不会启用 legacy RI class
   courseTesting/generatorInstructionCatalog.ts — 加载由唯一 ISA catalog 生成的内置 ASM generator profile、分类、对齐和 MDU 延迟投影；生成脚本校验成员资格与 instruction effects/control/memory facts 一致
-  courseTesting/machineCodeValidation.ts — 对最终 HexText 使用 core catalog canonical decoder（不再维护 opcode/funct 副本），先校验教程 IM 的 4096-word 物理容量及稳定版 oracle 的 4095-word 排他上界，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 `# instruction_set` 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
+  courseTesting/machineCodeValidation.ts — 对最终 HexText 使用 core catalog canonical decoder；调用方必须显式选择 `course-hardware` 4096-word 或 `stable-mars-v0.6.3` 4095-word 容量策略，再校验保留字段、CP0 rd/方向与课程 profile 指令白名单；手写/外部 ASM 只允许默认课程集，只有 case manifest 证明来源为内置生成器时才采纳匹配的 instruction_set 声明；P7 内部 RI 探针仅特许机器码 0x0000003f
   courseTesting/courseDataInitialization.ts — 课程 DM 初态预检：按修改版 MARS 的 4 KiB 分配块在同次汇编导出 0x0000..0x2fff，严格解析每个非空 1024-word HexText 块；允许未分配/`.space` 全零块，首个非零初值或缺失/畸形 dump 立即失败
   courseTesting/executionBudget.ts + mips/legacy/haltValidation.ts — provider-neutral pipeline 计算确定性执行预算；legacy/reference 层单独解析 coL2/停机标记，确认标准停机尾已实际执行并拒绝 cliff exit、错误自环和未到达尾部
   courseTesting/cpuState.ts — 软件 CPU 模型：32 GPR+3072-word DM(0x0000..0x2fff)+HI/LO+CP0+MDU 保护；HI/LO 初始化状态、字节/半字/字及修改版 MARS 小端 LWL/LWR/SWL/SWR 语义、最近写入追踪
@@ -80,11 +85,11 @@ case-storage:
   courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts typed alias、只接受 canonical `/` 的严格 case-relative 路径、完整 source artifact closure、assembler/oracle launch tuple、stdin/device/cycle/stop/seed/resource input、snapshot 数量/单项/总量 ceiling、大小写碰撞、symlink/bytes/hash/ProgramImage/HexText/trace evidence 校验；`p7.probe` 在 canonicalize 前以迭代式 depth/node/key/string-byte ceiling 验证。早期 v2 可读但不能 replay。exact replay/re-evaluate 见 mips-replay 模块
 
 conformance/phase-0:
-  conformance/mips/corpus — P3–P7 spec microprogram、challenge、教程引用、250 个固定 seed 与机器可读 feature distribution；seed renderer 独立生成 250 个唯一 source graph/HexText image（合计 5,000 words），先由固定 MARS 分 profile 汇编核对，再经编译后的 versioned JSONL CLI 全量 encode/decode；freeze verifier 防 silent corpus drift
+  conformance/mips/corpus — P3–P7 spec microprogram/challenge/教程引用；既有 250 assembly seeds 冻结 source graph/HexText，阶段 6 另有 `execution-corpus.json` 冻结 250 个可安全真实执行的 seed + 5 个手写边界程序及 source/image/halt fingerprint，freeze verifier 防 silent corpus drift
   conformance/mips/contract/evidence-gates.json — revision 2 冻结 22 个 P3–P7 capability scope、589 个由 `idPrefix.member` 精确展开的 bin 与 evidence fingerprint inclusion/exclusion；当前 validator 只验证声明结构/成员闭包，不表示旧数字 minimum 已由运行证据满足，阶段 6 默认切换按计划中的无配额条件另行判定
   conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema；`manage-*.mjs --refresh-integrity` 会强制把内嵌 approval 声明降级回 candidate，因此 artifact 永远保持 candidate 形态，不存在单独的批准步骤
   conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold benchmark matrix、统计与 candidate 校验；baseline 仅来自受保护 main 的 CI dispatch
   conformance/mips/decision-vectors — frozen contract/decision 的独立 vectors；Timer official-RTL lane 在缺少 Icarus 时必须由 required CI 失败而不是跳过伪通过
   conformance/mips/governance — 只保留 2026-08-27 审阅记录与归档的历史 approval 信封（provenance）；approval 机制已随单人维护放宽撤销
   conformance/mips/expected/guardedFs.mjs — expected-data 依赖闭包唯一文件系统入口；lexical/realpath 均限制在 conformance/mips，dependency whitelist 同时禁止 direct fs、dynamic import、child_process 等旁路读取 production catalog/contracts
-  gate — `npm run verify` 聚合全部检查（候选与正式层已于 2026-08-27 合并）；Timer RTL lane 只在装有 Icarus 的环境（CI）通过
+  gate — `npm run verify:phase6` 先执行 compile/module-boundary/阶段 6 定向 Vitest，再校验固定 references，以 `mars-assembler-v0.6.3` 执行 assembly-diff，并以 `legacy-course-executor` v0.6.3-course1 执行 255-case real differential 和 fail-closed aggregate；`.github/workflows/ci.yml` 在 Ubuntu 24.04/Windows 2025 永久执行并上传 machine-readable execution evidence，`.github/workflows/release.yml` 在 `v*` tag 上重跑同一双平台 matrix，publish job 必须等待两端成功。完整 `npm run verify` 继续聚合其他检查；Timer RTL lane 只在装有 Icarus 的环境（CI）通过

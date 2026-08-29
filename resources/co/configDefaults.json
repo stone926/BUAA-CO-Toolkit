@@ -3,6 +3,7 @@
   "diagnostics.disabledCodes": [],
   "diagnostics.disabledFileCodes": [],
   "mips.delayedBranching": "profile",
+  "mips.engine": "auto",
   "mips.extraArgs": [],
   "mips.instructionTokenMode": "realVsPseudo",
   "mips.memoryConfiguration": "auto",

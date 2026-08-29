@@ -7,7 +7,10 @@ import {
   useDelayedBranching
 } from '../../config';
 import { isFile, readTextFile } from '../../fsUtil';
-import { p7InternalUnknownInstructionMnemonic } from '../../courseTesting/builtinAsmGenerator';
+import {
+  p7InternalUnknownInstructionMnemonic,
+  sourceUnitsUseP7RiInstruction
+} from '../../courseTesting/p7RiInstruction';
 export {
   isLargeTextMemoryConfiguration,
   LARGE_TEXT_MEMORY_CONFIGS,
@@ -143,7 +146,8 @@ export async function p7RiInstructionNeeded(
     return false;
   }
   try {
-    return (await readTextFile(asmUri as any)).includes(p7InternalUnknownInstructionMnemonic);
+    const text = await readTextFile(asmUri as any);
+    return sourceUnitsUseP7RiInstruction(resolvedProfile, [{ id: asmUri.fsPath, text }]);
   } catch {
     return false;
   }

@@ -1,0 +1,4842 @@
+{
+  "schemaRevision": 1,
+  "description": "Safe deterministic phase-6 execution differential corpus. Generated cases use bounded forward branches and a final self-halt only; handwritten cases cover profile control-flow, memory and delay-slot boundaries.",
+  "batch": {
+    "id": "PHASE6-EXECUTION-DIFFERENTIAL-V1",
+    "profiles": [
+      "P3",
+      "P4",
+      "P5",
+      "P6",
+      "P7"
+    ],
+    "generatedCasesPerProfile": 50,
+    "generatedCases": 250,
+    "handwrittenCases": 5,
+    "generatorRevision": 1,
+    "rendererRevision": 1
+  },
+  "generated": [
+    {
+      "id": "EXEC-P3-0001",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0001",
+      "seedHashU32": "0xbba6a38b",
+      "rendererRevision": 1,
+      "sourceSha256": "d8ce77672000d6b4895641e34d5392a2cf0855535e936709e5ae863e05f0617a",
+      "imageSha256": "931fb89d614ad0e0f118a4707e1883f4fdd736497f253de375463875003af859",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0002",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0002",
+      "seedHashU32": "0xbca6a51e",
+      "rendererRevision": 1,
+      "sourceSha256": "e64964abf5e2511d24ee08ab20cc17ac3cc1b38d46c9839e9e43e06f57ccb662",
+      "imageSha256": "08030e02d75064fb2c10d06f6d41c3152799556e3d59df643ed3c383c0981fdd",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0003",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0003",
+      "seedHashU32": "0xbda6a6b1",
+      "rendererRevision": 1,
+      "sourceSha256": "6d9221b5ebf1094d7d9a044fdf1e463c4c97563785fb15fa2bcd603452d78a52",
+      "imageSha256": "90e3b576bb3e5ff5e900257e93b8c77529fc571ed97b8998172e3f6b2bd7b57a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0004",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0004",
+      "seedHashU32": "0xbea6a844",
+      "rendererRevision": 1,
+      "sourceSha256": "d305681a3171edae7d472a2718d25e13887ab298b1ade29c2e7cd55058645b95",
+      "imageSha256": "d371b1421a3544934d75086e36a6595c71512b74e100341cdaf34354f1e74284",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0005",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0005",
+      "seedHashU32": "0xbfa6a9d7",
+      "rendererRevision": 1,
+      "sourceSha256": "2b6523920c5f7c7301faf352ffd0d537b2924f8544e504902b044ef6c62388cc",
+      "imageSha256": "b7ae34809fb84c9516ab3bd949a12dfcb8f0c1e6f971562a41c6df0dbc1b26e5",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0006",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0006",
+      "seedHashU32": "0xc0a6ab6a",
+      "rendererRevision": 1,
+      "sourceSha256": "28a307d2ba2eca01820467a8447dae7748d300087a36f402bfe1016b048202ee",
+      "imageSha256": "b4d393ba8bee588b8449f10cc44120105dd521a9bf4e54de02b711fbf1c6a2b0",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0007",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0007",
+      "seedHashU32": "0xc1a6acfd",
+      "rendererRevision": 1,
+      "sourceSha256": "0051c6435d8723f9d3bc7be4390eef5eb2ecc9e5c9d1d14a7ba1828013e9f026",
+      "imageSha256": "c3724bc4a320b7d9525dfb1fdcbb46fab0a419d7a452d5770d9f041df3214a89",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0008",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0008",
+      "seedHashU32": "0xb2a69560",
+      "rendererRevision": 1,
+      "sourceSha256": "b64d5bc70c740f6288035b7474b29c59e29d449b60a6da3eb7d93868e8859e39",
+      "imageSha256": "272b6c07f4c6962bfaec34c7ed8be38cec64f20e3532da65d0f232690fcbcaf9",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0009",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0009",
+      "seedHashU32": "0xb3a696f3",
+      "rendererRevision": 1,
+      "sourceSha256": "9c79a25fb73c37ee210dbb810046e54c39eefac42a82432080cd60d6d6bfb422",
+      "imageSha256": "2281d51323a22dff1b5174a621d975efac1611e41cba1f0206e2ad99f7e3e659",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0010",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0010",
+      "seedHashU32": "0xc0a8ea01",
+      "rendererRevision": 1,
+      "sourceSha256": "c40b6e41b9d67c07cd84fdee71bf2827552d36ddb5d993148f46f9d6de391058",
+      "imageSha256": "998fedf660a8a3c7420aaab93acbbb55789c3bf17767408110f7039c3a9040dc",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0011",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0011",
+      "seedHashU32": "0xbfa8e86e",
+      "rendererRevision": 1,
+      "sourceSha256": "f9adf373ac84a6826e499801a323c3e52fd7306c0900c04a71db68385d853ec7",
+      "imageSha256": "d24fa02b98ac8b6746def77edb63c52a869620a3d5e8143d875350a1c0caf3f6",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0012",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0012",
+      "seedHashU32": "0xbea8e6db",
+      "rendererRevision": 1,
+      "sourceSha256": "0480281d385c23957621432406e331e7942b94d6b25f5cb09a2f056fcf38ea12",
+      "imageSha256": "0ee8b0594bec459a3059d386fb59092d0f4d15c9dd946d98db48da3dcb299d27",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0013",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0013",
+      "seedHashU32": "0xbda8e548",
+      "rendererRevision": 1,
+      "sourceSha256": "5a4e69e28cf1588bdec9cf890cc4c6963e77510ff0625ebdf499c4cbb70d70ad",
+      "imageSha256": "bb8371dd09bd21b3a9bb4dc47b7375f35663019fc9fe3f3f4ab5743567f95fb8",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0014",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0014",
+      "seedHashU32": "0xc4a8f04d",
+      "rendererRevision": 1,
+      "sourceSha256": "c5bce9a64b9f571da60ba3c622d735f0c683bf587fdffee7c5494ebb02e32004",
+      "imageSha256": "ec00dc6ccca4e19bc3d5613c839fc3ebb3d7876a3917572136fae1ab6b48f844",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0015",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0015",
+      "seedHashU32": "0xc3a8eeba",
+      "rendererRevision": 1,
+      "sourceSha256": "904e6d05de90b1cd57dc4de8f2ab0e4048cbdfa79d0572283784b68fafb3cc2c",
+      "imageSha256": "1332a55826b1f7dfbb45437ac52c1b14e30bb3425a0c57de0b7545b33214d2fc",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0016",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0016",
+      "seedHashU32": "0xc2a8ed27",
+      "rendererRevision": 1,
+      "sourceSha256": "ede9de226bfb237bddf468edecbcfb78693b01fb519d0b6552ef41f77f33b001",
+      "imageSha256": "c229239a37e9708753b43e00b639ee8e1b601c10615facf742ae129f51fb8e9d",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0017",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0017",
+      "seedHashU32": "0xc1a8eb94",
+      "rendererRevision": 1,
+      "sourceSha256": "1c8e326f7da33e4fd95485df0e22fe30b120e182d95b4a5f6ca2674bfe013f03",
+      "imageSha256": "777461c04e4d2400467efaf995e172f1c264c35b5ed366792c194f382005037b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0018",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0018",
+      "seedHashU32": "0xb8a8dd69",
+      "rendererRevision": 1,
+      "sourceSha256": "eb95a2b2befbeac2d343c9782869a297c3a0570b334eec09c7255f1ae7c87d92",
+      "imageSha256": "fe2432b8a55cf8471eb70af292ba19095b493895d7ad09062454300e50d6d80a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0019",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0019",
+      "seedHashU32": "0xb7a8dbd6",
+      "rendererRevision": 1,
+      "sourceSha256": "11dd514fc146ac7645f30dddf2253f90e66bf7f14665d4552eaed4ff002ac4df",
+      "imageSha256": "4782560ca0f9353ac783dd03e0ce83952847ab457f899e8c1e6c4a1dd1da766b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0020",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0020",
+      "seedHashU32": "0xc6ab320a",
+      "rendererRevision": 1,
+      "sourceSha256": "944578968d7103fb829d8455e789a0bfd79289eff82831202e7a3c51ab0bb130",
+      "imageSha256": "1eb142241ffdfe52f7dfa74bfa243a2d0e7fa6e4a5eee6629b9318c59fadad30",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0021",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0021",
+      "seedHashU32": "0xc7ab339d",
+      "rendererRevision": 1,
+      "sourceSha256": "cd9e72d120addcfbdc8e642457f26fc71a1479de49549c6965b8bc6810e47571",
+      "imageSha256": "afa22916ebe1c2b2daa8c57919632bf8c1ee19af367766908130ebfb79fcc866",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0022",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0022",
+      "seedHashU32": "0xc4ab2ee4",
+      "rendererRevision": 1,
+      "sourceSha256": "0d45d9a1a9b16f44fbd02c95d9f9d64e8070a707d505e47e2f5ff505d56cf069",
+      "imageSha256": "add3d2ab100f70657baa367face4458c4ec85daa8bc35a5007c9bc563e9538e6",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0023",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0023",
+      "seedHashU32": "0xc5ab3077",
+      "rendererRevision": 1,
+      "sourceSha256": "80709cd7879426a41eb7bd1bd6f5118e06bb8e9564324b207f5e6485ac5371e2",
+      "imageSha256": "cb1f76a235ec39b7d285ab057c90267b03ff9b7d6641aaa3ef3431aa9d75dbed",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0024",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0024",
+      "seedHashU32": "0xc2ab2bbe",
+      "rendererRevision": 1,
+      "sourceSha256": "4ada6a52fb5c87ea1d9925570a2a1be852077f1c17afbd3e4f038742068c0fd2",
+      "imageSha256": "11dc987b5f0e4191ab1ba3eab534108eacfda46d8c19274e73c36fbb11d7f4df",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0025",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0025",
+      "seedHashU32": "0xc3ab2d51",
+      "rendererRevision": 1,
+      "sourceSha256": "4c814c81a4f1a30720ad05583d8a63e0c67cdbf6087ab16be90d657c9c3f3b07",
+      "imageSha256": "3277dfe95243b015da64211f9c0231180a97b1e57a5af8da349dfb961f13cb67",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0026",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0026",
+      "seedHashU32": "0xc0ab2898",
+      "rendererRevision": 1,
+      "sourceSha256": "aad3e87f853b9f47998e8b7f0c456ec5e6fe311980b6f8d38e89e3922d72b856",
+      "imageSha256": "f75d7874c337dd712a65c9d88743349eea97b444df72e37faaf9d39914a01061",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0027",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0027",
+      "seedHashU32": "0xc1ab2a2b",
+      "rendererRevision": 1,
+      "sourceSha256": "9c9c8e5f1c5f0d37766ed10e32c0f4a4da217e5ea30eb88ed3712eb86335bce7",
+      "imageSha256": "751818ad0f3c01b4398726fb95acfbd1aee6f334c2059bba5a0bb4f875f478c8",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0028",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0028",
+      "seedHashU32": "0xbeab2572",
+      "rendererRevision": 1,
+      "sourceSha256": "ab5be41b79515ebf4ed20c9be843f585fea9a14881090fffb6a269f8f1d69933",
+      "imageSha256": "1eb639fc00c757cbecf634ea7bb1c166be523e149d04af6c35c42024cccf1f3d",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0029",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0029",
+      "seedHashU32": "0xbfab2705",
+      "rendererRevision": 1,
+      "sourceSha256": "a47dceb8bca447b55839be9af17897c3b2a1677ee8ad62c95e3675709c701bd8",
+      "imageSha256": "6478a78074d3ce82f383e4ea47f396e80398866571bffba5b48e9b130e54c65f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0030",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0030",
+      "seedHashU32": "0x2cae1133",
+      "rendererRevision": 1,
+      "sourceSha256": "fb9f5d99b2390f6aa797e52e666ff736f5e9a5f4eff3e5b957b0b908edd36d0b",
+      "imageSha256": "4f0c78dd0e6317096cdf15963a69635fe66c37ec3a10d8f9f6d15cc0a3d60c0f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0031",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0031",
+      "seedHashU32": "0x2bae0fa0",
+      "rendererRevision": 1,
+      "sourceSha256": "d526f7573e4e28e8adb7c150dae6763603cd3149d14a9eaccae17b76561e0e83",
+      "imageSha256": "8ba5863b57e3f4448b0f259f83f5a6d52f3d86dd1931abc3cfcb3e88ae700a72",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0032",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0032",
+      "seedHashU32": "0x2eae1459",
+      "rendererRevision": 1,
+      "sourceSha256": "20e44732c46450854a167a52e0832afbdfabae32ed0a13e64f344130c24a4675",
+      "imageSha256": "6de19d6f7911af6f7965a2b3d39d969bc7b910b57f8865ec8722a973b7ad1a57",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0033",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0033",
+      "seedHashU32": "0x2dae12c6",
+      "rendererRevision": 1,
+      "sourceSha256": "8f2d1d2f19f5f4d89e1ba64a61c617ab0b0fb00430f976a780b541eeadd47d1d",
+      "imageSha256": "19acc91a6a744d0740f45ff3f7f796c6e20e0d1c2ae19ea544a3fcba72fa2956",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0034",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0034",
+      "seedHashU32": "0x30ae177f",
+      "rendererRevision": 1,
+      "sourceSha256": "078a65f21f7c2896c48e4abd25d1a3fc255f6c020e193f0da22d86cd6d6fe207",
+      "imageSha256": "f1520c24e0e3e9a4159ddbf3ad95b68b4dcc6ed7987318fa9db4e441cd4f5739",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0035",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0035",
+      "seedHashU32": "0x2fae15ec",
+      "rendererRevision": 1,
+      "sourceSha256": "f2eb7b9741729b425c1104c737b4cf6548b73b8dd4ceeed996bc93fc63326537",
+      "imageSha256": "c2cd49886a2dd8e8bba33a3c4a36e7f99f178028fbc0cc7ae951fc96e5357676",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0036",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0036",
+      "seedHashU32": "0x32ae1aa5",
+      "rendererRevision": 1,
+      "sourceSha256": "e9b3d7176a70105ce7a3cb2d26eb9279e969f5ee576cb501d37f4ae729c15d06",
+      "imageSha256": "b29771f90ec1df09b87054de2bf740cd0c0f287d799afc8da60a8948f02577d3",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0037",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0037",
+      "seedHashU32": "0x31ae1912",
+      "rendererRevision": 1,
+      "sourceSha256": "9bfbdbdf1a780ffac65d7c422e933be8e643382613cf47f3a8ecd3c138ade3af",
+      "imageSha256": "30942345f0f42f51c41b7a2f1a5c3699daa8bf03665a41173c17c6355049d81b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0038",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0038",
+      "seedHashU32": "0x34ae1dcb",
+      "rendererRevision": 1,
+      "sourceSha256": "6d718e23d36255331ad5f08c10907d36a693a978220ec88b00c818c5a90493ad",
+      "imageSha256": "20b484a4a7212b0403a90e9c3a8bda96453359f0a86f2f3aea475eabc79ef2fa",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0039",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0039",
+      "seedHashU32": "0x33ae1c38",
+      "rendererRevision": 1,
+      "sourceSha256": "956ff257362a41dff063ad7fc1b652a3b2dbae938a9f72c8bb881f88432b7c2f",
+      "imageSha256": "a8fa04963433d2af37683fcb00d839320c907fad69d51785bac3ff8f52e60e7a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0040",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0040",
+      "seedHashU32": "0x32b0593c",
+      "rendererRevision": 1,
+      "sourceSha256": "504b6b6ecf18f735a676277e092b0eb9408150ea939ac0d140a41c3d8081b8a4",
+      "imageSha256": "d69898eb8ab0c5322baf032b4c7f80a489f70d7b85d6c5fc47596dd158c0e6db",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0041",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0041",
+      "seedHashU32": "0x33b05acf",
+      "rendererRevision": 1,
+      "sourceSha256": "76602296a7c5a38c5bfe020e599dc2bd63bf6a06f2bddd0c5e154b08a2bbb721",
+      "imageSha256": "a2936aa09da5fcbf5efea6c8a13fbf6014d3c8733ce568ba1dd94dde46e9d87c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0042",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0042",
+      "seedHashU32": "0x34b05c62",
+      "rendererRevision": 1,
+      "sourceSha256": "5060c7b72bda8d0d32e584a1447e8450729ccdc2b033d536964f1785bef3fdf0",
+      "imageSha256": "5bbb2b4d32b554a9aaed65e57da23923bfae63922fbb17e7456982eb663aa662",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0043",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0043",
+      "seedHashU32": "0x35b05df5",
+      "rendererRevision": 1,
+      "sourceSha256": "c82d3a51b23f3f1e43b5afd646e447b6295f86801688cc54546b8ca5b0c554a5",
+      "imageSha256": "48def270471049191e5c14f8aa62037caa0f8e49c09c40a2e42d57bbd5a640fc",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0044",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0044",
+      "seedHashU32": "0x2eb052f0",
+      "rendererRevision": 1,
+      "sourceSha256": "589969f4a2010408d6b9628f1e2c92c82af256acf8d51f2a8618f88c928fe934",
+      "imageSha256": "c535a28b608cdba3375c2d9fed4b7e347c2578c0b85b2ded8aebb243fd84448c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0045",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0045",
+      "seedHashU32": "0x2fb05483",
+      "rendererRevision": 1,
+      "sourceSha256": "77d756c1b0307ec477026e022e53b549d509c90942d5a58f8d34bbbb3c4e1268",
+      "imageSha256": "c52739beef340504e2108fc8b4c53fd92ec81ec9dd2c88334595b98da4f0baea",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0046",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0046",
+      "seedHashU32": "0x30b05616",
+      "rendererRevision": 1,
+      "sourceSha256": "6674fff54be39d896a81138f901e32c43123770b1b47424c54e1828746945719",
+      "imageSha256": "40b32bf97b978b1d757bfedb50b7abdcaaa00da6993a02b5ac7c06de005d7d68",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0047",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0047",
+      "seedHashU32": "0x31b057a9",
+      "rendererRevision": 1,
+      "sourceSha256": "3765e14a9163c6193ef9e2dedcaa47e47cd9a6d2346ba14501f4fb0165a839d8",
+      "imageSha256": "9d8dfb34b72a15f7c4b7a49027026b3a0519364406ec7c38db6059881e317b46",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0048",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0048",
+      "seedHashU32": "0x3ab065d4",
+      "rendererRevision": 1,
+      "sourceSha256": "60bb25c7373544f4f7e4dc75d7e919bc31fb425cfda31ea7ad77b23450b45eb9",
+      "imageSha256": "f2a7d2e2b4295e07f645fb50ce689af7bff09d2bdf9c7e2dbb6dd58e636f408b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0049",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0049",
+      "seedHashU32": "0x3bb06767",
+      "rendererRevision": 1,
+      "sourceSha256": "5f7680bf041667c0957bed35d250e7db4ed462b104632c9330185c5e69061a71",
+      "imageSha256": "cd37db65922396307684246780a55c4c3c96433926a4efbd6b7a29d70bb2b36c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P3-0050",
+      "profile": "P3",
+      "seed": "phase6-execution-p3-v1-0050",
+      "seedHashU32": "0x38b2a145",
+      "rendererRevision": 1,
+      "sourceSha256": "1519f308b1260ed30db01a8794f5830f1c7989c273f54a51e1e18a5783b4c0f5",
+      "imageSha256": "68c1652f7b9003ee9e497054df48341373eccd81f9a954644bc6d83e842918dc",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0001",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0001",
+      "seedHashU32": "0x54bf6c0a",
+      "rendererRevision": 1,
+      "sourceSha256": "0fb1baa38cace8933860a51943b7baac8de312b799979211c80d43db11126d8a",
+      "imageSha256": "b4906877978c214639738c14134b7f131a28835c2f5d458fa2a79c193b6b6c7a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0002",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0002",
+      "seedHashU32": "0x53bf6a77",
+      "rendererRevision": 1,
+      "sourceSha256": "66d00850204623510818ef6dc9a717bee16fd544f0cc282dd3f41d8f2e380670",
+      "imageSha256": "f89bedc53216ed21d808451c3d1af8747a1712cbe21579dcdac80b442869b8a0",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0003",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0003",
+      "seedHashU32": "0x52bf68e4",
+      "rendererRevision": 1,
+      "sourceSha256": "5cba8e55396b835af66f0292654000dafa4548dc3fd6e94c74b0f1057641b680",
+      "imageSha256": "66e6d15c153809dfdea7589182ce37b8413e6e57d44f58fe9fdb023796a0b52a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0004",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0004",
+      "seedHashU32": "0x51bf6751",
+      "rendererRevision": 1,
+      "sourceSha256": "287cf5c752f4cc39bee0d26b00b91d8918dd1627f3fbadc18b9bdae634df8be8",
+      "imageSha256": "94a4fb3c7fd989b32fa28f6678394bbd8bd73a17baa1bf9a77cf5e7d73a6aa79",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0005",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0005",
+      "seedHashU32": "0x50bf65be",
+      "rendererRevision": 1,
+      "sourceSha256": "0034fc869196d95c20bb53bb5d45216cba6a83303e841d525a005d513a9573a4",
+      "imageSha256": "fc051d99d8ff253cafd560cc0f9c319d28deecd03f59db62a6842da0d9e0a074",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0006",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0006",
+      "seedHashU32": "0x4fbf642b",
+      "rendererRevision": 1,
+      "sourceSha256": "cc25fef3120b0750d6de1d9a75e923f262cf0e4ca9b2c74e042197d18de33cf3",
+      "imageSha256": "a79dd90e71d2e307416ee5801ccd6001fcf63642cbac3821a04e7835837f7ac6",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0007",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0007",
+      "seedHashU32": "0x4ebf6298",
+      "rendererRevision": 1,
+      "sourceSha256": "3fc226cd5a9611cd7c3e702014cbc8d1168336be7a42003257b8f08d137bf725",
+      "imageSha256": "67d3518b75d8ff1b1dea0e4531907f7aa75752098472b8136d7a4835571277d4",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0008",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0008",
+      "seedHashU32": "0x4dbf6105",
+      "rendererRevision": 1,
+      "sourceSha256": "11a767bd474bf6dbfeec6d7d7b4846d2c8b2fe2f91695d9a727310b5eacf0d44",
+      "imageSha256": "f281b645c0a045231d549dfb36a01457c241413b464fe65a7f37244271dd78ea",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0009",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0009",
+      "seedHashU32": "0x4cbf5f72",
+      "rendererRevision": 1,
+      "sourceSha256": "3a3e63820a2623793d8dc4e992b31b8b5f441f081db4f1bcc232ad62212b5f08",
+      "imageSha256": "e2b1cf4fa3eeed0064c0ed2bd9768afaa11b5209be08e996eaa3e7619d3594ba",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0010",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0010",
+      "seedHashU32": "0x4fbd2594",
+      "rendererRevision": 1,
+      "sourceSha256": "42a1874ba76a354e5860ee0c22b5f9fde115eea4006e48c75b4c1e5ffee614d5",
+      "imageSha256": "84e2c651b88e6dc3632d3025453e7614d845aa4a007d3c3cb5de2bb0b0fa8414",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0011",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0011",
+      "seedHashU32": "0x50bd2727",
+      "rendererRevision": 1,
+      "sourceSha256": "23c3d6fa6bac716b746d88be0a417593f9507cb270cd17ef40e0538f2287d240",
+      "imageSha256": "d37f2a75bffffe17e9bf39f0bfa6830f0849e39af755735cbc04997bbc0cbfb6",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0012",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0012",
+      "seedHashU32": "0x51bd28ba",
+      "rendererRevision": 1,
+      "sourceSha256": "23c36e13ccbc5cd05d3c28b7853d5bbec116e3871617052055199d84fe3b7589",
+      "imageSha256": "f31e4d5392b2d2b0e3c15133fef6bfc93a0486c6c0aac76f80eac1e2648d077b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0013",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0013",
+      "seedHashU32": "0x52bd2a4d",
+      "rendererRevision": 1,
+      "sourceSha256": "fcfed08892104f6841ff26018d8b3df6249016cf4eb01b93739bdbf148fe4db1",
+      "imageSha256": "a11404a30c86c8dbc624eb44cd33a0256e1a38eef5a3d596278d40a2f310b85b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0014",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0014",
+      "seedHashU32": "0x4bbd1f48",
+      "rendererRevision": 1,
+      "sourceSha256": "870376ce49497f9a4f0086dec782e6210c07bf7760a51d1d031107c1cf14f2d2",
+      "imageSha256": "abc4c58e3ebc8d799852454344f16bff89b9725e3045ea0edad3d8f134f7d6a4",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0015",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0015",
+      "seedHashU32": "0x4cbd20db",
+      "rendererRevision": 1,
+      "sourceSha256": "e7e0d11553b7fda0fcad7aa29af59a535aed0aacb6d799ac9ada7e31f16a13ca",
+      "imageSha256": "8e70a10028114cf52fe92c259c290745ff23605ff5633964cd8a5ecc7b613eb1",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0016",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0016",
+      "seedHashU32": "0x4dbd226e",
+      "rendererRevision": 1,
+      "sourceSha256": "cb6155e50886d11d56e4f5c5c51edbed7024907f82f1b5f1f9b4ea8a34e2997b",
+      "imageSha256": "d4b785d65a5fdbab51456c3fd347c8d20a841e4185d29b2a2ad46846ef58a355",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0017",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0017",
+      "seedHashU32": "0x4ebd2401",
+      "rendererRevision": 1,
+      "sourceSha256": "f7fcf0b7093a81429fa55325b081016796fdf3077f62f14eda2bb1190c69ff39",
+      "imageSha256": "f526d19d6b4bbd3cb9fb17131d6a671f8202562565ea69d3eac000704efc6ddf",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0018",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0018",
+      "seedHashU32": "0x47bd18fc",
+      "rendererRevision": 1,
+      "sourceSha256": "d57205f0b20b5cc2bb1eee1cb65846999c13d44aca218258f493a1013376adcc",
+      "imageSha256": "793f3125b9d8dc1a86d423fa58da1705409b883209b33a599ff73b6797b6a779",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0019",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0019",
+      "seedHashU32": "0x48bd1a8f",
+      "rendererRevision": 1,
+      "sourceSha256": "7f1debb0ef8129c45b68e2081d2ef6a8697496620181ce1e6ed4b738873c0105",
+      "imageSha256": "a46201c4cc1f8c47b402629043c7ccb0d88255299c9e51a0fed3139f6a44773a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0020",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0020",
+      "seedHashU32": "0xc1c494cf",
+      "rendererRevision": 1,
+      "sourceSha256": "d1a583026337859d003c03f35ecbecd054006ee571cdcf0cbe3b28f08dea7e97",
+      "imageSha256": "5ebc7f64c5352d30b1653dd7b589a4db8cd1b2ee7f5a4b353c06a33f0f13eb7c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0021",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0021",
+      "seedHashU32": "0xc0c4933c",
+      "rendererRevision": 1,
+      "sourceSha256": "407e51363a2e4da1a2fca60206006e345f6f7a78d606c71887bd18a386392045",
+      "imageSha256": "9a9909da305d531a99c78506b587c003dfe46588ac87a611cf3312586e62735d",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0022",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0022",
+      "seedHashU32": "0xc3c497f5",
+      "rendererRevision": 1,
+      "sourceSha256": "e77fcf4bfb178689238b8110f99f9cd762cdcaa1d1559d80cae0a2af03339561",
+      "imageSha256": "3d8341209ad760da48487cf8a86669cf9ca7252221c514f545ecf2605be7e0f5",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0023",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0023",
+      "seedHashU32": "0xc2c49662",
+      "rendererRevision": 1,
+      "sourceSha256": "69ba1ae30cedf77b6ca36eec238fc531ccca44c2e4122b2f425062f681506a7b",
+      "imageSha256": "b4f680b51d674a021541a3da6ff16d5b81b0b64d5a1431845dd8f0a70765f720",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0024",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0024",
+      "seedHashU32": "0xbdc48e83",
+      "rendererRevision": 1,
+      "sourceSha256": "f99c757ec4a48599723c4205834eaf260376e5e71e411befc58006c37b24c70f",
+      "imageSha256": "04f5942595c014d3c10b95721051474a55292c4fa58f43133e55895cedb2b53e",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0025",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0025",
+      "seedHashU32": "0xbcc48cf0",
+      "rendererRevision": 1,
+      "sourceSha256": "2216b9595f92cc663d0a3f94bfcb6240e5e06c286b3a610a54c76d15ce7491db",
+      "imageSha256": "80029fe833cc4d2fc9103d4699fbe69eab95655227e03f114b2c97f5a14617c2",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0026",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0026",
+      "seedHashU32": "0xbfc491a9",
+      "rendererRevision": 1,
+      "sourceSha256": "8386116f5af2c5994b50c9f9c2d37f5f2dbff11afe7d5c74e31c41ae24e451de",
+      "imageSha256": "fd89a8ad11d89814ddcc4ba9f83819f6542247712ef86120b0a557c260839936",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0027",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0027",
+      "seedHashU32": "0xbec49016",
+      "rendererRevision": 1,
+      "sourceSha256": "23776651acc00cec5c52807b323fdd8d0b25a6dc97a8ed5f84b80ef314253cee",
+      "imageSha256": "86a59e9d04ac4ceaacb0122f247b016e78c4daa2bdec5e654dd7ea91cdec34de",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0028",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0028",
+      "seedHashU32": "0xc9c4a167",
+      "rendererRevision": 1,
+      "sourceSha256": "2a1ca7251201d8dd01586a7ed62eb6a90dea98a24e1ce2ba3c115fc3f2c3bff5",
+      "imageSha256": "58268bd54522eca7d01faf0fb58c665560d3ab0eee1fc01b241483b51cf8126b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0029",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0029",
+      "seedHashU32": "0xc8c49fd4",
+      "rendererRevision": 1,
+      "sourceSha256": "228f2b1fd0c6dd74d119cc1934927987b68c7d0d721f0f5a30ef05fef7a2ae30",
+      "imageSha256": "149e8d44e6029a017c480ea42785f51ebda34233774f4de55062681b93b1d6b3",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0030",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0030",
+      "seedHashU32": "0xbbc24cc6",
+      "rendererRevision": 1,
+      "sourceSha256": "f419440fb3056f8b2b89042fe1f6ce3a6fb186d520dd28260d2da2eb831ed825",
+      "imageSha256": "bc3a3e3583896ebe68081148d417dda1690e83af7840d9fdcaa1e41b87ed8477",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0031",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0031",
+      "seedHashU32": "0xbcc24e59",
+      "rendererRevision": 1,
+      "sourceSha256": "36b16a059ea873f5f4d36686d149cd512a0efefc7f2bd349151826bb2984a4d6",
+      "imageSha256": "e9f3588e769c4ec8bfac4d9e762a0959febcc595f9c66978d2b37eaa33529172",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0032",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0032",
+      "seedHashU32": "0xb9c249a0",
+      "rendererRevision": 1,
+      "sourceSha256": "4ed83b7361c76e6b3c1f5bbf13127b6e2fe55ebb484a8dbc6596a1d196a4e871",
+      "imageSha256": "59320fe57b2d9289f525ef1059bc1ad879537d7551087ed39b08c53494ad9662",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0033",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0033",
+      "seedHashU32": "0xbac24b33",
+      "rendererRevision": 1,
+      "sourceSha256": "27568d2bc6438ed37dd8136eb2e4685cc6a057dbdc19a9bb9bb0518c86b86f36",
+      "imageSha256": "117dfbd7e983a45198375b4e81bbe0f334545880d76ff80c6e060b04b5e1c73d",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0034",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0034",
+      "seedHashU32": "0xbfc25312",
+      "rendererRevision": 1,
+      "sourceSha256": "b6114419be6d64915ac2cb31a14cd3814a3a6eb303a83b8dc4f8530a41bae202",
+      "imageSha256": "f09ad1697e6215763bb837715b2eb5b47281232782813c778364d15bd5f22a3c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0035",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0035",
+      "seedHashU32": "0xc0c254a5",
+      "rendererRevision": 1,
+      "sourceSha256": "167b7a053d1c7b4cfe7ee0dd854c0359359ec41a89e9174d0cc0eee5c0c06677",
+      "imageSha256": "e16602d0391ce20f702b384c25a2045ca6258f736c10fafb20c7f98521cbee18",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0036",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0036",
+      "seedHashU32": "0xbdc24fec",
+      "rendererRevision": 1,
+      "sourceSha256": "31642f150e15d970180f7e1169cc8bb7443c7840b04baca51fce68fa7dca456e",
+      "imageSha256": "775f775cc0e41aa6888e907988f8f840015ce4eedb02a9be2319f31ce99f0987",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0037",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0037",
+      "seedHashU32": "0xbec2517f",
+      "rendererRevision": 1,
+      "sourceSha256": "dd4567801d23c52736a5a2b2681d1d276041a1da57dec32507c76d68189587f3",
+      "imageSha256": "d780a0a07d1ac8c252ec5fcc687522396e05b807de2385d640f0c1bf41532a02",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0038",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0038",
+      "seedHashU32": "0xc3c2595e",
+      "rendererRevision": 1,
+      "sourceSha256": "4719ea788bd451473fa24401c70ecb52b017382b60bd7c9918036a9c701ca0a3",
+      "imageSha256": "ed766b72c0d14905fc464942ddddf50ecd2f658cbe35eddce1b2f4d3c04d0173",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0039",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0039",
+      "seedHashU32": "0xc4c25af1",
+      "rendererRevision": 1,
+      "sourceSha256": "4ccacb0403c82f2c275403007f9eca1b2e3a763521744a1bc49893d2a8cf702b",
+      "imageSha256": "02c37a75a61cb999bd07b92dee56305e77e58908b074982466f54e40d468a1b3",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0040",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0040",
+      "seedHashU32": "0xbdb583f9",
+      "rendererRevision": 1,
+      "sourceSha256": "306d769cbaf7d675341e075b1c6a1f935611817fcab8226fa25a1ee607297794",
+      "imageSha256": "a20007dc5211d5493dea3cd36bd6d8cddbaec9847844f3ceba0c983483ac61ef",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0041",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0041",
+      "seedHashU32": "0xbcb58266",
+      "rendererRevision": 1,
+      "sourceSha256": "35ee3d502570c0c9b3a62dfb9e1eb4333e8deaa71a8afb816bc03a32faa81254",
+      "imageSha256": "2879edb83d2bd85b2c2557e6f5c821a6e8c7895fa7f15147ccd6482af6641ff2",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0042",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0042",
+      "seedHashU32": "0xbbb580d3",
+      "rendererRevision": 1,
+      "sourceSha256": "b6935039b9cac12f02381ea351ef5d896dc791ca9b62ed8bc00d6b7b5cff0985",
+      "imageSha256": "0134a28ed6bc4ab543ed7e880a144af8e3f189ddc6c6f5a109806b4ac0e13afd",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0043",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0043",
+      "seedHashU32": "0xbab57f40",
+      "rendererRevision": 1,
+      "sourceSha256": "f36c0c60d1668f425a107cc18a9056078fe1dfb6f0187b1bb5d241fdc38a5314",
+      "imageSha256": "0f22da3899777dcdd41518c682a8436a87ec4b802bd50137c103fdb76ab86b13",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0044",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0044",
+      "seedHashU32": "0xc1b58a45",
+      "rendererRevision": 1,
+      "sourceSha256": "a72050262a64ce3ca0652d14465350426cc4d5eabd23737d2067d738dcb061e1",
+      "imageSha256": "4e443d9c6a3349bfdcc42c95a63d84e650312b6ec3e06c761c008d3adec74a4f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0045",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0045",
+      "seedHashU32": "0xc0b588b2",
+      "rendererRevision": 1,
+      "sourceSha256": "319b4eb46757ba5d6c28aebb9448c5c20f6cff206740e668d2131795277a9c88",
+      "imageSha256": "0bc16849858e171ad2e2a2972122a888a390d13d67ca3725c82f0d9de0ff2bad",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0046",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0046",
+      "seedHashU32": "0xbfb5871f",
+      "rendererRevision": 1,
+      "sourceSha256": "0b32b94fec90529145e81ad119f809253a10dcd8029e2389654296c696c3fa55",
+      "imageSha256": "a6416633ca8b19163313445377dfee7a1ca1f3bc38c59f35941211ca1680b999",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0047",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0047",
+      "seedHashU32": "0xbeb5858c",
+      "rendererRevision": 1,
+      "sourceSha256": "b1fdc61c10ee9cac729d70f7bcbe4306ca93206af854201baaa148b9d1b4930b",
+      "imageSha256": "730272cf31cfba9fe21f3031d0d52af735750f91f189fce21dcf663677c7e9c1",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0048",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0048",
+      "seedHashU32": "0xc5b59091",
+      "rendererRevision": 1,
+      "sourceSha256": "54bcc081501ce93c89f835615d43d7d103239fa3afb1dfee619bc56c3c269732",
+      "imageSha256": "07d2b41380a93dfd3560d5725320a7808ece9750b5c9bedf1bb37eae3065ddbd",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0049",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0049",
+      "seedHashU32": "0xc4b58efe",
+      "rendererRevision": 1,
+      "sourceSha256": "7ce6f793acd6c0df5687014f6db76312a69be17dbafc4f7d24eb5a3fd069f26c",
+      "imageSha256": "bc3705185ec8cc84d60ea70a17af12f8d169d70ecc786847125efba5a05d2943",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P4-0050",
+      "profile": "P4",
+      "seed": "phase6-execution-p4-v1-0050",
+      "seedHashU32": "0xb7b33bf0",
+      "rendererRevision": 1,
+      "sourceSha256": "5f67ad6f310399f47317d24fe9e68e1ea6c9338c041a0dc56b456fc152ef8ee8",
+      "imageSha256": "03e10450232a735566f5f467c8ed393e2270384a75977229e12b3aff0f43a9e1",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0001",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0001",
+      "seedHashU32": "0x3d430005",
+      "rendererRevision": 1,
+      "sourceSha256": "8670e2eeba80d502cfb7a888dd886bea03889159c9b0953d211dfe7f02779e32",
+      "imageSha256": "821057b60734559551eee069231ef2541353616e8ac93c5886b614123c39c62f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0002",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0002",
+      "seedHashU32": "0x3a42fb4c",
+      "rendererRevision": 1,
+      "sourceSha256": "4053b40cfe09c2008879b496d99ac1f565ae3aa69963c1ec7065930ba395f873",
+      "imageSha256": "0e48ee4cc1262183049591720925a22509b10d6ecabb531ce908c4c0b8c73c68",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0003",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0003",
+      "seedHashU32": "0x3b42fcdf",
+      "rendererRevision": 1,
+      "sourceSha256": "fee41acea2c304b80267215e0ad2425a58b31d6b46154b5584792b9b67b6f33f",
+      "imageSha256": "2afa7e5c23b18f4de1860aed60fc56c9e0f2fc904ad8d10eac31bac06b63dc5c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0004",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0004",
+      "seedHashU32": "0x3842f826",
+      "rendererRevision": 1,
+      "sourceSha256": "894e03041b2dd916a3499e2d1b92d03c4c8edc8fda36a65c63a8907060a3854e",
+      "imageSha256": "9de7aaa251d5d5c041e6f2a49d23c8f4576448672f4e1b9aad8e792f5a227350",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0005",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0005",
+      "seedHashU32": "0x3942f9b9",
+      "rendererRevision": 1,
+      "sourceSha256": "70185d714f0d66de4a2d0d484440f060fce9cd3c0aa35ad6f290a7b2350b5466",
+      "imageSha256": "af8478506672767d56bbb6fc01cd4077140d19c496129b4ffc98ad3768858238",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0006",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0006",
+      "seedHashU32": "0x3642f500",
+      "rendererRevision": 1,
+      "sourceSha256": "6c209f6a6425fe807fc9ce092a1e6832f0b380fe284f2471962893d11dc9196f",
+      "imageSha256": "c72d0fc658912cd79c877434f204eee53609b30958f96b180e608baf24daba4f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0007",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0007",
+      "seedHashU32": "0x3742f693",
+      "rendererRevision": 1,
+      "sourceSha256": "518fbeedeb0c57d81930e883801dd88785207f61f1a91721a28a677a01fc703d",
+      "imageSha256": "9ab296b6aa500506a228a472b6b3dc6a5fbef3b22c122b9caeebfc839850b52c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0008",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0008",
+      "seedHashU32": "0x44430b0a",
+      "rendererRevision": 1,
+      "sourceSha256": "693aa6ab2085661fffac1d80078f594095f09b33a1c37a4e792b27281aedfc2e",
+      "imageSha256": "db5c1bad979dde7bfe9ca64bb14e68b406941bc86c2aa9c5e62ee2053d3468af",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0009",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0009",
+      "seedHashU32": "0x45430c9d",
+      "rendererRevision": 1,
+      "sourceSha256": "3858f3874818a0b566b4c38869e58a43ba7f0fe1e8b07e43a87e397d06198318",
+      "imageSha256": "a8be24abe09c7bdb8545b345f383415d2fd650c8c778729e3327f7044b8f6d70",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0010",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0010",
+      "seedHashU32": "0xc2460ffb",
+      "rendererRevision": 1,
+      "sourceSha256": "e27e19e889b7a6bd17e50f9b9c1ab8b5003fee0af07b1ab84fe5e413da51bb2a",
+      "imageSha256": "f595506fdda4a1e39931072e9a2c42af50baf556d5ecfb57a8237401ed32489f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0011",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0011",
+      "seedHashU32": "0xc1460e68",
+      "rendererRevision": 1,
+      "sourceSha256": "d66376e2e36ee53f4b741831ddff20667699157074b7218b95a27d3a01b516d4",
+      "imageSha256": "70a5ac69a6a7b81c8db1098f388b453a9cda2d2e832425cc70c51f44a14d026f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0012",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0012",
+      "seedHashU32": "0xc4461321",
+      "rendererRevision": 1,
+      "sourceSha256": "a49ff0d53f8de28c79c62e5c9ed0dcf23432d719885cb27f099728fe7419e169",
+      "imageSha256": "5bc5dda9de90fe45c28756b0a6130cba040981eb2b3dbceeb75e8714f273f398",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0013",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0013",
+      "seedHashU32": "0xc346118e",
+      "rendererRevision": 1,
+      "sourceSha256": "a1170d14f8f1760b964b41bc6540bb96c79ea7790d7cd5625aa7ada31b7d090d",
+      "imageSha256": "1a671a230e61865e5ead974d7c15df16ca4c0860dcae6dd1da5adce66a40ee34",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0014",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0014",
+      "seedHashU32": "0xc6461647",
+      "rendererRevision": 1,
+      "sourceSha256": "371dbe90ed966494bc96b253528e8f5b61b625a9666186c550b9ef1c7a3ad871",
+      "imageSha256": "86cf3926b8de901b0af9d424d5540c170d98c202ecd651d7c0f8afcb07e8e957",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0015",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0015",
+      "seedHashU32": "0xc54614b4",
+      "rendererRevision": 1,
+      "sourceSha256": "d2ad5c0a18b509874a1d06fe90d7f4a6949ada0222e4d1fc69753d6d4c3c4988",
+      "imageSha256": "ae44e771b08fafc2acf7796795f5ab4614a3822ac42e67842ff1093141bde50f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0016",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0016",
+      "seedHashU32": "0xc846196d",
+      "rendererRevision": 1,
+      "sourceSha256": "bf68761c4dca10fe8f8a2671d022e9883b2261f03fcc1c9e1e62dc02f2c93ef1",
+      "imageSha256": "1f87e8a6437734f23c5aa9db8e2c8ab1421314e65e3152f597e89661697a1f5d",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0017",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0017",
+      "seedHashU32": "0xc74617da",
+      "rendererRevision": 1,
+      "sourceSha256": "b0d079260c3aec41170eb977714c64072d20d169cf1e9ca30b7f8773b7959452",
+      "imageSha256": "f69fcf916812efe4250c8831f87d723d227f1424dedbb203756cf81b088242c2",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0018",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0018",
+      "seedHashU32": "0xba460363",
+      "rendererRevision": 1,
+      "sourceSha256": "eae991bdbc12d6a6210c6068d8f391aac2920b14523cec59b6b0c927a7c94bb4",
+      "imageSha256": "b24a6375c42ef0f1705ada830f92c7f934843bb998db3d4c89205b05a497461f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0019",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0019",
+      "seedHashU32": "0xb94601d0",
+      "rendererRevision": 1,
+      "sourceSha256": "4c3cc64174315a9885116247b5baa1274447a6a179d23a8bfc94a6df1cc39da5",
+      "imageSha256": "68d21935e871a86ada3e182774252bdf92ed648627d9d5eb2f29f5c639ab5611",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0020",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0020",
+      "seedHashU32": "0x303e6e60",
+      "rendererRevision": 1,
+      "sourceSha256": "86e541ddb021255ef1ea113ac202230979c723c27dafe76a62a922713d673ca2",
+      "imageSha256": "2496d209678532a835f0e8d982919b67f9bd2b138c82be8f35e9023954c3389d",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0021",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0021",
+      "seedHashU32": "0x313e6ff3",
+      "rendererRevision": 1,
+      "sourceSha256": "918b00dc88e2e444d9f09aae2d7a4472890fa875eb238fb321c8a29f69f2c10d",
+      "imageSha256": "b2b91c96f64e3471a462f40bc779012dad4778b4be17fbf70ae60a520dfca533",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0022",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0022",
+      "seedHashU32": "0x323e7186",
+      "rendererRevision": 1,
+      "sourceSha256": "c9bfc60700e009a7a053419adabe83002a8b493cfb0a7068058fab510b2fccaf",
+      "imageSha256": "4fcb1a8bf7a29d7ebaae9e19acccdd868760ad866c08ad531b9dd432a2dd4e95",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0023",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0023",
+      "seedHashU32": "0x333e7319",
+      "rendererRevision": 1,
+      "sourceSha256": "216a9dae7045d321e70c70c23268a5007f83abadba8f7019422f24cbb2ccf55e",
+      "imageSha256": "4c63796a0372343e293089bade8b2dd401377f9f48825f30ff94655aa72d9a7a",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0024",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0024",
+      "seedHashU32": "0x343e74ac",
+      "rendererRevision": 1,
+      "sourceSha256": "cad8f85a10db8a11ee8259b721747d8838a6f988bd3e7242e1489521c57b7618",
+      "imageSha256": "c2b76523a8009ffba147b84b4f4c24b476a892efeafa7f5c387f7c0c3b36a27b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0025",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0025",
+      "seedHashU32": "0x353e763f",
+      "rendererRevision": 1,
+      "sourceSha256": "98c107a99befd885fb6cd6cd531e12bcf8ce8fce5eb3fa6539c5428890a16749",
+      "imageSha256": "a27aae69b663a519285ef5d70876023c6562281a0dcb733413d102f9432b9878",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0026",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0026",
+      "seedHashU32": "0x363e77d2",
+      "rendererRevision": 1,
+      "sourceSha256": "7fafc090f34cceab318603d77d39d75ee7a5589e3def197c535f8b3658ae24c4",
+      "imageSha256": "58995adfb152707590e4c86f5288cf87569ef85ade143c3477c437fd8b2dee34",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0027",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0027",
+      "seedHashU32": "0x373e7965",
+      "rendererRevision": 1,
+      "sourceSha256": "7c210a4490b99c61ce6cb4b93d1d3cff5204cbcc2e7943cdc2333416e741fc7b",
+      "imageSha256": "32118cd67259ae3eda9eaa9effc4c915a0f185a77446f59b6ec13dcd58aa087e",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0028",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0028",
+      "seedHashU32": "0x383e7af8",
+      "rendererRevision": 1,
+      "sourceSha256": "f9728b23e8632198db74c0f947992625767524a0e6057fe9e54005cc85eb4354",
+      "imageSha256": "a19e906ced52825c93d9644d057730ac664cea2f58c0b847093bb2b80328d110",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0029",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0029",
+      "seedHashU32": "0x393e7c8b",
+      "rendererRevision": 1,
+      "sourceSha256": "1db9bd3a01aa080b07af8a1cd8eba09c845ca537f1f28e63e6e461ce630ad2e3",
+      "imageSha256": "53cbddb2b02231b164c13d86f2b4d0c7d5c50d15bf44440eb3131f324e17205e",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0030",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0030",
+      "seedHashU32": "0x3640b669",
+      "rendererRevision": 1,
+      "sourceSha256": "fef7b2c1c6cd5f83b5b6b5d313d014981a09c58e4ee649eb991baf0478ca14ed",
+      "imageSha256": "75e81bcaa42fb5bdf99a4d4958c852c8855d9c86ce7652226758bf159cc0abfd",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0031",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0031",
+      "seedHashU32": "0x3540b4d6",
+      "rendererRevision": 1,
+      "sourceSha256": "dad3226f70fa1cd3d5e6723f88db34fb26b71810826ee2aaf82f0e03e3249037",
+      "imageSha256": "4091a2856e03432c93cf93206a24344b091fc448be362544673795068c711ade",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0032",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0032",
+      "seedHashU32": "0x3440b343",
+      "rendererRevision": 1,
+      "sourceSha256": "0d840fd3aebde25f1591f5d82cc6b425770357256998fcfa0eaca2c348a3e95d",
+      "imageSha256": "597c4a1b479d89a9b99dd51d9811952f57ce1edf504cfedba07fc928ddf4b50b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0033",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0033",
+      "seedHashU32": "0x3340b1b0",
+      "rendererRevision": 1,
+      "sourceSha256": "d9fbf05f4a15f0f02097568fc3010a34f9ff5e30ea9131f35f6f4ae129a44d8c",
+      "imageSha256": "590ac086a77385ed4e65f10793b071ac201f3dc3bf5c2d5da1f5c4c65a714d65",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0034",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0034",
+      "seedHashU32": "0x3a40bcb5",
+      "rendererRevision": 1,
+      "sourceSha256": "a200dd8cd9dc42bbb83b36ed9933b514d0652f6f7e2fd73f76a504cb883ed0e1",
+      "imageSha256": "9059bf3ba986d27e892f9598f672f674f9f40130f39a68bef80a568d445242f2",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0035",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0035",
+      "seedHashU32": "0x3940bb22",
+      "rendererRevision": 1,
+      "sourceSha256": "2376493ff78765e420cc93e584d664f137eef80f55442b388f4d5873a90bb1e3",
+      "imageSha256": "b547cd9d2ca2d488f96fb6ae95e8b3b84b139204a65bc8a83cb037ecf3724e52",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0036",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0036",
+      "seedHashU32": "0x3840b98f",
+      "rendererRevision": 1,
+      "sourceSha256": "30a078a10b133ccc9f85a54f64b0dc7c277f1e87c86d6b370c9581c6b8ddd9e8",
+      "imageSha256": "b4dededba3181f873229818d2523ac661b4a1acf44a0649bfd95423710419a77",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0037",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0037",
+      "seedHashU32": "0x3740b7fc",
+      "rendererRevision": 1,
+      "sourceSha256": "a600137ef35203211eea252d520b232826c5fbfe66af17472021f56d5f9649cb",
+      "imageSha256": "c1d41698e6fe38015d9f7c8781a106995a4344bddbbf9c70578e8fedfdc3e58f",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0038",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0038",
+      "seedHashU32": "0x3e40c301",
+      "rendererRevision": 1,
+      "sourceSha256": "65d723e980a99c2f626254dcb7c32a41d904617d4f11e4cc44d9ac5fba614af9",
+      "imageSha256": "8374b5660ef47283ce9dcd9bfc54ccfe29dcc5c159c0b7120122d46bb8c6d263",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0039",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0039",
+      "seedHashU32": "0x3d40c16e",
+      "rendererRevision": 1,
+      "sourceSha256": "76807f66ebc59e3aff9903593bc4516157bcc214d9f5854f220888f903cb3bb6",
+      "imageSha256": "565a1a96b84e899beab0585e926ec508418c5a4c2ac967ccc3a5d89bccb84d5b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0040",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0040",
+      "seedHashU32": "0x344d7f36",
+      "rendererRevision": 1,
+      "sourceSha256": "82ac9ad82acffc2982b73faa61cf254d6789ef6794a3059d432f90982271f021",
+      "imageSha256": "217ef57e5e0161c88ab842968cb3fbb425dd5bde217f09348aa0c8fb8fe440eb",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0041",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0041",
+      "seedHashU32": "0x354d80c9",
+      "rendererRevision": 1,
+      "sourceSha256": "62e73e6c3952ea15a1d661d4b8295060d81f66ddcc925f2b39c4333622734845",
+      "imageSha256": "667fb799ad546d163a5fd8d39c3a1b79592d9d5b800d1deb2c5532dc7afa238c",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0042",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0042",
+      "seedHashU32": "0x324d7c10",
+      "rendererRevision": 1,
+      "sourceSha256": "0baf728be55a99558380ce87c0860b18284254eb63374aca75bea05c0b8cbeaa",
+      "imageSha256": "4a69bfd27eef8f379b80e232e03aa8a06aa2f1cb35dc6d07c9026992c2c71784",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0043",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0043",
+      "seedHashU32": "0x334d7da3",
+      "rendererRevision": 1,
+      "sourceSha256": "a4b6bc0c1a76bd9819d2057bc817b76ba377dec066d105ac7c0008d2abc90efd",
+      "imageSha256": "cc84f07404c4e8979d8786a545f4d5ade7fe631d0f3a4d86d622096dda001d3e",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0044",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0044",
+      "seedHashU32": "0x384d8582",
+      "rendererRevision": 1,
+      "sourceSha256": "e37f901ff8b673e631f286492e869ffb59f395f3accc64db117f13217b4512fa",
+      "imageSha256": "90d4cd31dcab1676646f8afa1c7645f8f5cff429be6ea3614aaaa8ddc954c294",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0045",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0045",
+      "seedHashU32": "0x394d8715",
+      "rendererRevision": 1,
+      "sourceSha256": "26213144308a319f3e191cba760c0c001476e696190391e477745efef1185ceb",
+      "imageSha256": "dea2109d025c694ceb4d8b084e9739a6dde2eed7cbfa615c1aa95b4937dde826",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0046",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0046",
+      "seedHashU32": "0x364d825c",
+      "rendererRevision": 1,
+      "sourceSha256": "c376a5ecd2e44efd4867e7e1b4de2e2ecb7a8c21fcaf6785d4ab668c8d324529",
+      "imageSha256": "79aed01c0967c3c2732c68b2ac984affe2703edacbf11637661f9caab10a81c1",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0047",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0047",
+      "seedHashU32": "0x374d83ef",
+      "rendererRevision": 1,
+      "sourceSha256": "f2fab57ec80799f5b07847ebd7298b792622868d01a8ea6d77a3de2f7f7d9f2f",
+      "imageSha256": "4b8710a168cbf6f5b44754f4e80231c304f01c4cbc6f6d62e42907ee75b7f318",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0048",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0048",
+      "seedHashU32": "0x3c4d8bce",
+      "rendererRevision": 1,
+      "sourceSha256": "91d7ab7b5d13a3895e9743a35ac03f887a31a9d4545064d120642dd7b2c44cfc",
+      "imageSha256": "b6dd9d35a972de1781de52fa87772816522332aafbbb07ba925183dfa6caa443",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0049",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0049",
+      "seedHashU32": "0x3d4d8d61",
+      "rendererRevision": 1,
+      "sourceSha256": "dc559b1139d76f77015ae3d810d087cae826d4b271fafb3973d411d39eaf1ed4",
+      "imageSha256": "bd41d435a82763488bf6b2ccb3a03f38f28c1e017267e7c51d4c36a6f2df4750",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P5-0050",
+      "profile": "P5",
+      "seed": "phase6-execution-p5-v1-0050",
+      "seedHashU32": "0x3a4fc73f",
+      "rendererRevision": 1,
+      "sourceSha256": "6445905c3268981579745c067d2ffb551369624d21b67a9e29bf858b84248fd4",
+      "imageSha256": "6840fe53c66582d4c3d00039aac4e0704d341d0307c1554adf08b73ae4cf200b",
+      "imageWordCount": 15,
+      "haltPc": "0x00003034",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0001",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0001",
+      "seedHashU32": "0xb7361aec",
+      "rendererRevision": 1,
+      "sourceSha256": "ac8b1450d9218395688fda75182890015cb13439c7bea2dfd6cc185ea33ad81e",
+      "imageSha256": "31117c018fc4c0450d5209b435ff77c39cdcbf56bf8bc6d32c70d06ad93d3762",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0002",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0002",
+      "seedHashU32": "0xba361fa5",
+      "rendererRevision": 1,
+      "sourceSha256": "9b5b36a3356acc1e352b8f4a0329cd917518326e285f15be02ed2de301e8e230",
+      "imageSha256": "68ffaa72ade4b6dd0e9da4d42483d31dfba83aacac3c59f91f87faae7cf0b9f3",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0003",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0003",
+      "seedHashU32": "0xb9361e12",
+      "rendererRevision": 1,
+      "sourceSha256": "f830a494ce6a4039f26ba960e32f93f272eb067254ba53bd50e3cd05e6478ba1",
+      "imageSha256": "556831a32092a2a0bdc0ee35442c215015220470f79c02547dedd1487c3d54ce",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0004",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0004",
+      "seedHashU32": "0xb4361633",
+      "rendererRevision": 1,
+      "sourceSha256": "7c7e366a8e93c602aef76e2190ae98ebd000a6f4ec07079e3da68f5ab89c31d7",
+      "imageSha256": "565375fda4ec36a626e3439aa607eec2824afb67d0a9402907beb231ccd0b9a0",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0005",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0005",
+      "seedHashU32": "0xb33614a0",
+      "rendererRevision": 1,
+      "sourceSha256": "7c64f30abd212be3636f5cdae24b4933fb09f356aef0488068e40296ff6d33be",
+      "imageSha256": "f87860cebd3fef6c89974ea305929633529cae1781d37d97b3ff3b21b4c4b6d7",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0006",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0006",
+      "seedHashU32": "0xb6361959",
+      "rendererRevision": 1,
+      "sourceSha256": "eee16e289a1980afe39c3ddda3f2234f17a32e92e9e28c50609feff6b35ded89",
+      "imageSha256": "1b75423a805385ca6100436e72b93386a283749dea253c55e824ddce794a56dd",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0007",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0007",
+      "seedHashU32": "0xb53617c6",
+      "rendererRevision": 1,
+      "sourceSha256": "af62bd3bb71d79391b1d538bc3e11bc7f6d61f589d2dce670ca82357919007cd",
+      "imageSha256": "9ef84454f159cd736766f90cd0270d3ffd78b7b192f9be0352a86097592347fd",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0008",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0008",
+      "seedHashU32": "0xc0362917",
+      "rendererRevision": 1,
+      "sourceSha256": "8770c80a2e366d0f0554ff8590ab3d881a9c1d47eaeb4a1f04e373dc9582370b",
+      "imageSha256": "333dbc59a7cd1a4023d3ee56949b0b58b25cb0b12ff641f03c971d74b52b6d0c",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0009",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0009",
+      "seedHashU32": "0xbf362784",
+      "rendererRevision": 1,
+      "sourceSha256": "306f9e314767fa462d28b03bba070fb4c1c8e4837963af4336b48b7e3bc85a40",
+      "imageSha256": "9b188576ed938771fed7dbcd079ad604f06c2a1d189033b3de4bd5e61e0c956c",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0010",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0010",
+      "seedHashU32": "0xb233d476",
+      "rendererRevision": 1,
+      "sourceSha256": "1bdf5b924bb5f739158ce4a3e6dbded173e0c428e1589bbf935f7cc2e1862dbf",
+      "imageSha256": "2f48841b7edb51dd4357402dafbc7b433977901254e5ea443c343920ebaa80ee",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0011",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0011",
+      "seedHashU32": "0xb333d609",
+      "rendererRevision": 1,
+      "sourceSha256": "a4e769990fa42a4a5d2c2a25018d50ca79e9738a8c9c5f11daf5a58774126785",
+      "imageSha256": "0c5772a4819faa8ef162599f0bbefd86934adafe14af87d003cd9a49384e51ae",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0012",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0012",
+      "seedHashU32": "0xb033d150",
+      "rendererRevision": 1,
+      "sourceSha256": "9b79bdf1425f525129fa812b9989463be9602f729abd321fb3cc9353d12ce6a6",
+      "imageSha256": "a093b748bbba7f9f4b2b79908ea035d1c7307b50ad4da7f3c52048f617b8dc96",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0013",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0013",
+      "seedHashU32": "0xb133d2e3",
+      "rendererRevision": 1,
+      "sourceSha256": "7c8696e908df9c0ff88d6c1570c32f1a7a93f598d5033f052cf85e92641e62e8",
+      "imageSha256": "40efd98b72dff8709fb3d39cee401ddc133daa53ebb82553816eaceb3fb6f556",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0014",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0014",
+      "seedHashU32": "0xb633dac2",
+      "rendererRevision": 1,
+      "sourceSha256": "fbaed035de86f1a0f1a5dce12a2259bccd4f52b24e7c9579356e5b01e5ac2db6",
+      "imageSha256": "4f9f07ca43958ac4db5dbb67056128d79e4f3bc774caaeefe80efe880862619b",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0015",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0015",
+      "seedHashU32": "0xb733dc55",
+      "rendererRevision": 1,
+      "sourceSha256": "2ad3467bfa51f571a5d5779b287ea53b7145f1c4c5c3b08a5fea64a6de290ba2",
+      "imageSha256": "351386592edfcb4ba9c546f0790b9e4523e9ec6fef87d01590df0ee89c495cb1",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0016",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0016",
+      "seedHashU32": "0xb433d79c",
+      "rendererRevision": 1,
+      "sourceSha256": "d8a92d9cf811c1d506aff3b11fbe0d9d9d5eecc6f3f82ae5ef3b0d9fd6b2651e",
+      "imageSha256": "7129fd2e8a1e5d21369b13644491924f17feec2658acb0174c70ba473b8e914f",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0017",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0017",
+      "seedHashU32": "0xb533d92f",
+      "rendererRevision": 1,
+      "sourceSha256": "413de95593021c4a29f11246016fa71ec7394ae4929fe9bb2f068a204fda61b7",
+      "imageSha256": "a398be18812dd0280260f93d2c599a0b7b38579754a98ac67d0ce3fa74528bee",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0018",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0018",
+      "seedHashU32": "0xba33e10e",
+      "rendererRevision": 1,
+      "sourceSha256": "887ee3fb491b6f200ba672fd123a7b76b5998024be4a90a4fbe088088fb15137",
+      "imageSha256": "85d18878031aa8b24efb17f1c95ec1f6d0edf802d1409cb6dee3799c52d5ca47",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0019",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0019",
+      "seedHashU32": "0xbb33e2a1",
+      "rendererRevision": 1,
+      "sourceSha256": "c33d18096b579c7e45a40611789fe8147c4427005349911d239e02f9522f41a4",
+      "imageSha256": "e5205c5f72997102c1900c280d62ecc655b1d6876e34fba77ff265d3959c36f1",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0020",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0020",
+      "seedHashU32": "0x4c30f54d",
+      "rendererRevision": 1,
+      "sourceSha256": "9d58981afb5e719ac9e3f282e151cabd5b1d5e0297db61d5654484aa26daebf4",
+      "imageSha256": "af0373d9ced6461b542fe5f70617e17e9cb92451b3319e49e289d943a08cad03",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0021",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0021",
+      "seedHashU32": "0x4b30f3ba",
+      "rendererRevision": 1,
+      "sourceSha256": "9929b1e321a881ad33b5373fc44bb1d563f4f8cf6ba3ed679e33b6302531e6fd",
+      "imageSha256": "54e11fab310284a08cd6d32ab4000c1cf18e2253b3d1a25742649b80a6703e3d",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0022",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0022",
+      "seedHashU32": "0x4a30f227",
+      "rendererRevision": 1,
+      "sourceSha256": "b3f1511b873e20ef071ffc264d04d2768124d8b3a2397f086b4bd72e0594dcd4",
+      "imageSha256": "fb77c94c469e137b9d9cf74537cbcda836bcf46d6ce0a131e9a00e0674a252c3",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0023",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0023",
+      "seedHashU32": "0x4930f094",
+      "rendererRevision": 1,
+      "sourceSha256": "e71769f4d1d14c13ded3aa46cbad07bcd91df421774d002f6ee054cf9979507c",
+      "imageSha256": "81ccad8df55de399b6cff8a9b86279d94b19e073916ef30a539113ae0e552e9a",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0024",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0024",
+      "seedHashU32": "0x4830ef01",
+      "rendererRevision": 1,
+      "sourceSha256": "7a4a10142a7f83c5e07bd39a16dcc3a40b0062b9b323fb43bd0e248b91e2c969",
+      "imageSha256": "495176c29367cd81004233c4d33c5bd51fa59072f77040ccf87472fe04505403",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0025",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0025",
+      "seedHashU32": "0x4730ed6e",
+      "rendererRevision": 1,
+      "sourceSha256": "66ff1966ccdb1efc3172f1cbaf2711ffd5075d1218c464bc93e2e59629e7a29c",
+      "imageSha256": "19d7d48aba6843f0b8b45bad953fb01ffac1ac57b58d5c0b4f938f29e0ce2ad1",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0026",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0026",
+      "seedHashU32": "0x4630ebdb",
+      "rendererRevision": 1,
+      "sourceSha256": "1427d4f3b0cecddbf136758462af6aef06cf06d2fb66d20e9a6c829c501870c0",
+      "imageSha256": "4f12c49674930d76b9ac05c3546598e682e07f6846a5a7ea3cb255024cafee6e",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0027",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0027",
+      "seedHashU32": "0x4530ea48",
+      "rendererRevision": 1,
+      "sourceSha256": "5e296f9f1da99dff6a46f9157ece9180f76ac65cc40ae209e32b935b618bccfa",
+      "imageSha256": "35d170b7cc517ef1ee3a7f6182334cd9d7d4363cf944e85bd54bef6ece1e91ef",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0028",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0028",
+      "seedHashU32": "0x4430e8b5",
+      "rendererRevision": 1,
+      "sourceSha256": "80490b8511f7657e8daace48eae4a9d59049f75e6231c7674277e82bb582ad2d",
+      "imageSha256": "361b8d58ef144162feed0fd26d184edc0415447e5d968cb2092b65ba47adde20",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0029",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0029",
+      "seedHashU32": "0x4330e722",
+      "rendererRevision": 1,
+      "sourceSha256": "0d352e87b11041a60c2353603d33c227cefebbba918656a84a921d63592cb5fe",
+      "imageSha256": "1c811c99f1e30242b29a222acf0d387dfc869609fff1ca1a358f94cefd9788d1",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0030",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0030",
+      "seedHashU32": "0x462ead44",
+      "rendererRevision": 1,
+      "sourceSha256": "8a36e4ed2a90d43a1388b292707ebdb563bd9367104680df32f77314eed5dc63",
+      "imageSha256": "dfdd866045159891c891cc1ee3f302347f1893e889d81bb6fee6d79e1bae1d68",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0031",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0031",
+      "seedHashU32": "0x472eaed7",
+      "rendererRevision": 1,
+      "sourceSha256": "05667fb6a9aee1513e5ba5edaa98b0fe88fd037890471b45e47eb9c99f8606e9",
+      "imageSha256": "e383978d91ad3f2ab1751a70aa2ca2626b6f4aef66d2b6d245084e63a9e37f67",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0032",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0032",
+      "seedHashU32": "0x482eb06a",
+      "rendererRevision": 1,
+      "sourceSha256": "3c12562d15fc180a2d67f85c41867eccd8fb93f053f13f6214e9b50536ef6e49",
+      "imageSha256": "ea04becfe49dcd8ec01dc8ea5e0b2a543550c0528737214ef4e312ab2eb29ff7",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0033",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0033",
+      "seedHashU32": "0x492eb1fd",
+      "rendererRevision": 1,
+      "sourceSha256": "682c2d80095de6841a11d902144ea322e137397c281d005a39f3053d7f8d8d85",
+      "imageSha256": "f22655e6bb618ae8855382a76852bd6e0886acc73d76d50ade925b902b8b5f01",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0034",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0034",
+      "seedHashU32": "0x422ea6f8",
+      "rendererRevision": 1,
+      "sourceSha256": "08ff968c86df14187259652ea57ca83db00996025a1bfe0d20ca9ee16eeb3274",
+      "imageSha256": "bb2a854c7e6ba8f568a66fbf77ebbdfbdeef417a27836cfac14e42088e53365c",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0035",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0035",
+      "seedHashU32": "0x432ea88b",
+      "rendererRevision": 1,
+      "sourceSha256": "537f34e2758d5c9db3e23f5ef24d058c02e06ec50820e2975c3b008855f2589b",
+      "imageSha256": "3f51f3a83c7c9e60340a97ac61e1263e92370630401bc904c40584816a6093bd",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0036",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0036",
+      "seedHashU32": "0x442eaa1e",
+      "rendererRevision": 1,
+      "sourceSha256": "e3e5c3c46c359ad53d8a89690a1be3eb9397f268dce50862e6b4d6434565ab15",
+      "imageSha256": "952a73c6d10a407d9b9c750d99eb89b407d94c25b27222020dcd3a3ba06f87d4",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0037",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0037",
+      "seedHashU32": "0x452eabb1",
+      "rendererRevision": 1,
+      "sourceSha256": "1f685acdd04ec02d287005c4188618b53f9b6f6e0923be37bb10bd050aa304d4",
+      "imageSha256": "df9ccf7993458bb7fe9edb3093c7764fdaa0e2cd2bb0772a14883455e7e560e8",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0038",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0038",
+      "seedHashU32": "0x3e2ea0ac",
+      "rendererRevision": 1,
+      "sourceSha256": "d4e9269c0e6b525659b55e4f8ee19f69d9dab89b35b53fecf363095d1cb4ceba",
+      "imageSha256": "4115bffd00f294be7c84fe3b63e045576e4573c8bb0f9e16ada3f74a292a192c",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0039",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0039",
+      "seedHashU32": "0x3f2ea23f",
+      "rendererRevision": 1,
+      "sourceSha256": "e45dc8954602fb84e8628298cd2b03e6f1237546dfe996db3eb312586bc7dda7",
+      "imageSha256": "ce511efcc54b5835daae599ed28ce8c0ce47d3ca45fc1771575916349b4351f0",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0040",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0040",
+      "seedHashU32": "0x402c653b",
+      "rendererRevision": 1,
+      "sourceSha256": "6091ad864753a4fdb046d8997061d97fa186296701ddb2b20a4ae8778973d603",
+      "imageSha256": "ff47553edfac77818d05951d3013f98fb9ecfe1f6a155958bd927f052e05bd5a",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0041",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0041",
+      "seedHashU32": "0x3f2c63a8",
+      "rendererRevision": 1,
+      "sourceSha256": "83e8c7758de68e96d40ce40801e89fc6297771ec007025b5b8b69866b3204c9e",
+      "imageSha256": "407250f87b75935f3fa80cb6673bfd8cfe6f000770918612b69d23296e406b70",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0042",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0042",
+      "seedHashU32": "0x422c6861",
+      "rendererRevision": 1,
+      "sourceSha256": "d3c3d6f3b2493ca92b3192878c1d58a0b1160bc4b6da37c2b787f454e1f962b2",
+      "imageSha256": "edb58baad7a080774980b410e824df3190f6bc9302292e61c4d218b7b34fc564",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0043",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0043",
+      "seedHashU32": "0x412c66ce",
+      "rendererRevision": 1,
+      "sourceSha256": "79e83b8158f4578f10659f887054e4229cfcb3888ab8041e0df6b5ccb5b57f07",
+      "imageSha256": "2f7c3f3f6bb5727245f905801358d201435c5015978b9b42a98504a0a702553d",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0044",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0044",
+      "seedHashU32": "0x442c6b87",
+      "rendererRevision": 1,
+      "sourceSha256": "b6ab528a6723f5b7e8391e9fcb27c292448e102babd89ad0e7ef9989dede674d",
+      "imageSha256": "e79c4642598074a674d89b7e5f46a6b737d5f0fba07b591e3649f151549e8f9f",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0045",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0045",
+      "seedHashU32": "0x432c69f4",
+      "rendererRevision": 1,
+      "sourceSha256": "c88e3218cfe8312bce256cddfa8bdc0d72654476962d5ed7dcbf3f8f4240be47",
+      "imageSha256": "c047d0464b59b70bd0e38dbec02bab9e7d4d6da9dd193b634ee5d441bfdb15d5",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0046",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0046",
+      "seedHashU32": "0x462c6ead",
+      "rendererRevision": 1,
+      "sourceSha256": "9494d7446a7f9d092938d533892c57307590cf3bde642729c5c24b4545b01316",
+      "imageSha256": "e00f36f43d839be7045dd36677f84b099c13c5d8abadba28777a412fa581dfba",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0047",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0047",
+      "seedHashU32": "0x452c6d1a",
+      "rendererRevision": 1,
+      "sourceSha256": "0aacab018b4c78e95f6f83a7e2d71bdda80d98f546d4de81f3ef73a6ebceb0fb",
+      "imageSha256": "2023ec7c551acb7cb6523d08244bfd29990273f40cbe6b05cfd5297910d81518",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0048",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0048",
+      "seedHashU32": "0x382c58a3",
+      "rendererRevision": 1,
+      "sourceSha256": "382cffc8952e5f3b4a102514698c962d404510c29e27fafeecaabe071a3d0801",
+      "imageSha256": "aa61b1b676e4ec6a32a2261a6b103d5ec00fb7856316d7d8da2cc99745c0c9f2",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0049",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0049",
+      "seedHashU32": "0x372c5710",
+      "rendererRevision": 1,
+      "sourceSha256": "d15280ff92c944ea3db37307df02ca158866c53d0a7ffeb716f5ad79e26214e1",
+      "imageSha256": "c0cfc3630f0bbc833259bae5ef26d85a0764f20e1088e4462ae3b9aa79069a63",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P6-0050",
+      "profile": "P6",
+      "seed": "phase6-execution-p6-v1-0050",
+      "seedHashU32": "0xba2953b2",
+      "rendererRevision": 1,
+      "sourceSha256": "593f5481af7faba7e063f2f9f7f63a05af1ba50ab75d3cc497210a01cdc326fd",
+      "imageSha256": "32d7ea759d257a8e4ccad623d39a54fad99748a7977a22bf9f43baca9418b1fb",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0001",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0001",
+      "seedHashU32": "0x3b36095f",
+      "rendererRevision": 1,
+      "sourceSha256": "f13cca853f448ba93e00170b515da5d0b5d4d1d2316b212610d4cd0dba968078",
+      "imageSha256": "411cbe00d3d26900f1c67df80f7e3d91a880489d183c8f7614d6d691d40e8d11",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0002",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0002",
+      "seedHashU32": "0x3c360af2",
+      "rendererRevision": 1,
+      "sourceSha256": "8e1bc5913cbfcd7cad5880f49c98ff081bf41a48abc87015c346dd5cb9997150",
+      "imageSha256": "7e041507204ca3a0bc20fc1da658ba22c28f1a33d828206bb828d65fded02732",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0003",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0003",
+      "seedHashU32": "0x3d360c85",
+      "rendererRevision": 1,
+      "sourceSha256": "9e9776af7d69d694598a37e87c02eebe65e07bfb51977c8ab6d5351ad5acbd11",
+      "imageSha256": "ea4447a541464a5ab8d6087a9aa2fc5ab6d318a7e7cfbb297bd4b46e9cf05e16",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0004",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0004",
+      "seedHashU32": "0x36360180",
+      "rendererRevision": 1,
+      "sourceSha256": "343f0200890a6d56c33b3a32bd144b3fb20e6bb3fa12fc5bbcc59d99c324c6a0",
+      "imageSha256": "ee70006b853bceaed8fb0d52a4cec434058cbf2df8f12e7de36857893e38e566",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0005",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0005",
+      "seedHashU32": "0x37360313",
+      "rendererRevision": 1,
+      "sourceSha256": "0d34bc95b0e9afe7d3141d52191bc5d85e710a5a4ee1ee44c0b017734e34c068",
+      "imageSha256": "6632eddcf9a1084f2cf6793ea43b20bbd82cb732a924f4cd512aa403900fbc30",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0006",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0006",
+      "seedHashU32": "0x383604a6",
+      "rendererRevision": 1,
+      "sourceSha256": "40ceee5335382f0d2253862b6efdce725ad2801de45393b3c813126d3a350715",
+      "imageSha256": "d98c32500275c57ab5622eb8006cf69b1f4418f998b270d41dad3321788a8420",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0007",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0007",
+      "seedHashU32": "0x39360639",
+      "rendererRevision": 1,
+      "sourceSha256": "696ddf8c12a8b2c83a6f8eff6ddc94db392b911c8acf7dc65ec441c1a03185b6",
+      "imageSha256": "7859c325bb69aea0cfb9e8f13f219c961498365114c17c1e237c877c25048d37",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0008",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0008",
+      "seedHashU32": "0x42361464",
+      "rendererRevision": 1,
+      "sourceSha256": "0088f3a7a0ebdc1a66b353f86289e3191e45300512044d28807fc271c8daf91c",
+      "imageSha256": "79805b8e9bb17ac56ad9ad68b436f994336cfd4422ad192ae63ffa1d1e86ae7a",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0009",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0009",
+      "seedHashU32": "0x433615f7",
+      "rendererRevision": 1,
+      "sourceSha256": "f2156a2d3e2225bc5d5ba83f86092c262cac011c6e7166fadd8c79795021f0c2",
+      "imageSha256": "a15194b5019e0c2e9bdce763cd94709ecab85cf1f123b1515734fc7c08dd2786",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0010",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0010",
+      "seedHashU32": "0xc0391955",
+      "rendererRevision": 1,
+      "sourceSha256": "c8b0e7223b58d59b7f781b0db0ee9fb3e7f38319c5303ea62b83a3721a9bd761",
+      "imageSha256": "eba97485e61750dd5fc3b98ac82cdcb753d7e6ec53db494239dd86ef27acc89a",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0011",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0011",
+      "seedHashU32": "0xbf3917c2",
+      "rendererRevision": 1,
+      "sourceSha256": "5b7ffec3a4011da2c126edf3e9dc257389f9b6cc9d994ab00ecd2e4406eedcaf",
+      "imageSha256": "ccb658837d3a9f6d574e9f5603effb27687e80cd7f2e00141c5ab5ccf8c0b034",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0012",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0012",
+      "seedHashU32": "0xbe39162f",
+      "rendererRevision": 1,
+      "sourceSha256": "165e9143bf420c15dbd0b8ce4231853da2b18d5904fee27cdd6ba6c54069751e",
+      "imageSha256": "dbf21b741ff36ab8fb20c5e509ac117c1f6d0b359106e84c12f02db565a5fe3f",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0013",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0013",
+      "seedHashU32": "0xbd39149c",
+      "rendererRevision": 1,
+      "sourceSha256": "2e09cf7d4521676297d245583cad5413c7899ddda5e03b14aaf1cf34396ef826",
+      "imageSha256": "f3a510406bc6e04340337518fb8cb939bcb3e6ed5e3faeeda659cabe1911456b",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0014",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0014",
+      "seedHashU32": "0xbc391309",
+      "rendererRevision": 1,
+      "sourceSha256": "bd0cae852495d10f62ad711c714d60a898e09ff044ea3dcef3b46af86e59d0e6",
+      "imageSha256": "fb1fe19a595654299be8303d103b51456af09a9764a7a234366bf6bcb62c473a",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0015",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0015",
+      "seedHashU32": "0xbb391176",
+      "rendererRevision": 1,
+      "sourceSha256": "f678497b8703f826c943484ef7f57b42a31776d0059c72ecb155712687c781a1",
+      "imageSha256": "d4da121551aa71251f1080779c4596a57e009c27d2f9a42318781acdad556f37",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0016",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0016",
+      "seedHashU32": "0xba390fe3",
+      "rendererRevision": 1,
+      "sourceSha256": "85f7ed87ef33bcf008e285add4af33199c5fe5a795e45bc0a52456d8372f3876",
+      "imageSha256": "7dac1f05d85c47e77aa0e28db9ebb94ea5df492b8fbcde4ef341e5eaabc892fd",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0017",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0017",
+      "seedHashU32": "0xb9390e50",
+      "rendererRevision": 1,
+      "sourceSha256": "25416be232adaf5bda6c4741c9125f8d5d681f54ba799b3b4aac9e80563bd447",
+      "imageSha256": "cea65716a55519990ec4633a6880641031b883d7596505ae0a6129acdb4bea2e",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0018",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0018",
+      "seedHashU32": "0xc83925ed",
+      "rendererRevision": 1,
+      "sourceSha256": "e171147465bc5036b042e771dc53840f5ea08ebd33734e02fcfe11fe2e7cd29d",
+      "imageSha256": "7a8dd8b241abb70b40a389e0ea52dc5380f40f2001cafb0abb49092cca615971",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0019",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0019",
+      "seedHashU32": "0xc739245a",
+      "rendererRevision": 1,
+      "sourceSha256": "a19c44dedeefdc91e6d3b86fe26757ca00709414bbec4412699109d8510398ce",
+      "imageSha256": "3b67626908af237cca01bcb2e35c628d7f7bdc371a04ad48a96abd4d741dc12f",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0020",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0020",
+      "seedHashU32": "0xc63b615e",
+      "rendererRevision": 1,
+      "sourceSha256": "403d4edd7c1b3a14e8044f218aab63ae8830ff0fd11d312749fff5eb99b83e25",
+      "imageSha256": "49110c00e408d681b383be83bb991a4e783f10a9f124ba88501b665b54596e10",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0021",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0021",
+      "seedHashU32": "0xc73b62f1",
+      "rendererRevision": 1,
+      "sourceSha256": "05778ad2888277dead7159ec2ee25f8dca34480ea9c32aabd748833e12ae257b",
+      "imageSha256": "97138468182bbcb2097750479fe0a12d6a5b324a7809d4ed3489ff46fe556b40",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0022",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0022",
+      "seedHashU32": "0xc43b5e38",
+      "rendererRevision": 1,
+      "sourceSha256": "437ca5232998ab97c32a3ee3cadea19d9c9d2ef1041d35951ca2f3e7a4e132e5",
+      "imageSha256": "d9884dbdcb70f4f4fbe9c6092b4bc460657dc2b500bfde5f5e6347a42db5d5af",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0023",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0023",
+      "seedHashU32": "0xc53b5fcb",
+      "rendererRevision": 1,
+      "sourceSha256": "6f59a33111b58b55d70167f7ace26c97a985a9c69b88151f1a71f8edddf8e41a",
+      "imageSha256": "ee87c3be78ac2b967868bc864be7c271d06f5cbc75181f265349372286a634ef",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0024",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0024",
+      "seedHashU32": "0xca3b67aa",
+      "rendererRevision": 1,
+      "sourceSha256": "25cdb397e2ffa141b97d91e9bfd69cf28b02ca60854a4e28be682600db15246f",
+      "imageSha256": "7493cb20892eb2a0296b816a4c9be30cc488fd467f55897604e1284773558c1c",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0025",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0025",
+      "seedHashU32": "0xcb3b693d",
+      "rendererRevision": 1,
+      "sourceSha256": "33e094365b428114a01b0c63a92f4dbdcde156790fce07737caf578d579944d5",
+      "imageSha256": "d6892e18facf519fd5cf95f9f216b84b0bf003a943490b9ba8db5844e44da473",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0026",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0026",
+      "seedHashU32": "0xc83b6484",
+      "rendererRevision": 1,
+      "sourceSha256": "7cb4378b985d015ce37dc2b0075008d170d3c63777cf6d875181db3e57b71622",
+      "imageSha256": "d09865518260396416e428b963de39bd1047541887524cdc4daa890086f11b07",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0027",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0027",
+      "seedHashU32": "0xc93b6617",
+      "rendererRevision": 1,
+      "sourceSha256": "19c01eafb6d32e01d8140c6fc92b6108cc12054987788881acd938c2c3aadf64",
+      "imageSha256": "efa44ab6acbc06fd86378d88fac86b152d0246955d4112e837a24f49bb3a834e",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0028",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0028",
+      "seedHashU32": "0xbe3b54c6",
+      "rendererRevision": 1,
+      "sourceSha256": "bee2cbd2168c5caef7ec078a5375c6cd1223c880e8b555ecce68bf84c4c6a358",
+      "imageSha256": "4e72379a4e4e12e917f3cd519a39bf3124e50ddb2ee1c66669b8105771950bb2",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0029",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0029",
+      "seedHashU32": "0xbf3b5659",
+      "rendererRevision": 1,
+      "sourceSha256": "65f15959b48406d18f83ba8188634eb3682f6ddbf8a83ee79be9c71158402335",
+      "imageSha256": "a3329843d1233f030860ce1aaffa438592e5c2765fd8fd0d7453cefb4cb39ca9",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0030",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0030",
+      "seedHashU32": "0xcc3da967",
+      "rendererRevision": 1,
+      "sourceSha256": "a9b528c3a9dd7697ebb5c62cf6d4495d6d9506559cb5b4a1eefc65564cdae224",
+      "imageSha256": "989082738efc7bfb2c2d90ddd2beb451c87022becf6a733468422e6b428d525b",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0031",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0031",
+      "seedHashU32": "0xcb3da7d4",
+      "rendererRevision": 1,
+      "sourceSha256": "5502ed8e6effdd98e125e10e2ae31ea5b5c3e8d11164dedb75a9e955fd534c99",
+      "imageSha256": "d2e16e316713dd2028e89b1c96ff225540babfe0203bb691781b57c5f9f276fe",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0032",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0032",
+      "seedHashU32": "0xce3dac8d",
+      "rendererRevision": 1,
+      "sourceSha256": "8ec3049ee9cda9ceaf9ed7812cb7fcd7278fed711a49b4d8c859b32a53918259",
+      "imageSha256": "59ef004ff78e56374185b3e0bd835f34977cab4be6b4b000c058fcaf11d70ed9",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0033",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0033",
+      "seedHashU32": "0xcd3daafa",
+      "rendererRevision": 1,
+      "sourceSha256": "a3a10693127a66e58de849ed5d4b092896e23fe45545d3cd1d6da53e0481b6ef",
+      "imageSha256": "43fa176e22bac0f32deb60b9f2f87be61f4900987896759343617e0220615f46",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0034",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0034",
+      "seedHashU32": "0xc83da31b",
+      "rendererRevision": 1,
+      "sourceSha256": "6220d204c4da586c68ed0e77341ca3813cda0398e44b885eeeadc5e0753755f8",
+      "imageSha256": "c8f3cd86c7291cfc6de817075f31c32299a04fd3c817250c8d83754213242d53",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0035",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0035",
+      "seedHashU32": "0xc73da188",
+      "rendererRevision": 1,
+      "sourceSha256": "6ed2697838eebd9bc093d64c578660df7fa52108bb3f4f771eb8b09ad6ae9ae0",
+      "imageSha256": "e27818b701f18eab59cea9b3c7c04c3081e717d8704759496ba95f712bf30149",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0036",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0036",
+      "seedHashU32": "0xca3da641",
+      "rendererRevision": 1,
+      "sourceSha256": "f66dfb2f19eef1b2a04a80a119a2710a6f18f2f4cce277c2bb8de378df51bc19",
+      "imageSha256": "11d91957c1c193660db4bb52eb52a1e0c16bf962c3a503ddc1a96dbd4944ae5b",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0037",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0037",
+      "seedHashU32": "0xc93da4ae",
+      "rendererRevision": 1,
+      "sourceSha256": "9006abe06791e6485f7de77751c2df79b86318739115044cf3812ac58f234d8f",
+      "imageSha256": "4c1aa2070aaa42bcdadfe099e2d50fff2fa970e8758c2a5c8c79f3a9247d20f5",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0038",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0038",
+      "seedHashU32": "0xc43d9ccf",
+      "rendererRevision": 1,
+      "sourceSha256": "aa1fc59ff33bfc612566a8a654db4f2c4d067445044ce21bfbebe0404a4629fc",
+      "imageSha256": "58598c63560eb5e80bc3cab6fe226df80f7ef38c932b3a0636eef637e5488048",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0039",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0039",
+      "seedHashU32": "0xc33d9b3c",
+      "rendererRevision": 1,
+      "sourceSha256": "63aa9f88467ea334d982c224446f34b05b10eea688117f256d96f18a14b65479",
+      "imageSha256": "1cac11c8d2121c33db454b459c272dd673c6c63911fbf72fdcc78f2020503438",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0040",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0040",
+      "seedHashU32": "0xc22c5088",
+      "rendererRevision": 1,
+      "sourceSha256": "cb3d91ee3257b83ab17021f96a09352a879f2776186d45112551ad7389960b77",
+      "imageSha256": "cd24cb1eb02418874d04694fcb17d2f8f43cd65aae7b0f8675dc5e20b68f36f8",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0041",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0041",
+      "seedHashU32": "0xc32c521b",
+      "rendererRevision": 1,
+      "sourceSha256": "723a00e99ad0d125eabfdfa8b9a91565f44dad77646daf9988aea73514e959b6",
+      "imageSha256": "d4fd59b8f31f039374921cb933ed4f577dc6172d68a40c5fcebf00bc8a25d560",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0042",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0042",
+      "seedHashU32": "0xc42c53ae",
+      "rendererRevision": 1,
+      "sourceSha256": "c58a6aa227370009898b9cac9694d32a00762725df60141c9c96b95c59f99fe8",
+      "imageSha256": "2c3838abef385313883a3b7b88816f6697bebf4f2527be47098bbcb5e6a305b3",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0043",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0043",
+      "seedHashU32": "0xc52c5541",
+      "rendererRevision": 1,
+      "sourceSha256": "cebfcd97f06b4c68995aae11167ac00ab39163b8649795917c3df0b030368edf",
+      "imageSha256": "a954778695ff6b71eb8950eb2238cc00e57399855aeaf1c82da5f277a0a813e3",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0044",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0044",
+      "seedHashU32": "0xc62c56d4",
+      "rendererRevision": 1,
+      "sourceSha256": "a343673bc1330f086380bdf4da48e299bf2505adefc7be2512edcb856c00900b",
+      "imageSha256": "46887fd160de9acf4536f07c1489706135d403aedb752345b87120234ed82d75",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0045",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0045",
+      "seedHashU32": "0xc72c5867",
+      "rendererRevision": 1,
+      "sourceSha256": "a546c62bbcea2a8ca5fd6dea8fa7416b3d6f90900a4bdfee4b1003f70706d7a2",
+      "imageSha256": "7212a2375f9d4d18e395a162ce560511c603ad8f48c35cbb5f1f8320d8e8ad07",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0046",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0046",
+      "seedHashU32": "0xc82c59fa",
+      "rendererRevision": 1,
+      "sourceSha256": "7f7d031c739be40dcf106bb03a2b30fff45ec3aa0c527f59b2d7ad64fb467f01",
+      "imageSha256": "dcb420575ea83351830d9214350cff688357d1fec45768fb284b7da1a43af075",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0047",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0047",
+      "seedHashU32": "0xc92c5b8d",
+      "rendererRevision": 1,
+      "sourceSha256": "ba952b5cc5535883b722ea314de214cb45eaab1c47a11969ee7a97194dddce7f",
+      "imageSha256": "ecbb7cab3d0b92c127aa5d71e87f1fa7f5dbab06a5b8a155c18129cbc7c9baaf",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0048",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0048",
+      "seedHashU32": "0xba2c43f0",
+      "rendererRevision": 1,
+      "sourceSha256": "79299671df53fa428440e09efb72b97a43f41ddc37209f23ec58c9456cba357f",
+      "imageSha256": "30c00a1fb13b36a57e4ea62988e88acb34e898c2a0fb6281e3a72d2903b7c321",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0049",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0049",
+      "seedHashU32": "0xbb2c4583",
+      "rendererRevision": 1,
+      "sourceSha256": "698f088a3e885fcaf03f610f1d91235550c57809ef282bbf841f63917fd44b12",
+      "imageSha256": "2e8ebab7859602587b9ffa8c0a71a4a84f80c6ff7924414f0ca9d047d5228658",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    },
+    {
+      "id": "EXEC-P7-0050",
+      "profile": "P7",
+      "seed": "phase6-execution-p7-v1-0050",
+      "seedHashU32": "0xc82e9891",
+      "rendererRevision": 1,
+      "sourceSha256": "2671c0458312f4343b358d684536440d974e63d47de1e8b88be9b4c02435b168",
+      "imageSha256": "4e569e30913474c2e7236d458f02f4ff1e39bc07e3a1d3ec61b37ab0b9cb6954",
+      "imageWordCount": 20,
+      "haltPc": "0x00003048",
+      "haltWord": "0x1000ffff",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null
+    }
+  ],
+  "handwritten": [
+    {
+      "id": "EXEC-HAND-P3-BOUNDARY",
+      "profile": "P3",
+      "file": "execution-handwritten/p3-boundary.asm",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null,
+      "sourceSha256": "c2f560c1e326b2123855b1679760ab72648e4aadcb088b597072899291a5603c"
+    },
+    {
+      "id": "EXEC-HAND-P4-BOUNDARY",
+      "profile": "P4",
+      "file": "execution-handwritten/p4-boundary.asm",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null,
+      "sourceSha256": "988af0f4c4edfe5d0b3b03cb5ce4155dcf873858ea747cc8274a7ff74bb5cb61"
+    },
+    {
+      "id": "EXEC-HAND-P5-BOUNDARY",
+      "profile": "P5",
+      "file": "execution-handwritten/p5-boundary.asm",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null,
+      "sourceSha256": "20473056545ba60a62f947ff6f111af13878133cf46b2400a819617d79283b57"
+    },
+    {
+      "id": "EXEC-HAND-P6-BOUNDARY",
+      "profile": "P6",
+      "file": "execution-handwritten/p6-boundary.asm",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null,
+      "sourceSha256": "7425841b69bf52e0326a810a7f55efa552590333399034d798fd26c6aeb6d964"
+    },
+    {
+      "id": "EXEC-HAND-P7-BOUNDARY",
+      "profile": "P7",
+      "file": "execution-handwritten/p7-boundary.asm",
+      "maxSteps": 128,
+      "features": [
+        "control-flow",
+        "memory",
+        "delay-slot-contract"
+      ],
+      "expectedDifferenceContractId": null,
+      "sourceSha256": "8db2d41609776756929a347b73b1bd95f119351d21389913abf1b4d97027c619"
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "payloadSha256": "f1e1613848be8509b7985ead30fc795933355ba9c7fa743efdfaee9650722799"
+  }
+}

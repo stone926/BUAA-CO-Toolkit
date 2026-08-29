@@ -50,7 +50,7 @@ infra:
   text.ts — getMipsWordRange, 字符分类
 
 trace:
-  traceParser.ts — 解析 coL1 写回行及 coL2 动态指令块为 CpuTraceEvent[]；课程 oracle 固定使用 coL2，以支持停机尾证明、SWL/SWR 合并、REGIMM 分支事件修复/后续状态限制和动态兼容检查，coL1 仅用于工具链能力探针
+  traceParser.ts — 解析 coL1 写回行及 coL2 动态指令块为 CpuTraceEvent[]；legacy MARS oracle 固定使用 coL2，以支持停机尾证明、SWL/SWR 合并、REGIMM 分支事件修复/后续状态限制和动态兼容检查，coL1 仅用于工具链能力探针；默认 builtin TS oracle 不经过该文本解析器
   traceCompare.ts — 事件对比引擎, TraceDiffResult
 
 迁移状态: 已从CST完全迁移到AST, Cst*和parseOperands为deprecated. 详见 ARCHITECTURE_REVIEW.md

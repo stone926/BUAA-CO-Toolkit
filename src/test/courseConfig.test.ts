@@ -17,10 +17,17 @@ describe('course config alignment', () => {
     expect(getProfileRequiredTools('P1')).toEqual(['ise']);
   });
 
-  it('uses Logisim and MARS tools only for the matching profiles', () => {
+  it('keeps legacy-only tools on P0-P3 where their profile capability still needs them', () => {
     expect(getProfileRequiredTools('P0')).toEqual(['logisim', 'java']);
     expect(getProfileRequiredTools('P2')).toEqual(['mars', 'java']);
     expect(getProfileRequiredTools('P3')).toEqual(['logisim', 'java']);
+  });
+
+  it('uses only ISE as the ordinary required tool for builtin P4-P7 course paths', () => {
+    expect(getProfileRequiredTools('P4')).toEqual(['ise']);
+    expect(getProfileRequiredTools('P5')).toEqual(['ise']);
+    expect(getProfileRequiredTools('P6')).toEqual(['ise']);
+    expect(getProfileRequiredTools('P7')).toEqual(['ise']);
   });
 
   it('matches the tutorial P5 top-level interface', () => {

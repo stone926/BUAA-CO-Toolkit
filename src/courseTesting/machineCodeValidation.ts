@@ -15,6 +15,9 @@ export interface CourseMachineCodeViolation {
 const builtinGeneratorMarker = /^#\s*Built-in BUAA CO (?:random|P7 probe) ASM test\s*$/im;
 /** Stable Mars v0.6.3 Compact* uses 0x6ffc as an exclusive text limit. */
 export const stableMarsCourseInstructionMemoryWords = 4095;
+export type CourseMachineCodeCapacityPolicy = 'course-hardware' | 'stable-mars-v0.6.3';
+export const courseHardwareMachineCodeCapacityPolicy: CourseMachineCodeCapacityPolicy = 'course-hardware';
+export const stableMarsMachineCodeCapacityPolicy: CourseMachineCodeCapacityPolicy = 'stable-mars-v0.6.3';
 
 export function validateCourseMachineCode(
   profile: ProjectProfile,
@@ -60,9 +63,14 @@ export function courseMachineCodeValidationError(
   profile: ProjectProfile,
   machineCodeText: string,
   asmText = '',
-  trustedBuiltinSource = false
+  trustedBuiltinSource = false,
+  capacityPolicy: CourseMachineCodeCapacityPolicy = courseHardwareMachineCodeCapacityPolicy
 ): string | undefined {
-  const capacityError = courseMachineCodeCapacityError(profile, machineCodeLineCount(machineCodeText));
+  const capacityError = courseMachineCodeCapacityError(
+    profile,
+    machineCodeLineCount(machineCodeText),
+    capacityPolicy
+  );
   if (capacityError) {
     return capacityError;
   }
@@ -78,23 +86,25 @@ export function courseMachineCodeValidationError(
 }
 
 /**
- * Validate both the course hardware capacity and the slightly smaller oracle range exposed by
- * stable Mars v0.6.3. Course hardware has 4096 words through 0x6ffc, but that MARS release treats
- * 0x6ffc as an exclusive Compact* text limit, so an automated oracle image can use only the first
- * 4095 words through 0x6ff8.
+ * Validate the provider-neutral course hardware capacity and, only when explicitly selected,
+ * the slightly smaller legacy oracle range exposed by stable Mars v0.6.3. Course hardware has
+ * 4096 words through 0x6ffc; that MARS release treats 0x6ffc as an exclusive Compact* text limit
+ * and can therefore use only the first 4095 words through 0x6ff8.
  */
 export function courseMachineCodeCapacityError(
   profile: ProjectProfile,
-  wordCount: number
+  wordCount: number,
+  policy: CourseMachineCodeCapacityPolicy = courseHardwareMachineCodeCapacityPolicy
 ): string | undefined {
   const capacity = courseInstructionMemoryWords(profile);
   if (capacity === undefined) {
     return undefined;
   }
   if (wordCount > capacity) {
-    return `${profile} 最终机器码共有 ${wordCount} words，超过教程 IM ${capacity} words 容量（0x3000..0x6ffc）。MARS large-text 内存配置可执行超出部分，但课程硬件无法装载。`;
+    return `${profile} 最终机器码共有 ${wordCount} words，超过教程 IM ${capacity} words 容量（0x3000..0x6ffc），课程硬件无法装载。`;
   }
-  if (wordCount > stableMarsCourseInstructionMemoryWords) {
+  if (policy === stableMarsMachineCodeCapacityPolicy
+    && wordCount > stableMarsCourseInstructionMemoryWords) {
     return `${profile} 最终机器码共有 ${wordCount} words；教程 IM 可容纳 ${capacity} words，但稳定版 MARS v0.6.3 的 Compact* 文本上界 0x6ffc 为排他值，课程 oracle 最多支持 ${stableMarsCourseInstructionMemoryWords} words（末址 0x6ff8）。请缩短 1 word`;
   }
   return undefined;

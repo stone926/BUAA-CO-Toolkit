@@ -9,7 +9,7 @@ entry:
 
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
-  config.ts — 所有co.*设置读取(getProfile/getMarsJar/getIsePath/getRunTimeout...), 分层取值(Workspace/WorkspaceFolder/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪
+  config.ts — 所有co.*设置读取(getProfile/getMipsEngine/getMarsJar/getIsePath/getRunTimeout...), 分层取值(Workspace/WorkspaceFolder/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；`co.mips.engine` 无效值 fail-safe 为 auto
 
 build:
   scripts/clean-compile-output.mjs — 编译前安全清空固定 `out/`，避免已删除模块的陈旧 JS 被打入 VSIX
@@ -20,7 +20,7 @@ build:
   profileResolver.ts — 推断核心: 端口签名(P6外部存储器/P7中断外设), display格式(P4 vs P5时间戳), P7结构(CP0+Bridge+Timer), 文件类型分布, 四级置信度(explicit/strong/weak/none)
 
 toolchain:
-  toolchain.ts — checkToolchain: Java(-version)/Python(--version)/已发布 MARS v0.6.3/8b53a49（coL1/coL2 兼容探针同时确认 Compact `$gp/$sp` 初值；课程 oracle 固定 coL2；检查 CompactLargeText/FixedCompactLargeText，P7 的 efc/p7irq）/ISE(fuse+ISim GUI可执行)/Logisim jar/Hazard Calculator
+  toolchain.ts + toolchainPolicy.ts — checkToolchain 与 UI 使用 mode-aware effective dependency：P4–P7 auto/builtin 只保留 ISE，P3 保留 Logisim/Java；mars/verify-both 再添加 profile 对应 MARS/Java。configured legacy 检查覆盖 v0.6.3 的 coL1/coL2、Compact 初态/配置及 P7 efc/p7irq；verify-both 另要求 v0.6.3-course1 `legacy-course-executor` 精确 bytes/SHA-256，不能与 assembly compatibility 角色混用
   iseCommon.ts — buildIseEnvironment, findFuse, findIsimGui, isimExecutableName
   python.ts — pythonCandidates(win32:python/py/python3, other:python3/python), firstWorkingCommand, commandResponds
 
@@ -66,7 +66,7 @@ ui:
   sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作/资料四段, 根据Profile+活跃文件+工具链状态
   wizard.ts — 4步向导: 选Profile->项目名->配置工具链(可选)->创建目录+模板(.v/.asm+testbench)
   advancedTools.ts — registerAdvancedTools(): 按Profile过滤低频工具
-  advancedToolModel.ts — 工具分组/标签/描述模型
+  advancedToolModel.ts — 工具分组/标签/描述模型；P3–P7 开发工具包含“使用固定 MARS 验证”，运行 independent full stack 并始终保留 bundle
   webview/reportLayout.ts — 报告 Webview 共享页面 shell/CSS(从resources/templates/webview渲染)、metric、table 和转义 helper
   templates/templateRegistry.ts — resources/templates 受控占位替换加载器, 用于生成可审计模板产物
 

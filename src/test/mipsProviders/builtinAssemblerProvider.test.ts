@@ -20,7 +20,11 @@ import {
   BUILTIN_TS_ASSEMBLER_DESCRIPTOR,
   BuiltinTsAssemblerProvider
 } from '../../mips/providers/builtinAssemblerProvider';
-import { wordsToHexText } from '../../mips/core/assembler/artifacts';
+import {
+  courseInstructionImageBaseAddress,
+  courseInstructionImageWords,
+  wordsToHexText
+} from '../../mips/core/assembler/artifacts';
 import {
   assembleProgramForService,
   courseAssemblerSemanticsRevision
@@ -75,6 +79,54 @@ describe('BuiltinTsAssemblerProvider', () => {
       expect(wordsToHexText(textWords).trim().split(/\s+/)).toEqual(dumped);
       expect(result.image!.sourceMap).toHaveLength(textWords.length);
       expect(result.image!.inputGraph).toHaveLength(1);
+    } finally {
+      await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
+
+  it('exports a merged P7 userText DUT image while kernelText remains ktext-only', async () => {
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-builtin-assembler-p7-'));
+    try {
+      const sourceUri = URI.file(path.join(directory, 'main.asm'));
+      await fs.promises.writeFile(sourceUri.fsPath, [
+        '.text',
+        'halt:',
+        '    beq $0, $0, halt',
+        '    nop',
+        '.ktext 0x4180',
+        '    eret'
+      ].join('\n'), 'utf8');
+      const userOutput = URI.file(path.join(directory, 'code.txt'));
+      const kernelOutput = URI.file(path.join(directory, 'kernel.txt'));
+      const provider = new BuiltinTsAssemblerProvider();
+      const userRequest: AssembleRequest = {
+        sourceUri,
+        target: { kind: 'userText', outputFile: userOutput },
+        courseTrace: true,
+        requirements: { profile: 'P7' }
+      };
+      expect((await provider.preflight(userRequest)).ok).toBe(true);
+      const userResult = await provider.assemble(userRequest);
+      expect(userResult.ok, userResult.status.stderr).toBe(true);
+
+      const userWords = (await fs.promises.readFile(userOutput.fsPath, 'utf8'))
+        .trim().split(/\s+/).map((word) => Number.parseInt(word, 16) >>> 0);
+      const handlerIndex = (0x4180 - courseInstructionImageBaseAddress) / 4;
+      expect(userWords).toHaveLength(handlerIndex + 1);
+      expect(userWords.slice(0, 2)).toEqual([0x1000ffff, 0]);
+      expect(userWords[handlerIndex - 1]).toBe(0);
+      expect(userWords[handlerIndex]).toBe(0x42000018);
+      expect(userWords).toEqual(courseInstructionImageWords(userResult.image!));
+
+      const kernelRequest: AssembleRequest = {
+        sourceUri,
+        target: { kind: 'kernelText', outputFile: kernelOutput },
+        requirements: { profile: 'P7' }
+      };
+      expect((await provider.preflight(kernelRequest)).ok).toBe(true);
+      const kernelResult = await provider.assemble(kernelRequest);
+      expect(kernelResult.ok, kernelResult.status.stderr).toBe(true);
+      expect(await fs.promises.readFile(kernelOutput.fsPath, 'utf8')).toBe('42000018\n');
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }

@@ -59,11 +59,27 @@
       },
       "co.toolchain.mars": {
         "type": "string",
-        "description": "Mars jar 包路径。课程 Trace 以已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）为兼容基线，要求支持 coL1、coL2 和 FixedCompactLargeText/CompactLargeText；插件通过 coL2 逐指令输出和 MARS 原生 max-step 在本地校验课程停机尾"
+        "description": "Mars jar 包路径。P2 和 co.mips.engine=mars 使用 configured legacy provider；verify-both/固定验证要求此路径精确指向编译内置信任的 v0.6.3-course1 legacy-course-executor。legacy 课程 Trace 要求 coL1、coL2 和 FixedCompactLargeText/CompactLargeText"
       },
       "co.toolchain.marsP7": {
         "type": "string",
-        "description": "P7 专用 Mars jar 路径。P7 自动测试以已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）为兼容基线，除 coL1/coL2 外还需要 efc、p7irq 和 cl；内存配置使用 CompactLargeText（课程异常入口固定 0x4180）。未配置时回退到 co.toolchain.mars"
+        "description": "P7 专用 Mars jar 路径。co.mips.engine=mars 时作为用户配置的 legacy 回滚（需 coL1/coL2/efc/p7irq/cl，不要求固定发布身份）；verify-both/固定验证时同一路径必须精确指向编译内置信任的 v0.6.3-course1 legacy-course-executor。内存配置使用 CompactLargeText（课程异常入口固定 0x4180）；未配置时回退到 co.toolchain.mars"
+      },
+      "co.mips.engine": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "builtin",
+          "mars",
+          "verify-both"
+        ],
+        "enumDescriptions": [
+          "按 Profile 和请求能力自动选择；已通过发布门槛的 P3-P7 课程路径使用内置 TypeScript 引擎",
+          "强制使用内置 TypeScript 汇编器和执行器，不隐式回退",
+          "将课程汇编器和 Oracle 一次性回滚到已配置的 MARS",
+          "以 builtin 为主路径，并用固定 v0.6.3-course1 reference 独立汇编/执行、保存 full-stack bundle"
+        ],
+        "description": "P3-P7 课程汇编与架构 Oracle 使用的 MIPS 引擎。auto 按 Profile 和请求能力选择；显式选择在能力检查或运行失败时不会隐式回退"
       },
       "co.mips.delayedBranching": {
         "type": "string",

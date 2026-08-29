@@ -34,6 +34,10 @@ const providerNeutralOrchestration = new Set([
   'src/courseTesting/traceRunner.ts',
   'src/courseTestLogisim.ts'
 ]);
+const builtinProviderAdapters = new Set([
+  'src/mips/providers/builtinAssemblerProvider.ts',
+  'src/mips/providers/builtinExecutionProvider.ts'
+]);
 const legacyTraceApiPattern = /\b(?:iterMarsDetailedTraceEvents|courseTraceMarsHaltError|courseMarsOracleCompatibilityError|machineCodeNeedsDetailedMarsTrace|marsDetailedUndefinedBehaviorError|traceLevel|traceOutput|imageRef)\b/;
 
 function walk(dir) {
@@ -91,7 +95,9 @@ function walkProduction(dir) {
     if (providerNeutralOrchestration.has(relative) && legacyTraceApiPattern.test(text)) {
       violations.push(`${relative}: consumes a legacy MARS request/trace API in provider-neutral orchestration`);
     }
-    if (relative.startsWith('src/courseTesting/') || relative === 'src/courseTestLogisim.ts') {
+    if (relative.startsWith('src/courseTesting/')
+      || relative === 'src/courseTestLogisim.ts'
+      || builtinProviderAdapters.has(relative)) {
       for (const match of text.matchAll(moduleSpecifierPattern)) {
         const specifier = match[1] ?? match[2] ?? match[3];
         if (specifier && /(?:^|\/)mips\/legacy(?:\/|$)/.test(specifier.replace(/\\/g, '/'))) {

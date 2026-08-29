@@ -5,18 +5,18 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
 import { configDefault } from './configDefaults';
 import { ProjectProfile } from './types';
-import { getMarsJar, getLogisimJar, getIsePath, getJava } from './config';
+import { getMarsJar, getLogisimJar, getIsePath, getJava, getMipsEngine } from './config';
 import {
   getProfileDefaults,
   getProfileDirectories,
   getProfileName,
-  getProfileRequiredTools,
   getVerilogPorts as getCourseVerilogPorts
 } from './courseConfig';
 import { defaultCoSettings } from './language/common/settings';
 import { buildTestbench, parseVerilog } from './language/verilog/service';
 import { renderResourceTemplate } from './templates/templateRegistry';
 import { pathExists } from './fsUtil';
+import { getEffectiveRequiredTools } from './toolchainPolicy';
 
 interface ToolchainSettings {
   mars?: string;
@@ -87,7 +87,7 @@ export async function runProjectWizard(): Promise<void> {
   let toolchainConfig: ToolchainSettings = {};
 
   if (configureToolchain?.value) {
-    toolchainConfig = await configureToolchainPaths(profile);
+    toolchainConfig = await configureToolchainPaths(profile, workspaceFolder.uri);
   }
 
   // Step 4: 创建目录结构
@@ -120,15 +120,15 @@ export async function runProjectWizard(): Promise<void> {
   }
 }
 
-async function configureToolchainPaths(profile: ProjectProfile): Promise<ToolchainSettings> {
+async function configureToolchainPaths(profile: ProjectProfile, resource: vscode.Uri): Promise<ToolchainSettings> {
   const toolchain: ToolchainSettings = {};
-  const requiredTools = new Set(getProfileRequiredTools(profile));
+  const requiredTools = new Set(getEffectiveRequiredTools(profile, getMipsEngine(resource)));
 
   if (requiredTools.has('java')) {
     const javaPath = await vscode.window.showInputBox({
       title: 'Java 路径',
       prompt: '输入 Java 可执行文件路径',
-      value: getJava(),
+      value: getJava(resource),
       placeHolder: 'java'
     });
     if (javaPath) {
@@ -140,7 +140,7 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<Toolcha
     const marsPath = await vscode.window.showInputBox({
       title: 'MARS 路径',
       prompt: '输入 Mars.jar 文件路径',
-      value: getMarsJar(),
+      value: getMarsJar(resource),
       placeHolder: 'E:/path/to/Mars4_5.jar'
     });
     if (marsPath) {
@@ -152,7 +152,7 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<Toolcha
     const marsP7Path = await vscode.window.showInputBox({
       title: 'P7 MARS 路径',
       prompt: '输入 P7 专用 Mars jar 路径',
-      value: getMarsJar(),
+      value: getMarsJar(resource),
       placeHolder: 'E:/path/to/Mars_p7.jar'
     });
     if (marsP7Path) {
@@ -164,7 +164,7 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<Toolcha
     const logisimPath = await vscode.window.showInputBox({
       title: 'Logisim 路径',
       prompt: '输入 logisim.jar 文件路径',
-      value: getLogisimJar(),
+      value: getLogisimJar(resource),
       placeHolder: 'E:/path/to/logisim.jar'
     });
     if (logisimPath) {
@@ -176,7 +176,7 @@ async function configureToolchainPaths(profile: ProjectProfile): Promise<Toolcha
     const isePath = await vscode.window.showInputBox({
       title: 'ISE 路径',
       prompt: '输入 Xilinx ISE 安装目录',
-      value: getIsePath(),
+      value: getIsePath(resource),
       placeHolder: 'D:/Xilinx/14.7/ISE_DS/ISE'
     });
     if (isePath) {

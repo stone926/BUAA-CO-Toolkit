@@ -1,5 +1,8 @@
 // @index mips-replay — legacy MARS 课程 machine/trace 契约的 replay adapter hook
-import { courseMachineCodeValidationError } from '../../courseTesting/machineCodeValidation';
+import {
+  courseMachineCodeValidationError,
+  stableMarsMachineCodeCapacityPolicy
+} from '../../courseTesting/machineCodeValidation';
 import { courseMarsOracleCompatibilityError } from '../legacy/marsOracleCompatibility';
 import type { ProjectProfile } from '../../projectProfile';
 import { maximumReplaySourceBytes, readBoundedRegularFile } from './boundedFile';
@@ -22,7 +25,8 @@ export async function validateLegacyMarsReplayAssembly(
     context.configuration.profile as ProjectProfile,
     Buffer.from(output.dutBytes).toString('utf8'),
     asmText,
-    context.sourceKind === 'builtin'
+    context.sourceKind === 'builtin',
+    stableMarsMachineCodeCapacityPolicy
   );
 }
 

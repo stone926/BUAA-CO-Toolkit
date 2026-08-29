@@ -171,7 +171,7 @@ async function resolveMachineCodeForHazard(
     if (invocation.result?.ok && invocation.result.outputFile) {
       return invocation.result.outputFile;
     }
-    vscode.window.showWarningMessage('MARS 导出机器码失败，将尝试使用已有机器码文件');
+    vscode.window.showWarningMessage('课程汇编器导出机器码失败，将尝试使用已有机器码文件');
   }
 
   const configured = getMachineCode(resource ?? folder.uri);

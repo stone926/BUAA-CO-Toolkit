@@ -85,6 +85,12 @@ export const registeredShadowDivergences: readonly RegisteredShadowDivergence[] 
     summary: 'Compact* 文本上界排他属于 assembler 差异，不进入 executor shadow 比较。'
   }),
   Object.freeze({
+    id: 'MARS-DIV-RAW-TEXT-WORD-001',
+    category: 'course-correct',
+    disposition: 'course-correct',
+    summary: '课程测试点允许在 text/ktext 注入 raw word；固定 MARS 汇编器拒绝该内部扩展。'
+  }),
+  Object.freeze({
     id: 'COURSE-DIV-TIMER-RESTART-001',
     category: 'source-conflict',
     disposition: 'course-correct',

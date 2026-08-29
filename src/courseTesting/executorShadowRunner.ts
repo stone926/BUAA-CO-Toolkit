@@ -13,16 +13,15 @@ import { serializeProgramImage } from '../mips/replay/programImage';
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../mips/replay/canonical';
 import { writeFileAtomicReplace } from '../mips/replay/atomicFile';
 import {
-  maximumReplayProgramImageBytes,
-  maximumReplaySourceBytes,
-  maximumReplayTraceBytes,
-  readBoundedRegularFile
-} from '../mips/replay/boundedFile';
-import {
   resolveBuiltinExecutionProvider,
   preflightFailureMessage
 } from '../mips/providers/providerResolver';
-import type { ExecuteResult, ExecuteRequest, MipsExecutionProvider } from '../mips/providers/contracts';
+import {
+  BUILTIN_TS_DESCRIPTOR,
+  type ExecuteResult,
+  type ExecuteRequest,
+  type MipsExecutionProvider
+} from '../mips/providers/contracts';
 import {
   compareExecutorShadow,
   ExecutorShadowDifferential
@@ -36,6 +35,7 @@ import { registeredShadowDivergences } from './oracle/shadowPolicy';
 import { isManifestV2 } from './manifestCodec';
 import { CourseTracePipeline } from './pipeline/courseTracePipeline';
 import { engineRunWasCancelled } from '../courseTestMessages';
+import { copyShadowCaseSourceClosure } from './shadowBundleArtifacts';
 
 export type ExecutorShadowStatus =
   | 'matched'
@@ -89,19 +89,32 @@ export async function runExecutorShadow(
   );
   if (imagePolicyIssues.length) {
     const message = `shadow 输入未通过课程 image policy: ${imagePolicyIssues[0].message}`;
-    services.output.appendLine(message);
+    const differential: ExecutorShadowDifferential = {
+      matched: false,
+      disposition: 'not-comparable',
+      legacyTraceDigest: legacyTraceDigest(options.legacy),
+      builtinTraceDigest: '',
+      legacyEvents: options.legacy.trace?.events.length ?? 0,
+      builtinEvents: 0,
+      notComparableReason: message
+    };
+    const bundleDir = await writeExecutorShadowBundle(
+      asmCase,
+      options,
+      undefined,
+      differential,
+      options.now ?? new Date(),
+      undefined,
+      'not-comparable'
+    );
+    const persistedMessage = `${message}，已保存 ${bundleDir}`;
+    services.output.appendLine(persistedMessage);
     return {
       status: 'not-comparable',
-      message,
-      differential: {
-        matched: false,
-        disposition: 'not-comparable',
-        legacyTraceDigest: legacyTraceDigest(options.legacy),
-        builtinTraceDigest: '',
-        legacyEvents: options.legacy.trace?.events.length ?? 0,
-        builtinEvents: 0,
-        notComparableReason: message
-      }
+      message: persistedMessage,
+      differential,
+      bundleDir,
+      resultFile: path.join(bundleDir, 'shadow-result.json')
     };
   }
   const builtinTraceUri = options.builtinTraceUri
@@ -126,19 +139,32 @@ export async function runExecutorShadow(
   const invocation = await resolveBuiltinExecutionProvider(services, builtinRequest);
   if (!invocation.preflight.ok) {
     const message = `builtin oracle preflight 失败: ${preflightFailureMessage(invocation.preflight)}`;
-    services.output.appendLine(message);
+    const differential: ExecutorShadowDifferential = {
+      matched: false,
+      disposition: 'not-comparable',
+      legacyTraceDigest: legacyTraceDigest(options.legacy),
+      builtinTraceDigest: '',
+      legacyEvents: options.legacy.trace?.events.length ?? 0,
+      builtinEvents: 0,
+      notComparableReason: message
+    };
+    const bundleDir = await writeExecutorShadowBundle(
+      asmCase,
+      options,
+      undefined,
+      differential,
+      options.now ?? new Date(),
+      undefined,
+      'not-comparable'
+    );
+    const persistedMessage = `${message}，已保存 ${bundleDir}`;
+    services.output.appendLine(persistedMessage);
     return {
       status: 'not-comparable',
-      message,
-      differential: {
-        matched: false,
-        disposition: 'not-comparable',
-        legacyTraceDigest: legacyTraceDigest(options.legacy),
-        builtinTraceDigest: '',
-        legacyEvents: options.legacy.trace?.events.length ?? 0,
-        builtinEvents: 0,
-        notComparableReason: message
-      }
+      message: persistedMessage,
+      differential,
+      bundleDir,
+      resultFile: path.join(bundleDir, 'shadow-result.json')
     };
   }
   builtinExecution = { provider: invocation.provider, preflight: invocation.preflight };
@@ -165,7 +191,7 @@ export async function runExecutorShadow(
     || engineRunWasCancelled(builtin.status, options.signal);
   const assertionFailed = builtin.ok && observation.assertionFailures.length > 0;
   const status: ExecutorShadowStatus = assertionFailed ? 'inconclusive' : differential.disposition;
-  const bundleDir = cancelled || (differential.matched && !assertionFailed)
+  const bundleDir = cancelled
     ? undefined
     : await writeExecutorShadowBundle(asmCase, options, builtin, differential, now, observation, status);
   const message = shadowMessage(differential, bundleDir, observation, assertionFailed, cancelled);
@@ -184,7 +210,7 @@ export async function runExecutorShadow(
 export async function writeExecutorShadowBundle(
   asmCase: AsmCase,
   options: RunExecutorShadowOptions,
-  builtin: ExecuteResult,
+  builtin: ExecuteResult | undefined,
   differential: ExecutorShadowDifferential,
   now = new Date(),
   observation?: ExecutionObservation,
@@ -200,7 +226,7 @@ export async function writeExecutorShadowBundle(
 
     // Full reproduction closure: source blobs are copied from the immutable v2
     // case, so the bundle remains usable after the original workspace moves.
-    await copyCaseSourceClosure(asmCase, path.join(temporary, 'case-source'));
+    await copyShadowCaseSourceClosure(asmCase, path.join(temporary, 'case-source'));
     const imageBytes = serializeProgramImage(options.image);
     await writeAtomic(path.join(temporary, 'program-image.json'), imageBytes);
     await writeAtomic(
@@ -209,9 +235,9 @@ export async function writeExecutorShadowBundle(
     );
     await writeAtomic(
       path.join(temporary, 'builtin-trace.out'),
-      Buffer.from(builtin.trace?.rawText ?? '', 'utf8')
+      Buffer.from(builtin?.trace?.rawText ?? '', 'utf8')
     );
-    if (builtin.events) {
+    if (builtin?.events) {
       await writeAtomic(
         path.join(temporary, 'builtin-events.json'),
         Buffer.from(`${canonicalJson({
@@ -227,6 +253,7 @@ export async function writeExecutorShadowBundle(
     const result = {
       schemaRevision: 1,
       kind: 'executor-shadow',
+      evidenceKind: 'executor-only',
       createdAt: now.toISOString(),
       profile: options.profile,
       imageFingerprint: options.image.fingerprint,
@@ -252,11 +279,14 @@ export async function writeExecutorShadowBundle(
           artifact: options.legacy.engineArtifact ?? null
         },
         builtin: {
-          id: builtin.descriptor.id,
-          build: builtin.descriptor.build,
-          semanticsRevision: builtin.descriptor.semanticsRevision,
-          capabilitiesRevision: builtin.descriptor.capabilitiesRevision,
-          artifact: builtin.engineArtifact ?? null
+          id: builtin?.descriptor.id ?? BUILTIN_TS_DESCRIPTOR.id,
+          build: builtin?.descriptor.build ?? BUILTIN_TS_DESCRIPTOR.build,
+          semanticsRevision: builtin?.descriptor.semanticsRevision
+            ?? BUILTIN_TS_DESCRIPTOR.semanticsRevision,
+          capabilitiesRevision: builtin?.descriptor.capabilitiesRevision
+            ?? BUILTIN_TS_DESCRIPTOR.capabilitiesRevision,
+          artifact: builtin?.engineArtifact ?? null,
+          completed: builtin !== undefined
         }
       },
       status,
@@ -277,29 +307,6 @@ export async function writeExecutorShadowBundle(
   }
 }
 
-async function copyCaseSourceClosure(asmCase: AsmCase, destination: string): Promise<void> {
-  await fs.promises.mkdir(destination, { recursive: true });
-  if (!isManifestV2(asmCase.manifest)) return;
-  const artifacts = asmCase.manifest.artifacts?.source ?? {};
-  const caseDir = path.resolve(asmCase.dir.fsPath);
-  for (const [name, reference] of Object.entries(artifacts)) {
-    if (!reference || typeof reference === 'string') continue;
-    const relative = reference.path.replace(/\\/g, '/');
-    const sourceFile = path.resolve(caseDir, ...relative.split('/'));
-    if (sourceFile !== caseDir && !sourceFile.startsWith(`${caseDir}${path.sep}`)) {
-      throw new Error(`source artifact ${name} escapes the case directory`);
-    }
-    const bytes = await readBoundedRegularFile(sourceFile, {
-      maximumBytes: maximumReplaySourceBytes,
-      expectedBytes: reference.bytes,
-      label: `shadow source closure ${name}`
-    });
-    const target = path.join(destination, ...relative.split('/'));
-    await fs.promises.mkdir(path.dirname(target), { recursive: true });
-    await writeAtomic(target, Buffer.from(bytes));
-  }
-}
-
 function shadowMessage(
   differential: ExecutorShadowDifferential,
   bundleDir: string | undefined,
@@ -315,9 +322,9 @@ function shadowMessage(
   }
   switch (differential.disposition) {
     case 'matched':
-      return 'Executor shadow 通过：legacy 与 builtin 的架构写 trace/最终摘要一致';
+      return `Executor shadow 通过：legacy 与 builtin 的架构写 trace/最终摘要一致，已保存 ${bundleDir}`;
     case 'not-comparable':
-      return `Executor shadow 不可比较：${differential.notComparableReason ?? 'unknown'}`;
+      return `Executor shadow 不可比较：${differential.notComparableReason ?? 'unknown'}，已保存 ${bundleDir}`;
     case 'inconclusive':
       return `Executor shadow 发现未登记差异，已保存 ${bundleDir}`;
     case 'course-correct':

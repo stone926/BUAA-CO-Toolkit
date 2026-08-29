@@ -155,6 +155,25 @@ export function getSimBackend(resource?: vscode.Uri): string {
   return layeredGetString('project.simBackend', configDefault<string>('project.simBackend'), resource);
 }
 
+export type MipsEngineMode = 'auto' | 'builtin' | 'mars' | 'verify-both';
+
+const mipsEngineModes = new Set<MipsEngineMode>(['auto', 'builtin', 'mars', 'verify-both']);
+
+/**
+ * P3-P7 课程汇编器与架构 Oracle 的引擎选择。
+ *
+ * 配置按 resource 读取，以正确支持 multi-root workspace；旧版或手写 settings
+ * 中的非法值统一回退到 auto，避免把不受支持的 provider id 带入运行路径。
+ */
+export function getMipsEngine(resource?: vscode.Uri): MipsEngineMode {
+  const configured = inspectedValue<unknown>('mips.engine', resource);
+  const normalized = typeof configured === 'string' ? configured.trim().toLowerCase() : '';
+  if (mipsEngineModes.has(normalized as MipsEngineMode)) {
+    return normalized as MipsEngineMode;
+  }
+  return configDefault<MipsEngineMode>('mips.engine');
+}
+
 export function useDelayedBranching(resource?: vscode.Uri): boolean {
   const mode = config<string>('mips.delayedBranching', configDefault<string>('mips.delayedBranching'), resource);
   if (mode === 'on') { return true; }

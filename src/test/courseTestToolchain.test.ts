@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   courseTraceMemoryConfigurationError,
+  courseTraceMemoryConfigurationErrorForEngine,
   formatToolchainFailure,
+  MARS_P7_CHECK,
+  requiredCourseTraceToolchainChecks,
   requiredToolchainFailures
 } from '../courseTestToolchain';
 
@@ -15,6 +18,26 @@ describe('course test toolchain helpers', () => {
   it('reports profile-specific trace memory configuration errors', () => {
     expect(courseTraceMemoryConfigurationError('P7', 'Default')).toBe('P7 持续生成测试必须使用 CompactLargeText，当前为 Default');
     expect(courseTraceMemoryConfigurationError('P5', 'Default')).toBe('非 P7 Trace 测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 Default');
+  });
+
+  it('skips MARS memory-layout checks for builtin lanes', () => {
+    expect(courseTraceMemoryConfigurationErrorForEngine('P3', 'auto', 'Default')).toBeUndefined();
+    expect(courseTraceMemoryConfigurationErrorForEngine('P7', 'builtin', 'Default')).toBeUndefined();
+    expect(courseTraceMemoryConfigurationErrorForEngine('P6', 'mars', 'Default'))
+      .toBe('非 P7 Trace 测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 Default');
+    expect(courseTraceMemoryConfigurationErrorForEngine('P7', 'verify-both', 'Default'))
+      .toBe('P7 持续生成测试必须使用 CompactLargeText，当前为 Default');
+  });
+
+  it('derives continuous and Logisim preflight checks from the effective engine tools', () => {
+    expect([...requiredCourseTraceToolchainChecks('P3', 'builtin', 'Default')])
+      .toEqual(['Java', 'Logisim']);
+    expect([...requiredCourseTraceToolchainChecks('P4', 'auto', 'Default')])
+      .toEqual(['ISE fuse']);
+    expect([...requiredCourseTraceToolchainChecks('P4', 'mars', 'FixedCompactLargeText')])
+      .toEqual(['Java', 'MARS', 'MARS coL2', 'ISE fuse', 'MARS FixedCompactLargeText']);
+    expect([...requiredCourseTraceToolchainChecks('P7', 'verify-both', 'CompactLargeText')])
+      .toEqual(['Java', 'MARS', 'MARS coL2', 'ISE fuse', 'MARS CompactLargeText', MARS_P7_CHECK]);
   });
 
   it('formats failed toolchain checks with optional suggestions', () => {

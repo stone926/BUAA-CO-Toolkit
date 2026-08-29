@@ -23,6 +23,12 @@ export type CourseTraceStatus = 'passed' | 'failed' | 'error';
 export type ExecutorShadowReportStatus = 'matched' | 'not-comparable' | 'course-correct' | 'mars-compatible' | 'inconclusive';
 
 export interface CourseTraceShadowSummary {
+  /**
+   * Executor-only reuses one image; full-stack independently assembles both
+   * sides. Missing is accepted only for historical phase-4 reports and must
+   * never be interpreted as full-stack evidence.
+   */
+  evidenceKind?: 'executor-only' | 'full-stack';
   status: ExecutorShadowReportStatus;
   message: string;
   bundleDir?: string;
@@ -31,6 +37,9 @@ export interface CourseTraceShadowSummary {
   builtinEvents?: number;
   disposition?: string;
   contractId?: string;
+  assemblyMatched?: boolean;
+  builtinWords?: number;
+  legacyWords?: number;
 }
 export type NeutralCourseTraceStage = 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe';
 /** Stage values emitted by v1 reports and accepted indefinitely when reading. */
@@ -72,7 +81,7 @@ export interface CourseTraceCaseResult {
   simEvents?: number;
   matchedEvents?: number;
   diffEvents?: number;
-  /** Phase-4 executor shadow evidence; absent unless verify-both was requested. */
+  /** Phase-4/6 shadow evidence; the evidenceKind prevents cross-lane inheritance. */
   shadow?: CourseTraceShadowSummary;
   probe?: P7ProbeCheckResult;
 }
@@ -542,7 +551,8 @@ function renderCaseArtifacts(item: CourseTraceCaseResult): SafeHtml {
     ['Machine Code', item.machineCode],
     ['Oracle', courseTraceOracleOutput(item)],
     ['DUT', dutOut],
-    ['DUT Raw', dutRawOut === dutOut ? undefined : dutRawOut]
+    ['DUT Raw', dutRawOut === dutOut ? undefined : dutRawOut],
+    [item.shadow?.evidenceKind === 'full-stack' ? 'Full-stack Evidence' : 'Executor Shadow', item.shadow?.resultFile]
   ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
   if (!entries.length) {
     return html.raw('');

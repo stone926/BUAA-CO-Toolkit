@@ -13,9 +13,9 @@ import {
   getMarsJar,
   getLogisimJar,
   getIsePath,
-  getHazardCalculator
+  getHazardCalculator,
+  getMipsEngine
 } from './config';
-import { getProfileRequiredTools } from './courseConfig';
 import {
   getProfileTutorialLink,
   getToolTutorialLinksForProfile
@@ -29,6 +29,7 @@ import {
 } from './sidebarModel';
 import { ProjectProfile } from './types';
 import { workspaceFolderForOrFirst } from './fsUtil';
+import { getEffectiveRequiredTools } from './toolchainPolicy';
 
 export type SidebarItem = vscode.TreeItem & { children?: SidebarItem[]; contextValue?: string };
 
@@ -129,7 +130,9 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
   private createToolModels(profile: ProjectProfile, resource?: vscode.Uri): SidebarToolModel[] {
     const tools: SidebarToolModel[] = [];
-    const requiredTools = new Set(getProfileRequiredTools(profile).map((tool) => tool.toLowerCase()));
+    const requiredTools = new Set(
+      getEffectiveRequiredTools(profile, getMipsEngine(resource)).map((tool) => tool.toLowerCase())
+    );
     const showAllTools = profile !== 'auto' && requiredTools.size === 0;
     if (showAllTools || requiredTools.has('java')) {
       tools.push(this.createToolModel('java', 'Java', getJava(resource)));

@@ -56,6 +56,7 @@ vi.mock('vscode', () => ({
 }));
 
 import {
+  getMipsEngine,
   getMarsJar,
   getMemoryConfiguration,
   useDelayedBranching
@@ -168,6 +169,34 @@ describe('getMemoryConfiguration', () => {
     setConfig('co.mips.memoryConfiguration', 'FixedCompactLargeText');
 
     expect(getMemoryConfiguration()).toBe('FixedCompactLargeText');
+  });
+});
+
+describe('getMipsEngine', () => {
+  beforeEach(() => {
+    clearConfig();
+  });
+
+  it('defaults to auto', () => {
+    expect(getMipsEngine()).toBe('auto');
+  });
+
+  it.each(['auto', 'builtin', 'mars', 'verify-both'] as const)(
+    'accepts the supported %s mode',
+    (mode) => {
+      setConfig('co.mips.engine', mode);
+      expect(getMipsEngine()).toBe(mode);
+    }
+  );
+
+  it('normalizes a resource-scoped value', () => {
+    setConfig('co.mips.engine', ' BUILTIN ');
+    expect(getMipsEngine(makeUri('/workspace/project.asm'))).toBe('builtin');
+  });
+
+  it('falls back to auto for an invalid value', () => {
+    setConfig('co.mips.engine', 'unknown-engine');
+    expect(getMipsEngine()).toBe('auto');
   });
 });
 

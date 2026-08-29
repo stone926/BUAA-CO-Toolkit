@@ -1,7 +1,12 @@
 // @index course-trace-runner — 单个课程 Trace case 的 provider-neutral oracle/DUT 执行与比较
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getMemoryConfiguration, getProfile } from '../config';
+import {
+  getMemoryConfiguration,
+  getMipsEngine,
+  getProfile,
+  type MipsEngineMode
+} from '../config';
 import { P7ProbeMetadata } from './builtinAsmGenerator';
 import { checkP7Probe } from './p7ProbeCheck';
 import {
@@ -13,6 +18,8 @@ import {
 } from '../language/mips/traceParser';
 import { parseSimOutput } from '../language/verilog/traceParser';
 import { executeWithPreflight, preflightFailureMessage } from '../mips/providers/providerResolver';
+import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
+import { verifyConfiguredFixedMarsReference } from '../mips/providers/fixedMarsReference';
 import { defaultTraceCompareMode } from '../traceCompare';
 import { runIsim } from '../verilog';
 import { IsimCompileCache } from '../verilogIsimCache';
@@ -47,14 +54,17 @@ import {
 import type { CourseTraceCaseInput } from '../courseTestCases';
 import type {
   CourseTraceBatchSource,
+  CourseTraceShadowSummary,
   NeutralCourseTraceCaseResult
 } from '../courseTestReport';
 import {
+  courseTraceOutputDirectory,
   oracleOutputFileNameForCase,
   simOutputFileNameForCase
 } from '../courseTestTraceFiles';
 import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from '../courseTestMessages';
 import { runExecutorShadow, type ExecutorShadowOutcome } from './executorShadowRunner';
+import { runFullStackShadow, type FullStackShadowOutcome } from './fullStackShadowRunner';
 import { runP3LogisimTraceCase } from '../courseTestLogisim';
 import type { P3LogisimTraceSetup } from '../courseTestLogisim';
 
@@ -66,6 +76,8 @@ export interface CourseTraceRunOptions {
   logisim?: P3LogisimTraceSetup;
   isimCompileCache?: IsimCompileCache;
   artifactOutputMode?: 'workspace' | 'case';
+  /** Snapshot override used by explicit developer lanes; normal runs read co.mips.engine once. */
+  engineMode?: MipsEngineMode;
   /** Phase-4 executor shadow: run legacy + builtin and adjudicate the difference. */
   oracleMode?: 'verify-both';
   /** Trusted root for shadow bundles; defaults to the immutable ASM case directory. */
@@ -82,8 +94,31 @@ export async function runCourseTraceCase(
   options: CourseTraceRunOptions = {}
 ): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
-  if (getProfile(asm) === 'P3') {
+  const profile = getProfile(asm);
+  if (profile === 'P3') {
     return await runP3LogisimTraceCase(services, item, options);
+  }
+  const enginePlan = resolveCourseEnginePlan(
+    options.engineMode ?? getMipsEngine(asm),
+    profile,
+    { deterministicConsole: item.stdin !== undefined }
+  );
+  if (enginePlan.mode === 'verify-both' && item.stdin) {
+    return failedCase(
+      item,
+      'oracle',
+      'Full-stack 固定 MARS 验证不支持带 stdin 的用例；此能力仍由阶段 7 处理'
+    );
+  }
+  const fixedMars = enginePlan.mode === 'verify-both'
+    ? await verifyConfiguredFixedMarsReference(asm, { signal: options.signal })
+    : undefined;
+  if (fixedMars && !fixedMars.ok) {
+    return failedCase(
+      item,
+      'oracle',
+      `[${fixedMars.diagnostic.code}] ${fixedMars.diagnostic.message}`
+    );
   }
   const pipeline = options.pipeline ?? defaultCourseTracePipeline();
 
@@ -97,6 +132,7 @@ export async function runCourseTraceCase(
     source: asmCaseSourceFromBatchSource(options.source ?? { kind: 'selected', asmFiles: [asm.fsPath] }),
     stdin: item.stdin,
     resource: asm,
+    enginePlan,
     p7: await p7MetadataFromManifest(asm)
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
@@ -118,6 +154,7 @@ export async function runCourseTraceCase(
     showMessages: false,
     revealOutput: options.revealOutput,
     courseTrace: true,
+    enginePlan,
     signal: options.signal
   });
   if (!dump?.ok || !dump.outputFile) {
@@ -139,6 +176,16 @@ export async function runCourseTraceCase(
   }
   const probe = resolveCaseProbeMetadataFromCase(asmCase);
   if (probe) {
+    if (enginePlan.mode === 'verify-both') {
+      return failedCase(
+        item,
+        'oracle',
+        'Full-stack shadow 不可比较：P7 probe 是 DUT-only 性质检查，不产生可比较的 oracle execution evidence',
+        asmCase.machineCode,
+        undefined,
+        asmCase
+      );
+    }
     services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
     const isim = await pipeline.runDut(services, {
       resource: asm,
@@ -180,7 +227,6 @@ export async function runCourseTraceCase(
   }
 
   const machineCodeText = await readTextFile(asmCase.machineCode);
-  const profile = getProfile(asmCase.sourceAsm);
   let stdinText: string | undefined;
   try {
     stdinText = await readAsmCaseStdinSnapshot(asmCase);
@@ -205,13 +251,27 @@ export async function runCourseTraceCase(
     machineCodeText
   );
   const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc;
-  if (!Number.isSafeInteger(haltPc)) {
+  if (haltPc === undefined || !Number.isSafeInteger(haltPc)) {
     return failedCase(item, 'assemble', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
   }
   if (!dump.image) {
     return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage', asmCase.machineCode, undefined, asmCase);
   }
+  const imagePolicyIssues = pipeline.validateProgram(profile, dump.image, haltPc);
+  if (imagePolicyIssues.length) {
+    return failedCase(
+      item,
+      'assemble',
+      `测试中止：ProgramImage 不符合课程硬件契约：[${imagePolicyIssues[0].code}] ${imagePolicyIssues[0].message}`,
+      asmCase.machineCode,
+      undefined,
+      asmCase
+    );
+  }
   services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  const oracleOutputUri = caseOutputMode
+    ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
+    : vscode.Uri.file(path.join(courseTraceOutputDirectory(asm).fsPath, oracleOutputFileNameForCase(item)));
   const oracleInvocation = await pipeline.runOracle(services, {
     image: dump.image,
     executionBinding: dump.executionBinding,
@@ -219,8 +279,9 @@ export async function runCourseTraceCase(
     trace: { kind: 'architectural-writes', courseCorrect: true },
     maxSteps,
     haltPc,
-    runOutputFile: caseOutputMode ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item)) : undefined,
+    runOutputFile: oracleOutputUri,
     interruptSchedule,
+    p7RiInstruction: dump.resolvedRun?.p7RiInstruction,
     courseTrace: true,
     revealOutput: options.revealOutput,
     requirements: {
@@ -231,7 +292,7 @@ export async function runCourseTraceCase(
       ...(stdinText === undefined ? {} : { deterministicConsole: true }),
       eventSchemaRevision: 1
     }
-  }, { signal: options.signal });
+  }, { signal: options.signal }, enginePlan);
   const oracle = oracleInvocation.result;
   const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (postOracleSourceIssue) {
@@ -269,8 +330,8 @@ export async function runCourseTraceCase(
     }
   }
   await pipeline.recordOracle(asmCase, oracle, {
-    profile,
-    memoryConfiguration: getMemoryConfiguration(asmCase.sourceAsm),
+    profile: oracle.resolvedRun?.profile ?? profile,
+    memoryConfiguration: oracle.resolvedRun?.memoryConfiguration ?? getMemoryConfiguration(asmCase.sourceAsm),
     courseTrace: true,
     maxSteps,
     haltPc,
@@ -278,30 +339,31 @@ export async function runCourseTraceCase(
     stdinSha256: asmCase.manifest.stdin?.sha256
   }, { stopReason: 'halt-loop' });
 
-  const shadow = options.oracleMode === 'verify-both'
+  let shadowSummary: CourseTraceShadowSummary | undefined;
+  const executorShadow = options.oracleMode === 'verify-both'
     ? await runExecutorShadow(services, asmCase, {
       profile,
       image: dump.image,
       maxSteps,
-      haltPc: haltPc!,
+      haltPc,
       interruptSchedule,
       legacy: oracle,
       outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
       signal: options.signal
     })
     : undefined;
-  if (shadow) {
-    const shadowSummary = shadowSummaryFromOutcome(shadow);
-    const shadowCancelled = shadow.builtinResult?.stop?.kind === 'cancelled'
-      || engineRunWasCancelled(shadow.builtinResult?.status, options.signal);
-    if (shadowCancelled || shadow.status === 'inconclusive' || shadow.status === 'not-comparable') {
+  if (executorShadow) {
+    shadowSummary = executorShadowSummary(executorShadow);
+    const shadowCancelled = executorShadow.builtinResult?.stop?.kind === 'cancelled'
+      || engineRunWasCancelled(executorShadow.builtinResult?.status, options.signal);
+    if (shadowCancelled || executorShadow.status === 'inconclusive' || executorShadow.status === 'not-comparable') {
       return {
         ...failedCase(
           item,
           'oracle',
           shadowCancelled
-            ? `测试已取消：executor shadow：${shadow.message}`
-            : `测试中止：executor shadow ${shadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${shadow.message}`,
+            ? `测试已取消：executor shadow：${executorShadow.message}`
+            : `测试中止：executor shadow ${executorShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${executorShadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase,
@@ -310,7 +372,38 @@ export async function runCourseTraceCase(
         shadow: shadowSummary
       };
     }
-    services.output.appendLine(shadow.message);
+    services.output.appendLine(executorShadow.message);
+  }
+
+  const fullStackShadow = enginePlan.mode === 'verify-both'
+    ? await runFullStackShadow(services, asmCase, {
+      profile,
+      builtinAssembly: dump,
+      builtinExecution: oracle,
+      maxSteps,
+      haltPc,
+      interruptSchedule,
+      p7RiInstruction: dump.resolvedRun?.p7RiInstruction,
+      outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
+      expectedLegacySha256: fixedMars?.ok ? fixedMars.identity.sha256 : undefined,
+      signal: options.signal
+    })
+    : undefined;
+  if (fullStackShadow) {
+    shadowSummary = fullStackShadowSummary(fullStackShadow);
+    if (fullStackShadow.status === 'inconclusive' || fullStackShadow.status === 'not-comparable') {
+      return {
+        ...failedCase(
+          item,
+          'oracle',
+          `测试中止：full-stack shadow ${fullStackShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${fullStackShadow.message}`,
+          asmCase.machineCode,
+          oracle.outputFile,
+          asmCase
+        ),
+        shadow: shadowSummary
+      };
+    }
   }
 
   const isim = await pipeline.runDut(services, {
@@ -360,7 +453,7 @@ export async function runCourseTraceCase(
       dutEvents: diff.summary.dutEvents,
       matchedEvents: diff.summary.matchedEvents,
       diffEvents: diff.summary.diffEvents,
-      ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+      ...(shadowSummary ? { shadow: shadowSummary } : {})
     };
   }
 
@@ -380,7 +473,7 @@ export async function runCourseTraceCase(
     dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,
     diffEvents: diff.summary.diffEvents,
-    ...(shadow ? { shadow: shadowSummaryFromOutcome(shadow) } : {})
+    ...(shadowSummary ? { shadow: shadowSummary } : {})
   };
 }
 
@@ -397,17 +490,9 @@ function defaultCourseTracePipeline(): CourseTracePipeline {
   });
 }
 
-function shadowSummaryFromOutcome(shadow: ExecutorShadowOutcome): {
-  status: ExecutorShadowOutcome['status'];
-  message: string;
-  bundleDir?: string;
-  resultFile?: string;
-  legacyEvents: number;
-  builtinEvents: number;
-  disposition?: string;
-  contractId?: string;
-} {
+function executorShadowSummary(shadow: ExecutorShadowOutcome): CourseTraceShadowSummary {
   return {
+    evidenceKind: 'executor-only',
     status: shadow.status,
     message: shadow.message,
     ...(shadow.bundleDir ? { bundleDir: shadow.bundleDir } : {}),
@@ -418,6 +503,23 @@ function shadowSummaryFromOutcome(shadow: ExecutorShadowOutcome): {
     ...(shadow.differential.classification?.contractId
       ? { contractId: shadow.differential.classification.contractId }
       : {})
+  };
+}
+
+function fullStackShadowSummary(shadow: FullStackShadowOutcome): CourseTraceShadowSummary {
+  return {
+    evidenceKind: 'full-stack',
+    status: shadow.status,
+    message: shadow.message,
+    bundleDir: shadow.bundleDir,
+    resultFile: shadow.resultFile,
+    legacyEvents: shadow.execution?.legacyEvents,
+    builtinEvents: shadow.execution?.builtinEvents,
+    disposition: shadow.execution?.disposition ?? shadow.assembly.disposition,
+    contractId: shadow.execution?.classification?.contractId ?? shadow.assembly.contractId,
+    assemblyMatched: shadow.assembly.matched,
+    builtinWords: shadow.assembly.builtinWords,
+    legacyWords: shadow.assembly.legacyWords
   };
 }
 

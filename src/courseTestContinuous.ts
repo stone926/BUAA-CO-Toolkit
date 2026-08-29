@@ -9,7 +9,8 @@ import {
   getContinuousReportRetainedIterations,
   getContinuousRetainedPassingCases,
   getContinuousStopOnFailure,
-  getMemoryConfiguration
+  getMemoryConfiguration,
+  getMipsEngine
 } from './config';
 import {
   addContinuousResult,
@@ -21,7 +22,7 @@ import {
 import { ensureDirectory, writeTextFile } from './fsUtil';
 import { revealOutputChannel } from './process';
 import { checkToolchain } from './toolchain';
-import { AppServices, ProjectProfile } from './types';
+import { AppServices } from './types';
 import {
   ContinuousTraceIteration,
   ContinuousTraceReport,
@@ -31,9 +32,9 @@ import {
   renderContinuousTraceMonitor
 } from './courseTestReport';
 import {
-  courseTraceMemoryConfigurationError,
+  courseTraceMemoryConfigurationErrorForEngine,
   formatToolchainFailure,
-  MARS_P7_CHECK,
+  requiredCourseTraceToolchainChecks,
   requiredToolchainFailures
 } from './courseTestToolchain';
 import { normalizePathKey } from './pathUtils';
@@ -350,16 +351,17 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
   if (!profile) {
     return false;
   }
+  const engineMode = getMipsEngine(resource);
   const memoryConfiguration = getMemoryConfiguration(resource);
-  const configurationError = courseTraceMemoryConfigurationError(profile, memoryConfiguration);
+  const configurationError = courseTraceMemoryConfigurationErrorForEngine(profile, engineMode, memoryConfiguration);
   if (configurationError) {
     services.output.appendLine(configurationError);
     vscode.window.showErrorMessage(configurationError);
     return false;
   }
 
-  const checks = await checkToolchain(services.output, resource, profile === 'P3' ? { tools: ['java', 'mars', 'logisim'] } : {});
-  const required = requiredContinuousTraceChecks(profile, memoryConfiguration);
+  const checks = await checkToolchain(services.output, resource);
+  const required = requiredCourseTraceToolchainChecks(profile, engineMode, memoryConfiguration);
   const failed = requiredToolchainFailures(checks, required);
   if (!failed.length) {
     return true;
@@ -369,19 +371,6 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
   services.output.appendLine(message);
   vscode.window.showErrorMessage(message);
   return false;
-}
-
-function requiredContinuousTraceChecks(profile: ProjectProfile, memoryConfiguration: string): Set<string> {
-  if (profile === 'P3') {
-    return new Set(['Java', 'MARS', 'MARS coL2', 'Logisim', `MARS ${memoryConfiguration}`]);
-  }
-  // Stable MARS has no dedicated course-halt marker, so every course run uses coL2 to prove that
-  // the validated final self-branch was actually executed before the native step limit stops it.
-  const names = new Set(['Java', 'MARS', 'MARS coL2', 'ISE fuse', `MARS ${memoryConfiguration}`]);
-  if (profile === 'P7') {
-    names.add(MARS_P7_CHECK);
-  }
-  return names;
 }
 
 async function updateContinuousTraceMonitor(session: ContinuousTraceSession, options: { force?: boolean } = {}): Promise<void> {

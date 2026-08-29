@@ -2,13 +2,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getProfile, resolvePython } from './config';
+import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, resolvePython } from './config';
 import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
-import { getProfileRequiredTools } from './courseConfig';
 import { MARS_P7_CHECK } from './courseTestToolchain';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 import { iterCpuTraceEvents, iterMarsDetailedTraceEvents } from './language/mips/traceParser';
+import { getEffectiveRequiredTools } from './toolchainPolicy';
 export { buildIseEnvironment, findFuse, findIsimGui, isimExecutableName } from './iseCommon';
 import { findFuse, findIsimGui } from './iseCommon';
 
@@ -37,7 +37,7 @@ export async function checkToolchain(
     }];
   }
   const requiredTools = new Set([
-    ...getProfileRequiredTools(profile).map(normalizeToolName),
+    ...getEffectiveRequiredTools(profile, getMipsEngine(resource)).map(normalizeToolName),
     ...(options.tools ?? []).map(normalizeToolName)
   ]);
   const checkAll = requiredTools.size === 0;

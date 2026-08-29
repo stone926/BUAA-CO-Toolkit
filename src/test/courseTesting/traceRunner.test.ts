@@ -19,6 +19,7 @@ import {
   iterCpuTraceEvents
 } from '../../language/mips/traceParser';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
+import { createLegacyProgramImage } from '../../mips/replay/programImage';
 
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
@@ -27,6 +28,7 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../config', () => ({
   getProfile: vi.fn(() => 'P5'),
+  getMipsEngine: vi.fn(() => 'auto'),
   getMemoryConfiguration: vi.fn(() => 'Default')
 }));
 
@@ -51,7 +53,8 @@ vi.mock('../../verilog', () => ({
 }));
 
 vi.mock('../../fsUtil', () => ({
-  readTextFile: vi.fn()
+  readTextFile: vi.fn(),
+  workspaceFolderFor: vi.fn(() => undefined)
 }));
 
 vi.mock('../../language/mips/traceCompare', () => ({
@@ -80,13 +83,10 @@ vi.mock('../../courseTesting/p7ProbeCheck', () => ({
 }));
 
 const callOrder: string[] = [];
-const testProgramImage = {
-  formatVersion: 1,
-  fingerprint: 'a'.repeat(64),
-  entryPc: 0x3000,
-  segments: [{ name: 'text', baseAddress: 0x3000, words: [0, 0x1000ffff] }],
-  symbols: [], sourceMap: [], inputGraph: [{ id: 'root', contentHash: 'b'.repeat(64) }]
-} as const;
+const testProgramImage = createLegacyProgramImage(
+  '00000000\n1000ffff\n00000000\n',
+  [{ id: 'root', contentHash: 'b'.repeat(64) }]
+);
 
 function services() {
   return {
@@ -188,7 +188,7 @@ describe('course trace runner orchestration', () => {
     });
     vi.mocked(readTextFile).mockImplementation(async (uri) => {
       if (uri.fsPath.endsWith('code.txt')) {
-        return '00000000\n1000ffff\n';
+        return '00000000\n1000ffff\n00000000\n';
       }
       return 'trace\n';
     });
@@ -229,6 +229,15 @@ describe('course trace runner orchestration', () => {
     expect(result).not.toHaveProperty('simOut');
     expect(result).not.toHaveProperty('marsEvents');
     expect(result).not.toHaveProperty('simEvents');
+  });
+
+  it('snapshots one atomic engine plan for case capture, assembly and execution', async () => {
+    await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+
+    const capturedPlan = vi.mocked(createAsmCaseFromAsm).mock.calls[0][1]?.enginePlan;
+    expect(capturedPlan).toMatchObject({ mode: 'auto', primaryEngineId: 'builtin-ts', profile: 'P5' });
+    expect(vi.mocked(prepareAsmCaseMachineCode).mock.calls[0][2]?.enginePlan).toBe(capturedPlan);
+    expect(vi.mocked(executeWithPreflight).mock.calls[0][3]).toBe(capturedPlan);
   });
 
   it('accepts a native ProgramImage assembler without a legacy source-reassembly binding', async () => {
@@ -292,7 +301,8 @@ describe('course trace runner orchestration', () => {
     expect(executeWithPreflight).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ stdin: 'sealed\n' }),
-      expect.anything()
+      expect.anything(),
+      expect.objectContaining({ primaryEngineId: 'legacy-mars-configured' })
     );
     expect(vi.mocked(executeWithPreflight).mock.calls[0][1]).not.toHaveProperty('stdinSource');
   });
@@ -353,7 +363,8 @@ describe('course trace runner orchestration', () => {
     expect(executeWithPreflight).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ trace: { kind: 'architectural-writes', courseCorrect: true } }),
-      expect.objectContaining({ signal: undefined })
+      expect.objectContaining({ signal: undefined }),
+      expect.objectContaining({ primaryEngineId: 'builtin-ts' })
     );
     expect(iterCpuTraceEvents).toHaveBeenCalledTimes(1);
     expect(compareTraceIterables).toHaveBeenCalledWith(

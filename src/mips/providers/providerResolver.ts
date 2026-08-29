@@ -1,5 +1,6 @@
 // @index mips-providers — provider 解析：唯一入口，preflight 在副作用前完成，禁止半途 fallback
 import { AppServices } from '../../types';
+import { getMipsEngine, getProfile } from '../../config';
 import {
   AssembleRequest,
   AssembleResult,
@@ -13,6 +14,13 @@ import {
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
 import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
 import { LegacyMarsProvider } from './legacyMarsProvider';
+import {
+  BUILTIN_TS_ENGINE_ID,
+  type CourseEnginePlan,
+  type CourseProviderEngineId,
+  LEGACY_MARS_ENGINE_ID,
+  resolveCourseEnginePlan
+} from './courseEnginePolicy';
 
 /**
  * Provider resolver（计划第 5.3/9 节）。
@@ -30,7 +38,7 @@ interface ProviderRegistry {
 let registryOverride: ProviderRegistry | undefined;
 let defaultRegistries = new WeakMap<AppServices, ProviderRegistry>();
 
-/** Register the default provider set (currently legacy only). Idempotent per services instance. */
+/** Register the phase-6 provider set. Resolution policy, not array order, selects a lane. */
 export function registerDefaultProviders(services: AppServices): ProviderRegistry {
   if (registryOverride) {
     return registryOverride;
@@ -40,9 +48,8 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
     return existing;
   }
   const legacyProvider = new LegacyMarsProvider(services);
-  // Phase 4/5: builtin engines are registered behind legacy so the default
-  // course pipeline stays on MARS. They are reachable through explicit
-  // provider-id resolution (shadow / verify-both) until phase 6.
+  // Keep registration order stable for evidence/tests. Phase-6 resolution is
+  // by the immutable plan's engine id and never relies on this order.
   const builtinAssemblerProvider = new BuiltinTsAssemblerProvider(services.mipsRuntime);
   const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
   const registry = {
@@ -64,20 +71,59 @@ export function setProviderRegistry(registry: ProviderRegistry | undefined): voi
 
 export function resolveAssemblerProvider(
   services: AppServices,
-  request: AssembleRequest
-): Promise<{ provider: MipsAssemblerProvider; preflight: ProviderPreflight }> {
+  request: AssembleRequest,
+  selection?: CourseEnginePlan
+): Promise<{
+  provider: MipsAssemblerProvider;
+  preflight: ProviderPreflight;
+  selection: CourseEnginePlan;
+}> {
   const registry = registerDefaultProviders(services);
-  const providers = registryOverride ? registry.assemblerProviders : registry.assemblerProviders.slice(0, 1);
-  return resolveFirstCapable(providers, request, 'assembler');
+  const effectiveSelection = selection ?? resolveCourseEnginePlan(
+    getMipsEngine(request.sourceUri),
+    request.requirements?.profile ?? getProfile(request.sourceUri),
+    request.requirements
+  );
+  return resolvePlannedProvider(
+    registry.assemblerProviders,
+    effectiveSelection.primaryEngineId,
+    request,
+    'assembler',
+    effectiveSelection
+  );
 }
 
 export function resolveExecutionProvider(
   services: AppServices,
-  request: ExecuteRequest
-): Promise<{ provider: MipsExecutionProvider; preflight: ProviderPreflight }> {
+  request: ExecuteRequest,
+  selection?: CourseEnginePlan
+): Promise<{
+  provider: MipsExecutionProvider;
+  preflight: ProviderPreflight;
+  selection: CourseEnginePlan;
+}> {
   const registry = registerDefaultProviders(services);
-  const providers = registryOverride ? registry.executionProviders : registry.executionProviders.slice(0, 1);
-  return resolveFirstCapable(providers, request, 'execution');
+  // ExecuteRequest has no resource URI. The course orchestrator must pass the
+  // assembly-time snapshot to preserve an explicit resource-scoped setting.
+  // A standalone execution request intentionally receives only the safe auto
+  // policy; it must never read an unrelated active editor/workspace setting.
+  const effectiveSelection = selection ?? resolveCourseEnginePlan(
+    'auto',
+    request.requirements?.profile ?? request.profile,
+    {
+      deterministicConsole: request.requirements?.deterministicConsole === true
+        || request.stdin !== undefined
+        || request.stdinSource !== undefined,
+      interactiveConsole: request.requirements?.interactiveConsole
+    }
+  );
+  return resolvePlannedProvider(
+    registry.executionProviders,
+    effectiveSelection.primaryEngineId,
+    request,
+    'execution',
+    effectiveSelection
+  );
 }
 /** Resolve a specific assembler engine for explicit phase-5/full-stack runs. */
 export function resolveAssemblerProviderById(
@@ -90,7 +136,7 @@ export function resolveAssemblerProviderById(
   if (!provider) {
     throw new Error(`No assembler provider is registered for engine "${engineId}".`);
   }
-  return resolveFirstCapable([provider], request, 'assembler');
+  return resolveExactProvider(provider, request);
 }
 
 /** Resolve a specific execution engine for explicit shadow / verify-both runs. */
@@ -104,7 +150,7 @@ export function resolveExecutionProviderById(
   if (!provider) {
     throw new Error(`No execution provider is registered for engine "${engineId}".`);
   }
-  return resolveFirstCapable([provider], request, 'execution');
+  return resolveExactProvider(provider, request);
 }
 
 /** Convenience for explicit phase-5 builtin assembler / full-stack lanes. */
@@ -142,13 +188,67 @@ async function resolveFirstCapable<R, T extends { preflight(request: R): Provide
   return firstFailure!;
 }
 
+async function resolveExactProvider<
+  R,
+  T extends { preflight(request: R): ProviderPreflight | Promise<ProviderPreflight> }
+>(provider: T, request: R): Promise<{ provider: T; preflight: ProviderPreflight }> {
+  return { provider, preflight: await provider.preflight(request) };
+}
+
+async function resolvePlannedProvider<
+  R,
+  T extends {
+    readonly descriptor: { readonly id: string };
+    preflight(request: R): ProviderPreflight | Promise<ProviderPreflight>;
+  }
+>(
+  providers: readonly T[],
+  engineId: CourseProviderEngineId,
+  request: R,
+  kind: 'assembler' | 'execution',
+  selection: CourseEnginePlan
+): Promise<{ provider: T; preflight: ProviderPreflight; selection: CourseEnginePlan }> {
+  const provider = providers.find((candidate) => candidate.descriptor.id === engineId);
+  if (provider) {
+    return {
+      ...await resolveExactProvider(provider, request),
+      selection
+    };
+  }
+
+  // setProviderRegistry is a test seam. Preserve its historical support for
+  // arbitrary fake providers (and one-provider adapter tests), while keeping
+  // the production registry and every standard phase-6 selection exact.
+  if (registryOverride && (providers.length === 1 || providers.some((candidate) =>
+    !isCourseProviderEngineId(candidate.descriptor.id)))) {
+    return {
+      ...await resolveFirstCapable(providers, request, kind),
+      selection
+    };
+  }
+  throw new Error(`No ${kind} provider is registered for selected engine "${engineId}".`);
+}
+
+function isCourseProviderEngineId(engineId: string): engineId is CourseProviderEngineId {
+  return engineId === LEGACY_MARS_ENGINE_ID || engineId === BUILTIN_TS_ENGINE_ID;
+}
+
 /** Convenience: run preflight, fail closed with a structured result when unsupported. */
 export async function assembleWithPreflight(
   services: AppServices,
   request: AssembleRequest,
-  context?: ProviderRunContext
-): Promise<{ ok: boolean; result?: AssembleResult; preflight: ProviderPreflight }> {
-  const { provider, preflight } = await resolveAssemblerProvider(services, request);
+  context?: ProviderRunContext,
+  selection?: CourseEnginePlan
+): Promise<{
+  ok: boolean;
+  result?: AssembleResult;
+  preflight: ProviderPreflight;
+}> {
+  const { provider, preflight } = await resolveAssemblerProvider(
+    services,
+    request,
+    selection
+  );
   if (!preflight.ok) {
     return { ok: false, preflight };
   }
@@ -160,9 +260,18 @@ export async function assembleWithPreflight(
 export async function executeWithPreflight(
   services: AppServices,
   request: ExecuteRequest,
-  context?: ProviderRunContext
-): Promise<{ ok: boolean; result?: ExecuteResult; preflight: ProviderPreflight }> {
-  const { provider, preflight } = await resolveExecutionProvider(services, request);
+  context?: ProviderRunContext,
+  selection?: CourseEnginePlan
+): Promise<{
+  ok: boolean;
+  result?: ExecuteResult;
+  preflight: ProviderPreflight;
+}> {
+  const { provider, preflight } = await resolveExecutionProvider(
+    services,
+    request,
+    selection
+  );
   if (!preflight.ok) {
     return { ok: false, preflight };
   }

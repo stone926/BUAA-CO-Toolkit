@@ -70,7 +70,7 @@ async function compareLatestOutputs(services: AppServices): Promise<void> {
   const pair = await findLatestTracePair(folder);
   if (!pair) {
     const choice = await vscode.window.showWarningMessage(
-      '在当前工作区中未找到现有 Oracle/DUT Trace 产物（*.mars.out / *.sim.out）',
+      '在当前工作区中未找到现有 Oracle/DUT Trace 产物（*.oracle.out / *.sim.out；兼容 *.mars.out）',
       '手动选择文件'
     );
     if (choice === '手动选择文件') {
@@ -138,7 +138,8 @@ async function pickCompareMode(): Promise<CompareMode | undefined> {
 }
 
 async function findLatestTracePair(folder: vscode.WorkspaceFolder): Promise<TraceFilePair | undefined> {
-  const oracle = await findLatestFile(folder, '.co/out/*.mars.out');
+  const oracle = await findLatestFile(folder, '.co/out/*.oracle.out')
+    ?? await findLatestFile(folder, '.co/out/*.mars.out');
   const dut = await findLatestFile(folder, '.co/out/*.sim.out');
   if (!oracle || !dut) {
     return undefined;
