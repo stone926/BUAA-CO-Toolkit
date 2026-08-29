@@ -467,6 +467,23 @@ describe('course trace runner orchestration', () => {
     expect(runIsim).not.toHaveBeenCalled();
   });
 
+  it('classifies an unexpected test-point preparation exception as assemble, not compare', async () => {
+    vi.mocked(prepareAsmCaseMachineCode).mockRejectedValueOnce(
+      new Error('invalid ProgramImage: symbol references an unknown segment')
+    );
+
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+
+    expect(result).toMatchObject({
+      status: 'error',
+      stage: 'assemble',
+      caseId: 'case-1'
+    });
+    expect(result.message).toContain('invalid ProgramImage');
+    expect(executeWithPreflight).not.toHaveBeenCalled();
+    expect(runIsim).not.toHaveBeenCalled();
+  });
+
   it('returns a DUT-stage failure with case metadata and prior oracle output', async () => {
     vi.mocked(runIsim).mockResolvedValueOnce({
       generated: {} as never,

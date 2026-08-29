@@ -47,7 +47,7 @@ import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import type { ParsedInstructionOperand } from './operands';
 import { realInstructionForms } from './instructionForms';
 
-export const courseAssemblerSemanticsRevision = 2 as const;
+export const courseAssemblerSemanticsRevision = 3 as const;
 
 export interface CourseAssemblerOptions {
   readonly profile: CourseProfile;
@@ -445,6 +445,7 @@ function defineLabels(statement: ParsedStatement, state: AssemblyState): void {
     }
     const segment = state.currentSection === 'data' ? 'data'
       : state.currentSection === 'ktext' ? 'ktext' : 'text';
+    state.builder.markSectionUsed(segment);
     state.labels.set(name, {
       name,
       kind: 'label',
@@ -462,6 +463,7 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
     case '.text':
     case '.ktext':
       state.currentSection = mnemonic === '.text' ? 'text' : 'ktext';
+      state.builder.markSectionUsed(state.currentSection);
       if (operands.length === 1) {
         const address = requiredInteger(operands[0], state, 0, 0xffff_ffff);
         if (address.ok) setSectionCursor(state, state.currentSection, address.value, span, statement.expansionStack);
@@ -477,6 +479,7 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       break;
     case '.data':
       state.currentSection = 'data';
+      state.builder.markSectionUsed('data');
       state.builder.resetAutoAlign();
       if (operands.length === 1) {
         const address = requiredInteger(operands[0], state, 0, 0xffff_ffff);

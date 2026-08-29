@@ -163,14 +163,26 @@ export async function runCourseTraceCase(
     );
   }
 
-  const dump = await pipeline.prepareProgram(services, asmCase, {
-    showMessages: false,
-    revealOutput: options.revealOutput,
-    nonInteractive: automatic ? true : undefined,
-    courseTrace: true,
-    enginePlan,
-    signal: options.signal
-  });
+  let dump: Awaited<ReturnType<CourseTracePipeline['prepareProgram']>>;
+  try {
+    dump = await pipeline.prepareProgram(services, asmCase, {
+      showMessages: false,
+      revealOutput: options.revealOutput,
+      nonInteractive: automatic ? true : undefined,
+      courseTrace: true,
+      enginePlan,
+      signal: options.signal
+    });
+  } catch (error) {
+    return failedCase(
+      item,
+      'assemble',
+      `测试中止：测试点准备异常：${error instanceof Error ? error.message : String(error)}`,
+      undefined,
+      undefined,
+      asmCase
+    );
+  }
   if (!dump?.ok || !dump.outputFile) {
     return failedCase(
       item,

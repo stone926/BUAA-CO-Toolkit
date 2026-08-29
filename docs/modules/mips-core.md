@@ -18,7 +18,7 @@
 - assembler/expression.ts — MARS 风格有符号 32 位归一化的常量表达式、符号解析回调与稳定 undefined-symbol 分类；移位运算同级且左结合
 - assembler/macros.ts — `.macro` 定义、形参替换、宏内标签 `_M#` 去重、递归/总膨胀限额与嵌套展开栈
 - assembler/pseudo.ts — 课程常用 pseudo 展开（li/la/move/b/blt/... 与便捷访存寻址）；最终真实指令仍统一经过 catalog profile/layer 校验
-- assembler/sections.ts — text/ktext/data 绝对光标、前向空洞、容量/重叠检查、小端字节车道与 MARS 4 KiB 数据块 padding
+- assembler/sections.ts — text/ktext/data 绝对光标、前向空洞、容量/重叠检查、小端字节车道、`.space` 零填充分配与 MARS 4 KiB 数据块 padding
 - assembler/instructionForms.ts — 指令形式的操作数模式/参数化辅助（encoder 与 pseudo 校验共享）
 - assembler/operands.ts — 操作数解析：`off($base)` 内存形式、寄存器/$0/立即数分类与括号配对
 - assembler/registers.ts — 架构寄存器名称/编号事实（与 resources/mips/registers.json 同源，勿手改）

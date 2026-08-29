@@ -98,7 +98,7 @@ export const maximumAsmCaseIndexManifestBytes = 16 * 1024 * 1024;
 
 export interface AsmCaseTestOutcome {
   readonly status: 'passed' | 'failed' | 'error';
-  readonly stage: 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe';
+  readonly stage: 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe' | 'internal';
   readonly diagnostic: string;
 }
 

@@ -40,7 +40,7 @@ export interface CourseTraceShadowSummary {
   builtinWords?: number;
   legacyWords?: number;
 }
-export type NeutralCourseTraceStage = 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe';
+export type NeutralCourseTraceStage = 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe' | 'internal';
 /** Stage values emitted by v1 reports and accepted indefinitely when reading. */
 export type LegacyCourseTraceStage = 'dump' | 'mars' | 'isim' | 'logisim';
 export type CourseTraceStage = NeutralCourseTraceStage | LegacyCourseTraceStage;
@@ -338,6 +338,8 @@ export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): s
       return '[AUTO-COMPARE] 结果比较未完成';
     case 'probe':
       return '[AUTO-PROBE] P7 定向检查未完成';
+    case 'internal':
+      return '[AUTO-INTERNAL] 自动测试内部流程未完成；请使用复现编号定位';
   }
 }
 

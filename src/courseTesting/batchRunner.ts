@@ -133,7 +133,7 @@ export async function runCourseTraceBatch(
           stdin: item.stdin?.fsPath,
           ...(item.asmCase ? caseResultFields(item.asmCase) : {}),
           status: 'error',
-          stage: 'compare',
+          stage: 'internal',
           message
         };
         results.push(result);
@@ -141,7 +141,7 @@ export async function runCourseTraceBatch(
           try {
             await recordAsmCaseTestOutcome(result.caseManifest, {
               status: result.status,
-              stage: 'compare',
+              stage: 'internal',
               diagnostic: publicAutomaticDiagnosticMessage(result)
             });
           } catch {

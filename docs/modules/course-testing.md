@@ -24,7 +24,7 @@ orchestration:
   courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.oracle.out、.co/out/{stem}.sim.out；手动比较仍兼容读取旧 `.mars.out`
 
 generation:
-  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/ISim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe 中立 stage
+  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/ISim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe/internal 中立 stage，未分类框架异常不得伪装成 compare 失败
   courseTesting/courseTestSession.ts — batch 与 continuous 共用的原子会话租约；任意单次/持续课程测试互斥，避免共享 ISim/Logisim 工程、testbench 和机器码被并发覆写，release 幂等并在 finally 中执行
   courseTesting/automaticTestPolicy.ts — 自动测试引擎、强度与外部工具预算唯一入口：固定 builtin；P3-P6 4094 payload，P7 1118+hybrid+全异常，中断/Timer 固定开启；持续测试的停止/留存策略也在此冻结
   courseTesting/generatorWorkflow.ts — 自动入口始终使用内置 generator 和 internal policy，不再由活动外部生成器文件接管；P7 hybrid 内部展开为 anchor/core-probe/timer-probe，分片写入 manifest 供精确 replay 但不形成用户设置；历史 external setup 与完整 CourseTraceBatchSource provenance 仅供隐藏兼容/精确 replay

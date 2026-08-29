@@ -37,6 +37,7 @@ interface RecordedOrigin {
 export class CourseSegmentBuilder {
   private textWords: number[] = [];
   private ktextWords: number[] = [];
+  private readonly usedSections = new Set<CourseSectionId>();
   private readonly textOccupied = new Set<number>();
   private readonly ktextOccupied = new Set<number>();
   private readonly dataBytes = new Map<number, number>();
@@ -55,7 +56,13 @@ export class CourseSegmentBuilder {
     }
   }
 
+  /** Preserve an explicitly selected or symbol-bearing section even when it has zero words. */
+  markSectionUsed(section: CourseSectionId): void {
+    this.usedSections.add(section);
+  }
+
   setCursor(section: CourseSectionId, address: number): void {
+    this.markSectionUsed(section);
     if ((address & 3) !== 0) {
       throw new Error(`段 ${section} 的地址 ${hex8Address(address)} 未字对齐`);
     }
@@ -77,6 +84,7 @@ export class CourseSegmentBuilder {
   }
 
   alignData(exponent: number): void {
+    this.markSectionUsed('data');
     if (exponent === 0) {
       this.disableAutoAlign();
       return;
@@ -97,6 +105,7 @@ export class CourseSegmentBuilder {
     word: number,
     origin: WorkOrigin
   ): { wordIndex: number; segmentIndex: number } {
+    this.markSectionUsed(section);
     const address = this.cursor(section);
     this.ensureInstructionAddress(section, address);
     const words = section === 'text' ? this.textWords : this.ktextWords;
@@ -122,6 +131,7 @@ export class CourseSegmentBuilder {
 
   /** Write data bytes at a previously allocated address (pass-2 relocation patch). */
   writeDataBytesAt(address: number, bytes: readonly number[], origin: WorkOrigin): void {
+    this.markSectionUsed('data');
     if (bytes.length) this.ensureDataAddress(address + bytes.length - 1);
     for (let offset = 0; offset < bytes.length; offset++) {
       this.dataBytes.set(address + offset, bytes[offset] & 0xff);
@@ -136,6 +146,7 @@ export class CourseSegmentBuilder {
 
   /** Advance the data cursor without allocating initialized bytes (MARS `.space` semantics). */
   appendDataSpace(bytes: number): number {
+    this.markSectionUsed('data');
     const address = this.dataCursor;
     if (bytes) this.ensureDataAddress(address + bytes - 1);
     this.advance('data', bytes);
@@ -148,6 +159,7 @@ export class CourseSegmentBuilder {
     /** Numeric directive width; 0 disables MARS auto-alignment (strings/space). */
     alignment = 0
   ): number {
+    this.markSectionUsed('data');
     if (this.dataAutoAlign && alignment > 1) {
       const aligned = Math.ceil(this.dataCursor / alignment) * alignment;
       if (aligned > courseSectionLayout.data.base) this.ensureDataAddress(aligned - 1);
@@ -170,18 +182,23 @@ export class CourseSegmentBuilder {
 
   toSegments(): ProgramSegment[] {
     const segments: ProgramSegment[] = [];
-    if (this.textWords.length) {
+    if (this.textWords.length || this.usedSections.has('text')) {
       segments.push({ name: 'text', baseAddress: courseSectionLayout.text.base, words: this.textWords });
     }
-    if (this.ktextWords.length) {
+    if (this.ktextWords.length || this.usedSections.has('ktext')) {
       segments.push({ name: 'ktext', baseAddress: courseSectionLayout.ktext.base, words: this.ktextWords });
     }
-    if (this.dataBytes.size > 0) {
+    if (this.dataBytes.size > 0
+      || this.dataCursor > courseSectionLayout.data.base
+      || this.usedSections.has('data')) {
       // MARS allocates data memory in 4096-byte (1024-word) blocks and its HexText
-      // dump ends at the last allocated block boundary. Course data starts at 0 and
-      // is written contiguously, so pad to the same boundary for image differential.
-      const lastByte = Math.max(...this.dataBytes.keys()) + 1;
-      const allocatedEnd = Math.ceil(lastByte / 0x1000) * 0x1000;
+      // dump ends at the last allocated block boundary. `.space` advances the cursor
+      // without creating initialized bytes, but it still allocates zero-filled course
+      // DM and must therefore materialize a data segment for labels and replay.
+      const lastInitializedByte = this.dataBytes.size > 0
+        ? Math.max(...this.dataBytes.keys()) + 1
+        : courseSectionLayout.data.base;
+      const allocatedEnd = Math.ceil(lastInitializedByte / 0x1000) * 0x1000;
       const wordCount = Math.max(
         Math.ceil((this.dataCursor - courseSectionLayout.data.base) / 4),
         allocatedEnd / 4

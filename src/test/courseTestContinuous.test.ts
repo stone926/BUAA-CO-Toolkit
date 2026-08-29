@@ -199,6 +199,21 @@ describe('continuous generated trace orchestration', () => {
     expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(2);
   });
 
+  it('classifies an unhandled case exception as an internal framework error', async () => {
+    const deps = createDependencies({
+      runCourseTraceCase: vi.fn(async () => {
+        throw new Error('unexpected host failure');
+      })
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ stage: 'internal' })
+    );
+  });
+
   it('writes continuous results with the role-neutral v2 schema', async () => {
     const deps = createDependencies({
       runCourseTraceCase: vi.fn(async (_services, item) => ({

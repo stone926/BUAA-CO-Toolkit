@@ -187,7 +187,7 @@ async function runContinuousP7PipelineWithSession(
             caseManifest: item.asmCase?.manifestUri.fsPath,
             asmSnapshot: item.asmCase?.asm.fsPath,
             status: 'error',
-            stage: 'compare',
+            stage: 'internal',
             message: error instanceof Error ? error.message : String(error)
           };
         }

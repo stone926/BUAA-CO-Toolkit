@@ -259,7 +259,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
                   asmSnapshot: item.asmCase.asm.fsPath
                 } : {}),
                 status: 'error',
-                stage: 'compare',
+                stage: 'internal',
                 message: error instanceof Error ? error.message : String(error)
               };
             }

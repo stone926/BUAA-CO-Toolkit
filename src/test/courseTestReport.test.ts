@@ -21,6 +21,7 @@ import {
   createCourseTraceBatchReport,
   neutralCourseTraceCaseResult,
   neutralCourseTraceStage,
+  publicAutomaticDiagnosticMessage,
   renderAsmCaseIndex,
   renderBatchTraceReport,
   renderContinuousTraceMonitor,
@@ -29,6 +30,15 @@ import {
 import type { ContinuousTraceReport, CourseTraceCaseResult } from '../courseTestReport';
 
 describe('course test reports', () => {
+  it('labels unclassified framework failures as internal instead of compare', () => {
+    expect(publicAutomaticDiagnosticMessage({
+      asm: 'hidden.asm',
+      status: 'error',
+      stage: 'internal',
+      message: 'private framework detail'
+    })).toBe('[AUTO-INTERNAL] 自动测试内部流程未完成；请使用复现编号定位');
+  });
+
   it('renders test history without exposing automatic-case paths or artifact internals', () => {
     const html = renderAsmCaseIndex([{
       manifest: {

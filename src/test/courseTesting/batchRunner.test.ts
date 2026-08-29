@@ -53,6 +53,7 @@ import {
 } from '../../courseTesting/batchRunner';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
 import { revealOutputChannel } from '../../process';
+import { recordAsmCaseTestOutcome } from '../../asmCaseStore';
 import type { AppServices } from '../../types';
 import { tryAcquireCourseTestSession } from '../../courseTesting/courseTestSession';
 
@@ -140,6 +141,24 @@ describe('batch runner cancellation session', () => {
     expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('Trace'));
     expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('Batch'));
     expect(services.statusBar.text).toBe('');
+  });
+
+  it('does not misreport an unclassified framework exception as a trace comparison failure', async () => {
+    vi.mocked(runCourseTraceCase).mockRejectedValueOnce(new Error('unexpected host failure'));
+
+    await runCourseTraceBatch(
+      services,
+      [{ asm: URI.file('/tmp/a.asm') }],
+      { kind: 'generator' },
+      async (_services, _resource, base) => ({ ...base })
+    );
+
+    expect(vi.mocked(runCourseTraceCase)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordAsmCaseTestOutcome)).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ stage: 'internal' })
+    );
+    expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('compare'));
   });
 
   it('refuses to start while continuous testing owns the shared artifact session', async () => {

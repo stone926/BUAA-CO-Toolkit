@@ -3,7 +3,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 import { findCourseHaltPc } from '../../mips/core/assembler/artifacts';
-import { programImageIssues } from '../../mips/replay/programImage';
+import {
+  deserializeProgramImage,
+  programImageIssues,
+  serializeProgramImage
+} from '../../mips/replay/programImage';
 import { commitEventSourceMap, sourceMapEntryForAddress } from '../../mips/core/assembler/sourceMap';
 
 const corpusRoot = path.resolve(process.cwd(), 'conformance/mips/corpus/spec-microprograms');
@@ -109,6 +113,49 @@ describe('course assembler directives and pseudo', () => {
     expect(data!.words[4].toString(16).padStart(8, '0')).toBe('00006f79');
     const text = result.image!.segments.find((segment) => segment.name === 'text')!;
     expect(text.words[0].toString(16).padStart(8, '0')).toBe('2408ffff');
+  });
+
+  it('materializes zero-filled .space allocation as a serializable data segment', () => {
+    const asm = [
+      '.data',
+      '_co_data:',
+      '    .space 12288',
+      '.text',
+      '_co_test_end:',
+      '    beq $0, $0, _co_test_end',
+      '    nop'
+    ].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P6' });
+
+    expect(result.ok).toBe(true);
+    const data = result.image!.segments.find((segment) => segment.name === 'data');
+    expect(data?.words).toHaveLength(3072);
+    expect(data?.words.every((word) => word === 0)).toBe(true);
+    expect(result.image!.symbols.find((symbol) => symbol.name === '_co_data'))
+      .toMatchObject({ segment: 'data', value: 0 });
+    expect(programImageIssues(result.image)).toEqual([]);
+    expect(() => serializeProgramImage(result.image!)).not.toThrow();
+  });
+
+  it('preserves an empty symbol-bearing data segment for .space 0 and label-only sources', () => {
+    for (const allocation of ['    .space 0', '']) {
+      const asm = [
+        '.data',
+        'empty_data:',
+        allocation,
+        '.text',
+        '    nop'
+      ].filter(Boolean).join('\n');
+      const result = assembleCourseSource({ id: 'root', text: asm }, { profile: 'P6' });
+
+      expect(result.ok).toBe(true);
+      expect(result.image!.segments.find((segment) => segment.name === 'data')?.words).toEqual([]);
+      expect(result.image!.symbols.find((symbol) => symbol.name === 'empty_data'))
+        .toMatchObject({ segment: 'data', value: 0 });
+      const serialized = serializeProgramImage(result.image!);
+      expect(programImageIssues(result.image)).toEqual([]);
+      expect(deserializeProgramImage(serialized)).toEqual(result.image);
+    }
   });
 
   it('fixes a data label when the following directive auto-aligns it', () => {
