@@ -65,13 +65,21 @@ test('help exposes only project, ISE, DUT wiring, instructions, and output contr
   for (const option of [...removedPolicyOptions, 'java', 'mars', 'mars-p7']) {
     assert.equal(result.stdout.includes(`--${option}`), false, `help leaked --${option}`);
   }
+  assert.match(result.stdout, /启动持续测试/);
+  assert.doesNotMatch(result.stdout, /co-test continuous/);
+});
+
+test('legacy positional test selector is rejected', () => {
+  const result = spawnSync(process.execPath, [cli, 'continuous'], { encoding: 'utf8' });
+  assert.equal(result.status, 2, result.stderr || result.stdout);
+  assert.match(result.stderr, /未知命令行参数: continuous/);
 });
 
 test('former automatic-policy options are explicitly rejected', () => {
   for (const option of removedPolicyOptions) {
     const result = spawnSync(process.execPath, [cli, `--${option}`], { encoding: 'utf8' });
     assert.equal(result.status, 2, `--${option}: ${result.stderr || result.stdout}`);
-    assert.match(result.stderr, /最强自动测试策略接管/);
+    assert.match(result.stderr, /最强持续测试策略接管/);
   }
 });
 
@@ -130,6 +138,7 @@ test('default CLI generates anchor, core probe, and timer probe and writes a san
   assert.equal(report.iterations.length, 1);
   assert.deepEqual(report.iterations[0].source, { kind: 'generator' });
   assert.equal(report.iterations[0].summary.errors + report.iterations[0].summary.failed > 0, true);
+  assert.equal(report.iterations[0].results.length, 1, 'default testing must stop after the first error');
   assert.equal(report.iterations[0].results[0].asm, '测试点 1');
 
   const reportKeys = allObjectKeys(report);

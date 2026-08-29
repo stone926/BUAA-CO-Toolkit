@@ -114,6 +114,7 @@ type TestDependencies = ContinuousGeneratedTraceDependencies<TestSetup, TestCase
 
 const resource = URI.file('E:/work/main.asm');
 const asm = URI.file('E:/work/generated.asm');
+const secondAsm = URI.file('E:/work/generated-2.asm');
 const setup: TestSetup = {
   resource,
   folder: { uri: URI.file('E:/work'), name: 'work', index: 0 }
@@ -144,7 +145,7 @@ describe('continuous generated trace orchestration', () => {
     const second = startContinuousGeneratedTraceTests(createServices(), deps);
 
     await second;
-    expect(vscodeMocks.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('已有一个自动测试'));
+    expect(vscodeMocks.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('已有一个测试任务'));
     expect(deps.resolveGeneratorRunSetup).toHaveBeenCalledTimes(1);
 
     pendingSetup.resolve(undefined);
@@ -185,6 +186,7 @@ describe('continuous generated trace orchestration', () => {
     policyMocks.maxIterations.mockReturnValue(2);
     policyMocks.stopOnFailure.mockReturnValue(false);
     const deps = createDependencies({
+      expandTraceCases: vi.fn(async () => [{ asm }, { asm: secondAsm }]),
       runCourseTraceCase: vi.fn(async (_services, item) => ({
         asm: item.asm.fsPath,
         status: 'error' as const,
@@ -196,7 +198,49 @@ describe('continuous generated trace orchestration', () => {
     await startContinuousGeneratedTraceTests(createServices(), deps);
 
     expect(deps.runGeneratorAndCollectAsms).toHaveBeenCalledTimes(2);
-    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(2);
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not execute a second case in the same iteration after the first case fails', async () => {
+    const deps = createDependencies({
+      expandTraceCases: vi.fn(async () => [{ asm }, { asm: secondAsm }]),
+      runCourseTraceCase: vi.fn(async (_services, item) => ({
+        asm: item.asm.fsPath,
+        status: item.asm.fsPath === asm.fsPath ? 'failed' as const : 'passed' as const,
+        stage: 'compare' as const,
+        message: item.asm.fsPath === asm.fsPath ? 'mismatch' : 'matched'
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(1);
+    expect(deps.runCourseTraceCase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ asm }),
+      expect.anything()
+    );
+  });
+
+  it('does not execute a second case in the same iteration after the first case errors', async () => {
+    const deps = createDependencies({
+      expandTraceCases: vi.fn(async () => [{ asm }, { asm: secondAsm }]),
+      runCourseTraceCase: vi.fn(async (_services, item) => ({
+        asm: item.asm.fsPath,
+        status: item.asm.fsPath === asm.fsPath ? 'error' as const : 'passed' as const,
+        stage: item.asm.fsPath === asm.fsPath ? 'mars' as const : 'compare' as const,
+        message: item.asm.fsPath === asm.fsPath ? 'invalid generated case' : 'matched'
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(1);
+    expect(deps.runCourseTraceCase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ asm }),
+      expect.anything()
+    );
   });
 
   it('classifies an unhandled case exception as an internal framework error', async () => {

@@ -13,9 +13,9 @@ P7 自动固定运行 hybrid：anchor(TS 课程 oracle 精确对拍+中断注入
 独立 conformance 严格按 evidence kind 区分：既有 assembly-diff 通过 JSONL CLI 对 10 个 P3–P7 corpus 与固定 MARS 比较 text/ktext/data；阶段 6 新增真实 execution differential，冻结 P3–P7 各 50 个确定性 seed（合计 250）和各 1 个手写边界用例。每例先证明 TS/MARS 实际执行 image fingerprint 完全相同，再比较 canonical architectural writes、精确停机和最终 observable summary。聚合 gate 重算 profile/result payload，要求每 profile 50+1、总 255、0 failed/inconclusive/out-of-domain/error/unexplained，拒绝 artifact-only `validated` 冒充执行证据。固定 MARS reference 永久在 Ubuntu 24.04/Windows 2025 CI matrix 中运行。
 
 orchestration:
-  courseTest.ts — 总调度；公共面只有运行自动测试、持续自动测试、停止自动测试、测试历史/失败用例四个入口；旧低层命令 ID 仅作隐藏兼容。runCourseTraceCase 串联 plan->assemble provider->同 plan oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe
+  courseTest.ts — 总调度；公共测试启动入口唯一为“启动持续测试”，默认按最强策略无限生成，并在首个失败或错误时立即停止；另保留“停止持续测试”和“测试历史/失败用例”两个控制/诊断入口，旧单轮自动入口已删除，低层手动/回放命令 ID 仅作隐藏兼容。runCourseTraceCase 串联 plan->assemble provider->同 plan oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
-  courseTestContinuous.ts — 持续生成循环：生产入口固定无限轮、首错停止、零延迟主动 yield、通过产物/报告有界、失败产物保留；内部参数不读 Settings。启动阶段同步占位防重复会话，启动检查期间也可取消；停止请求可打断等待或在途外部工具，用户取消的未完成 case 不计为测试 error；面板关闭触发停止，最终报告写失败也保证释放会话
+  courseTestContinuous.ts — “启动持续测试”的持续生成循环：生产入口固定最强配置、无限轮、首个失败或错误立即停止、零延迟主动 yield、通过产物/报告有界、失败/错误产物保留；内部参数不读 Settings。启动阶段同步占位防重复会话，启动检查期间也可取消；停止请求可打断等待或在途外部工具，用户取消的未完成 case 不计为测试 error；面板关闭触发停止，最终报告写失败也保证释放会话
   courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
   courseTestReport.ts — HTML 报告：批量/Logisim 准备/持续监控/ASM 索引；读取时兼容旧 mars/sim/logisim 字段，新结果只使用 oracle/dut；legacy logisimOut 只解释为原始 CLI 输出，不伪装成已解析 DUT trace
   courseTestToolchain.ts — mode-aware 校验：automatic 固定传 builtin override，P4–P7 不探测 Java/MARS，失败只输出稳定能力名而不泄漏本机路径；手动 mars/verify-both 才检查稳定版 Compact/coL1/coL2/efc/p7irq 与内存配置，cl 仅在历史 RI mnemonic 精确回放时按需校验。固定验证另在执行前按编译内置信任身份校验 course1 bytes/SHA-256

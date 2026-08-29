@@ -375,19 +375,9 @@
         "icon": "$(new-folder)"
       },
       {
-        "command": "co.course.openTutorial",
-        "title": "CO: 打开课程教程",
-        "icon": "$(book)"
-      },
-      {
         "command": "co.tools.openAdvanced",
         "title": "CO: 更多工具",
         "icon": "$(tools)"
-      },
-      {
-        "command": "co.course.openProfileTutorial",
-        "title": "CO: 打开当前 Profile 教程",
-        "icon": "$(symbol-class)"
       },
       {
         "command": "co.mips.runCurrentFile",
@@ -486,16 +476,12 @@
         "title": "CO: 打开冲突报告"
       },
       {
-        "command": "co.test.runGeneratedTraceTests",
-        "title": "CO: 运行自动测试"
-      },
-      {
         "command": "co.test.startContinuousGeneratedTraceTests",
-        "title": "CO: 持续自动测试"
+        "title": "CO: 启动持续测试"
       },
       {
         "command": "co.test.stopContinuousTests",
-        "title": "CO: 停止自动测试"
+        "title": "CO: 停止持续测试"
       },
       {
         "command": "co.test.openAsmCaseIndex",
@@ -565,12 +551,6 @@
           "command": "co.checkToolchain"
         },
         {
-          "command": "co.course.openTutorial"
-        },
-        {
-          "command": "co.test.runGeneratedTraceTests"
-        },
-        {
           "command": "co.test.startContinuousGeneratedTraceTests"
         },
         {
@@ -584,10 +564,6 @@
         },
         {
           "command": "co.sidebar.refresh",
-          "when": "false"
-        },
-        {
-          "command": "co.course.openProfileTutorial",
           "when": "false"
         },
         {
@@ -698,11 +674,6 @@
               "流水线 + 乘除法 + 外置存储器",
               "MIPS 微系统（异常+外设）"
             ]
-          },
-          "co.course.tutorialRoot": {
-            "type": "string",
-            "description": "可选的教程根目录。可使用本地镜像路径如 C:/co/tutorial 或 URL。为空时自动检测附近的本地镜像，若无则回退到官方网站",
-            "default": ""
           },
           "co.project.topModule": {
             "type": "string",

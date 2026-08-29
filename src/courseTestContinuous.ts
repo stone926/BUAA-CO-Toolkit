@@ -126,7 +126,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
   const sessionLease = tryAcquireCourseTestSession('continuous');
   if (!sessionLease || activeContinuousTraceSession || continuousTraceStartReserved) {
     sessionLease?.release();
-    vscode.window.showWarningMessage('已有一个自动测试或持续测试正在运行');
+    vscode.window.showWarningMessage('已有一个测试任务正在运行');
     return;
   }
 
@@ -197,14 +197,14 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
     panel.onDidDispose(() => requestContinuousTraceStop(session!));
 
     services.output.appendLine('');
-    services.output.appendLine('正在启动持续自动测试');
+    services.output.appendLine('正在启动持续测试');
 
     await updateContinuousTraceMonitor(session, { force: true });
     let index = 0;
     while (!session.stopRequested && (maxIterations === 0 || index < maxIterations)) {
       index++;
       session.report.totalIterations = index;
-      services.statusBar.text = `CO: 持续自动测试 #${index}`;
+      services.statusBar.text = `CO: 持续测试 #${index}`;
       const iteration: ContinuousTraceIteration = {
         index,
         status: 'running',
@@ -216,7 +216,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       await updateContinuousTraceMonitor(session, { force: true });
 
       services.output.appendLine('');
-      services.output.appendLine(`持续自动测试第 ${index} 轮`);
+      services.output.appendLine(`持续测试第 ${index} 轮`);
       let iterationLevelError = false;
       try {
         const generated = await deps.runGeneratorAndCollectAsms(services, setup, {
@@ -281,6 +281,9 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
             addContinuousResult(iteration.summary, result);
             iteration.status = continuousStatusFromCounts(iteration.summary, true, session.stopRequested);
             await updateContinuousTraceMonitor(session);
+            if (shouldStopAfterIterationCounts(iteration.summary, stopOnFailure)) {
+              break;
+            }
           }
           iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
         }
@@ -314,7 +317,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
     if (session) {
       session.report.running = false;
       session.report.stopRequested = session.stopRequested;
-      services.statusBar.text = 'CO: 持续自动测试已停止';
+      services.statusBar.text = 'CO: 持续测试已停止';
       try {
         await updateContinuousTraceMonitor(session, { force: true });
       } catch {
@@ -340,7 +343,7 @@ export function stopContinuousTests(): void {
     : '已请求取消当前工具并停止持续测试');
 }
 
-/** Quiet primitive used by the single public "stop automatic tests" facade. */
+/** Quiet primitive used by the public stop-continuous-test facade. */
 export function requestContinuousTestsStop(): 'none' | 'starting' | 'running' {
   if (activeContinuousTraceSession) {
     requestContinuousTraceStop(activeContinuousTraceSession);
@@ -362,9 +365,9 @@ function requestContinuousTraceStop(session: ContinuousTraceSession): void {
 
 async function ensureContinuousTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {
   services.output.appendLine('');
-  services.output.appendLine('正在检查持续自动测试工具链');
+  services.output.appendLine('正在检查持续测试工具链');
 
-  const profile = await ensureConcreteProfile(resource, '持续自动测试需要先确定项目 Profile');
+  const profile = await ensureConcreteProfile(resource, '持续测试需要先确定项目 Profile');
   if (!profile) {
     return false;
   }
@@ -387,7 +390,7 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
     return true;
   }
 
-  const message = `持续自动测试工具链检查失败：${failed.map(formatAutomaticToolchainFailure).join('；')}`;
+  const message = `持续测试工具链检查失败：${failed.map(formatAutomaticToolchainFailure).join('；')}`;
   services.output.appendLine(message);
   vscode.window.showErrorMessage(message);
   return false;

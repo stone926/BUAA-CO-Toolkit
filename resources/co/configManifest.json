@@ -17,10 +17,6 @@
         ],
         "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法推断时会要求手动选择并保存"
       },
-      "co.course.tutorialRoot": {
-        "type": "string",
-        "description": "可选的教程根目录。可使用本地镜像路径如 C:/co/tutorial 或 URL。为空时自动检测附近的本地镜像，若无则回退到官方网站"
-      },
       "co.project.topModule": {
         "type": "string",
         "description": "课程检查和 ISim 工程生成使用的顶层 Verilog 模块名"

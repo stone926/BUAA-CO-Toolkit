@@ -28,7 +28,6 @@ import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
 import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
-import { registerCourseLinks } from './courseLinks';
 import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 import { getProfileName } from './courseConfig';
@@ -157,7 +156,6 @@ export function activate(context: vscode.ExtensionContext): void {
   registerHazard(context, services);
   registerTraceCompare(context, services);
   registerCourseTest(context, services);
-  registerCourseLinks(context);
   registerAdvancedTools(context);
 
   function cachedToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): ToolDetection[] | undefined {

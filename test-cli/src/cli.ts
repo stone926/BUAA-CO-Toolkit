@@ -122,15 +122,12 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
 
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-    if (index === 0 && arg === 'continuous') {
-      continue;
-    }
     if (arg === '-h' || arg === '--help') {
       printHelp();
       process.exit(0);
     }
     if (arg === '-v' || arg === '--version') {
-      process.stdout.write('buaa-co-test-cli 0.1.0 (P7 strongest automatic pipeline)\n');
+      process.stdout.write('buaa-co-test-cli 0.1.0 (P7 strongest continuous test)\n');
       process.exit(0);
     }
     if (arg === '-q' || arg === '--quiet') {
@@ -150,7 +147,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     const name = equalsIndex >= 0 ? raw.slice(0, equalsIndex) : raw;
     const inlineValue = equalsIndex >= 0 ? raw.slice(equalsIndex + 1) : undefined;
     if (INTERNAL_POLICY_OPTIONS.has(name)) {
-      throw new Error(`参数 --${name} 已由最强自动测试策略接管，不再支持`);
+      throw new Error(`参数 --${name} 已由最强持续测试策略接管，不再支持`);
     }
     const readValue = (): string => {
       if (inlineValue !== undefined) {
@@ -215,10 +212,9 @@ function validateCliOptions(options: CliOptions): void {
 }
 
 function printHelp(): void {
-  process.stdout.write(`BUAA CO Toolkit | test-cli (P7 continuous automatic testing)
+  process.stdout.write(`BUAA CO Toolkit | 启动持续测试 (P7)
 
 用法:
-  co-test continuous [options]
   co-test [options]
 
 每轮自动执行 P7 允许范围内的最强测试组合。
@@ -286,11 +282,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       process.stdout.write(`${JSON.stringify(result.report, null, 2)}\n`);
     } else {
       const summary = result.summary;
-      process.stdout.write(`\n持续自动测试完成: ${summary.passed} 通过, ${summary.failed} 失败, ${summary.errors} 错误\n`);
+      process.stdout.write(`\n持续测试完成: ${summary.passed} 通过, ${summary.failed} 失败, ${summary.errors} 错误\n`);
     }
     process.exitCode = sigintCount > 0 ? 130 : (result.status === 'passed' ? 0 : 1);
   } catch {
-    process.stderr.write('持续自动测试启动失败；请检查项目、工具链与输出位置配置\n');
+    process.stderr.write('持续测试启动失败；请检查项目、工具链与输出位置配置\n');
     process.exitCode = 1;
   } finally {
     process.removeListener('SIGINT', onSigint);

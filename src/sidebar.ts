@@ -17,15 +17,10 @@ import {
   getMipsEngine
 } from './config';
 import {
-  getProfileTutorialLink,
-  getToolTutorialLinksForProfile
-} from './courseLinks';
-import {
   buildSidebarModel,
   SidebarActiveFileModel,
   SidebarNodeModel,
-  SidebarToolModel,
-  SidebarTutorialModel
+  SidebarToolModel
 } from './sidebarModel';
 import { ProjectProfile } from './types';
 import { workspaceFolderForOrFirst } from './fsUtil';
@@ -75,8 +70,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       simTime: getSimTime(resource),
       simBackend: getSimBackend(resource),
       activeFile: this.activeFileModel(activeDocument),
-      tools: this.createToolModels(profile, resource),
-      tutorials: this.createTutorialModels(profile)
+      tools: this.createToolModels(profile, resource)
     };
   }
 
@@ -164,43 +158,6 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       value: normalized || '未配置',
       configured: Boolean(normalized)
     };
-  }
-
-  private createTutorialModels(profile: ProjectProfile): SidebarTutorialModel[] {
-    const items: SidebarTutorialModel[] = [
-      {
-        id: 'home',
-        label: '课程教程首页',
-        description: '打开教程首页',
-        tooltip: '打开 CO 课程教程首页',
-        command: Commands.Course.OpenTutorial,
-        icon: 'book'
-      }
-    ];
-    const profileLink = getProfileTutorialLink(profile);
-    if (profileLink) {
-      items.push({
-        id: `profile.${profile}`,
-        label: `${profile} 教程`,
-        description: profileLink.description,
-        tooltip: profileLink.description ?? profileLink.title,
-        command: Commands.Course.OpenTutorialLink,
-        arguments: [profileLink],
-        icon: 'symbol-class'
-      });
-    }
-    for (const link of getToolTutorialLinksForProfile(profile)) {
-      items.push({
-        id: `tool.${link.path}`,
-        label: link.title,
-        description: link.description,
-        tooltip: link.description ?? link.title,
-        command: Commands.Course.OpenTutorialLink,
-        arguments: [link],
-        icon: 'link-external'
-      });
-    }
-    return items;
   }
 
   private isLogisimCircuitFile(uri: vscode.Uri): boolean {

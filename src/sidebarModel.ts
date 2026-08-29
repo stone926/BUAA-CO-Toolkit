@@ -1,4 +1,4 @@
-// @index sidebar-model — 纯函数式数据模型，四段结构
+// @index sidebar-model — 纯函数式数据模型，三段结构
 import * as path from 'path';
 import {
   Commands,
@@ -11,7 +11,7 @@ import {
 import { getProfileName } from './courseConfig';
 import { ProjectProfile } from './projectProfile';
 
-export type SidebarNodeKind = 'section' | 'info' | 'action' | 'tool' | 'tutorial';
+export type SidebarNodeKind = 'section' | 'info' | 'action';
 
 export interface SidebarCommandModel {
   command: string;
@@ -39,16 +39,6 @@ export interface SidebarToolModel {
   configured: boolean;
 }
 
-export interface SidebarTutorialModel {
-  id: string;
-  label: string;
-  description?: string;
-  tooltip?: string;
-  command: string;
-  arguments?: unknown[];
-  icon: string;
-}
-
 export interface SidebarActiveFileModel {
   languageId?: string;
   fsPath: string;
@@ -68,7 +58,6 @@ export interface SidebarModelContext {
   simBackend: string;
   activeFile?: SidebarActiveFileModel;
   tools: SidebarToolModel[];
-  tutorials: SidebarTutorialModel[];
 }
 
 const traceProfiles = TRACE_PROFILES;
@@ -81,8 +70,7 @@ export function buildSidebarModel(context: SidebarModelContext): SidebarNodeMode
   return [
     projectSection(context),
     contextSection(context),
-    actionsSection(context),
-    materialsSection(context)
+    actionsSection(context)
   ].filter(hasVisibleChildren);
 }
 
@@ -208,28 +196,20 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
   if (shouldShowTraceActions(context.profile)) {
     children.push(
       actionItem(
-        'core.automaticTest',
-        '运行自动测试',
-        Commands.Test.RunGeneratedTraceTests,
-        'beaker',
-        '生成完整测试并验证 CPU',
-        '使用当前 Profile 的默认最强测试方案。'
-      ),
-      actionItem(
-        'core.continuousAutomaticTest',
-        '持续自动测试',
+        'core.continuousTest',
+        '启动持续测试',
         Commands.Test.StartContinuousGeneratedTraceTests,
         'rocket',
-        '持续运行自动测试',
-        '持续验证 CPU，直到停止或发现问题。'
+        '以最强配置持续验证 CPU',
+        '持续生成当前 Profile 的最强测试点，直到首个失败、错误或手动停止。'
       ),
       actionItem(
         'core.stopAutomaticTest',
-        '停止自动测试',
+        '停止持续测试',
         Commands.Test.StopContinuousTests,
         'debug-stop',
-        '停止当前的自动测试',
-        '如果没有正在运行的自动测试，此命令会安全返回。'
+        '停止当前的持续测试',
+        '如果没有正在运行的持续测试，此命令会安全返回。'
       ),
       actionItem(
         'core.testHistory',
@@ -322,49 +302,11 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       Commands.ToolsOpenAdvanced,
       'tools',
       '按当前 Profile 显示低频工具',
-      '打开高级工具选择器，包含自动测试、VCD、Logisim CSV、Hazard 分析等低频入口。'
+      '打开高级工具选择器，包含 VCD、Logisim CSV、Hazard 分析等低频入口。'
     )
   );
 
   return sectionItem('actions', '操作', true, children);
-}
-
-function materialsSection(context: SidebarModelContext): SidebarNodeModel {
-  const children: SidebarNodeModel[] = [
-    ...context.tutorials.map((tutorial) => ({
-      id: `tutorial.${tutorial.id}`,
-      label: tutorial.label,
-      description: tutorial.description,
-      tooltip: tutorial.tooltip ?? tutorial.description,
-      icon: tutorial.icon,
-      kind: 'tutorial' as const,
-      contextValue: 'tutorial',
-      command: {
-        command: tutorial.command,
-        title: tutorial.label,
-        arguments: tutorial.arguments ?? []
-      }
-    }))
-  ];
-
-  for (const tool of context.tools) {
-    children.push({
-      id: `tool.${tool.id}`,
-      label: tool.name,
-      description: tool.configured ? '已配置' : '未配置',
-      tooltip: tool.configured ? tool.value : `${tool.name} 未配置。点击“检查工具链”查看建议。`,
-      icon: tool.configured ? 'check' : 'warning',
-      kind: 'tool',
-      contextValue: 'tool',
-      command: {
-        command: Commands.CheckToolchain,
-        title: '检查工具链',
-        arguments: []
-      }
-    });
-  }
-
-  return sectionItem('materials', '资料', false, children);
 }
 
 function sectionItem(id: string, label: string, expanded: boolean, children: SidebarNodeModel[]): SidebarNodeModel {

@@ -62,7 +62,7 @@ export async function runCourseTraceBatch(
   if (!sessionLease || activeCourseTraceBatch) {
     sessionLease?.release();
     vscode.window.showWarningMessage(automatic
-      ? '已有一个自动测试或持续测试正在运行'
+      ? '已有一个测试任务正在运行'
       : '已有一个课程测试正在运行');
     return;
   }

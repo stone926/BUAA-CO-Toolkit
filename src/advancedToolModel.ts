@@ -3,7 +3,6 @@ import {
   HAZARD_PROFILES,
   LOGISIM_PROFILES,
   MIPS_PROFILES,
-  TRACE_PROFILES,
   VERILOG_PROFILES
 } from './constants';
 import { ProjectProfile } from './projectProfile';
@@ -24,7 +23,6 @@ export interface AdvancedToolItemModel {
   command: string;
 }
 
-const traceProfiles = TRACE_PROFILES;
 const verilogProfiles = VERILOG_PROFILES;
 const mipsProfiles = MIPS_PROFILES;
 const logisimProfiles = LOGISIM_PROFILES;
@@ -42,15 +40,6 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
     if (context.profile === 'P7') {
       items.push(tool('mips.kernelDump', 'ASM 导出内核文本段', 'MARS', activeDetail, Commands.Mips.DumpKernelText));
     }
-  }
-
-  if (traceProfiles.has(context.profile)) {
-    items.push(
-      tool('trace.automatic', '运行自动测试', '自动测试', '生成完整测试并验证 CPU', Commands.Test.RunGeneratedTraceTests),
-      tool('trace.continuous', '持续自动测试', '自动测试', '持续运行自动测试', Commands.Test.StartContinuousGeneratedTraceTests),
-      tool('trace.stop', '停止自动测试', '自动测试', '停止当前的自动测试', Commands.Test.StopContinuousTests),
-      tool('trace.history', '测试历史 / 失败用例', '自动测试', '查看历史结果和失败用例', Commands.Test.OpenAsmCaseIndex)
-    );
   }
 
   if (context.activeKind === 'verilog' && verilogProfiles.has(context.profile)) {

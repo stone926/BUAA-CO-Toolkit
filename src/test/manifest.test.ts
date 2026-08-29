@@ -20,7 +20,7 @@ import { verilogSemanticTokenTypes } from '../language/verilog/model';
 interface PackageJson {
   activationEvents?: string[];
   contributes?: {
-    commands?: Array<{ command: string }>;
+    commands?: Array<{ command: string; title?: string }>;
     configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; markdownDescription?: string; type?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { type?: string; enum?: unknown[] } }> }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
@@ -79,8 +79,6 @@ describe('package manifest', () => {
       'co.projectWizard',
       'co.selectProjectProfile',
       'co.checkToolchain',
-      'co.course.openTutorial',
-      'co.test.runGeneratedTraceTests',
       'co.test.startContinuousGeneratedTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex',
@@ -149,22 +147,26 @@ describe('package manifest', () => {
     expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(false);
   });
 
-  it('contributes only the four automatic-test facade commands', () => {
+  it('contributes only the continuous-test start, stop, and history facade commands', () => {
     const pkg = readPackage();
-    const commands = (pkg.contributes?.commands ?? [])
-      .map((command) => command.command)
-      .filter((command) => command.startsWith('co.test.'));
+    const commandEntries = (pkg.contributes?.commands ?? [])
+      .filter((command) => command.command.startsWith('co.test.'));
+    const commands = commandEntries.map((command) => command.command);
     const palette = (pkg.contributes?.menus?.commandPalette ?? [])
       .map((item) => item.command)
       .filter((command) => command.startsWith('co.test.'));
 
     expect(commands).toEqual([
-      'co.test.runGeneratedTraceTests',
       'co.test.startContinuousGeneratedTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex'
     ]);
     expect(palette).toEqual(commands);
+    expect(commandEntries.map((command) => command.title)).toEqual([
+      'CO: 启动持续测试',
+      'CO: 停止持续测试',
+      'CO: 测试历史 / 失败用例'
+    ]);
   });
 
   it('hides the Verilog signal view outside Verilog signal contexts', () => {
@@ -190,8 +192,8 @@ describe('package manifest', () => {
       '编辑器与诊断',
       '格式化'
     ]);
-    expect(Object.keys(properties)).toHaveLength(45);
-    expect(Object.keys(configDefaults)).toHaveLength(45);
+    expect(Object.keys(properties)).toHaveLength(44);
+    expect(Object.keys(configDefaults)).toHaveLength(44);
     for (const [key, value] of Object.entries(configDefaults)) {
       expect(properties[`co.${key}`]?.default, key).toEqual(value);
     }

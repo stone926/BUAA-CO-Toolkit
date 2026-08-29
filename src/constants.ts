@@ -104,7 +104,6 @@ export const Commands = {
     RunExecutorShadow: 'co.test.runExecutorShadow',
     VerifyWithFixedMars: 'co.test.verifyWithFixedMars',
     RunBatchTraceTests: 'co.test.runBatchTraceTests',
-    RunGeneratedTraceTests: 'co.test.runGeneratedTraceTests',
     StartContinuousGeneratedTraceTests: 'co.test.startContinuousGeneratedTraceTests',
     StopBatchTraceTests: 'co.test.stopBatchTraceTests',
     GenerateAsmTests: 'co.test.generateAsmTests',
@@ -129,12 +128,6 @@ export const Commands = {
   Hazard: {
     AnalyzeCurrentMachineCode: 'co.hazard.analyzeCurrentMachineCode',
     OpenReport: 'co.hazard.openReport'
-  },
-
-  Course: {
-    OpenTutorial: 'co.course.openTutorial',
-    OpenProfileTutorial: 'co.course.openProfileTutorial',
-    OpenTutorialLink: 'co.course.openTutorialLink'
   },
 
   Diagnostics: {

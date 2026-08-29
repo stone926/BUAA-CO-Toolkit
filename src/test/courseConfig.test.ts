@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getCourseConfig,
   getLogisimTraceProfileConfig,
   getProfileDefaults,
   getProfileDirectories,
@@ -87,13 +86,5 @@ describe('course config alignment', () => {
     expect(inference.p7ExclusivePorts).toContain('macroscopic_pc');
     expect(inference.p7Structure?.bridgeModuleNames).toContain('bridge');
     expect(inference.logisimCpuPathPatterns?.length).toBeGreaterThan(0);
-  });
-
-  it('contains tutorial links for profiles and core tools', () => {
-    const tutorial = getCourseConfig().tutorial;
-    expect(tutorial?.profiles?.P7?.path).toBe('P7/implement/P7-2-1/');
-    expect(tutorial?.tools?.logisim?.length).toBeGreaterThan(0);
-    expect(tutorial?.tools?.mars?.length).toBeGreaterThan(0);
-    expect(tutorial?.tools?.ise?.length).toBeGreaterThan(0);
   });
 });

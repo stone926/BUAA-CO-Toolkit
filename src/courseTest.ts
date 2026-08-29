@@ -1,5 +1,5 @@
 import { Commands } from './constants';
-// @index main-coordinator — 课程测试总调度：4 个公共自动测试入口 + 隐藏兼容命令
+// @index main-coordinator — 课程测试总调度：持续测试门面 + 内部批量/复现能力
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getProfile } from './config';
@@ -67,7 +67,6 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
     vscode.commands.registerCommand(Commands.Test.RunExecutorShadow, () => runExecutorShadowTest(services)),
     vscode.commands.registerCommand(Commands.Test.VerifyWithFixedMars, () => verifyCourseTraceWithFixedMars(services)),
     vscode.commands.registerCommand(Commands.Test.RunBatchTraceTests, () => runBatchCourseTraceTests(services)),
-    vscode.commands.registerCommand(Commands.Test.RunGeneratedTraceTests, () => runGeneratedCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.GenerateAsmTests, () => generateAsmTests(services)),
     vscode.commands.registerCommand(Commands.Test.GenerateAndDumpAsmTests, () => generateAndDumpAsmTests(services)),
@@ -107,13 +106,13 @@ function stopAutomaticTests(services: AppServices): void {
   const continuous = requestContinuousTestsStop();
   const batch = isCourseTraceBatchRunning() && stopCourseTraceBatch();
   if (!batch && continuous === 'none') {
-    vscode.window.showInformationMessage('当前没有正在运行的自动测试');
+    vscode.window.showInformationMessage('当前没有正在运行的持续测试');
     return;
   }
   if (batch) {
-    services.output.appendLine('正在停止自动测试…');
+    services.output.appendLine('正在停止测试任务…');
   }
-  vscode.window.showInformationMessage('已请求停止自动测试');
+  vscode.window.showInformationMessage('已请求停止持续测试');
 }
 
 async function runFullCourseTraceTest(services: AppServices): Promise<void> {
@@ -224,17 +223,6 @@ async function runBatchCourseTraceTests(services: AppServices): Promise<void> {
   }
 
   await runCourseTraceBatch(services, cases, { kind: 'selected' }, resolveCourseTraceRunOptions);
-}
-
-async function runGeneratedCourseTraceTests(services: AppServices): Promise<void> {
-  await vscode.workspace.saveAll(false);
-
-  const generated = await resolveGeneratedAsmBatch(services, { resolveAsmBatchInputs });
-  if (!generated) {
-    return;
-  }
-
-  await runCourseTraceBatch(services, await expandTraceCases(generated.asms, generated.asmCases), generated.source, resolveCourseTraceRunOptions);
 }
 
 async function resolveCourseTraceRunOptions(

@@ -13,11 +13,7 @@ describe('advanced tool model', () => {
     expect(commands).toContain('co.verilog.generateTestbench');
     expect(commands).toContain('co.verilog.generateIseProject');
     expect(commands).toContain('co.verilog.exportVcd');
-    expect(commands).toContain('co.test.runGeneratedTraceTests');
-    expect(commands).toContain('co.test.startContinuousGeneratedTraceTests');
-    expect(commands).toContain('co.test.stopContinuousTests');
-    expect(commands).toContain('co.test.openAsmCaseIndex');
-    expect(commands).not.toContain('co.test.verifyWithFixedMars');
+    expect(commands.some((command) => command.startsWith('co.test.'))).toBe(false);
     expect(commands).toContain('co.hazard.analyzeCurrentMachineCode');
     expect(commands).not.toContain('co.logisim.convertLogToCsv');
   });
@@ -31,7 +27,7 @@ describe('advanced tool model', () => {
     expect(commands).not.toContain('co.test.prepareGeneratedLogisimCases');
     expect(commands).not.toContain('co.test.diagnoseP3LogisimTraceCircuit');
     expect(commands).not.toContain('co.test.runFullTest');
-    expect(commands).toContain('co.test.runGeneratedTraceTests');
+    expect(commands.some((command) => command.startsWith('co.test.'))).toBe(false);
     expect(commands).not.toContain('co.verilog.generateIseProject');
   });
 
@@ -44,10 +40,6 @@ describe('advanced tool model', () => {
       'co.mips.runWithStdinFile',
       'co.mips.runInTerminal',
       'co.mips.dumpKernelText',
-      'co.test.runGeneratedTraceTests',
-      'co.test.startContinuousGeneratedTraceTests',
-      'co.test.stopContinuousTests',
-      'co.test.openAsmCaseIndex',
       'co.verilog.generateTestbench',
       'co.verilog.checkSyntaxWithIse',
       'co.verilog.generateIseProject',
@@ -66,21 +58,15 @@ describe('advanced tool model', () => {
     expect(commands.every((command) => contributedCommands.has(command))).toBe(true);
   });
 
-  it('exposes exactly four automatic-test concepts for trace profiles', () => {
-    const testItems = buildAdvancedToolItems({ profile: 'P6', activeKind: 'verilog' })
-      .filter((item) => item.command.startsWith('co.test.'));
+  it('does not duplicate the public test facade in more tools', () => {
+    const contexts = [
+      { profile: 'P7' as const, activeKind: 'mips' as const },
+      { profile: 'P6' as const, activeKind: 'verilog' as const },
+      { profile: 'P3' as const, activeKind: 'logisim' as const }
+    ];
 
-    expect(testItems.map((item) => item.command)).toEqual([
-      'co.test.runGeneratedTraceTests',
-      'co.test.startContinuousGeneratedTraceTests',
-      'co.test.stopContinuousTests',
-      'co.test.openAsmCaseIndex'
-    ]);
-    expect(testItems.map((item) => item.label)).toEqual([
-      '运行自动测试',
-      '持续自动测试',
-      '停止自动测试',
-      '测试历史 / 失败用例'
-    ]);
+    for (const context of contexts) {
+      expect(buildAdvancedToolItems(context).some((item) => item.command.startsWith('co.test.'))).toBe(false);
+    }
   });
 });

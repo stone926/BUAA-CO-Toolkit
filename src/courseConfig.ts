@@ -89,20 +89,9 @@ export interface CourseConfig {
   traceFormatPatterns: Record<string, string[]>;
   directiveDescriptions: Record<string, string>;
   directiveDetails: Record<string, { description: string; commonValues?: Record<string, string> }>;
-  tutorial?: {
-    officialRoot?: string;
-    profiles?: Record<string, CourseTutorialLink>;
-    tools?: Record<string, CourseTutorialLink[]>;
-  };
 }
 
 let courseConfig: CourseConfig | undefined;
-
-export interface CourseTutorialLink {
-  title: string;
-  path: string;
-  description?: string;
-}
 
 function loadCourseConfig(): CourseConfig {
   if (courseConfig) {
@@ -123,8 +112,7 @@ function loadCourseConfig(): CourseConfig {
       logisimTrace: {},
       traceFormatPatterns: {},
       directiveDescriptions: {},
-      directiveDetails: {},
-      tutorial: {}
+      directiveDetails: {}
     };
   }
 }

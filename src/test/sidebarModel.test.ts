@@ -17,7 +17,6 @@ function baseContext(overrides: Partial<SidebarModelContext> = {}): SidebarModel
     simTime: '200us',
     simBackend: 'isim',
     tools: [],
-    tutorials: [],
     ...overrides
   };
 }
@@ -62,8 +61,8 @@ describe('sidebar model', () => {
 
     expect(model.map((node) => node.label)).toEqual(['项目', '当前上下文', '操作']);
     const actions = section(model, '操作');
-    expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
     expect(hasCommand(actions.children, 'co.verilog.generateTestbench')).toBe(false);
     expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
@@ -81,8 +80,8 @@ describe('sidebar model', () => {
     }));
 
     const actions = section(model, '操作');
-    expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
     expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
     expect(findCommand(model, 'co.verilog.generateTestbench')).toBeUndefined();
@@ -125,8 +124,8 @@ describe('sidebar model', () => {
     }));
 
     const actions = section(model, '操作');
-    expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
     expect(hasCommand(actions.children, 'co.test.prepareLogisimCases')).toBe(false);
     expect(hasCommand(actions.children, 'co.logisim.openCurrentCircuit')).toBe(true);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
@@ -210,24 +209,34 @@ describe('sidebar model', () => {
     expect(project.children?.find((item) => item.id === 'project.profile')?.description).toBe('未推断');
   });
 
-  it('exposes exactly four automatic-test concepts without internal details', () => {
+  it('exposes exactly the continuous-test start, stop, and history facade without internal details', () => {
     const model = buildSidebarModel(baseContext({ profile: 'P7' }));
     const actions = section(model, '操作');
     const testActions = actions.children?.filter((item) => item.command?.command.startsWith('co.test.')) ?? [];
 
     expect(testActions.map((item) => item.command?.command)).toEqual([
-      'co.test.runGeneratedTraceTests',
       'co.test.startContinuousGeneratedTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex'
     ]);
     expect(testActions.map((item) => item.label)).toEqual([
-      '运行自动测试',
-      '持续自动测试',
-      '停止自动测试',
+      '启动持续测试',
+      '停止持续测试',
       '测试历史 / 失败用例'
     ]);
     expect(testActions.flatMap((item) => [item.description, item.tooltip]).join('\n'))
       .not.toMatch(/\.co\/|\.co\\|case\.json|MARS|ISim|Logisim|backend|dump|对拍/i);
+  });
+
+  it('does not restore a materials section when tool status is available', () => {
+    const model = buildSidebarModel(baseContext({
+      tools: [
+        { id: 'mars', name: 'Mars', value: 'D:\\Program Files\\Mars\\Mars.jar', configured: true },
+        { id: 'ise', name: 'ISE', value: 'D:\\ISE\\14.7', configured: true }
+      ]
+    }));
+
+    expect(model.some((node) => node.label === '资料')).toBe(false);
+    expect(model.some((node) => node.id === 'materials')).toBe(false);
   });
 });

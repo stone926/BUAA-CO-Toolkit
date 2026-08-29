@@ -130,7 +130,7 @@ async function runContinuousP7PipelineWithSession(
   const totalSummary = createContinuousCounts();
 
   services.output.appendLine('');
-  services.output.appendLine('正在启动持续自动测试');
+  services.output.appendLine('正在启动持续测试');
   await writePublicReport(options.reportFile, report);
 
   let index = 0;
@@ -148,7 +148,7 @@ async function runContinuousP7PipelineWithSession(
     await writePublicReport(options.reportFile, report);
 
     services.output.appendLine('');
-    services.output.appendLine(`持续自动测试第 ${index} 轮`);
+    services.output.appendLine(`持续测试第 ${index} 轮`);
     let iterationLevelError = false;
     try {
       const generated = await runGeneratorAndCollectAsms(services, setup, {
@@ -209,6 +209,9 @@ async function runContinuousP7PipelineWithSession(
         addContinuousResult(totalSummary, result);
         iteration.status = continuousStatusFromCounts(iteration.summary, true, session.stopRequested);
         await writePublicReport(options.reportFile, report);
+        if (shouldStopAfterIterationCounts(iteration.summary, policy.stopOnFailure)) {
+          break;
+        }
       }
 
       iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
@@ -264,7 +267,7 @@ async function ensureP7ToolchainReady(
   resource: vscode.Uri
 ): Promise<void> {
   services.output.appendLine('');
-  services.output.appendLine('正在检查持续自动测试工具链');
+  services.output.appendLine('正在检查持续测试工具链');
   const profile = 'P7' as const;
   const engineMode = automaticTestEngineMode;
   const memoryConfiguration = getMemoryConfiguration(resource);

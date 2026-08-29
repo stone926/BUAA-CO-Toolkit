@@ -249,10 +249,6 @@ export function getHazardCalculator(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.hazardCalculator', configDefault<string>('toolchain.hazardCalculator'), resource);
 }
 
-export function getTutorialRoot(resource?: vscode.Uri): string {
-  return layeredGetString('course.tutorialRoot', configDefault<string>('course.tutorialRoot'), resource);
-}
-
 export function getRunTimeout(resource?: vscode.Uri): number {
   return config<number>('run.timeoutMs', configDefault<number>('run.timeoutMs'), resource);
 }

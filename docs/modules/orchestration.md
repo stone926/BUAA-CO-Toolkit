@@ -1,4 +1,4 @@
-# orchestration | src/ | ~48 files
+# orchestration | src/ | ~47 files
 
 扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/用例存储
 不含语言智能逻辑(在src/language/ LSP Server端)
@@ -14,7 +14,7 @@ config:
 build:
   scripts/clean-compile-output.mjs — 编译前安全清空固定 `out/`，避免已删除模块的陈旧 JS 被打入 VSIX
   configDefaults.ts — 从resources/co/configDefaults.json加载 co.* 默认值, 供扩展宿主/LSP/测试共享
-  courseConfig.ts — Profile定义(P0-P7): 名称/描述/语言/目录/必需工具/端口/内存布局/P3 Logisim trace/教程, 从resources/co/courseConfig.json加载缓存
+  courseConfig.ts — Profile定义(P0-P7): 名称/描述/语言/目录/必需工具/端口/内存布局/P3 Logisim trace, 从resources/co/courseConfig.json加载缓存
   projectProfile.ts — ProjectProfile(auto|P0-P7), ConcreteProjectProfile, isConcreteProjectProfile
   profileInference.ts — buildProfileInferenceInput: 从文件列表+模块注册表收集端口/扩展名/display格式
   profileResolver.ts — 推断核心: 端口签名(P6外部存储器/P7中断外设), display格式(P4 vs P5时间戳), P7结构(CP0+Bridge+Timer), 文件类型分布, 四级置信度(explicit/strong/weak/none)
@@ -63,15 +63,14 @@ hazard:
 
 ui:
   sidebar.ts — CoSidebarProvider TreeView: buildTree()->buildSidebarModel()->TreeItem
-  sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作/资料四段, 根据Profile+活跃文件+工具链状态
+  sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作三段，根据Profile+活跃文件+工具链状态构建；操作区只提供“启动持续测试”这一测试启动入口，另有停止与历史入口，不再包含“资料”段
   wizard.ts — 4步向导: 选Profile->项目名->配置工具链(可选)->创建目录+模板(.v/.asm+testbench)
-  advancedTools.ts — registerAdvancedTools(): 按Profile过滤低频工具
-  advancedToolModel.ts — 工具分组/标签/描述模型；P3–P7 开发工具包含“使用固定 MARS 验证”，运行 independent full stack 并始终保留 bundle
+  advancedTools.ts — registerAdvancedTools(): 按Profile过滤非测试低频工具，不重复提供测试入口
+  advancedToolModel.ts — 非测试工具分组/标签/描述模型，按 Profile 与当前文件类型过滤低频工具
   webview/reportLayout.ts — 报告 Webview 共享页面 shell/CSS(从resources/templates/webview渲染)、metric、table 和转义 helper
   templates/templateRegistry.ts — resources/templates 受控占位替换加载器, 用于生成可审计模板产物
 
 other:
   legacySemanticColorMigration.ts — 一次性清理旧版本曾注入且用户未修改的全局 semantic token 规则；迁移后不再触碰颜色配置
-  courseLinks.ts — registerCourseLinks()3命令: 教程首页/Profile教程/工具教程. 支持本地镜像
   workflowInputs.ts — resolveWorkspaceFile(s)、resolveMachineCodeInput(智能查找code.txt), resolveActiveOrPickedTextFile, pickOneFile
   types.ts — AppServices(OutputChannel+StatusBarItem), RunResult, ToolDetection
