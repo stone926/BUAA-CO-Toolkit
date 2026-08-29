@@ -19,6 +19,10 @@
 - assembler/macros.ts — `.macro` 定义、形参替换、宏内标签 `_M#` 去重、递归/总膨胀限额与嵌套展开栈
 - assembler/pseudo.ts — 课程常用 pseudo 展开（li/la/move/b/blt/... 与便捷访存寻址）；最终真实指令仍统一经过 catalog profile/layer 校验
 - assembler/sections.ts — text/ktext/data 绝对光标、前向空洞、容量/重叠检查、小端字节车道与 MARS 4 KiB 数据块 padding
+- assembler/instructionForms.ts — 指令形式的操作数模式/参数化辅助（encoder 与 pseudo 校验共享）
+- assembler/operands.ts — 操作数解析：`off($base)` 内存形式、寄存器/$0/立即数分类与括号配对
+- assembler/registers.ts — 架构寄存器名称/编号事实（与 resources/mips/registers.json 同源，勿手改）
+- assembler/work.ts — 两遍汇编的中间 WorkInstruction/WorkOperand 表示——text/data 指令统一为可编码/编码前居中的对象
 - assembler/assembler.ts — 两遍汇编：MARS 风格递归 `.eqv` token substitution、layout/symbol/relocation、伪指令展开、ProgramImage 生成；任一诊断存在时不返回 image
 - assembler/assemblyService.ts — CLI/Worker 共用的有界 assembler DTO；显式 include 边，不解释文件路径
 - assembler/artifacts.ts — ProgramImage 到课程 HexText/kernel dump 与停机 PC 检测

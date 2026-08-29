@@ -1,4 +1,4 @@
-# mips-lsp | src/language/mips/ | 29 files
+# mips-lsp | src/language/mips/ | 33 files
 
 MIPS汇编(.asm/.s/.mips) LSP: 解析->AST->语义->诊断->补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作 + MARS trace解析对比
 
@@ -23,6 +23,8 @@ resources:
   resources.ts — ISA静态资源加载: instructions/registers/cp0/directives/syscalls/pseudo/meta；真实指令的 type/delay/read-write/memory facts 合并自 generated/isaDisplayCatalog（由唯一 isa.json 生成） | exports: instructions, registers, cp0Registers, mipsSemanticTokenTypes
   generated/isaDisplayCatalog.ts — 与 core catalog 同 schema revision/SHA 的 LSP 结构事实生成物（勿手改）
   marsArgs.ts — MARS 命令行参数构造: run/dumpText/dumpKernel, P7 efc/p7irq/cl 参数, 内存配置常量
+  legacyMarsPolicy.ts — 稳定版 MARS 兼容内存配置/异常入口策略（大文本段容纳 0x3000→0x4180 handler）
+  legacyMarsDiagnostics.ts — 稳定版 MARS 兼容诊断映射：coL1/coL2/efc/p7irq/cl 组合与原始输出归一化；被多个子系统复用
 
 display:
   display.ts — hover/inlay Markdown: syscall详情, CP0寄存器, 宏体/展开预览

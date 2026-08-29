@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ 42 files + host adapters
+# course-testing | src/courseTesting/ | 42 files + host adapters
 
 P3-P7 自动化测试：生成 ASM -> 稳定版修改 MARS dump/黄金 Trace -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告
 MARS 黄金模型：兼容基线固定为已发布的 Mars-with-BUAA-CO-extension v0.6.3（8b53a49）。课程 oracle 运行一律强制 coL2；coL1 只在工具链检查中作为兼容能力探针。非 P7 另依赖 FixedCompactLargeText/CompactLargeText，P7 另依赖 efc、p7irq、cl 与 CompactLargeText；固定 ae/se 令汇编与运行错误以非零退出码失败。课程 dump 先静态确认最终 `_co_test_end` 是自分支+nop，运行时再用 coL2 逐指令块确认该自分支确实执行，并用 MARS 原生 max-step 结束永久自环；不依赖未发布的专用停机 marker。SWL/SWR 按动态指令合并同一 DM 字的多次局部写入；BGEZAL/BLTZAL 按 MIPS 规范补齐分支自身在 not-taken 路径遗漏的 `$31=PC+8` Trace，但稳定版 MARS 的后续执行状态仍是旧值，因此在显式重写 `$31` 前继续读取会被拒绝。同一详细 Trace 还只拒绝实际执行到的 oracle 初态差异/未定义行为。同次汇编仍分块 dump 0x0000..0x2fff，以拒绝与硬件全零 DM 复位不一致的非零 `.data` 初值；内置生成器约束普通测试数据，手写/外部用例须自行遵守教程地址映射和下述稳定版边界，不假定 MARS 提供额外的课程地址或 handler 契约开关
@@ -26,7 +26,7 @@ generation:
   courseTesting/executorShadowRunner.ts — executor shadow 宿主：legacy + builtin 双跑、image policy、course-correct/mars-compatible/inconclusive 分类，mismatch 自动保存含 source closure、ProgramImage、raw traces、engines、contracts 的复现 bundle；
 
   courseTesting/pipeline/courseTracePipeline.ts — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle 执行与差分比较）；
-  courseTesting/pipeline/courseImagePolicy.ts + haltPolicy.ts + executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；
+  courseTesting/pipeline/courseImagePolicy.ts + courseTesting/pipeline/haltPolicy.ts + courseTesting/pipeline/executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；
 
   courseTesting/oracle/commitProjection.ts — CommitEvent 到结构化 first-diff 摘要（PC、word、GPR/HI-LO/CP0、memory/device）与 canonical event digest；
   courseTesting/oracle/differentialRunner.ts — legacy/builtin 架构写 trace、first-diff、final digest 的确定性差分；
@@ -76,6 +76,7 @@ logisim/verilog-observer:
 case-storage:
   asmCaseStore.ts — 持久化：createAsmCaseFromAsm/FromText（新 case 写 manifest v2）、prepareAsmCaseMachineCode（经 assembler provider）、artifact 管理、manifest 列表（v1/v2 兼容读取）；v1 严格只读。创建时捕获完整 SourceUnit/include graph，后续汇编/oracle 只读取 case 内 immutable materialization；原 workspace 路径仅作 provenance。dump 后保存 serialized ProgramImage、observability、DUT exact bytes；oracle 后保存完整 run input 与 raw/event/final-state digest。新 artifact 必须先复制到 case 内并记录相对路径/bytes/SHA-256，非文件 provenance 进入独立 metadata。root/stdin/artifact/manifest 均以同句柄有界读取；manifest discovery 流式枚举并限制 2048 个条目与 16 MiB manifest 总量
   asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata；v1 永久只读兼容
+  src/pathContainment.ts — case 路径包含审计：realpath/lexical 双重包含、symlink/junction 拒绝、大小写折叠检测；供 replay 与 case-storage 复用（不可信路径 fail-closed）
   courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts typed alias、只接受 canonical `/` 的严格 case-relative 路径、完整 source artifact closure、assembler/oracle launch tuple、stdin/device/cycle/stop/seed/resource input、snapshot 数量/单项/总量 ceiling、大小写碰撞、symlink/bytes/hash/ProgramImage/HexText/trace evidence 校验；`p7.probe` 在 canonicalize 前以迭代式 depth/node/key/string-byte ceiling 验证。早期 v2 可读但不能 replay。exact replay/re-evaluate 见 mips-replay 模块
 
 conformance/phase-0:

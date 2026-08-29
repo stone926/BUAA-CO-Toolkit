@@ -81,8 +81,18 @@ function scanIndexReferences() {
         // Exclude full paths already matched by the src/... regex
         if (filename.startsWith('src/')) continue;
         if (/^[a-z][\w\/-]*\.ts$/.test(filename)) {
-          const rel = `${baseDir}/${filename}`;
-          addRef(rel, moduleName);
+          // Some module docs reference files with a module-dir prefix that is
+          // already implied by baseDir (e.g. baseDir=src/courseTesting but the
+          // doc writes "courseTesting/batchRunner.ts"). Resolve against baseDir
+          // first, then fall back to src/ so both conventions resolve cleanly.
+          const baseCandidate = `${baseDir}/${filename}`;
+          const srcCandidate = `src/${filename}`;
+          if (existsSync(join(ROOT, baseCandidate))) {
+            addRef(baseCandidate, moduleName);
+          }
+          if (existsSync(join(ROOT, srcCandidate))) {
+            addRef(srcCandidate, moduleName);
+          }
         }
       }
     }

@@ -22,16 +22,16 @@
 
 ### 已完成
 
-- **阶段 0/1（2026-08-27 正式过门）**：课程 contract/decision/divergence ledger、
+- 阶段 0/1（2026-08-27 正式过门）：课程 contract/decision/divergence ledger、
   角色化固定 MARS reference（hash 校验下载）、独立 conformance harness、candidate
   expected data、provider-neutral contracts、manifest v2、唯一 ISA catalog 与
   versioned JSONL CLI、懒启动 Worker 与严格 ACK/backpressure、进程树取消、
   replay closure 与 exact replay、新旧 legacy 等价。
-- **阶段 2（2026-08-27 实现落地）**：P3–P6 机器执行核心 —— GPR/PC/HI/LO、显式小端
+- 阶段 2（2026-08-27 实现落地）：P3–P6 机器执行核心 —— GPR/PC/HI/LO、显式小端
   byte lane、transactional effect→commit、P3/P4 无延迟槽（link=PC+4）、P5/P6 一条
   延迟槽（link=PC+8）、byte/half 与 MDU、lwl/lwr/swl/swr、halt 检测要求完整
   自分支+delay-slot nop 序列、步数预算与 PC/word 级诊断、可比较域 fail closed。
-- **阶段 3（2026-08-27 实现落地）**：P7 CP0（SR/Cause/EPC 掩码、EXL/BD/EPC）、
+- 阶段 3（2026-08-27 实现落地）：P7 CP0（SR/Cause/EPC 掩码、EXL/BD/EPC）、
   `F>D>E>M` 最早阶段仲裁、Int 覆盖同一 victim 的异常、victim 零副作用（含设备
   事务 abort）、eret 无延迟槽、AdEL/AdES/Syscall/RI/Ov 全类、外部 IRQ 采用
   “宏观 victim PC + occurrence” 计划；官方 Timer 按 P7_standard_timer_2019.v 重建
@@ -40,7 +40,7 @@
 - 版本化 JSONL CLI 新增 `machine.execute` 与 `device.cycleVector`，conformance 的
   execution/device 证据可经该进程边界复现。核心现位于 `src/mips/core`（assembler + machine/devices/events/isa/profiles），
   directed 套件 250+ 断言引自教程/官方 Verilog/contract ledger。
-- **阶段 5（2026-08-28 实现落地）**：纯 TS P3–P7 课程汇编器。source/include
+- 阶段 5（2026-08-28 实现落地）：纯 TS P3–P7 课程汇编器。source/include
   graph、`.eqv`、`.macro`、严格 parser、text/ktext/data layout、relocation、
   sourceMap origin chain、课程常用 pseudo 与生成器 RI cell；`BuiltinTsAssemblerProvider`
   注册在 legacy 之后并写入课程 HexText/kernel dump；`assembler.assemble` 进入
@@ -53,7 +53,7 @@
   差异（仅 5 个旧 P5 自动测试出现 MARS `.data` 稀疏块 dump 与其模拟器真实内存
   不一致的已知限制）。按 `COURSE-COMMON-ASM-RAW-WORD-001` 支持 `.text/.ktext`
   中的原始 `.word` 注入，为后续 RI 未知指令测试点生成保留汇编器能力。
-- **阶段 4（2026-08-27 实现落地）**：生产 oracle 与自动测试能力接入。
+- 阶段 4（2026-08-27 实现落地）：生产 oracle 与自动测试能力接入。
   `BuiltinTsExecutionProvider` 注册在 legacy 之后且默认解析仍为 MARS，仅供显式
   shadow/verify-both；`CourseTracePipeline` 在 P3 Logisim 与 P4–P7 traceRunner
   全分支注入 createCase/prepareProgram/runOracle/runDut(或 runLogisimDut)/
@@ -67,15 +67,15 @@
 
 ### 治理模型（2026-08-27 起，单人维护规模）
 
-- **测试即证据**：全部 directed 测试、RTL 决策向量、250 固定 seeds、frozen
+- 测试即证据：全部 directed 测试、RTL 决策向量、250 固定 seeds、frozen
   regression、TS-CLI 交叉核对在每次 push 自动运行（CI 与 Phase 1 portability 两个
   workflow，覆盖 ubuntu-24.04 与 windows-2025）。
-- **expected data 更新**：用 `manage-*.mjs --refresh-integrity` 重新生成派生 hash
+- expected data 更新：用 `manage-*.mjs --refresh-integrity` 重新生成派生 hash
   （强制 candidate 形态），在 diff 中审阅后正常提交；没有单独批准步骤。
-- **benchmark**：手动 dispatch `ci.yml`（`run_fixed_benchmark=true`）在固定双 runner
+- benchmark：手动 dispatch `ci.yml`（`run_fixed_benchmark=true`）在固定双 runner
   采集 candidate，`bench/validate-fixed-benchmark.mjs` 校验后替换 baseline。
-- **branch protection**：直推 main；禁止 force-push 与删除分支。
-- **有意保留的红灯**：`verify:decisions --require-rtl` 只在装有 Icarus 的环境（CI）
+- branch protection：直推 main；禁止 force-push 与删除分支。
+- 有意保留的红灯：`verify:decisions --require-rtl` 只在装有 Icarus 的环境（CI）
   通过；本机无 Icarus 时该步失败是设计行为，不是回归。
 - 历史 approval 信封与审阅记录归档在 `conformance/mips/governance/reviews/`，仅作
   provenance，不再被任何检查读取。
@@ -86,7 +86,7 @@
 
 ## 1. 决策摘要
 
-本项目不机械翻译 MARS 的 Java 类，也不以“完整复制 MARS”为目标。长期目标是实现一个 **BUAA CO 课程专用 MIPS 引擎**：
+本项目不机械翻译 MARS 的 Java 类，也不以“完整复制 MARS”为目标。长期目标是实现一个 BUAA CO 课程专用 MIPS 引擎：
 
 1. 默认执行语义以课程教程和官方硬件契约为准，尤其 P7 明确不以 MARS 为最终标准。
 2. 汇编语法兼容性在声明的范围内以固定 MARS v0.6.3 为参考；不追求 GUI、浮点、工具插件和全部 syscall。
@@ -98,8 +98,8 @@
 
 本方案中最重要的边界是：
 
-- **course-correct**：课程硬件应当表现出的语义，是产品默认。
-- **mars-compatible**：固定 MARS 的汇编或运行行为，只用于兼容、迁移和解释差异。
+- course-correct：课程硬件应当表现出的语义，是产品默认。
+- mars-compatible：固定 MARS 的汇编或运行行为，只用于兼容、迁移和解释差异。
 
 二者发生冲突时不得静默选择；必须通过带规范依据的差异记录明确裁决。
 
@@ -216,7 +216,7 @@ P7 教程明确说明 MARS 与 SMRL/课程规范存在差异，正式测试不�
 - assembler/机器码 validator 可以诊断非 canonical 保留位，但 P7 runtime recognition 只按 opcode 和 R-type funct；其他保留字段异常不得额外触发 RI。
 - IF-AdEL 与 RI 的 victim 作为无副作用 `nop` 流到统一 CP0 仲裁点，保证异常前没有部分提交。
 
-这些条件应覆盖所有**可达且有语义区分度**的 directed cells，而不是机械构造全笛卡尔积：RI 与 Syscall、Ov 与访存异常属于互斥指令类；同一受害指令按 `F:AdEL > D:RI/Syscall > E:Ov > M:AdEL/AdES` 保留最早阶段的非零异常码，不同受害指令先按程序年龄仲裁，已使能中断在提交点覆盖异常并令 victim 重试。
+这些条件应覆盖所有可达且有语义区分度的 directed cells，而不是机械构造全笛卡尔积：RI 与 Syscall、Ov 与访存异常属于互斥指令类；同一受害指令按 `F:AdEL > D:RI/Syscall > E:Ov > M:AdEL/AdES` 保留最早阶段的非零异常码，不同受害指令先按程序年龄仲裁，已使能中断在提交点覆盖异常并令 victim 重试。
 
 必须区分四个边界：运行期 PC 超出合法 IM 是架构 AdEL，运行期访存超出合法 region 是架构 AdEL/AdES，assembler 试图放置越界 segment 才是汇编诊断；合法 IM 范围内但 `ProgramImage` 未提供该 word 时，strict lane 以 `unloaded-instruction` 标记 out-of-domain（不是 AdEL，也不合成 nop）。仅显式 exploratory policy 可 synthetic zero-fill，且不得成为 strict golden。
 
@@ -585,7 +585,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 
 ### 阶段 0：课程契约与 conformance 基础（已完成，2026-08-27 过门）
 
-**目标**：在写执行语义前先定义什么叫正确，并使固定 MARS reference 与 course vector 均可重现。
+目标：在写执行语义前先定义什么叫正确，并使固定 MARS reference 与 course vector 均可重现。
 
 工作：
 
@@ -607,7 +607,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 
 ### 阶段 1：Provider-neutral 迁移与唯一 ISA catalog（已完成，2026-08-27 过门）
 
-**目标**：在行为不变的前提下去掉生产管线对 MARS 名称和返回结构的依赖。
+目标：在行为不变的前提下去掉生产管线对 MARS 名称和返回结构的依赖。
 
 工作：
 
@@ -629,7 +629,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 
 ### 阶段 2：P3–P6 机器执行核心（已实现，2026-08-27）
 
-**目标**：先解决自动测试最需要的架构 oracle；输入暂时继续使用 MARS 生成的 image，以隔离执行器错误。
+目标：先解决自动测试最需要的架构 oracle；输入暂时继续使用 MARS 生成的 image，以隔离执行器错误。
 
 工作：
 
@@ -647,7 +647,7 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 
 ### 阶段 3：P7 CP0、异常、中断与 Timer（已实现，2026-08-27）
 
-**目标**：实现课程规范优先的 P7 执行和设备模型。
+目标：实现课程规范优先的 P7 执行和设备模型。
 
 工作：
 
@@ -666,11 +666,11 @@ v2 bundle 必须是 replay closure，而不是一组原工作区 hash：
 - 缺少 cycle schedule 的 Timer case 被明确拒绝为 out-of-domain；不存在把“每指令 tick”作为课程真值的通过路径。
 - MARS 与课程规范的差异进入 ledger；不得用宽泛 waiver 隐藏。
 
-### 阶段 4：生产 oracle 与自动测试能力接入
+### 阶段 4：生产 oracle 与自动测试能力接入（已实现，2026-08-27）
 
-**目标**：让 TS executor 在真实课程 pipeline 中执行第一阶段的 executor shadow，并交付结构化诊断价值。
+目标：让 TS executor 在真实课程 pipeline 中执行第一阶段的 executor shadow，并交付结构化诊断价值。
 
-**落地记录**：`verify-real-cpu-shadow.mjs` 已对 stone-cpu/alh-cpu/gyc-co/
+落地记录：`verify-real-cpu-shadow.mjs` 已对 stone-cpu/alh-cpu/gyc-co/
 hlc-cpu/kimi-cpu/ds-cpu 的 49 个归档 `.co/cases` 运行：16 matched、
 33 not-comparable（缺少归档 trace 或稳定 out-of-domain），0 inconclusive、
 0 corrupt；未发现未登记的 trace 差异。
@@ -694,9 +694,9 @@ hlc-cpu/kimi-cpu/ds-cpu 的 49 个归档 `.co/cases` 运行：16 matched、
 
 ### 阶段 5：P3–P7 课程汇编器（已实现，2026-08-28）
 
-**目标**：消除普通课程测试的最后一个 MARS 运行时依赖。
+目标：消除普通课程测试的最后一个 MARS 运行时依赖。
 
-**落地记录**：核心位于 `src/mips/core/assembler`（14 文件），provider 位于
+落地记录：核心位于 `src/mips/core/assembler`（14 文件），provider 位于
 `src/mips/providers/builtinAssemblerProvider.ts`；`assembler.assemble` 进入
 版本化 JSONL CLI 与 Worker。assembly-diff lane 用固定 MARS v0.6.3 对 manifest
 全部 10 个 corpus 用例直接比较 text/ktext/data image，0 unexplained diff；
@@ -721,9 +721,7 @@ CRLF/BOM 与中文路径均由 provider 的 source graph capture 或核心诊断
 
 ### 阶段 6：默认切换与清理
 
-**目标**：在证据充分的前提下，按 profile 逐项把课程默认 oracle 切换到 TS，并保留即时回滚。
-取代初版“30 天 / 10,000 去重 case / 500 手写 graph”的 quota：这些数字无法由单人环境
-可持续地产生，放宽后的门槛保留其意图（不盲目切换），不设配额。
+目标：在证据充分的前提下，按 profile 逐项把课程默认 oracle 切换到 TS，并保留即时回滚。
 
 工作：
 
@@ -747,7 +745,7 @@ CRLF/BOM 与中文路径均由 provider 的 source graph capture 或核心诊断
 
 ### 阶段 7：P2 与常见 MARS 用户体验
 
-**目标**：覆盖常见手写汇编和确定性 console 程序，而不是完整复刻 MARS IDE。
+目标：覆盖常见手写汇编和确定性 console 程序，而不是完整复刻 MARS IDE。
 
 工作：
 
@@ -787,10 +785,6 @@ CRLF/BOM 与中文路径均由 provider 的 source graph capture 或核心诊断
 | 5 | 极高 | 12–22 | macro/layout/relocation/pseudo 与 source provenance |
 | 6 | 编码中等、验证等待高 | 3–6 + shadow 窗口 | 证据污染、过早切换、跨平台发布 |
 | 7 | 高且可后置 | 8–15 | syscall/交互状态机和安全 capability |
-
-AI 辅助会显著降低重复 handler、schema adapter、语料生成和 reducer 的编码成本，但不能降低
-规范裁决、独立 expected value 与 shadow 判读的最低证据成本。因此总难度仍为高；关键路径
-是阶段 0、3、5，不是 TypeScript 行数。
 
 ## 7. 测试与正确性保证
 
@@ -841,13 +835,13 @@ Conformance harness 是独立 package/process，禁止 import 生产 assembler�
 
 ### 7.3 语料分层
 
-1. **规范微程序**：每个 profile、每条指令的正常、边界、异常/拒绝向量。
-2. **汇编布局**：标签、宏、`.eqv`、pseudo、expression、section/data directives、多文件、BOM/CRLF/中文路径。
-3. **教程/真实语料**：教程 ASM、插件模板、MARS regression、经许可匿名化的学生工程。
-4. **编码/状态边界**：`0/1/-1`、`0x7fff/0x8000/0xffff`、32 位极值、`$0`、首尾地址、前/后/自分支。
-5. **独立 IR fuzz**：独立 manifest/renderer 生成 ASM 和 raw image，不读取生产 catalog。
-6. **非法与 undefined**：区分课程应拒绝、MARS-only、course-correct divergence 和架构未定义。
-7. **历史 challenge corpus**：`$gp/$sp` 初态、4095/4096 word、SWL/SWR、REGIMM link、异常 victim 缺 header、HI/LO 未定义和 MARS-only 地址段。
+1. 规范微程序：每个 profile、每条指令的正常、边界、异常/拒绝向量。
+2. 汇编布局：标签、宏、`.eqv`、pseudo、expression、section/data directives、多文件、BOM/CRLF/中文路径。
+3. 教程/真实语料：教程 ASM、插件模板、MARS regression、经许可匿名化的学生工程。
+4. 编码/状态边界：`0/1/-1`、`0x7fff/0x8000/0xffff`、32 位极值、`$0`、首尾地址、前/后/自分支。
+5. 独立 IR fuzz：独立 manifest/renderer 生成 ASM 和 raw image，不读取生产 catalog。
+6. 非法与 undefined：区分课程应拒绝、MARS-only、course-correct divergence 和架构未定义。
+7. 历史 challenge corpus：`$gp/$sp` 初态、4095/4096 word、SWL/SWR、REGIMM link、异常 victim 缺 header、HI/LO 未定义和 MARS-only 地址段。
 
 每个 fuzz failure 自动执行行、寄存器、立即数和控制流感知 shrink；最小复现、原 seed、双方 raw/canonical trace 固化为 regression。
 
