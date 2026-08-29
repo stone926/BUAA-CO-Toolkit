@@ -132,10 +132,19 @@ describe('course machine-code validation', () => {
     expect(validateCourseMachineCode('P3', '00430821\n', asm, false)).toHaveLength(1);
   });
 
-  it('allows only the plugin-owned P7 RI marker encoding when it is declared', () => {
+  it('allows only catalog RI words declared by trusted built-in raw-word source', () => {
+    const asm = '.text\n.word 0xfc000000\n.word 0x0000003f\n';
+
+    expect(validateCourseMachineCode('P7', 'fc000000\n0000003f\n', asm, true)).toEqual([]);
+    expect(validateCourseMachineCode('P7', 'fc000000\n0000003f\n', asm, false)).toHaveLength(2);
+    expect(validateCourseMachineCode('P7', '0000003e\n', '.text\n.word 0x0000003e\n', true)).toHaveLength(1);
+    expect(validateCourseMachineCode('P7', 'fc000000\n', '.data\n.word 0xfc000000\n', true)).toHaveLength(1);
+    expect(validateCourseMachineCode('P7', 'fc000000\n', '.text\n.word 0x0000003f\n', true)).toHaveLength(1);
+  });
+
+  it('keeps the historical P7 RI mnemonic readable for legacy manifest replay', () => {
     expect(validateCourseMachineCode('P7', '0000003f\n', '_co_internal_unknown_instruction\n', true)).toEqual([]);
-    expect(validateCourseMachineCode('P7', '0000003f\n')).toHaveLength(1);
-    expect(validateCourseMachineCode('P7', '0000003e\n', '_co_internal_unknown_instruction\n')).toHaveLength(1);
+    expect(validateCourseMachineCode('P7', '0000003f\n', '# _co_internal_unknown_instruction\n', true)).toHaveLength(1);
   });
 
   it('rejects eret in P7 user text but accepts it at the tutorial exception entry', () => {

@@ -25,6 +25,14 @@ vi.mock('../../fsUtil', () => ({
   writeTextFile: vi.fn(async () => undefined)
 }));
 
+vi.mock('../../process', () => ({
+  revealOutputChannel: vi.fn()
+}));
+
+vi.mock('../../asmCaseStore', () => ({
+  recordAsmCaseTestOutcome: vi.fn(async () => undefined)
+}));
+
 vi.mock('../../courseTestReport', () => ({
   batchSummary: vi.fn((results: Array<{ status: string }>) => ({
     total: results.length,
@@ -34,6 +42,7 @@ vi.mock('../../courseTestReport', () => ({
   })),
   createCourseTraceBatchReport: vi.fn(() => ({ generatedAt: new Date().toISOString(), summary: { total: 0, passed: 0, failed: 0, errors: 0 }, results: [] })),
   neutralCourseTraceCaseResult: vi.fn((item: unknown) => item),
+  publicAutomaticDiagnosticMessage: vi.fn(() => '通过'),
   showBatchTraceReport: vi.fn()
 }));
 
@@ -43,7 +52,9 @@ import {
   stopCourseTraceBatch
 } from '../../courseTesting/batchRunner';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
+import { revealOutputChannel } from '../../process';
 import type { AppServices } from '../../types';
+import { tryAcquireCourseTestSession } from '../../courseTesting/courseTestSession';
 
 const services = {
   output: { appendLine: vi.fn() },
@@ -100,5 +111,53 @@ describe('batch runner cancellation session', () => {
     );
     expect(runCourseTraceCase).not.toHaveBeenCalled();
     expect(isCourseTraceBatchRunning()).toBe(false);
+  });
+
+  it('keeps the automatic facade quiet and uses user-facing automatic-test wording', async () => {
+    vi.mocked(runCourseTraceCase).mockResolvedValueOnce({
+      asm: 'E:/private/builtin-p7-probe-timer.asm',
+      status: 'passed',
+      stage: 'compare',
+      message: 'matched'
+    });
+
+    const resolveRunOptions = vi.fn(async (_services, _resource, base) => ({ ...base }));
+    await runCourseTraceBatch(
+      services,
+      [{ asm: URI.file('E:/private/builtin-p7-probe-timer.asm') }],
+      { kind: 'generator', commandLine: 'internal --count 1118', cwd: 'E:/private' },
+      resolveRunOptions
+    );
+
+    expect(revealOutputChannel).not.toHaveBeenCalled();
+    expect(resolveRunOptions).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ revealOutput: false })
+    );
+    expect(services.output.appendLine).toHaveBeenCalledWith('自动测试: 1 个用例');
+    expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('E:/private'));
+    expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('Trace'));
+    expect(services.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('Batch'));
+    expect(services.statusBar.text).toBe('');
+  });
+
+  it('refuses to start while continuous testing owns the shared artifact session', async () => {
+    const lease = tryAcquireCourseTestSession('continuous');
+    expect(lease).toBeDefined();
+    const resolveRunOptions = vi.fn();
+    try {
+      await runCourseTraceBatch(
+        services,
+        [{ asm: URI.file('/tmp/a.asm') }],
+        { kind: 'generator' },
+        resolveRunOptions
+      );
+    } finally {
+      lease?.release();
+    }
+
+    expect(resolveRunOptions).not.toHaveBeenCalled();
+    expect(runCourseTraceCase).not.toHaveBeenCalled();
   });
 });

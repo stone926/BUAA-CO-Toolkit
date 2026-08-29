@@ -431,6 +431,200 @@ describe('P7 probe checker', () => {
     expect(result.passed).toBe(false);
     expect(result.failures.some((failure) => failure.message.includes('record 1'))).toBe(true);
     expect(result.failures.some((failure) => failure.message.includes('record 2'))).toBe(true);
+
+    const victimCommit = sim.replace(
+      'CO_P7_PROBE external_ack scenario=1 time=100',
+      'CO_P7_PROBE external_ack scenario=1 time=100\n12@00003020: $8 <= deadbeef'
+    );
+    expect(checkP7Probe(victimCommit, parseSimOutput(victimCommit), metadata).failures
+      .some((failure) => failure.message.includes('exception victim'))).toBe(true);
+  });
+
+  it('rejects eret fall-through poison commits', () => {
+    const sim = [
+      ...recordLines(0, [p7ProbeMagic, 2, 2, 0x1c03, 0x0400, 0x3040, 0, 0]),
+      '20@00004200: *000027d4 <= 00000000'
+    ].join('\n');
+    const metadata: P7ProbeMetadata = {
+      ...baseMetadata,
+      scenarios: [baseMetadata.scenarios[1]]
+    };
+
+    const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
+
+    expect(result.passed).toBe(false);
+    expect(result.failures.some((failure) => failure.kind === 'eret' && failure.message.includes('poison'))).toBe(true);
+  });
+
+  it('requires masked-window commits before the handler record', () => {
+    const scenario: P7ProbeMetadata['scenarios'][number] = {
+      id: 1,
+      kind: 'external',
+      expectedIpMask: 0x1000,
+      expectedExcCode: 0,
+      allowedEpc: [0x3030],
+      donePc: 0x3040,
+      waitPc: 0x3030,
+      triggerPc: 0x3010,
+      armAddress: 0x27d0,
+      armValue: 1,
+      requiredPreHandlerCommits: [{ pc: 0x3020, kind: 'dm', target: 0x27dc, value: 0x6001 }]
+    };
+    const metadata: P7ProbeMetadata = {
+      version: 1,
+      logBase: p7ProbeLogBase,
+      recordWords: p7ProbeRecordWords,
+      scenarios: [scenario]
+    };
+    const diagnostics = [
+      'CO_P7_PROBE external_arm scenario=1 addr=000027d0 value=00000001 time=80',
+      'CO_P7_PROBE external_raise scenario=1 pc=00003010 time=96',
+      'CO_P7_PROBE external_ack scenario=1 time=100'
+    ];
+    const valid = [
+      ...diagnostics,
+      '10@00003020: *000027dc <= 00006001',
+      ...recordLines(0, [p7ProbeMagic, 1, 1, 0x1c03, 0x1000, 0x3030, 0, 0])
+    ].join('\n');
+    expect(checkP7Probe(valid, parseSimOutput(valid), metadata).passed).toBe(true);
+
+    const late = [
+      ...diagnostics,
+      ...recordLines(0, [p7ProbeMagic, 1, 1, 0x1c03, 0x1000, 0x3030, 0, 0]),
+      '30@00003020: *000027dc <= 00006001'
+    ].join('\n');
+    expect(checkP7Probe(late, parseSimOutput(late), metadata).failures
+      .some((failure) => failure.message.includes('pre-handler'))).toBe(true);
+  });
+
+  it('accepts a cleared Cause.IP readback for pulse-shaped timer mode', () => {
+    const metadata: P7ProbeMetadata = {
+      version: 1,
+      logBase: p7ProbeLogBase,
+      recordWords: p7ProbeRecordWords,
+      scenarios: [{
+        id: 1,
+        kind: 'timer0',
+        expectedIpMask: 0x0400,
+        allowedEpc: [0x3020],
+        donePc: 0x3028,
+        expectedRecords: [{
+          expectedIpMask: 0x0400,
+          allowedIpMasks: [0, 0x0400],
+          expectedExcCode: 0,
+          allowedEpc: [0x3020]
+        }]
+      }]
+    };
+    const sim = recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0, 0x3020, 0, 0]).join('\n');
+
+    expect(checkP7Probe(sim, parseSimOutput(sim), metadata).passed).toBe(true);
+  });
+
+  it('requires two Mode-1 reloads, a cleared old IP marker, and a later fresh interrupt', () => {
+    const metadata: P7ProbeMetadata = {
+      version: 1,
+      shard: 'timer',
+      logBase: p7ProbeLogBase,
+      recordWords: p7ProbeRecordWords,
+      scenarios: [{
+        id: 1,
+        kind: 'timer0',
+        expectedIpMask: 0x0400,
+        allowedEpc: [0x3060, 0x3064],
+        donePc: 0x3068,
+        expectedRecords: [
+          {
+            expectedIpMask: 0x0400,
+            allowedIpMasks: [0, 0x0400],
+            expectedExcCode: 0,
+            allowedEpc: [0x3020, 0x3024],
+            allowedBdEpc: [0x3020]
+          },
+          {
+            expectedIpMask: 0x0400,
+            allowedIpMasks: [0, 0x0400],
+            expectedExcCode: 0,
+            allowedEpc: [0x3060, 0x3064],
+            allowedBdEpc: [0x3060]
+          }
+        ],
+        requiredPreHandlerCommits: [
+          { pc: 0x3030, kind: 'grf', target: 11, value: 1 },
+          { pc: 0x3030, kind: 'grf', target: 11, value: 2 },
+          { pc: 0x3040, kind: 'grf', target: 15, value: 0 },
+          { pc: 0x3044, kind: 'dm', target: 0x27dc, value: 0x7101 }
+        ]
+      }]
+    };
+    const protocolCommits = [
+      '10@00003030: $11 <= 00000001',
+      '11@00003030: $11 <= 00000002',
+      '12@00003040: $15 <= 00000000',
+      '13@00003044: *000027dc <= 00007101'
+    ];
+    const sim = [
+      ...protocolCommits,
+      ...recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0, 0x3020, 0x0400, 0x3060])
+    ].join('\n');
+
+    expect(checkP7Probe(sim, parseSimOutput(sim), metadata).passed).toBe(true);
+
+    const missingDeassertMarker = sim.replace('13@00003044: *000027dc <= 00007101\n', '');
+    expect(checkP7Probe(missingDeassertMarker, parseSimOutput(missingDeassertMarker), metadata).failures
+      .some((failure) => failure.message.includes('pre-handler DM'))).toBe(true);
+
+    const wrongRecord = [
+      ...protocolCommits,
+      ...recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0x80000400, 0x3024, 0x0400, 0x3060])
+    ].join('\n');
+    expect(checkP7Probe(wrongRecord, parseSimOutput(wrongRecord), metadata).failures
+      .some((failure) => failure.message.includes('record 1') && failure.message.includes('wait branch'))).toBe(true);
+  });
+
+  it('rejects the Mode-1 stale-IRQ failure marker emitted before fresh arming', () => {
+    const metadata: P7ProbeMetadata = {
+      ...baseMetadata,
+      scenarios: [baseMetadata.scenarios[1]]
+    };
+    const sim = [
+      '9@000041d0: *000027dc <= bad10001',
+      ...recordLines(0, [p7ProbeMagic, 2, 2, 0x1c03, 0x0400, 0x3040, 0, 0])
+    ].join('\n');
+
+    const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
+
+    expect(result.passed).toBe(false);
+    expect(result.failures.some((failure) => failure.kind === 'timer' && failure.message.includes('stale IRQ'))).toBe(true);
+  });
+
+  it('checks one-shot timer CTRL/COUNT before the handler clears CTRL', () => {
+    const metadata: P7ProbeMetadata = {
+      version: 1,
+      shard: 'timer',
+      logBase: p7ProbeLogBase,
+      recordWords: p7ProbeRecordWords,
+      scenarios: [{
+        id: 1,
+        kind: 'timer0',
+        expectedIpMask: 0x0400,
+        allowedEpc: [0x3020],
+        donePc: 0x3028,
+        expectedRecords: [{
+          expectedIpMask: 0x0400,
+          expectedExcCode: 0,
+          allowedEpc: [0x3020],
+          allowedAuxPairs: [[8, 0]],
+          auxPairDescription: 'Timer0 one-shot CTRL/COUNT before handler clear'
+        }]
+      }]
+    };
+    const valid = recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0x0400, 0x3020, 8, 0]).join('\n');
+    const maskedByHandlerClear = recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0x0400, 0x3020, 0, 0]).join('\n');
+
+    expect(checkP7Probe(valid, parseSimOutput(valid), metadata).passed).toBe(true);
+    expect(checkP7Probe(maskedByHandlerClear, parseSimOutput(maskedByHandlerClear), metadata).failures
+      .some((failure) => failure.message.includes('one-shot'))).toBe(true);
   });
 
   it('checks exact HI/LO sentinels and post-handler completion for younger MDU probes', () => {

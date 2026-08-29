@@ -29,7 +29,7 @@ export function legacyMarsCompatibilityDiagnostic(
     return '当前 MARS 不支持 efc / p7irq（P7 异常与外部中断）参数。P7 自动对拍需要含该功能的修改版 Mars 构建，请重新构建并配置 co.toolchain.marsP7。';
   }
   if (input.p7RiInstruction && /Invalid Command Argument:\s*cl/i.test(output)) {
-    return '当前 MARS 不支持 cl 额外指令加载，无法生成/运行 P7 RI 异常测试。请使用支持 cl 的修改版 Mars，或从 co.test.p7.exceptionTypes 中移除 RI。';
+    return '当前 MARS 不支持旧用例所需的 cl 额外指令加载。请改用 auto/builtin 自动测试，或配置支持 cl 的 P7 修改版 MARS。';
   }
   const memoryMatch = /Invalid memory configuration:\s*([A-Za-z0-9_]+)/i.exec(output);
   if (memoryMatch) {

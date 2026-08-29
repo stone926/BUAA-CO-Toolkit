@@ -15,7 +15,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   verilog-lsp    | docs/modules/verilog-lsp.md    | 61 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~48 files| 扩展宿主层
-  course-testing | docs/modules/course-testing.md | 44 files | 自动化测试框架
+  course-testing | docs/modules/course-testing.md | 48 files | 自动化测试框架
   test-suite     | docs/modules/test-suite.md     | 192 files| Vitest 测试
   resources      | docs/modules/resources.md      | ~15 files| 静态资源
   highlighting   | docs/modules/syntax-highlighting.md | ~8 files | TextMate/semantic 分层高亮
@@ -23,7 +23,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 数据流:
   MIPS: Text -> syntax.ts -> ast.ts -> semantic.ts -> parser.ts -> diagnostics, cache: parseCache.ts
   Verilog: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts 调度: syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag, cache: parseCache.ts
-  Test: SourceUnit immutable bundle -> 一次性 CourseEnginePlan -> assembler provider -> serialized ProgramImage/DUT bytes -> CourseTracePipeline -> 同一计划的 oracle provider -> ISim/Logisim DUT -> traceCompare -> HTML/JSON v2 report（P3–P7 auto 默认 builtin-ts；mars 一键回滚；verify-both 独立双端并保存 full-stack bundle；case 可 exact replay）
+  Test: SourceUnit immutable bundle -> 一次性 CourseEnginePlan -> assembler provider -> serialized ProgramImage/DUT bytes -> CourseTracePipeline -> 同一计划的 oracle provider -> ISim/Logisim DUT -> traceCompare -> HTML/JSON v2 report（P3–P7 automatic 固定 builtin-ts；mars/verify-both 仅供手动与历史回滚验证；case 可 exact replay）
 
 P7 test modes: anchor(TS课程oracle+ISim精确对拍), probe(DM探针黑盒检查), hybrid(两者), off(无中断)；probe 为 DUT-only，不能冒充 full-stack reference evidence
 

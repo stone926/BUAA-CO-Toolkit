@@ -96,6 +96,12 @@ import { sourceUnitsUseP7RiInstruction } from './courseTesting/p7RiInstruction';
 export const maximumAsmCaseIndexEntries = 2048;
 export const maximumAsmCaseIndexManifestBytes = 16 * 1024 * 1024;
 
+export interface AsmCaseTestOutcome {
+  readonly status: 'passed' | 'failed' | 'error';
+  readonly stage: 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe';
+  readonly diagnostic: string;
+}
+
 export interface AsmCase {
   id: string;
   dir: vscode.Uri;
@@ -326,7 +332,10 @@ export async function prepareAsmCaseMachineCode(
       pseudoInstructions: true,
       eventSchemaRevision: 1
     }
-  }, { signal: options.signal }, options.enginePlan);
+  }, {
+    signal: options.signal,
+    nonInteractive: options.nonInteractive
+  }, options.enginePlan);
   const dump = invocation.result ?? {
     ok: false,
     status: {
@@ -395,7 +404,10 @@ export async function prepareAsmCaseMachineCode(
         : courseHardwareMachineCodeCapacityPolicy
     );
     if (validationError) {
-      services.output.appendLine(validationError);
+      services.output.appendLine(machineCodeValidationOutputMessage(
+        validationError,
+        options.nonInteractive === true
+      ));
       return {
         ...dump,
         ok: false,
@@ -521,11 +533,21 @@ export async function prepareAsmCaseMachineCode(
 export interface PrepareAsmCaseOptions {
   showMessages?: boolean;
   revealOutput?: boolean;
+  /** Internal automatic-test lane; keeps provider process details out of user output. */
+  nonInteractive?: boolean;
   courseTrace?: boolean;
   p7RiInstruction?: boolean;
   /** One assembly-time snapshot reused by the executor; never re-read mid-case. */
   enginePlan?: CourseEnginePlan;
   signal?: AbortSignal;
+}
+
+/** Keep detailed word/address diagnostics available to manual runs only. */
+export function machineCodeValidationOutputMessage(
+  validationError: string,
+  nonInteractive: boolean
+): string {
+  return nonInteractive ? '自动测试点校验失败' : validationError;
 }
 
 /** Record a completed oracle run only after its halt/error policy has been verified. */
@@ -898,6 +920,42 @@ export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array
     }
   }
   return manifests.sort((left, right) => right.manifest.createdAt.localeCompare(left.manifest.createdAt));
+}
+
+/** Persist only the compact public outcome needed by the test-history index. */
+export async function recordAsmCaseTestOutcome(
+  manifestPath: string | undefined,
+  outcome: AsmCaseTestOutcome
+): Promise<void> {
+  if (!manifestPath || path.basename(manifestPath).toLowerCase() !== 'case.json') {
+    return;
+  }
+  let bytes: Buffer;
+  try {
+    bytes = await readBoundedRegularFile(manifestPath, {
+      maximumBytes: maximumReplayManifestBytes,
+      label: 'ASM case outcome manifest'
+    });
+  } catch {
+    return;
+  }
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return;
+  }
+  if (!isKnownManifest(manifest) || !isManifestV2(manifest)) {
+    return;
+  }
+  const metadata = {
+    ...(manifest.metadata ?? {}),
+    'test.status': outcome.status,
+    'test.stage': outcome.stage,
+    'test.diagnostic': outcome.diagnostic
+  };
+  assertManifestEntries(metadata, 'metadata');
+  await writeManifestAtomic(manifestPath, { ...manifest, metadata });
 }
 
 export async function readAsmCaseManifestForAsm(asm: vscode.Uri): Promise<AsmCaseManifestUnion | undefined> {

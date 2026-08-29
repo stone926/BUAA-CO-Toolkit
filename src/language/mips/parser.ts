@@ -602,7 +602,9 @@ function validateDirective(
   const directive = executable.lowerMnemonic;
   const operandText = executable.operandText;
   const directiveRange = executable.mnemonicRange;
-  if (STORAGE_DIRECTIVES.has(directive) && section !== 'data') {
+  // A raw 32-bit cell is also a valid instruction-segment payload. The course
+  // generator uses this standard MARS syntax to exercise P7 RI decoder cases.
+  if (STORAGE_DIRECTIVES.has(directive) && directive !== '.word' && section !== 'data') {
     diagnostics.push(makeDiagnostic(directiveRange, `${directive} can only be used in a data segment. Switch to .data first.`, DiagnosticSeverity.Error, 'directive-segment'));
   }
 

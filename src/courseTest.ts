@@ -1,15 +1,12 @@
 import { Commands } from './constants';
-// @index main-coordinator — 课程测试总调度，14个co.test.*命令
+// @index main-coordinator — 课程测试总调度：4 个公共自动测试入口 + 隐藏兼容命令
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getProfile } from './config';
 import {
   GeneratedAsmBatch,
   GeneratorRunSetup,
-  generatorCommandLine,
-  generatorCwd,
   generatorFolder,
-  generatorLabel,
   generatorResource,
   resolveGeneratedAsmBatch,
   resolveGeneratorRunSetup,
@@ -40,8 +37,8 @@ import {
   showBatchTraceReport
 } from './courseTestReport';
 import {
-  startContinuousGeneratedTraceTests,
-  stopContinuousTests
+  requestContinuousTestsStop,
+  startContinuousGeneratedTraceTests
 } from './courseTestContinuous';
 import type { ContinuousGeneratedTraceDependencies } from './courseTestContinuous';
 import {
@@ -55,7 +52,8 @@ import type {
   CourseTraceBatchReport,
   CourseTraceBatchSource
 } from './courseTestReport';
-import { engineStageFailureMessage } from './courseTestMessages';
+import { resolveCourseEnginePlan } from './mips/providers/courseEnginePolicy';
+import { automaticTestEngineMode } from './courseTesting/automaticTestPolicy';
 import {
   findStdinCandidatesForAsm,
   resolveSingleStdinInput
@@ -73,7 +71,7 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.GenerateAsmTests, () => generateAsmTests(services)),
     vscode.commands.registerCommand(Commands.Test.GenerateAndDumpAsmTests, () => generateAndDumpAsmTests(services)),
-    vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopContinuousTests()),
+    vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopAutomaticTests(services)),
     vscode.commands.registerCommand(Commands.Test.StopBatchTraceTests, () => stopBatchCourseTraceTests(services)),
     vscode.commands.registerCommand(Commands.Test.PrepareLogisimCases, () => prepareLogisimCases(services)),
     vscode.commands.registerCommand(Commands.Test.DiagnoseP3LogisimTraceCircuit, () => diagnoseP3LogisimTraceCircuit(services)),
@@ -88,9 +86,6 @@ function createContinuousTraceDependencies(): ContinuousGeneratedTraceDependenci
     resolveGeneratorRunSetup,
     generatorResource,
     generatorFolder,
-    generatorLabel,
-    generatorCommandLine,
-    generatorCwd,
     resolveCourseTraceRunOptions,
     runGeneratorAndCollectAsms,
     expandTraceCases,
@@ -106,6 +101,19 @@ function stopBatchCourseTraceTests(services: AppServices): void {
   if (stopCourseTraceBatch()) {
     services.output.appendLine('正在停止批量课程 Trace 测试…');
   }
+}
+
+function stopAutomaticTests(services: AppServices): void {
+  const continuous = requestContinuousTestsStop();
+  const batch = isCourseTraceBatchRunning() && stopCourseTraceBatch();
+  if (!batch && continuous === 'none') {
+    vscode.window.showInformationMessage('当前没有正在运行的自动测试');
+    return;
+  }
+  if (batch) {
+    services.output.appendLine('正在停止自动测试…');
+  }
+  vscode.window.showInformationMessage('已请求停止自动测试');
 }
 
 async function runFullCourseTraceTest(services: AppServices): Promise<void> {
@@ -236,7 +244,9 @@ async function resolveCourseTraceRunOptions(
 ): Promise<CourseTraceRunOptions | undefined> {
   const options: CourseTraceRunOptions = { ...base };
   if (getProfile(resource) === 'P3') {
-    const logisim = await resolveP3LogisimTraceSetup(services, resource);
+    const logisim = await resolveP3LogisimTraceSetup(services, resource, {
+      nonInteractive: base.source?.kind === 'generator'
+    });
     if (!logisim) {
       return undefined;
     }
@@ -293,7 +303,7 @@ async function openBatchTraceReport(): Promise<void> {
 
 async function openAsmCaseIndex(): Promise<void> {
   const manifests = await listAsmCaseManifests(vscode.window.activeTextEditor?.document.uri);
-  const panel = vscode.window.createWebviewPanel('coAsmCaseIndex', 'CO ASM 用例记录', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coAsmCaseIndex', '测试历史 / 失败用例', vscode.ViewColumn.Beside, {
     enableScripts: false
   });
   panel.webview.html = renderAsmCaseIndex(manifests);
@@ -362,48 +372,48 @@ function generatedCaseInputs(generated: GeneratedAsmBatch): CourseTraceCaseInput
 async function generateAsmTests(services: AppServices): Promise<void> {
   await vscode.workspace.saveAll(false);
   const setup = await resolveGeneratorRunSetup();
-  if (!setup) {
+  if (!setup || setup.kind !== 'builtin') {
     return;
   }
-  const generated = await runGeneratorAndCollectAsms(services, setup);
+  const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
   if (!generated?.asms.length) {
     vscode.window.showWarningMessage('测试生成器未产生新的 ASM 测试点');
     return;
   }
-  await vscode.window.showTextDocument(generated.asms[0], { preview: false });
-  vscode.window.showInformationMessage(`已生成 ${generated.asms.length} 个 ASM 测试点`);
+  vscode.window.showInformationMessage('自动测试点已准备');
 }
 
 async function generateAndDumpAsmTests(services: AppServices): Promise<void> {
   await vscode.workspace.saveAll(false);
   const setup = await resolveGeneratorRunSetup();
-  if (!setup) {
+  if (!setup || setup.kind !== 'builtin') {
     return;
   }
-  const generated = await runGeneratorAndCollectAsms(services, setup);
+  const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
   if (!generated?.asms.length) {
     vscode.window.showWarningMessage('测试生成器未产生新的 ASM 测试点');
     return;
   }
 
-  let dumped = 0;
+  const enginePlan = resolveCourseEnginePlan(automaticTestEngineMode, setup.profile);
   for (const item of generatedCaseInputs(generated)) {
     const asmCase = item.asmCase ?? await createAsmCaseFromAsm(item.asm, {
       source: asmCaseSourceFromBatchSource(generated.source),
       resource: item.asm,
-      p7: await p7MetadataFromManifest(item.asm)
+      p7: await p7MetadataFromManifest(item.asm),
+      enginePlan
     });
-    const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+    const dump = await prepareAsmCaseMachineCode(services, asmCase, {
+      showMessages: false,
+      nonInteractive: true,
+      enginePlan
+    });
     if (!dump?.ok || !dump.outputFile) {
-      const detail = engineStageFailureMessage('汇编器导出机器码失败', dump?.status);
-      vscode.window.showErrorMessage(detail);
+      vscode.window.showErrorMessage('自动测试点准备失败');
       return;
     }
-    dumped++;
-    services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
   }
-  await vscode.window.showTextDocument(generated.asms[0], { preview: false });
-  vscode.window.showInformationMessage(`已生成 ${generated.asms.length} 个 ASM 测试点，并 dump ${dumped} 个机器码文件`);
+  vscode.window.showInformationMessage('自动测试点已准备');
 }
 
 

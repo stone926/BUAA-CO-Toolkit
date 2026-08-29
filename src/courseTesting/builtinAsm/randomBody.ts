@@ -52,8 +52,13 @@ import {
 } from '../mipsUtil';
 import { Random, hashSeed } from '../random';
 import { p7SafeInterruptAnchorMnemonics } from '../p7InterruptAnchor';
-import { p7InternalUnknownInstructionMnemonic } from '../p7RiInstruction';
+import {
+  p7RiWordCatalog,
+  p7RiWordDirective,
+  p7RiWordEntryAt
+} from '../p7RiWords';
 
+// Historical API only. New built-in sources use raw `.word` RI cells.
 export { p7InternalUnknownInstructionMnemonic } from '../p7RiInstruction';
 
 export type P7ExceptionKind = 'adel' | 'ades' | 'syscall' | 'ri' | 'ov';
@@ -106,9 +111,6 @@ const readRegisters = ['$0', ...writableRegisters];
 const textBaseAddress = p7UserTextBaseAddress;
 const p7PrologueInstructionCount = 2;
 const poisonRegister = '$26';
-// Handler helpers come from the required P7 profile. These CP0-only instructions are the pieces a
-// custom body selection can otherwise omit while still requesting exception handling.
-const p7HandlerRequiredMnemonics = ['mfc0', 'mtc0', 'eret'] as const;
 const registerTrapMnemonics = new Set(['teq', 'tne', 'tge', 'tgeu', 'tlt', 'tltu']);
 const immediateTrapMnemonics = new Set(['teqi', 'tnei', 'tgei', 'tgeiu', 'tlti', 'tltiu']);
 const trapMnemonics = new Set([...registerTrapMnemonics, ...immediateTrapMnemonics]);
@@ -291,18 +293,6 @@ function validateBuiltinGeneratorRequest(
     if (count < minimum) {
       throw new BuiltinAsmGeneratorError(`Built-in ASM generator P7 interrupt tests require at least ${minimum} instruction slots to reserve a safe interrupt target.`);
     }
-    if (!p7InterruptAnchorMnemonics.some((mnemonic) => allowed.has(mnemonic))) {
-      throw new BuiltinAsmGeneratorError('Built-in ASM generator P7 interrupt tests require at least one safe ALU/immediate instruction such as ori, addiu, or addu.');
-    }
-  }
-  if (allowed.has('eret') && !handlerEnabled) {
-    throw new BuiltinAsmGeneratorError('Built-in ASM generator emits eret only inside the P7 exception handler; enable syscall, interrupt, or exceptions to exercise it.');
-  }
-  if (handlerEnabled) {
-    const missing = p7HandlerRequiredMnemonics.filter((mnemonic) => !allowed.has(mnemonic));
-    if (missing.length) {
-      throw new BuiltinAsmGeneratorError(`Built-in ASM generator P7 exception handler requires instruction(s): ${missing.join(', ')}.`);
-    }
   }
 }
 
@@ -328,6 +318,7 @@ class ProgramGenerator {
   private interruptAnchorTargetIndex: number | undefined;
   private labelIndex = 0;
   private emittedCount = 0;
+  private nextRiWordOccurrence = 0;
   private nextMduProbeMode: MduReadProbeMode = 'busy';
   private readonly nextBranchOutcome = new Map<string, boolean>();
   private readonly nextConditionalMoveOutcome = new Map<string, boolean>();
@@ -391,7 +382,11 @@ class ProgramGenerator {
         ?? this.pickBiasedMnemonic(randomBudget)
         ?? this.pickAnyMnemonic(randomBudget);
       if (!mnemonic) {
-        throw new BuiltinAsmGeneratorError('Built-in ASM generator could not fill the requested instruction count with the configured instruction set. Add a safe value-producing instruction such as ori/addiu/addu, or reduce control/MDU-only instructions.');
+        // The public instruction list is a payload focus, not a requirement to make every selected
+        // instruction safe in every generated state. Keep the automatic harness total and bounded
+        // when a control/CP0/MDU-only focus has no currently legal candidate.
+        this.emitStaticInstruction('nop', 'nop');
+        continue;
       }
       const startIndex = this.emittedCount;
       this.emitMnemonic(mnemonic);
@@ -425,6 +420,7 @@ class ProgramGenerator {
       `# instruction_count: ${this.targetCount}`,
       '# instruction_count_scope: payload (halt tail excluded)',
       `# instruction_set: ${instructionSet}`,
+      '# instruction_set_scope: randomized payload focus; safety scaffolding may add fixed course instructions',
       '.data',
       '.align 2',
       '_co_data:',
@@ -614,7 +610,12 @@ class ProgramGenerator {
     if (this.profile !== 'P7' || this.exceptionRate <= 0) {
       return [];
     }
-    return this.shuffle(this.exceptionTypes.filter((kind) => this.exceptionSequenceLength(kind) !== undefined));
+    return this.shuffle(this.exceptionTypes.flatMap((kind) => {
+      if (this.exceptionSequenceLength(kind) === undefined) return [];
+      // RI is one exception class but has multiple decoder families. Reserve one
+      // mandatory coverage entry for every catalog word before random filling.
+      return kind === 'ri' ? p7RiWordCatalog.map(() => kind) : [kind];
+    }));
   }
 
   private emitExceptionKind(kind: P7ExceptionKind): number | undefined {
@@ -671,7 +672,8 @@ class ProgramGenerator {
 
   private emitRiException(): number {
     const victimIndex = this.emittedCount;
-    this.emitStaticInstruction('ri', p7InternalUnknownInstructionMnemonic);
+    const entry = p7RiWordEntryAt(this.nextRiWordOccurrence++);
+    this.emitStaticInstruction('ri', p7RiWordDirective(entry));
     return victimIndex;
   }
 
@@ -782,8 +784,9 @@ class ProgramGenerator {
     return this.remaining();
   }
 
-  private interruptAnchorMnemonic(): string | undefined {
-    return p7InterruptAnchorMnemonics.find((mnemonic) => this.allowed.has(mnemonic) && this.canEmitSingle(mnemonic));
+  private interruptAnchorMnemonic(): string {
+    return p7InterruptAnchorMnemonics.find((mnemonic) => this.allowed.has(mnemonic) && this.canEmitSingle(mnemonic))
+      ?? 'ori';
   }
 
   private emitInterruptAnchor(): void {
@@ -799,9 +802,6 @@ class ProgramGenerator {
 
   private emitInterruptAnchorInstruction(): void {
     const mnemonic = this.interruptAnchorMnemonic();
-    if (!mnemonic) {
-      throw new BuiltinAsmGeneratorError('Internal generator error: cannot emit a safe P7 interrupt anchor instruction.');
-    }
     const startIndex = this.emittedCount;
     this.emitModeledAnchorInstruction(mnemonic);
     this.noteInterruptCandidate(mnemonic, startIndex);
@@ -933,7 +933,8 @@ class ProgramGenerator {
   }
 
   private pickAnyMnemonic(remainingBudget: number): string | undefined {
-    return this.rng.pick(Array.from(this.allowed).filter((mnemonic) => this.canEmit(mnemonic, remainingBudget)));
+    const candidates = Array.from(this.allowed).filter((mnemonic) => this.canEmit(mnemonic, remainingBudget));
+    return candidates.length ? this.rng.pick(candidates) : undefined;
   }
 
   private weightFor(mnemonic: string): number {

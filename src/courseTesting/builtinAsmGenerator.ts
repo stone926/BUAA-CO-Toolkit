@@ -17,6 +17,7 @@ export type {
   P7ProbeExpectedRecord,
   P7ProbeMetadata,
   P7ProbeOptions,
+  P7ProbeShard,
   P7ProbeScenario,
   P7ProbeScenarioKind,
   P7StressMode

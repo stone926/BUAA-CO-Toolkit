@@ -1,15 +1,10 @@
 # BUAA CO test-cli
 
-从 BUAA CO Toolkit 插件中抽取出的 **P7 无头持续测试 CLI**。保持插件原有代码不变，构建时把课程测试管线复制到 `test-cli/dist` 并注入一个最小 `vscode` 运行时 shim，因此不需要启动 VS Code。
+BUAA CO Toolkit 的 P7 无头持续自动测试入口。构建时会复用插件中的课程测试实现并注入最小 `vscode` 运行时 shim，因此运行测试时不需要启动 VS Code。
 
-管线循环：
+CLI 与插件共用同一套自动测试策略。默认每轮都会使用 P7 允许范围内的最大测试负载并启用全部内置验证维度；持续执行直到发现问题或用户发送中止信号。覆盖强度、场景组合、循环调度、失败停止、产物留存、随机化和仿真预算均由工具内部管理，不能从命令行调低。
 
-1. 内置随机 ASM 测试点生成（支持自定义 P7 指令集）
-2. MARS dump 机器码
-3. MARS 黄金 Trace（coL2）
-4. ISim Verilog 仿真 Trace
-5. Trace 对拍（anchor）或 DM Probe 检查（probe），hybrid 每轮同时跑两者
-6. 写 `.co/out/continuous-trace-report.json`，按策略保留通过/失败产物并进入下一轮
+唯一可自定义的测试内容是 payload 指令集。项目位置、ISE 工具链路径、DUT 顶层模块和输出格式仍可配置。
 
 ## 构建
 
@@ -19,43 +14,33 @@ npm install
 npm run build
 ```
 
-构建产物位于 `test-cli/dist`，入口：
-
-- `test-cli/dist/cli.js`（推荐）
-- `test-cli/dist/test-cli/src/cli.js`
-
-构建脚本只读取 `../src` 与 `../resources` 复制到 `test-cli/.build-src` 和 `dist`，不修改插件原有代码；`dist/node_modules/vscode` 是注入的无头 shim，使 `dist` 脱离 VS Code 运行。
+构建产物位于 `test-cli/dist`，推荐入口为 `test-cli/dist/cli.js`。构建脚本只读取 `../src` 与 `../resources`，不会修改插件源文件。
 
 ## 运行
 
 ```bash
-node test-cli/dist/cli.js --project <P7项目目录> \
-  --mars-p7 <Mars-with-BUAA-CO-extension jar> \
+node test-cli/dist/cli.js \
+  --project <P7项目目录> \
   --ise <ISE安装目录> \
-  --instructions "add, sub, ori, lw, sw, beq, lui, jal, jr, mfc0, mtc0, eret, syscall, nop" \
-  --count 200 --iterations 3 --stress anchor
+  --instructions "add, sub, ori, lw, sw, beq, lui, jal, jr, mfc0, mtc0, eret, syscall, nop"
 ```
 
-常用参数见 `--help`。默认 Profile 固定为 P7，内存配置固定为 `CompactLargeText`。
+`--instructions` 接受逗号或空白分隔的真实 MIPS 指令；留空时使用 P7 Profile 默认指令集。测试框架所需的安全脚手架和异常处理代码不受该列表限制。
 
-### 指令集配置
+使用 `--help` 查看项目、ISE、DUT 顶层模块和报告格式参数。旧版的强度、次数、间隔、场景、异常、中断、种子、留存、仿真时长、私有 testbench 和中间产物参数会被明确拒绝，不会静默改变最强策略。
 
-`--instructions` 接受逗号或空白分隔的真实 MIPS 指令（不接受伪指令）。留空时使用 P7 Profile 默认指令集。自定义指令集后，是否启用异常/中断由以下参数共同决定：
+## 工具链与 DUT
 
-- `--stress off` 且 `--exception-rate 0 --exception-types ""`：可运行不含 `mfc0/mtc0/eret` 的最小指令集
-- 启用 syscall/trap 指令、`--exception-rate > 0` 或 `--interrupt` 时，生成器要求指令集包含 `mfc0 mtc0 eret`
-- `--exception-types RI` 需要支持 `cl` 额外指令加载的修改版 MARS
+- P7 自动路径使用 ISE/ISim 验证 Verilog DUT，其余参考与测试点准备无需额外工具链配置。
+- `--ise` 指向 Xilinx ISE 安装目录。
+- `--top-module` 用于定位项目 DUT；自动 testbench、机器码文件名和执行预算由工具内部管理。
+- 自动测试始终执行静默工具链预检，防止在环境不完整时生成误导性的结果。
 
-## 工具链
+## 报告与退出码
 
-- MARS：`--mars-p7` 优先，未配置时回退 `--mars`；需要支持 `coL1`/`coL2`、`efc`、`p7irq` 和 `CompactLargeText`
-- ISE：`--ise` 指向 Xilinx ISE 根目录（需要 `fuse`/`isim`）
-- Java：`--java`，默认 `java`
+默认报告写入项目的 `.co/out/continuous-trace-report.json`，也可用 `--report` 指定输出位置。公开 JSON 只包含轮次状态、汇总、匿名测试点、复现编号和 CPU 差异证据，不包含本机路径、外部命令、工作目录或内部策略。
 
-可用 `--skip-toolchain-check` 跳过启动工具链检查（失败仍会在用例执行阶段体现）。
-
-## 退出码
-
-- `0`：所有轮次通过
+- `0`：测试正常结束且已执行轮次全部通过
 - `1`：存在失败/错误，或启动失败
 - `2`：命令行参数错误
+- `130`：收到中止信号

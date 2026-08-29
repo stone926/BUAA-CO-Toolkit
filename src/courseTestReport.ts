@@ -11,8 +11,7 @@ import {
 } from './language/mips/traceCompare';
 import {
   AsmCaseManifestUnion,
-  manifestArtifactsOf,
-  manifestMachineCodeOf,
+  isManifestV2,
   manifestSourceOf
 } from './courseTesting/manifestCodec';
 import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
@@ -152,14 +151,19 @@ export interface ContinuousTraceReport {
   running: boolean;
   stopRequested: boolean;
   totalIterations?: number;
-  generator: string;
-  commandLine: string;
-  cwd: string;
-  options: {
+  /** @deprecated legacy report provenance; new automatic reports keep it in each case manifest. */
+  generator?: string;
+  /** @deprecated legacy report provenance; new automatic reports keep it in each case manifest. */
+  commandLine?: string;
+  /** @deprecated legacy report provenance; new automatic reports keep it in each case manifest. */
+  cwd?: string;
+  /** @deprecated legacy internal controls; new automatic reports do not serialize them. */
+  options?: {
     intervalMs: number;
     maxIterations: number;
     stopOnFailure: boolean;
   };
+  /** @deprecated legacy internal controls; new automatic reports do not serialize them. */
   retention?: {
     retainedPassingCases: number;
     reportRetainedIterations: number;
@@ -174,9 +178,6 @@ export interface AsmCaseManifestEntry {
 }
 
 export const continuousTraceMonitorMaxRows = 100;
-
-/** Typed empty map so Object.entries keeps its string value overload. */
-const EMPTY_STRING_MAP: Record<string, string> = {};
 
 /** Map v1 engine/tool names to the stable pipeline role used by new reports. */
 export function neutralCourseTraceStage(stage: CourseTraceStage): NeutralCourseTraceStage {
@@ -252,14 +253,92 @@ export function createCourseTraceBatchReport(
   source?: CourseTraceBatchSource,
   generatedAt = new Date().toISOString()
 ): CourseTraceBatchReport {
-  const neutralResults = results.map(neutralCourseTraceCaseResult);
+  const neutralResults = source?.kind === 'generator'
+    ? results.map(publicAutomaticCourseTraceCaseResult)
+    : results.map(neutralCourseTraceCaseResult);
   return {
     schemaVersion: 2,
     generatedAt,
-    ...(source ? { source } : {}),
+    ...(source ? { source: publicBatchReportSource(source) } : {}),
     summary: batchSummary(neutralResults),
     results: neutralResults
   };
+}
+
+/**
+ * Public automatic reports keep actionable CPU evidence and a replay id, but never serialize
+ * private paths, generator controls, backend commands, or raw artifact locations.
+ */
+export function publicAutomaticCourseTraceCaseResult(
+  item: CourseTraceCaseResult,
+  index: number
+): NeutralCourseTraceCaseResult {
+  const neutral = neutralCourseTraceCaseResult(item);
+  return {
+    asm: `测试点 ${index + 1}`,
+    ...(neutral.caseId ? { caseId: neutral.caseId } : {}),
+    ...(neutral.artifactsPruned ? { artifactsPruned: true } : {}),
+    status: neutral.status,
+    ...(neutral.cancelled ? { cancelled: true } : {}),
+    stage: neutral.stage,
+    message: publicAutomaticDiagnosticMessage(neutral),
+    ...(neutral.firstDiffIndex === undefined ? {} : { firstDiffIndex: neutral.firstDiffIndex }),
+    ...(neutral.firstDiff ? { firstDiff: neutral.firstDiff } : {}),
+    ...(neutral.probe ? {
+      probe: {
+        passed: neutral.probe.passed,
+        records: [],
+        failures: neutral.probe.failures,
+        diagnostics: []
+      }
+    } : {})
+  };
+}
+
+/** Serialize the continuous monitor through the same compact public boundary as one-shot runs. */
+export function publicContinuousTraceReport(report: ContinuousTraceReport): ContinuousTraceReport {
+  return {
+    ...(report.schemaVersion === undefined ? {} : { schemaVersion: report.schemaVersion }),
+    generatedAt: report.generatedAt,
+    running: report.running,
+    stopRequested: report.stopRequested,
+    ...(report.totalIterations === undefined ? {} : { totalIterations: report.totalIterations }),
+    iterations: report.iterations.map((iteration) => ({
+      index: iteration.index,
+      status: iteration.status,
+      startedAt: iteration.startedAt,
+      ...(iteration.finishedAt ? { finishedAt: iteration.finishedAt } : {}),
+      source: { kind: 'generator' },
+      summary: iteration.summary,
+      results: iteration.results.map(publicAutomaticCourseTraceCaseResult),
+      ...(iteration.message ? {
+        message: '[AUTO-ITERATION] 本轮未完成；请使用失败用例的复现编号定位'
+      } : {})
+    }))
+  };
+}
+
+/** Stable, path-free diagnosis shown by every public automatic-test surface. */
+export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): string {
+  if (item.cancelled) return '[AUTO-STOPPED] 测试已停止';
+  if (item.status === 'passed') return '通过';
+  if (item.status === 'failed') {
+    return item.probe
+      ? '[AUTO-PROBE] P7 定向检查未通过'
+      : '[AUTO-MISMATCH] CPU 输出与参考结果不一致';
+  }
+  switch (neutralCourseTraceStage(item.stage)) {
+    case 'assemble':
+      return '[AUTO-ASSEMBLE] 测试点汇编未完成';
+    case 'oracle':
+      return '[AUTO-ORACLE] 参考结果未生成';
+    case 'dut':
+      return '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口';
+    case 'compare':
+      return '[AUTO-COMPARE] 结果比较未完成';
+    case 'probe':
+      return '[AUTO-PROBE] P7 定向检查未完成';
+  }
 }
 
 function neutralTraceDiffSnapshot(snapshot: TraceDiffSnapshot): NeutralTraceDiffSnapshot {
@@ -304,6 +383,17 @@ const logisimPrepareStatusCss = `
     }
 `;
 
+const historyStatusCss = `
+    .passed td:nth-child(6) {
+      color: var(--vscode-testing-iconPassed);
+      font-weight: 600;
+    }
+    .failed td:nth-child(6), .error td:nth-child(6) {
+      color: var(--vscode-testing-iconFailed);
+      font-weight: 600;
+    }
+`;
+
 export function showLogisimPrepareReport(
   report: vscode.Uri,
   results: LogisimPrepareCaseResult[],
@@ -323,42 +413,46 @@ export function showBatchTraceReport(
   generatedAt?: string,
   source?: CourseTraceBatchSource
 ): void {
-  const panel = vscode.window.createWebviewPanel('coBatchTraceReport', 'CO 批量 Trace 测试', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel(
+    'coBatchTraceReport',
+    source?.kind === 'generator' ? '自动测试结果' : 'CO 批量 Trace 测试',
+    vscode.ViewColumn.Beside,
+    {
     enableScripts: false
-  });
+    }
+  );
   panel.webview.html = renderBatchTraceReport(results, report, generatedAt, source);
 }
 
-export function renderContinuousTraceMonitor(report: ContinuousTraceReport, reportFile: vscode.Uri): string {
+export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _reportFile: vscode.Uri): string {
   const latest = report.iterations[0];
   const latestSummary = latest?.summary ?? continuousCounts([]);
   const totalIterations = report.totalIterations ?? report.iterations.length;
   const visibleIterations = report.iterations.slice(0, continuousTraceMonitorMaxRows);
   const hiddenIterations = Math.max(0, totalIterations - visibleIterations.length);
   const rows = visibleIterations.map((iteration) => {
-    const firstProblem = iteration.results.find((item) => item.status !== 'passed');
-    const pruned = !firstProblem && iteration.results.some((item) => item.artifactsPruned);
+    const firstProblemIndex = iteration.results.findIndex((item) => item.status !== 'passed');
+    const firstProblem = firstProblemIndex >= 0 ? iteration.results[firstProblemIndex] : undefined;
     return {
       className: iteration.status,
       cells: [
         String(iteration.index),
-        escapeHtml(iteration.status.toUpperCase()),
-        escapeHtml(iteration.startedAt),
-        iteration.finishedAt ? escapeHtml(iteration.finishedAt) : '',
+        escapeHtml(continuousStatusLabel(iteration.status)),
         String(iteration.summary.total),
         String(iteration.summary.passed),
         String(iteration.summary.failed),
         String(iteration.summary.errors),
-        firstProblem ? escapeHtml(path.basename(firstProblem.asm)) : '',
-        firstProblem ? escapeHtml(firstProblem.message) : escapeHtml(iteration.message ?? (pruned ? '通过产物已按留存策略清理' : ''))
+        firstProblem ? renderAutomaticCaseLabel(firstProblemIndex, firstProblem) : '',
+        firstProblem
+          ? renderContinuousFirstProblem(firstProblem)
+          : iteration.status === 'error'
+            ? escapeHtml('本轮未完成，请打开完整报告查看诊断')
+            : ''
       ]
     };
   });
   const hiddenNote = hiddenIterations
-    ? html.raw(`<p class="muted">仅显示最近 ${html.text(visibleIterations.length)} / ${html.text(totalIterations)} 轮；旧通过轮可能已从 JSON 报告和 case 产物中清理。</p>`)
-    : html.raw('');
-  const retentionNote = report.retention
-    ? html.raw(`<div>留存: 通过 case 最近 ${html.text(report.retention.retainedPassingCases)} 个，报告最近 ${html.text(report.retention.reportRetainedIterations || '无限制')} 轮，输出 ${html.text(report.retention.artifactOutputMode === 'case' ? '写入 ASM case' : '写入 .co/out')}</div>`)
+    ? html.raw(`<p class="muted">仅显示最近 ${html.text(visibleIterations.length)} / ${html.text(totalIterations)} 轮。</p>`)
     : html.raw('');
   const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
 
@@ -369,22 +463,43 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, repo
   ${renderMetricGrid([
     { label: '状态', value: state },
     { label: '轮数', value: totalIterations },
-    { label: '最近通过', value: latestSummary.passed },
-    { label: '最近失败', value: latestSummary.failed },
-    { label: '最近错误', value: latestSummary.errors }
+    { label: '最近一轮通过', value: latestSummary.passed },
+    { label: '最近一轮失败', value: latestSummary.failed },
+    { label: '最近一轮错误', value: latestSummary.errors }
   ])}
   <div class="paths">
-    <div>生成器: <code>${escapeHtml(report.generator)}</code></div>
-    <div>命令: <code>${escapeHtml(report.commandLine)}</code></div>
-    <div>工作目录: <code>${escapeHtml(report.cwd)}</code></div>
-    <div>选项: 间隔 ${report.options.intervalMs} 毫秒, 最大 ${report.options.maxIterations || '无限制'}, 失败时停止 ${report.options.stopOnFailure}</div>
-    ${retentionNote}
-    <div>JSON 报告: <code>${escapeHtml(reportFile.fsPath)}</code></div>
+    <div>失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现数据已自动保存。</div>
   </div>
   ${hiddenNote}
-  ${renderTable(['#', '状态', '开始', '结束', '总数', '通过', '失败', '错误', '首个问题', '消息'], rows)}
+  ${renderTable(['#', '状态', '用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows)}
 `)
   });
+}
+
+function continuousStatusLabel(status: ContinuousRunStatus): string {
+  switch (status) {
+    case 'running':
+      return '测试中';
+    case 'passed':
+      return '通过';
+    case 'failed':
+      return '失败';
+    case 'error':
+      return '错误';
+    case 'stopped':
+      return '已停止';
+  }
+}
+
+function renderContinuousFirstProblem(item: CourseTraceCaseResult): SafeHtml {
+  const probeFailure = item.probe?.failures[0];
+  if (probeFailure) {
+    return html.raw(`<div>${html.text(probeFailure.kind)}: ${html.text(probeFailure.message)}</div>`);
+  }
+  if (item.firstDiff) {
+    return renderFirstDiffSummary(item);
+  }
+  return html.text(publicAutomaticDiagnosticMessage(item));
 }
 
 export function renderBatchTraceReport(
@@ -393,6 +508,9 @@ export function renderBatchTraceReport(
   generatedAt?: string,
   source?: CourseTraceBatchSource
 ): string {
+  if (source?.kind === 'generator') {
+    return renderAutomaticBatchTraceReport(results);
+  }
   const summary = batchSummary(results);
   const rows = results.map((item, index) => ({
     className: item.status,
@@ -427,6 +545,50 @@ export function renderBatchTraceReport(
   ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', '首个差异', '首个差异详情', '产物', '事件', '消息'], rows)}
 `)
   });
+}
+
+function renderAutomaticBatchTraceReport(results: CourseTraceCaseResult[]): string {
+  const summary = batchSummary(results);
+  const rows = results.map((item, index) => ({
+    className: item.status,
+    cells: [
+      String(index + 1),
+      escapeHtml(item.status === 'passed' ? '通过' : item.status === 'failed' ? '失败' : '错误'),
+      renderAutomaticCaseLabel(index, item),
+      item.status === 'passed' ? html.text('通过') : renderContinuousFirstProblem(item)
+    ]
+  }));
+  return renderReportPage({
+    title: '自动测试',
+    extraCss: traceStatusCss,
+    body: html.raw(`
+  ${renderMetricGrid([
+    { label: '总数', value: summary.total },
+    { label: '通过', value: summary.passed },
+    { label: '失败', value: summary.failed },
+    { label: '错误', value: summary.errors }
+  ])}
+  <div class="paths">失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现信息已自动保存。</div>
+  ${renderTable(['#', '状态', '测试点', '结果'], rows)}
+`)
+  });
+}
+
+function publicBatchReportSource(source: CourseTraceBatchSource): CourseTraceBatchSource {
+  if (source.kind === 'generator') {
+    // Full generator provenance is already sealed in each case manifest. Keep only the marker
+    // required to reopen this JSON with the compact automatic-test renderer.
+    return { kind: 'generator' };
+  }
+  return source;
+}
+
+function renderAutomaticCaseLabel(index: number, item: CourseTraceCaseResult): SafeHtml {
+  const label = `测试点 ${index + 1}`;
+  if (item.status === 'passed' || !item.caseId) {
+    return html.text(label);
+  }
+  return html.raw(`${html.text(label)}<div class="muted">Case ${html.code(item.caseId)}</div>`);
 }
 
 export function renderLogisimPrepareReport(
@@ -479,45 +641,35 @@ export function renderBatchSource(source: CourseTraceBatchSource | undefined): S
   }
   const asmCount = source.asmFiles?.length ?? 0;
   return html.raw(`<div class="paths">
-    <div>来源: 生成的 ASM 文件${asmCount ? ` (${asmCount})` : ''}</div>
-    ${source.generator ? `<div>生成器: ${html.code(source.generator)}</div>` : ''}
-    ${source.commandLine ? `<div>命令: ${html.code(source.commandLine)}</div>` : ''}
-    ${source.cwd ? `<div>工作目录: ${html.code(source.cwd)}</div>` : ''}
+    <div>来源: 自动测试${asmCount ? ` (${asmCount})` : ''}</div>
   </div>`);
 }
 
 export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
-  const rows = cases.map(({ manifest, uri }) => {
-    // v2 stores case-relative artifact paths; restore absolute ones for display.
-    const caseDir = path.dirname(uri.fsPath);
-    const resolveArtifact = (value: string): string =>
-      path.isAbsolute(value) ? value : path.join(caseDir, value);
-    // Record-shaped view keeps Object.entries on its string overload.
-    const artifactGroups: Record<string, Record<string, string> | undefined> = manifestArtifactsOf(manifest);
-    const artifacts = Object.entries(artifactGroups)
-      .flatMap(([kind, items]) => Object.entries(items ?? EMPTY_STRING_MAP)
-        .map(([name, value]) => `${kind}.${name}: ${resolveArtifact(value)}`))
-      .slice(0, 6);
-    const machineCode = manifestMachineCodeOf(manifest);
+  const rows = cases.map(({ manifest }, index) => {
+    const automatic = manifestSourceOf(manifest).kind !== 'selected';
+    const metadata = isManifestV2(manifest) ? manifest.metadata : undefined;
+    const outcome = metadata?.['test.status'];
+    const diagnostic = metadata?.['test.diagnostic'];
     return {
+      className: outcome,
       cells: [
-        html.code(manifest.caseId),
+        String(index + 1),
         escapeHtml(manifest.createdAt),
         escapeHtml(manifest.profile),
-        escapeHtml(manifestSourceOf(manifest).kind),
-        html.code(manifest.originalAsmPath),
-        html.code(manifest.asmSnapshot.path),
-        machineCode ? html.code(resolveArtifact(machineCode.path)) : '',
-        html.raw(artifacts.map((item) => `<div>${html.code(item)}</div>`).join('')),
-        html.code(uri.fsPath)
+        escapeHtml(automatic ? '自动测试' : '手动测试'),
+        html.code(manifest.caseId),
+        escapeHtml(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : outcome === 'error' ? '错误' : '已保存'),
+        escapeHtml(diagnostic ?? '—')
       ]
     };
   });
   return renderReportPage({
-    title: 'CO ASM 用例记录',
+    title: '测试历史 / 失败用例',
+    extraCss: historyStatusCss,
     body: html.raw(`
-  <div class="summary">共 ${cases.length} 个 case，按创建时间倒序排列。</div>
-  ${renderTable(['Case', '时间', 'Profile', '来源', '原始 ASM', 'ASM 快照', '机器码', 'Artifacts', 'Manifest'], rows)}
+  <div class="summary">共 ${cases.length} 个测试点，按创建时间倒序排列。诊断已脱敏；发现问题后，可用复现编号定位已保存的数据。</div>
+  ${renderTable(['#', '时间', '课程阶段', '来源', '复现编号', '结果', '诊断'], rows)}
 `)
   });
 }

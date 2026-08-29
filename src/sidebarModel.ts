@@ -208,28 +208,36 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
   if (shouldShowTraceActions(context.profile)) {
     children.push(
       actionItem(
-        'core.continuousTrace',
-        '持续生成测试',
+        'core.automaticTest',
+        '运行自动测试',
+        Commands.Test.RunGeneratedTraceTests,
+        'beaker',
+        '生成完整测试并验证 CPU',
+        '使用当前 Profile 的默认最强测试方案。'
+      ),
+      actionItem(
+        'core.continuousAutomaticTest',
+        '持续自动测试',
         Commands.Test.StartContinuousGeneratedTraceTests,
         'rocket',
-        `生成 ASM -> case -> dump -> ${traceBackendName(context.profile)} -> 对拍`,
-        `自动生成或导入 ASM，并为每次运行写入 .co/cases/<caseId>。\n报告和输出保留在 .co/out。`
+        '持续运行自动测试',
+        '持续验证 CPU，直到停止或发现问题。'
       ),
       actionItem(
-        'core.stopContinuousTrace',
-        '停止持续测试',
+        'core.stopAutomaticTest',
+        '停止自动测试',
         Commands.Test.StopContinuousTests,
         'debug-stop',
-        '停止当前持续测试任务',
-        '如果没有正在运行的持续测试，此命令会安全返回。'
+        '停止当前的自动测试',
+        '如果没有正在运行的自动测试，此命令会安全返回。'
       ),
       actionItem(
-        'core.asmCases',
-        '查看 ASM 用例记录',
+        'core.testHistory',
+        '测试历史 / 失败用例',
         Commands.Test.OpenAsmCaseIndex,
         'history',
-        '.co/cases 历史记录',
-        '打开 .co/cases/*/case.json 的索引视图，查看 ASM 快照、机器码和派生输出。'
+        '查看历史结果和失败用例',
+        '打开测试历史，用于定位和复现失败。'
       )
     );
   }
@@ -314,7 +322,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       Commands.ToolsOpenAdvanced,
       'tools',
       '按当前 Profile 显示低频工具',
-      '打开高级工具选择器，包含批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等低频入口。'
+      '打开高级工具选择器，包含自动测试、VCD、Logisim CSV、Hazard 分析等低频入口。'
     )
   );
 
@@ -453,10 +461,6 @@ function usesConfiguredVerilogProject(profile: ProjectProfile): boolean {
 
 function usesVerilogProfile(profile: ProjectProfile): boolean {
   return verilogProfiles.has(profile);
-}
-
-function traceBackendName(profile: ProjectProfile): string {
-  return profile === 'P3' ? 'Logisim' : 'ISim';
 }
 
 function profileDescription(profile: ProjectProfile): string {

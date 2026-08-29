@@ -1,20 +1,31 @@
-import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import {
-  BuiltinAsmGeneratorError,
-  generateBuiltinAsmTestCase,
-  resolveBuiltinInstructionSet
-} from '../../src/courseTesting/builtinAsmGenerator';
-import type {
-  BuiltinAsmGeneratorResult,
-  P7StressMode
-} from '../../src/courseTesting/builtinAsmGenerator';
-import {
-  AsmCase,
-  createAsmCaseFromText,
-  updateAsmCaseMetadata
+  recordAsmCaseTestOutcome,
+  type AsmCase
 } from '../../src/asmCaseStore';
+import { getMemoryConfiguration } from '../../src/config';
+import type { CourseTraceCaseInput } from '../../src/courseTestCases';
+import type {
+  ContinuousTraceIteration,
+  ContinuousTraceReport,
+  CourseTraceCaseResult
+} from '../../src/courseTestReport';
+import {
+  neutralCourseTraceStage,
+  publicAutomaticDiagnosticMessage,
+  publicContinuousTraceReport
+} from '../../src/courseTestReport';
+import {
+  courseTraceMemoryConfigurationErrorForEngine,
+  requiredCourseTraceToolchainChecks,
+  requiredToolchainFailures
+} from '../../src/courseTestToolchain';
+import {
+  automaticTestEngineMode,
+  continuousAutomaticTestPolicy
+} from '../../src/courseTesting/automaticTestPolicy';
 import {
   addContinuousResult,
   continuousStatusFromCounts,
@@ -24,59 +35,28 @@ import {
 } from '../../src/courseTesting/continuous';
 import type { ContinuousCounts } from '../../src/courseTesting/continuous';
 import {
-  formatToolchainFailure,
-  courseTraceMemoryConfigurationError,
-  MARS_P7_CHECK,
-  requiredToolchainFailures
-} from '../../src/courseTestToolchain';
-import type {
-  ContinuousTraceIteration,
-  ContinuousTraceReport,
-  CourseTraceBatchSource,
-  CourseTraceCaseResult
-} from '../../src/courseTestReport';
-import {
-  CourseTraceRunOptions,
-  runCourseTraceCase
-} from '../../src/courseTesting/traceRunner';
+  resolveGeneratorRunSetup,
+  runGeneratorAndCollectAsms
+} from '../../src/courseTesting/generatorWorkflow';
+import { runCourseTraceCase } from '../../src/courseTesting/traceRunner';
 import { checkToolchain } from '../../src/toolchain';
-import { createIsimCompileCache } from '../../src/verilogIsimCache';
 import type { AppServices } from '../../src/types';
-import * as vscode from 'vscode';
+import { createIsimCompileCache } from '../../src/verilogIsimCache';
 
+/**
+ * Public CLI inputs deliberately contain no coverage, scheduling, retention, seed, or
+ * simulation-duration controls. Those are owned by the shared automatic-test policy.
+ */
 export interface ContinuousPipelineOptions {
   projectRoot: string;
-  instructions: string;
-  instructionCount: number;
-  intervalMs: number;
-  maxIterations: number;
-  stopOnFailure: boolean;
-  retainedPassingCases: number;
-  reportRetainedIterations: number;
-  stressMode: P7StressMode;
-  interrupt: boolean;
-  timerInterrupt: boolean;
-  externalInterruptIntensity: number;
-  timerIntensity: number;
-  probeScenarioCount: number;
-  exceptionRate: number;
-  exceptionTypes: string[];
-  seed?: string;
-  memoryConfiguration: string;
-  checkToolchain: boolean;
   reportFile: string;
 }
 
 export interface ContinuousPipelineResult {
+  /** The result returned to callers has already crossed the public-report boundary. */
   report: ContinuousTraceReport;
   status: 'passed' | 'failed' | 'error';
   summary: ContinuousCounts;
-}
-
-interface GeneratedP7Case {
-  asmCase: AsmCase;
-  generated: BuiltinAsmGeneratorResult;
-  mode: P7StressMode;
 }
 
 interface Session {
@@ -89,8 +69,6 @@ interface RetainedCaseArtifact {
   caseDir?: string;
   result: CourseTraceCaseResult;
 }
-
-const generatorName = 'builtin:random-asm';
 
 export interface ContinuousPipelineController {
   result: Promise<ContinuousPipelineResult>;
@@ -126,40 +104,24 @@ async function runContinuousP7PipelineWithSession(
 ): Promise<ContinuousPipelineResult> {
   const projectRoot = path.resolve(options.projectRoot);
   const resource = vscode.Uri.file(projectRoot);
-  if (!options.checkToolchain) {
-    services.output.appendLine('已跳过工具链检查');
-  } else {
-    await ensureP7ToolchainReady(services, resource, options.memoryConfiguration);
+  await ensureP7ToolchainReady(services, resource);
+
+  // The shared resolver is the single source of truth for maximum instruction count,
+  // full P7 exception/interrupt coverage, and anchor/core-probe/timer-probe expansion.
+  const setup = await resolveGeneratorRunSetup();
+  if (!setup
+    || setup.kind !== 'builtin'
+    || setup.profile !== 'P7'
+    || normalizePath(setup.folder.uri.fsPath) !== normalizePath(projectRoot)) {
+    throw new Error('自动测试点准备失败；请检查项目 Profile 和指令集配置');
   }
-
-  const instructionSet = resolveBuiltinInstructionSet('P7', options.instructions);
-  const commandLine = builtinCommandLine(options, instructionSet.mnemonics);
-  const sourceBase: CourseTraceBatchSource = {
-    kind: 'generator',
-    generator: generatorName,
-    commandLine,
-    cwd: path.join(projectRoot, '.co', 'cases')
-  };
-
+  const policy = continuousAutomaticTestPolicy;
   const report: ContinuousTraceReport = {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     running: true,
     stopRequested: false,
     totalIterations: 0,
-    generator: generatorName,
-    commandLine,
-    cwd: sourceBase.cwd ?? projectRoot,
-    options: {
-      intervalMs: options.intervalMs,
-      maxIterations: options.maxIterations,
-      stopOnFailure: options.stopOnFailure
-    },
-    retention: {
-      retainedPassingCases: options.retainedPassingCases,
-      reportRetainedIterations: options.reportRetainedIterations,
-      artifactOutputMode: 'case'
-    },
     iterations: []
   };
 
@@ -168,16 +130,11 @@ async function runContinuousP7PipelineWithSession(
   const totalSummary = createContinuousCounts();
 
   services.output.appendLine('');
-  services.output.appendLine('正在启动无头持续生成 P7 Trace 测试');
-  services.output.appendLine(`项目: ${projectRoot}`);
-  services.output.appendLine(`指令集: ${instructionSet.mnemonics.join(' ')}`);
-  services.output.appendLine(`指令数: ${options.instructionCount}, 间隔: ${options.intervalMs} 毫秒, 最大轮数: ${options.maxIterations || '无限制'}, 失败时停止: ${options.stopOnFailure}`);
-  services.output.appendLine(`报告: ${options.reportFile}`);
-
-  await writeReport(options.reportFile, report);
+  services.output.appendLine('正在启动持续自动测试');
+  await writePublicReport(options.reportFile, report);
 
   let index = 0;
-  while (!session.stopRequested && (options.maxIterations === 0 || index < options.maxIterations)) {
+  while (!session.stopRequested && (policy.maxIterations === 0 || index < policy.maxIterations)) {
     index++;
     report.totalIterations = index;
     const iteration: ContinuousTraceIteration = {
@@ -188,50 +145,60 @@ async function runContinuousP7PipelineWithSession(
       results: []
     };
     report.iterations.unshift(iteration);
-    await writeReport(options.reportFile, report);
+    await writePublicReport(options.reportFile, report);
 
     services.output.appendLine('');
-    services.output.appendLine(`Continuous iteration #${index}`);
+    services.output.appendLine(`持续自动测试第 ${index} 轮`);
     let iterationLevelError = false;
     try {
-      const generatedCases = await generateP7CasesAsync(services, options, sourceBase, new Date());
-      if (!generatedCases.length) {
-        throw new Error('P7 内置生成器未产生任何测试点');
+      const generated = await runGeneratorAndCollectAsms(services, setup, {
+        revealOutput: false,
+        signal: session.abortController.signal
+      });
+      if (!generated?.asms.length) {
+        throw new Error('未能准备新的自动测试点');
       }
-      iteration.source = {
-        ...sourceBase,
-        asmFiles: generatedCases.map((item) => item.asmCase.sourceAsm.fsPath)
-      };
+      iteration.source = { kind: 'generator' };
+      const cases = generatedCases(generated.asms, generated.asmCases);
 
-      for (let i = 0; i < generatedCases.length; i++) {
+      for (let caseIndex = 0; caseIndex < cases.length; caseIndex++) {
         if (session.stopRequested) {
           break;
         }
-        const { asmCase } = generatedCases[i];
-        services.output.appendLine(`[iteration ${index}, case ${i + 1}/${generatedCases.length}] ${asmCase.sourceAsm.fsPath}`);
+        const item = cases[caseIndex];
+        services.output.appendLine(`[第 ${index} 轮，测试点 ${caseIndex + 1}/${cases.length}] 正在验证`);
         let result: CourseTraceCaseResult;
         try {
-          result = await runCourseTraceCase(services, { asm: asmCase.sourceAsm, asmCase }, {
+          result = await runCourseTraceCase(services, item, {
             revealOutput: false,
-            source: iteration.source,
+            source: generated.source,
             artifactOutputMode: 'case',
             isimCompileCache: compileCache,
             signal: session.abortController.signal
-          } as CourseTraceRunOptions);
+          });
         } catch (error) {
           if (session.stopRequested) {
             iteration.status = 'stopped';
             break;
           }
           result = {
-            asm: asmCase.sourceAsm.fsPath,
-            caseId: asmCase.id,
-            caseManifest: asmCase.manifestUri.fsPath,
-            asmSnapshot: asmCase.asm.fsPath,
+            asm: item.asm.fsPath,
+            caseId: item.asmCase?.id,
+            caseManifest: item.asmCase?.manifestUri.fsPath,
+            asmSnapshot: item.asmCase?.asm.fsPath,
             status: 'error',
             stage: 'compare',
             message: error instanceof Error ? error.message : String(error)
           };
+        }
+        try {
+          await recordAsmCaseTestOutcome(result.caseManifest, {
+            status: result.status,
+            stage: neutralCourseTraceStage(result.stage),
+            diagnostic: publicAutomaticDiagnosticMessage(result)
+          });
+        } catch {
+          services.output.appendLine('测试历史结果保存失败');
         }
         if (session.stopRequested && result.cancelled) {
           iteration.status = 'stopped';
@@ -241,165 +208,89 @@ async function runContinuousP7PipelineWithSession(
         addContinuousResult(iteration.summary, result);
         addContinuousResult(totalSummary, result);
         iteration.status = continuousStatusFromCounts(iteration.summary, true, session.stopRequested);
-        await writeReport(options.reportFile, report);
+        await writePublicReport(options.reportFile, report);
       }
 
       iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
     } catch (error) {
       iteration.status = 'error';
-      iteration.message = error instanceof BuiltinAsmGeneratorError || error instanceof Error
-        ? error.message
-        : String(error);
+      iteration.message = error instanceof Error ? error.message : String(error);
       iterationLevelError = true;
-      services.output.appendLine(`iteration #${index} 错误: ${iteration.message}`);
       totalSummary.errors++;
+      services.output.appendLine('本轮自动测试未完成');
     }
 
     iteration.finishedAt = new Date().toISOString();
     if (iteration.status === 'running') {
       iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
     }
-    await applyRetention(report, iteration, retainedArtifacts, options.retainedPassingCases, options.reportRetainedIterations);
-    await writeReport(options.reportFile, report);
+    await applyRetention(
+      report,
+      iteration,
+      retainedArtifacts,
+      policy.retainedPassingCases,
+      policy.reportRetainedIterations,
+      path.join(projectRoot, '.co', 'cases')
+    );
+    await writePublicReport(options.reportFile, report);
 
-    const reachedMaxIterations = options.maxIterations > 0 && index >= options.maxIterations;
+    const reachedMaxIterations = policy.maxIterations > 0 && index >= policy.maxIterations;
     if (
       session.stopRequested
       || iterationLevelError
-      || shouldStopAfterIterationCounts(iteration.summary, options.stopOnFailure)
+      || shouldStopAfterIterationCounts(iteration.summary, policy.stopOnFailure)
       || reachedMaxIterations
     ) {
       break;
     }
-    await waitForInterval(session, options.intervalMs);
+    await waitForInterval(session, policy.intervalMs);
   }
 
   report.running = false;
   report.stopRequested = session.stopRequested;
   report.generatedAt = new Date().toISOString();
-  await writeReport(options.reportFile, report);
+  await writePublicReport(options.reportFile, report);
 
   const status = totalSummary.errors > 0
     ? 'error'
     : totalSummary.failed > 0
       ? 'failed'
       : 'passed';
-  return { report, status, summary: totalSummary };
+  return { report: publicContinuousTraceReport(report), status, summary: totalSummary };
 }
 
 async function ensureP7ToolchainReady(
   services: AppServices,
-  resource: vscode.Uri,
-  memoryConfiguration: string
+  resource: vscode.Uri
 ): Promise<void> {
   services.output.appendLine('');
-  services.output.appendLine('正在检查 P7 持续生成 Trace 测试工具链');
-  const configurationError = courseTraceMemoryConfigurationError('P7', memoryConfiguration);
+  services.output.appendLine('正在检查持续自动测试工具链');
+  const profile = 'P7' as const;
+  const engineMode = automaticTestEngineMode;
+  const memoryConfiguration = getMemoryConfiguration(resource);
+  const configurationError = courseTraceMemoryConfigurationErrorForEngine(
+    profile,
+    engineMode,
+    memoryConfiguration
+  );
   if (configurationError) {
-    throw new Error(configurationError);
+    throw new Error('自动测试工具链配置不兼容；请检查项目工具链设置');
   }
-  const checks = await checkToolchain(services.output, resource);
-  const required = new Set([
-    'Java',
-    'MARS',
-    'MARS coL2',
-    'ISE fuse',
-    `MARS ${memoryConfiguration}`,
-    MARS_P7_CHECK
-  ]);
-  const failed = requiredToolchainFailures(checks, required);
-  if (!failed.length) {
-    return;
+  const checks = await checkToolchain(services.output, resource, {
+    nonInteractive: true,
+    engineMode: automaticTestEngineMode
+  });
+  const required = requiredCourseTraceToolchainChecks(profile, engineMode, memoryConfiguration);
+  if (requiredToolchainFailures(checks, required).length) {
+    throw new Error('自动测试工具链检查失败；请检查项目工具链设置');
   }
-  throw new Error(`P7 持续生成测试工具链检查失败：${failed.map(formatToolchainFailure).join('；')}`);
 }
 
-function builtinCommandLine(options: ContinuousPipelineOptions, mnemonics: readonly string[]): string {
-  const parts = [
-    'builtin-random-asm',
-    '--profile P7',
-    `--count ${options.instructionCount}`,
-    `--stress-mode ${options.stressMode}`
-  ];
-  if (mnemonics.length) {
-    parts.push(`--instructions ${JSON.stringify(mnemonics.join(' '))}`);
+function generatedCases(asms: vscode.Uri[], asmCases?: AsmCase[]): CourseTraceCaseInput[] {
+  if (asmCases?.length) {
+    return asmCases.map((asmCase) => ({ asm: asmCase.sourceAsm, asmCase }));
   }
-  return parts.join(' ');
-}
-
-async function generateP7CasesAsync(
-  services: AppServices,
-  options: ContinuousPipelineOptions,
-  sourceBase: CourseTraceBatchSource,
-  generatedAt: Date
-): Promise<GeneratedP7Case[]> {
-  const modes: P7StressMode[] = options.stressMode === 'hybrid'
-    ? ['anchor', 'probe']
-    : [options.stressMode];
-  const generatedCases: GeneratedP7Case[] = [];
-  services.output.appendLine('');
-  services.output.appendLine('正在运行内置随机 ASM 生成器');
-  services.output.appendLine('Profile: P7');
-  services.output.appendLine(`模式: ${modes.join(', ')}`);
-
-  for (const mode of modes) {
-    const generated = generateBuiltinAsmTestCase({
-      profile: 'P7',
-      instructionText: options.instructions,
-      instructionCount: options.instructionCount,
-      seed: options.seed ? `${options.seed}-${mode}` : undefined,
-      generatedAt,
-      interrupt: options.interrupt && mode !== 'off',
-      p7StressMode: mode,
-      timerInterrupt: mode === 'probe' && options.timerInterrupt,
-      externalInterruptIntensity: options.externalInterruptIntensity,
-      timerIntensity: options.timerIntensity,
-      probeScenarioCount: options.probeScenarioCount,
-      exceptionRate: mode === 'probe' ? 0 : options.exceptionRate,
-      exceptionTypes: options.exceptionTypes
-    });
-    const fileName = builtinAsmFileName(generated.profile, generatedAt, generated.mode ?? mode);
-    const asmCase = await createAsmCaseFromText(fileName, generated.text, {
-      resource: vscode.Uri.file(options.projectRoot),
-      source: {
-        kind: 'builtin',
-        generator: generatorName,
-        commandLine: sourceBase.commandLine,
-        cwd: sourceBase.cwd
-      },
-      createdAt: generatedAt,
-      p7: {
-        interruptSchedule: generated.interruptSchedule,
-        probe: generated.probe
-      }
-    });
-    await updateAsmCaseMetadata(asmCase, {
-      'source.generatedName': fileName,
-      'source.seed': generated.seed,
-      'source.mode': generated.mode ?? mode ?? 'default'
-    });
-    services.output.appendLine(generated.mode === 'probe'
-      ? `Probe 主程序指令数量: ${generated.instructionCount}（含固定终止尾部）`
-      : `有效载荷指令数量: ${generated.instructionCount}（另有 2 条停机自环尾指令）`);
-    services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
-    services.output.appendLine(`种子: ${generated.seed}`);
-    if (generated.interruptSchedule.length) {
-      services.output.appendLine(`外部中断目标 PC: ${generated.interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
-    }
-    if (generated.probe) {
-      services.output.appendLine(`Probe 场景: ${generated.probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
-    }
-    services.output.appendLine(`ASM: ${asmCase.sourceAsm.fsPath}`);
-    generatedCases.push({ asmCase, generated, mode });
-  }
-  return generatedCases;
-}
-
-function builtinAsmFileName(profile: string, generatedAt: Date, mode?: string): string {
-  const timestamp = generatedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-  const suffix = randomBytes(3).toString('hex');
-  const modePart = mode ? `-${mode}` : '';
-  return `builtin-${profile.toLowerCase()}${modePart}-${timestamp}-${suffix}.asm`;
+  return asms.map((asm) => ({ asm }));
 }
 
 async function applyRetention(
@@ -407,13 +298,14 @@ async function applyRetention(
   iteration: ContinuousTraceIteration,
   retainedArtifacts: RetainedCaseArtifact[],
   retainedPassingCases: number,
-  reportRetainedIterations: number
+  reportRetainedIterations: number,
+  casesRoot: string
 ): Promise<void> {
   for (const result of iteration.results) {
     if (result.status !== 'passed') {
       continue;
     }
-    const caseDir = caseDirFromManifest(result.caseManifest);
+    const caseDir = caseDirFromManifest(result.caseManifest, casesRoot);
     if (caseDir) {
       retainedArtifacts.push({ caseDir, result });
     }
@@ -424,7 +316,7 @@ async function applyRetention(
     if (!victim?.caseDir) {
       continue;
     }
-    if (isProtectedCaseDir(report, retainedArtifacts, victim.caseDir)) {
+    if (isProtectedCaseDir(report, retainedArtifacts, victim.caseDir, casesRoot)) {
       continue;
     }
     try {
@@ -441,7 +333,8 @@ async function applyRetention(
 function isProtectedCaseDir(
   report: ContinuousTraceReport,
   retainedArtifacts: RetainedCaseArtifact[],
-  caseDir: string
+  caseDir: string,
+  casesRoot: string
 ): boolean {
   if (retainedArtifacts.some((item) => item.caseDir && normalizePath(item.caseDir) === normalizePath(caseDir))) {
     return true;
@@ -451,7 +344,7 @@ function isProtectedCaseDir(
       if (result.status === 'passed') {
         continue;
       }
-      const protectedDir = caseDirFromManifest(result.caseManifest);
+      const protectedDir = caseDirFromManifest(result.caseManifest, casesRoot);
       if (protectedDir && normalizePath(protectedDir) === normalizePath(caseDir)) {
         return true;
       }
@@ -460,13 +353,18 @@ function isProtectedCaseDir(
   return false;
 }
 
-function caseDirFromManifest(manifest: string | undefined): string | undefined {
+function caseDirFromManifest(manifest: string | undefined, casesRoot: string): string | undefined {
   if (!manifest || path.basename(manifest).toLowerCase() !== 'case.json') {
     return undefined;
   }
-  const dir = path.dirname(manifest);
-  const resolved = path.resolve(dir);
-  return path.basename(path.dirname(resolved)).toLowerCase() === 'cases'
+  const resolved = path.resolve(path.dirname(manifest));
+  const resolvedRoot = path.resolve(casesRoot);
+  const relative = path.relative(resolvedRoot, resolved);
+  return Boolean(relative)
+    && relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
+    && normalizePath(path.dirname(resolved)) === normalizePath(resolvedRoot)
     && path.basename(resolved).length > 0
     ? resolved
     : undefined;
@@ -491,9 +389,10 @@ function normalizePath(value: string): string {
 }
 
 async function waitForInterval(session: Session, ms: number): Promise<void> {
-  if (session.stopRequested || ms <= 0) {
+  if (session.stopRequested) {
     return;
   }
+  // Even a zero-delay strongest policy yields once so SIGINT and I/O are not starved.
   await new Promise<void>((resolve) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -511,12 +410,17 @@ async function waitForInterval(session: Session, ms: number): Promise<void> {
       resolve();
     };
     session.wakeIntervalWait = finish;
-    timer = setTimeout(finish, ms);
+    if (session.stopRequested) {
+      finish();
+      return;
+    }
+    timer = setTimeout(finish, Math.max(0, ms));
   });
 }
 
-async function writeReport(reportFile: string, report: ContinuousTraceReport): Promise<void> {
+async function writePublicReport(reportFile: string, report: ContinuousTraceReport): Promise<void> {
   await fs.promises.mkdir(path.dirname(reportFile), { recursive: true });
   report.generatedAt = new Date().toISOString();
-  await fs.promises.writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  const publicReport = publicContinuousTraceReport(report);
+  await fs.promises.writeFile(reportFile, `${JSON.stringify(publicReport, null, 2)}\n`, 'utf8');
 }

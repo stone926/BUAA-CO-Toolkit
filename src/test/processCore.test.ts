@@ -1,7 +1,98 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('vscode', () => ({
+  window: { showInformationMessage: vi.fn() },
+  workspace: { getConfiguration: vi.fn() }
+}));
+
+vi.mock('../config', () => ({
+  getRunTimeout: vi.fn(() => 5000),
+  shouldRevealOutput: vi.fn(() => false),
+  showCommandBeforeRun: vi.fn(() => true)
+}));
+
 import { runProcessCore } from '../processCore';
+import { runTool } from '../process';
+import * as vscode from 'vscode';
+import { showCommandBeforeRun } from '../config';
 
 describe('process core', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(showCommandBeforeRun).mockReturnValue(true);
+  });
+
+  it('keeps non-interactive tool commands and raw streams out of the output channel', async () => {
+    const output = { append: vi.fn(), appendLine: vi.fn() };
+    const result = await runTool(process.execPath, [
+      '-e',
+      "process.stdout.write('out'); process.stderr.write('err');"
+    ], {
+      cwd: process.cwd(),
+      output: output as never,
+      timeoutMs: 5000,
+      nonInteractive: true
+    });
+
+    expect(result).toMatchObject({ ok: true, stdout: 'out', stderr: 'err' });
+    expect(output.append).not.toHaveBeenCalled();
+    expect(output.appendLine).not.toHaveBeenCalled();
+    expect(showCommandBeforeRun).not.toHaveBeenCalled();
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it('preserves command confirmation and process chatter for an interactive manual run', async () => {
+    vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce('运行' as never);
+    const output = { append: vi.fn(), appendLine: vi.fn() };
+    const result = await runTool(process.execPath, [
+      '-e',
+      "process.stdout.write('manual-out'); process.stderr.write('manual-err');"
+    ], {
+      cwd: process.cwd(),
+      output: output as never,
+      timeoutMs: 5000
+    });
+
+    expect(result.ok).toBe(true);
+    expect(showCommandBeforeRun).toHaveBeenCalledOnce();
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledOnce();
+    expect(output.appendLine).toHaveBeenCalledWith(expect.stringMatching(/^\$ /));
+    expect(output.appendLine).toHaveBeenCalledWith(`cwd: ${process.cwd()}`);
+    expect(output.append).toHaveBeenCalledWith('manual-out');
+    expect(output.append).toHaveBeenCalledWith('manual-err');
+  });
+
+  it('keeps non-interactive spawn errors out of the output channel', async () => {
+    const output = { append: vi.fn(), appendLine: vi.fn() };
+    const result = await runTool('__co_missing_external_tool__', [], {
+      cwd: process.cwd(),
+      output: output as never,
+      timeoutMs: 5000,
+      nonInteractive: true
+    });
+
+    expect(result.ok).toBe(false);
+    expect(output.append).not.toHaveBeenCalled();
+    expect(output.appendLine).not.toHaveBeenCalled();
+  });
+
+  it('keeps non-interactive timeout details out of the output channel', async () => {
+    const output = { append: vi.fn(), appendLine: vi.fn() };
+    const result = await runTool(process.execPath, [
+      '-e',
+      'setTimeout(() => undefined, 5000);'
+    ], {
+      cwd: process.cwd(),
+      output: output as never,
+      timeoutMs: 20,
+      nonInteractive: true
+    });
+
+    expect(result).toMatchObject({ ok: false, timedOut: true });
+    expect(output.append).not.toHaveBeenCalled();
+    expect(output.appendLine).not.toHaveBeenCalled();
+  });
+
   it('captures stdout and stderr for successful commands', async () => {
     const result = await runProcessCore(process.execPath, [
       '-e',

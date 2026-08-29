@@ -26,7 +26,8 @@ export function declDetail(decl: VerilogDecl): string {
 }
 
 interface TestbenchOptions {
-  finishDelay?: string;
+  /** `false` leaves termination to the simulator command (used by automatic tests). */
+  finishDelay?: string | false;
   profile?: ProjectProfile;
   interruptSchedule?: number[];
   p7Probe?: P7ProbeTestbenchMetadata;
@@ -36,6 +37,7 @@ interface P7ProbeTestbenchMetadata {
   scenarios: Array<{
     id: number;
     kind: string;
+    triggerPc?: number;
     waitPc?: number;
     armAddress?: number;
     armValue?: number;
@@ -45,7 +47,9 @@ interface P7ProbeTestbenchMetadata {
 }
 
 export function buildTestbench(module: VerilogModule, tbName: string, options: TestbenchOptions = {}): string {
-  const finishDelay = options.finishDelay?.trim() || '200000';
+  const finishDelay = options.finishDelay === false
+    ? undefined
+    : options.finishDelay?.trim() || '200000';
   const hasExternalInstructionMemory = hasPort(module, 'i_inst_addr') && hasPort(module, 'i_inst_rdata');
   const hasExternalDataMemory = hasPort(module, 'm_data_addr') && hasPort(module, 'm_data_rdata') && hasPort(module, 'm_data_wdata') && hasPort(module, 'm_data_byteen');
   const hasCourseExternalMemory = hasExternalInstructionMemory || hasExternalDataMemory;
@@ -96,7 +100,7 @@ export function buildTestbench(module: VerilogModule, tbName: string, options: T
 interface BasicTestbenchViewModel {
   connections: string[];
   declarations: string[];
-  finishDelay: string;
+  finishDelay?: string;
   hasClk: boolean;
   hasReset: boolean;
   module: VerilogModule;
@@ -104,15 +108,20 @@ interface BasicTestbenchViewModel {
 }
 
 function renderBasicTestbench(view: BasicTestbenchViewModel): string {
-  const finishLines = ['    initial begin'];
+  const controlLines: string[] = [];
   if (view.hasReset) {
-    finishLines.push(
+    controlLines.push(
       "        reset = 1'b1;",
       '        #20;',
       "        reset = 1'b0;"
     );
   }
-  finishLines.push(`        #${view.finishDelay};`, '        $finish;', '    end');
+  if (view.finishDelay) {
+    controlLines.push(`        #${view.finishDelay};`, '        $finish;');
+  }
+  const finishLines = controlLines.length
+    ? ['    initial begin', ...controlLines, '    end']
+    : [];
 
   return renderResourceTemplate('verilog/basic_testbench.v', {
     tbName: view.tbName,
@@ -227,7 +236,7 @@ function p7InterruptBlock(interruptSchedule?: number[]): string {
 
 function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
   const externalScenarios = probe.scenarios.filter((scenario) =>
-    scenario.kind === 'external' && Number.isFinite(scenario.waitPc));
+    scenario.kind === 'external' && Number.isFinite(scenario.triggerPc ?? scenario.waitPc));
   const externalScenarioViews = externalScenarios.map((scenario, index) => p7ExternalScenarioView(scenario, index));
   const hasArmedExternalScenario = externalScenarioViews.some((scenario) => !scenario.legacy);
   const hasLegacyExternalScenario = externalScenarioViews.some((scenario) => scenario.legacy);
@@ -290,7 +299,7 @@ function p7ExternalScenarioView(
   return {
     index,
     scenarioId: scenario.id,
-    targetPcHex: hex32NoPrefix(scenario.waitPc ?? 0),
+    targetPcHex: hex32NoPrefix(scenario.triggerPc ?? scenario.waitPc ?? 0),
     armAddressHex: hex32NoPrefix(armAddress),
     armValueHex: hex32NoPrefix(armValue),
     delayCycles: Number.isFinite(scenario.externalDelayCycles) ? Math.max(0, Math.floor(scenario.externalDelayCycles ?? 0)) : 0,

@@ -30,7 +30,8 @@ const retryVariants = new Set([
   'retry-store',
   'retry-load-dependency',
   'retry-jal',
-  'retry-delay-slot-store'
+  'retry-delay-slot-store-taken',
+  'retry-delay-slot-store-not-taken'
 ]);
 
 export function isExternalRetryVariant(variant: string | undefined): boolean {
@@ -51,8 +52,10 @@ export function emitExternalRetryScenario(
       return emitRetryLoadDependency(writer, id, variant, rng, padding);
     case 'retry-jal':
       return emitRetryJal(writer, id, variant, rng, padding);
-    case 'retry-delay-slot-store':
-      return emitRetryDelaySlotStore(writer, id, variant, rng, padding);
+    case 'retry-delay-slot-store-taken':
+      return emitRetryDelaySlotStore(writer, id, variant, true, rng, padding);
+    case 'retry-delay-slot-store-not-taken':
+      return emitRetryDelaySlotStore(writer, id, variant, false, rng, padding);
     default:
       throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported external retry probe variant ${variant}.`);
   }
@@ -135,6 +138,7 @@ function emitRetryDelaySlotStore(
   writer: ProgramWriter,
   id: number,
   variant: string,
+  taken: boolean,
   rng: Random,
   padding: ProbePaddingProfile
 ): P7ProbeScenario {
@@ -143,7 +147,7 @@ function emitRetryDelaySlotStore(
   const donePc = writer.pc() + 8 * 4;
   emitRetryPreamble(writer, id, donePc);
   const branchPc = writer.pc();
-  writer.emit(`beq $0, $0, _co_probe_s${id}_done`);
+  writer.emit(`${taken ? 'beq' : 'bne'} $0, $0, _co_probe_s${id}_done`);
   const victimPc = writer.pc();
   writer.emit(`sw $8, 0x${retryDelayStoreAddress.toString(16)}($0)`);
   return finishRetryScenario(writer, id, variant, victimPc, donePc, true, [branchPc], rng, padding, [{

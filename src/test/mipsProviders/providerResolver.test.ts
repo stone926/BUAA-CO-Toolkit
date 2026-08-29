@@ -363,7 +363,7 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
     expect(mocks.runMarsFile).not.toHaveBeenCalled();
   });
 
-  it('forwards cancellation and validated image halt metadata to legacy execution', async () => {
+  it('forwards automatic quiet context, cancellation and validated halt metadata to both legacy MARS stages', async () => {
     const owner = services();
     const provider = new LegacyMarsProvider(owner);
     setProviderRegistry({ assemblerProviders: [provider], executionProviders: [provider] });
@@ -385,7 +385,10 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
       courseTrace: true,
       maxSteps: 256,
       trace: { kind: 'architectural-writes', courseCorrect: true }
-    }), { signal: controller.signal });
+    }), {
+      signal: controller.signal,
+      nonInteractive: true
+    });
 
     expect(result.ok).toBe(true);
     expect(result.result?.engineArtifact?.sha256).toBe('a'.repeat(64));
@@ -396,9 +399,12 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
       expect.objectContaining({
         haltPc: 0x3010,
         maxSteps: 256,
-        signal: controller.signal
+        signal: controller.signal,
+        nonInteractive: true
       })
     );
+    expect(mocks.runMarsFile).toHaveBeenCalledTimes(2);
+    expect(mocks.runMarsFile.mock.calls.every((call) => call[3]?.nonInteractive === true)).toBe(true);
   });
 
   it('preserves an aborted process reason through the legacy provider status', async () => {
@@ -589,6 +595,7 @@ describe('LegacyMarsProvider capability and dispatch contract', () => {
         signal: controller.signal
       })
     );
+    expect(mocks.runMarsFile.mock.calls[0][3]?.nonInteractive).toBeUndefined();
   });
 
   it('assembles in a private source closure and returns the authoritative ProgramImage binding', async () => {

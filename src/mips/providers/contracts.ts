@@ -46,6 +46,11 @@ export type ProviderPreflightResult = ProviderPreflight | Promise<ProviderPrefli
 /** Per-run context shared by both provider kinds. */
 export interface ProviderRunContext {
   signal?: AbortSignal;
+  /**
+   * Internal automation lane. Providers must preserve engine semantics while suppressing
+   * per-process confirmation and private command/cwd/raw-stream output.
+   */
+  nonInteractive?: boolean;
   onProgress?: (message: string) => void;
   /** Stream canonical commit events when the selected provider exposes them. */
   onCommitEvent?: (event: CommitEvent) => void;

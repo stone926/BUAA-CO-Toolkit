@@ -35,7 +35,7 @@
       },
       "co.project.simTime": {
         "type": "string",
-        "description": "ISim TCL 运行时长，格式为 `run <值>; exit`。默认为课程的 200us"
+        "description": "手动运行 ISim/导出波形时的 TCL 运行时长，格式为 `run <值>; exit`。自动测试会按测试规模内部计算充足预算，不受此项限制"
       },
       "co.project.simBackend": {
         "type": "string",
@@ -55,15 +55,15 @@
       },
       "co.toolchain.python": {
         "type": "string",
-        "description": "本机 Python 命令。留空时自动检测（macOS/Linux 优先 python3，Windows 优先 python/py），用于流水线冲突分析和外部 .py 生成器"
+        "description": "本机 Python 命令。留空时自动检测（macOS/Linux 优先 python3，Windows 优先 python/py），用于流水线冲突分析"
       },
       "co.toolchain.mars": {
         "type": "string",
-        "description": "Mars jar 包路径。P2 和 co.mips.engine=mars 使用 configured legacy provider；verify-both/固定验证要求此路径精确指向编译内置信任的 v0.6.3-course1 legacy-course-executor。legacy 课程 Trace 要求 coL1、coL2 和 FixedCompactLargeText/CompactLargeText"
+        "description": "Mars jar 包路径。P2 与手动/历史复现显式选择 mars 时作为 legacy provider；verify-both/固定验证要求受信任的 v0.6.3-course1 版本。P3-P7 自动测试不读取此项"
       },
       "co.toolchain.marsP7": {
         "type": "string",
-        "description": "P7 专用 Mars jar 路径。co.mips.engine=mars 时作为用户配置的 legacy 回滚（需 coL1/coL2/efc/p7irq/cl，不要求固定发布身份）；verify-both/固定验证时同一路径必须精确指向编译内置信任的 v0.6.3-course1 legacy-course-executor。内存配置使用 CompactLargeText（课程异常入口固定 0x4180）；未配置时回退到 co.toolchain.mars"
+        "description": "P7 手动测试/历史复现专用 Mars jar 路径，仅在显式选择 mars 或 verify-both 引擎时使用。自动测试不读取此项；未配置时回退到 co.toolchain.mars"
       },
       "co.mips.engine": {
         "type": "string",
@@ -79,7 +79,7 @@
           "将课程汇编器和 Oracle 一次性回滚到已配置的 MARS",
           "以 builtin 为主路径，并用固定 v0.6.3-course1 reference 独立汇编/执行、保存 full-stack bundle"
         ],
-        "description": "P3-P7 课程汇编与架构 Oracle 使用的 MIPS 引擎。auto 按 Profile 和请求能力选择；显式选择在能力检查或运行失败时不会隐式回退"
+        "description": "手动测试与历史复现使用的 P3-P7 MIPS 引擎。自动测试固定使用内置引擎并忽略此项；手动显式选择在能力检查或运行失败时不会隐式回退"
       },
       "co.mips.delayedBranching": {
         "type": "string",
@@ -113,147 +113,27 @@
     "properties": {
       "co.run.showCommandBeforeRun": {
         "type": "boolean",
-        "description": "运行前显示完整的外部命令"
+        "description": "手动运行外部工具前显示完整命令；自动测试始终非交互并忽略此项"
       },
       "co.run.revealOutput": {
         "type": "boolean",
-        "description": "运行外部工具（MARS/ISim/对拍等）时自动弹出「输出」面板。默认关闭，仅静默写入输出，可手动从输出面板查看"
+        "description": "手动运行外部工具时自动弹出「输出」面板。自动测试始终静默执行并忽略此项"
       },
       "co.run.timeoutMs": {
         "type": "number",
         "minimum": 1,
-        "description": "外部工具运行超时时间（毫秒）"
+        "description": "手动外部工具运行超时时间（毫秒）；自动测试使用内部预算并忽略此项"
       },
       "co.mips.extraArgs": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "description": "普通 MARS 命令追加的参数列表；每个参数或参数值单独一项。课程自动 Trace 将忽略此配置，并由插件固定 mc/db/efc/p7irq/cl/coL1/coL2/ae/se/max-step 等已发布版本支持的参数，避免用户参数改变测评语义；不会使用 ig 掩盖教程禁止的算术溢出"
+        "description": "普通 MARS 命令追加的参数列表；每个参数或参数值单独一项。自动测试忽略此配置，以免用户参数改变测评语义"
       },
-      "co.test.generatorArgs": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "追加到外部 ASM 测试生成器命令行的参数列表。每个参数或参数值单独一项；可追加生成器自身支持的参数，如 --seed 1234、--count 100、--profile P6、输出路径参数。内置生成器请使用 co.test.builtinGenerator.* 和 co.test.p7.*"
-      },
-      "co.test.generatedAsmLimit": {
-        "type": "number",
-        "minimum": 1,
-        "description": "批量测试时，插件获取的新建或修改 ASM 文件的最大数量"
-      },
-      "co.test.builtinGenerator.enabled": {
-        "type": "boolean",
-        "description": "默认使用内置 ASM 生成器。打开外部生成器文件或禁用此项可使用外部生成器"
-      },
-      "co.test.builtinGenerator.instructions": {
+      "co.test.instructions": {
         "type": "string",
-        "description": "自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。"
-      },
-      "co.test.builtinGenerator.instructionCount": {
-        "type": "number",
-        "minimum": 1,
-        "maximum": 4000,
-        "description": "内置 ASM 生成器的主程序有效载荷指令数，不含末尾额外的 beq 停机自环和 nop 延迟槽。P3-P6 使用此设置；P7 下使用 co.test.builtinGenerator.p7InstructionCount"
-      },
-      "co.test.builtinGenerator.p7InstructionCount": {
-        "type": "number",
-        "minimum": 1,
-        "maximum": 1118,
-        "description": "P7 内置 ASM 生成器的主程序有效载荷指令数。停机自环 beq 及其 nop 延迟槽额外占 2 条；1118 + 2 条恰好到 0x417c，不覆盖 0x4180 异常入口"
-      },
-      "co.test.continuousIntervalMs": {
-        "type": "number",
-        "minimum": 1,
-        "description": "两轮持续测试之间的时间间隔"
-      },
-      "co.test.continuousMaxIterations": {
-        "type": "number",
-        "minimum": 0,
-        "description": "持续测试轮数。0 表示运行到手动停止或失败策略触发"
-      },
-      "co.test.continuousStopOnFailure": {
-        "type": "boolean",
-        "description": "当持续测试中测试点 WA 或非法样例时，停止持续测试"
-      },
-      "co.test.continuousRetainedPassingCases": {
-        "type": "number",
-        "minimum": 0,
-        "description": "持续测试自动保留的最近通过 ASM case 数量。旧的通过 case 会被清理；失败和异常 case 始终保留。设为 0 表示不保留通过 case 产物"
-      },
-      "co.test.continuousReportRetainedIterations": {
-        "type": "number",
-        "minimum": 0,
-        "description": "持续测试 JSON 报告保留的最近轮数。旧的通过轮会被压缩；失败和异常轮始终保留。设为 0 表示不压缩报告历史"
-      },
-      "co.test.logisim.mainCircuit": {
-        "type": "string",
-        "description": "P3 Logisim 自动 Trace 对拍使用的电路顶层名称。该 circuit 需要暴露教程 Trace 输出 Instr、pc、RegWrite、RegAddr、RegData、MemWrite、MemAddr、MemData；可用标准 label 识别，未完整标注时按外观端口顺序推断"
-      },
-      "co.test.logisim.traceColumns": {
-        "type": "object",
-        "additionalProperties": {
-          "type": "number",
-          "minimum": 0
-        },
-        "description": "P3 Logisim Trace stdout 显式列映射（零基，halt pin 不计入）。可配置 instr、pc、regwrite、regaddr、regdata、memwrite、memaddr、memdata，用于非标准 label/外观顺序的电路"
-      },
-      "co.test.p7.interrupt": {
-        "type": "boolean",
-        "description": "P7 自动对拍是否注入外部中断（在生成器选定的安全 PC 处，testbench 与 MARS 同步触发）。若你的流水线时序导致中断点假阳性，可关闭此项退化为纯异常/正常数据通路对拍（完全确定性）"
-      },
-      "co.test.p7.stressMode": {
-        "type": "string",
-        "enum": [
-          "anchor",
-          "probe",
-          "hybrid",
-          "off"
-        ],
-        "description": "P7 中断/Timer 压测模式。anchor 保持原精确对拍；probe 使用黑盒 probe 性质检查；hybrid 同时生成 anchor 与 probe；off 关闭中断/Timer 压测"
-      },
-      "co.test.p7.timerInterrupt": {
-        "type": "boolean",
-        "description": "P7 probe 模式是否生成 Timer0/Timer1 中断场景"
-      },
-      "co.test.p7.externalInterruptIntensity": {
-        "type": "number",
-        "minimum": 0,
-        "maximum": 1,
-        "description": "P7 probe 模式生成外部中断场景的强度（0~1）"
-      },
-      "co.test.p7.timerIntensity": {
-        "type": "number",
-        "minimum": 0,
-        "maximum": 1,
-        "description": "P7 probe 模式生成 Timer 中断场景的强度（0~1）"
-      },
-      "co.test.p7.probeScenarioCount": {
-        "type": "number",
-        "minimum": 1,
-        "maximum": 64,
-        "description": "P7 probe 模式每个 ASM 生成的场景数量，最多 64 条以保持 probe log 在 DM 范围内"
-      },
-      "co.test.p7.exceptionRate": {
-        "type": "number",
-        "minimum": 0,
-        "maximum": 1,
-        "description": "P7 生成器主动制造内部异常（AdEL、AdES、Syscall、RI、Ov）的比例（0~1）。0 表示不主动制造内部异常"
-      },
-      "co.test.p7.exceptionTypes": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "AdEL",
-            "AdES",
-            "Syscall",
-            "RI",
-            "Ov"
-          ]
-        },
-        "description": "P7 内置 ASM 生成器主动覆盖的异常类型。Syscall 关闭时也不会在用户态随机生成 syscall；RI 需要支持 cl 额外指令加载的 P7 修改版 MARS"
+        "description": "自动测试重点覆盖的真实指令。用逗号或空白分隔；留空时覆盖当前 Profile 的完整课程指令集。测试规模、中断、异常、外设和持续测试策略由插件自动使用最强安全配置。"
       }
     }
   },

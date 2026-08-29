@@ -22,6 +22,9 @@ export interface P7HardwareConfig {
       firstEpc: number;
     };
     probeExternalArmAddress: number;
+    probeEretPoisonAddress: number;
+    probePostEretStatusAddress: number;
+    probeMaskedInterruptMarkerAddress: number;
     exceptionFlushShadowSlots: number;
     interruptAnchorInstructionCount: number;
   };
@@ -102,6 +105,9 @@ export const p7ProbeStateFirstStatus = p7Hardware.memoryLayout.probeState.firstS
 export const p7ProbeStateFirstCause = p7Hardware.memoryLayout.probeState.firstCause;
 export const p7ProbeStateFirstEpc = p7Hardware.memoryLayout.probeState.firstEpc;
 export const p7ProbeExternalArmAddress = p7Hardware.memoryLayout.probeExternalArmAddress;
+export const p7ProbeEretPoisonAddress = p7Hardware.memoryLayout.probeEretPoisonAddress;
+export const p7ProbePostEretStatusAddress = p7Hardware.memoryLayout.probePostEretStatusAddress;
+export const p7ProbeMaskedInterruptMarkerAddress = p7Hardware.memoryLayout.probeMaskedInterruptMarkerAddress;
 
 export const p7StatusEnableAllCourseInterrupts = p7Hardware.cp0.status.enableAllCourseInterrupts;
 export const p7ExternalInterruptAckAddress = p7Hardware.interrupt.externalAckAddress;
@@ -177,6 +183,9 @@ function validateP7Hardware(value: unknown): asserts value is P7HardwareConfig {
   integerAt(memoryLayout, 'dataMemoryWords');
   integerAt(memoryLayout, 'mainTerminatorInstructionCount');
   integerAt(memoryLayout, 'probeExternalArmAddress');
+  integerAt(memoryLayout, 'probeEretPoisonAddress');
+  integerAt(memoryLayout, 'probePostEretStatusAddress');
+  integerAt(memoryLayout, 'probeMaskedInterruptMarkerAddress');
   integerAt(memoryLayout, 'exceptionFlushShadowSlots');
   integerAt(memoryLayout, 'interruptAnchorInstructionCount');
   integerAt(probeState, 'scenarioId');

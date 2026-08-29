@@ -5,11 +5,13 @@ import { CO_OUT_DIR } from '../constants';
 import { ensureDirectory, workspaceFolderForOrFirst, writeTextFile } from '../fsUtil';
 import { revealOutputChannel } from '../process';
 import { AppServices } from '../types';
-import { CourseTraceCaseInput } from '../courseTestCases';
+import { recordAsmCaseTestOutcome } from '../asmCaseStore';
+import { caseResultFields, CourseTraceCaseInput } from '../courseTestCases';
 import {
   batchSummary,
   createCourseTraceBatchReport,
   neutralCourseTraceCaseResult,
+  publicAutomaticDiagnosticMessage,
   showBatchTraceReport
 } from '../courseTestReport';
 import type {
@@ -20,6 +22,7 @@ import {
   CourseTraceRunOptions,
   runCourseTraceCase
 } from './traceRunner';
+import { tryAcquireCourseTestSession } from './courseTestSession';
 
 export type ResolveCourseTraceRunOptions = (
   services: AppServices,
@@ -54,29 +57,40 @@ export async function runCourseTraceBatch(
   resolveRunOptions: ResolveCourseTraceRunOptions,
   options: { signal?: AbortSignal } = {}
 ): Promise<void> {
-  if (activeCourseTraceBatch) {
-    vscode.window.showWarningMessage('已有一个批量课程 Trace 测试会话正在运行');
+  const automatic = source.kind === 'generator';
+  const sessionLease = tryAcquireCourseTestSession('batch');
+  if (!sessionLease || activeCourseTraceBatch) {
+    sessionLease?.release();
+    vscode.window.showWarningMessage(automatic
+      ? '已有一个自动测试或持续测试正在运行'
+      : '已有一个课程测试正在运行');
     return;
   }
-  revealOutputChannel(services.output);
-  services.output.appendLine('');
-  const sourceLabel = source.kind === 'generator' ? '生成的课程 Trace 测试' : '批量课程 Trace 测试';
-  services.output.appendLine(`${sourceLabel}: ${cases.length} 个用例`);
-
   const controller = new AbortController();
   const signal = controller.signal;
   const propagateExternalAbort = (): void => controller.abort();
-  if (options.signal) {
-    options.signal.addEventListener('abort', propagateExternalAbort, { once: true });
-    if (options.signal.aborted) controller.abort();
-  }
   activeCourseTraceBatch = { controller, signal, startedAt: Date.now() };
   const previousStatus = services.statusBar.text;
-  services.statusBar.text = 'CO: Batch Trace';
   try {
+    if (options.signal) {
+      options.signal.addEventListener('abort', propagateExternalAbort, { once: true });
+      if (options.signal.aborted) controller.abort();
+    }
+    if (!automatic) {
+      revealOutputChannel(services.output);
+    }
+    services.output.appendLine('');
+    const sourceLabel = automatic ? '自动测试' : '批量课程测试';
+    services.output.appendLine(`${sourceLabel}: ${cases.length} 个用例`);
+    services.statusBar.text = automatic ? 'CO: 自动测试' : 'CO: 批量测试';
+
     // One logical batch session owns one AbortController. Every assembler/oracle/
     // ISim/Logisim process in this loop receives the same signal.
-    const runOptions = await resolveRunOptions(services, cases[0].asm, { source, signal });
+    const runOptions = await resolveRunOptions(services, cases[0].asm, {
+      source,
+      signal,
+      ...(automatic ? { revealOutput: false } : {})
+    });
     if (!runOptions) {
       return;
     }
@@ -85,28 +99,55 @@ export async function runCourseTraceBatch(
     const results: CourseTraceCaseResult[] = [];
     for (let i = 0; i < cases.length; i++) {
       if (signal.aborted) {
-        services.output.appendLine('批量课程 Trace 测试已停止');
+        services.output.appendLine(automatic ? '自动测试已停止' : '批量课程测试已停止');
         break;
       }
       const item = cases[i];
       const asm = item.asm;
       services.output.appendLine('');
-      services.output.appendLine(`[${i + 1}/${cases.length}] ${asm.fsPath}`);
-      if (item.stdin) {
+      services.output.appendLine(automatic
+        ? `[${i + 1}/${cases.length}] 正在验证测试点`
+        : `[${i + 1}/${cases.length}] ${asm.fsPath}`);
+      if (item.stdin && !automatic) {
         services.output.appendLine(`stdin: ${item.stdin.fsPath}`);
       }
       try {
-        results.push(neutralCourseTraceCaseResult(await runCourseTraceCase(services, item, runOptions)));
+        const result = neutralCourseTraceCaseResult(await runCourseTraceCase(services, item, runOptions));
+        results.push(result);
+        if (automatic) {
+          try {
+            await recordAsmCaseTestOutcome(result.caseManifest, {
+              status: result.status,
+              stage: result.stage,
+              diagnostic: publicAutomaticDiagnosticMessage(result)
+            });
+          } catch {
+            services.output.appendLine('测试历史结果保存失败');
+          }
+        }
       } catch (error) {
         if (signal.aborted) break;
         const message = error instanceof Error ? error.message : String(error);
-        results.push({
+        const result: CourseTraceCaseResult = {
           asm: asm.fsPath,
           stdin: item.stdin?.fsPath,
+          ...(item.asmCase ? caseResultFields(item.asmCase) : {}),
           status: 'error',
           stage: 'compare',
           message
-        });
+        };
+        results.push(result);
+        if (automatic) {
+          try {
+            await recordAsmCaseTestOutcome(result.caseManifest, {
+              status: result.status,
+              stage: 'compare',
+              diagnostic: publicAutomaticDiagnosticMessage(result)
+            });
+          } catch {
+            services.output.appendLine('测试历史结果保存失败');
+          }
+        }
       }
     }
 
@@ -117,9 +158,10 @@ export async function runCourseTraceBatch(
     const passed = summary.passed;
     const failed = summary.failed;
     const errors = summary.errors;
+    const completionLabel = automatic ? '自动测试' : '批量测试';
     const message = signal.aborted
-      ? `批量 Trace 测试已停止: ${results.length} 个用例已执行，${passed} 通过, ${failed} 失败, ${errors} 错误`
-      : `批量 Trace 测试完成: ${passed} 通过, ${failed} 失败, ${errors} 错误`;
+      ? `${completionLabel}已停止: ${results.length} 个用例已执行，${passed} 通过, ${failed} 失败, ${errors} 错误`
+      : `${completionLabel}完成: ${passed} 通过, ${failed} 失败, ${errors} 错误`;
     if (failed || errors) {
       vscode.window.showWarningMessage(message);
     } else {
@@ -128,6 +170,7 @@ export async function runCourseTraceBatch(
   } finally {
     options.signal?.removeEventListener('abort', propagateExternalAbort);
     activeCourseTraceBatch = undefined;
+    sessionLease.release();
     services.statusBar.text = previousStatus;
   }
 }

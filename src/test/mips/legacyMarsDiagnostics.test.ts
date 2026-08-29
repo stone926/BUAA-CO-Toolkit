@@ -14,7 +14,7 @@ describe('legacy MARS compatibility diagnostics', () => {
       .toMatch(/不支持 efc \/ p7irq/);
     expect(legacyMarsCompatibilityDiagnostic({
       ...base, p7RiInstruction: true, stdout: 'Invalid Command Argument: cl'
-    })).toMatch(/不支持 cl/);
+    })).toMatch(/不支持旧用例所需的 cl/);
     expect(legacyMarsCompatibilityDiagnostic({
       ...base, stdout: 'Invalid memory configuration: CompactLargeText'
     })).toMatch(/不支持 CompactLargeText/);

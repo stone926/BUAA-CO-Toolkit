@@ -151,7 +151,7 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
   }
 
   async assemble(request: AssembleRequest, context?: ProviderRunContext): Promise<AssembleResult> {
-    const snapshot = snapshotAssembleRequest(request, context?.signal);
+    const snapshot = snapshotAssembleRequest(request, context);
     const mode = snapshot.target.kind === 'kernelText' ? 'dumpKernel' : 'dumpText';
     const launch = await this.launchFor(request);
     if (!launch.ok) return assemblePreflightFailure(this.descriptor, launch.preflight);
@@ -187,6 +187,7 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
         p7RiInstruction: snapshot.p7RiInstruction,
         dumpOutputFile: outputFile,
         signal: snapshot.signal,
+        nonInteractive: snapshot.nonInteractive,
         resolvedLaunch: stagedLaunch
       });
       const output = await runMarsFile(this.services, stagedSourceUri, mode, marsOptions);
@@ -238,7 +239,7 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
     // Capture every value the invocation can observe before launchFor reaches its first await.
     // launchFor still rejects mutations around preflight; this private frozen copy additionally
     // prevents a mutation in the promise-continuation gap from changing the actual invocation.
-    const snapshot = snapshotExecuteRequest(request, context?.signal);
+    const snapshot = snapshotExecuteRequest(request, context);
     // The legacy engine re-assembles from the provider-owned source binding. Orchestration still
     // supplies the authoritative ProgramImage and never handles a MARS dump-shaped request.
     const launch = await this.launchFor(request);
@@ -280,6 +281,7 @@ export class LegacyMarsProvider implements MipsAssemblerProvider, MipsExecutionP
         maxSteps: snapshot.maxSteps,
         haltPc: snapshot.haltPc,
         signal: snapshot.signal,
+        nonInteractive: snapshot.nonInteractive,
         resolvedLaunch: stagedRunLaunch
       });
       output = await runMarsFile(this.services, staged.sourceUri, 'run', marsOptions);
@@ -356,11 +358,12 @@ interface LegacyAssembleRequestSnapshot {
   p7RiInstruction?: boolean;
   revealOutput?: boolean;
   signal?: AbortSignal;
+  nonInteractive?: boolean;
 }
 
 function snapshotAssembleRequest(
   request: AssembleRequest,
-  signal?: AbortSignal
+  context?: ProviderRunContext
 ): Readonly<LegacyAssembleRequestSnapshot> {
   return Object.freeze({
     requestFingerprint: legacyRequestFingerprint(request),
@@ -375,7 +378,8 @@ function snapshotAssembleRequest(
     courseTrace: request.courseTrace,
     p7RiInstruction: request.p7RiInstruction,
     revealOutput: request.revealOutput,
-    signal
+    signal: context?.signal,
+    nonInteractive: context?.nonInteractive
   });
 }
 
@@ -395,9 +399,13 @@ interface LegacyExecuteRequestSnapshot {
   courseTrace?: boolean;
   revealOutput?: boolean;
   signal?: AbortSignal;
+  nonInteractive?: boolean;
 }
 
-function snapshotExecuteRequest(request: ExecuteRequest, signal?: AbortSignal): Readonly<LegacyExecuteRequestSnapshot> {
+function snapshotExecuteRequest(
+  request: ExecuteRequest,
+  context?: ProviderRunContext
+): Readonly<LegacyExecuteRequestSnapshot> {
   const sourceUri = request.executionBinding?.sourceUri;
   if (!sourceUri) throw new Error('legacy source-reassembly binding missing after preflight');
   const interruptSchedule = request.interruptSchedule
@@ -418,7 +426,8 @@ function snapshotExecuteRequest(request: ExecuteRequest, signal?: AbortSignal): 
     runOutputFile: request.runOutputFile ? cloneLocalUri(request.runOutputFile) : undefined,
     courseTrace: request.courseTrace,
     revealOutput: request.revealOutput,
-    signal
+    signal: context?.signal,
+    nonInteractive: context?.nonInteractive
   });
 }
 
@@ -610,6 +619,7 @@ async function prepareVerifiedLegacyExecutionSource(
       p7RiInstruction: snapshot.p7RiInstruction,
       dumpOutputFile: dumpFile,
       signal: snapshot.signal,
+      nonInteractive: snapshot.nonInteractive,
       resolvedLaunch: dumpLaunch
     }));
     if (!verificationOutput?.result.ok || !verificationOutput.outputFile) {

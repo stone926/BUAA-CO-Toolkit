@@ -138,4 +138,20 @@ describe('ISE project source ordering', () => {
     const reverse = await verilogProjectSignature([z, a]);
     expect(forward).not.toBe(reverse);
   });
+
+  it('excludes configured user testbenches while preserving DUT and generated automatic sources', async () => {
+    const dut = URI.file('E:/work/mips.v');
+    const userTestbench = URI.file('E:/work/mips_tb.v');
+    const alternateTestbench = URI.file('E:/work/test/custom.v');
+    const generated = URI.file('E:/work/.co/isim/co_generated_auto_tb.v');
+    vscodeState.module!.workspace.findFiles
+      .mockResolvedValueOnce([userTestbench, alternateTestbench, dut])
+      .mockResolvedValueOnce([]);
+
+    await expect(resolveIseProjectFiles(folder as never, [generated], {
+      excludedFiles: [alternateTestbench],
+      excludedBasenames: ['mips_tb.v'],
+      protectedFiles: [dut]
+    })).resolves.toEqual([dut, generated]);
+  });
 });

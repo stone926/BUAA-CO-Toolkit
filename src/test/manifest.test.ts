@@ -4,13 +4,10 @@ import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
 import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
-import { getCourseConfig, getLogisimTraceProfileConfig } from '../courseConfig';
+import { getCourseConfig } from '../courseConfig';
 import { generatorInstructionCatalog } from '../courseTesting/generatorInstructionCatalog';
 import {
-  p7CourseInstructionCountMaximum,
-  p7ExceptionHandlerAddress,
-  p7ProbeDefaultScenarioCount,
-  p7ProbeMaxScenarioCount
+  p7ExceptionHandlerAddress
 } from '../courseTesting/p7Hardware';
 import {
   configurableVerilogLintRuleIds,
@@ -83,8 +80,8 @@ describe('package manifest', () => {
       'co.selectProjectProfile',
       'co.checkToolchain',
       'co.course.openTutorial',
+      'co.test.runGeneratedTraceTests',
       'co.test.startContinuousGeneratedTraceTests',
-      'co.test.stopBatchTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex',
       'co.tools.openAdvanced'
@@ -152,6 +149,24 @@ describe('package manifest', () => {
     expect(activationEvents.has('onCommand:co.test.openAsmCaseIndex')).toBe(false);
   });
 
+  it('contributes only the four automatic-test facade commands', () => {
+    const pkg = readPackage();
+    const commands = (pkg.contributes?.commands ?? [])
+      .map((command) => command.command)
+      .filter((command) => command.startsWith('co.test.'));
+    const palette = (pkg.contributes?.menus?.commandPalette ?? [])
+      .map((item) => item.command)
+      .filter((command) => command.startsWith('co.test.'));
+
+    expect(commands).toEqual([
+      'co.test.runGeneratedTraceTests',
+      'co.test.startContinuousGeneratedTraceTests',
+      'co.test.stopContinuousTests',
+      'co.test.openAsmCaseIndex'
+    ]);
+    expect(palette).toEqual(commands);
+  });
+
   it('hides the Verilog signal view outside Verilog signal contexts', () => {
     const pkg = readPackage();
     const signalView = Object.values(pkg.contributes?.views ?? {})
@@ -175,29 +190,26 @@ describe('package manifest', () => {
       '编辑器与诊断',
       '格式化'
     ]);
-    expect(Object.keys(properties)).toHaveLength(65);
-    expect(Object.keys(configDefaults)).toHaveLength(65);
+    expect(Object.keys(properties)).toHaveLength(45);
+    expect(Object.keys(configDefaults)).toHaveLength(45);
     for (const [key, value] of Object.entries(configDefaults)) {
       expect(properties[`co.${key}`]?.default, key).toEqual(value);
     }
     for (const key of Object.keys(properties)) {
       expect(configDefaults[key.replace(/^co\./, '')], key).not.toBeUndefined();
     }
-    expect(properties['co.test.builtinGenerator.instructionCount'].default).toBe(4000);
-    expect(properties['co.test.continuousRetainedPassingCases'].default).toBe(20);
-    expect(properties['co.test.continuousReportRetainedIterations'].default).toBe(200);
-    expect(properties['co.test.p7.stressMode'].default).toBe('hybrid');
+    expect(Object.keys(properties).filter((key) => key.startsWith('co.test.'))).toEqual([
+      'co.test.instructions'
+    ]);
+    expect(properties['co.test.instructions'].default).toBe('');
     expect(properties['co.mips.engine']).toMatchObject({
       type: 'string',
       default: 'auto',
       enum: ['auto', 'builtin', 'mars', 'verify-both']
     });
-    expect(properties['co.test.p7.probeScenarioCount'].default).toBe(p7ProbeDefaultScenarioCount);
-    expect(properties['co.test.p7.probeScenarioCount'].maximum).toBe(p7ProbeMaxScenarioCount);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
     expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
-    expect(properties['co.test.logisim.mainCircuit'].default).toBe(getLogisimTraceProfileConfig('P3')?.defaultCircuit);
     expect(properties['co.mips.extraArgs'].type).toBe('array');
     expect(properties['co.mips.extraArgs'].items?.type).toBe('string');
 
@@ -225,30 +237,26 @@ describe('package manifest', () => {
     ]);
   });
 
-  it('derives P7 manifest limits and descriptions from the hardware resource', () => {
+  it('derives P7 toolchain descriptions from the hardware resource without exposing test strength knobs', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
-    const p7InstructionCount = properties['co.test.builtinGenerator.p7InstructionCount'];
     const handler = `0x${p7ExceptionHandlerAddress.toString(16)}`;
 
-    expect(p7InstructionCount.default).toBe(p7CourseInstructionCountMaximum);
-    expect(p7InstructionCount.maximum).toBe(p7CourseInstructionCountMaximum);
-    expect(p7InstructionCount.description).toContain(handler);
-    expect(p7InstructionCount.description).toContain(String(p7CourseInstructionCountMaximum));
     expect(properties['co.toolchain.marsP7'].description).toContain(handler);
     expect(properties['co.mips.memoryConfiguration'].description).toContain(handler);
+    expect(Object.keys(properties).some((key) => key.startsWith('co.test.p7.'))).toBe(false);
   });
 
   it('derives generator profile descriptions from the ASM generator catalog', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
-    const property = properties['co.test.builtinGenerator.instructions'];
+    const property = properties['co.test.instructions'];
     const description = property.description ?? '';
     const markdownDescription = property.markdownDescription ?? '';
 
-    expect(description).toBe('自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。');
+    expect(description).toBe('自动测试重点覆盖的真实指令。用逗号或空白分隔；留空时覆盖当前 Profile 的完整课程指令集。测试规模、中断、异常、外设和持续测试策略由插件自动使用最强安全配置。');
     expect(description).not.toContain('P6=');
     expect(markdownDescription).toContain('默认指令集');
     for (const [profile, mnemonics] of Object.entries(generatorInstructionCatalog.profiles)) {

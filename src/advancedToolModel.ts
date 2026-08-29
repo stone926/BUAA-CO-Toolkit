@@ -46,15 +46,10 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
 
   if (traceProfiles.has(context.profile)) {
     items.push(
-      tool('trace.single', '单 ASM Trace 测试', '课程测试', '选择一个 ASM，创建 case 并对拍', Commands.Test.RunFullTest),
-      tool('trace.fixedMars', '使用固定 MARS 验证', '开发者验证', '独立双端汇编与执行，并保存 full-stack bundle', Commands.Test.VerifyWithFixedMars),
-      tool('trace.batch', '多 ASM 批量 Trace 测试', '课程测试', '选择多个 ASM，生成批量报告', Commands.Test.RunBatchTraceTests),
-      tool('trace.generatedBatch', '生成并批量 Trace 测试', '课程测试', '生成 ASM 后批量对拍', Commands.Test.RunGeneratedTraceTests),
-      tool('trace.generateAsm', '生成 ASM 测试点', '课程测试', '只生成并记录 ASM case', Commands.Test.GenerateAsmTests),
-      tool('trace.generateAndDump', '生成并导出机器码', '课程测试', '生成 ASM 后 dump code.txt', Commands.Test.GenerateAndDumpAsmTests),
-      tool('trace.compareFiles', '手动选择输出对拍', '报告', '选择两个 trace 输出文件比较', Commands.Test.CompareTraceFiles),
-      tool('trace.compareLatest', '最近输出对拍', '报告', '比较 .co/out 中最近的黄金/仿真输出', Commands.Test.CompareLatestOutputs),
-      tool('trace.batchReport', '打开批量测试报告', '报告', '打开 .co/out 中最近的批量报告', Commands.Test.OpenBatchTraceReport)
+      tool('trace.automatic', '运行自动测试', '自动测试', '生成完整测试并验证 CPU', Commands.Test.RunGeneratedTraceTests),
+      tool('trace.continuous', '持续自动测试', '自动测试', '持续运行自动测试', Commands.Test.StartContinuousGeneratedTraceTests),
+      tool('trace.stop', '停止自动测试', '自动测试', '停止当前的自动测试', Commands.Test.StopContinuousTests),
+      tool('trace.history', '测试历史 / 失败用例', '自动测试', '查看历史结果和失败用例', Commands.Test.OpenAsmCaseIndex)
     );
   }
 
@@ -72,13 +67,6 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
       tool('logisim.rom', '生成 Logisim ROM 文件', 'Logisim', '选择 ASM 并生成 ROM 文本', Commands.Logisim.GenerateRom),
       tool('logisim.csv', 'Logisim 日志转 CSV', 'Logisim', '选择 logging 文本并转换', Commands.Logisim.ConvertLogToCsv)
     );
-    if (context.profile === 'P3' || context.activeKind === 'logisim') {
-      items.push(
-        tool('logisim.prepare', '准备 Logisim 电路用例', 'Logisim', '选择 ASM 并注入电路副本', Commands.Test.PrepareLogisimCases),
-        tool('logisim.prepareGenerated', '准备生成的 Logisim 电路用例', 'Logisim', '生成 ASM 并注入电路副本', Commands.Test.PrepareGeneratedLogisimCases),
-        tool('logisim.diagnoseP3', '诊断 P3 Logisim Trace 电路', 'Logisim', '输出 trace 端口、ROM 和列映射诊断', Commands.Test.DiagnoseP3LogisimTraceCircuit)
-      );
-    }
   }
 
   if (hazardProfiles.has(context.profile)) {

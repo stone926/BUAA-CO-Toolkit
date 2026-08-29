@@ -1,5 +1,5 @@
 import { Random } from '../../random';
-import { P7ProbeScenario, P7ProbeScenarioKind } from '../types';
+import { P7ProbeScenario, P7ProbeScenarioKind, P7ProbeShard } from '../types';
 import {
   p7CauseIpExternalMask,
   p7CauseIpTimer0Mask,
@@ -21,6 +21,7 @@ export interface ProbeScenarioPlanOptions {
   externalIntensity: number;
   timerIntensity: number;
   exceptionTypes: readonly string[];
+  shard?: P7ProbeShard;
 }
 
 const probeExceptionCoverageOrder: P7ProbeScenarioKind[] = ['adel', 'ades', 'syscall', 'ri', 'ov'];
@@ -36,14 +37,19 @@ export function planProbeScenarioKinds(options: ProbeScenarioPlanOptions, rng: R
   const count = clampProbeScenarioCount(options.count);
   const enabledExceptions = enabledProbeExceptions(options.exceptionTypes);
   const requiredKinds: P7ProbeScenarioKind[] = [];
+  const shard = options.shard ?? 'all';
+  const includeCore = shard !== 'timer';
+  const includeTimer = shard !== 'core';
 
-  if (options.externalInterrupt && options.externalIntensity > 0) {
+  if (includeCore && options.externalInterrupt && options.externalIntensity > 0) {
     requiredKinds.push('external');
   }
-  if (options.timerInterrupt && options.timerIntensity > 0) {
+  if (includeTimer && (shard === 'timer' || (options.timerInterrupt && options.timerIntensity > 0))) {
     requiredKinds.push('timer0', 'timer1');
   }
-  requiredKinds.push(...enabledExceptions);
+  if (includeCore) {
+    requiredKinds.push(...enabledExceptions);
+  }
   if (!requiredKinds.length) {
     requiredKinds.push('syscall');
   }
@@ -60,7 +66,12 @@ export function planProbeScenarioKinds(options: ProbeScenarioPlanOptions, rng: R
     }
   }
   while (result.length < count) {
-    result.push(pickFillerScenario(options, enabledExceptions, rng));
+    // Automatic core probes use all remaining record slots. RI is the shortest precise
+    // exception scenario, so deterministic raw-word alternation keeps 64 records below
+    // the 0x4180 text boundary without weakening explicit variant coverage.
+    result.push(shard === 'core'
+      ? 'ri'
+      : pickFillerScenario(options, enabledExceptions, rng, shard));
   }
   return shuffle(result, rng);
 }
@@ -133,17 +144,21 @@ function enabledProbeExceptions(values: readonly string[]): P7ProbeScenarioKind[
 function pickFillerScenario(
   options: ProbeScenarioPlanOptions,
   enabledExceptions: readonly P7ProbeScenarioKind[],
-  rng: Random
+  rng: Random,
+  shard: P7ProbeShard
 ): P7ProbeScenarioKind {
   const weighted: P7ProbeScenarioKind[] = [];
-  if (options.externalInterrupt && rng.chance(options.externalIntensity)) {
+  if (shard !== 'timer' && options.externalInterrupt && rng.chance(options.externalIntensity)) {
     weighted.push('external');
   }
-  if (options.timerInterrupt && rng.chance(options.timerIntensity)) {
+  if (shard !== 'core' && (shard === 'timer' || (options.timerInterrupt && rng.chance(options.timerIntensity)))) {
     weighted.push(rng.chance(0.5) ? 'timer0' : 'timer1');
   }
-  if (!weighted.length || rng.chance(0.65)) {
+  if (shard !== 'timer' && (!weighted.length || rng.chance(0.65))) {
     weighted.push(rng.pick(enabledExceptions.length ? enabledExceptions : ['syscall']));
+  }
+  if (!weighted.length) {
+    weighted.push(rng.chance(0.5) ? 'timer0' : 'timer1');
   }
   return rng.pick(weighted);
 }

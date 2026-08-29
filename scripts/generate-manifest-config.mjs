@@ -85,21 +85,8 @@ function deriveP7Values(p7Hardware) {
   };
 }
 
-function exceptionTypeLabels(exceptionCodes) {
-  const labels = {
-    adel: 'AdEL',
-    ades: 'AdES',
-    syscall: 'Syscall',
-    ri: 'RI',
-    ov: 'Ov'
-  };
-  return Object.keys(exceptionCodes)
-    .map((key) => labels[key] ?? key)
-    .filter(Boolean);
-}
-
 function generatorInstructionDescription() {
-  return '自定义内置 ASM 生成器使用的指令集。用逗号或空白分隔；留空时按当前 Profile 使用默认指令集。';
+  return '自动测试重点覆盖的真实指令。用逗号或空白分隔；留空时覆盖当前 Profile 的完整课程指令集。测试规模、中断、异常、外设和持续测试策略由插件自动使用最强安全配置。';
 }
 
 function generatorInstructionMarkdownDescription(generatorProfiles) {
@@ -109,7 +96,7 @@ function generatorInstructionMarkdownDescription(generatorProfiles) {
     .map((profile) => `- **${profile}**: \`${profiles[profile].join(', ')}\``)
     .join('\n');
   return [
-    '自定义内置 ASM 生成器使用的指令集。',
+    '自动测试重点覆盖的真实指令。测试脚手架所需指令由插件内部管理，不需要手工加入。',
     '',
     '- 用逗号或任意数量空白分隔。',
     '- 只接受真实指令，不接受伪指令。',
@@ -122,13 +109,8 @@ function generatorInstructionMarkdownDescription(generatorProfiles) {
 
 function deriveConfigDefaults(baseDefaults, resources) {
   const defaults = clone(baseDefaults);
-  const { courseConfig, lintRules, p7Hardware, p7Values } = resources;
+  const { lintRules } = resources;
   defaults['project.profile'] = defaults['project.profile'] ?? 'auto';
-  defaults['test.builtinGenerator.p7InstructionCount'] = p7Values.instructionCountMaximum;
-  defaults['test.p7.probeScenarioCount'] = p7Hardware.probe.defaultScenarioCount;
-  defaults['test.p7.exceptionTypes'] = exceptionTypeLabels(p7Hardware.cp0.exceptionCodes);
-  defaults['test.logisim.mainCircuit'] =
-    courseConfig.logisimTrace?.P3?.defaultCircuit ?? defaults['test.logisim.mainCircuit'];
   defaults['verilog.lint.disabledRules'] = lintRules
     .filter((rule) => rule.configurable && !rule.enabledByDefault)
     .map((rule) => rule.id);
@@ -154,7 +136,7 @@ function applyGeneratedSchema(groups, defaults, resources) {
     }
   }
 
-  const { courseConfig, generatorProfiles, lintRules, p7Hardware, p7Values } = resources;
+  const { courseConfig, generatorProfiles, lintRules, p7Values } = resources;
   const profileIds = Object.keys(courseConfig.profiles);
   properties['co.project.profile'].enum = ['auto', ...profileIds];
   properties['co.project.profile'].enumDescriptions = [
@@ -162,27 +144,13 @@ function applyGeneratedSchema(groups, defaults, resources) {
     ...profileIds.map((profile) => courseConfig.profiles[profile]?.name ?? profile)
   ];
 
-  const p7InstructionCount = properties['co.test.builtinGenerator.p7InstructionCount'];
-  p7InstructionCount.minimum = 1;
-  p7InstructionCount.maximum = p7Values.instructionCountMaximum;
-  p7InstructionCount.description =
-    `P7 内置 ASM 生成器的主程序有效载荷指令数。停机自环 beq 及其 nop 延迟槽额外占 2 条；${p7Values.instructionCountMaximum} + 2 条恰好填满到 ${shortHex(p7Values.exceptionHandlerAddress - 4)}，不覆盖 ${shortHex(p7Values.exceptionHandlerAddress)} 异常入口`;
-
   properties['co.toolchain.marsP7'].description =
-    `P7 专用 Mars jar 路径。co.mips.engine=mars 时作为用户配置的 legacy 回滚（需 coL1/coL2/efc/p7irq/cl，不要求固定发布身份）；verify-both/固定验证时同一路径必须精确指向编译内置信任的 v0.6.3-course1 legacy-course-executor。内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）；未配置时回退到 co.toolchain.mars`;
+    `P7 专用 Mars jar 路径，仅在显式选择 mars 或 verify-both 引擎时使用。mars 作为用户配置的 legacy 回滚；verify-both/固定验证要求受信任的 v0.6.3-course1 版本。内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）；未配置时回退到 co.toolchain.mars`;
   properties['co.mips.memoryConfiguration'].description =
     `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
-  properties['co.test.builtinGenerator.instructions'].description = generatorInstructionDescription();
-  properties['co.test.builtinGenerator.instructions'].markdownDescription =
+  properties['co.test.instructions'].description = generatorInstructionDescription();
+  properties['co.test.instructions'].markdownDescription =
     generatorInstructionMarkdownDescription(generatorProfiles);
-
-  const probeScenario = properties['co.test.p7.probeScenarioCount'];
-  probeScenario.minimum = 1;
-  probeScenario.maximum = p7Hardware.probe.maxScenarioCount;
-  probeScenario.description =
-    `P7 probe 模式每个 ASM 生成的场景数量，最多 ${p7Hardware.probe.maxScenarioCount} 条以保持 probe log 在 DM 范围内`;
-
-  properties['co.test.p7.exceptionTypes'].items.enum = defaults['test.p7.exceptionTypes'];
 
   const configurableLintIds = lintRules
     .filter((rule) => rule.configurable)

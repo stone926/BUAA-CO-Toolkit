@@ -14,11 +14,30 @@ describe('mode-aware toolchain policy consumers', () => {
     expect(text).not.toContain('getProfileRequiredTools(');
   });
 
-  it.each(['courseTestContinuous.ts', 'courseTestLogisim.ts'])('%s keeps MARS-only preflight behind engine policy', (file) => {
-    const text = source(file);
+  it('pins continuous automatic preflight to the private builtin engine', () => {
+    const text = source('courseTestContinuous.ts');
     expect(text).toContain('courseTraceMemoryConfigurationErrorForEngine');
     expect(text).toContain('requiredCourseTraceToolchainChecks');
-    expect(text).toContain('getMipsEngine(resource)');
+    expect(text).toContain('const engineMode = automaticTestEngineMode');
+    expect(text).toContain('engineMode: automaticTestEngineMode');
+    expect(text).not.toContain('getMipsEngine(resource)');
+  });
+
+  it('keeps manual P3 engine selection while pinning generated Logisim work to builtin', () => {
+    const text = source('courseTestLogisim.ts');
+    expect(text).toContain("const automatic = source.kind === 'generator'");
+    expect(text).toContain('automatic ? automaticTestEngineMode : getMipsEngine(asm)');
+    expect(text).toContain('nonInteractive: automatic');
+    expect(text).toContain('engineMode: options.nonInteractive ? automaticTestEngineMode : undefined');
     expect(text).not.toMatch(/tools:\s*\[\s*['"]java['"]\s*,\s*['"]mars['"]/);
+  });
+
+  it('pins generated case provenance and hidden dump compatibility to builtin', () => {
+    const workflow = source(path.join('courseTesting', 'generatorWorkflow.ts'));
+    const coordinator = source('courseTest.ts');
+    expect(workflow).toContain('resolveCourseEnginePlan(automaticTestEngineMode, setup.profile)');
+    expect(workflow).toContain('enginePlan,');
+    expect(coordinator).toContain('resolveCourseEnginePlan(automaticTestEngineMode, setup.profile)');
+    expect(coordinator).toContain('nonInteractive: true');
   });
 });

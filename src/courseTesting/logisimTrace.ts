@@ -889,26 +889,26 @@ function resolveP3ExplicitColumns(
     const index = explicitColumns[label];
     if (index === undefined) {
       if (label !== 'instr') {
-        errors.push(`co.test.logisim.traceColumns is missing required column "${label}".`);
+        errors.push(`旧版显式列映射缺少必需输出 "${label}"。请为对应 Pin 设置教程标准 label 以便自动识别。`);
       }
       continue;
     }
     if (!Number.isInteger(index) || index < 0 || index >= columns.length) {
-      errors.push(`co.test.logisim.traceColumns.${label} is ${index}; expected a stdout column index in 0..${Math.max(0, columns.length - 1)}.`);
+      errors.push(`旧版显式列映射中的 "${label}"=${index} 超出 stdout 列范围 0..${Math.max(0, columns.length - 1)}。`);
       continue;
     }
     const duplicate = usedIndexes.get(index);
     if (duplicate) {
-      errors.push(`co.test.logisim.traceColumns maps both "${duplicate}" and "${label}" to stdout column ${index}.`);
+      errors.push(`旧版显式列映射把 "${duplicate}" 和 "${label}" 同时指向 stdout 第 ${index} 列。`);
       continue;
     }
     usedIndexes.set(index, label);
     const column = columns[index];
     if (column.width !== p3OrderedWidths[label]) {
-      errors.push(`co.test.logisim.traceColumns.${label} points to ${formatColumnSummary(column)} with width ${column.width}; expected ${p3OrderedWidths[label]}.`);
+      errors.push(`旧版显式列映射中的 "${label}" 指向 ${formatColumnSummary(column)}（位宽 ${column.width}），期望位宽 ${p3OrderedWidths[label]}。`);
     }
     if (isP3LogisimTraceSemanticLabel(column.canonicalLabel) && column.canonicalLabel !== label) {
-      warnings.push(`co.test.logisim.traceColumns.${label} points to label "${column.logisimLabel}", which looks like "${column.canonicalLabel}".`);
+      warnings.push(`旧版显式列映射中的 "${label}" 指向 label "${column.logisimLabel}"，其外观更像 "${column.canonicalLabel}"。`);
     }
     selected.set(label, column);
   }

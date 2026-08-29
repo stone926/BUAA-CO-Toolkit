@@ -74,7 +74,8 @@ export interface CourseTracePipelineDependencies {
     haltPcHex: string,
     resource: vscode.Uri,
     streamOutput?: boolean,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    nonInteractive?: boolean
   ) => Promise<LogisimCliTraceRun>;
   compareTraces?: typeof compareTraceIterables;
   recordOracle?: typeof recordAsmCaseOracleResult;
@@ -133,11 +134,12 @@ export class CourseTracePipeline {
     haltPcHex: string,
     resource: vscode.Uri,
     streamOutput = true,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    nonInteractive = false
   ): Promise<LogisimCliTraceRun> {
     const stage = this.dependencies.runLogisimDut;
     if (!stage) throw missingStage('runLogisimDut');
-    return stage(services, setup, circuit, haltPcHex, resource, streamOutput, signal);
+    return stage(services, setup, circuit, haltPcHex, resource, streamOutput, signal, nonInteractive);
   }
 
   compareTraces(...args: Parameters<typeof compareTraceIterables>): ReturnType<typeof compareTraceIterables> {

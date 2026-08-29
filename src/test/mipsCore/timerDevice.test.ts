@@ -259,6 +259,45 @@ describe('P7 timer cycle state machine', () => {
     ]);
   });
 
+  it('exposes 0, 0, PRESET when PRESET or CTRL is the colliding third write', () => {
+    // This is the architectural observation used by the generated student-DUT probe.
+    // Each write is one M-stage WE edge; each following read samples Dout before its
+    // non-WE edge advances IDLE -> LOAD -> CNT.
+    const timer = new CourseTimerDevice('timer0');
+    timer.write(timerRegisterIndex.preset, 0x20);
+    timer.tick();
+    timer.write(timerRegisterIndex.ctrl, 1);
+    timer.tick();
+    timer.write(timerRegisterIndex.preset, 0x40);
+    timer.tick();
+
+    const observations: number[] = [];
+    for (let index = 0; index < 3; index++) {
+      observations.push(timer.read(timerRegisterIndex.count));
+      timer.tick();
+    }
+
+    expect(observations).toEqual([0, 0, 0x40]);
+    expect(timer.snapshot()).toEqual(snap('cnt', 1, 0x40, 0x3f, false, false, 6));
+
+    const ctrlTimer = new CourseTimerDevice('timer1');
+    ctrlTimer.write(timerRegisterIndex.preset, 0x20);
+    ctrlTimer.tick();
+    ctrlTimer.write(timerRegisterIndex.ctrl, 1);
+    ctrlTimer.tick();
+    ctrlTimer.write(timerRegisterIndex.ctrl, 1);
+    ctrlTimer.tick();
+
+    const ctrlObservations: number[] = [];
+    for (let index = 0; index < 3; index++) {
+      ctrlObservations.push(ctrlTimer.read(timerRegisterIndex.count));
+      ctrlTimer.tick();
+    }
+
+    expect(ctrlObservations).toEqual([0, 0, 0x20]);
+    expect(ctrlTimer.snapshot()).toEqual(snap('cnt', 1, 0x20, 0x1f, false, false, 6));
+  });
+
   it('runs a mode-0 one-shot from IDLE through INT back to IDLE', () => {
     // COURSE-P7-TIMER-004/005/008. CTRL = 0x9 -> IM = 1, Mode = 2'b00, EN = 1.
     // PRESET = 3, so CNT takes three edges: 3 -> 2 -> 1 -> (0 and INT), because

@@ -3,6 +3,8 @@ import { getLogisimTraceProfileConfig, getVerilogTestbenchConfig } from '../cour
 import { defaultInstructionSets } from './mnemonicSets';
 import { p7ExceptionHandlerAddress } from './p7Hardware';
 import { decodeCourseInstructionWord } from '../mips/core/isa/decoder';
+import { sourceUnitsUseP7RiInstruction } from './p7RiInstruction';
+import { isP7RiWord, p7RiWordsUsedInInstructionSegments } from './p7RiWords';
 
 export interface CourseMachineCodeViolation {
   index: number;
@@ -32,16 +34,20 @@ export function validateCourseMachineCode(
   for (const mnemonic of trustedBuiltinSource ? declaredBuiltinInstructionSet(asmText) : []) {
     allowed.add(mnemonic);
   }
-  const allowInternalRi = trustedBuiltinSource
+  const allowLegacyInternalRi = trustedBuiltinSource
     && profile === 'P7'
-    && /\b_co_internal_unknown_instruction\b/.test(asmText);
+    && sourceUnitsUseP7RiInstruction('P7', [{ id: 'machine-code-validation', text: asmText }]);
+  const declaredRawRiWords = trustedBuiltinSource && profile === 'P7'
+    ? p7RiWordsUsedInInstructionSegments(asmText)
+    : new Set<number>();
   const words = machineCodeWords(machineCodeText);
   const violations: CourseMachineCodeViolation[] = [];
   for (let index = 0; index < words.length; index++) {
     const word = words[index];
     const value = Number.parseInt(word, 16) >>> 0;
     const mnemonic = decodeCourseMachineInstruction(value);
-    const allowedInternalRi = allowInternalRi && value === 0x0000003f;
+    const allowedInternalRi = (allowLegacyInternalRi && value === 0x0000003f)
+      || (isP7RiWord(value) && declaredRawRiWords.has(value));
     const address = 0x3000 + index * 4;
     const placementReason = profile === 'P7' && mnemonic === 'eret' && address < p7ExceptionHandlerAddress
       ? `教程规定 eret 只会出现在 0x${p7ExceptionHandlerAddress.toString(16)} 起的异常处理程序中`

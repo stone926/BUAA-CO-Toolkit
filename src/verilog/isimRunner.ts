@@ -7,7 +7,8 @@ import {
   getMachineCode,
   getIsePath,
   getProfile,
-  getSimTime
+  getSimTime,
+  getTestbench
 } from '../config';
 import { ensureDirectory, isFile, pathExists, workspaceFolderFor, writeTextFile } from '../fsUtil';
 import { revealOutputChannel, runTool } from '../process';
@@ -52,10 +53,12 @@ import {
 import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
+  findUserTestbenchSourceUris,
   recordTestbenchForAsmCase,
   resolveNamedTestbench,
   TestbenchResolution
 } from './testbenchResolver';
+import { automaticExternalToolTimeoutMs } from '../courseTesting/automaticTestPolicy';
 
 export interface IsimRunOptions extends IseProjectOptions {
   machineCodeSource?: vscode.Uri;
@@ -98,8 +101,14 @@ export async function runIsim(
   options: IsimRunOptions = {}
 ): Promise<IsimRunOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
-  const showMessages = options.showMessages !== false;
-  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, showMessages, options.signal);
+  const showMessages = !options.nonInteractive && options.showMessages !== false;
+  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(
+    services,
+    activeUri,
+    showMessages,
+    options.signal,
+    options.nonInteractive
+  );
   if (requiresAsmCase(activeUri) && !asmCase) {
     return undefined;
   }
@@ -115,6 +124,8 @@ export async function runIsim(
     output: services.output,
     resource: activeUri,
     env: iseEnv,
+    nonInteractive: options.nonInteractive,
+    timeoutMs: options.nonInteractive ? automaticExternalToolTimeoutMs : undefined,
     signal: options.signal
   });
   let simOut: vscode.Uri | undefined;
@@ -150,7 +161,7 @@ export async function compileIsim(
   options: CompileIsimOptions = {}
 ): Promise<CompiledIsimOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
-  const showMessages = options.showMessages !== false;
+  const showMessages = !options.nonInteractive && options.showMessages !== false;
   if (!await ensureConcreteProfile(activeUri, '运行 ISim 需要先确定项目 Profile')) {
     return undefined;
   }
@@ -159,26 +170,36 @@ export async function compileIsim(
   }
   const isePath = getIsePath(activeUri);
   if (!isePath) {
-    vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath');
+    if (!options.nonInteractive) {
+      vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath');
+    }
     return undefined;
   }
   const fuse = findFuse(isePath);
   const iseEnv = buildIseEnvironment(isePath);
   if (!await isFile(fuse)) {
-    vscode.window.showErrorMessage(`未找到 fuse 可执行文件：${fuse}`);
+    if (!options.nonInteractive) {
+      vscode.window.showErrorMessage(`未找到 fuse 可执行文件：${fuse}`);
+    }
     return undefined;
   }
   const folder = workspaceFolderFor(activeUri);
   if (!folder) {
-    vscode.window.showErrorMessage('运行 ISim 前请先打开一个工作区文件夹');
+    if (!options.nonInteractive) {
+      vscode.window.showErrorMessage('运行 ISim 前请先打开一个工作区文件夹');
+    }
     return undefined;
   }
 
   const moduleRegistry = options.moduleRegistry;
-  const resolved = options.testbenchName
-    ? await resolveNamedTestbench(options.testbenchName, activeUri, moduleRegistry)
-    : (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, options.p7Probe, showMessages))
-    ?? await ensureRunnableTestbench(services, activeUri, showMessages, moduleRegistry);
+  const resolutionOptions = { nonInteractive: options.nonInteractive };
+  const resolved = options.nonInteractive
+    ? (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, options.p7Probe, showMessages, resolutionOptions))
+      ?? await ensureRunnableTestbench(services, activeUri, showMessages, moduleRegistry, resolutionOptions)
+    : options.testbenchName
+      ? await resolveNamedTestbench(options.testbenchName, activeUri, moduleRegistry, resolutionOptions)
+      : (await ensureP7InterruptTestbench(services, activeUri, options.interruptSchedule, options.p7Probe, showMessages, resolutionOptions))
+        ?? await ensureRunnableTestbench(services, activeUri, showMessages, moduleRegistry, resolutionOptions);
   if (!resolved?.moduleName) {
     return undefined;
   }
@@ -186,9 +207,21 @@ export async function compileIsim(
     ...(options.extraVerilogFiles ?? []),
     ...(resolved.generatedUri ? [resolved.generatedUri] : [])
   ]);
-  const projectFiles = await resolveIseProjectFiles(folder, extraVerilogFiles);
+  const configuredTestbench = getTestbench(activeUri);
+  const excludedTestbenchSources = options.nonInteractive
+    ? await findUserTestbenchSourceUris(activeUri ?? folder.uri, configuredTestbench, moduleRegistry)
+    : [];
+  const projectFiles = await resolveIseProjectFiles(folder, extraVerilogFiles, options.nonInteractive
+    ? {
+        excludedFiles: excludedTestbenchSources,
+        excludedBasenames: [`${configuredTestbench}.v`],
+        protectedFiles: resolved.designSourceUri ? [resolved.designSourceUri] : []
+      }
+    : {});
   if (!projectFiles.length) {
-    vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
+    if (!options.nonInteractive) {
+      vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
+    }
     return undefined;
   }
   const tclText = options.tclText ?? buildIsimRunTcl(getSimTime(activeUri));
@@ -212,7 +245,9 @@ export async function compileIsim(
     : undefined;
   const cached = cacheKey ? options.compileCache?.get(cacheKey) as CompiledIsimOutput | undefined : undefined;
   if (cached && await isFile(cached.exePath) && await pathExists(cached.generated.tcl.fsPath)) {
-    services.output.appendLine(`复用 ISim 编译: ${cached.exePath}`);
+    if (!options.nonInteractive) {
+      services.output.appendLine(`复用 ISim 编译: ${cached.exePath}`);
+    }
     return cached;
   }
   const artifactStem = cacheKey ? isimCompileArtifactStem(resolved.moduleName, cacheKey) : resolved.moduleName;
@@ -224,14 +259,15 @@ export async function compileIsim(
     projectFileBaseName: artifactStem,
     projectFiles,
     tclFileName: cacheKey ? undefined : options.tclFileName,
-    tclText
+    tclText,
+    nonInteractive: options.nonInteractive
   });
   if (!generated) {
     return undefined;
   }
 
   const exeName = isimExecutableName(artifactStem, fuse);
-  if (options.revealOutput !== false) {
+  if (!options.nonInteractive && options.revealOutput !== false) {
     revealOutputChannel(services.output, activeUri);
   }
   const fuseArgs = [
@@ -247,6 +283,8 @@ export async function compileIsim(
     output: services.output,
     resource: activeUri,
     env: iseEnv,
+    nonInteractive: options.nonInteractive,
+    timeoutMs: options.nonInteractive ? automaticExternalToolTimeoutMs : undefined,
     signal: options.signal
   });
   if (!fuseResult.ok) {
@@ -283,7 +321,9 @@ async function prepareIsimRunInputs(
     : undefined;
   if (machineCodeSource) {
     await copyMachineCodeToSimDirectory(machineCodeSource, compiled.generated.outDir, activeUri);
-    services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
+    if (!options.nonInteractive) {
+      services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
+    }
     if (asmCase) {
       await copyAsmCaseArtifact(
         asmCase,
@@ -296,7 +336,9 @@ async function prepareIsimRunInputs(
       await copyAsmCaseArtifact(asmCase, 'verilog', compiled.generated.tcl, 'isim-run.tcl', 'tcl');
     }
   } else if (machineCodeExpected) {
-    services.output.appendLine(`未找到可复制到 ${compiled.generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
+    services.output.appendLine(options.nonInteractive
+      ? '自动测试未能准备 CPU 机器码'
+      : `未找到可复制到 ${compiled.generated.outDir.fsPath} 的 ${getMachineCode(activeUri)} 源文件`);
     if (showMessages) {
       vscode.window.showWarningMessage(`未找到 ${getMachineCode(activeUri)}。如果设计中调用了 $readmemh("${getMachineCode(activeUri)}")，ISim 可能会失败`);
     }
@@ -311,9 +353,13 @@ async function ensureSimulationAsmCase(
   services: AppServices,
   resource: vscode.Uri | undefined,
   showMessages: boolean,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  nonInteractive?: boolean
 ): Promise<AsmCase | undefined> {
   if (!requiresAsmCase(resource)) {
+    return undefined;
+  }
+  if (nonInteractive) {
     return undefined;
   }
   const asm = await resolveAsmCaseInput('选择用于 Verilog 仿真的 MIPS ASM 文件');

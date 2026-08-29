@@ -7,7 +7,7 @@ MIPS汇编(.asm/.s/.mips) LSP: 解析->AST->语义->诊断->补全/hover/跳转/
   Trace: traceParser.ts(MARS coL1/coL2；课程 oracle 固定 coL2) -> traceCompare.ts(事件对比)
 
 core:
-  parser.ts — 解析编排: source->parsed lines->AST->semantic model->diagnostics | exports: parseMips
+  parser.ts — 解析编排: source->parsed lines->AST->semantic model->diagnostics；`.word` 同时允许 data 存储与 text/ktext raw instruction cell，其余 storage directive 仍限 data | exports: parseMips
   syntax.ts — 词法解析/格式化API, deprecated parseOperands/Cst*兼容 | exports: parseMipsSourceDocument, parseMipsFormatDocument, printMipsFormatDocument
   ast.ts — 类型化AST: MipsOperandAst(register/symbol/memory/immediate/string/labelPlusImmediate), .eqv/.macro头 | exports: buildMipsAst, MipsAstDocument, MipsOperandAst
   semantic.ts — 语义: 符号收集/作用域/引用, 跳转定义/查找引用查询 | exports: buildMipsSemanticModel, resolveMipsSemanticTarget, mipsSemanticReferenceRanges

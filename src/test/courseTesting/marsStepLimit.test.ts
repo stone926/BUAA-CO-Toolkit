@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { courseExecutionInstructionBudget } from '../../courseTesting/executionBudget';
+import {
+  courseTraceIsimRunTcl,
+  courseTraceIsimTime,
+  p7ProbeExecutionInstructionBudget
+} from '../../courseTesting/pipeline/executionBudget';
 import { courseTraceMarsHaltError } from '../../mips/legacy/haltValidation';
 
 describe('generated course-trace MARS step limit', () => {
@@ -35,6 +40,22 @@ describe('generated course-trace MARS step limit', () => {
     const spoofed = '# Built-in BUAA CO random ASM test\n# instruction_count: 1\n';
 
     expect(courseExecutionInstructionBudget('P6', spoofed, false, '1000ffff\n00000000\n')).toBe(65_536);
+  });
+
+  it('derives a private conservative ISim window from the architectural budget', () => {
+    expect(courseTraceIsimTime(1)).toBe('200us');
+    // 4094 payload instructions use an 8252-step oracle budget. The derived
+    // window leaves 16 complete course clock cycles for every possible step.
+    expect(courseTraceIsimTime(8_252)).toBe('529us');
+    expect(courseTraceIsimTime(64_256)).toBe('4113us');
+    expect(courseTraceIsimRunTcl(8_252)).toBe('run 529us;\nexit\n');
+  });
+
+  it('gives P7 probes a fixed internal budget and caps malformed oversized cases', () => {
+    expect(courseTraceIsimTime(p7ProbeExecutionInstructionBudget)).toBe('4195us');
+    expect(courseTraceIsimTime(262_144)).toBe('5000us');
+    expect(() => courseTraceIsimTime(0)).toThrow(RangeError);
+    expect(() => courseTraceIsimTime(Number.MAX_SAFE_INTEGER + 1)).toThrow(RangeError);
   });
 
   it('accepts stable coL2 proof of the validated halt branch and the newer marker', () => {

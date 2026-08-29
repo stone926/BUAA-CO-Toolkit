@@ -21,13 +21,16 @@ const vscodeMocks = vi.hoisted(() => ({
 
 const configMocks = vi.hoisted(() => ({
   ensureConcreteProfile: vi.fn(async () => 'P5'),
-  getContinuousIntervalMs: vi.fn(() => 1),
-  getContinuousMaxIterations: vi.fn(() => 1),
-  getContinuousReportRetainedIterations: vi.fn(() => 20),
-  getContinuousRetainedPassingCases: vi.fn(() => 5),
-  getContinuousStopOnFailure: vi.fn(() => true),
   getMemoryConfiguration: vi.fn(() => 'FixedCompactLargeText'),
   getMipsEngine: vi.fn(() => 'auto')
+}));
+
+const policyMocks = vi.hoisted(() => ({
+  intervalMs: vi.fn(() => 1),
+  maxIterations: vi.fn(() => 1),
+  reportRetainedIterations: vi.fn(() => 20),
+  retainedPassingCases: vi.fn(() => 5),
+  stopOnFailure: vi.fn(() => true)
 }));
 
 const fileMocks = vi.hoisted(() => ({
@@ -63,10 +66,17 @@ vi.mock('../toolchain', () => ({
 
 vi.mock('../courseTestToolchain', () => ({
   courseTraceMemoryConfigurationErrorForEngine: vi.fn(() => undefined),
+  formatAutomaticToolchainFailure: vi.fn(() => 'automatic failure'),
   formatToolchainFailure: vi.fn(() => 'failure'),
   requiredCourseTraceToolchainChecks: vi.fn(() => new Set()),
   requiredToolchainFailures: vi.fn(() => [])
 }));
+
+const outcomeMocks = vi.hoisted(() => ({
+  recordAsmCaseTestOutcome: vi.fn(async () => undefined)
+}));
+
+vi.mock('../asmCaseStore', () => outcomeMocks);
 
 vi.mock('../courseTestReport', async (importOriginal) => ({
   ...await importOriginal<typeof import('../courseTestReport')>(),
@@ -77,6 +87,10 @@ import {
   startContinuousGeneratedTraceTests,
   stopContinuousTests
 } from '../courseTestContinuous';
+import { revealOutputChannel } from '../process';
+import { checkToolchain } from '../toolchain';
+import { recordAsmCaseTestOutcome } from '../asmCaseStore';
+import { tryAcquireCourseTestSession } from '../courseTesting/courseTestSession';
 
 interface TestSetup {
   resource: URI;
@@ -108,11 +122,11 @@ const setup: TestSetup = {
 beforeEach(() => {
   vi.clearAllMocks();
   vscodeMocks.disposeListeners.splice(0);
-  configMocks.getContinuousIntervalMs.mockReturnValue(1);
-  configMocks.getContinuousMaxIterations.mockReturnValue(1);
-  configMocks.getContinuousReportRetainedIterations.mockReturnValue(20);
-  configMocks.getContinuousRetainedPassingCases.mockReturnValue(5);
-  configMocks.getContinuousStopOnFailure.mockReturnValue(true);
+  policyMocks.intervalMs.mockReturnValue(1);
+  policyMocks.maxIterations.mockReturnValue(1);
+  policyMocks.reportRetainedIterations.mockReturnValue(20);
+  policyMocks.retainedPassingCases.mockReturnValue(5);
+  policyMocks.stopOnFailure.mockReturnValue(true);
   fileMocks.writeTextFile.mockResolvedValue(undefined);
 });
 
@@ -130,11 +144,25 @@ describe('continuous generated trace orchestration', () => {
     const second = startContinuousGeneratedTraceTests(createServices(), deps);
 
     await second;
-    expect(vscodeMocks.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('已有一个持续'));
+    expect(vscodeMocks.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('已有一个自动测试'));
     expect(deps.resolveGeneratorRunSetup).toHaveBeenCalledTimes(1);
 
     pendingSetup.resolve(undefined);
     await first;
+  });
+
+  it('refuses to start while a batch owns the shared artifact session', async () => {
+    const lease = tryAcquireCourseTestSession('batch');
+    expect(lease).toBeDefined();
+    const deps = createDependencies();
+    try {
+      await startContinuousGeneratedTraceTests(createServices(), deps);
+    } finally {
+      lease?.release();
+    }
+
+    expect(deps.resolveGeneratorRunSetup).not.toHaveBeenCalled();
+    expect(deps.runGeneratorAndCollectAsms).not.toHaveBeenCalled();
   });
 
   it('can cancel a session while asynchronous startup is still resolving', async () => {
@@ -154,8 +182,8 @@ describe('continuous generated trace orchestration', () => {
   });
 
   it('continues after case errors when stop-on-failure is disabled', async () => {
-    configMocks.getContinuousMaxIterations.mockReturnValue(2);
-    configMocks.getContinuousStopOnFailure.mockReturnValue(false);
+    policyMocks.maxIterations.mockReturnValue(2);
+    policyMocks.stopOnFailure.mockReturnValue(false);
     const deps = createDependencies({
       runCourseTraceCase: vi.fn(async (_services, item) => ({
         asm: item.asm.fsPath,
@@ -175,6 +203,8 @@ describe('continuous generated trace orchestration', () => {
     const deps = createDependencies({
       runCourseTraceCase: vi.fn(async (_services, item) => ({
         asm: item.asm.fsPath,
+        caseId: 'case-1',
+        caseManifest: 'E:/work/.co/cases/case-1/case.json',
         status: 'failed' as const,
         stage: 'mars' as const,
         message: 'mismatch',
@@ -190,23 +220,55 @@ describe('continuous generated trace orchestration', () => {
     const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
     const report = reports.at(-1) as {
       schemaVersion: number;
-      iterations: Array<{ results: Array<Record<string, unknown>> }>;
+      iterations: Array<{ source?: Record<string, unknown>; results: Array<Record<string, unknown>> }>;
+      generator?: string;
+      commandLine?: string;
+      cwd?: string;
+      options?: unknown;
+      retention?: unknown;
     };
     expect(report.schemaVersion).toBe(2);
     expect(report.iterations[0].results[0]).toMatchObject({
       stage: 'oracle',
-      oracleOut: 'E:/work/oracle.out',
-      dutOut: 'E:/work/dut.out',
-      oracleEvents: 1,
-      dutEvents: 2
+      asm: '测试点 1',
+      status: 'failed',
+      message: '[AUTO-MISMATCH] CPU 输出与参考结果不一致'
     });
+    expect(JSON.stringify(report)).not.toContain('E:/work');
+    expect(report.iterations[0].results[0]).not.toHaveProperty('oracleOut');
+    expect(report.iterations[0].results[0]).not.toHaveProperty('dutOut');
     expect(report.iterations[0].results[0]).not.toHaveProperty('marsOut');
     expect(report.iterations[0].results[0]).not.toHaveProperty('simOut');
+    expect(report.iterations[0].source).toEqual({ kind: 'generator' });
+    expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
+      'E:/work/.co/cases/case-1/case.json',
+      {
+        status: 'failed',
+        stage: 'oracle',
+        diagnostic: '[AUTO-MISMATCH] CPU 输出与参考结果不一致'
+      }
+    );
+    expect(report).not.toHaveProperty('generator');
+    expect(report).not.toHaveProperty('commandLine');
+    expect(report).not.toHaveProperty('cwd');
+    expect(report).not.toHaveProperty('options');
+    expect(report).not.toHaveProperty('retention');
+    expect(deps.resolveCourseTraceRunOptions).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ source: { kind: 'generator' } })
+    );
+    expect(checkToolchain).toHaveBeenCalledWith(
+      expect.anything(),
+      resource,
+      { nonInteractive: true, engineMode: 'builtin' }
+    );
+    expect(revealOutputChannel).not.toHaveBeenCalled();
   });
 
   it('still stops on generator and iteration-level errors when stop-on-failure is disabled', async () => {
-    configMocks.getContinuousMaxIterations.mockReturnValue(3);
-    configMocks.getContinuousStopOnFailure.mockReturnValue(false);
+    policyMocks.maxIterations.mockReturnValue(3);
+    policyMocks.stopOnFailure.mockReturnValue(false);
     const generatorErrorDeps = createDependencies({
       runGeneratorAndCollectAsms: vi.fn(async () => undefined)
     });
@@ -225,8 +287,8 @@ describe('continuous generated trace orchestration', () => {
   });
 
   it('does not schedule an interval wait after the final finite iteration', async () => {
-    configMocks.getContinuousIntervalMs.mockReturnValue(60_000);
-    configMocks.getContinuousMaxIterations.mockReturnValue(1);
+    policyMocks.intervalMs.mockReturnValue(60_000);
+    policyMocks.maxIterations.mockReturnValue(1);
     const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
 
     await startContinuousGeneratedTraceTests(createServices(), createDependencies());
@@ -235,8 +297,8 @@ describe('continuous generated trace orchestration', () => {
   });
 
   it('interrupts the interval wait when stop is requested', async () => {
-    configMocks.getContinuousIntervalMs.mockReturnValue(60_000);
-    configMocks.getContinuousMaxIterations.mockReturnValue(0);
+    policyMocks.intervalMs.mockReturnValue(60_000);
+    policyMocks.maxIterations.mockReturnValue(0);
     const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     const deps = createDependencies();
     const run = startContinuousGeneratedTraceTests(createServices(), deps);
@@ -250,7 +312,7 @@ describe('continuous generated trace orchestration', () => {
   });
 
   it('does not count an in-flight user cancellation as a test error', async () => {
-    configMocks.getContinuousMaxIterations.mockReturnValue(0);
+    policyMocks.maxIterations.mockReturnValue(0);
     const pending = deferred<CourseTraceCaseResult>();
     const deps = createDependencies({
       runCourseTraceCase: vi.fn(async () => await pending.promise)
@@ -305,12 +367,16 @@ describe('continuous generated trace orchestration', () => {
 
 function createDependencies(overrides: Partial<TestDependencies> = {}): TestDependencies {
   return {
+    automaticPolicy: () => ({
+      intervalMs: policyMocks.intervalMs(),
+      maxIterations: policyMocks.maxIterations(),
+      stopOnFailure: policyMocks.stopOnFailure(),
+      retainedPassingCases: policyMocks.retainedPassingCases(),
+      reportRetainedIterations: policyMocks.reportRetainedIterations()
+    }),
     resolveGeneratorRunSetup: vi.fn(async () => setup),
     generatorResource: vi.fn((value) => value.resource),
     generatorFolder: vi.fn((value) => value.folder as never),
-    generatorLabel: vi.fn(() => 'test-generator'),
-    generatorCommandLine: vi.fn(() => 'test-generator --run'),
-    generatorCwd: vi.fn(() => 'E:/work'),
     resolveCourseTraceRunOptions: vi.fn(async () => ({ token: 'run' })),
     runGeneratorAndCollectAsms: vi.fn(async () => ({
       asms: [asm],

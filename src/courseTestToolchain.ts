@@ -62,6 +62,11 @@ export function formatToolchainFailure(check: ToolDetection): string {
   return `${check.name} ${check.detail}${check.suggestion ? `（${check.suggestion}）` : ''}`;
 }
 
+/** Automatic reports identify the missing capability without exposing commands or local paths. */
+export function formatAutomaticToolchainFailure(check: ToolDetection): string {
+  return `${check.name} 不可用，请检查工具链设置`;
+}
+
 export function requiredToolchainFailures(
   checks: readonly ToolDetection[],
   requiredNames: ReadonlySet<string>

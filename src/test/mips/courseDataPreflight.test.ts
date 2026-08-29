@@ -143,6 +143,65 @@ describe('runMarsFile course DM initialization preflight', () => {
     expect(dataDumpPaths.every((file) => !fs.existsSync(file))).toBe(true);
   });
 
+  it('keeps an automatic legacy dump quiet while preserving the generated halt-loop artifact', async () => {
+    const owner = testServices();
+    const outputFile = vscode.Uri.file(path.join(runnerState.root, 'quiet-code.txt'));
+    vi.mocked(runTool).mockImplementation(async (_command, args) => {
+      const hexTextIndex = args.indexOf('HexText');
+      fs.writeFileSync(args[hexTextIndex + 1], '34080001\n');
+      return {
+        ...successResult('raw stdout must stay private'),
+        stderr: 'raw stderr must stay private'
+      };
+    });
+
+    const output = await runMarsFile(
+      owner,
+      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
+      'dumpText',
+      {
+        showMessages: false,
+        revealOutput: false,
+        nonInteractive: true,
+        dumpOutputFile: outputFile
+      }
+    );
+
+    expect(output?.result).toMatchObject({
+      ok: true,
+      stdout: 'raw stdout must stay private',
+      stderr: 'raw stderr must stay private'
+    });
+    expect(fs.readFileSync(outputFile.fsPath, 'utf8')).toContain('1000ffff');
+    expect(vi.mocked(runTool).mock.calls[0][2]).toMatchObject({ nonInteractive: true });
+    expect(owner.output.append).not.toHaveBeenCalled();
+    expect(owner.output.appendLine).not.toHaveBeenCalled();
+  });
+
+  it('preserves manual MARS dump chatter when the automatic quiet lane is absent', async () => {
+    const owner = testServices();
+    vi.mocked(runTool).mockImplementation(async (_command, args) => {
+      const hexTextIndex = args.indexOf('HexText');
+      fs.writeFileSync(args[hexTextIndex + 1], '34080001\n');
+      return successResult();
+    });
+
+    const output = await runMarsFile(
+      owner,
+      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
+      'dumpText',
+      {
+        showMessages: false,
+        revealOutput: false,
+        dumpOutputFile: vscode.Uri.file(path.join(runnerState.root, 'manual-code.txt'))
+      }
+    );
+
+    expect(output?.result.ok).toBe(true);
+    expect(vi.mocked(runTool).mock.calls[0][2]?.nonInteractive).toBeUndefined();
+    expect(owner.output.appendLine).toHaveBeenCalledWith(expect.stringContaining('追加停机自环'));
+  });
+
   it('allows an unallocated data block represented by the pre-created empty file', async () => {
     vi.mocked(runTool).mockImplementation(async (_command, args) => {
       const dumps = dumpTriples(args);
@@ -209,11 +268,18 @@ describe('runMarsFile course DM initialization preflight', () => {
       return successResult();
     });
 
+    const owner = testServices();
     const output = await runMarsFile(
-      testServices(),
+      owner,
       vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
       'dumpText',
-      { courseTrace: true, p7RiInstruction: true, showMessages: false, revealOutput: false }
+      {
+        courseTrace: true,
+        p7RiInstruction: true,
+        showMessages: false,
+        revealOutput: false,
+        nonInteractive: true
+      }
     );
 
     expect(output?.result.ok).toBe(true);
@@ -227,6 +293,8 @@ describe('runMarsFile course DM initialization preflight', () => {
     expect(stagedClasses[0]).not.toContain(path.join('.co', 'engine-registry'));
     expect(fs.existsSync(stagedJars[0])).toBe(false);
     expect(fs.existsSync(stagedClasses[0])).toBe(false);
+    expect(vi.mocked(runTool).mock.calls.every((call) => call[2]?.nonInteractive === true)).toBe(true);
+    expect(owner.output.appendLine).not.toHaveBeenCalled();
   });
 
   it('rejects the first nonzero initialized word and still cleans the dump directory', async () => {

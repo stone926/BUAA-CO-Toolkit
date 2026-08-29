@@ -32,6 +32,8 @@ export interface IseProjectOptions {
   projectFiles?: vscode.Uri[];
   tclFileName?: string;
   tclText?: string;
+  /** Internal automation lane: generate artifacts without exposing their private paths. */
+  nonInteractive?: boolean;
 }
 
 export async function generateIseProject(
@@ -39,22 +41,26 @@ export async function generateIseProject(
   options: IseProjectOptions = {}
 ): Promise<IseProjectFiles | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
-  const showMessages = options.showMessages !== false;
+  const nonInteractive = options.nonInteractive === true;
+  const showMessages = !nonInteractive && options.showMessages !== false;
   if (!await ensureConcreteProfile(activeUri, '生成 ISE 工程需要先确定项目 Profile')) {
     return undefined;
   }
   const folder = workspaceFolderFor(activeUri);
   if (!folder) {
-    vscode.window.showErrorMessage('生成 ISE 文件前请先打开一个工作区文件夹');
+    if (!nonInteractive) {
+      vscode.window.showErrorMessage('生成 ISE 文件前请先打开一个工作区文件夹');
+    }
     return undefined;
   }
   const top = getTestbench(activeUri);
   const testbenchName = options.testbenchName ?? top;
   const projectFileBaseName = options.projectFileBaseName ?? testbenchName;
-  const simTime = getSimTime(activeUri);
   const projectFiles = options.projectFiles ?? await resolveIseProjectFiles(folder, options.extraVerilogFiles);
   if (!projectFiles.length) {
-    vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
+    if (!nonInteractive) {
+      vscode.window.showErrorMessage('工作区中未找到 Verilog 文件');
+    }
     return undefined;
   }
 
@@ -63,11 +69,13 @@ export async function generateIseProject(
   const prj = vscode.Uri.file(path.join(outDir.fsPath, `${projectFileBaseName}.prj`));
   const tcl = vscode.Uri.file(path.join(outDir.fsPath, options.tclFileName ?? `${projectFileBaseName}.tcl`));
   const prjText = buildIseProjectText(projectFiles.map((uri) => uri.fsPath));
-  const tclText = options.tclText ?? buildIsimRunTcl(simTime);
+  const tclText = options.tclText ?? buildIsimRunTcl(getSimTime(activeUri));
   await writeTextFile(prj, prjText);
   await writeTextFile(tcl, tclText);
-  services.output.appendLine(`已生成 ${prj.fsPath}`);
-  services.output.appendLine(`已生成 ${tcl.fsPath}`);
+  if (!nonInteractive) {
+    services.output.appendLine(`已生成 ${prj.fsPath}`);
+    services.output.appendLine(`已生成 ${tcl.fsPath}`);
+  }
   if (showMessages) {
     vscode.window.showInformationMessage('已生成 ISE PRJ/TCL 文件');
   }
@@ -76,9 +84,25 @@ export async function generateIseProject(
 
 export async function resolveIseProjectFiles(
   folder: vscode.WorkspaceFolder,
-  extraVerilogFiles: readonly vscode.Uri[] | undefined
+  extraVerilogFiles: readonly vscode.Uri[] | undefined,
+  exclusions: {
+    excludedFiles?: readonly vscode.Uri[];
+    excludedBasenames?: readonly string[];
+    protectedFiles?: readonly vscode.Uri[];
+  } = {}
 ): Promise<vscode.Uri[]> {
-  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), verilogProjectExcludeGlob, 5000);
+  const discovered = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.v'), verilogProjectExcludeGlob, 5000);
+  const protectedKeys = new Set([
+    ...(extraVerilogFiles ?? []),
+    ...(exclusions.protectedFiles ?? [])
+  ].map((uri) => normalizePathKey(uri.fsPath)));
+  const excludedKeys = new Set((exclusions.excludedFiles ?? []).map((uri) => normalizePathKey(uri.fsPath)));
+  const excludedBasenames = new Set((exclusions.excludedBasenames ?? []).map((name) => name.toLowerCase()));
+  const files = discovered.filter((uri) => {
+    const key = normalizePathKey(uri.fsPath);
+    return protectedKeys.has(key)
+      || (!excludedKeys.has(key) && !excludedBasenames.has(path.basename(uri.fsPath).toLowerCase()));
+  });
   const xiseFiles = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.xise'), verilogProjectExcludeGlob, 2);
   let xiseFileOrder: string[] = [];
   if (xiseFiles.length === 1) {

@@ -34,10 +34,41 @@ describe('P7 probe scenario planning', () => {
         exceptionTypes: ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov']
       }, new Random(hashSeed(`variant-coverage-${seed}`)));
 
-      for (const kind of ['external', 'adel', 'ades', 'syscall', 'ov'] as const) {
+      for (const kind of ['external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'] as const) {
         expect(kinds.filter((candidate) => candidate === kind).length)
           .toBeGreaterThanOrEqual(probeVariantsFor(kind).length);
       }
+    }
+  });
+
+  it('partitions core and timer coverage without losing any shard variant', () => {
+    const common = {
+      externalInterrupt: true,
+      timerInterrupt: true,
+      externalIntensity: 1,
+      timerIntensity: 1,
+      exceptionTypes: ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov']
+    } as const;
+    const core = planProbeScenarioKinds({
+      ...common,
+      count: 64,
+      shard: 'core'
+    }, new Random(hashSeed('core-shard')));
+    const timer = planProbeScenarioKinds({
+      ...common,
+      count: 10,
+      shard: 'timer'
+    }, new Random(hashSeed('timer-shard')));
+
+    expect(core).not.toContain('timer0');
+    expect(core).not.toContain('timer1');
+    expect(new Set(timer)).toEqual(new Set(['timer0', 'timer1']));
+    for (const kind of ['external', 'adel', 'ades', 'syscall', 'ri', 'ov'] as const) {
+      expect(core.filter((candidate) => candidate === kind).length).toBeGreaterThanOrEqual(probeVariantsFor(kind).length);
+    }
+    expect(core.filter((candidate) => candidate === 'ri').length).toBe(probeVariantsFor('ri').length + 12);
+    for (const kind of ['timer0', 'timer1'] as const) {
+      expect(timer.filter((candidate) => candidate === kind).length).toBe(probeVariantsFor(kind).length);
     }
   });
 });

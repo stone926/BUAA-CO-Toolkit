@@ -51,6 +51,7 @@ import { courseExecutionInstructionBudget } from './courseTesting/executionBudge
 import { resolveWorkspaceFile } from './workflowInputs';
 import {
   courseTraceMemoryConfigurationErrorForEngine,
+  formatAutomaticToolchainFailure,
   formatToolchainFailure,
   requiredCourseTraceToolchainChecks,
   requiredToolchainFailures
@@ -94,6 +95,10 @@ import {
   simOutputFileNameForCase
 } from './courseTestTraceFiles';
 import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from './courseTestMessages';
+import {
+  automaticExternalToolTimeoutMs,
+  automaticTestEngineMode
+} from './courseTesting/automaticTestPolicy';
 
 const batchTraceCompareRetainedEntries = 1;
 
@@ -105,6 +110,11 @@ export interface P3LogisimTraceSetup {
   traceDiagnostic: string;
   traceColumns?: LogisimTraceColumnMap;
   romTarget: LogisimRomTarget;
+}
+
+export interface P3LogisimTraceSetupOptions {
+  /** Internal automatic-test setup: keep tool details out of the normal user surface. */
+  nonInteractive?: boolean;
 }
 
 export interface LogisimCliTraceRun {
@@ -154,6 +164,7 @@ export async function runLogisimPrepareBatch(
   cases: CourseTraceCaseInput[],
   source: CourseTraceBatchSource
 ): Promise<void> {
+  const automatic = source.kind === 'generator';
   const circuit = await resolveLogisimCircuitInput();
   if (!circuit) {
     return;
@@ -170,25 +181,42 @@ export async function runLogisimPrepareBatch(
   const outDir = vscode.Uri.file(path.join(baseDir, CO_LOGISIM_DIR));
   await ensureDirectory(outDir);
 
-  revealOutputChannel(services.output, circuit);
+  if (!automatic) {
+    revealOutputChannel(services.output, circuit);
+  }
   services.output.appendLine('');
-  services.output.appendLine(`准备 Logisim 电路用例: ${cases.length} 个用例`);
-  services.output.appendLine(`电路: ${circuit.fsPath}`);
-  services.output.appendLine(`ROM: ${target.label ?? 'ROM'}${target.loc ? ` ${target.loc}` : ''}`);
+  services.output.appendLine(automatic
+    ? '正在准备自动测试电路'
+    : `准备 Logisim 电路用例: ${cases.length} 个用例`);
+  if (!automatic) {
+    services.output.appendLine(`电路: ${circuit.fsPath}`);
+    services.output.appendLine(`ROM: ${target.label ?? 'ROM'}${target.loc ? ` ${target.loc}` : ''}`);
+  }
 
   const results: LogisimPrepareCaseResult[] = [];
   for (let i = 0; i < cases.length; i++) {
     const item = cases[i];
     const asm = item.asm;
     services.output.appendLine('');
-    services.output.appendLine(`[${i + 1}/${cases.length}] ${asm.fsPath}`);
+    services.output.appendLine(automatic
+      ? `[${i + 1}/${cases.length}] 正在准备`
+      : `[${i + 1}/${cases.length}] ${asm.fsPath}`);
 
     try {
+      const enginePlan = resolveCourseEnginePlan(
+        automatic ? automaticTestEngineMode : getMipsEngine(asm),
+        'P3'
+      );
       const asmCase = item.asmCase ?? await createAsmCaseFromAsm(asm, {
         source: asmCaseSourceFromBatchSource(source),
-        resource: circuit
+        resource: circuit,
+        enginePlan
       });
-      const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
+      const dump = await prepareAsmCaseMachineCode(services, asmCase, {
+        showMessages: false,
+        nonInteractive: automatic,
+        enginePlan
+      });
       if (!dump?.ok || !dump.outputFile) {
         results.push({
           asm: asm.fsPath,
@@ -214,9 +242,11 @@ export async function runLogisimPrepareBatch(
         circuit: outFile.fsPath,
         wordCount: injected.wordCount
       });
-      services.output.appendLine(`已准备电路: ${outFile.fsPath}`);
+      services.output.appendLine(automatic ? '自动测试电路已准备' : `已准备电路: ${outFile.fsPath}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = automatic
+        ? '自动测试电路准备失败'
+        : error instanceof Error ? error.message : String(error);
       results.push({
         asm: asm.fsPath,
         status: 'error',
@@ -225,8 +255,10 @@ export async function runLogisimPrepareBatch(
     }
   }
 
-  const report = await writeLogisimPrepareReport(circuit, target, results, source, outDir);
-  showLogisimPrepareReport(report, results, source, circuit, target);
+  if (!automatic) {
+    const report = await writeLogisimPrepareReport(circuit, target, results, source, outDir);
+    showLogisimPrepareReport(report, results, source, circuit, target);
+  }
   const summary = logisimPrepSummary(results);
   const message = `Logisim 用例准备完成: ${summary.prepared} 已准备, ${summary.errors} 错误`;
   if (summary.errors) {
@@ -243,8 +275,11 @@ export async function runP3LogisimTraceCase(
 ): Promise<NeutralCourseTraceCaseResult> {
   const asm = item.asm;
   const pipeline = options.pipeline ?? defaultP3TracePipeline();
-  services.output.appendLine('P3 Logisim Trace 测试');
-  services.output.appendLine(`ASM: ${asm.fsPath}`);
+  const automatic = options.source?.kind === 'generator';
+  services.output.appendLine(automatic ? '正在运行自动测试点' : 'P3 Logisim Trace 测试');
+  if (!automatic) {
+    services.output.appendLine(`ASM: ${asm.fsPath}`);
+  }
   if (item.stdin) {
     return {
       asm: asm.fsPath,
@@ -254,7 +289,10 @@ export async function runP3LogisimTraceCase(
       message: 'P3 Logisim Trace 对拍不支持标准输入用例'
     };
   }
-  const enginePlan = resolveCourseEnginePlan(options.engineMode ?? getMipsEngine(asm), 'P3');
+  const enginePlan = resolveCourseEnginePlan(
+    automatic ? automaticTestEngineMode : options.engineMode ?? getMipsEngine(asm),
+    'P3'
+  );
   const fixedMars = enginePlan.mode === 'verify-both'
     ? await verifyConfiguredFixedMarsReference(asm, { signal: options.signal })
     : undefined;
@@ -262,7 +300,9 @@ export async function runP3LogisimTraceCase(
     return failedCase(item, 'oracle', `[${fixedMars.diagnostic.code}] ${fixedMars.diagnostic.message}`);
   }
 
-  const setup = options.logisim ?? await resolveP3LogisimTraceSetup(services, asm);
+  const setup = options.logisim ?? await resolveP3LogisimTraceSetup(services, asm, {
+    nonInteractive: automatic
+  });
   if (!setup) {
     return {
       asm: asm.fsPath,
@@ -280,14 +320,17 @@ export async function runP3LogisimTraceCase(
     enginePlan
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
-  services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
-  services.output.appendLine(`Logisim 电路: ${setup.circuit.fsPath}`);
-  services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
+  if (!automatic) {
+    services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+    services.output.appendLine(`Logisim 电路: ${setup.circuit.fsPath}`);
+    services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
+  }
   await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-diagnostic.txt', setup.traceDiagnostic, 'traceDiagnostic');
 
   const dump = await pipeline.prepareProgram(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
+    nonInteractive: automatic ? true : undefined,
     courseTrace: true,
     enginePlan,
     signal: options.signal
@@ -303,7 +346,9 @@ export async function runP3LogisimTraceCase(
       engineRunWasCancelled(dump?.status, options.signal)
     );
   }
-  services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
+  if (!automatic) {
+    services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
+  }
 
   const machineCodeText = await readTextFile(asmCase.machineCode);
   let logisimCode: P3LogisimMachineCode;
@@ -323,7 +368,9 @@ export async function runP3LogisimTraceCase(
       asmCase
     );
   }
-  services.output.appendLine(`Logisim 停机 PC: 0x${logisimCode.haltPcHex}`);
+  if (!automatic) {
+    services.output.appendLine(`Logisim 停机 PC: 0x${logisimCode.haltPcHex}`);
+  }
 
   let preparedCircuit: vscode.Uri;
   try {
@@ -373,7 +420,9 @@ export async function runP3LogisimTraceCase(
       asmCase
     );
   }
-  services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  if (!automatic) {
+    services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  }
   const oracleOutputUri = caseOutputMode
     ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
     : vscode.Uri.file(path.join(courseTraceOutputDirectory(asm).fsPath, oracleOutputFileNameForCase(item)));
@@ -392,7 +441,10 @@ export async function runP3LogisimTraceCase(
       instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
       eventSchemaRevision: 1
     }
-  }, { signal: options.signal }, enginePlan);
+  }, {
+    signal: options.signal,
+    nonInteractive: automatic ? true : undefined
+  }, enginePlan);
   const oracle = oracleInvocation.result;
   const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (postOracleSourceIssue) {
@@ -481,7 +533,8 @@ export async function runP3LogisimTraceCase(
       haltPc: logisimCode.haltPc,
       outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
       expectedLegacySha256: fixedMars?.ok ? fixedMars.identity.sha256 : undefined,
-      signal: options.signal
+      signal: options.signal,
+      nonInteractive: automatic ? true : undefined
     })
     : undefined;
   if (fullStackShadow) {
@@ -507,8 +560,9 @@ export async function runP3LogisimTraceCase(
     preparedCircuit,
     logisimCode.haltPcHex,
     asm,
-    options.revealOutput !== false,
-    options.signal
+    !automatic && options.revealOutput !== false,
+    options.signal,
+    automatic
   );
   const outDir = caseOutputMode ? undefined : courseTraceOutputDirectory(asm);
   if (outDir) {
@@ -756,9 +810,10 @@ export function resolveSingleP3LogisimRomTarget(
 
 export async function resolveP3LogisimTraceSetup(
   services: AppServices,
-  resource: vscode.Uri
+  resource: vscode.Uri,
+  options: P3LogisimTraceSetupOptions = {}
 ): Promise<P3LogisimTraceSetup | undefined> {
-  if (!await ensureP3LogisimTraceToolchainReady(services, resource)) {
+  if (!await ensureP3LogisimTraceToolchainReady(services, resource, options)) {
     return undefined;
   }
 
@@ -791,14 +846,16 @@ export async function resolveP3LogisimTraceSetup(
     return undefined;
   }
 
-  revealOutputChannel(services.output, circuit);
-  services.output.appendLine('');
-  services.output.appendLine('P3 Logisim Trace 设置');
-  services.output.appendLine(`电路: ${circuit.fsPath}`);
-  services.output.appendLine(`Trace 顶层: ${traceCircuit}`);
-  services.output.appendLine(`Trace 输出列: ${traceSpec.columns.map((column) => column.logisimLabel || `(col ${column.index})`).join(', ')}`);
-  services.output.appendLine(traceDiagnostic);
-  services.output.appendLine(`ROM: ${romTarget.label ?? 'ROM'}${romTarget.loc ? ` ${romTarget.loc}` : ''}`);
+  if (!options.nonInteractive) {
+    revealOutputChannel(services.output, circuit);
+    services.output.appendLine('');
+    services.output.appendLine('P3 Logisim Trace 设置');
+    services.output.appendLine(`电路: ${circuit.fsPath}`);
+    services.output.appendLine(`Trace 顶层: ${traceCircuit}`);
+    services.output.appendLine(`Trace 输出列: ${traceSpec.columns.map((column) => column.logisimLabel || `(col ${column.index})`).join(', ')}`);
+    services.output.appendLine(traceDiagnostic);
+    services.output.appendLine(`ROM: ${romTarget.label ?? 'ROM'}${romTarget.loc ? ` ${romTarget.loc}` : ''}`);
+  }
 
   return {
     circuit,
@@ -818,18 +875,21 @@ export async function runLogisimTraceCli(
   haltPcHex: string,
   resource: vscode.Uri,
   streamOutput = true,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  nonInteractive = false
 ): Promise<LogisimCliTraceRun> {
   const java = getJava(resource);
   const logisim = getLogisimJar(resource);
   const args = ['-jar', logisim, circuit.fsPath, '-tty', 'table,halt,speed'];
   const cwd = path.dirname(circuit.fsPath);
   const display = commandLine(java, args);
-  const timeoutMs = getRunTimeout(resource);
-  services.output.appendLine(`$ ${display}`);
-  services.output.appendLine(`cwd: ${cwd}`);
+  const timeoutMs = nonInteractive ? automaticExternalToolTimeoutMs : getRunTimeout(resource);
+  if (!nonInteractive) {
+    services.output.appendLine(`$ ${display}`);
+    services.output.appendLine(`cwd: ${cwd}`);
+  }
 
-  if (showCommandBeforeRun(resource)) {
+  if (!nonInteractive && showCommandBeforeRun(resource)) {
     const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
     if (choice !== '运行') {
       return {
@@ -864,9 +924,9 @@ export async function runLogisimTraceCli(
         services.output.append(text);
       }
     },
-    onStderr: (text) => services.output.append(text),
-    onError: (error) => services.output.appendLine(error.message),
-    onTimeout: () => {
+    onStderr: nonInteractive ? undefined : (text) => services.output.append(text),
+    onError: nonInteractive ? undefined : (error) => services.output.appendLine(error.message),
+    onTimeout: nonInteractive ? undefined : () => {
       if (!haltedByPc && !pcError) {
         services.output.appendLine(`运行超时（${timeoutMs} 毫秒）`);
       }
@@ -893,10 +953,10 @@ export async function runLogisimTraceCli(
     },
     successPredicate: (result) => haltedByPc || (!result.stopped && !result.timedOut && !pcError && result.exitCode === 0)
   });
-  if (haltedByPc) {
+  if (haltedByPc && !nonInteractive) {
     services.output.appendLine(`Logisim 已到达停机 PC 0x${haltPcHex}，结束命令行仿真`);
   }
-  if (pcError) {
+  if (pcError && !nonInteractive) {
     services.output.appendLine(pcError);
   }
   const finalStderr = pcError
@@ -966,12 +1026,18 @@ function isLogisimCircuitFile(uri: vscode.Uri): boolean {
   return uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.circ';
 }
 
-async function ensureP3LogisimTraceToolchainReady(services: AppServices, resource: vscode.Uri): Promise<boolean> {
-  revealOutputChannel(services.output, resource);
+async function ensureP3LogisimTraceToolchainReady(
+  services: AppServices,
+  resource: vscode.Uri,
+  options: P3LogisimTraceSetupOptions = {}
+): Promise<boolean> {
+  if (!options.nonInteractive) {
+    revealOutputChannel(services.output, resource);
+  }
   services.output.appendLine('');
-  services.output.appendLine('正在检查 P3 Logisim Trace 对拍工具链');
+  services.output.appendLine(options.nonInteractive ? '正在检查自动测试工具链' : '正在检查 P3 Logisim Trace 对拍工具链');
 
-  const engineMode = getMipsEngine(resource);
+  const engineMode = options.nonInteractive ? automaticTestEngineMode : getMipsEngine(resource);
   const memoryConfiguration = getMemoryConfiguration(resource);
   const configurationError = courseTraceMemoryConfigurationErrorForEngine('P3', engineMode, memoryConfiguration);
   if (configurationError) {
@@ -980,14 +1046,18 @@ async function ensureP3LogisimTraceToolchainReady(services: AppServices, resourc
     return false;
   }
 
-  const checks = await checkToolchain(services.output, resource);
+  const checks = await checkToolchain(services.output, resource, {
+    nonInteractive: options.nonInteractive,
+    engineMode: options.nonInteractive ? automaticTestEngineMode : undefined
+  });
   const required = requiredCourseTraceToolchainChecks('P3', engineMode, memoryConfiguration);
   const failed = requiredToolchainFailures(checks, required);
   if (!failed.length) {
     return true;
   }
 
-  const message = `P3 Logisim Trace 工具链检查失败：${failed.map(formatToolchainFailure).join('；')}`;
+  const formatter = options.nonInteractive ? formatAutomaticToolchainFailure : formatToolchainFailure;
+  const message = `${options.nonInteractive ? '自动测试' : 'P3 Logisim Trace'}工具链检查失败：${failed.map(formatter).join('；')}`;
   services.output.appendLine(message);
   vscode.window.showErrorMessage(message);
   return false;

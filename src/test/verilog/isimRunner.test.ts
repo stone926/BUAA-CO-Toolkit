@@ -6,7 +6,8 @@ import { compileIsim, runIsim } from '../../verilog/isimRunner';
 import {
   ensureConcreteProfile,
   getIsePath,
-  getProfile
+  getProfile,
+  getSimTime
 } from '../../config';
 import {
   isFile,
@@ -14,7 +15,7 @@ import {
   workspaceFolderFor,
   writeTextFile
 } from '../../fsUtil';
-import { runTool } from '../../process';
+import { revealOutputChannel, runTool } from '../../process';
 import { findFuse } from '../../toolchain';
 import {
   copyAsmCaseArtifact,
@@ -35,6 +36,7 @@ import {
 import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
+  findUserTestbenchSourceUris,
   recordTestbenchForAsmCase,
   resolveNamedTestbench
 } from '../../verilog/testbenchResolver';
@@ -54,7 +56,8 @@ vi.mock('../../config', () => ({
   getMachineCode: vi.fn(() => 'code.txt'),
   getIsePath: vi.fn(),
   getProfile: vi.fn(),
-  getSimTime: vi.fn(() => '200us')
+  getSimTime: vi.fn(() => '200us'),
+  getTestbench: vi.fn(() => 'mips_tb')
 }));
 
 vi.mock('../../fsUtil', () => ({
@@ -107,6 +110,7 @@ vi.mock('../../verilog/simulationInputs', () => ({
 vi.mock('../../verilog/testbenchResolver', () => ({
   ensureP7InterruptTestbench: vi.fn(),
   ensureRunnableTestbench: vi.fn(),
+  findUserTestbenchSourceUris: vi.fn(),
   recordTestbenchForAsmCase: vi.fn(async () => undefined),
   resolveNamedTestbench: vi.fn()
 }));
@@ -169,6 +173,7 @@ describe('Verilog ISim runner orchestration', () => {
     vi.mocked(resolveNamedTestbench).mockResolvedValue({ kind: 'user', moduleName: 'mips_tb', sourceUri: URI.file('E:/work/tb.v') });
     vi.mocked(ensureRunnableTestbench).mockResolvedValue({ kind: 'user', moduleName: 'mips_tb', sourceUri: URI.file('E:/work/tb.v') });
     vi.mocked(ensureP7InterruptTestbench).mockResolvedValue(undefined);
+    vi.mocked(findUserTestbenchSourceUris).mockResolvedValue([URI.file('E:/work/tb.v')]);
     vi.mocked(resolveIseProjectFiles).mockResolvedValue([URI.file('E:/work/src/mips.v'), URI.file('E:/work/tb.v')]);
     vi.mocked(verilogProjectSignature).mockResolvedValue('project-signature');
     vi.mocked(generateIseProject).mockResolvedValue(generated);
@@ -233,6 +238,58 @@ describe('Verilog ISim runner orchestration', () => {
     }));
   });
 
+  it('propagates the automatic non-interactive boundary and hides machine-code paths', async () => {
+    const currentServices = services();
+    const currentCase = asmCase();
+
+    await runIsim(currentServices, {
+      resource,
+      asmCase: currentCase,
+      nonInteractive: true,
+      tclText: 'run 4195us;\nexit\n'
+    });
+
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(runTool).mock.calls[0][2]).toEqual(expect.objectContaining({
+      nonInteractive: true,
+      timeoutMs: 300_000
+    }));
+    expect(vi.mocked(runTool).mock.calls[1][2]).toEqual(expect.objectContaining({
+      nonInteractive: true,
+      timeoutMs: 300_000
+    }));
+    expect(ensureP7InterruptTestbench).toHaveBeenCalledWith(
+      currentServices,
+      resource,
+      undefined,
+      undefined,
+      false,
+      { nonInteractive: true }
+    );
+    expect(ensureRunnableTestbench).toHaveBeenCalledWith(
+      currentServices,
+      resource,
+      false,
+      undefined,
+      { nonInteractive: true }
+    );
+    expect(generateIseProject).toHaveBeenCalledWith(currentServices, expect.objectContaining({
+      nonInteractive: true,
+      tclText: 'run 4195us;\nexit\n'
+    }));
+    expect(resolveIseProjectFiles).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+      expect.objectContaining({
+        excludedFiles: [URI.file('E:/work/tb.v')],
+        excludedBasenames: ['mips_tb.v']
+      })
+    );
+    expect(getSimTime).not.toHaveBeenCalled();
+    expect(revealOutputChannel).not.toHaveBeenCalled();
+    expect(currentServices.output.appendLine).not.toHaveBeenCalledWith(expect.stringContaining(currentCase.machineCode.fsPath));
+  });
+
   it('reuses a compile cache hit without generating a project or running fuse', async () => {
     const cached = {
       generated,
@@ -260,7 +317,7 @@ describe('Verilog ISim runner orchestration', () => {
 
     await compileIsim(services(), { resource, interruptSchedule: [0x3000] });
 
-    expect(resolveIseProjectFiles).toHaveBeenCalledWith(expect.anything(), [generatedUri]);
+    expect(resolveIseProjectFiles).toHaveBeenCalledWith(expect.anything(), [generatedUri], {});
   });
 
   it('does not run P4-P7 simulation when ASM case selection is cancelled', async () => {

@@ -31,7 +31,8 @@ import {
   type ExecuteRequest,
   type ExecuteResult,
   type MipsAssemblerProvider,
-  type MipsExecutionProvider
+  type MipsExecutionProvider,
+  type ProviderRunContext
 } from '../../mips/providers/contracts';
 import {
   setProviderRegistry
@@ -86,6 +87,22 @@ describe('full-stack shadow runner', () => {
     expect(evidence.input.builtinImageFingerprint).toBe(fixture.image.fingerprint);
     expect(evidence.input.legacyImageFingerprint).toBe(fixture.image.fingerprint);
     expect(fs.readdirSync(path.dirname(outcome.bundleDir)).some((name) => name.includes('.tmp-'))).toBe(false);
+  });
+
+  it('forwards the automatic quiet context through both legacy providers without logging shadow details', async () => {
+    const fixture = await createFixture();
+    const providers = installProviders();
+    const owner = services();
+
+    const outcome = await runFixture(fixture, undefined, {
+      nonInteractive: true,
+      services: owner
+    });
+
+    expect(outcome.status).toBe('matched');
+    expect(providers.assemble.mock.calls[0][1]).toMatchObject({ nonInteractive: true });
+    expect(providers.execute.mock.calls[0][1]).toMatchObject({ nonInteractive: true });
+    expect(owner.output.appendLine).not.toHaveBeenCalled();
   });
 
   it('retains an inconclusive bundle for an unregistered assembly image mismatch', async () => {
@@ -298,7 +315,10 @@ function installProviders(scenario: ProviderScenario = {}): {
   readonly assemble: ReturnType<typeof vi.fn>;
   readonly execute: ReturnType<typeof vi.fn>;
 } {
-  const assemble = vi.fn(async (request: AssembleRequest): Promise<AssembleResult> => {
+  const assemble = vi.fn(async (
+    request: AssembleRequest,
+    _context?: ProviderRunContext
+  ): Promise<AssembleResult> => {
     const failure = scenario.assemblyFailure;
     if (failure) {
       return {
@@ -344,7 +364,10 @@ function installProviders(scenario: ProviderScenario = {}): {
       }
     };
   });
-  const execute = vi.fn(async (request: ExecuteRequest): Promise<ExecuteResult> => {
+  const execute = vi.fn(async (
+    request: ExecuteRequest,
+    _context?: ProviderRunContext
+  ): Promise<ExecuteResult> => {
     expect(request.executionBinding?.imageFingerprint).toBe(request.image.fingerprint);
     const event = traceEvent(scenario.legacyTraceValue ?? '0000002A');
     return {
@@ -390,8 +413,12 @@ function installProviders(scenario: ProviderScenario = {}): {
   return { assemble, execute };
 }
 
-async function runFixture(fixture: Fixture, outputRoot = path.join(root, 'shadow')) {
-  return runFullStackShadow(services(), fixture.asmCase, {
+async function runFixture(
+  fixture: Fixture,
+  outputRoot = path.join(root, 'shadow'),
+  options: { nonInteractive?: boolean; services?: AppServices } = {}
+) {
+  return runFullStackShadow(options.services ?? services(), fixture.asmCase, {
     profile: 'P5',
     builtinAssembly: builtinAssembly(fixture.image),
     builtinExecution: builtinExecution(),
@@ -399,6 +426,7 @@ async function runFixture(fixture: Fixture, outputRoot = path.join(root, 'shadow
     haltPc: 0x3004,
     outputRoot,
     expectedLegacySha256: fixedSha256,
+    nonInteractive: options.nonInteractive,
     now: new Date('2026-08-29T00:00:00.000Z')
   });
 }

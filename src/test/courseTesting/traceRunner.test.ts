@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AsmCase } from '../../asmCaseStore';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
-import { getProfile } from '../../config';
+import { getMipsEngine, getProfile } from '../../config';
 import { runP3LogisimTraceCase } from '../../courseTestLogisim';
 import {
   asmCaseSourceSnapshotIssue,
@@ -20,6 +20,8 @@ import {
 } from '../../language/mips/traceParser';
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
 import { createLegacyProgramImage } from '../../mips/replay/programImage';
+import { verifyConfiguredFixedMarsReference } from '../../mips/providers/fixedMarsReference';
+import { runFullStackShadow } from '../../courseTesting/fullStackShadowRunner';
 
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
@@ -46,6 +48,14 @@ vi.mock('../../asmCaseStore', () => ({
 
 vi.mock('../../mips/providers/providerResolver', () => ({
   executeWithPreflight: vi.fn()
+}));
+
+vi.mock('../../mips/providers/fixedMarsReference', () => ({
+  verifyConfiguredFixedMarsReference: vi.fn()
+}));
+
+vi.mock('../../courseTesting/fullStackShadowRunner', () => ({
+  runFullStackShadow: vi.fn()
 }));
 
 vi.mock('../../verilog', () => ({
@@ -133,6 +143,7 @@ describe('course trace runner orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(recordAsmCaseOracleResult).mockResolvedValue(undefined);
+    vi.mocked(getMipsEngine).mockReturnValue('auto');
     vi.mocked(readAsmCaseStdinSnapshot).mockResolvedValue(undefined);
     vi.mocked(asmCaseSourceSnapshotIssue).mockResolvedValue(undefined);
     callOrder.splice(0);
@@ -510,9 +521,123 @@ describe('course trace runner orchestration', () => {
     expect(result.stage).toBe('probe');
     expect(runIsim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       asmCase: currentCase,
-      p7Probe: probe
+      p7Probe: probe,
+      tclText: 'run 4195us;\nexit\n'
     }));
     expect(checkP7Probe).toHaveBeenCalled();
     expect(executeWithPreflight).not.toHaveBeenCalled();
+  });
+
+  it.each(['mars', 'verify-both'] as const)(
+    'runs an automatic P7 probe as builtin/DUT-only when the workspace engine is %s',
+    async (configuredEngine) => {
+      vi.mocked(getProfile).mockReturnValue('P7');
+      vi.mocked(getMipsEngine).mockReturnValue(configuredEngine);
+      const probe = { version: 1, logBase: 0x2800, recordWords: 8, scenarios: [{ id: 1, kind: 'ri' }] };
+      const currentCase = makeAsmCase({ p7: { probe } as never });
+
+      const result = await runCourseTraceCase(
+        services(),
+        { asm: URI.file('E:/work/src/test.asm'), asmCase: currentCase },
+        { source: { kind: 'generator' } }
+      );
+
+      expect(result.stage).toBe('probe');
+      expect(prepareAsmCaseMachineCode).toHaveBeenCalledWith(
+        expect.anything(),
+        currentCase,
+        expect.objectContaining({
+          enginePlan: expect.objectContaining({ mode: 'builtin', primaryEngineId: 'builtin-ts' })
+        })
+      );
+      expect(verifyConfiguredFixedMarsReference).not.toHaveBeenCalled();
+      expect(executeWithPreflight).not.toHaveBeenCalled();
+      expect(runIsim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        p7Probe: probe,
+        nonInteractive: true
+      }));
+    }
+  );
+
+  it('passes a private execution-budget-derived TCL window to automatic ISim', async () => {
+    const result = await runCourseTraceCase(
+      services(),
+      { asm: URI.file('E:/work/src/test.asm') },
+      { source: { kind: 'generator' } }
+    );
+
+    expect(result.status).toBe('passed');
+    expect(runIsim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      tclText: 'run 4195us;\nexit\n',
+      nonInteractive: true
+    }));
+  });
+
+  it.each(['mars', 'verify-both'] as const)(
+    'keeps every generated case on the private builtin stack when the workspace engine is %s',
+    async (configuredEngine) => {
+      vi.mocked(getMipsEngine).mockReturnValue(configuredEngine);
+
+      const result = await runCourseTraceCase(
+        services(),
+        { asm: URI.file('E:/work/src/test.asm') },
+        { source: { kind: 'generator' } }
+      );
+
+      expect(result.status).toBe('passed');
+      expect(prepareAsmCaseMachineCode).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          nonInteractive: true,
+          enginePlan: expect.objectContaining({ mode: 'builtin', primaryEngineId: 'builtin-ts' })
+        })
+      );
+      expect(executeWithPreflight).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ nonInteractive: true }),
+        expect.objectContaining({ mode: 'builtin', primaryEngineId: 'builtin-ts' })
+      );
+      expect(verifyConfiguredFixedMarsReference).not.toHaveBeenCalled();
+      expect(runFullStackShadow).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves verify-both full-stack validation for a manual case', async () => {
+    vi.mocked(getMipsEngine).mockReturnValue('verify-both');
+    vi.mocked(verifyConfiguredFixedMarsReference).mockResolvedValueOnce({
+      ok: true,
+      identity: { sha256: 'a'.repeat(64) }
+    } as never);
+    vi.mocked(runFullStackShadow).mockResolvedValueOnce({
+      evidenceKind: 'full-stack',
+      status: 'matched',
+      message: 'matched',
+      bundleDir: 'E:/work/shadow',
+      resultFile: 'E:/work/shadow/full-stack-result.json',
+      assembly: {
+        matched: true,
+        builtinWords: 3,
+        legacyWords: 3,
+        disposition: 'matched',
+        message: 'matched'
+      }
+    } as never);
+
+    const result = await runCourseTraceCase(
+      services(),
+      { asm: URI.file('E:/work/src/test.asm') }
+    );
+
+    expect(result.status).toBe('passed');
+    expect(runFullStackShadow).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        expectedLegacySha256: 'a'.repeat(64),
+        nonInteractive: undefined
+      })
+    );
   });
 });

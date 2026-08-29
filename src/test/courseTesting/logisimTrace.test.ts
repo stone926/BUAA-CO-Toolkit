@@ -333,7 +333,7 @@ describe('Logisim trace helpers', () => {
         memaddr: 6,
         memdata: 7
       }
-    })).toThrow('traceColumns.regaddr');
+    })).toThrow('旧版显式列映射中的 "regaddr"');
   });
 
   it('reports partial label conflicts with inferred ordered mapping', () => {

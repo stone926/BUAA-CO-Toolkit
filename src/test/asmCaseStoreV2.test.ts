@@ -10,11 +10,13 @@ import {
   asmCaseSourceSnapshotIssue,
   copyAsmCaseArtifact,
   listAsmCaseManifests,
+  machineCodeValidationOutputMessage,
   maximumAsmCaseIndexEntries,
   maximumAsmCaseIndexManifestBytes,
   prepareAsmCaseMachineCode,
   readAsmCaseManifestForAsm,
   readAsmCaseStdinSnapshot,
+  recordAsmCaseTestOutcome,
   recordAsmCaseOracleResult,
   updateAsmCaseArtifacts,
   updateAsmCaseMetadata
@@ -89,6 +91,13 @@ function createCase(): AsmCase {
 }
 
 describe('ASM case manifest v2 artifact storage', () => {
+  it('hides word, address and mnemonic diagnostics from automatic output', () => {
+    const detail = '0x00004180 word=ffffffff mnemonic=unknown SECRET_INTERNAL';
+    expect(machineCodeValidationOutputMessage(detail, true)).toBe('自动测试点校验失败');
+    expect(machineCodeValidationOutputMessage(detail, true)).not.toContain('SECRET_INTERNAL');
+    expect(machineCodeValidationOutputMessage(detail, false)).toBe(detail);
+  });
+
   it('rejects an assembly plan captured for a different case profile', async () => {
     const asmCase = createCase();
     const result = await prepareAsmCaseMachineCode({} as never, asmCase, {
@@ -135,6 +144,24 @@ describe('ASM case manifest v2 artifact storage', () => {
       'dut.verilog.testbenchSha256': 'a'.repeat(64)
     });
     expect(manifest.dut?.configurationHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('records only the sanitized outcome needed by test history', async () => {
+    const asmCase = createCase();
+    fs.writeFileSync(asmCase.manifestUri.fsPath, JSON.stringify(asmCase.manifest));
+
+    await recordAsmCaseTestOutcome(asmCase.manifestUri.fsPath, {
+      status: 'error',
+      stage: 'dut',
+      diagnostic: '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口'
+    });
+
+    const written = JSON.parse(fs.readFileSync(asmCase.manifestUri.fsPath, 'utf8')) as AsmCaseManifestV2;
+    expect(written.metadata).toEqual({
+      'test.status': 'error',
+      'test.stage': 'dut',
+      'test.diagnostic': '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口'
+    });
   });
 
   it('rejects direct references outside the case directory', async () => {

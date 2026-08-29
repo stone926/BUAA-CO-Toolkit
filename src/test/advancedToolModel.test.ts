@@ -14,19 +14,24 @@ describe('advanced tool model', () => {
     expect(commands).toContain('co.verilog.generateIseProject');
     expect(commands).toContain('co.verilog.exportVcd');
     expect(commands).toContain('co.test.runGeneratedTraceTests');
-    expect(commands).toContain('co.test.verifyWithFixedMars');
+    expect(commands).toContain('co.test.startContinuousGeneratedTraceTests');
+    expect(commands).toContain('co.test.stopContinuousTests');
+    expect(commands).toContain('co.test.openAsmCaseIndex');
+    expect(commands).not.toContain('co.test.verifyWithFixedMars');
     expect(commands).toContain('co.hazard.analyzeCurrentMachineCode');
     expect(commands).not.toContain('co.logisim.convertLogToCsv');
   });
 
-  it('includes Logisim preparation and diagnostics for P3', () => {
+  it('keeps Logisim utilities but hides test preparation and diagnostics for P3', () => {
     const commands = commandsFor('P3', 'logisim');
 
     expect(commands).toContain('co.logisim.generateRom');
     expect(commands).toContain('co.logisim.convertLogToCsv');
-    expect(commands).toContain('co.test.prepareLogisimCases');
-    expect(commands).toContain('co.test.diagnoseP3LogisimTraceCircuit');
-    expect(commands).toContain('co.test.runFullTest');
+    expect(commands).not.toContain('co.test.prepareLogisimCases');
+    expect(commands).not.toContain('co.test.prepareGeneratedLogisimCases');
+    expect(commands).not.toContain('co.test.diagnoseP3LogisimTraceCircuit');
+    expect(commands).not.toContain('co.test.runFullTest');
+    expect(commands).toContain('co.test.runGeneratedTraceTests');
     expect(commands).not.toContain('co.verilog.generateIseProject');
   });
 
@@ -39,24 +44,16 @@ describe('advanced tool model', () => {
       'co.mips.runWithStdinFile',
       'co.mips.runInTerminal',
       'co.mips.dumpKernelText',
-      'co.test.runFullTest',
-      'co.test.verifyWithFixedMars',
-      'co.test.runBatchTraceTests',
       'co.test.runGeneratedTraceTests',
-      'co.test.generateAsmTests',
-      'co.test.generateAndDumpAsmTests',
-      'co.test.compareTraceFiles',
-      'co.test.compareLatestOutputs',
-      'co.test.openBatchTraceReport',
+      'co.test.startContinuousGeneratedTraceTests',
+      'co.test.stopContinuousTests',
+      'co.test.openAsmCaseIndex',
       'co.verilog.generateTestbench',
       'co.verilog.checkSyntaxWithIse',
       'co.verilog.generateIseProject',
       'co.verilog.exportVcd',
       'co.logisim.generateRom',
       'co.logisim.convertLogToCsv',
-      'co.test.prepareLogisimCases',
-      'co.test.prepareGeneratedLogisimCases',
-      'co.test.diagnoseP3LogisimTraceCircuit',
       'co.hazard.analyzeCurrentMachineCode',
       'co.hazard.openReport'
     ]);
@@ -67,5 +64,23 @@ describe('advanced tool model', () => {
     ];
 
     expect(commands.every((command) => contributedCommands.has(command))).toBe(true);
+  });
+
+  it('exposes exactly four automatic-test concepts for trace profiles', () => {
+    const testItems = buildAdvancedToolItems({ profile: 'P6', activeKind: 'verilog' })
+      .filter((item) => item.command.startsWith('co.test.'));
+
+    expect(testItems.map((item) => item.command)).toEqual([
+      'co.test.runGeneratedTraceTests',
+      'co.test.startContinuousGeneratedTraceTests',
+      'co.test.stopContinuousTests',
+      'co.test.openAsmCaseIndex'
+    ]);
+    expect(testItems.map((item) => item.label)).toEqual([
+      '运行自动测试',
+      '持续自动测试',
+      '停止自动测试',
+      '测试历史 / 失败用例'
+    ]);
   });
 });

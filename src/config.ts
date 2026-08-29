@@ -8,12 +8,7 @@ import {
   concreteProjectProfiles,
   isConcreteProjectProfile
 } from './projectProfile';
-import {
-  p7CourseInstructionCountMaximum,
-  p7ProbeDefaultScenarioCount,
-  p7ProbeMaxScenarioCount
-} from './courseTesting/p7Hardware';
-import { getProfileName } from './courseConfig';
+import { getLogisimTraceProfileConfig, getProfileName } from './courseConfig';
 import { commandResponds, defaultPythonCommand, firstWorkingCommand, pythonCandidates } from './python';
 import {
   ProfileConfiguredSource,
@@ -295,7 +290,7 @@ export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
 }
 
 export function getGeneratorArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('test.generatorArgs', configDefaultArray('test.generatorArgs'), resource);
+  return layeredGetArray('test.generatorArgs', [], resource);
 }
 
 export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
@@ -303,150 +298,25 @@ export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
   if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
   }
-  return configDefault<number>('test.generatedAsmLimit');
+  return 100;
 }
 
-export function useBuiltinTestGenerator(resource?: vscode.Uri): boolean {
-  const configured = inspectedValue<boolean>('test.builtinGenerator.enabled', resource);
-  if (typeof configured === 'boolean') {
-    return configured;
+/** The sole public automatic-test customization. The old key is migration-only. */
+export function getAutomaticTestInstructions(resource?: vscode.Uri): string {
+  const current = inspectedValue<string>('test.instructions', resource);
+  if (typeof current === 'string') {
+    return current.trim();
   }
-  return configDefault<boolean>('test.builtinGenerator.enabled');
+  const legacy = inspectedValue<string>('test.builtinGenerator.instructions', resource)?.trim();
+  return legacy || configDefault<string>('test.instructions');
 }
 
-export function getBuiltinGeneratorInstructions(resource?: vscode.Uri): string {
-  return layeredGetString(
-    'test.builtinGenerator.instructions',
-    configDefault<string>('test.builtinGenerator.instructions'),
-    resource
-  );
+export function getLogisimTraceMainCircuit(_resource?: vscode.Uri): string {
+  return getLogisimTraceProfileConfig('P3')?.defaultCircuit ?? 'main';
 }
 
-export function getBuiltinGeneratorInstructionCount(resource?: vscode.Uri): number {
-  const configured = inspectedValue<number>('test.builtinGenerator.instructionCount', resource);
-  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
-    return Math.floor(configured);
-  }
-  return configDefault<number>('test.builtinGenerator.instructionCount');
-}
-
-export function getBuiltinGeneratorP7InstructionCount(resource?: vscode.Uri): number {
-  const configured = inspectedValue<number>('test.builtinGenerator.p7InstructionCount', resource);
-  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
-    return Math.min(Math.floor(configured), p7CourseInstructionCountMaximum);
-  }
-  return Math.min(configDefault<number>('test.builtinGenerator.p7InstructionCount'), p7CourseInstructionCountMaximum);
-}
-
-export function getContinuousIntervalMs(resource?: vscode.Uri): number {
-  return positiveIntegerConfig('test.continuousIntervalMs', configDefault<number>('test.continuousIntervalMs'), resource);
-}
-
-export function getContinuousMaxIterations(resource?: vscode.Uri): number {
-  return nonNegativeIntegerConfig('test.continuousMaxIterations', configDefault<number>('test.continuousMaxIterations'), resource);
-}
-
-export function getContinuousStopOnFailure(resource?: vscode.Uri): boolean {
-  return config<boolean>('test.continuousStopOnFailure', configDefault<boolean>('test.continuousStopOnFailure'), resource);
-}
-
-export function getContinuousRetainedPassingCases(resource?: vscode.Uri): number {
-  return nonNegativeIntegerConfig('test.continuousRetainedPassingCases', configDefault<number>('test.continuousRetainedPassingCases'), resource);
-}
-
-export function getContinuousReportRetainedIterations(resource?: vscode.Uri): number {
-  return nonNegativeIntegerConfig('test.continuousReportRetainedIterations', configDefault<number>('test.continuousReportRetainedIterations'), resource);
-}
-
-export function getLogisimTraceMainCircuit(resource?: vscode.Uri): string {
-  return layeredGetString(
-    'test.logisim.mainCircuit',
-    configDefault<string>('test.logisim.mainCircuit'),
-    resource
-  );
-}
-
-export function getLogisimTraceColumns(resource?: vscode.Uri): Record<string, number> | undefined {
-  const configured = inspectedValue<Record<string, unknown>>('test.logisim.traceColumns', resource);
-  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
-    return undefined;
-  }
-  const result: Record<string, number> = {};
-  for (const [key, value] of Object.entries(configured)) {
-    if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
-      result[key.trim().toLowerCase()] = value;
-    }
-  }
-  return Object.keys(result).length ? result : undefined;
-}
-
-/**
- * P7 自动对拍是否注入外部中断（macroscopic_pc == target_pc 触发）。
- * 关闭时退化为纯异常/正常数据通路对拍（完全确定性）。
- */
-export function getP7InterruptEnabled(resource?: vscode.Uri): boolean {
-  const configured = inspectedValue<boolean>('test.p7.interrupt', resource);
-  if (typeof configured === 'boolean') {
-    return configured;
-  }
-  return configDefault<boolean>('test.p7.interrupt');
-}
-
-export type P7StressMode = 'anchor' | 'probe' | 'hybrid' | 'off';
-
-export function getP7StressMode(resource?: vscode.Uri): P7StressMode {
-  const normalize = (value: unknown): P7StressMode | undefined => {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    return normalized === 'anchor' || normalized === 'probe' || normalized === 'hybrid' || normalized === 'off'
-      ? normalized
-      : undefined;
-  };
-  return normalize(inspectedValue<string>('test.p7.stressMode', resource))
-    ?? configDefault<P7StressMode>('test.p7.stressMode');
-}
-
-export function getP7TimerInterruptEnabled(resource?: vscode.Uri): boolean {
-  const configured = inspectedValue<boolean>('test.p7.timerInterrupt', resource);
-  if (typeof configured === 'boolean') {
-    return configured;
-  }
-  return configDefault<boolean>('test.p7.timerInterrupt');
-}
-
-export function getP7ExternalInterruptIntensity(resource?: vscode.Uri): number {
-  return p7UnitIntervalConfig('test.p7.externalInterruptIntensity', configDefault<number>('test.p7.externalInterruptIntensity'), resource);
-}
-
-export function getP7TimerIntensity(resource?: vscode.Uri): number {
-  return p7UnitIntervalConfig('test.p7.timerIntensity', configDefault<number>('test.p7.timerIntensity'), resource);
-}
-
-export function getP7ProbeScenarioCount(resource?: vscode.Uri): number {
-  const normalize = (value: number): number => Math.min(p7ProbeMaxScenarioCount, Math.max(1, Math.floor(value)));
-  const configured = inspectedValue<number>('test.p7.probeScenarioCount', resource);
-  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
-    return normalize(configured);
-  }
-  return normalize(configDefault<number>('test.p7.probeScenarioCount') ?? p7ProbeDefaultScenarioCount);
-}
-
-/**
- * P7 生成器主动制造内部异常（AdEL/AdES/Syscall/RI/Ov）的比例，范围 [0, 1]。
- */
-export function getP7ExceptionRate(resource?: vscode.Uri): number {
-  const configured = inspectedValue<number>('test.p7.exceptionRate', resource);
-  if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
-    return Math.min(1, configured);
-  }
-  return configDefault<number>('test.p7.exceptionRate');
-}
-
-export function getP7ExceptionTypes(resource?: vscode.Uri): string[] {
-  return layeredGetArray(
-    'test.p7.exceptionTypes',
-    configDefaultArray('test.p7.exceptionTypes'),
-    resource
-  );
+export function getLogisimTraceColumns(_resource?: vscode.Uri): Record<string, number> | undefined {
+  return undefined;
 }
 
 function layeredGetArray(
@@ -470,26 +340,4 @@ function inspectedValue<T>(key: string, resource?: vscode.Uri): T | undefined {
 
 function normalizeProjectProfile(value: unknown): ProjectProfile | undefined {
   return value === 'auto' || isConcreteProjectProfile(value) ? value : undefined;
-}
-
-function positiveIntegerConfig(key: string, fallback: number, resource?: vscode.Uri): number {
-  const value = config<number>(key, fallback, resource);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-}
-
-function nonNegativeIntegerConfig(key: string, fallback: number, resource?: vscode.Uri): number {
-  const value = config<number>(key, fallback, resource);
-  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
-}
-
-function p7UnitIntervalConfig(
-  key: string,
-  fallback: number,
-  resource?: vscode.Uri
-): number {
-  const configured = inspectedValue<number>(key, resource);
-  if (typeof configured === 'number' && Number.isFinite(configured) && configured >= 0) {
-    return Math.min(1, configured);
-  }
-  return fallback;
 }

@@ -25,6 +25,11 @@ export interface RunToolOptions {
   launchSuccessDelayMs?: number;
   /** Cancellation with process-tree termination (plan section 1.6). */
   signal?: AbortSignal;
+  /**
+   * Internal automation lane: never ask for per-process confirmation and do not stream the
+   * private command/cwd/raw process chatter into the user-facing output channel.
+   */
+  nonInteractive?: boolean;
   /** Raw output ceilings. Exceeding either limit terminates the whole process tree. */
   maxStdoutBytes?: number;
   maxStderrBytes?: number;
@@ -45,10 +50,12 @@ export async function runTool(command: string, args: string[], options: RunToolO
   const timeoutMs = options.timeoutMs ?? getRunTimeout(options.resource);
   const display = commandLine(command, args);
   const cwd = options.cwd;
-  options.output.appendLine(`$ ${display}`);
-  options.output.appendLine(`cwd: ${cwd}`);
+  if (!options.nonInteractive) {
+    options.output.appendLine(`$ ${display}`);
+    options.output.appendLine(`cwd: ${cwd}`);
+  }
 
-  if (showCommandBeforeRun(options.resource)) {
+  if (!options.nonInteractive && showCommandBeforeRun(options.resource)) {
     const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
     if (choice !== '运行') {
       return {
@@ -72,10 +79,12 @@ export async function runTool(command: string, args: string[], options: RunToolO
     maxStdoutBytes: options.maxStdoutBytes,
     maxStderrBytes: options.maxStderrBytes,
     commandLine: display,
-    onStdout: (text) => options.output.append(text),
-    onStderr: (text) => options.output.append(text),
-    onError: (error) => options.output.appendLine(error.message),
-    onTimeout: () => options.output.appendLine(`运行超时（${timeoutMs} 毫秒）`)
+    onStdout: options.nonInteractive ? undefined : (text) => options.output.append(text),
+    onStderr: options.nonInteractive ? undefined : (text) => options.output.append(text),
+    onError: options.nonInteractive ? undefined : (error) => options.output.appendLine(error.message),
+    onTimeout: options.nonInteractive
+      ? undefined
+      : () => options.output.appendLine(`运行超时（${timeoutMs} 毫秒）`)
   });
   return {
     ok: result.ok,
@@ -94,10 +103,12 @@ export async function launchTool(command: string, args: string[], options: RunTo
   const display = commandLine(command, args);
   const cwd = options.cwd;
   const successDelayMs = options.launchSuccessDelayMs ?? 1500;
-  options.output.appendLine(`$ ${display}`);
-  options.output.appendLine(`cwd: ${cwd}`);
+  if (!options.nonInteractive) {
+    options.output.appendLine(`$ ${display}`);
+    options.output.appendLine(`cwd: ${cwd}`);
+  }
 
-  if (showCommandBeforeRun(options.resource)) {
+  if (!options.nonInteractive && showCommandBeforeRun(options.resource)) {
     const choice = await vscode.window.showInformationMessage(`运行外部工具？\n${display}`, '运行');
     if (choice !== '运行') {
       return {

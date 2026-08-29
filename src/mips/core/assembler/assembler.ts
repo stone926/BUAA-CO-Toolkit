@@ -57,7 +57,7 @@ export interface CourseAssemblerOptions {
   readonly maximumMacroDepth?: number;
   readonly maximumExpandedInstructions?: number;
   readonly maximumPseudoInstructionsPerStatement?: number;
-  /** P7 generator RI victim mnemonic (`_co_internal_unknown_instruction` -> word 0x0000003f). */
+  /** Historical P7 RI victim mnemonic retained only for old manifest replay. */
   readonly p7RiInstruction?: boolean;
 }
 

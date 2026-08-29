@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   courseTraceMemoryConfigurationError,
   courseTraceMemoryConfigurationErrorForEngine,
+  formatAutomaticToolchainFailure,
   formatToolchainFailure,
   MARS_P7_CHECK,
   requiredCourseTraceToolchainChecks,
@@ -44,6 +45,18 @@ describe('course test toolchain helpers', () => {
     expect(formatToolchainFailure({ name: 'MARS', ok: false, detail: '未配置' })).toBe('MARS 未配置');
     expect(formatToolchainFailure({ name: 'ISE fuse', ok: false, detail: '不可用', suggestion: '检查 ISE 路径' }))
       .toBe('ISE fuse 不可用（检查 ISE 路径）');
+  });
+
+  it('keeps automatic toolchain failures free of local paths and raw details', () => {
+    const message = formatAutomaticToolchainFailure({
+      name: 'ISE fuse',
+      ok: false,
+      detail: 'E:/SECRET_ISE_PATH/bin/nt64/fuse.exe',
+      suggestion: '检查 ISE 路径'
+    });
+
+    expect(message).toBe('ISE fuse 不可用，请检查工具链设置');
+    expect(message).not.toContain('SECRET_ISE_PATH');
   });
 
   it('treats a required capability that was never checked as a failure', () => {

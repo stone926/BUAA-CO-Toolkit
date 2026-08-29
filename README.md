@@ -25,18 +25,12 @@
 
 ### 第一步：装好外部工具并填路径
 
-P3–P7 普通课程测试不再要求安装 MARS。P2 或 `co.mips.engine=mars` 使用用户配置的 legacy MARS；汇编兼容基线固定为 [`v0.6.3`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/tag/v0.6.3)（commit `8b53a49`，SHA-256 `599957…afb31`）。`verify-both`/“使用固定 MARS 验证”使用另一角色 [`v0.6.3-course1`](https://github.com/stone926/Mars-with-BUAA-CO-extension/releases/tag/v0.6.3-course1)（commit `c6197f4`，SHA-256 `d13456…0c64`），二者不能互相冒充。
+P3–P7 自动测试不要求安装 MARS：P3 填写 Logisim，P4–P7 填写 ISE 即可。只有 P2，或手动测试/历史复现显式使用 MARS 回滚与验证时，才需要额外配置 MARS。
 
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
 ```jsonc
 {
-  // P3-P7 默认 auto：内置 TS 汇编器 + 执行器；mars 可一次设置回滚，verify-both 用于开发验证
-  "co.mips.engine": "auto",
-  // 仅 P2 / mars / verify-both 需要；verify-both 必须指向受信任的 v0.6.3-course1
-  "co.toolchain.mars": "修改版 Mars 的路径",
-  // P7：mars 接受具备课程能力的 configured legacy；verify-both 必须精确使用受信任的 course1
-  "co.toolchain.marsP7": "修改版 Mars P7 的路径",
   // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
   "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 bin 等文件夹",
   // Logisim（P0/P3）
@@ -47,7 +41,7 @@ P3–P7 普通课程测试不再要求安装 MARS。P2 或 `co.mips.engine=mars`
 }
 ```
 
-> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮）。检查项会随 Profile 和 `co.mips.engine` 变化；P4–P7 的 `auto`/`builtin` 不检查 Java 或 MARS。
+> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮）。手动检查项会随 Profile 和 `co.mips.engine` 变化；自动测试独立检查自身固定需要的最小工具链。
 
 ### 第二步：告诉插件当前是哪个 Profile
 
@@ -58,12 +52,10 @@ P3–P7 普通课程测试不再要求安装 MARS。P2 或 `co.mips.engine=mars`
 
 打开侧边栏「**BUAA CO Toolkit**」面板 →「操作」区，点：
 
-- **持续生成测试**（P3–P7）
-  → 插件自动循环执行：**生成随机测试点 → TS 汇编器生成机器码 → Logisim/ISim 跑你的 CPU → TS 执行器生成课程 oracle → 对拍 → 出报告**，发现不一致会停下并定位首个差异。
+- **持续自动测试**（P3–P7）
+  → 插件会持续生成高强度测试点、运行你的 CPU 并核验结果；发现问题后自动停下并保存可复现用例。
 
-低频入口（单次/批量对拍、生成器、VCD、Logisim CSV、Hazard 分析等）统一放在侧边栏 **更多工具...** 或命令面板 **`CO: 更多工具`**。
-
-P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 probe 性质检查用例。如果切到 `probe`，流程会变成 **TS 汇编器生成机器码 → ISim 跑 CPU → 检查 probe 性质**，不运行架构 trace oracle；见下文 P7 专项说明。
+VCD、Logisim CSV、Hazard 分析等非测试工具统一放在侧边栏 **更多工具...** 或命令面板 **`CO: 更多工具`**。自动测试不再要求用户选择单次/批量、生成器、dump 或对拍方式。
 
 就这么简单。下面是细节。
 
@@ -73,34 +65,28 @@ P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 pr
 
 这是本插件最重要的能力。它把课程对拍流程全自动化：
 
-```
-随机生成器  →  ASM 测试点  →  TS 汇编器 / ProgramImage ──┐
-                                                        ├─→ 对拍 GRF/DM 写  →  报告（首个差异定位）
-                          TS 课程 oracle ────────────────┘
-                          你的 CPU（ISim/Logisim 仿真）──┘
+```text
+生成高强度测试点  →  运行你的 CPU  →  课程规则核验  →  简洁报告 / 失败复现
 ```
 
 ### 怎么触发（侧边栏 / 更多工具）
 
 | 我想…… | 入口 |
 |---|---|
-| **一直循环跑，直到出错或我手动停**（推荐） | 侧边栏「操作」→「持续生成测试」，命令面板也保留同名入口 |
-| 停止持续测试 | 侧边栏「操作」→「停止持续测试」，命令面板也保留同名入口 |
-| 查看历史 ASM case | 侧边栏「操作」→「查看 ASM 用例记录」，命令面板也保留同名入口 |
-| 单次/批量/生成后对拍 | 侧边栏「操作」→「更多工具...」 |
-| 用固定 MARS 独立复核同一 case | 「更多工具...」→「使用固定 MARS 验证」（始终保存 full-stack bundle） |
-| 只生成测试点或只 dump 机器码 | 侧边栏「操作」→「更多工具...」 |
-| 手动比较 trace 输出 / 打开批量报告 | 侧边栏「操作」→「更多工具...」 |
+| **跑一轮最强自动测试** | 侧边栏「操作」→「运行自动测试」 |
+| **一直循环跑，直到出错或我手动停**（推荐） | 侧边栏「操作」→「持续自动测试」 |
+| 停止当前自动测试 | 侧边栏「操作」→「停止自动测试」 |
+| 查看测试历史或复现失败 | 侧边栏「操作」→「测试历史 / 失败用例」 |
 
-持续测试会打开一个**实时监控面板**，并把每轮结果写到 `.co/out/continuous-trace-report.json`（即使关掉 VSCode 也能看）。默认遇到第一个失败/异常就停（可用 `co.test.continuousStopOnFailure: false` 关闭）。为了避免 `.co` 越跑越乱，持续测试的 trace 输出会直接写入对应 `.co/cases/<caseId>/`，通过 case 默认只保留最近 20 个；失败和异常 case 始终保留用于复现。
+持续测试会打开一个简洁的**实时监控面板**。它会一直运行，遇到第一个失败/异常就停止；通过产物自动有界清理，失败和异常用例始终保留用于复现。这些策略由插件管理，不需要用户配置。
 
 ### 内置随机生成器
 
-插件自带随机 ASM 生成器（默认启用，`co.test.builtinGenerator.enabled`），无需自己写脚本。它会：
+插件自带随机 ASM 生成器，自动测试入口始终使用它，无需自己写脚本。它会：
 
-- 按 Profile 选用合适的默认指令集（也可用 `co.test.builtinGenerator.instructions` 自定义，逗号或空格分隔，只接受真实指令）；
+- 按 Profile 覆盖完整课程指令集；也可用唯一的测试配置 `co.test.instructions` 指定重点 payload 指令（逗号或空格分隔，只接受真实指令），固定测试脚手架不需要手工加入；
 - 在内部**建模 CPU 状态**（寄存器、HI/LO、内存、CP0），从而生成**合法、确定**的测试点：避免除零、避免非预期的地址错/溢出、正确处理延迟槽与乘除部件占用窗口、在跳转后插入“毒化”指令检验控制流；
-- 生成数量由 `co.test.builtinGenerator.instructionCount`（P3–P6）/ `co.test.builtinGenerator.p7InstructionCount`（P7，默认/上限 1118）控制。
+- 自动使用当前课程阶段允许的最大安全规模；空间边界、异常入口和兼容性差异都由插件处理。
 
 默认指令集：
 
@@ -109,26 +95,17 @@ P7 默认使用 `hybrid` 模式，同一轮生成精确 trace 对拍用例和 pr
 | P3 | `add, sub, ori, lw, sw, beq, lui, nop` |
 | P4 | `add, sub, ori, lw, sw, beq, lui, jal, jr, nop` |
 | P5 | `add, sub, ori, lw, sw, beq, lui, jal, jr, nop` |
-| P6 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr` |
-| P7 | `nop, add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall` |
-
-> 也可以用**外部生成器**：打开你的 `.py/.js/.jar/.bat/.cmd/.exe/.ps1` 生成器文件再触发测试，或关掉 `co.test.builtinGenerator.enabled`。用 `co.test.generatorArgs` 按列表逐项追加外部生成器自己支持的参数，例如 `--seed`、`1234`、`--count`、`100`。
+| P6 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, nop` |
+| P7 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall, nop` |
 
 ### P7 专项说明（异常 + 外部中断 + Timer）
 
-P7 在普通流水线 CPU 基础上加了 CP0、异常、外部中断、Timer。本插件的 P7 对拍：
+P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断和 Timer 的课程可观察行为。插件会自行组合定向场景与随机测试，无需选择模式、概率、场景数量或中断参数。
 
-- **`anchor` 模式**：运行内置 TS 课程 oracle + ISim trace，精确比较 GRF/DM 写事件。外部中断由生成器选定的安全 anchor PC 驱动，oracle 与 testbench 在同一架构点注入。此模式适合对拍。
-- **`probe` 模式**：生成黑盒 probe ASM，TS 汇编器只生成机器码。CPU 运行时由软件 handler 在 DM `0x2800` 起写 probe log，checker 检查异常码、IP 位、EPC 窗口、外部中断响应、Timer CTRL 清零等课程可观察性质。此模式适合高强度测外部中断/Timer，但不是逐指令黄金模型对拍。
-- **`hybrid` 模式（默认）**：同一轮生成一个 `anchor` 精确对拍用例和一个 `probe` 性质检查用例。
-- **`off` 模式**：关闭 P7 外部中断/Timer 压测；仍可按 `co.test.p7.exceptionRate`/`exceptionTypes` 生成普通 P7 异常与指令对拍。
-- **内部异常覆盖**：默认覆盖课程要求的 AdEL、AdES、Syscall、RI、Ov。`exceptionRate` 只影响 anchor/random body；probe 内部异常覆盖由 `co.test.p7.exceptionTypes` 控制。
-- **外部中断**（`co.test.p7.interrupt`，默认开）：anchor 使用安全 PC 注入；probe 使用“软件 arm 标记 `0x27d0` + wait PC”双条件触发，避免内部异常 flush 后宏观 PC 不确定导致误拉高中断。
-- **Timer**：anchor 不做 Timer 中断精确对拍，因为架构指令提交与 Verilog 周期之间没有课程规定的一一映射。probe 可在 `co.test.p7.timerInterrupt: true` 时测试 Timer0/Timer1 中断性质，但只检查课程可观察语义，不检查精确触发周期。
-- **内存布局**：课程 IM 为 `0x3000..0x6fff` 共 4096 words，异常入口为 0x4180；机器码投影会按绝对地址合并用户段和内核段并用零填充空洞。
-- **MARS 只用于配置回滚或固定验证**：`mars` 运行用户配置的 legacy provider；`verify-both`/开发命令才要求并校验 v0.6.3-course1 固定执行 reference。P7 legacy 还要求 `efc`/`p7irq`/`cl`，配在 `co.toolchain.marsP7`。普通 `auto`/`builtin` 路径不读取或启动 MARS。
-
-Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`，不读取、不检查 `BadVAddr($8)`。外部中断响应使用 `sb $0, 0x7f20($0)`；Timer 只通过 `lw/sw` 访问 CTRL/PRESET/COUNT，不写 Count，不用 byte/half 访问 Timer。
+- 固定覆盖 AdEL、AdES、Syscall、RI、Ov，以及延迟槽、异常/中断优先级、屏蔽与恢复、`eret` 返回等边界；
+- RI 统一通过 `.word` 注入 raw word，覆盖 unknown opcode 与 unknown funct，不再由私有助记符生成；
+- Timer 自动覆盖单次/周期模式、停止后重启、重装与寄存器写优先级，只检查课程定义的行为，不要求某一种学生流水线周期数；
+- 自动测试固定使用内置参考栈，不读取 `co.mips.engine`，因此无需 MARS；`mars` / `verify-both` 仅用于手动测试和历史用例复现。
 
 ### 输出/对拍约定
 
@@ -139,10 +116,9 @@ Probe handler 只读取课程要求的 CP0 `SR($12)`、`Cause($13)`、`EPC($14)`
 
 ### 如何理解测试结果
 
-- `anchor`/普通 trace 对拍失败通常表示 CPU 与当前课程 oracle（`auto`/`builtin` 为 TS）在某个**可见写事件**上不一致；首个差异不一定就是根因，流水线错误常会在若干周期后才表现为 GRF/DM 写错。
-- `probe` 失败表示某个 P7 性质不满足，报告会给出 scenario、Cause、EPC、期望 IP/ExcCode、缺失的 ack/clear 等信息；它不是架构 trace mismatch。
-- 通过不等于“完全正确”：随机测试只覆盖已生成样例，trace 只观察 GRF/DM 写，probe 只观察课程规定端口与软件日志。CP0 内部位、未被后续读取的数据、纯时序性能问题、未启用的异常类型都可能需要补充定向测试。
-- 需要复现时优先保留失败/异常报告中指向的 `.co/cases/<caseId>/` 和 `.co/out/continuous-trace-report.json`；case 目录包含 ASM 快照、机器码、trace 输出、seed、mode、中断/probe 元数据和首个差异。
+- 结果不一致通常表示 CPU 的可见写事件或 P7 课程性质不满足；报告会给出首个可操作差异，不会展示内部测试强度或调度参数。
+- 通过不等于“完全正确”：随机测试只能覆盖实际生成的样例，纯性能问题和课程未要求的扩展行为仍需另行验证。
+- 失败与异常用例会自动保留；在“测试历史 / 失败用例”中使用复现编号即可定位，不需要理解内部文件布局。
 
 ---
 
@@ -166,31 +142,30 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 ### Logisim（P0 / P3）
 `.circ` 识别、电路/组件大纲、标签诊断；以及：
 - 侧边栏「操作」在当前 `.circ` 文件上提供打开电路和注入 ROM；
-- 生成 ROM、日志转 CSV、P3 trace 电路诊断、批量准备电路用例放在「更多工具...」；
-- P3 Trace 对拍读取顶层 `main`（可用 `co.test.logisim.mainCircuit` 改）中的 `Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData`。Logisim CLI 的 stdout 列序按 Logisim 2.7.1 源码规则解析：先收集 appearance ports，再按实际 Pin 坐标从上到下、从左到右输出；插件优先用标准 label 映射，label 不完整时按教程外观/Pin 顺序推断，也可用 `co.test.logisim.traceColumns` 显式指定 stdout 列号；
+- 生成 ROM、日志转 CSV 放在「更多工具...」；P3 自动测试会在需要时自行完成 trace 电路识别与用例准备；
+- P3 Trace 对拍自动识别教程顶层电路中的 `Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData`。Logisim CLI 的 stdout 列序按 Logisim 2.7.1 源码规则解析：先收集 appearance ports，再按实际 Pin 坐标从上到下、从左到右输出；插件优先用标准 label 映射，label 不完整时按教程外观/Pin 顺序推断，并在无法可靠识别时给出具体诊断；
 - P3 Logisim 对拍不要求电路提供 `halt` pin。插件会给 ROM 末尾追加停机自环，并在 `pc` 到达注入的 halt PC 时结束仿真；若暴露 `Instr`，插件会额外检查 `Instr` 与当前 PC 对应机器码是否一致；
-- P3 trace 电路诊断可在运行前输出 circuit、ROM、output pin、位宽、坐标、appearance 顺序和最终语义映射；P3 电路应当只有一个 32 位 ROM；
-- 批量准备会把机器码注入 `.circ` 副本，并写到 `.co/cases/<caseId>/logisim/`。
+- 自动识别失败时，诊断会说明缺少或冲突的端口；P3 电路应当只有一个 32 位 ROM。
 
 ### 流水线冲突分析（P5/P6/P7）
 - 在「更多工具...」中提供冲突分析和打开报告（需配置 `co.toolchain.hazardCalculator`）。
 
 ### 项目辅助
-- 命令面板只保留 `CO: 项目向导`、`CO: 选择项目 Profile`、`CO: 检查工具链`、`CO: 打开课程教程`、持续测试启动/停止、ASM 用例记录和 `CO: 更多工具`。其余命令仅通过侧边栏或编辑器上下文菜单触发，不出现在命令面板中。
+- 命令面板的测试入口只保留 `CO: 运行自动测试`、`CO: 持续自动测试`、`CO: 停止自动测试`、`CO: 测试历史 / 失败用例`；项目向导、Profile、工具链、教程和更多工具仍按原入口提供。
 
 ---
 
 ## 4. 配置项（按 Settings UI 分组）
 
 > 优先级：VS Code 用户/工作区设置 `co.*` → 默认值。工作区设置可写在 `.vscode/settings.json`。
-> 设置 UI 保留完整细项，并分成五组：`项目基本情况`、`工具链`、`运行与测试`、`编辑器与诊断`、`格式化`。
+> 设置 UI 分成五组：`项目基本情况`、`工具链`、`运行与测试`、`编辑器与诊断`、`格式化`。自动测试内部只公开一个指令集选择，其他强度参数由插件管理。
 
 ### 项目基础
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto；auto 会推断具体 P 并保存，无法推断时要求选择） |
-| `co.project.simTime` | `200us` | ISim 运行时长（写入 TCL `run <值>; exit`） |
+| `co.project.simTime` | `200us` | 手动 ISim 运行时长；自动测试使用内部执行预算并忽略此项 |
 
 其余项目项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)、`co.course.tutorialRoot`。
 
@@ -198,10 +173,10 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `co.mips.engine` | `auto` | P3–P7 课程引擎：`auto`/`builtin` 使用内置 TS，`mars` 一次设置回滚，`verify-both` 双端独立汇编执行并保存 full-stack bundle；任一失败都不隐式 fallback |
-| `co.toolchain.mars` | — | 稳定版 Mars v0.6.3 jar（需 coL1/coL2 和 large-text 内存配置） |
-| `co.toolchain.marsP7` | — | P7 的 `mars` configured legacy 回滚路径（需 coL1/coL2/efc/p7irq/cl）；`verify-both` 时必须精确为受信任的 v0.6.3-course1；不填回退到 `co.toolchain.mars` |
-| `co.mips.delayedBranching` | `profile` | MARS 延迟槽（profile：P5/P6/P7 自动追加 `db`） |
+| `co.mips.engine` | `auto` | 手动测试/历史复现的 P3–P7 课程引擎；自动测试固定使用内置 TS，不读取此项 |
+| `co.toolchain.mars` | — | 仅 P2、手动 `mars` / `verify-both` 或历史复现使用；P3–P7 自动测试无需配置 |
+| `co.toolchain.marsP7` | — | P7 专用的显式 MARS 回滚/验证路径；不填时回退到 `co.toolchain.mars` |
+| `co.mips.delayedBranching` | `profile` | MARS 延迟槽开关；`profile` 会按课程阶段自动处理 |
 | `co.mips.memoryConfiguration` | `auto` | MARS 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
 | `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
 | `co.toolchain.logisim` | — | Logisim jar |
@@ -212,32 +187,12 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `co.test.builtinGenerator.enabled` | `true` | 使用内置随机生成器 |
-| `co.test.builtinGenerator.instructionCount` | `4000` | P3–P6 主程序指令数 |
-| `co.test.builtinGenerator.p7InstructionCount` | `1118` | P7 主程序指令数（上限 1118，0x4180 之前） |
-| `co.test.builtinGenerator.instructions` | `""` | 自定义指令集（空=用当前 Profile 默认；默认集见“内置随机生成器”） |
-| `co.test.p7.stressMode` | `"hybrid"` | P7 压测模式：`anchor` 精确对拍、`probe` 黑盒性质检查、`hybrid` 两者都跑、`off` 关闭中断/Timer 压测 |
-| `co.test.p7.interrupt` | `true` | P7 是否生成外部中断场景；关掉后 anchor/probe 都不会注入外部中断 |
-| `co.test.p7.timerInterrupt` | `true` | probe/hybrid 的 probe 用例是否生成 Timer0/Timer1 中断场景 |
-| `co.test.p7.externalInterruptIntensity` | `0.25` | probe 外部中断场景随机补齐强度（0–1） |
-| `co.test.p7.timerIntensity` | `0.20` | probe Timer 场景随机补齐强度（0–1） |
-| `co.test.p7.probeScenarioCount` | `32` | 每个 probe ASM 的场景数，最大 64 |
-| `co.test.p7.exceptionRate` | `0.08` | P7 anchor/random body 主动制造内部异常的比例（0–1） |
-| `co.test.p7.exceptionTypes` | `["AdEL","AdES","Syscall","RI","Ov"]` | P7 主动覆盖的异常类型；probe 内部异常覆盖按此配置生成 |
-| `co.test.continuousIntervalMs` | `1000` | 持续测试两轮间隔（毫秒） |
-| `co.test.continuousMaxIterations` | `0` | 持续测试最大轮数（0=不限） |
-| `co.test.continuousStopOnFailure` | `true` | 失败/非法即停 |
-| `co.test.continuousRetainedPassingCases` | `20` | 持续测试保留的最近通过 case 数；失败/异常 case 始终保留 |
-| `co.test.continuousReportRetainedIterations` | `200` | 持续测试 JSON 报告保留的最近轮数；失败/异常轮始终保留 |
-| `co.mips.extraArgs` | `[]` | 仅普通/legacy MARS 命令使用；课程 legacy lane 固定拼接 `coL2`/`efc`/`p7irq`/`cl`/`db`/`mc` 等，builtin oracle 不读取此项 |
-| `co.test.generatorArgs` | `[]` | 按列表追加外部生成器支持的参数，如 `--seed` `1234`、`--count` `100`、`--profile` `P6`、输出路径参数；内置生成器用 `co.test.builtinGenerator.*` / `co.test.p7.*` 配置 |
-| `co.test.generatedAsmLimit` | `100` | 一轮拾取的新建/修改 ASM 上限 |
-| `co.test.logisim.mainCircuit` | `"main"` | P3 Logisim Trace 顶层 circuit 名称 |
-| `co.test.logisim.traceColumns` | `{}` | P3 Logisim Trace stdout 显式列映射，零基列号 |
+| `co.test.instructions` | `""` | 唯一公开的自动测试参数：指定重点 payload 真实指令；空值覆盖当前 Profile 完整课程指令集 |
+| `co.mips.extraArgs` | `[]` | 仅普通 MARS 命令使用；自动测试会忽略，避免改变测评语义 |
 
-运行细项也在本组：`co.run.showCommandBeforeRun`(`false`，运行前打印完整命令)、`co.run.revealOutput`(`false`，运行外部工具时是否自动弹出「输出」面板；默认不弹，仅静默写入)、`co.run.timeoutMs`(`120000`)。
+运行细项也在本组：`co.run.showCommandBeforeRun`(`false`，手动运行外部工具前显示完整命令)、`co.run.revealOutput`(`false`，手动运行外部工具时是否自动弹出「输出」面板)、`co.run.timeoutMs`(`120000`，手动外部工具超时)。自动测试始终非交互、静默执行，并使用内部超时预算，不受这些设置影响。
 
-`co.mips.extraArgs` 和 `co.test.generatorArgs` 都是 Settings UI 的列表项；每个命令行 token 单独添加一项，不需要写 shell 引号。
+测试规模、P7 模式/概率/场景、中断/Timer、持续轮数/间隔/停止与留存均为内部策略，不再出现在 Settings 中，也不会被旧工作区设置静默削弱。旧版的指令集选择会自动迁移；其余旧测试参数只保留在历史 case 的复现信息中。
 
 ### 编辑器与诊断
 
@@ -257,19 +212,13 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 ## 5. ⚠️ 特别注意事项
 
-1. **只有 P7 的 `mars`/`verify-both` 需要修改版 MARS**：`mars` 是 configured legacy 回滚；`verify-both` 必须使用 v0.6.3-course1（c6197f4）并按插件内置信任清单校验精确 byte count 与 SHA-256。两者都通过 `co.toolchain.marsP7` 配置；文件名相同不能代替身份校验。普通 `auto`/`builtin` 不需要 MARS。
-2. **RI 的 MARS 兼容支路依赖额外指令加载**：legacy normalizer 用 `_co_internal_unknown_instruction` 和 `cl _co_internal_unknown_instruction.class` 复现固定参考行为；内置 TS 生产路径直接按课程 RI 契约处理，不加载 Java class。
-3. **ISE 路径要指到 `.../ISE_DS/ISE`**，此目录下有 `bin`。例如 `D:/ISE/14.7/ISE_DS/ISE`。`fuse` 会编译工作区里**所有** `.v`；P7 自动测试会生成一个**专用 testbench**（不会覆盖你自己的 `mips_tb.v`）。
-4. **anchor 外部中断对拍仍依赖宏观 PC 约定**：testbench 只能从官方 `mips` 顶层端口看到宏观写回/访存信息，无法读取学生内部流水级。若你的实现对异常 flush 后的宏观 PC 暴露方式不同，anchor 外部中断可能出现假阳性；可切到 `probe` 或关闭 `co.test.p7.interrupt`。
-5. **probe 不是完整黄金模型**：probe 只检查课程可观察性质，不比较每条普通指令的架构 trace，也不判断 Timer 精确触发周期。probe 通过只能说明这些性质通过，不等价于 CPU 全部行为正确。
-6. **probe 会占用部分 DM 地址**：log 固定从 `0x2800` 开始，每条 8 word；`0x27d0` 用作 external arm 标记，`0x27e0..0x27ec` 用作 handler 状态。随机 DM 扰动会避开 `0x27d0..0x2fff` 和 `0x7f00..0x7f2f`。手写 probe 用例或外部生成器不要覆盖这些区域。
-7. **BadVAddr 不测试**：课程不要求实现 BadVAddr，本插件的 P7 handler/probe 不读取、不记录、不检查 CP0 `$8`。如果你实现了 BadVAddr，需要另写专门测试。
-8. **延迟槽**：P5/P6/P7 的课程 profile 开启一条延迟槽；legacy 回滚支路等价地向 MARS 加 `db`。
-9. **对拍默认忽略周期**，只比较 PC/目标/值——这与课程评测一致；它**抓不到**“不体现在 GRF/DM 写上的错误”（如从不被读取的寄存器/CP0 位算错、纯时序问题）。
-10. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
-11. **课程 IM 容量与 legacy 边界分开**：内置 TS/真实硬件接受 `0x3000..0x6fff` 的完整 4096 words；仅固定 v0.6.3 legacy lane 因 Compact* 排他 bug 最多接受 4095 words（末址 `0x6ff8`）。同理，`0x2fff` 数据边界和下述 `$gp/$sp` 限制只约束 legacy 可比较域，不会污染内置课程语义。
-12. **legacy 用例使用 `$gp/$sp` 前要显式初始化**：教程 CPU 复位所有 GPR 为 0，而 v0.6.3 Compact* 默认 `$gp=0x1800`、`$sp=0x2ffc`；`mars`/`verify-both` 会保守拒绝依赖该私有初态的路径。
-13. **legacy 的未跳转 `BLTZAL/BGEZAL` 差异**：v0.6.3 会在内部保留旧 `$31`。需要固定 MARS 可比较性的用例应先显式重写 `$31`；内置课程引擎按课程/ISA 契约执行。
+1. **自动测试不需要 MARS**：P3–P7 自动生成用例固定使用内置参考栈；`co.mips.engine` 的 `mars` / `verify-both` 只影响手动测试和历史复现。
+2. **新的 RI 测试统一使用 raw word**：自动生成源码用 `.word` 覆盖 unknown opcode 与 unknown funct；旧用例仍可回放，但新测试点不再生成私有 RI 助记符。
+3. **ISE 路径要指到 `.../ISE_DS/ISE`**，此目录下有 `bin`。例如 `D:/ISE/14.7/ISE_DS/ISE`。自动测试使用独立 testbench，不会覆盖你自己的文件。
+4. **测试不绑定某一种流水线周期数**：默认按课程可见写事件和定义行为核验，因此纯性能问题或不可见内部状态仍可能需要额外定向测试。
+5. **BadVAddr 不测试**：课程不要求实现 BadVAddr；如果你实现了它，需要另写专门测试。
+6. **延迟槽按 Profile 自动处理**：P5/P6/P7 开启一条课程延迟槽，无需另调自动测试参数。
+7. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
 
 ---
 
@@ -280,8 +229,8 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
 | `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、MARS/ISim/Logisim trace 与复现元数据 |
 | `.co/out/*.oracle.out` / `*.sim.out` | 手动单次/批量测试的 provider-neutral oracle / ISim 输出；持续测试默认把输出写入对应 case 目录（旧 `.mars.out` 仍可读取） |
-| `.co/out/trace-batch-report.json` | 批量测试报告（含命令、生成文件、首个差异） |
-| `.co/out/continuous-trace-report.json` | 持续测试报告；旧通过轮会按留存策略压缩，失败/异常轮保留 |
+| `.co/out/trace-batch-report.json` | 批量测试摘要；自动测试报告不暴露内部命令或强度参数，失败用例仍可从历史中精确回放 |
+| `.co/out/continuous-trace-report.json` | 持续测试摘要；自动留存通过样本并完整保留失败/异常轮，不暴露内部调度参数 |
 | `.co/isim/` | ISE `.prj/.tcl`、生成的 testbench、`code.txt` |
 | `.co/logisim/` | 注入机器码后的 `.circ` 副本与报告 |
 
@@ -347,39 +296,6 @@ tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别
 
 ## 与 MARS 在 P7 验证/回滚中协作
 
-默认 `auto` 不进入 MARS 支路。`co.mips.engine=mars` 是 configured legacy 回滚：同一个设置让 assembler/oracle 都恢复为用户配置的 MARS provider；legacy 运行强制使用并解析 `coL2`，`coL1` 只作工具链兼容探针。插件从 dump 和动态 trace 双重确认标准停机尾，再把 `.oracle.out` 与 ISim/Logisim DUT trace 对拍。
+自动测试始终使用内置参考栈，不进入 MARS 支路，也不读取 `co.mips.engine`。手动测试中，`mars` 用于回滚到用户配置的兼容引擎，`verify-both` 用于受信任版本的独立验证；`co.mips.extraArgs` 只影响普通手动 MARS 命令。
 
-`verify-both`/显式「使用固定 MARS 验证」是另一条开发证据路径：
-
-1. 先按编译内置信任清单校验 v0.6.3-course1 `legacy-course-executor` 的普通文件身份、精确大小和 SHA-256；
-2. 从同一已哈希 v2 source closure 建立隔离副本，分别运行 TS assembler→TS executor 与 fixed MARS assembler→它自己的 ProgramImage/executor；
-3. 比较两端实际 image，再比较 canonical writes、精确停机和最终摘要；汇编/执行前后复验 fixed hash，任何漂移、不可比较或未登记差异都阻断；
-4. 无论 matched、已登记差异还是 mismatch，都原子保存 source/image/raw trace/engine/contracts 的 full-stack bundle。
-
-`probe` 是 DUT-only 性质检查，不能产生 full-stack 双端 execution evidence；`verify-both` 遇到 probe 会明确阻断。普通 `auto` 下由 TS 汇编器生成用户/内核机器码，判定来自 ISim trace 中重建出的 probe log 和 `CO_P7_PROBE ...` 诊断行。
-
-### 对拍约定（插件依赖的 Mars 行为）
-
-| 行为 | 说明 |
-|------|------|
-| 输出目标 | `coL1`/`coL2` → stdout，`coERR` → stderr；legacy 课程 oracle 只消费 `coL2`，`coL1` 仅用于工具链兼容探针 |
-| 事件格式 | `coL1` 为 `@<8位hex>: <$|*><target> <= <8位hex>`；`coL2` 额外用 `@PC... -> ... (机器码)` 标记每条动态指令 |
-| 事件顺序 | 按指令执行顺序输出；同一指令的多笔写操作在同一 PC 下分行输出 |
-| $0 写入 | **不输出**（与 testbench `$0` 过滤一致） |
-| hi/lo 写入 | **不输出**（MDU 内部寄存器，testbench 不追踪） |
-| CP0 写入 | **不输出**（`mtc0` 不可见于 `$display` trace） |
-| MMIO 写入 | **不输出**（Timer0 `0x7F00~0x7F08`、Timer1 `0x7F10~0x7F18`、中断响应 `0x7F20`，与 testbench 一致） |
-| 内存地址 | 字对齐（`addr & ~0x3`），与 testbench `fixed_addr = m_data_addr & 32'hfffffffc` 一致 |
-
-### 插件端参数映射
-
-插件根据用户配置自动拼接 Mars 参数，用户无需手动操作：
-
-| 插件配置 | 映射的 Mars 参数 |
-|----------|-----------------|
-| Profile `P7` | `mc CompactLargeText efc` |
-| Profile `P4/P5/P6` | `mc FixedCompactLargeText` |
-| `co.mips.delayedBranching` = `on` / `profile:P5+` | `db` |
-| `co.test.p7.interrupt` = `true` 且 `stressMode=anchor` | `p7irq=<target_pc-4>` |
-| 课程自动 Trace | 固定 `coL2 ae1 se1 <max-step>`；P7 按需追加 `efc`/`p7irq`/`cl` |
-| `co.mips.extraArgs` | 仅普通 MARS 命令按列表逐项附加；课程自动 Trace 会忽略 |
+历史用例若使用旧的私有 RI 助记符仍可精确回放；新生成的 RI 测试只使用标准 `.word` raw word。

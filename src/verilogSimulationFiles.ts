@@ -1,6 +1,7 @@
 import { renderResourceTemplate } from './templates/templateRegistry';
 
 export const generatedTestbenchMarker = '// CO_GENERATED_RUNTIME_TESTBENCH';
+export const automaticRuntimeTestbenchName = 'co_generated_auto_tb';
 export const p7AutoRuntimeTestbenchName = 'co_generated_p7_auto_tb';
 export const verilogProjectExcludeGlob = '**/{node_modules,out,.git,.co,.vscode,.vscode-test}/**';
 

@@ -55,6 +55,11 @@ export type MarsRunMode = 'run' | 'dumpText' | 'dumpKernel';
 export interface MarsRunOptions {
   showMessages?: boolean;
   revealOutput?: boolean;
+  /**
+   * Internal automatic-test lane: preserve the MARS result while suppressing prompts and
+   * command/cwd/raw-stream or artifact-path chatter in the user-facing output channel.
+   */
+  nonInteractive?: boolean;
   stdin?: string;
   stdinSource?: vscode.Uri;
   courseTrace?: boolean;
@@ -170,7 +175,7 @@ export async function runMarsFile(
   mode: MarsRunMode,
   options: MarsRunOptions = {}
 ): Promise<MarsRunOutput | undefined> {
-  const showMessages = options.showMessages !== false;
+  const showMessages = options.showMessages !== false && !options.nonInteractive;
   if (!options.resolvedLaunch
     && !await ensureConcreteProfile(asmUri, '运行 MARS 需要先确定项目 Profile')) {
     return undefined;
@@ -186,7 +191,7 @@ export async function runMarsFile(
       ? 'legacy MARS preflight snapshot 与当前 source/mode 不匹配'
       : launchResolutionMessage(launchResolution);
     const message = detail || 'legacy MARS preflight 未能解析 launch snapshot';
-    services.output.appendLine(message);
+    appendMarsRunMessage(services, options, message);
     if (showMessages) vscode.window.showErrorMessage(message);
     return {
       result: localMarsRunFailure('java', [], dirname(asmUri), message)
@@ -201,7 +206,7 @@ export async function runMarsFile(
   };
   const configuredMars = launch.configuredMars;
 
-  if (options.revealOutput !== false) {
+  if (!options.nonInteractive && options.revealOutput !== false) {
     revealOutputChannel(services.output, asmUri);
   }
   const java = launch.runtime.command;
@@ -219,7 +224,7 @@ export async function runMarsFile(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     const message = `无法读取已配置的 MARS artifact，运行已终止：${detail}`;
-    services.output.appendLine(message);
+    appendMarsRunMessage(services, options, message);
     if (showMessages) {
       vscode.window.showErrorMessage(message);
     }
@@ -243,7 +248,7 @@ export async function runMarsFile(
       engineArtifact = { ...engineArtifact, dependencies: [p7Dependency] };
     } catch (error) {
       const message = `无法捕获 P7 RI instruction runtime artifact，运行已终止：${error instanceof Error ? error.message : String(error)}`;
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return { result: localMarsRunFailure(java, ['-jar', configuredMars], cwd, message), engineArtifact, resolvedRun };
     }
   }
@@ -273,7 +278,7 @@ export async function runMarsFile(
       executionStageDir = undefined;
     }
     const message = `无法准备私有 MARS 执行 artifact，运行已终止：${error instanceof Error ? error.message : String(error)}`;
-    services.output.appendLine(message);
+    appendMarsRunMessage(services, options, message);
     if (showMessages) vscode.window.showErrorMessage(message);
     return {
       result: localMarsRunFailure(java, ['-jar', configuredMars], cwd, message),
@@ -323,6 +328,7 @@ export async function runMarsFile(
       stdin: options.stdin,
       timeoutMs: launch.wallClockMs,
       signal: options.signal,
+      nonInteractive: options.nonInteractive,
       maxStdoutBytes: maximumReplayTraceBytes,
       maxStderrBytes: maximumReplayTraceBytes
     });
@@ -330,7 +336,7 @@ export async function runMarsFile(
     if (result.ok && courseDataDump) {
       const dumpError = await validateCourseDataDumpFiles(courseDataDump, result);
       if (dumpError) {
-        services.output.appendLine(dumpError);
+        appendMarsRunMessage(services, effectiveOptions, dumpError);
         result = localMarsRunFailureFrom(result, dumpError);
       }
     }
@@ -340,7 +346,7 @@ export async function runMarsFile(
     }
     const detail = error instanceof Error ? error.message : String(error);
     const message = `课程 DM 初始化 dump 预检失败：${detail}。无法安全确认 MARS 与 P3–P7 硬件的全零 DM 初态一致，已终止课程 Trace。`;
-    services.output.appendLine(message);
+    appendMarsRunMessage(services, effectiveOptions, message);
     result = localMarsRunFailure(java, args, cwd, message);
   } finally {
     if (courseDataDump) {
@@ -353,7 +359,7 @@ export async function runMarsFile(
       const userTextDump = await readBoundedMarsText(outputFile, 'MARS user text dump');
       const haltError = courseTraceHaltLoopError(userTextDump);
       if (haltError) {
-        services.output.appendLine(haltError);
+        appendMarsRunMessage(services, effectiveOptions, haltError);
         result = localMarsRunFailureFrom(result, haltError);
       } else {
         validatedCourseHaltPc = courseTraceHaltPc(userTextDump);
@@ -362,13 +368,13 @@ export async function runMarsFile(
     if (result.ok && launch.profile === 'P7') {
       result = await mergeP7KernelTextDump(services, asmUri, java, mars, cwd, outputFile, result, effectiveOptions);
     } else if (result.ok && cpuHaltProfiles.has(launch.profile as ProjectProfile)) {
-      await appendHaltLoopToTextDump(outputFile, services);
+      await appendHaltLoopToTextDump(outputFile, services, effectiveOptions);
     }
   }
 
   const artifactDriftError = await registeredMarsArtifactDriftError(registry, engineArtifact);
   if (artifactDriftError) {
-    services.output.appendLine(artifactDriftError);
+    appendMarsRunMessage(services, effectiveOptions, artifactDriftError);
     result = localMarsRunFailureFrom(result, artifactDriftError);
   }
 
@@ -405,7 +411,9 @@ export async function runMarsFile(
   } finally {
     if (executionStageDir) {
       await fs.promises.rm(executionStageDir, { recursive: true, force: true }).catch((error) => {
-        services.output.appendLine(
+        appendMarsRunMessage(
+          services,
+          options,
           `无法清理私有 MARS 执行目录 ${executionStageDir}：${error instanceof Error ? error.message : String(error)}`
         );
       });
@@ -512,7 +520,7 @@ function withMarsCompatibilityDiagnostics(
   if (!message) {
     return result;
   }
-  services.output.appendLine(message);
+  appendMarsRunMessage(services, options, message);
   return {
     ...result,
     ok: false,
@@ -551,6 +559,7 @@ async function mergeP7KernelTextDump(
       resource: asmUri,
       timeoutMs: options.resolvedLaunch?.wallClockMs,
       signal: options.signal,
+      nonInteractive: options.nonInteractive,
       maxStdoutBytes: maximumReplayTraceBytes,
       maxStderrBytes: maximumReplayTraceBytes
     });
@@ -568,7 +577,7 @@ async function mergeP7KernelTextDump(
     const dumpDiagnostic = marsDumpFailureDiagnostic(kernelResult.stdout, kernelResult.stderr);
     if (dumpDiagnostic) {
       const message = `P7 内核机器码导出失败：MARS 报告“${dumpDiagnostic}”。不能以缺失异常处理程序的 code.txt 继续测试。`;
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return localMarsRunFailureFrom(kernelResult, message);
     }
     const explicitlyEmpty = marsDumpExplicitlyEmpty(kernelResult.stdout, kernelResult.stderr);
@@ -577,7 +586,7 @@ async function mergeP7KernelTextDump(
         return previousResult;
       }
       const message = 'P7 内核机器码导出失败：MARS 未生成 kernel HexText，也未明确报告内核文本段为空。';
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return localMarsRunFailureFrom(kernelResult, message);
     }
     let kernelText: string;
@@ -585,7 +594,7 @@ async function mergeP7KernelTextDump(
       kernelText = await readBoundedMarsText(kernelOutputFile, 'MARS P7 kernel dump');
     } catch (error) {
       const message = `P7 内核机器码导出失败：无法读取 kernel HexText（${error instanceof Error ? error.message : String(error)}）。`;
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return localMarsRunFailureFrom(kernelResult, message);
     }
     const invalidKernelLine = kernelText.split(/\r?\n/)
@@ -593,7 +602,7 @@ async function mergeP7KernelTextDump(
       .find((line) => line.length > 0 && !/^[0-9a-fA-F]{8}$/.test(line));
     if (invalidKernelLine) {
       const message = `P7 内核机器码导出失败：kernel HexText 包含非法行 ${JSON.stringify(invalidKernelLine)}。`;
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return localMarsRunFailureFrom(kernelResult, message);
     }
     const textLines = machineCodeLines(await readBoundedMarsText(textOutputFile, 'MARS P7 merged text dump'));
@@ -603,7 +612,7 @@ async function mergeP7KernelTextDump(
         return previousResult;
       }
       const message = 'P7 内核机器码导出失败：kernel HexText 为空，但 MARS 未明确报告内核文本段未写入。';
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return localMarsRunFailureFrom(kernelResult, message);
     }
 
@@ -614,7 +623,7 @@ async function mergeP7KernelTextDump(
       : [MIPS_SELF_BRANCH_HEX, MIPS_NOP_HEX];
     if (terminatedTextLines.length > p7KernelTextStartIndex) {
       const message = `P7 机器码导出失败：用户文本段及停机自环共有 ${terminatedTextLines.length} 条指令，已覆盖 0x${p7ExceptionHandlerAddress.toString(16)} 异常入口。`;
-      services.output.appendLine(message);
+      appendMarsRunMessage(services, options, message);
       return {
         ...previousResult,
         ok: false,
@@ -632,7 +641,7 @@ async function mergeP7KernelTextDump(
       merged[p7KernelTextStartIndex + i] = kernelLines[i];
     }
     await writeTextFile(textOutputFile, `${merged.join('\n')}\n`);
-    services.output.appendLine(`已合并 P7 内核文本段到 ${textOutputFile.fsPath}`);
+    appendMarsRunMessage(services, options, `已合并 P7 内核文本段到 ${textOutputFile.fsPath}`);
     return previousResult;
   } finally {
     try {
@@ -659,16 +668,30 @@ const cpuHaltProfiles = CPU_HALT_PROFILES;
  * 给普通（非课程 Trace）dump 出的机器码追加停机自环（与 P7 一致）。课程 Trace 会先要求
  * ASM 自身具备该尾部，禁止只改 code.txt 造成 MARS 与硬件程序不一致。
  */
-async function appendHaltLoopToTextDump(outputFile: vscode.Uri, services: AppServices): Promise<void> {
+async function appendHaltLoopToTextDump(
+  outputFile: vscode.Uri,
+  services: AppServices,
+  options: MarsRunOptions
+): Promise<void> {
   try {
     const text = await readBoundedMarsText(outputFile, 'MARS machine-code dump');
     const terminated = appendHaltLoop(text);
     if (terminated !== text) {
       await writeTextFile(outputFile, terminated);
-      services.output.appendLine('已为机器码追加停机自环（防止流水线取指越界，避免 hazard 工具报 AdEL）');
+      appendMarsRunMessage(services, options, '已为机器码追加停机自环（防止流水线取指越界，避免 hazard 工具报 AdEL）');
     }
   } catch (error) {
-    services.output.appendLine(`追加停机自环失败：${error instanceof Error ? error.message : String(error)}`);
+    appendMarsRunMessage(services, options, `追加停机自环失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function appendMarsRunMessage(
+  services: AppServices,
+  options: Pick<MarsRunOptions, 'nonInteractive'>,
+  message: string
+): void {
+  if (!options.nonInteractive) {
+    services.output.appendLine(message);
   }
 }
 

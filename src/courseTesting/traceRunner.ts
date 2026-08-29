@@ -26,7 +26,11 @@ import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
-import { courseExecutionInstructionBudget } from './pipeline/executionBudget';
+import {
+  courseExecutionInstructionBudget,
+  courseTraceIsimRunTcl,
+  p7ProbeExecutionInstructionBudget
+} from './pipeline/executionBudget';
 import { CourseTracePipeline } from './pipeline/courseTracePipeline';
 import {
   AsmCase,
@@ -67,6 +71,7 @@ import { runExecutorShadow, type ExecutorShadowOutcome } from './executorShadowR
 import { runFullStackShadow, type FullStackShadowOutcome } from './fullStackShadowRunner';
 import { runP3LogisimTraceCase } from '../courseTestLogisim';
 import type { P3LogisimTraceSetup } from '../courseTestLogisim';
+import { automaticTestEngineMode } from './automaticTestPolicy';
 
 const batchTraceCompareRetainedEntries = 1;
 
@@ -98,8 +103,12 @@ export async function runCourseTraceCase(
   if (profile === 'P3') {
     return await runP3LogisimTraceCase(services, item, options);
   }
+  const automatic = options.source?.kind === 'generator';
   const enginePlan = resolveCourseEnginePlan(
-    options.engineMode ?? getMipsEngine(asm),
+    // Every generated case shares the private automatic stack. Besides keeping rollback modes
+    // out of the public workflow, this is required for raw `.word` RI cases that course MARS
+    // intentionally rejects in text/ktext. Manual and replay cases still honor their engine plan.
+    automatic ? automaticTestEngineMode : options.engineMode ?? getMipsEngine(asm),
     profile,
     { deterministicConsole: item.stdin !== undefined }
   );
@@ -122,9 +131,11 @@ export async function runCourseTraceCase(
   }
   const pipeline = options.pipeline ?? defaultCourseTracePipeline();
 
-  services.output.appendLine('完整课程 Trace 测试');
-  services.output.appendLine(`ASM: ${asm.fsPath}`);
-  if (item.stdin) {
+  services.output.appendLine(automatic ? '正在运行自动测试点' : '完整课程 Trace 测试');
+  if (!automatic) {
+    services.output.appendLine(`ASM: ${asm.fsPath}`);
+  }
+  if (item.stdin && !automatic) {
     services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
   }
 
@@ -136,7 +147,9 @@ export async function runCourseTraceCase(
     p7: await p7MetadataFromManifest(asm)
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
-  services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+  if (!automatic) {
+    services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+  }
 
   if (item.asmCase && item.stdin
     && normalizePathKey(item.stdin.fsPath) !== normalizePathKey(asmCase.manifest.stdin?.originalPath ?? '')) {
@@ -153,6 +166,7 @@ export async function runCourseTraceCase(
   const dump = await pipeline.prepareProgram(services, asmCase, {
     showMessages: false,
     revealOutput: options.revealOutput,
+    nonInteractive: automatic ? true : undefined,
     courseTrace: true,
     enginePlan,
     signal: options.signal
@@ -168,10 +182,12 @@ export async function runCourseTraceCase(
       engineRunWasCancelled(dump?.status, options.signal)
     );
   }
-  services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
+  if (!automatic) {
+    services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
+  }
 
   const interruptSchedule = resolveCaseInterruptScheduleFromCase(asmCase);
-  if (interruptSchedule) {
+  if (interruptSchedule && !automatic) {
     services.output.appendLine(`外部中断目标 PC: ${interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
   }
   const probe = resolveCaseProbeMetadataFromCase(asmCase);
@@ -186,7 +202,9 @@ export async function runCourseTraceCase(
         asmCase
       );
     }
-    services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
+    if (!automatic) {
+      services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
+    }
     const isim = await pipeline.runDut(services, {
       resource: asm,
       showMessages: false,
@@ -195,7 +213,9 @@ export async function runCourseTraceCase(
       simOutputFileName: simOutputFileNameForCase(item),
       simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
+      tclText: courseTraceIsimRunTcl(p7ProbeExecutionInstructionBudget),
       compileCache: options.isimCompileCache,
+      nonInteractive: automatic,
       signal: options.signal
     });
     if (!isim?.simResult.ok || !isim.simOut) {
@@ -268,7 +288,9 @@ export async function runCourseTraceCase(
       asmCase
     );
   }
-  services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+  if (!automatic) {
+    services.output.appendLine('Oracle 已设置有界执行预算，并要求 provider 证明标准停机尾');
+  }
   const oracleOutputUri = caseOutputMode
     ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
     : vscode.Uri.file(path.join(courseTraceOutputDirectory(asm).fsPath, oracleOutputFileNameForCase(item)));
@@ -292,7 +314,10 @@ export async function runCourseTraceCase(
       ...(stdinText === undefined ? {} : { deterministicConsole: true }),
       eventSchemaRevision: 1
     }
-  }, { signal: options.signal }, enginePlan);
+  }, {
+    signal: options.signal,
+    nonInteractive: automatic ? true : undefined
+  }, enginePlan);
   const oracle = oracleInvocation.result;
   const postOracleSourceIssue = await asmCaseSourceSnapshotIssue(asmCase);
   if (postOracleSourceIssue) {
@@ -386,7 +411,8 @@ export async function runCourseTraceCase(
       p7RiInstruction: dump.resolvedRun?.p7RiInstruction,
       outputRoot: options.shadowOutputRoot?.fsPath ?? path.join(asmCase.dir.fsPath, 'shadow'),
       expectedLegacySha256: fixedMars?.ok ? fixedMars.identity.sha256 : undefined,
-      signal: options.signal
+      signal: options.signal,
+      nonInteractive: automatic ? true : undefined
     })
     : undefined;
   if (fullStackShadow) {
@@ -414,7 +440,9 @@ export async function runCourseTraceCase(
     simOutputFileName: simOutputFileNameForCase(item),
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
+    tclText: courseTraceIsimRunTcl(maxSteps),
     compileCache: options.isimCompileCache,
+    nonInteractive: automatic,
     signal: options.signal
   });
   if (!isim?.simResult.ok || !isim.simOut) {

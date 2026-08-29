@@ -30,6 +30,12 @@
     },
     "probeExternalArmAddress": 10192,
     "_probeExternalArmAddress_hex": "0x27d0",
+    "probeEretPoisonAddress": 10196,
+    "_probeEretPoisonAddress_hex": "0x27d4",
+    "probePostEretStatusAddress": 10200,
+    "_probePostEretStatusAddress_hex": "0x27d8",
+    "probeMaskedInterruptMarkerAddress": 10204,
+    "_probeMaskedInterruptMarkerAddress_hex": "0x27dc",
     "exceptionFlushShadowSlots": 2,
     "interruptAnchorInstructionCount": 2
   },

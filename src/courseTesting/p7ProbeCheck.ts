@@ -16,6 +16,9 @@ import {
   p7ProbeKindSyscall,
   p7ProbeKindTimer0,
   p7ProbeKindTimer1,
+  p7ProbeEretPoisonAddress,
+  p7ProbeMaskedInterruptMarkerAddress,
+  p7ProbeMode1FailureMarker,
   p7ExternalInterruptAckAddress,
   p7ProbeMagic,
   p7StatusEnableAllCourseInterrupts
@@ -69,6 +72,22 @@ export function checkP7Probe(
     }
   }
   for (const event of simEvents) {
+    if (event.kind === 'dm' && parseHex(event.target) === (p7ProbeEretPoisonAddress >>> 0)) {
+      failures.push({
+        scenarioId: 0,
+        kind: 'eret',
+        message: `instruction physically following eret committed DM at poison address 0x${p7ProbeEretPoisonAddress.toString(16)}`
+      });
+    }
+    if (event.kind === 'dm'
+      && parseHex(event.target) === (p7ProbeMaskedInterruptMarkerAddress >>> 0)
+      && parseHex(event.value) === (p7ProbeMode1FailureMarker >>> 0)) {
+      failures.push({
+        scenarioId: 0,
+        kind: 'timer',
+        message: 'Mode-1 timer exposed a stale IRQ before the fresh period was armed'
+      });
+    }
     if (event.kind === 'dm' && parseHex(event.target) > 0x2fff) {
       failures.push({
         scenarioId: 0,
@@ -99,10 +118,8 @@ export function checkP7Probe(
   let recordIndex = 0;
   for (const scenario of metadata.scenarios) {
     const expectedRecords = expectedRecordsFor(scenario);
-    const firstExpectedExcCode = expectedRecords[0]?.expectedExcCode;
     const internalException = scenario.kind === 'internal'
-      || firstExpectedExcCode === undefined
-      || firstExpectedExcCode !== 0;
+      || expectedRecords.some((expected) => expected.expectedExcCode === undefined || expected.expectedExcCode !== 0);
     const victimPc = scenario.victimPc;
     if (internalException && victimPc !== undefined && Number.isFinite(victimPc)) {
       const victimCommit = findCommitAtPc(simEvents, victimPc);
@@ -153,6 +170,9 @@ export function checkP7Probe(
       const armIndex = diagnostics.indexOf(`external_arm:${scenario.id}`);
       const raiseIndex = diagnostics.indexOf(`external_raise:${scenario.id}`);
       const ackIndex = diagnostics.indexOf(`external_ack:${scenario.id}`);
+      const armCount = diagnostics.filter((item) => item === `external_arm:${scenario.id}`).length;
+      const raiseCount = diagnostics.filter((item) => item === `external_raise:${scenario.id}`).length;
+      const ackCount = diagnostics.filter((item) => item === `external_ack:${scenario.id}`).length;
       const requiresArm = Number.isFinite(scenario.armAddress) && Number.isFinite(scenario.armValue);
       if (requiresArm && armIndex < 0) {
         failures.push(failure(scenario, 'external interrupt was not armed by software marker'));
@@ -163,6 +183,15 @@ export function checkP7Probe(
       if (ackIndex < 0) {
         failures.push(failure(scenario, `external interrupt was not acknowledged through 0x${p7ExternalInterruptAckAddress.toString(16)}`));
       }
+      if (requiresArm && armCount > 1) {
+        failures.push(failure(scenario, `external interrupt arm marker appeared ${armCount} times`));
+      }
+      if (raiseCount > 1) {
+        failures.push(failure(scenario, `external interrupt was raised ${raiseCount} times`));
+      }
+      if (ackCount > 1) {
+        failures.push(failure(scenario, `external interrupt was acknowledged ${ackCount} times`));
+      }
       if (requiresArm && armIndex >= 0 && raiseIndex >= 0 && armIndex > raiseIndex) {
         failures.push(failure(scenario, 'external interrupt was raised before arm marker'));
       }
@@ -170,7 +199,10 @@ export function checkP7Probe(
         failures.push(failure(scenario, 'external interrupt ack appeared before raise'));
       }
     }
-    if (scenario.kind === 'timer0' || scenario.kind === 'timer1') {
+    if ((scenario.kind === 'timer0' || scenario.kind === 'timer1')
+      && expectedRecords.length === 1
+      && !expectedRecords[0].allowedAuxPairs?.length
+      && !expectedRecords[0].requireEqualAuxPair) {
       const record = scenarioRecords[0];
       if (!record) {
         continue;
@@ -193,11 +225,19 @@ export function checkP7Probe(
         failures.push(failure(scenario, 'completion marker appeared before the final handler record'));
       }
     }
+    for (const expectedCommit of scenario.requiredPreHandlerCommits ?? []) {
+      const commits = matchingCommits(simEvents, expectedCommit);
+      if (commits.length !== 1) {
+        failures.push(failure(
+          scenario,
+          `required pre-handler ${expectedCommit.kind.toUpperCase()} commit at 0x${(expectedCommit.pc >>> 0).toString(16)}: expected exactly once, got ${commits.length}`
+        ));
+      } else if (finalRecord && commits[0].lineNumber >= finalRecord.lastLineNumber) {
+        failures.push(failure(scenario, 'required pre-handler commit appeared after the handler record'));
+      }
+    }
     for (const expectedCommit of scenario.requiredCommits ?? []) {
-      const commits = simEvents.filter((event) => event.kind === expectedCommit.kind
-        && parseHex(event.pc) === (expectedCommit.pc >>> 0)
-        && (event.kind === 'grf' ? Number(event.target) : parseHex(event.target)) === (expectedCommit.target >>> 0)
-        && parseHex(event.value) === (expectedCommit.value >>> 0));
+      const commits = matchingCommits(simEvents, expectedCommit);
       if (commits.length !== 1) {
         failures.push(failure(
           scenario,
@@ -215,6 +255,16 @@ export function checkP7Probe(
     failures,
     diagnostics
   };
+}
+
+function matchingCommits(
+  simEvents: readonly CpuTraceEvent[],
+  expected: { pc: number; kind: 'grf' | 'dm'; target: number; value: number }
+): CpuTraceEvent[] {
+  return simEvents.filter((event) => event.kind === expected.kind
+    && parseHex(event.pc) === (expected.pc >>> 0)
+    && (event.kind === 'grf' ? Number(event.target) : parseHex(event.target)) === (expected.target >>> 0)
+    && parseHex(event.value) === (expected.value >>> 0));
 }
 
 function expectedRecordsFor(scenario: P7ProbeScenario): P7ProbeExpectedRecord[] {
@@ -272,10 +322,11 @@ function validateExpectedRecord(
 
   const actualIp = record.cause & p7CauseIpMask;
   const expectedIp = expected.expectedIpMask & p7CauseIpMask;
-  if (actualIp !== expectedIp) {
+  const allowedIpMasks = expected.allowedIpMasks?.map((value) => value & p7CauseIpMask) ?? [expectedIp];
+  if (!allowedIpMasks.includes(actualIp)) {
     failures.push(failure(
       scenario,
-      `${recordLabel}${internalException ? 'internal exception recorded unexpected' : 'Cause.IP differs: expected'} Cause.IP 0x${expectedIp.toString(16)}, got 0x${actualIp.toString(16)}`
+      `${recordLabel}${internalException ? 'internal exception recorded unexpected' : 'Cause.IP differs: expected'} Cause.IP ${allowedIpMasks.map((value) => `0x${value.toString(16)}`).join(' or ')}, got 0x${actualIp.toString(16)}`
     ));
   }
 
@@ -287,10 +338,13 @@ function validateExpectedRecord(
       `${recordLabel}Cause.BD differs: expected ${expectedBd ? 1 : 0}, got ${inDelaySlot ? 1 : 0}`
     ));
   } else if (expectedBd === undefined && inDelaySlot
-    && (scenario.waitPc === undefined || (record.epc >>> 0) !== (scenario.waitPc >>> 0))) {
+    && !(expected.allowedBdEpc ?? (scenario.waitPc === undefined ? [] : [scenario.waitPc]))
+      .includes(record.epc >>> 0)) {
+    const allowedBdEpc = expected.allowedBdEpc
+      ?? (scenario.waitPc === undefined ? [] : [scenario.waitPc]);
     failures.push(failure(
       scenario,
-      `${recordLabel}Cause.BD=1 requires EPC to identify the probe wait branch at 0x${scenario.waitPc === undefined ? 'undefined' : (scenario.waitPc >>> 0).toString(16)}`
+      `${recordLabel}Cause.BD=1 requires EPC to identify ${allowedBdEpc.length === 1 ? 'the probe wait branch' : 'an allowed wait branch'} at ${allowedBdEpc.length ? allowedBdEpc.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(' or ') : 'an unavailable PC'}`
     ));
   }
   if (expected.allowedEpc.length && !expected.allowedEpc.includes(record.epc >>> 0)) {

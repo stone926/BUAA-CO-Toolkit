@@ -4,23 +4,11 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   ensureConcreteProfile,
-  getBuiltinGeneratorInstructionCount,
-  getBuiltinGeneratorInstructions,
-  getBuiltinGeneratorP7InstructionCount,
+  getAutomaticTestInstructions,
   getGeneratedAsmLimit,
   getGeneratorArgs,
   getJava,
-  getP7ExceptionRate,
-  getP7ExceptionTypes,
-  getP7ExternalInterruptIntensity,
-  getP7InterruptEnabled,
-  getP7ProbeScenarioCount,
-  getP7StressMode,
-  getP7TimerIntensity,
-  getP7TimerInterruptEnabled,
-  P7StressMode,
-  resolvePython,
-  useBuiltinTestGenerator
+  resolvePython
 } from '../config';
 import {
   AsmCase,
@@ -29,8 +17,11 @@ import {
 } from '../asmCaseStore';
 import {
   BuiltinAsmGeneratorError,
-  generateBuiltinAsmTestCase
+  generateBuiltinAsmTestCase,
+  type P7ProbeShard,
+  type P7StressMode
 } from './builtinAsmGenerator';
+import { probeVariantCount } from './builtinAsm/p7/probeVariants';
 import {
   buildGeneratorInvocation,
   changedAsmFiles,
@@ -42,7 +33,12 @@ import { CourseTraceBatchSource } from '../courseTestReport';
 import { workspaceFolderForOrFirst } from '../fsUtil';
 import { revealOutputChannel, runTool } from '../process';
 import { AppServices, ProjectProfile } from '../types';
-import { resolveActiveFile, resolveFileInput } from '../workflowInputs';
+import { resolveFileInput } from '../workflowInputs';
+import {
+  automaticTestEngineMode,
+  automaticTestPolicy
+} from './automaticTestPolicy';
+import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 
 export type GeneratorRunSetup = ExternalGeneratorRunSetup | BuiltinGeneratorRunSetup;
 
@@ -82,32 +78,20 @@ export interface ResolveGeneratedAsmBatchOptions {
 
 export async function resolveGeneratedAsmBatch(
   services: AppServices,
-  options: ResolveGeneratedAsmBatchOptions
+  _options: ResolveGeneratedAsmBatchOptions
 ): Promise<GeneratedAsmBatch | undefined> {
   const setup = await resolveGeneratorRunSetup();
   if (!setup) {
     return undefined;
   }
-  const generated = await runGeneratorAndCollectAsms(services, setup);
+  // The public automatic facade stays quiet even when the generic run setting asks
+  // manual tools to reveal their output panel. Failures are surfaced by the compact
+  // automatic-test report instead.
+  const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
   if (generated) {
     return generated;
   }
-
-  const choice = await vscode.window.showWarningMessage(
-    '生成器已完成，但未检测到新建或修改的 ASM 文件',
-    '手动选择 ASM 文件'
-  );
-  if (choice !== '手动选择 ASM 文件') {
-    return undefined;
-  }
-  const picked = await options.resolveAsmBatchInputs();
-  if (!picked.length) {
-    return undefined;
-  }
-  return {
-    asms: picked,
-    source: generatorSource(setup, picked)
-  };
+  return undefined;
 }
 
 export async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined> {
@@ -117,41 +101,28 @@ export async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | un
     return undefined;
   }
 
-  const activeExternal = await resolveActiveGeneratorInput();
-  if (activeExternal) {
-    return await buildExternalGeneratorRunSetup(folder, activeExternal);
-  }
-
   const resource = vscode.window.activeTextEditor?.document.uri ?? folder.uri;
   const profile = await ensureConcreteProfile(resource, '运行测试生成器需要先确定项目 Profile');
   if (!profile) {
     return undefined;
   }
-  if (useBuiltinTestGenerator(resource)) {
-    return {
-      kind: 'builtin',
-      folder,
-      resource,
-      profile,
-      instructionText: getBuiltinGeneratorInstructions(resource),
-      instructionCount: builtinInstructionCountForProfile(profile, resource),
-      interrupt: profile === 'P7' && getP7InterruptEnabled(resource),
-      p7StressMode: profile === 'P7' ? getP7StressMode(resource) : 'off',
-      timerInterrupt: profile === 'P7' && getP7TimerInterruptEnabled(resource),
-      externalInterruptIntensity: profile === 'P7' ? getP7ExternalInterruptIntensity(resource) : 0,
-      timerIntensity: profile === 'P7' ? getP7TimerIntensity(resource) : 0,
-      probeScenarioCount: profile === 'P7' ? getP7ProbeScenarioCount(resource) : 0,
-      exceptionRate: profile === 'P7' ? getP7ExceptionRate(resource) : 0,
-      exceptionTypes: profile === 'P7' ? getP7ExceptionTypes(resource) : []
-    };
-  }
-
-  const generator = await resolveGeneratorInput(folder);
-  if (!generator) {
-    return undefined;
-  }
-
-  return await buildExternalGeneratorRunSetup(folder, generator);
+  const policy = automaticTestPolicy(profile);
+  return {
+    kind: 'builtin',
+    folder,
+    resource,
+    profile,
+    instructionText: getAutomaticTestInstructions(resource),
+    instructionCount: policy.instructionCount,
+    interrupt: policy.interrupt,
+    p7StressMode: policy.p7StressMode,
+    timerInterrupt: policy.timerInterrupt,
+    externalInterruptIntensity: policy.externalInterruptIntensity,
+    timerIntensity: policy.timerIntensity,
+    probeScenarioCount: policy.probeScenarioCount,
+    exceptionRate: policy.exceptionRate,
+    exceptionTypes: [...policy.exceptionTypes]
+  };
 }
 
 export async function runGeneratorAndCollectAsms(
@@ -252,29 +223,31 @@ async function runBuiltinGeneratorAndCollectAsms(
   options: { revealOutput?: boolean } = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
-  const modes: Array<P7StressMode | undefined> = setup.profile === 'P7'
-    ? (setup.p7StressMode === 'hybrid' ? ['anchor', 'probe'] : [setup.p7StressMode])
-    : [undefined];
+  const specs = builtinGenerationSpecs(setup);
+  const enginePlan = resolveCourseEnginePlan(automaticTestEngineMode, setup.profile);
   const asms: vscode.Uri[] = [];
   const asmCases: AsmCase[] = [];
-  const generatedCases: ReturnType<typeof generateBuiltinAsmTestCase>[] = [];
   try {
-    for (const mode of modes) {
+    for (const spec of specs) {
+      const mode = spec.mode;
       const generated = generateBuiltinAsmTestCase({
         profile: setup.profile,
         instructionText: setup.instructionText,
         instructionCount: setup.instructionCount,
         generatedAt,
-        interrupt: setup.interrupt && mode !== 'off',
+        interrupt: setup.interrupt && mode !== 'off' && spec.probeShard !== 'timer',
         p7StressMode: mode,
-        timerInterrupt: mode === 'probe' && setup.timerInterrupt,
+        timerInterrupt: mode === 'probe' && spec.probeShard === 'timer' && setup.timerInterrupt,
         externalInterruptIntensity: setup.externalInterruptIntensity,
         timerIntensity: setup.timerIntensity,
-        probeScenarioCount: setup.probeScenarioCount,
+        probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
+        probeShard: spec.probeShard,
         exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
         exceptionTypes: setup.exceptionTypes
       });
-      const fileName = builtinAsmFileName(generated.profile, generatedAt, generated.mode);
+      // File names are intentionally opaque. Exact mode/shard provenance belongs in the
+      // immutable case manifest, not in the public automatic-test surface.
+      const fileName = builtinAsmFileName(generated.profile, generatedAt);
       const asmCase = await createAsmCaseFromText(fileName, generated.text, {
         resource: setup.resource,
         source: {
@@ -284,6 +257,7 @@ async function runBuiltinGeneratorAndCollectAsms(
           cwd: generatorCwd(setup)
         },
         createdAt: generatedAt,
+        enginePlan,
         p7: {
           interruptSchedule: generated.interruptSchedule,
           probe: generated.probe
@@ -292,20 +266,20 @@ async function runBuiltinGeneratorAndCollectAsms(
       await updateAsmCaseMetadata(asmCase, {
         'source.generatedName': fileName,
         'source.seed': generated.seed,
-        'source.mode': generated.mode ?? mode ?? 'default'
+        'source.mode': generated.mode ?? mode ?? 'default',
+        ...(spec.probeShard ? { 'source.probeShard': spec.probeShard } : {})
       });
       asms.push(asmCase.sourceAsm);
       asmCases.push(asmCase);
-      generatedCases.push(generated);
     }
   } catch (error) {
-    const message = error instanceof BuiltinAsmGeneratorError || error instanceof Error ? error.message : String(error);
+    const message = publicBuiltinGeneratorFailure(error);
     vscode.window.showErrorMessage(message);
     if (options.revealOutput !== false) {
       revealOutputChannel(services.output, setup.folder.uri);
     }
     services.output.appendLine('');
-    services.output.appendLine(`内置 ASM 生成器失败: ${message}`);
+    services.output.appendLine(message);
     return undefined;
   }
 
@@ -313,24 +287,7 @@ async function runBuiltinGeneratorAndCollectAsms(
     revealOutputChannel(services.output, setup.folder.uri);
   }
   services.output.appendLine('');
-  services.output.appendLine('正在运行内置随机 ASM 生成器');
-  services.output.appendLine(`Profile: ${setup.profile}`);
-  services.output.appendLine(`模式: ${modes.map((mode) => mode ?? 'default').join(', ')}`);
-  for (let i = 0; i < generatedCases.length; i++) {
-    const generated = generatedCases[i];
-    services.output.appendLine(generated.mode === 'probe'
-      ? `Probe 主程序指令数量: ${generated.instructionCount}（含固定终止尾部）`
-      : `有效载荷指令数量: ${generated.instructionCount}（另有 2 条停机自环尾指令）`);
-    services.output.appendLine(`指令集: ${generated.instructionSet.join(' ')}`);
-    services.output.appendLine(`种子: ${generated.seed}`);
-    if (generated.interruptSchedule.length) {
-      services.output.appendLine(`外部中断目标 PC: ${generated.interruptSchedule.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`);
-    }
-    if (generated.probe) {
-      services.output.appendLine(`Probe 场景: ${generated.probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
-    }
-    services.output.appendLine(`ASM: ${asms[i].fsPath}`);
-  }
+  services.output.appendLine('自动测试点已准备');
 
   return {
     asms,
@@ -339,25 +296,59 @@ async function runBuiltinGeneratorAndCollectAsms(
   };
 }
 
-async function resolveActiveGeneratorInput(): Promise<vscode.Uri | undefined> {
-  return await resolveActiveFile({
-    predicate: (uri) => isSupportedGeneratorFile(uri.fsPath),
-    saveDirty: true
-  });
-}
-
-function builtinInstructionCountForProfile(profile: ProjectProfile, resource: vscode.Uri): number {
-  if (profile === 'P7') {
-    return getBuiltinGeneratorP7InstructionCount(resource);
+function publicBuiltinGeneratorFailure(error: unknown): string {
+  if (error instanceof BuiltinAsmGeneratorError
+    && /^Invalid built-in ASM generator instruction set:/i.test(error.message)) {
+    const detail = error.message
+      .replace(/^Invalid built-in ASM generator instruction set:\s*/i, '')
+      .replace(/\.$/, '');
+    return `自动测试指令集无效：${detail}`;
   }
-  return getBuiltinGeneratorInstructionCount(resource);
+  return '自动测试点准备失败；请检查 co.test.instructions 后重试';
 }
 
-function builtinAsmFileName(profile: string, generatedAt: Date, mode?: string): string {
+interface BuiltinGenerationSpec {
+  mode: P7StressMode | undefined;
+  probeShard?: P7ProbeShard;
+  probeScenarioCount?: number;
+}
+
+function builtinGenerationSpecs(setup: BuiltinGeneratorRunSetup): BuiltinGenerationSpec[] {
+  if (setup.profile !== 'P7') {
+    return [{ mode: undefined }];
+  }
+  if (setup.p7StressMode !== 'probe' && setup.p7StressMode !== 'hybrid') {
+    return [{ mode: setup.p7StressMode }];
+  }
+
+  const probes: BuiltinGenerationSpec[] = [{
+    mode: 'probe',
+    probeShard: 'core',
+    // Every core variant plus twelve short deterministic RI raw-word repeats. This uses the
+    // complete 64-record DM budget while keeping the user program below the 0x4180 handler.
+    probeScenarioCount: Math.min(setup.probeScenarioCount, coreProbeVariantCount() + 12)
+  }];
+  if (setup.timerInterrupt) {
+    probes.push({
+      mode: 'probe',
+      probeShard: 'timer',
+      probeScenarioCount: probeVariantCount('timer0') + probeVariantCount('timer1')
+    });
+  }
+  return setup.p7StressMode === 'hybrid'
+    ? [{ mode: 'anchor' }, ...probes]
+    : probes;
+}
+
+function coreProbeVariantCount(): number {
+  return (['external', 'adel', 'ades', 'syscall', 'ri', 'ov'] as const)
+    .reduce((total, kind) => total + probeVariantCount(kind), 0);
+}
+
+function builtinAsmFileName(profile: string, generatedAt: Date): string {
   const timestamp = generatedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   const suffix = randomBytes(3).toString('hex');
-  const modePart = mode ? `-${mode}` : '';
-  return `builtin-${profile.toLowerCase()}${modePart}-${timestamp}-${suffix}.asm`;
+  return `builtin-${profile.toLowerCase()}-${timestamp}-${suffix}.asm`;
 }
 
 async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vscode.Uri | undefined> {

@@ -26,6 +26,7 @@ import {
 } from '../asmCaseStore';
 import { sha256Bytes } from '../asmCaseStoreCore';
 import {
+  automaticRuntimeTestbenchName,
   generatedRuntimeTestbenchText,
   isGeneratedRuntimeTestbench,
   p7AutoRuntimeTestbenchName,
@@ -53,6 +54,8 @@ export type TestbenchResolutionKind = 'active' | 'user' | 'generated' | 'p7-auto
 export interface TestbenchResolution {
   moduleName: string;
   kind: TestbenchResolutionKind;
+  /** DUT top source retained when automatic testbench sources are excluded from the PRJ. */
+  designSourceUri?: vscode.Uri;
   sourceUri?: vscode.Uri;
   generatedUri?: vscode.Uri;
   sha256?: string;
@@ -61,6 +64,11 @@ export interface TestbenchResolution {
 export interface ExistingTestbenchSearchResult {
   resolution?: TestbenchResolution;
   conflict: boolean;
+}
+
+export interface TestbenchResolutionOptions {
+  /** Internal automation lane: suppress UI/path details and let TCL control termination. */
+  nonInteractive?: boolean;
 }
 
 export async function defaultUserTestbenchUri(resource: vscode.Uri, tbName: string, configuredTop: boolean): Promise<vscode.Uri> {
@@ -83,7 +91,8 @@ export async function ensureP7InterruptTestbench(
   resource: vscode.Uri | undefined,
   interruptSchedule: number[] | undefined,
   p7Probe: P7ProbeMetadata | undefined,
-  showMessages: boolean
+  showMessages: boolean,
+  options: TestbenchResolutionOptions = {}
 ): Promise<TestbenchResolution | undefined> {
   if ((!interruptSchedule || !interruptSchedule.length) && !p7Probe) {
     return undefined;
@@ -91,7 +100,9 @@ export async function ensureP7InterruptTestbench(
   const topName = getTopModule(resource);
   const topDefinition = await findTopModuleDefinition(resource, topName);
   if (!topDefinition) {
-    services.output.appendLine(`未找到顶层模块 ${topName}，无法生成 P7 中断 testbench；改用默认 testbench（不注入外部中断）。`);
+    if (!options.nonInteractive) {
+      services.output.appendLine(`未找到顶层模块 ${topName}，无法生成 P7 中断 testbench；改用默认 testbench（不注入外部中断）。`);
+    }
     return undefined;
   }
   const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(topDefinition.uri);
@@ -100,31 +111,69 @@ export async function ensureP7InterruptTestbench(
   await ensureDirectory(outDir);
   const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
   const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(resource)),
     profile: 'P7',
     interruptSchedule,
     p7Probe
-  }));
+  }), options);
   if (!written) {
     return undefined;
   }
-  if (p7Probe) {
-    services.output.appendLine(`已生成 P7 probe testbench ${tbUri.fsPath}（scenarios=${p7Probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(',')}）`);
-  } else {
-    services.output.appendLine(`已生成 P7 中断 testbench ${tbUri.fsPath}（target_pc=${(interruptSchedule ?? []).map((pc) => `0x${(pc >>> 0).toString(16)}`).join(',')}）`);
+  if (!options.nonInteractive) {
+    if (p7Probe) {
+      services.output.appendLine(`已生成 P7 probe testbench ${tbUri.fsPath}（scenarios=${p7Probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(',')}）`);
+    } else {
+      services.output.appendLine(`已生成 P7 中断 testbench ${tbUri.fsPath}（target_pc=${(interruptSchedule ?? []).map((pc) => `0x${(pc >>> 0).toString(16)}`).join(',')}）`);
+    }
   }
-  if (showMessages) {
+  if (showMessages && !options.nonInteractive) {
     vscode.window.showInformationMessage('已生成 P7 中断 testbench');
   }
-  return { moduleName: p7AutoRuntimeTestbenchName, kind: 'p7-auto', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
+  return {
+    moduleName: p7AutoRuntimeTestbenchName,
+    kind: 'p7-auto',
+    designSourceUri: topDefinition.uri,
+    generatedUri: tbUri,
+    sha256: await fileSha256(tbUri)
+  };
 }
 
 export async function ensureRunnableTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
   showMessages: boolean,
-  moduleRegistry?: MutableVerilogModuleProvider
+  moduleRegistry?: MutableVerilogModuleProvider,
+  options: TestbenchResolutionOptions = {}
 ): Promise<TestbenchResolution | undefined> {
+  // Automatic course tests own their observation window. A user testbench may
+  // contain an early $finish, custom stimulus, or a module name that conflicts
+  // with the configured testbench, so it must never participate in this lane.
+  if (options.nonInteractive) {
+    const topName = getTopModule(resource);
+    const topDefinition = await findTopModuleDefinition(resource, topName, moduleRegistry);
+    if (!topDefinition) {
+      return undefined;
+    }
+    const tbUri = await privateRuntimeTestbenchUri(topDefinition.uri, automaticRuntimeTestbenchName);
+    const written = await writeGeneratedRuntimeTestbench(
+      tbUri,
+      buildTestbench(topDefinition.module, automaticRuntimeTestbenchName, {
+        finishDelay: false,
+        profile: getProfile(topDefinition.uri)
+      }),
+      options
+    );
+    if (!written) {
+      return undefined;
+    }
+    return {
+      moduleName: automaticRuntimeTestbenchName,
+      kind: 'generated',
+      designSourceUri: topDefinition.uri,
+      generatedUri: tbUri,
+      sha256: await fileSha256(tbUri)
+    };
+  }
+
   const configuredTestbench = getTestbench(resource);
   const activeTestbench = await activeTestbenchModuleName(resource, configuredTestbench);
   if (activeTestbench) {
@@ -140,16 +189,18 @@ export async function ensureRunnableTestbench(
   const topDefinition = await findTopModuleDefinition(resource, topName, moduleRegistry);
   if (!topDefinition) {
     if (getProfile(resource) === 'P1') {
-      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages, moduleRegistry);
+      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages, moduleRegistry, options);
       if (activeTestbench) {
         return activeTestbench;
       }
     }
-    services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}`);
-    return await resolveNamedTestbench(configuredTestbench, resource, moduleRegistry);
+    if (!options.nonInteractive) {
+      services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}`);
+    }
+    return await resolveNamedTestbench(configuredTestbench, resource, moduleRegistry, options);
   }
 
-  const existing = await findExistingTestbenchResolution(topDefinition.uri, configuredTestbench, moduleRegistry);
+  const existing = await findExistingTestbenchResolution(topDefinition.uri, configuredTestbench, moduleRegistry, options);
   if (existing.conflict) {
     return undefined;
   }
@@ -159,14 +210,16 @@ export async function ensureRunnableTestbench(
 
   const tbUri = await runtimeTestbenchUri(topDefinition.uri, configuredTestbench);
   const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(topDefinition.uri)),
+    finishDelay: options.nonInteractive ? false : verilogDelayFromSimTime(getSimTime(topDefinition.uri)),
     profile: getProfile(topDefinition.uri)
-  }));
+  }), options);
   if (!written) {
     return undefined;
   }
-  services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
-  if (showMessages) {
+  if (!options.nonInteractive) {
+    services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
+  }
+  if (showMessages && !options.nonInteractive) {
     vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
   }
   return { moduleName: configuredTestbench, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
@@ -175,10 +228,11 @@ export async function ensureRunnableTestbench(
 export async function resolveNamedTestbench(
   testbenchName: string,
   resource: vscode.Uri | undefined,
-  moduleRegistry?: MutableVerilogModuleProvider
+  moduleRegistry?: MutableVerilogModuleProvider,
+  options: TestbenchResolutionOptions = {}
 ): Promise<TestbenchResolution | undefined> {
   const existing = resource
-    ? await findExistingTestbenchResolution(resource, testbenchName, moduleRegistry)
+    ? await findExistingTestbenchResolution(resource, testbenchName, moduleRegistry, options)
     : { resolution: undefined, conflict: false };
   if (existing.conflict) {
     return undefined;
@@ -189,11 +243,12 @@ export async function resolveNamedTestbench(
 export async function findExistingTestbenchResolution(
   resource: vscode.Uri,
   tbName: string,
-  moduleRegistry?: MutableVerilogModuleProvider
+  moduleRegistry?: MutableVerilogModuleProvider,
+  options: TestbenchResolutionOptions = {}
 ): Promise<ExistingTestbenchSearchResult> {
   const candidates = await testbenchCandidates(resource, tbName, moduleRegistry);
   if (!candidates.length) {
-    if (moduleRegistry?.scanning) {
+    if (moduleRegistry?.scanning && !options.nonInteractive) {
       vscode.window.showWarningMessage('项目 Verilog 模块仍在解析，未找到跨文件 testbench 时可稍后重试');
     }
     return { conflict: false };
@@ -208,7 +263,9 @@ export async function findExistingTestbenchResolution(
   const sameRank = ranked.filter((candidate) => candidate.rank === best.rank);
   if (sameRank.length > 1) {
     const choices = sameRank.map((candidate) => vscode.workspace.asRelativePath(candidate.uri)).join(', ');
-    vscode.window.showErrorMessage(`发现多个同优先级 testbench 模块 ${tbName}: ${choices}`);
+    if (!options.nonInteractive) {
+      vscode.window.showErrorMessage(`发现多个同优先级 testbench 模块 ${tbName}: ${choices}`);
+    }
     return { conflict: true };
   }
   return {
@@ -220,6 +277,16 @@ export async function findExistingTestbenchResolution(
       sha256: await fileSha256(best.uri)
     }
   };
+}
+
+/** All parseable user sources that declare the configured testbench module. */
+export async function findUserTestbenchSourceUris(
+  resource: vscode.Uri,
+  tbName: string,
+  moduleRegistry?: MutableVerilogModuleProvider
+): Promise<vscode.Uri[]> {
+  const candidates = await testbenchCandidates(resource, tbName, moduleRegistry);
+  return candidates.map((candidate) => candidate.uri);
 }
 
 export async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: TestbenchResolution): Promise<void> {
@@ -245,14 +312,15 @@ async function ensureActiveModuleTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
   showMessages: boolean,
-  moduleRegistry?: MutableVerilogModuleProvider
+  moduleRegistry?: MutableVerilogModuleProvider,
+  options: TestbenchResolutionOptions = {}
 ): Promise<TestbenchResolution | undefined> {
   const definition = await activeModuleDefinition(resource);
   if (!definition) {
     return undefined;
   }
   const tbName = `${definition.module.name}_tb`;
-  const existing = await findExistingTestbenchResolution(definition.uri, tbName, moduleRegistry);
+  const existing = await findExistingTestbenchResolution(definition.uri, tbName, moduleRegistry, options);
   if (existing.conflict) {
     return undefined;
   }
@@ -261,14 +329,16 @@ async function ensureActiveModuleTestbench(
   }
   const tbUri = await runtimeTestbenchUri(definition.uri, tbName);
   const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(definition.module, tbName, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(definition.uri)),
+    finishDelay: options.nonInteractive ? false : verilogDelayFromSimTime(getSimTime(definition.uri)),
     profile: getProfile(definition.uri)
-  }));
+  }), options);
   if (!written) {
     return undefined;
   }
-  services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
-  if (showMessages) {
+  if (!options.nonInteractive) {
+    services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
+  }
+  if (showMessages && !options.nonInteractive) {
     vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
   }
   return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
@@ -280,6 +350,14 @@ async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string):
   const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
   await ensureDirectory(outDir);
   return vscode.Uri.file(path.join(outDir.fsPath, runtimeTestbenchFileName(testbenchName)));
+}
+
+async function privateRuntimeTestbenchUri(resource: vscode.Uri, moduleName: string): Promise<vscode.Uri> {
+  const folder = workspaceFolderForOrFirst(resource);
+  const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
+  const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
+  await ensureDirectory(outDir);
+  return vscode.Uri.file(path.join(outDir.fsPath, `${moduleName}.v`));
 }
 
 async function testbenchCandidates(
@@ -363,12 +441,18 @@ async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: stri
   return found;
 }
 
-async function writeGeneratedRuntimeTestbench(uri: vscode.Uri, testbenchText: string): Promise<boolean> {
+async function writeGeneratedRuntimeTestbench(
+  uri: vscode.Uri,
+  testbenchText: string,
+  options: TestbenchResolutionOptions = {}
+): Promise<boolean> {
   const next = generatedRuntimeTestbenchText(testbenchText);
   if (await pathExists(uri.fsPath)) {
     const existing = await readTextFileSafe(uri);
     if (!isGeneratedRuntimeTestbench(existing)) {
-      vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
+      if (!options.nonInteractive) {
+        vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
+      }
       return false;
     }
     if (existing === next) {

@@ -82,6 +82,8 @@ export interface RunFullStackShadowOptions {
   /** SHA-256 verified against the application-owned legacy-course-executor role. */
   readonly expectedLegacySha256?: string;
   readonly signal?: AbortSignal;
+  /** Internal automatic-test lane; legacy providers remain semantically identical but quiet. */
+  readonly nonInteractive?: boolean;
   readonly now?: Date;
 }
 
@@ -210,7 +212,10 @@ export async function runFullStackShadow(
         } else {
           legacyAssembly = await resolvedAssembler.provider.assemble(
             assemblyRequest,
-            { signal: options.signal }
+            {
+              signal: options.signal,
+              nonInteractive: options.nonInteractive
+            }
           );
           const cancelled = engineRunWasCancelled(legacyAssembly.status, options.signal);
           const referenceAfterAssembly = cancelled
@@ -363,7 +368,10 @@ export async function runFullStackShadow(
             } else {
               legacyExecution = await resolvedExecutor.provider.execute(
                 executionRequest,
-                { signal: options.signal }
+                {
+                  signal: options.signal,
+                  nonInteractive: options.nonInteractive
+                }
               );
               await writeAtomic(
                 legacyTraceUri.fsPath,
@@ -468,7 +476,9 @@ export async function runFullStackShadow(
     );
     await fs.promises.rename(temporary, destination);
     const finalResult = path.join(destination, 'full-stack-result.json');
-    services.output.appendLine(message);
+    if (!options.nonInteractive) {
+      services.output.appendLine(message);
+    }
     return {
       evidenceKind: 'full-stack',
       status,

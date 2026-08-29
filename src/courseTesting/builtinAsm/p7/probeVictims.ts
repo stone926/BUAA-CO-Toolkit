@@ -1,9 +1,7 @@
 // @index p7-probe-victims — P7 精确异常触发序列规划与 EPC/受害 PC 定位
 import { Random } from '../../random';
-import {
-  BuiltinAsmGeneratorError,
-  p7InternalUnknownInstructionMnemonic
-} from '../randomBody';
+import { BuiltinAsmGeneratorError } from '../randomBody';
+import { p7RiWordDirective, p7RiWordEntry } from '../../p7RiWords';
 import { P7ProbeScenarioKind } from '../types';
 import { loadImmediateInstructions, probeUserScratchRegisters } from './probeAsm';
 import {
@@ -58,12 +56,15 @@ export function planInternalExceptionVictim(
 ): InternalExceptionVictimPlan {
   switch (kind) {
     case 'adel':
-      return planAdelVictim(variant, rng);
+      return planAdelVictim(variant, rng, doneLabel);
     case 'ades':
-      return planAdesVictim(variant, rng);
+      return planAdesVictim(variant, rng, doneLabel);
     case 'syscall':
       if (variant?.startsWith('young-')) {
         return planYoungerMduVictim(variant);
+      }
+      if (variant === 'post-eret-status') {
+        return directVictimPlan(['syscall']);
       }
       return {
         instructions: [`beq $0, $0, ${doneLabel}`, 'syscall'],
@@ -71,15 +72,20 @@ export function planInternalExceptionVictim(
         epcInstructionIndex: 0,
         victimInstructionIndex: 1
       };
-    case 'ri':
+    case 'ri': {
+      const entry = p7RiWordEntry(variant);
+      if (!entry) {
+        throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported P7 RI probe variant ${String(variant)}.`);
+      }
       return {
-        instructions: [`bne $0, $0, ${doneLabel}`, p7InternalUnknownInstructionMnemonic],
+        instructions: [`bne $0, $0, ${doneLabel}`, p7RiWordDirective(entry)],
         expectedBd: true,
         epcInstructionIndex: 0,
         victimInstructionIndex: 1
       };
+    }
     case 'ov':
-      return planOverflowVictim(variant);
+      return planOverflowVictim(variant, doneLabel);
     case 'internal':
       return directVictimPlan([
         ...loadImmediateInstructions('$1', 0x80000000),
@@ -111,13 +117,17 @@ export function resolveInternalExceptionVictim(
   };
 }
 
-function planAdelVictim(variant: string | undefined, rng: Random): InternalExceptionVictimPlan {
+function planAdelVictim(variant: string | undefined, rng: Random, doneLabel: string): InternalExceptionVictimPlan {
   const target = rng.pick(probeUserScratchRegisters);
   switch (variant) {
-    case 'misaligned-load':
-      return directVictimPlan([`lw ${target}, 1($0)`]);
-    case 'misaligned-half-load':
-      return directVictimPlan([`lh ${target}, 1($0)`]);
+    case 'misaligned-load-delay-taken':
+      return delaySlotVictimPlan([], `lw ${target}, 1($0)`, doneLabel, true);
+    case 'misaligned-load-delay-not-taken':
+      return delaySlotVictimPlan([], `lw ${target}, 1($0)`, doneLabel, false);
+    case 'misaligned-half-load-delay-taken':
+      return delaySlotVictimPlan([], `lh ${target}, 1($0)`, doneLabel, true);
+    case 'misaligned-half-load-delay-not-taken':
+      return delaySlotVictimPlan([], `lh ${target}, 1($0)`, doneLabel, false);
     case 'ea-overflow-load':
       return directVictimPlan([
         ...loadImmediateInstructions('$20', 0x7fffffff),
@@ -146,13 +156,17 @@ function planAdelVictim(variant: string | undefined, rng: Random): InternalExcep
   }
 }
 
-function planAdesVictim(variant: string | undefined, rng: Random): InternalExceptionVictimPlan {
+function planAdesVictim(variant: string | undefined, rng: Random, doneLabel: string): InternalExceptionVictimPlan {
   const source = rng.pick(probeUserScratchRegisters);
   switch (variant) {
-    case 'misaligned-store':
-      return directVictimPlan([`sw ${source}, 1($0)`]);
-    case 'misaligned-half-store':
-      return directVictimPlan([`sh ${source}, 1($0)`]);
+    case 'misaligned-store-delay-taken':
+      return delaySlotVictimPlan([], `sw ${source}, 1($0)`, doneLabel, true);
+    case 'misaligned-store-delay-not-taken':
+      return delaySlotVictimPlan([], `sw ${source}, 1($0)`, doneLabel, false);
+    case 'misaligned-half-store-delay-taken':
+      return delaySlotVictimPlan([], `sh ${source}, 1($0)`, doneLabel, true);
+    case 'misaligned-half-store-delay-not-taken':
+      return delaySlotVictimPlan([], `sh ${source}, 1($0)`, doneLabel, false);
     case 'ea-overflow-store':
       return directVictimPlan([
         ...loadImmediateInstructions('$20', 0x7fffffff),
@@ -225,25 +239,28 @@ function planTimerStoreVictim(
   };
 }
 
-function planOverflowVictim(variant: string | undefined): InternalExceptionVictimPlan {
+function planOverflowVictim(variant: string | undefined, doneLabel: string): InternalExceptionVictimPlan {
   switch (variant) {
-    case 'add-overflow':
-      return directVictimPlan([
+    case 'add-overflow-delay-taken':
+    case 'add-overflow-delay-not-taken':
+      return delaySlotVictimPlan([
         ...loadImmediateInstructions('$20', 0x7fffffff),
-        ...loadImmediateInstructions('$21', 1),
-        'add $22, $20, $21'
-      ]);
-    case 'addi-overflow':
-      return directVictimPlan([
-        ...loadImmediateInstructions('$20', 0x7fffffff),
-        'addi $22, $20, 1'
-      ]);
-    case 'sub-overflow':
-      return directVictimPlan([
+        ...loadImmediateInstructions('$21', 1)
+      ], 'add $22, $20, $21', doneLabel, variant.endsWith('delay-taken'));
+    case 'addi-overflow-delay-taken':
+    case 'addi-overflow-delay-not-taken':
+      return delaySlotVictimPlan(
+        loadImmediateInstructions('$20', 0x7fffffff),
+        'addi $22, $20, 1',
+        doneLabel,
+        variant.endsWith('delay-taken')
+      );
+    case 'sub-overflow-delay-taken':
+    case 'sub-overflow-delay-not-taken':
+      return delaySlotVictimPlan([
         ...loadImmediateInstructions('$20', 0x80000000),
-        ...loadImmediateInstructions('$21', 1),
-        'sub $22, $20, $21'
-      ]);
+        ...loadImmediateInstructions('$21', 1)
+      ], 'sub $22, $20, $21', doneLabel, variant.endsWith('delay-taken'));
     default:
       throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported P7 Ov probe variant ${String(variant)}.`);
   }
@@ -294,6 +311,25 @@ function directVictimPlan(instructions: string[]): InternalExceptionVictimPlan {
     expectedBd: false,
     epcInstructionIndex: victimInstructionIndex,
     victimInstructionIndex
+  };
+}
+
+function delaySlotVictimPlan(
+  setup: string[],
+  victimInstruction: string,
+  doneLabel: string,
+  taken: boolean
+): InternalExceptionVictimPlan {
+  const epcInstructionIndex = setup.length;
+  return {
+    instructions: [
+      ...setup,
+      `${taken ? 'beq' : 'bne'} $0, $0, ${doneLabel}`,
+      victimInstruction
+    ],
+    expectedBd: true,
+    epcInstructionIndex,
+    victimInstructionIndex: epcInstructionIndex + 1
   };
 }
 

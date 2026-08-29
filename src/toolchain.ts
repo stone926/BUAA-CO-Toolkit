@@ -2,7 +2,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, resolvePython } from './config';
+import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, resolvePython, type MipsEngineMode } from './config';
 import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
 import { MARS_P7_CHECK } from './courseTestToolchain';
 import { runTool } from './process';
@@ -20,7 +20,13 @@ const stableCompactSpResetValue = '00002FFC';
 export async function checkToolchain(
   output: vscode.OutputChannel,
   resource?: vscode.Uri,
-  options: { promptForProfile?: boolean; tools?: string[] } = {}
+  options: {
+    promptForProfile?: boolean;
+    tools?: string[];
+    nonInteractive?: boolean;
+    /** Private automatic lanes pin this so a workspace rollback cannot start legacy probes. */
+    engineMode?: MipsEngineMode;
+  } = {}
 ): Promise<ToolDetection[]> {
   const checks: ToolDetection[] = [];
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
@@ -37,7 +43,7 @@ export async function checkToolchain(
     }];
   }
   const requiredTools = new Set([
-    ...getEffectiveRequiredTools(profile, getMipsEngine(resource)).map(normalizeToolName),
+    ...getEffectiveRequiredTools(profile, options.engineMode ?? getMipsEngine(resource)).map(normalizeToolName),
     ...(options.tools ?? []).map(normalizeToolName)
   ]);
   const checkAll = requiredTools.size === 0;
@@ -48,7 +54,8 @@ export async function checkToolchain(
       cwd,
       output,
       resource,
-      timeoutMs: 10000
+      timeoutMs: 10000,
+      nonInteractive: options.nonInteractive
     });
     checks.push({
       name: 'Java',
@@ -64,7 +71,8 @@ export async function checkToolchain(
       cwd,
       output,
       resource,
-      timeoutMs: 10000
+      timeoutMs: 10000,
+      nonInteractive: options.nonInteractive
     });
     checks.push({
       name: 'Python',
@@ -79,7 +87,7 @@ export async function checkToolchain(
     const marsFile = await fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactLargeText dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
     checks.push(marsFile);
     if (marsFile.ok) {
-      checks.push(...await marsCapabilityChecks(output, resource, cwd, mars, profile));
+      checks.push(...await marsCapabilityChecks(output, resource, cwd, mars, profile, options.nonInteractive));
     }
   }
 
@@ -121,7 +129,8 @@ async function marsCapabilityChecks(
   resource: vscode.Uri | undefined,
   cwd: string,
   mars: string,
-  profile: string
+  profile: string,
+  nonInteractive = false
 ): Promise<ToolDetection[]> {
   const tempDir = coTmpDir(resource, 'co-mars-check-');
   try {
@@ -167,13 +176,15 @@ async function marsCapabilityChecks(
       cwd,
       output,
       resource,
-      timeoutMs: 10000
+      timeoutMs: 10000,
+      nonInteractive
     });
     const traceL2 = await runTool(java, [...traceBaseArgs, 'coL2', asm], {
       cwd,
       output,
       resource,
-      timeoutMs: 10000
+      timeoutMs: 10000,
+      nonInteractive
     });
     const checks: ToolDetection[] = [
       marsTraceCapabilityCheck(traceL1, 1),
@@ -183,9 +194,9 @@ async function marsCapabilityChecks(
       checks.push(p7InterruptCapabilityCheck(traceL1));
     }
     if (profile !== 'P7') {
-      checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'FixedCompactLargeText'));
+      checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'FixedCompactLargeText', nonInteractive));
     }
-    checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactLargeText'));
+    checks.push(await memoryConfigurationCapabilityCheck(output, resource, cwd, java, mars, asm, tempDir, 'CompactLargeText', nonInteractive));
     return checks;
   } finally {
     await cleanupCoTmp(tempDir);
@@ -272,14 +283,16 @@ async function memoryConfigurationCapabilityCheck(
   mars: string,
   asm: string,
   tempDir: string,
-  memoryConfiguration: 'CompactDataAtZero' | 'FixedCompactLargeText' | 'CompactLargeText'
+  memoryConfiguration: 'CompactDataAtZero' | 'FixedCompactLargeText' | 'CompactLargeText',
+  nonInteractive = false
 ): Promise<ToolDetection> {
   const outFile = path.join(tempDir, `${memoryConfiguration}.txt`);
   const result = await runTool(java, ['-jar', mars, 'nc', 'mc', memoryConfiguration, 'db', 'a', 'dump', '.text', 'HexText', outFile, asm], {
     cwd,
     output,
     resource,
-    timeoutMs: 10000
+    timeoutMs: 10000,
+    nonInteractive
   });
   const combined = `${result.stdout}\n${result.stderr}`;
   const unsupported = /Invalid memory configuration/i.test(combined);

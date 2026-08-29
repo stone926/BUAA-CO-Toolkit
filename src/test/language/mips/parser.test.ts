@@ -599,9 +599,16 @@ describe('parseMips', () => {
       expect(diagCodes(result)).toContain('unknown-directive');
     });
 
-    it('reports error for .word in non-data segment', () => {
-      const text = '.text\n    .word 42';
-      const result = parseMips(doc(text), settings());
+    it('accepts raw .word cells in text and ktext instruction segments', () => {
+      for (const text of ['.text\n    .word 0xfc000000', '.ktext 0x4180\n    .word 0x0000003f']) {
+        const result = parseMips(doc(text), settings({ project: { profile: 'P7' } }));
+        expect(diagCodes(result), text).not.toContain('directive-segment');
+        expect(result.diagnostics.filter((diagnostic) => diagnostic.severity === 1), text).toEqual([]);
+      }
+    });
+
+    it('still reports other storage directives in an instruction segment', () => {
+      const result = parseMips(doc('.text\n    .half 42'), settings());
       expect(diagCodes(result)).toContain('directive-segment');
     });
 
