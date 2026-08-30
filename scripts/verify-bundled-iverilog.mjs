@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -21,6 +22,14 @@ const runtimeRoot = join(extensionRoot, "vendor", "iverilog", "win32-x64");
 const binDir = join(runtimeRoot, "bin");
 const iverilog = join(binDir, "iverilog.exe");
 const vvp = join(binDir, "vvp.exe");
+const utf8ManifestExecutables = [
+  "bin/iverilog-vpi.exe",
+  "bin/iverilog.exe",
+  "bin/vvp.exe",
+  "lib/ivl/ivl.exe",
+  "lib/ivl/ivlpp.exe",
+  "lib/ivl/vhdlpp.exe",
+];
 
 assertOneFile(
   [join(extensionRoot, "LICENSE"), join(extensionRoot, "LICENSE.txt")],
@@ -61,11 +70,13 @@ const requiredFiles = [
   "bin/zlib1.dll",
   "lib/ivl/ivl.exe",
   "lib/ivl/ivlpp.exe",
+  "lib/ivl/vhdlpp.exe",
   "lib/ivl/null.tgt",
   "lib/ivl/system.vpi",
   "lib/ivl/vvp.tgt",
   "CORRESPONDING_SOURCES.json",
   "THIRD_PARTY_NOTICES.md",
+  "UTF8_MANIFEST_PATCH.json",
   "licenses/iverilog-COPYING.txt",
   "licenses/bzip2-LICENSE.txt",
   "licenses/readline-COPYING.txt",
@@ -80,6 +91,44 @@ const requiredFiles = [
 
 for (const relativePath of requiredFiles) {
   assertFile(join(runtimeRoot, ...relativePath.split("/")), relativePath);
+}
+
+const manifestPatch = JSON.parse(
+  readFileSync(join(runtimeRoot, "UTF8_MANIFEST_PATCH.json"), "utf8"),
+);
+if (
+  manifestPatch.schemaVersion !== 1 ||
+  !Array.isArray(manifestPatch.targets) ||
+  manifestPatch.targets.length !== 6
+) {
+  fail("UTF8_MANIFEST_PATCH.json must describe the six patched executables.");
+}
+const manifestPatchTargets = new Map(
+  manifestPatch.targets.map((target) => [target.path, target]),
+);
+for (const relativePath of utf8ManifestExecutables) {
+  const target = manifestPatchTargets.get(relativePath);
+  if (
+    !target ||
+    typeof target.originalSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(target.originalSha256) ||
+    typeof target.patchedSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(target.patchedSha256)
+  ) {
+    fail(`Missing or invalid UTF-8 manifest patch metadata: ${relativePath}`);
+  }
+  const executablePath = join(runtimeRoot, ...relativePath.split("/"));
+  assertUtf8ActiveCodePage(
+    executablePath,
+    relativePath,
+  );
+  assertValidPeMetadata(executablePath, relativePath);
+  const actualSha256 = createHash("sha256")
+    .update(readFileSync(executablePath))
+    .digest("hex");
+  if (actualSha256 !== target.patchedSha256) {
+    fail(`Unexpected patched executable hash for ${relativePath}: ${actualSha256}`);
+  }
 }
 
 const notice = readFileSync(join(runtimeRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
@@ -291,6 +340,83 @@ function assertOneFile(paths, label) {
     }
   }
   fail(`Required runtime file is missing: ${label}`);
+}
+
+function assertUtf8ActiveCodePage(path, label) {
+  const executableText = readFileSync(path).toString("latin1");
+  if (!/<activeCodePage\b[^>]*>\s*UTF-8\s*<\/activeCodePage>/.test(executableText)) {
+    fail(`Bundled executable is missing its UTF-8 activeCodePage manifest: ${label}`);
+  }
+}
+
+function assertValidPeMetadata(path, label) {
+  const bytes = readFileSync(path);
+  if (bytes.length < 64 || bytes.readUInt16LE(0) !== 0x5a4d) {
+    fail(`Bundled executable is not a valid PE image: ${label}`);
+  }
+  const peOffset = bytes.readUInt32LE(0x3c);
+  if (peOffset > bytes.length - 24 || bytes.readUInt32LE(peOffset) !== 0x00004550) {
+    fail(`Bundled executable has an invalid PE header: ${label}`);
+  }
+
+  const fileHeaderOffset = peOffset + 4;
+  const sectionCount = bytes.readUInt16LE(fileHeaderOffset + 2);
+  const symbolTablePointer = bytes.readUInt32LE(fileHeaderOffset + 8);
+  const symbolCount = bytes.readUInt32LE(fileHeaderOffset + 12);
+  const optionalHeaderSize = bytes.readUInt16LE(fileHeaderOffset + 16);
+  const optionalHeaderOffset = fileHeaderOffset + 20;
+  const sectionTableOffset = optionalHeaderOffset + optionalHeaderSize;
+  if (sectionTableOffset + (sectionCount * 40) > bytes.length) {
+    fail(`Bundled executable has a truncated PE section table: ${label}`);
+  }
+
+  let rawSectionEnd = 0;
+  for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex += 1) {
+    const sectionOffset = sectionTableOffset + (sectionIndex * 40);
+    const rawSize = bytes.readUInt32LE(sectionOffset + 16);
+    const rawPointer = bytes.readUInt32LE(sectionOffset + 20);
+    rawSectionEnd = Math.max(rawSectionEnd, rawPointer + rawSize);
+  }
+  if (symbolCount === 0 || symbolTablePointer !== rawSectionEnd) {
+    fail(`Bundled executable has an invalid COFF symbol-table pointer: ${label}`);
+  }
+
+  const stringTableOffset = symbolTablePointer + (symbolCount * 18);
+  if (stringTableOffset + 4 > bytes.length) {
+    fail(`Bundled executable has a truncated COFF symbol table: ${label}`);
+  }
+  const stringTableLength = bytes.readUInt32LE(stringTableOffset);
+  if (stringTableLength < 4 || stringTableOffset + stringTableLength !== bytes.length) {
+    fail(`Bundled executable has a truncated COFF string table: ${label}`);
+  }
+
+  const checksumOffset = optionalHeaderOffset + 64;
+  if (checksumOffset + 4 > sectionTableOffset) {
+    fail(`Bundled executable has no complete PE checksum field: ${label}`);
+  }
+  const storedChecksum = bytes.readUInt32LE(checksumOffset);
+  const computedChecksum = computePeChecksum(bytes, checksumOffset);
+  if (storedChecksum !== computedChecksum) {
+    fail(
+      `Bundled executable has an invalid PE checksum: ${label} ` +
+      `(stored ${storedChecksum}, computed ${computedChecksum})`,
+    );
+  }
+}
+
+function computePeChecksum(bytes, checksumOffset) {
+  let sum = 0;
+  for (let offset = 0; offset < bytes.length; offset += 2) {
+    if (offset === checksumOffset || offset === checksumOffset + 2) {
+      continue;
+    }
+    const word = bytes[offset] | ((bytes[offset + 1] ?? 0) << 8);
+    sum += word;
+    sum = (sum & 0xffff) + (sum >>> 16);
+  }
+  sum = (sum & 0xffff) + (sum >>> 16);
+  sum = (sum & 0xffff) + (sum >>> 16);
+  return ((sum & 0xffff) + bytes.length) >>> 0;
 }
 
 function isolatedPath(runtimeBin) {

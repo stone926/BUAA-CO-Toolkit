@@ -38,7 +38,7 @@ test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsRep
 
 进程/兼容证据:
   processCore 覆盖 stdout/stderr raw-byte cap、UTF-8 chunk boundary、timeout/abort 与子孙进程树；`test-cli` 的 legacy-equivalence runner 在 detached provider 迁移前父提交 `044bab0` 与当前 provider 路径间比较 machine code、trace、verdict、halt PC
-  scripts/verify-bundled-iverilog*.mjs 从源码树或解包 VSIX 在隔离 PATH 下验证 runtime、compile/VVP/watchdog 与 P1/P4-P7 课程兼容；fetch-iverilog-corresponding-sources.mjs 按固定 manifest 下载并校验 release 对应源码资产
+  scripts/verify-bundled-iverilog*.mjs 从源码树或解包 VSIX 在隔离 PATH 下验证六个原生 EXE 的 UTF-8 manifest、中文路径 syntax/compile/VVP/watchdog 与 P1/P4-P7 课程兼容；常规 portability CI 在 Windows 2025 提前执行同一 smoke，fetch-iverilog-corresponding-sources.mjs 按固定 manifest 下载并校验 release 对应源码资产
 
 fixtures:
   syntaxFixtures — fixture测试运行器

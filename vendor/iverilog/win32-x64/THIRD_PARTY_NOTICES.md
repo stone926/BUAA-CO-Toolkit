@@ -1,10 +1,12 @@
 # Third-party notices for the bundled Windows x64 Icarus runtime
 
-This directory contains an unmodified runtime assembled from the MSYS2 UCRT64
-binary packages listed below. It is distributed with BUAA CO Toolkit for use by
-the extension's Verilog compiler and simulator integration. These components
-remain under their respective licenses; the repository's top-level license does
-not replace or restrict those licenses.
+This directory contains a runtime assembled from the MSYS2 UCRT64 binary
+packages listed below. The six Icarus PE executables carry the manifest-only
+downstream modification documented below; the remaining files are copied from
+the listed packages. It is distributed with BUAA CO Toolkit for use by the
+extension's Verilog compiler and simulator integration. These components remain
+under their respective licenses; the repository's top-level license does not
+replace or restrict those licenses.
 
 The snapshot was assembled on 2026-08-30. Each exact MSYS2 source-only archive
 contains the corresponding upstream source, MSYS2 packaging recipe, and applied
@@ -17,6 +19,33 @@ BUAA CO Toolkit release that distributes this runtime attaches those seven verif
 source archives and a `SHA256SUMS` file alongside the VSIX, so corresponding source remains available
 from the [project release page](https://github.com/stone926/BUAA-CO-Toolkit/releases)
 without depending exclusively on the MSYS2 mirror.
+
+## Downstream Windows UTF-8 manifest modification
+
+BUAA CO Toolkit adds the Windows 10/11 `activeCodePage` value `UTF-8` to the
+embedded application manifest of `bin/iverilog.exe`, `bin/iverilog-vpi.exe`,
+`bin/vvp.exe`, `lib/ivl/ivl.exe`, `lib/ivl/ivlpp.exe`, and
+`lib/ivl/vhdlpp.exe`. No executable code is changed. This lets the existing
+narrow Windows APIs and command-line entry points receive UTF-8 paths even when
+the user's system ANSI code page cannot represent a project directory.
+The reproducible patch preserves and relocates each executable's original COFF
+symbol/string table, verifies every non-resource PE section is byte-identical,
+and recalculates the PE checksum after the resource update.
+
+The complete source for this modification is
+`scripts/iverilog-utf8-codepage.manifest` and
+`scripts/patch-iverilog-utf8-manifests.ps1` in the same tagged BUAA CO Toolkit
+repository. [`UTF8_MANIFEST_PATCH.json`](UTF8_MANIFEST_PATCH.json) records the
+SHA-256 digests before and after the modification and the exact manifest-tool
+version used for the distributed files. The PowerShell script records the
+digest of every original MSYS2 executable, refuses unexpected input, applies
+the manifest with the Windows SDK `mt.exe`, verifies the embedded result, and
+is idempotent. Reproduce the modification from the unmodified package files
+with:
+
+```powershell
+pwsh -File scripts/patch-iverilog-utf8-manifests.ps1
+```
 
 ## Components
 

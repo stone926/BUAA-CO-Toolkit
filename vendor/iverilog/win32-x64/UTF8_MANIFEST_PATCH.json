@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "description": "Manifest-only downstream modification enabling the UTF-8 active process code page for the bundled Icarus executables.",
+  "manifestSource": "scripts/iverilog-utf8-codepage.manifest",
+  "manifestSourceSha256": "ae18e973ee276ee777cf40fa0ccf4c73e23ec0280d3abd4bca39f205145ebf9a",
+  "patchScriptSource": "scripts/patch-iverilog-utf8-manifests.ps1",
+  "manifestToolVersion": "10.0.26100.7705",
+  "targets": [
+    {
+      "path": "bin/iverilog-vpi.exe",
+      "originalSha256": "497e9f9e183526908a765be973ed1cf6b00b1704abd1e6302e043136b579b1b1",
+      "patchedSha256": "5478b1dc05d2dd318dbbac6955bb69f5f5110adc2e318aba4c2bbe4df0945931"
+    },
+    {
+      "path": "bin/iverilog.exe",
+      "originalSha256": "25e1ba02e72f58d9d484bc5457d69a6b179d22d86bdf5ba5d6f9f0d4fe620bbf",
+      "patchedSha256": "41f4c2d64f4d2a81ea4f74934af16eb25ff3af5fab379c69a5c1e505c00a4d70"
+    },
+    {
+      "path": "bin/vvp.exe",
+      "originalSha256": "f0775603e1f1bcf1b2dea16dff963a4b7d71b7b33d5bbe23d2b01ff5b2304e09",
+      "patchedSha256": "41b22141a2c240f12696effe6d33b8e4da4814fd2e8b44ca5ea54e2f876e48ab"
+    },
+    {
+      "path": "lib/ivl/ivl.exe",
+      "originalSha256": "75b5b4569796b4cd85c74e9b4836699a70159279c3bae20268a8578558686643",
+      "patchedSha256": "3129a87688bee71f6001c2bfb270e59330750080af584c3d9c84c3e6b1d6c95d"
+    },
+    {
+      "path": "lib/ivl/ivlpp.exe",
+      "originalSha256": "d41181df44c4c6a6ad07e5f91a34f7624ec081150c5b08e007133afdb7fad3c8",
+      "patchedSha256": "054359ea7c3587cfd3540319ae3aa75e95d79f9fcfcabe45f23848b92fe1c19a"
+    },
+    {
+      "path": "lib/ivl/vhdlpp.exe",
+      "originalSha256": "83974fee3745a754110abc5ef51468fa7a90f2afec36d5288e4c02e5ed6ca9bf",
+      "patchedSha256": "155d5219cc999070f26760ef974eacee489582542d151786e697582bacdf4262"
+    }
+  ]
+}

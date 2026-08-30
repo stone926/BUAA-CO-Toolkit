@@ -4,6 +4,9 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- fix(verilog): enable the bundled Windows Icarus processes' UTF-8 code page so projects and temporary files with non-ASCII paths work independently of the system locale
+- test(release): run the packaged-runtime Unicode-path smoke in regular Windows portability CI before a release tag is created
+
 ## [1.0.4] - 2026-08-30
 
 - fix(ci): make bundled-runtime and replay source-graph tests portable across Linux and Windows path representations

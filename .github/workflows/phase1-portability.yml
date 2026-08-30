@@ -47,6 +47,10 @@ jobs:
       - name: Compile and prove the checked-out tree stays unchanged
         run: npm run verify:generated-tree-clean
 
+      - name: Smoke bundled Icarus with Unicode paths
+        if: runner.os == 'Windows'
+        run: node scripts/verify-bundled-iverilog.mjs .
+
       - name: Run the complete existing test suite on this platform
         run: npm test
 
