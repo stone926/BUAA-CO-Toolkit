@@ -12,7 +12,10 @@ test/language/mips/:
   parser, syntax, instructionValidation, semantic, resources, hover, formatting, traceParser, traceCompare, realProjectPatterns, completions, signatureHelp
 
 test/language/verilog/:
-  syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
+  syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
+
+test/verilog/:
+  verilogBackend, iverilogRuntime, iverilogRunner, simulationRunner, simulationInputs — 两值选择、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、自定义机器码名 alias 与无 fallback 分派
 
 TextMate:
   使用 vscode-textmate + vscode-oniguruma 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步及课程真实宏/数字片段
@@ -35,6 +38,7 @@ test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsRep
 
 进程/兼容证据:
   processCore 覆盖 stdout/stderr raw-byte cap、UTF-8 chunk boundary、timeout/abort 与子孙进程树；`test-cli` 的 legacy-equivalence runner 在 detached provider 迁移前父提交 `044bab0` 与当前 provider 路径间比较 machine code、trace、verdict、halt PC
+  scripts/verify-bundled-iverilog*.mjs 从源码树或解包 VSIX 在隔离 PATH 下验证 runtime、compile/VVP/watchdog 与 P1/P4-P7 课程兼容；fetch-iverilog-corresponding-sources.mjs 按固定 manifest 下载并校验 release 对应源码资产
 
 fixtures:
   syntaxFixtures — fixture测试运行器

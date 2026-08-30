@@ -15,7 +15,8 @@ function baseContext(overrides: Partial<SidebarModelContext> = {}): SidebarModel
     testbench: 'mips_tb',
     machineCode: 'code.txt',
     simTime: '200us',
-    simBackend: 'isim',
+    verilogBackend: 'Icarus Verilog（内置）',
+    iseConfigured: false,
     tools: [],
     ...overrides
   };

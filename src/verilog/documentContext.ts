@@ -34,10 +34,11 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
     },
     verilog: {
       syntax: {
+        external: {
+          mode: config<CoSettings['verilog']['syntax']['external']['mode']>('verilog.syntax.external.mode', defaultCoSettings.verilog.syntax.external.mode, uri),
+          timeoutMs: config<number>('verilog.syntax.external.timeoutMs', defaultCoSettings.verilog.syntax.external.timeoutMs, uri)
+        },
         ise: {
-          enabled: config<boolean>('verilog.syntax.ise.enabled', defaultCoSettings.verilog.syntax.ise.enabled, uri),
-          mode: config<CoSettings['verilog']['syntax']['ise']['mode']>('verilog.syntax.ise.mode', defaultCoSettings.verilog.syntax.ise.mode, uri),
-          timeoutMs: config<number>('verilog.syntax.ise.timeoutMs', defaultCoSettings.verilog.syntax.ise.timeoutMs, uri),
           suppressedWarnings: config<string[]>('verilog.syntax.ise.suppressedWarnings', defaultCoSettings.verilog.syntax.ise.suppressedWarnings, uri)
         }
       },

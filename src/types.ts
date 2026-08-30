@@ -5,6 +5,8 @@ export type { ProjectProfile } from './projectProfile';
 export interface AppServices {
   output: vscode.OutputChannel;
   statusBar: vscode.StatusBarItem;
+  /** Absolute extension installation root used to resolve bundled runtimes. */
+  extensionRoot?: string;
   /** Optional lazy worker host. When present, builtin execute jobs run off the extension-host thread. */
   mipsRuntime?: MipsRuntimeManager;
 }

@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { buildAdvancedToolItems } from '../advancedToolModel';
 
-function commandsFor(profile: Parameters<typeof buildAdvancedToolItems>[0]['profile'], activeKind: Parameters<typeof buildAdvancedToolItems>[0]['activeKind']): string[] {
-  return buildAdvancedToolItems({ profile, activeKind, activeFileName: 'current.v' })
+function commandsFor(
+  profile: Parameters<typeof buildAdvancedToolItems>[0]['profile'],
+  activeKind: Parameters<typeof buildAdvancedToolItems>[0]['activeKind'],
+  iseConfigured = false
+): string[] {
+  return buildAdvancedToolItems({ profile, activeKind, activeFileName: 'current.v', iseConfigured })
     .map((item) => item.command);
 }
 
 describe('advanced tool model', () => {
   it('filters Verilog tools by profile and active editor kind', () => {
-    const commands = commandsFor('P7', 'verilog');
+    const commands = commandsFor('P7', 'verilog', true);
 
     expect(commands).toContain('co.verilog.generateTestbench');
     expect(commands).toContain('co.verilog.generateIseProject');
@@ -16,6 +20,14 @@ describe('advanced tool model', () => {
     expect(commands.some((command) => command.startsWith('co.test.'))).toBe(false);
     expect(commands).toContain('co.hazard.analyzeCurrentMachineCode');
     expect(commands).not.toContain('co.logisim.convertLogToCsv');
+  });
+
+  it('keeps generic syntax checking but hides ISE-only tools without an ISE opt-in', () => {
+    const commands = commandsFor('P7', 'verilog');
+
+    expect(commands).toContain('co.verilog.checkSyntaxWithIse');
+    expect(commands).not.toContain('co.verilog.generateIseProject');
+    expect(commands).not.toContain('co.verilog.exportVcd');
   });
 
   it('keeps Logisim utilities but hides test preparation and diagnostics for P3', () => {
@@ -51,7 +63,7 @@ describe('advanced tool model', () => {
     ]);
     const commands = [
       ...commandsFor('P7', 'mips'),
-      ...commandsFor('P7', 'verilog'),
+      ...commandsFor('P7', 'verilog', true),
       ...commandsFor('P3', 'logisim')
     ];
 

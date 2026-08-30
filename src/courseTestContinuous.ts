@@ -382,7 +382,8 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
 
   const checks = await checkToolchain(services.output, resource, {
     nonInteractive: true,
-    engineMode: automaticTestEngineMode
+    engineMode: automaticTestEngineMode,
+    extensionRoot: services.extensionRoot
   });
   const required = requiredCourseTraceToolchainChecks(profile, engineMode, memoryConfiguration);
   const failed = requiredToolchainFailures(checks, required);

@@ -13,6 +13,7 @@ export interface AdvancedToolContext {
   profile: ProjectProfile;
   activeKind: CoActiveKind;
   activeFileName?: string;
+  iseConfigured?: boolean;
 }
 
 export interface AdvancedToolItemModel {
@@ -45,10 +46,14 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
   if (context.activeKind === 'verilog' && verilogProfiles.has(context.profile)) {
     items.push(
       tool('verilog.testbench', '生成 Verilog Testbench', 'Verilog', activeDetail, Commands.Verilog.GenerateTestbench),
-      tool('verilog.syntaxIse', '使用 ISE 检查语法', 'Verilog', activeDetail, Commands.Verilog.CheckSyntaxWithIse),
-      tool('verilog.iseProject', '生成 ISE 工程', 'Verilog', '生成 .co/isim PRJ/TCL', Commands.Verilog.GenerateIseProject),
-      tool('verilog.vcd', '导出 VCD 波形', 'Verilog', '批量运行并写入 .co/out', Commands.Verilog.ExportVcd)
+      tool('verilog.syntax', '检查 Verilog 语法', 'Verilog', activeDetail, Commands.Verilog.CheckSyntaxWithIse)
     );
+    if (context.iseConfigured) {
+      items.push(
+        tool('verilog.iseProject', '生成 ISE 工程', 'ISE', '生成 .co/isim PRJ/TCL', Commands.Verilog.GenerateIseProject),
+        tool('verilog.vcd', '导出 ISim VCD 波形', 'ISE', '批量运行并写入 .co/out', Commands.Verilog.ExportVcd)
+      );
+    }
   }
 
   if (shouldShowLogisimTools(context)) {

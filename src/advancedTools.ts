@@ -1,7 +1,7 @@
 import { Commands } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getProfile } from './config';
+import { getIsePath, getProfile } from './config';
 import {
   AdvancedToolContext,
   buildAdvancedToolItems,
@@ -59,6 +59,7 @@ function contextFromActiveEditor(): AdvancedToolContext {
   return {
     profile: getProfile(document?.uri),
     activeKind: activeKindForDocument(document),
-    activeFileName: document?.uri.scheme === 'file' ? path.basename(document.uri.fsPath) : undefined
+    activeFileName: document?.uri.scheme === 'file' ? path.basename(document.uri.fsPath) : undefined,
+    iseConfigured: Boolean(getIsePath(document?.uri).trim())
   };
 }

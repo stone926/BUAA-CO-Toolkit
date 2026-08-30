@@ -11,6 +11,7 @@ import { iterCpuTraceEvents, iterMarsDetailedTraceEvents } from './language/mips
 import { getEffectiveRequiredTools } from './toolchainPolicy';
 export { buildIseEnvironment, findFuse, findIsimGui, isimExecutableName } from './iseCommon';
 import { findFuse, findIsimGui } from './iseCommon';
+import { IverilogRuntimeError, preflightIverilogRuntime } from './verilog/iverilogRuntime';
 
 const marsCapabilityGpCopyRegister = '3';
 const marsCapabilitySpCopyRegister = '4';
@@ -24,6 +25,8 @@ export async function checkToolchain(
     promptForProfile?: boolean;
     tools?: string[];
     nonInteractive?: boolean;
+    /** Extension installation root used to resolve the bundled Icarus runtime. */
+    extensionRoot?: string;
     /** Private automatic lanes pin this so a workspace rollback cannot start legacy probes. */
     engineMode?: MipsEngineMode;
   } = {}
@@ -96,24 +99,52 @@ export async function checkToolchain(
     checks.push(await fileCheck('Logisim', logisim, '请设置 co.toolchain.logisim'));
   }
 
-  if (checkAll || requiredTools.has('ise')) {
-    const ise = getIsePath(resource);
-    const fuse = ise ? findFuse(ise) : '';
-    const isimGui = ise ? findIsimGui(ise) : '';
-    const fuseOk = Boolean(fuse && await isFile(fuse));
-    const isimGuiOk = Boolean(isimGui && await isFile(isimGui));
-    checks.push({
-      name: 'ISE fuse',
-      ok: fuseOk,
-      detail: fuse || '未配置',
-      suggestion: fuseOk ? undefined : '请设置 co.toolchain.isePath 为 ISE 目录'
-    });
-    checks.push({
-      name: 'ISim GUI',
-      ok: isimGuiOk,
-      detail: isimGui || '未配置',
-      suggestion: isimGuiOk ? undefined : '请设置 co.toolchain.isePath 为包含 ISim 的 ISE 目录'
-    });
+  if (checkAll || requiredTools.has('verilogsimulator')) {
+    const ise = getIsePath(resource).trim();
+    if (ise) {
+      const fuse = findFuse(ise);
+      const fuseOk = Boolean(fuse && await isFile(fuse));
+      checks.push({
+        name: 'Verilog simulator',
+        ok: fuseOk,
+        detail: fuse || ise,
+        suggestion: fuseOk ? undefined : 'co.toolchain.isePath 已显式配置，但其中未找到 ISE fuse；请修正路径或清空该设置以使用内置 Icarus'
+      });
+      if (checkAll) {
+        const isimGui = findIsimGui(ise);
+        const isimGuiOk = Boolean(isimGui && await isFile(isimGui));
+        checks.push({
+          name: 'ISim GUI',
+          ok: isimGuiOk,
+          detail: isimGui || ise,
+          suggestion: isimGuiOk ? undefined : '当前 ISE 路径中未找到 ISim GUI；无头仿真仍只依赖 fuse'
+        });
+      }
+    } else if (!options.extensionRoot) {
+      checks.push({
+        name: 'Verilog simulator',
+        ok: false,
+        detail: '无法定位扩展安装目录',
+        suggestion: '请重新加载或重新安装扩展'
+      });
+    } else {
+      try {
+        const preflight = await preflightIverilogRuntime(options.extensionRoot, { timeoutMs: 10_000 });
+        checks.push({
+          name: 'Verilog simulator',
+          ok: true,
+          detail: `${preflight.version} (bundled)`
+        });
+      } catch (error) {
+        const detail = error instanceof IverilogRuntimeError ? error.message : String(error);
+        checks.push({
+          name: 'Verilog simulator',
+          ok: false,
+          detail,
+          suggestion: '请重新安装 Windows x64 扩展包；内置 Icarus 运行时缺失或不可执行'
+        });
+      }
+    }
   }
 
   const hazardDir = getHazardCalculator(resource);

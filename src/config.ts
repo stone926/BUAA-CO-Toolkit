@@ -146,10 +146,6 @@ export function getSimTime(resource?: vscode.Uri): string {
   return layeredGetString('project.simTime', configDefault<string>('project.simTime'), resource);
 }
 
-export function getSimBackend(resource?: vscode.Uri): string {
-  return layeredGetString('project.simBackend', configDefault<string>('project.simBackend'), resource);
-}
-
 export type MipsEngineMode = 'auto' | 'builtin' | 'mars' | 'verify-both';
 
 const mipsEngineModes = new Set<MipsEngineMode>(['auto', 'builtin', 'mars', 'verify-both']);

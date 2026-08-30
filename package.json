@@ -5,7 +5,7 @@
   "version": "1.0.2",
   "publisher": "stone926",
   "icon": "icons/logo.png",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -417,16 +417,17 @@
       },
       {
         "command": "co.verilog.generateIseProject",
-        "title": "CO: Verilog 生成 ISE 工程"
+        "title": "CO: Verilog 生成 ISE 工程",
+        "enablement": "co.iseConfigured"
       },
       {
         "command": "co.verilog.checkSyntaxWithIse",
-        "title": "CO: Verilog 使用 ISE 检查语法",
+        "title": "CO: Verilog 检查语法",
         "icon": "$(checklist)"
       },
       {
         "command": "co.verilog.runIsim",
-        "title": "CO: Verilog 运行 ISim",
+        "title": "CO: Verilog 运行仿真",
         "icon": {
           "light": "icons/run-isim-light.svg",
           "dark": "icons/run-isim-dark.svg"
@@ -435,12 +436,14 @@
       {
         "command": "co.verilog.openIsimWaveform",
         "title": "CO: Verilog 查看 ISim 波形",
-        "icon": "$(pulse)"
+        "icon": "$(pulse)",
+        "enablement": "co.iseConfigured"
       },
       {
         "command": "co.verilog.exportVcd",
         "title": "CO: Verilog 导出 VCD 波形",
-        "icon": "$(save)"
+        "icon": "$(save)",
+        "enablement": "co.iseConfigured"
       },
       {
         "command": "co.verilog.inspectSignal",
@@ -677,12 +680,12 @@
           },
           "co.project.topModule": {
             "type": "string",
-            "description": "课程检查和 ISim 工程生成使用的顶层 Verilog 模块名",
+            "description": "课程检查和 Verilog 仿真工程生成使用的顶层模块名",
             "default": "mips"
           },
           "co.project.testbench": {
             "type": "string",
-            "description": "ISim 默认使用的 Verilog Testbench 模块名",
+            "description": "Verilog 仿真默认使用的 Testbench 模块名",
             "default": "mips_tb"
           },
           "co.project.machineCode": {
@@ -692,16 +695,8 @@
           },
           "co.project.simTime": {
             "type": "string",
-            "description": "手动运行 ISim/导出波形时的 TCL 运行时长，格式为 `run <值>; exit`。自动测试会按测试规模内部计算充足预算，不受此项限制",
+            "description": "手动运行 Verilog 仿真或导出 ISim 波形时使用的仿真时长。自动测试会按测试规模内部计算充足预算，不受此项限制",
             "default": "200us"
-          },
-          "co.project.simBackend": {
-            "type": "string",
-            "enum": [
-              "isim"
-            ],
-            "description": "Verilog 仿真后端。当前版本仅支持 ISim",
-            "default": "isim"
           }
         }
       },
@@ -767,7 +762,7 @@
           },
           "co.toolchain.isePath": {
             "type": "string",
-            "description": "Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE",
+            "description": "Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE。留空时使用扩展内置 Icarus；非空时显式选择 ISE，配置无效不会回退",
             "default": ""
           },
           "co.toolchain.hazardCalculator": {
@@ -851,12 +846,7 @@
             "description": "Verilog 隐式连线诊断的严重级别",
             "default": "warning"
           },
-          "co.verilog.syntax.ise.enabled": {
-            "type": "boolean",
-            "description": "默认启用保存后 ISE fuse 语法检查。ISE 不可用时自动回退到内置 Verilog 检查",
-            "default": true
-          },
-          "co.verilog.syntax.ise.mode": {
+          "co.verilog.syntax.external.mode": {
             "type": "string",
             "enum": [
               "off",
@@ -864,17 +854,17 @@
               "commandOnly"
             ],
             "enumDescriptions": [
-              "禁用 ISE 语法检查",
-              "保存 Verilog 文件时自动运行 ISE 检查",
-              "只在运行 CO: Verilog 使用 ISE 检查语法 命令时检查"
+              "禁用外部编译器语法检查",
+              "保存 Verilog 文件时自动运行外部编译器检查",
+              "只在运行 CO: Verilog 检查语法 命令时检查"
             ],
-            "description": "控制 ISE fuse 语法检查触发时机",
+            "description": "控制外部 Verilog 编译器语法检查触发时机；ISE 路径为空时使用内置 Icarus，非空时使用 ISE fuse",
             "default": "onSave"
           },
-          "co.verilog.syntax.ise.timeoutMs": {
+          "co.verilog.syntax.external.timeoutMs": {
             "type": "number",
             "minimum": 0,
-            "description": "ISE 语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs",
+            "description": "外部 Verilog 编译器语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs",
             "default": 0
           },
           "co.verilog.syntax.ise.suppressedWarnings": {
@@ -1056,7 +1046,7 @@
   "scripts": {
     "compile": "npm run sync:generated && npm run clean:compile && tsc -p ./",
     "vscode:prepublish": "npm run compile",
-    "package:vsix": "npm run sync:generated && vsce package",
+    "package:vsix": "npm run sync:generated && vsce package --target win32-x64",
     "publish": "node scripts/release.mjs",
     "generate:manifest-config": "node scripts/generate-manifest-config.mjs",
     "check:manifest-config": "node scripts/generate-manifest-config.mjs --check",
@@ -1080,6 +1070,7 @@
     "verify:mips-cli": "node scripts/verify-mips-cli.mjs",
     "verify:mips-worker": "node scripts/verify-mips-worker.mjs",
     "verify:process-supervisor": "node scripts/verify-process-supervisor.mjs",
+    "verify:bundled-iverilog": "npm run compile && node scripts/verify-bundled-iverilog.mjs .",
     "verify:phase4": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && node --test scripts/verify-real-cpu-shadow.test.mjs && vitest run src/test/courseTesting/builtinExecutionProvider.test.ts src/test/courseTesting/oracleDifferential.test.ts src/test/courseTesting/executorShadowRunner.test.ts src/test/courseTesting/executionAssertions.test.ts src/test/mipsReplay/builtinExecutionAdapter.test.ts src/test/mipsProviders/phase4ProviderResolver.test.ts src/test/courseTesting/traceRunner.test.ts src/test/courseTestLogisim.test.ts src/test/courseTestLogisimSignal.test.ts src/test/mipsCli/executeProtocol.test.ts src/test/mipsHost/workerExecutionJobs.test.ts src/test/courseTesting/batchRunner.test.ts src/test/courseTesting/courseTracePipeline.test.ts",
     "verify:phase4-real-cpu": "npm run compile && node --test scripts/verify-real-cpu-shadow.test.mjs && node scripts/verify-real-cpu-shadow.mjs",
     "verify:phase5": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && vitest run src/test/mipsCore/assemblerCourse.test.ts src/test/mipsCore/assemblerFullStack.test.ts src/test/mipsCore/assemblerPseudoGolden.test.ts src/test/mipsProviders/builtinAssemblerProvider.test.ts src/test/mipsProviders/phase5ProviderResolver.test.ts src/test/mipsReplay/builtinExecutionAdapter.test.ts src/test/mipsReplay/builtinCaseExactReplay.test.ts src/test/mipsCli/protocol.test.ts src/test/mipsHost/workerJobs.test.ts",

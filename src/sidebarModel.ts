@@ -55,7 +55,8 @@ export interface SidebarModelContext {
   testbench: string;
   machineCode: string;
   simTime: string;
-  simBackend: string;
+  verilogBackend: string;
+  iseConfigured: boolean;
   activeFile?: SidebarActiveFileModel;
   tools: SidebarToolModel[];
 }
@@ -158,14 +159,14 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
       infoItem('context.tb', 'TB', context.testbench, 'co.project.testbench', 'beaker'),
       infoItem('context.machineCode', '机器码名', context.machineCode, '仿真前会复制到 .co/isim/<machineCode>', 'file-binary'),
       infoItem('context.simTime', '仿真时长', context.simTime, 'co.project.simTime', 'watch'),
-      infoItem('context.backend', '仿真后端', context.simBackend, 'co.project.simBackend', 'circuit-board')
+      infoItem('context.backend', '仿真后端', context.verilogBackend, '由 co.toolchain.isePath 自动选择', 'circuit-board')
       );
     } else if (context.profile === 'P1') {
       children.push(infoItem(
         'context.verilogMode',
         '仿真模式',
         '独立模块',
-        'P1 Verilog 练习没有统一顶层。运行 ISim 时会优先使用当前 testbench；否则为当前模块生成临时 testbench。',
+        'P1 Verilog 练习没有统一顶层。运行仿真时会优先使用当前 testbench；否则为当前模块生成临时 testbench。',
         'beaker'
       ));
     }
@@ -269,20 +270,12 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
   if (active && isVerilogFile(active) && shouldShowVerilogActions(context.profile, active.languageId)) {
     children.push(
       actionItem(
-        'core.runIsim',
-        '运行 ISim',
+        'core.runVerilogSimulation',
+        '运行 Verilog 仿真',
         Commands.Verilog.RunIsim,
         'run',
         verilogSimulationDescription(context),
         verilogSimulationTooltip(context, active)
-      ),
-      actionItem(
-        'core.openWave',
-        '查看 ISim 波形',
-        Commands.Verilog.OpenIsimWaveform,
-        'pulse',
-        verilogSimulationDescription(context),
-        `${verilogSimulationTooltip(context, active)}\n\nGUI 启动后执行 wave add -r /。`
       ),
       actionItem(
         'core.inspectSignal',
@@ -293,6 +286,16 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         '将光标放在任一信号上，侧边栏会显示声明、驱动和读取位置。'
       )
     );
+    if (context.iseConfigured) {
+      children.splice(children.length - 1, 0, actionItem(
+        'core.openWave',
+        '查看 ISim 波形',
+        Commands.Verilog.OpenIsimWaveform,
+        'pulse',
+        verilogSimulationDescription(context),
+        `${verilogSimulationTooltip(context, active)}\n\nGUI 启动后执行 wave add -r /。`
+      ));
+    }
   }
 
   children.push(

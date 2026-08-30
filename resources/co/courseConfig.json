@@ -39,7 +39,7 @@
       "description": "Verilog 基本语法",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim"],
-      "requiredTools": ["ise"],
+      "requiredTools": ["verilogSimulator"],
       "capabilities": {
         "verilog": true
       },
@@ -76,7 +76,7 @@
       "description": "用 Verilog 实现单周期 CPU",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["ise"],
+      "requiredTools": ["verilogSimulator"],
       "capabilities": {
         "trace": true,
         "verilog": true,
@@ -88,8 +88,7 @@
         "topModule": "mips",
         "testbench": "mips_tb",
         "machineCode": "code.txt",
-        "simTime": "200us",
-        "simBackend": "isim"
+        "simTime": "200us"
       }
     },
     "P5": {
@@ -97,7 +96,7 @@
       "description": "带阻塞和转发的五级流水线 CPU",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["ise"],
+      "requiredTools": ["verilogSimulator"],
       "capabilities": {
         "trace": true,
         "verilog": true,
@@ -111,8 +110,7 @@
         "topModule": "mips",
         "testbench": "mips_tb",
         "machineCode": "code.txt",
-        "simTime": "200us",
-        "simBackend": "isim"
+        "simTime": "200us"
       }
     },
     "P6": {
@@ -120,7 +118,7 @@
       "description": "流水线 CPU + 乘除法 + 存储器外置 + 按字节访存",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["ise"],
+      "requiredTools": ["verilogSimulator"],
       "capabilities": {
         "trace": true,
         "verilog": true,
@@ -134,8 +132,7 @@
         "topModule": "mips",
         "testbench": "mips_tb",
         "machineCode": "code.txt",
-        "simTime": "200us",
-        "simBackend": "isim"
+        "simTime": "200us"
       }
     },
     "P7": {
@@ -143,7 +140,7 @@
       "description": "异常处理和访问外设",
       "language": "verilog",
       "directories": [".co", "src", "test", "sim", "data"],
-      "requiredTools": ["ise"],
+      "requiredTools": ["verilogSimulator"],
       "capabilities": {
         "trace": true,
         "verilog": true,
@@ -156,8 +153,7 @@
         "topModule": "mips",
         "testbench": "mips_tb",
         "machineCode": "code.txt",
-        "simTime": "200us",
-        "simBackend": "isim"
+        "simTime": "200us"
       }
     }
   },

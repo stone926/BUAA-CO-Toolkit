@@ -1,3 +1,7 @@
 # Preserve the byte-for-byte official Timer RTL snapshot; its normalized-LF
 # SHA-256 is a conformance trust root and includes the distributed whitespace.
 conformance/mips/decision-vectors/reference/P7_standard_timer_2019.v -whitespace
+
+# Keep the verified MSYS2 runtime snapshot byte-for-byte stable across Windows
+# checkouts, including its compiler config, VAMS include, and license files.
+vendor/iverilog/win32-x64/** -text -whitespace

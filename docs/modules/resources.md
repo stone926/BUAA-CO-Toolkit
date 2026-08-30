@@ -21,9 +21,9 @@ resources/verilog/:
   lintRules.json — Verilog course lint 规则 catalog: id/title/severity/default/configurable/quickFix
 
 resources/co/:
-  configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐；`co.mips.engine=auto`
-  configManifest.json — co.* VS Code settings schema 源: 分组/类型/描述/枚举/范围, default 由 configDefaults.json 注入；engine 枚举为 auto/builtin/mars/verify-both
-  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/无条件工具/端口；P4–P7 不再声明 MARS/Java，legacy lane 依赖由 toolchainPolicy 动态追加；外置测试台 IM=4096 words、DM=3072 words；指令描述/Profile推断hints
+  configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐；`co.mips.engine=auto`；外部 Verilog 检查默认 onSave
+  configManifest.json — co.* VS Code settings schema 源: 分组/类型/描述/枚举/范围, default 由 configDefaults.json 注入；Verilog 外部检查键为 `syntax.external.mode/timeoutMs`
+  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/无条件工具/端口；P1/P4–P7 声明逻辑 `verilogSimulator` 而非固定 ISE，P4–P7 不再声明 MARS/Java，legacy lane 依赖由 toolchainPolicy 动态追加；外置测试台 IM=4096 words、DM=3072 words；指令描述/Profile推断hints
   p7Hardware.json — P7 课程硬件布局: 0x3000 起 4096-word IM、3072-word DM、0x4180 异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
 
@@ -64,6 +64,11 @@ resources/templates/wizard/:
   verilog_top.v — 项目向导生成的 Verilog 顶层模块
   basic_testbench.v — 项目向导解析失败时的基础 testbench fallback
   加载: templateRegistry 受控占位替换
+
+vendor/iverilog/win32-x64/:
+  bin/ + lib/ivl/ — 固定的 MSYS2 UCRT64 Icarus 13.0 可执行文件、目标与运行依赖
+  THIRD_PARTY_NOTICES.md + licenses/ — 实际分发组件的许可、版权、二进制来源与对应源码说明
+  CORRESPONDING_SOURCES.json — 7 个精确 source-only archive 的 URL、大小与 SHA-256；release workflow 校验后附加到同版本 GitHub Release
 
 resources/templates/asm/:
   p7_exception_handler*.asm — P7 anchor/hybrid 异常处理模板

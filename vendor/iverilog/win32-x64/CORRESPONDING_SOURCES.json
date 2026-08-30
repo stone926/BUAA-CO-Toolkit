@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "component": "Icarus Verilog 13.0",
+      "file": "mingw-w64-iverilog-1~13.0-2.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-iverilog-1~13.0-2.src.tar.zst",
+      "sha256": "fce280b0f1f475c14ba9eddeb1c4fa9dde45da802961003960d9911c5fcb869c",
+      "sizeBytes": 3085636
+    },
+    {
+      "component": "bzip2 1.0.8",
+      "file": "mingw-w64-bzip2-1.0.8-4.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-bzip2-1.0.8-4.src.tar.zst",
+      "sha256": "fd9360917314d1cbccb3cb15ed8450d1e56b8a9f733b606504aba52c52159e54",
+      "sizeBytes": 818825
+    },
+    {
+      "component": "GNU Readline 8.3.003",
+      "file": "mingw-w64-readline-8.3.003-1.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-readline-8.3.003-1.src.tar.zst",
+      "sha256": "1e2713dd55f795920d5784ab2e7a797dd7ce7392a4cf1991f9b848e25ae1f95d",
+      "sizeBytes": 3355361
+    },
+    {
+      "component": "zlib 1.3.2",
+      "file": "mingw-w64-zlib-1.3.2-2.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-zlib-1.3.2-2.src.tar.zst",
+      "sha256": "eef69dea52357e01b272d6fd6dc4d7c0773f71260cb7bcde6047c8c383518db3",
+      "sizeBytes": 1326375
+    },
+    {
+      "component": "GNU termcap 1.3.1",
+      "file": "mingw-w64-termcap-1.3.1-7.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-termcap-1.3.1-7.src.tar.zst",
+      "sha256": "6a1207578fd39b64924fcdfcacc1c862ba3c714477dd662ba20da8d9b4cbd4ed",
+      "sizeBytes": 441185
+    },
+    {
+      "component": "GCC runtime libraries 16.2.0",
+      "file": "mingw-w64-gcc-16.2.0-3.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-gcc-16.2.0-3.src.tar.zst",
+      "sha256": "eb3479a8b0b23810fbbbc25ef76879e867e88d09960a40145d73f5505fda4da0",
+      "sizeBytes": 107228430
+    },
+    {
+      "component": "MinGW-w64 winpthreads 14.0.0",
+      "file": "mingw-w64-winpthreads-14.0.0.r302.gd7f3c5201-1.src.tar.zst",
+      "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-winpthreads-14.0.0.r302.gd7f3c5201-1.src.tar.zst",
+      "sha256": "f3375ec5a49a45502840dd50ebf8f2c5a86efdd649acebb920134b9b02e3af9d",
+      "sizeBytes": 53236718
+    }
+  ]
+}

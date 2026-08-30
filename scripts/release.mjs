@@ -55,7 +55,7 @@ function main() {
   assertTagDoesNotExist(tagName);
 
   const releaseBase = getReleaseBase();
-  const notes = getReleaseNotes(releaseBase);
+  const notes = getUnreleasedNotes() ?? getReleaseNotes(releaseBase);
 
   printPlan(releaseBase, notes);
 
@@ -64,7 +64,7 @@ function main() {
     return;
   }
 
-  run("npm", ["run", "sync:manifest-config"]);
+  run("npm", ["run", "sync:generated"]);
   assertNoGeneratedChanges();
 
   if (!skipTests) {
@@ -203,6 +203,24 @@ function getReleaseNotes(releaseBase) {
   return lines.map((line) => `- ${line}`);
 }
 
+function getUnreleasedNotes() {
+  if (!existsSync(changelogPath)) {
+    return null;
+  }
+
+  const content = readFileSync(changelogPath, "utf8");
+  const heading = /^## \[Unreleased\][^\r\n]*(?:\r?\n|$)/m.exec(content);
+  if (!heading) {
+    return null;
+  }
+
+  const bodyStart = heading.index + heading[0].length;
+  const remainder = content.slice(bodyStart);
+  const nextHeading = /^## \[/m.exec(remainder);
+  const body = remainder.slice(0, nextHeading?.index ?? remainder.length).trim();
+  return body ? [body] : null;
+}
+
 function updateChangelog(version, notes) {
   const date = new Date().toISOString().slice(0, 10);
   const entry = `## [${version}] - ${date}\n\n${notes.join("\n")}\n\n`;
@@ -220,9 +238,23 @@ function updateChangelog(version, notes) {
     content = `# Change Log\n\n${content}`;
   }
 
+  let updated = "";
+  const unreleased = /^## \[Unreleased\][^\r\n]*(?:\r?\n|$)/m.exec(content);
+  if (unreleased) {
+    const bodyStart = unreleased.index + unreleased[0].length;
+    const remainder = content.slice(bodyStart);
+    const nextHeading = /^## \[/m.exec(remainder);
+    const suffixStart = bodyStart + (nextHeading?.index ?? remainder.length);
+    const prefix = content.slice(0, unreleased.index).trimEnd();
+    const suffix = content.slice(suffixStart).trimStart();
+    const trailing = suffix ? suffix : "";
+    updated = `${prefix}\n\n## [Unreleased]\n\n${entry}${trailing}`;
+    writeFileSync(changelogPath, updated, "utf8");
+    return;
+  }
+
   const marker = "\n## [";
   const index = content.indexOf(marker);
-  let updated = "";
 
   if (index === -1) {
     updated = `${content.trimEnd()}\n\n${entry}`;
@@ -245,7 +277,7 @@ function printPlan(releaseBase, notes) {
   }
 
   console.log("Steps:");
-  console.log("- npm run sync:manifest-config");
+  console.log("- npm run sync:generated");
   if (!skipTests) {
     console.log("- npm test");
   } else {
@@ -278,7 +310,7 @@ function assertNoGeneratedChanges() {
   if (status) {
     fail(
       [
-        "Generated manifest configuration changed files. Review and commit them before publishing.",
+        "Generated artifacts changed files. Review and commit them before publishing.",
         "Dirty files:",
         status,
       ].join("\n"),

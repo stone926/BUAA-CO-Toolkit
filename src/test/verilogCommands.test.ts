@@ -3,8 +3,10 @@ import * as vscode from 'vscode';
 import { Commands } from '../constants';
 import { registerVerilog } from '../verilog';
 import { defaultCoSettings } from '../language/common/settings';
-import { runIsim as runIsimCore } from '../verilog/isimRunner';
+import { getIsePath } from '../config';
+import { runVerilogSimulation as runVerilogSimulationCore } from '../verilog/simulationRunner';
 import { openIsimWaveform, exportVcdWaveform } from '../verilogWaveform';
+import { generateIseProject } from '../verilog/iseProject';
 import { pathExists, writeTextFile } from '../fsUtil';
 import {
   buildTestbench,
@@ -28,6 +30,7 @@ vi.mock('vscode', async () => {
 
 vi.mock('../config', () => ({
   ensureConcreteProfile: vi.fn(async () => 'P4'),
+  getIsePath: vi.fn(() => 'D:/ISE'),
   getSimTime: vi.fn(() => '200us'),
   getTestbench: vi.fn(() => 'mips_tb'),
   getTopModule: vi.fn(() => 'mips')
@@ -72,6 +75,10 @@ vi.mock('../verilog/isimRunner', () => ({
   runIsim: vi.fn(async () => undefined)
 }));
 
+vi.mock('../verilog/simulationRunner', () => ({
+  runVerilogSimulation: vi.fn(async () => undefined)
+}));
+
 function services() {
   return { output: {} as never, statusBar: {} as never };
 }
@@ -105,6 +112,7 @@ function normalizedFsPath(uri: vscode.Uri): string {
 describe('Verilog command registration and entry behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getIsePath).mockReturnValue('D:/ISE');
     vscodeState.state!.activeTextEditor = undefined;
     vscodeState.state!.config.clear();
     vi.mocked(parseVerilog).mockReturnValue({ modules: [{ name: 'mips' }] } as never);
@@ -133,9 +141,27 @@ describe('Verilog command registration and entry behavior', () => {
       Commands.Verilog.OpenIsimWaveform,
       Commands.Verilog.ExportVcd
     ]));
-    expect(runIsimCore).toHaveBeenCalledWith(svc, { moduleRegistry });
+    expect(runVerilogSimulationCore).toHaveBeenCalledWith(svc, { moduleRegistry });
     expect(openIsimWaveform).toHaveBeenCalledWith(svc, expect.objectContaining({ moduleRegistry }));
     expect(exportVcdWaveform).toHaveBeenCalledWith(svc, expect.objectContaining({ moduleRegistry }));
+  });
+
+  it('blocks ISE-only handlers when the resource-scoped ISE path is blank', async () => {
+    vi.mocked(getIsePath).mockReturnValue('   ');
+    const commands = commandMap();
+    registerVerilog({ subscriptions: [] } as never, services());
+
+    await commands.get(Commands.Verilog.GenerateIseProject)!();
+    await commands.get(Commands.Verilog.OpenIsimWaveform)!();
+    await commands.get(Commands.Verilog.ExportVcd)!();
+
+    expect(generateIseProject).not.toHaveBeenCalled();
+    expect(openIsimWaveform).not.toHaveBeenCalled();
+    expect(exportVcdWaveform).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledTimes(3);
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      '此功能需要 Xilinx ISE。请先设置 co.toolchain.isePath'
+    );
   });
 
   it('merges and deduplicates a valid lint rule disable command', async () => {

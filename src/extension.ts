@@ -6,7 +6,7 @@ import {
   TRACE_CONTEXT_PROFILES,
   VERILOG_CONTEXT_PROFILES
 } from './constants';
-import { getProfileResolution, setProfileInferenceProvider } from './config';
+import { getIsePath, getProfileResolution, setProfileInferenceProvider } from './config';
 import {
   diagnosticCodeKey,
   diagnosticFileCodeKey,
@@ -53,6 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const services: AppServices = {
     output,
     statusBar,
+    extensionRoot: context.extensionUri.fsPath,
     mipsRuntime
   };
 
@@ -175,7 +176,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.CheckToolchain, async () => {
       const resource = vscode.window.activeTextEditor?.document.uri;
-      const checks = await showToolchainReport(output);
+      const checks = await showToolchainReport(output, services.extensionRoot);
       toolchainCache.set(toolchainCacheKey(resource), { checks, timestamp: Date.now() });
       scheduleRefreshProjectUi(resource);
     }),
@@ -227,16 +228,17 @@ function updateCoContext(resource?: vscode.Uri): void {
   void vscode.commands.executeCommand('setContext', 'co.hasVerilogProfile', hasVerilogProfile);
   void vscode.commands.executeCommand('setContext', 'co.activeCoKind', activeKind);
   void vscode.commands.executeCommand('setContext', 'co.verilogSignalVisible', activeKind === 'verilog');
+  void vscode.commands.executeCommand('setContext', 'co.iseConfigured', Boolean(getIsePath(resource).trim()));
 }
 
 export async function deactivate(): Promise<void> {
   await stopLanguageServer();
 }
 
-async function showToolchainReport(output: vscode.OutputChannel): Promise<ToolDetection[]> {
+async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?: string): Promise<ToolDetection[]> {
   output.appendLine('正在检查 CO 工具链...');
   const resource = vscode.window.activeTextEditor?.document.uri;
-  const checks = await checkToolchain(output, resource, { promptForProfile: true });
+  const checks = await checkToolchain(output, resource, { promptForProfile: true, extensionRoot });
   output.appendLine('');
   for (const check of checks) {
     output.appendLine(`${check.ok ? 'OK' : '缺失'} ${check.name}: ${check.detail}`);
@@ -308,7 +310,7 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
     const checks = getToolchainStatus(resource);
     if (checks && sameResource(resource, vscode.window.activeTextEditor?.document.uri)) {
       const toolStatus = checks
-        .filter((check) => ['MARS', 'ISE fuse', 'Logisim'].includes(check.name))
+        .filter((check) => ['MARS', 'Verilog simulator', 'Logisim'].includes(check.name))
         .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
         .join(' | ');
       if (toolStatus) {

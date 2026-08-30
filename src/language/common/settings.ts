@@ -32,10 +32,11 @@ export interface CoSettings {
   };
   verilog: {
     syntax: {
-      ise: {
-        enabled: boolean;
+      external: {
         mode: 'off' | 'onSave' | 'commandOnly';
         timeoutMs: number;
+      };
+      ise: {
         suppressedWarnings: string[];
       };
     };
@@ -87,10 +88,11 @@ export const defaultCoSettings: CoSettings = {
   },
   verilog: {
     syntax: {
+      external: {
+        mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.external.mode'),
+        timeoutMs: configDefault<number>('verilog.syntax.external.timeoutMs')
+      },
       ise: {
-        enabled: configDefault<boolean>('verilog.syntax.ise.enabled'),
-        mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.ise.mode'),
-        timeoutMs: configDefault<number>('verilog.syntax.ise.timeoutMs'),
         suppressedWarnings: configDefaultArray('verilog.syntax.ise.suppressedWarnings')
       }
     },
@@ -164,17 +166,26 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
   const candidate = typeof value === 'object' && value !== null
     ? value as Partial<CoSettings['verilog']['syntax']>
     : {};
+  const externalCandidate = typeof candidate.external === 'object' && candidate.external !== null
+    ? candidate.external as Partial<CoSettings['verilog']['syntax']['external']>
+    : {};
   const iseCandidate = typeof candidate.ise === 'object' && candidate.ise !== null
     ? candidate.ise as Partial<CoSettings['verilog']['syntax']['ise']>
     : {};
-  const mode = iseCandidate.mode === 'off' || iseCandidate.mode === 'commandOnly' || iseCandidate.mode === 'onSave'
-    ? iseCandidate.mode
-    : defaultCoSettings.verilog.syntax.ise.mode;
+  const mode = externalCandidate.mode === 'off' || externalCandidate.mode === 'commandOnly' || externalCandidate.mode === 'onSave'
+    ? externalCandidate.mode
+    : defaultCoSettings.verilog.syntax.external.mode;
   return {
-    ise: {
-      enabled: typeof iseCandidate.enabled === 'boolean' ? iseCandidate.enabled : defaultCoSettings.verilog.syntax.ise.enabled,
+    external: {
       mode,
-      timeoutMs: normalizeInteger(iseCandidate.timeoutMs, defaultCoSettings.verilog.syntax.ise.timeoutMs, 0, 600000),
+      timeoutMs: normalizeInteger(
+        externalCandidate.timeoutMs,
+        defaultCoSettings.verilog.syntax.external.timeoutMs,
+        0,
+        600000
+      )
+    },
+    ise: {
       suppressedWarnings: normalizeStringArray(iseCandidate.suppressedWarnings, defaultCoSettings.verilog.syntax.ise.suppressedWarnings)
     }
   };

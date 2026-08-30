@@ -2,6 +2,15 @@
 
 All notable changes to BUAA CO Toolkit are documented in this file.
 
+## [Unreleased]
+
+- feat(verilog): bundle Icarus Verilog 13.0 and its Windows x64 runtime dependencies for compiler-level syntax checks and course simulation without a separate ISE/MSYS2 install
+- feat(verilog): select bundled Icarus when `co.toolchain.isePath` is empty and retain fuse/ISim as the explicit ISE opt-in, with no silent fallback for invalid non-empty paths
+- feat(verilog): keep ISE project, ISim waveform, and existing VCD commands as ISE-only capabilities
+- fix(verilog): support nested source-tree includes, serialize shared Icarus workspace artifacts, and keep generated course testbenches compatible with custom machine-code filenames
+- breaking(config): replace `co.verilog.syntax.ise.enabled/mode/timeoutMs` with `co.verilog.syntax.external.mode/timeoutMs`; ignore the removed `co.project.simBackend` setting
+- chore(release): publish a single verified `win32-x64` VSIX artifact to both Marketplace and GitHub Releases, including bundled-runtime licenses, notices, and verified corresponding-source archives
+
 ## [1.0.2] - 2026-08-13
 
 - fix(course-testing): target stable Mars v0.6.3 (a026eab)

@@ -27,7 +27,6 @@ export interface ProfileDefaults {
   testbench: string;
   machineCode: string;
   simTime: string;
-  simBackend: string;
 }
 
 export interface PortConfig {

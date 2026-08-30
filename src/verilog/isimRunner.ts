@@ -1,7 +1,6 @@
 // @index verilog-isim-runner — ISim 编译/运行、机器码准备与 ASM case 记录
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ASM_NEEDED_VERILOG_PROFILES } from '../constants';
 import {
   ensureConcreteProfile,
   getMachineCode,
@@ -20,9 +19,6 @@ import type { MutableVerilogModuleProvider } from '../language/verilog/modulePro
 import {
   AsmCase,
   copyAsmCaseArtifact,
-  createAsmCaseFromAsm,
-  prepareAsmCaseMachineCode,
-  resolveAsmCaseInput,
   writeAsmCaseArtifact
 } from '../asmCaseStore';
 import { buildIsimRunTcl } from '../verilogSimulationFiles';
@@ -51,6 +47,10 @@ import {
   resolveMachineCodeSource
 } from './simulationInputs';
 import {
+  ensureSimulationAsmCase,
+  requiresSimulationAsmCase
+} from './simulationAsmCase';
+import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
   findUserTestbenchSourceUris,
@@ -61,6 +61,8 @@ import {
 import { automaticExternalToolTimeoutMs } from '../courseTesting/automaticTestPolicy';
 
 export interface IsimRunOptions extends IseProjectOptions {
+  /** Internal operation snapshot; direct/legacy callers omit it and read current configuration. */
+  isePath?: string;
   machineCodeSource?: vscode.Uri;
   asmCase?: AsmCase;
   moduleRegistry?: MutableVerilogModuleProvider;
@@ -102,14 +104,12 @@ export async function runIsim(
 ): Promise<IsimRunOutput | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = !options.nonInteractive && options.showMessages !== false;
-  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(
-    services,
-    activeUri,
+  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, {
     showMessages,
-    options.signal,
-    options.nonInteractive
-  );
-  if (requiresAsmCase(activeUri) && !asmCase) {
+    signal: options.signal,
+    nonInteractive: options.nonInteractive
+  });
+  if (requiresSimulationAsmCase(activeUri) && !asmCase) {
     return undefined;
   }
   const compiled = await compileIsim(services, options);
@@ -117,7 +117,7 @@ export async function runIsim(
     return;
   }
   await prepareIsimRunInputs(services, activeUri, compiled, options, asmCase, showMessages);
-  const isePath = getIsePath(activeUri);
+  const isePath = options.isePath ?? getIsePath(activeUri);
   const iseEnv = buildIseEnvironment(isePath);
   const simResult = await runTool(compiled.exePath, ['-nolog', '-tclbatch', path.basename(compiled.generated.tcl.fsPath)], {
     cwd: compiled.generated.outDir.fsPath,
@@ -168,7 +168,7 @@ export async function compileIsim(
   if (!options.compileCache) {
     await vscode.workspace.saveAll(false);
   }
-  const isePath = getIsePath(activeUri);
+  const isePath = options.isePath ?? getIsePath(activeUri);
   if (!isePath) {
     if (!options.nonInteractive) {
       vscode.window.showErrorMessage('ISE 路径未配置。请设置 co.toolchain.isePath');
@@ -347,46 +347,4 @@ async function prepareIsimRunInputs(
   if (asmCase) {
     await recordTestbenchForAsmCase(asmCase, compiled.testbench);
   }
-}
-
-async function ensureSimulationAsmCase(
-  services: AppServices,
-  resource: vscode.Uri | undefined,
-  showMessages: boolean,
-  signal?: AbortSignal,
-  nonInteractive?: boolean
-): Promise<AsmCase | undefined> {
-  if (!requiresAsmCase(resource)) {
-    return undefined;
-  }
-  if (nonInteractive) {
-    return undefined;
-  }
-  const asm = await resolveAsmCaseInput('选择用于 Verilog 仿真的 MIPS ASM 文件');
-  if (!asm) {
-    if (showMessages) {
-      vscode.window.showWarningMessage('已取消：P4-P7 Verilog 仿真需要选择 ASM 以生成可追溯机器码');
-    }
-    return undefined;
-  }
-  const asmCase = await createAsmCaseFromAsm(asm, {
-    resource,
-    source: { kind: 'selected' }
-  });
-  const dump = await prepareAsmCaseMachineCode(services, asmCase, {
-    showMessages: false,
-    signal
-  });
-  if (!dump?.ok || !dump.outputFile) {
-    if (showMessages) {
-      vscode.window.showErrorMessage('MARS 导出机器码失败，无法继续 Verilog 仿真');
-    }
-    return undefined;
-  }
-  services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
-  return asmCase;
-}
-
-function requiresAsmCase(resource: vscode.Uri | undefined): boolean {
-  return ASM_NEEDED_VERILOG_PROFILES.has(getProfile(resource));
 }

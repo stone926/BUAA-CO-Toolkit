@@ -11,9 +11,9 @@ import {
 } from '../courseConfig';
 
 describe('course config alignment', () => {
-  it('uses ISE-oriented directories and tools for P1', () => {
+  it('uses the bundled-capable simulator dependency for P1', () => {
     expect(getProfileDirectories('P1')).toEqual(['.co', 'src', 'test', 'sim']);
-    expect(getProfileRequiredTools('P1')).toEqual(['ise']);
+    expect(getProfileRequiredTools('P1')).toEqual(['verilogSimulator']);
   });
 
   it('keeps legacy-only tools on P0-P3 where their profile capability still needs them', () => {
@@ -22,11 +22,11 @@ describe('course config alignment', () => {
     expect(getProfileRequiredTools('P3')).toEqual(['logisim', 'java']);
   });
 
-  it('uses only ISE as the ordinary required tool for builtin P4-P7 course paths', () => {
-    expect(getProfileRequiredTools('P4')).toEqual(['ise']);
-    expect(getProfileRequiredTools('P5')).toEqual(['ise']);
-    expect(getProfileRequiredTools('P6')).toEqual(['ise']);
-    expect(getProfileRequiredTools('P7')).toEqual(['ise']);
+  it('uses one logical Verilog simulator dependency for P4-P7 course paths', () => {
+    expect(getProfileRequiredTools('P4')).toEqual(['verilogSimulator']);
+    expect(getProfileRequiredTools('P5')).toEqual(['verilogSimulator']);
+    expect(getProfileRequiredTools('P6')).toEqual(['verilogSimulator']);
+    expect(getProfileRequiredTools('P7')).toEqual(['verilogSimulator']);
   });
 
   it('matches the tutorial P5 top-level interface', () => {
@@ -48,8 +48,7 @@ describe('course config alignment', () => {
     expect(getProfileDefaults('P7')).toEqual(expect.objectContaining({
       topModule: 'mips',
       testbench: 'mips_tb',
-      machineCode: 'code.txt',
-      simBackend: 'isim'
+      machineCode: 'code.txt'
     }));
   });
 

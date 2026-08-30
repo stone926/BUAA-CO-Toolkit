@@ -1,6 +1,6 @@
 # course-testing | src/courseTesting/ | 48 files + host adapters
 
-P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> ISim/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于手动测试、历史 replay 和显式开发者验证。
+P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(Icarus/ISim)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。Verilog 后端只由 resource-scoped `isePath` 选择：空值使用扩展内置 Icarus，非空使用现有 ISim，失败不回退。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于手动测试、历史 replay 和显式开发者验证。
 
 MARS reference 按角色严格拆分：assembly compatibility 使用 `mars-assembler-v0.6.3`（8b53a49，SHA-256 `599957…afb31`）；真实 execution/full-stack gate 使用 `legacy-course-executor` v0.6.3-course1（c6197f4，SHA-256 `d13456…0c64`）。`mars` 模式是 configured legacy 回滚，只有 `verify-both`/开发命令要求后一固定身份。legacy 课程 oracle 强制 coL2，coL1 仅作兼容探针；P7 按需使用 efc/p7irq，只有历史 `_co_internal_unknown_instruction` 用例才额外使用 cl，新生成 RI raw word 不需要。MARS 的 dump、停机尾、SWL/SWR、REGIMM link、Compact 初态/边界 bug 修复只存在于 `mips/legacy` normalizer 和 conformance，不进入 builtin provider/core。任一含非零 `.data` 初值的课程 case 会在 provider-neutral ProgramImage policy 处拒绝，因为 DUT 复位内存为全零。
 
@@ -31,8 +31,8 @@ generation:
   courseTesting/executorShadowRunner.ts — executor-only shadow 宿主：同一 legacy ProgramImage 证据上对比 builtin executor；结果显式标为 `executor-only`，不能计入 full-stack gate
   courseTesting/fullStackShadowRunner.ts + shadowBundleArtifacts.ts — full-stack shadow：从已哈希 v2 source closure 建立隔离 materialization，builtin assembler→builtin executor 与 fixed legacy assembler→其自身 legacy executor 双端独立运行；前后复验 fixed hash、逐字比较实际 image，matched/mismatch/inconclusive 都原子保存 source/image/raw trace/engine/contracts/result bundle，未登记或不可比较结果阻断
 
-  courseTesting/pipeline/courseTracePipeline.ts — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle 执行与差分比较）；
-  courseTesting/pipeline/courseImagePolicy.ts + courseTesting/pipeline/haltPolicy.ts + courseTesting/pipeline/executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；自动 ISim 从架构 step budget 派生 200us..5ms 私有 TCL（probe 使用内部上界），不受手动 `co.project.simTime` 截断
+  courseTesting/pipeline/courseTracePipeline.ts — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle、backend-neutral Verilog DUT 执行与差分比较）；
+  courseTesting/pipeline/courseImagePolicy.ts + courseTesting/pipeline/haltPolicy.ts + courseTesting/pipeline/executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；自动 Verilog 仿真从架构 step budget 派生 200us..5ms 私有预算（ISE 使用 TCL，Icarus 转成 watchdog；probe 使用内部上界），不受手动 `co.project.simTime` 截断
 
   courseTesting/oracle/commitProjection.ts — CommitEvent 到结构化 first-diff 摘要（PC、word、GPR/HI-LO/CP0、memory/device）与 canonical event digest；
   courseTesting/oracle/differentialRunner.ts — legacy/builtin 架构写 trace、first-diff、final digest 的确定性差分；

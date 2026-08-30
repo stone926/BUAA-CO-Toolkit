@@ -87,6 +87,39 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.maxBlankLines).toBe(0);
   });
 
+  it('normalizes backend-neutral external Verilog syntax settings', () => {
+    const result = mergeCoSettings({
+      verilog: {
+        syntax: {
+          external: {
+            mode: 'commandOnly',
+            timeoutMs: 700000
+          }
+        }
+      }
+    });
+    expect(result.verilog.syntax.external).toEqual({
+      mode: 'commandOnly',
+      timeoutMs: 600000
+    });
+  });
+
+  it('ignores removed ISE syntax trigger keys', () => {
+    const result = mergeCoSettings({
+      verilog: {
+        syntax: {
+          ise: {
+            enabled: false,
+            mode: 'off',
+            timeoutMs: 1234
+          }
+        }
+      }
+    });
+    expect(result.verilog.syntax.external).toEqual(defaultCoSettings.verilog.syntax.external);
+    expect(result.verilog.syntax.ise).toEqual(defaultCoSettings.verilog.syntax.ise);
+  });
+
   it('ignores old flattened Verilog format alignment keys', () => {
     const result = mergeCoSettings({
       verilog: {

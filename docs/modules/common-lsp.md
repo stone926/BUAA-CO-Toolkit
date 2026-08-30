@@ -3,7 +3,7 @@
 各语言共用基础设施: 配置合并、诊断过滤、LSP 辅助、缓存
 
 settings:
-  settings.ts — CoSettings接口/默认值/mergeCoSettings/诊断禁用键 | exports: CoSettings, defaultCoSettings, mergeCoSettings, isVerilogLintRuleEnabled, diagnosticCodeKey, diagnosticFileCodeKey, isDiagnosticCodeDisabledForFile
+  settings.ts — CoSettings接口/默认值/mergeCoSettings/诊断禁用键；外部 Verilog 检查使用 backend-neutral external mode/timeout，ISE warning suppression 独立保留 | exports: CoSettings, defaultCoSettings, mergeCoSettings, isVerilogLintRuleEnabled, diagnosticCodeKey, diagnosticFileCodeKey, isDiagnosticCodeDisabledForFile
 
 diagnostic-actions:
   diagnosticActions.ts — 诊断过滤和QuickFix生成 | exports: filterDisabledDiagnostics, getDiagnosticSuppressActions

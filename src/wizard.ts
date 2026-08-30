@@ -172,15 +172,15 @@ async function configureToolchainPaths(profile: ProjectProfile, resource: vscode
     }
   }
 
-  if (requiredTools.has('ise')) {
+  if (requiredTools.has('verilogSimulator')) {
     const isePath = await vscode.window.showInputBox({
-      title: 'ISE 路径',
-      prompt: '输入 Xilinx ISE 安装目录',
+      title: 'ISE 路径（可选）',
+      prompt: '留空使用内置 Icarus；输入目录则显式使用 Xilinx ISE/ISim',
       value: getIsePath(resource),
       placeHolder: 'D:/Xilinx/14.7/ISE_DS/ISE'
     });
-    if (isePath) {
-      toolchain.isePath = isePath;
+    if (isePath !== undefined) {
+      toolchain.isePath = isePath.trim();
     }
   }
 
@@ -298,9 +298,8 @@ async function updateProjectSettings(profile: ProjectProfile, toolchainConfig: T
   }
   await config.update('project.machineCode', configDefault<string>('project.machineCode'), vscode.ConfigurationTarget.Workspace);
   await config.update('project.simTime', configDefault<string>('project.simTime'), vscode.ConfigurationTarget.Workspace);
-  await config.update('project.simBackend', configDefault<string>('project.simBackend'), vscode.ConfigurationTarget.Workspace);
   for (const [key, value] of Object.entries(toolchainConfig)) {
-    if (typeof value === 'string' && value.trim()) {
+    if (typeof value === 'string' && (value.trim() || key === 'isePath')) {
       await config.update(`toolchain.${key}`, value.trim(), vscode.ConfigurationTarget.Workspace);
     }
   }

@@ -11,7 +11,7 @@ import type {
   P3LogisimTraceSetup
 } from '../../courseTestLogisim';
 import type { executeWithPreflight } from '../../mips/providers/providerResolver';
-import type { runIsim } from '../../verilog';
+import type { runVerilogSimulation } from '../../verilog';
 import type { AppServices } from '../../types';
 import type {
   AsmCase,
@@ -65,8 +65,8 @@ export interface CourseTracePipelineDependencies {
   createCase?: typeof createAsmCaseFromAsm;
   prepareProgram?: typeof prepareAsmCaseMachineCode;
   runOracle?: typeof executeWithPreflight;
-  runDut?: typeof runIsim;
-  /** P3 Logisim-specific DUT runner; P4-P7 use `runDut` (ISim). */
+  runDut?: typeof runVerilogSimulation;
+  /** P3 Logisim-specific DUT runner; P4-P7 use the selected Verilog backend. */
   runLogisimDut?: (
     services: AppServices,
     setup: P3LogisimTraceSetup,
@@ -121,7 +121,7 @@ export class CourseTracePipeline {
     return stage(...args);
   }
 
-  runDut(...args: Parameters<typeof runIsim>): ReturnType<typeof runIsim> {
+  runDut(...args: Parameters<typeof runVerilogSimulation>): ReturnType<typeof runVerilogSimulation> {
     const stage = this.dependencies.runDut;
     if (!stage) throw missingStage('runDut');
     return stage(...args);

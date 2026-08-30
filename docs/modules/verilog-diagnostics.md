@@ -1,6 +1,6 @@
-# verilog-diagnostics | src/language/verilog/ | 11 files | parent: verilog-lsp.md
+# verilog-diagnostics | src/language/verilog/ | 14 files | parent: verilog-lsp.md
 
-多类型诊断系统: 语法错误/课程Lint(VC-001~022)/数据流宽度/实例连接/usage/赋值分析/跨文件/ISE
+多类型诊断系统: 语法错误/课程Lint(VC-001~022)/数据流宽度/实例连接/usage/赋值分析/跨文件/外部 Icarus 或 ISE
 
 调度: diagnostics.ts -> syntaxDiag + lintDiag(implicitNet/courseStyle/synthesizable/explicitPortNetType/assignment) + dataflowDiag + instanceConnectionDiag + usageDiag + workspaceDiag + driverDiag
 
@@ -31,8 +31,13 @@ assignment:
 workspace:
   workspaceDiagnostics.ts — 跨文件: 模块重复定义/缺失模块/接口一致性
 
-ise:
-  iseSyntaxCheck.ts — ISE fuse集成: 调用fuse语法检查, 解析错误输出为Diagnostic[], 支持off/onSave/commandOnly
+external-compiler:
+  externalSyntaxProject.ts — 发现与排序外部检查使用的工作区 Verilog 源文件
+  externalSyntaxCheck.ts — isePath 两值分派；显式但无效的 ISE 配置产生错误且不回退
+  iverilogSyntaxCheck.ts — bundled Icarus `-tnull -i` 检查与最小 stderr 诊断解析
+  iseSyntaxCheck.ts — ISE fuse 集成与错误输出解析
   iseDiagnosticFilters.ts — ISE fuse warning降噪: 从资源加载过滤规则, 按设置过滤 ise-syntax 噪声
+
+触发设置: `co.verilog.syntax.external.mode`(`off|onSave|commandOnly`) 与 `co.verilog.syntax.external.timeoutMs`; `co.verilog.syntax.ise.suppressedWarnings` 仅作用于 ISE 分支。
 
 迁移: 多数规则基于AST/model, token回退仅限语法错误边界. ARCHITECTURE_REVIEW.md

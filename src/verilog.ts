@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { Commands } from './constants';
 import {
   ensureConcreteProfile,
+  getIsePath,
   getSimTime,
   getTestbench,
   getTopModule
@@ -42,10 +43,16 @@ import {
   IsimRunOptions,
   IsimRunOutput
 } from './verilog/isimRunner';
+import {
+  runVerilogSimulation as runVerilogSimulationCore,
+  type VerilogSimulationRunOptions,
+  type VerilogSimulationRunOutput
+} from './verilog/simulationRunner';
 
 export { generateIseProject } from './verilog/iseProject';
 export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
 export type { IsimRunOptions, IsimRunOutput, CompileIsimOptions, CompiledIsimOutput } from './verilog/isimRunner';
+export type { VerilogSimulationRunOptions, VerilogSimulationRunOutput } from './verilog/simulationRunner';
 
 let sharedModuleRegistry: MutableVerilogModuleProvider | undefined;
 
@@ -54,23 +61,27 @@ export function registerVerilog(context: vscode.ExtensionContext, services: AppS
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Verilog.DisableLintRule, (rule?: string) => disableLintRule(rule)),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
-    vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => generateIseProject(services)),
-    vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkSyntaxWithIse()),
-    vscode.commands.registerCommand(Commands.Verilog.RunIsim, () => runIsim(services, { moduleRegistry })),
-    vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => openIsimWaveform(services, { compileIsim, moduleRegistry })),
-    vscode.commands.registerCommand(Commands.Verilog.ExportVcd, () => exportVcdWaveform(services, { compileIsim, moduleRegistry }))
+    vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => runIseOnlyCommand(() => generateIseProject(services))),
+    vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkVerilogSyntax()),
+    vscode.commands.registerCommand(Commands.Verilog.RunIsim, () => runVerilogSimulation(services, { moduleRegistry })),
+    vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => runIseOnlyCommand(() => openIsimWaveform(services, { compileIsim, moduleRegistry }))),
+    vscode.commands.registerCommand(Commands.Verilog.ExportVcd, () => runIseOnlyCommand(() => exportVcdWaveform(services, { compileIsim, moduleRegistry })))
   );
 }
 
-async function checkSyntaxWithIse(): Promise<void> {
+async function checkVerilogSyntax(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.languageId !== 'verilog') {
     vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
     return;
   }
+  if (coSettingsForUri(editor.document.uri).verilog.syntax.external.mode === 'off') {
+    vscode.window.showInformationMessage('外部 Verilog 语法检查已在设置中关闭');
+    return;
+  }
   await editor.document.save();
   await executeLanguageServerCommand(Commands.Server.InternalVerilogCheckSyntaxWithIse, [editor.document.uri.toString()]);
-  vscode.window.showInformationMessage('已触发 ISE 语法检查，结果会显示在问题面板');
+  vscode.window.showInformationMessage('已触发外部 Verilog 语法检查，结果会显示在问题面板');
 }
 
 async function disableLintRule(rule?: string): Promise<void> {
@@ -144,6 +155,13 @@ export async function runIsim(
   return await runIsimCore(services, withSharedModuleRegistry(options));
 }
 
+export async function runVerilogSimulation(
+  services: AppServices,
+  options: VerilogSimulationRunOptions = {}
+): Promise<VerilogSimulationRunOutput | undefined> {
+  return await runVerilogSimulationCore(services, withSharedModuleRegistry(options));
+}
+
 async function compileIsim(
   services: AppServices,
   options: CompileIsimOptions = {}
@@ -156,6 +174,15 @@ function withSharedModuleRegistry<T extends { moduleRegistry?: MutableVerilogMod
     ...options,
     moduleRegistry: options.moduleRegistry ?? sharedModuleRegistry
   };
+}
+
+async function runIseOnlyCommand<T>(action: () => Promise<T>): Promise<T | undefined> {
+  const resource = vscode.window.activeTextEditor?.document.uri;
+  if (!getIsePath(resource).trim()) {
+    vscode.window.showErrorMessage('此功能需要 Xilinx ISE。请先设置 co.toolchain.isePath');
+    return undefined;
+  }
+  return await action();
 }
 
 function normalizeLintRule(rule?: string): string | undefined {

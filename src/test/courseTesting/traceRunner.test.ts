@@ -12,7 +12,7 @@ import {
   recordAsmCaseOracleResult
 } from '../../asmCaseStore';
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
-import { runIsim } from '../../verilog';
+import { runVerilogSimulation } from '../../verilog';
 import { readTextFile } from '../../fsUtil';
 import { compareTraceIterables } from '../../language/mips/traceCompare';
 import {
@@ -59,7 +59,7 @@ vi.mock('../../courseTesting/fullStackShadowRunner', () => ({
 }));
 
 vi.mock('../../verilog', () => ({
-  runIsim: vi.fn()
+  runVerilogSimulation: vi.fn()
 }));
 
 vi.mock('../../fsUtil', () => ({
@@ -188,9 +188,10 @@ describe('course trace runner orchestration', () => {
         preflight: { ok: true, diagnostics: [], descriptor }
       } as never;
     });
-    vi.mocked(runIsim).mockImplementation(async () => {
+    vi.mocked(runVerilogSimulation).mockImplementation(async () => {
       callOrder.push('isim');
       return {
+        backend: 'isim',
         generated: {} as never,
         fuseResult: { ok: true, code: 0, stdout: '', stderr: '' },
         simResult: { ok: true, code: 0, stdout: '', stderr: '' },
@@ -364,7 +365,7 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result).toMatchObject({ status: 'error', stage: 'oracle', cancelled: true });
-    expect(runIsim).not.toHaveBeenCalled();
+    expect(runVerilogSimulation).not.toHaveBeenCalled();
   });
 
   it('compares the canonical provider projection without interpreting provider-private trace text', async () => {
@@ -424,7 +425,7 @@ describe('course trace runner orchestration', () => {
 
     expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
     expect(result.message).toContain('DivZero');
-    expect(runIsim).not.toHaveBeenCalled();
+    expect(runVerilogSimulation).not.toHaveBeenCalled();
   });
 
   it('surfaces a provider stop-validation failure without knowing its legacy trace format', async () => {
@@ -449,7 +450,7 @@ describe('course trace runner orchestration', () => {
 
     expect(result).toMatchObject({ status: 'error', stage: 'oracle' });
     expect(result.message).toContain('跳出已装载文本');
-    expect(runIsim).not.toHaveBeenCalled();
+    expect(runVerilogSimulation).not.toHaveBeenCalled();
   });
 
   it('stops after a failed assembly without running the oracle or ISim', async () => {
@@ -464,7 +465,7 @@ describe('course trace runner orchestration', () => {
     expect(result.status).toBe('error');
     expect(result.stage).toBe('assemble');
     expect(executeWithPreflight).not.toHaveBeenCalled();
-    expect(runIsim).not.toHaveBeenCalled();
+    expect(runVerilogSimulation).not.toHaveBeenCalled();
   });
 
   it('classifies an unexpected test-point preparation exception as assemble, not compare', async () => {
@@ -481,11 +482,12 @@ describe('course trace runner orchestration', () => {
     });
     expect(result.message).toContain('invalid ProgramImage');
     expect(executeWithPreflight).not.toHaveBeenCalled();
-    expect(runIsim).not.toHaveBeenCalled();
+    expect(runVerilogSimulation).not.toHaveBeenCalled();
   });
 
   it('returns a DUT-stage failure with case metadata and prior oracle output', async () => {
-    vi.mocked(runIsim).mockResolvedValueOnce({
+    vi.mocked(runVerilogSimulation).mockResolvedValueOnce({
+      backend: 'isim',
       generated: {} as never,
       fuseResult: { ok: true, code: 0, stdout: '', stderr: '' },
       simResult: { ok: false, code: 1, stdout: '', stderr: 'bad' }
@@ -536,7 +538,7 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.stage).toBe('probe');
-    expect(runIsim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       asmCase: currentCase,
       p7Probe: probe,
       tclText: 'run 4195us;\nexit\n'
@@ -569,7 +571,7 @@ describe('course trace runner orchestration', () => {
       );
       expect(verifyConfiguredFixedMarsReference).not.toHaveBeenCalled();
       expect(executeWithPreflight).not.toHaveBeenCalled();
-      expect(runIsim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
         p7Probe: probe,
         nonInteractive: true
       }));
@@ -584,7 +586,7 @@ describe('course trace runner orchestration', () => {
     );
 
     expect(result.status).toBe('passed');
-    expect(runIsim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       tclText: 'run 4195us;\nexit\n',
       nonInteractive: true
     }));

@@ -19,11 +19,11 @@
       },
       "co.project.topModule": {
         "type": "string",
-        "description": "课程检查和 ISim 工程生成使用的顶层 Verilog 模块名"
+        "description": "课程检查和 Verilog 仿真工程生成使用的顶层模块名"
       },
       "co.project.testbench": {
         "type": "string",
-        "description": "ISim 默认使用的 Verilog Testbench 模块名"
+        "description": "Verilog 仿真默认使用的 Testbench 模块名"
       },
       "co.project.machineCode": {
         "type": "string",
@@ -31,14 +31,7 @@
       },
       "co.project.simTime": {
         "type": "string",
-        "description": "手动运行 ISim/导出波形时的 TCL 运行时长，格式为 `run <值>; exit`。自动测试会按测试规模内部计算充足预算，不受此项限制"
-      },
-      "co.project.simBackend": {
-        "type": "string",
-        "enum": [
-          "isim"
-        ],
-        "description": "Verilog 仿真后端。当前版本仅支持 ISim"
+        "description": "手动运行 Verilog 仿真或导出 ISim 波形时使用的仿真时长。自动测试会按测试规模内部计算充足预算，不受此项限制"
       }
     }
   },
@@ -96,7 +89,7 @@
       },
       "co.toolchain.isePath": {
         "type": "string",
-        "description": "Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE"
+        "description": "Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE。留空时使用扩展内置 Icarus；非空时显式选择 ISE，配置无效不会回退"
       },
       "co.toolchain.hazardCalculator": {
         "type": "string",
@@ -168,11 +161,7 @@
         ],
         "description": "Verilog 隐式连线诊断的严重级别"
       },
-      "co.verilog.syntax.ise.enabled": {
-        "type": "boolean",
-        "description": "默认启用保存后 ISE fuse 语法检查。ISE 不可用时自动回退到内置 Verilog 检查"
-      },
-      "co.verilog.syntax.ise.mode": {
+      "co.verilog.syntax.external.mode": {
         "type": "string",
         "enum": [
           "off",
@@ -180,16 +169,16 @@
           "commandOnly"
         ],
         "enumDescriptions": [
-          "禁用 ISE 语法检查",
-          "保存 Verilog 文件时自动运行 ISE 检查",
-          "只在运行 CO: Verilog 使用 ISE 检查语法 命令时检查"
+          "禁用外部编译器语法检查",
+          "保存 Verilog 文件时自动运行外部编译器检查",
+          "只在运行 CO: Verilog 检查语法 命令时检查"
         ],
-        "description": "控制 ISE fuse 语法检查触发时机"
+        "description": "控制外部 Verilog 编译器语法检查触发时机；ISE 路径为空时使用内置 Icarus，非空时使用 ISE fuse"
       },
-      "co.verilog.syntax.ise.timeoutMs": {
+      "co.verilog.syntax.external.timeoutMs": {
         "type": "number",
         "minimum": 0,
-        "description": "ISE 语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs"
+        "description": "外部 Verilog 编译器语法检查超时时间（毫秒）。0 表示使用 co.run.timeoutMs"
       },
       "co.verilog.syntax.ise.suppressedWarnings": {
         "type": "array",

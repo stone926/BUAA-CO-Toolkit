@@ -46,8 +46,8 @@ export function requiredCourseTraceToolchainChecks(
   if (tools.has('logisim')) {
     required.add('Logisim');
   }
-  if (tools.has('ise')) {
-    required.add('ISE fuse');
+  if (tools.has('verilogsimulator')) {
+    required.add('Verilog simulator');
   }
   if (hasMarsTool(tools)) {
     required.add(`MARS ${memoryConfiguration}`);

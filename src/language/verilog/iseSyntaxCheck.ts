@@ -1,13 +1,14 @@
-import { CO_DIR, CO_ISE_CHECK_DIR } from '../../constants';
+import { CO_ISE_CHECK_DIR } from '../../constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Diagnostic, DiagnosticSeverity, Range, WorkspaceFolder } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { buildIseEnvironment, findFuse, isimExecutableName } from '../../iseCommon';
 import { buildIseProjectText } from '../../verilogSimulationFiles';
-import { isFile, yieldEventLoop } from '../../nodeFs';
+import { isFile } from '../../nodeFs';
 import { runProcessCore } from '../../processCore';
 import type { CoSettings } from '../common/settings';
+import { resolveExternalSyntaxProject } from './externalSyntaxProject';
 import { filterIseDiagnosticsByUri } from './iseDiagnosticFilters';
 
 export interface IseSyntaxCheckOptions {
@@ -18,6 +19,7 @@ export interface IseSyntaxCheckOptions {
   fallbackTopModule?: string;
   timeoutMs: number;
   settings: CoSettings;
+  signal?: AbortSignal;
 }
 
 export interface IseSyntaxCheckResult {
@@ -38,12 +40,8 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
     return emptyResult(false, 'missing-toolchain');
   }
 
-  const root = workspaceRootFor(options.workspaceFolders, options.triggerUri);
-  if (!root) {
-    return emptyResult(false, 'no-files');
-  }
-  const files = await scanVerilogFiles(root, 5000);
-  if (!files.length) {
+  const project = await resolveExternalSyntaxProject(options.workspaceFolders, options.triggerUri);
+  if (!project?.sources.length) {
     return emptyResult(false, 'no-files');
   }
 
@@ -52,18 +50,19 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
     return emptyResult(false, 'no-top');
   }
 
-  const outDir = path.join(root, CO_ISE_CHECK_DIR);
+  const outDir = path.join(project.root, CO_ISE_CHECK_DIR);
   await fs.promises.mkdir(outDir, { recursive: true });
   const prj = path.join(outDir, 'co_syntax.prj');
-  await fs.promises.writeFile(prj, buildIseProjectText(files), 'utf8');
+  await fs.promises.writeFile(prj, buildIseProjectText(project.sources), 'utf8');
 
   const exeName = isimExecutableName('co_syntax', fuse);
   const run = await runProcessCore(fuse, ['--incremental', '-nodebug', '-prj', path.basename(prj), '-o', exeName, topModule], {
     cwd: outDir,
     env: buildIseEnvironment(isePath),
-    timeoutMs: options.timeoutMs > 0 ? options.timeoutMs : defaultTimeoutMs
+    timeoutMs: options.timeoutMs > 0 ? options.timeoutMs : defaultTimeoutMs,
+    signal: options.signal
   });
-  const rawDiagnosticsByUri = parseFuseDiagnostics(`${run.stdout}\n${run.stderr}`, root, options.triggerUri);
+  const rawDiagnosticsByUri = parseFuseDiagnostics(`${run.stdout}\n${run.stderr}`, project.root, options.triggerUri);
   if (!run.ok && rawDiagnosticsByUri.size === 0) {
     addDiagnostic(rawDiagnosticsByUri, options.triggerUri, {
       range: Range.create(0, 0, 0, 1),
@@ -133,82 +132,12 @@ function parseFuseDiagnosticLine(
   };
 }
 
-async function scanVerilogFiles(root: string, limit: number): Promise<string[]> {
-  const result: string[] = [];
-  const stack = [root];
-  while (stack.length && result.length < limit) {
-    const current = stack.pop();
-    if (!current) {
-      continue;
-    }
-    let entries: fs.Dirent[];
-    try {
-      entries = await fs.promises.readdir(current, { withFileTypes: true });
-    } catch {
-      // 无法读取的目录不参与 ISE 临时工程
-      continue;
-    }
-    for (const entry of entries) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (!shouldSkipDirectory(entry.name)) {
-          stack.push(fullPath);
-        }
-        continue;
-      }
-      if (entry.isFile() && entry.name.toLowerCase().endsWith('.v')) {
-        result.push(fullPath);
-        if (result.length >= limit) {
-          break;
-        }
-      }
-    }
-    await yieldEventLoop();
-  }
-  return result.sort();
-}
-
-function workspaceRootFor(workspaceFolders: WorkspaceFolder[] | null | undefined, triggerUri: string): string | undefined {
-  const triggerPath = fsPathFromUri(triggerUri);
-  const matching = workspaceFolders
-    ?.map((folder) => fsPathFromUri(folder.uri))
-    .filter((folder): folder is string => Boolean(folder))
-    .sort((left, right) => right.length - left.length)
-    .find((folder) => triggerPath ? isInsideDirectory(triggerPath, folder) : true);
-  return matching ?? (triggerPath ? path.dirname(triggerPath) : undefined);
-}
-
-function shouldSkipDirectory(name: string): boolean {
-  return name === '.git' ||
-    name === CO_DIR ||
-    name === '.vscode' ||
-    name === '.vscode-test' ||
-    name === 'node_modules' ||
-    name === 'out' ||
-    name === 'dist' ||
-    name === 'build' ||
-    name === 'coverage';
-}
-
 function uriForFusePath(file: string, workspaceRoot: string): string {
   const normalized = file.replace(/\//g, path.sep);
   const resolved = path.isAbsolute(normalized)
     ? normalized
     : path.resolve(workspaceRoot, normalized);
   return URI.file(resolved).toString();
-}
-
-function fsPathFromUri(uri: string): string | undefined {
-  try {
-    return URI.parse(uri).fsPath;
-  } catch {
-    return undefined;
-  }
-}
-
-function isInsideDirectory(file: string, dir: string): boolean {
-  const relative = path.relative(dir, file);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function addDiagnostic(map: Map<string, Diagnostic[]>, uri: string, diagnostic: Diagnostic): void {

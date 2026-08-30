@@ -48,13 +48,18 @@ export async function copyMachineCodeToSimDirectory(
   outDir: vscode.Uri,
   resource?: vscode.Uri
 ): Promise<void> {
-  const target = vscode.Uri.file(path.join(outDir.fsPath, getMachineCode(resource)));
-  if (samePath(source.fsPath, target.fsPath)) {
+  const targets = dedupePaths([
+    path.join(outDir.fsPath, getMachineCode(resource)),
+    path.join(outDir.fsPath, 'code.txt')
+  ]).filter((target) => !samePath(source.fsPath, target));
+  if (!targets.length) {
     return;
   }
-  await ensureDirectory(vscode.Uri.file(path.dirname(target.fsPath)));
   const content = await vscode.workspace.fs.readFile(source);
-  await vscode.workspace.fs.writeFile(target, content);
+  for (const target of targets) {
+    await ensureDirectory(vscode.Uri.file(path.dirname(target)));
+    await vscode.workspace.fs.writeFile(vscode.Uri.file(target), content);
+  }
 }
 
 function machineCodeCandidateRank(file: string, resource: vscode.Uri | undefined, folder: vscode.WorkspaceFolder): number {

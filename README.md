@@ -1,41 +1,43 @@
 # BUAA CO 工具箱（VSCode 插件）
 
-面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/ISim 仿真 → 自动对拍 → 报告，循环进行）。固定 MARS 已降级为可选回滚与开发/CI 兼容参考。
+面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/Verilog 仿真 → 自动对拍 → 报告，循环进行）。Windows x64 版本已内置 Icarus Verilog 13.0；固定 MARS 已降级为可选回滚与开发/CI 兼容参考。
 
 ---
 
 ## 平台支持
 
-| 功能 | Windows | Linux | macOS |
-|---|---|---|---|
-| 语言特性（高亮 / 补全 / 诊断 / 格式化 / 大纲 / 折叠） | ✅ | ✅ | ✅ |
-| Logisim（打开 / ROM 生成 / 注入 / 日志转 CSV） | ✅ | ✅ | ✅ |
-| MARS 运行 / dump 机器码（Java） | ✅ | ✅ | ✅ |
-| 流水线冲突分析（Java + Python） | ✅ | ✅ | ✅ |
-| **ISim 仿真（依赖 Xilinx ISE）** | ✅ | ⚠️ | ❌ |
-| **一键随机对拍（P3 依赖 Logisim；P4–P7 依赖 ISim）** | ✅ | ⚠️ | P3 ✅ / P4–P7 ❌ |
+本版本只发布 `win32-x64` 定向 VSIX，支持在 Windows x64 的本地 VS Code 扩展宿主中运行。
 
-- **ISim 仿真与 P4–P7 Verilog 自动对拍依赖 Xilinx ISE**，而 ISE 只发布过 Windows 与 Linux 版本：**macOS 无法运行 Verilog 仿真**，P1 / P4 / P5 / P6 / P7 的仿真与自动对拍均不可用；P3 Logisim 对拍不依赖 ISE（语言特性、内置 TS 引擎、Logisim、可选 MARS、冲突分析仍可正常使用）。
-- Linux（⚠️）：ISE 14.7 可用，但在现代 64 位发行版上通常需按照指导书自行处理兼容性问题
-- 其余功能为 TS / Java / Python 实现，三平台通用。`co.toolchain.python` 留空时会自动检测（macOS / Linux 优先 `python3`，Windows 优先 `python` / `py`）。
+| 环境 | 本版本 |
+|---|---|
+| Windows 10/11 x64，本地 VS Code | ✅ |
+| Windows ARM64 | ❌ |
+| WSL / Remote SSH 扩展宿主 | ❌ |
+| Linux / macOS 本地扩展宿主 | ❌ |
+
+- 未配置 `co.toolchain.isePath` 时，插件直接启动随包附带的 `iverilog.exe`、`vvp.exe` 和依赖 DLL；不要求安装 Icarus、MSYS2 或修改 `PATH`。
+- 配置非空且有效的 `co.toolchain.isePath` 后，通用语法检查与 Verilog 仿真入口改用已有的 ISE fuse / ISim。配置非空但无效时会明确报错，不会静默回退到 Icarus。
+- 课程最终结果仍以课程测评环境为准；Icarus 与 ISE 对少量非标准或时序敏感写法可能有差异，出现分歧时可配置 ISE/ISim 复核。
+- 生成 ISE 工程、打开 ISim 波形和现有 ISim VCD 导出仍必须配置 ISE；未配置时这些 ISE 专属入口不可用。
+- Bundled runtime 的组件版本、二进制校验值、许可证和对应源码见 [第三方声明](vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)。
 
 ---
 
 ## 1. 快速开始
 
-### 第一步：装好外部工具并填路径
+### 第一步：按需填写外部工具路径
 
-P3–P7 自动测试不要求安装 MARS：P3 填写 Logisim，P4–P7 填写 ISE 即可。只有 P2，或手动测试/历史复现显式使用 MARS 回滚与验证时，才需要额外配置 MARS。
+P1 / P4–P7 的 Verilog 仿真默认直接使用内置 Icarus，无需安装 ISE。P3 需要填写 Logisim。只有希望显式使用 ISE/ISim，或需要 ISE 工程、ISim 波形与 VCD 功能时，才填写 `co.toolchain.isePath`。P3–P7 自动测试不要求安装 MARS；只有 P2，或手动测试/历史复现显式使用 MARS 回滚与验证时，才需要额外配置 MARS。
 
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
 ```jsonc
 {
-  // Verilog 仿真（Xilinx ISE/ISim 的安装目录，注意指到 .../ISE_DS/ISE）
-  "co.toolchain.isePath": "ISE 的路径，此路径下应包含名为 bin 等文件夹",
+  // 可选：显式使用 Xilinx ISE/ISim；留空即使用内置 Icarus 13.0
+  "co.toolchain.isePath": "",
   // Logisim（P0/P3）
   "co.toolchain.logisim": "Logisim 的路径",
-  // Java（保持默认即可）；Python 留空自动检测（macOS/Linux 优先 python3）
+  // Java（保持默认即可）；Python 留空时自动检测
   "co.toolchain.java": "java",
   "co.toolchain.python": ""
 }
@@ -131,8 +133,8 @@ P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断�
 ### Verilog
 高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
 - `.v` / `.vh` 提供完整 Verilog LSP；课程使用的 `.sv` / `.svh` 以独立 SystemVerilog 语言提供词法高亮，避免尚未支持的 SystemVerilog 结构被 Verilog parser 误诊断；
-- 侧边栏「操作」保留 ISim 运行、波形查看和信号连线；
-- 生成 Testbench、ISE 语法检查、信号连线在 Verilog 右键菜单；ISE 工程生成和 VCD 导出放在「更多工具...」。
+- 侧边栏「操作」提供 backend-neutral 的 Verilog 仿真和信号连线；未配置 ISE 时使用 bundled Icarus，配置有效 ISE 后使用 ISim；
+- 生成 Testbench、外部编译器语法检查和信号连线在 Verilog 右键菜单；ISE 工程生成、ISim 波形和 VCD 导出属于 ISE 专属功能，配置 ISE 后才开放。
 - **信号连线面板**：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。该面板默认只在 Verilog 上下文或执行“查看信号连线”后出现。
 
 ### 语义高亮与主题适配
@@ -164,9 +166,9 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto；auto 会推断具体 P 并保存，无法推断时要求选择） |
-| `co.project.simTime` | `200us` | 手动 ISim 运行时长；自动测试使用内部执行预算并忽略此项 |
+| `co.project.simTime` | `200us` | 手动 Verilog 仿真运行时长；自动测试使用内部执行预算并忽略此项 |
 
-其余项目项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)、`co.project.simBackend`(`isim`)。
+其余项目项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)。旧工作区中残留的 `co.project.simBackend` 不再参与后端选择。
 
 ### 工具链
 
@@ -177,7 +179,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | `co.toolchain.marsP7` | — | P7 专用的显式 MARS 回滚/验证路径；不填时回退到 `co.toolchain.mars` |
 | `co.mips.delayedBranching` | `profile` | MARS 延迟槽开关；`profile` 会按课程阶段自动处理 |
 | `co.mips.memoryConfiguration` | `auto` | MARS 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
-| `co.toolchain.isePath` | — | ISE 安装目录（`.../ISE_DS/ISE`） |
+| `co.toolchain.isePath` | — | 留空使用内置 Icarus 13.0；填写 `.../ISE_DS/ISE` 后显式使用 fuse/ISim |
 | `co.toolchain.logisim` | — | Logisim jar |
 
 其余工具链项：`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`。
@@ -201,7 +203,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
 | `co.mips.instructionTokenMode` | `realVsPseudo` | MIPS 指令 semantic token 分类粒度；颜色由 VS Code 决定 |
 
-同组还包含：`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.ise.*`（保存时 ISE 语法检查）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。
+同组还包含：`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.external.mode` / `timeoutMs`（保存或命令触发的外部编译器检查）、`co.verilog.syntax.ise.suppressedWarnings`（仅 ISE 分支）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。旧的 `co.verilog.syntax.ise.enabled/mode/timeoutMs` 已移除。
 
 ### 格式化
 
@@ -213,7 +215,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 1. **自动测试不需要 MARS**：P3–P7 自动生成用例固定使用内置参考栈；`co.mips.engine` 的 `mars` / `verify-both` 只影响手动测试和历史复现。
 2. **新的 RI 测试统一使用 raw word**：自动生成源码用 `.word` 覆盖 unknown opcode 与 unknown funct；旧用例仍可回放，但新测试点不再生成私有 RI 助记符。
-3. **ISE 路径要指到 `.../ISE_DS/ISE`**，此目录下有 `bin`。例如 `D:/ISE/14.7/ISE_DS/ISE`。自动测试使用独立 testbench，不会覆盖你自己的文件。
+3. **ISE 是显式 opt-in**：留空 `co.toolchain.isePath` 使用 bundled Icarus；如填写，路径要指到含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。无效的非空路径会失败而不会回退。自动测试使用独立 testbench，不会覆盖你自己的文件。
 4. **测试不绑定某一种流水线周期数**：默认按课程可见写事件和定义行为核验，因此纯性能问题或不可见内部状态仍可能需要额外定向测试。
 5. **BadVAddr 不测试**：课程不要求实现 BadVAddr；如果你实现了它，需要另写专门测试。
 6. **延迟槽按 Profile 自动处理**：P5/P6/P7 开启一条课程延迟槽，无需另调自动测试参数。
@@ -226,11 +228,11 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | 路径 | 内容 |
 |---|---|
 | `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
-| `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、MARS/ISim/Logisim trace 与复现元数据 |
-| `.co/out/*.oracle.out` / `*.sim.out` | 手动单次/批量测试的 provider-neutral oracle / ISim 输出；持续测试默认把输出写入对应 case 目录（旧 `.mars.out` 仍可读取） |
+| `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、oracle/Verilog/Logisim trace 与复现元数据 |
+| `.co/out/*.oracle.out` / `*.sim.out` | 手动单次/批量测试的 provider-neutral oracle / Verilog 仿真输出；持续测试默认把输出写入对应 case 目录（旧 `.mars.out` 仍可读取） |
 | `.co/out/trace-batch-report.json` | 批量测试摘要；自动测试报告不暴露内部命令或强度参数，失败用例仍可从历史中精确回放 |
 | `.co/out/continuous-trace-report.json` | 持续测试摘要；自动留存通过样本并完整保留失败/异常轮，不暴露内部调度参数 |
-| `.co/isim/` | ISE `.prj/.tcl`、生成的 testbench、`code.txt` |
+| `.co/isim/` | Verilog 仿真工作目录：生成的 testbench、`code.txt`、Icarus `.vvp`/watchdog，或 ISE `.prj/.tcl` |
 | `.co/logisim/` | 注入机器码后的 `.circ` 副本与报告 |
 
 ---
@@ -252,7 +254,7 @@ npm run publish -- patch
 
 本地脚本会要求工作树干净，然后执行：
 
-1. `npm run sync:manifest-config`，生成并检查 `package.json` 中的 VS Code 配置清单；若生成文件有未提交变化会停止发布
+1. `npm run sync:generated`，生成并检查 manifest、语法与 ISA 派生产物；若生成文件有未提交变化会停止发布
 2. `npm test` 和 `npm run compile`
 3. 更新 `package.json` / `package-lock.json` 的 version
 4. 根据最近一个 `v*` tag 之后的提交更新 `CHANGELOG.md`
@@ -261,15 +263,17 @@ npm run publish -- patch
 
 每次 main push / pull request 还会永久运行 `npm run verify:phase6`：Ubuntu 24.04 与 Windows 2025 各自执行阶段 6 定向测试、固定 `mars-assembler-v0.6.3` 的 assembly differential，以及固定 `legacy-course-executor` v0.6.3-course1 对 250 个生成用例 + 5 个手写边界用例的真实 execution differential。CI 要求 assembly lane 无未解释差异，并要求 execution lane 每个 profile 50+1、总计 255/255 通过且 0 unexplained/inconclusive/out-of-domain/error；结果以 machine-readable evidence 上传。
 
-tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别完成同一套 `verify:phase6`；Marketplace 发布 job 通过 `needs` 等待两个 matrix 结果，因此单独推 tag 或使用本地 `--skip-tests` 都不能绕过默认切换门。随后发布 job 在 Ubuntu runner 上执行：
+tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别完成同一套 `verify:phase6`；Windows package job 通过 `needs` 等待两个 matrix 结果，因此单独推 tag 或使用本地 `--skip-tests` 都不能绕过默认切换门。随后发布链只打包一次：
 
-1. `npm ci`
-2. `npm run sync:manifest-config`，并确认生成文件已经提交
-3. `npm test`
-4. `npm run compile`
-5. `vsce package` 生成 VSIX
-6. `vsce publish --packagePath <vsix>` 发布到 VS Code Marketplace
-7. 用同一个 VSIX 创建 GitHub Release
+1. Windows 2025 job 执行 `npm ci`、生成物同步检查、`npm test` 和 `npm run compile`
+2. `vsce package --target win32-x64` 生成唯一的 `buaa-co-toolkit-<version>-win32-x64.vsix`
+3. 解包 VSIX，确认平台 metadata、bundled executable/DLL、`lib/ivl`、许可证与第三方声明均在包内
+4. 从解包后的扩展安装布局、在隔离 `PATH` 下运行 `iverilog -V` 和含 `$readmemh` / `$display` 的 tiny compile+run
+5. 上传通过验收的 VSIX artifact；Ubuntu publish job 只下载该 artifact，并核对 SHA-256，不重新打包
+6. publish job 按固定 manifest 下载并校验 7 个对应源码包，`vsce publish --skip-duplicate --packagePath <同一 VSIX>` 幂等发布到 Marketplace
+7. GitHub Release 同时保存该 VSIX、对应源码包和 `SHA256SUMS`，不把约 162 MiB 源码塞入 VSIX
+
+本地 `npm run package:vsix` 同样固定生成 `win32-x64` 定向包；`npm run verify:bundled-iverilog` 可直接检查源码树中的运行时。此版本不发布无 `--target` 的 generic fallback。
 
 首次使用前，需要在 GitHub 仓库的 Actions secrets 中添加 `VSCE_PAT`，该 token 需要有 VS Code Marketplace 的 Manage 权限。GitHub Release 使用仓库自带的 `GITHUB_TOKEN`，不需要额外配置。
 
@@ -277,7 +281,7 @@ tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别
 
 - `npm run publish -- --dry-run`：预览下一次 release notes 和步骤，不改文件
 - `npm run publish -- minor --no-push`：只在本地创建 release commit/tag，不推送
-- `npm run publish -- patch --skip-tests`：只跳过本地 `npm test`；manifest 配置生成/检查和 tag workflow 的双平台 `verify:phase6` 仍强制执行
+- `npm run publish -- patch --skip-tests`：只跳过本地 `npm test`；生成物检查和 tag workflow 的双平台 `verify:phase6` 仍强制执行
 
 配置清单维护命令：
 

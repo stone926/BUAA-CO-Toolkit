@@ -10,7 +10,6 @@
   "mips.warnPseudoInstruction": true,
   "project.machineCode": "code.txt",
   "project.profile": "auto",
-  "project.simBackend": "isim",
   "project.simTime": "200us",
   "project.testbench": "mips_tb",
   "project.topModule": "mips",
@@ -49,10 +48,9 @@
     "vc-021"
   ],
   "verilog.lint.synthesizableHints": true,
-  "verilog.syntax.ise.enabled": true,
-  "verilog.syntax.ise.mode": "onSave",
+  "verilog.syntax.external.mode": "onSave",
+  "verilog.syntax.external.timeoutMs": 0,
   "verilog.syntax.ise.suppressedWarnings": [
     "ise-unconnected-port"
-  ],
-  "verilog.syntax.ise.timeoutMs": 0
+  ]
 }

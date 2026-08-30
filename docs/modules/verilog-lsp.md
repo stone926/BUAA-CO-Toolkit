@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 61 files
+# verilog-lsp | src/language/verilog/ | 64 files
 
 Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
 
@@ -59,6 +59,12 @@ cross-file:
   workspaceModuleRegistry.ts — VSCode端后台索引: FileSystemWatcher `.v/.vh`, onDidSaveTextDocument增量更新
   workspaceIndex.ts — LSP端模块数据库: 索引模块/宏/引用/display格式, 跨文件查找, 增量更新(≤50逐文件,>50全量)
   signalWiring.ts — 跨模块信号driver/reader追踪
+
+external-compiler:
+  externalSyntaxCheck.ts — 与仿真共用 `isePath` 两值 selector；空值走 bundled Icarus，非空只走 ISE fuse，显式无效 ISE 不回退
+  externalSyntaxProject.ts — LSP 侧有界发现 `.v`/唯一 XISE 并复用确定性 source order，跳过编辑器/构建产物目录
+  iverilogSyntaxCheck.ts — 从 initializationOptions 的扩展安装根运行绝对路径 `iverilog -g2005 -tnull -i`，解析常见 path:line[:column] 诊断
+  iseSyntaxCheck.ts — 保留 fuse 检查，并与 Icarus 共用外部源码发现；ISE warning suppression 只作用于该分支
 
 legacy:
   cst.ts — deprecated CST兼容包装, 生产路径已不使用

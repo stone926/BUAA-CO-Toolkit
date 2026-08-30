@@ -192,8 +192,8 @@ describe('package manifest', () => {
       '编辑器与诊断',
       '格式化'
     ]);
-    expect(Object.keys(properties)).toHaveLength(44);
-    expect(Object.keys(configDefaults)).toHaveLength(44);
+    expect(Object.keys(properties)).toHaveLength(42);
+    expect(Object.keys(configDefaults)).toHaveLength(42);
     for (const [key, value] of Object.entries(configDefaults)) {
       expect(properties[`co.${key}`]?.default, key).toEqual(value);
     }
@@ -212,6 +212,16 @@ describe('package manifest', () => {
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
     expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
     expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
+    expect(properties['co.verilog.syntax.external.mode']).toMatchObject({
+      type: 'string',
+      default: 'onSave',
+      enum: ['off', 'onSave', 'commandOnly']
+    });
+    expect(properties['co.verilog.syntax.external.timeoutMs']?.default).toBe(0);
+    expect(properties).not.toHaveProperty('co.project.simBackend');
+    expect(properties).not.toHaveProperty('co.verilog.syntax.ise.enabled');
+    expect(properties).not.toHaveProperty('co.verilog.syntax.ise.mode');
+    expect(properties).not.toHaveProperty('co.verilog.syntax.ise.timeoutMs');
     expect(properties['co.mips.extraArgs'].type).toBe('array');
     expect(properties['co.mips.extraArgs'].items?.type).toBe('string');
 

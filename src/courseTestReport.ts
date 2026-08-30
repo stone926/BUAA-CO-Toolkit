@@ -60,6 +60,8 @@ export interface CourseTraceCaseResult {
   machineCode?: string;
   oracleOut?: string;
   dutOut?: string;
+  /** Simulator selected for this DUT run. */
+  dutBackend?: 'iverilog' | 'isim' | 'logisim';
   /** Optional raw DUT process output when dutOut is the normalized trace. */
   dutRawOut?: string;
   /** @deprecated v1 alias for oracleOut. */
@@ -268,6 +270,7 @@ export function createCourseTraceBatchReport(
 /**
  * Public automatic reports keep actionable CPU evidence and a replay id, but never serialize
  * private paths, generator controls, backend commands, or raw artifact locations.
+ * The stable backend label is retained so a report identifies the simulator used.
  */
 export function publicAutomaticCourseTraceCaseResult(
   item: CourseTraceCaseResult,
@@ -281,6 +284,7 @@ export function publicAutomaticCourseTraceCaseResult(
     status: neutral.status,
     ...(neutral.cancelled ? { cancelled: true } : {}),
     stage: neutral.stage,
+    ...(neutral.dutBackend ? { dutBackend: neutral.dutBackend } : {}),
     message: publicAutomaticDiagnosticMessage(neutral),
     ...(neutral.firstDiffIndex === undefined ? {} : { firstDiffIndex: neutral.firstDiffIndex }),
     ...(neutral.firstDiff ? { firstDiff: neutral.firstDiff } : {}),
@@ -523,6 +527,7 @@ export function renderBatchTraceReport(
       escapeHtml(path.basename(item.asm)),
       item.stdin ? escapeHtml(path.basename(item.stdin)) : '',
       escapeHtml(neutralCourseTraceStage(item.stage)),
+      escapeHtml(item.dutBackend ?? ''),
       item.firstDiffIndex === undefined ? '' : String(item.firstDiffIndex + 1),
       renderFirstDiffSummary(item),
       renderCaseArtifacts(item),
@@ -544,7 +549,7 @@ export function renderBatchTraceReport(
   ${generatedAt ? `<div class="paths">生成时间: <code>${escapeHtml(generatedAt)}</code></div>` : ''}
   ${renderBatchSource(source)}
   <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
-  ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', '首个差异', '首个差异详情', '产物', '事件', '消息'], rows)}
+  ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', 'DUT 后端', '首个差异', '首个差异详情', '产物', '事件', '消息'], rows)}
 `)
   });
 }
@@ -686,15 +691,16 @@ export function batchSummary(results: CourseTraceCaseResult[]): CourseTraceBatch
 }
 
 function summaryText(item: CourseTraceCaseResult): string {
+  const backend = item.dutBackend ? `${item.dutBackend}: ` : '';
   if (item.probe) {
-    return `Probe records ${item.probe.records.length}, failures ${item.probe.failures.length}`;
+    return `${backend}Probe records ${item.probe.records.length}, failures ${item.probe.failures.length}`;
   }
   const oracleEvents = courseTraceOracleEvents(item);
   const dutEvents = courseTraceDutEvents(item);
   if (oracleEvents === undefined || dutEvents === undefined) {
     return '';
   }
-  return `Oracle ${oracleEvents}, DUT ${dutEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
+  return `${backend}Oracle ${oracleEvents}, DUT ${dutEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
 }
 
 function renderCaseArtifacts(item: CourseTraceCaseResult): SafeHtml {

@@ -53,10 +53,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish:
-    name: Publish VS Code extension
+  package:
+    name: Package and verify Windows x64 VSIX
     needs: phase6-gate
-    runs-on: ubuntu-latest
+    runs-on: windows-2025
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      version: ${{ steps.meta.outputs.version }}
+      vsix_name: ${{ steps.meta.outputs.vsix_name }}
+      vsix_sha256: ${{ steps.artifact.outputs.sha256 }}
 
     steps:
       - name: Checkout
@@ -71,11 +76,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate and check manifest config
-        run: npm run sync:manifest-config
+      - name: Generate and check committed artifacts
+        run: npm run sync:generated
 
       - name: Verify generated files are committed
-        run: git diff --exit-code -- package.json resources/co/configDefaults.json
+        run: git diff --exit-code
 
       - name: Test
         run: npm test
@@ -85,26 +90,99 @@ jobs:
 
       - name: Read package metadata
         id: meta
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $name = node -p "require('./package.json').name"
+          $tag = "${{ github.ref_name }}"
+          if ($tag -ne "v$version") {
+            throw "Tag $tag does not match package version $version."
+          }
+          $vsixName = "$name-$version-win32-x64.vsix"
+          "artifact_name=buaa-co-toolkit-win32-x64-vsix" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "vsix_name=$vsixName" >> $env:GITHUB_OUTPUT
+          "vsix=dist/$vsixName" >> $env:GITHUB_OUTPUT
+
+      - name: Package Windows x64 VSIX
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          npx vsce package --target win32-x64 --out "${{ steps.meta.outputs.vsix }}"
+
+      - name: Inspect VSIX and smoke bundled runtime
+        shell: pwsh
+        run: |
+          $extractRoot = Join-Path $env:RUNNER_TEMP "buaa-co-toolkit-vsix"
+          New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+          tar -xf "${{ steps.meta.outputs.vsix }}" -C $extractRoot
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to extract ${{ steps.meta.outputs.vsix }}."
+          }
+          $manifest = Get-Content -LiteralPath (Join-Path $extractRoot "extension.vsixmanifest") -Raw
+          if ($manifest -notmatch 'TargetPlatform="win32-x64"') {
+            throw "VSIX manifest is not targeted to win32-x64."
+          }
+          foreach ($forbidden in @("src", "scripts", "test-cli", "tmp", "node_modules/@rolldown")) {
+            if (Test-Path -LiteralPath (Join-Path $extractRoot "extension/$forbidden")) {
+              throw "VSIX contains development-only path: $forbidden"
+            }
+          }
+          node scripts/verify-bundled-iverilog.mjs (Join-Path $extractRoot "extension")
+          if ($LASTEXITCODE -ne 0) {
+            throw "Bundled Icarus smoke failed from extracted VSIX."
+          }
+
+      - name: Record VSIX digest
+        id: artifact
+        shell: pwsh
+        run: |
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath "${{ steps.meta.outputs.vsix }}").Hash.ToLowerInvariant()
+          "sha256=$sha256" >> $env:GITHUB_OUTPUT
+          Write-Output "VSIX SHA-256: $sha256"
+
+      - name: Upload verified VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: ${{ steps.meta.outputs.vsix }}
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish verified VSIX
+    needs: package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install publishing dependencies
+        run: npm ci
+
+      - name: Download verified VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.artifact_name }}
+          path: dist
+
+      - name: Verify downloaded VSIX digest
         shell: bash
         run: |
-          VERSION="$(node -p "require('./package.json').version")"
-          NAME="$(node -p "require('./package.json').name")"
-          TAG="${GITHUB_REF_NAME}"
-          if [ "${TAG}" != "v${VERSION}" ]; then
-            echo "Tag ${TAG} does not match package version ${VERSION}."
-            exit 1
-          fi
-          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "name=${NAME}" >> "${GITHUB_OUTPUT}"
-          echo "vsix=dist/${NAME}-${VERSION}.vsix" >> "${GITHUB_OUTPUT}"
+          echo "${{ needs.package.outputs.vsix_sha256 }}  dist/${{ needs.package.outputs.vsix_name }}" | sha256sum --check -
 
-      - name: Package VSIX
-        run: |
-          mkdir -p dist
-          npx vsce package --out "${{ steps.meta.outputs.vsix }}"
+      - name: Fetch and verify corresponding sources
+        run: node scripts/fetch-iverilog-corresponding-sources.mjs dist/corresponding-sources
 
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish --packagePath "${{ steps.meta.outputs.vsix }}"
+        run: npx vsce publish --skip-duplicate --packagePath "dist/${{ needs.package.outputs.vsix_name }}"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
@@ -112,7 +190,7 @@ jobs:
         id: notes
         shell: bash
         run: |
-          VERSION="${{ steps.meta.outputs.version }}"
+          VERSION="${{ needs.package.outputs.version }}"
           awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "Release ${GITHUB_REF_NAME}" > release-notes.md
@@ -124,10 +202,14 @@ jobs:
         shell: bash
         run: |
           TAG="${GITHUB_REF_NAME}"
-          VSIX="${{ steps.meta.outputs.vsix }}"
+          VSIX="dist/${{ needs.package.outputs.vsix_name }}"
+          SOURCE_ASSETS=(
+            dist/corresponding-sources/*.src.tar.zst
+            dist/corresponding-sources/SHA256SUMS
+          )
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --title "${TAG}" --notes-file release-notes.md
-            gh release upload "${TAG}" "${VSIX}" --clobber
+            gh release upload "${TAG}" "${VSIX}" "${SOURCE_ASSETS[@]}" --clobber
           else
-            gh release create "${TAG}" "${VSIX}" --title "${TAG}" --notes-file release-notes.md --verify-tag
+            gh release create "${TAG}" "${VSIX}" "${SOURCE_ASSETS[@]}" --title "${TAG}" --notes-file release-notes.md --verify-tag
           fi

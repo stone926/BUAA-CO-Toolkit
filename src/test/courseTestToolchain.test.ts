@@ -34,11 +34,11 @@ describe('course test toolchain helpers', () => {
     expect([...requiredCourseTraceToolchainChecks('P3', 'builtin', 'Default')])
       .toEqual(['Java', 'Logisim']);
     expect([...requiredCourseTraceToolchainChecks('P4', 'auto', 'Default')])
-      .toEqual(['ISE fuse']);
+      .toEqual(['Verilog simulator']);
     expect([...requiredCourseTraceToolchainChecks('P4', 'mars', 'FixedCompactLargeText')])
-      .toEqual(['Java', 'MARS', 'MARS coL2', 'ISE fuse', 'MARS FixedCompactLargeText']);
+      .toEqual(['Java', 'MARS', 'MARS coL2', 'Verilog simulator', 'MARS FixedCompactLargeText']);
     expect([...requiredCourseTraceToolchainChecks('P7', 'verify-both', 'CompactLargeText')])
-      .toEqual(['Java', 'MARS', 'MARS coL2', 'ISE fuse', 'MARS CompactLargeText', MARS_P7_CHECK]);
+      .toEqual(['Java', 'MARS', 'MARS coL2', 'Verilog simulator', 'MARS CompactLargeText', MARS_P7_CHECK]);
   });
 
   it('formats failed toolchain checks with optional suggestions', () => {

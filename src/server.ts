@@ -93,7 +93,7 @@ import {
   getVerilogSemanticTokens,
   getVerilogSignatureHelp
 } from './language/verilog/service';
-import { runIseSyntaxCheck } from './language/verilog/iseSyntaxCheck';
+import { runExternalVerilogSyntaxCheck as executeExternalVerilogSyntaxCheck } from './language/verilog/externalSyntaxCheck';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
@@ -176,14 +176,16 @@ interface ServerState {
   hasFormattingDynamicRegistration: boolean;
   hasSemanticTokensRefreshSupport: boolean;
   workspaceFolders: WorkspaceFolder[] | null | undefined;
+  extensionRoot?: string;
   globalSettings: CoSettings;
   documentSettings: Map<string, Thenable<CoSettings>>;
   updatedDocumentVersions: Map<string, number>;
   contentChangeTimers: Map<string, ReturnType<typeof setTimeout>>;
-  verilogIseDiagnostics: Map<string, Diagnostic[]>;
-  verilogIseTimers: Map<string, ReturnType<typeof setTimeout>>;
-  verilogIseRunSequence: number;
-  notifiedMissingIseToolchain: boolean;
+  verilogExternalDiagnostics: Map<string, Diagnostic[]>;
+  verilogExternalTimers: Map<string, ReturnType<typeof setTimeout>>;
+  verilogExternalControllers: Map<string, AbortController>;
+  verilogExternalRunSequences: Map<string, number>;
+  notifiedExternalToolchainError?: string;
   configurationVersion: number;
   effectiveSettingsCache: Map<string, CoSettings>;
   verilogProfileSnapshot?: VerilogProfileSnapshot;
@@ -201,18 +203,19 @@ const state: ServerState = {
   hasFormattingDynamicRegistration: false,
   hasSemanticTokensRefreshSupport: false,
   workspaceFolders: undefined,
+  extensionRoot: undefined,
   globalSettings: defaultCoSettings,
   documentSettings: new Map(),
   updatedDocumentVersions: new Map(),
   contentChangeTimers: new Map(),
-  verilogIseDiagnostics: new Map(),
-  verilogIseTimers: new Map(),
-  verilogIseRunSequence: 0,
-  notifiedMissingIseToolchain: false,
+  verilogExternalDiagnostics: new Map(),
+  verilogExternalTimers: new Map(),
+  verilogExternalControllers: new Map(),
+  verilogExternalRunSequences: new Map(),
   configurationVersion: 0,
   effectiveSettingsCache: new Map()
 };
-const verilogIseCommand = Commands.Server.InternalVerilogCheckSyntaxWithIse;
+const verilogExternalSyntaxCommand = Commands.Server.InternalVerilogCheckSyntaxWithIse;
 const maxEffectiveSettingsCacheEntries = 200;
 const verilogIndexStartupDelayMs = 750;
 let verilogIndexRebuildTimer: ReturnType<typeof setTimeout> | undefined;
@@ -226,12 +229,58 @@ function traceServerStartup(message: string): void {
   connection.console.info(`[BUAA CO Toolkit] ${message}`);
 }
 
+function extensionRootFromInitializationOptions(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const extensionRoot = (value as Record<string, unknown>).extensionRoot;
+  return typeof extensionRoot === 'string' && extensionRoot.trim()
+    ? extensionRoot.trim()
+    : undefined;
+}
+
+function resetExternalVerilogSyntaxChecks(): void {
+  for (const timer of state.verilogExternalTimers.values()) {
+    clearTimeout(timer);
+  }
+  state.verilogExternalTimers.clear();
+  for (const controller of state.verilogExternalControllers.values()) {
+    controller.abort();
+  }
+  state.verilogExternalControllers.clear();
+  state.verilogExternalDiagnostics.clear();
+  state.verilogExternalRunSequences.clear();
+  state.notifiedExternalToolchainError = undefined;
+}
+
+function logExternalSyntaxFailure(backend: string, output: string): void {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return;
+  }
+  const maxLogCharacters = 32768;
+  const suffix = trimmed.length > maxLogCharacters ? '\n… output truncated' : '';
+  connection.console.error(
+    `[BUAA CO Toolkit] ${backend} syntax check failed:\n${trimmed.slice(0, maxLogCharacters)}${suffix}`
+  );
+}
+
+function clearExternalDiagnosticsForWorkspace(uri: string): void {
+  const key = workspaceKeyForUri(uri);
+  for (const diagnosticUri of state.verilogExternalDiagnostics.keys()) {
+    if (workspaceKeyForUri(diagnosticUri) === key) {
+      state.verilogExternalDiagnostics.delete(diagnosticUri);
+    }
+  }
+}
+
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   traceServerStartup('server initialize begin');
   state.hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
   state.hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
   state.hasSemanticTokensRefreshSupport = Boolean(params.capabilities.workspace?.semanticTokens?.refreshSupport);
   state.workspaceFolders = params.workspaceFolders;
+  state.extensionRoot = extensionRootFromInitializationOptions(params.initializationOptions);
 
   return {
     capabilities: {
@@ -256,7 +305,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       inlayHintProvider: true,
       executeCommandProvider: {
-        commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand, verilogIseCommand]
+        commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand, verilogExternalSyntaxCommand]
       },
       semanticTokensProvider: {
         legend: {
@@ -298,6 +347,7 @@ connection.onDidChangeConfiguration((change) => {
   state.effectiveSettingsCache.clear();
   state.verilogProfileSnapshot = undefined;
   clearMipsSemanticTokenCache();
+  resetExternalVerilogSyntaxChecks();
   refreshSemanticTokens();
   void validateAllDocuments();
 });
@@ -343,7 +393,7 @@ async function handleDocumentClosed(document: TextDocument): Promise<void> {
   const settings = await getDocumentSettings(document.uri);
   state.documentSettings.delete(document.uri);
   state.updatedDocumentVersions.delete(document.uri);
-  state.verilogIseDiagnostics.delete(document.uri);
+  state.verilogExternalDiagnostics.delete(document.uri);
   await serviceForDocument(document)?.removeDocument?.(document.uri, settings);
   connection.sendDiagnostics({
     uri: document.uri,
@@ -460,12 +510,12 @@ connection.onExecuteCommand(async (params) => {
   } else if (params.command === mipsIgnorePseudoMnemonicCommand && typeof params.arguments?.[0] === 'string') {
     mipsState.ignoredPseudoInstructionMnemonics.add(params.arguments[0].toLowerCase());
     await validateDocuments(isMipsDocument);
-  } else if (params.command === verilogIseCommand) {
+  } else if (params.command === verilogExternalSyntaxCommand) {
     const uri = typeof params.arguments?.[0] === 'string'
       ? params.arguments[0]
       : documents.all().find((document) => document.languageId === 'verilog')?.uri;
     if (uri) {
-      await runVerilogIseSyntaxCheck(uri, await settingsForUri(uri), true);
+      await runExternalVerilogSyntaxCheck(uri, await settingsForUri(uri), true);
     }
   }
 });
@@ -475,7 +525,7 @@ async function handleDocumentSaved(document: TextDocument): Promise<void> {
     await updateIndexAndValidate(document);
   }
   const settings = effectiveSettingsForDocument(document, await getDocumentSettings(document.uri));
-  scheduleVerilogIseSyntaxCheck(document, settings);
+  scheduleExternalVerilogSyntaxCheck(document, settings);
 }
 
 async function updateIndexAndValidate(document: TextDocument): Promise<void> {
@@ -509,87 +559,129 @@ function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnosti
   if (document.languageId !== 'verilog') {
     return diagnostics;
   }
-  const iseDiagnostics = state.verilogIseDiagnostics.get(document.uri) ?? [];
-  if (!iseDiagnostics.length) {
+  const externalDiagnostics = state.verilogExternalDiagnostics.get(document.uri) ?? [];
+  if (!externalDiagnostics.length) {
     return diagnostics;
   }
-  const iseLines = new Set(iseDiagnostics.map((diagnostic) => diagnostic.range.start.line));
+  const externalLines = new Set(externalDiagnostics.map((diagnostic) => diagnostic.range.start.line));
   const filtered = diagnostics.filter((diagnostic) => {
     const code = typeof diagnostic.code === 'string' ? diagnostic.code : '';
-    return !(code.startsWith('syntax-') && iseLines.has(diagnostic.range.start.line));
+    return !(code.startsWith('syntax-') && externalLines.has(diagnostic.range.start.line));
   });
-  return [...filtered, ...iseDiagnostics];
+  return [...filtered, ...externalDiagnostics];
 }
 
-function scheduleVerilogIseSyntaxCheck(document: TextDocument, settings: CoSettings): void {
+function scheduleExternalVerilogSyntaxCheck(document: TextDocument, settings: CoSettings): void {
   if (document.languageId !== 'verilog') {
     return;
   }
-  const ise = settings.verilog.syntax.ise;
-  if (!ise.enabled || ise.mode !== 'onSave') {
+  const external = settings.verilog.syntax.external;
+  if (external.mode !== 'onSave') {
     return;
   }
   const localDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, settings) ?? [];
   if (localDiagnostics.some((diagnostic) => diagnostic.severity === 1 && typeof diagnostic.code === 'string' && diagnostic.code.startsWith('syntax-'))) {
-    state.verilogIseDiagnostics.delete(document.uri);
-    void validateDocument(document, settings);
+    clearExternalDiagnosticsForWorkspace(document.uri);
+    void validateOpenVerilogDocuments();
     return;
   }
   const key = workspaceKeyForUri(document.uri);
-  const existing = state.verilogIseTimers.get(key);
+  const existing = state.verilogExternalTimers.get(key);
   if (existing) {
     clearTimeout(existing);
   }
-  state.verilogIseTimers.set(key, setTimeout(() => {
-    state.verilogIseTimers.delete(key);
-    void runVerilogIseSyntaxCheck(document.uri, settings, false);
+  state.verilogExternalTimers.set(key, setTimeout(() => {
+    state.verilogExternalTimers.delete(key);
+    void runExternalVerilogSyntaxCheck(document.uri, settings, false);
   }, 500));
 }
 
-async function runVerilogIseSyntaxCheck(uri: string, settings: CoSettings, manual: boolean): Promise<void> {
-  const ise = settings.verilog.syntax.ise;
-  if (!ise.enabled || ise.mode === 'off') {
+async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, manual: boolean): Promise<void> {
+  const external = settings.verilog.syntax.external;
+  if (external.mode === 'off') {
     return;
   }
-  if (!manual && ise.mode !== 'onSave') {
+  if (!manual && external.mode !== 'onSave') {
     return;
   }
-  const runId = ++state.verilogIseRunSequence;
+  const controllerKey = workspaceKeyForUri(uri);
+  if (manual) {
+    const scheduled = state.verilogExternalTimers.get(controllerKey);
+    if (scheduled) {
+      clearTimeout(scheduled);
+      state.verilogExternalTimers.delete(controllerKey);
+    }
+  }
+  const runId = (state.verilogExternalRunSequences.get(controllerKey) ?? 0) + 1;
+  state.verilogExternalRunSequences.set(controllerKey, runId);
+  state.verilogExternalControllers.get(controllerKey)?.abort();
+  const controller = new AbortController();
+  state.verilogExternalControllers.set(controllerKey, controller);
   const configuredTop = settings.project.topModule.trim();
   const fallbackTop = verilogIndex.indexedModules()[0]?.name;
   const topModule = configuredTop && verilogIndex.getModule(configuredTop)
     ? configuredTop
     : fallbackTop ?? configuredTop;
-  const result = await runIseSyntaxCheck({
-    workspaceFolders: state.workspaceFolders,
-    triggerUri: uri,
-    isePath: settings.toolchain.isePath,
-    topModule,
-    fallbackTopModule: fallbackTop,
-    timeoutMs: ise.timeoutMs > 0 ? ise.timeoutMs : settings.run.timeoutMs,
-    settings
-  });
-  if (runId !== state.verilogIseRunSequence) {
-    return;
-  }
-  if (result.skipped === 'missing-toolchain') {
-    state.verilogIseDiagnostics.clear();
-    if (!state.notifiedMissingIseToolchain) {
-      state.notifiedMissingIseToolchain = true;
-      void connection.window.showInformationMessage('ISE fuse 未配置或不可用，Verilog 语法检查已回退到内置检查。');
+  let result: Awaited<ReturnType<typeof executeExternalVerilogSyntaxCheck>>;
+  try {
+    result = await executeExternalVerilogSyntaxCheck({
+      workspaceFolders: state.workspaceFolders,
+      triggerUri: uri,
+      extensionRoot: state.extensionRoot,
+      isePath: settings.toolchain.isePath,
+      topModule,
+      fallbackTopModule: fallbackTop,
+      timeoutMs: external.timeoutMs > 0 ? external.timeoutMs : settings.run.timeoutMs,
+      settings,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (controller.signal.aborted || runId !== state.verilogExternalRunSequences.get(controllerKey)) {
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = `外部 Verilog 语法检查失败：${detail}`;
+    const usingIse = Boolean(settings.toolchain.isePath.trim());
+    logExternalSyntaxFailure(usingIse ? 'isim' : 'iverilog', message);
+    clearExternalDiagnosticsForWorkspace(uri);
+    state.verilogExternalDiagnostics.set(uri, [{
+      range: Range.create(0, 0, 0, 1),
+      severity: 1,
+      source: usingIse ? 'ISE fuse' : 'Icarus Verilog',
+      code: usingIse ? 'ise-toolchain' : 'iverilog-toolchain',
+      message
+    }]);
+    if (state.notifiedExternalToolchainError !== message) {
+      state.notifiedExternalToolchainError = message;
+      void connection.window.showErrorMessage(message);
     }
     await validateOpenVerilogDocuments();
     return;
+  } finally {
+    if (state.verilogExternalControllers.get(controllerKey) === controller) {
+      state.verilogExternalControllers.delete(controllerKey);
+    }
+  }
+  if (runId !== state.verilogExternalRunSequences.get(controllerKey)) {
+    return;
   }
   if (result.skipped) {
-    state.verilogIseDiagnostics.clear();
+    clearExternalDiagnosticsForWorkspace(uri);
     await validateOpenVerilogDocuments();
     return;
   }
-  state.notifiedMissingIseToolchain = false;
-  state.verilogIseDiagnostics.clear();
+  if (result.toolchainError && state.notifiedExternalToolchainError !== result.toolchainError) {
+    state.notifiedExternalToolchainError = result.toolchainError;
+    void connection.window.showErrorMessage(result.toolchainError);
+  } else if (!result.toolchainError) {
+    state.notifiedExternalToolchainError = undefined;
+  }
+  if (!result.ok) {
+    logExternalSyntaxFailure(result.backend, result.stderr || result.stdout);
+  }
+  clearExternalDiagnosticsForWorkspace(uri);
   for (const [diagnosticUri, diagnostics] of result.diagnosticsByUri) {
-    state.verilogIseDiagnostics.set(diagnosticUri, diagnostics);
+    state.verilogExternalDiagnostics.set(diagnosticUri, diagnostics);
   }
   await validateOpenVerilogDocuments();
 }

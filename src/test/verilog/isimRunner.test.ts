@@ -16,7 +16,7 @@ import {
   writeTextFile
 } from '../../fsUtil';
 import { revealOutputChannel, runTool } from '../../process';
-import { findFuse } from '../../toolchain';
+import { buildIseEnvironment, findFuse } from '../../toolchain';
 import {
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
@@ -236,6 +236,19 @@ describe('Verilog ISim runner orchestration', () => {
     expect(vi.mocked(runTool).mock.calls[1][2]).toEqual(expect.objectContaining({
       signal: controller.signal
     }));
+  });
+
+  it('uses one dispatcher-supplied ISE path snapshot for compile and simulation', async () => {
+    vi.mocked(getProfile).mockReturnValue('P1');
+    vi.mocked(getIsePath).mockReturnValue('D:/changed-during-operation');
+
+    await runIsim(services(), { resource, isePath: 'D:/snapshot-ISE' });
+
+    expect(getIsePath).not.toHaveBeenCalled();
+    expect(findFuse).toHaveBeenCalledWith('D:/snapshot-ISE');
+    expect(buildIseEnvironment).toHaveBeenCalledTimes(2);
+    expect(buildIseEnvironment).toHaveBeenNthCalledWith(1, 'D:/snapshot-ISE');
+    expect(buildIseEnvironment).toHaveBeenNthCalledWith(2, 'D:/snapshot-ISE');
   });
 
   it('propagates the automatic non-interactive boundary and hides machine-code paths', async () => {

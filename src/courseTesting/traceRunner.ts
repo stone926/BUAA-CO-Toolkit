@@ -21,7 +21,8 @@ import { executeWithPreflight, preflightFailureMessage } from '../mips/providers
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { verifyConfiguredFixedMarsReference } from '../mips/providers/fixedMarsReference';
 import { defaultTraceCompareMode } from '../traceCompare';
-import { runIsim } from '../verilog';
+import { runVerilogSimulation } from '../verilog';
+import { verilogSimulationTerminalResult } from '../verilog/simulationRunner';
 import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';
@@ -217,7 +218,7 @@ export async function runCourseTraceCase(
     if (!automatic) {
       services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
     }
-    const isim = await pipeline.runDut(services, {
+    const dut = await pipeline.runDut(services, {
       resource: asm,
       showMessages: false,
       revealOutput: options.revealOutput,
@@ -230,18 +231,21 @@ export async function runCourseTraceCase(
       nonInteractive: automatic,
       signal: options.signal
     });
-    if (!isim?.simResult.ok || !isim.simOut) {
-      return failedCase(
-        item,
-        'dut',
-        '测试中止：DUT 运行失败',
-        asmCase.machineCode,
-        undefined,
-        asmCase,
-        engineRunWasCancelled(isim?.simResult, options.signal)
-      );
+    if (!dut?.simResult?.ok || !dut.simOut) {
+      return {
+        ...failedCase(
+          item,
+          'dut',
+          '测试中止：DUT 运行失败',
+          asmCase.machineCode,
+          undefined,
+          asmCase,
+          engineRunWasCancelled(verilogSimulationTerminalResult(dut), options.signal)
+        ),
+        ...(dut?.backend ? { dutBackend: dut.backend } : {})
+      };
     }
-    const simText = await readTextFile(isim.simOut);
+    const simText = await readTextFile(dut.simOut);
     const simEvents = parseSimOutput(simText);
     const probeResult = checkP7Probe(simText, simEvents, probe);
     return {
@@ -252,7 +256,8 @@ export async function runCourseTraceCase(
       stage: 'probe',
       message: probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
       machineCode: asmCase.machineCode.fsPath,
-      dutOut: isim.simOut.fsPath,
+      dutOut: dut.simOut.fsPath,
+      dutBackend: dut.backend,
       dutEvents: simEvents.length,
       probe: probeResult
     };
@@ -444,7 +449,7 @@ export async function runCourseTraceCase(
     }
   }
 
-  const isim = await pipeline.runDut(services, {
+  const dut = await pipeline.runDut(services, {
     resource: asm,
     showMessages: false,
     revealOutput: options.revealOutput,
@@ -457,19 +462,22 @@ export async function runCourseTraceCase(
     nonInteractive: automatic,
     signal: options.signal
   });
-  if (!isim?.simResult.ok || !isim.simOut) {
-    return failedCase(
-      item,
-      'dut',
-      '测试中止：DUT 运行失败',
-      asmCase.machineCode,
-      oracle.outputFile,
-      asmCase,
-      engineRunWasCancelled(isim?.simResult, options.signal)
-    );
+  if (!dut?.simResult?.ok || !dut.simOut) {
+    return {
+      ...failedCase(
+        item,
+        'dut',
+        '测试中止：DUT 运行失败',
+        asmCase.machineCode,
+        oracle.outputFile,
+        asmCase,
+        engineRunWasCancelled(verilogSimulationTerminalResult(dut), options.signal)
+      ),
+      ...(dut?.backend ? { dutBackend: dut.backend } : {})
+    };
   }
 
-  const simText = await readTextFile(isim.simOut);
+  const simText = await readTextFile(dut.simOut);
   const diff = pipeline.compareTraces(oracle.trace.events, iterCpuTraceEvents(simText), {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
@@ -488,7 +496,8 @@ export async function runCourseTraceCase(
       message: emptyTraceMessage,
       machineCode: asmCase.machineCode.fsPath,
       oracleOut: oracle.outputFile.fsPath,
-      dutOut: isim.simOut.fsPath,
+      dutOut: dut.simOut.fsPath,
+      dutBackend: dut.backend,
       oracleEvents: diff.summary.oracleEvents,
       dutEvents: diff.summary.dutEvents,
       matchedEvents: diff.summary.matchedEvents,
@@ -506,7 +515,8 @@ export async function runCourseTraceCase(
     message: diffMessage(diff),
     machineCode: asmCase.machineCode.fsPath,
     oracleOut: oracle.outputFile.fsPath,
-    dutOut: isim.simOut.fsPath,
+    dutOut: dut.simOut.fsPath,
+    dutBackend: dut.backend,
     firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
     firstDiff: firstTraceDiffSnapshot(diff),
     oracleEvents: diff.summary.oracleEvents,
@@ -522,7 +532,7 @@ function defaultCourseTracePipeline(): CourseTracePipeline {
     createCase: createAsmCaseFromAsm,
     prepareProgram: prepareAsmCaseMachineCode,
     runOracle: executeWithPreflight,
-    runDut: runIsim,
+    runDut: runVerilogSimulation,
     compareTraces: compareTraceIterables,
     recordOracle: recordAsmCaseOracleResult,
     updateArtifacts: updateAsmCaseArtifacts,
