@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-08-30
+
 - feat(verilog): bundle Icarus Verilog 13.0 and its Windows x64 runtime dependencies for compiler-level syntax checks and course simulation without a separate ISE/MSYS2 install
 - feat(verilog): select bundled Icarus when `co.toolchain.isePath` is empty and retain fuse/ISim as the explicit ISE opt-in, with no silent fallback for invalid non-empty paths
 - feat(verilog): keep ISE project, ISim waveform, and existing VCD commands as ISE-only capabilities
