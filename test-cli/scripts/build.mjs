@@ -55,20 +55,26 @@ if (!existsSync(vscodeShimSource)) {
 }
 
 // The extracted Verilog command module pulls in the VS Code language client solely for the
-// on-demand ISE syntax-check command. The headless pipeline never uses that UI command, so the
+// on-demand external syntax-check command. The headless pipeline never uses that UI command, so the
 // extracted copy drops the dependency to keep the CLI independent from `vscode-languageclient`.
 {
   const nl = String.fromCharCode(10);
   const verilogEntry = path.join(buildDir, 'src', 'verilog.ts');
   const text = readFileSync(verilogEntry, 'utf8').split(String.fromCharCode(13) + nl).join(nl);
-  const withoutImport = text.replace("import { executeLanguageServerCommand } from './languageClient';" + nl, '');
-  const fnStart = withoutImport.indexOf('async function checkSyntaxWithIse()');
+  const languageClientImport = "import { executeLanguageServerCommand } from './languageClient';" + nl;
+  if (!text.includes(languageClientImport)) {
+    throw new Error('cannot isolate the Verilog syntax-check language-client import');
+  }
+  const withoutImport = text.replace(languageClientImport, '');
+  const fnSignature = 'async function checkVerilogSyntax(): Promise<void> {';
+  const fnStart = withoutImport.indexOf(fnSignature);
   const fnEnd = withoutImport.indexOf(nl + 'async function disableLintRule', fnStart);
-  const patched = fnStart >= 0 && fnEnd > fnStart
-    ? withoutImport.slice(0, fnStart) + 'async function checkSyntaxWithIse(): Promise<void> {' + nl +
-      '  // Headless test-cli has no language server; the interactive command is unavailable.' + nl +
-      '}' + nl + nl + withoutImport.slice(fnEnd)
-    : withoutImport;
+  if (fnStart < 0 || fnEnd <= fnStart) {
+    throw new Error('cannot isolate the Verilog syntax-check command implementation');
+  }
+  const patched = withoutImport.slice(0, fnStart) + fnSignature + nl +
+    '  // Headless test-cli has no language server; the interactive command is unavailable.' + nl +
+    '}' + nl + nl + withoutImport.slice(fnEnd);
   writeFileSync(verilogEntry, patched);
 }
 
