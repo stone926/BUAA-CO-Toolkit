@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-08-30
+
 - fix(ci): make bundled-runtime and replay source-graph tests portable across Linux and Windows path representations
 - fix(ci): decouple the headless test CLI from VS Code language-client command glue and compile only its import closure
 
