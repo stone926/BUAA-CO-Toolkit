@@ -37,35 +37,29 @@ import {
 } from './verilog/testbenchResolver';
 import {
   compileIsim as compileIsimCore,
-  CompileIsimOptions,
-  CompiledIsimOutput,
-  runIsim as runIsimCore,
-  IsimRunOptions,
-  IsimRunOutput
 } from './verilog/isimRunner';
 import {
-  runVerilogSimulation as runVerilogSimulationCore,
-  type VerilogSimulationRunOptions,
-  type VerilogSimulationRunOutput
+  runVerilogSimulation,
+  setVerilogSimulationModuleRegistry
 } from './verilog/simulationRunner';
 
 export { generateIseProject } from './verilog/iseProject';
 export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
+export { runIsim } from './verilog/isimRunner';
+export { runVerilogSimulation };
 export type { IsimRunOptions, IsimRunOutput, CompileIsimOptions, CompiledIsimOutput } from './verilog/isimRunner';
 export type { VerilogSimulationRunOptions, VerilogSimulationRunOutput } from './verilog/simulationRunner';
 
-let sharedModuleRegistry: MutableVerilogModuleProvider | undefined;
-
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
-  sharedModuleRegistry = moduleRegistry;
+  setVerilogSimulationModuleRegistry(moduleRegistry);
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Verilog.DisableLintRule, (rule?: string) => disableLintRule(rule)),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
     vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => runIseOnlyCommand(() => generateIseProject(services))),
     vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkVerilogSyntax()),
     vscode.commands.registerCommand(Commands.Verilog.RunIsim, () => runVerilogSimulation(services, { moduleRegistry })),
-    vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => runIseOnlyCommand(() => openIsimWaveform(services, { compileIsim, moduleRegistry }))),
-    vscode.commands.registerCommand(Commands.Verilog.ExportVcd, () => runIseOnlyCommand(() => exportVcdWaveform(services, { compileIsim, moduleRegistry })))
+    vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => runIseOnlyCommand(() => openIsimWaveform(services, { compileIsim: compileIsimCore, moduleRegistry }))),
+    vscode.commands.registerCommand(Commands.Verilog.ExportVcd, () => runIseOnlyCommand(() => exportVcdWaveform(services, { compileIsim: compileIsimCore, moduleRegistry })))
   );
 }
 
@@ -146,34 +140,6 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
   }));
   moduleRegistry?.updateUri(tbUri);
   await vscode.window.showTextDocument(tbUri);
-}
-
-export async function runIsim(
-  services: AppServices,
-  options: IsimRunOptions = {}
-): Promise<IsimRunOutput | undefined> {
-  return await runIsimCore(services, withSharedModuleRegistry(options));
-}
-
-export async function runVerilogSimulation(
-  services: AppServices,
-  options: VerilogSimulationRunOptions = {}
-): Promise<VerilogSimulationRunOutput | undefined> {
-  return await runVerilogSimulationCore(services, withSharedModuleRegistry(options));
-}
-
-async function compileIsim(
-  services: AppServices,
-  options: CompileIsimOptions = {}
-): Promise<CompiledIsimOutput | undefined> {
-  return await compileIsimCore(services, withSharedModuleRegistry(options));
-}
-
-function withSharedModuleRegistry<T extends { moduleRegistry?: MutableVerilogModuleProvider }>(options: T): T {
-  return {
-    ...options,
-    moduleRegistry: options.moduleRegistry ?? sharedModuleRegistry
-  };
 }
 
 async function runIseOnlyCommand<T>(action: () => Promise<T>): Promise<T | undefined> {

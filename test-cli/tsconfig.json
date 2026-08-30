@@ -12,5 +12,5 @@
     "types": ["node"],
     "noEmitOnError": true
   },
-  "include": [".build-src/**/*.ts"]
+  "include": [".build-src/test-cli/src/**/*.ts"]
 }

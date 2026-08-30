@@ -11,7 +11,7 @@ import type {
   P3LogisimTraceSetup
 } from '../../courseTestLogisim';
 import type { executeWithPreflight } from '../../mips/providers/providerResolver';
-import type { runVerilogSimulation } from '../../verilog';
+import type { runVerilogSimulation } from '../../verilog/simulationRunner';
 import type { AppServices } from '../../types';
 import type {
   AsmCase,

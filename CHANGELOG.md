@@ -5,7 +5,7 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 ## [Unreleased]
 
 - fix(ci): make bundled-runtime and replay source-graph tests portable across Linux and Windows path representations
-- fix(ci): keep the headless test CLI extraction aligned with the external Verilog syntax-check command
+- fix(ci): decouple the headless test CLI from VS Code language-client command glue and compile only its import closure
 
 ## [1.0.3] - 2026-08-30
 

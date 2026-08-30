@@ -72,10 +72,12 @@ vi.mock('../verilog/testbenchResolver', () => ({
 }));
 
 vi.mock('../verilog/isimRunner', () => ({
+  compileIsim: vi.fn(async () => undefined),
   runIsim: vi.fn(async () => undefined)
 }));
 
 vi.mock('../verilog/simulationRunner', () => ({
+  setVerilogSimulationModuleRegistry: vi.fn(),
   runVerilogSimulation: vi.fn(async () => undefined)
 }));
 

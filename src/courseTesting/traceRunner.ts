@@ -21,8 +21,10 @@ import { executeWithPreflight, preflightFailureMessage } from '../mips/providers
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { verifyConfiguredFixedMarsReference } from '../mips/providers/fixedMarsReference';
 import { defaultTraceCompareMode } from '../traceCompare';
-import { runVerilogSimulation } from '../verilog';
-import { verilogSimulationTerminalResult } from '../verilog/simulationRunner';
+import {
+  runVerilogSimulation,
+  verilogSimulationTerminalResult
+} from '../verilog/simulationRunner';
 import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile } from '../fsUtil';

@@ -47,7 +47,7 @@ verilog-commands:
   verilog/iverilogRuntime.ts — 固定定位 `vendor/iverilog/win32-x64`，为子进程前置 bundled bin，校验 exe/lib 并会话级执行 `iverilog -V`；统一生成 source-relative、各源码目录和 workspace root 的 include 参数
   verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + `vvp -N`，复用源文件顺序/testbench/`code.txt`，用独立 watchdog top 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物
   verilog/workspaceOperationQueue.ts — 以规范化 workspace path 为键的轻量 Promise 队列；等待者取消会释放自身 turn，不中断前序也不阻塞后续仿真
-  verilog/simulationRunner.ts — 通用 Verilog 仿真薄分派器与带 backend 的最小公共结果；显式 ISE 失败不启动 Icarus
+  verilog/simulationRunner.ts — 无 language-client 命令胶水依赖、可供 headless 复用的通用 Verilog 仿真分派器、共享增量模块注册表与带 backend 的最小公共结果；命令和课程流水线复用同一入口，显式 ISE 失败不启动 Icarus
   verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘
   verilog/simulationAsmCase.ts — Icarus/ISim 共用的 P4–P7 ASM case 选择与 MARS 机器码准备，避免双后端行为漂移
   verilog/simulationInputs.ts — Icarus/ISim 运行前机器码源定位与复制；保留配置文件名并同步生成课程 TB 固定读取的 `code.txt` alias

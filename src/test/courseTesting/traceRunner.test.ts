@@ -12,7 +12,7 @@ import {
   recordAsmCaseOracleResult
 } from '../../asmCaseStore';
 import { executeWithPreflight } from '../../mips/providers/providerResolver';
-import { runVerilogSimulation } from '../../verilog';
+import { runVerilogSimulation } from '../../verilog/simulationRunner';
 import { readTextFile } from '../../fsUtil';
 import { compareTraceIterables } from '../../language/mips/traceCompare';
 import {
@@ -58,7 +58,8 @@ vi.mock('../../courseTesting/fullStackShadowRunner', () => ({
   runFullStackShadow: vi.fn()
 }));
 
-vi.mock('../../verilog', () => ({
+vi.mock('../../verilog/simulationRunner', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../verilog/simulationRunner')>(),
   runVerilogSimulation: vi.fn()
 }));
 

@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import { getIsePath } from '../config';
 import type { AppServices, RunResult } from '../types';
+import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
 import { runIsim, IsimRunOptions, IsimRunOutput } from './isimRunner';
 import { runIverilog, IverilogRunOutput } from './iverilogRunner';
 import { selectVerilogBackend } from './verilogBackend';
@@ -15,6 +16,15 @@ export interface VerilogSimulationRunOptions extends IsimRunOptions {
 
 export type IsimSimulationRunOutput = IsimRunOutput & { backend: 'isim' };
 export type VerilogSimulationRunOutput = IsimSimulationRunOutput | IverilogRunOutput;
+
+let sharedModuleRegistry: MutableVerilogModuleProvider | undefined;
+
+/** Keep command and headless-safe course-test simulations on the incremental module registry. */
+export function setVerilogSimulationModuleRegistry(
+  moduleRegistry: MutableVerilogModuleProvider | undefined
+): void {
+  sharedModuleRegistry = moduleRegistry;
+}
 
 /**
  * Return the process result that decided this simulation's terminal state.
@@ -37,12 +47,15 @@ export async function runVerilogSimulation(
   services: AppServices,
   options: VerilogSimulationRunOptions = {}
 ): Promise<VerilogSimulationRunOutput | undefined> {
-  const resource = options.resource ?? vscode.window.activeTextEditor?.document.uri;
+  const effectiveOptions = options.moduleRegistry || !sharedModuleRegistry
+    ? options
+    : { ...options, moduleRegistry: sharedModuleRegistry };
+  const resource = effectiveOptions.resource ?? vscode.window.activeTextEditor?.document.uri;
   const isePath = getIsePath(resource);
   if (selectVerilogBackend(isePath) === 'isim') {
     services.output.appendLine('Verilog backend: ISim (configured ISE)');
-    const output = await runIsim(services, { ...options, isePath });
+    const output = await runIsim(services, { ...effectiveOptions, isePath });
     return output ? { ...output, backend: 'isim' } : undefined;
   }
-  return await runIverilog(services, options);
+  return await runIverilog(services, effectiveOptions);
 }

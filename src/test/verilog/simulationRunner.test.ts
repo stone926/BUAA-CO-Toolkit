@@ -6,6 +6,7 @@ import { runIsim } from '../../verilog/isimRunner';
 import { runIverilog } from '../../verilog/iverilogRunner';
 import {
   runVerilogSimulation,
+  setVerilogSimulationModuleRegistry,
   verilogSimulationTerminalResult
 } from '../../verilog/simulationRunner';
 
@@ -33,6 +34,7 @@ const services = {
 describe('Verilog simulation dispatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setVerilogSimulationModuleRegistry(undefined);
     vscodeState.state!.activeTextEditor = undefined;
   });
 
@@ -71,6 +73,20 @@ describe('Verilog simulation dispatcher', () => {
     await expect(runVerilogSimulation(services, { resource })).resolves.toBeUndefined();
 
     expect(runIverilog).not.toHaveBeenCalled();
+  });
+
+  it('uses the shared module registry unless an operation supplies its own', async () => {
+    vi.mocked(getIsePath).mockReturnValue('');
+    vi.mocked(runIverilog).mockResolvedValue({ backend: 'iverilog' } as never);
+    const sharedRegistry = { kind: 'shared' } as never;
+    const operationRegistry = { kind: 'operation' } as never;
+    setVerilogSimulationModuleRegistry(sharedRegistry);
+
+    await runVerilogSimulation(services, { resource });
+    await runVerilogSimulation(services, { resource, moduleRegistry: operationRegistry });
+
+    expect(runIverilog).toHaveBeenNthCalledWith(1, services, { resource, moduleRegistry: sharedRegistry });
+    expect(runIverilog).toHaveBeenNthCalledWith(2, services, { resource, moduleRegistry: operationRegistry });
   });
 
   it('uses an Icarus compile failure as the terminal process result', () => {

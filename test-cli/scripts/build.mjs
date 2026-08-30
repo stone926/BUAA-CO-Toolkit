@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,32 +54,6 @@ if (!existsSync(vscodeShimSource)) {
   throw new Error(`missing vscode shim: ${vscodeShimSource}`);
 }
 
-// The extracted Verilog command module pulls in the VS Code language client solely for the
-// on-demand external syntax-check command. The headless pipeline never uses that UI command, so the
-// extracted copy drops the dependency to keep the CLI independent from `vscode-languageclient`.
-{
-  const nl = String.fromCharCode(10);
-  const verilogEntry = path.join(buildDir, 'src', 'verilog.ts');
-  const text = readFileSync(verilogEntry, 'utf8').split(String.fromCharCode(13) + nl).join(nl);
-  const languageClientImport = "import { executeLanguageServerCommand } from './languageClient';" + nl;
-  if (!text.includes(languageClientImport)) {
-    throw new Error('cannot isolate the Verilog syntax-check language-client import');
-  }
-  const withoutImport = text.replace(languageClientImport, '');
-  const fnSignature = 'async function checkVerilogSyntax(): Promise<void> {';
-  const fnStart = withoutImport.indexOf(fnSignature);
-  const fnEnd = withoutImport.indexOf(nl + 'async function disableLintRule', fnStart);
-  if (fnStart < 0 || fnEnd <= fnStart) {
-    throw new Error('cannot isolate the Verilog syntax-check command implementation');
-  }
-  const patched = withoutImport.slice(0, fnStart) + fnSignature + nl +
-    '  // Headless test-cli has no language server; the interactive command is unavailable.' + nl +
-    '}' + nl + nl + withoutImport.slice(fnEnd);
-  writeFileSync(verilogEntry, patched);
-}
-
-
-
 if (!typecheckOnly) {
   rm(outDir);
 }
@@ -117,6 +91,15 @@ if (result.status !== 0) {
 if (typecheckOnly) {
   console.log('[test-cli] typecheck passed');
   process.exit(0);
+}
+
+const forbiddenHeadlessOutputs = [
+  path.join(outDir, 'src', 'languageClient.js'),
+  path.join(outDir, 'src', 'verilog.js')
+];
+const leakedHeadlessOutputs = forbiddenHeadlessOutputs.filter(existsSync);
+if (leakedHeadlessOutputs.length) {
+  throw new Error(`headless import closure reached VS Code command glue: ${leakedHeadlessOutputs.join(', ')}`);
 }
 
 const cliEntry = 'test-cli/src/cli.js';
