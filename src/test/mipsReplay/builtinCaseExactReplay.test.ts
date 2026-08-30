@@ -96,11 +96,12 @@ describe('builtin case capture and exact replay', () => {
       expect(assembled?.ok, assembled?.status.stderr).toBe(true);
       expect(assembled?.image).toBeDefined();
       expect(assembled?.executionBinding).toBeUndefined();
-      expect(assembled?.image?.inputGraph.map((unit) => unit.uri)).toEqual(
-        withInclude
-          ? [pathToFileURL(sourceFile).toString(), pathToFileURL(path.join(sourceDir, 'lib.asm')).toString()]
-          : [pathToFileURL(sourceFile).toString()]
-      );
+      const expectedSourceFiles = withInclude
+        ? [sourceFile, path.join(sourceDir, 'lib.asm')]
+        : [sourceFile];
+      const expectedSourceUris = await Promise.all(expectedSourceFiles.map(async (file) =>
+        pathToFileURL(await fs.promises.realpath(file)).toString()));
+      expect(assembled?.image?.inputGraph.map((unit) => unit.uri)).toEqual(expectedSourceUris);
 
       const oracleDir = path.join(asmCase.dir.fsPath, 'oracle');
       fs.mkdirSync(oracleDir);

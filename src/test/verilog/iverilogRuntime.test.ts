@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as path from 'path';
 import { isDirectory, isFile } from '../../nodeFs';
 import { runProcessCore } from '../../processCore';
 import {
@@ -50,11 +51,13 @@ describe('bundled Icarus runtime', () => {
   });
 
   it('resolves only the fixed win32-x64 installation layout', () => {
-    const runtime = resolveIverilogRuntime('E:/Extension Root');
-    expect(normalized(runtime.rootDir)).toBe('e:/extension root/vendor/iverilog/win32-x64');
-    expect(normalized(runtime.iverilogPath)).toBe('e:/extension root/vendor/iverilog/win32-x64/bin/iverilog.exe');
-    expect(normalized(runtime.vvpPath)).toBe('e:/extension root/vendor/iverilog/win32-x64/bin/vvp.exe');
-    expect(normalized(runtime.libDir)).toBe('e:/extension root/vendor/iverilog/win32-x64/lib/ivl');
+    const extensionRoot = path.resolve('Extension Root');
+    const expectedRoot = path.join(extensionRoot, 'vendor', 'iverilog', 'win32-x64');
+    const runtime = resolveIverilogRuntime(extensionRoot);
+    expect(runtime.rootDir).toBe(expectedRoot);
+    expect(runtime.iverilogPath).toBe(path.join(expectedRoot, 'bin', 'iverilog.exe'));
+    expect(runtime.vvpPath).toBe(path.join(expectedRoot, 'bin', 'vvp.exe'));
+    expect(runtime.libDir).toBe(path.join(expectedRoot, 'lib', 'ivl'));
   });
 
   it('inherits environment values while prepending only bundled bin to Path', () => {

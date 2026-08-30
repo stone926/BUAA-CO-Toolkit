@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- fix(ci): make bundled-runtime and replay source-graph tests portable across Linux and Windows path representations
+
 ## [1.0.3] - 2026-08-30
 
 - feat(verilog): bundle Icarus Verilog 13.0 and its Windows x64 runtime dependencies for compiler-level syntax checks and course simulation without a separate ISE/MSYS2 install
