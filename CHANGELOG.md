@@ -4,6 +4,10 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- fix(course-testing): surface the first path-safe Icarus/ISim compile or runtime diagnostic in continuous-test reports, bound simulator process output, and preserve private Icarus failure logs with each reproducible case
+- refactor(config): reduce the normal Settings UI from 42 low-level options to 20 course and user-experience settings, while keeping existing advanced values compatible and hidden unless configured
+- fix(config): apply resource and machine scopes consistently, derive project defaults from the selected Profile, and keep machine tool paths out of workspace settings
+
 ## [1.0.5] - 2026-08-30
 
 - fix(verilog): enable the bundled Windows Icarus processes' UTF-8 code page so projects and temporary files with non-ASCII paths work independently of the system locale

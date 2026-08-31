@@ -14,9 +14,9 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   mips-replay    | docs/modules/mips-replay.md    | 15 files | v2 离线闭包、可信引擎注册表、exact replay/re-evaluate
   verilog-lsp    | docs/modules/verilog-lsp.md    | 61 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
-  orchestration  | docs/modules/orchestration.md  | ~47 files| 扩展宿主层
+  orchestration  | docs/modules/orchestration.md  | ~53 files| 扩展宿主层
   course-testing | docs/modules/course-testing.md | 48 files | 自动化测试框架
-  test-suite     | docs/modules/test-suite.md     | 192 files| Vitest 测试
+  test-suite     | docs/modules/test-suite.md     | 197 files| Vitest 测试
   resources      | docs/modules/resources.md      | ~15 files| 静态资源
   highlighting   | docs/modules/syntax-highlighting.md | ~8 files | TextMate/semantic 分层高亮
 

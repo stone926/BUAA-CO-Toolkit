@@ -1,21 +1,21 @@
-# test-suite | src/test/ | 192 files | 框架: Vitest
+# test-suite | src/test/ | 197 files | 框架: Vitest
 
 单元/集成测试, 镜像src/结构. npm test = vitest run. 以下为<name>.test.ts
 
 test/:
-  manifest, advancedToolModel, asmCaseStoreCore, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver
+  manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 20 项公开配置/22 项仅已配置可见兼容 schema 及 scope/order，configProfile/wizardSettings/wizardUpdate 锁定 Profile 派生默认、本机/项目写入边界和 legacy 工具路径迁移原子顺序
 
 test/language/common/:
   settings, diagnosticActions, lsp, util, documentResultCache, semanticTokens
 
 test/language/mips/:
-  parser, syntax, instructionValidation, semantic, resources, hover, formatting, traceParser, traceCompare, realProjectPatterns, completions, signatureHelp
+  parser, syntax, instructionValidation, semantic, resources, hover, formatting, traceParser, traceCompare, realProjectPatterns, completions, signatureHelp, codeActions
 
 test/language/verilog/:
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/verilog/:
-  verilogBackend, iverilogRuntime, iverilogRunner, simulationRunner, simulationInputs — 两值选择、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、自定义机器码名 alias 与无 fallback 分派
+  verilogBackend, iverilogRuntime, iverilogRunner, simulationRunner, simulationDiagnostic, simulationInputs — 两值选择、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 
 TextMate:
   使用 vscode-textmate + vscode-oniguruma 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步及课程真实宏/数字片段

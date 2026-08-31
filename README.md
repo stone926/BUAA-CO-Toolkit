@@ -43,7 +43,7 @@ P1 / P4–P7 的 Verilog 仿真默认直接使用内置 Icarus，无需安装 IS
 }
 ```
 
-> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮）。手动检查项会随 Profile 和 `co.mips.engine` 变化；自动测试独立检查自身固定需要的最小工具链。
+> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮）。检查项会随 Profile 和当前工作流变化；自动测试只检查自身固定需要的最小工具链。
 
 ### 第二步：告诉插件当前是哪个 Profile
 
@@ -106,7 +106,7 @@ P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断�
 - 固定覆盖 AdEL、AdES、Syscall、RI、Ov，以及延迟槽、异常/中断优先级、屏蔽与恢复、`eret` 返回等边界；
 - RI 统一通过 `.word` 注入 raw word，覆盖 unknown opcode 与 unknown funct，不再由私有助记符生成；
 - Timer 自动覆盖单次/周期模式、停止后重启、重装与寄存器写优先级，只检查课程定义的行为，不要求某一种学生流水线周期数；
-- 自动测试固定使用内置参考栈，不读取 `co.mips.engine`，因此无需 MARS；`mars` / `verify-both` 仅用于手动测试和历史用例复现。
+- 自动测试固定使用内置参考栈，因此无需 MARS；MARS 兼容分支仅用于手动测试和历史用例复现。
 
 ### 输出/对拍约定
 
@@ -120,6 +120,7 @@ P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断�
 - 结果不一致通常表示 CPU 的可见写事件或 P7 课程性质不满足；报告会给出首个可操作差异，不会展示内部测试强度或调度参数。
 - 通过不等于“完全正确”：随机测试只能覆盖实际生成的样例，纯性能问题和课程未要求的扩展行为仍需另行验证。
 - 失败与异常用例会自动保留；在“测试历史 / 失败用例”中使用复现编号即可定位，不需要理解内部文件布局。
+- Icarus/ISim 未能启动 CPU 时，报告会直接显示阶段、退出原因和首条已脱敏的文件/行号诊断；Icarus 原始输出只保存在对应的本地失败用例中。
 
 ---
 
@@ -158,62 +159,50 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 ## 4. 配置项（按 Settings UI 分组）
 
-> 优先级：VS Code 用户/工作区设置 `co.*` → 默认值。工作区设置可写在 `.vscode/settings.json`。
-> 设置 UI 分成五组：`项目基本情况`、`工具链`、`运行与测试`、`编辑器与诊断`、`格式化`。自动测试内部只公开一个指令集选择，其他强度参数由插件管理。
+> 配置遵循“先表达课程意图，再按需覆盖”的原则。Profile、测试与项目兼容项可按工作区文件夹设置；工具路径属于本机设置，不进入 Settings Sync，也不会再由向导写入项目的 `.vscode/settings.json`。再次运行向导时，会先保存本机工具路径，再清理同一工具遗留的项目级路径，避免旧配置遮蔽新选择。
+> 新用户的 Settings UI 只显示下面 20 项。旧版本的底层格式、MARS 回滚、超时/debug 和诊断忽略项仅在曾经显式配置时显示兼容提示，运行时仍读取其已有值。
 
-### 项目基础
-
-| 配置 | 默认 | 说明 |
-|---|---|---|
-| `co.project.profile` | `auto` | 当前 Profile（P0–P7 / auto；auto 会推断具体 P 并保存，无法推断时要求选择） |
-| `co.project.simTime` | `200us` | 手动 Verilog 仿真运行时长；自动测试使用内部执行预算并忽略此项 |
-
-其余项目项：`co.project.topModule`(`mips`)、`co.project.testbench`(`mips_tb`)、`co.project.machineCode`(`code.txt`)。旧工作区中残留的 `co.project.simBackend` 不再参与后端选择。
-
-### 工具链
+### 课程项目
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `co.mips.engine` | `auto` | 手动测试/历史复现的 P3–P7 课程引擎；自动测试固定使用内置 TS，不读取此项 |
-| `co.toolchain.mars` | — | 仅 P2、手动 `mars` / `verify-both` 或历史复现使用；P3–P7 自动测试无需配置 |
-| `co.toolchain.marsP7` | — | P7 专用的显式 MARS 回滚/验证路径；不填时回退到 `co.toolchain.mars` |
-| `co.mips.delayedBranching` | `profile` | MARS 延迟槽开关；`profile` 会按课程阶段自动处理 |
-| `co.mips.memoryConfiguration` | `auto` | MARS 内存模式（auto：P3–P6=FixedCompactLargeText，P7=CompactLargeText） |
-| `co.toolchain.isePath` | — | 留空使用内置 Icarus 13.0；填写 `.../ISE_DS/ISE` 后显式使用 fuse/ISim |
-| `co.toolchain.logisim` | — | Logisim jar |
+| `co.project.profile` | `auto` | 当前课程阶段（P0–P7）；能可靠推断时自动保存，否则要求选择 |
+| `co.test.instructions` | `""` | 自动测试重点覆盖的真实指令；留空覆盖当前 Profile 的完整课程指令集，测试规模和 P7 策略由插件管理 |
 
-其余工具链项：`co.toolchain.java`、`co.toolchain.python`、`co.toolchain.hazardCalculator`。
+### 外部工具（按需）
 
-### 运行与测试
-
-| 配置 | 默认 | 说明 |
+| 配置 | 默认 | 何时需要 |
 |---|---|---|
-| `co.test.instructions` | `""` | 唯一公开的自动测试参数：指定重点 payload 真实指令；空值覆盖当前 Profile 完整课程指令集 |
-| `co.mips.extraArgs` | `[]` | 仅普通 MARS 命令使用；自动测试会忽略，避免改变测评语义 |
+| `co.toolchain.isePath` | — | 仅显式使用 ISE/ISim；留空使用内置 Icarus 13.0 |
+| `co.toolchain.logisim` | — | P0/P3 Logisim 工作流 |
+| `co.toolchain.mars` | — | P2 MARS 工作流；P3–P7 自动测试不需要 |
+| `co.toolchain.hazardCalculator` | — | P5–P7 冲突分析（可选） |
+| `co.toolchain.java` | `java` | Java 无法从 PATH 启动时覆盖 |
+| `co.toolchain.python` | 自动探测 | Python 无法自动探测时覆盖 |
 
-运行细项也在本组：`co.run.showCommandBeforeRun`(`false`，手动运行外部工具前显示完整命令)、`co.run.revealOutput`(`false`，手动运行外部工具时是否自动弹出「输出」面板)、`co.run.timeoutMs`(`120000`，手动外部工具超时)。自动测试始终非交互、静默执行，并使用内部超时预算，不受这些设置影响。
-
-测试规模、P7 模式/概率/场景、中断/Timer、持续轮数/间隔/停止与留存均为内部策略，不再出现在 Settings 中，也不会被旧工作区设置静默削弱。旧版的指令集选择会自动迁移；其余旧测试参数只保留在历史 case 的复现信息中。
-
-### 编辑器与诊断
+### 编辑器体验
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `co.mips.warnPseudoInstruction` | `true` | 使用伪指令时告警 |
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
-| `co.mips.instructionTokenMode` | `realVsPseudo` | MIPS 指令 semantic token 分类粒度；颜色由 VS Code 决定 |
+| `co.mips.instructionTokenMode` | `realVsPseudo` | MIPS 指令语义分类粒度；颜色仍由当前 VS Code 主题决定 |
+| `co.verilog.implicitNet.diagnostic` | `warning` | 隐式连线的诊断级别 |
+| `co.verilog.syntax.external.mode` | `onSave` | 内置 Icarus/显式 ISE 的编译器级检查时机 |
+| `co.verilog.lint.courseRules` | `true` | 课程规则诊断 |
+| `co.verilog.lint.synthesizableHints` | `true` | 可综合性提示 |
 
-同组还包含：`co.verilog.implicitNet.*`（隐式连线）、`co.verilog.syntax.external.mode` / `timeoutMs`（保存或命令触发的外部编译器检查）、`co.verilog.syntax.ise.suppressedWarnings`（仅 ISE 分支）、`co.verilog.lint.*`（课程 Lint、可综合性、禁用规则）、`co.diagnostics.disabledCodes` / `disabledFileCodes`。旧的 `co.verilog.syntax.ise.enabled/mode/timeoutMs` 已移除。
+### 高级项目兼容
 
-### 格式化
+只有非标准工程或手动仿真通常需要这些覆盖项：`co.project.topModule`、`co.project.testbench`、`co.project.machineCode`、`co.project.simTime` 和 `co.run.revealOutput`。顶层与 testbench 默认由 Profile 给出（P1 为 `main/main_tb`，P4–P7 为 `mips/mips_tb`）；自动测试使用私有 testbench、固定机器码别名和内部执行预算，不受这些手动参数影响。
 
-格式化组包含 `co.verilog.format.*`（续行缩进、位宽间距、声明范围间距、`else` 换行、最大连续空行等）。纵向对齐细项集中于 `co.verilog.format.alignment.*`：`parameter` 默认 `equals`，会对齐连续 `parameter` / `localparam` 声明中的等号；`modulePort` 默认 `name`，会对齐多行 `module` 声明中的位宽和端口名；`ternary` 默认 `question`，会对齐多行三目运算符链中的问号。
+格式化采用插件维护的课程默认风格，不再要求用户组合九个底层旋钮。MARS 引擎、延迟槽、内存布局、进程超时和诊断快速修复存储也由插件按 Profile/具体操作管理，不作为日常设置。
 
 ---
 
 ## 5. ⚠️ 特别注意事项
 
-1. **自动测试不需要 MARS**：P3–P7 自动生成用例固定使用内置参考栈；`co.mips.engine` 的 `mars` / `verify-both` 只影响手动测试和历史复现。
+1. **自动测试不需要 MARS**：P3–P7 自动生成用例固定使用内置参考栈；已有的 MARS 回滚配置只影响手动测试和历史复现。
 2. **新的 RI 测试统一使用 raw word**：自动生成源码用 `.word` 覆盖 unknown opcode 与 unknown funct；旧用例仍可回放，但新测试点不再生成私有 RI 助记符。
 3. **ISE 是显式 opt-in**：留空 `co.toolchain.isePath` 使用 bundled Icarus；如填写，路径要指到含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。无效的非空路径会失败而不会回退。自动测试使用独立 testbench，不会覆盖你自己的文件。
 4. **测试不绑定某一种流水线周期数**：默认按课程可见写事件和定义行为核验，因此纯性能问题或不可见内部状态仍可能需要额外定向测试。
@@ -228,10 +217,10 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | 路径 | 内容 |
 |---|---|
 | `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
-| `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、oracle/Verilog/Logisim trace 与复现元数据 |
+| `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、oracle/Verilog/Logisim trace 与复现元数据；Icarus 失败时另保存私有 `iverilog-compile.log` / `iverilog-simulation.log` |
 | `.co/out/*.oracle.out` / `*.sim.out` | 手动单次/批量测试的 provider-neutral oracle / Verilog 仿真输出；持续测试默认把输出写入对应 case 目录（旧 `.mars.out` 仍可读取） |
 | `.co/out/trace-batch-report.json` | 批量测试摘要；自动测试报告不暴露内部命令或强度参数，失败用例仍可从历史中精确回放 |
-| `.co/out/continuous-trace-report.json` | 持续测试摘要；自动留存通过样本并完整保留失败/异常轮，不暴露内部调度参数 |
+| `.co/out/continuous-trace-report.json` | 持续测试摘要；DUT 失败包含脱敏、限长的阶段/原因/首条编译诊断，自动留存通过样本并完整保留失败/异常轮 |
 | `.co/isim/` | Verilog 仿真工作目录：生成的 testbench、`code.txt`、Icarus `.vvp`/watchdog，或 ISE `.prj/.tcl` |
 | `.co/logisim/` | 注入机器码后的 `.circ` 副本与报告 |
 
@@ -299,6 +288,6 @@ tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别
 
 ## 与 MARS 在 P7 验证/回滚中协作
 
-自动测试始终使用内置参考栈，不进入 MARS 支路，也不读取 `co.mips.engine`。手动测试中，`mars` 用于回滚到用户配置的兼容引擎，`verify-both` 用于受信任版本的独立验证；`co.mips.extraArgs` 只影响普通手动 MARS 命令。
+自动测试始终使用内置参考栈，不进入 MARS 支路。旧版本中已经配置的手动 MARS 回滚与双引擎验证值仍会被读取，但不再出现在新用户的日常设置中；自定义 MARS 参数也只影响普通手动命令。
 
 历史用例若使用旧的私有 RI 助记符仍可精确回放；新生成的 RI 测试只使用标准 `.word` raw word。

@@ -1,4 +1,4 @@
-# orchestration | src/ | ~47 files
+# orchestration | src/ | ~53 files
 
 扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/用例存储
 不含语言智能逻辑(在src/language/ LSP Server端)
@@ -9,7 +9,9 @@ entry:
 
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
-  config.ts — 所有co.*设置读取(getProfile/getMipsEngine/getMarsJar/getIsePath/getRunTimeout...), 分层取值(Workspace/WorkspaceFolder/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；`co.mips.engine` 无效值 fail-safe 为 auto
+  config.ts — 所有co.*设置读取(getProfile/getMipsEngine/getMarsJar/getIsePath/getRunTimeout...), 分层取值(WorkspaceFolder/Workspace/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；显式 Profile 的 top/TB/机器码/时长默认直接来自 courseConfig，向导无需写冗余项目设置；`co.mips.engine` 无效值 fail-safe 为 auto
+  resources/co/configManifest.json + configDefaults.json — 公开 schema 与内部运行默认解耦：日常 UI 精确 20 项，底层 legacy/策略键以无默认的 deprecated schema 仅对已有配置可见；项目/诊断使用 resource scope，工具路径使用 machine-overridable scope
+  scripts/generate-manifest-config.mjs — 只向非 deprecated 公开项注入默认值，允许内部默认作为受测超集，并从课程资源生成 Profile/指令说明
 
 build:
   scripts/clean-compile-output.mjs — 编译前安全清空固定 `out/`，避免已删除模块的陈旧 JS 被打入 VSIX
@@ -45,10 +47,13 @@ verilog-commands:
   verilog/iseProjectOrder.ts — 纯函数解析 XISE FILE_VERILOG 路径和 BehavioralSimulation seqID（全部有效且唯一时升序，否则稳定回退文档顺序），并组合普通/XISE/运行时源顺序，处理相对路径、XML 实体、去重和跨平台路径
   verilog/verilogBackend.ts — 纯两值选择器：resource-scoped `isePath` 留空选 bundled Icarus，非空选 ISim，不探测 PATH 且不运行中回退
   verilog/iverilogRuntime.ts — 固定定位 `vendor/iverilog/win32-x64`，为子进程前置 bundled bin，校验 exe/lib 并会话级执行 `iverilog -V`；六个原生 EXE 通过可复现的 manifest-only 补丁启用 UTF-8 process code page，兼容系统 ANSI code page 无法表示的中文路径；统一生成 source-relative、各源码目录和 workspace root 的 include 参数
-  verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + `vvp -N`，复用源文件顺序/testbench/`code.txt`，用独立 watchdog top 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物
+  verilog/iverilogDiagnostics.ts — 纯 Icarus `path:line[:column]` stderr 解析，供 LSP syntax diagnostics 与运行失败归因共同复用
+  verilog/iseDiagnostics.ts — 纯 ISE fuse error/warning/info 解析，保留可操作的文件、行号和消息，供 LSP 与仿真失败报告共同复用
+  verilog/simulationDiagnostic.ts — Icarus/ISim 失败结构化为 phase/reason/exit/首条诊断；公开报告边界统一做工作区相对路径、外部路径 basename、ANSI/控制符清理和限长
+  verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + `vvp -N`，复用源文件顺序/testbench/`code.txt`，用独立 watchdog top 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物；编译/VVP stdout/stderr 分阶段设置 byte cap，失败为 case 保存有界私有原始 log，交互命令直接显示首条可定位诊断
   verilog/workspaceOperationQueue.ts — 以规范化 workspace path 为键的轻量 Promise 队列；等待者取消会释放自身 turn，不中断前序也不阻塞后续仿真
-  verilog/simulationRunner.ts — 无 language-client 命令胶水依赖、可供 headless 复用的通用 Verilog 仿真分派器、共享增量模块注册表与带 backend 的最小公共结果；命令和课程流水线复用同一入口，显式 ISE 失败不启动 Icarus
-  verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘
+  verilog/simulationRunner.ts — 无 language-client 命令胶水依赖、可供 headless 复用的通用 Verilog 仿真分派器、共享增量模块注册表与带 backend 的最小公共结果；统一识别 Icarus compile、ISim fuse、simulate/output terminal failure，命令和课程流水线复用同一入口，显式 ISE 失败不启动 Icarus
+  verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘；fuse/仿真分阶段设置 byte cap，run 入口在 fuse 失败时保留 generated/fuseResult，自动报告与手动错误均显示脱敏首条诊断而不误报为准备失败
   verilog/simulationAsmCase.ts — Icarus/ISim 共用的 P4–P7 ASM case 选择与 MARS 机器码准备，避免双后端行为漂移
   verilog/simulationInputs.ts — Icarus/ISim 运行前机器码源定位与复制；保留配置文件名并同步生成课程 TB 固定读取的 `code.txt` alias
   verilog/testbenchResolver.ts — Verilog testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录；发现顶层/testbench 时复用 ISE 源文件排除规则，不把 `.vscode`/`.vscode-test` 内编辑器副本误判为重复模块
@@ -69,8 +74,10 @@ hazard:
 
 ui:
   sidebar.ts — CoSidebarProvider TreeView: buildTree()->buildSidebarModel()->TreeItem
-  sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作三段，根据Profile+活跃文件+工具链状态构建；操作区只提供“启动持续测试”这一测试启动入口，另有停止与历史入口，不再包含“资料”段
-  wizard.ts — 4步向导: 选Profile->项目名->配置工具链(可选)->创建目录+模板(.v/.asm+testbench)
+  sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作三段，根据Profile+活跃文件+工具链状态构建；Verilog 常规上下文只强调当前文件与后端，避免把手动 Top/TB/时长误解成自动测试输入；操作区只提供“启动持续测试”这一测试启动入口
+  wizard.ts + wizardSettings.ts — 4步向导: 选Profile->项目名->配置工具链(可选)->创建目录+模板；纯写入计划只把 Profile 写入对应 WorkspaceFolder，机器路径写 Global，不再把绝对路径或 Profile 派生默认写进项目；迁移旧设置时严格先写 Global，再清理当前资源所属 WorkspaceFolder/Workspace 的同键路径，空 ISE 选择也能解除旧项目覆盖
+  configurationResource.ts — 诊断快速修复携带来源文档 URI，在多根工作区内精确选择配置资源；仅命令面板直调时回退活动编辑器
+  diagnosticSettings.ts — MIPS 伪指令与 Verilog lint 快速修复的配置读改写；与命令注册解耦并统一使用来源资源作用域
   advancedTools.ts — registerAdvancedTools(): 按Profile过滤非测试低频工具，不重复提供测试入口
   advancedToolModel.ts — 非测试工具分组/标签/描述模型，按 Profile 与当前文件类型过滤低频工具
   webview/reportLayout.ts — 报告 Webview 共享页面 shell/CSS(从resources/templates/webview渲染)、metric、table 和转义 helper
