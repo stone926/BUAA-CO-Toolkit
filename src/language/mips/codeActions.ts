@@ -31,7 +31,7 @@ export function getMipsCodeActions(document: TextDocument, diagnostics: Diagnost
     ),
     CodeAction.create(
       'Disable pseudo-instruction warnings in this workspace',
-      Command.create('Disable pseudo warnings', Commands.Mips.DisablePseudoWarnings),
+      Command.create('Disable pseudo warnings', Commands.Mips.DisablePseudoWarnings, document.uri),
       CodeActionKind.QuickFix
     )
   ];

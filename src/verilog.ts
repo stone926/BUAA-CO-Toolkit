@@ -9,7 +9,6 @@ import {
   getTestbench,
   getTopModule
 } from './config';
-import { defaultCoSettings } from './language/common/settings';
 import {
   buildTestbench,
   moduleAtPosition,
@@ -42,6 +41,7 @@ import {
   runVerilogSimulation,
   setVerilogSimulationModuleRegistry
 } from './verilog/simulationRunner';
+import { disableVerilogLintRule } from './diagnosticSettings';
 
 export { generateIseProject } from './verilog/iseProject';
 export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
@@ -53,7 +53,10 @@ export type { VerilogSimulationRunOptions, VerilogSimulationRunOutput } from './
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
   setVerilogSimulationModuleRegistry(moduleRegistry);
   context.subscriptions.push(
-    vscode.commands.registerCommand(Commands.Verilog.DisableLintRule, (rule?: string) => disableLintRule(rule)),
+    vscode.commands.registerCommand(
+      Commands.Verilog.DisableLintRule,
+      disableVerilogLintRule
+    ),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
     vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => runIseOnlyCommand(() => generateIseProject(services))),
     vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkVerilogSyntax()),
@@ -76,19 +79,6 @@ async function checkVerilogSyntax(): Promise<void> {
   await editor.document.save();
   await executeLanguageServerCommand(Commands.Server.InternalVerilogCheckSyntaxWithIse, [editor.document.uri.toString()]);
   vscode.window.showInformationMessage('已触发外部 Verilog 语法检查，结果会显示在问题面板');
-}
-
-async function disableLintRule(rule?: string): Promise<void> {
-  const normalized = normalizeLintRule(rule);
-  if (!normalized) {
-    vscode.window.showErrorMessage('无法禁用此 Verilog Lint 规则，因为规则 ID 无效');
-    return;
-  }
-  const config = vscode.workspace.getConfiguration('co');
-  const current = config.get<string[]>('verilog.lint.disabledRules', defaultCoSettings.verilog.lint.disabledRules);
-  const merged = [...new Set([...current.map((item) => item.toLowerCase()), normalized])].sort();
-  await config.update('verilog.lint.disabledRules', merged, vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalized.toUpperCase()}`);
 }
 
 async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider): Promise<void> {
@@ -149,9 +139,4 @@ async function runIseOnlyCommand<T>(action: () => Promise<T>): Promise<T | undef
     return undefined;
   }
   return await action();
-}
-
-function normalizeLintRule(rule?: string): string | undefined {
-  const normalized = rule?.trim().toLowerCase();
-  return normalized && /^vc-\d{3}$/.test(normalized) ? normalized : undefined;
 }

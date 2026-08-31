@@ -155,11 +155,13 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
     ];
     if (usesConfiguredVerilogProject(context.profile)) {
       children.push(
-      infoItem('context.top', 'Top', context.topModule, 'co.project.topModule', 'symbol-class'),
-      infoItem('context.tb', 'TB', context.testbench, 'co.project.testbench', 'beaker'),
-      infoItem('context.machineCode', '机器码名', context.machineCode, '仿真前会复制到 .co/isim/<machineCode>', 'file-binary'),
-      infoItem('context.simTime', '仿真时长', context.simTime, 'co.project.simTime', 'watch'),
-      infoItem('context.backend', '仿真后端', context.verilogBackend, '由 co.toolchain.isePath 自动选择', 'circuit-board')
+        infoItem(
+          'context.backend',
+          '仿真后端',
+          context.verilogBackend,
+          '默认使用插件内置 Icarus；仅在配置 ISE 路径后切换到 ISE。Top/TB 等参数只影响手动仿真，不影响持续测试。',
+          'circuit-board'
+        )
       );
     } else if (context.profile === 'P1') {
       children.push(infoItem(

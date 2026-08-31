@@ -1,5 +1,6 @@
 // @index settings — CoSettings接口/默认值/合并验证/诊断禁用键
-import { ProjectProfile } from '../../projectProfile';
+import { isConcreteProjectProfile, ProjectProfile } from '../../projectProfile';
+import { getProfileDefaults } from '../../courseConfig';
 import { configDefault, configDefaultArray } from '../../configDefaults';
 import { configurableVerilogLintRuleIds, defaultDisabledVerilogLintRuleIds } from '../verilog/lintRuleCatalog';
 
@@ -128,10 +129,7 @@ export function mergeCoSettings(value: unknown): CoSettings {
       disabledCodes: normalizeDisabledDiagnosticCodes(candidate.diagnostics?.disabledCodes),
       disabledFileCodes: normalizeDisabledDiagnosticFileCodes(candidate.diagnostics?.disabledFileCodes)
     },
-    project: {
-      ...defaultCoSettings.project,
-      ...(candidate.project ?? {})
-    },
+    project: normalizeProject(candidate.project),
     toolchain: {
       ...defaultCoSettings.toolchain,
       ...(candidate.toolchain ?? {}),
@@ -160,6 +158,44 @@ export function mergeCoSettings(value: unknown): CoSettings {
       format: normalizeVerilogFormat(candidate.verilog?.format)
     }
   };
+}
+
+function normalizeProject(value: Partial<CoSettings['project']> | undefined): CoSettings['project'] {
+  const candidate = value ?? {};
+  const profile = candidate.profile === 'auto' || isConcreteProjectProfile(candidate.profile)
+    ? candidate.profile
+    : defaultCoSettings.project.profile;
+  const profileDefaults = isConcreteProjectProfile(profile) ? getProfileDefaults(profile) : {};
+  return {
+    profile,
+    // The manifest intentionally publishes blank top/testbench defaults. Keep that
+    // sentinel while Profile is auto so the inference layer can distinguish an
+    // inherited value from a user override and apply the resolved Profile defaults.
+    topModule: projectEntrypoint(
+      candidate.topModule,
+      profileDefaults.topModule ?? defaultCoSettings.project.topModule,
+      profile === 'auto'
+    ),
+    testbench: projectEntrypoint(
+      candidate.testbench,
+      profileDefaults.testbench ?? defaultCoSettings.project.testbench,
+      profile === 'auto'
+    ),
+    machineCode: nonEmptyString(candidate.machineCode, profileDefaults.machineCode ?? defaultCoSettings.project.machineCode),
+    simTime: nonEmptyString(candidate.simTime, profileDefaults.simTime ?? defaultCoSettings.project.simTime)
+  };
+}
+
+function projectEntrypoint(value: unknown, fallback: string, deferBlank: boolean): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const normalized = value.trim();
+  return normalized || (deferBlank ? '' : fallback);
+}
+
+function nonEmptyString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
 function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax'] {

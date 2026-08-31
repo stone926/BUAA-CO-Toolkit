@@ -39,6 +39,38 @@ describe('mergeCoSettings', () => {
     expect(result.project.testbench).toBe(defaultCoSettings.project.testbench);
   });
 
+  it('resolves empty project overrides from the selected Profile', () => {
+    const result = mergeCoSettings({
+      project: { profile: 'P1', topModule: '', testbench: '', machineCode: '', simTime: '' }
+    });
+    expect(result.project).toEqual({
+      profile: 'P1',
+      topModule: 'main',
+      testbench: 'main_tb',
+      machineCode: 'code.txt',
+      simTime: '200us'
+    });
+  });
+
+  it('keeps blank auto top and testbench values deferred for Profile inference', () => {
+    const result = mergeCoSettings({
+      project: { profile: 'auto', topModule: ' ', testbench: '' }
+    });
+
+    expect(result.project.topModule).toBe('');
+    expect(result.project.testbench).toBe('');
+    expect(result.project.machineCode).toBe('code.txt');
+    expect(result.project.simTime).toBe('200us');
+  });
+
+  it('preserves explicit non-standard project overrides', () => {
+    const result = mergeCoSettings({
+      project: { profile: 'P1', topModule: 'custom_top', testbench: 'custom_tb' }
+    });
+    expect(result.project.topModule).toBe('custom_top');
+    expect(result.project.testbench).toBe('custom_tb');
+  });
+
   it('merges a partial mips section', () => {
     const result = mergeCoSettings({ mips: { warnPseudoInstruction: false } });
     expect(result.mips.warnPseudoInstruction).toBe(false);

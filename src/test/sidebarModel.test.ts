@@ -61,6 +61,9 @@ describe('sidebar model', () => {
     }));
 
     expect(model.map((node) => node.label)).toEqual(['项目', '当前上下文', '操作']);
+    const context = section(model, '当前上下文');
+    expect(childLabels(context)).toEqual(['当前 Verilog', '仿真后端']);
+    expect(context.children?.find((item) => item.label === '仿真后端')?.tooltip).toContain('不影响持续测试');
     const actions = section(model, '操作');
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);

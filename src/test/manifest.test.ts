@@ -2,17 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
-import { defaultDisabledVerilogLintRules } from '../language/common/settings';
 import { getConfigDefaults } from '../configDefaults';
 import { getCourseConfig } from '../courseConfig';
 import { generatorInstructionCatalog } from '../courseTesting/generatorInstructionCatalog';
-import {
-  p7ExceptionHandlerAddress
-} from '../courseTesting/p7Hardware';
-import {
-  configurableVerilogLintRuleIds,
-  defaultDisabledVerilogLintRuleIds
-} from '../language/verilog/lintRuleCatalog';
 import { Commands } from '../constants';
 import { mipsSemanticTokenTypes } from '../language/mips/resources';
 import { verilogSemanticTokenTypes } from '../language/verilog/model';
@@ -21,7 +13,24 @@ interface PackageJson {
   activationEvents?: string[];
   contributes?: {
     commands?: Array<{ command: string; title?: string }>;
-    configuration?: Array<{ title: string; properties?: Record<string, { default?: unknown; description?: string; markdownDescription?: string; type?: string; enum?: unknown[]; enumDescriptions?: string[]; minimum?: number; maximum?: number; items?: { type?: string; enum?: unknown[] } }> }>;
+    configuration?: Array<{
+      title: string;
+      order?: number;
+      properties?: Record<string, {
+        default?: unknown;
+        deprecationMessage?: string;
+        description?: string;
+        markdownDescription?: string;
+        type?: string;
+        enum?: unknown[];
+        enumDescriptions?: string[];
+        minimum?: number;
+        maximum?: number;
+        items?: { type?: string; enum?: unknown[] };
+        order?: number;
+        scope?: string;
+      }>;
+    }>;
     configurationDefaults?: Record<string, unknown>;
     grammars?: Array<{ language: string; scopeName?: string; path?: string }>;
     languages?: Array<{ id: string; extensions?: string[]; configuration?: string }>;
@@ -31,6 +40,82 @@ interface PackageJson {
     views?: Record<string, Array<{ id: string; when?: string }>>;
   };
 }
+
+const publicConfigurationGroups = [
+  {
+    title: '课程项目',
+    order: 10,
+    scope: 'resource',
+    keys: [
+      'co.project.profile',
+      'co.test.instructions'
+    ]
+  },
+  {
+    title: '外部工具',
+    order: 20,
+    scope: 'machine-overridable',
+    keys: [
+      'co.toolchain.java',
+      'co.toolchain.python',
+      'co.toolchain.mars',
+      'co.toolchain.logisim',
+      'co.toolchain.isePath',
+      'co.toolchain.hazardCalculator'
+    ]
+  },
+  {
+    title: '编辑器体验',
+    order: 30,
+    scope: 'resource',
+    keys: [
+      'co.mips.warnPseudoInstruction',
+      'co.mips.instructionTokenMode',
+      'co.mips.warnMissingExitSyscall',
+      'co.verilog.implicitNet.diagnostic',
+      'co.verilog.syntax.external.mode',
+      'co.verilog.lint.courseRules',
+      'co.verilog.lint.synthesizableHints'
+    ]
+  },
+  {
+    title: '高级项目兼容',
+    order: 40,
+    scope: 'resource',
+    keys: [
+      'co.project.topModule',
+      'co.project.testbench',
+      'co.project.machineCode',
+      'co.project.simTime',
+      'co.run.revealOutput'
+    ]
+  }
+] as const;
+
+const compatibilityConfigurationKeys = [
+  'co.toolchain.marsP7',
+  'co.mips.engine',
+  'co.mips.delayedBranching',
+  'co.mips.memoryConfiguration',
+  'co.run.showCommandBeforeRun',
+  'co.run.timeoutMs',
+  'co.mips.extraArgs',
+  'co.verilog.syntax.external.timeoutMs',
+  'co.verilog.syntax.ise.suppressedWarnings',
+  'co.verilog.implicitNet.ignorePatterns',
+  'co.verilog.lint.disabledRules',
+  'co.diagnostics.disabledCodes',
+  'co.diagnostics.disabledFileCodes',
+  'co.verilog.format.continuationIndent',
+  'co.verilog.format.spaceInRange',
+  'co.verilog.format.declarationRangeSpacing',
+  'co.verilog.format.spaceBeforeInstancePorts',
+  'co.verilog.format.separateElse',
+  'co.verilog.format.maxBlankLines',
+  'co.verilog.format.alignment.parameter',
+  'co.verilog.format.alignment.modulePort',
+  'co.verilog.format.alignment.ternary'
+] as const;
 
 function readPackage(): PackageJson {
   return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')) as PackageJson;
@@ -179,85 +264,74 @@ describe('package manifest', () => {
     expect(signalView?.when).toContain('co.verilogSignalVisible');
   });
 
-  it('keeps CO settings grouped and aligned with runtime defaults', () => {
+  it('exposes exactly the ordered 20-setting public surface', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
-    const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
-    const configDefaults = getConfigDefaults();
+    const publicGroups = groups.filter((group) => group.title !== '兼容设置（仅已配置用户可见）');
+    const publicProperties = Object.assign({}, ...publicGroups.map((group) => group.properties ?? {}));
+    const expectedPublicKeys = publicConfigurationGroups.flatMap((group) => [...group.keys]);
 
-    expect(groups.map((group) => group.title)).toEqual([
-      '项目基本情况',
-      '工具链',
-      '运行与测试',
-      '编辑器与诊断',
-      '格式化'
-    ]);
-    expect(Object.keys(properties)).toHaveLength(42);
-    expect(Object.keys(configDefaults)).toHaveLength(42);
-    for (const [key, value] of Object.entries(configDefaults)) {
-      expect(properties[`co.${key}`]?.default, key).toEqual(value);
+    expect(publicGroups.map((group) => ({ title: group.title, order: group.order }))).toEqual(
+      publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
+    );
+    expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
+    expect(expectedPublicKeys).toHaveLength(20);
+
+    for (const expectedGroup of publicConfigurationGroups) {
+      const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);
+      const actualProperties = actualGroup?.properties ?? {};
+      expect(Object.keys(actualProperties), expectedGroup.title).toEqual([...expectedGroup.keys]);
+      expectedGroup.keys.forEach((key, index) => {
+        expect(actualProperties[key], key).toMatchObject({
+          scope: expectedGroup.scope,
+          order: (index + 1) * 10
+        });
+        expect(actualProperties[key]?.deprecationMessage, key).toBeUndefined();
+      });
     }
-    for (const key of Object.keys(properties)) {
-      expect(configDefaults[key.replace(/^co\./, '')], key).not.toBeUndefined();
-    }
-    expect(Object.keys(properties).filter((key) => key.startsWith('co.test.'))).toEqual([
-      'co.test.instructions'
-    ]);
-    expect(properties['co.test.instructions'].default).toBe('');
-    expect(properties['co.mips.engine']).toMatchObject({
-      type: 'string',
-      default: 'auto',
-      enum: ['auto', 'builtin', 'mars', 'verify-both']
-    });
-    expect(properties['co.verilog.lint.disabledRules'].default).toEqual([...defaultDisabledVerilogLintRules]);
-    expect(properties['co.verilog.lint.disabledRules'].default).toEqual(defaultDisabledVerilogLintRuleIds);
-    expect(properties['co.verilog.lint.disabledRules'].items?.enum).toEqual(configurableVerilogLintRuleIds);
-    expect(properties['co.verilog.syntax.external.mode']).toMatchObject({
+
+    expect(publicProperties['co.verilog.syntax.external.mode']).toMatchObject({
       type: 'string',
       default: 'onSave',
       enum: ['off', 'onSave', 'commandOnly']
     });
-    expect(properties['co.verilog.syntax.external.timeoutMs']?.default).toBe(0);
-    expect(properties).not.toHaveProperty('co.project.simBackend');
-    expect(properties).not.toHaveProperty('co.verilog.syntax.ise.enabled');
-    expect(properties).not.toHaveProperty('co.verilog.syntax.ise.mode');
-    expect(properties).not.toHaveProperty('co.verilog.syntax.ise.timeoutMs');
-    expect(properties['co.mips.extraArgs'].type).toBe('array');
-    expect(properties['co.mips.extraArgs'].items?.type).toBe('string');
-
-    const groupProperties = (title: string) => Object.keys(groups.find((group) => group.title === title)?.properties ?? {});
-    expect(groupProperties('工具链')).toEqual(expect.arrayContaining([
-      'co.mips.engine',
-      'co.mips.delayedBranching',
-      'co.mips.memoryConfiguration'
-    ]));
-    expect(groupProperties('运行与测试')).toContain('co.mips.extraArgs');
-    expect(groupProperties('编辑器与诊断').some((key) => key.startsWith('co.verilog.format.'))).toBe(false);
-    expect(groupProperties('格式化')).toEqual(expect.arrayContaining([
-      'co.verilog.format.continuationIndent',
-      'co.verilog.format.alignment.parameter',
-      'co.verilog.format.alignment.modulePort',
-      'co.verilog.format.alignment.ternary'
-    ]));
-
-    const propertyKeys = Object.keys(properties);
-    const alignmentStart = propertyKeys.indexOf('co.verilog.format.alignment.parameter');
-    expect(propertyKeys.slice(alignmentStart, alignmentStart + 3)).toEqual([
-      'co.verilog.format.alignment.parameter',
-      'co.verilog.format.alignment.modulePort',
-      'co.verilog.format.alignment.ternary'
-    ]);
   });
 
-  it('derives P7 toolchain descriptions from the hardware resource without exposing test strength knobs', () => {
+  it('keeps internal defaults as a superset without publishing defaults for compatibility settings', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
-    const handler = `0x${p7ExceptionHandlerAddress.toString(16)}`;
+    const configDefaults = getConfigDefaults();
+    const publicKeys = new Set(publicConfigurationGroups.flatMap((group) => [...group.keys]));
+    const internalOnlyDefaultKeys = Object.keys(configDefaults)
+      .map((key) => `co.${key}`)
+      .filter((key) => !publicKeys.has(key));
 
-    expect(properties['co.toolchain.marsP7'].description).toContain(handler);
-    expect(properties['co.mips.memoryConfiguration'].description).toContain(handler);
-    expect(Object.keys(properties).some((key) => key.startsWith('co.test.p7.'))).toBe(false);
+    expect(Object.keys(configDefaults).length).toBeGreaterThan(publicKeys.size);
+    expect(internalOnlyDefaultKeys).toEqual(expect.arrayContaining([...compatibilityConfigurationKeys]));
+    expect(internalOnlyDefaultKeys).toHaveLength(compatibilityConfigurationKeys.length);
+
+    for (const key of publicKeys) {
+      const defaultKey = key.replace(/^co\./, '');
+      const expectedDefault = key === 'co.project.topModule' || key === 'co.project.testbench'
+        ? ''
+        : configDefaults[defaultKey];
+      expect(properties[key]?.default, key).toEqual(expectedDefault);
+    }
+
+    expect(properties['co.project.topModule']?.description).toContain('通常无需修改');
+    expect(properties['co.project.testbench']?.description).toContain('自动测试使用独立');
+
+    const compatibilityGroup = groups.find((group) => group.title === '兼容设置（仅已配置用户可见）');
+    expect(compatibilityGroup?.order).toBe(100);
+    expect(Object.keys(compatibilityGroup?.properties ?? {})).toEqual([...compatibilityConfigurationKeys]);
+    compatibilityConfigurationKeys.forEach((key, index) => {
+      const property = compatibilityGroup?.properties?.[key];
+      expect(property?.default, key).toBeUndefined();
+      expect(property?.deprecationMessage?.trim().length, key).toBeGreaterThan(0);
+      expect(property?.scope, key).toBe(key === 'co.toolchain.marsP7' ? 'machine-overridable' : 'resource');
+      expect(property?.order, key).toBe((index + 1) * 10);
+    });
   });
 
   it('derives generator profile descriptions from the ASM generator catalog', () => {

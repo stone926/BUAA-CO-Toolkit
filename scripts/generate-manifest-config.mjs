@@ -40,14 +40,6 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function hex(value, width = 8) {
-  return `0x${(value >>> 0).toString(16).padStart(width, '0')}`;
-}
-
-function shortHex(value) {
-  return `0x${(value >>> 0).toString(16)}`;
-}
-
 function stripPackageDefaults(configurationGroups) {
   const groups = clone(configurationGroups);
   for (const group of groups) {
@@ -70,19 +62,6 @@ function propertyMap(groups) {
 
 function sortedObject(value) {
   return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
-}
-
-function deriveP7Values(p7Hardware) {
-  const memory = p7Hardware.memoryLayout;
-  const userSlots = (memory.exceptionHandlerAddress - memory.userTextBaseAddress) / 4;
-  const instructionCountMaximum = userSlots - memory.mainTerminatorInstructionCount;
-  const kernelDumpEndAddress = memory.userTextBaseAddress + memory.instructionMemoryWords * 4 - 4;
-  return {
-    exceptionHandlerAddress: memory.exceptionHandlerAddress,
-    instructionCountMaximum,
-    kernelDumpEndAddress,
-    kernelDumpRange: `${hex(memory.exceptionHandlerAddress)}-${hex(kernelDumpEndAddress)}`
-  };
 }
 
 function generatorInstructionDescription() {
@@ -120,23 +99,27 @@ function deriveConfigDefaults(baseDefaults, resources) {
 function applyGeneratedSchema(groups, defaults, resources) {
   const generated = clone(groups);
   const properties = propertyMap(generated);
-  const defaultsByPackageKey = Object.fromEntries(
-    Object.entries(defaults).map(([key, value]) => [`co.${key}`, value])
-  );
 
-  for (const [key, value] of Object.entries(defaultsByPackageKey)) {
-    if (!properties[key]) {
-      throw new Error(`configDefaults.json contains co.${key.replace(/^co\./, '')}, but configManifest.json has no ${key}.`);
+  for (const [key, property] of Object.entries(properties)) {
+    // Deprecated compatibility settings intentionally have no contributed
+    // default. VS Code then keeps them out of the normal Settings UI while
+    // still recognizing values already present in older workspaces.
+    if (property.deprecationMessage) {
+      delete property.default;
+      continue;
     }
-    properties[key].default = value;
-  }
-  for (const key of Object.keys(properties)) {
-    if (!(key in defaultsByPackageKey)) {
-      throw new Error(`configManifest.json contains ${key}, but configDefaults.json has no ${key.replace(/^co\./, '')}.`);
+    const defaultKey = key.replace(/^co\./, '');
+    if (!Object.prototype.hasOwnProperty.call(defaults, defaultKey)) {
+      throw new Error(`Public setting ${key} has no internal default in configDefaults.json.`);
+    }
+    // A schema may intentionally provide a UI sentinel (for example an empty
+    // project override whose effective value comes from the selected Profile).
+    if (!Object.prototype.hasOwnProperty.call(property, 'default')) {
+      property.default = clone(defaults[defaultKey]);
     }
   }
 
-  const { courseConfig, generatorProfiles, lintRules, p7Values } = resources;
+  const { courseConfig, generatorProfiles } = resources;
   const profileIds = Object.keys(courseConfig.profiles);
   properties['co.project.profile'].enum = ['auto', ...profileIds];
   properties['co.project.profile'].enumDescriptions = [
@@ -144,20 +127,9 @@ function applyGeneratedSchema(groups, defaults, resources) {
     ...profileIds.map((profile) => courseConfig.profiles[profile]?.name ?? profile)
   ];
 
-  properties['co.toolchain.marsP7'].description =
-    `P7 专用 Mars jar 路径，仅在显式选择 mars 或 verify-both 引擎时使用。mars 作为用户配置的 legacy 回滚；verify-both/固定验证要求受信任的 v0.6.3-course1 版本。内存配置使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）；未配置时回退到 co.toolchain.mars`;
-  properties['co.mips.memoryConfiguration'].description =
-    `MARS 内存模式。auto 在 P3-P6 使用 FixedCompactLargeText 以支持更长机器码，在 P7 使用 CompactLargeText（课程异常入口 ${shortHex(p7Values.exceptionHandlerAddress)}）`;
   properties['co.test.instructions'].description = generatorInstructionDescription();
   properties['co.test.instructions'].markdownDescription =
     generatorInstructionMarkdownDescription(generatorProfiles);
-
-  const configurableLintIds = lintRules
-    .filter((rule) => rule.configurable)
-    .map((rule) => rule.id);
-  properties['co.verilog.lint.disabledRules'].items.enum = configurableLintIds;
-  properties['co.verilog.lint.disabledRules'].description =
-    '需要禁用的 Verilog Lint。格式化会处理间距和缩进';
 
   return generated;
 }
@@ -175,12 +147,10 @@ function main() {
   }
 
   const baseDefaults = readJson(configDefaultsPath);
-  const p7Hardware = readJson(path.join(root, 'resources', 'co', 'p7Hardware.json'));
   const courseConfig = readJson(path.join(root, 'resources', 'co', 'courseConfig.json'));
   const generatorProfiles = readJson(path.join(root, 'resources', 'mips', 'generatorProfiles.json'));
   const lintRules = readJson(path.join(root, 'resources', 'verilog', 'lintRules.json'));
-  const p7Values = deriveP7Values(p7Hardware);
-  const resources = { courseConfig, generatorProfiles, lintRules, p7Hardware, p7Values };
+  const resources = { courseConfig, generatorProfiles, lintRules };
 
   const nextDefaults = deriveConfigDefaults(baseDefaults, resources);
   writeJsonIfChanged(configDefaultsPath, nextDefaults);

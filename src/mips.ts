@@ -46,6 +46,7 @@ import {
   maximumReplayTraceBytes,
   readBoundedRegularFile
 } from './mips/replay/boundedFile';
+import { disableMipsPseudoWarnings } from './diagnosticSettings';
 
 // Re-export for testability
 export { buildMarsArgs } from './language/mips/marsArgs';
@@ -92,10 +93,7 @@ export interface MarsRunOutput {
 
 export function registerMips(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand(Commands.Mips.DisablePseudoWarnings, async () => {
-      await vscode.workspace.getConfiguration('co').update('mips.warnPseudoInstruction', false, vscode.ConfigurationTarget.Workspace);
-      vscode.window.showInformationMessage('已在当前工作区中禁用 MIPS 伪指令警告');
-    }),
+    vscode.commands.registerCommand(Commands.Mips.DisablePseudoWarnings, disableMipsPseudoWarnings),
     vscode.commands.registerCommand(Commands.Mips.RunCurrentFile, () => runMarsCurrentFile(services, 'run')),
     vscode.commands.registerCommand(Commands.Mips.RunAndCapture, () => runMarsCurrentFile(services, 'run')),
     vscode.commands.registerCommand(Commands.Mips.RunWithStdinFile, () => runMarsCurrentFileWithStdinFile(services)),

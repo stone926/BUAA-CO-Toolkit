@@ -5,7 +5,12 @@ import {
   isConcreteProjectProfile
 } from './projectProfile';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
-import { getProfileInferenceConfig, getTraceFormatPatterns, ProfileInferenceConfig } from './courseConfig';
+import {
+  getProfileDefaults,
+  getProfileInferenceConfig,
+  getTraceFormatPatterns,
+  ProfileInferenceConfig
+} from './courseConfig';
 
 export type ProfileConfiguredSource = 'settings' | 'default';
 export type ProfileResolutionSource = ProfileConfiguredSource | 'inferred' | 'manualFallback';
@@ -112,7 +117,9 @@ export function resolveProjectProfile(input: ProfileResolverInput): ProfileResol
   };
 }
 
-export function applyResolvedProfile<T extends { project: { profile: ProjectProfile; topModule: string } }>(
+export function applyResolvedProfile<T extends {
+  project: { profile: ProjectProfile; topModule: string; testbench: string };
+}>(
   settings: T,
   input: Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'>
 ): T {
@@ -125,13 +132,23 @@ export function applyResolvedProfile<T extends { project: { profile: ProjectProf
   if (!resolution.effectiveProfile || resolution.effectiveProfile === settings.project.profile) {
     return settings;
   }
+  const profileDefaults = getProfileDefaults(resolution.effectiveProfile);
   return {
     ...settings,
     project: {
       ...settings.project,
-      profile: resolution.effectiveProfile
+      profile: resolution.effectiveProfile,
+      topModule: resolvedProjectEntrypoint(settings.project.topModule, profileDefaults.topModule),
+      testbench: resolvedProjectEntrypoint(settings.project.testbench, profileDefaults.testbench)
     }
   };
+}
+
+function resolvedProjectEntrypoint(current: string, profileDefault: string | undefined): string {
+  if (current.trim() || !profileDefault?.trim()) {
+    return current;
+  }
+  return profileDefault.trim();
 }
 
 function inferCandidates(input: ProfileResolverInput): Candidate[] {

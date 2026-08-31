@@ -8,7 +8,12 @@ import {
   concreteProjectProfiles,
   isConcreteProjectProfile
 } from './projectProfile';
-import { getLogisimTraceProfileConfig, getProfileName } from './courseConfig';
+import {
+  getLogisimTraceProfileConfig,
+  getProfileDefaults,
+  getProfileName,
+  type ProfileDefaults
+} from './courseConfig';
 import { commandResponds, defaultPythonCommand, firstWorkingCommand, pythonCandidates } from './python';
 import {
   ProfileConfiguredSource,
@@ -37,6 +42,13 @@ let profileInferenceProvider: ProfileInferenceProvider | undefined;
 
 export function setProfileInferenceProvider(provider: ProfileInferenceProvider | undefined): void {
   profileInferenceProvider = provider;
+}
+
+/** Write resource-scoped settings to the owning folder in multi-root workspaces. */
+export function configurationTargetForResource(resource?: vscode.Uri): vscode.ConfigurationTarget {
+  return resource && vscode.workspace.getWorkspaceFolder(resource)
+    ? vscode.ConfigurationTarget.WorkspaceFolder
+    : vscode.ConfigurationTarget.Workspace;
 }
 
 /**
@@ -101,7 +113,11 @@ export async function persistInferredProfile(resource?: vscode.Uri): Promise<Con
   if (resolution.configuredProfile !== 'auto' || resolution.source !== 'inferred' || !resolution.effectiveProfile) {
     return resolution.effectiveProfile;
   }
-  await vscode.workspace.getConfiguration('co', resource).update('project.profile', resolution.effectiveProfile, vscode.ConfigurationTarget.Workspace);
+  await vscode.workspace.getConfiguration('co', resource).update(
+    'project.profile',
+    resolution.effectiveProfile,
+    configurationTargetForResource(resource)
+  );
   return resolution.effectiveProfile;
 }
 
@@ -125,25 +141,63 @@ export async function ensureConcreteProfile(resource?: vscode.Uri, detail?: stri
   if (!picked) {
     return undefined;
   }
-  await vscode.workspace.getConfiguration('co').update('project.profile', picked.profile, vscode.ConfigurationTarget.Workspace);
+  await vscode.workspace.getConfiguration('co', resource).update(
+    'project.profile',
+    picked.profile,
+    configurationTargetForResource(resource)
+  );
   vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
   return picked.profile;
 }
 
 export function getTopModule(resource?: vscode.Uri): string {
-  return layeredGetString('project.topModule', configDefault<string>('project.topModule'), resource);
+  return layeredGetString(
+    'project.topModule',
+    configuredProfileDefault('topModule', configDefault<string>('project.topModule'), resource),
+    resource
+  );
 }
 
 export function getTestbench(resource?: vscode.Uri): string {
-  return layeredGetString('project.testbench', configDefault<string>('project.testbench'), resource);
+  return layeredGetString(
+    'project.testbench',
+    configuredProfileDefault('testbench', configDefault<string>('project.testbench'), resource),
+    resource
+  );
 }
 
 export function getMachineCode(resource?: vscode.Uri): string {
-  return layeredGetString('project.machineCode', configDefault<string>('project.machineCode'), resource);
+  return layeredGetString(
+    'project.machineCode',
+    configuredProfileDefault('machineCode', configDefault<string>('project.machineCode'), resource),
+    resource
+  );
 }
 
 export function getSimTime(resource?: vscode.Uri): string {
-  return layeredGetString('project.simTime', configDefault<string>('project.simTime'), resource);
+  return layeredGetString(
+    'project.simTime',
+    configuredProfileDefault('simTime', configDefault<string>('project.simTime'), resource),
+    resource
+  );
+}
+
+/**
+ * A concrete Profile is the user's course-level intent, so its resource catalog
+ * supplies project defaults without making the wizard persist four redundant
+ * settings. Explicit values at any VS Code scope still win in layeredGetString.
+ */
+function configuredProfileDefault(
+  key: keyof ProfileDefaults,
+  fallback: string,
+  resource?: vscode.Uri
+): string {
+  const configured = getConfiguredProjectProfile(resource).profile;
+  if (!isConcreteProjectProfile(configured)) {
+    return fallback;
+  }
+  const value = getProfileDefaults(configured)[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
 export type MipsEngineMode = 'auto' | 'builtin' | 'mars' | 'verify-both';
@@ -227,10 +281,15 @@ export async function resolvePython(resource?: vscode.Uri): Promise<string> {
 export function getMarsJar(resource?: vscode.Uri): string {
   const profile = getProfile(resource);
   if (profile === 'P7') {
-    const p7 = layeredGetString('toolchain.marsP7', configDefault<string>('toolchain.marsP7'), resource);
+    const p7 = getMarsP7Jar(resource);
     if (p7) { return p7; }
   }
   return layeredGetString('toolchain.mars', configDefault<string>('toolchain.mars'), resource);
+}
+
+/** Read the dedicated P7 override without profile-dependent generic fallback. */
+export function getMarsP7Jar(resource?: vscode.Uri): string {
+  return layeredGetString('toolchain.marsP7', configDefault<string>('toolchain.marsP7'), resource);
 }
 
 export function getLogisimJar(resource?: vscode.Uri): string {

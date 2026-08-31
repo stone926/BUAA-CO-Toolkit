@@ -29,7 +29,7 @@ export function directiveHoverText(directive: string): string | undefined {
     return '**.align n**\n\n将下一个数据项按 2^n 字节边界对齐。常用值为 `.align 0`、`.align 1` 和 `.align 2`';
   }
   if (directive === '.data' || directive === '.text') {
-    return `**${directive}**\n\n切换当前汇编段。课程自动测试会按当前 Profile 选择 MARS 内存配置，通常不应传递自定义段地址`;
+    return `**${directive}**\n\n切换当前汇编段。内置课程引擎会按当前 Profile 使用固定内存布局，通常不应传递自定义段地址`;
   }
   if (directive === '.ktext') {
     return `**.ktext**\n\n切换到内核文本段。P7 异常处理程序使用课程固定入口 \`.ktext 0x${p7ExceptionHandlerAddress.toString(16)}\``;

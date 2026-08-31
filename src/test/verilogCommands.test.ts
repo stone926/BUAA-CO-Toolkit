@@ -29,6 +29,7 @@ vi.mock('vscode', async () => {
 });
 
 vi.mock('../config', () => ({
+  configurationTargetForResource: vi.fn((resource?: unknown) => resource ? 3 : 1),
   ensureConcreteProfile: vi.fn(async () => 'P4'),
   getIsePath: vi.fn(() => 'D:/ISE'),
   getSimTime: vi.fn(() => '200us'),
@@ -168,6 +169,7 @@ describe('Verilog command registration and entry behavior', () => {
 
   it('merges and deduplicates a valid lint rule disable command', async () => {
     const commands = commandMap();
+    setActiveDocument('E:/work/mips.v', 'verilog', 'module mips; endmodule');
     vscodeState.state!.config.set('co.verilog.lint.disabledRules', ['vc-002']);
     registerVerilog({ subscriptions: [] } as never, services());
 
@@ -175,8 +177,30 @@ describe('Verilog command registration and entry behavior', () => {
     await commands.get(Commands.Verilog.DisableLintRule)!('vc-001');
 
     const config = vscode.workspace.getConfiguration('co');
-    expect(config.update).toHaveBeenLastCalledWith('verilog.lint.disabledRules', ['vc-001', 'vc-002'], vscode.ConfigurationTarget.Workspace);
+    expect(config.update).toHaveBeenLastCalledWith('verilog.lint.disabledRules', ['vc-001', 'vc-002'], vscode.ConfigurationTarget.WorkspaceFolder);
     expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it('uses the diagnostic document URI instead of an unrelated active editor for lint settings', async () => {
+    const commands = commandMap();
+    setActiveDocument('E:/other/active.v', 'verilog', 'module active; endmodule');
+    const diagnosticUri = vscode.Uri.file('E:/work/cpu.v');
+    vscodeState.state!.workspaceFolders.push(
+      { uri: vscode.Uri.file('E:/work'), name: 'cpu' },
+      { uri: vscode.Uri.file('E:/other'), name: 'other' }
+    );
+    registerVerilog({ subscriptions: [] } as never, services());
+
+    await commands.get(Commands.Verilog.DisableLintRule)!('VC-007', diagnosticUri.toString());
+
+    const configuredResource = vi.mocked(vscode.workspace.getConfiguration).mock.calls[0]?.[1] as vscode.Uri;
+    expect(normalizedFsPath(configuredResource)).toBe(normalizedFsPath(diagnosticUri));
+    const config = vscode.workspace.getConfiguration('co', diagnosticUri);
+    expect(config.update).toHaveBeenLastCalledWith(
+      'verilog.lint.disabledRules',
+      expect.arrayContaining(['vc-007']),
+      vscode.ConfigurationTarget.WorkspaceFolder
+    );
   });
 
   it('rejects generate testbench when the active editor is not Verilog', async () => {

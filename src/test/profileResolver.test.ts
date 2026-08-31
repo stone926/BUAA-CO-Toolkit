@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCoSettings } from '../language/common/settings';
+import { defaultCoSettings, mergeCoSettings } from '../language/common/settings';
 import { applyResolvedProfile, resolveProjectProfile, ProfileResolverModule } from '../profileResolver';
 import { getProfileInferenceConfig } from '../courseConfig';
 
@@ -171,6 +171,32 @@ describe('profile resolver', () => {
       modules: [module('mips', ['clk', 'reset'])]
     });
     expect(unresolved.project.profile).toBe('auto');
+  });
+
+  it('applies P1 entrypoint defaults after auto inference without replacing explicit overrides', () => {
+    const inferred = applyResolvedProfile(mergeCoSettings({
+      project: { profile: 'auto', topModule: '', testbench: '' }
+    }), {
+      files: [{ path: 'E:/co/p1/main.v', languageId: 'verilog' }],
+      modules: [module('main', [])]
+    });
+    expect(inferred.project).toMatchObject({
+      profile: 'P1',
+      topModule: 'main',
+      testbench: 'main_tb'
+    });
+
+    const customized = applyResolvedProfile(mergeCoSettings({
+      project: { profile: 'auto', topModule: 'custom_top', testbench: 'custom_tb' }
+    }), {
+      files: [{ path: 'E:/co/p1/custom_top.v', languageId: 'verilog' }],
+      modules: [module('custom_top', [])]
+    });
+    expect(customized.project).toMatchObject({
+      profile: 'P1',
+      topModule: 'custom_top',
+      testbench: 'custom_tb'
+    });
   });
 });
 

@@ -3,9 +3,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
-import { configDefault } from './configDefaults';
 import { ProjectProfile } from './types';
-import { getMarsJar, getLogisimJar, getIsePath, getJava, getMipsEngine } from './config';
+import { getMarsJar, getMarsP7Jar, getLogisimJar, getIsePath, getJava, getMipsEngine } from './config';
 import {
   getProfileDefaults,
   getProfileDirectories,
@@ -17,16 +16,11 @@ import { buildTestbench, parseVerilog } from './language/verilog/service';
 import { renderResourceTemplate } from './templates/templateRegistry';
 import { pathExists } from './fsUtil';
 import { getEffectiveRequiredTools } from './toolchainPolicy';
-
-interface ToolchainSettings {
-  mars?: string;
-  marsP7?: string;
-  isePath?: string;
-  logisim?: string;
-  java?: string;
-  python?: string;
-  hazardCalculator?: string;
-}
+import {
+  buildWizardSettingUpdates,
+  inspectWizardToolchainLegacyScopes,
+  WizardToolchainSettings
+} from './wizardSettings';
 
 export async function runProjectWizard(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -84,7 +78,7 @@ export async function runProjectWizard(): Promise<void> {
     }
   );
 
-  let toolchainConfig: ToolchainSettings = {};
+  let toolchainConfig: WizardToolchainSettings = {};
 
   if (configureToolchain?.value) {
     toolchainConfig = await configureToolchainPaths(profile, workspaceFolder.uri);
@@ -111,7 +105,7 @@ export async function runProjectWizard(): Promise<void> {
     if (createStructure.value) {
       await createProjectStructure(rootPath, profile);
     }
-    await updateProjectSettings(profile, toolchainConfig);
+    await updateProjectSettings(profile, toolchainConfig, workspaceFolder.uri);
     vscode.window.showInformationMessage(createStructure.value
       ? `CO 项目 '${projectName}' (${profile}) 创建成功！`
       : `CO 项目 '${projectName}' (${profile}) 设置已更新`);
@@ -120,8 +114,8 @@ export async function runProjectWizard(): Promise<void> {
   }
 }
 
-async function configureToolchainPaths(profile: ProjectProfile, resource: vscode.Uri): Promise<ToolchainSettings> {
-  const toolchain: ToolchainSettings = {};
+export async function configureToolchainPaths(profile: ProjectProfile, resource: vscode.Uri): Promise<WizardToolchainSettings> {
+  const toolchain: WizardToolchainSettings = {};
   const requiredTools = new Set(getEffectiveRequiredTools(profile, getMipsEngine(resource)));
 
   if (requiredTools.has('java')) {
@@ -152,7 +146,7 @@ async function configureToolchainPaths(profile: ProjectProfile, resource: vscode
     const marsP7Path = await vscode.window.showInputBox({
       title: 'P7 MARS 路径',
       prompt: '输入 P7 专用 Mars jar 路径',
-      value: getMarsJar(resource),
+      value: getMarsP7Jar(resource),
       placeHolder: 'E:/path/to/Mars_p7.jar'
     });
     if (marsP7Path) {
@@ -287,20 +281,25 @@ function currentDateStamp(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function updateProjectSettings(profile: ProjectProfile, toolchainConfig: ToolchainSettings): Promise<void> {
-  const config = vscode.workspace.getConfiguration('co');
-  const topModule = defaultTopModuleForProfile(profile);
-  await config.update('project.profile', profile, vscode.ConfigurationTarget.Workspace);
-  if (topModule) {
-    const defaults = getProfileDefaults(profile);
-    await config.update('project.topModule', topModule, vscode.ConfigurationTarget.Workspace);
-    await config.update('project.testbench', defaults.testbench ?? `${topModule}_tb`, vscode.ConfigurationTarget.Workspace);
-  }
-  await config.update('project.machineCode', configDefault<string>('project.machineCode'), vscode.ConfigurationTarget.Workspace);
-  await config.update('project.simTime', configDefault<string>('project.simTime'), vscode.ConfigurationTarget.Workspace);
-  for (const [key, value] of Object.entries(toolchainConfig)) {
-    if (typeof value === 'string' && (value.trim() || key === 'isePath')) {
-      await config.update(`toolchain.${key}`, value.trim(), vscode.ConfigurationTarget.Workspace);
-    }
+export async function updateProjectSettings(
+  profile: ProjectProfile,
+  toolchainConfig: WizardToolchainSettings,
+  resource?: vscode.Uri
+): Promise<void> {
+  const config = vscode.workspace.getConfiguration('co', resource);
+  const baseUpdates = buildWizardSettingUpdates(profile, toolchainConfig, Boolean(resource));
+  const legacyScopes = inspectWizardToolchainLegacyScopes(
+    baseUpdates,
+    Boolean(resource),
+    (key) => config.inspect<string>(key)
+  );
+
+  for (const update of buildWizardSettingUpdates(profile, toolchainConfig, Boolean(resource), legacyScopes)) {
+    const target = update.target === 'global'
+      ? vscode.ConfigurationTarget.Global
+      : update.target === 'workspaceFolder'
+        ? vscode.ConfigurationTarget.WorkspaceFolder
+        : vscode.ConfigurationTarget.Workspace;
+    await config.update(update.key, update.value, target);
   }
 }

@@ -6,13 +6,14 @@ import {
   TRACE_CONTEXT_PROFILES,
   VERILOG_CONTEXT_PROFILES
 } from './constants';
-import { getIsePath, getProfileResolution, setProfileInferenceProvider } from './config';
 import {
-  diagnosticCodeKey,
-  diagnosticFileCodeKey,
-  diagnosticCodeToString,
-  disableDiagnosticCodeCommand,
-  defaultCoSettings
+  configurationTargetForResource,
+  getIsePath,
+  getProfileResolution,
+  setProfileInferenceProvider
+} from './config';
+import {
+  disableDiagnosticCodeCommand
 } from './language/common/settings';
 import { startLanguageServer, stopLanguageServer } from './languageClient';
 import { registerLogisim } from './logisim';
@@ -34,6 +35,7 @@ import { getProfileName } from './courseConfig';
 import { html, renderReportPage, renderTable } from './webview/reportLayout';
 import { timeStartup, traceStartup } from './startupTrace';
 import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
+import { disableDiagnosticCode } from './diagnosticSettings';
 
 const escapeHtml = html.text;
 const verilogModuleRegistryStartupDelayMs = 1000;
@@ -82,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand(disableDiagnosticCodeCommand, (languageId?: string, code?: string, documentUri?: string) => disableDiagnosticCode(languageId, code, documentUri))
+    vscode.commands.registerCommand(disableDiagnosticCodeCommand, disableDiagnosticCode)
   );
 
   // 工作空间模块注册表：后台解析所有 .v/.vh 文件，供 sidebar 连线分析跨文件查找模块
@@ -256,7 +258,8 @@ async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?:
 
 async function selectProjectProfile(): Promise<void> {
   const profiles: ProjectProfile[] = [...ALL_PROFILES];
-  const resolution = getProfileResolution(vscode.window.activeTextEditor?.document.uri);
+  const resource = vscode.window.activeTextEditor?.document.uri;
+  const resolution = getProfileResolution(resource);
   const current = resolution.configuredProfile;
   const picked = await vscode.window.showQuickPick(
     profiles.map((profile) => ({
@@ -271,32 +274,12 @@ async function selectProjectProfile(): Promise<void> {
   if (!picked) {
     return;
   }
-  await vscode.workspace.getConfiguration('co').update('project.profile', picked.profile, vscode.ConfigurationTarget.Workspace);
+  await vscode.workspace.getConfiguration('co', resource).update(
+    'project.profile',
+    picked.profile,
+    configurationTargetForResource(resource)
+  );
   vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
-}
-
-async function disableDiagnosticCode(languageId?: string, code?: string, documentUri?: string): Promise<void> {
-  const normalizedLanguageId = typeof languageId === 'string' ? languageId.trim().toLowerCase() : '';
-  const normalizedCode = diagnosticCodeToString(code);
-  if (!normalizedLanguageId || !normalizedCode) {
-    vscode.window.showErrorMessage('无法禁用此诊断，因为其代码无效');
-    return;
-  }
-  const config = vscode.workspace.getConfiguration('co');
-  if (typeof documentUri === 'string' && documentUri.trim()) {
-    const key = diagnosticFileCodeKey(normalizedLanguageId, normalizedCode, documentUri);
-    const current = config.get<string[]>('diagnostics.disabledFileCodes', defaultCoSettings.diagnostics.disabledFileCodes);
-    const merged = [...new Set([...current.map((item) => item.trim()).filter(Boolean), key])].sort();
-    await config.update('diagnostics.disabledFileCodes', merged, vscode.ConfigurationTarget.Workspace);
-    vscode.window.showInformationMessage(`已在当前工作区中对该文件禁用 ${normalizedCode} 诊断`);
-    return;
-  }
-
-  const key = diagnosticCodeKey(normalizedLanguageId, normalizedCode);
-  const current = config.get<string[]>('diagnostics.disabledCodes', defaultCoSettings.diagnostics.disabledCodes);
-  const merged = [...new Set([...current.map((item) => item.trim().toLowerCase()).filter(Boolean), key])].sort();
-  await config.update('diagnostics.disabledCodes', merged, vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalizedCode} 诊断`);
 }
 
 function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => ToolDetection[] | undefined): void {

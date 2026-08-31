@@ -7,6 +7,9 @@ const { configStore } = vi.hoisted(() => ({
 
 vi.mock('vscode', () => ({
   workspace: {
+    getWorkspaceFolder(resource?: { fsPath?: string }) {
+      return resource?.fsPath?.startsWith('/workspace') ? { uri: resource } : undefined;
+    },
     getConfiguration(section: string, _resource?: any) {
       return {
         get<T>(key: string): T | undefined {
@@ -56,10 +59,16 @@ vi.mock('vscode', () => ({
 }));
 
 import {
+  configurationTargetForResource,
   getAutomaticTestInstructions,
+  getMachineCode,
   getMipsEngine,
   getMarsJar,
+  getMarsP7Jar,
   getMemoryConfiguration,
+  getSimTime,
+  getTestbench,
+  getTopModule,
   useDelayedBranching
 } from '../config';
 import type * as vscode from 'vscode';
@@ -99,6 +108,54 @@ describe('automatic test instruction setting migration', () => {
   });
 });
 
+describe('resource-scoped configuration targets', () => {
+  it('uses WorkspaceFolder only for a resource owned by a folder', () => {
+    expect(configurationTargetForResource(makeUri('/workspace/project.asm'))).toBe(3);
+    expect(configurationTargetForResource(makeUri('/outside/project.asm'))).toBe(1);
+    expect(configurationTargetForResource()).toBe(1);
+  });
+});
+
+describe('profile-derived project defaults', () => {
+  beforeEach(() => {
+    clearConfig();
+  });
+
+  it('uses the P1 course defaults without wizard-written overrides', () => {
+    setConfig('co.project.profile', 'P1');
+
+    expect(getTopModule()).toBe('main');
+    expect(getTestbench()).toBe('main_tb');
+    expect(getMachineCode()).toBe('code.txt');
+    expect(getSimTime()).toBe('200us');
+  });
+
+  it('uses the CPU course defaults for P7', () => {
+    setConfig('co.project.profile', 'P7');
+
+    expect(getTopModule()).toBe('mips');
+    expect(getTestbench()).toBe('mips_tb');
+    expect(getMachineCode()).toBe('code.txt');
+    expect(getSimTime()).toBe('200us');
+  });
+
+  it('keeps an explicit non-standard project override', () => {
+    setConfig('co.project.profile', 'P1');
+    setConfig('co.project.topModule', 'custom_top');
+    setConfig('co.project.testbench', 'custom_tb');
+
+    expect(getTopModule()).toBe('custom_top');
+    expect(getTestbench()).toBe('custom_tb');
+  });
+
+  it('uses generic defaults while Profile remains auto', () => {
+    setConfig('co.project.profile', 'auto');
+
+    expect(getTopModule()).toBe('mips');
+    expect(getTestbench()).toBe('mips_tb');
+  });
+});
+
 describe('getMarsJar', () => {
   beforeEach(() => {
     clearConfig();
@@ -133,6 +190,16 @@ describe('getMarsJar', () => {
     setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
 
     expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
+  });
+
+  it('reads the dedicated P7 key without falling back through the current profile', () => {
+    setConfig('co.project.profile', 'P6');
+    setConfig('co.toolchain.mars', '/opt/mars/Generic.jar');
+
+    expect(getMarsP7Jar()).toBe('');
+
+    setConfig('co.toolchain.marsP7', '/opt/mars/P7.jar');
+    expect(getMarsP7Jar()).toBe('/opt/mars/P7.jar');
   });
 
   it('returns empty string when nothing is configured', () => {

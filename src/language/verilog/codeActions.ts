@@ -71,7 +71,7 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
 
   actions.push(...getWidthMismatchCodeActions(document, diagnostics, settings));
   actions.push(...getVerilogDataflowCodeActions(document, diagnostics, settings));
-  actions.push(...getVerilogLintRuleCodeActions(diagnostics, settings));
+  actions.push(...getVerilogLintRuleCodeActions(document, diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogExpressionCodeActions(document, range, settings));
   actions.push(...getVerilogLiteralCodeActions(document, range));
@@ -332,6 +332,7 @@ function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagno
         Commands.Diagnostics.DisableCode,
         document.languageId,
         code,
+        'file',
         document.uri
       )
     });
@@ -344,7 +345,9 @@ function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagno
         `对此工作区禁用 ${code}`,
         Commands.Diagnostics.DisableCode,
         document.languageId,
-        code
+        code,
+        'workspace',
+        document.uri
       )
     });
   }
@@ -449,7 +452,7 @@ function defaultCaseIndent(document: TextDocument, statement: VerilogCaseStateme
   return `${caseIndent}    `;
 }
 
-function getVerilogLintRuleCodeActions(diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
+function getVerilogLintRuleCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
   const actions: CodeAction[] = [];
   const seen = new Set<string>();
   const disabled = new Set(settings.verilog.lint.disabledRules.map((rule) => rule.toLowerCase()));
@@ -463,7 +466,7 @@ function getVerilogLintRuleCodeActions(diagnostics: Diagnostic[], settings: CoSe
       title: `Disable ${rule.toUpperCase()} in this workspace`,
       kind: CodeActionKind.QuickFix,
       diagnostics: [diagnostic],
-      command: Command.create(`Disable ${rule.toUpperCase()}`, Commands.Verilog.DisableLintRule, rule)
+      command: Command.create(`Disable ${rule.toUpperCase()}`, Commands.Verilog.DisableLintRule, rule, document.uri)
     });
   }
   return actions;

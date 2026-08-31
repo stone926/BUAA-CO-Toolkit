@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
 import { getVerilogCodeActions, getVerilogDiagnostics } from '../../../language/verilog/service';
@@ -131,7 +132,30 @@ endmodule
 
     const actions = getVerilogCodeActions(document, vc007!.range, [vc007!], settings, new VerilogWorkspaceIndex());
     const disableAction = actions.find((action) => action.command?.command === 'co.verilog.disableLintRule');
-    expect(disableAction?.command?.arguments).toEqual(['vc-007']);
+    expect(disableAction?.command?.arguments).toEqual(['vc-007', document.uri]);
+  });
+
+  it('keeps width suppression scope explicit while targeting the diagnostic document root', () => {
+    const document = doc('module demo; endmodule');
+    const diagnostic = {
+      range: Range.create(0, 0, 0, 6),
+      message: 'width mismatch',
+      severity: DiagnosticSeverity.Warning,
+      code: 'width-mismatch'
+    };
+
+    const actions = getVerilogCodeActions(
+      document,
+      diagnostic.range,
+      [diagnostic],
+      mergeCoSettings({}),
+      new VerilogWorkspaceIndex()
+    ).filter((action) => action.command?.command === 'co.diagnostics.disableCode');
+
+    expect(actions.map((action) => action.command?.arguments)).toEqual([
+      ['verilog', 'width-mismatch', 'file', document.uri],
+      ['verilog', 'width-mismatch', 'workspace', document.uri]
+    ]);
   });
 
   it('does not treat <= comparisons as combinational nonblocking assignments', () => {

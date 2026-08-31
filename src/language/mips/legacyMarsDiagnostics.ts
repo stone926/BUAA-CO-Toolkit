@@ -23,10 +23,10 @@ export function legacyMarsCompatibilityDiagnostic(
 ): string | undefined {
   const output = `${input.stdout}\n${input.stderr}`;
   if (input.traceOutput && /Invalid Command Argument:\s*coL[12]/i.test(output)) {
-    return '当前 MARS 不支持 coL1/coL2 trace 参数。课程自动对拍需要 Toby-Shi-cloud/Mars-with-BUAA-CO-extension 修改版 Mars，请检查 co.toolchain.mars / co.toolchain.marsP7。';
+    return '当前 MARS 不支持 coL1/coL2 trace 参数。该参数仅用于手动 MARS 回滚或历史用例复现；请改用内置课程引擎，或为回滚流程配置兼容的修改版 MARS。';
   }
   if (input.courseTrace && /Invalid Command Argument:\s*(efc|p7irq)/i.test(output)) {
-    return '当前 MARS 不支持 efc / p7irq（P7 异常与外部中断）参数。P7 自动对拍需要含该功能的修改版 Mars 构建，请重新构建并配置 co.toolchain.marsP7。';
+    return '当前 MARS 不支持 efc / p7irq（P7 异常与外部中断）参数。该参数仅用于手动 MARS 回滚或历史复现；普通自动测试使用内置课程引擎。';
   }
   if (input.p7RiInstruction && /Invalid Command Argument:\s*cl/i.test(output)) {
     return '当前 MARS 不支持旧用例所需的 cl 额外指令加载。请改用 auto/builtin 自动测试，或配置支持 cl 的 P7 修改版 MARS。';
@@ -35,10 +35,10 @@ export function legacyMarsCompatibilityDiagnostic(
   if (memoryMatch) {
     const rejected = memoryMatch[1] || input.memoryConfiguration;
     if (isLargeTextMemoryConfiguration(rejected)) {
-      return `当前 MARS 不支持 ${rejected} 内存配置。非 P7 自动化测试默认使用 large text 配置以支持超长机器码，请改用修改版 Mars。`;
+      return `当前 MARS 不支持 ${rejected} 内存配置。它只影响手动 MARS 回滚或历史复现；普通自动测试由内置课程引擎按 Profile 使用固定布局。`;
     }
     if (input.mode === 'dumpText' || input.mode === 'run') {
-      return `当前 MARS 不支持 ${rejected} 内存配置，请检查 co.mips.memoryConfiguration 或更换修改版 Mars。`;
+      return `当前 MARS 不支持 ${rejected} 内存配置。请恢复内置课程策略；若在复现历史 MARS 流程，请改用兼容构建。`;
     }
   }
   return undefined;

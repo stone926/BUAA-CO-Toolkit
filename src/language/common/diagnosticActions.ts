@@ -34,14 +34,28 @@ export function getDiagnosticSuppressActions(languageId: string, diagnostics: Di
         title: `Suppress ${code} diagnostics in this file for this workspace`,
         kind: CodeActionKind.QuickFix,
         diagnostics: [diagnostic],
-        command: Command.create(`Suppress ${code} for file`, disableDiagnosticCodeCommand, languageId, code, documentUri)
+        command: Command.create(
+          `Suppress ${code} for file`,
+          disableDiagnosticCodeCommand,
+          languageId,
+          code,
+          'file',
+          documentUri
+        )
       });
     }
     actions.push({
       title: `Suppress ${code} diagnostics in this workspace`,
       kind: CodeActionKind.QuickFix,
       diagnostics: [diagnostic],
-      command: Command.create(`Suppress ${code}`, disableDiagnosticCodeCommand, languageId, code)
+      command: Command.create(
+        `Suppress ${code}`,
+        disableDiagnosticCodeCommand,
+        languageId,
+        code,
+        'workspace',
+        documentUri
+      )
     });
   }
   return actions;

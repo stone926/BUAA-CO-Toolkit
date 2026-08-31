@@ -29,7 +29,8 @@ describe('directiveHoverText', () => {
       const text = directiveHoverText(directive);
       expect(text).toBeDefined();
       expect(text!).toContain(directive);
-      expect(text!).toContain('MARS');
+      expect(text!).toContain('内置课程引擎');
+      expect(text!).not.toContain('MARS 内存配置');
     }
   });
 

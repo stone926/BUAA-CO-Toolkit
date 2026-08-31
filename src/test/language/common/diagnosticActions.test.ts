@@ -36,10 +36,10 @@ describe('diagnostic suppress actions', () => {
       disableDiagnosticCodeCommand
     ]);
     expect(actions.map((action) => action.command?.arguments)).toEqual([
-      ['verilog', 'missing-endmodule', 'file:///work/cpu.v'],
-      ['verilog', 'missing-endmodule'],
-      ['verilog', 'width-mismatch', 'file:///work/cpu.v'],
-      ['verilog', 'width-mismatch']
+      ['verilog', 'missing-endmodule', 'file', 'file:///work/cpu.v'],
+      ['verilog', 'missing-endmodule', 'workspace', 'file:///work/cpu.v'],
+      ['verilog', 'width-mismatch', 'file', 'file:///work/cpu.v'],
+      ['verilog', 'width-mismatch', 'workspace', 'file:///work/cpu.v']
     ]);
   });
 
