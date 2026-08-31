@@ -2,8 +2,19 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import { URI } from 'vscode-uri';
 import { parseFuseDiagnostics } from '../../../language/verilog/iseSyntaxCheck';
+import { parseIseDiagnosticRecord } from '../../../verilog/iseDiagnostics';
 
 describe('ISE syntax diagnostic parser', () => {
+  it('exposes a filesystem-agnostic record for report diagnostics', () => {
+    expect(parseIseDiagnosticRecord('ERROR:HDLCompiler:806 - "E:/private/work/cpu.v" Line 28: Syntax error.'))
+      .toEqual({
+        file: 'E:/private/work/cpu.v',
+        line: 28,
+        severity: 'error',
+        message: 'Syntax error.'
+      });
+  });
+
   it('parses HDLCompiler file and line diagnostics', () => {
     const root = path.resolve('workspace');
     const file = path.join(root, 'cpu.v');

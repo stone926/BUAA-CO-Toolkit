@@ -7,6 +7,7 @@ import { runIverilog } from '../../verilog/iverilogRunner';
 import {
   runVerilogSimulation,
   setVerilogSimulationModuleRegistry,
+  verilogSimulationFailure,
   verilogSimulationTerminalResult
 } from '../../verilog/simulationRunner';
 
@@ -102,5 +103,81 @@ describe('Verilog simulation dispatcher', () => {
       compileResult: { ok: true },
       simResult
     } as never)).toBe(simResult);
+  });
+
+  it('keeps an ISim fuse failure as the terminal compile result', async () => {
+    const fuseResult = {
+      ok: false,
+      exitCode: 1,
+      commandLine: 'D:/ISE/fuse.exe',
+      cwd: 'E:/work/.co/isim',
+      stdout: '',
+      stderr: 'ERROR:HDLCompiler:806 - "E:/work/CPU.v" Line 28: Syntax error.',
+      timedOut: false,
+      stopped: false
+    };
+    vi.mocked(getIsePath).mockReturnValue('D:/ISE');
+    vi.mocked(runIsim).mockResolvedValue({
+      generated: {},
+      fuseResult
+    } as never);
+
+    const output = await runVerilogSimulation(services, { resource });
+
+    expect(output).toMatchObject({ backend: 'isim', fuseResult });
+    expect(verilogSimulationTerminalResult(output)).toBe(fuseResult);
+    expect(verilogSimulationFailure(output, 'E:/work')).toEqual({
+      phase: 'compile',
+      reason: 'exit',
+      exitCode: 1,
+      diagnostic: {
+        file: 'CPU.v',
+        line: 28,
+        message: 'Syntax error.'
+      }
+    });
+  });
+
+  it('classifies compile, simulation, missing-output, and setup failures', () => {
+    const compile = verilogSimulationFailure({
+      backend: 'iverilog',
+      compileResult: {
+        ok: false,
+        exitCode: 26,
+        stderr: 'E:/work/CPU.v:449: error: unable to bind',
+        stdout: '',
+        timedOut: false,
+        stopped: false,
+        commandLine: 'secret',
+        cwd: 'E:/work/.co/isim'
+      }
+    } as never, 'E:/work');
+    const simulation = verilogSimulationFailure({
+      backend: 'iverilog',
+      compileResult: { ok: true },
+      simResult: {
+        ok: false,
+        exitCode: null,
+        stderr: '',
+        stdout: '',
+        timedOut: true,
+        stopped: true,
+        stopReason: 'timeout',
+        commandLine: 'secret',
+        cwd: 'E:/work/.co/isim'
+      }
+    } as never, 'E:/work');
+
+    expect(compile).toMatchObject({
+      phase: 'compile',
+      reason: 'exit',
+      diagnostic: { file: 'CPU.v', line: 449 }
+    });
+    expect(simulation).toEqual({ phase: 'simulate', reason: 'timeout' });
+    expect(verilogSimulationFailure({
+      backend: 'isim',
+      simResult: { ok: true }
+    } as never)).toEqual({ phase: 'output', reason: 'missing-output' });
+    expect(verilogSimulationFailure(undefined)).toEqual({ phase: 'prepare', reason: 'unavailable' });
   });
 });

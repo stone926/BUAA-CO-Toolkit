@@ -39,6 +39,50 @@ describe('course test reports', () => {
     })).toBe('[AUTO-INTERNAL] 自动测试内部流程未完成；请使用复现编号定位');
   });
 
+  it('shows a detailed, escaped, and path-safe automatic DUT compile diagnostic', () => {
+    const result: CourseTraceCaseResult = {
+      asm: 'E:/SECRET/case.asm',
+      caseId: 'case-compile',
+      status: 'error',
+      stage: 'dut',
+      message: 'raw E:/SECRET/backend detail',
+      dutBackend: 'iverilog',
+      dutFailure: {
+        phase: 'compile',
+        reason: 'exit',
+        exitCode: 26,
+        diagnostic: {
+          file: 'E:/SECRET/private/CPU.v',
+          line: 449,
+          message: 'Unable to bind <module>&signal'
+        }
+      }
+    };
+    const message = publicAutomaticDiagnosticMessage(result);
+    const report = createCourseTraceBatchReport([result], { kind: 'generator' });
+    const rendered = renderBatchTraceReport(
+      [result],
+      { fsPath: 'E:/SECRET/report.json' } as never,
+      undefined,
+      { kind: 'generator' }
+    );
+
+    expect(message).toBe(
+      '[AUTO-DUT] Icarus 编译失败（退出码 26）：CPU.v:449: Unable to bind <module>&signal'
+    );
+    expect(report.results[0]).toMatchObject({
+      dutFailure: {
+        phase: 'compile',
+        diagnostic: { file: 'CPU.v', line: 449 }
+      },
+      message
+    });
+    expect(JSON.stringify(report)).not.toContain('SECRET');
+    expect(rendered).toContain('CPU.v:449');
+    expect(rendered).toContain('&lt;module&gt;&amp;signal');
+    expect(rendered).not.toContain('SECRET');
+  });
+
   it('renders test history without exposing automatic-case paths or artifact internals', () => {
     const html = renderAsmCaseIndex([{
       manifest: {

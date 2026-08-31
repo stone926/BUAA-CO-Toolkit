@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
+import * as vscode from 'vscode';
 import type { AppServices, RunResult } from '../../types';
 import {
   buildIverilogCompileArgs,
@@ -256,13 +257,20 @@ describe('Icarus runner orchestration', () => {
     expect(compileOptions).toEqual(expect.objectContaining({
       cwd: expect.stringMatching(/[\\/]\.co[\\/]isim$/i),
       env: { Path: 'bundled-bin' },
-      signal: controller.signal
+      signal: controller.signal,
+      maxStdoutBytes: 4 * 1024 * 1024,
+      maxStderrBytes: 4 * 1024 * 1024
     }));
     expect(runTool).toHaveBeenNthCalledWith(
       2,
       runtime.vvpPath,
       ['-N', expect.stringMatching(/simulation\.vvp$/i)],
-      expect.objectContaining({ cwd: compileOptions.cwd, signal: controller.signal })
+      expect.objectContaining({
+        cwd: compileOptions.cwd,
+        signal: controller.signal,
+        maxStdoutBytes: 16 * 1024 * 1024,
+        maxStderrBytes: 16 * 1024 * 1024
+      })
     );
     expect(writeTextFile).toHaveBeenCalledWith(
       expect.objectContaining({ path: expect.stringMatching(/mips_tb\.sim\.out$/i) }),
@@ -300,6 +308,45 @@ describe('Icarus runner orchestration', () => {
     );
   });
 
+  it('surfaces the process output ceiling as a bounded simulation failure', async () => {
+    vi.mocked(runTool)
+      .mockResolvedValueOnce(toolResult())
+      .mockResolvedValueOnce(toolResult({
+        ok: false,
+        exitCode: null,
+        stopped: true,
+        stopReason: 'stdout-limit',
+        stdout: 'bounded trace'
+      }));
+
+    const result = await runIverilog(services(), { resource, showMessages: false });
+
+    expect(result?.simResult).toMatchObject({
+      ok: false,
+      stopReason: 'stdout-limit',
+      stdout: 'bounded trace'
+    });
+    expect(result?.simOut).toBeUndefined();
+    expect(vi.mocked(runTool).mock.calls[1][2]).toEqual(expect.objectContaining({
+      maxStdoutBytes: 16 * 1024 * 1024,
+      maxStderrBytes: 16 * 1024 * 1024
+    }));
+  });
+
+  it('shows the first actionable compiler location for an interactive run', async () => {
+    vi.mocked(runTool).mockResolvedValueOnce(toolResult({
+      ok: false,
+      exitCode: 26,
+      stderr: 'E:/work/CPU.v:449: error: Net D_fixedRD1_reg is not defined'
+    }));
+
+    await runIverilog(services(), { resource });
+
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      'Icarus 编译失败（退出码 26）：CPU.v:449: Net D_fixedRD1_reg is not defined'
+    );
+  });
+
   it('surfaces VVP failure (including -N $stop) and does not persist partial stdout', async () => {
     vi.mocked(runTool)
       .mockResolvedValueOnce(toolResult())
@@ -310,6 +357,39 @@ describe('Icarus runner orchestration', () => {
     expect(result?.simResult).toMatchObject({ ok: false, exitCode: 1, stderr: '$stop' });
     expect(result?.simOut).toBeUndefined();
     expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
+  });
+
+  it('stores raw compile diagnostics as a private case artifact without command metadata', async () => {
+    vi.mocked(getProfile).mockReturnValue('P4');
+    const currentCase = {
+      machineCode: URI.file('E:/work/.co/cases/case-failure/code.txt'),
+      manifestUri: URI.file('E:/work/.co/cases/case-failure/case.json')
+    } as never;
+    vi.mocked(runTool).mockResolvedValueOnce(toolResult({
+      ok: false,
+      exitCode: 26,
+      commandLine: 'E:/SECRET/iverilog.exe --private',
+      cwd: 'E:/SECRET/cwd',
+      stderr: 'E:/work/CPU.v:449: Unable to bind `D_fixedRD1_reg`'
+    }));
+
+    await runIverilog(services(), {
+      resource,
+      asmCase: currentCase,
+      nonInteractive: true
+    });
+
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      'iverilog-compile.log',
+      expect.stringContaining('CPU.v:449'),
+      'compileLog'
+    );
+    const log = vi.mocked(writeAsmCaseArtifact).mock.calls[0][3];
+    expect(log).not.toContain('--private');
+    expect(log).not.toContain('E:/SECRET/cwd');
+    expect(runTool).toHaveBeenCalledTimes(1);
   });
 
   it('uses the private automatic testbench/source exclusions and prepares code.txt in the shared cwd', async () => {

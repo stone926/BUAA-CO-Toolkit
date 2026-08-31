@@ -59,6 +59,15 @@ import {
   TestbenchResolution
 } from './testbenchResolver';
 import { automaticExternalToolTimeoutMs } from '../courseTesting/automaticTestPolicy';
+import {
+  createVerilogSimulationFailure,
+  verilogSimulationFailureMessage
+} from './simulationDiagnostic';
+
+/** Fuse diagnostics are textual and should remain well below this per-stream ceiling. */
+const maximumIsimCompileOutputBytes = 4 * 1024 * 1024;
+/** Bound user-controlled simulator traces to the course replay artifact ceiling. */
+const maximumIsimSimulationOutputBytes = 16 * 1024 * 1024;
 
 export interface IsimRunOptions extends IseProjectOptions {
   /** Internal operation snapshot; direct/legacy callers omit it and read current configuration. */
@@ -80,7 +89,8 @@ export interface IsimRunOptions extends IseProjectOptions {
 export interface IsimRunOutput {
   generated: IseProjectFiles;
   fuseResult: RunResult;
-  simResult: RunResult;
+  /** Absent when fuse failed before the simulator executable could be launched. */
+  simResult?: RunResult;
   simOut?: vscode.Uri;
 }
 
@@ -98,6 +108,10 @@ export interface CompileIsimOptions extends IsimRunOptions {
   tclText?: string;
 }
 
+type IsimCompileAttempt =
+  | { kind: 'compiled'; output: CompiledIsimOutput }
+  | { kind: 'failed'; output: Pick<IsimRunOutput, 'generated' | 'fuseResult'> };
+
 export async function runIsim(
   services: AppServices,
   options: IsimRunOptions = {}
@@ -112,10 +126,14 @@ export async function runIsim(
   if (requiresSimulationAsmCase(activeUri) && !asmCase) {
     return undefined;
   }
-  const compiled = await compileIsim(services, options);
-  if (!compiled) {
+  const compileAttempt = await attemptCompileIsim(services, options);
+  if (!compileAttempt) {
     return;
   }
+  if (compileAttempt.kind === 'failed') {
+    return compileAttempt.output;
+  }
+  const compiled = compileAttempt.output;
   await prepareIsimRunInputs(services, activeUri, compiled, options, asmCase, showMessages);
   const isePath = options.isePath ?? getIsePath(activeUri);
   const iseEnv = buildIseEnvironment(isePath);
@@ -126,7 +144,9 @@ export async function runIsim(
     env: iseEnv,
     nonInteractive: options.nonInteractive,
     timeoutMs: options.nonInteractive ? automaticExternalToolTimeoutMs : undefined,
-    signal: options.signal
+    signal: options.signal,
+    maxStdoutBytes: maximumIsimSimulationOutputBytes,
+    maxStderrBytes: maximumIsimSimulationOutputBytes
   });
   let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
@@ -150,7 +170,15 @@ export async function runIsim(
     }
   } else {
     if (showMessages) {
-      vscode.window.showErrorMessage('ISim 运行失败。请查看插件输出面板');
+      vscode.window.showErrorMessage(verilogSimulationFailureMessage(
+        createVerilogSimulationFailure(
+          'isim',
+          'simulate',
+          simResult,
+          workspaceFolderFor(activeUri)?.uri.fsPath
+        ),
+        'isim'
+      ));
     }
   }
   return { generated: compiled.generated, fuseResult: compiled.fuseResult, simResult, simOut };
@@ -160,6 +188,14 @@ export async function compileIsim(
   services: AppServices,
   options: CompileIsimOptions = {}
 ): Promise<CompiledIsimOutput | undefined> {
+  const attempt = await attemptCompileIsim(services, options);
+  return attempt?.kind === 'compiled' ? attempt.output : undefined;
+}
+
+async function attemptCompileIsim(
+  services: AppServices,
+  options: CompileIsimOptions
+): Promise<IsimCompileAttempt | undefined> {
   const activeUri = options.resource ?? vscode.window.activeTextEditor?.document.uri;
   const showMessages = !options.nonInteractive && options.showMessages !== false;
   if (!await ensureConcreteProfile(activeUri, '运行 ISim 需要先确定项目 Profile')) {
@@ -248,7 +284,7 @@ export async function compileIsim(
     if (!options.nonInteractive) {
       services.output.appendLine(`复用 ISim 编译: ${cached.exePath}`);
     }
-    return cached;
+    return { kind: 'compiled', output: cached };
   }
   const artifactStem = cacheKey ? isimCompileArtifactStem(resolved.moduleName, cacheKey) : resolved.moduleName;
 
@@ -285,13 +321,21 @@ export async function compileIsim(
     env: iseEnv,
     nonInteractive: options.nonInteractive,
     timeoutMs: options.nonInteractive ? automaticExternalToolTimeoutMs : undefined,
-    signal: options.signal
+    signal: options.signal,
+    maxStdoutBytes: maximumIsimCompileOutputBytes,
+    maxStderrBytes: maximumIsimCompileOutputBytes
   });
   if (!fuseResult.ok) {
     if (showMessages) {
-      vscode.window.showErrorMessage('ISim 编译失败。请查看插件输出面板');
+      vscode.window.showErrorMessage(verilogSimulationFailureMessage(
+        createVerilogSimulationFailure('isim', 'compile', fuseResult, folder.uri.fsPath),
+        'isim'
+      ));
     }
-    return undefined;
+    return {
+      kind: 'failed',
+      output: { generated, fuseResult }
+    };
   }
 
   const compiled = {
@@ -304,7 +348,7 @@ export async function compileIsim(
   if (cacheKey) {
     options.compileCache?.set(cacheKey, compiled);
   }
-  return compiled;
+  return { kind: 'compiled', output: compiled };
 }
 
 async function prepareIsimRunInputs(

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
+import * as vscode from 'vscode';
 import type { AppServices } from '../../types';
 import type { AsmCase } from '../../asmCaseStore';
 import { compileIsim, runIsim } from '../../verilog/isimRunner';
@@ -219,7 +220,9 @@ describe('Verilog ISim runner orchestration', () => {
       tclFileName: 'custom.tcl'
     }));
     expect(runTool).toHaveBeenCalledWith('D:/ISE/fuse.exe', expect.arrayContaining(['-prj', 'mips_tb.prj', '-o', 'mips_tb.exe', 'mips_tb']), expect.objectContaining({
-      cwd: generated.outDir.fsPath
+      cwd: generated.outDir.fsPath,
+      maxStdoutBytes: 4 * 1024 * 1024,
+      maxStderrBytes: 4 * 1024 * 1024
     }));
   });
 
@@ -231,10 +234,14 @@ describe('Verilog ISim runner orchestration', () => {
 
     expect(runTool).toHaveBeenCalledTimes(2);
     expect(vi.mocked(runTool).mock.calls[0][2]).toEqual(expect.objectContaining({
-      signal: controller.signal
+      signal: controller.signal,
+      maxStdoutBytes: 4 * 1024 * 1024,
+      maxStderrBytes: 4 * 1024 * 1024
     }));
     expect(vi.mocked(runTool).mock.calls[1][2]).toEqual(expect.objectContaining({
-      signal: controller.signal
+      signal: controller.signal,
+      maxStdoutBytes: 16 * 1024 * 1024,
+      maxStderrBytes: 16 * 1024 * 1024
     }));
   });
 
@@ -347,10 +354,36 @@ describe('Verilog ISim runner orchestration', () => {
 
     const result = await runIsim(services(), { resource });
 
-    expect(result?.simResult.ok).toBe(true);
+    expect(result?.simResult?.ok).toBe(true);
     expect(resolveAsmCaseInput).not.toHaveBeenCalled();
     expect(resolveMachineCodeSource).not.toHaveBeenCalled();
     expect(runTool).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns the fuse process result when compilation fails before ISim starts', async () => {
+    vi.mocked(getProfile).mockReturnValue('P1');
+    const fuseResult = {
+      ok: false,
+      exitCode: 1,
+      commandLine: 'D:/ISE/fuse.exe -prj mips_tb.prj',
+      cwd: generated.outDir.fsPath,
+      stdout: '',
+      stderr: 'ERROR:HDLCompiler:806 - "E:/work/CPU.v" Line 28: Syntax error.',
+      timedOut: false,
+      stopped: false
+    };
+    vi.mocked(runTool).mockResolvedValueOnce(fuseResult);
+
+    const result = await runIsim(services(), { resource });
+
+    expect(result).toEqual({ generated, fuseResult });
+    expect(result?.simResult).toBeUndefined();
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(resolveMachineCodeSource).not.toHaveBeenCalled();
+    expect(writeTextFile).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      'ISim 编译失败（退出码 1）：CPU.v:28: Syntax error.'
+    );
   });
 
   it('records machine code, project, testbench, and sim output artifacts on successful case simulation', async () => {
@@ -377,12 +410,60 @@ describe('Verilog ISim runner orchestration', () => {
   it('does not write simulation output when the simulator process fails', async () => {
     vi.mocked(runTool)
       .mockResolvedValueOnce({ ok: true, code: 0, stdout: '', stderr: '' })
-      .mockResolvedValueOnce({ ok: false, code: 1, stdout: 'bad', stderr: 'error' });
+      .mockResolvedValueOnce({
+        ok: false,
+        exitCode: 1,
+        commandLine: 'E:/work/.co/isim/mips_tb.exe',
+        cwd: generated.outDir.fsPath,
+        stdout: 'bad',
+        stderr: 'ERROR:Simulator:999 - "C:/Users/private-user/tb.v" Line 7: Runtime failure.',
+        timedOut: false,
+        stopped: false
+      });
 
     const result = await runIsim(services(), { resource, asmCase: asmCase() });
 
     expect(result?.simOut).toBeUndefined();
     expect(writeTextFile).not.toHaveBeenCalled();
     expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      'ISim 仿真失败（退出码 1）：tb.v:7: Runtime failure.'
+    );
+    expect(vi.mocked(vscode.window.showErrorMessage).mock.calls.flat().join('\n'))
+      .not.toContain('private-user');
+  });
+
+  it('classifies an ISim output ceiling and never writes the truncated trace', async () => {
+    vi.mocked(getProfile).mockReturnValue('P1');
+    vi.mocked(runTool)
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({
+        ok: false,
+        exitCode: null,
+        commandLine: 'E:/work/.co/isim/mips_tb.exe',
+        cwd: generated.outDir.fsPath,
+        stdout: 'bounded trace',
+        stderr: '',
+        timedOut: false,
+        stopped: true,
+        stopReason: 'stdout-limit'
+      });
+
+    const result = await runIsim(services(), { resource });
+
+    expect(result?.simResult).toMatchObject({
+      ok: false,
+      stopReason: 'stdout-limit',
+      stdout: 'bounded trace'
+    });
+    expect(result?.simOut).toBeUndefined();
+    expect(writeTextFile).not.toHaveBeenCalled();
+    expect(vi.mocked(runTool).mock.calls[1][2]).toEqual(expect.objectContaining({
+      maxStdoutBytes: 16 * 1024 * 1024,
+      maxStderrBytes: 16 * 1024 * 1024
+    }));
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      'ISim 仿真输出过多，进程已终止'
+    );
   });
 });

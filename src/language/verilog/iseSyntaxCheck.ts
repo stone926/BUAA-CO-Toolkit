@@ -10,6 +10,7 @@ import { runProcessCore } from '../../processCore';
 import type { CoSettings } from '../common/settings';
 import { resolveExternalSyntaxProject } from './externalSyntaxProject';
 import { filterIseDiagnosticsByUri } from './iseDiagnosticFilters';
+import { parseIseDiagnosticRecords } from '../../verilog/iseDiagnostics';
 
 export interface IseSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -84,52 +85,23 @@ export async function runIseSyntaxCheck(options: IseSyntaxCheckOptions): Promise
 
 export function parseFuseDiagnostics(output: string, workspaceRoot: string, fallbackUri: string): Map<string, Diagnostic[]> {
   const diagnosticsByUri = new Map<string, Diagnostic[]>();
-  const lines = output.split(/\r?\n/);
-  for (const line of lines) {
-    const parsed = parseFuseDiagnosticLine(line, workspaceRoot, fallbackUri);
-    if (!parsed) {
-      continue;
-    }
-    addDiagnostic(diagnosticsByUri, parsed.uri, parsed.diagnostic);
-  }
-  return diagnosticsByUri;
-}
-
-function parseFuseDiagnosticLine(
-  line: string,
-  workspaceRoot: string,
-  fallbackUri: string
-): { uri: string; diagnostic: Diagnostic } | undefined {
-  const trimmed = line.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const match = /^(ERROR|WARNING|INFO):[^-]*-\s+(?:"([^"]+)"\s+)?(?:Line\s+(\d+):\s*)?(.+)$/i.exec(trimmed)
-    ?? /^(ERROR|WARNING|INFO):.*?(?:"([^"]+)")\s+Line\s+(\d+):\s*(.+)$/i.exec(trimmed);
-  if (!match) {
-    return undefined;
-  }
-  const severityLabel = match[1].toUpperCase();
-  const file = match[2];
-  const lineText = match[3];
-  const message = match[4]?.trim() || trimmed;
-  const uri = file ? uriForFusePath(file, workspaceRoot) : fallbackUri;
-  const lineNumber = Math.max(0, Number(lineText ?? 1) - 1);
-  const severity = severityLabel === 'ERROR'
+  for (const record of parseIseDiagnosticRecords(output)) {
+    const uri = record.file ? uriForFusePath(record.file, workspaceRoot) : fallbackUri;
+    const lineNumber = Math.max(0, (record.line ?? 1) - 1);
+    const severity = record.severity === 'error'
     ? DiagnosticSeverity.Error
-    : severityLabel === 'WARNING'
+    : record.severity === 'warning'
       ? DiagnosticSeverity.Warning
       : DiagnosticSeverity.Information;
-  return {
-    uri,
-    diagnostic: {
+    addDiagnostic(diagnosticsByUri, uri, {
       range: Range.create(lineNumber, 0, lineNumber, 1),
       severity,
       source: 'ISE fuse',
       code: 'ise-syntax',
-      message
-    }
-  };
+      message: record.message
+    });
+  }
+  return diagnosticsByUri;
 }
 
 function uriForFusePath(file: string, workspaceRoot: string): string {

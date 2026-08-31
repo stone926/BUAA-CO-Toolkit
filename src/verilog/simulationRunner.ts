@@ -5,6 +5,11 @@ import type { AppServices, RunResult } from '../types';
 import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
 import { runIsim, IsimRunOptions, IsimRunOutput } from './isimRunner';
 import { runIverilog, IverilogRunOutput } from './iverilogRunner';
+import {
+  createVerilogSimulationFailure,
+  missingVerilogSimulationOutputFailure,
+  type VerilogSimulationFailure
+} from './simulationDiagnostic';
 import { selectVerilogBackend } from './verilogBackend';
 
 export interface VerilogSimulationRunOptions extends IsimRunOptions {
@@ -28,14 +33,34 @@ export function setVerilogSimulationModuleRegistry(
 
 /**
  * Return the process result that decided this simulation's terminal state.
- * Icarus compile failures have no simResult, while all launched simulations
- * use simResult (including VVP cancellation/timeout/failure).
+ * Compile failures have no simResult, while all launched simulations use
+ * simResult (including VVP/ISim cancellation, timeout, and process failure).
  */
 export function verilogSimulationTerminalResult(
   output: VerilogSimulationRunOutput | undefined
 ): RunResult | undefined {
   return output?.simResult
-    ?? (output?.backend === 'iverilog' ? output.compileResult : undefined);
+    ?? (output?.backend === 'iverilog' ? output.compileResult : output?.fuseResult);
+}
+
+/** Convert the terminal process state into a bounded, path-safe report payload. */
+export function verilogSimulationFailure(
+  output: VerilogSimulationRunOutput | undefined,
+  workspaceRoot?: string
+): VerilogSimulationFailure {
+  if (!output) {
+    return createVerilogSimulationFailure('isim', 'prepare', undefined, workspaceRoot);
+  }
+  if (output.backend === 'iverilog' && !output.compileResult.ok) {
+    return createVerilogSimulationFailure('iverilog', 'compile', output.compileResult, workspaceRoot);
+  }
+  if (output.backend === 'isim' && output.fuseResult && !output.fuseResult.ok) {
+    return createVerilogSimulationFailure('isim', 'compile', output.fuseResult, workspaceRoot);
+  }
+  if (output.simResult && !output.simResult.ok) {
+    return createVerilogSimulationFailure(output.backend, 'simulate', output.simResult, workspaceRoot);
+  }
+  return missingVerilogSimulationOutputFailure();
 }
 
 /**

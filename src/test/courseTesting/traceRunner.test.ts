@@ -501,7 +501,88 @@ describe('course trace runner orchestration', () => {
     expect(result.caseId).toBe('case-1');
     expect(result.machineCode).toContain('code.txt');
     expect(result.oracleOut).toContain('oracle.out');
+    expect(result.dutFailure).toMatchObject({
+      phase: 'simulate',
+      reason: 'exit',
+      diagnostic: { message: 'bad' }
+    });
     expect(result).not.toHaveProperty('marsOut');
+  });
+
+  it('preserves a path-safe Icarus compile diagnostic for the automatic report', async () => {
+    vi.mocked(runVerilogSimulation).mockResolvedValueOnce({
+      backend: 'iverilog',
+      compileResult: {
+        ok: false,
+        exitCode: 26,
+        commandLine: 'E:/SECRET/bin/iverilog.exe --private',
+        cwd: 'E:/SECRET/work',
+        stdout: '',
+        stderr: 'E:/work/rtl/CPU.v:449: error: Unable to bind `D_fixedRD1_reg`',
+        timedOut: false,
+        stopped: false
+      }
+    } as never);
+
+    const result = await runCourseTraceCase(
+      services(),
+      { asm: URI.file('E:/work/src/test.asm') },
+      { source: { kind: 'generator' } }
+    );
+
+    expect(result).toMatchObject({
+      status: 'error',
+      stage: 'dut',
+      dutBackend: 'iverilog',
+      dutFailure: {
+        phase: 'compile',
+        reason: 'exit',
+        exitCode: 26,
+        diagnostic: {
+          file: 'CPU.v',
+          line: 449,
+          message: 'Unable to bind `D_fixedRD1_reg`'
+        }
+      }
+    });
+    expect(result.message).toContain('CPU.v:449');
+    expect(JSON.stringify(result)).not.toMatch(/SECRET|--private/);
+  });
+
+  it('preserves the same Icarus compile diagnosis on the P7 probe branch', async () => {
+    vi.mocked(getProfile).mockReturnValue('P7');
+    const probe = { version: 1, logBase: 0x2800, recordWords: 8, scenarios: [{ id: 1, kind: 'ri' }] };
+    const currentCase = makeAsmCase({ p7: { probe } as never });
+    vi.mocked(createAsmCaseFromAsm).mockResolvedValueOnce(currentCase);
+    vi.mocked(runVerilogSimulation).mockResolvedValueOnce({
+      backend: 'iverilog',
+      compileResult: {
+        ok: false,
+        exitCode: 26,
+        commandLine: '',
+        cwd: 'E:/work/.co/isim',
+        stdout: '',
+        stderr: 'E:/work/CPU.v:500: error: Unable to bind `M_RD2_from_W`',
+        timedOut: false,
+        stopped: false
+      }
+    } as never);
+
+    const result = await runCourseTraceCase(
+      services(),
+      { asm: URI.file('E:/work/src/test.asm') },
+      { source: { kind: 'generator' } }
+    );
+
+    expect(result).toMatchObject({
+      stage: 'dut',
+      dutBackend: 'iverilog',
+      dutFailure: {
+        phase: 'compile',
+        diagnostic: { file: 'CPU.v', line: 500 }
+      }
+    });
+    expect(executeWithPreflight).not.toHaveBeenCalled();
   });
 
   it('reports two empty writeback traces as indeterminate instead of blaming one side', async () => {

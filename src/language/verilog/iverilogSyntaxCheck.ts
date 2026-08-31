@@ -7,6 +7,7 @@ import {
   buildIverilogEnvironment,
   preflightIverilogRuntime
 } from '../../verilog/iverilogRuntime';
+import { parseIverilogDiagnosticRecords } from '../../verilog/iverilogDiagnostics';
 import { runProcessCore } from '../../processCore';
 import { resolveExternalSyntaxProject } from './externalSyntaxProject';
 
@@ -102,45 +103,22 @@ export function parseIverilogDiagnostics(
   workspaceRoot: string
 ): Map<string, Diagnostic[]> {
   const diagnosticsByUri = new Map<string, Diagnostic[]>();
-  for (const line of output.split(/\r?\n/)) {
-    const parsed = parseIverilogDiagnosticLine(line, workspaceRoot);
-    if (parsed) {
-      addDiagnostic(diagnosticsByUri, parsed.uri, parsed.diagnostic);
-    }
-  }
-  return diagnosticsByUri;
-}
-
-function parseIverilogDiagnosticLine(
-  line: string,
-  workspaceRoot: string
-): { uri: string; diagnostic: Diagnostic } | undefined {
-  const trimmed = line.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const match = /^(.+?):(\d+)(?::(\d+))?:\s*(?:(warning|error|sorry|info(?:rmation)?):\s*)?(.+)$/i.exec(trimmed);
-  if (!match) {
-    return undefined;
-  }
-  const lineNumber = Math.max(0, Number(match[2]) - 1);
-  const character = Math.max(0, Number(match[3] ?? 1) - 1);
-  const label = match[4]?.toLowerCase();
-  const severity = label === 'warning'
-    ? DiagnosticSeverity.Warning
-    : label === 'info' || label === 'information'
-      ? DiagnosticSeverity.Information
-      : DiagnosticSeverity.Error;
-  return {
-    uri: uriForIverilogPath(match[1], workspaceRoot),
-    diagnostic: {
+  for (const parsed of parseIverilogDiagnosticRecords(output)) {
+    const lineNumber = parsed.line - 1;
+    const character = (parsed.column ?? 1) - 1;
+    addDiagnostic(diagnosticsByUri, uriForIverilogPath(parsed.file, workspaceRoot), {
       range: Range.create(lineNumber, character, lineNumber, character + 1),
-      severity,
+      severity: parsed.severity === 'warning'
+        ? DiagnosticSeverity.Warning
+        : parsed.severity === 'information'
+          ? DiagnosticSeverity.Information
+          : DiagnosticSeverity.Error,
       source: 'Icarus Verilog',
       code: 'iverilog-syntax',
-      message: match[5].trim()
-    }
-  };
+      message: parsed.message
+    });
+  }
+  return diagnosticsByUri;
 }
 
 function uriForIverilogPath(file: string, workspaceRoot: string): string {

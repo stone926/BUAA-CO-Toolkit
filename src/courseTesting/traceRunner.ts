@@ -23,11 +23,14 @@ import { verifyConfiguredFixedMarsReference } from '../mips/providers/fixedMarsR
 import { defaultTraceCompareMode } from '../traceCompare';
 import {
   runVerilogSimulation,
+  verilogSimulationFailure,
   verilogSimulationTerminalResult
 } from '../verilog/simulationRunner';
+import type { VerilogSimulationRunOutput } from '../verilog/simulationRunner';
+import { verilogSimulationFailureMessage } from '../verilog/simulationDiagnostic';
 import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
-import { readTextFile } from '../fsUtil';
+import { readTextFile, workspaceFolderFor } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
 import {
   courseExecutionInstructionBudget,
@@ -234,18 +237,7 @@ export async function runCourseTraceCase(
       signal: options.signal
     });
     if (!dut?.simResult?.ok || !dut.simOut) {
-      return {
-        ...failedCase(
-          item,
-          'dut',
-          '测试中止：DUT 运行失败',
-          asmCase.machineCode,
-          undefined,
-          asmCase,
-          engineRunWasCancelled(verilogSimulationTerminalResult(dut), options.signal)
-        ),
-        ...(dut?.backend ? { dutBackend: dut.backend } : {})
-      };
+      return failedDutCaseResult(item, asmCase, dut, undefined, options.signal);
     }
     const simText = await readTextFile(dut.simOut);
     const simEvents = parseSimOutput(simText);
@@ -465,18 +457,7 @@ export async function runCourseTraceCase(
     signal: options.signal
   });
   if (!dut?.simResult?.ok || !dut.simOut) {
-    return {
-      ...failedCase(
-        item,
-        'dut',
-        '测试中止：DUT 运行失败',
-        asmCase.machineCode,
-        oracle.outputFile,
-        asmCase,
-        engineRunWasCancelled(verilogSimulationTerminalResult(dut), options.signal)
-      ),
-      ...(dut?.backend ? { dutBackend: dut.backend } : {})
-    };
+    return failedDutCaseResult(item, asmCase, dut, oracle.outputFile, options.signal);
   }
 
   const simText = await readTextFile(dut.simOut);
@@ -540,6 +521,32 @@ function defaultCourseTracePipeline(): CourseTracePipeline {
     updateArtifacts: updateAsmCaseArtifacts,
     copyArtifact: copyAsmCaseArtifact
   });
+}
+
+function failedDutCaseResult(
+  item: CourseTraceCaseInput,
+  asmCase: AsmCase,
+  dut: VerilogSimulationRunOutput | undefined,
+  oracleOutput: vscode.Uri | undefined,
+  signal: AbortSignal | undefined
+): NeutralCourseTraceCaseResult {
+  const failure = verilogSimulationFailure(
+    dut,
+    workspaceFolderFor(item.asm)?.uri.fsPath
+  );
+  return {
+    ...failedCase(
+      item,
+      'dut',
+      `测试中止：${verilogSimulationFailureMessage(failure, dut?.backend)}`,
+      asmCase.machineCode,
+      oracleOutput,
+      asmCase,
+      engineRunWasCancelled(verilogSimulationTerminalResult(dut), signal)
+    ),
+    ...(dut?.backend ? { dutBackend: dut.backend } : {}),
+    dutFailure: failure
+  };
 }
 
 function executorShadowSummary(shadow: ExecutorShadowOutcome): CourseTraceShadowSummary {

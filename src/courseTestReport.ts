@@ -15,6 +15,11 @@ import {
   manifestSourceOf
 } from './courseTesting/manifestCodec';
 import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
+import {
+  normalizeVerilogSimulationFailure,
+  verilogSimulationFailureMessage,
+  type VerilogSimulationFailure
+} from './verilog/simulationDiagnostic';
 
 const escapeHtml = html.text;
 
@@ -62,6 +67,8 @@ export interface CourseTraceCaseResult {
   dutOut?: string;
   /** Simulator selected for this DUT run. */
   dutBackend?: 'iverilog' | 'isim' | 'logisim';
+  /** Bounded, path-safe terminal failure detail for reports and history. */
+  dutFailure?: VerilogSimulationFailure;
   /** Optional raw DUT process output when dutOut is the normalized trace. */
   dutRawOut?: string;
   /** @deprecated v1 alias for oracleOut. */
@@ -285,6 +292,9 @@ export function publicAutomaticCourseTraceCaseResult(
     ...(neutral.cancelled ? { cancelled: true } : {}),
     stage: neutral.stage,
     ...(neutral.dutBackend ? { dutBackend: neutral.dutBackend } : {}),
+    ...(neutral.dutFailure ? {
+      dutFailure: normalizeVerilogSimulationFailure(neutral.dutFailure)
+    } : {}),
     message: publicAutomaticDiagnosticMessage(neutral),
     ...(neutral.firstDiffIndex === undefined ? {} : { firstDiffIndex: neutral.firstDiffIndex }),
     ...(neutral.firstDiff ? { firstDiff: neutral.firstDiff } : {}),
@@ -337,7 +347,9 @@ export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): s
     case 'oracle':
       return '[AUTO-ORACLE] 参考结果未生成';
     case 'dut':
-      return '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口';
+      return item.dutFailure
+        ? `[AUTO-DUT] ${verilogSimulationFailureMessage(item.dutFailure, item.dutBackend)}`
+        : '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口';
     case 'compare':
       return '[AUTO-COMPARE] 结果比较未完成';
     case 'probe':

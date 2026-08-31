@@ -53,8 +53,16 @@ import {
   TestbenchResolution
 } from './testbenchResolver';
 import { runSerializedWorkspaceOperation } from './workspaceOperationQueue';
+import {
+  createVerilogSimulationFailure,
+  verilogSimulationFailureMessage
+} from './simulationDiagnostic';
 
 const defaultWatchdogLimitPs = 200_000_000;
+/** Compiler diagnostics are textual and should remain well below this per-stream ceiling. */
+const maximumIverilogCompileOutputBytes = 4 * 1024 * 1024;
+/** Course traces share the same 16 MiB ceiling used by replay artifacts. */
+const maximumIverilogSimulationOutputBytes = 16 * 1024 * 1024;
 
 export interface IverilogRunOptions extends IseProjectOptions, Pick<IsimRunOptions,
   | 'machineCodeSource'
@@ -309,7 +317,11 @@ async function runIverilogInWorkspace(
     workspaceRoot: folder.uri.fsPath,
     sourceFiles: sourceFiles.map((uri) => uri.fsPath),
     watchdogFile: watchdog.fsPath
-  }), processOptions);
+  }), {
+    ...processOptions,
+    maxStdoutBytes: maximumIverilogCompileOutputBytes,
+    maxStderrBytes: maximumIverilogCompileOutputBytes
+  });
   const baseOutput: Omit<IverilogRunOutput, 'compileResult'> = {
     backend: 'iverilog',
     runtimeVersion: preflight.version,
@@ -318,13 +330,21 @@ async function runIverilogInWorkspace(
     testbench
   };
   if (!compileResult.ok) {
+    await persistIverilogFailureLog(services, asmCase, 'compile', compileResult);
     if (showMessages) {
-      vscode.window.showErrorMessage('Icarus Verilog 编译失败。请查看插件输出面板');
+      vscode.window.showErrorMessage(verilogSimulationFailureMessage(
+        createVerilogSimulationFailure('iverilog', 'compile', compileResult, folder.uri.fsPath),
+        'iverilog'
+      ));
     }
     return { ...baseOutput, compileResult };
   }
 
-  const simResult = await runTool(preflight.runtime.vvpPath, ['-N', compiled.fsPath], processOptions);
+  const simResult = await runTool(preflight.runtime.vvpPath, ['-N', compiled.fsPath], {
+    ...processOptions,
+    maxStdoutBytes: maximumIverilogSimulationOutputBytes,
+    maxStderrBytes: maximumIverilogSimulationOutputBytes
+  });
   let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
     if (options.simOutputUri) {
@@ -348,8 +368,14 @@ async function runIverilogInWorkspace(
     if (showMessages) {
       vscode.window.showInformationMessage('Icarus Verilog 仿真完成，输出见 .co/out');
     }
-  } else if (showMessages) {
-    vscode.window.showErrorMessage('VVP 仿真失败。请查看插件输出面板');
+  } else {
+    await persistIverilogFailureLog(services, asmCase, 'simulation', simResult);
+    if (showMessages) {
+      vscode.window.showErrorMessage(verilogSimulationFailureMessage(
+        createVerilogSimulationFailure('iverilog', 'simulate', simResult, folder.uri.fsPath),
+        'iverilog'
+      ));
+    }
   }
 
   return { ...baseOutput, compileResult, simResult, simOut };
@@ -479,5 +505,41 @@ function reportRunnerError(
   if (showMessages) {
     revealOutputChannel(services.output, resource);
     vscode.window.showErrorMessage(message);
+  }
+}
+
+async function persistIverilogFailureLog(
+  services: AppServices,
+  asmCase: AsmCase | undefined,
+  phase: 'compile' | 'simulation',
+  result: RunResult
+): Promise<void> {
+  if (!asmCase) {
+    return;
+  }
+  const content = [
+    `phase=${phase}`,
+    `exitCode=${result.exitCode ?? 'none'}`,
+    `timedOut=${result.timedOut}`,
+    `stopReason=${result.stopReason ?? 'none'}`,
+    '',
+    '--- stderr ---',
+    result.stderr,
+    '',
+    '--- stdout ---',
+    result.stdout
+  ].join('\n');
+  try {
+    await writeAsmCaseArtifact(
+      asmCase,
+      'verilog',
+      `iverilog-${phase}.log`,
+      content,
+      `${phase}Log`
+    );
+  } catch {
+    // The original simulator failure remains authoritative. Artifact persistence is
+    // best-effort so a read-only/legacy case cannot turn it into an internal error.
+    services.output.appendLine('Icarus Verilog 失败日志未能写入测试历史');
   }
 }
