@@ -149,7 +149,7 @@ describe('Verilog command registration and entry behavior', () => {
     expect(exportVcdWaveform).toHaveBeenCalledWith(svc, expect.objectContaining({ moduleRegistry }));
   });
 
-  it('blocks ISE-only handlers when the resource-scoped ISE path is blank', async () => {
+  it('generates ISE project files without a configured path but still gates waveform handlers', async () => {
     vi.mocked(getIsePath).mockReturnValue('   ');
     const commands = commandMap();
     registerVerilog({ subscriptions: [] } as never, services());
@@ -158,10 +158,10 @@ describe('Verilog command registration and entry behavior', () => {
     await commands.get(Commands.Verilog.OpenIsimWaveform)!();
     await commands.get(Commands.Verilog.ExportVcd)!();
 
-    expect(generateIseProject).not.toHaveBeenCalled();
+    expect(generateIseProject).toHaveBeenCalledOnce();
     expect(openIsimWaveform).not.toHaveBeenCalled();
     expect(exportVcdWaveform).not.toHaveBeenCalled();
-    expect(vscode.window.showErrorMessage).toHaveBeenCalledTimes(3);
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledTimes(2);
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
       '此功能需要 Xilinx ISE。请先设置 co.toolchain.isePath'
     );

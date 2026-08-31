@@ -1,4 +1,4 @@
-// @index course-testing-pipeline — provider-neutral 执行预算与自动 ISim 运行时间策略
+// @index course-testing-pipeline — provider-neutral 执行预算与 Verilog 仿真时间策略
 
 import { buildIsimRunTcl } from '../../verilogSimulationFiles';
 
@@ -19,7 +19,7 @@ const maximumCourseTraceIsimTimeUs = 5_000;
 const nanosecondsPerCourseExecutionStep = 64;
 
 /**
- * 从已经由 provider-neutral policy 计算的 maxSteps 派生自动 ISim 时间。
+ * 从已经由 provider-neutral policy 计算的 maxSteps 派生自动 Verilog 仿真时间。
  *
  * 下限保持旧有短用例的容错窗口；5ms 上限仍相当于 125 万个课程时钟周期，
  * 在 4096-word IM 边界上有充足余量，同时避免畸形输入导致无界仿真。
@@ -43,7 +43,7 @@ export function courseTraceIsimTime(maxSteps: number): string {
   return `${microseconds}us`;
 }
 
-/** Build the private TCL batch used only by automatic course Trace runs. */
+/** Build the legacy-compatible duration carrier; Icarus extracts the same run budget as a watchdog. */
 export function courseTraceIsimRunTcl(maxSteps: number): string {
   return buildIsimRunTcl(courseTraceIsimTime(maxSteps));
 }

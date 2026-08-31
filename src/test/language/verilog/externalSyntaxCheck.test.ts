@@ -42,17 +42,18 @@ describe('external Verilog syntax dispatcher', () => {
     vi.mocked(runIseSyntaxCheck).mockResolvedValue(result());
   });
 
-  it('selects bundled Icarus when isePath is blank', async () => {
-    const actual = await runExternalVerilogSyntaxCheck(baseOptions('   '));
+  it('selects bundled Icarus by default even when isePath is configured', async () => {
+    const actual = await runExternalVerilogSyntaxCheck(baseOptions('D:/ISE/14.7/ISE_DS/ISE'));
     expect(actual.backend).toBe('iverilog');
     expect(runIverilogSyntaxCheck).toHaveBeenCalledOnce();
     expect(runIseSyntaxCheck).not.toHaveBeenCalled();
   });
 
-  it('selects ISE when isePath is non-empty', async () => {
+  it('selects ISE only for an explicit backend request', async () => {
     const signal = new AbortController().signal;
     const actual = await runExternalVerilogSyntaxCheck({
       ...baseOptions('D:/ISE/14.7/ISE_DS/ISE'),
+      backend: 'isim',
       signal
     });
     expect(actual.backend).toBe('isim');
@@ -66,7 +67,10 @@ describe('external Verilog syntax dispatcher', () => {
       skipped: 'missing-toolchain'
     }));
 
-    const actual = await runExternalVerilogSyntaxCheck(baseOptions('D:/broken-ISE'));
+    const actual = await runExternalVerilogSyntaxCheck({
+      ...baseOptions('D:/broken-ISE'),
+      backend: 'isim'
+    });
 
     expect(actual.backend).toBe('isim');
     expect(actual.toolchainError).toContain('不会回退到内置 Icarus');
@@ -80,7 +84,10 @@ describe('external Verilog syntax dispatcher', () => {
   it('converts ISE project setup errors into a diagnostic instead of rejecting', async () => {
     vi.mocked(runIseSyntaxCheck).mockRejectedValueOnce(new Error('EACCES writing .co/ise-check'));
 
-    const actual = await runExternalVerilogSyntaxCheck(baseOptions('D:/ISE'));
+    const actual = await runExternalVerilogSyntaxCheck({
+      ...baseOptions('D:/ISE'),
+      backend: 'isim'
+    });
 
     expect(actual).toMatchObject({ backend: 'isim', ok: false, timedOut: false });
     expect(actual.toolchainError).toContain('EACCES');

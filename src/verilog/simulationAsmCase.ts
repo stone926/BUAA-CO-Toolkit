@@ -43,7 +43,7 @@ export async function ensureSimulationAsmCase(
   });
   if (!dump?.ok || !dump.outputFile) {
     if (options.showMessages) {
-      vscode.window.showErrorMessage('MARS 导出机器码失败，无法继续 Verilog 仿真');
+      vscode.window.showErrorMessage('汇编器生成机器码失败，无法继续 Verilog 仿真');
     }
     return undefined;
   }

@@ -641,14 +641,13 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
     }
     const detail = error instanceof Error ? error.message : String(error);
     const message = `外部 Verilog 语法检查失败：${detail}`;
-    const usingIse = Boolean(settings.toolchain.isePath.trim());
-    logExternalSyntaxFailure(usingIse ? 'isim' : 'iverilog', message);
+    logExternalSyntaxFailure('iverilog', message);
     clearExternalDiagnosticsForWorkspace(uri);
     state.verilogExternalDiagnostics.set(uri, [{
       range: Range.create(0, 0, 0, 1),
       severity: 1,
-      source: usingIse ? 'ISE fuse' : 'Icarus Verilog',
-      code: usingIse ? 'ise-toolchain' : 'iverilog-toolchain',
+      source: 'Icarus Verilog',
+      code: 'iverilog-toolchain',
       message
     }]);
     if (state.notifiedExternalToolchainError !== message) {

@@ -39,8 +39,8 @@ describe('Verilog simulation dispatcher', () => {
     vscodeState.state!.activeTextEditor = undefined;
   });
 
-  it('uses Icarus for a blank ISE path and passes the operation options unchanged', async () => {
-    vi.mocked(getIsePath).mockReturnValue('   ');
+  it('uses Icarus by default even when an ISE path is configured', async () => {
+    vi.mocked(getIsePath).mockReturnValue('D:/ISE/14.7/ISE_DS/ISE');
     vi.mocked(runIverilog).mockResolvedValue({ backend: 'iverilog' } as never);
     const options = { resource, tclText: 'run 4195us;\nexit\n' };
 
@@ -48,13 +48,14 @@ describe('Verilog simulation dispatcher', () => {
 
     expect(runIverilog).toHaveBeenCalledWith(services, options);
     expect(runIsim).not.toHaveBeenCalled();
+    expect(getIsePath).not.toHaveBeenCalled();
   });
 
-  it('uses ISim for every non-empty ISE path and adds the backend label', async () => {
+  it('uses ISim only for an explicit backend request and adds the configured path', async () => {
     vi.mocked(getIsePath).mockReturnValue('D:/invalid-but-explicit-ISE');
     vi.mocked(runIsim).mockResolvedValue({ simResult: { ok: true } } as never);
 
-    await expect(runVerilogSimulation(services, { resource })).resolves.toMatchObject({
+    await expect(runVerilogSimulation(services, { resource, backend: 'isim' })).resolves.toMatchObject({
       backend: 'isim',
       simResult: { ok: true }
     });
@@ -67,11 +68,11 @@ describe('Verilog simulation dispatcher', () => {
     expect(runIverilog).not.toHaveBeenCalled();
   });
 
-  it('does not fall back when the explicitly selected ISim branch fails', async () => {
+  it('does not fall back when an explicitly requested ISim branch fails', async () => {
     vi.mocked(getIsePath).mockReturnValue('D:/invalid-ISE');
     vi.mocked(runIsim).mockResolvedValue(undefined);
 
-    await expect(runVerilogSimulation(services, { resource })).resolves.toBeUndefined();
+    await expect(runVerilogSimulation(services, { resource, backend: 'isim' })).resolves.toBeUndefined();
 
     expect(runIverilog).not.toHaveBeenCalled();
   });
@@ -122,7 +123,7 @@ describe('Verilog simulation dispatcher', () => {
       fuseResult
     } as never);
 
-    const output = await runVerilogSimulation(services, { resource });
+    const output = await runVerilogSimulation(services, { resource, backend: 'isim' });
 
     expect(output).toMatchObject({ backend: 'isim', fuseResult });
     expect(verilogSimulationTerminalResult(output)).toBe(fuseResult);

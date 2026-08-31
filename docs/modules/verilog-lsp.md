@@ -53,7 +53,7 @@ lsp-providers:
   formatting.ts — Verilog 细项格式化配置
   folding.ts — module/always/initial/function/task/generate/case/预处理条件块
   symbols.ts — 文档符号树(模块->端口/参数/声明/实例)
-  traceParser.ts — ISim $display输出解析为CpuTraceEvent[]
+  traceParser.ts — Verilog `$display` trace 输出解析为 CpuTraceEvent[]（Icarus 与 legacy ISim 共用）
 
 cross-file:
   workspaceModuleRegistry.ts — VSCode端后台索引: FileSystemWatcher `.v/.vh`, onDidSaveTextDocument增量更新
@@ -61,7 +61,7 @@ cross-file:
   signalWiring.ts — 跨模块信号driver/reader追踪
 
 external-compiler:
-  externalSyntaxCheck.ts — 与仿真共用 `isePath` 两值 selector；空值走 bundled Icarus，非空只走 ISE fuse，显式无效 ISE 不回退
+  externalSyntaxCheck.ts — 通用/on-save 检查固定 bundled Icarus；仅显式 internal backend 请求保留 ISE fuse 兼容支路，`isePath` 本身不再选择后端
   externalSyntaxProject.ts — LSP 侧有界发现 `.v`/唯一 XISE 并复用确定性 source order，跳过编辑器/构建产物目录
   iverilogSyntaxCheck.ts — 从 initializationOptions 的扩展安装根运行绝对路径 `iverilog -g2005 -tnull -i`，解析常见 path:line[:column] 诊断
   iseSyntaxCheck.ts — 保留 fuse 检查，并与 Icarus 共用外部源码发现；ISE warning suppression 只作用于该分支

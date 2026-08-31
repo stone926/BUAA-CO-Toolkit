@@ -22,12 +22,22 @@ describe('advanced tool model', () => {
     expect(commands).not.toContain('co.logisim.convertLogToCsv');
   });
 
-  it('keeps generic syntax checking but hides ISE-only tools without an ISE opt-in', () => {
-    const commands = commandsFor('P7', 'verilog');
+  it('keeps Icarus checks and ISE project generation available while gating ISim execution tools', () => {
+    const items = buildAdvancedToolItems({
+      profile: 'P7',
+      activeKind: 'verilog',
+      activeFileName: 'current.v',
+      iseConfigured: false
+    });
+    const commands = items.map((item) => item.command);
 
     expect(commands).toContain('co.verilog.checkSyntaxWithIse');
-    expect(commands).not.toContain('co.verilog.generateIseProject');
+    expect(commands).toContain('co.verilog.generateIseProject');
     expect(commands).not.toContain('co.verilog.exportVcd');
+    expect(items.find((item) => item.command === 'co.verilog.checkSyntaxWithIse')?.description)
+      .toContain('Icarus');
+    expect(items.find((item) => item.command === 'co.verilog.generateIseProject')?.detail)
+      .toContain('不要求已安装 ISE');
   });
 
   it('keeps Logisim utilities but hides test preparation and diagnostics for P3', () => {

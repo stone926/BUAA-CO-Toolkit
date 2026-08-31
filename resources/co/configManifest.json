@@ -46,7 +46,7 @@
       },
       "co.toolchain.mars": {
         "type": "string",
-        "description": "P2 汇编和运行使用的 Mars jar 路径。P3-P7 自动测试使用内置参考引擎，无需配置",
+        "description": "P2 汇编/运行，以及 P3-P7 通用 MARS 运行、stdin、终端命令使用的 Mars jar 路径；P7 可由兼容项 marsP7 覆盖。P3-P7 汇编导出和自动测试无需配置",
         "scope": "machine-overridable",
         "order": 30
       },
@@ -58,7 +58,7 @@
       },
       "co.toolchain.isePath": {
         "type": "string",
-        "description": "Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE。留空时使用扩展内置 Icarus；非空时显式选择 ISE，配置无效不会回退",
+        "description": "仅供 ISim GUI 波形和当前 ISim VCD 导出使用的 Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE。通用语法检查、仿真和自动测试始终使用扩展内置 Icarus",
         "scope": "machine-overridable",
         "order": 50
       },
@@ -126,7 +126,7 @@
           "保存 Verilog 文件时自动运行编译器检查",
           "只在运行 CO: Verilog 检查语法 命令时检查"
         ],
-        "description": "控制 Verilog 编译器语法检查的触发时机；ISE 路径为空时使用内置 Icarus，非空时使用 ISE fuse",
+        "description": "控制内置 Icarus Verilog 编译器语法检查的触发时机；ISE 路径不会改变此后端",
         "scope": "resource",
         "order": 50
       },
@@ -164,7 +164,7 @@
       },
       "co.project.machineCode": {
         "type": "string",
-        "description": "MARS 生成、Verilog/Logisim 工作流加载的机器码文件名。课程标准项目通常使用 code.txt",
+        "description": "内置汇编器或 legacy MARS 生成、Verilog/Logisim 工作流加载的机器码文件名。课程标准项目通常使用 code.txt",
         "scope": "resource",
         "order": 30
       },
@@ -188,8 +188,8 @@
     "properties": {
       "co.toolchain.marsP7": {
         "type": "string",
-        "description": "P7 手动测试和历史复现使用的 Mars jar 路径",
-        "deprecationMessage": "仅为兼容已有的 P7 MARS 配置保留。自动测试不读取此项；建议删除该设置并使用内置参考引擎。",
+        "description": "P7 普通 MARS 运行、显式 legacy 测试和历史复现使用的 Mars jar override",
+        "deprecationMessage": "仅为兼容已有的 P7 MARS override 保留。汇编导出和自动测试不读取此项；不使用 P7 MARS 兼容流程时可删除。",
         "scope": "machine-overridable",
         "order": 10
       },

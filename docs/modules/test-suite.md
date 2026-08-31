@@ -15,7 +15,7 @@ test/language/verilog/:
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/verilog/:
-  verilogBackend, iverilogRuntime, iverilogRunner, simulationRunner, simulationDiagnostic, simulationInputs — 两值选择、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
+  verilogBackend, iverilogRuntime, iverilogRunner, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 
 TextMate:
   使用 vscode-textmate + vscode-oniguruma 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步及课程真实宏/数字片段

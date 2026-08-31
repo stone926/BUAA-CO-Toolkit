@@ -1,4 +1,4 @@
-// @index verilog-testbench-resolver — ISim testbench 发现、生成和 case 记录
+// @index verilog-testbench-resolver — Verilog testbench 发现、生成和 case 记录
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -220,7 +220,7 @@ export async function ensureRunnableTestbench(
     services.output.appendLine(`已生成 testbench ${tbUri.fsPath}`);
   }
   if (showMessages && !options.nonInteractive) {
-    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
+    vscode.window.showInformationMessage(`已生成 Verilog testbench ${path.basename(tbUri.fsPath)}`);
   }
   return { moduleName: configuredTestbench, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
 }
@@ -339,7 +339,7 @@ async function ensureActiveModuleTestbench(
     services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
   }
   if (showMessages && !options.nonInteractive) {
-    vscode.window.showInformationMessage(`已为 ISim 生成 ${path.basename(tbUri.fsPath)}`);
+    vscode.window.showInformationMessage(`已生成 Verilog testbench ${path.basename(tbUri.fsPath)}`);
   }
   return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
 }

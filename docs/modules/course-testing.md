@@ -1,6 +1,6 @@
 # course-testing | src/courseTesting/ | 48 files + host adapters
 
-P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(Icarus/ISim)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。Verilog 后端只由 resource-scoped `isePath` 选择：空值使用扩展内置 Icarus，非空使用现有 ISim，失败不回退。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于手动测试、历史 replay 和显式开发者验证。
+P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(bundled Icarus)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。通用 Verilog 仿真和自动 DUT lane 固定使用扩展内置 Icarus；resource-scoped `isePath` 仅服务 ISim GUI 波形和当前 ISim VCD 等专属功能，不再充当默认后端 selector。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于手动测试、历史 replay 和显式开发者验证。
 
 MARS reference 按角色严格拆分：assembly compatibility 使用 `mars-assembler-v0.6.3`（8b53a49，SHA-256 `599957…afb31`）；真实 execution/full-stack gate 使用 `legacy-course-executor` v0.6.3-course1（c6197f4，SHA-256 `d13456…0c64`）。`mars` 模式是 configured legacy 回滚，只有 `verify-both`/开发命令要求后一固定身份。legacy 课程 oracle 强制 coL2，coL1 仅作兼容探针；P7 按需使用 efc/p7irq，只有历史 `_co_internal_unknown_instruction` 用例才额外使用 cl，新生成 RI raw word 不需要。MARS 的 dump、停机尾、SWL/SWR、REGIMM link、Compact 初态/边界 bug 修复只存在于 `mips/legacy` normalizer 和 conformance，不进入 builtin provider/core。任一含非零 `.data` 初值的课程 case 会在 provider-neutral ProgramImage policy 处拒绝，因为 DUT 复位内存为全零。
 
@@ -13,7 +13,7 @@ P7 自动固定运行 hybrid：anchor(TS 课程 oracle 精确对拍+中断注入
 独立 conformance 严格按 evidence kind 区分：既有 assembly-diff 通过 JSONL CLI 对 10 个 P3–P7 corpus 与固定 MARS 比较 text/ktext/data；阶段 6 新增真实 execution differential，冻结 P3–P7 各 50 个确定性 seed（合计 250）和各 1 个手写边界用例。每例先证明 TS/MARS 实际执行 image fingerprint 完全相同，再比较 canonical architectural writes、精确停机和最终 observable summary。聚合 gate 重算 profile/result payload，要求每 profile 50+1、总 255、0 failed/inconclusive/out-of-domain/error/unexplained，拒绝 artifact-only `validated` 冒充执行证据。固定 MARS reference 永久在 Ubuntu 24.04/Windows 2025 CI matrix 中运行。
 
 orchestration:
-  courseTest.ts — 总调度；公共测试启动入口唯一为“启动持续测试”，默认按最强策略无限生成，并在首个失败或错误时立即停止；另保留“停止持续测试”和“测试历史/失败用例”两个控制/诊断入口，旧单轮自动入口已删除，低层手动/回放命令 ID 仅作隐藏兼容。runCourseTraceCase 串联 plan->assemble provider->同 plan oracle provider->ISim/Logisim DUT->compare，并分流 P7 probe
+  courseTest.ts — 总调度；公共测试启动入口唯一为“启动持续测试”，默认按最强策略无限生成，并在首个失败或错误时立即停止；另保留“停止持续测试”和“测试历史/失败用例”两个控制/诊断入口，旧单轮自动入口已删除，低层手动/回放命令 ID 仅作隐藏兼容。runCourseTraceCase 串联 plan->assemble provider->同 plan oracle provider->Icarus/Logisim DUT->compare，并分流 P7 probe
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
   courseTestContinuous.ts — “启动持续测试”的持续生成循环：生产入口固定最强配置、无限轮、首个失败或错误立即停止、零延迟主动 yield、通过产物/报告有界、失败/错误产物保留；内部参数不读 Settings。启动阶段同步占位防重复会话，启动检查期间也可取消；停止请求可打断等待或在途外部工具，用户取消的未完成 case 不计为测试 error；面板关闭触发停止，最终报告写失败也保证释放会话
   courseTestMessages.ts — diffMessage 中文提示、marsStageFailureMessage
@@ -24,22 +24,22 @@ orchestration:
   courseTestTraceFiles.ts — 输出命名：.co/out/{stem}.oracle.out、.co/out/{stem}.sim.out；手动比较仍兼容读取旧 `.mars.out`
 
 generation:
-  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/ISim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe/internal 中立 stage，未分类框架异常不得伪装成 compare 失败
-  courseTesting/courseTestSession.ts — batch 与 continuous 共用的原子会话租约；任意单次/持续课程测试互斥，避免共享 ISim/Logisim 工程、testbench 和机器码被并发覆写，release 幂等并在 finally 中执行
+  courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/Icarus/Logisim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe/internal 中立 stage，未分类框架异常不得伪装成 compare 失败
+  courseTesting/courseTestSession.ts — batch 与 continuous 共用的原子会话租约；任意单次/持续课程测试互斥，避免共享 Icarus/Logisim 工作目录、testbench 和机器码被并发覆写，release 幂等并在 finally 中执行
   courseTesting/automaticTestPolicy.ts — 自动测试引擎、强度与外部工具预算唯一入口：固定 builtin；P3-P6 4094 payload，P7 1118+hybrid+全异常，中断/Timer 固定开启；持续测试的停止/留存策略也在此冻结
   courseTesting/generatorWorkflow.ts — 自动入口始终使用内置 generator 和 internal policy，不再由活动外部生成器文件接管；P7 hybrid 内部展开为 anchor/core-probe/timer-probe，分片写入 manifest 供精确 replay 但不形成用户设置；历史 external setup 与完整 CourseTraceBatchSource provenance 仅供隐藏兼容/精确 replay
   courseTesting/executorShadowRunner.ts — executor-only shadow 宿主：同一 legacy ProgramImage 证据上对比 builtin executor；结果显式标为 `executor-only`，不能计入 full-stack gate
   courseTesting/fullStackShadowRunner.ts + shadowBundleArtifacts.ts — full-stack shadow：从已哈希 v2 source closure 建立隔离 materialization，builtin assembler→builtin executor 与 fixed legacy assembler→其自身 legacy executor 双端独立运行；前后复验 fixed hash、逐字比较实际 image，matched/mismatch/inconclusive 都原子保存 source/image/raw trace/engine/contracts/result bundle，未登记或不可比较结果阻断
 
   courseTesting/pipeline/courseTracePipeline.ts — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle、backend-neutral Verilog DUT 执行与差分比较）；
-  courseTesting/pipeline/courseImagePolicy.ts + courseTesting/pipeline/haltPolicy.ts + courseTesting/pipeline/executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；自动 Verilog 仿真从架构 step budget 派生 200us..5ms 私有预算（ISE 使用 TCL，Icarus 转成 watchdog；probe 使用内部上界），不受手动 `co.project.simTime` 截断
+  courseTesting/pipeline/courseImagePolicy.ts + courseTesting/pipeline/haltPolicy.ts + courseTesting/pipeline/executionBudget.ts — 课程 ProgramImage 段布局/容量/停机字策略与执行预算单一入口；自动 Verilog 仿真从架构 step budget 派生 200us..5ms 私有预算并由 Icarus 转成 watchdog（probe 使用内部上界），不受手动 `co.project.simTime` 截断
 
   courseTesting/oracle/commitProjection.ts — CommitEvent 到结构化 first-diff 摘要（PC、word、GPR/HI-LO/CP0、memory/device）与 canonical event digest；
   courseTesting/oracle/differentialRunner.ts — legacy/builtin 架构写 trace、first-diff、final digest 的确定性差分；
   courseTesting/oracle/shadowPolicy.ts — 已登记 divergence 策略；未登记差异固定为 inconclusive；
   courseTesting/oracle/executionAssertions.ts — CommitEvent assertion/watchpoint 观察器；
 
-  courseTesting/traceRunner.ts — 单 case 执行：一次快照 engine plan，依次校验 source closure、assembler image、课程 ProgramImage policy、oracle、DUT 与 manifest metadata；provider-neutral 输出为 `.oracle.out`。Icarus/ISim 的 anchor 与 P7 probe 失败统一经 simulationDiagnostic 归因，case result 保存安全摘要，Icarus case 目录另留私有原始 compile/simulation log 供复现。所有自动 P3-P7 case（anchor/core probe/timer probe 均含）固定 builtin，manual/replay 才读取 engineMode；旧 `oracleMode='verify-both'` 仅保留 executor-only shadow，新手动 `engineMode='verify-both'` 运行独立 full stack。普通 stdin、hash 变化、任一 inconclusive/not-comparable 仍阻断固定验证
+  courseTesting/traceRunner.ts — 单 case 执行：一次快照 engine plan，依次校验 source closure、assembler image、课程 ProgramImage policy、oracle、Icarus DUT 与 manifest metadata；provider-neutral 输出为 `.oracle.out`。anchor 与 P7 probe 失败统一经 simulationDiagnostic 归因，case result 保存安全摘要，case 目录另留私有原始 compile/simulation log 供复现。所有自动 P3-P7 case（anchor/core probe/timer probe 均含）固定 builtin，manual/replay 才读取 engineMode；旧 `oracleMode='verify-both'` 仅保留 executor-only shadow，新手动 `engineMode='verify-both'` 运行独立 full stack。普通 stdin、hash 变化、任一 inconclusive/not-comparable 仍阻断固定验证
   mips/legacy/marsOracleCompatibility.ts — legacy/reference 层的 P3-P7 稳定版 MARS oracle 兼容检查；coL2 动态跟踪 `$gp/$sp` 是否已显式初始化并重建访存有效地址，拒绝 signed EA 溢出和 Compact* 中课程硬件不存在的数据段；P7 对 efc 处理异常时不输出 victim 指令头的情况增加保守静态兜底
   mips/legacy/marsImageCompatibility.ts — legacy/reference 层将每个 coL2 动态 PC/机器码绑定到最终硬件 HexText（含 P7 padding/handler merge），并只允许 handler 内精确 `sb $0,0x7f20($0)` 访问 IG；用跨分支/跳转及延迟槽的静态常量数据流兜底无 victim header 的非对齐 IG 访问
   courseTesting/builtinAsmGenerator.ts — 入口：generateBuiltinAsmTestCase；P7StressMode 分派(anchor->randomBody、probe->probeEmitter、hybrid 两次调用)

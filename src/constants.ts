@@ -20,7 +20,7 @@ export const TRACE_PROFILES = new Set<ProjectProfile>(profilesWithCapability('tr
 /** 使用 Verilog 开发流程的 Profile。 */
 export const VERILOG_PROFILES = new Set<ProjectProfile>(profilesWithCapability('verilog'));
 
-/** 使用 MIPS 汇编（Mars 运行）的 Profile。 */
+/** 使用 MIPS 汇编工作流的 Profile。 */
 export const MIPS_PROFILES = new Set<ProjectProfile>(profilesWithCapability('mips'));
 
 /** Logisim 电路相关的 Profile。 */
@@ -51,10 +51,10 @@ export const CO_DIR = '.co';
 /** 课程测试用例存储目录。 */
 export const CO_CASES_DIR = '.co/cases';
 
-/** MARS/ISim 输出目录。 */
+/** Oracle、仿真器与 legacy MARS 输出目录。 */
 export const CO_OUT_DIR = '.co/out';
 
-/** ISim 工程目录。 */
+/** Verilog 仿真工作目录（兼容沿用 isim 名称）。 */
 export const CO_ISIM_DIR = '.co/isim';
 
 /** Hazard 分析输出目录。 */

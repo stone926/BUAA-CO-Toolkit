@@ -28,7 +28,6 @@ import {
 } from '../verilog/simulationRunner';
 import type { VerilogSimulationRunOutput } from '../verilog/simulationRunner';
 import { verilogSimulationFailureMessage } from '../verilog/simulationDiagnostic';
-import { IsimCompileCache } from '../verilogIsimCache';
 import { AppServices } from '../types';
 import { readTextFile, workspaceFolderFor } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
@@ -85,7 +84,6 @@ export interface CourseTraceRunOptions {
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
-  isimCompileCache?: IsimCompileCache;
   artifactOutputMode?: 'workspace' | 'case';
   /** Snapshot override used by explicit developer lanes; normal runs read co.mips.engine once. */
   engineMode?: MipsEngineMode;
@@ -232,7 +230,6 @@ export async function runCourseTraceCase(
       simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
       tclText: courseTraceIsimRunTcl(p7ProbeExecutionInstructionBudget),
-      compileCache: options.isimCompileCache,
       nonInteractive: automatic,
       signal: options.signal
     });
@@ -452,7 +449,6 @@ export async function runCourseTraceCase(
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
     tclText: courseTraceIsimRunTcl(maxSteps),
-    compileCache: options.isimCompileCache,
     nonInteractive: automatic,
     signal: options.signal
   });

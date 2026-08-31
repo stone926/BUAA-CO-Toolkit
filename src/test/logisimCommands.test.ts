@@ -101,7 +101,7 @@ describe('Logisim command workflows', () => {
       ok: true,
       status: { ok: true, exitCode: 0, stdout: '', stderr: '', timedOut: false },
       outputFile: vscode.Uri.file('E:/work/.co/cases/case-1/code.txt'),
-      descriptor: { id: 'legacy-mars-v0.6.3' }
+      descriptor: { id: 'builtin-ts' }
     } as never);
     vi.mocked(readTextFile).mockResolvedValue('v2.0 raw\n00000000\n');
     vi.mocked(writeAsmCaseArtifact).mockResolvedValue(vscode.Uri.file('E:/work/.co/cases/case-1/logisim/out.circ') as never);
@@ -112,14 +112,14 @@ describe('Logisim command workflows', () => {
     vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({
       ok: false,
       status: { ok: false, exitCode: 1, stdout: '', stderr: 'bad', timedOut: false },
-      descriptor: { id: 'legacy-mars-v0.6.3' }
+      descriptor: { id: 'builtin-ts' }
     } as never);
     registerLogisim({ subscriptions: [] } as never, services());
 
     await commands.get(Commands.Logisim.GenerateRom)!();
 
     expect(writeAsmCaseArtifact).not.toHaveBeenCalled();
-    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('MARS 导出机器码失败，无法生成 Logisim ROM');
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('汇编器生成机器码失败，无法生成 Logisim ROM');
   });
 
   it('injects machine code into a selected circuit and records the prepared circuit artifact', async () => {
@@ -140,5 +140,25 @@ describe('Logisim command workflows', () => {
       'circuitTemplate'
     );
     expect(vscode.window.showTextDocument).toHaveBeenCalled();
+  });
+
+  it('reports ROM injection assembly failures without naming MARS', async () => {
+    const commands = commandMap();
+    vi.mocked(pickOneFile).mockResolvedValue(vscode.Uri.file('E:/work/cpu.circ'));
+    vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({
+      ok: false,
+      status: { ok: false, exitCode: 1, stdout: '', stderr: 'bad', timedOut: false },
+      descriptor: { id: 'builtin-ts' }
+    } as never);
+    registerLogisim({ subscriptions: [] } as never, services());
+
+    await commands.get(Commands.Logisim.InjectRomIntoCircuit)!();
+
+    expect(injectMachineCodeIntoLogisimRom).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      '汇编器生成机器码失败，无法注入 Logisim ROM'
+    );
+    expect(vi.mocked(vscode.window.showErrorMessage).mock.calls.flat().join(' '))
+      .not.toMatch(/MARS/i);
   });
 });

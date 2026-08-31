@@ -4,7 +4,8 @@ import {
   courseInstructionImageBaseAddress,
   courseInstructionImageHexText,
   courseInstructionImageWordCapacity,
-  courseInstructionImageWords
+  courseInstructionImageWords,
+  courseInstructionImageWordsWithOrdinaryHalt
 } from '../../mips/core/assembler/artifacts';
 
 function image(segments: readonly ProgramSegment[]): ProgramImage {
@@ -75,5 +76,39 @@ describe('course instruction-image projection', () => {
       name: 'text', baseAddress: 0x3000,
       words: new Array(courseInstructionImageWordCapacity + 1).fill(0)
     }]))).toThrow(/extends outside/);
+  });
+
+  it.each(['P4', 'P6'] as const)('appends the ordinary %s CPU halt loop after user text', (profile) => {
+    const words = courseInstructionImageWordsWithOrdinaryHalt(image([{
+      name: 'text', baseAddress: 0x3000, words: [0x34080001]
+    }]), profile);
+
+    expect(words).toEqual([0x34080001, 0x1000ffff, 0]);
+  });
+
+  it('places the ordinary P7 halt loop before the absolute ktext address', () => {
+    const handlerIndex = (0x4180 - courseInstructionImageBaseAddress) / 4;
+    const words = courseInstructionImageWordsWithOrdinaryHalt(image([
+      { name: 'text', baseAddress: 0x3000, words: [0x34080001] },
+      { name: 'ktext', baseAddress: 0x4180, words: [0x401a6800, 0x42000018] }
+    ]), 'P7');
+
+    expect(words.slice(0, 3)).toEqual([0x34080001, 0x1000ffff, 0]);
+    expect(words[handlerIndex - 1]).toBe(0);
+    expect(words.slice(handlerIndex)).toEqual([0x401a6800, 0x42000018]);
+  });
+
+  it('does not duplicate an existing halt loop and rejects collision with P7 ktext', () => {
+    const halted = image([
+      { name: 'text', baseAddress: 0x3000, words: [0x34080001, 0x1000ffff, 0] },
+      { name: 'ktext', baseAddress: 0x4180, words: [0x42000018] }
+    ]);
+    expect(courseInstructionImageWordsWithOrdinaryHalt(halted, 'P7'))
+      .toEqual(courseInstructionImageWords(halted));
+
+    expect(() => courseInstructionImageWordsWithOrdinaryHalt(image([
+      { name: 'text', baseAddress: 0x3000, words: new Array(1119).fill(0x34080001) },
+      { name: 'ktext', baseAddress: 0x4180, words: [0x42000018] }
+    ]), 'P7')).toThrow(/halt loop.*overlaps.*ktext/);
   });
 });

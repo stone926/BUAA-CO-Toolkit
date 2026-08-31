@@ -159,7 +159,7 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
           'context.backend',
           '仿真后端',
           context.verilogBackend,
-          '默认使用插件内置 Icarus；仅在配置 ISE 路径后切换到 ISE。Top/TB 等参数只影响手动仿真，不影响持续测试。',
+          '通用仿真与持续测试固定使用插件内置 Icarus。ISE 路径只启用 ISim 波形等专属功能，不会切换默认后端，也不影响持续测试。Top/TB 等参数只影响手动仿真。',
           'circuit-board'
         )
       );
@@ -252,11 +252,11 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
     children.push(
       actionItem(
         'core.asmRun',
-        'ASM 运行',
+        'MARS 运行',
         Commands.Mips.RunCurrentFile,
         'play',
         `使用当前 ASM: ${active.basename}`,
-        active.fsPath
+        `${active.fsPath}\n\n通用运行保留 MARS syscall/console 语义；文本段导出使用独立的汇编器路由。`
       ),
       actionItem(
         'core.asmDumpText',
@@ -264,7 +264,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         Commands.Mips.DumpText,
         'export',
         `写入 ${context.machineCode}`,
-        `ASM:\n${active.fsPath}\n\n默认输出:\n${defaultSiblingPath(active.fsPath, context.machineCode)}`
+        `ASM:\n${active.fsPath}\n\n默认输出:\n${defaultSiblingPath(active.fsPath, context.machineCode)}\n\n${context.profile === 'P2' ? 'P2 使用 MARS。' : 'P3–P7 使用内置汇编器。'}`
       )
     );
   }

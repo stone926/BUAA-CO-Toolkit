@@ -33,11 +33,11 @@ workspace:
 
 external-compiler:
   externalSyntaxProject.ts — 发现与排序外部检查使用的工作区 Verilog 源文件
-  externalSyntaxCheck.ts — isePath 两值分派；显式但无效的 ISE 配置产生错误且不回退
+  externalSyntaxCheck.ts — 通用/on-save 检查固定使用 bundled Icarus；仅显式 internal `isim` 请求保留 ISE fuse 兼容分支，工具路径本身不选择后端
   iverilogSyntaxCheck.ts — bundled Icarus `-tnull -i` 检查与最小 stderr 诊断解析
   iseSyntaxCheck.ts — ISE fuse 集成与错误输出解析
   iseDiagnosticFilters.ts — ISE fuse warning降噪: 从资源加载过滤规则, 按设置过滤 ise-syntax 噪声
 
-触发设置: `co.verilog.syntax.external.mode`(`off|onSave|commandOnly`) 与 `co.verilog.syntax.external.timeoutMs`; `co.verilog.syntax.ise.suppressedWarnings` 仅作用于 ISE 分支。
+触发设置: `co.verilog.syntax.external.mode`(`off|onSave|commandOnly`) 与 `co.verilog.syntax.external.timeoutMs`; `co.verilog.syntax.ise.suppressedWarnings` 仅作用于显式 ISE 兼容分支，普通检查不读取它。
 
 迁移: 多数规则基于AST/model, token回退仅限语法错误边界. ARCHITECTURE_REVIEW.md

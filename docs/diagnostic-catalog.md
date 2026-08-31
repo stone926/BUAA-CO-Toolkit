@@ -129,7 +129,7 @@
 | `synth-*` | 信息 | 可综合性提示 | `src/language/verilog/lintDiagnostics.ts` | `initial`、声明初始化、乘除取模 |
 | `vc-001-*` 等 VC 子码 | 可配置 | 课程 Lint | `src/language/verilog/lintDiagnostics.ts`, `src/language/verilog/dataflowDiagnostics.ts` | 课程风格、组合/时序逻辑规则；基础规则见下表 |
 | `ise-syntax` | 错误/警告/信息 | 外部 ISE | `src/language/verilog/iseSyntaxCheck.ts`, `src/language/verilog/iseDiagnosticFilters.ts` | ISE fuse 输出的语法诊断；默认过滤未连接端口类 warning |
-| `ise-toolchain` | 错误 | 外部 ISE | `src/language/verilog/externalSyntaxCheck.ts` | 显式配置的 ISE 路径无效；不会回退到 bundled Icarus |
+| `ise-toolchain` | 错误 | 外部 ISE | `src/language/verilog/externalSyntaxCheck.ts` | 显式 internal ISE 兼容检查找不到 fuse；不会回退到 bundled Icarus |
 | `iverilog-syntax` | 错误/警告/信息 | 外部 Icarus | `src/language/verilog/iverilogSyntaxCheck.ts` | bundled Icarus 输出的可定位编译诊断 |
 | `iverilog-toolchain` | 错误 | 外部 Icarus | `src/language/verilog/iverilogSyntaxCheck.ts` | 扩展根缺失、bundled runtime 缺失或预检失败 |
 

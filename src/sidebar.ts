@@ -67,7 +67,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       testbench: getTestbench(resource),
       machineCode: getMachineCode(resource),
       simTime: getSimTime(resource),
-      verilogBackend: getIsePath(resource).trim() ? 'ISE / ISim' : 'Icarus Verilog（内置）',
+      verilogBackend: 'Icarus Verilog（内置）',
       iseConfigured: Boolean(getIsePath(resource).trim()),
       activeFile: this.activeFileModel(activeDocument),
       tools: this.createToolModels(profile, resource)
@@ -141,10 +141,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       tools.push(this.createToolModel('logisim', 'Logisim', getLogisimJar(resource)));
     }
     if (showAllTools || requiredTools.has('verilogsimulator')) {
-      const isePath = getIsePath(resource).trim();
-      tools.push(isePath
-        ? this.createToolModel('verilogSimulator', 'Verilog simulator (ISE)', isePath)
-        : this.createToolModel('verilogSimulator', 'Verilog simulator', 'Icarus Verilog（内置）'));
+      tools.push(this.createToolModel('verilogSimulator', 'Verilog simulator', 'Icarus Verilog（内置）'));
     }
     const hazardDir = getHazardCalculator(resource);
     if (hazardDir) {

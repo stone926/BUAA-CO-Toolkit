@@ -33,7 +33,7 @@ async function generateLogisimRom(services: AppServices): Promise<void> {
   const asmCase = await createAsmCaseFromAsm(asm, { source: { kind: 'selected' } });
   const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
   if (!dump?.ok || !dump.outputFile) {
-    vscode.window.showErrorMessage('MARS 导出机器码失败，无法生成 Logisim ROM');
+    vscode.window.showErrorMessage('汇编器生成机器码失败，无法生成 Logisim ROM');
     return;
   }
   const text = await readTextFile(asmCase.machineCode);
@@ -56,7 +56,7 @@ async function injectRomIntoCircuit(services: AppServices): Promise<void> {
   const asmCase = await createAsmCaseFromAsm(asm, { source: { kind: 'selected' } });
   const dump = await prepareAsmCaseMachineCode(services, asmCase, { showMessages: false });
   if (!dump?.ok || !dump.outputFile) {
-    vscode.window.showErrorMessage('MARS 导出机器码失败，无法注入 Logisim ROM');
+    vscode.window.showErrorMessage('汇编器生成机器码失败，无法注入 Logisim ROM');
     return;
   }
 

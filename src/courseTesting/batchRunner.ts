@@ -85,7 +85,7 @@ export async function runCourseTraceBatch(
     services.statusBar.text = automatic ? 'CO: 自动测试' : 'CO: 批量测试';
 
     // One logical batch session owns one AbortController. Every assembler/oracle/
-    // ISim/Logisim process in this loop receives the same signal.
+    // Icarus/Logisim process in this loop receives the same signal.
     const runOptions = await resolveRunOptions(services, cases[0].asm, {
       source,
       signal,

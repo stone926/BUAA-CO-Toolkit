@@ -1,4 +1,4 @@
-// @index verilog-external-syntax-check — isePath 驱动的 Icarus/ISE 外部语法检查薄分派
+// @index verilog-external-syntax-check — bundled Icarus 默认检查；ISE 仅接受显式请求
 import { Diagnostic, DiagnosticSeverity, Range, WorkspaceFolder } from 'vscode-languageserver/node';
 import { selectVerilogBackend, VerilogBackend } from '../../verilog/verilogBackend';
 import type { CoSettings } from '../common/settings';
@@ -15,6 +15,8 @@ export interface ExternalVerilogSyntaxCheckOptions {
   timeoutMs: number;
   settings: CoSettings;
   signal?: AbortSignal;
+  /** Generic/on-save checks omit this. Reserved for an explicit ISE compatibility check. */
+  backend?: VerilogBackend;
 }
 
 export interface ExternalVerilogSyntaxCheckResult {
@@ -31,7 +33,7 @@ export interface ExternalVerilogSyntaxCheckResult {
 export async function runExternalVerilogSyntaxCheck(
   options: ExternalVerilogSyntaxCheckOptions
 ): Promise<ExternalVerilogSyntaxCheckResult> {
-  const backend = selectVerilogBackend(options.isePath);
+  const backend = selectVerilogBackend(options.backend);
   if (backend === 'iverilog') {
     try {
       const result = await runIverilogSyntaxCheck({
@@ -75,7 +77,7 @@ export async function runExternalVerilogSyntaxCheck(
     };
   }
 
-  const message = `已配置 co.toolchain.isePath，但未找到可用的 ISE fuse：${options.isePath.trim()}。不会回退到内置 Icarus。`;
+  const message = `显式 ISE 兼容检查未找到可用的 fuse：${options.isePath.trim() || '未配置 co.toolchain.isePath'}。不会回退到内置 Icarus。`;
   const diagnosticsByUri = new Map<string, Diagnostic[]>([[options.triggerUri, [{
     range: Range.create(0, 0, 0, 1),
     severity: DiagnosticSeverity.Error,

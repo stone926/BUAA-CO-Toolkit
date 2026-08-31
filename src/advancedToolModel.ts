@@ -39,18 +39,18 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
       tool('mips.terminal', 'ASM 终端运行', 'MARS', activeDetail, Commands.Mips.RunInTerminal)
     );
     if (context.profile === 'P7') {
-      items.push(tool('mips.kernelDump', 'ASM 导出内核文本段', 'MARS', activeDetail, Commands.Mips.DumpKernelText));
+      items.push(tool('mips.kernelDump', 'ASM 导出内核文本段', '内置汇编器', activeDetail, Commands.Mips.DumpKernelText));
     }
   }
 
   if (context.activeKind === 'verilog' && verilogProfiles.has(context.profile)) {
     items.push(
       tool('verilog.testbench', '生成 Verilog Testbench', 'Verilog', activeDetail, Commands.Verilog.GenerateTestbench),
-      tool('verilog.syntax', '检查 Verilog 语法', 'Verilog', activeDetail, Commands.Verilog.CheckSyntaxWithIse)
+      tool('verilog.syntax', '检查 Verilog 语法', 'Icarus（内置）', activeDetail, Commands.Verilog.CheckSyntaxWithIse),
+      tool('verilog.iseProject', '生成 ISE 工程文件', 'ISE 工程', '仅生成 .co/isim PRJ/TCL，不要求已安装 ISE', Commands.Verilog.GenerateIseProject)
     );
     if (context.iseConfigured) {
       items.push(
-        tool('verilog.iseProject', '生成 ISE 工程', 'ISE', '生成 .co/isim PRJ/TCL', Commands.Verilog.GenerateIseProject),
         tool('verilog.vcd', '导出 ISim VCD 波形', 'ISE', '批量运行并写入 .co/out', Commands.Verilog.ExportVcd)
       );
     }

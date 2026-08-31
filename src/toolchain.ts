@@ -1,8 +1,8 @@
-// @index toolchain — Java/Python/MARS/ISE/Logisim/Hazard检测
+// @index toolchain — bundled Icarus 与可选 Java/Python/MARS/Logisim/Hazard 检测
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureConcreteProfile, getHazardCalculator, getIsePath, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, resolvePython, type MipsEngineMode } from './config';
+import { ensureConcreteProfile, getHazardCalculator, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, resolvePython, type MipsEngineMode } from './config';
 import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
 import { MARS_P7_CHECK } from './courseTestToolchain';
 import { runTool } from './process';
@@ -10,7 +10,6 @@ import { ToolDetection } from './types';
 import { iterCpuTraceEvents, iterMarsDetailedTraceEvents } from './language/mips/traceParser';
 import { getEffectiveRequiredTools } from './toolchainPolicy';
 export { buildIseEnvironment, findFuse, findIsimGui, isimExecutableName } from './iseCommon';
-import { findFuse, findIsimGui } from './iseCommon';
 import { IverilogRuntimeError, preflightIverilogRuntime } from './verilog/iverilogRuntime';
 
 const marsCapabilityGpCopyRegister = '3';
@@ -100,27 +99,7 @@ export async function checkToolchain(
   }
 
   if (checkAll || requiredTools.has('verilogsimulator')) {
-    const ise = getIsePath(resource).trim();
-    if (ise) {
-      const fuse = findFuse(ise);
-      const fuseOk = Boolean(fuse && await isFile(fuse));
-      checks.push({
-        name: 'Verilog simulator',
-        ok: fuseOk,
-        detail: fuse || ise,
-        suggestion: fuseOk ? undefined : 'co.toolchain.isePath 已显式配置，但其中未找到 ISE fuse；请修正路径或清空该设置以使用内置 Icarus'
-      });
-      if (checkAll) {
-        const isimGui = findIsimGui(ise);
-        const isimGuiOk = Boolean(isimGui && await isFile(isimGui));
-        checks.push({
-          name: 'ISim GUI',
-          ok: isimGuiOk,
-          detail: isimGui || ise,
-          suggestion: isimGuiOk ? undefined : '当前 ISE 路径中未找到 ISim GUI；无头仿真仍只依赖 fuse'
-        });
-      }
-    } else if (!options.extensionRoot) {
+    if (!options.extensionRoot) {
       checks.push({
         name: 'Verilog simulator',
         ok: false,

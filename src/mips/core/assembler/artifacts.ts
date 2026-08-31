@@ -73,6 +73,64 @@ export function courseInstructionImageWords(image: ProgramImage): readonly numbe
   return Array.from({ length: usedWords }, (_unused, index) => projected[index] ?? 0);
 }
 
+/**
+ * Render an ordinary user-facing CPU dump with the historical safety tail.
+ *
+ * Unlike course-trace assembly, an ordinary dump is allowed to add a synthetic
+ * `beq $0,$0,-1` + `nop` after the source user-text segment. P4-P6 need it at
+ * the end of the flat text image; P7 needs it in the absolute gap before ktext,
+ * so appending to the end of the already projected image would be incorrect.
+ */
+export function courseInstructionImageWordsWithOrdinaryHalt(
+  image: ProgramImage,
+  profile: CourseProfile
+): readonly number[] {
+  const projected = [...courseInstructionImageWords(image)];
+  if (profile === 'P3') {
+    return projected;
+  }
+
+  const textSegments = image.segments.filter((segment) =>
+    segment.name === 'text' && segment.words.length > 0);
+  if (!textSegments.length && profile !== 'P7') {
+    return projected;
+  }
+  const textEndIndex = textSegments.length
+    ? Math.max(...textSegments.map((segment) => (
+      (segment.baseAddress - courseInstructionImageBaseAddress) / 4 + segment.words.length
+    )))
+    : 0;
+  const halt = courseExecutionProfiles[profile].halt;
+  if (textEndIndex >= 2
+    && projected[textEndIndex - 2] === halt.selfBranchWord
+    && projected[textEndIndex - 1] === halt.delaySlotWord) {
+    return projected;
+  }
+
+  const haltEndIndex = textEndIndex + 2;
+  if (!Number.isSafeInteger(textEndIndex)
+    || textEndIndex < 0
+    || haltEndIndex > courseInstructionImageWordCapacity) {
+    throw new Error('ordinary course dump has no instruction-memory room for the halt loop');
+  }
+  for (const segment of image.segments) {
+    if (segment.name === 'data' || segment.name === 'text' || segment.words.length === 0) continue;
+    const segmentStart = (segment.baseAddress - courseInstructionImageBaseAddress) / 4;
+    const segmentEnd = segmentStart + segment.words.length;
+    if (textEndIndex < segmentEnd && haltEndIndex > segmentStart) {
+      const address = courseInstructionImageBaseAddress + textEndIndex * 4;
+      throw new Error(
+        `ordinary course dump halt loop at 0x${address.toString(16).padStart(8, '0')} overlaps segment "${segment.name}"`
+      );
+    }
+  }
+
+  while (projected.length < haltEndIndex) projected.push(0);
+  projected[textEndIndex] = halt.selfBranchWord;
+  projected[textEndIndex + 1] = halt.delaySlotWord;
+  return projected;
+}
+
 /** Project a ProgramImage into the one-word-per-line course DUT HexText representation. */
 export function courseInstructionImageHexText(image: ProgramImage): string {
   return wordsToHexText(courseInstructionImageWords(image));

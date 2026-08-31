@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
 import { ProjectProfile } from './types';
-import { getMarsJar, getMarsP7Jar, getLogisimJar, getIsePath, getJava, getMipsEngine } from './config';
+import { getMarsJar, getMarsP7Jar, getLogisimJar, getJava, getMipsEngine } from './config';
 import {
   getProfileDefaults,
   getProfileDirectories,
@@ -70,7 +70,7 @@ export async function runProjectWizard(): Promise<void> {
   const configureToolchain = await vscode.window.showQuickPick(
     [
       { label: '跳过', description: '使用现有配置或稍后手动配置', value: false },
-      { label: '配置工具链', description: '设置 MARS、ISE、Logisim 等工具路径', value: true }
+      { label: '配置工具链', description: '按当前 Profile 设置所需外部工具路径', value: true }
     ],
     {
       title: '配置工具链？',
@@ -163,18 +163,6 @@ export async function configureToolchainPaths(profile: ProjectProfile, resource:
     });
     if (logisimPath) {
       toolchain.logisim = logisimPath;
-    }
-  }
-
-  if (requiredTools.has('verilogSimulator')) {
-    const isePath = await vscode.window.showInputBox({
-      title: 'ISE 路径（可选）',
-      prompt: '留空使用内置 Icarus；输入目录则显式使用 Xilinx ISE/ISim',
-      value: getIsePath(resource),
-      placeHolder: 'D:/Xilinx/14.7/ISE_DS/ISE'
-    });
-    if (isePath !== undefined) {
-      toolchain.isePath = isePath.trim();
     }
   }
 

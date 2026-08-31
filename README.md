@@ -1,6 +1,6 @@
 # BUAA CO 工具箱（VSCode 插件）
 
-面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/Verilog 仿真 → 自动对拍 → 报告，循环进行）。Windows x64 版本已内置 Icarus Verilog 13.0；固定 MARS 已降级为可选回滚与开发/CI 兼容参考。
+面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/Verilog 仿真 → 自动对拍 → 报告，循环进行）。Windows x64 版本已内置课程汇编器和 Icarus Verilog 13.0；MARS 只保留给 P2、普通 ASM 运行/stdin/终端、显式兼容/复现与 CI 验证。
 
 ---
 
@@ -15,11 +15,55 @@
 | WSL / Remote SSH 扩展宿主 | ❌ |
 | Linux / macOS 本地扩展宿主 | ❌ |
 
-- 未配置 `co.toolchain.isePath` 时，插件直接启动随包附带的 `iverilog.exe`、`vvp.exe` 和依赖 DLL；不要求安装 Icarus、MSYS2 或修改 `PATH`。
-- 配置非空且有效的 `co.toolchain.isePath` 后，通用语法检查与 Verilog 仿真入口改用已有的 ISE fuse / ISim。配置非空但无效时会明确报错，不会静默回退到 Icarus。
-- 课程最终结果仍以课程测评环境为准；Icarus 与 ISE 对少量非标准或时序敏感写法可能有差异，出现分歧时可配置 ISE/ISim 复核。
-- 生成 ISE 工程、打开 ISim 波形和现有 ISim VCD 导出仍必须配置 ISE；未配置时这些 ISE 专属入口不可用。
+- 通用/on-save Verilog 编译器检查、手动仿真和 P4–P7 自动测试始终直接启动随包附带的 `iverilog.exe`、`vvp.exe` 和依赖 DLL；不要求安装 Icarus、MSYS2 或修改 `PATH`，也不受 `co.toolchain.isePath` 影响。
+- 生成 ISE PRJ/TCL 工程文件不要求安装 ISE。只有打开 ISim GUI 波形和使用当前集成的 VCD 导出命令时才读取 `co.toolchain.isePath`；路径无效只会使这些 ISE 专属入口失败。
+- 课程最终结果仍以课程测评环境为准；Icarus 与课程使用的 ISE/ISim 对少量非标准、厂商相关或时序敏感写法可能有差异。
 - Bundled runtime 的组件版本、二进制校验值、许可证和对应源码见 [第三方声明](vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)。
+
+---
+
+## 内置工具与外部工具的边界
+
+### 内置汇编器与 MARS
+
+| 场景 | 默认使用 | 是否需要 MARS |
+|---|---|---|
+| P3–P7 持续自动测试的 ASM 与课程 oracle | 内置 TypeScript 汇编器 + 内置课程执行器 | 否 |
+| P3 Logisim ROM 生成/注入 | 内置汇编器生成机器码 | 否；运行 Logisim 仍需 Logisim + Java |
+| P4–P7 手动 Verilog 仿真和自动测试的 `code.txt` 准备 | 内置汇编器 | 否 |
+| P5–P7 Hazard 分析的机器码准备 | 内置汇编器 | 否；分析本身仍需 Hazard 工具及 Python |
+| P3–P7 普通文本段导出、P7 内核文本段导出 | 内置汇编器 | 否；这些导出命令不读取 legacy 回滚设置 |
+| P2 文本段导出，以及所有普通 ASM 运行、捕获输出、带 stdin 运行和终端交互 | MARS | 是，同时需要 Java |
+| 显式 `mars` / `verify-both`、旧用例 exact replay、固定兼容验证与 CI conformance | 对应的 legacy/fixed MARS lane | 是 |
+
+内置汇编器面向 **P3–P7 课程硬件**：支持各 Profile 的课程指令集、课程常用伪指令、`.text` / `.ktext` / `.data`、宏、`.eqv` 和有界递归 `.include`，并直接生成绑定源码的 `ProgramImage` 与课程机器码。课程 DUT/Logisim/Verilog 流程要求数据存储器复位为全零，因此会拒绝非零 `.data` 初值；需要用 store 指令在运行时初始化。它不是完整的 MARS 4.5 替代品：不提供 P2 的 MARS syscall 服务、控制台输入输出或交互终端，也不承诺支持全部 MARS 伪指令、directive 和扩展（例如 `.kdata`）。选定内置后若源码超出支持范围，插件会给出诊断并终止，不会在失败后偷偷改用 MARS。
+
+### Bundled Icarus 与 ISE
+
+| 功能 | 实际支持边界 | 是否需要 ISE |
+|---|---|---|
+| 保存时/命令触发的外部 Verilog 检查 | 固定使用 bundled Icarus，参数为 `-g2005` | 否 |
+| P1、P4–P7 手动 Verilog 仿真 | 固定使用 bundled Icarus + VVP | 否 |
+| P4–P7 自动测试的 Verilog DUT | 固定使用 bundled Icarus + VVP | 否 |
+| Verilog 源码范围 | 仅把 `.v` 作为 Verilog-2005 编译单元；`.vh` 通过 `` `include `` 使用 | 否 |
+| `.sv` / `.svh` | 只有独立的 SystemVerilog 词法高亮，不进入本插件的 LSP、外部检查或仿真 | 不适用 |
+| 生成 ISE PRJ/TCL 工程文件 | 只生成文件，不启动 ISE | 否 |
+| 打开 ISim GUI 波形、使用当前集成的 VCD 导出 | ISE/ISim 专属入口 | 是，需有效 `co.toolchain.isePath` |
+| Xilinx vendor IP、综合、实现、时序仿真和 bitstream | 当前不支持；bundled Icarus 不能替代这些厂商流程 | 需在插件外使用相应 Xilinx 工具 |
+
+`co.toolchain.isePath` 不再切换通用检查、手动仿真或自动测试的后端。Bundled Icarus 缺失或编译失败时会直接报告错误，不会回退到 ISE。
+
+### 最小外部依赖速查
+
+| Profile / 工作流 | 标准功能所需的外部依赖 |
+|---|---|
+| P0 | Logisim + Java |
+| P1 | 无；Verilog 检查与仿真使用随包 Icarus |
+| P2 | MARS + Java |
+| P3 | Logisim + Java；ASM 汇编与机器码准备不需要 MARS |
+| P4–P7 | 无；ASM 使用内置汇编器，Verilog 使用随包 Icarus |
+| P5–P7 可选 Hazard 分析 | 另需课程 Hazard 工具及 Python，但机器码准备不需要 MARS |
+| 可选 ISim GUI / 集成 VCD | 另需 ISE/ISim，并配置 `co.toolchain.isePath` |
 
 ---
 
@@ -27,17 +71,19 @@
 
 ### 第一步：按需填写外部工具路径
 
-P1 / P4–P7 的 Verilog 仿真默认直接使用内置 Icarus，无需安装 ISE。P3 需要填写 Logisim。只有希望显式使用 ISE/ISim，或需要 ISE 工程、ISim 波形与 VCD 功能时，才填写 `co.toolchain.isePath`。P3–P7 自动测试不要求安装 MARS；只有 P2，或手动测试/历史复现显式使用 MARS 回滚与验证时，才需要额外配置 MARS。
+P1 / P4–P7 的 Verilog 检查、手动仿真和自动测试固定使用内置 Icarus，无需安装 ISE。P3 需要填写 Logisim。只有要打开 ISim GUI 波形或使用集成 VCD 导出时，才填写 `co.toolchain.isePath`；单纯生成 ISE 工程文件不需要。P3–P7 的测试、ROM/Verilog/Hazard 机器码准备和默认导出不要求安装 MARS；P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 或历史复现才需要 MARS。
 
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
 ```jsonc
 {
-  // 可选：显式使用 Xilinx ISE/ISim；留空即使用内置 Icarus 13.0
+  // 可选：仅供 ISim GUI 波形和集成 VCD 导出；不会切换通用仿真后端
   "co.toolchain.isePath": "",
+  // P2、普通 ASM 运行/stdin/终端或显式 legacy 流程
+  "co.toolchain.mars": "",
   // Logisim（P0/P3）
   "co.toolchain.logisim": "Logisim 的路径",
-  // Java（保持默认即可）；Python 留空时自动检测
+  // Java 供 MARS/Logisim 使用（保持默认即可）；Python 留空时自动检测
   "co.toolchain.java": "java",
   "co.toolchain.python": ""
 }
@@ -106,13 +152,13 @@ P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断�
 - 固定覆盖 AdEL、AdES、Syscall、RI、Ov，以及延迟槽、异常/中断优先级、屏蔽与恢复、`eret` 返回等边界；
 - RI 统一通过 `.word` 注入 raw word，覆盖 unknown opcode 与 unknown funct，不再由私有助记符生成；
 - Timer 自动覆盖单次/周期模式、停止后重启、重装与寄存器写优先级，只检查课程定义的行为，不要求某一种学生流水线周期数；
-- 自动测试固定使用内置参考栈，因此无需 MARS；MARS 兼容分支仅用于手动测试和历史用例复现。
+- 自动测试固定使用内置参考栈，因此无需 MARS；MARS 分支仅用于 P2/普通运行、显式 legacy/verify、历史 exact replay 和开发/CI conformance。
 
 ### 输出/对拍约定
 
 - 两端 trace 格式一致：`@PC: $寄存器 <= 值`（寄存器写）、`@PC: *地址 <= 值`（内存写）。
 - 对拍**默认忽略周期/时间**，只比较 PC、目标、值（可在手动对拍时切换严格模式）。
-- 标准输入自动配对：`foo.asm` 旁的 `foo.in / foo.input / foo.stdin / foo.dat`（及 `foo.xxx.in`、`input/tests/data` 等子目录）会自动作为 stdin。
+- stdin 只属于 MARS/legacy 运行路径：`foo.asm` 旁的 `foo.in / foo.input / foo.stdin / foo.dat`（及 `foo.xxx.in`、`input/tests/data` 等子目录）可被手动 legacy case 自动配对；这不表示内置汇编器提供控制台输入。
 - 报告与中间产物都在工程下的 `.co/` 目录（见第 6 节）。
 
 ### 如何理解测试结果
@@ -120,7 +166,7 @@ P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断�
 - 结果不一致通常表示 CPU 的可见写事件或 P7 课程性质不满足；报告会给出首个可操作差异，不会展示内部测试强度或调度参数。
 - 通过不等于“完全正确”：随机测试只能覆盖实际生成的样例，纯性能问题和课程未要求的扩展行为仍需另行验证。
 - 失败与异常用例会自动保留；在“测试历史 / 失败用例”中使用复现编号即可定位，不需要理解内部文件布局。
-- Icarus/ISim 未能启动 CPU 时，报告会直接显示阶段、退出原因和首条已脱敏的文件/行号诊断；Icarus 原始输出只保存在对应的本地失败用例中。
+- Icarus 未能启动 CPU 时，报告会直接显示阶段、退出原因和首条已脱敏的文件/行号诊断；原始输出只保存在对应的本地失败用例中。
 
 ---
 
@@ -128,14 +174,17 @@ P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断�
 
 ### MIPS 汇编
 语法高亮、补全、悬浮提示、标签/定义跳转、诊断、格式化；以及：
-- 侧边栏「操作」只放常用的 ASM 运行和文本段导出；
-- 带标准输入运行、终端运行和 P7 内核段导出放在「更多工具...」，编辑器标题栏仍保留终端运行和文本段导出的快捷按钮。
+- 侧边栏「操作」只放常用的 ASM 运行和文本段导出；P3–P7 文本段默认由内置汇编器导出，P2 导出仍使用 MARS；
+- 带标准输入运行、终端运行和 P7 内核段导出放在「更多工具...」，编辑器标题栏仍保留终端运行和文本段导出的快捷按钮；P7 内核段默认使用内置汇编器，运行/stdin/终端始终属于 MARS；
+- P3 ROM、P4–P7 Verilog 和 P5–P7 Hazard 工作流需要机器码时，默认复用同一个内置汇编器，不要求先手工启动 MARS。
 
 ### Verilog
 高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
-- `.v` / `.vh` 提供完整 Verilog LSP；课程使用的 `.sv` / `.svh` 以独立 SystemVerilog 语言提供词法高亮，避免尚未支持的 SystemVerilog 结构被 Verilog parser 误诊断；
-- 侧边栏「操作」提供 backend-neutral 的 Verilog 仿真和信号连线；未配置 ISE 时使用 bundled Icarus，配置有效 ISE 后使用 ISim；
-- 生成 Testbench、外部编译器语法检查和信号连线在 Verilog 右键菜单；ISE 工程生成、ISim 波形和 VCD 导出属于 ISE 专属功能，配置 ISE 后才开放。
+- `.v` / `.vh` 提供完整 Verilog LSP；Icarus 以 `-g2005` 编译 `.v`，`.vh` 只通过 `` `include `` 使用；
+- `.sv` / `.svh` 以独立 SystemVerilog 语言提供词法高亮，不进入 Verilog parser、外部编译器检查或仿真；
+- 侧边栏「操作」提供 Verilog 仿真和信号连线；通用检查、手动仿真和自动测试固定使用 bundled Icarus，不读取 ISE 路径；
+- 生成 Testbench、外部编译器语法检查和信号连线在 Verilog 右键菜单；生成 ISE 工程文件无需安装 ISE，只有 ISim GUI 波形和当前集成 VCD 导出要求有效 ISE 路径；
+- 当前流程不支持 Xilinx vendor IP、综合、实现、时序仿真或 bitstream。
 - **信号连线面板**：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。该面板默认只在 Verilog 上下文或执行“查看信号连线”后出现。
 
 ### 语义高亮与主题适配
@@ -173,11 +222,11 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 | 配置 | 默认 | 何时需要 |
 |---|---|---|
-| `co.toolchain.isePath` | — | 仅显式使用 ISE/ISim；留空使用内置 Icarus 13.0 |
+| `co.toolchain.isePath` | — | 仅打开 ISim GUI 波形或使用当前集成的 VCD 导出；不会切换通用检查/仿真后端 |
 | `co.toolchain.logisim` | — | P0/P3 Logisim 工作流 |
-| `co.toolchain.mars` | — | P2 MARS 工作流；P3–P7 自动测试不需要 |
+| `co.toolchain.mars`（P7 旧配置可能使用 `marsP7`） | — | P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 和历史 MARS 复现；P3–P7 默认机器码准备不需要 |
 | `co.toolchain.hazardCalculator` | — | P5–P7 冲突分析（可选） |
-| `co.toolchain.java` | `java` | Java 无法从 PATH 启动时覆盖 |
+| `co.toolchain.java` | `java` | MARS 或 Logisim 无法从 PATH 启动 Java 时覆盖 |
 | `co.toolchain.python` | 自动探测 | Python 无法自动探测时覆盖 |
 
 ### 编辑器体验
@@ -188,7 +237,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 | `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
 | `co.mips.instructionTokenMode` | `realVsPseudo` | MIPS 指令语义分类粒度；颜色仍由当前 VS Code 主题决定 |
 | `co.verilog.implicitNet.diagnostic` | `warning` | 隐式连线的诊断级别 |
-| `co.verilog.syntax.external.mode` | `onSave` | 内置 Icarus/显式 ISE 的编译器级检查时机 |
+| `co.verilog.syntax.external.mode` | `onSave` | 内置 Icarus 编译器级检查的触发时机 |
 | `co.verilog.lint.courseRules` | `true` | 课程规则诊断 |
 | `co.verilog.lint.synthesizableHints` | `true` | 可综合性提示 |
 
@@ -202,13 +251,14 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 ## 5. ⚠️ 特别注意事项
 
-1. **自动测试不需要 MARS**：P3–P7 自动生成用例固定使用内置参考栈；已有的 MARS 回滚配置只影响手动测试和历史复现。
+1. **P3–P7 默认机器码路径不需要 MARS**：自动测试、Logisim ROM、Verilog/Hazard 机器码准备和默认 text/kernel dump 使用内置汇编器。P2、所有普通 ASM 运行/stdin/终端、显式 legacy/verify、历史 exact replay 和 CI conformance 仍使用 MARS。
 2. **新的 RI 测试统一使用 raw word**：自动生成源码用 `.word` 覆盖 unknown opcode 与 unknown funct；旧用例仍可回放，但新测试点不再生成私有 RI 助记符。
-3. **ISE 是显式 opt-in**：留空 `co.toolchain.isePath` 使用 bundled Icarus；如填写，路径要指到含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。无效的非空路径会失败而不会回退。自动测试使用独立 testbench，不会覆盖你自己的文件。
+3. **Icarus 是固定的通用 Verilog 后端**：`co.toolchain.isePath` 不影响保存时检查、手动仿真或自动测试。只有 ISim GUI 波形与集成 VCD 导出读取该路径；需要时应指向含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。生成 ISE PRJ/TCL 本身不需要安装 ISE。自动测试使用独立 testbench，不会覆盖你自己的文件。
 4. **测试不绑定某一种流水线周期数**：默认按课程可见写事件和定义行为核验，因此纯性能问题或不可见内部状态仍可能需要额外定向测试。
 5. **BadVAddr 不测试**：课程不要求实现 BadVAddr；如果你实现了它，需要另写专门测试。
 6. **延迟槽按 Profile 自动处理**：P5/P6/P7 开启一条课程延迟槽，无需另调自动测试参数。
-7. 不要把机器码 `.txt` 误当 stdin：stdin 仅按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时自动配对。
+7. **SystemVerilog 仅高亮**：`.sv/.svh` 不参加本插件的 LSP、Icarus 检查或仿真；需要 SystemVerilog、vendor IP 或综合/实现流程时请使用相应外部工具。
+8. 不要把机器码 `.txt` 误当 stdin：stdin 只在 MARS/legacy 路径按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时配对。
 
 ---
 
@@ -286,8 +336,8 @@ tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别
 
 ## 附录
 
-## 与 MARS 在 P7 验证/回滚中协作
+## MARS 兼容、复现与验证
 
-自动测试始终使用内置参考栈，不进入 MARS 支路。旧版本中已经配置的手动 MARS 回滚与双引擎验证值仍会被读取，但不再出现在新用户的日常设置中；自定义 MARS 参数也只影响普通手动命令。
+P3–P7 自动测试和默认机器码准备始终使用内置参考栈，不进入 MARS 支路。MARS 继续服务于 P2、普通 ASM 运行/stdin/终端、显式 `mars` 回滚、`verify-both` 双引擎验证、历史 exact replay，以及固定 reference 的开发/CI conformance。旧版本中已经配置的兼容值仍会被读取，但不再出现在新用户的日常设置中；自定义 MARS 参数只影响普通 MARS 手动命令。
 
-历史用例若使用旧的私有 RI 助记符仍可精确回放；新生成的 RI 测试只使用标准 `.word` raw word。
+历史用例若使用旧的私有 RI 助记符，仍可在相应 MARS artifact 可用时精确回放；新生成的 RI 测试只使用标准 `.word` raw word。

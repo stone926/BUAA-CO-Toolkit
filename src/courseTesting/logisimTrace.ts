@@ -288,7 +288,7 @@ export function setLogisimMainCircuit(circuitText: string, circuitName: string):
 export function prepareP3LogisimMachineCode(machineCodeText: string): P3LogisimMachineCode {
   const words = parseMachineCodeWords(machineCodeText);
   if (!words.length) {
-    throw new Error('MARS dump produced no machine-code words.');
+    throw new Error('汇编器未生成任何机器码字。');
   }
   const alreadyTerminated = machineCodeHasHaltLoop(words);
   const programWordCount = alreadyTerminated ? words.length - p3LogisimHaltWords : words.length;

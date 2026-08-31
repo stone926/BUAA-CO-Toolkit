@@ -1,4 +1,4 @@
-// @index verilog-simulation-runner — resource-scoped Icarus/ISim 两分派仿真入口
+// @index verilog-simulation-runner — bundled Icarus 默认仿真；ISim 仅接受显式请求
 import * as vscode from 'vscode';
 import { getIsePath } from '../config';
 import type { AppServices, RunResult } from '../types';
@@ -10,9 +10,11 @@ import {
   missingVerilogSimulationOutputFailure,
   type VerilogSimulationFailure
 } from './simulationDiagnostic';
-import { selectVerilogBackend } from './verilogBackend';
+import { selectVerilogBackend, type VerilogBackend } from './verilogBackend';
 
 export interface VerilogSimulationRunOptions extends IsimRunOptions {
+  /** Generic commands and course tests omit this and always use bundled Icarus. */
+  backend?: VerilogBackend;
   /** Extension installation root used only by the bundled Icarus branch. */
   extensionRoot?: string;
   /** Optional direct Icarus watchdog budget; TCL `run` remains the default source. */
@@ -64,9 +66,9 @@ export function verilogSimulationFailure(
 }
 
 /**
- * Select exactly once from the resource-scoped ISE path and never fall back
- * during an operation. An invalid non-empty ISE path therefore stays an ISim
- * configuration failure instead of silently starting bundled Icarus.
+ * Generic commands and course tests always use bundled Icarus. An ISE-specific
+ * caller may explicitly request ISim; that branch remains fail-closed and does
+ * not fall back when its configured toolchain is invalid.
  */
 export async function runVerilogSimulation(
   services: AppServices,
@@ -75,12 +77,13 @@ export async function runVerilogSimulation(
   const effectiveOptions = options.moduleRegistry || !sharedModuleRegistry
     ? options
     : { ...options, moduleRegistry: sharedModuleRegistry };
-  const resource = effectiveOptions.resource ?? vscode.window.activeTextEditor?.document.uri;
-  const isePath = getIsePath(resource);
-  if (selectVerilogBackend(isePath) === 'isim') {
-    services.output.appendLine('Verilog backend: ISim (configured ISE)');
-    const output = await runIsim(services, { ...effectiveOptions, isePath });
+  const { backend: requestedBackend, ...runnerOptions } = effectiveOptions;
+  if (selectVerilogBackend(requestedBackend) === 'isim') {
+    const resource = runnerOptions.resource ?? vscode.window.activeTextEditor?.document.uri;
+    const isePath = runnerOptions.isePath ?? getIsePath(resource);
+    services.output.appendLine('Verilog backend: ISim (explicit request)');
+    const output = await runIsim(services, { ...runnerOptions, isePath });
     return output ? { ...output, backend: 'isim' } : undefined;
   }
-  return await runIverilog(services, effectiveOptions);
+  return await runIverilog(services, runnerOptions);
 }

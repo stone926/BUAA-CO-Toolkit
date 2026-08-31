@@ -1,4 +1,4 @@
-// @index verilog-commands — ISE/ISim工作流：编译/仿真/波形/P7 probe
+// @index verilog-commands — Icarus 通用工作流与 ISE/ISim 专属工程、波形能力
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Commands } from './constants';
@@ -58,7 +58,7 @@ export function registerVerilog(context: vscode.ExtensionContext, services: AppS
       disableVerilogLintRule
     ),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
-    vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => runIseOnlyCommand(() => generateIseProject(services))),
+    vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => generateIseProject(services)),
     vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkVerilogSyntax()),
     vscode.commands.registerCommand(Commands.Verilog.RunIsim, () => runVerilogSimulation(services, { moduleRegistry })),
     vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => runIseOnlyCommand(() => openIsimWaveform(services, { compileIsim: compileIsimCore, moduleRegistry }))),

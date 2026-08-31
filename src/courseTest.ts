@@ -20,7 +20,6 @@ import {
 import { runCourseTraceBatch } from './courseTesting/batchRunner';
 import { isCourseTraceBatchRunning, stopCourseTraceBatch } from './courseTesting/batchRunner';
 import { compareTracePair, defaultTraceCompareMode } from './traceCompare';
-import { createIsimCompileCache } from './verilogIsimCache';
 import { AppServices } from './types';
 import { readTextFile, workspaceFolderForOrFirst } from './fsUtil';
 import { pickOneFile, resolveWorkspaceFile, resolveWorkspaceFiles } from './workflowInputs';
@@ -239,8 +238,6 @@ async function resolveCourseTraceRunOptions(
       return undefined;
     }
     options.logisim = logisim;
-  } else {
-    options.isimCompileCache ??= createIsimCompileCache();
   }
   return options;
 }

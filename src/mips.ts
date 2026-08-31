@@ -1,4 +1,4 @@
-// @index mips-commands — MARS运行/dump/终端/P7内核段合并
+// @index mips-legacy-runner — MARS 运行、兼容 dump 与 P7 内核段合并
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -20,7 +20,6 @@ import {
 } from './courseTesting/courseDataInitialization';
 import { p7ExceptionHandlerAddress, p7KernelTextDumpEndAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
 import { AppServices, ProjectProfile, RunResult } from './types';
-import { pickOneFile } from './workflowInputs';
 import { sanitizeFileStem } from './pathUtils';
 import {
   buildMarsArgs,
@@ -47,6 +46,7 @@ import {
   readBoundedRegularFile
 } from './mips/replay/boundedFile';
 import { disableMipsPseudoWarnings } from './diagnosticSettings';
+import { pickOneFile } from './workflowInputs';
 
 // Re-export for testability
 export { buildMarsArgs } from './language/mips/marsArgs';
@@ -91,15 +91,14 @@ export interface MarsRunOutput {
   resolvedRun?: ResolvedEngineRun;
 }
 
+/** Register only the commands whose console/interactive semantics require MARS. */
 export function registerMips(context: vscode.ExtensionContext, services: AppServices): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Mips.DisablePseudoWarnings, disableMipsPseudoWarnings),
-    vscode.commands.registerCommand(Commands.Mips.RunCurrentFile, () => runMarsCurrentFile(services, 'run')),
-    vscode.commands.registerCommand(Commands.Mips.RunAndCapture, () => runMarsCurrentFile(services, 'run')),
+    vscode.commands.registerCommand(Commands.Mips.RunCurrentFile, () => runMarsCurrentFile(services)),
+    vscode.commands.registerCommand(Commands.Mips.RunAndCapture, () => runMarsCurrentFile(services)),
     vscode.commands.registerCommand(Commands.Mips.RunWithStdinFile, () => runMarsCurrentFileWithStdinFile(services)),
-    vscode.commands.registerCommand(Commands.Mips.RunInTerminal, () => runMarsCurrentFileInTerminal()),
-    vscode.commands.registerCommand(Commands.Mips.DumpText, () => runMarsCurrentFile(services, 'dumpText')),
-    vscode.commands.registerCommand(Commands.Mips.DumpKernelText, () => runMarsCurrentFile(services, 'dumpKernel'))
+    vscode.commands.registerCommand(Commands.Mips.RunInTerminal, () => runMarsCurrentFileInTerminal())
   );
 }
 
@@ -120,24 +119,22 @@ async function resolveCurrentMipsDocument(): Promise<vscode.TextDocument | undef
   return document;
 }
 
-async function runMarsCurrentFile(services: AppServices, mode: MarsRunMode): Promise<void> {
+async function runMarsCurrentFile(services: AppServices): Promise<void> {
   const document = await resolveCurrentMipsDocument();
-  if (!document) { return; }
-
-  await runMarsFile(services, document.uri, mode);
+  if (!document) return;
+  await runMarsFile(services, document.uri, 'run');
 }
 
 async function runMarsCurrentFileWithStdinFile(services: AppServices): Promise<void> {
   const document = await resolveCurrentMipsDocument();
-  if (!document) { return; }
+  if (!document) return;
 
   const stdinSource = await pickOneFile('选择 MARS 标准输入文本文件', {
     Text: ['txt', 'in', 'input', 'dat'],
     All: ['*']
   });
-  if (!stdinSource) {
-    return;
-  }
+  if (!stdinSource) return;
+
   const bytes = await vscode.workspace.fs.readFile(stdinSource);
   await runMarsFile(services, document.uri, 'run', {
     stdin: Buffer.from(bytes).toString('utf8'),
@@ -147,8 +144,8 @@ async function runMarsCurrentFileWithStdinFile(services: AppServices): Promise<v
 
 async function runMarsCurrentFileInTerminal(): Promise<void> {
   const document = await resolveCurrentMipsDocument();
-  if (!document) { return; }
-  if (!await ensureConcreteProfile(document.uri, '运行 MARS 需要先确定项目 Profile')) { return; }
+  if (!document) return;
+  if (!await ensureConcreteProfile(document.uri, '运行 MARS 需要先确定项目 Profile')) return;
 
   const mars = getMarsJar(document.uri);
   if (!mars) {
