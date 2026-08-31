@@ -41,7 +41,6 @@ import {
 import { runCourseTraceCase } from '../../src/courseTesting/traceRunner';
 import { checkToolchain } from '../../src/toolchain';
 import type { AppServices } from '../../src/types';
-import { createIsimCompileCache } from '../../src/verilogIsimCache';
 
 /**
  * Public CLI inputs deliberately contain no coverage, scheduling, retention, seed, or
@@ -125,7 +124,6 @@ async function runContinuousP7PipelineWithSession(
     iterations: []
   };
 
-  const compileCache = createIsimCompileCache();
   const retainedArtifacts: RetainedCaseArtifact[] = [];
   const totalSummary = createContinuousCounts();
 
@@ -173,7 +171,6 @@ async function runContinuousP7PipelineWithSession(
             revealOutput: false,
             source: generated.source,
             artifactOutputMode: 'case',
-            isimCompileCache: compileCache,
             signal: session.abortController.signal
           });
         } catch (error) {
@@ -281,7 +278,8 @@ async function ensureP7ToolchainReady(
   }
   const checks = await checkToolchain(services.output, resource, {
     nonInteractive: true,
-    engineMode: automaticTestEngineMode
+    engineMode: automaticTestEngineMode,
+    extensionRoot: services.extensionRoot
   });
   const required = requiredCourseTraceToolchainChecks(profile, engineMode, memoryConfiguration);
   if (requiredToolchainFailures(checks, required).length) {

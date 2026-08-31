@@ -60,6 +60,9 @@ jobs:
       - name: Phase 5 course assembler and full-stack gate on this platform
         run: npm run verify:phase5
 
+      - name: Headless test CLI smoke
+        run: npm --prefix test-cli test
+
       - name: Verify versioned MIPS JSONL CLI
         run: npm run verify:mips-cli
 

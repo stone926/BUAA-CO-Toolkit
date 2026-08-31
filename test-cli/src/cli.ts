@@ -94,7 +94,11 @@ function createServices(quiet: boolean): AppServices {
   };
   return {
     output: output as unknown as AppServices['output'],
-    statusBar: statusBar as unknown as AppServices['statusBar']
+    statusBar: statusBar as unknown as AppServices['statusBar'],
+    // dist/test-cli/src -> dist -> test-cli -> repository/extension root.
+    // The headless pipeline shares the production bundled-Icarus resolver, so it
+    // must expose the same installation root that VS Code supplies at runtime.
+    extensionRoot: path.resolve(__dirname, '..', '..', '..', '..')
   };
 }
 

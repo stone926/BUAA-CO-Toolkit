@@ -111,7 +111,9 @@ test('shared default policy is maximum-strength P7 and unbounded continuous test
   });
 });
 
-test('default CLI generates anchor, core probe, and timer probe and writes a sanitized report', (t) => {
+test('default CLI generates anchor, core probe, and timer probe and writes a sanitized report', {
+  skip: process.platform !== 'win32' ? 'bundled Icarus is supported on Windows x64 only' : false
+}, (t) => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'co-test-cli-'));
   t.after(() => fs.rmSync(project, { recursive: true, force: true }));
   fs.writeFileSync(path.join(project, 'mips.v'), 'module mips; endmodule\n');
