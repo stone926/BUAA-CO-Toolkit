@@ -1,9 +1,9 @@
-# test-suite | src/test/ | 197 files | 框架: Vitest
+# test-suite | src/test/ | 201 files | 框架: Vitest
 
 单元/集成测试, 镜像src/结构. npm test = vitest run. 以下为<name>.test.ts
 
 test/:
-  manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 20 项公开配置/22 项仅已配置可见兼容 schema 及 scope/order，configProfile/wizardSettings/wizardUpdate 锁定 Profile 派生默认、本机/项目写入边界和 legacy 工具路径迁移原子顺序
+  manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 20 项公开配置/22 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
 
 test/language/common/:
   settings, diagnosticActions, lsp, util, documentResultCache, semanticTokens
@@ -15,7 +15,7 @@ test/language/verilog/:
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/verilog/:
-  verilogBackend, iverilogRuntime, iverilogRunner, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
+  verilogBackend, iseProjectOrder, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、ISE 源发现/XISE 顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、bundled runtime 路径/预检、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 
 TextMate:
   使用 vscode-textmate + vscode-oniguruma 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步及课程真实宏/数字片段
@@ -24,7 +24,7 @@ test/language/logisim/:
   service, rom, realProjectPatterns
 
 test/courseTesting/:
-  builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous
+  builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous；覆盖 continuous P7 首失败/取消/展开与部分生成异常的会话所有权清理，以及 terminal/manual/session mismatch 的 fail-closed 保留
 
 test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsReplay/:
   ISA catalog/encode/decode golden 与 core/LSP/generator 多目标 projection 收敛/--check；有界 JSONL CLI；Worker protocol v2、从 0 连续 sequence、consumer 成功后 ACK、slice 取消与 crash generation；provider preflight immutable request/launch；source graph、ProgramImage、engine trust registry、exact replay/re-evaluate、真实 MARS 可选集成

@@ -4,7 +4,7 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { getMemoryConfiguration, getMipsEngine, getProfile } from './config';
-import { ensureDirectory, pathExists, workspaceFolderForOrFirst, writeTextFile } from './fsUtil';
+import { ensureDirectory, pathExists, workspaceFolderForOrFirst } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
 import { AppServices, ProjectProfile } from './types';
 import { resolveFileInput } from './workflowInputs';
@@ -26,6 +26,7 @@ import {
   AsmCaseArtifactKind,
   AsmCaseManifest,
   AsmCaseP7Metadata,
+  AsmCaseSnapshot,
   AsmCaseSource,
   asmCaseId,
   asmCasePaths,
@@ -40,6 +41,7 @@ import {
   ManifestArtifactReference,
   ManifestRunConfiguration,
   asmCaseManifestVersion2,
+  assertManifestStringMapEntries,
   isKnownManifest,
   isManifestV2,
   manifestDutConfigurationHash,
@@ -60,7 +62,8 @@ import {
   defaultSourceCaptureLimits,
   loadAndVerifySourceGraph,
   loadVerifiedSourceGraphInput,
-  type CapturedSourceBundle
+  type CapturedSourceBundle,
+  type SourceGraphBundle
 } from './mips/replay/sourceBundle';
 import {
   createLegacyProgramImage,
@@ -84,6 +87,7 @@ import {
 } from './mips/replay/boundedFile';
 import {
   ImmutableEngineArtifactRegistry,
+  type ResolvedEngineArtifact,
   workspaceEngineRegistryRoot
 } from './mips/replay/engineRegistry';
 import { builtinAssemblerEngineArtifact } from './mips/replay/builtinAssemblerEngineArtifact';
@@ -91,6 +95,14 @@ import { builtinExecutionEngineArtifact } from './mips/replay/builtinEngineArtif
 import { commitEventsCanonical } from './mips/core/events/commitEvent';
 import { parseStructuredExecutionEvidence } from './mips/replay/structuredExecutionEvidence';
 import { sourceUnitsUseP7RiInstruction } from './courseTesting/p7RiInstruction';
+import { recordContinuousAsmCaseOutcome } from './courseTesting/continuousCaseRetention';
+
+export {
+  discardContinuousGeneratedAsmCase,
+  discardContinuousPassingAsmCase,
+  markContinuousAsmCaseCancelled,
+  type ContinuousAsmCaseState
+} from './courseTesting/continuousCaseRetention';
 
 /** Keep case discovery bounded even when a workspace contains an adversarial case tree. */
 export const maximumAsmCaseIndexEntries = 2048;
@@ -100,6 +112,10 @@ export interface AsmCaseTestOutcome {
   readonly status: 'passed' | 'failed' | 'error';
   readonly stage: 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe' | 'internal';
   readonly diagnostic: string;
+  readonly continuous?: {
+    readonly sessionId: string;
+    readonly state: 'passed' | 'failed' | 'error';
+  };
 }
 
 export interface AsmCase {
@@ -119,6 +135,8 @@ export interface CreateAsmCaseOptions {
   resource?: vscode.Uri;
   createdAt?: Date;
   p7?: AsmCaseP7Metadata;
+  /** Initial non-file provenance, committed with the first manifest write. */
+  metadata?: Record<string, string>;
   /** Explicit command snapshot; otherwise capture the resource-scoped setting once. */
   enginePlan?: CourseEnginePlan;
 }
@@ -179,7 +197,7 @@ export async function createAsmCaseFromAsm(
     options.stdin !== undefined,
     options.enginePlan
   );
-  const manifest = createV2Manifest(
+  let manifest = createV2Manifest(
     path.basename(paths.caseDir),
     createdAt,
     profile,
@@ -197,6 +215,9 @@ export async function createAsmCaseFromAsm(
     initialEngine.assembler,
     initialEngine.executor
   );
+  if (options.metadata) {
+    manifest = mergeAsmCaseMetadata(manifest, options.metadata);
+  }
   const manifestUri = vscode.Uri.file(paths.manifest);
   await assertContainedDirectoryPath(root, paths.caseDir);
   await writeManifestAtomic(paths.manifest, manifest);
@@ -251,7 +272,7 @@ export async function createAsmCaseFromText(
     options.stdin !== undefined,
     options.enginePlan
   );
-  const manifest = createV2Manifest(
+  let manifest = createV2Manifest(
     path.basename(paths.caseDir),
     createdAt,
     profile,
@@ -269,6 +290,9 @@ export async function createAsmCaseFromText(
     initialEngine.assembler,
     initialEngine.executor
   );
+  if (options.metadata) {
+    manifest = mergeAsmCaseMetadata(manifest, options.metadata);
+  }
   const manifestUri = vscode.Uri.file(paths.manifest);
   await assertContainedDirectoryPath(root, paths.caseDir);
   await writeManifestAtomic(paths.manifest, manifest);
@@ -563,7 +587,7 @@ export async function recordAsmCaseOracleResult(
 ): Promise<void> {
   assertWritableV2Case(asmCase);
   // Last-line defence against source edits that raced the oracle process.
-  await assertAsmCaseSourceSnapshotCurrent(asmCase);
+  const verifiedSourceGraph = await assertAsmCaseSourceSnapshotCurrent(asmCase);
   await assertAsmCaseStdinSnapshotCurrent(asmCase);
   const oracleArtifact = await persistBuiltinEngineArtifact(
     asmCase,
@@ -588,7 +612,8 @@ export async function recordAsmCaseOracleResult(
     asmCase,
     providerBoundConfiguration,
     outcome.stopReason,
-    result.resolvedRun
+    result.resolvedRun,
+    verifiedSourceGraph
   );
   const traceReference = asmCase.manifest.artifacts?.oracle?.traceOut;
   if (!traceReference || typeof traceReference === 'string') {
@@ -718,7 +743,7 @@ export async function updateAsmCaseArtifacts(
   artifacts: Record<string, string>
 ): Promise<void> {
   assertWritableV2Case(asmCase);
-  assertManifestEntries(artifacts, 'artifact');
+  assertManifestStringMapEntries(artifacts, 'artifact');
   // File artifacts are content-addressed; metadata must use the separate API.
   const snapshots = await Promise.all(Object.entries(artifacts).map(async ([name, file]) => {
       if (!path.isAbsolute(file)) {
@@ -735,8 +760,17 @@ export async function updateAsmCaseArtifacts(
         bytes: bytes.byteLength
       }] as const;
   }));
+  await updateAsmCaseArtifactSnapshots(asmCase, kind, Object.fromEntries(snapshots));
+}
+
+async function updateAsmCaseArtifactSnapshots(
+  asmCase: AsmCase & { manifest: AsmCaseManifestV2 },
+  kind: AsmCaseArtifactKind,
+  snapshots: Record<string, ManifestArtifactReference>,
+  metadata?: Record<string, string>
+): Promise<void> {
   const groups = new Map<keyof AsmCaseArtifactsV2, Record<string, ManifestArtifactReference>>();
-  for (const [name, value] of snapshots) {
+  for (const [name, value] of Object.entries(snapshots)) {
     const { group, key } = v2ArtifactGroup(kind, name);
     const entry = groups.get(group) ?? {};
     entry[key] = value;
@@ -747,7 +781,10 @@ export async function updateAsmCaseArtifacts(
     const key = group as keyof NonNullable<AsmCaseManifestV2['artifacts']>;
     merged[key] = { ...(merged[key] ?? {}), ...values };
   }
-  asmCase.manifest = { ...asmCase.manifest, artifacts: merged };
+  const withArtifacts: AsmCaseManifestV2 = { ...asmCase.manifest, artifacts: merged };
+  asmCase.manifest = metadata
+    ? mergeAsmCaseMetadata(withArtifacts, metadata)
+    : withArtifacts;
   await writeAsmCaseManifest(asmCase);
 }
 
@@ -757,16 +794,24 @@ export async function updateAsmCaseMetadata(
   metadata: Record<string, string>
 ): Promise<void> {
   assertWritableV2Case(asmCase);
-  assertManifestEntries(metadata, 'metadata');
+  asmCase.manifest = mergeAsmCaseMetadata(asmCase.manifest, metadata);
+  await writeAsmCaseManifest(asmCase);
+}
+
+function mergeAsmCaseMetadata(
+  manifest: AsmCaseManifestV2,
+  metadata: Record<string, string>
+): AsmCaseManifestV2 {
+  assertManifestStringMapEntries(metadata, 'metadata');
   const dutEntries = Object.fromEntries(Object.entries(metadata).filter(([key]) => key.startsWith('dut.')));
   const provenanceEntries = Object.fromEntries(Object.entries(metadata).filter(([key]) => !key.startsWith('dut.')));
   const dutConfiguration = {
-    ...(asmCase.manifest.dut?.configuration ?? {}),
+    ...(manifest.dut?.configuration ?? {}),
     ...dutEntries
   };
-  const mergedMetadata = { ...(asmCase.manifest.metadata ?? {}), ...provenanceEntries };
-  asmCase.manifest = {
-    ...asmCase.manifest,
+  const mergedMetadata = { ...(manifest.metadata ?? {}), ...provenanceEntries };
+  return {
+    ...manifest,
     ...(Object.keys(dutConfiguration).length ? {
       dut: {
         configuration: dutConfiguration,
@@ -775,7 +820,6 @@ export async function updateAsmCaseMetadata(
     } : {}),
     ...(Object.keys(mergedMetadata).length ? { metadata: mergedMetadata } : {})
   };
-  await writeAsmCaseManifest(asmCase);
 }
 
 async function caseRelativePath(asmCase: AsmCase, absolutePath: string): Promise<string> {
@@ -823,17 +867,24 @@ export async function writeAsmCaseArtifact(
 ): Promise<vscode.Uri> {
   assertWritableV2Case(asmCase);
   const maximumBytes = asmCaseArtifactMaximumBytes(kind, artifactName);
-  const contentBytes = Buffer.byteLength(content, 'utf8');
-  if (contentBytes > maximumBytes) {
+  const bytes = Buffer.from(content, 'utf8');
+  if (bytes.byteLength > maximumBytes) {
     throw new Error(
-      `ASM case ${kind} artifact ${artifactName} size ${contentBytes} exceeds the hard limit ${maximumBytes}`
+      `ASM case ${kind} artifact ${artifactName} size ${bytes.byteLength} exceeds the hard limit ${maximumBytes}`
     );
   }
   const dir = artifactDirectory(asmCase, kind);
   await ensureDirectory(dir);
   const uri = vscode.Uri.file(path.join(dir.fsPath, path.basename(fileName)));
-  await writeTextFile(uri, content);
-  await updateAsmCaseArtifacts(asmCase, kind, { [artifactName]: uri.fsPath });
+  await vscode.workspace.fs.writeFile(uri, bytes);
+  const relativePath = await caseRelativePath(asmCase, uri.fsPath);
+  await updateAsmCaseArtifactSnapshots(asmCase, kind, {
+    [artifactName]: {
+      path: relativePath,
+      sha256: sha256Bytes(bytes),
+      bytes: bytes.byteLength
+    }
+  });
   return uri;
 }
 
@@ -850,7 +901,8 @@ export async function copyAsmCaseArtifact(
   kind: 'verilog' | 'logisim' | 'oracle' | 'mars',
   source: vscode.Uri,
   fileName = path.basename(source.fsPath),
-  artifactName = path.basename(fileName, path.extname(fileName))
+  artifactName = path.basename(fileName, path.extname(fileName)),
+  metadata?: Record<string, string> | ((snapshot: Readonly<AsmCaseSnapshot>) => Record<string, string>)
 ): Promise<vscode.Uri> {
   assertWritableV2Case(asmCase);
   if (source.scheme !== 'file') {
@@ -859,14 +911,28 @@ export async function copyAsmCaseArtifact(
   const dir = artifactDirectory(asmCase, kind);
   await ensureDirectory(dir);
   const target = vscode.Uri.file(path.join(dir.fsPath, path.basename(fileName)));
+  let bytes: Buffer;
   if (normalizePathKey(source.fsPath) !== normalizePathKey(target.fsPath)) {
-    const bytes = await readBoundedRegularFile(source.fsPath, {
+    bytes = await readBoundedRegularFile(source.fsPath, {
       maximumBytes: asmCaseArtifactMaximumBytes(kind, artifactName),
       label: `ASM case ${kind} artifact copy ${artifactName}`
     });
     await vscode.workspace.fs.writeFile(target, bytes);
+  } else {
+    bytes = await readBoundedRegularFile(target.fsPath, {
+      maximumBytes: asmCaseArtifactMaximumBytes(kind, artifactName),
+      label: `ASM case ${kind} artifact ${artifactName}`
+    });
   }
-  await updateAsmCaseArtifacts(asmCase, kind, { [artifactName]: target.fsPath });
+  const relativePath = await caseRelativePath(asmCase, target.fsPath);
+  const snapshot: AsmCaseSnapshot = {
+    path: relativePath,
+    sha256: sha256Bytes(bytes),
+    bytes: bytes.byteLength
+  };
+  await updateAsmCaseArtifactSnapshots(asmCase, kind, {
+    [artifactName]: snapshot
+  }, typeof metadata === 'function' ? metadata(snapshot) : metadata);
   return target;
 }
 
@@ -930,6 +996,22 @@ export async function recordAsmCaseTestOutcome(
   if (!manifestPath || path.basename(manifestPath).toLowerCase() !== 'case.json') {
     return;
   }
+  if (outcome.continuous) {
+    const recorded = await recordContinuousAsmCaseOutcome(
+      manifestPath,
+      outcome.continuous.sessionId,
+      {
+        status: outcome.status,
+        stage: outcome.stage,
+        diagnostic: outcome.diagnostic,
+        state: outcome.continuous.state
+      }
+    );
+    if (!recorded) {
+      throw new Error('Continuous ASM case outcome was refused by ownership validation');
+    }
+    return;
+  }
   let bytes: Buffer;
   try {
     bytes = await readBoundedRegularFile(manifestPath, {
@@ -954,7 +1036,7 @@ export async function recordAsmCaseTestOutcome(
     'test.stage': outcome.stage,
     'test.diagnostic': outcome.diagnostic
   };
-  assertManifestEntries(metadata, 'metadata');
+  assertManifestStringMapEntries(metadata, 'metadata');
   await writeManifestAtomic(manifestPath, { ...manifest, metadata });
 }
 
@@ -983,7 +1065,7 @@ export function isAsmFile(uri: vscode.Uri): boolean {
   return ['.asm', '.s', '.mips'].includes(path.extname(uri.fsPath).toLowerCase());
 }
 
-const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/isim,.co/logisim,.co/tmp}/**';
+const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/isim,.co/logisim,.co/tmp,.co/trash}/**';
 
 async function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): Promise<ReturnType<typeof asmCasePaths>> {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -1076,7 +1158,9 @@ function assertWritableV2Case(
  * execute only the captured materialization; the original workspace path is provenance and may
  * be moved or deleted. Early-v2 cases without a graph retain the stricter legacy fallback.
  */
-export async function assertAsmCaseSourceSnapshotCurrent(asmCase: AsmCase): Promise<void> {
+export async function assertAsmCaseSourceSnapshotCurrent(
+  asmCase: AsmCase
+): Promise<SourceGraphBundle | undefined> {
   assertWritableV2Case(asmCase);
   const expected = asmCase.manifest.asmSnapshot;
   const snapshotFile = await caseSnapshotFile(asmCase, expected.path, 'ASM root snapshot');
@@ -1102,11 +1186,11 @@ export async function assertAsmCaseSourceSnapshotCurrent(asmCase: AsmCase): Prom
     if (normalizePathKey(expectedMaterialized) !== normalizePathKey(asmCase.sourceAsm.fsPath)) {
       throw new Error('ASM provider source is not the immutable SourceUnit graph root');
     }
-    return;
+    return graph;
   }
 
   if (normalizePathKey(asmCase.sourceAsm.fsPath) === normalizePathKey(asmCase.asm.fsPath)) {
-    return;
+    return undefined;
   }
   const sourceBytes = await readIntegrityFile(
     asmCase.sourceAsm.fsPath,
@@ -1115,6 +1199,7 @@ export async function assertAsmCaseSourceSnapshotCurrent(asmCase: AsmCase): Prom
     maximumReplaySourceBytes
   );
   assertSnapshotBytes(sourceBytes, expected, 'ASM source');
+  return undefined;
 }
 
 export async function asmCaseSourceSnapshotIssue(asmCase: AsmCase): Promise<string | undefined> {
@@ -1218,12 +1303,13 @@ async function completeReplayRunConfiguration(
   asmCase: AsmCase & { manifest: AsmCaseManifestV2 },
   configuration: ManifestRunConfiguration,
   stopReason: AsmCaseManifestV2['oracle']['stopReason'],
-  resolvedRun: ResolvedEngineRun
+  resolvedRun: ResolvedEngineRun,
+  verifiedSourceGraph?: SourceGraphBundle
 ): Promise<ManifestRunConfiguration> {
   const graphReference = asmCase.manifest.program.sourceGraph;
-  const graph = graphReference
+  const graph = verifiedSourceGraph ?? (graphReference
     ? await loadAndVerifySourceGraph(asmCase.dir.fsPath, graphReference.path)
-    : undefined;
+    : undefined);
   if (configuration.profile !== resolvedRun.profile) {
     throw new Error(`requested profile ${configuration.profile} differs from executed profile ${resolvedRun.profile}`);
   }
@@ -1366,24 +1452,6 @@ function failedEngineStatusFrom(
   };
 }
 
-function assertManifestEntries(values: Record<string, string>, label: string): void {
-  const entries = Object.entries(values);
-  if (!entries.length) {
-    throw new Error(`ASM case ${label} update must contain at least one entry`);
-  }
-  for (const [key, value] of entries) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(key)
-      || key === '__proto__'
-      || key === 'prototype'
-      || key === 'constructor') {
-      throw new Error(`ASM case ${label} key is invalid: ${JSON.stringify(key)}`);
-    }
-    if (typeof value !== 'string' || value.trim().length === 0) {
-      throw new Error(`ASM case ${label} value is empty: ${key}`);
-    }
-  }
-}
-
 /**
  * Build a fresh v2 manifest. Image and completed-oracle fields remain absent or
  * unknown until their corresponding stages actually finish.
@@ -1502,14 +1570,125 @@ async function persistBuiltinEngineArtifact(
   }
   const caseRoot = path.resolve(asmCase.dir.fsPath);
   const workspaceRoot = path.dirname(path.dirname(path.dirname(caseRoot)));
+  const registered = await registerBuiltinArtifactOnce(workspaceRoot, artifact);
+  return { ...registered.identity };
+}
+
+const maximumBuiltinArtifactRegistrationCacheEntries = 64;
+
+interface CachedBuiltinArtifactRegistration {
+  registered: ResolvedEngineArtifact;
+  artifactIdentity: BuiltinArtifactNodeIdentity;
+  metadataIdentity: BuiltinArtifactNodeIdentity;
+}
+
+interface BuiltinArtifactNodeIdentity {
+  dev: number;
+  ino: number;
+  birthtimeMs: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  size: number;
+}
+
+const builtinArtifactRegistrations = new Map<string, Promise<CachedBuiltinArtifactRegistration>>();
+
+async function registerBuiltinArtifactOnce(
+  workspaceRoot: string,
+  artifact: ReturnType<typeof builtinAssemblerEngineArtifact> | ReturnType<typeof builtinExecutionEngineArtifact>
+): Promise<ResolvedEngineArtifact> {
+  const identity = artifact.identity;
+  const key = [
+    normalizePathKey(path.resolve(workspaceRoot)),
+    identity.role,
+    identity.sha256.toLowerCase(),
+    identity.fileName
+  ].join('|');
+  const cached = builtinArtifactRegistrations.get(key);
+  if (cached) {
+    try {
+      const cachedRegistration = await cached;
+      const registered = cachedRegistration.registered;
+      const [artifactStat, metadataStat] = await Promise.all([
+        fs.promises.lstat(registered.path),
+        fs.promises.lstat(path.join(path.dirname(registered.path), 'artifact.json'))
+      ]);
+      if (!artifactStat.isSymbolicLink()
+        && artifactStat.isFile()
+        && !metadataStat.isSymbolicLink()
+        && metadataStat.isFile()
+        && sameBuiltinArtifactNodeIdentity(artifactStat, cachedRegistration.artifactIdentity)
+        && sameBuiltinArtifactNodeIdentity(metadataStat, cachedRegistration.metadataIdentity)) {
+        builtinArtifactRegistrations.delete(key);
+        builtinArtifactRegistrations.set(key, cached);
+        return registered;
+      }
+    } catch {
+      // A removed/corrupt registry entry is retried through the authoritative registrar below.
+    }
+    builtinArtifactRegistrations.delete(key);
+  }
+
   const registry = new ImmutableEngineArtifactRegistry(
     workspaceEngineRegistryRoot(workspaceRoot),
     workspaceRoot
   );
-  const registered = await registry.registerBytes(
-    artifact.identity.role!,
-    artifact.bytes,
-    artifact.identity.fileName!
-  );
-  return { ...registered.identity };
+  let pending!: Promise<CachedBuiltinArtifactRegistration>;
+  pending = (async (): Promise<CachedBuiltinArtifactRegistration> => {
+    const registered = await registry.registerBytes(
+      identity.role!,
+      artifact.bytes,
+      identity.fileName!
+    );
+    const [artifactStat, metadataStat] = await Promise.all([
+      fs.promises.lstat(registered.path),
+      fs.promises.lstat(path.join(path.dirname(registered.path), 'artifact.json'))
+    ]);
+    if (artifactStat.isSymbolicLink()
+      || !artifactStat.isFile()
+      || metadataStat.isSymbolicLink()
+      || !metadataStat.isFile()) {
+      throw new Error('Builtin engine registry entry is not a stable regular-file pair');
+    }
+    return {
+      registered,
+      artifactIdentity: builtinArtifactNodeIdentity(artifactStat),
+      metadataIdentity: builtinArtifactNodeIdentity(metadataStat)
+    };
+  })().catch((error) => {
+    if (builtinArtifactRegistrations.get(key) === pending) {
+      builtinArtifactRegistrations.delete(key);
+    }
+    throw error;
+  });
+  builtinArtifactRegistrations.set(key, pending);
+  while (builtinArtifactRegistrations.size > maximumBuiltinArtifactRegistrationCacheEntries) {
+    const oldest = builtinArtifactRegistrations.keys().next().value as string | undefined;
+    if (!oldest || oldest === key) break;
+    builtinArtifactRegistrations.delete(oldest);
+  }
+  return (await pending).registered;
+}
+
+function builtinArtifactNodeIdentity(stat: fs.Stats): BuiltinArtifactNodeIdentity {
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    birthtimeMs: stat.birthtimeMs,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+    size: stat.size
+  };
+}
+
+function sameBuiltinArtifactNodeIdentity(
+  stat: fs.Stats,
+  expected: BuiltinArtifactNodeIdentity
+): boolean {
+  return stat.dev === expected.dev
+    && stat.ino === expected.ino
+    && stat.birthtimeMs === expected.birthtimeMs
+    && stat.mtimeMs === expected.mtimeMs
+    && stat.ctimeMs === expected.ctimeMs
+    && stat.size === expected.size;
 }

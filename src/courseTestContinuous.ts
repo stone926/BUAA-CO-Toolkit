@@ -1,6 +1,7 @@
 import { CO_DIR, CO_OUT_DIR } from './constants';
 import * as path from 'path';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import {
   ensureConcreteProfile,
@@ -17,6 +18,11 @@ import { ensureDirectory, writeTextFile } from './fsUtil';
 import { checkToolchain } from './toolchain';
 import { AppServices } from './types';
 import { recordAsmCaseTestOutcome } from './asmCaseStore';
+import {
+  discardContinuousGeneratedAsmCase,
+  discardContinuousPassingAsmCase,
+  markContinuousAsmCaseCancelled
+} from './courseTesting/continuousCaseRetention';
 import {
   ContinuousTraceIteration,
   ContinuousTraceReport,
@@ -43,6 +49,7 @@ import {
 import { tryAcquireCourseTestSession } from './courseTesting/courseTestSession';
 
 interface ContinuousTraceSession {
+  id: string;
   stopRequested: boolean;
   abortController: AbortController;
   wakeIntervalWait?: () => void;
@@ -70,11 +77,25 @@ interface ContinuousGeneratedBatch<TAsmCase> {
   asmCases?: TAsmCase[];
 }
 
+interface ContinuousGeneratedAsmCaseLike {
+  id: string;
+  manifestUri: vscode.Uri;
+}
+
 interface ContinuousIterationRunOptions {
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   artifactOutputMode?: 'workspace' | 'case';
   signal?: AbortSignal;
+}
+
+interface ContinuousGeneratorRunOptions {
+  revealOutput: false;
+  signal?: AbortSignal;
+  continuous: {
+    sessionId: string;
+    iteration: number;
+  };
 }
 
 interface ContinuousTraceRetention {
@@ -88,9 +109,20 @@ interface ContinuousRetainedArtifacts {
   result: CourseTraceCaseResult;
   caseDir?: string;
   files: string[];
+  pruneFailures: number;
 }
 
-export interface ContinuousGeneratedTraceDependencies<TSetup, TCase extends ContinuousTraceCaseLike, TAsmCase, TRunOptions extends object> {
+interface ContinuousOwnedCase {
+  manifestPath: string;
+  state: 'generated' | 'cancelled' | 'passed' | 'failed' | 'error';
+}
+
+export interface ContinuousGeneratedTraceDependencies<
+  TSetup,
+  TCase extends ContinuousTraceCaseLike,
+  TAsmCase extends ContinuousGeneratedAsmCaseLike,
+  TRunOptions extends object
+> {
   /** Test-only injection seam; the production facade always uses the internal policy. */
   automaticPolicy?: () => ContinuousAutomaticTestPolicy;
   resolveGeneratorRunSetup: () => Promise<TSetup | undefined>;
@@ -104,7 +136,7 @@ export interface ContinuousGeneratedTraceDependencies<TSetup, TCase extends Cont
   runGeneratorAndCollectAsms: (
     services: AppServices,
     setup: TSetup,
-    options: { revealOutput: false; signal?: AbortSignal }
+    options: ContinuousGeneratorRunOptions
   ) => Promise<ContinuousGeneratedBatch<TAsmCase> | undefined>;
   expandTraceCases: (asms: vscode.Uri[], asmCases?: TAsmCase[]) => Promise<TCase[]>;
   runCourseTraceCase: (
@@ -118,8 +150,14 @@ let activeContinuousTraceSession: ContinuousTraceSession | undefined;
 let continuousTraceStartReserved = false;
 let continuousTraceStartupStopRequested = false;
 const continuousMonitorFlushIntervalMs = 1000;
+const maximumContinuousPruneFailures = 3;
 
-export async function startContinuousGeneratedTraceTests<TSetup, TCase extends ContinuousTraceCaseLike, TAsmCase, TRunOptions extends object>(
+export async function startContinuousGeneratedTraceTests<
+  TSetup,
+  TCase extends ContinuousTraceCaseLike,
+  TAsmCase extends ContinuousGeneratedAsmCaseLike,
+  TRunOptions extends object
+>(
   services: AppServices,
   deps: ContinuousGeneratedTraceDependencies<TSetup, TCase, TAsmCase, TRunOptions>
 ): Promise<void> {
@@ -175,6 +213,7 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       retainContextWhenHidden: true
     });
     session = {
+      id: randomUUID(),
       stopRequested: false,
       abortController: new AbortController(),
       reportFile,
@@ -212,8 +251,9 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
         summary: createContinuousCounts(),
         results: []
       };
+      const ownedCases = new Map<string, ContinuousOwnedCase>();
       session.report.iterations.unshift(iteration);
-      await updateContinuousTraceMonitor(session, { force: true });
+      await updateContinuousTraceMonitor(session);
 
       services.output.appendLine('');
       services.output.appendLine(`持续测试第 ${index} 轮`);
@@ -221,15 +261,29 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
       try {
         const generated = await deps.runGeneratorAndCollectAsms(services, setup, {
           revealOutput: false,
-          signal: session.abortController.signal
+          signal: session.abortController.signal,
+          continuous: {
+            sessionId: session.id,
+            iteration: index
+          }
         });
         if (!generated?.asms.length) {
-          iteration.status = 'error';
-          iteration.message = '未能准备新的自动测试点';
-          iterationLevelError = true;
-          services.output.appendLine(iteration.message);
+          if (session.stopRequested || session.abortController.signal.aborted) {
+            iteration.status = 'stopped';
+          } else {
+            iteration.status = 'error';
+            iteration.message = '未能准备新的自动测试点';
+            iterationLevelError = true;
+            services.output.appendLine(iteration.message);
+          }
         } else {
           iteration.source = { kind: 'generator' };
+          for (const asmCase of generated.asmCases ?? []) {
+            ownedCases.set(normalizePathKey(asmCase.manifestUri.fsPath), {
+              manifestPath: asmCase.manifestUri.fsPath,
+              state: 'generated'
+            });
+          }
           const cases = await deps.expandTraceCases(generated.asms, generated.asmCases);
           for (let i = 0; i < cases.length; i++) {
             if (session.stopRequested) {
@@ -264,18 +318,42 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
               };
             }
             result = neutralCourseTraceCaseResult(result);
+            const resolvedManifestPath = result.caseManifest ?? item.asmCase?.manifestUri.fsPath;
+            if (!result.caseManifest && resolvedManifestPath) {
+              result = { ...result, caseManifest: resolvedManifestPath };
+            }
+            const ownedCase = resolvedManifestPath
+              ? ownedCases.get(normalizePathKey(resolvedManifestPath))
+              : undefined;
+            if (session.stopRequested && result.cancelled) {
+              if (ownedCase) {
+                ownedCase.state = 'cancelled';
+                try {
+                  await markContinuousAsmCaseCancelled(ownedCase.manifestPath, session.id);
+                } catch {
+                  services.output.appendLine('取消测试点状态保存失败');
+                }
+              }
+              iteration.status = 'stopped';
+              break;
+            }
+            if (ownedCase) {
+              ownedCase.state = result.status;
+            }
             try {
-              await recordAsmCaseTestOutcome(result.caseManifest, {
+              await recordAsmCaseTestOutcome(resolvedManifestPath, {
                 status: result.status,
                 stage: neutralCourseTraceStage(result.stage),
-                diagnostic: publicAutomaticDiagnosticMessage(result)
+                diagnostic: publicAutomaticDiagnosticMessage(result),
+                ...(ownedCase ? {
+                  continuous: {
+                    sessionId: session.id,
+                    state: result.status
+                  }
+                } : {})
               });
             } catch {
               services.output.appendLine('测试历史结果保存失败');
-            }
-            if (session.stopRequested && result.cancelled) {
-              iteration.status = 'stopped';
-              break;
             }
             iteration.results.push(result);
             addContinuousResult(iteration.summary, result);
@@ -288,17 +366,22 @@ export async function startContinuousGeneratedTraceTests<TSetup, TCase extends C
           iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
         }
       } catch (error) {
-        iteration.status = 'error';
-        iteration.message = error instanceof Error ? error.message : String(error);
-        iterationLevelError = true;
+        if (session.stopRequested || session.abortController.signal.aborted) {
+          iteration.status = 'stopped';
+        } else {
+          iteration.status = 'error';
+          iteration.message = error instanceof Error ? error.message : String(error);
+          iterationLevelError = true;
+        }
       }
 
       iteration.finishedAt = new Date().toISOString();
       if (iteration.status === 'running') {
         iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
       }
+      await discardContinuousUnfinishedCases(ownedCases, session.id, services);
       await applyContinuousRetention(session, iteration);
-      await updateContinuousTraceMonitor(session, { force: true });
+      await updateContinuousTraceMonitor(session);
 
       const reachedMaxIterations = maxIterations > 0 && index >= maxIterations;
       if (
@@ -432,10 +515,18 @@ async function applyContinuousRetention(
     }
   }
 
-  while (session.retainedPassingArtifacts.length > session.retention.retainedPassingCases) {
+  const pruneCandidates = session.retainedPassingArtifacts.length;
+  let pruneAttempts = 0;
+  while (session.retainedPassingArtifacts.length > session.retention.retainedPassingCases
+    && pruneAttempts < pruneCandidates) {
     const victim = session.retainedPassingArtifacts.shift();
-    if (victim) {
-      await pruneContinuousPassingArtifacts(victim, session);
+    pruneAttempts++;
+    if (victim && !await pruneContinuousPassingArtifacts(victim, session)) {
+      victim.pruneFailures++;
+      if (victim.pruneFailures < maximumContinuousPruneFailures) {
+        // Bounded rotation prevents one fail-closed case from starving later victims.
+        session.retainedPassingArtifacts.push(victim);
+      }
     }
   }
 
@@ -443,6 +534,27 @@ async function applyContinuousRetention(
     session.report.iterations,
     session.retention.reportRetainedIterations
   );
+}
+
+async function discardContinuousUnfinishedCases(
+  ownedCases: ReadonlyMap<string, ContinuousOwnedCase>,
+  sessionId: string,
+  services: AppServices
+): Promise<void> {
+  let refused = false;
+  for (const ownedCase of ownedCases.values()) {
+    if (ownedCase.state !== 'generated' && ownedCase.state !== 'cancelled') continue;
+    try {
+      if (!await discardContinuousGeneratedAsmCase(ownedCase.manifestPath, sessionId)) {
+        refused = true;
+      }
+    } catch {
+      refused = true;
+    }
+  }
+  if (refused) {
+    services.output.appendLine('部分未完成测试点未能安全清理，已保留原始 case');
+  }
 }
 
 function continuousRetainedArtifacts(
@@ -461,39 +573,48 @@ function continuousRetainedArtifacts(
     resultIndex,
     result,
     caseDir,
-    files
+    files,
+    pruneFailures: 0
   };
 }
 
 async function pruneContinuousPassingArtifacts(
   victim: ContinuousRetainedArtifacts,
   session: ContinuousTraceSession
-): Promise<void> {
+): Promise<boolean> {
   const protectedPaths = protectedContinuousArtifactPaths(session);
   const protectedDirs = protectedContinuousCaseDirs(session);
   const victimDirKey = victim.caseDir ? normalizePathKey(victim.caseDir) : undefined;
 
-  if (victim.caseDir && !protectedDirs.has(victimDirKey!) && isSafeContinuousCaseDir(victim.caseDir)) {
-    try {
-      await fs.promises.rm(victim.caseDir, { recursive: true, force: true });
-    } catch {
-      // Best-effort cleanup only. The report is still compacted so the monitor stays small.
-    }
-  }
-
+  // Remove retryable standalone outputs first. Once a case directory is atomically
+  // moved out of the live index its original manifest path cannot be retried.
   for (const file of victim.files) {
     const key = normalizePathKey(file);
     if (protectedPaths.has(key) || !isSafeContinuousOutFile(file)) {
-      continue;
+      return false;
     }
     try {
       await fs.promises.rm(file, { force: true });
     } catch {
-      // Best-effort cleanup only.
+      return false;
+    }
+  }
+
+  if (victim.caseDir) {
+    if (protectedDirs.has(victimDirKey!)) {
+      return false;
+    }
+    try {
+      if (!await discardContinuousPassingAsmCase(victim.result.caseManifest, session.id)) {
+        return false;
+      }
+    } catch {
+      return false;
     }
   }
 
   markContinuousArtifactsPruned(victim.result);
+  return true;
 }
 
 function protectedContinuousArtifactPaths(session: ContinuousTraceSession): Set<string> {

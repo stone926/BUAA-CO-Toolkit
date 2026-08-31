@@ -6,7 +6,10 @@ import {
   runGeneratorAndCollectAsms,
   type BuiltinGeneratorRunSetup
 } from '../../courseTesting/generatorWorkflow';
-import { createAsmCaseFromText, updateAsmCaseMetadata } from '../../asmCaseStore';
+import {
+  createAsmCaseFromText
+} from '../../asmCaseStore';
+import { discardContinuousGeneratedAsmCase } from '../../courseTesting/continuousCaseRetention';
 import {
   BuiltinAsmGeneratorError,
   generateBuiltinAsmTestCase
@@ -34,8 +37,11 @@ vi.mock('../../process', () => ({
 }));
 
 vi.mock('../../asmCaseStore', () => ({
-  createAsmCaseFromText: vi.fn(),
-  updateAsmCaseMetadata: vi.fn(async () => undefined)
+  createAsmCaseFromText: vi.fn()
+}));
+
+vi.mock('../../courseTesting/continuousCaseRetention', () => ({
+  discardContinuousGeneratedAsmCase: vi.fn(async () => true)
 }));
 
 vi.mock('../../courseTesting/builtinAsmGenerator', () => ({
@@ -91,21 +97,7 @@ describe('builtin generator workflow', () => {
       interruptSchedule: [0x4180],
       probe: undefined
     } as never);
-    vi.mocked(createAsmCaseFromText).mockImplementation(async (fileName: string) => ({
-      id: 'case-1',
-      dir: URI.file('E:/work/.co/cases/case-1'),
-      manifestUri: URI.file('E:/work/.co/cases/case-1/case.json'),
-      asm: URI.file(`E:/work/.co/cases/case-1/${fileName}`),
-      sourceAsm: URI.file(`E:/work/.co/cases/case-1/${fileName}`),
-      machineCode: URI.file('E:/work/.co/cases/case-1/code.txt'),
-      manifest: {
-        version: 1,
-        caseId: 'case-1',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        source: { kind: 'builtin' },
-        asm: { path: fileName, sha256: 'asm' }
-      }
-    } as never));
+    vi.mocked(createAsmCaseFromText).mockImplementation(async (fileName: string) => mockAsmCase('case-1', fileName));
   });
 
   it('always resolves the strongest builtin policy even when the workspace rollback is mars', async () => {
@@ -156,14 +148,36 @@ describe('builtin generator workflow', () => {
           primaryEngineId: 'builtin-ts',
           profile: 'P7'
         }),
-        p7: { interruptSchedule: [0x4180], probe: undefined }
+        p7: { interruptSchedule: [0x4180], probe: undefined },
+        metadata: {
+          'source.generatedName': expect.stringMatching(/^builtin-p7-/),
+          'source.seed': 'seed-1',
+          'source.mode': 'anchor',
+          'source.instructionCount': '20'
+        }
       })
     );
-    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), {
-      'source.generatedName': expect.stringMatching(/^builtin-p7-/),
-      'source.seed': 'seed-1',
-      'source.mode': 'anchor'
+  });
+
+  it('records continuous ownership in the initial case manifest metadata', async () => {
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+
+    await runGeneratorAndCollectAsms(services(), setup(), {
+      revealOutput: false,
+      continuous: { sessionId, iteration: 7 }
     });
+
+    expect(createAsmCaseFromText).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          'continuous.sessionId': sessionId,
+          'continuous.iteration': '7',
+          'continuous.state': 'generated'
+        })
+      })
+    );
   });
 
   it('keeps the public one-shot automatic generator quiet', async () => {
@@ -275,19 +289,92 @@ describe('builtin generator workflow', () => {
       probeScenarioCount: 10,
       exceptionRate: 0
     }));
-    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      'source.seed': 'anchor-seed',
-      'source.mode': 'anchor'
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), expect.objectContaining({
+      metadata: expect.objectContaining({ 'source.seed': 'anchor-seed', 'source.mode': 'anchor' })
     }));
-    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      'source.seed': 'probe-seed',
-      'source.mode': 'probe',
-      'source.probeShard': 'core'
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), expect.objectContaining({
+      metadata: expect.objectContaining({
+        'source.seed': 'probe-seed',
+        'source.mode': 'probe',
+        'source.probeShard': 'core'
+      })
     }));
-    expect(updateAsmCaseMetadata).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      'source.seed': 'timer-probe-seed',
-      'source.mode': 'probe',
-      'source.probeShard': 'timer'
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(3, expect.anything(), expect.anything(), expect.objectContaining({
+      metadata: expect.objectContaining({
+        'source.seed': 'timer-probe-seed',
+        'source.mode': 'probe',
+        'source.probeShard': 'timer'
+      })
     }));
   });
+
+  it('safely discards cases created before a later P7 shard fails', async () => {
+    const sessionId = '22222222-2222-4222-8222-222222222222';
+    vi.mocked(createAsmCaseFromText)
+      .mockResolvedValueOnce(mockAsmCase('partial-anchor', 'anchor.asm'))
+      .mockRejectedValueOnce(new Error('second case write failed'));
+
+    const batch = await runGeneratorAndCollectAsms(services(), setup({
+      p7StressMode: 'hybrid',
+      timerInterrupt: true
+    }), {
+      revealOutput: false,
+      continuous: { sessionId, iteration: 1 }
+    });
+
+    expect(batch).toBeUndefined();
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledTimes(1);
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledWith(
+      URI.file('E:/work/.co/cases/partial-anchor/case.json').fsPath,
+      sessionId
+    );
+  });
+
+  it('quietly cleans partial cases when continuous generation is aborted', async () => {
+    const sessionId = '33333333-3333-4333-8333-333333333333';
+    const controller = new AbortController();
+    const currentServices = services();
+    vi.mocked(createAsmCaseFromText).mockImplementationOnce(async () => {
+      controller.abort();
+      return mockAsmCase('cancelled-anchor', 'anchor.asm');
+    });
+    const vscode = await import('vscode');
+
+    const batch = await runGeneratorAndCollectAsms(currentServices, setup({
+      p7StressMode: 'hybrid',
+      timerInterrupt: true
+    }), {
+      revealOutput: false,
+      signal: controller.signal,
+      continuous: { sessionId, iteration: 1 }
+    });
+
+    expect(batch).toBeUndefined();
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledWith(
+      URI.file('E:/work/.co/cases/cancelled-anchor/case.json').fsPath,
+      sessionId
+    );
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(currentServices.output.appendLine).mock.calls))
+      .not.toMatch(/自动测试点准备失败|自动测试点已准备/);
+  });
 });
+
+function mockAsmCase(id: string, fileName: string) {
+  const caseDir = `E:/work/.co/cases/${id}`;
+  return {
+    id,
+    dir: URI.file(caseDir),
+    manifestUri: URI.file(`${caseDir}/case.json`),
+    asm: URI.file(`${caseDir}/${fileName}`),
+    sourceAsm: URI.file(`${caseDir}/${fileName}`),
+    machineCode: URI.file(`${caseDir}/code.txt`),
+    manifest: {
+      version: 1,
+      caseId: id,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      source: { kind: 'builtin' },
+      asm: { path: fileName, sha256: 'asm' }
+    }
+  } as never;
+}

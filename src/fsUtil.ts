@@ -41,6 +41,34 @@ export async function writeTextFile(uri: vscode.Uri, content: string): Promise<v
   await vscode.workspace.fs.writeFile(uri, bytes);
 }
 
+/** Avoid invalidating downstream file-signature caches when generated UTF-8 text is unchanged. */
+export async function writeTextFileIfChanged(uri: vscode.Uri, content: string): Promise<boolean> {
+  const bytes = Buffer.from(content, 'utf8');
+  let existingStat: vscode.FileStat | undefined;
+  try {
+    existingStat = await vscode.workspace.fs.stat(uri);
+  } catch {
+    // Missing targets continue through the ordinary write path.
+  }
+  if (existingStat) {
+    if ((existingStat.type & vscode.FileType.SymbolicLink) !== 0) {
+      throw new Error(`Refusing to overwrite generated text through a symbolic link: ${uri.fsPath}`);
+    }
+    if (existingStat.type === vscode.FileType.File && existingStat.size === bytes.byteLength) {
+      try {
+        const existing = await vscode.workspace.fs.readFile(uri);
+        if (Buffer.from(existing).equals(bytes)) {
+          return false;
+        }
+      } catch {
+        // An unreadable regular target continues through the ordinary write path.
+      }
+    }
+  }
+  await vscode.workspace.fs.writeFile(uri, bytes);
+  return true;
+}
+
 export async function readTextFile(uri: vscode.Uri): Promise<string> {
   const bytes = await vscode.workspace.fs.readFile(uri);
   return Buffer.from(bytes).toString('utf8');

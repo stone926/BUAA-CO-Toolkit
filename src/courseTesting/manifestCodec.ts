@@ -619,6 +619,22 @@ function isManifestMapKey(value: string): boolean {
     && value !== 'constructor';
 }
 
+/** Validate metadata/configuration entries before committing a manifest update. */
+export function assertManifestStringMapEntries(values: Record<string, string>, label: string): void {
+  const entries = Object.entries(values);
+  if (!entries.length) {
+    throw new Error(`ASM case ${label} update must contain at least one entry`);
+  }
+  for (const [key, value] of entries) {
+    if (!isManifestMapKey(key)) {
+      throw new Error(`ASM case ${label} key is invalid: ${JSON.stringify(key)}`);
+    }
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new Error(`ASM case ${label} value is empty: ${key}`);
+    }
+  }
+}
+
 // ── Normalized field views (v1 and v2) ───────────────────────────────────────
 
 export function manifestSourceOf(manifest: AsmCaseManifestUnion): AsmCaseSource {

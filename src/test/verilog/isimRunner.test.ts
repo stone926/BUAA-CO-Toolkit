@@ -80,6 +80,8 @@ vi.mock('../../toolchain', () => ({
 }));
 
 vi.mock('../../asmCaseStore', () => ({
+  asmCaseArtifactUri: vi.fn((_asmCase, _kind, fileName) =>
+    URI.file(`E:/work/.co/cases/case-1/verilog/${fileName}`)),
   copyAsmCaseArtifact: vi.fn(async (_asmCase, _kind, _source, fileName) =>
     URI.file(`E:/work/.co/cases/case-1/verilog/${fileName}`)),
   createAsmCaseFromAsm: vi.fn(),
@@ -390,8 +392,9 @@ describe('Verilog ISim runner orchestration', () => {
     const currentCase = asmCase();
     const simOutputUri = URI.file('E:/work/.co/cases/case-1/verilog/case.sim.out');
 
-    await runIsim(services(), { resource, asmCase: currentCase, simOutputUri });
+    const result = await runIsim(services(), { resource, asmCase: currentCase, simOutputUri });
 
+    expect(result?.simOut).toBe(simOutputUri);
     expect(copyMachineCodeToSimDirectory).toHaveBeenCalledWith(currentCase.machineCode, generated.outDir, resource);
     expect(copyAsmCaseArtifact).toHaveBeenCalledWith(
       currentCase,
@@ -403,8 +406,45 @@ describe('Verilog ISim runner orchestration', () => {
     expect(copyAsmCaseArtifact).toHaveBeenCalledWith(currentCase, 'verilog', generated.prj, 'isim-project.prj', 'prj');
     expect(copyAsmCaseArtifact).toHaveBeenCalledWith(currentCase, 'verilog', generated.tcl, 'isim-run.tcl', 'tcl');
     expect(recordTestbenchForAsmCase).toHaveBeenCalledWith(currentCase, expect.objectContaining({ moduleName: 'mips_tb' }));
+    expect(writeTextFile).not.toHaveBeenCalledWith(simOutputUri, 'sim stdout');
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      'case.sim.out',
+      'sim stdout',
+      'simOut'
+    );
+    expect(copyAsmCaseArtifact).not.toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      simOutputUri,
+      'case.sim.out',
+      'simOut'
+    );
+  });
+
+  it('does not treat a non-file output URI with the same fsPath as the case artifact', async () => {
+    const currentCase = asmCase();
+    const simOutputUri = URI.parse('memfs:/E:/work/.co/cases/case-1/verilog/case.sim.out');
+
+    const result = await runIsim(services(), { resource, asmCase: currentCase, simOutputUri });
+
+    expect(result?.simOut).toBe(simOutputUri);
     expect(writeTextFile).toHaveBeenCalledWith(simOutputUri, 'sim stdout');
-    expect(copyAsmCaseArtifact).toHaveBeenCalledWith(currentCase, 'verilog', simOutputUri, 'case.sim.out', 'simOut');
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      'case.sim.out',
+      'sim stdout',
+      'simOut'
+    );
+    expect(copyAsmCaseArtifact).not.toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      simOutputUri,
+      'case.sim.out',
+      'simOut'
+    );
   });
 
   it('does not write simulation output when the simulator process fails', async () => {

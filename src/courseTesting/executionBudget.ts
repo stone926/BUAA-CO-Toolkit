@@ -17,10 +17,9 @@ export function courseExecutionInstructionBudget(
   if (trustedBuiltinSource && builtinRandomAsmMarker.test(asmText)) {
     const match = instructionCountMarker.exec(asmText);
     const instructionCount = match ? Number(match[1]) : Number.NaN;
-    if (Number.isSafeInteger(instructionCount) && instructionCount > 0) {
-      return profile === 'P7'
-        ? Math.max(512, instructionCount * 16 + 256)
-        : Math.max(256, instructionCount * 2 + 64);
+    const builtinBudget = courseExecutionInstructionBudgetFromCount(profile, instructionCount);
+    if (builtinBudget !== undefined) {
+      return builtinBudget;
     }
   }
 
@@ -30,4 +29,21 @@ export function courseExecutionInstructionBudget(
     .filter((line) => /^[0-9a-f]{8}$/i.test(line))
     .length;
   return Math.max(65_536, machineCodeWords * 64);
+}
+
+/**
+ * Reuse the generator's case-local provenance without reopening the generated ASM.
+ * Callers must only pass a count captured while creating a trusted builtin case.
+ */
+export function courseExecutionInstructionBudgetFromCount(
+  profile: ProjectProfile,
+  instructionCount: number
+): number | undefined {
+  if (!Number.isSafeInteger(instructionCount) || instructionCount <= 0) {
+    return undefined;
+  }
+  const budget = profile === 'P7'
+    ? Math.max(512, instructionCount * 16 + 256)
+    : Math.max(256, instructionCount * 2 + 64);
+  return Number.isSafeInteger(budget) ? budget : undefined;
 }

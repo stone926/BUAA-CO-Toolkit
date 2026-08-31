@@ -195,7 +195,7 @@ describe('course trace runner orchestration', () => {
         backend: 'isim',
         generated: {} as never,
         fuseResult: { ok: true, code: 0, stdout: '', stderr: '' },
-        simResult: { ok: true, code: 0, stdout: '', stderr: '' },
+        simResult: { ok: true, code: 0, stdout: 'trace\n', stderr: '' },
         simOut: URI.file('E:/work/sim.out')
       };
     });
@@ -242,6 +242,7 @@ describe('course trace runner orchestration', () => {
     expect(result).not.toHaveProperty('simOut');
     expect(result).not.toHaveProperty('marsEvents');
     expect(result).not.toHaveProperty('simEvents');
+    expect(readTextFile).not.toHaveBeenCalledWith(URI.file('E:/work/sim.out'));
   });
 
   it('snapshots one atomic engine plan for case capture, assembly and execution', async () => {
@@ -672,6 +673,48 @@ describe('course trace runner orchestration', () => {
       tclText: 'run 4195us;\nexit\n',
       nonInteractive: true
     }));
+  });
+
+  it('uses the case-captured builtin instruction count without reopening generated ASM', async () => {
+    vi.mocked(getProfile).mockReturnValue('P5');
+    const engine = { id: 'builtin-ts', semanticsRevision: 1, capabilitiesRevision: 1 };
+    const currentCase = makeAsmCase({
+      version: 2,
+      profile: 'P5',
+      originalAsmPath: 'builtin-random.asm',
+      asmSnapshot: { path: 'program.asm', sha256: 'a'.repeat(64), bytes: 100 },
+      source: { kind: 'builtin', generator: 'builtin:random-asm' },
+      metadata: { 'source.instructionCount': '4000' },
+      program: {
+        assembler: engine,
+        machineCode: {
+          path: 'code.txt',
+          sha256: 'b'.repeat(64),
+          bytes: 27,
+          wordCount: 3,
+          haltPc: 0x3004
+        }
+      },
+      oracle: {
+        engine,
+        configurationHash: 'c'.repeat(64),
+        runConfiguration: { profile: 'P5', memoryConfiguration: 'Default' },
+        stopReason: 'unknown'
+      }
+    } as never);
+
+    const result = await runCourseTraceCase(
+      services(),
+      { asm: currentCase.sourceAsm, asmCase: currentCase },
+      { source: { kind: 'generator' } }
+    );
+
+    expect(result.status).toBe('passed');
+    expect(vi.mocked(executeWithPreflight).mock.calls.at(-1)?.[1].maxSteps).toBe(8064);
+    expect(runVerilogSimulation).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
+      tclText: 'run 517us;\nexit\n'
+    }));
+    expect(readTextFile).not.toHaveBeenCalledWith(currentCase.sourceAsm);
   });
 
   it.each(['mars', 'verify-both'] as const)(

@@ -18,6 +18,7 @@ import { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
 import {
   AsmCase,
+  asmCaseArtifactUri,
   copyAsmCaseArtifact,
   writeAsmCaseArtifact
 } from '../asmCaseStore';
@@ -150,19 +151,34 @@ export async function runIsim(
   });
   let simOut: vscode.Uri | undefined;
   if (simResult.ok) {
+    const simFileName = options.simOutputUri
+      ? path.basename(options.simOutputUri.fsPath)
+      : isimOutputFileName(compiled.testbenchName, options.simOutputFileName);
     if (options.simOutputUri) {
       simOut = options.simOutputUri;
-      await ensureDirectory(vscode.Uri.file(path.dirname(simOut.fsPath)));
     } else {
       const simOutDir = await simulationOutputDirectory(activeUri, compiled.generated.outDir);
-      simOut = vscode.Uri.file(path.join(simOutDir.fsPath, isimOutputFileName(compiled.testbenchName, options.simOutputFileName)));
+      simOut = vscode.Uri.file(path.join(simOutDir.fsPath, simFileName));
     }
-    await writeTextFile(simOut, simResult.stdout);
-    if (asmCase) {
+    const expectedCaseOutput = asmCase
+      ? asmCaseArtifactUri(asmCase, 'verilog', simFileName)
+      : undefined;
+    if (asmCase
+      && options.simOutputUri
+      && options.simOutputUri.scheme === 'file'
+      && expectedCaseOutput
+      && normalizePathKey(simOut.fsPath) === normalizePathKey(expectedCaseOutput.fsPath)) {
+      await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
+    } else {
       if (options.simOutputUri) {
-        await copyAsmCaseArtifact(asmCase, 'verilog', simOut, path.basename(simOut.fsPath), 'simOut');
-      } else {
-        await writeAsmCaseArtifact(asmCase, 'verilog', path.basename(simOut.fsPath), simResult.stdout, 'simOut');
+        const outputParent = options.simOutputUri.scheme === 'file'
+          ? vscode.Uri.file(path.dirname(simOut.fsPath))
+          : simOut.with({ path: path.posix.dirname(simOut.path), query: '', fragment: '' });
+        await ensureDirectory(outputParent);
+      }
+      await writeTextFile(simOut, simResult.stdout);
+      if (asmCase) {
+        await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
       }
     }
     if (showMessages) {

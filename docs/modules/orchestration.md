@@ -4,7 +4,7 @@
 不含语言智能逻辑(在src/language/ LSP Server端)
 
 entry:
-  extension.ts — activate(): 注册全部命令/侧边栏/StatusBar/FileWatcher(.v/.vh/.asm/.circ)/工具链缓存, deactivate()停止LSP
+  extension.ts — activate(): 注册全部命令/侧边栏/StatusBar/FileWatcher(.v/.vh/.xise/.asm/.circ)/工具链缓存；属于 ISE 发现基线的 Verilog/XISE create/change/delete 会失效所有包含该路径的嵌套 workspace 缓存，folder add/remove 保守清空 session 基线，忽略 `.co` 生成 TB 等排除目录事件, deactivate()停止LSP
   languageClient.ts — startLanguageServer(IPC模式，initializationOptions 传扩展安装根供 bundled runtime 定位), stopLanguageServer, executeLanguageServerCommand
 
 config:
@@ -45,20 +45,23 @@ mips-commands:
 verilog-commands:
   verilog.ts — Verilog 命令入口：generateTestbench、默认 Icarus 仿真/外部语法检查、ISE 工程文件生成、ISim 波形/VCD handler gate、lint禁用和 registerVerilog()；兼容保留既有 command ID
   verilog/documentContext.ts — VS Code 文档到 Verilog LSP TextDocument/CoSettings 的适配
-  verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集（排除 `.co`、`.vscode`、`.vscode-test` 等非 DUT 目录）、顺序敏感的项目签名；工作区唯一 `.xise` 存在时按 FILE_VERILOG 的 BehavioralSimulation seqID 编译，未列入的普通 `.v` 稳定排序后前置，运行时生成源固定置尾；无唯一/可读 XISE 时确定性排序
+  verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集（排除 `.co`、`.vscode`、`.vscode-test` 等非 DUT 目录）、顺序敏感的项目签名；工作区 `.v`/`.xise` 发现与唯一 XISE 解析使用 session 内 8-workspace LRU，并合并同根并发首次查询，extra/protected/exclusion 每次基于缓存原始基线重算，嵌套 multi-root 事件逐根失效；工作区唯一 `.xise` 存在时按 FILE_VERILOG 的 BehavioralSimulation seqID 编译，未列入的普通 `.v` 稳定排序后前置，运行时生成源固定置尾；无唯一/可读 XISE 时确定性排序
   verilog/iseProjectOrder.ts — 纯函数解析 XISE FILE_VERILOG 路径和 BehavioralSimulation seqID（全部有效且唯一时升序，否则稳定回退文档顺序），并组合普通/XISE/运行时源顺序，处理相对路径、XML 实体、去重和跨平台路径
   verilog/verilogBackend.ts — 显式两值偏好解析；省略偏好固定 bundled Icarus，仅显式 `isim` 请求进入 ISim，工具路径存在性不再参与选择
-  verilog/iverilogRuntime.ts — 固定定位 `vendor/iverilog/win32-x64`，为子进程前置 bundled bin，校验 exe/lib 并会话级执行 `iverilog -V`；六个原生 EXE 通过可复现的 manifest-only 补丁启用 UTF-8 process code page，兼容系统 ANSI code page 无法表示的中文路径；统一生成 source-relative、各源码目录和 workspace root 的 include 参数
+  verilog/iverilogRuntime.ts — 固定定位 `vendor/iverilog/win32-x64`，为子进程前置 bundled bin 并清除可重定向 compiler config 的 `IVERILOG_ICONFIG`（保留 VVP dumper/VPI 运行时控制），校验 exe/lib 并会话级执行 `iverilog -V`；六个原生 EXE 通过可复现的 manifest-only 补丁启用 UTF-8 process code page，兼容系统 ANSI code page 无法表示的中文路径；统一生成 source-relative、各源码目录和 workspace root 的 include 参数
   verilog/iverilogDiagnostics.ts — 纯 Icarus `path:line[:column]` stderr 解析，供 LSP syntax diagnostics 与运行失败归因共同复用
   verilog/iseDiagnostics.ts — 纯 ISE fuse error/warning/info 解析，保留可操作的文件、行号和消息，供 LSP 与仿真失败报告共同复用
   verilog/simulationDiagnostic.ts — Icarus/ISim 失败结构化为 phase/reason/exit/首条诊断；公开报告边界统一做工作区相对路径、外部路径 basename、ANSI/控制符清理和限长
-  verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + `vvp -N`，复用源文件顺序/testbench/`code.txt`，用独立 watchdog top 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物；编译/VVP stdout/stderr 分阶段设置 byte cap，失败为 case 保存有界私有原始 log，交互命令直接显示首条可定位诊断
+  verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + `vvp -N`，复用源文件顺序/testbench/`code.txt`，用 workspace-hash 命名的稳定 watchdog top + VVP plusarg 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物；自动 case 的指定 sim.out 直接由已持有 stdout 一次写入并登记 artifact，不再落盘后重读复制；编译/VVP stdout/stderr 分阶段设置 byte cap，失败为 case 保存有界私有原始 log，交互命令直接显示首条可定位诊断
+  verilog/iverilogCompileCache.ts — session 内按 workspace 保存单条 content-verified Icarus 编译缓存（全局 8-workspace LRU）；key 固定 runtime/version/完整 argv/有序直接源 SHA，`-Mall` 依赖闭包与 VVP artifact 每次命中按内容复验；取消中的 lookup 不驱逐原有效项，磁盘只复用固定 vvp/depfile，不按 case 增长
+  verilog/iverilogCompileCacheIo.ts — 编译缓存专用的可取消、有界同句柄读取与 SHA/节点身份指纹；Windows case-fold 路径碰撞 fail-open，受限并发 hash
+  verilog/iverilogIncludeResolution.ts — literal `include` 纯解析、source-relative/cwd/`-I` 搜索顺序与 shadow 负依赖验证；动态 include、边界超限或不可验证状态 fail-open
   verilog/workspaceOperationQueue.ts — 以规范化 workspace path 为键的轻量 Promise 队列；等待者取消会释放自身 turn，不中断前序也不阻塞后续仿真
   verilog/simulationRunner.ts — 无 language-client 命令胶水依赖、可供 headless 复用的通用 Verilog 仿真分派器、共享增量模块注册表与带 backend 的最小公共结果；通用命令/课程流水线固定 Icarus，只有显式 backend 请求才进入 ISim；统一识别 Icarus compile、ISim fuse、simulate/output terminal failure，显式 ISim 失败不启动 Icarus
-  verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘；fuse/仿真分阶段设置 byte cap，run 入口在 fuse 失败时保留 generated/fuseResult，自动报告与手动错误均显示脱敏首条诊断而不误报为准备失败
+  verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘；自动 case 的指定 sim.out 同样由已持有 stdout 一次写入并登记 artifact；fuse/仿真分阶段设置 byte cap，run 入口在 fuse 失败时保留 generated/fuseResult，自动报告与手动错误均显示脱敏首条诊断而不误报为准备失败
   verilog/simulationAsmCase.ts — P4–P7 ASM case 选择与 provider-neutral 机器码准备；默认内置汇编器，不把失败误报为 MARS 问题
   verilog/simulationInputs.ts — Icarus/ISim 运行前机器码源定位与复制；保留配置文件名并同步生成课程 TB 固定读取的 `code.txt` alias
-  verilog/testbenchResolver.ts — Verilog testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录；发现顶层/testbench 时复用 ISE 源文件排除规则，不把 `.vscode`/`.vscode-test` 内编辑器副本误判为重复模块
+  verilog/testbenchResolver.ts — Verilog testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录；P7 自动 top 查找复用增量 module registry，生成文本直接复用内存 SHA，case snapshot 与 DUT metadata 以同一份 bytes 一次提交；发现顶层/testbench 时复用 ISE 源文件排除规则，不把 `.vscode`/`.vscode-test` 内编辑器副本误判为重复模块
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
   verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper

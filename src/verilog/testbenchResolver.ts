@@ -92,13 +92,14 @@ export async function ensureP7InterruptTestbench(
   interruptSchedule: number[] | undefined,
   p7Probe: P7ProbeMetadata | undefined,
   showMessages: boolean,
-  options: TestbenchResolutionOptions = {}
+  options: TestbenchResolutionOptions = {},
+  moduleRegistry?: MutableVerilogModuleProvider
 ): Promise<TestbenchResolution | undefined> {
   if ((!interruptSchedule || !interruptSchedule.length) && !p7Probe) {
     return undefined;
   }
   const topName = getTopModule(resource);
-  const topDefinition = await findTopModuleDefinition(resource, topName);
+  const topDefinition = await findTopModuleDefinition(resource, topName, moduleRegistry);
   if (!topDefinition) {
     if (!options.nonInteractive) {
       services.output.appendLine(`未找到顶层模块 ${topName}，无法生成 P7 中断 testbench；改用默认 testbench（不注入外部中断）。`);
@@ -110,12 +111,12 @@ export async function ensureP7InterruptTestbench(
   const outDir = vscode.Uri.file(path.join(baseDir, CO_ISIM_DIR));
   await ensureDirectory(outDir);
   const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
-  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
+  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
     profile: 'P7',
     interruptSchedule,
     p7Probe
   }), options);
-  if (!written) {
+  if (!sha256) {
     return undefined;
   }
   if (!options.nonInteractive) {
@@ -133,7 +134,7 @@ export async function ensureP7InterruptTestbench(
     kind: 'p7-auto',
     designSourceUri: topDefinition.uri,
     generatedUri: tbUri,
-    sha256: await fileSha256(tbUri)
+    sha256
   };
 }
 
@@ -154,7 +155,7 @@ export async function ensureRunnableTestbench(
       return undefined;
     }
     const tbUri = await privateRuntimeTestbenchUri(topDefinition.uri, automaticRuntimeTestbenchName);
-    const written = await writeGeneratedRuntimeTestbench(
+    const sha256 = await writeGeneratedRuntimeTestbench(
       tbUri,
       buildTestbench(topDefinition.module, automaticRuntimeTestbenchName, {
         finishDelay: false,
@@ -162,7 +163,7 @@ export async function ensureRunnableTestbench(
       }),
       options
     );
-    if (!written) {
+    if (!sha256) {
       return undefined;
     }
     return {
@@ -170,7 +171,7 @@ export async function ensureRunnableTestbench(
       kind: 'generated',
       designSourceUri: topDefinition.uri,
       generatedUri: tbUri,
-      sha256: await fileSha256(tbUri)
+      sha256
     };
   }
 
@@ -209,11 +210,11 @@ export async function ensureRunnableTestbench(
   }
 
   const tbUri = await runtimeTestbenchUri(topDefinition.uri, configuredTestbench);
-  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
+  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, configuredTestbench, {
     finishDelay: options.nonInteractive ? false : verilogDelayFromSimTime(getSimTime(topDefinition.uri)),
     profile: getProfile(topDefinition.uri)
   }), options);
-  if (!written) {
+  if (!sha256) {
     return undefined;
   }
   if (!options.nonInteractive) {
@@ -222,7 +223,7 @@ export async function ensureRunnableTestbench(
   if (showMessages && !options.nonInteractive) {
     vscode.window.showInformationMessage(`已生成 Verilog testbench ${path.basename(tbUri.fsPath)}`);
   }
-  return { moduleName: configuredTestbench, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
+  return { moduleName: configuredTestbench, kind: 'generated', generatedUri: tbUri, sha256 };
 }
 
 export async function resolveNamedTestbench(
@@ -296,12 +297,19 @@ export async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: Te
     'dut.verilog.testbenchKind': resolution.kind
   };
   if (source) {
-    await copyAsmCaseArtifact(asmCase, 'verilog', source, 'testbench.v', 'testbenchSnapshot');
-    const sha256 = await fileSha256(source);
     metadata['dut.verilog.testbenchSource'] = source.fsPath;
-    if (sha256) {
-      metadata['dut.verilog.testbenchSha256'] = sha256;
-    }
+    await copyAsmCaseArtifact(
+      asmCase,
+      'verilog',
+      source,
+      'testbench.v',
+      'testbenchSnapshot',
+      (snapshot) => ({
+        ...metadata,
+        'dut.verilog.testbenchSha256': snapshot.sha256
+      })
+    );
+    return;
   } else if (resolution.sha256) {
     metadata['dut.verilog.testbenchSha256'] = resolution.sha256;
   }
@@ -328,11 +336,11 @@ async function ensureActiveModuleTestbench(
     return existing.resolution;
   }
   const tbUri = await runtimeTestbenchUri(definition.uri, tbName);
-  const written = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(definition.module, tbName, {
+  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(definition.module, tbName, {
     finishDelay: options.nonInteractive ? false : verilogDelayFromSimTime(getSimTime(definition.uri)),
     profile: getProfile(definition.uri)
   }), options);
-  if (!written) {
+  if (!sha256) {
     return undefined;
   }
   if (!options.nonInteractive) {
@@ -341,7 +349,7 @@ async function ensureActiveModuleTestbench(
   if (showMessages && !options.nonInteractive) {
     vscode.window.showInformationMessage(`已生成 Verilog testbench ${path.basename(tbUri.fsPath)}`);
   }
-  return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256: await fileSha256(tbUri) };
+  return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256 };
 }
 
 async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string): Promise<vscode.Uri> {
@@ -445,22 +453,23 @@ async function writeGeneratedRuntimeTestbench(
   uri: vscode.Uri,
   testbenchText: string,
   options: TestbenchResolutionOptions = {}
-): Promise<boolean> {
+): Promise<string | undefined> {
   const next = generatedRuntimeTestbenchText(testbenchText);
+  const sha256 = sha256Bytes(Buffer.from(next, 'utf8'));
   if (await pathExists(uri.fsPath)) {
     const existing = await readTextFileSafe(uri);
     if (!isGeneratedRuntimeTestbench(existing)) {
       if (!options.nonInteractive) {
         vscode.window.showErrorMessage(`不会覆盖非插件生成的 testbench：${uri.fsPath}`);
       }
-      return false;
+      return undefined;
     }
     if (existing === next) {
-      return true;
+      return sha256;
     }
   }
   await writeTextFile(uri, next);
-  return true;
+  return sha256;
 }
 
 async function readTextFileSafe(uri: vscode.Uri): Promise<string> {

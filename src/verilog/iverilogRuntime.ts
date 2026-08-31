@@ -34,6 +34,10 @@ export interface IverilogPreflightOptions {
   timeoutMs?: number;
 }
 
+const bundledIverilogEnvironmentOverrides = new Set([
+  'iverilog_iconfig'
+]);
+
 export interface IverilogPreflightResult {
   runtime: IverilogRuntime;
   result: RunProcessCoreResult;
@@ -99,7 +103,10 @@ export function buildIverilogEnvironment(
   const pathKey = pathEntry?.[0] ?? 'PATH';
   const inheritedPath = pathEntry?.[1];
   const environment = Object.fromEntries(
-    Object.entries(baseEnv).filter(([key]) => key.toLowerCase() !== 'path')
+    Object.entries(baseEnv).filter(([key]) => {
+      const normalized = key.toLowerCase();
+      return normalized !== 'path' && !bundledIverilogEnvironmentOverrides.has(normalized);
+    })
   );
   return {
     ...environment,

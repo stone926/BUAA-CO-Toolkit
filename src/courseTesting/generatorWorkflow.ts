@@ -12,9 +12,9 @@ import {
 } from '../config';
 import {
   AsmCase,
-  createAsmCaseFromText,
-  updateAsmCaseMetadata
+  createAsmCaseFromText
 } from '../asmCaseStore';
+import { discardContinuousGeneratedAsmCase } from './continuousCaseRetention';
 import {
   BuiltinAsmGeneratorError,
   generateBuiltinAsmTestCase,
@@ -70,6 +70,15 @@ export interface GeneratedAsmBatch {
   asms: vscode.Uri[];
   source: CourseTraceBatchSource;
   asmCases?: AsmCase[];
+}
+
+export interface GeneratorRunOptions {
+  revealOutput?: boolean;
+  signal?: AbortSignal;
+  continuous?: {
+    sessionId: string;
+    iteration: number;
+  };
 }
 
 export interface ResolveGeneratedAsmBatchOptions {
@@ -128,7 +137,7 @@ export async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | un
 export async function runGeneratorAndCollectAsms(
   services: AppServices,
   setup: GeneratorRunSetup,
-  options: { revealOutput?: boolean; signal?: AbortSignal } = {}
+  options: GeneratorRunOptions = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   if (setup.kind === 'builtin') {
     return await runBuiltinGeneratorAndCollectAsms(services, setup, options);
@@ -220,7 +229,7 @@ async function buildExternalGeneratorRunSetup(
 async function runBuiltinGeneratorAndCollectAsms(
   services: AppServices,
   setup: BuiltinGeneratorRunSetup,
-  options: { revealOutput?: boolean } = {}
+  options: GeneratorRunOptions = {}
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
   const specs = builtinGenerationSpecs(setup);
@@ -229,6 +238,9 @@ async function runBuiltinGeneratorAndCollectAsms(
   const asmCases: AsmCase[] = [];
   try {
     for (const spec of specs) {
+      if (options.signal?.aborted) {
+        throw new Error('continuous builtin generation cancelled');
+      }
       const mode = spec.mode;
       const generated = generateBuiltinAsmTestCase({
         profile: setup.profile,
@@ -261,18 +273,38 @@ async function runBuiltinGeneratorAndCollectAsms(
         p7: {
           interruptSchedule: generated.interruptSchedule,
           probe: generated.probe
+        },
+        metadata: {
+          'source.generatedName': fileName,
+          'source.seed': generated.seed,
+          'source.mode': generated.mode ?? mode ?? 'default',
+          'source.instructionCount': String(generated.instructionCount),
+          ...(spec.probeShard ? { 'source.probeShard': spec.probeShard } : {}),
+          ...(options.continuous ? {
+            'continuous.sessionId': options.continuous.sessionId,
+            'continuous.iteration': String(options.continuous.iteration),
+            'continuous.state': 'generated'
+          } : {})
         }
-      });
-      await updateAsmCaseMetadata(asmCase, {
-        'source.generatedName': fileName,
-        'source.seed': generated.seed,
-        'source.mode': generated.mode ?? mode ?? 'default',
-        ...(spec.probeShard ? { 'source.probeShard': spec.probeShard } : {})
       });
       asms.push(asmCase.sourceAsm);
       asmCases.push(asmCase);
+      if (options.signal?.aborted) {
+        throw new Error('continuous builtin generation cancelled');
+      }
     }
   } catch (error) {
+    if (options.continuous) {
+      for (const asmCase of asmCases) {
+        await discardContinuousGeneratedAsmCase(
+          asmCase.manifestUri.fsPath,
+          options.continuous.sessionId
+        ).catch(() => false);
+      }
+    }
+    if (options.signal?.aborted) {
+      return undefined;
+    }
     const message = publicBuiltinGeneratorFailure(error);
     vscode.window.showErrorMessage(message);
     if (options.revealOutput !== false) {

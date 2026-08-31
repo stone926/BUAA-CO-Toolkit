@@ -73,10 +73,18 @@ vi.mock('../courseTestToolchain', () => ({
 }));
 
 const outcomeMocks = vi.hoisted(() => ({
-  recordAsmCaseTestOutcome: vi.fn(async () => undefined)
+  recordAsmCaseTestOutcome: vi.fn(async () => undefined),
+  markContinuousAsmCaseCancelled: vi.fn(async () => true),
+  discardContinuousGeneratedAsmCase: vi.fn(async () => true),
+  discardContinuousPassingAsmCase: vi.fn(async () => true)
 }));
 
 vi.mock('../asmCaseStore', () => outcomeMocks);
+vi.mock('../courseTesting/continuousCaseRetention', () => ({
+  markContinuousAsmCaseCancelled: outcomeMocks.markContinuousAsmCaseCancelled,
+  discardContinuousGeneratedAsmCase: outcomeMocks.discardContinuousGeneratedAsmCase,
+  discardContinuousPassingAsmCase: outcomeMocks.discardContinuousPassingAsmCase
+}));
 
 vi.mock('../courseTestReport', async (importOriginal) => ({
   ...await importOriginal<typeof import('../courseTestReport')>(),
@@ -89,6 +97,11 @@ import {
 } from '../courseTestContinuous';
 import { revealOutputChannel } from '../process';
 import { checkToolchain } from '../toolchain';
+import {
+  discardContinuousGeneratedAsmCase,
+  discardContinuousPassingAsmCase,
+  markContinuousAsmCaseCancelled
+} from '../courseTesting/continuousCaseRetention';
 import { recordAsmCaseTestOutcome } from '../asmCaseStore';
 import { tryAcquireCourseTestSession } from '../courseTesting/courseTestSession';
 
@@ -100,10 +113,13 @@ interface TestSetup {
 interface TestCase {
   asm: URI;
   stdin?: URI;
+  asmCase?: TestAsmCase;
 }
 
 interface TestAsmCase {
   id: string;
+  manifestUri: URI;
+  asm: URI;
 }
 
 interface TestRunOptions {
@@ -183,6 +199,7 @@ describe('continuous generated trace orchestration', () => {
   });
 
   it('continues after case errors when stop-on-failure is disabled', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
     policyMocks.maxIterations.mockReturnValue(2);
     policyMocks.stopOnFailure.mockReturnValue(false);
     const deps = createDependencies({
@@ -199,6 +216,7 @@ describe('continuous generated trace orchestration', () => {
 
     expect(deps.runGeneratorAndCollectAsms).toHaveBeenCalledTimes(2);
     expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(4);
+    expect(fileMocks.writeTextFile).toHaveBeenCalledTimes(2);
   });
 
   it('does not execute a second case in the same iteration after the first case fails', async () => {
@@ -219,6 +237,60 @@ describe('continuous generated trace orchestration', () => {
       expect.anything(),
       expect.objectContaining({ asm }),
       expect.anything()
+    );
+  });
+
+  it('preserves the first failed P7 case and discards the generated cases that were never executed', async () => {
+    const generatedCases = [
+      testAsmCase('case-anchor'),
+      testAsmCase('case-core-probe'),
+      testAsmCase('case-timer-probe')
+    ];
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: generatedCases.map((item) => item.asm),
+        source: { kind: 'generator' as const },
+        asmCases: generatedCases
+      })),
+      expandTraceCases: vi.fn(async (_asms, asmCases) =>
+        (asmCases ?? []).map((asmCase) => ({ asm: asmCase.asm, asmCase }))),
+      runCourseTraceCase: vi.fn(async (_services, item) => ({
+        asm: item.asm.fsPath,
+        caseId: item.asmCase!.id,
+        caseManifest: item.asmCase!.manifestUri.fsPath,
+        status: 'failed' as const,
+        stage: 'compare' as const,
+        message: 'mismatch'
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(1);
+    const generatorOptions = vi.mocked(deps.runGeneratorAndCollectAsms).mock.calls[0][2];
+    expect(generatorOptions.continuous).toMatchObject({
+      sessionId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+      iteration: 1
+    });
+    expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
+      generatedCases[0].manifestUri.fsPath,
+      expect.objectContaining({
+        status: 'failed',
+        continuous: expect.objectContaining({ state: 'failed' })
+      })
+    );
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledTimes(2);
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledWith(
+      generatedCases[1].manifestUri.fsPath,
+      expect.any(String)
+    );
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledWith(
+      generatedCases[2].manifestUri.fsPath,
+      expect.any(String)
+    );
+    expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalledWith(
+      generatedCases[0].manifestUri.fsPath,
+      expect.any(String)
     );
   });
 
@@ -255,6 +327,38 @@ describe('continuous generated trace orchestration', () => {
     expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ stage: 'internal' })
+    );
+  });
+
+  it('persists a terminal outcome through the generated case when a runner result omits its manifest', async () => {
+    const asmCase = testAsmCase('runner-omitted-manifest');
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: [asmCase.asm],
+        source: { kind: 'generator' as const },
+        asmCases: [asmCase]
+      })),
+      expandTraceCases: vi.fn(async () => [{ asm: asmCase.asm, asmCase }]),
+      runCourseTraceCase: vi.fn(async () => ({
+        asm: asmCase.asm.fsPath,
+        status: 'error' as const,
+        stage: 'internal' as const,
+        message: 'runner omitted case identity'
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
+      asmCase.manifestUri.fsPath,
+      expect.objectContaining({
+        status: 'error',
+        continuous: expect.objectContaining({ state: 'error' })
+      })
+    );
+    expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalledWith(
+      asmCase.manifestUri.fsPath,
+      expect.any(String)
     );
   });
 
@@ -345,6 +449,37 @@ describe('continuous generated trace orchestration', () => {
     expect(iterationErrorDeps.expandTraceCases).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a stop, not an iteration error, when cancellation finishes inside generation', async () => {
+    policyMocks.maxIterations.mockReturnValue(0);
+    const services = createServices();
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => {
+        stopContinuousTests();
+        return undefined;
+      })
+    });
+
+    await startContinuousGeneratedTraceTests(services, deps);
+
+    const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
+    const finalReport = reports.at(-1) as {
+      iterations: Array<{
+        status: string;
+        summary: { total: number; errors: number };
+        results: unknown[];
+        message?: string;
+      }>;
+    };
+    expect(finalReport.iterations[0]).toMatchObject({
+      status: 'stopped',
+      summary: { total: 0, errors: 0 },
+      results: []
+    });
+    expect(finalReport.iterations[0]).not.toHaveProperty('message');
+    expect(services.output.appendLine).not.toHaveBeenCalledWith('未能准备新的自动测试点');
+    expect(vscodeMocks.showErrorMessage).not.toHaveBeenCalled();
+  });
+
   it('does not schedule an interval wait after the final finite iteration', async () => {
     policyMocks.intervalMs.mockReturnValue(60_000);
     policyMocks.maxIterations.mockReturnValue(1);
@@ -402,6 +537,132 @@ describe('continuous generated trace orchestration', () => {
       summary: { total: 0, errors: 0 },
       results: []
     });
+  });
+
+  it('marks and discards a cancelled P7 case together with its unexecuted siblings', async () => {
+    policyMocks.maxIterations.mockReturnValue(0);
+    const generatedCases = [
+      testAsmCase('cancel-anchor'),
+      testAsmCase('cancel-core-probe'),
+      testAsmCase('cancel-timer-probe')
+    ];
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: generatedCases.map((item) => item.asm),
+        source: { kind: 'generator' as const },
+        asmCases: generatedCases
+      })),
+      expandTraceCases: vi.fn(async (_asms, asmCases) =>
+        (asmCases ?? []).map((asmCase) => ({ asm: asmCase.asm, asmCase }))),
+      runCourseTraceCase: vi.fn(async (_services, item) => {
+        stopContinuousTests();
+        return {
+          asm: item.asm.fsPath,
+          caseId: item.asmCase!.id,
+          caseManifest: item.asmCase!.manifestUri.fsPath,
+          status: 'error' as const,
+          cancelled: true as const,
+          stage: 'dut' as const,
+          message: 'aborted'
+        };
+      })
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(markContinuousAsmCaseCancelled).toHaveBeenCalledWith(
+      generatedCases[0].manifestUri.fsPath,
+      expect.any(String)
+    );
+    expect(recordAsmCaseTestOutcome).not.toHaveBeenCalled();
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledTimes(3);
+    for (const item of generatedCases) {
+      expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledWith(
+        item.manifestUri.fsPath,
+        expect.any(String)
+      );
+    }
+  });
+
+  it('discards every generated case when case expansion fails', async () => {
+    const generatedCases = [testAsmCase('expand-1'), testAsmCase('expand-2'), testAsmCase('expand-3')];
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: generatedCases.map((item) => item.asm),
+        source: { kind: 'generator' as const },
+        asmCases: generatedCases
+      })),
+      expandTraceCases: vi.fn(async () => {
+        throw new Error('cannot expand cases');
+      })
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledTimes(3);
+    expect(deps.runCourseTraceCase).not.toHaveBeenCalled();
+  });
+
+  it('rotates a refused passing-retention case without starving a later victim', async () => {
+    policyMocks.maxIterations.mockReturnValue(2);
+    policyMocks.retainedPassingCases.mockReturnValue(0);
+    const generatedCases = [testAsmCase('retention-1'), testAsmCase('retention-2')];
+    let generation = 0;
+    vi.mocked(discardContinuousPassingAsmCase)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => {
+        const asmCase = generatedCases[generation++];
+        return {
+          asms: [asmCase.asm],
+          source: { kind: 'generator' as const },
+          asmCases: [asmCase]
+        };
+      }),
+      expandTraceCases: vi.fn(async (_asms, asmCases) => [{
+        asm: asmCases![0].asm,
+        asmCase: asmCases![0]
+      }]),
+      runCourseTraceCase: vi.fn(async (_services, item) => ({
+        asm: item.asm.fsPath,
+        caseId: item.asmCase!.id,
+        caseManifest: item.asmCase!.manifestUri.fsPath,
+        asmSnapshot: item.asmCase!.asm.fsPath,
+        status: 'passed' as const,
+        stage: 'compare' as const,
+        message: 'matched'
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(discardContinuousPassingAsmCase).toHaveBeenCalledTimes(3);
+    expect(discardContinuousPassingAsmCase).toHaveBeenNthCalledWith(
+      1,
+      generatedCases[0].manifestUri.fsPath,
+      expect.any(String)
+    );
+    expect(discardContinuousPassingAsmCase).toHaveBeenNthCalledWith(
+      3,
+      generatedCases[1].manifestUri.fsPath,
+      expect.any(String)
+    );
+    expect(discardContinuousPassingAsmCase).toHaveBeenNthCalledWith(
+      2,
+      generatedCases[0].manifestUri.fsPath,
+      expect.any(String)
+    );
+    const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
+    const finalReport = reports.at(-1) as {
+      iterations: Array<{ results: Array<{ artifactsPruned?: boolean }> }>;
+    };
+    expect(finalReport.iterations.flatMap((iteration) => iteration.results))
+      .toEqual([
+        expect.objectContaining({ artifactsPruned: true }),
+        expect.not.objectContaining({ artifactsPruned: true })
+      ]);
   });
 
   it('releases the active session even when the final report write fails', async () => {
@@ -467,6 +728,15 @@ function createServices(): AppServices {
     statusBar: {
       text: ''
     } as never
+  };
+}
+
+function testAsmCase(id: string): TestAsmCase {
+  const caseDir = `E:/work/.co/cases/${id}`;
+  return {
+    id,
+    manifestUri: URI.file(`${caseDir}/case.json`),
+    asm: URI.file(`${caseDir}/program.asm`)
   };
 }
 

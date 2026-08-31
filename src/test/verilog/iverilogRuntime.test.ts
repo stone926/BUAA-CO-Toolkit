@@ -60,17 +60,23 @@ describe('bundled Icarus runtime', () => {
     expect(runtime.libDir).toBe(path.join(expectedRoot, 'lib', 'ivl'));
   });
 
-  it('inherits environment values while prepending only bundled bin to Path', () => {
+  it('isolates the compiler config override, preserves VVP controls, and prepends bundled bin to Path', () => {
     const runtime = resolveIverilogRuntime('E:/Extension Root');
     const env = buildIverilogEnvironment(runtime, {
       Path: 'C:/Windows',
       PATH: 'C:/ambiguous-mingw',
-      KEEP: 'yes'
+      KEEP: 'yes',
+      IVERILOG_ICONFIG: 'E:/host/iconfig',
+      iverilog_vpi_module_path: 'E:/host/vpi',
+      IVERILOG_DUMPER: 'fst'
     });
     expect(env.KEEP).toBe('yes');
     expect(normalized(env.Path ?? '')).toContain('vendor/iverilog/win32-x64/bin');
     expect(env.Path).toContain('C:/Windows');
     expect(env).not.toHaveProperty('PATH');
+    expect(env).not.toHaveProperty('IVERILOG_ICONFIG');
+    expect(env.iverilog_vpi_module_path).toBe('E:/host/vpi');
+    expect(env.IVERILOG_DUMPER).toBe('fst');
   });
 
   it('enables source-relative and workspace-root includes without rewriting paths', () => {

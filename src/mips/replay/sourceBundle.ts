@@ -229,6 +229,13 @@ export function sourceGraphFingerprint(graph: Omit<SourceGraphBundle, 'graphFing
 }
 
 export async function loadAndVerifySourceGraph(caseDir: string, graphRelativePath: string): Promise<SourceGraphBundle> {
+  return (await loadAndVerifySourceGraphState(caseDir, graphRelativePath)).graph;
+}
+
+async function loadAndVerifySourceGraphState(
+  caseDir: string,
+  graphRelativePath: string
+): Promise<{ graph: SourceGraphBundle; rawUnits: Map<string, DiscoveredUnit> }> {
   const graphFile = await resolveContainedRegularFile(caseDir, graphRelativePath);
   let graph: unknown;
   try {
@@ -307,7 +314,7 @@ export async function loadAndVerifySourceGraph(caseDir: string, graphRelativePat
       throw new Error(`source graph unit ${unit.id} materialized bytes do not equal the derived view`);
     }
   }
-  return typed;
+  return { graph: typed, rawUnits };
 }
 
 export async function sourceGraphBundleIssues(caseDir: string, graphRelativePath: string): Promise<string[]> {
@@ -407,36 +414,9 @@ async function loadOriginalSourceGraph(
   caseDir: string,
   graphRelativePath: string
 ): Promise<{ graph: SourceGraphBundle; rawUnits: Map<string, DiscoveredUnit> }> {
-  const graph = await loadAndVerifySourceGraph(caseDir, graphRelativePath);
-  const rawUnits = new Map<string, DiscoveredUnit>();
-  for (const unit of graph.units) {
-    const blob = await resolveContainedRegularFile(caseDir, unit.blobPath);
-    const bytes = await readBoundedRegularFile(blob, {
-      maximumBytes: graph.limits.maxBytes,
-      expectedBytes: unit.bytes,
-      label: `source graph unit ${unit.id} blob`
-    });
-    if (bytes.byteLength !== unit.bytes || sha256Bytes(bytes) !== unit.contentHash) {
-      throw new Error(`source graph unit ${unit.id} changed between verification and materialization`);
-    }
-    rawUnits.set(unit.id, {
-      id: unit.id,
-      marsPath: unit.provenanceUri,
-      realPath: unit.provenanceUri,
-      bytes,
-      contentHash: unit.contentHash,
-      provenanceUri: unit.provenanceUri,
-      directives: graph.edges.filter((edge) => edge.from === unit.id)
-        .sort((left, right) => left.ordinal - right.ordinal)
-        .map((edge) => ({
-          requestedPath: edge.requestedPath,
-          pathStartOffset: edge.pathStartOffset,
-          pathEndOffset: edge.pathEndOffset,
-          targetId: edge.to
-        }))
-    });
-  }
-  return { graph, rawUnits };
+  // The verifier already read, hashed and parsed every immutable blob. Reuse those
+  // exact bytes as one atomic snapshot instead of reopening every file immediately.
+  return await loadAndVerifySourceGraphState(caseDir, graphRelativePath);
 }
 
 export function sourceGraphIssues(value: unknown): string[] {

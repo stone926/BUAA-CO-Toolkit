@@ -21,6 +21,11 @@ import {
   updateAsmCaseArtifacts,
   updateAsmCaseMetadata
 } from '../asmCaseStore';
+import {
+  discardContinuousGeneratedAsmCase,
+  discardContinuousPassingAsmCase,
+  markContinuousAsmCaseCancelled
+} from '../courseTesting/continuousCaseRetention';
 import type { AsmCaseManifestV2 } from '../courseTesting/manifestCodec';
 import type { ExecuteResult } from '../mips/providers/contracts';
 import {
@@ -162,6 +167,138 @@ describe('ASM case manifest v2 artifact storage', () => {
       'test.stage': 'dut',
       'test.diagnostic': '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口'
     });
+  });
+
+  it('moves a matching generated continuous case out of the live case index', async () => {
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const asmCase = makeContinuousOwnedCase(sessionId, 'generated');
+
+    await expect(discardContinuousGeneratedAsmCase(asmCase.manifestUri.fsPath, sessionId))
+      .resolves.toBe(true);
+
+    expect(fs.existsSync(asmCase.dir.fsPath)).toBe(false);
+  });
+
+  it('marks a matching generated case cancelled before safely discarding it', async () => {
+    const sessionId = '22222222-2222-4222-8222-222222222222';
+    const asmCase = makeContinuousOwnedCase(sessionId, 'generated');
+
+    await expect(markContinuousAsmCaseCancelled(asmCase.manifestUri.fsPath, sessionId))
+      .resolves.toBe(true);
+    const marked = JSON.parse(fs.readFileSync(asmCase.manifestUri.fsPath, 'utf8')) as AsmCaseManifestV2;
+    expect(marked.metadata?.['continuous.state']).toBe('cancelled');
+    await expect(discardContinuousGeneratedAsmCase(asmCase.manifestUri.fsPath, sessionId))
+      .resolves.toBe(true);
+  });
+
+  it('refuses continuous cleanup for a different session, manual source, or terminal evidence', async () => {
+    const sessionId = '33333333-3333-4333-8333-333333333333';
+    const mismatched = makeContinuousOwnedCase(sessionId, 'generated');
+    await expect(discardContinuousGeneratedAsmCase(
+      mismatched.manifestUri.fsPath,
+      '44444444-4444-4444-8444-444444444444'
+    )).resolves.toBe(false);
+    await expect(recordAsmCaseTestOutcome(mismatched.manifestUri.fsPath, {
+      status: 'failed',
+      stage: 'compare',
+      diagnostic: 'wrong session',
+      continuous: {
+        sessionId: '44444444-4444-4444-8444-444444444444',
+        state: 'failed'
+      }
+    })).rejects.toThrow(/ownership validation/);
+    expect(fs.existsSync(mismatched.dir.fsPath)).toBe(true);
+
+    const manual = makeContinuousOwnedCase(sessionId, 'generated');
+    (manual.manifest as AsmCaseManifestV2).source = { kind: 'selected' };
+    fs.writeFileSync(manual.manifestUri.fsPath, JSON.stringify(manual.manifest));
+    await expect(discardContinuousGeneratedAsmCase(manual.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(manual.dir.fsPath)).toBe(true);
+
+    const failed = makeContinuousOwnedCase(sessionId, 'failed');
+    await expect(discardContinuousGeneratedAsmCase(failed.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(failed.dir.fsPath)).toBe(true);
+
+    const terminalEvidence = makeContinuousOwnedCase(sessionId, 'generated');
+    (terminalEvidence.manifest as AsmCaseManifestV2).metadata!['test.status'] = 'failed';
+    fs.writeFileSync(terminalEvidence.manifestUri.fsPath, JSON.stringify(terminalEvidence.manifest));
+    await expect(discardContinuousGeneratedAsmCase(terminalEvidence.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(terminalEvidence.dir.fsPath)).toBe(true);
+  });
+
+  it('serializes terminal outcome recording ahead of cleanup for the same case', async () => {
+    const sessionId = '77777777-7777-4777-8777-777777777777';
+    const asmCase = makeContinuousOwnedCase(sessionId, 'generated');
+
+    const [recorded, discarded] = await Promise.all([
+      recordAsmCaseTestOutcome(asmCase.manifestUri.fsPath, {
+        status: 'failed',
+        stage: 'compare',
+        diagnostic: 'mismatch',
+        continuous: { sessionId, state: 'failed' }
+      }),
+      discardContinuousGeneratedAsmCase(asmCase.manifestUri.fsPath, sessionId)
+    ]);
+
+    expect(recorded).toBeUndefined();
+    expect(discarded).toBe(false);
+    expect(fs.existsSync(asmCase.dir.fsPath)).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(asmCase.manifestUri.fsPath, 'utf8')) as AsmCaseManifestV2;
+    expect(manifest.metadata).toMatchObject({
+      'continuous.state': 'failed',
+      'test.status': 'failed',
+      'test.stage': 'compare'
+    });
+  });
+
+  it('prunes only session-owned cases with agreeing passed terminal evidence', async () => {
+    const sessionId = '55555555-5555-4555-8555-555555555555';
+    const passed = makeContinuousOwnedCase(sessionId, 'passed');
+    (passed.manifest as AsmCaseManifestV2).metadata!['test.status'] = 'passed';
+    fs.writeFileSync(passed.manifestUri.fsPath, JSON.stringify(passed.manifest));
+
+    await expect(discardContinuousPassingAsmCase(passed.manifestUri.fsPath, sessionId))
+      .resolves.toBe(true);
+    expect(fs.existsSync(passed.dir.fsPath)).toBe(false);
+
+    const failed = makeContinuousOwnedCase(sessionId, 'failed');
+    (failed.manifest as AsmCaseManifestV2).metadata!['test.status'] = 'failed';
+    fs.writeFileSync(failed.manifestUri.fsPath, JSON.stringify(failed.manifest));
+    await expect(discardContinuousPassingAsmCase(failed.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(failed.dir.fsPath)).toBe(true);
+
+    const disagreement = makeContinuousOwnedCase(sessionId, 'passed');
+    (disagreement.manifest as AsmCaseManifestV2).metadata!['test.status'] = 'failed';
+    fs.writeFileSync(disagreement.manifestUri.fsPath, JSON.stringify(disagreement.manifest));
+    await expect(discardContinuousPassingAsmCase(disagreement.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(disagreement.dir.fsPath)).toBe(true);
+
+    const manual = makeContinuousOwnedCase(sessionId, 'passed');
+    (manual.manifest as AsmCaseManifestV2).source = { kind: 'selected' };
+    (manual.manifest as AsmCaseManifestV2).metadata!['test.status'] = 'passed';
+    fs.writeFileSync(manual.manifestUri.fsPath, JSON.stringify(manual.manifest));
+    await expect(discardContinuousPassingAsmCase(manual.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(manual.dir.fsPath)).toBe(true);
+  });
+
+  it('refuses cleanup when the controlled trash directory is a link', async () => {
+    const sessionId = '66666666-6666-4666-8666-666666666666';
+    const asmCase = makeContinuousOwnedCase(sessionId, 'generated');
+    const workspaceRoot = path.dirname(path.dirname(path.dirname(asmCase.dir.fsPath)));
+    const externalTrash = path.join(workspaceRoot, 'external-trash');
+    const trashDir = path.join(workspaceRoot, '.co', 'trash');
+    fs.mkdirSync(externalTrash);
+    fs.symlinkSync(externalTrash, trashDir, process.platform === 'win32' ? 'junction' : 'dir');
+
+    await expect(discardContinuousGeneratedAsmCase(asmCase.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    expect(fs.existsSync(asmCase.dir.fsPath)).toBe(true);
   });
 
   it('rejects direct references outside the case directory', async () => {
@@ -384,12 +521,21 @@ describe('ASM case manifest v2 artifact storage', () => {
       'mars',
       URI.file(source),
       'oracle.out',
-      'traceOut'
+      'traceOut',
+      (snapshot) => ({
+        'source.copyStage': 'oracle',
+        'source.copySha256': snapshot.sha256
+      })
     );
 
     expect(fs.readFileSync(copied.fsPath, 'utf8')).toBe('trace contents');
     expect((asmCase.manifest as AsmCaseManifestV2).artifacts?.oracle?.traceOut)
       .toMatchObject({ path: 'mars/oracle.out', bytes: 14 });
+    expect((asmCase.manifest as AsmCaseManifestV2).metadata)
+      .toMatchObject({
+        'source.copyStage': 'oracle',
+        'source.copySha256': crypto.createHash('sha256').update('trace contents').digest('hex')
+      });
   });
 
   it('rejects source or case-local root bytes that drift from the immutable snapshot', async () => {
@@ -491,6 +637,27 @@ describe('ASM case manifest v2 artifact storage', () => {
     await expect(listAsmCaseManifests()).rejects.toThrow(/manifest bytes/);
   });
 });
+
+function makeContinuousOwnedCase(
+  sessionId: string,
+  state: 'generated' | 'cancelled' | 'passed' | 'failed' | 'error'
+): AsmCase {
+  const asmCase = createCase();
+  const manifest = asmCase.manifest as AsmCaseManifestV2;
+  manifest.source = {
+    kind: 'builtin',
+    generator: 'builtin:random-asm'
+  };
+  manifest.metadata = {
+    'continuous.sessionId': sessionId,
+    'continuous.iteration': '1',
+    'continuous.state': state
+  };
+  fs.writeFileSync(asmCase.manifestUri.fsPath, `${JSON.stringify(manifest)}\n`);
+  const workspaceRoot = path.dirname(path.dirname(path.dirname(asmCase.dir.fsPath)));
+  vscodeState.state!.workspaceFolders.push({ uri: URI.file(workspaceRoot), name: 'test' });
+  return asmCase;
+}
 
 function makeSourceSnapshotValid(asmCase: AsmCase): void {
   const bytes = Buffer.from('.text\nnop\n');

@@ -37,6 +37,10 @@ import { html, renderReportPage, renderTable } from './webview/reportLayout';
 import { timeStartup, traceStartup } from './startupTrace';
 import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
 import { disableDiagnosticCode } from './diagnosticSettings';
+import {
+  clearIseProjectDiscoveryCache,
+  invalidateIseProjectDiscoveryCachesForUri
+} from './verilog/iseProject';
 
 const escapeHtml = html.text;
 const verilogModuleRegistryStartupDelayMs = 1000;
@@ -115,21 +119,36 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     verilogWatcher,
     verilogWatcher.onDidCreate((uri) => {
+      invalidateIseProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
       moduleRegistry.updateUri(uri);
     }),
     verilogWatcher.onDidChange((uri) => {
+      invalidateIseProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
       moduleRegistry.updateUri(uri);
     }),
     verilogWatcher.onDidDelete((uri) => {
+      invalidateIseProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
       moduleRegistry.removeUri(uri);
     })
   );
+  const xiseWatcher = vscode.workspace.createFileSystemWatcher('**/*.xise');
+  context.subscriptions.push(
+    xiseWatcher,
+    xiseWatcher.onDidCreate(invalidateIseProjectDiscovery),
+    xiseWatcher.onDidChange(invalidateIseProjectDiscovery),
+    xiseWatcher.onDidDelete(invalidateIseProjectDiscovery)
+  );
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    // Folder changes are infrequent. A full in-memory clear also covers a root
+    // removed, edited while detached, then re-added at the same path.
+    clearIseProjectDiscoveryCache();
+  }));
   const profileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{asm,s,mips,circ}');
   context.subscriptions.push(
     profileWatcher,
@@ -175,6 +194,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
   function invalidateToolchainCache(): void {
     toolchainCache.clear();
+  }
+
+  function invalidateIseProjectDiscovery(uri: vscode.Uri): void {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    if (!vscode.workspace.getWorkspaceFolder(uri)) {
+      clearIseProjectDiscoveryCache();
+      return;
+    }
+    invalidateIseProjectDiscoveryCachesForUri(folders, uri);
   }
 
   context.subscriptions.push(

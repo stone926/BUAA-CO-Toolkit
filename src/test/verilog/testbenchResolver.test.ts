@@ -193,6 +193,40 @@ describe('testbench workspace discovery', () => {
     expect(currentServices.output.appendLine).not.toHaveBeenCalled();
     expect(vscodeState.module!.window.showInformationMessage).not.toHaveBeenCalled();
   });
+
+  it('uses the module registry for P7 top lookup without scanning the workspace', async () => {
+    const topUri = URI.file('E:/work/src/mips.v');
+    const registry = {
+      scanning: false,
+      getModule: vi.fn(),
+      getModules: vi.fn(() => [{
+        name: 'mips',
+        uri: topUri.toString(),
+        ports: []
+      }]),
+      allModules: vi.fn(() => []),
+      updateUri: vi.fn(),
+      removeUri: vi.fn()
+    } as never;
+
+    const result = await ensureP7InterruptTestbench(
+      services(),
+      URI.file('E:/work/program.asm'),
+      [0x3010],
+      undefined,
+      false,
+      { nonInteractive: true },
+      registry
+    );
+
+    expect(result).toMatchObject({
+      kind: 'p7-auto',
+      moduleName: 'co_generated_p7_auto_tb'
+    });
+    expect(result?.designSourceUri?.fsPath.toLowerCase()).toBe(topUri.fsPath.toLowerCase());
+    expect(registry.getModules).toHaveBeenCalledWith('mips');
+    expect(findWorkspaceFileCandidates).not.toHaveBeenCalled();
+  });
 });
 
 function services(): AppServices {

@@ -49,5 +49,6 @@ export function courseTraceIsimRunTcl(maxSteps: number): string {
 }
 
 export {
-  courseExecutionInstructionBudget
+  courseExecutionInstructionBudget,
+  courseExecutionInstructionBudgetFromCount
 } from '../executionBudget';

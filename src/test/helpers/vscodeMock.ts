@@ -26,6 +26,7 @@ export interface VscodeMockModule {
   Uri: typeof URI;
   RelativePattern: new (base: { uri: URI } | URI | string, pattern: string) => { base: unknown; pattern: string };
   ConfigurationTarget: { Workspace: number; Global: number; WorkspaceFolder: number };
+  FileType: { Unknown: number; File: number; Directory: number; SymbolicLink: number };
   ViewColumn: { Beside: number };
   EventEmitter: new <T>() => {
     event: (listener: (value: T) => void) => { dispose: () => void };
@@ -41,7 +42,7 @@ export interface VscodeMockModule {
       readFile: Mock<(uri: URI) => Promise<Uint8Array>>;
       writeFile: Mock<(uri: URI, bytes: Uint8Array) => Promise<void>>;
       createDirectory: Mock<(uri: URI) => Promise<void>>;
-      stat: Mock<(uri: URI) => Promise<{ mtime: number; type: number }>>;
+      stat: Mock<(uri: URI) => Promise<{ mtime: number; ctime: number; size: number; type: number }>>;
     };
     findFiles: Mock<(include: unknown, exclude?: unknown, maxResults?: number) => Promise<URI[]>>;
     saveAll: Mock<(includeUntitled?: boolean) => Promise<boolean>>;
@@ -92,6 +93,7 @@ export function createVscodeModuleMock(state: VscodeMockState, fn: MockFactory):
       constructor(public base: { uri: URI } | URI | string, public pattern: string) {}
     },
     ConfigurationTarget: { Workspace: 1, Global: 2, WorkspaceFolder: 3 },
+    FileType: { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 },
     ViewColumn: { Beside: 2 },
     EventEmitter: class EventEmitter<T> {
       private listeners = new Set<(value: T) => void>();
@@ -127,7 +129,7 @@ export function createVscodeModuleMock(state: VscodeMockState, fn: MockFactory):
         readFile: fn(async () => new Uint8Array()),
         writeFile: fn(async () => undefined),
         createDirectory: fn(async () => undefined),
-        stat: fn(async () => ({ mtime: Date.now(), type: 1 }))
+        stat: fn(async () => ({ mtime: Date.now(), ctime: Date.now(), size: 0, type: 1 }))
       },
       findFiles: fn(async () => []),
       saveAll: fn(async () => true),

@@ -17,7 +17,8 @@ import {
 import {
   ensureDirectory,
   workspaceFolderFor,
-  writeTextFile
+  writeTextFile,
+  writeTextFileIfChanged
 } from '../../fsUtil';
 import { revealOutputChannel, runTool } from '../../process';
 import {
@@ -30,6 +31,11 @@ import {
   buildIverilogEnvironment,
   preflightIverilogRuntime
 } from '../../verilog/iverilogRuntime';
+import {
+  lookupIverilogCompileCache,
+  prepareIverilogCompileCacheMiss,
+  storeIverilogCompileCache
+} from '../../verilog/iverilogCompileCache';
 import {
   copyMachineCodeToSimDirectory,
   resolveMachineCodeSource
@@ -62,7 +68,8 @@ vi.mock('../../config', () => ({
 vi.mock('../../fsUtil', () => ({
   ensureDirectory: vi.fn(async () => undefined),
   workspaceFolderFor: vi.fn(),
-  writeTextFile: vi.fn(async () => undefined)
+  writeTextFile: vi.fn(async () => undefined),
+  writeTextFileIfChanged: vi.fn(async () => true)
 }));
 
 vi.mock('../../process', () => ({
@@ -71,11 +78,14 @@ vi.mock('../../process', () => ({
 }));
 
 vi.mock('../../asmCaseStore', () => ({
+  asmCaseArtifactUri: vi.fn((_asmCase, _kind, fileName) =>
+    URI.file(`E:/work/.co/cases/case-1/verilog/${fileName}`)),
   copyAsmCaseArtifact: vi.fn(async () => undefined),
   createAsmCaseFromAsm: vi.fn(),
   prepareAsmCaseMachineCode: vi.fn(),
   resolveAsmCaseInput: vi.fn(),
-  writeAsmCaseArtifact: vi.fn(async () => undefined)
+  writeAsmCaseArtifact: vi.fn(async (_asmCase, _kind, fileName) =>
+    URI.file(`E:/work/.co/cases/case-1/verilog/${fileName}`))
 }));
 
 vi.mock('../../verilogIsimOutput', () => ({
@@ -89,6 +99,12 @@ vi.mock('../../verilog/iverilogRuntime', () => ({
   buildIverilogIncludeArgs: vi.fn((root: string) => ['-grelative-include', '-I', root]),
   buildIverilogEnvironment: vi.fn(() => ({ Path: 'bundled-bin' })),
   preflightIverilogRuntime: vi.fn()
+}));
+
+vi.mock('../../verilog/iverilogCompileCache', () => ({
+  lookupIverilogCompileCache: vi.fn(),
+  prepareIverilogCompileCacheMiss: vi.fn(),
+  storeIverilogCompileCache: vi.fn()
 }));
 
 vi.mock('../../verilog/simulationInputs', () => ({
@@ -149,6 +165,7 @@ describe('Icarus compile arguments and watchdog', () => {
       testbenchModule: 'mips_tb',
       watchdogModule: '__co_iverilog_watchdog_ab12',
       outputFile: 'E:/work path/simulation.vvp',
+      dependencyFile: 'E:/work path/simulation.dependencies',
       workspaceRoot: 'E:/课程 workspace path',
       sourceFiles: ['E:/work/a.v', 'E:/work/z.v', 'E:/work/generated_tb.v'],
       watchdogFile: 'E:/work/watchdog.v'
@@ -156,6 +173,7 @@ describe('Icarus compile arguments and watchdog', () => {
 
     expect(args).toEqual([
       '-g2005', '-grelative-include', '-I', 'E:/课程 workspace path',
+      '-Mall=E:/work path/simulation.dependencies',
       '-t', 'vvp',
       '-s', 'mips_tb',
       '-s', '__co_iverilog_watchdog_ab12',
@@ -180,11 +198,15 @@ describe('Icarus compile arguments and watchdog', () => {
   });
 
   it('emits a separate, bounded Verilog root with a final delta before finish', () => {
-    expect(buildIverilogWatchdog('__co_iverilog_watchdog_ab12', 1234)).toBe([
+    expect(buildIverilogWatchdog('__co_iverilog_watchdog_ab12')).toBe([
       '`timescale 1ps/1ps',
       'module __co_iverilog_watchdog_ab12;',
+      '    time limit_ps;',
       '    initial begin',
-      '        #(1234);',
+      '        if (!$value$plusargs("co_watchdog_limit_ps=%d", limit_ps)) begin',
+      '            limit_ps = 200000000;',
+      '        end',
+      '        #(limit_ps);',
       '        #1;',
       '        $finish;',
       '    end',
@@ -220,6 +242,9 @@ describe('Icarus runner orchestration', () => {
       URI.file('E:/work/test/mips_tb.v')
     ]);
     vi.mocked(runTool).mockResolvedValue(toolResult());
+    vi.mocked(lookupIverilogCompileCache).mockResolvedValue({ snapshot: {} as never });
+    vi.mocked(prepareIverilogCompileCacheMiss).mockResolvedValue(true);
+    vi.mocked(storeIverilogCompileCache).mockResolvedValue(true);
     vi.mocked(resolveMachineCodeSource).mockResolvedValue(undefined);
   });
 
@@ -235,25 +260,27 @@ describe('Icarus runner orchestration', () => {
     expect(result).toMatchObject({
       backend: 'iverilog',
       runtimeVersion: 'Icarus Verilog 13.0',
+      compileCacheHit: false,
       compileResult: { ok: true },
       simResult: { ok: true }
     });
     expect(runTool).toHaveBeenCalledTimes(2);
     const [compileCommand, compileArgs, compileOptions] = vi.mocked(runTool).mock.calls[0];
     expect(compileCommand).toBe(runtime.iverilogPath);
-    expect(compileArgs.slice(0, 12)).toEqual([
+    expect(compileArgs.slice(0, 13)).toEqual([
       '-g2005', '-grelative-include', '-I', expect.stringMatching(/e:[\\/]work/i),
+      expect.stringMatching(/^-Mall=.*simulation\.dependencies$/i),
       '-t', 'vvp', '-s', 'mips_tb', '-s',
-      expect.stringMatching(/^__co_iverilog_watchdog_[0-9a-f]{8}$/),
+      expect.stringMatching(/^__co_iverilog_watchdog_[0-9a-f]{16}$/),
       '-o',
       expect.stringMatching(/simulation\.vvp$/i)
     ]);
-    expect(compileArgs.slice(12, -1).map(normalized)).toEqual([
+    expect(compileArgs.slice(13, -1).map(normalized)).toEqual([
       'e:/work/src/a.v',
       'e:/work/src/z.v',
       'e:/work/test/mips_tb.v'
     ]);
-    expect(normalized(compileArgs.at(-1) ?? '')).toMatch(/__co_iverilog_watchdog_[0-9a-f]{8}\.v$/);
+    expect(normalized(compileArgs.at(-1) ?? '')).toMatch(/co_iverilog_watchdog\.v$/);
     expect(compileOptions).toEqual(expect.objectContaining({
       cwd: expect.stringMatching(/[\\/]\.co[\\/]isim$/i),
       env: { Path: 'bundled-bin' },
@@ -264,7 +291,11 @@ describe('Icarus runner orchestration', () => {
     expect(runTool).toHaveBeenNthCalledWith(
       2,
       runtime.vvpPath,
-      ['-N', expect.stringMatching(/simulation\.vvp$/i)],
+      [
+        '-N',
+        expect.stringMatching(/simulation\.vvp$/i),
+        '+co_watchdog_limit_ps=4195000000'
+      ],
       expect.objectContaining({
         cwd: compileOptions.cwd,
         signal: controller.signal,
@@ -276,10 +307,128 @@ describe('Icarus runner orchestration', () => {
       expect.objectContaining({ path: expect.stringMatching(/mips_tb\.sim\.out$/i) }),
       'trace stdout'
     );
-    expect(writeTextFile).toHaveBeenCalledWith(
-      expect.objectContaining({ path: expect.stringMatching(/watchdog_[0-9a-f]{8}\.v$/i) }),
-      expect.stringContaining('#(4195000000);')
+    expect(writeTextFileIfChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ path: expect.stringMatching(/co_iverilog_watchdog\.v$/i) }),
+      expect.stringContaining('$value$plusargs("co_watchdog_limit_ps=%d", limit_ps)')
     );
+  });
+
+  it('persists a case-local requested simulation output from retained stdout without reopening it', async () => {
+    const currentCase = {
+      id: 'case-1',
+      dir: URI.file('E:/work/.co/cases/case-1'),
+      manifestUri: URI.file('E:/work/.co/cases/case-1/case.json'),
+      asm: URI.file('E:/work/.co/cases/case-1/program.asm'),
+      sourceAsm: URI.file('E:/work/program.asm'),
+      machineCode: URI.file('E:/work/.co/cases/case-1/code.txt')
+    } as never;
+    const simOutputUri = URI.file('E:/work/.co/cases/case-1/verilog/case.sim.out');
+    vi.mocked(runTool)
+      .mockResolvedValueOnce(toolResult())
+      .mockResolvedValueOnce(toolResult({ stdout: 'case trace' }));
+
+    const result = await runIverilog(services(), {
+      resource,
+      asmCase: currentCase,
+      simOutputUri,
+      showMessages: false
+    });
+
+    expect(result?.simOut?.path).toBe(simOutputUri.path);
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      'case.sim.out',
+      'case trace',
+      'simOut'
+    );
+    expect(writeTextFile).not.toHaveBeenCalledWith(simOutputUri, 'case trace');
+    expect(copyAsmCaseArtifact).not.toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      simOutputUri,
+      'case.sim.out',
+      'simOut'
+    );
+  });
+
+  it('does not treat a non-file output URI with the same fsPath as the case artifact', async () => {
+    const currentCase = {
+      id: 'case-1',
+      dir: URI.file('E:/work/.co/cases/case-1'),
+      manifestUri: URI.file('E:/work/.co/cases/case-1/case.json'),
+      asm: URI.file('E:/work/.co/cases/case-1/program.asm'),
+      sourceAsm: URI.file('E:/work/program.asm'),
+      machineCode: URI.file('E:/work/.co/cases/case-1/code.txt')
+    } as never;
+    const simOutputUri = URI.parse('memfs:/E:/work/.co/cases/case-1/verilog/case.sim.out');
+    vi.mocked(runTool)
+      .mockResolvedValueOnce(toolResult())
+      .mockResolvedValueOnce(toolResult({ stdout: 'virtual trace' }));
+
+    const result = await runIverilog(services(), {
+      resource,
+      asmCase: currentCase,
+      simOutputUri,
+      showMessages: false
+    });
+
+    expect(result?.simOut).toBe(simOutputUri);
+    expect(writeTextFile).toHaveBeenCalledWith(simOutputUri, 'virtual trace');
+    expect(writeAsmCaseArtifact).toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      'case.sim.out',
+      'virtual trace',
+      'simOut'
+    );
+    expect(copyAsmCaseArtifact).not.toHaveBeenCalledWith(
+      currentCase,
+      'verilog',
+      simOutputUri,
+      'case.sim.out',
+      'simOut'
+    );
+  });
+
+  it('reuses one compiled artifact while running VVP with each case watchdog budget', async () => {
+    const snapshot = { key: 'same compile inputs' } as never;
+    const cachedCompileResult = toolResult({ stdout: 'compiler output' });
+    vi.mocked(lookupIverilogCompileCache)
+      .mockResolvedValueOnce({ snapshot })
+      .mockResolvedValueOnce({
+        snapshot,
+        hit: { compileResult: cachedCompileResult }
+      });
+    vi.mocked(runTool)
+      .mockResolvedValueOnce(cachedCompileResult)
+      .mockResolvedValueOnce(toolResult({ stdout: 'first VVP' }))
+      .mockResolvedValueOnce(toolResult({ stdout: 'second VVP' }));
+
+    const first = await runIverilog(services(), {
+      resource,
+      showMessages: false,
+      watchdogLimitPs: 100
+    });
+    const second = await runIverilog(services(), {
+      resource,
+      showMessages: false,
+      watchdogLimitPs: 900
+    });
+
+    expect(first?.compileCacheHit).toBe(false);
+    expect(second?.compileCacheHit).toBe(true);
+    expect(first?.simResult?.stdout).toBe('first VVP');
+    expect(second?.simResult?.stdout).toBe('second VVP');
+    expect(runTool).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(runTool).mock.calls.map(([command]) => command)).toEqual([
+      runtime.iverilogPath,
+      runtime.vvpPath,
+      runtime.vvpPath
+    ]);
+    expect(vi.mocked(runTool).mock.calls[1][1]).toContain('+co_watchdog_limit_ps=100');
+    expect(vi.mocked(runTool).mock.calls[2][1]).toContain('+co_watchdog_limit_ps=900');
+    expect(storeIverilogCompileCache).toHaveBeenCalledTimes(1);
   });
 
   it('returns compile stderr/timeout state without starting VVP', async () => {
@@ -405,15 +554,26 @@ describe('Icarus runner orchestration', () => {
       machineCode: URI.file('E:/work/.co/cases/case-1/code.txt'),
       manifestUri: URI.file('E:/work/.co/cases/case-1/case.json')
     } as never;
+    const moduleRegistry = { getModules: vi.fn() } as never;
 
     await runIverilog(services(), {
       resource,
       asmCase: currentCase,
+      moduleRegistry,
       nonInteractive: true,
       interruptSchedule: [0x3000],
       tclText: 'run 5000us;\nexit\n'
     });
 
+    expect(ensureP7InterruptTestbench).toHaveBeenCalledWith(
+      expect.anything(),
+      resource,
+      [0x3000],
+      undefined,
+      false,
+      { nonInteractive: true },
+      moduleRegistry
+    );
     expect(resolveIseProjectFiles).toHaveBeenCalledWith(
       expect.anything(),
       [generatedTb],

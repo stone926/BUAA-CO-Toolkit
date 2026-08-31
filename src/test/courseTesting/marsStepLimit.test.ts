@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { courseExecutionInstructionBudget } from '../../courseTesting/executionBudget';
+import {
+  courseExecutionInstructionBudget,
+  courseExecutionInstructionBudgetFromCount
+} from '../../courseTesting/executionBudget';
 import {
   courseTraceIsimRunTcl,
   courseTraceIsimTime,
@@ -34,6 +37,13 @@ describe('generated course-trace MARS step limit', () => {
 
     expect(courseExecutionInstructionBudget('P3', asm, true, '')).toBe(256);
     expect(courseExecutionInstructionBudget('P7', asm, true, '')).toBe(512);
+  });
+
+  it('reuses a case-captured builtin instruction count without reparsing ASM', () => {
+    expect(courseExecutionInstructionBudgetFromCount('P6', 4000)).toBe(8064);
+    expect(courseExecutionInstructionBudgetFromCount('P7', 4000)).toBe(64256);
+    expect(courseExecutionInstructionBudgetFromCount('P6', Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(courseExecutionInstructionBudgetFromCount('P6', 0)).toBeUndefined();
   });
 
   it('does not trust spoofed built-in metadata without manifest provenance', () => {

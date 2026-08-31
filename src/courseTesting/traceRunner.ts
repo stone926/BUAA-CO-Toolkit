@@ -33,6 +33,7 @@ import { readTextFile, workspaceFolderFor } from '../fsUtil';
 import { normalizePathKey } from '../pathUtils';
 import {
   courseExecutionInstructionBudget,
+  courseExecutionInstructionBudgetFromCount,
   courseTraceIsimRunTcl,
   p7ProbeExecutionInstructionBudget
 } from './pipeline/executionBudget';
@@ -236,7 +237,9 @@ export async function runCourseTraceCase(
     if (!dut?.simResult?.ok || !dut.simOut) {
       return failedDutCaseResult(item, asmCase, dut, undefined, options.signal);
     }
-    const simText = await readTextFile(dut.simOut);
+    // The runner has already persisted this exact bounded stdout as simOut. Reuse the
+    // retained process text instead of reading and decoding a trace of up to 16 MiB again.
+    const simText = dut.simResult.stdout;
     const simEvents = parseSimOutput(simText);
     const probeResult = checkP7Probe(simText, simEvents, probe);
     return {
@@ -272,10 +275,17 @@ export async function runCourseTraceCase(
   if (preOracleSourceIssue) {
     return failedCase(item, 'oracle', preOracleSourceIssue, asmCase.machineCode, undefined, asmCase);
   }
-  const maxSteps = courseExecutionInstructionBudget(
+  const manifestSource = manifestSourceOf(asmCase.manifest);
+  const recordedInstructionCount = automatic
+    && asmCase.manifest.version === 2
+    && manifestSource.kind === 'builtin'
+    ? Number(asmCase.manifest.metadata?.['source.instructionCount'])
+    : Number.NaN;
+  const recordedBudget = courseExecutionInstructionBudgetFromCount(profile, recordedInstructionCount);
+  const maxSteps = recordedBudget ?? courseExecutionInstructionBudget(
     profile,
     await readTextFile(asmCase.sourceAsm),
-    manifestSourceOf(asmCase.manifest).kind === 'builtin',
+    manifestSource.kind === 'builtin',
     machineCodeText
   );
   const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc;
@@ -456,7 +466,7 @@ export async function runCourseTraceCase(
     return failedDutCaseResult(item, asmCase, dut, oracle.outputFile, options.signal);
   }
 
-  const simText = await readTextFile(dut.simOut);
+  const simText = dut.simResult.stdout;
   const diff = pipeline.compareTraces(oracle.trace.events, iterCpuTraceEvents(simText), {
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
