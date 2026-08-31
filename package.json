@@ -2,7 +2,7 @@
   "name": "buaa-co-toolkit",
   "displayName": "BUAA CO Toolkit",
   "description": "计算机组成实验 VSCode 工具箱：支持内置 MIPS 汇编、Icarus Verilog 与 Logisim",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "publisher": "stone926",
   "icon": "icons/logo.png",
   "license": "SEE LICENSE IN LICENSE",

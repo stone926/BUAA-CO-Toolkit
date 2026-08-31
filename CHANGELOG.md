@@ -4,6 +4,12 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-08-31
+
+- fix(test-cli): align bundled Icarus preflight (2048966)
+- perf(course-testing): cache simulation builds and reduce IO (c9ef1e9)
+- feat(toolchain): prefer bundled assembler and Icarus (9adc6f9)
+
 ## [1.0.6] - 2026-08-31
 
 - fix(course-testing): surface the first path-safe Icarus/ISim compile or runtime diagnostic in continuous-test reports, bound simulator process output, and preserve private Icarus failure logs with each reproducible case
