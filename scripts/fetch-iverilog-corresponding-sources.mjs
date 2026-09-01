@@ -79,6 +79,7 @@ function validateManifest(value, descriptor) {
     if (
       typeof source?.component !== "string" || !source.component.trim() ||
       typeof source?.file !== "string" || basename(source.file) !== source.file ||
+      !/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(source.file) ||
       files.has(source.file) ||
       typeof source?.url !== "string" || !descriptor.validateLocation(source) ||
       typeof source?.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.sha256) ||

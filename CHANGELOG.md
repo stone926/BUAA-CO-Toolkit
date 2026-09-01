@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- fix(release): keep corresponding-source filenames stable through GitHub Release upload and verify both `SHA256SUMS` and the final remote asset-name set
+
 ## [1.1.0] - 2026-09-01
 
 - feat(verilog): bundle Icarus Verilog 13.0 for macOS 14+ on Apple Silicon and Intel, with no Homebrew installation required; keep ISE/ISim-only features Windows x64-only

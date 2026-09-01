@@ -68,7 +68,7 @@ resources/templates/wizard/:
 vendor/iverilog/win32-x64/:
   bin/ + lib/ivl/ — 固定的 MSYS2 UCRT64 Icarus 13.0 可执行文件、目标与运行依赖
   THIRD_PARTY_NOTICES.md + licenses/ — 实际分发组件的许可、版权、二进制来源与对应源码说明
-  CORRESPONDING_SOURCES.json — 7 个精确 source-only archive 的 URL、大小与 SHA-256
+  CORRESPONDING_SOURCES.json — 7 个精确 source-only archive 的 URL、大小与 SHA-256；`file` 使用 GitHub Release 不会重写的稳定资产名，`SHA256SUMS` 因此与最终下载名一致
 
 vendor/iverilog/darwin-arm64/ + darwin-x64/:
   bin/ + lib/ivl/ + include/ + share/ — 固定的 Homebrew Icarus 13.0 Sonoma bottle 完整 prefix；分别面向 Apple Silicon 与 Intel，binary deployment target 为 macOS 14

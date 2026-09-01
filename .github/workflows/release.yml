@@ -216,7 +216,22 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - name: Fetch and verify corresponding sources
-        run: node scripts/fetch-iverilog-corresponding-sources.mjs dist/corresponding-sources
+        shell: bash
+        run: |
+          node scripts/fetch-iverilog-corresponding-sources.mjs dist/corresponding-sources
+          (
+            cd dist/corresponding-sources
+            sha256sum --check --strict SHA256SUMS
+            shopt -s nullglob
+            SOURCE_ARCHIVES=(*.src.tar.zst *.tar.gz)
+            if [[ ${#SOURCE_ARCHIVES[@]} -ne 8 ]]; then
+              echo "Expected exactly eight corresponding-source archives, found ${#SOURCE_ARCHIVES[@]}." >&2
+              exit 1
+            fi
+            diff -u \
+              <(awk '{print $2}' SHA256SUMS | sort) \
+              <(printf '%s\n' "${SOURCE_ARCHIVES[@]}" | sort)
+          )
 
       - name: Publish to VS Code Marketplace
         run: npx vsce publish --skip-duplicate --packagePath dist/*.vsix
@@ -252,3 +267,20 @@ jobs:
           else
             gh release create "${TAG}" "${VSIX_ASSETS[@]}" "${SOURCE_ASSETS[@]}" --title "${TAG}" --notes-file release-notes.md --verify-tag
           fi
+
+          CHECK_DIR="$(mktemp -d)"
+          for asset in "${VSIX_ASSETS[@]}" "${SOURCE_ASSETS[@]}"; do
+            basename "${asset}"
+          done | sort > "${CHECK_DIR}/expected-assets.txt"
+          gh release view "${TAG}" --json assets --jq '.assets[].name' \
+            | sort > "${CHECK_DIR}/actual-assets.txt"
+          diff -u "${CHECK_DIR}/expected-assets.txt" "${CHECK_DIR}/actual-assets.txt"
+
+          awk '{print $2 "\tsha256:" $1}' dist/corresponding-sources/SHA256SUMS \
+            | sort > "${CHECK_DIR}/expected-source-digests.txt"
+          gh release view "${TAG}" --json assets \
+            --jq '.assets[] | select((.name | endswith(".src.tar.zst")) or (.name | endswith(".tar.gz"))) | [.name, .digest] | @tsv' \
+            | sort > "${CHECK_DIR}/actual-source-digests.txt"
+          diff -u \
+            "${CHECK_DIR}/expected-source-digests.txt" \
+            "${CHECK_DIR}/actual-source-digests.txt"

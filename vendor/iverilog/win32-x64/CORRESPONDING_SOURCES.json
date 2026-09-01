@@ -3,7 +3,7 @@
   "sources": [
     {
       "component": "Icarus Verilog 13.0",
-      "file": "mingw-w64-iverilog-1~13.0-2.src.tar.zst",
+      "file": "mingw-w64-iverilog-1.13.0-2.src.tar.zst",
       "url": "https://mirror.msys2.org/mingw/sources/mingw-w64-iverilog-1~13.0-2.src.tar.zst",
       "sha256": "fce280b0f1f475c14ba9eddeb1c4fa9dde45da802961003960d9911c5fcb869c",
       "sizeBytes": 3085636
