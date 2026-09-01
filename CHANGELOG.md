@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-01
+
 - feat(verilog): bundle Icarus Verilog 13.0 for macOS 14+ on Apple Silicon and Intel, with no Homebrew installation required; keep ISE/ISim-only features Windows x64-only
 - chore(release): publish and smoke-test `win32-x64`, `darwin-arm64`, and `darwin-x64` VSIX packages on native runners, and attach deduplicated corresponding sources to the GitHub Release
 
