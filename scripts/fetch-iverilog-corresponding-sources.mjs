@@ -18,16 +18,42 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const manifestPath = join(
-  repositoryRoot,
-  "vendor",
-  "iverilog",
-  "win32-x64",
-  "CORRESPONDING_SOURCES.json",
-);
+const manifestDescriptors = [
+  {
+    path: join(
+      repositoryRoot,
+      "vendor",
+      "iverilog",
+      "win32-x64",
+      "CORRESPONDING_SOURCES.json",
+    ),
+    expectedCount: 7,
+    validateLocation(source) {
+      return source.file.endsWith(".src.tar.zst")
+        && source.url.startsWith("https://mirror.msys2.org/mingw/sources/");
+    },
+  },
+  {
+    path: join(
+      repositoryRoot,
+      "vendor",
+      "iverilog",
+      "CORRESPONDING_SOURCES.json",
+    ),
+    expectedCount: 1,
+    validateLocation(source) {
+      return source.file === "v13_0.tar.gz"
+        && source.url === "https://github.com/steveicarus/iverilog/archive/refs/tags/v13_0.tar.gz";
+    },
+  },
+];
 const outputDirectory = resolve(process.argv[2] ?? join(repositoryRoot, "dist", "corresponding-sources"));
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const sources = validateManifest(manifest);
+const sources = deduplicateSources(
+  manifestDescriptors.flatMap((descriptor) => {
+    const manifest = JSON.parse(readFileSync(descriptor.path, "utf8"));
+    return validateManifest(manifest, descriptor);
+  }),
+);
 
 mkdirSync(outputDirectory, { recursive: true });
 for (const source of sources) {
@@ -40,8 +66,12 @@ writeFileSync(
 );
 console.log(`Verified ${sources.length} corresponding-source archives in ${outputDirectory}.`);
 
-function validateManifest(value) {
-  if (value?.schemaVersion !== 1 || !Array.isArray(value.sources) || value.sources.length !== 7) {
+function validateManifest(value, descriptor) {
+  if (
+    value?.schemaVersion !== 1
+      || !Array.isArray(value.sources)
+      || value.sources.length !== descriptor.expectedCount
+  ) {
     throw new Error("Invalid corresponding-source manifest schema or entry count.");
   }
   const files = new Set();
@@ -49,8 +79,8 @@ function validateManifest(value) {
     if (
       typeof source?.component !== "string" || !source.component.trim() ||
       typeof source?.file !== "string" || basename(source.file) !== source.file ||
-      !source.file.endsWith(".src.tar.zst") || files.has(source.file) ||
-      typeof source?.url !== "string" || !source.url.startsWith("https://mirror.msys2.org/mingw/sources/") ||
+      files.has(source.file) ||
+      typeof source?.url !== "string" || !descriptor.validateLocation(source) ||
       typeof source?.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.sha256) ||
       !Number.isSafeInteger(source?.sizeBytes) || source.sizeBytes <= 0
     ) {
@@ -59,6 +89,37 @@ function validateManifest(value) {
     files.add(source.file);
     return source;
   });
+}
+
+function deduplicateSources(sources) {
+  const uniqueSources = [];
+  const byUrl = new Map();
+  const bySha256 = new Map();
+  const byFile = new Map();
+  for (const source of sources) {
+    const duplicate = byUrl.get(source.url) ?? bySha256.get(source.sha256);
+    if (duplicate) {
+      if (
+        duplicate.url !== source.url
+          || duplicate.sha256 !== source.sha256
+          || duplicate.file !== source.file
+          || duplicate.sizeBytes !== source.sizeBytes
+      ) {
+        throw new Error(
+          `Conflicting duplicate corresponding-source entry: ${JSON.stringify(source)}`,
+        );
+      }
+      continue;
+    }
+    if (byFile.has(source.file)) {
+      throw new Error(`Conflicting corresponding-source filename: ${source.file}`);
+    }
+    uniqueSources.push(source);
+    byUrl.set(source.url, source);
+    bySha256.set(source.sha256, source);
+    byFile.set(source.file, source);
+  }
+  return uniqueSources;
 }
 
 async function ensureSourceArchive(source, outputDirectory) {

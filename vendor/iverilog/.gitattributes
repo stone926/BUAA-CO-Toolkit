@@ -1,0 +1,4 @@
+# Keep the verified Homebrew bottle prefixes byte-for-byte stable across
+# checkouts. Executable modes are recorded explicitly in the Git index.
+darwin-arm64/** -text -whitespace
+darwin-x64/** -text -whitespace

@@ -13,15 +13,20 @@ import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { verifyBundledIverilogCourseCompatibility } from "./verify-bundled-iverilog-course.mjs";
 
-if (process.platform !== "win32" || process.arch !== "x64") {
-  fail(`Bundled Icarus smoke requires win32-x64; got ${process.platform}-${process.arch}.`);
-}
-
 const extensionRoot = resolve(process.argv[2] ?? ".");
-const runtimeRoot = join(extensionRoot, "vendor", "iverilog", "win32-x64");
+const runtime = resolveRuntime(process.platform, process.arch);
+if (!runtime) {
+  fail(`Bundled Icarus smoke does not support ${process.platform}-${process.arch}.`);
+}
+const runtimeRoot = join(extensionRoot, "vendor", "iverilog", runtime.target);
 const binDir = join(runtimeRoot, "bin");
-const iverilog = join(binDir, "iverilog.exe");
-const vvp = join(binDir, "vvp.exe");
+const libDir = join(runtimeRoot, "lib", "ivl");
+const iverilog = join(binDir, runtime.iverilogExecutable);
+const vvp = join(binDir, runtime.vvpExecutable);
+const iverilogRuntimeArgs = runtime.target.startsWith("darwin-")
+  ? ["-B", libDir]
+  : [];
+const withRuntimeArgs = (args) => [...iverilogRuntimeArgs, ...args];
 const utf8ManifestExecutables = [
   "bin/iverilog-vpi.exe",
   "bin/iverilog.exe",
@@ -53,10 +58,20 @@ if (extensionManifest.license !== "SEE LICENSE IN LICENSE") {
   fail(`Unexpected extension license field: ${extensionManifest.license ?? "<missing>"}`);
 }
 
-const requiredFiles = [
-  "bin/iverilog.exe",
-  "bin/iverilog-vpi.exe",
-  "bin/vvp.exe",
+const commonRequiredFiles = [
+  `bin/${runtime.iverilogExecutable}`,
+  `bin/${runtime.iverilogVpiExecutable}`,
+  `bin/${runtime.vvpExecutable}`,
+  `lib/ivl/${runtime.ivlExecutable}`,
+  `lib/ivl/${runtime.ivlppExecutable}`,
+  `lib/ivl/${runtime.vhdlppExecutable}`,
+  "lib/ivl/null.tgt",
+  "lib/ivl/system.vpi",
+  "lib/ivl/vvp.tgt",
+  "THIRD_PARTY_NOTICES.md",
+  "licenses/iverilog-COPYING.txt",
+];
+const windowsRequiredFiles = [
   "bin/libatomic-1.dll",
   "bin/libbz2-1.dll",
   "bin/libgcc_s_seh-1.dll",
@@ -68,16 +83,8 @@ const requiredFiles = [
   "bin/libtermcap-0.dll",
   "bin/libwinpthread-1.dll",
   "bin/zlib1.dll",
-  "lib/ivl/ivl.exe",
-  "lib/ivl/ivlpp.exe",
-  "lib/ivl/vhdlpp.exe",
-  "lib/ivl/null.tgt",
-  "lib/ivl/system.vpi",
-  "lib/ivl/vvp.tgt",
   "CORRESPONDING_SOURCES.json",
-  "THIRD_PARTY_NOTICES.md",
   "UTF8_MANIFEST_PATCH.json",
-  "licenses/iverilog-COPYING.txt",
   "licenses/bzip2-LICENSE.txt",
   "licenses/readline-COPYING.txt",
   "licenses/zlib-LICENSE.txt",
@@ -88,80 +95,36 @@ const requiredFiles = [
   "licenses/gcc-libs-README.txt",
   "licenses/winpthreads-COPYING.txt",
 ];
+const darwinRequiredFiles = [
+  ".brew/icarus-verilog.rb",
+  "BOTTLE_MANIFEST.json",
+  "COPYING",
+  "README.md",
+  "include/iverilog/vpi_user.h",
+  "lib/libvpi.a",
+  "sbom.spdx.json",
+  "share/man/man1/iverilog-vpi.1",
+  "share/man/man1/iverilog.1",
+  "share/man/man1/vvp.1",
+];
+const requiredFiles = [
+  ...commonRequiredFiles,
+  ...(runtime.target === "win32-x64" ? windowsRequiredFiles : darwinRequiredFiles),
+];
 
 for (const relativePath of requiredFiles) {
   assertFile(join(runtimeRoot, ...relativePath.split("/")), relativePath);
 }
 
-const manifestPatch = JSON.parse(
-  readFileSync(join(runtimeRoot, "UTF8_MANIFEST_PATCH.json"), "utf8"),
-);
-if (
-  manifestPatch.schemaVersion !== 1 ||
-  !Array.isArray(manifestPatch.targets) ||
-  manifestPatch.targets.length !== 6
-) {
-  fail("UTF8_MANIFEST_PATCH.json must describe the six patched executables.");
-}
-const manifestPatchTargets = new Map(
-  manifestPatch.targets.map((target) => [target.path, target]),
-);
-for (const relativePath of utf8ManifestExecutables) {
-  const target = manifestPatchTargets.get(relativePath);
-  if (
-    !target ||
-    typeof target.originalSha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(target.originalSha256) ||
-    typeof target.patchedSha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(target.patchedSha256)
-  ) {
-    fail(`Missing or invalid UTF-8 manifest patch metadata: ${relativePath}`);
-  }
-  const executablePath = join(runtimeRoot, ...relativePath.split("/"));
-  assertUtf8ActiveCodePage(
-    executablePath,
-    relativePath,
-  );
-  assertValidPeMetadata(executablePath, relativePath);
-  const actualSha256 = createHash("sha256")
-    .update(readFileSync(executablePath))
-    .digest("hex");
-  if (actualSha256 !== target.patchedSha256) {
-    fail(`Unexpected patched executable hash for ${relativePath}: ${actualSha256}`);
-  }
-}
-
-const notice = readFileSync(join(runtimeRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
-const sourceManifest = JSON.parse(
-  readFileSync(join(runtimeRoot, "CORRESPONDING_SOURCES.json"), "utf8"),
-);
-if (sourceManifest.schemaVersion !== 1 || sourceManifest.sources?.length !== 7) {
-  fail("CORRESPONDING_SOURCES.json must contain the seven exact source archives.");
-}
-for (const source of sourceManifest.sources) {
-  if (
-    typeof source.file !== "string" || !source.file.endsWith(".src.tar.zst") ||
-    typeof source.url !== "string" || !source.url.startsWith("https://mirror.msys2.org/mingw/sources/") ||
-    typeof source.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.sha256) ||
-    !Number.isSafeInteger(source.sizeBytes) || source.sizeBytes <= 0 ||
-    !notice.includes(source.url) || !notice.includes(source.sha256)
-  ) {
-    fail(`Invalid or undocumented corresponding-source entry: ${JSON.stringify(source)}`);
-  }
-}
-for (const expected of [
-  "Icarus Verilog 13.0",
-  "mingw-w64-ucrt-x86_64-iverilog",
-  "Corresponding source",
-]) {
-  if (!notice.includes(expected)) {
-    fail(`THIRD_PARTY_NOTICES.md is missing: ${expected}`);
-  }
+if (runtime.target === "win32-x64") {
+  verifyWindowsRuntimeMetadata(runtimeRoot);
+} else {
+  verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime);
 }
 
 const isolatedEnv = isolatedEnvironment(binDir);
 
-const version = run(iverilog, ["-V"], extensionRoot, isolatedEnv);
+const version = run(iverilog, withRuntimeArgs(["-V"]), extensionRoot, isolatedEnv);
 const versionText = `${version.stdout}\n${version.stderr}`;
 if (!/Icarus Verilog version 13\.0\b/.test(versionText)) {
   fail(`Unexpected bundled Icarus version:\n${versionText.trim()}`);
@@ -192,7 +155,12 @@ try {
   );
   writeFileSync(join(smokeRoot, "code.txt"), "2a\n", "utf8");
 
-  run(iverilog, ["-g2005", "-tnull", "-i", sourcePath], smokeRoot, isolatedEnv);
+  run(
+    iverilog,
+    withRuntimeArgs(["-g2005", "-tnull", "-i", sourcePath]),
+    smokeRoot,
+    isolatedEnv,
+  );
 
   const syntaxFailurePath = join(smokeRoot, "intentional syntax failure.v");
   writeFileSync(
@@ -207,7 +175,7 @@ try {
   );
   const syntaxFailure = execute(
     iverilog,
-    ["-g2005", "-tnull", "-i", syntaxFailurePath],
+    withRuntimeArgs(["-g2005", "-tnull", "-i", syntaxFailurePath]),
     smokeRoot,
     isolatedEnv,
   );
@@ -225,7 +193,16 @@ try {
 
   run(
     iverilog,
-    ["-g2005", "-t", "vvp", "-s", "tiny_smoke", "-o", outputPath, sourcePath],
+    withRuntimeArgs([
+      "-g2005",
+      "-t",
+      "vvp",
+      "-s",
+      "tiny_smoke",
+      "-o",
+      outputPath,
+      sourcePath,
+    ]),
     smokeRoot,
     isolatedEnv,
   );
@@ -256,7 +233,7 @@ try {
   );
   run(
     iverilog,
-    [
+    withRuntimeArgs([
       "-g2005",
       "-t",
       "vvp",
@@ -267,7 +244,7 @@ try {
       "-o",
       watchdogOutput,
       watchdogSource,
-    ],
+    ]),
     smokeRoot,
     isolatedEnv,
   );
@@ -292,7 +269,16 @@ try {
   );
   run(
     iverilog,
-    ["-g2005", "-t", "vvp", "-s", "stop_smoke", "-o", stopOutput, stopSource],
+    withRuntimeArgs([
+      "-g2005",
+      "-t",
+      "vvp",
+      "-s",
+      "stop_smoke",
+      "-o",
+      stopOutput,
+      stopSource,
+    ]),
     smokeRoot,
     isolatedEnv,
   );
@@ -309,15 +295,239 @@ try {
     workingDirectory: smokeRoot,
     iverilog,
     vvp,
+    iverilogArgs: iverilogRuntimeArgs,
+    selectedLabels: runtime.target.startsWith("darwin-")
+      ? ["P7-probe"]
+      : undefined,
     runCommand: (command, args, cwd) => run(command, args, cwd, isolatedEnv),
   });
 } finally {
   rmSync(smokeRoot, { force: true, recursive: true });
 }
 
+const courseCoverage = runtime.target === "win32-x64"
+  ? "nested includes and full course compatibility"
+  : "representative course compatibility";
 console.log(
-  `Bundled Icarus 13.0 passed isolated -V, syntax success/failure, nested includes, compile/run, watchdog, $stop, and course compatibility smokes (${courseSmokeLabels.join(", ")}; P7 probe armed).`,
+  `Bundled Icarus 13.0 passed isolated -V, syntax success/failure, compile/run, watchdog, $stop, plus ${courseCoverage} smokes (${courseSmokeLabels.join(", ")}; P7 probe armed).`,
 );
+
+function resolveRuntime(platform, arch) {
+  const common = {
+    iverilogVpiExecutable: platform === "win32" ? "iverilog-vpi.exe" : "iverilog-vpi",
+    ivlExecutable: platform === "win32" ? "ivl.exe" : "ivl",
+    ivlppExecutable: platform === "win32" ? "ivlpp.exe" : "ivlpp",
+    vhdlppExecutable: platform === "win32" ? "vhdlpp.exe" : "vhdlpp",
+  };
+  if (platform === "win32" && arch === "x64") {
+    return {
+      ...common,
+      target: "win32-x64",
+      iverilogExecutable: "iverilog.exe",
+      vvpExecutable: "vvp.exe",
+    };
+  }
+  if (platform === "darwin" && arch === "arm64") {
+    return {
+      ...common,
+      target: "darwin-arm64",
+      iverilogExecutable: "iverilog",
+      vvpExecutable: "vvp",
+      bottle: {
+        tag: "arm64_sonoma",
+        cellar: "/opt/homebrew/Cellar",
+        url: "https://ghcr.io/v2/homebrew/core/icarus-verilog/blobs/sha256:936627d8dfbb9996d55b3f3044f6bdf45e433df0c5fe9d0f8390f1a35714978b",
+        sha256: "936627d8dfbb9996d55b3f3044f6bdf45e433df0c5fe9d0f8390f1a35714978b",
+        sizeBytes: 2140973,
+      },
+    };
+  }
+  if (platform === "darwin" && arch === "x64") {
+    return {
+      ...common,
+      target: "darwin-x64",
+      iverilogExecutable: "iverilog",
+      vvpExecutable: "vvp",
+      bottle: {
+        tag: "sonoma",
+        cellar: "/usr/local/Cellar",
+        url: "https://ghcr.io/v2/homebrew/core/icarus-verilog/blobs/sha256:2eb03352145134b01eec88e2426a5bb066952c60f13c5d8b90067c6674ab56fe",
+        sha256: "2eb03352145134b01eec88e2426a5bb066952c60f13c5d8b90067c6674ab56fe",
+        sizeBytes: 2270344,
+      },
+    };
+  }
+  return undefined;
+}
+
+function verifyWindowsRuntimeMetadata(runtimeRoot) {
+  const manifestPatch = JSON.parse(
+    readFileSync(join(runtimeRoot, "UTF8_MANIFEST_PATCH.json"), "utf8"),
+  );
+  if (
+    manifestPatch.schemaVersion !== 1 ||
+    !Array.isArray(manifestPatch.targets) ||
+    manifestPatch.targets.length !== 6
+  ) {
+    fail("UTF8_MANIFEST_PATCH.json must describe the six patched executables.");
+  }
+  const manifestPatchTargets = new Map(
+    manifestPatch.targets.map((target) => [target.path, target]),
+  );
+  for (const relativePath of utf8ManifestExecutables) {
+    const target = manifestPatchTargets.get(relativePath);
+    if (
+      !target ||
+      typeof target.originalSha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(target.originalSha256) ||
+      typeof target.patchedSha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(target.patchedSha256)
+    ) {
+      fail(`Missing or invalid UTF-8 manifest patch metadata: ${relativePath}`);
+    }
+    const executablePath = join(runtimeRoot, ...relativePath.split("/"));
+    assertUtf8ActiveCodePage(executablePath, relativePath);
+    assertValidPeMetadata(executablePath, relativePath);
+    const actualSha256 = createHash("sha256")
+      .update(readFileSync(executablePath))
+      .digest("hex");
+    if (actualSha256 !== target.patchedSha256) {
+      fail(`Unexpected patched executable hash for ${relativePath}: ${actualSha256}`);
+    }
+  }
+
+  const notice = readFileSync(join(runtimeRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
+  const sourceManifest = JSON.parse(
+    readFileSync(join(runtimeRoot, "CORRESPONDING_SOURCES.json"), "utf8"),
+  );
+  if (sourceManifest.schemaVersion !== 1 || sourceManifest.sources?.length !== 7) {
+    fail("CORRESPONDING_SOURCES.json must contain the seven exact source archives.");
+  }
+  for (const source of sourceManifest.sources) {
+    if (
+      typeof source.file !== "string" || !source.file.endsWith(".src.tar.zst") ||
+      typeof source.url !== "string" || !source.url.startsWith("https://mirror.msys2.org/mingw/sources/") ||
+      typeof source.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.sha256) ||
+      !Number.isSafeInteger(source.sizeBytes) || source.sizeBytes <= 0 ||
+      !notice.includes(source.url) || !notice.includes(source.sha256)
+    ) {
+      fail(`Invalid or undocumented corresponding-source entry: ${JSON.stringify(source)}`);
+    }
+  }
+  for (const expected of [
+    "Icarus Verilog 13.0",
+    "mingw-w64-ucrt-x86_64-iverilog",
+    "Corresponding source",
+  ]) {
+    if (!notice.includes(expected)) {
+      fail(`THIRD_PARTY_NOTICES.md is missing: ${expected}`);
+    }
+  }
+}
+
+function verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime) {
+  const executablePaths = [
+    `bin/${runtime.iverilogExecutable}`,
+    `bin/${runtime.iverilogVpiExecutable}`,
+    `bin/${runtime.vvpExecutable}`,
+    `lib/ivl/${runtime.ivlExecutable}`,
+    `lib/ivl/${runtime.ivlppExecutable}`,
+    `lib/ivl/${runtime.vhdlppExecutable}`,
+  ];
+  for (const relativePath of executablePaths) {
+    assertExecutable(
+      join(runtimeRoot, ...relativePath.split("/")),
+      relativePath,
+    );
+  }
+
+  const bottleManifest = JSON.parse(
+    readFileSync(join(runtimeRoot, "BOTTLE_MANIFEST.json"), "utf8"),
+  );
+  if (
+    bottleManifest.schemaVersion !== 1
+      || bottleManifest.formula?.tap !== "homebrew/core"
+      || bottleManifest.formula?.name !== "icarus-verilog"
+      || bottleManifest.formula?.version !== "13.0"
+      || bottleManifest.formula?.revision !== 0
+      || bottleManifest.bottle?.tag !== runtime.bottle.tag
+      || bottleManifest.bottle?.rebuild !== 0
+      || bottleManifest.bottle?.cellar !== runtime.bottle.cellar
+      || bottleManifest.bottle?.url !== runtime.bottle.url
+      || bottleManifest.bottle?.sha256 !== runtime.bottle.sha256
+      || bottleManifest.bottle?.sizeBytes !== runtime.bottle.sizeBytes
+      || bottleManifest.sourceManifest !== "../CORRESPONDING_SOURCES.json"
+  ) {
+    fail(`Invalid Homebrew bottle metadata for ${runtime.target}.`);
+  }
+
+  const sourceManifestPath = join(
+    extensionRoot,
+    "vendor",
+    "iverilog",
+    "CORRESPONDING_SOURCES.json",
+  );
+  assertFile(sourceManifestPath, "vendor/iverilog/CORRESPONDING_SOURCES.json");
+  const sourceManifest = JSON.parse(readFileSync(sourceManifestPath, "utf8"));
+  const source = sourceManifest.sources?.[0];
+  if (
+    sourceManifest.schemaVersion !== 1
+      || sourceManifest.sources?.length !== 1
+      || source?.component !== "Icarus Verilog 13.0"
+      || source?.file !== "v13_0.tar.gz"
+      || source?.url !== "https://github.com/steveicarus/iverilog/archive/refs/tags/v13_0.tar.gz"
+      || source?.sha256 !== "c897bbfa9848688982c6d5c30529fc29d68df0b9ff22ffa73bad89db73a7ce49"
+      || source?.sizeBytes !== 3215392
+  ) {
+    fail("Invalid shared macOS corresponding-source manifest.");
+  }
+
+  const notice = readFileSync(join(runtimeRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
+  for (const expected of [
+    "Icarus Verilog 13.0",
+    "formula revision `0`",
+    runtime.bottle.url,
+    runtime.bottle.sha256,
+    source.url,
+    source.sha256,
+  ]) {
+    if (!notice.includes(expected)) {
+      fail(`THIRD_PARTY_NOTICES.md is missing: ${expected}`);
+    }
+  }
+
+  const formula = readFileSync(
+    join(runtimeRoot, ".brew", "icarus-verilog.rb"),
+    "utf8",
+  );
+  for (const expected of [source.url, source.sha256, 'license all_of: ["GPL-2.0-or-later", "LGPL-2.1-or-later"]']) {
+    if (!formula.includes(expected)) {
+      fail(`Homebrew formula snapshot is missing: ${expected}`);
+    }
+  }
+
+  const sbom = JSON.parse(readFileSync(join(runtimeRoot, "sbom.spdx.json"), "utf8"));
+  const sourcePackage = sbom.packages?.find((entry) => entry.name === "icarus-verilog");
+  if (
+    sourcePackage?.versionInfo !== "13.0"
+      || sourcePackage?.downloadLocation !== source.url
+      || !sourcePackage.checksums?.some(
+        (checksum) => checksum.algorithm === "SHA256" && checksum.checksumValue === source.sha256,
+      )
+  ) {
+    fail("Homebrew SBOM does not match the corresponding-source manifest.");
+  }
+
+  const copyingHash = createHash("sha256")
+    .update(readFileSync(join(runtimeRoot, "COPYING")))
+    .digest("hex");
+  const stableCopyingHash = createHash("sha256")
+    .update(readFileSync(join(runtimeRoot, "licenses", "iverilog-COPYING.txt")))
+    .digest("hex");
+  if (copyingHash !== stableCopyingHash) {
+    fail("licenses/iverilog-COPYING.txt does not match the bottle's COPYING file.");
+  }
+}
 
 function assertFile(path, label) {
   try {
@@ -326,6 +536,21 @@ function assertFile(path, label) {
     }
   } catch {
     fail(`Required runtime file is missing: ${label}`);
+  }
+}
+
+function assertExecutable(path, label) {
+  let file;
+  try {
+    file = statSync(path);
+  } catch {
+    fail(`Required runtime file is missing: ${label}`);
+  }
+  if (!file.isFile()) {
+    fail(`Required runtime entry is not a file: ${label}`);
+  }
+  if ((file.mode & 0o111) !== 0o111) {
+    fail(`Packaged runtime entry is not executable: ${label}`);
   }
 }
 
@@ -420,13 +645,24 @@ function computePeChecksum(bytes, checksumOffset) {
 }
 
 function isolatedPath(runtimeBin) {
+  if (process.platform !== "win32") {
+    return [runtimeBin, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(delimiter);
+  }
   const windowsRoot = process.env.SystemRoot ?? "C:\\Windows";
   return [runtimeBin, join(windowsRoot, "System32"), windowsRoot].join(delimiter);
 }
 
 function isolatedEnvironment(runtimeBin) {
+  const removedVariables = new Set([
+    "dyld_fallback_library_path",
+    "dyld_library_path",
+    "iverilog_iconfig",
+    "path",
+  ]);
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "path"),
+    Object.entries(process.env).filter(
+      ([key]) => !removedVariables.has(key.toLowerCase()),
+    ),
   );
   env.PATH = isolatedPath(runtimeBin);
   return env;

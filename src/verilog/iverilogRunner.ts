@@ -38,6 +38,7 @@ import type { IsimRunOptions } from './isimRunner';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
+  buildIverilogRuntimeArgs,
   IverilogPreflightResult,
   IverilogRuntime,
   preflightIverilogRuntime
@@ -116,6 +117,7 @@ export interface IverilogRunOutput {
 }
 
 export interface IverilogCompileArguments {
+  runtime: IverilogRuntime;
   testbenchModule: string;
   watchdogModule: string;
   outputFile: string;
@@ -133,6 +135,7 @@ export function buildIverilogCompileArgs(input: IverilogCompileArguments): strin
     throw new RangeError('outputFile must not be empty');
   }
   return [
+    ...buildIverilogRuntimeArgs(input.runtime),
     '-g2005',
     ...buildIverilogIncludeArgs(input.workspaceRoot, [
       ...input.sourceFiles,
@@ -340,6 +343,7 @@ async function runIverilogInWorkspace(
     watchdog.fsPath
   ];
   const compileArguments = buildIverilogCompileArgs({
+    runtime: preflight.runtime,
     testbenchModule: testbench.moduleName,
     watchdogModule,
     outputFile: compiled.fsPath,

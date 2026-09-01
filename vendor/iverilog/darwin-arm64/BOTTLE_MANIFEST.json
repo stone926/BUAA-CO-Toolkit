@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "formula": {
+    "tap": "homebrew/core",
+    "name": "icarus-verilog",
+    "version": "13.0",
+    "revision": 0
+  },
+  "bottle": {
+    "tag": "arm64_sonoma",
+    "rebuild": 0,
+    "cellar": "/opt/homebrew/Cellar",
+    "url": "https://ghcr.io/v2/homebrew/core/icarus-verilog/blobs/sha256:936627d8dfbb9996d55b3f3044f6bdf45e433df0c5fe9d0f8390f1a35714978b",
+    "sha256": "936627d8dfbb9996d55b3f3044f6bdf45e433df0c5fe9d0f8390f1a35714978b",
+    "sizeBytes": 2140973
+  },
+  "sourceManifest": "../CORRESPONDING_SOURCES.json"
+}

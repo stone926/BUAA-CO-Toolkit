@@ -5,10 +5,12 @@ import { runProcessCore } from '../../processCore';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
+  buildIverilogRuntimeArgs,
   IverilogRuntimeError,
   parseIverilogVersion,
   preflightIverilogRuntime,
-  resolveIverilogRuntime
+  resolveIverilogRuntime,
+  resolveIverilogRuntimeTarget
 } from '../../verilog/iverilogRuntime';
 
 vi.mock('../../nodeFs', () => ({
@@ -50,14 +52,34 @@ describe('bundled Icarus runtime', () => {
     });
   });
 
-  it('resolves only the fixed win32-x64 installation layout', () => {
+  it.each([
+    ['win32', 'x64', 'win32-x64', 'iverilog.exe', 'vvp.exe'],
+    ['darwin', 'arm64', 'darwin-arm64', 'iverilog', 'vvp'],
+    ['darwin', 'x64', 'darwin-x64', 'iverilog', 'vvp']
+  ] as const)('maps %s-%s to the bundled %s installation layout', (
+    platform,
+    arch,
+    target,
+    iverilogExecutable,
+    vvpExecutable
+  ) => {
     const extensionRoot = path.resolve('Extension Root');
-    const expectedRoot = path.join(extensionRoot, 'vendor', 'iverilog', 'win32-x64');
-    const runtime = resolveIverilogRuntime(extensionRoot);
+    const descriptor = resolveIverilogRuntimeTarget(platform, arch);
+    const expectedRoot = path.join(extensionRoot, 'vendor', 'iverilog', target);
+    const runtime = resolveIverilogRuntime(extensionRoot, platform, arch);
+    expect(descriptor).toEqual({ target, iverilogExecutable, vvpExecutable });
+    expect(runtime.target).toBe(target);
     expect(runtime.rootDir).toBe(expectedRoot);
-    expect(runtime.iverilogPath).toBe(path.join(expectedRoot, 'bin', 'iverilog.exe'));
-    expect(runtime.vvpPath).toBe(path.join(expectedRoot, 'bin', 'vvp.exe'));
+    expect(runtime.iverilogPath).toBe(path.join(expectedRoot, 'bin', iverilogExecutable));
+    expect(runtime.vvpPath).toBe(path.join(expectedRoot, 'bin', vvpExecutable));
     expect(runtime.libDir).toBe(path.join(expectedRoot, 'lib', 'ivl'));
+  });
+
+  it('rejects hosts without a corresponding bundled runtime target', () => {
+    expect(() => resolveIverilogRuntimeTarget('linux', 'x64')).toThrowError(expect.objectContaining({
+      code: 'unsupported-platform',
+      message: expect.stringContaining('当前平台没有对应的 bundled Icarus 包')
+    }));
   });
 
   it('isolates the compiler config override, preserves VVP controls, and prepends bundled bin to Path', () => {
@@ -77,6 +99,16 @@ describe('bundled Icarus runtime', () => {
     expect(env).not.toHaveProperty('IVERILOG_ICONFIG');
     expect(env.iverilog_vpi_module_path).toBe('E:/host/vpi');
     expect(env.IVERILOG_DUMPER).toBe('fst');
+  });
+
+  it('adds the bottle prefix override only for macOS runtimes', () => {
+    const windows = resolveIverilogRuntime('E:/Extension Root', 'win32', 'x64');
+    const arm64 = resolveIverilogRuntime('E:/Extension Root', 'darwin', 'arm64');
+    const x64 = resolveIverilogRuntime('E:/Extension Root', 'darwin', 'x64');
+
+    expect(buildIverilogRuntimeArgs(windows)).toEqual([]);
+    expect(buildIverilogRuntimeArgs(arm64)).toEqual(['-B', arm64.libDir]);
+    expect(buildIverilogRuntimeArgs(x64)).toEqual(['-B', x64.libDir]);
   });
 
   it('enables source-relative and workspace-root includes without rewriting paths', () => {
@@ -124,6 +156,23 @@ describe('bundled Icarus runtime', () => {
       ['-V'],
       expect.objectContaining({ cwd: expect.stringMatching(/bin$/i) })
     );
+  });
+
+  it('preflights a macOS bottle with its bundled lib/ivl base', async () => {
+    platformSpy.mockReturnValue('darwin');
+    archSpy.mockReturnValue('arm64');
+    try {
+      await preflightIverilogRuntime('E:/mac-runtime-case');
+
+      expect(runProcessCore).toHaveBeenCalledWith(
+        expect.stringMatching(/[\\/]darwin-arm64[\\/]bin[\\/]iverilog$/),
+        ['-B', expect.stringMatching(/[\\/]darwin-arm64[\\/]lib[\\/]ivl$/), '-V'],
+        expect.objectContaining({ cwd: expect.stringMatching(/[\\/]darwin-arm64[\\/]bin$/) })
+      );
+    } finally {
+      platformSpy.mockReturnValue('win32');
+      archSpy.mockReturnValue('x64');
+    }
   });
 
   it('evicts a failed preflight so a later operation can retry', async () => {

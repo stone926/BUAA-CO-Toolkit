@@ -16,6 +16,8 @@ export function verifyBundledIverilogCourseCompatibility({
   workingDirectory,
   iverilog,
   vvp,
+  iverilogArgs = [],
+  selectedLabels,
   runCommand,
 }) {
   const extensionRequire = createRequire(join(extensionRoot, "package.json"));
@@ -54,6 +56,17 @@ export function verifyBundledIverilogCourseCompatibility({
   }
   cachedBuildTestbench = buildTestbench;
   const includeArgsFor = (sourceFiles) => buildIverilogIncludeArgs(workingDirectory, sourceFiles);
+  const selectedLabelSet = selectedLabels === undefined
+    ? undefined
+    : new Set(selectedLabels);
+  const completedLabels = [];
+  const runSelectedCourseCase = (options) => {
+    if (selectedLabelSet && !selectedLabelSet.has(options.label)) {
+      return;
+    }
+    runCourseCase({ ...options, iverilogArgs });
+    completedLabels.push(options.label);
+  };
 
   const p1Ports = [
     { name: "clk", direction: "input", width: 1 },
@@ -65,7 +78,7 @@ export function verifyBundledIverilogCourseCompatibility({
   const p6Ports = requireProfilePorts(courseConfig, "P6");
   const p7Ports = requireProfilePorts(courseConfig, "P7");
 
-  runCourseCase({
+  runSelectedCourseCase({
     label: "P1",
     profile: "P1",
     topModuleName: "main",
@@ -102,7 +115,7 @@ export function verifyBundledIverilogCourseCompatibility({
     includeArgsFor,
   });
 
-  runCourseCase({
+  runSelectedCourseCase({
     label: "P4",
     profile: "P4",
     topModuleName: "mips",
@@ -126,7 +139,7 @@ export function verifyBundledIverilogCourseCompatibility({
     includeArgsFor,
   });
 
-  runCourseCase({
+  runSelectedCourseCase({
     label: "P5",
     profile: "P5",
     topModuleName: "mips",
@@ -151,7 +164,7 @@ export function verifyBundledIverilogCourseCompatibility({
     includeArgsFor,
   });
 
-  runCourseCase({
+  runSelectedCourseCase({
     label: "P6",
     profile: "P6",
     topModuleName: "mips",
@@ -193,7 +206,7 @@ export function verifyBundledIverilogCourseCompatibility({
   const p7MachineCode = courseMachineCode("3401002a");
   const p7DutText = p7Dut(p7Ports);
 
-  runCourseCase({
+  runSelectedCourseCase({
     label: "P7-anchor",
     profile: "P7",
     topModuleName: "mips",
@@ -226,7 +239,7 @@ export function verifyBundledIverilogCourseCompatibility({
     includeArgsFor,
   });
 
-  runCourseCase({
+  runSelectedCourseCase({
     label: "P7-probe",
     profile: "P7",
     topModuleName: "mips",
@@ -273,7 +286,7 @@ export function verifyBundledIverilogCourseCompatibility({
     includeArgsFor,
   });
 
-  return ["P1", "P4", "P5", "P6", "P7-anchor", "P7-probe"];
+  return completedLabels;
 }
 
 function runCourseCase({
@@ -291,6 +304,7 @@ function runCourseCase({
   workingDirectory,
   iverilog,
   vvp,
+  iverilogArgs,
   runCommand,
   includeArgsFor,
 }) {
@@ -331,6 +345,7 @@ function runCourseCase({
   runCommand(
     iverilog,
     [
+      ...iverilogArgs,
       "-g2005",
       ...includeArgsFor([dutPath, testbenchPath, watchdogPath]),
       "-t",

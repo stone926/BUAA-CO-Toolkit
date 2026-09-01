@@ -1,24 +1,27 @@
 # BUAA CO 工具箱（VSCode 插件）
 
-面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/Verilog 仿真 → 自动对拍 → 报告，循环进行）。Windows x64 版本已内置课程汇编器和 Icarus Verilog 13.0；MARS 只保留给 P2、普通 ASM 运行/stdin/终端、显式兼容/复现与 CI 验证。
+面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/Verilog 仿真 → 自动对拍 → 报告，循环进行）。Windows x64、macOS Apple Silicon 与 macOS Intel 版本均内置课程汇编器和 Icarus Verilog 13.0；MARS 只保留给 P2、普通 ASM 运行/stdin/终端、显式兼容/复现与 CI 验证。
 
 ---
 
 ## 平台支持
 
-本版本只发布 `win32-x64` 定向 VSIX，支持在 Windows x64 的本地 VS Code 扩展宿主中运行。
+本版本为三个本地 VS Code 扩展宿主分别发布定向 VSIX：`win32-x64`、`darwin-arm64` 和 `darwin-x64`。
 
 | 环境 | 本版本 |
 |---|---|
 | Windows 10/11 x64，本地 VS Code | ✅ |
+| macOS 14 或更高版本，Apple Silicon，本地 VS Code | ✅ |
+| macOS 14 或更高版本，Intel x64，本地 VS Code | ✅ |
 | Windows ARM64 | ❌ |
 | WSL / Remote SSH 扩展宿主 | ❌ |
-| Linux / macOS 本地扩展宿主 | ❌ |
+| Linux 本地扩展宿主 | ❌ |
 
-- 通用/on-save Verilog 编译器检查、手动仿真和 P4–P7 自动测试始终直接启动随包附带的 `iverilog.exe`、`vvp.exe` 和依赖 DLL；不要求安装 Icarus、MSYS2 或修改 `PATH`，也不受 `co.toolchain.isePath` 影响。
-- 生成 ISE PRJ/TCL 工程文件不要求安装 ISE。只有打开 ISim GUI 波形和使用当前集成的 VCD 导出命令时才读取 `co.toolchain.isePath`；路径无效只会使这些 ISE 专属入口失败。
+- macOS runtime 使用 Sonoma bottle，二进制运行下限为 macOS 14；发布 CI 在 macOS 15 的 Apple Silicon 与 Intel runner 上验收，不能据此视为已经在 macOS 14 实机验收。
+- 通用/on-save Verilog 编译器检查、手动仿真和 P4–P7 自动测试始终直接启动当前平台随包附带的 `iverilog` 与 `vvp`；Windows 不要求 Icarus/MSYS2，macOS 不要求 Icarus/Homebrew，也不需要修改 `PATH`，且不受 `co.toolchain.isePath` 影响。
+- 生成 ISE PRJ/TCL 工程文件不要求安装 ISE。只有 Windows x64 上打开 ISim GUI 波形和使用当前集成的 VCD 导出命令时才读取 `co.toolchain.isePath`；这些 ISE 专属功能在 macOS 不可用。
 - 课程最终结果仍以课程测评环境为准；Icarus 与课程使用的 ISE/ISim 对少量非标准、厂商相关或时序敏感写法可能有差异。
-- Bundled runtime 的组件版本、二进制校验值、许可证和对应源码见 [第三方声明](vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)。
+- Bundled runtime 的组件版本、二进制校验值、许可证和对应源码见 [Windows x64](vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)、[macOS Apple Silicon](vendor/iverilog/darwin-arm64/THIRD_PARTY_NOTICES.md) 和 [macOS Intel](vendor/iverilog/darwin-x64/THIRD_PARTY_NOTICES.md) 第三方声明。
 
 ---
 
@@ -48,7 +51,7 @@
 | Verilog 源码范围 | 仅把 `.v` 作为 Verilog-2005 编译单元；`.vh` 通过 `` `include `` 使用 | 否 |
 | `.sv` / `.svh` | 只有独立的 SystemVerilog 词法高亮，不进入本插件的 LSP、外部检查或仿真 | 不适用 |
 | 生成 ISE PRJ/TCL 工程文件 | 只生成文件，不启动 ISE | 否 |
-| 打开 ISim GUI 波形、使用当前集成的 VCD 导出 | ISE/ISim 专属入口 | 是，需有效 `co.toolchain.isePath` |
+| 打开 ISim GUI 波形、使用当前集成的 VCD 导出 | 仅 Windows x64 可用的 ISE/ISim 专属入口；macOS 不可用 | 是，需有效 `co.toolchain.isePath` |
 | Xilinx vendor IP、综合、实现、时序仿真和 bitstream | 当前不支持；bundled Icarus 不能替代这些厂商流程 | 需在插件外使用相应 Xilinx 工具 |
 
 `co.toolchain.isePath` 不再切换通用检查、手动仿真或自动测试的后端。Bundled Icarus 缺失或编译失败时会直接报告错误，不会回退到 ISE。
@@ -63,7 +66,7 @@
 | P3 | Logisim + Java；ASM 汇编与机器码准备不需要 MARS |
 | P4–P7 | 无；ASM 使用内置汇编器，Verilog 使用随包 Icarus |
 | P5–P7 可选 Hazard 分析 | 另需课程 Hazard 工具及 Python，但机器码准备不需要 MARS |
-| 可选 ISim GUI / 集成 VCD | 另需 ISE/ISim，并配置 `co.toolchain.isePath` |
+| 可选 ISim GUI / 集成 VCD（仅 Windows x64） | 另需 ISE/ISim，并配置 `co.toolchain.isePath`；macOS 不可用 |
 
 ---
 
@@ -71,7 +74,7 @@
 
 ### 第一步：按需填写外部工具路径
 
-P1 / P4–P7 的 Verilog 检查、手动仿真和自动测试固定使用内置 Icarus，无需安装 ISE。P3 需要填写 Logisim。只有要打开 ISim GUI 波形或使用集成 VCD 导出时，才填写 `co.toolchain.isePath`；单纯生成 ISE 工程文件不需要。P3–P7 的测试、ROM/Verilog/Hazard 机器码准备和默认导出不要求安装 MARS；P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 或历史复现才需要 MARS。
+P1 / P4–P7 的 Verilog 检查、手动仿真和自动测试固定使用内置 Icarus，无需安装 ISE 或 Homebrew。P3 需要填写 Logisim。只有在 Windows x64 上要打开 ISim GUI 波形或使用集成 VCD 导出时，才填写 `co.toolchain.isePath`；单纯生成 ISE 工程文件不需要，macOS 也不提供这些 ISE 专属功能。P3–P7 的测试、ROM/Verilog/Hazard 机器码准备和默认导出不要求安装 MARS；P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 或历史复现才需要 MARS。
 
 打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
 
@@ -222,7 +225,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 | 配置 | 默认 | 何时需要 |
 |---|---|---|
-| `co.toolchain.isePath` | — | 仅打开 ISim GUI 波形或使用当前集成的 VCD 导出；不会切换通用检查/仿真后端 |
+| `co.toolchain.isePath` | — | 仅 Windows x64 打开 ISim GUI 波形或使用当前集成的 VCD 导出；macOS 不可用，也不会切换通用检查/仿真后端 |
 | `co.toolchain.logisim` | — | P0/P3 Logisim 工作流 |
 | `co.toolchain.mars`（P7 旧配置可能使用 `marsP7`） | — | P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 和历史 MARS 复现；P3–P7 默认机器码准备不需要 |
 | `co.toolchain.hazardCalculator` | — | P5–P7 冲突分析（可选） |
@@ -253,7 +256,7 @@ TextMate 始终负责注释、字符串、数字、关键字、编译指令和�
 
 1. **P3–P7 默认机器码路径不需要 MARS**：自动测试、Logisim ROM、Verilog/Hazard 机器码准备和默认 text/kernel dump 使用内置汇编器。P2、所有普通 ASM 运行/stdin/终端、显式 legacy/verify、历史 exact replay 和 CI conformance 仍使用 MARS。
 2. **新的 RI 测试统一使用 raw word**：自动生成源码用 `.word` 覆盖 unknown opcode 与 unknown funct；旧用例仍可回放，但新测试点不再生成私有 RI 助记符。
-3. **Icarus 是固定的通用 Verilog 后端**：`co.toolchain.isePath` 不影响保存时检查、手动仿真或自动测试。只有 ISim GUI 波形与集成 VCD 导出读取该路径；需要时应指向含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。生成 ISE PRJ/TCL 本身不需要安装 ISE。自动测试使用独立 testbench，不会覆盖你自己的文件。
+3. **Icarus 是固定的通用 Verilog 后端**：`co.toolchain.isePath` 不影响保存时检查、手动仿真或自动测试。只有 Windows x64 的 ISim GUI 波形与集成 VCD 导出读取该路径；需要时应指向含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。macOS 不支持这些 ISE 专属功能。生成 ISE PRJ/TCL 本身不需要安装 ISE。自动测试使用独立 testbench，不会覆盖你自己的文件。
 4. **测试不绑定某一种流水线周期数**：默认按课程可见写事件和定义行为核验，因此纯性能问题或不可见内部状态仍可能需要额外定向测试。
 5. **BadVAddr 不测试**：课程不要求实现 BadVAddr；如果你实现了它，需要另写专门测试。
 6. **延迟槽按 Profile 自动处理**：P5/P6/P7 开启一条课程延迟槽，无需另调自动测试参数。
@@ -302,17 +305,17 @@ npm run publish -- patch
 
 每次 main push / pull request 还会永久运行 `npm run verify:phase6`：Ubuntu 24.04 与 Windows 2025 各自执行阶段 6 定向测试、固定 `mars-assembler-v0.6.3` 的 assembly differential，以及固定 `legacy-course-executor` v0.6.3-course1 对 250 个生成用例 + 5 个手写边界用例的真实 execution differential。CI 要求 assembly lane 无未解释差异，并要求 execution lane 每个 profile 50+1、总计 255/255 通过且 0 unexplained/inconclusive/out-of-domain/error；结果以 machine-readable evidence 上传。
 
-tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别完成同一套 `verify:phase6`；Windows package job 通过 `needs` 等待两个 matrix 结果，因此单独推 tag 或使用本地 `--skip-tests` 都不能绕过默认切换门。随后发布链只打包一次：
+tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别完成同一套 `verify:phase6`，并另在 Ubuntu 24.04 上运行一次完整 `npm test` 与生成物漂移检查；三个 package job 通过 `needs` 等待这些结果，因此单独推 tag 或使用本地 `--skip-tests` 都不能绕过发布门。随后发布链生成三个原生包：
 
-1. Windows 2025 job 执行 `npm ci`、生成物同步检查、`npm test` 和 `npm run compile`
-2. `vsce package --target win32-x64` 生成唯一的 `buaa-co-toolkit-<version>-win32-x64.vsix`
-3. 解包 VSIX，确认平台 metadata、bundled executable/DLL、`lib/ivl`、许可证与第三方声明均在包内
-4. 从解包后的扩展安装布局、在隔离 `PATH` 下运行 `iverilog -V` 和含 `$readmemh` / `$display` 的 tiny compile+run
-5. 上传通过验收的 VSIX artifact；Ubuntu publish job 只下载该 artifact，并核对 SHA-256，不重新打包
-6. publish job 按固定 manifest 下载并校验 7 个对应源码包，`vsce publish --skip-duplicate --packagePath <同一 VSIX>` 幂等发布到 Marketplace
-7. GitHub Release 同时保存该 VSIX、对应源码包和 `SHA256SUMS`，不把约 162 MiB 源码塞入 VSIX
+1. `windows-2025`、`macos-15`（Apple Silicon）和 `macos-15-intel` 分别执行 `npm ci` 与 `npm run compile`
+2. 每个 runner 执行 `vsce package --target <target>`，生成同版本的 `win32-x64`、`darwin-arm64` 和 `darwin-x64` VSIX；macOS 打包前显式恢复运行入口的 executable bit
+3. 每个 job 解包自己刚生成的 VSIX，确认 target metadata 与开发目录排除，再从解包后的扩展安装布局运行当前架构的 bundled Icarus smoke；macOS 的 `iverilog` 调用显式使用包内 `lib/ivl` prefix
+4. 三个通过验收的 VSIX 分别上传为本次 workflow artifact；Ubuntu publish job 使用 artifact pattern 合并下载，不重新打包
+5. publish job 校验三个确定性文件名后，一次执行 `vsce publish --skip-duplicate --packagePath dist/*.vsix`，幂等发布到现有 Marketplace 条目
+6. publish job 按固定 manifest 下载并校验 Windows 的 7 个 source-only archive 与 macOS 两架构共用、去重后的 Icarus v13.0 上游源码包
+7. GitHub Release 同时保存三个 VSIX、`*.src.tar.zst`、`*.tar.gz` 和 `SHA256SUMS`；对应源码不放入 VSIX
 
-本地 `npm run package:vsix` 同样固定生成 `win32-x64` 定向包；`npm run verify:bundled-iverilog` 可直接检查源码树中的运行时。此版本不发布无 `--target` 的 generic fallback。
+当前 `@vscode/vsce` 的 target-folder 排除选项不会可靠裁剪 collect 结果，因此三个定向 VSIX 暂时都携带三套 runtime，运行时 resolver 只会启动当前平台对应的一套。本地 `npm run package:vsix` 继续作为 `win32-x64` 快捷命令；`npm run verify:bundled-iverilog` 可在当前受支持平台直接检查源码树中的 runtime。此版本不发布无 `--target` 的 generic fallback。
 
 首次使用前，需要在 GitHub 仓库的 Actions secrets 中添加 `VSCE_PAT`，该 token 需要有 VS Code Marketplace 的 Manage 权限。GitHub Release 使用仓库自带的 `GITHUB_TOKEN`，不需要额外配置。
 

@@ -120,7 +120,7 @@ export async function checkToolchain(
           name: 'Verilog simulator',
           ok: false,
           detail,
-          suggestion: '请重新安装 Windows x64 扩展包；内置 Icarus 运行时缺失或不可执行'
+          suggestion: '请安装与当前平台匹配的扩展包；内置 Icarus 运行时缺失或不可执行'
         });
       }
     }

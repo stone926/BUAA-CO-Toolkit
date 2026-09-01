@@ -53,15 +53,9 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  package:
-    name: Package and verify Windows x64 VSIX
-    needs: phase6-gate
-    runs-on: windows-2025
-    outputs:
-      artifact_name: ${{ steps.meta.outputs.artifact_name }}
-      version: ${{ steps.meta.outputs.version }}
-      vsix_name: ${{ steps.meta.outputs.vsix_name }}
-      vsix_sha256: ${{ steps.artifact.outputs.sha256 }}
+  test:
+    name: Test release candidate
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -76,75 +70,102 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate and check committed artifacts
-        run: npm run sync:generated
+      - name: Test
+        run: npm test
 
       - name: Verify generated files are committed
         run: git diff --exit-code
 
-      - name: Test
-        run: npm test
+  package:
+    name: Package and verify ${{ matrix.target }} VSIX
+    needs:
+      - phase6-gate
+      - test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            runner: windows-2025
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Compile
         run: npm run compile
 
       - name: Read package metadata
         id: meta
-        shell: pwsh
+        shell: bash
         run: |
-          $version = node -p "require('./package.json').version"
-          $name = node -p "require('./package.json').name"
-          $tag = "${{ github.ref_name }}"
-          if ($tag -ne "v$version") {
-            throw "Tag $tag does not match package version $version."
-          }
-          $vsixName = "$name-$version-win32-x64.vsix"
-          "artifact_name=buaa-co-toolkit-win32-x64-vsix" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "vsix_name=$vsixName" >> $env:GITHUB_OUTPUT
-          "vsix=dist/$vsixName" >> $env:GITHUB_OUTPUT
+          version="$(node -p "require('./package.json').version")"
+          name="$(node -p "require('./package.json').name")"
+          if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${version}." >&2
+            exit 1
+          fi
+          vsix_name="${name}-${version}-${{ matrix.target }}.vsix"
+          echo "vsix_name=${vsix_name}" >> "${GITHUB_OUTPUT}"
+          echo "vsix=dist/${vsix_name}" >> "${GITHUB_OUTPUT}"
 
-      - name: Package Windows x64 VSIX
-        shell: pwsh
+      - name: Restore macOS runtime executable bits
+        if: runner.os == 'macOS'
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          npx vsce package --target win32-x64 --out "${{ steps.meta.outputs.vsix }}"
+          runtime="vendor/iverilog/${{ matrix.target }}"
+          chmod +x \
+            "${runtime}/bin/iverilog" \
+            "${runtime}/bin/iverilog-vpi" \
+            "${runtime}/bin/vvp" \
+            "${runtime}/lib/ivl/ivl" \
+            "${runtime}/lib/ivl/ivlpp"
+          if [[ -f "${runtime}/lib/ivl/vhdlpp" ]]; then
+            chmod +x "${runtime}/lib/ivl/vhdlpp"
+          fi
+
+      - name: Package ${{ matrix.target }} VSIX
+        shell: bash
+        run: |
+          mkdir -p dist
+          npx vsce package --target "${{ matrix.target }}" --out "${{ steps.meta.outputs.vsix }}"
 
       - name: Inspect VSIX and smoke bundled runtime
-        shell: pwsh
+        shell: bash
         run: |
-          $extractRoot = Join-Path $env:RUNNER_TEMP "buaa-co-toolkit-vsix"
-          New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
-          tar -xf "${{ steps.meta.outputs.vsix }}" -C $extractRoot
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to extract ${{ steps.meta.outputs.vsix }}."
-          }
-          $manifest = Get-Content -LiteralPath (Join-Path $extractRoot "extension.vsixmanifest") -Raw
-          if ($manifest -notmatch 'TargetPlatform="win32-x64"') {
-            throw "VSIX manifest is not targeted to win32-x64."
-          }
-          foreach ($forbidden in @("src", "scripts", "test-cli", "tmp", "node_modules/@rolldown")) {
-            if (Test-Path -LiteralPath (Join-Path $extractRoot "extension/$forbidden")) {
-              throw "VSIX contains development-only path: $forbidden"
-            }
-          }
-          node scripts/verify-bundled-iverilog.mjs (Join-Path $extractRoot "extension")
-          if ($LASTEXITCODE -ne 0) {
-            throw "Bundled Icarus smoke failed from extracted VSIX."
-          }
-
-      - name: Record VSIX digest
-        id: artifact
-        shell: pwsh
-        run: |
-          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath "${{ steps.meta.outputs.vsix }}").Hash.ToLowerInvariant()
-          "sha256=$sha256" >> $env:GITHUB_OUTPUT
-          Write-Output "VSIX SHA-256: $sha256"
+          extract_root="${RUNNER_TEMP}/buaa-co-toolkit-vsix-${{ matrix.target }}"
+          mkdir -p "${extract_root}"
+          unzip -q "${{ steps.meta.outputs.vsix }}" -d "${extract_root}"
+          if ! grep -Fq 'TargetPlatform="${{ matrix.target }}"' "${extract_root}/extension.vsixmanifest"; then
+            echo "VSIX manifest is not targeted to ${{ matrix.target }}." >&2
+            exit 1
+          fi
+          for forbidden in src scripts test-cli tmp node_modules/@rolldown; do
+            if [[ -e "${extract_root}/extension/${forbidden}" ]]; then
+              echo "VSIX contains development-only path: ${forbidden}" >&2
+              exit 1
+            fi
+          done
+          node scripts/verify-bundled-iverilog.mjs "${extract_root}/extension"
 
       - name: Upload verified VSIX
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.meta.outputs.artifact_name }}
+          name: buaa-co-toolkit-${{ matrix.target }}-vsix
           path: ${{ steps.meta.outputs.vsix }}
           if-no-files-found: error
           retention-days: 30
@@ -170,19 +191,35 @@ jobs:
       - name: Download verified VSIX
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.package.outputs.artifact_name }}
+          pattern: buaa-co-toolkit-*-vsix
+          merge-multiple: true
           path: dist
 
-      - name: Verify downloaded VSIX digest
+      - name: Verify downloaded VSIX set
+        id: meta
         shell: bash
         run: |
-          echo "${{ needs.package.outputs.vsix_sha256 }}  dist/${{ needs.package.outputs.vsix_name }}" | sha256sum --check -
+          version="$(node -p "require('./package.json').version")"
+          if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${version}." >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          vsixes=(dist/*.vsix)
+          if [[ ${#vsixes[@]} -ne 3 ]]; then
+            echo "Expected exactly three VSIX files, found ${#vsixes[@]}." >&2
+            exit 1
+          fi
+          for target in win32-x64 darwin-arm64 darwin-x64; do
+            test -f "dist/buaa-co-toolkit-${version}-${target}.vsix"
+          done
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - name: Fetch and verify corresponding sources
         run: node scripts/fetch-iverilog-corresponding-sources.mjs dist/corresponding-sources
 
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish --skip-duplicate --packagePath "dist/${{ needs.package.outputs.vsix_name }}"
+        run: npx vsce publish --skip-duplicate --packagePath dist/*.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
@@ -190,7 +227,7 @@ jobs:
         id: notes
         shell: bash
         run: |
-          VERSION="${{ needs.package.outputs.version }}"
+          VERSION="${{ steps.meta.outputs.version }}"
           awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "Release ${GITHUB_REF_NAME}" > release-notes.md
@@ -202,14 +239,16 @@ jobs:
         shell: bash
         run: |
           TAG="${GITHUB_REF_NAME}"
-          VSIX="dist/${{ needs.package.outputs.vsix_name }}"
+          shopt -s nullglob
+          VSIX_ASSETS=(dist/*.vsix)
           SOURCE_ASSETS=(
             dist/corresponding-sources/*.src.tar.zst
+            dist/corresponding-sources/*.tar.gz
             dist/corresponding-sources/SHA256SUMS
           )
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --title "${TAG}" --notes-file release-notes.md
-            gh release upload "${TAG}" "${VSIX}" "${SOURCE_ASSETS[@]}" --clobber
+            gh release upload "${TAG}" "${VSIX_ASSETS[@]}" "${SOURCE_ASSETS[@]}" --clobber
           else
-            gh release create "${TAG}" "${VSIX}" "${SOURCE_ASSETS[@]}" --title "${TAG}" --notes-file release-notes.md --verify-tag
+            gh release create "${TAG}" "${VSIX_ASSETS[@]}" "${SOURCE_ASSETS[@]}" --title "${TAG}" --notes-file release-notes.md --verify-tag
           fi

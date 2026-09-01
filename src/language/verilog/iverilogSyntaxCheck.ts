@@ -5,6 +5,7 @@ import { URI } from 'vscode-uri';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
+  buildIverilogRuntimeArgs,
   preflightIverilogRuntime
 } from '../../verilog/iverilogRuntime';
 import { parseIverilogDiagnosticRecords } from '../../verilog/iverilogDiagnostics';
@@ -60,6 +61,7 @@ export async function runIverilogSyntaxCheck(
   }
 
   const args = [
+    ...buildIverilogRuntimeArgs(preflight.runtime),
     '-g2005',
     ...buildIverilogIncludeArgs(project.root, project.sources),
     '-tnull',

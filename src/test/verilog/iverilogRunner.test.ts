@@ -29,6 +29,7 @@ import { resolveIseProjectFiles } from '../../verilog/iseProject';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
+  buildIverilogRuntimeArgs,
   preflightIverilogRuntime
 } from '../../verilog/iverilogRuntime';
 import {
@@ -98,6 +99,8 @@ vi.mock('../../verilog/iseProject', () => ({ resolveIseProjectFiles: vi.fn() }))
 vi.mock('../../verilog/iverilogRuntime', () => ({
   buildIverilogIncludeArgs: vi.fn((root: string) => ['-grelative-include', '-I', root]),
   buildIverilogEnvironment: vi.fn(() => ({ Path: 'bundled-bin' })),
+  buildIverilogRuntimeArgs: vi.fn((runtime: { target: string; libDir: string }) =>
+    runtime.target.startsWith('darwin-') ? ['-B', runtime.libDir] : []),
   preflightIverilogRuntime: vi.fn()
 }));
 
@@ -122,6 +125,7 @@ vi.mock('../../verilog/testbenchResolver', () => ({
 
 const resource = URI.file('E:/work/src/mips.v');
 const runtime = {
+  target: 'win32-x64' as const,
   rootDir: 'E:/extension/vendor/iverilog/win32-x64',
   binDir: 'E:/extension/vendor/iverilog/win32-x64/bin',
   libDir: 'E:/extension/vendor/iverilog/win32-x64/lib/ivl',
@@ -162,6 +166,7 @@ function toolResult(overrides: Partial<RunResult> = {}): RunResult {
 describe('Icarus compile arguments and watchdog', () => {
   it('keeps source order and supplies both explicit roots', () => {
     const args = buildIverilogCompileArgs({
+      runtime,
       testbenchModule: 'mips_tb',
       watchdogModule: '__co_iverilog_watchdog_ab12',
       outputFile: 'E:/work path/simulation.vvp',
@@ -187,6 +192,31 @@ describe('Icarus compile arguments and watchdog', () => {
       'E:/work/generated_tb.v',
       'E:/work/watchdog.v'
     ]);
+  });
+
+  it('places the macOS bottle base before the existing compile arguments', () => {
+    const macRuntime = {
+      ...runtime,
+      target: 'darwin-x64' as const,
+      rootDir: '/extension/vendor/iverilog/darwin-x64',
+      binDir: '/extension/vendor/iverilog/darwin-x64/bin',
+      libDir: '/extension/vendor/iverilog/darwin-x64/lib/ivl',
+      iverilogPath: '/extension/vendor/iverilog/darwin-x64/bin/iverilog',
+      vvpPath: '/extension/vendor/iverilog/darwin-x64/bin/vvp'
+    };
+    const args = buildIverilogCompileArgs({
+      runtime: macRuntime,
+      testbenchModule: 'mips_tb',
+      watchdogModule: '__co_iverilog_watchdog_ab12',
+      outputFile: '/work/simulation.vvp',
+      dependencyFile: '/work/simulation.dependencies',
+      workspaceRoot: '/work',
+      sourceFiles: ['/work/mips.v'],
+      watchdogFile: '/work/watchdog.v'
+    });
+
+    expect(args.slice(0, 3)).toEqual(['-B', macRuntime.libDir, '-g2005']);
+    expect(buildIverilogRuntimeArgs).toHaveBeenCalledWith(macRuntime);
   });
 
   it('converts automatic TCL budgets into the 1ps watchdog time base', () => {

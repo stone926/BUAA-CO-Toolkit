@@ -68,7 +68,15 @@ resources/templates/wizard/:
 vendor/iverilog/win32-x64/:
   bin/ + lib/ivl/ — 固定的 MSYS2 UCRT64 Icarus 13.0 可执行文件、目标与运行依赖
   THIRD_PARTY_NOTICES.md + licenses/ — 实际分发组件的许可、版权、二进制来源与对应源码说明
-  CORRESPONDING_SOURCES.json — 7 个精确 source-only archive 的 URL、大小与 SHA-256；release workflow 校验后附加到同版本 GitHub Release
+  CORRESPONDING_SOURCES.json — 7 个精确 source-only archive 的 URL、大小与 SHA-256
+
+vendor/iverilog/darwin-arm64/ + darwin-x64/:
+  bin/ + lib/ivl/ + include/ + share/ — 固定的 Homebrew Icarus 13.0 Sonoma bottle 完整 prefix；分别面向 Apple Silicon 与 Intel，binary deployment target 为 macOS 14
+  THIRD_PARTY_NOTICES.md + licenses/ — bottle URL/SHA、Homebrew formula revision、Icarus 许可与上游 v13.0 source URL；运行时不依赖 Homebrew，也不额外携带 dylib
+  Git 保留 `bin/iverilog`、`bin/vvp`、`lib/ivl/ivl`、`lib/ivl/ivlpp` 等入口的 executable bit；release workflow 还会在原生 macOS runner 打包前显式恢复并从解包 VSIX 验收
+
+vendor/iverilog/CORRESPONDING_SOURCES.json:
+  macOS 两个架构共享的 Icarus v13.0 上游源码清单；release fetch 按 URL/SHA 与 Windows 清单合并去重，GitHub Release 同时附加 `*.src.tar.zst`、`*.tar.gz` 和统一 `SHA256SUMS`
 
 resources/templates/asm/:
   p7_exception_handler*.asm — P7 anchor/hybrid 异常处理模板

@@ -1,15 +1,27 @@
-// @index verilog-iverilog-runtime — bundled Windows x64 Icarus 定位、子进程环境与会话级预检
+// @index verilog-iverilog-runtime — bundled Windows/macOS Icarus 定位、子进程环境与会话级预检
 import * as path from 'path';
 import { isDirectory, isFile } from '../nodeFs';
 import { dedupePaths } from '../pathUtils';
 import { runProcessCore, RunProcessCoreResult } from '../processCore';
 
 export interface IverilogRuntime {
+  target: IverilogRuntimeTarget;
   rootDir: string;
   binDir: string;
   libDir: string;
   iverilogPath: string;
   vvpPath: string;
+}
+
+export type IverilogRuntimeTarget =
+  | 'win32-x64'
+  | 'darwin-arm64'
+  | 'darwin-x64';
+
+export interface IverilogRuntimeTargetDescriptor {
+  readonly target: IverilogRuntimeTarget;
+  readonly iverilogExecutable: string;
+  readonly vvpExecutable: string;
 }
 
 export type IverilogRuntimeErrorCode =
@@ -75,7 +87,36 @@ const preflightResultsByRoot = new Map<string, IverilogPreflightResult>();
 const pendingPreflightsByRoot = new Map<string, Promise<IverilogPreflightResult>>();
 const defaultPreflightTimeoutMs = 10_000;
 
-export function resolveIverilogRuntime(extensionRoot: string): IverilogRuntime {
+/** Map a host platform/architecture pair to its bundled runtime layout. */
+export function resolveIverilogRuntimeTarget(
+  platform: NodeJS.Platform,
+  arch: string
+): IverilogRuntimeTargetDescriptor {
+  if (platform === 'win32' && arch === 'x64') {
+    return {
+      target: 'win32-x64',
+      iverilogExecutable: 'iverilog.exe',
+      vvpExecutable: 'vvp.exe'
+    };
+  }
+  if (platform === 'darwin' && (arch === 'arm64' || arch === 'x64')) {
+    return {
+      target: `darwin-${arch}`,
+      iverilogExecutable: 'iverilog',
+      vvpExecutable: 'vvp'
+    };
+  }
+  throw new IverilogRuntimeError(
+    'unsupported-platform',
+    `当前平台没有对应的 bundled Icarus 包（当前 ${platform}-${arch}）`
+  );
+}
+
+export function resolveIverilogRuntime(
+  extensionRoot: string,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch
+): IverilogRuntime {
   const trimmedRoot = extensionRoot.trim();
   if (!trimmedRoot) {
     throw new IverilogRuntimeError(
@@ -83,15 +124,24 @@ export function resolveIverilogRuntime(extensionRoot: string): IverilogRuntime {
       '缺少扩展安装根路径，无法定位内置 Icarus Verilog'
     );
   }
-  const rootDir = path.resolve(trimmedRoot, 'vendor', 'iverilog', 'win32-x64');
+  const descriptor = resolveIverilogRuntimeTarget(platform, arch);
+  const rootDir = path.resolve(trimmedRoot, 'vendor', 'iverilog', descriptor.target);
   const binDir = path.join(rootDir, 'bin');
   return {
+    target: descriptor.target,
     rootDir,
     binDir,
     libDir: path.join(rootDir, 'lib', 'ivl'),
-    iverilogPath: path.join(binDir, 'iverilog.exe'),
-    vvpPath: path.join(binDir, 'vvp.exe')
+    iverilogPath: path.join(binDir, descriptor.iverilogExecutable),
+    vvpPath: path.join(binDir, descriptor.vvpExecutable)
   };
+}
+
+/** Override the Homebrew Cellar prefix embedded in macOS Icarus bottles. */
+export function buildIverilogRuntimeArgs(runtime: IverilogRuntime): string[] {
+  return runtime.target === 'win32-x64'
+    ? []
+    : ['-B', runtime.libDir];
 }
 
 /** Inherit the host environment and only prepend the bundled bin directory. */
@@ -126,7 +176,10 @@ export async function preflightIverilogRuntime(
   options: IverilogPreflightOptions = {}
 ): Promise<IverilogPreflightResult> {
   const runtime = resolveIverilogRuntime(extensionRoot);
-  const key = path.normalize(runtime.rootDir).toLowerCase();
+  const normalizedRoot = path.normalize(runtime.rootDir);
+  const key = runtime.target === 'win32-x64'
+    ? normalizedRoot.toLowerCase()
+    : normalizedRoot;
   const cached = preflightResultsByRoot.get(key);
   if (cached) {
     return cached;
@@ -149,13 +202,6 @@ async function performPreflight(
   runtime: IverilogRuntime,
   timeoutMs: number
 ): Promise<IverilogPreflightResult> {
-  if (process.platform !== 'win32' || process.arch !== 'x64') {
-    throw new IverilogRuntimeError(
-      'unsupported-platform',
-      `内置 Icarus Verilog 仅支持 Windows x64（当前 ${process.platform}-${process.arch}）`
-    );
-  }
-
   const requiredFiles = [runtime.iverilogPath, runtime.vvpPath];
   const fileChecks = await Promise.all(requiredFiles.map(async (file) => ({ file, ok: await isFile(file) })));
   const libExists = await isDirectory(runtime.libDir);
@@ -171,7 +217,10 @@ async function performPreflight(
     );
   }
 
-  const result = await runProcessCore(runtime.iverilogPath, ['-V'], {
+  const result = await runProcessCore(runtime.iverilogPath, [
+    ...buildIverilogRuntimeArgs(runtime),
+    '-V'
+  ], {
     cwd: runtime.binDir,
     env: buildIverilogEnvironment(runtime),
     timeoutMs
