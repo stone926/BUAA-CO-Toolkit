@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-02
+
 - feat(verilog): bundle Icarus Verilog 13.0 for Linux x64 and ARM64, built and verified on Ubuntu 22.04 with no separate Icarus installation required
 - perf(packaging): include only the matching platform's Icarus runtime in each Windows, macOS, and Linux VSIX while preserving its licenses and corresponding-source information
 - fix(lsp): preserve pending on-save compiler diagnostics when unrelated VS Code settings change
