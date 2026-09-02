@@ -55,7 +55,9 @@ describe('bundled Icarus runtime', () => {
   it.each([
     ['win32', 'x64', 'win32-x64', 'iverilog.exe', 'vvp.exe'],
     ['darwin', 'arm64', 'darwin-arm64', 'iverilog', 'vvp'],
-    ['darwin', 'x64', 'darwin-x64', 'iverilog', 'vvp']
+    ['darwin', 'x64', 'darwin-x64', 'iverilog', 'vvp'],
+    ['linux', 'arm64', 'linux-arm64', 'iverilog', 'vvp'],
+    ['linux', 'x64', 'linux-x64', 'iverilog', 'vvp']
   ] as const)('maps %s-%s to the bundled %s installation layout', (
     platform,
     arch,
@@ -75,8 +77,12 @@ describe('bundled Icarus runtime', () => {
     expect(runtime.libDir).toBe(path.join(expectedRoot, 'lib', 'ivl'));
   });
 
-  it('rejects hosts without a corresponding bundled runtime target', () => {
-    expect(() => resolveIverilogRuntimeTarget('linux', 'x64')).toThrowError(expect.objectContaining({
+  it.each([
+    ['linux', 'arm'],
+    ['win32', 'arm64'],
+    ['freebsd', 'x64']
+  ] as const)('rejects %s-%s without a corresponding bundled runtime target', (platform, arch) => {
+    expect(() => resolveIverilogRuntimeTarget(platform, arch)).toThrowError(expect.objectContaining({
       code: 'unsupported-platform',
       message: expect.stringContaining('当前平台没有对应的 bundled Icarus 包')
     }));
@@ -101,14 +107,15 @@ describe('bundled Icarus runtime', () => {
     expect(env.IVERILOG_DUMPER).toBe('fst');
   });
 
-  it('adds the bottle prefix override only for macOS runtimes', () => {
-    const windows = resolveIverilogRuntime('E:/Extension Root', 'win32', 'x64');
-    const arm64 = resolveIverilogRuntime('E:/Extension Root', 'darwin', 'arm64');
-    const x64 = resolveIverilogRuntime('E:/Extension Root', 'darwin', 'x64');
-
-    expect(buildIverilogRuntimeArgs(windows)).toEqual([]);
-    expect(buildIverilogRuntimeArgs(arm64)).toEqual(['-B', arm64.libDir]);
-    expect(buildIverilogRuntimeArgs(x64)).toEqual(['-B', x64.libDir]);
+  it.each([
+    ['win32', 'x64'],
+    ['darwin', 'arm64'],
+    ['darwin', 'x64'],
+    ['linux', 'arm64'],
+    ['linux', 'x64']
+  ] as const)('uses the bundled component base when needed for %s-%s', (platform, arch) => {
+    const runtime = resolveIverilogRuntime('E:/Extension Root', platform, arch);
+    expect(buildIverilogRuntimeArgs(runtime)).toEqual(platform === 'win32' ? [] : ['-B', runtime.libDir]);
   });
 
   it('enables source-relative and workspace-root includes without rewriting paths', () => {
@@ -158,16 +165,23 @@ describe('bundled Icarus runtime', () => {
     );
   });
 
-  it('preflights a macOS bottle with its bundled lib/ivl base', async () => {
-    platformSpy.mockReturnValue('darwin');
-    archSpy.mockReturnValue('arm64');
+  it.each([
+    ['darwin', 'arm64'],
+    ['darwin', 'x64'],
+    ['linux', 'arm64'],
+    ['linux', 'x64']
+  ] as const)('preflights %s-%s with its bundled lib/ivl base', async (platform, arch) => {
+    platformSpy.mockReturnValue(platform);
+    archSpy.mockReturnValue(arch);
     try {
-      await preflightIverilogRuntime('E:/mac-runtime-case');
+      const extensionRoot = `E:/unix-runtime-case-${platform}-${arch}`;
+      const runtime = resolveIverilogRuntime(extensionRoot, platform, arch);
+      await preflightIverilogRuntime(extensionRoot);
 
       expect(runProcessCore).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]darwin-arm64[\\/]bin[\\/]iverilog$/),
-        ['-B', expect.stringMatching(/[\\/]darwin-arm64[\\/]lib[\\/]ivl$/), '-V'],
-        expect.objectContaining({ cwd: expect.stringMatching(/[\\/]darwin-arm64[\\/]bin$/) })
+        runtime.iverilogPath,
+        ['-B', runtime.libDir, '-V'],
+        expect.objectContaining({ cwd: runtime.binDir })
       );
     } finally {
       platformSpy.mockReturnValue('win32');

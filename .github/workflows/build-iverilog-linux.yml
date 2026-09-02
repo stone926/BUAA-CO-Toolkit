@@ -1,0 +1,116 @@
+name: Build bundled Linux Icarus
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Icarus 13.0 for ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install extension dependencies
+        run: npm ci
+
+      - name: Compile extension for runtime smoke
+        run: npm run compile
+
+      - name: Read fixed corresponding source
+        id: source
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync('vendor/iverilog/CORRESPONDING_SOURCES.json', 'utf8'));
+          const source = manifest.sources.find(entry => entry.file === 'v13_0.tar.gz');
+          if (!source || !/^https:\/\/[^\r\n]+$/.test(source.url) || !/^[a-f0-9]{64}$/.test(source.sha256)) {
+            throw new Error('Missing or invalid fixed Icarus v13_0 source.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `url=${source.url}\nsha256=${source.sha256}\n`);
+          NODE
+
+      - name: Build complete prefix in native Ubuntu 22.04
+        shell: bash
+        env:
+          SOURCE_URL: ${{ steps.source.outputs.url }}
+          SOURCE_SHA256: ${{ steps.source.outputs.sha256 }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p dist
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}:/workspace:ro" \
+            --volume "${GITHUB_WORKSPACE}/dist:/output" \
+            --env SOURCE_URL --env SOURCE_SHA256 --env TARGET \
+            ubuntu:22.04 bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install --yes --no-install-recommends build-essential bison flex curl ca-certificates
+              bash /workspace/vendor/iverilog/build-linux.sh \
+                "$TARGET" "/output/$TARGET" "$SOURCE_URL" "$SOURCE_SHA256"
+              runtime="/output/$TARGET"
+              for binary in \
+                "$runtime/bin/iverilog" "$runtime/bin/vvp" \
+                "$runtime/lib/ivl/ivl" "$runtime/lib/ivl/ivlpp" "$runtime/lib/ivl/vhdlpp" \
+                "$runtime/lib/ivl/"*.vpi "$runtime/lib/ivl/"*.tgt; do
+                printf "\n=== %s ===\n" "${binary#/output/}"
+                readelf --wide --program-headers --dynamic --version-info "$binary"
+                ldd "$binary"
+              done > "/output/$TARGET-dependencies.txt"
+              tar -czf "/output/$TARGET.tar.gz" -C /output "$TARGET"
+            '
+
+      - name: Smoke new runtime on Ubuntu 22.04
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p "vendor/iverilog/${TARGET}"
+          node_dir="$(dirname "$(command -v node)")"
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}:/workspace:ro" \
+            --volume "${GITHUB_WORKSPACE}/dist/${TARGET}:/workspace/vendor/iverilog/${TARGET}:ro" \
+            --volume "${node_dir}:/node:ro" \
+            --workdir /workspace \
+            ubuntu:22.04 bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install --yes --no-install-recommends libstdc++6
+              /node/node /workspace/scripts/verify-bundled-iverilog.mjs /workspace
+            '
+
+      - name: Upload complete runtime with executable permissions
+        uses: actions/upload-artifact@v4
+        with:
+          name: iverilog-${{ matrix.target }}
+          path: dist/${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload system dependency inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iverilog-${{ matrix.target }}-dependencies
+          path: dist/${{ matrix.target }}-dependencies.txt
+          if-no-files-found: warn
+          retention-days: 30

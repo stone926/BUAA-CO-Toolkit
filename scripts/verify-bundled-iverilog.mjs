@@ -23,9 +23,9 @@ const binDir = join(runtimeRoot, "bin");
 const libDir = join(runtimeRoot, "lib", "ivl");
 const iverilog = join(binDir, runtime.iverilogExecutable);
 const vvp = join(binDir, runtime.vvpExecutable);
-const iverilogRuntimeArgs = runtime.target.startsWith("darwin-")
-  ? ["-B", libDir]
-  : [];
+const iverilogRuntimeArgs = runtime.target === "win32-x64"
+  ? []
+  : ["-B", libDir];
 const withRuntimeArgs = (args) => [...iverilogRuntimeArgs, ...args];
 const utf8ManifestExecutables = [
   "bin/iverilog-vpi.exe",
@@ -109,7 +109,8 @@ const darwinRequiredFiles = [
 ];
 const requiredFiles = [
   ...commonRequiredFiles,
-  ...(runtime.target === "win32-x64" ? windowsRequiredFiles : darwinRequiredFiles),
+  ...(runtime.target === "win32-x64" ? windowsRequiredFiles : []),
+  ...(runtime.target.startsWith("darwin-") ? darwinRequiredFiles : []),
 ];
 
 for (const relativePath of requiredFiles) {
@@ -119,7 +120,12 @@ for (const relativePath of requiredFiles) {
 if (runtime.target === "win32-x64") {
   verifyWindowsRuntimeMetadata(runtimeRoot);
 } else {
-  verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime);
+  verifyUnixRuntimeExecutables(runtimeRoot, runtime);
+  if (runtime.target.startsWith("darwin-")) {
+    verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime);
+  } else {
+    verifyLinuxRuntimeMetadata(extensionRoot, runtimeRoot);
+  }
 }
 
 const isolatedEnv = isolatedEnvironment(binDir);
@@ -296,9 +302,9 @@ try {
     iverilog,
     vvp,
     iverilogArgs: iverilogRuntimeArgs,
-    selectedLabels: runtime.target.startsWith("darwin-")
-      ? ["P7-probe"]
-      : undefined,
+    selectedLabels: runtime.target === "win32-x64"
+      ? undefined
+      : ["P7-probe"],
     runCommand: (command, args, cwd) => run(command, args, cwd, isolatedEnv),
   });
 } finally {
@@ -325,6 +331,14 @@ function resolveRuntime(platform, arch) {
       target: "win32-x64",
       iverilogExecutable: "iverilog.exe",
       vvpExecutable: "vvp.exe",
+    };
+  }
+  if (platform === "linux" && (arch === "x64" || arch === "arm64")) {
+    return {
+      ...common,
+      target: `linux-${arch}`,
+      iverilogExecutable: "iverilog",
+      vvpExecutable: "vvp",
     };
   }
   if (platform === "darwin" && arch === "arm64") {
@@ -425,7 +439,7 @@ function verifyWindowsRuntimeMetadata(runtimeRoot) {
   }
 }
 
-function verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime) {
+function verifyUnixRuntimeExecutables(runtimeRoot, runtime) {
   const executablePaths = [
     `bin/${runtime.iverilogExecutable}`,
     `bin/${runtime.iverilogVpiExecutable}`,
@@ -440,7 +454,9 @@ function verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime) {
       relativePath,
     );
   }
+}
 
+function verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime) {
   const bottleManifest = JSON.parse(
     readFileSync(join(runtimeRoot, "BOTTLE_MANIFEST.json"), "utf8"),
   );
@@ -461,26 +477,7 @@ function verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime) {
     fail(`Invalid Homebrew bottle metadata for ${runtime.target}.`);
   }
 
-  const sourceManifestPath = join(
-    extensionRoot,
-    "vendor",
-    "iverilog",
-    "CORRESPONDING_SOURCES.json",
-  );
-  assertFile(sourceManifestPath, "vendor/iverilog/CORRESPONDING_SOURCES.json");
-  const sourceManifest = JSON.parse(readFileSync(sourceManifestPath, "utf8"));
-  const source = sourceManifest.sources?.[0];
-  if (
-    sourceManifest.schemaVersion !== 1
-      || sourceManifest.sources?.length !== 1
-      || source?.component !== "Icarus Verilog 13.0"
-      || source?.file !== "v13_0.tar.gz"
-      || source?.url !== "https://github.com/steveicarus/iverilog/archive/refs/tags/v13_0.tar.gz"
-      || source?.sha256 !== "c897bbfa9848688982c6d5c30529fc29d68df0b9ff22ffa73bad89db73a7ce49"
-      || source?.sizeBytes !== 3215392
-  ) {
-    fail("Invalid shared macOS corresponding-source manifest.");
-  }
+  const source = verifySharedSourceManifest(extensionRoot);
 
   const notice = readFileSync(join(runtimeRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
   for (const expected of [
@@ -527,6 +524,44 @@ function verifyDarwinRuntimeMetadata(extensionRoot, runtimeRoot, runtime) {
   if (copyingHash !== stableCopyingHash) {
     fail("licenses/iverilog-COPYING.txt does not match the bottle's COPYING file.");
   }
+}
+
+function verifyLinuxRuntimeMetadata(extensionRoot, runtimeRoot) {
+  const source = verifySharedSourceManifest(extensionRoot);
+  assertFile(
+    join(extensionRoot, "vendor", "iverilog", "build-linux.sh"),
+    "vendor/iverilog/build-linux.sh",
+  );
+  const notice = readFileSync(join(runtimeRoot, "THIRD_PARTY_NOTICES.md"), "utf8");
+  for (const expected of [source.component, source.url, source.sha256]) {
+    if (!notice.includes(expected)) {
+      fail(`THIRD_PARTY_NOTICES.md is missing: ${expected}`);
+    }
+  }
+}
+
+function verifySharedSourceManifest(extensionRoot) {
+  const sourceManifestPath = join(
+    extensionRoot,
+    "vendor",
+    "iverilog",
+    "CORRESPONDING_SOURCES.json",
+  );
+  assertFile(sourceManifestPath, "vendor/iverilog/CORRESPONDING_SOURCES.json");
+  const sourceManifest = JSON.parse(readFileSync(sourceManifestPath, "utf8"));
+  const source = sourceManifest.sources?.[0];
+  if (
+    sourceManifest.schemaVersion !== 1
+      || sourceManifest.sources?.length !== 1
+      || source?.component !== "Icarus Verilog 13.0"
+      || source?.file !== "v13_0.tar.gz"
+      || source?.url !== "https://github.com/steveicarus/iverilog/archive/refs/tags/v13_0.tar.gz"
+      || source?.sha256 !== "c897bbfa9848688982c6d5c30529fc29d68df0b9ff22ffa73bad89db73a7ce49"
+      || source?.sizeBytes !== 3215392
+  ) {
+    fail("Invalid shared Icarus corresponding-source manifest.");
+  }
+  return source;
 }
 
 function assertFile(path, label) {
@@ -657,6 +692,7 @@ function isolatedEnvironment(runtimeBin) {
     "dyld_fallback_library_path",
     "dyld_library_path",
     "iverilog_iconfig",
+    "ld_library_path",
     "path",
   ]);
   const env = Object.fromEntries(

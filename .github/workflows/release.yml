@@ -71,7 +71,9 @@ jobs:
         run: npm ci
 
       - name: Test
-        run: npm test
+        run: |
+          npm test
+          node --test scripts/package-vsix.test.mjs
 
       - name: Verify generated files are committed
         run: git diff --exit-code
@@ -91,6 +93,10 @@ jobs:
             runner: macos-15
           - target: darwin-x64
             runner: macos-15-intel
+          - target: linux-x64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -123,8 +129,8 @@ jobs:
           echo "vsix_name=${vsix_name}" >> "${GITHUB_OUTPUT}"
           echo "vsix=dist/${vsix_name}" >> "${GITHUB_OUTPUT}"
 
-      - name: Restore macOS runtime executable bits
-        if: runner.os == 'macOS'
+      - name: Restore Unix runtime executable bits
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           runtime="vendor/iverilog/${{ matrix.target }}"
@@ -142,7 +148,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          npx vsce package --target "${{ matrix.target }}" --out "${{ steps.meta.outputs.vsix }}"
+          node scripts/package-vsix.mjs --target "${{ matrix.target }}" --out "${{ steps.meta.outputs.vsix }}"
 
       - name: Inspect VSIX and smoke bundled runtime
         shell: bash
@@ -160,6 +166,12 @@ jobs:
               exit 1
             fi
           done
+          runtime_root="${extract_root}/extension/vendor/iverilog"
+          runtime_directories=("${runtime_root}"/*/)
+          if [[ ${#runtime_directories[@]} -ne 1 || "${runtime_directories[0]}" != "${runtime_root}/${{ matrix.target }}/" ]]; then
+            echo "VSIX must contain only the ${{ matrix.target }} Icarus runtime; found: ${runtime_directories[*]}" >&2
+            exit 1
+          fi
           node scripts/verify-bundled-iverilog.mjs "${extract_root}/extension"
 
       - name: Upload verified VSIX
@@ -206,11 +218,11 @@ jobs:
           fi
           shopt -s nullglob
           vsixes=(dist/*.vsix)
-          if [[ ${#vsixes[@]} -ne 3 ]]; then
-            echo "Expected exactly three VSIX files, found ${#vsixes[@]}." >&2
+          if [[ ${#vsixes[@]} -ne 5 ]]; then
+            echo "Expected exactly five VSIX files, found ${#vsixes[@]}." >&2
             exit 1
           fi
-          for target in win32-x64 darwin-arm64 darwin-x64; do
+          for target in win32-x64 darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
             test -f "dist/buaa-co-toolkit-${version}-${target}.vsix"
           done
           echo "version=${version}" >> "${GITHUB_OUTPUT}"

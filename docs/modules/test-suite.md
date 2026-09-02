@@ -15,7 +15,7 @@ test/language/verilog/:
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/verilog/:
-  verilogBackend, iseProjectOrder, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、ISE 源发现/XISE 顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64 runtime 纯映射与 unsupported 分支、三平台路径/预检、macOS `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
+  verilogBackend, iseProjectOrder, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、ISE 源发现/XISE 顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime 纯映射与 unsupported 分支、五 target 路径/预检、Unix `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 
 TextMate:
   使用 vscode-textmate + vscode-oniguruma 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步及课程真实宏/数字片段
@@ -38,9 +38,13 @@ test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsRep
 
 进程/兼容证据:
   processCore 覆盖 stdout/stderr raw-byte cap、UTF-8 chunk boundary、timeout/abort 与子孙进程树；`test-cli` 的 legacy-equivalence runner 在 detached provider 迁移前父提交 `044bab0` 与当前 provider 路径间比较 machine code、trace、verdict、halt PC
-  scripts/verify-bundled-iverilog*.mjs 从源码树或解包 VSIX 按 host platform/arch 自动选择 win32-x64/darwin-arm64/darwin-x64 runtime，在隔离 PATH 下验证中文与空格路径的 syntax success/failure、compile/VVP、`$readmemh`/`$display`、watchdog 和代表性课程兼容；Windows 另验证六个原生 EXE 的 UTF-8 manifest/PE metadata，macOS 的全部 `iverilog` 调用验证 bundled `-B <lib/ivl>`。常规 portability CI 在 Windows 2025 提前执行同一 smoke；release matrix 在 windows-2025、macos-15 arm64、macos-15-intel 从各自解包 VSIX 运行 host smoke，公共 `npm test` 只执行一次；fetch-iverilog-corresponding-sources.mjs 合并固定 Windows 与共享 macOS manifest，按 URL/SHA 去重下载并校验 release 对应源码资产
+  scripts/verify-bundled-iverilog*.mjs 从源码树或解包 VSIX 按 host platform/arch 自动选择 win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime，在隔离 PATH 下验证中文与空格路径的 syntax success/failure、compile/VVP、`$readmemh`/`$display`、watchdog 和代表性课程兼容；Windows 另验证六个原生 EXE 的 UTF-8 manifest/PE metadata，macOS / Linux 的全部 `iverilog` 调用验证 bundled `-B <lib/ivl>`。常规 portability CI 在 Windows 2025 提前执行同一 smoke；release matrix 在 windows-2025、macos-15 arm64、macos-15-intel、ubuntu-24.04、ubuntu-24.04-arm 从各自解包 VSIX 运行 host smoke，公共 `npm test` 只执行一次；fetch-iverilog-corresponding-sources.mjs 合并固定 Windows 与共享 macOS / Linux manifest，按 URL/SHA 去重下载并校验 release 对应源码资产
 
 fixtures:
   syntaxFixtures — fixture测试运行器
   fixtures/syntax/mips/: valid/, invalid/(含JSON期望), course/
   fixtures/syntax/verilog/: valid/, invalid/, course-out/, real-project/
+
+平台打包与构建验证:
+  scripts/package-vsix.test.mjs 通过真实 vsce fixture 验证五目标内容裁剪、共享许可/来源/配方保留、中文空格路径及参数失败；release 同一 Test job 执行。每个平台解包检查只保留当前 runtime，Unix 课程 smoke 选择 P7-probe。Linux 手动构建 workflow 在干净 Ubuntu 22.04 容器执行 smoke 并记录实际 ELF 依赖，普通 release 不重复构建或 ABI 扫描。
+  首次集成（2026-09-03）：[五个平台最终 VSIX 的原生验证](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33656156772) 全部通过；Linux 二进制来自 [Ubuntu 22.04 原生双架构构建](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33655749189)。桌面 Linux VS Code 的保存诊断、手动仿真和自动测试 UI 尚未手工验收。

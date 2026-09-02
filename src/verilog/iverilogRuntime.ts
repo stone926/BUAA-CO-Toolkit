@@ -1,4 +1,4 @@
-// @index verilog-iverilog-runtime — bundled Windows/macOS Icarus 定位、子进程环境与会话级预检
+// @index verilog-iverilog-runtime — bundled Windows/macOS/Linux Icarus 定位、子进程环境与会话级预检
 import * as path from 'path';
 import { isDirectory, isFile } from '../nodeFs';
 import { dedupePaths } from '../pathUtils';
@@ -16,7 +16,9 @@ export interface IverilogRuntime {
 export type IverilogRuntimeTarget =
   | 'win32-x64'
   | 'darwin-arm64'
-  | 'darwin-x64';
+  | 'darwin-x64'
+  | 'linux-arm64'
+  | 'linux-x64';
 
 export interface IverilogRuntimeTargetDescriptor {
   readonly target: IverilogRuntimeTarget;
@@ -99,9 +101,9 @@ export function resolveIverilogRuntimeTarget(
       vvpExecutable: 'vvp.exe'
     };
   }
-  if (platform === 'darwin' && (arch === 'arm64' || arch === 'x64')) {
+  if ((platform === 'darwin' || platform === 'linux') && (arch === 'arm64' || arch === 'x64')) {
     return {
-      target: `darwin-${arch}`,
+      target: `${platform}-${arch}`,
       iverilogExecutable: 'iverilog',
       vvpExecutable: 'vvp'
     };
@@ -137,7 +139,7 @@ export function resolveIverilogRuntime(
   };
 }
 
-/** Override the Homebrew Cellar prefix embedded in macOS Icarus bottles. */
+/** Locate bundled Unix components independently of their build-time prefix. */
 export function buildIverilogRuntimeArgs(runtime: IverilogRuntime): string[] {
   return runtime.target === 'win32-x64'
     ? []

@@ -1105,7 +1105,7 @@
   "scripts": {
     "compile": "npm run sync:generated && npm run clean:compile && tsc -p ./",
     "vscode:prepublish": "npm run compile",
-    "package:vsix": "npm run sync:generated && vsce package --target win32-x64",
+    "package:vsix": "npm run sync:generated && node scripts/package-vsix.mjs --target win32-x64",
     "publish": "node scripts/release.mjs",
     "generate:manifest-config": "node scripts/generate-manifest-config.mjs",
     "check:manifest-config": "node scripts/generate-manifest-config.mjs --check",

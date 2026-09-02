@@ -2,3 +2,8 @@
 # checkouts. Executable modes are recorded explicitly in the Git index.
 darwin-arm64/** -text -whitespace
 darwin-x64/** -text -whitespace
+
+# Keep Linux installation prefixes byte-for-byte stable on Windows checkouts.
+linux-x64/** -text -whitespace
+linux-arm64/** -text -whitespace
+build-linux.sh text eol=lf

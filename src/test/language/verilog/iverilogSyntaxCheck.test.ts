@@ -23,7 +23,7 @@ vi.mock('../../../verilog/iverilogRuntime', () => ({
   buildIverilogIncludeArgs: vi.fn((root: string) => ['-grelative-include', '-I', root]),
   buildIverilogEnvironment: vi.fn(() => ({ PATH: 'bundled-bin' })),
   buildIverilogRuntimeArgs: vi.fn((runtime: { target: string; libDir: string }) =>
-    runtime.target.startsWith('darwin-') ? ['-B', runtime.libDir] : []),
+    runtime.target === 'win32-x64' ? [] : ['-B', runtime.libDir]),
   preflightIverilogRuntime: vi.fn()
 }));
 
@@ -138,35 +138,37 @@ describe('Icarus syntax checker', () => {
     });
   });
 
-  it('places the macOS bottle base before the existing syntax arguments', async () => {
-    const root = await temporaryProject();
-    const file = path.join(root, 'top.v');
-    await fs.promises.writeFile(file, 'module top; endmodule\n');
-    const macRuntime = {
-      target: 'darwin-arm64' as const,
-      rootDir: '/extension/vendor/iverilog/darwin-arm64',
-      binDir: '/extension/vendor/iverilog/darwin-arm64/bin',
-      libDir: '/extension/vendor/iverilog/darwin-arm64/lib/ivl',
-      iverilogPath: '/extension/vendor/iverilog/darwin-arm64/bin/iverilog',
-      vvpPath: '/extension/vendor/iverilog/darwin-arm64/bin/vvp'
-    };
-    vi.mocked(preflightIverilogRuntime).mockResolvedValue({
-      runtime: macRuntime,
-      result: successfulRun(),
-      version: 'Icarus Verilog 13.0'
-    });
+  it.each(['darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64'] as const)(
+    'places the %s component base before the existing syntax arguments', async (target) => {
+      const root = await temporaryProject();
+      const file = path.join(root, 'top.v');
+      await fs.promises.writeFile(file, 'module top; endmodule\n');
+      const unixRuntime = {
+        target,
+        rootDir: `/extension/vendor/iverilog/${target}`,
+        binDir: `/extension/vendor/iverilog/${target}/bin`,
+        libDir: `/extension/vendor/iverilog/${target}/lib/ivl`,
+        iverilogPath: `/extension/vendor/iverilog/${target}/bin/iverilog`,
+        vvpPath: `/extension/vendor/iverilog/${target}/bin/vvp`
+      };
+      vi.mocked(preflightIverilogRuntime).mockResolvedValue({
+        runtime: unixRuntime,
+        result: successfulRun(),
+        version: 'Icarus Verilog 13.0'
+      });
 
-    await runIverilogSyntaxCheck({
-      workspaceFolders: [{ uri: URI.file(root).toString(), name: 'workspace' }],
-      triggerUri: URI.file(file).toString(),
-      extensionRoot: '/extension',
-      timeoutMs: 5000
-    });
+      await runIverilogSyntaxCheck({
+        workspaceFolders: [{ uri: URI.file(root).toString(), name: 'workspace' }],
+        triggerUri: URI.file(file).toString(),
+        extensionRoot: '/extension',
+        timeoutMs: 5000
+      });
 
-    const [, args] = vi.mocked(runProcessCore).mock.calls[0];
-    expect(args.slice(0, 3)).toEqual(['-B', macRuntime.libDir, '-g2005']);
-    expect(buildIverilogRuntimeArgs).toHaveBeenCalledWith(macRuntime);
-  });
+      const [, args] = vi.mocked(runProcessCore).mock.calls[0];
+      expect(args.slice(0, 3)).toEqual(['-B', unixRuntime.libDir, '-g2005']);
+      expect(buildIverilogRuntimeArgs).toHaveBeenCalledWith(unixRuntime);
+    }
+  );
 
   it('reports a missing extension root instead of guessing cwd or PATH', async () => {
     const root = await temporaryProject();

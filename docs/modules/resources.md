@@ -76,7 +76,17 @@ vendor/iverilog/darwin-arm64/ + darwin-x64/:
   Git 保留 `bin/iverilog`、`bin/vvp`、`lib/ivl/ivl`、`lib/ivl/ivlpp` 等入口的 executable bit；release workflow 还会在原生 macOS runner 打包前显式恢复并从解包 VSIX 验收
 
 vendor/iverilog/CORRESPONDING_SOURCES.json:
-  macOS 两个架构共享的 Icarus v13.0 上游源码清单；release fetch 按 URL/SHA 与 Windows 清单合并去重，GitHub Release 同时附加 `*.src.tar.zst`、`*.tar.gz` 和统一 `SHA256SUMS`
+  macOS / Linux 四个 target 共享的 Icarus v13.0 上游源码清单；release fetch 按 URL/SHA 与 Windows 清单合并去重，GitHub Release 继续附加 8 个源码归档与统一 `SHA256SUMS`
+
+vendor/iverilog/linux-x64/ + linux-arm64/:
+  bin/ + lib/ivl/ + include/ + share/ — 固定 Icarus 13.0 上游源码在原生 Ubuntu 22.04 容器构建的完整安装目录；使用系统 glibc / libstdc++ / libgcc，不分发私有 loader 或设置 LD_LIBRARY_PATH
+  THIRD_PARTY_NOTICES.md + licenses/iverilog-COPYING.txt — 版本、构建环境、参数及对应源码 URL/SHA；禁用 readline / termcap / zlib / bzip2，保留课程文本 trace、readmemh 与基础 VCD
+  vendor/iverilog/build-linux.sh — 共享下载/校验/编译配方，随 VSIX 分发；.github/workflows/build-iverilog-linux.yml 仅手动生成保权限的 tar artifact，普通 release 使用已入库产物
+  首次导入验证（2026-09-03）：[原生双架构构建与 Ubuntu 22.04 smoke](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33655749189) 均通过；readelf/ldd 检查覆盖全部可执行 ELF、VPI 与 target，仅依赖系统 libc/libm/libstdc++/libgcc 及加载器，无 RPATH/RUNPATH 或缺失依赖。两架构实际引用的最高符号版本均为 GLIBC_2.35、GLIBCXX_3.4.30；以 Ubuntu 22.04 标准更新环境验收，不据此扩大其他发行版承诺。
+
+平台打包:
+  scripts/package-vsix.mjs — 本地与 release 共用必填 --target / 可选 --out 的入口；合并根 .vscodeignore 与非目标 runtime 目录排除规则到临时 ignoreFile，保留目标完整目录及共享来源/配方，结束清理临时文件
+  .github/workflows/release.yml — Windows x64、macOS 两架构、Linux 两架构原生打包；Unix 恢复入口可执行位，解包确认唯一目标 runtime 后运行同一 smoke；不发布 universal 或 alpine 包
 
 resources/templates/asm/:
   p7_exception_handler*.asm — P7 anchor/hybrid 异常处理模板

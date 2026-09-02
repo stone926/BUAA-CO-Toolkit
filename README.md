@@ -17,7 +17,11 @@
 | Windows 10/11 x64 | 支持 | `win32-x64` |
 | macOS 14+，Apple Silicon | 支持 | `darwin-arm64` |
 | macOS 14+，Intel | 支持 | `darwin-x64` |
-| Windows ARM64、Linux、WSL、Remote SSH | 不支持 | — |
+| Linux x64（Ubuntu 22.04 / 24.04） | 支持 | `linux-x64` |
+| Linux ARM64（Ubuntu 22.04 / 24.04） | 支持 | `linux-arm64` |
+| Windows ARM64、Linux ARM32、Alpine / musl | 不支持 | — |
+
+每个平台包只携带对应平台和架构的 Icarus 运行时。Linux 使用系统标准 glibc、libstdc++ 和 libgcc；其他 glibc 发行版不做白名单拦截，但尚未承诺兼容。WSL、Remote SSH 和 Dev Containers 的完整工作流尚未验收。
 
 ### 2. 打开项目并选择 Profile
 
@@ -116,6 +120,7 @@ P3–P7 的自动测试链路如下：
 ## 兼容性与边界
 
 - Icarus 是常规 Verilog 后端。`co.toolchain.isePath` 不会切换保存时检查、手动仿真或自动测试到 ISE。
+- Linux 内置 Icarus 保留文本 trace、`$readmemh` 和基础 VCD，不提供 FST / LXT / LXT2 压缩波形或 readline 行编辑。ISE / ISim GUI 功能仍仅支持 Windows。
 - 插件不覆盖 Xilinx vendor IP、综合、实现、时序仿真或 bitstream 工作流；这些请在相应 Xilinx 工具中完成。
 - P3 trace 对拍要求课程标准的单个 32 位 ROM 和 trace 接口；无法可靠识别时，插件会给出缺失或冲突端口的诊断。
 - 随机和定向测试能有效发现很多问题，但“通过”不等于所有场景都正确；课程最终结果仍以课程测评环境为准。
@@ -132,6 +137,10 @@ npm run check:generated
 npm run package:vsix
 ```
 
-发布使用 `npm run publish -- patch`（也可替换为 `minor`、`major` 或显式版本号）。完整架构、模块边界和验证说明见[架构索引](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/docs/INDEX.md)；变更记录见 [CHANGELOG](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/CHANGELOG.md)。随包 Icarus 的许可证、校验信息和对应源码说明见 [Windows x64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)、[macOS Apple Silicon](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-arm64/THIRD_PARTY_NOTICES.md) 和 [macOS Intel](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-x64/THIRD_PARTY_NOTICES.md)。
+`npm run package:vsix` 默认生成 Windows x64 包。其他平台在对应系统上运行 `node scripts/package-vsix.mjs --target <target> --out dist/<name>.vsix`；支持上表的五个 target，统一按目标裁剪运行时，macOS / Linux 在原生系统打包以保留可执行权限。
+
+Linux 二进制由手动触发的 `Build bundled Linux Icarus` workflow 在两个原生架构的 Ubuntu 22.04 容器中生成；下载 tar artifact 后，将完整安装目录放入 `vendor/iverilog/<target>/` 并提交。构建配方 `vendor/iverilog/build-linux.sh` 随 VSIX 分发；日常发布使用仓库内固定产物，无需重新编译 Icarus。
+
+发布使用 `npm run publish -- patch`（也可替换为 `minor`、`major` 或显式版本号），release matrix 从五个平台的最终 VSIX 解包运行 smoke。完整架构、模块边界和验证说明见[架构索引](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/docs/INDEX.md)；变更记录见 [CHANGELOG](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/CHANGELOG.md)。随包 Icarus 的许可证、校验信息和对应源码说明见 [Windows x64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)、[macOS Apple Silicon](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-arm64/THIRD_PARTY_NOTICES.md)、[macOS Intel](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-x64/THIRD_PARTY_NOTICES.md)、[Linux x64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/linux-x64/THIRD_PARTY_NOTICES.md) 和 [Linux ARM64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/linux-arm64/THIRD_PARTY_NOTICES.md)。
 
 遇到问题或希望补充课程场景，请到 [GitHub Issues](https://github.com/stone926/BUAA-CO-Toolkit/issues) 反馈。
