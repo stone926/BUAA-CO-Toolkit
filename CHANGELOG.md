@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-02
+
 - fix(release): keep corresponding-source filenames stable through GitHub Release upload and verify both `SHA256SUMS` and the final remote asset-name set
 
 ## [1.1.0] - 2026-09-01
