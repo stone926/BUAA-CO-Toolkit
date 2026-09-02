@@ -139,6 +139,10 @@ npm run package:vsix
 
 `npm run package:vsix` 默认生成 Windows x64 包。其他平台在对应系统上运行 `node scripts/package-vsix.mjs --target <target> --out dist/<name>.vsix`；支持上表的五个 target，统一按目标裁剪运行时，macOS / Linux 在原生系统打包以保留可执行权限。
 
+`Extension platforms` CI 在 PR、主分支提交和手动触发时验证五个平台的最终 VSIX：检查包内容与 Icarus，再启动真实 VS Code 稳定版，验证扩展激活、LSP 保存诊断与修复、仿真命令和一个固定 P4 课程用例的 Worker / 对拍报告。发布复用同一验证步骤；全量单元测试仍由原有 CI 执行。维护者无需准备其他系统的电脑。
+
+本地可在对应平台解包 VSIX 后运行 `npm run verify:extension-host -- <解包后的 extension 目录>`；无显示器的 Linux 使用 `xvfb-run -a npm run verify:extension-host -- <目录>`。VS Code 自动下载至 `.vscode-test/`，测试工作区和日志保留在 `.vscode-test/extension-host-smoke/`；排查指定版本时可设置 `CO_VSCODE_VERSION`。
+
 Linux 二进制由手动触发的 `Build bundled Linux Icarus` workflow 在两个原生架构的 Ubuntu 22.04 容器中生成；下载 tar artifact 后，将完整安装目录放入 `vendor/iverilog/<target>/` 并提交。构建配方 `vendor/iverilog/build-linux.sh` 随 VSIX 分发；日常发布使用仓库内固定产物，无需重新编译 Icarus。
 
 发布使用 `npm run publish -- patch`（也可替换为 `minor`、`major` 或显式版本号），release matrix 从五个平台的最终 VSIX 解包运行 smoke。完整架构、模块边界和验证说明见[架构索引](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/docs/INDEX.md)；变更记录见 [CHANGELOG](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/CHANGELOG.md)。随包 Icarus 的许可证、校验信息和对应源码说明见 [Windows x64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)、[macOS Apple Silicon](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-arm64/THIRD_PARTY_NOTICES.md)、[macOS Intel](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-x64/THIRD_PARTY_NOTICES.md)、[Linux x64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/linux-x64/THIRD_PARTY_NOTICES.md) 和 [Linux ARM64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/linux-arm64/THIRD_PARTY_NOTICES.md)。

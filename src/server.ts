@@ -8,7 +8,6 @@ import {
   CompletionParams,
   createConnection,
   DefinitionParams,
-  DidChangeConfigurationNotification,
   Diagnostic,
   DocumentFormattingParams,
   DocumentFormattingRequest,
@@ -323,9 +322,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 
 connection.onInitialized(() => {
   traceServerStartup('server initialized');
-  if (state.hasConfigurationCapability) {
-    void connection.client.register(DidChangeConfigurationNotification.type, undefined);
-  }
   if (state.hasFormattingDynamicRegistration) {
     void connection.client.register(DocumentFormattingRequest.type, {
       documentSelector: [

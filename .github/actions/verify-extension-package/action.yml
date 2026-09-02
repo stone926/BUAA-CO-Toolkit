@@ -1,0 +1,103 @@
+name: Verify extension package
+description: Package one native VSIX and verify its bundled runtime and VS Code extension host.
+
+inputs:
+  target:
+    description: VSIX target matching the current runner.
+    required: true
+
+outputs:
+  vsix:
+    description: Path to the verified VSIX.
+    value: ${{ steps.package.outputs.vsix }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Unix runtime executable bits
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        runtime="vendor/iverilog/${TARGET}"
+        chmod +x \
+          "${runtime}/bin/iverilog" \
+          "${runtime}/bin/iverilog-vpi" \
+          "${runtime}/bin/vvp" \
+          "${runtime}/lib/ivl/ivl" \
+          "${runtime}/lib/ivl/ivlpp"
+        if [[ -f "${runtime}/lib/ivl/vhdlpp" ]]; then
+          chmod +x "${runtime}/lib/ivl/vhdlpp"
+        fi
+
+    - name: Package native VSIX
+      id: package
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        version="$(node -p "require('./package.json').version")"
+        name="$(node -p "require('./package.json').name")"
+        vsix="dist/${name}-${version}-${TARGET}.vsix"
+        mkdir -p dist
+        node scripts/package-vsix.mjs --target "${TARGET}" --out "${vsix}"
+        echo "vsix=${vsix}" >> "${GITHUB_OUTPUT}"
+
+    - name: Inspect VSIX and smoke bundled runtime
+      id: inspect
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        VSIX: ${{ steps.package.outputs.vsix }}
+      run: |
+        extract_root="${RUNNER_TEMP}/buaa-co-toolkit-vsix-${TARGET}"
+        mkdir -p "${extract_root}"
+        unzip -q "${VSIX}" -d "${extract_root}"
+        if ! grep -Fq "TargetPlatform=\"${TARGET}\"" "${extract_root}/extension.vsixmanifest"; then
+          echo "VSIX manifest is not targeted to ${TARGET}." >&2
+          exit 1
+        fi
+        for forbidden in src scripts test-cli tmp node_modules/@rolldown; do
+          if [[ -e "${extract_root}/extension/${forbidden}" ]]; then
+            echo "VSIX contains development-only path: ${forbidden}" >&2
+            exit 1
+          fi
+        done
+        runtime_root="${extract_root}/extension/vendor/iverilog"
+        runtime_directories=("${runtime_root}"/*/)
+        if [[ ${#runtime_directories[@]} -ne 1 || "${runtime_directories[0]}" != "${runtime_root}/${TARGET}/" ]]; then
+          echo "VSIX must contain only the ${TARGET} Icarus runtime; found: ${runtime_directories[*]}" >&2
+          exit 1
+        fi
+        node scripts/verify-bundled-iverilog.mjs "${extract_root}/extension"
+        echo "extension=${extract_root}/extension" >> "${GITHUB_OUTPUT}"
+
+    - name: Install Linux VS Code GUI libraries
+      if: runner.os == 'Linux'
+      shell: bash
+      # Ubuntu 24.04 x64/ARM64 runners already provide Xvfb, NSS and GBM.
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libasound2t64 libgtk-3-0t64
+
+    - name: Smoke packaged extension in VS Code
+      shell: bash
+      env:
+        EXTENSION: ${{ steps.inspect.outputs.extension }}
+      run: |
+        if [[ "${RUNNER_OS}" == "Linux" ]]; then
+          xvfb-run -a node scripts/verify-extension-host.mjs "${EXTENSION}"
+        else
+          node scripts/verify-extension-host.mjs "${EXTENSION}"
+        fi
+
+    - name: Upload extension host failure logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: extension-host-logs-${{ inputs.target }}
+        path: .vscode-test/extension-host-smoke/
+        include-hidden-files: true
+        if-no-files-found: ignore
+        retention-days: 7

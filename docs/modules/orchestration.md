@@ -5,7 +5,7 @@
 
 entry:
   extension.ts — activate(): 注册全部命令/侧边栏/StatusBar/FileWatcher(.v/.vh/.xise/.asm/.circ)/工具链缓存；属于 ISE 发现基线的 Verilog/XISE create/change/delete 会失效所有包含该路径的嵌套 workspace 缓存，folder add/remove 保守清空 session 基线，忽略 `.co` 生成 TB 等排除目录事件, deactivate()停止LSP
-  languageClient.ts — startLanguageServer(IPC模式，initializationOptions 传扩展安装根供 bundled runtime 定位), stopLanguageServer, executeLanguageServerCommand
+  languageClient.ts — startLanguageServer(IPC模式，initializationOptions 传扩展安装根供 bundled runtime 定位), stopLanguageServer, executeLanguageServerCommand；统一同步 co 配置，避免无关编辑器设置变化取消 LSP 保存语法检查
 
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导

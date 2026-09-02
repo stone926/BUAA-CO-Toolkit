@@ -1,0 +1,62 @@
+name: Extension platforms
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-platforms-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.target }} extension
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            runner: windows-2025
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-x64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package and verify native extension
+        id: verify
+        uses: ./.github/actions/verify-extension-package
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Upload verified VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: buaa-co-toolkit-${{ matrix.target }}-vsix
+          path: ${{ steps.verify.outputs.vsix }}
+          if-no-files-found: error
+          retention-days: 7

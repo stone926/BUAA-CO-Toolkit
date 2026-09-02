@@ -47,4 +47,10 @@ fixtures:
 
 平台打包与构建验证:
   scripts/package-vsix.test.mjs 通过真实 vsce fixture 验证五目标内容裁剪、共享许可/来源/配方保留、中文空格路径及参数失败；release 同一 Test job 执行。每个平台解包检查只保留当前 runtime，Unix 课程 smoke 选择 P7-probe。Linux 手动构建 workflow 在干净 Ubuntu 22.04 容器执行 smoke 并记录实际 ELF 依赖，普通 release 不重复构建或 ABI 扫描。
-  首次集成（2026-09-03）：[五个平台最终 VSIX 的原生验证](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33656156772) 全部通过；Linux 二进制来自 [Ubuntu 22.04 原生双架构构建](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33655749189)。桌面 Linux VS Code 的保存诊断、手动仿真和自动测试 UI 尚未手工验收。
+  首次 Icarus 集成（2026-09-03）：[五个平台最终 VSIX 的原生验证](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33656156772) 全部通过；Linux 二进制来自 [Ubuntu 22.04 原生双架构构建](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33655749189)。此记录只覆盖打包和 Icarus 层。
+
+真实 VS Code 扩展宿主:
+  scripts/verify-extension-host.mjs — @vscode/test-electron 下载当前稳定版，加载最终 VSIX 解包目录；隔离用户配置/其他扩展，创建中文空格工作区，保留日志；本地可用 CO_VSCODE_VERSION 指定排查版本
+  scripts/extension-host-smoke.cjs — 四项小型测试：实际扩展激活、DocumentSymbol/LSP 保存 Icarus 错误诊断与修复（包含无关 editor 设置变化不应取消保存检查的回归）、co.verilog.runIsim 命令及输出、co.test.runFullTest 固定 P4 用例的真实 assembler/Worker oracle/Icarus 双侧 golden trace 与报告 Webview；内嵌协议 fixture，不复制完整课程 CPU，不 mock VS Code 或增加生产测试接口
+  .github/workflows/extension-platforms.yml — PR/main push/手动五 target 原生验证；.github/actions/verify-extension-package/action.yml 与 release 共用打包、解包、Icarus smoke、真实扩展宿主检查，Linux 用 Xvfb；不逐平台重复全量单元测试，失败上传宿主日志
+  首次宿主验证（2026-09-03）：[五个平台最终 VSIX 的真实 VS Code 验证](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33659011560) 全部通过；保存诊断回归另以旧 server 失败、新 server 通过作本地对照。

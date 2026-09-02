@@ -87,6 +87,7 @@ vendor/iverilog/linux-x64/ + linux-arm64/:
 平台打包:
   scripts/package-vsix.mjs — 本地与 release 共用必填 --target / 可选 --out 的入口；合并根 .vscodeignore 与非目标 runtime 目录排除规则到临时 ignoreFile，保留目标完整目录及共享来源/配方，结束清理临时文件
   .github/workflows/release.yml — Windows x64、macOS 两架构、Linux 两架构原生打包；Unix 恢复入口可执行位，解包确认唯一目标 runtime 后运行同一 smoke；不发布 universal 或 alpine 包
+  .github/actions/verify-extension-package/action.yml — release 与 Extension platforms 常规 CI 共用上述打包检查，并从最终 VSIX 启动真实 VS Code 验证核心命令/LSP/Worker；测试脚本和 devDependencies 不进入 VSIX
 
 resources/templates/asm/:
   p7_exception_handler*.asm — P7 anchor/hybrid 异常处理模板
