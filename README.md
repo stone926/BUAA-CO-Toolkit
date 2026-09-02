@@ -1,346 +1,137 @@
-# BUAA CO 工具箱（VSCode 插件）
+# BUAA CO 工具箱
 
-面向北航计算机组成（CO）实验的开箱即用 VSCode 插件，覆盖 **MIPS 汇编、Verilog、Logisim** 三套工作流，并为 P3–P7 的 CPU 提供**一键随机对拍测试**（生成测试点 → 内置 TypeScript 课程引擎 → Logisim/Verilog 仿真 → 自动对拍 → 报告，循环进行）。Windows x64、macOS Apple Silicon 与 macOS Intel 版本均内置课程汇编器和 Icarus Verilog 13.0；MARS 只保留给 P2、普通 ASM 运行/stdin/终端、显式兼容/复现与 CI 验证。
+面向北航计算机组成（CO）实验的 VS Code 插件。它把 MIPS 汇编、Verilog、Logisim 和 P3–P7 CPU 对拍测试整合到同一个工作流中：少装工具、少配参数，先让项目跑起来。
 
----
+[在 VS Code Marketplace 安装](https://marketplace.visualstudio.com/items?itemName=stone926.buaa-co-toolkit) · [GitHub 仓库](https://github.com/stone926/BUAA-CO-Toolkit) · [发布版本与 VSIX](https://github.com/stone926/BUAA-CO-Toolkit/releases)
 
-## 平台支持
+## 快速开始
 
-本版本为三个本地 VS Code 扩展宿主分别发布定向 VSIX：`win32-x64`、`darwin-arm64` 和 `darwin-x64`。
+### 1. 安装并确认运行环境
 
-| 环境 | 本版本 |
-|---|---|
-| Windows 10/11 x64，本地 VS Code | ✅ |
-| macOS 14 或更高版本，Apple Silicon，本地 VS Code | ✅ |
-| macOS 14 或更高版本，Intel x64，本地 VS Code | ✅ |
-| Windows ARM64 | ❌ |
-| WSL / Remote SSH 扩展宿主 | ❌ |
-| Linux 本地扩展宿主 | ❌ |
+可在扩展市场搜索 **BUAA CO Toolkit** 安装；离线安装时，从发布页下载与本机匹配的 VSIX，再在扩展视图的“从 VSIX 安装…”中打开它。
 
-- macOS runtime 使用 Sonoma bottle，二进制运行下限为 macOS 14；发布 CI 在 macOS 15 的 Apple Silicon 与 Intel runner 上验收，不能据此视为已经在 macOS 14 实机验收。
-- 通用/on-save Verilog 编译器检查、手动仿真和 P4–P7 自动测试始终直接启动当前平台随包附带的 `iverilog` 与 `vvp`；Windows 不要求 Icarus/MSYS2，macOS 不要求 Icarus/Homebrew，也不需要修改 `PATH`，且不受 `co.toolchain.isePath` 影响。
-- 生成 ISE PRJ/TCL 工程文件不要求安装 ISE。只有 Windows x64 上打开 ISim GUI 波形和使用当前集成的 VCD 导出命令时才读取 `co.toolchain.isePath`；这些 ISE 专属功能在 macOS 不可用。
-- 课程最终结果仍以课程测评环境为准；Icarus 与课程使用的 ISE/ISim 对少量非标准、厂商相关或时序敏感写法可能有差异。
-- Bundled runtime 的组件版本、二进制校验值、许可证和对应源码见 [Windows x64](vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)、[macOS Apple Silicon](vendor/iverilog/darwin-arm64/THIRD_PARTY_NOTICES.md) 和 [macOS Intel](vendor/iverilog/darwin-x64/THIRD_PARTY_NOTICES.md) 第三方声明。
+插件需要 VS Code 1.90 或更高版本，并在以下本地扩展宿主上发布：
 
----
-
-## 内置工具与外部工具的边界
-
-### 内置汇编器与 MARS
-
-| 场景 | 默认使用 | 是否需要 MARS |
+| 本地 VS Code 宿主 | 支持情况 | 手动安装的 VSIX |
 |---|---|---|
-| P3–P7 持续自动测试的 ASM 与课程 oracle | 内置 TypeScript 汇编器 + 内置课程执行器 | 否 |
-| P3 Logisim ROM 生成/注入 | 内置汇编器生成机器码 | 否；运行 Logisim 仍需 Logisim + Java |
-| P4–P7 手动 Verilog 仿真和自动测试的 `code.txt` 准备 | 内置汇编器 | 否 |
-| P5–P7 Hazard 分析的机器码准备 | 内置汇编器 | 否；分析本身仍需 Hazard 工具及 Python |
-| P3–P7 普通文本段导出、P7 内核文本段导出 | 内置汇编器 | 否；这些导出命令不读取 legacy 回滚设置 |
-| P2 文本段导出，以及所有普通 ASM 运行、捕获输出、带 stdin 运行和终端交互 | MARS | 是，同时需要 Java |
-| 显式 `mars` / `verify-both`、旧用例 exact replay、固定兼容验证与 CI conformance | 对应的 legacy/fixed MARS lane | 是 |
+| Windows 10/11 x64 | 支持 | `win32-x64` |
+| macOS 14+，Apple Silicon | 支持 | `darwin-arm64` |
+| macOS 14+，Intel | 支持 | `darwin-x64` |
+| Windows ARM64、Linux、WSL、Remote SSH | 不支持 | — |
 
-内置汇编器面向 **P3–P7 课程硬件**：支持各 Profile 的课程指令集、课程常用伪指令、`.text` / `.ktext` / `.data`、宏、`.eqv` 和有界递归 `.include`，并直接生成绑定源码的 `ProgramImage` 与课程机器码。课程 DUT/Logisim/Verilog 流程要求数据存储器复位为全零，因此会拒绝非零 `.data` 初值；需要用 store 指令在运行时初始化。它不是完整的 MARS 4.5 替代品：不提供 P2 的 MARS syscall 服务、控制台输入输出或交互终端，也不承诺支持全部 MARS 伪指令、directive 和扩展（例如 `.kdata`）。选定内置后若源码超出支持范围，插件会给出诊断并终止，不会在失败后偷偷改用 MARS。
+### 2. 打开项目并选择 Profile
 
-### Bundled Icarus 与 ISE
+新项目：先在 VS Code 中打开一个文件夹或工作区，然后在命令面板（`Ctrl+Shift+P`）运行 **`CO: 项目向导`**。向导可以创建课程目录、模板文件，并写入 Profile。
 
-| 功能 | 实际支持边界 | 是否需要 ISE |
+已有项目：运行 **`CO: 选择项目 Profile`**，选择 P0–P7；也可以把 `co.project.profile` 设为 `auto`，插件会根据项目文件、顶层接口和 trace 格式推断。不能唯一推断时，插件会提示你选择。
+
+### 3. 只配置当前工作流需要的外部工具
+
+打开 VS Code 设置，搜索 `co.toolchain`。P1 和 P4–P7 的常规 Verilog 检查、手动仿真和自动测试都使用插件随包提供的 Icarus，无需安装 ISE、Homebrew 或 MARS。
+
+| 课程阶段或功能 | 需要配置 | 对应设置 |
 |---|---|---|
-| 保存时/命令触发的外部 Verilog 检查 | 固定使用 bundled Icarus，参数为 `-g2005` | 否 |
-| P1、P4–P7 手动 Verilog 仿真 | 固定使用 bundled Icarus + VVP | 否 |
-| P4–P7 自动测试的 Verilog DUT | 固定使用 bundled Icarus + VVP | 否 |
-| Verilog 源码范围 | 仅把 `.v` 作为 Verilog-2005 编译单元；`.vh` 通过 `` `include `` 使用 | 否 |
-| `.sv` / `.svh` | 只有独立的 SystemVerilog 词法高亮，不进入本插件的 LSP、外部检查或仿真 | 不适用 |
-| 生成 ISE PRJ/TCL 工程文件 | 只生成文件，不启动 ISE | 否 |
-| 打开 ISim GUI 波形、使用当前集成的 VCD 导出 | 仅 Windows x64 可用的 ISE/ISim 专属入口；macOS 不可用 | 是，需有效 `co.toolchain.isePath` |
-| Xilinx vendor IP、综合、实现、时序仿真和 bitstream | 当前不支持；bundled Icarus 不能替代这些厂商流程 | 需在插件外使用相应 Xilinx 工具 |
+| P0 / P3 Logisim | Logisim JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.logisim`、`co.toolchain.java` |
+| P2 ASM 运行 | MARS JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.mars`、`co.toolchain.java` |
+| P1、P4–P7 标准 Verilog 工作流 | 无 | — |
+| P5–P7 流水线冲突分析（可选） | 课程 `hazard_analysis` 目录；必要时指定 Python | `co.toolchain.hazardCalculator`、`co.toolchain.python` |
+| ISim GUI 波形 / 集成 VCD（可选） | Windows x64 上的 ISE 安装目录 | `co.toolchain.isePath` |
 
-`co.toolchain.isePath` 不再切换通用检查、手动仿真或自动测试的后端。Bundled Icarus 缺失或编译失败时会直接报告错误，不会回退到 ISE。
+工具路径是本机配置；不要把个人绝对路径提交到项目的 `.vscode/settings.json`。配置后运行 **`CO: 检查工具链`**，它只检查当前 Profile 和操作实际需要的工具。
 
-### 最小外部依赖速查
+### 4. 开始使用
 
-| Profile / 工作流 | 标准功能所需的外部依赖 |
+从左侧活动栏打开 **BUAA CO Toolkit**，在“操作”区按需要执行：
+
+| 目标 | 最快入口 |
 |---|---|
-| P0 | Logisim + Java |
-| P1 | 无；Verilog 检查与仿真使用随包 Icarus |
-| P2 | MARS + Java |
-| P3 | Logisim + Java；ASM 汇编与机器码准备不需要 MARS |
-| P4–P7 | 无；ASM 使用内置汇编器，Verilog 使用随包 Icarus |
-| P5–P7 可选 Hazard 分析 | 另需课程 Hazard 工具及 Python，但机器码准备不需要 MARS |
-| 可选 ISim GUI / 集成 VCD（仅 Windows x64） | 另需 ISE/ISim，并配置 `co.toolchain.isePath`；macOS 不可用 |
+| P3–P7 测试 CPU | **启动持续测试**；首个失败或错误会停止，并保留可复现用例 |
+| 停止或查看测试结果 | **停止持续测试**、**测试历史 / 失败用例** |
+| P2 运行 MIPS 程序 | 在 MIPS 文件的“操作”中运行 MARS |
+| P1 / P4–P7 检查或运行 Verilog | 保存 `.v` 文件触发默认检查；在编辑器右键菜单或侧边栏运行仿真 |
+| P0 / P3 打开电路、生成或注入 ROM | 打开 `.circ` 文件后使用“操作”区 |
+| VCD、Hazard、日志转 CSV 等低频功能 | **`CO: 更多工具`** |
 
----
+P3 自动测试需要 Logisim 和 Java；P4–P7 自动测试不需要 MARS 或 ISE。
 
-## 1. 快速开始
+## 插件如何工作
 
-### 第一步：按需填写外部工具路径
+插件把“编辑体验”和“课程工具链”分开处理。MIPS、Verilog 与 Logisim 文件先获得高亮、诊断、导航和格式化；涉及课程执行时，再根据 Profile 选择对应的运行流程。
 
-P1 / P4–P7 的 Verilog 检查、手动仿真和自动测试固定使用内置 Icarus，无需安装 ISE 或 Homebrew。P3 需要填写 Logisim。只有在 Windows x64 上要打开 ISim GUI 波形或使用集成 VCD 导出时，才填写 `co.toolchain.isePath`；单纯生成 ISE 工程文件不需要，macOS 也不提供这些 ISE 专属功能。P3–P7 的测试、ROM/Verilog/Hazard 机器码准备和默认导出不要求安装 MARS；P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 或历史复现才需要 MARS。
-
-打开 VSCode 设置（`Ctrl+,`），搜索 `co.toolchain`，按你的 Profile 需要填写：
-
-```jsonc
-{
-  // 可选：仅供 ISim GUI 波形和集成 VCD 导出；不会切换通用仿真后端
-  "co.toolchain.isePath": "",
-  // P2、普通 ASM 运行/stdin/终端或显式 legacy 流程
-  "co.toolchain.mars": "",
-  // Logisim（P0/P3）
-  "co.toolchain.logisim": "Logisim 的路径",
-  // Java 供 MARS/Logisim 使用（保持默认即可）；Python 留空时自动检测
-  "co.toolchain.java": "java",
-  "co.toolchain.python": ""
-}
-```
-
-> 填完后执行命令 **`CO: 检查工具链`**（侧边栏也有按钮）。检查项会随 Profile 和当前工作流变化；自动测试只检查自身固定需要的最小工具链。
-
-### 第二步：告诉插件当前是哪个 Profile
-
-- 用命令 **`CO: 选择项目 Profile`**（P0–P7），或在 VS Code 用户/工作区设置中设置 `co.project.profile`。
-- `auto` 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法唯一推断时会要求手动选择并保存。
-
-### 第三步：一键跑测试
-
-打开侧边栏「**BUAA CO Toolkit**」面板 →「操作」区，点：
-
-- **启动持续测试**（P3–P7）
-  → 插件会以当前 Profile 的最强配置持续生成测试点、运行你的 CPU 并核验结果；遇到第一个失败或错误后立即停下并保存可复现用例。
-
-VCD、Logisim CSV、Hazard 分析等非测试工具统一放在侧边栏 **更多工具...** 或命令面板 **`CO: 更多工具`**；“更多工具”不再重复提供测试入口。自动测试也不再要求用户选择单次/批量、生成器、dump 或对拍方式。
-
-就这么简单。下面是细节。
-
----
-
-## 2. 核心功能：一键随机对拍测试（P3–P7）
-
-这是本插件最重要的能力。它把课程对拍流程全自动化：
+P3–P7 的自动测试链路如下：
 
 ```text
-生成高强度测试点  →  运行你的 CPU  →  课程规则核验  →  简洁报告 / 失败复现
+内置测试生成器
+  → 内置 TypeScript 汇编器
+  → 内置课程 oracle
+  → Logisim（P3）或随包 Icarus（P4–P7）运行你的 CPU
+  → 比较课程可观察写事件，生成报告和可复现用例
 ```
 
-### 怎么触发（侧边栏 / 命令面板）
+默认引擎边界如下：
 
-| 我想…… | 入口 |
+| 场景 | 默认实现 |
 |---|---|
-| **以最强配置一直测试，直到首个失败/错误或我手动停** | 侧边栏「操作」→「启动持续测试」（命令面板：`CO: 启动持续测试`） |
-| 停止当前测试 | 侧边栏「操作」→「停止持续测试」 |
-| 查看测试历史或复现失败 | 侧边栏「操作」→「测试历史 / 失败用例」 |
+| P3–P7 自动测试、ROM/机器码准备、课程文本段导出 | 内置 TypeScript 汇编器和课程执行器 |
+| P2，以及普通 MIPS 运行、标准输入和终端交互 | MARS + Java |
+| P3 电路运行与对拍 | Logisim + Java |
+| P1、P4–P7 Verilog 检查与仿真 | 随包 Icarus + VVP |
+| ISim GUI 波形与集成 VCD | 仅 Windows x64 的可选 ISE 功能 |
 
-“启动持续测试”是唯一的测试启动入口，会打开一个简洁的**实时监控面板**。测试默认使用当前 Profile 允许的最强配置并持续运行，遇到第一个失败或错误就立即停止；通过产物自动有界清理，失败和错误用例始终保留用于复现。这些策略由插件管理，不需要用户配置。
+内置汇编器面向 P3–P7 课程硬件，支持课程指令集、常用伪指令、`.text`、`.ktext`、`.data`、宏、`.eqv` 和有界 `.include`。它不是完整的 MARS 替代品：不提供 P2 syscall 控制台、标准输入或交互终端，也不承诺支持所有 MARS 扩展。CPU 测试中，数据存储器按课程约定从全零开始，因此含非零 `.data` 初值的用例会被拒绝；请在程序运行时用 store 初始化数据。
 
-### 内置随机生成器
+“启动持续测试”固定采用当前 Profile 的强测试策略，而不是让用户选择生成器、批量大小或对拍后端。`co.test.instructions` 是唯一的测试侧重点设置：留空会覆盖该阶段完整课程指令集，填写真实指令可让生成器优先覆盖它们。P7 还会覆盖 CP0、异常、外部中断和 Timer；对拍关注课程定义的可观察行为，不把某一种流水线周期数当作正确性的唯一标准。
 
-插件自带随机 ASM 生成器，自动测试入口始终使用它，无需自己写脚本。它会：
+## 功能一览
 
-- 按 Profile 覆盖完整课程指令集；也可用唯一的测试配置 `co.test.instructions` 指定重点 payload 指令（逗号或空格分隔，只接受真实指令），固定测试脚手架不需要手工加入；
-- 在内部**建模 CPU 状态**（寄存器、HI/LO、内存、CP0），从而生成**合法、确定**的测试点：避免除零、避免非预期的地址错/溢出、正确处理延迟槽与乘除部件占用窗口、在跳转后插入“毒化”指令检验控制流；
-- 自动使用当前课程阶段允许的最大安全规模；空间边界、异常入口和兼容性差异都由插件处理。
-
-默认指令集：
-
-| Profile | 默认指令 |
+| 范围 | 提供的能力 |
 |---|---|
-| P3 | `add, sub, ori, lw, sw, beq, lui, nop` |
-| P4 | `add, sub, ori, lw, sw, beq, lui, jal, jr, nop` |
-| P5 | `add, sub, ori, lw, sw, beq, lui, jal, jr, nop` |
-| P6 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, nop` |
-| P7 | `add, sub, and, or, slt, sltu, lui, addi, andi, ori, lb, lh, lw, sb, sh, sw, mult, multu, div, divu, mfhi, mflo, mthi, mtlo, beq, bne, jal, jr, mfc0, mtc0, eret, syscall, nop` |
+| MIPS（`.asm` / `.s` / `.mips`） | 高亮、补全、悬浮、定义/引用跳转、诊断、格式化、重命名、MARS trace 解析与对比 |
+| Verilog（`.v` / `.vh`） | 高亮、模块/信号大纲、跨文件导航、课程 Lint、隐式连线/位宽/连接诊断、格式化、信号连线视图、随包 Icarus 检查与仿真 |
+| SystemVerilog（`.sv` / `.svh`） | 仅词法高亮；不进入 Verilog LSP、编译器检查或仿真 |
+| Logisim（`.circ`） | 电路与组件大纲、标签诊断、打开电路、ROM 生成/注入、日志转 CSV，以及 P3 trace 对拍 |
+| P5–P7 | 可选的流水线冲突分析与报告 |
 
-### P7 专项说明（异常 + 外部中断 + Timer）
+## 常用设置与生成文件
 
-P7 自动测试会同时覆盖普通指令、CP0、精确异常、外部中断和 Timer 的课程可观察行为。插件会自行组合定向场景与随机测试，无需选择模式、概率、场景数量或中断参数。
+除工具路径外，大多数项目只需要下面几项设置：
 
-- 固定覆盖 AdEL、AdES、Syscall、RI、Ov，以及延迟槽、异常/中断优先级、屏蔽与恢复、`eret` 返回等边界；
-- RI 统一通过 `.word` 注入 raw word，覆盖 unknown opcode 与 unknown funct，不再由私有助记符生成；
-- Timer 自动覆盖单次/周期模式、停止后重启、重装与寄存器写优先级，只检查课程定义的行为，不要求某一种学生流水线周期数；
-- 自动测试固定使用内置参考栈，因此无需 MARS；MARS 分支仅用于 P2/普通运行、显式 legacy/verify、历史 exact replay 和开发/CI conformance。
-
-### 输出/对拍约定
-
-- 两端 trace 格式一致：`@PC: $寄存器 <= 值`（寄存器写）、`@PC: *地址 <= 值`（内存写）。
-- 对拍**默认忽略周期/时间**，只比较 PC、目标、值（可在手动对拍时切换严格模式）。
-- stdin 只属于 MARS/legacy 运行路径：`foo.asm` 旁的 `foo.in / foo.input / foo.stdin / foo.dat`（及 `foo.xxx.in`、`input/tests/data` 等子目录）可被手动 legacy case 自动配对；这不表示内置汇编器提供控制台输入。
-- 报告与中间产物都在工程下的 `.co/` 目录（见第 6 节）。
-
-### 如何理解测试结果
-
-- 结果不一致通常表示 CPU 的可见写事件或 P7 课程性质不满足；报告会给出首个可操作差异，不会展示内部测试强度或调度参数。
-- 通过不等于“完全正确”：随机测试只能覆盖实际生成的样例，纯性能问题和课程未要求的扩展行为仍需另行验证。
-- 失败与异常用例会自动保留；在“测试历史 / 失败用例”中使用复现编号即可定位，不需要理解内部文件布局。
-- Icarus 未能启动 CPU 时，报告会直接显示阶段、退出原因和首条已脱敏的文件/行号诊断；原始输出只保存在对应的本地失败用例中。
-
----
-
-## 3. 其他功能
-
-### MIPS 汇编
-语法高亮、补全、悬浮提示、标签/定义跳转、诊断、格式化；以及：
-- 侧边栏「操作」只放常用的 ASM 运行和文本段导出；P3–P7 文本段默认由内置汇编器导出，P2 导出仍使用 MARS；
-- 带标准输入运行、终端运行和 P7 内核段导出放在「更多工具...」，编辑器标题栏仍保留终端运行和文本段导出的快捷按钮；P7 内核段默认使用内置汇编器，运行/stdin/终端始终属于 MARS；
-- P3 ROM、P4–P7 Verilog 和 P5–P7 Hazard 工作流需要机器码时，默认复用同一个内置汇编器，不要求先手工启动 MARS。
-
-### Verilog
-高亮、模块/信号大纲、悬浮、定义跳转、隐式连线诊断、课程 Lint、可综合性检查、格式化；以及：
-- `.v` / `.vh` 提供完整 Verilog LSP；Icarus 以 `-g2005` 编译 `.v`，`.vh` 只通过 `` `include `` 使用；
-- `.sv` / `.svh` 以独立 SystemVerilog 语言提供词法高亮，不进入 Verilog parser、外部编译器检查或仿真；
-- 侧边栏「操作」提供 Verilog 仿真和信号连线；通用检查、手动仿真和自动测试固定使用 bundled Icarus，不读取 ISE 路径；
-- 生成 Testbench、外部编译器语法检查和信号连线在 Verilog 右键菜单；生成 ISE 工程文件无需安装 ISE，只有 ISim GUI 波形和当前集成 VCD 导出要求有效 ISE 路径；
-- 当前流程不支持 Xilinx vendor IP、综合、实现、时序仿真或 bitstream。
-- **信号连线面板**：把光标放在任一信号上，自动列出它的**声明**、**驱动/写**（`assign`、`always` 赋值、子模块 output 端口）、**读取/使用**（RHS、子模块 input 端口），点击条目跳转到源码。该面板默认只在 Verilog 上下文或执行“查看信号连线”后出现。
-
-### 语义高亮与主题适配
-TextMate 始终负责注释、字符串、数字、关键字、编译指令和操作符；semantic highlighting 只叠加 MIPS 指令类型/CP0 寄存器、Verilog 模块/端口/task/function 等上下文角色。插件不提供颜色、不监听主题，运行期也不改写编辑器配色；最终显示完全由 VS Code 当前主题和用户设置决定。升级时只会一次性清理旧版本曾自动注入且仍未被用户修改的规则。关闭语义高亮时仍保留完整词法底色，详见 [语法高亮与语义分类](docs/semantic-colors.md)。
-
-### Logisim（P0 / P3）
-`.circ` 识别、电路/组件大纲、标签诊断；以及：
-- 侧边栏「操作」在当前 `.circ` 文件上提供打开电路和注入 ROM；
-- 生成 ROM、日志转 CSV 放在「更多工具...」；P3 自动测试会在需要时自行完成 trace 电路识别与用例准备；
-- P3 Trace 对拍自动识别教程顶层电路中的 `Instr, pc, RegWrite, RegAddr, RegData, MemWrite, MemAddr, MemData`。Logisim CLI 的 stdout 列序按 Logisim 2.7.1 源码规则解析：先收集 appearance ports，再按实际 Pin 坐标从上到下、从左到右输出；插件优先用标准 label 映射，label 不完整时按教程外观/Pin 顺序推断，并在无法可靠识别时给出具体诊断；
-- P3 Logisim 对拍不要求电路提供 `halt` pin。插件会给 ROM 末尾追加停机自环，并在 `pc` 到达注入的 halt PC 时结束仿真；若暴露 `Instr`，插件会额外检查 `Instr` 与当前 PC 对应机器码是否一致；
-- 自动识别失败时，诊断会说明缺少或冲突的端口；P3 电路应当只有一个 32 位 ROM。
-
-### 流水线冲突分析（P5/P6/P7）
-- 在「更多工具...」中提供冲突分析和打开报告（需配置 `co.toolchain.hazardCalculator`）。
-
-### 项目辅助
-- 测试启动入口只保留 `CO: 启动持续测试`；另保留 `CO: 停止持续测试` 和 `CO: 测试历史 / 失败用例` 作为控制与诊断入口。“更多工具”不再包含测试入口，侧边栏“资料”及教程入口已删除。
-
----
-
-## 4. 配置项（按 Settings UI 分组）
-
-> 配置遵循“先表达课程意图，再按需覆盖”的原则。Profile、测试与项目兼容项可按工作区文件夹设置；工具路径属于本机设置，不进入 Settings Sync，也不会再由向导写入项目的 `.vscode/settings.json`。再次运行向导时，会先保存本机工具路径，再清理同一工具遗留的项目级路径，避免旧配置遮蔽新选择。
-> 新用户的 Settings UI 只显示下面 20 项。旧版本的底层格式、MARS 回滚、超时/debug 和诊断忽略项仅在曾经显式配置时显示兼容提示，运行时仍读取其已有值。
-
-### 课程项目
-
-| 配置 | 默认 | 说明 |
-|---|---|---|
-| `co.project.profile` | `auto` | 当前课程阶段（P0–P7）；能可靠推断时自动保存，否则要求选择 |
-| `co.test.instructions` | `""` | 自动测试重点覆盖的真实指令；留空覆盖当前 Profile 的完整课程指令集，测试规模和 P7 策略由插件管理 |
-
-### 外部工具（按需）
-
-| 配置 | 默认 | 何时需要 |
-|---|---|---|
-| `co.toolchain.isePath` | — | 仅 Windows x64 打开 ISim GUI 波形或使用当前集成的 VCD 导出；macOS 不可用，也不会切换通用检查/仿真后端 |
-| `co.toolchain.logisim` | — | P0/P3 Logisim 工作流 |
-| `co.toolchain.mars`（P7 旧配置可能使用 `marsP7`） | — | P2、普通 ASM 运行/stdin/终端、显式 legacy/verify 和历史 MARS 复现；P3–P7 默认机器码准备不需要 |
-| `co.toolchain.hazardCalculator` | — | P5–P7 冲突分析（可选） |
-| `co.toolchain.java` | `java` | MARS 或 Logisim 无法从 PATH 启动 Java 时覆盖 |
-| `co.toolchain.python` | 自动探测 | Python 无法自动探测时覆盖 |
-
-### 编辑器体验
-
-| 配置 | 默认 | 说明 |
-|---|---|---|
-| `co.mips.warnPseudoInstruction` | `true` | 使用伪指令时告警 |
-| `co.mips.warnMissingExitSyscall` | `true` | P2 缺少退出 syscall 时告警 |
-| `co.mips.instructionTokenMode` | `realVsPseudo` | MIPS 指令语义分类粒度；颜色仍由当前 VS Code 主题决定 |
-| `co.verilog.implicitNet.diagnostic` | `warning` | 隐式连线的诊断级别 |
-| `co.verilog.syntax.external.mode` | `onSave` | 内置 Icarus 编译器级检查的触发时机 |
-| `co.verilog.lint.courseRules` | `true` | 课程规则诊断 |
-| `co.verilog.lint.synthesizableHints` | `true` | 可综合性提示 |
-
-### 高级项目兼容
-
-只有非标准工程或手动仿真通常需要这些覆盖项：`co.project.topModule`、`co.project.testbench`、`co.project.machineCode`、`co.project.simTime` 和 `co.run.revealOutput`。顶层与 testbench 默认由 Profile 给出（P1 为 `main/main_tb`，P4–P7 为 `mips/mips_tb`）；自动测试使用私有 testbench、固定机器码别名和内部执行预算，不受这些手动参数影响。
-
-格式化采用插件维护的课程默认风格，不再要求用户组合九个底层旋钮。MARS 引擎、延迟槽、内存布局、进程超时和诊断快速修复存储也由插件按 Profile/具体操作管理，不作为日常设置。
-
----
-
-## 5. ⚠️ 特别注意事项
-
-1. **P3–P7 默认机器码路径不需要 MARS**：自动测试、Logisim ROM、Verilog/Hazard 机器码准备和默认 text/kernel dump 使用内置汇编器。P2、所有普通 ASM 运行/stdin/终端、显式 legacy/verify、历史 exact replay 和 CI conformance 仍使用 MARS。
-2. **新的 RI 测试统一使用 raw word**：自动生成源码用 `.word` 覆盖 unknown opcode 与 unknown funct；旧用例仍可回放，但新测试点不再生成私有 RI 助记符。
-3. **Icarus 是固定的通用 Verilog 后端**：`co.toolchain.isePath` 不影响保存时检查、手动仿真或自动测试。只有 Windows x64 的 ISim GUI 波形与集成 VCD 导出读取该路径；需要时应指向含 `bin` 的 `.../ISE_DS/ISE`，例如 `D:/ISE/14.7/ISE_DS/ISE`。macOS 不支持这些 ISE 专属功能。生成 ISE PRJ/TCL 本身不需要安装 ISE。自动测试使用独立 testbench，不会覆盖你自己的文件。
-4. **测试不绑定某一种流水线周期数**：默认按课程可见写事件和定义行为核验，因此纯性能问题或不可见内部状态仍可能需要额外定向测试。
-5. **BadVAddr 不测试**：课程不要求实现 BadVAddr；如果你实现了它，需要另写专门测试。
-6. **延迟槽按 Profile 自动处理**：P5/P6/P7 开启一条课程延迟槽，无需另调自动测试参数。
-7. **SystemVerilog 仅高亮**：`.sv/.svh` 不参加本插件的 LSP、Icarus 检查或仿真；需要 SystemVerilog、vendor IP 或综合/实现流程时请使用相应外部工具。
-8. 不要把机器码 `.txt` 误当 stdin：stdin 只在 MARS/legacy 路径按 `.in/.input/.stdin/.dat` 后缀且与 ASM 同名时配对。
-
----
-
-## 6. 目录约定（工程下 `.co/`）
-
-| 路径 | 内容 |
+| 设置 | 用途 |
 |---|---|
-| `.vscode/settings.json` | 可选的工作区级 VS Code 设置（`co.*` 配置项） |
-| `.co/cases/<caseId>/` | ASM case 记录：`program.asm`、`code.txt`、`case.json`、oracle/Verilog/Logisim trace 与复现元数据；Icarus 失败时另保存私有 `iverilog-compile.log` / `iverilog-simulation.log` |
-| `.co/out/*.oracle.out` / `*.sim.out` | 手动单次/批量测试的 provider-neutral oracle / Verilog 仿真输出；持续测试默认把输出写入对应 case 目录（旧 `.mars.out` 仍可读取） |
-| `.co/out/trace-batch-report.json` | 批量测试摘要；自动测试报告不暴露内部命令或强度参数，失败用例仍可从历史中精确回放 |
-| `.co/out/continuous-trace-report.json` | 持续测试摘要；DUT 失败包含脱敏、限长的阶段/原因/首条编译诊断，自动留存通过样本并完整保留失败/异常轮 |
-| `.co/isim/` | Verilog 仿真工作目录：生成的 testbench、`code.txt`、Icarus `.vvp`/watchdog，或 ISE `.prj/.tcl` |
-| `.co/logisim/` | 注入机器码后的 `.circ` 副本与报告 |
+| `co.project.profile` | 当前课程阶段；默认 `auto` |
+| `co.test.instructions` | 自动测试要重点覆盖的真实指令；留空使用默认全集 |
+| `co.verilog.syntax.external.mode` | 内置 Icarus 检查的触发时机；默认保存时检查 |
+| `co.project.topModule`、`co.project.testbench`、`co.project.machineCode`、`co.project.simTime` | 非标准工程或手动仿真的高级覆盖项；自动测试不读取这些手动参数 |
 
----
+插件会在工作区的 `.co/` 下保存生成物：
 
-## 7. 发布流程
+| 位置 | 内容 |
+|---|---|
+| `.co/cases/<caseId>/` | 测试程序、机器码、报告、trace 和复现元数据；失败与错误用例会保留 |
+| `.co/out/` | 手动运行或批量运行的输出与摘要 |
+| `.co/isim/`、`.co/logisim/`、`.co/hazard/` | 仿真、电路与冲突分析的工作文件 |
 
-发布由一条本地命令触发：
+这些文件是本地工作产物，不是学生源代码；建议在自己的课程项目中把 `.co/` 加入 `.gitignore`。
 
-```bash
-npm run publish -- patch
+## 兼容性与边界
+
+- Icarus 是常规 Verilog 后端。`co.toolchain.isePath` 不会切换保存时检查、手动仿真或自动测试到 ISE。
+- 插件不覆盖 Xilinx vendor IP、综合、实现、时序仿真或 bitstream 工作流；这些请在相应 Xilinx 工具中完成。
+- P3 trace 对拍要求课程标准的单个 32 位 ROM 和 trace 接口；无法可靠识别时，插件会给出缺失或冲突端口的诊断。
+- 随机和定向测试能有效发现很多问题，但“通过”不等于所有场景都正确；课程最终结果仍以课程测评环境为准。
+
+## 开发与维护
+
+维护者可从仓库根目录运行：
+
+```powershell
+npm ci
+npm run compile
+npm test
+npm run check:generated
+npm run package:vsix
 ```
 
-可用版本参数：
+发布使用 `npm run publish -- patch`（也可替换为 `minor`、`major` 或显式版本号）。完整架构、模块边界和验证说明见[架构索引](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/docs/INDEX.md)；变更记录见 [CHANGELOG](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/CHANGELOG.md)。随包 Icarus 的许可证、校验信息和对应源码说明见 [Windows x64](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/win32-x64/THIRD_PARTY_NOTICES.md)、[macOS Apple Silicon](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-arm64/THIRD_PARTY_NOTICES.md) 和 [macOS Intel](https://github.com/stone926/BUAA-CO-Toolkit/blob/main/vendor/iverilog/darwin-x64/THIRD_PARTY_NOTICES.md)。
 
-- `patch`：`0.2.0 -> 0.2.1`（默认）
-- `minor`：`0.2.0 -> 0.3.0`
-- `major`：`0.2.0 -> 1.0.0`
-- 显式版本号：例如 `npm run publish -- 0.3.1`
-
-本地脚本会要求工作树干净，然后执行：
-
-1. `npm run sync:generated`，生成并检查 manifest、语法与 ISA 派生产物；若生成文件有未提交变化会停止发布
-2. `npm test` 和 `npm run compile`
-3. 更新 `package.json` / `package-lock.json` 的 version
-4. 根据最近一个 `v*` tag 之后的提交更新 `CHANGELOG.md`
-5. 创建 `chore: release vX.Y.Z` 提交和 `vX.Y.Z` annotated tag
-6. `git push origin HEAD --follow-tags`
-
-每次 main push / pull request 还会永久运行 `npm run verify:phase6`：Ubuntu 24.04 与 Windows 2025 各自执行阶段 6 定向测试、固定 `mars-assembler-v0.6.3` 的 assembly differential，以及固定 `legacy-course-executor` v0.6.3-course1 对 250 个生成用例 + 5 个手写边界用例的真实 execution differential。CI 要求 assembly lane 无未解释差异，并要求 execution lane 每个 profile 50+1、总计 255/255 通过且 0 unexplained/inconclusive/out-of-domain/error；结果以 machine-readable evidence 上传。
-
-tag 推送后，GitHub Actions 会先在 Ubuntu 24.04 与 Windows 2025 上分别完成同一套 `verify:phase6`，并另在 Ubuntu 24.04 上运行一次完整 `npm test` 与生成物漂移检查；三个 package job 通过 `needs` 等待这些结果，因此单独推 tag 或使用本地 `--skip-tests` 都不能绕过发布门。随后发布链生成三个原生包：
-
-1. `windows-2025`、`macos-15`（Apple Silicon）和 `macos-15-intel` 分别执行 `npm ci` 与 `npm run compile`
-2. 每个 runner 执行 `vsce package --target <target>`，生成同版本的 `win32-x64`、`darwin-arm64` 和 `darwin-x64` VSIX；macOS 打包前显式恢复运行入口的 executable bit
-3. 每个 job 解包自己刚生成的 VSIX，确认 target metadata 与开发目录排除，再从解包后的扩展安装布局运行当前架构的 bundled Icarus smoke；macOS 的 `iverilog` 调用显式使用包内 `lib/ivl` prefix
-4. 三个通过验收的 VSIX 分别上传为本次 workflow artifact；Ubuntu publish job 使用 artifact pattern 合并下载，不重新打包
-5. publish job 校验三个确定性文件名后，一次执行 `vsce publish --skip-duplicate --packagePath dist/*.vsix`，幂等发布到现有 Marketplace 条目
-6. publish job 按固定 manifest 下载并校验 Windows 的 7 个 source-only archive 与 macOS 两架构共用、去重后的 Icarus v13.0 上游源码包
-7. GitHub Release 同时保存三个 VSIX、`*.src.tar.zst`、`*.tar.gz` 和 `SHA256SUMS`；对应源码不放入 VSIX
-
-当前 `@vscode/vsce` 的 target-folder 排除选项不会可靠裁剪 collect 结果，因此三个定向 VSIX 暂时都携带三套 runtime，运行时 resolver 只会启动当前平台对应的一套。本地 `npm run package:vsix` 继续作为 `win32-x64` 快捷命令；`npm run verify:bundled-iverilog` 可在当前受支持平台直接检查源码树中的 runtime。此版本不发布无 `--target` 的 generic fallback。
-
-首次使用前，需要在 GitHub 仓库的 Actions secrets 中添加 `VSCE_PAT`，该 token 需要有 VS Code Marketplace 的 Manage 权限。GitHub Release 使用仓库自带的 `GITHUB_TOKEN`，不需要额外配置。
-
-辅助命令：
-
-- `npm run publish -- --dry-run`：预览下一次 release notes 和步骤，不改文件
-- `npm run publish -- minor --no-push`：只在本地创建 release commit/tag，不推送
-- `npm run publish -- patch --skip-tests`：只跳过本地 `npm test`；生成物检查和 tag workflow 的双平台 `verify:phase6` 仍强制执行
-
-配置清单维护命令：
-
-- `npm run generate:manifest-config`：从 `resources/co/configManifest.json`、`resources/co/configDefaults.json` 和课程资源生成 `package.json` 的 `contributes.configuration`
-- `npm run check:manifest-config`：只检查生成结果是否已同步，不写文件
-- `npm run sync:manifest-config`：先生成再检查；`compile`、`watch`、`test`、`test:coverage`、`package:vsix` 和发布流程都会自动运行
-
----
-
-如需扩展（如 Timer 模块单元测试、显式校验 CP0 寄存器值、其他后端），欢迎提 issue / 反馈。
-
----
-
-## 附录
-
-## MARS 兼容、复现与验证
-
-P3–P7 自动测试和默认机器码准备始终使用内置参考栈，不进入 MARS 支路。MARS 继续服务于 P2、普通 ASM 运行/stdin/终端、显式 `mars` 回滚、`verify-both` 双引擎验证、历史 exact replay，以及固定 reference 的开发/CI conformance。旧版本中已经配置的兼容值仍会被读取，但不再出现在新用户的日常设置中；自定义 MARS 参数只影响普通 MARS 手动命令。
-
-历史用例若使用旧的私有 RI 助记符，仍可在相应 MARS artifact 可用时精确回放；新生成的 RI 测试只使用标准 `.word` raw word。
+遇到问题或希望补充课程场景，请到 [GitHub Issues](https://github.com/stone926/BUAA-CO-Toolkit/issues) 反馈。

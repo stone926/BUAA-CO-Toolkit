@@ -1,22 +1,26 @@
+# Dependencies and generated build or test output.
 node_modules/
 out/
 dist/
 coverage/
-*.vsix
 .vscode-test/
-.co
+*.vsix
+
+# Per-workspace artifacts produced by the extension and simulators.
+.co/
 fuse.log
 isim.log
-additional
+
+# Local course tools, agent state, and temporary inspection output.
+additional/
 .agents/
-.claude
-*.class
-!resources/mars/_co_internal_unknown_instruction.class
+.claude/
+tmp/
 AGENTS.md
 CLAUDE.md
+_CLAUDE.md
 conformance/.cache/
 
-# 会话临时产物（PDF 页面渲染等），不进入仓库
-tmp/
-
-_CLAUDE.md
+# Local Java compilation output. The extension ships this one compiled class.
+*.class
+!resources/mars/_co_internal_unknown_instruction.class

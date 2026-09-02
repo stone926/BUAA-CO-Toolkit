@@ -1,81 +1,50 @@
-# Source and local development state.
-.git/**
+# Keep the VSIX to runtime code, assets, production dependencies, and notices.
+# VSCE already excludes .git, .vscodeignore, package-lock.json, and *.vsix.
+
+# Source, tests, CI, and local workspace state.
 .gitignore
-.vscodeignore
 .github/**
 .vscode/**
 .agents/**
 .claude/**
-src/**
-scripts/**
+additional/**
+conformance/**
+coverage/**
 dist/**
 docs/**
-additional/**
 memory/**
 .co/**
-.vscode-test/**
-tmp/**
+scripts/**
+src/**
 test-cli/**
+tmp/**
 
-# Build/test configuration and local release artifacts.
+# Development-only configuration and local instruction files.
 tsconfig.json
 tsconfig.test.json
 vitest.config.ts
-package-lock.json
-*.vsix
-coverage/**
+AGENTS.md
+CLAUDE.md
+_CLAUDE.md
 fuse.log
 isim.log
 
-# Development documentation that is not part of the shipped extension.
-AGENTS.md
-ARCHITECTURE_REVIEW.md
-CLAUDE.md
-CO_SUBSET_SYNTAX_COVERAGE_PLAN.md
+# Generated source inputs with a compiled runtime equivalent.
+resources/mars/_co_internal_unknown_instruction.java
+resources/mips/isa.json
 
-# Generated debug/test output.
+# Test and source-map output. vscode:prepublish cleans out/ before compilation,
+# so no per-file stale-output denylist is needed here.
 **/*.map
 **/*.test.*
 out/test/**
 
-# Stale compiled files from previous source layouts.
-out/projectConfig.js
-out/projectWizard.js
-out/courseTesting/logisimRunner.js
-out/courseTesting/p7Testbench.js
-out/language/logisim/folding.js
-out/language/verilog/analysis.js
-out/language/verilog/instanceParser.js
-out/language/verilog/lintAlwaysRules.js
-out/language/verilog/lintDeclarationRules.js
-out/language/verilog/lintInstantiationRules.js
-out/language/verilog/lintMagicNumberRules.js
-out/language/verilog/lintNamingRules.js
-out/language/verilog/lintSignalNames.js
-out/language/verilog/lintTestbenchRules.js
-out/language/verilog/lintUtils.js
-out/language/verilog/statementValidator.js
-out/language/verilog/syntaxAssignmentValidation.js
-out/language/verilog/syntaxDeclarationKeywords.js
-out/language/verilog/syntaxDeclarationValidation.js
-out/language/verilog/syntaxExpressionValidation.js
-out/language/verilog/syntaxInstanceValidation.js
-out/language/verilog/syntaxModuleHeaderValidation.js
-out/language/verilog/syntaxParserUtils.js
-out/language/verilog/syntaxProceduralValidation.js
-out/language/verilog/tokenNavigation.js
+# Source-control metadata nested in bundled third-party runtime directories.
+**/.gitattributes
+**/.gitignore
 
-# Runtime uses the compiled class only.
-resources/mars/_co_internal_unknown_instruction.java
-
-# ISA catalog is compiled into out/mips/core/generated/isaCatalog.js; the JSON
-# is a build input only.
-resources/mips/isa.json
-
-# Conformance harness and pinned-reference cache are development artifacts.
-conformance/**
-
-# Dependency files that are useful for development but not runtime.
+# Dependency files useful for development but unnecessary at runtime. Keep
+# license files and third-party notices in the package.
 node_modules/**/*.d.ts
 node_modules/**/*.map
 node_modules/**/README*
