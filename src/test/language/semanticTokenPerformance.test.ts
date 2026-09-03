@@ -6,7 +6,6 @@ import { clearMipsParseCache, clearMipsSemanticTokenCache, getMipsSemanticTokens
 import { MipsServerState } from '../../language/mips/state';
 import { clearCachedVerilogParse } from '../../language/verilog/parseCache';
 import { clearVerilogSemanticTokenCache, getVerilogSemanticTokens } from '../../language/verilog/service';
-import { VerilogWorkspaceIndex } from '../../language/verilog/workspaceIndex';
 
 describe('semantic token performance', () => {
   afterEach(() => {
@@ -18,15 +17,14 @@ describe('semantic token performance', () => {
 
   it('keeps first Verilog semantic token requests responsive on large files', () => {
     const document = TextDocument.create('test://semantic-performance/large.v', 'verilog', 1, largeVerilogDesign(180));
-    const index = new VerilogWorkspaceIndex();
 
     const start = performance.now();
-    const first = getVerilogSemanticTokens(document, mergeCoSettings({}), index);
+    const first = getVerilogSemanticTokens(document, mergeCoSettings({}));
     const elapsedMs = performance.now() - start;
 
     expect(first.data.length).toBeGreaterThan(0);
     expect(elapsedMs).toBeLessThan(performanceBudgetMs());
-    expect(getVerilogSemanticTokens(document, mergeCoSettings({}), index)).toBe(first);
+    expect(getVerilogSemanticTokens(document, mergeCoSettings({}))).toBe(first);
   });
 
   it('keeps first MIPS semantic token requests responsive on large files', () => {

@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import {
   AsmCaseManifestV2,
+  type ManifestRunConfiguration,
   asmCaseManifestVersion2,
   isSafeCaseRelativePath,
   isKnownManifest,
@@ -92,7 +93,7 @@ const testRunConfiguration = {
     maxSourceBytes: 1024, maxIncludeDepth: 8, maxIncludeUnits: 8
   },
   runtime: { kind: 'java' as const, command: 'java' }
-} as const;
+} satisfies ManifestRunConfiguration;
 
 function artifact(path: string, digest = 'd'): { path: string; sha256: string; bytes: number } {
   return { path, sha256: digest.repeat(64), bytes: 1 };
@@ -1026,6 +1027,10 @@ describe('manifest v1/v2 codec', () => {
       ]));
       fs.writeFileSync(path.join(dir, 'oracle', 'mars.out'), trace);
 
+      const originalTraceSnapshot = complete.artifacts?.oracle?.traceOut;
+      if (!originalTraceSnapshot || typeof originalTraceSnapshot === 'string') {
+        throw new Error('The complete fixture must contain a hashed oracle trace snapshot.');
+      }
       const oversizedSnapshots: AsmCaseManifestV2 = {
         ...complete,
         asmSnapshot: { ...complete.asmSnapshot, bytes: maximumReplaySnapshotBytes + 1 },
@@ -1036,9 +1041,7 @@ describe('manifest v1/v2 codec', () => {
         artifacts: {
           oracle: {
             traceOut: {
-              ...(complete.artifacts!.oracle!.traceOut as Exclude<
-                NonNullable<AsmCaseManifestV2['artifacts']>['oracle']![string], string
-              >),
+              ...originalTraceSnapshot,
               bytes: maximumReplaySnapshotBytes + 1
             }
           }

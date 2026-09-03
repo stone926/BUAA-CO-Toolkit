@@ -19,13 +19,16 @@ import {
 } from '../verilog/testbenchResolver';
 
 const vscodeState = vi.hoisted(() => ({
-  state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined
+  state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined,
+  showWarningMessage: vi.fn<(message: string, ...items: string[]) => Promise<string | undefined>>(async () => undefined)
 }));
 
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('./helpers/vscodeMock');
   vscodeState.state = createVscodeMockState();
-  return createVscodeModuleMock(vscodeState.state, vi.fn);
+  const module = createVscodeModuleMock(vscodeState.state, vi.fn);
+  module.window.showWarningMessage = vscodeState.showWarningMessage;
+  return module;
 });
 
 vi.mock('../config', () => ({
@@ -221,13 +224,13 @@ describe('Verilog command registration and entry behavior', () => {
     vi.mocked(pathExists).mockResolvedValue(true);
     registerVerilog({ subscriptions: [] } as never, services(), moduleRegistry as never);
 
-    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('打开');
+    vscodeState.showWarningMessage.mockResolvedValueOnce('打开');
     await commands.get(Commands.Verilog.GenerateTestbench)!();
     const openedUri = vi.mocked(vscode.window.showTextDocument).mock.calls[0]?.[0] as vscode.Uri;
     expect(normalizedFsPath(openedUri)).toBe('e:/work/mips_tb.v');
     expect(writeTextFile).not.toHaveBeenCalled();
 
-    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('覆盖');
+    vscodeState.showWarningMessage.mockResolvedValueOnce('覆盖');
     await commands.get(Commands.Verilog.GenerateTestbench)!();
     const [writtenUri, writtenText] = vi.mocked(writeTextFile).mock.calls[0];
     expect(normalizedFsPath(writtenUri as vscode.Uri)).toBe('e:/work/mips_tb.v');

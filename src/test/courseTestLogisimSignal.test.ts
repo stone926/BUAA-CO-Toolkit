@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createTestServices } from './helpers/appServices';
 
 const processState = vi.hoisted(() => ({ run: vi.fn() }));
 
@@ -41,9 +42,7 @@ describe('Logisim CLI cancellation boundary', () => {
       cwd: 'E:/work'
     });
     const controller = new AbortController();
-    const services = {
-      output: { append: vi.fn(), appendLine: vi.fn() }
-    } as never;
+    const services = createTestServices();
 
     await runLogisimTraceCli(
       services,
@@ -73,9 +72,7 @@ describe('Logisim CLI cancellation boundary', () => {
       commandLine: 'java -jar logisim.jar',
       cwd: 'E:/work'
     });
-    const services = {
-      output: { append: vi.fn(), appendLine: vi.fn() }
-    } as never;
+    const services = createTestServices();
 
     await runLogisimTraceCli(
       services,
@@ -100,9 +97,7 @@ describe('Logisim CLI cancellation boundary', () => {
   });
 
   it('pins the automatic P3 preflight to builtin even when the workspace selects mars', async () => {
-    const services = {
-      output: { append: vi.fn(), appendLine: vi.fn(), show: vi.fn() }
-    } as never;
+    const services = createTestServices();
     const resource = { fsPath: 'E:/private/program.asm' } as never;
 
     await resolveP3LogisimTraceSetup(services, resource, { nonInteractive: true });

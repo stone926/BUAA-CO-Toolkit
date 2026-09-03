@@ -3,6 +3,7 @@ import { URI } from 'vscode-uri';
 import * as vscode from 'vscode';
 import type { AppServices } from '../../types';
 import type { AsmCase } from '../../asmCaseStore';
+import { createTestRunResult } from '../helpers/appServices';
 import { compileIsim, runIsim } from '../../verilog/isimRunner';
 import {
   ensureConcreteProfile,
@@ -156,8 +157,10 @@ function asmCase(): AsmCase {
       version: 1,
       caseId: 'case-1',
       createdAt: '2026-01-01T00:00:00.000Z',
+      profile: 'P5',
+      originalAsmPath: 'E:/work/src/test.asm',
       source: { kind: 'selected' },
-      asm: { path: 'E:/work/src/test.asm', sha256: 'asm' }
+      asmSnapshot: { path: 'program.asm', sha256: 'asm', bytes: 0 }
     }
   };
 }
@@ -180,7 +183,7 @@ describe('Verilog ISim runner orchestration', () => {
     vi.mocked(resolveIseProjectFiles).mockResolvedValue([URI.file('E:/work/src/mips.v'), URI.file('E:/work/tb.v')]);
     vi.mocked(verilogProjectSignature).mockResolvedValue('project-signature');
     vi.mocked(generateIseProject).mockResolvedValue(generated);
-    vi.mocked(runTool).mockResolvedValue({ ok: true, code: 0, stdout: 'sim stdout', stderr: '' });
+    vi.mocked(runTool).mockResolvedValue(createTestRunResult({ stdout: 'sim stdout' }));
     vi.mocked(resolveMachineCodeSource).mockResolvedValue(URI.file('E:/work/code.txt'));
   });
 
@@ -449,7 +452,7 @@ describe('Verilog ISim runner orchestration', () => {
 
   it('does not write simulation output when the simulator process fails', async () => {
     vi.mocked(runTool)
-      .mockResolvedValueOnce({ ok: true, code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce(createTestRunResult())
       .mockResolvedValueOnce({
         ok: false,
         exitCode: 1,
@@ -476,7 +479,7 @@ describe('Verilog ISim runner orchestration', () => {
   it('classifies an ISim output ceiling and never writes the truncated trace', async () => {
     vi.mocked(getProfile).mockReturnValue('P1');
     vi.mocked(runTool)
-      .mockResolvedValueOnce({ ok: true, code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce(createTestRunResult())
       .mockResolvedValueOnce({
         ok: false,
         exitCode: null,

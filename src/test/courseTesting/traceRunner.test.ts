@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AsmCase } from '../../asmCaseStore';
+import type { AsmCaseManifest } from '../../asmCaseStoreCore';
+import type { AsmCaseManifestV2 } from '../../courseTesting/manifestCodec';
+import type { EngineDescriptor } from '../../mips/core/api';
+import { createTestRunResult } from '../helpers/appServices';
 import { runCourseTraceCase } from '../../courseTesting/traceRunner';
 import { getMipsEngine, getProfile } from '../../config';
 import { runP3LogisimTraceCase } from '../../courseTestLogisim';
@@ -114,7 +118,7 @@ function services() {
   };
 }
 
-function makeAsmCase(overrides: Partial<AsmCase['manifest']> = {}): AsmCase {
+function makeAsmCase(overrides: Partial<AsmCaseManifest> | AsmCaseManifestV2 = {}): AsmCase {
   return {
     id: 'case-1',
     dir: URI.file('E:/work/.co/cases/case-1'),
@@ -122,16 +126,18 @@ function makeAsmCase(overrides: Partial<AsmCase['manifest']> = {}): AsmCase {
     asm: URI.file('E:/work/.co/cases/case-1/program.asm'),
     sourceAsm: URI.file('E:/work/src/test.asm'),
     machineCode: URI.file('E:/work/.co/cases/case-1/code.txt'),
-    manifest: {
+    manifest: overrides.version === 2 ? overrides : {
       version: 1,
       caseId: 'case-1',
       createdAt: '2026-01-01T00:00:00.000Z',
       source: { kind: 'selected' },
-      asm: { path: 'E:/work/src/test.asm', sha256: 'asm' },
+      profile: 'P5',
+      originalAsmPath: 'E:/work/src/test.asm',
+      asmSnapshot: { path: 'program.asm', sha256: 'a'.repeat(64), bytes: 100 },
       machineCode: {
         path: 'E:/work/.co/cases/case-1/code.txt',
-        sha256: 'code',
-        bytes: 12,
+        sha256: 'b'.repeat(64),
+        bytes: 27,
         wordCount: 3,
         haltPc: 0x3004
       },
@@ -153,7 +159,13 @@ describe('course trace runner orchestration', () => {
       callOrder.push('create-case');
       return currentCase;
     });
-    const descriptor = { id: 'legacy-mars-v0.6.3' } as never;
+    const descriptor: EngineDescriptor = {
+      id: 'legacy-mars-v0.6.3',
+      kind: 'full-stack',
+      build: 'v0.6.3 fixture',
+      semanticsRevision: 1,
+      capabilitiesRevision: 1
+    };
     vi.mocked(prepareAsmCaseMachineCode).mockImplementation(async () => {
       callOrder.push('dump');
       return {
@@ -166,7 +178,7 @@ describe('course trace runner orchestration', () => {
           kind: 'source-reassembly', providerId: descriptor.id,
           sourceUri: currentCase.sourceAsm, imageFingerprint: testProgramImage.fingerprint
         }
-      } as never;
+      };
     });
     vi.mocked(executeWithPreflight).mockImplementation(async () => {
       callOrder.push('oracle');
@@ -193,9 +205,13 @@ describe('course trace runner orchestration', () => {
       callOrder.push('isim');
       return {
         backend: 'isim',
-        generated: {} as never,
-        fuseResult: { ok: true, code: 0, stdout: '', stderr: '' },
-        simResult: { ok: true, code: 0, stdout: 'trace\n', stderr: '' },
+        generated: {
+          prj: URI.file('E:/work/test.prj'),
+          tcl: URI.file('E:/work/test.tcl'),
+          outDir: URI.file('E:/work')
+        },
+        fuseResult: createTestRunResult(),
+        simResult: createTestRunResult({ stdout: 'trace\n' }),
         simOut: URI.file('E:/work/sim.out')
       };
     });
@@ -711,6 +727,8 @@ describe('course trace runner orchestration', () => {
     const engine = { id: 'builtin-ts', semanticsRevision: 1, capabilitiesRevision: 1 };
     const currentCase = makeAsmCase({
       version: 2,
+      caseId: 'case-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
       profile: 'P5',
       originalAsmPath: 'builtin-random.asm',
       asmSnapshot: { path: 'program.asm', sha256: 'a'.repeat(64), bytes: 100 },
@@ -732,7 +750,7 @@ describe('course trace runner orchestration', () => {
         runConfiguration: { profile: 'P5', memoryConfiguration: 'Default' },
         stopReason: 'unknown'
       }
-    } as never);
+    });
 
     const result = await runCourseTraceCase(
       services(),

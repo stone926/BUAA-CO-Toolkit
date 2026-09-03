@@ -475,7 +475,8 @@ describe('phase-1 offline replay closure', () => {
           inputGraphWasDeepFrozen = Object.isFrozen(context.inputGraph)
             && context.inputGraph.every((unit) => Object.isFrozen(unit));
           assemblerConfigurationWasOverlaid = context.configuration.profile === 'P4'
-            && context.configuration.runtime?.command === 'assembler-java'
+            && context.configuration.runtime?.kind === 'java'
+            && context.configuration.runtime.command === 'assembler-java'
             && context.configuration.resourceLimits?.wallClockMs === 7_777;
           try {
             context.configuration.resourceLimits!.maxSteps = 999;
@@ -491,7 +492,8 @@ describe('phase-1 offline replay closure', () => {
             && context.stdinBytes?.[0] === 0x41
             && context.configuration.resourceLimits?.maxSteps === 64;
           oracleConfigurationStayedOriginal = context.configuration.profile === 'P4'
-            && context.configuration.runtime?.command === 'java'
+            && context.configuration.runtime?.kind === 'java'
+            && context.configuration.runtime.command === 'java'
             && context.configuration.resourceLimits?.wallClockMs === 10_000;
         }
       }

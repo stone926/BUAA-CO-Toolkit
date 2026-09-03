@@ -22,7 +22,7 @@ function context(overrides: Partial<ReplayAdapterContext> = {}): ReplayAdapterCo
     artifactPath,
     dependencies: new Map(),
     sourceRoot: path.join(dir, 'source.asm'),
-    sourceKind: 'file',
+    sourceKind: 'selected',
     inputGraph: [sourceUnitFingerprint({ id: 'root.asm', text: 'x' })],
     configuration: {
       profile: 'P5',
@@ -159,6 +159,9 @@ describe('BuiltinTsReplayAdapter', () => {
       inputGraph: [sourceUnitFingerprint({ id: 'root.asm', text: 'x' })]
     });
     const base = context();
+    if (!base.configuration.resourceLimits) {
+      throw new Error('The execution fixture must define complete resource limits.');
+    }
     const ctx = context({
       signal,
       configuration: {
@@ -227,7 +230,8 @@ describe('BuiltinTsReplayAdapter', () => {
       const result = await adapter.assemble(ctx);
       expect(result.ok).toBe(true);
       expect(result.image?.segments.find((segment) => segment.name === 'text')?.words[0].toString(16).padStart(8, '0')).toBe('3408002a');
-      expect(result.dutBytes?.toString('utf8')).toBe('3408002a\n1000fffe\n00000000\n');
+      if (!result.dutBytes) throw new Error('Successful assembly must produce DUT bytes.');
+      expect(Buffer.from(result.dutBytes).toString('utf8')).toBe('3408002a\n1000fffe\n00000000\n');
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }

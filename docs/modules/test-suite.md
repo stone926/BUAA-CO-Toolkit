@@ -1,6 +1,9 @@
 # test-suite | src/test/ | 205 files | 框架: Vitest
 
-单元/集成测试, 镜像src/结构. npm test = vitest run. 以下为<name>.test.ts
+单元/集成测试, 镜像src/结构. npm test / npm run test:coverage 先同步生成文件，再运行 npm run typecheck，最后执行 Vitest；CI 和 release 的 npm test 同样包含该门禁。npm run typecheck 使用 tsconfig.test.json 严格检查生产源码、测试源码及 Vitest 配置，且不生成文件；npm run compile 仍只构建生产源码。以下为<name>.test.ts
+
+test/helpers/:
+  appServices.ts — 完整 AppServices / RunResult 测试样例；保留 Vitest mock 调用签名供断言使用，以真实接口校验 fixture 字段。
 
 test/:
   manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 20 项公开配置/22 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝

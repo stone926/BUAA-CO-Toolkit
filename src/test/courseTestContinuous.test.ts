@@ -252,7 +252,7 @@ describe('continuous generated trace orchestration', () => {
         source: { kind: 'generator' as const },
         asmCases: generatedCases
       })),
-      expandTraceCases: vi.fn(async (_asms, asmCases) =>
+      expandTraceCases: vi.fn<TestDependencies['expandTraceCases']>(async (_asms, asmCases) =>
         (asmCases ?? []).map((asmCase) => ({ asm: asmCase.asm, asmCase }))),
       runCourseTraceCase: vi.fn(async (_services, item) => ({
         asm: item.asm.fsPath,
@@ -552,7 +552,7 @@ describe('continuous generated trace orchestration', () => {
         source: { kind: 'generator' as const },
         asmCases: generatedCases
       })),
-      expandTraceCases: vi.fn(async (_asms, asmCases) =>
+      expandTraceCases: vi.fn<TestDependencies['expandTraceCases']>(async (_asms, asmCases) =>
         (asmCases ?? []).map((asmCase) => ({ asm: asmCase.asm, asmCase }))),
       runCourseTraceCase: vi.fn(async (_services, item) => {
         stopContinuousTests();

@@ -21,6 +21,7 @@ import { exactReplayCase, reEvaluateCase } from '../../mips/replay/replayService
 import { LegacyMarsReplayAdapter } from '../../mips/replay/legacyMarsAdapter';
 import { createDefaultReplayAdapterRegistry } from '../../mips/replay';
 import { maximumReplayTraceBytes } from '../../mips/replay/boundedFile';
+import type { ReplayAdapterContext } from '../../mips/replay/types';
 
 const realJar = process.env.CO_REAL_MARS_JAR;
 const realJava = process.env.CO_REAL_JAVA ?? 'java';
@@ -68,10 +69,11 @@ describe('real legacy MARS offline replay', () => {
       }
     };
     const adapter = new LegacyMarsReplayAdapter({ javaCommand: realJava });
-    const context = {
+    const context: ReplayAdapterContext = {
       artifactPath: artifact.path,
       dependencies: new Map<string, string>(),
       sourceRoot: source.rootMaterializedPath,
+      sourceKind: 'selected',
       inputGraph: source.inputGraph,
       configuration,
       workingDirectory: path.join(root, 'initial-run')
@@ -180,9 +182,10 @@ describe('real legacy MARS offline replay', () => {
     const artifact = await registry.registerFile('user-configured-mars', realJar!, path.basename(realJar!));
     const configuration = runConfiguration('P7');
     const adapter = new LegacyMarsReplayAdapter({ javaCommand: realJava });
-    const context = {
+    const context: ReplayAdapterContext = {
       artifactPath: artifact.path, dependencies: new Map<string, string>(),
       sourceRoot: source.rootMaterializedPath, inputGraph: source.inputGraph,
+      sourceKind: 'selected',
       configuration, workingDirectory: path.join(root, 'assemble')
     };
     const assembly = await adapter.assemble(context);
@@ -197,7 +200,7 @@ describe('real legacy MARS offline replay', () => {
   }, 60_000);
 });
 
-function runConfiguration(profile: 'P4' | 'P7' = 'P4'): ManifestRunConfiguration {
+function runConfiguration(profile: 'P4' | 'P7' = 'P4') {
   const p7 = profile === 'P7';
   return {
     profile, memoryConfiguration: p7 ? 'CompactLargeText' : 'FixedCompactLargeText', courseTrace: true, traceOutput: true,
@@ -216,7 +219,7 @@ function runConfiguration(profile: 'P4' | 'P7' = 'P4'): ManifestRunConfiguration
       maxSourceBytes: 8 * 1024 * 1024, maxIncludeDepth: 32, maxIncludeUnits: 256
     },
     runtime: { kind: 'java', command: realJava }
-  };
+  } satisfies ManifestRunConfiguration;
 }
 
 function snapshot(caseDir: string, file: string) {

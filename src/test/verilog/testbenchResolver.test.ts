@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AppServices } from '../../types';
+import type { MutableVerilogModuleProvider } from '../../language/verilog/moduleProvider';
+import { parseModules } from '../../language/verilog/parser';
+import { verilogDoc } from '../helpers/textDocument';
 import { getSimTime } from '../../config';
 import { writeTextFile } from '../../fsUtil';
 import {
@@ -73,7 +76,7 @@ describe('testbench workspace discovery', () => {
       expect(options.exclude).toBe(verilogProjectExcludeGlob);
       expect(options.exclude).toContain('.vscode');
       expect(options.exclude).toContain('.vscode-test');
-      return [{ uri: rootTestbench, relative: 'mips_tb.v' }];
+      return [{ uri: rootTestbench, rank: 0 }];
     });
 
     const result = await findExistingTestbenchResolution(URI.file('E:/work/program.asm'), 'mips_tb');
@@ -196,18 +199,16 @@ describe('testbench workspace discovery', () => {
 
   it('uses the module registry for P7 top lookup without scanning the workspace', async () => {
     const topUri = URI.file('E:/work/src/mips.v');
+    const document = verilogDoc('module mips; endmodule', topUri.toString());
+    const modules = parseModules(document, document.getText());
     const registry = {
       scanning: false,
       getModule: vi.fn(),
-      getModules: vi.fn(() => [{
-        name: 'mips',
-        uri: topUri.toString(),
-        ports: []
-      }]),
+      getModules: vi.fn((_name: string) => modules),
       allModules: vi.fn(() => []),
       updateUri: vi.fn(),
       removeUri: vi.fn()
-    } as never;
+    } satisfies MutableVerilogModuleProvider;
 
     const result = await ensureP7InterruptTestbench(
       services(),

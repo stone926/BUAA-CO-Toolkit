@@ -51,7 +51,7 @@ describe('workflow input resolution', () => {
     const fast = vscode.Uri.file('E:/work/fast.asm');
     vscodeState.state!.workspaceFolders.push({ uri: root, name: 'work' });
     vi.mocked(vscode.workspace.findFiles).mockResolvedValueOnce([slow, fast]);
-    vi.mocked(vscode.window.showQuickPick).mockImplementationOnce(async (items: any) => items[0]);
+    vi.mocked(vscode.window.showQuickPick).mockImplementationOnce(async (items) => (await items)[0]);
 
     const picked = await resolveFileInput({
       title: '选择 ASM',
@@ -64,8 +64,13 @@ describe('workflow input resolution', () => {
     });
 
     expect(picked).toBe(fast);
-    const quickPickItems = vi.mocked(vscode.window.showQuickPick).mock.calls[0][0] as Array<{ uri: vscode.Uri }>;
-    expect(quickPickItems.map((item) => item.uri.fsPath)).toEqual([fast.fsPath, slow.fsPath]);
+    const quickPickItems = await vi.mocked(vscode.window.showQuickPick).mock.calls[0][0];
+    expect(quickPickItems.map((item) => {
+      if (!('uri' in item) || !(item.uri instanceof vscode.Uri)) {
+        throw new Error('Expected each workspace QuickPick item to retain its URI.');
+      }
+      return item.uri.fsPath;
+    })).toEqual([fast.fsPath, slow.fsPath]);
     expect(vscode.workspace.findFiles).toHaveBeenCalledWith('**/*.asm', '**/{node_modules,out,.git,.co}/**', 200);
   });
 

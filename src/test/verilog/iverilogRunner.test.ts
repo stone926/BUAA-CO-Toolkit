@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import * as vscode from 'vscode';
 import type { AppServices, RunResult } from '../../types';
+import type { AsmCase } from '../../asmCaseStore';
 import {
   buildIverilogCompileArgs,
   buildIverilogWatchdog,
@@ -583,9 +584,22 @@ describe('Icarus runner orchestration', () => {
       designSourceUri: URI.file('E:/work/src/mips.v')
     });
     const currentCase = {
+      id: 'case-1',
+      dir: URI.file('E:/work/.co/cases/case-1'),
+      asm: URI.file('E:/work/.co/cases/case-1/program.asm'),
+      sourceAsm: URI.file('E:/work/src/test.asm'),
       machineCode: URI.file('E:/work/.co/cases/case-1/code.txt'),
-      manifestUri: URI.file('E:/work/.co/cases/case-1/case.json')
-    } as never;
+      manifestUri: URI.file('E:/work/.co/cases/case-1/case.json'),
+      manifest: {
+        version: 1,
+        caseId: 'case-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        profile: 'P7',
+        originalAsmPath: 'E:/work/src/test.asm',
+        source: { kind: 'selected' },
+        asmSnapshot: { path: 'program.asm', sha256: 'asm', bytes: 0 }
+      }
+    } satisfies AsmCase;
     const moduleRegistry = { getModules: vi.fn() } as never;
 
     await runIverilog(services(), {

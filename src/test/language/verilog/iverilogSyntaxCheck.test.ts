@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import { runProcessCore } from '../../../processCore';
 import {
@@ -116,6 +116,7 @@ describe('Icarus syntax checker', () => {
     const [command, args, runOptions] = vi.mocked(runProcessCore).mock.calls[0];
     expect(command).toBe('C:/extension/vendor/iverilog/win32-x64/bin/iverilog.exe');
     const [includeRoot, includeSources] = vi.mocked(buildIverilogIncludeArgs).mock.calls[0];
+    assert.isDefined(includeSources);
     expect(path.normalize(includeRoot).toLowerCase()).toBe(path.normalize(root).toLowerCase());
     expect(includeSources.map((file) => path.normalize(file).toLowerCase())).toEqual(
       [first, second].map((file) => path.normalize(file).toLowerCase())

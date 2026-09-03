@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import * as os from 'os';
 import * as path from 'path';
@@ -8,7 +8,7 @@ vi.mock('vscode', () => ({
   Uri: URI
 }));
 
-import { BuiltinTsExecutionProvider } from '../../mips/providers/builtinExecutionProvider';
+import { BuiltinTsExecutionProvider, type BuiltinWorkerRuntime } from '../../mips/providers/builtinExecutionProvider';
 import { ExecutionAssertionObserver } from '../../courseTesting/oracle/executionAssertions';
 import { buildProgramImage } from '../../mips/core/programImage';
 import { sourceUnitFingerprint } from '../../mips/core/programImage';
@@ -88,6 +88,7 @@ describe('BuiltinTsExecutionProvider', () => {
     expect(trace).toContain('@00003000: $8 <= 0000002A');
     const events = JSON.parse(fs.readFileSync(result.eventArtifact!.fsPath, 'utf8'));
     expect(events.eventSchema).toBe('buaa-co-commit-event-v1');
+    assert.isDefined(result.eventCount);
     expect(events.events).toHaveLength(result.eventCount);
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -98,9 +99,10 @@ describe('BuiltinTsExecutionProvider', () => {
     expect(stdin.ok).toBe(false);
     expect(stdin.diagnostics.some((item) => item.code === 'builtin-ts.stdin-unsupported')).toBe(true);
 
-    const trace = await provider.preflight(request({
-      trace: { kind: 'architectural-writes', courseCorrect: false }
-    }));
+    const invalidTraceRequest = request();
+    // Exercise the runtime guard for an input that cannot be constructed through the typed API.
+    Reflect.set(invalidTraceRequest, 'trace', { kind: 'architectural-writes', courseCorrect: false });
+    const trace = await provider.preflight(invalidTraceRequest);
     expect(trace.ok).toBe(false);
     expect(trace.diagnostics.some((item) => item.code === 'builtin-ts.course-trace-required')).toBe(true);
   });
@@ -128,8 +130,8 @@ describe('BuiltinTsExecutionProvider', () => {
       deviceEvents: [],
       mnemonic: 'ori'
     };
-    const runJob = vi.fn(async (_job: unknown, options: { onProgress?: (batch: unknown[]) => void }) => {
-      options.onProgress?.([workerEvent]);
+    const runJob = vi.fn<BuiltinWorkerRuntime['runJob']>(async (_job, options) => {
+      await options?.onProgress?.([workerEvent]);
       return {
         protocolVersion: 2,
         kind: 'result',
@@ -164,11 +166,12 @@ describe('BuiltinTsExecutionProvider', () => {
   });
 
   it('normalizes worker cancellation to a stopped provider result', async () => {
-    const runJob = vi.fn(async () => ({
+    const runJob = vi.fn<BuiltinWorkerRuntime['runJob']>(async () => ({
       protocolVersion: 2,
       kind: 'result',
       requestId: 'req-cancel',
       ok: false,
+      error: 'cancelled',
       cancelled: true
     }));
 
@@ -181,7 +184,7 @@ describe('BuiltinTsExecutionProvider', () => {
   });
 
   it('does not treat a cancelled worker execution payload as a successful halt', async () => {
-    const runJob = vi.fn(async () => ({
+    const runJob = vi.fn<BuiltinWorkerRuntime['runJob']>(async () => ({
       protocolVersion: 2,
       kind: 'result',
       requestId: 'req-cancel-payload',

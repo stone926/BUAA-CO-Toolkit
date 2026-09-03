@@ -8,6 +8,7 @@ import { registerHazard, renderHazardReport } from '../hazard';
 import { workspaceFolderForOrFirst } from '../fsUtil';
 import { resolveFileInput } from '../workflowInputs';
 import { runTool } from '../process';
+import { createTestRunResult } from './helpers/appServices';
 
 const vscodeState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined
@@ -92,7 +93,13 @@ describe('hazard analysis workflow and report rendering', () => {
     } as never);
     vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(new TextEncoder().encode('00000000\n'));
     vi.mocked(resolveFileInput).mockResolvedValue(vscode.Uri.file(path.join(root, 'code.txt')));
-    vi.mocked(runTool).mockResolvedValue({ ok: false, code: 1, stdout: 'bad', stderr: 'traceback' });
+    vi.mocked(runTool).mockResolvedValue(createTestRunResult({
+      ok: false,
+      exitCode: 1,
+      cwd: root,
+      stdout: 'bad',
+      stderr: 'traceback'
+    }));
   });
 
   it('returns without running the analyzer when machine-code selection is cancelled', async () => {

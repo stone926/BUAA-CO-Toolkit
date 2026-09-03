@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
+import { createTestServices as services } from '../helpers/appServices';
 import {
   resolveGeneratedAsmBatch,
   resolveGeneratorRunSetup,
@@ -15,9 +16,14 @@ import {
   generateBuiltinAsmTestCase
 } from '../../courseTesting/builtinAsmGenerator';
 
+const vscodeState = vi.hoisted(() => ({
+  state: undefined as ReturnType<typeof import('../helpers/vscodeMock').createVscodeMockState> | undefined
+}));
+
 vi.mock('vscode', async () => {
   const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
   const state = createVscodeMockState();
+  vscodeState.state = state;
   return { ...createVscodeModuleMock(state, vi.fn), __state: state };
 });
 
@@ -48,21 +54,6 @@ vi.mock('../../courseTesting/builtinAsmGenerator', () => ({
   BuiltinAsmGeneratorError: class BuiltinAsmGeneratorError extends Error {},
   generateBuiltinAsmTestCase: vi.fn()
 }));
-
-function services() {
-  return {
-    output: {
-      appendLine: vi.fn(),
-      append: vi.fn(),
-      show: vi.fn(),
-      clear: vi.fn(),
-      hide: vi.fn(),
-      dispose: vi.fn(),
-      name: 'test'
-    } as never,
-    statusBar: {} as never
-  };
-}
 
 function setup(overrides: Partial<BuiltinGeneratorRunSetup> = {}): BuiltinGeneratorRunSetup {
   return {
@@ -101,15 +92,10 @@ describe('builtin generator workflow', () => {
   });
 
   it('always resolves the strongest builtin policy even when the workspace rollback is mars', async () => {
-    const vscode = await import('vscode') as typeof import('vscode') & {
-      __state: {
-        activeTextEditor?: { document: { uri: URI } };
-        workspaceFolders: Array<{ uri: URI; name?: string }>;
-      };
-    };
-    vscode.__state.workspaceFolders.push({ uri: URI.file('E:/work'), name: 'work' });
+    const state = vscodeState.state!;
+    state.workspaceFolders.push({ uri: URI.file('E:/work'), name: 'work' });
     // An active legacy generator file must no longer take over the public automatic command.
-    vscode.__state.activeTextEditor = { document: { uri: URI.file('E:/work/legacy-generator.py') } };
+    state.activeTextEditor = { document: { uri: URI.file('E:/work/legacy-generator.py') } };
 
     const resolved = await resolveGeneratorRunSetup();
 
@@ -132,7 +118,7 @@ describe('builtin generator workflow', () => {
       kind: 'generator',
       generator: 'builtin:random-asm'
     });
-    expect(batch?.source.cwd.toLowerCase()).toMatch(/[\\/]\.co[\\/]cases$/);
+    expect(batch?.source.cwd?.toLowerCase()).toMatch(/[\\/]\.co[\\/]cases$/);
     expect(createAsmCaseFromText).toHaveBeenCalledWith(
       expect.stringMatching(/^builtin-p7-\d{14}-[0-9a-f]{6}\.asm$/),
       '.text\nori $0, $0, 0\n',
@@ -181,18 +167,13 @@ describe('builtin generator workflow', () => {
   });
 
   it('keeps the public one-shot automatic generator quiet', async () => {
-    const vscode = await import('vscode') as typeof import('vscode') & {
-      __state: {
-        activeTextEditor?: { document: { uri: URI } };
-        workspaceFolders: Array<{ uri: URI; name?: string }>;
-      };
-    };
+    const state = vscodeState.state!;
     const process = await import('../../process');
-    vscode.__state.workspaceFolders.splice(0, vscode.__state.workspaceFolders.length, {
+    state.workspaceFolders.splice(0, state.workspaceFolders.length, {
       uri: URI.file('E:/work'),
       name: 'work'
     });
-    vscode.__state.activeTextEditor = { document: { uri: URI.file('E:/work/main.asm') } };
+    state.activeTextEditor = { document: { uri: URI.file('E:/work/main.asm') } };
 
     const batch = await resolveGeneratedAsmBatch(services(), {
       resolveAsmBatchInputs: vi.fn(async () => [])

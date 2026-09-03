@@ -302,7 +302,7 @@ describe('package manifest', () => {
     const groups = pkg.contributes?.configuration ?? [];
     const properties = Object.assign({}, ...groups.map((group) => group.properties ?? {}));
     const configDefaults = getConfigDefaults();
-    const publicKeys = new Set(publicConfigurationGroups.flatMap((group) => [...group.keys]));
+    const publicKeys = new Set<string>(publicConfigurationGroups.flatMap((group) => [...group.keys]));
     const internalOnlyDefaultKeys = Object.keys(configDefaults)
       .map((key) => `co.${key}`)
       .filter((key) => !publicKeys.has(key));

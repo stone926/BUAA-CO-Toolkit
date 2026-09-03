@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestServices as testServices } from '../helpers/appServices';
 
 const runnerState = vi.hoisted(() => ({ root: '', profile: 'P6', marsJar: '' }));
 
@@ -465,14 +466,5 @@ function successResult(stdout = '') {
     stdout,
     stderr: '',
     timedOut: false
-  };
-}
-
-function testServices() {
-  return {
-    output: {
-      appendLine: vi.fn(), append: vi.fn(), show: vi.fn(), clear: vi.fn(), hide: vi.fn(), dispose: vi.fn(), name: 'test'
-    } as never,
-    statusBar: {} as never
   };
 }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
+import { createTestServices as services } from './helpers/appServices';
 
 const mocks = vi.hoisted(() => ({
   copyArtifact: vi.fn(async () => undefined),
@@ -13,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   resolveWorkspaceFile: vi.fn(),
   revealOutput: vi.fn(),
   showReport: vi.fn(),
-  writeTextFile: vi.fn(async () => undefined)
+  writeTextFile: vi.fn<typeof import('../fsUtil').writeTextFile>(async () => undefined)
 }));
 
 vi.mock('vscode', () => ({
@@ -79,13 +80,6 @@ const asmCase = {
   manifest: { version: 2, source: { kind: 'builtin' } }
 };
 
-function services() {
-  return {
-    output: { append: vi.fn(), appendLine: vi.fn() },
-    statusBar: { text: '' }
-  } as never;
-}
-
 describe('generated Logisim prepare compatibility boundary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,7 +116,7 @@ describe('generated Logisim prepare compatibility boundary', () => {
     expect(mocks.getMipsEngine).not.toHaveBeenCalled();
     expect(mocks.revealOutput).not.toHaveBeenCalled();
     expect(mocks.showReport).not.toHaveBeenCalled();
-    expect(mocks.writeTextFile.mock.calls.some(([uri]) => String((uri as URI).fsPath).includes('report'))).toBe(false);
+    expect(mocks.writeTextFile.mock.calls.some(([uri]) => uri.fsPath.includes('report'))).toBe(false);
     expect(JSON.stringify(owner.output.appendLine.mock.calls)).not.toContain('SECRET_PROJECT');
     expect(JSON.stringify(owner.output.appendLine.mock.calls)).not.toContain('SECRET_COMMAND');
   });

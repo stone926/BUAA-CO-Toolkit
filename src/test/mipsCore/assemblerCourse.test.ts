@@ -285,7 +285,7 @@ describe('course assembler directives and pseudo', () => {
       gprWrites: [],
       hiLoWrites: [],
       cp0Writes: [],
-      memoryWrites: [{ address: 0, value: 0x11223344, byteMask: 0, wordAddress: 0, valueBefore: 0, valueAfter: 0x11223344, region: 'data' }],
+      memoryWrites: [{ address: 0, rawValue: 0x11223344, byteMask: 0xf, wordAddress: 0, valueBefore: 0, valueAfter: 0x11223344, region: 'data' }],
       deviceEvents: []
     }).memoryWrites).toHaveLength(1);
   });

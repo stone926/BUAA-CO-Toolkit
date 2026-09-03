@@ -163,6 +163,20 @@ function asmCase(): AsmCase {
     sourceAsm: URI.file(path.join(dir, 'source', 'root.asm')),
     manifest: {
       version: 2,
+      caseId: 'case-1',
+      createdAt: '2026-08-31T00:00:00.000Z',
+      profile: 'P5',
+      originalAsmPath: '/workspace/root.asm',
+      asmSnapshot: {
+        path: 'source/root.asm', sha256: sha256(sourceText), bytes: Buffer.byteLength(sourceText)
+      },
+      source: { kind: 'selected' },
+      program: { assembler: LEGACY_MARS_DESCRIPTOR },
+      oracle: {
+        engine: LEGACY_MARS_DESCRIPTOR,
+        configurationHash: sha256('executor-shadow-fixture'),
+        stopReason: 'unknown'
+      },
       artifacts: {
         source: {
           'root.asm': {
@@ -172,7 +186,7 @@ function asmCase(): AsmCase {
           }
         }
       }
-    } as AsmCase['manifest']
+    }
   };
 }
 

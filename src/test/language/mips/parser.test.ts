@@ -1,24 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseMips } from '../../../language/mips/parser';
-import { defaultCoSettings, CoSettings } from '../../../language/common/settings';
+import { mergeCoSettings, CoSettings } from '../../../language/common/settings';
 
 function doc(text: string): TextDocument {
   return TextDocument.create('test://test.s', 'mipsasm', 1, text);
 }
 
 function settings(overrides: Record<string, unknown> = {}): CoSettings {
-  const o = overrides as Record<string, Record<string, unknown>>;
-  return {
-    ...defaultCoSettings,
-    ...overrides,
-    project: { ...defaultCoSettings.project, ...(o.project ?? {}) },
-    mips: { ...defaultCoSettings.mips, ...(o.mips ?? {}) },
-    verilog: {
-      implicitNet: { ...defaultCoSettings.verilog.implicitNet, ...(o.verilog?.implicitNet ?? {}) },
-      lint: { ...defaultCoSettings.verilog.lint, ...(o.verilog?.lint ?? {}) }
-    }
-  };
+  return mergeCoSettings(overrides);
 }
 
 function diagCodes(result: ReturnType<typeof parseMips>): string[] {

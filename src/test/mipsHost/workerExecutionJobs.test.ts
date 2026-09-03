@@ -25,9 +25,11 @@ describe('phase-4 worker execution jobs', () => {
       collectTrace: true,
       collectCoverage: true
     }, context());
-    expect(result.status).toBe('halted');
-    expect(result.trace).toContain('@00003000: $8 <= 0000002A');
-    expect(result.finalStateDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(result).toMatchObject({
+      status: 'halted',
+      trace: expect.arrayContaining(['@00003000: $8 <= 0000002A']),
+      finalStateDigest: expect.stringMatching(/^[0-9a-f]{64}$/)
+    });
   });
 
   it('runs device-cycle-vector through the worker boundary', async () => {
@@ -36,10 +38,10 @@ describe('phase-4 worker execution jobs', () => {
       { kind: 'write', device: 'timer0', register: 'ctrl', value: '0x00000001' },
       { kind: 'tick', cycles: 1 }
     ], context());
-    expect(Array.isArray(result)).toBe(true);
-    expect(result).toHaveLength(3);
-    expect(result[1].timer0.state).toBe('idle');
-    expect(result[2].timer0.state).toBe('load');
-    expect(result[2].timer0.ctrl).toBe('0x00000001');
+    expect(result).toEqual([
+      expect.anything(),
+      expect.objectContaining({ timer0: expect.objectContaining({ state: 'idle' }) }),
+      expect.objectContaining({ timer0: expect.objectContaining({ state: 'load', ctrl: '0x00000001' }) })
+    ]);
   });
 });

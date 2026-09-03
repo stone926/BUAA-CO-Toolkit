@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { MipsRuntimeManager } from '../../mips/host/runtimeManager';
 import { WorkerClient, MipsWorkerPort } from '../../mips/host/workerClient';
-import { workerProtocolVersion } from '../../mips/host/workerProtocol';
+import { workerProtocolVersion, type WorkerOutboundMessage, type WorkerResultMessage } from '../../mips/host/workerProtocol';
 
 // JS fixture worker implementing the phase-1 protocol, so the host-side
 // integration tests do not depend on the compiled out/ tree.
@@ -22,6 +22,13 @@ function manager(): MipsRuntimeManager {
   return created;
 }
 
+function terminalResult(message: WorkerOutboundMessage): WorkerResultMessage {
+  if (message.kind !== 'result') {
+    throw new Error(`Expected a terminal worker result, received ${message.kind}`);
+  }
+  return message;
+}
+
 describe('worker host skeleton', () => {
   it('does not start a worker until the first job', () => {
     const runtime = manager();
@@ -39,7 +46,7 @@ describe('worker host skeleton', () => {
 
   it('round-trips a ping job through a real worker thread', async () => {
     const runtime = manager();
-    const result = await runtime.runJob({ kind: 'ping', payload: 'hello-worker' });
+    const result = terminalResult(await runtime.runJob({ kind: 'ping', payload: 'hello-worker' }));
     expect(runtime.started).toBe(true);
     expect(result.kind).toBe('result');
     expect(result.ok).toBe(true);
@@ -50,9 +57,9 @@ describe('worker host skeleton', () => {
     const runtime = manager();
     await runtime.runJob({ kind: 'ping' }); // ensure a live worker
     const pending = runtime.runJob({ kind: 'crash' } as never);
-    const crashed = await pending;
+    const crashed = terminalResult(await pending);
     expect(crashed.ok).toBe(false);
-    const second = await runtime.runJob({ kind: 'ping' });
+    const second = terminalResult(await runtime.runJob({ kind: 'ping' }));
     expect(second.ok).toBe(true);
   });
 
@@ -68,7 +75,7 @@ describe('worker host skeleton', () => {
     const controller = new AbortController();
     const promise = client.start({ kind: 'ping' }, { signal: controller.signal });
     controller.abort();
-    const result = await promise;
+    const result = terminalResult(await promise);
     expect(result.ok).toBe(false);
     expect(result).toMatchObject({ cancelled: true });
     expect(dispose).toHaveBeenCalled();

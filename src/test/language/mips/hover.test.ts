@@ -20,6 +20,9 @@ function state(): MipsServerState {
 function hoverText(text: string, line: number, character: number): string {
   const hover = getMipsHover(doc(text), { line, character }, defaultCoSettings, state());
   const contents = hover?.contents;
+  if (Array.isArray(contents)) {
+    return contents.map((entry) => typeof entry === 'string' ? entry : entry.value).join('\n');
+  }
   return typeof contents === 'string' ? contents : contents?.value ?? '';
 }
 
