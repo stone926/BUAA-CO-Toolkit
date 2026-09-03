@@ -12,8 +12,6 @@ P7 系统组合使用合法的程序可见状态同步：Timer Mode0 在 IE=0 �
 
 阶段 6 引擎边界：automatic case 直接建立 builtin `CourseEnginePlan`，生成规模、工具链预检、prepare 与 oracle 均不读取 workspace rollback，也不会启动 legacy capability probe；这保证 text/ktext `.word` RI 可稳定执行。手动 case 开始时读取一次 resource-scoped `co.mips.engine` 并生成原子计划，prepare 与 oracle 必须复用：`auto` 对 P3–P7 选 builtin，stdin/交互能力在阶段 7 前明确选 legacy；`builtin` 强制 builtin；`mars` 强制 configured legacy；`verify-both` 主路径 builtin，并用固定 reference 的独立汇编结果喂给独立 legacy executor。builtin event artifact 在持久化时复核 event count/digest、final-state digest、engine/image/profile/stop 绑定；assembler 与 executor 使用各自逻辑 artifact/revision 身份。
 
-独立 conformance 严格按 evidence kind 区分：既有 assembly-diff 通过 JSONL CLI 对 10 个 P3–P7 corpus 与固定 MARS 比较 text/ktext/data；阶段 6 新增真实 execution differential，冻结 P3–P7 各 50 个确定性 seed（合计 250）和各 1 个手写边界用例。每例先证明 TS/MARS 实际执行 image fingerprint 完全相同，再比较 canonical architectural writes、精确停机和最终 observable summary。聚合 gate 重算 profile/result payload，要求每 profile 50+1、总 255、0 failed/inconclusive/out-of-domain/error/unexplained，拒绝 artifact-only `validated` 冒充执行证据。固定 MARS reference 永久在 Ubuntu 24.04/Windows 2025 CI matrix 中运行。
-
 orchestration:
   courseTest.ts — 总调度；公共测试启动入口唯一为“启动持续测试”，默认按最强策略无限生成，并在首个失败或错误时立即停止；另保留“停止持续测试”和“测试历史/失败用例”两个控制/诊断入口，旧单轮自动入口已删除，低层手动/回放命令 ID 仅作隐藏兼容。runCourseTraceCase 串联 plan->assemble provider->同 plan oracle provider->Icarus/Logisim DUT->compare，并分流 P7 probe
   courseTestCases.ts — CourseTraceCaseInput 类型、failedCase 构造
@@ -92,13 +90,3 @@ case-storage:
   asmCaseStoreCore.ts — Manifest Schema(v1)：caseId(ISO+SHA256 前 8 位)、.co/cases/{caseId}/、sha256Bytes/sha256Text、machineCode.haltPc、manifest-only P7 metadata；v1 永久只读兼容
   src/pathContainment.ts — case 路径包含审计：realpath/lexical 双重包含、symlink/junction 拒绝、大小写折叠检测；供 replay 与 case-storage 复用（不可信路径 fail-closed）
   courseTesting/manifestCodec.ts — Manifest v2 codec：program/oracle/artifacts typed alias、只接受 canonical `/` 的严格 case-relative 路径、完整 source artifact closure、assembler/oracle launch tuple、stdin/device/cycle/stop/seed/resource input、snapshot 数量/单项/总量 ceiling、大小写碰撞、symlink/bytes/hash/ProgramImage/HexText/trace evidence 校验；`p7.probe` 在 canonicalize 前以迭代式 depth/node/key/string-byte ceiling 验证。早期 v2 可读但不能 replay。exact replay/re-evaluate 见 mips-replay 模块
-
-conformance/phase-0:
-  conformance/mips/corpus — P3–P7 spec microprogram/challenge/教程引用；既有 250 assembly seeds 冻结 source graph/HexText，阶段 6 另有 `execution-corpus.json` 冻结 250 个可安全真实执行的 seed + 5 个手写边界程序及 source/image/halt fingerprint，freeze verifier 防 silent corpus drift
-  conformance/mips/contract/evidence-gates.json — revision 2 冻结 22 个 P3–P7 capability scope、589 个由 `idPrefix.member` 精确展开的 bin 与 evidence fingerprint inclusion/exclusion；当前 validator 只验证声明结构/成员闭包，不表示旧数字 minimum 已由运行证据满足，阶段 6 默认切换按计划中的无配额条件另行判定
-  conformance/mips/expected — 人工 courseVector 与 ISA golden 使用独立 schema；`manage-*.mjs --refresh-integrity` 会强制把内嵌 approval 声明降级回 candidate，因此 artifact 永远保持 candidate 形态，不存在单独的批准步骤
-  conformance/mips/bench — 固定 Windows Server 2025 / Ubuntu 24.04 runner 的 cold benchmark matrix、统计与 candidate 校验；baseline 仅来自受保护 main 的 CI dispatch
-  conformance/mips/decision-vectors — frozen contract/decision 的独立 vectors；Timer official-RTL lane 在缺少 Icarus 时必须由 required CI 失败而不是跳过伪通过
-  conformance/mips/governance — 只保留 2026-08-27 审阅记录与归档的历史 approval 信封（provenance）；approval 机制已随单人维护放宽撤销
-  conformance/mips/expected/guardedFs.mjs — expected-data 依赖闭包唯一文件系统入口；lexical/realpath 均限制在 conformance/mips，dependency whitelist 同时禁止 direct fs、dynamic import、child_process 等旁路读取 production catalog/contracts
-  gate — `npm run verify:phase6` 先执行 compile/module-boundary/阶段 6 定向 Vitest，再校验固定 references，以 `mars-assembler-v0.6.3` 执行 assembly-diff，并以 `legacy-course-executor` v0.6.3-course1 执行 255-case real differential 和 fail-closed aggregate；`.github/workflows/ci.yml` 在 Ubuntu 24.04/Windows 2025 永久执行并上传 machine-readable execution evidence，`.github/workflows/release.yml` 在 `v*` tag 上重跑同一双平台 matrix，publish job 必须等待两端成功。完整 `npm run verify` 继续聚合其他检查；Timer RTL lane 只在装有 Icarus 的环境（CI）通过
