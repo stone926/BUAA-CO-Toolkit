@@ -60,6 +60,8 @@ export interface P7ProbeMetadata {
   shard?: P7ProbeShard;
   logBase: number;
   recordWords: number;
+  /** Raw CP0 reset reads stored before the first mtc0 or exception; absent in historical probes. */
+  initialCp0?: Partial<Record<'status' | 'cause' | 'epc', P7ProbeCommitExpectation>>;
   scenarios: P7ProbeScenario[];
 }
 

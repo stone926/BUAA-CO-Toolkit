@@ -254,6 +254,37 @@ describe('course trace runner orchestration', () => {
     expect(vi.mocked(executeWithPreflight).mock.calls[0][3]).toBe(capturedPlan);
   });
 
+  it('fails a P6 raw byte-enable mismatch even when architectural word traces match', async () => {
+    vi.mocked(getProfile).mockReturnValueOnce('P6');
+    const oracleImplementation = vi.mocked(executeWithPreflight).getMockImplementation()!;
+    vi.mocked(executeWithPreflight).mockImplementationOnce(async (...args) => {
+      const invocation = await oracleImplementation(...args);
+      invocation.result!.events = [{
+        sequence: 0, kind: 'instruction', pcBefore: 0x3000, pcAfter: 0x3004,
+        gprWrites: [], hiLoWrites: [], cp0Writes: [], deviceEvents: [],
+        memoryWrites: [{
+          address: 1, wordAddress: 0, byteMask: 2, rawValue: 0x11,
+          valueBefore: 0x11111111, valueAfter: 0x11111111, region: 'data'
+        }]
+      }];
+      return invocation;
+    });
+    const dutImplementation = vi.mocked(runVerilogSimulation).getMockImplementation()!;
+    vi.mocked(runVerilogSimulation).mockImplementationOnce(async (...args) => {
+      const dut = await dutImplementation(...args);
+      dut!.simResult!.stdout = 'trace\nCO_DM_STORE pc=00003000 addr=00000001 byteen=1111 wdata=11111111 time=10\n';
+      return dut;
+    });
+
+    const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
+
+    expect(compareTraceIterables).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'failed', stage: 'compare',
+      firstDiff: { reason: expect.stringContaining('byte-enable 应为 0010') }
+    });
+  });
+
   it('accepts a native ProgramImage assembler without a legacy source-reassembly binding', async () => {
     const currentCase = makeAsmCase();
     vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({

@@ -42,6 +42,7 @@ ISA 生成维护:
 resources/templates/verilog/:
   basic_testbench.v — 通用 Verilog testbench shell
   external_memory_testbench.v — P6-style 外部指令/数据存储器 testbench shell
+  dm_store_contract.v — P6/P7 共享的有效 DM 写事务记录与地址/opcode/byte-enable/使能 lane 契约检查；保留 CO_DM_STORE 原始字段供 builtin oracle 对拍
   p7_official_testbench.v — P7 official-style testbench shell
   p7_interrupt_block*.v — P7 external interrupt主动/注释模板
   p7_probe_block.v — P7 probe interrupt/MMIO观测模板

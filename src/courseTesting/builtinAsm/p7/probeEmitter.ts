@@ -84,6 +84,7 @@ import {
 import { emitExternalRetryScenario, isExternalRetryVariant } from './probeExternalScenarios';
 import { emitInterruptMduScenario, isInterruptMduVariant } from './probeMduScenarios';
 import { emitInterruptPriorityScenario } from './probePriorityScenarios';
+import { emitTimerPendingWritesScenario } from './probeTimerWriteScenario';
 import {
   ProbePaddingProfile,
   emitClearTimers,
@@ -136,7 +137,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
   const padding = paddingProfile(scenarioCount);
 
   emitHeader(main, instructionSet.mnemonics.join(' '), seed, options.generatedAt ?? new Date());
-  emitProbePrologue(main);
+  const initialCp0 = emitProbePrologue(main);
 
   const occurrences = new Map<P7ProbeScenarioKind, number>();
   scenarioKinds.forEach((kind, index) => {
@@ -165,6 +166,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
     shard,
     logBase: p7ProbeLogBase,
     recordWords: p7ProbeRecordWords,
+    initialCp0,
     scenarios
   };
   const probeLogCapacity = Math.floor((p7UserTextBaseAddress - p7ProbeLogBase) / (p7ProbeRecordWords * 4));
@@ -205,7 +207,22 @@ function emitHeader(writer: ProgramWriter, instructionSet: string, seed: string,
   writer.label('main');
 }
 
-function emitProbePrologue(writer: ProgramWriter): void {
+function emitProbePrologue(writer: ProgramWriter): NonNullable<P7ProbeMetadata['initialCp0']> {
+  // Capture all raw values before SR is masked or an exception can rewrite EPC.
+  // These scratch slots are subsequently reused; the metadata binds each sample
+  // to this exact store PC, so later handler writes cannot replace it.
+  writer.emit('mfc0 $8, $12');
+  writer.emit('mfc0 $9, $13');
+  writer.emit('mfc0 $10, $14');
+  const initialCp0: NonNullable<P7ProbeMetadata['initialCp0']> = {};
+  for (const [name, register, address] of [
+    ['status', 8, p7ProbeStateFirstStatus],
+    ['cause', 9, p7ProbeStateFirstCause],
+    ['epc', 10, p7ProbeStateFirstEpc]
+  ] as const) {
+    initialCp0[name] = { pc: writer.pc(), kind: 'dm', target: address, value: 0 };
+    writer.emit(`sw $${register}, ${asmHex(address)}($0)`);
+  }
   emitInstructionTemplate(writer, 'asm/p7_probe_prologue.asm', {
     externalArmAddressHex: asmHex(p7ProbeExternalArmAddress),
     loadProbeLogBase: loadImmediateInstructions('$26', p7ProbeLogBase).join('\n'),
@@ -220,6 +237,7 @@ function emitProbePrologue(writer: ProgramWriter): void {
     timer0CtrlHex: asmHex(p7Timer0Ctrl),
     timer1CtrlHex: asmHex(p7Timer1Ctrl)
   });
+  return initialCp0;
 }
 
 function emitScenario(
@@ -257,8 +275,8 @@ function emitScenario(
   if ((kind === 'timer0' || kind === 'timer1') && variant === 'disable-reload') {
     return emitTimerDisableReloadScenario(writer, id, kind, variant, rng, padding);
   }
-  if ((kind === 'timer0' || kind === 'timer1') && variant === 'write-priority') {
-    return emitTimerWritePriorityScenario(writer, id, kind, variant, rng, padding);
+  if ((kind === 'timer0' || kind === 'timer1') && variant === 'pending-writes') {
+    return emitTimerPendingWritesScenario(writer, id, kind, rng, padding);
   }
 
   if (isInternalProbeKind(kind)) {
@@ -728,130 +746,6 @@ function emitTimerDisableReloadScenario(
     timerPreset: 32,
     requireCompletion: true
   };
-}
-
-/**
- * Observe the timer RTL's top-level `else if (WE)` priority through architectural
- * loads.  With three consecutive timer writes the state machine must remain in
- * IDLE.  The following three COUNT loads therefore see 0, 0, PRESET while their
- * own non-WE edges advance IDLE -> LOAD -> CNT.  A timer that also advances its
- * FSM on a write edge produces a different sequence and is trapped in `badLabel`.
- */
-function emitTimerWritePriorityScenario(
-  writer: ProgramWriter,
-  id: number,
-  kind: 'timer0' | 'timer1',
-  variant: 'write-priority',
-  rng: Random,
-  padding: ProbePaddingProfile
-): P7ProbeScenario {
-  const ctrl = kind === 'timer0' ? p7Timer0Ctrl : p7Timer1Ctrl;
-  const preset = kind === 'timer0' ? p7Timer0Preset : p7Timer1Preset;
-  const count = kind === 'timer0' ? p7Timer0Count : p7Timer1Count;
-  const badLabel = `_co_probe_s${id}_bad_timer_write_priority`;
-  const afterBadLabel = `_co_probe_s${id}_after_bad_timer_write_priority`;
-  const finalPreset = 0x40;
-
-  emitDisableInterrupts(writer);
-  emitNormalizeTimerToIdleZero(writer, ctrl, preset);
-
-  emitLoadImmediate(writer, '$8', 0x20);
-  emitLoadImmediate(writer, '$9', 1);
-  emitLoadImmediate(writer, '$10', finalPreset);
-
-  // Keep these six accesses adjacent: their M-stage cadence is the invariant.
-  writer.emit(`sw $8, 0x${preset.toString(16)}($0)`);
-  writer.emit(`sw $9, 0x${ctrl.toString(16)}($0)`);
-  writer.emit(`sw $10, 0x${preset.toString(16)}($0)`);
-  const firstLoadPc = writer.pc();
-  writer.emit(`lw $11, 0x${count.toString(16)}($0)`);
-  const secondLoadPc = writer.pc();
-  writer.emit(`lw $12, 0x${count.toString(16)}($0)`);
-  const thirdLoadPc = writer.pc();
-  writer.emit(`lw $13, 0x${count.toString(16)}($0)`);
-  writer.emit('nop');
-  writer.emit('nop');
-  writer.emit(`bne $11, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.emit(`bne $12, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.emit(`bne $13, $10, ${badLabel}`);
-  writer.emit('nop');
-
-  // Repeat with CTRL as the third adjacent write. On that edge CTRL is already
-  // enabled, so an implementation which ignores WE priority wrongly enters LOAD.
-  writer.emit(`sw $0, 0x${ctrl.toString(16)}($0)`);
-  emitNormalizeTimerToIdleZero(writer, ctrl, preset);
-  writer.emit(`sw $8, 0x${preset.toString(16)}($0)`);
-  writer.emit(`sw $9, 0x${ctrl.toString(16)}($0)`);
-  writer.emit(`sw $9, 0x${ctrl.toString(16)}($0)`);
-  const ctrlFirstLoadPc = writer.pc();
-  writer.emit(`lw $14, 0x${count.toString(16)}($0)`);
-  const ctrlSecondLoadPc = writer.pc();
-  writer.emit(`lw $15, 0x${count.toString(16)}($0)`);
-  const ctrlThirdLoadPc = writer.pc();
-  writer.emit(`lw $16, 0x${count.toString(16)}($0)`);
-  writer.emit('nop');
-  writer.emit('nop');
-  writer.emit(`bne $14, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.emit(`bne $15, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.emit(`bne $16, $8, ${badLabel}`);
-  writer.emit('nop');
-  writer.emit(`sw $0, 0x${ctrl.toString(16)}($0)`);
-  emitEnableInterrupts(writer);
-
-  const resumePc = writer.pc() + 3 * 4;
-  emitStoreImmediate(writer, resumePc, p7ProbeStateDonePc);
-  const victimPc = writer.pc();
-  writer.emit('syscall');
-  if (writer.pc() !== resumePc) {
-    throw new BuiltinAsmGeneratorError(`Internal generator error: P7 timer write-priority scenario ${id} return PC was miscalculated.`);
-  }
-  writer.label(`_co_probe_s${id}_done`);
-  const completionPc = writer.pc();
-  writer.emit(`ori $1, $0, ${id}`);
-  writer.emit(`beq $0, $0, ${afterBadLabel}`);
-  writer.emit('nop');
-  writer.label(badLabel);
-  writer.emit(`beq $0, $0, ${badLabel}`);
-  writer.emit('nop');
-  writer.label(afterBadLabel);
-  emitPadding(writer, rng, padding.postMin, padding.postMax);
-
-  return {
-    ...scenarioWithLocations(id, kind, victimPc, completionPc),
-    variant,
-    expectedIpMask: 0,
-    expectedExcCode: expectedExcCode('syscall'),
-    expectedBd: false,
-    allowedEpc: [victimPc],
-    victimPc,
-    timerPreset: finalPreset,
-    requireCompletion: true,
-    requiredPreHandlerCommits: [
-      { pc: firstLoadPc, kind: 'grf', target: 11, value: 0 },
-      { pc: secondLoadPc, kind: 'grf', target: 12, value: 0 },
-      { pc: thirdLoadPc, kind: 'grf', target: 13, value: finalPreset },
-      { pc: ctrlFirstLoadPc, kind: 'grf', target: 14, value: 0 },
-      { pc: ctrlSecondLoadPc, kind: 'grf', target: 15, value: 0 },
-      { pc: ctrlThirdLoadPc, kind: 'grf', target: 16, value: 0x20 }
-    ]
-  };
-}
-
-function emitNormalizeTimerToIdleZero(writer: ProgramWriter, ctrl: number, preset: number): void {
-  // Drive a zero-length mode-0 period to completion; COUNT is read-only.
-  emitStoreImmediate(writer, 0, preset);
-  emitStoreImmediate(writer, 1, ctrl);
-  for (let i = 0; i < 8; i++) {
-    writer.emit('nop');
-  }
-  writer.emit(`sw $0, 0x${ctrl.toString(16)}($0)`);
-  for (let i = 0; i < 4; i++) {
-    writer.emit('nop');
-  }
 }
 
 function pcRange(startPc: number, endPc: number): number[] {

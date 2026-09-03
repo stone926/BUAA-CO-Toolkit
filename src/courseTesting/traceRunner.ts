@@ -9,6 +9,7 @@ import {
 } from '../config';
 import { P7ProbeMetadata } from './builtinAsmGenerator';
 import { checkP7Probe } from './p7ProbeCheck';
+import { firstDmStoreDifference } from './dmStoreCheck';
 import {
   compareTraceIterables,
   firstTraceDiffSnapshot
@@ -471,6 +472,9 @@ export async function runCourseTraceCase(
     compareCycles: defaultTraceCompareMode.compareCycles,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
+  const storeDifference = diff.matched && oracle.events && (profile === 'P6' || profile === 'P7')
+    ? firstDmStoreDifference(oracle.events, simText)
+    : undefined;
 
   if (!diff.summary.oracleEvents || !diff.summary.dutEvents) {
     const emptyTraceMessage = !diff.summary.oracleEvents && !diff.summary.dutEvents
@@ -499,15 +503,15 @@ export async function runCourseTraceCase(
     asm: asm.fsPath,
     stdin: item.stdin?.fsPath,
     ...caseResultFields(asmCase),
-    status: diff.matched ? 'passed' : 'failed',
+    status: diff.matched && !storeDifference ? 'passed' : 'failed',
     stage: 'compare',
-    message: diffMessage(diff),
+    message: storeDifference?.reason ?? diffMessage(diff),
     machineCode: asmCase.machineCode.fsPath,
     oracleOut: oracle.outputFile.fsPath,
     dutOut: dut.simOut.fsPath,
     dutBackend: dut.backend,
     firstDiffIndex: diff.firstDiffIndex >= 0 ? diff.firstDiffIndex : undefined,
-    firstDiff: firstTraceDiffSnapshot(diff),
+    firstDiff: storeDifference ?? firstTraceDiffSnapshot(diff),
     oracleEvents: diff.summary.oracleEvents,
     dutEvents: diff.summary.dutEvents,
     matchedEvents: diff.summary.matchedEvents,

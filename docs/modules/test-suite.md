@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 201 files | 框架: Vitest
+# test-suite | src/test/ | 205 files | 框架: Vitest
 
 单元/集成测试, 镜像src/结构. npm test = vitest run. 以下为<name>.test.ts
 
@@ -15,6 +15,7 @@ test/language/verilog/:
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/verilog/:
+  dmStoreContract — 真实 bundled Icarus 执行 P6/P7 完整 testbench：SB/SH 错误全使能读改写在旧实现整条 trace 相同、新实现失败；覆盖各宽度/扩展 store、无效事务、使能 lane、忽略的地址低位 X/Z，以及失败摘要接线
   verilogBackend, iseProjectOrder, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、ISE 源发现/XISE 顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime 纯映射与 unsupported 分支、五 target 路径/预检、Unix `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 
 TextMate:
@@ -24,6 +25,9 @@ test/language/logisim/:
   service, rom, realProjectPatterns
 
 test/courseTesting/:
+  builtinRegisterCoverage — P3–P7 默认最大 payload 的全 GPR 双端口读与存储观察、真实 RegisterFile 的 $28 恒零/$28-$29 别名变异；P4/P5 十二种 jr 生产者/间隔的陈旧目标变异；完成标记、halt 和各阶段容量
+  dmStoreCheck — 原始公开 DM 事务对拍：同整字下的错误 mask/字节选择、目标 word、缺失/重复/乱序写、使能 lane 的错误与 X/Z；禁用 lane 任意数据、SW 忽略的低地址位和不同 GPR 写回时序均可接受，traceRunner 回归覆盖整字匹配时仍判失败
+  p7ProbeAudit — young-MDU 完整旧/新 HI/LO 允许态与损坏反例、Timer 稳定 pending-writes 的额外时钟间隔、首次 CP0 reset 样本错误/丢失/重复/延迟与后续覆盖，全部自动 probe 分片容量
   builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous；覆盖 continuous P7 首失败/取消/展开与部分生成异常的会话所有权清理，以及 terminal/manual/session mismatch 的 fail-closed 保留
   p7ProbeScenarios, p7ProbeMmio, p7ProbePriority, p7ProbeMdu — 五分片多 seed 的完整变体覆盖、实际汇编与 IM/DM 容量；Timer 非法读写、pending 优先级、外部/Timer MDU 的真实汇编执行和损坏 CP0/HI/LO/重试写回负例；模型执行不冒充真实 DUT 的流水线证据
 

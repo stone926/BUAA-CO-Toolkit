@@ -65,6 +65,21 @@ export function checkP7Probe(
   const records = reconstructProbeRecords(simEvents, metadata);
   const diagnostics = parseProbeDiagnostics(simOutput);
   const failures: P7ProbeFailure[] = [];
+  for (const [name, expected] of Object.entries(metadata.initialCp0 ?? {})) {
+    const writes = simEvents.filter((event) => parseHex(event.pc) === (expected.pc >>> 0));
+    const matches = matchingCommits(simEvents, expected);
+    if (writes.length !== 1 || matches.length !== 1) {
+      failures.push({
+        scenarioId: 0, kind: 'cp0-reset',
+        message: `CP0 reset ${name} read-back differs: expected exactly one zero sample at PC 0x${expected.pc.toString(16)}`
+      });
+    } else if (records.some((record) => record.firstLineNumber <= matches[0].lineNumber)) {
+      failures.push({
+        scenarioId: 0, kind: 'cp0-reset',
+        message: `CP0 reset ${name} sample appeared after an exception record`
+      });
+    }
+  }
   for (const diagnostic of diagnostics) {
     if (diagnostic.includes('mmio_on_dm')
       || diagnostic.includes('external_raise_unarmed')

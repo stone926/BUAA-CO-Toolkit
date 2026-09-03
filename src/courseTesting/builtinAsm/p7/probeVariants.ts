@@ -7,7 +7,7 @@ const timerPriorityVariants = [
   'priority-ri', 'priority-adel', 'priority-ades', 'priority-ov', 'priority-syscall',
   'priority-syscall-delay-taken', 'priority-syscall-delay-not-taken'
 ];
-const timerVariants = ['mode0-min', 'mode0-max', 'mode1-repeat', 'disable-reload', 'write-priority',
+const timerVariants = ['mode0-min', 'mode0-max', 'mode1-repeat', 'disable-reload', 'pending-writes',
   ...timerPriorityVariants, ...mduVariants];
 
 const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = {

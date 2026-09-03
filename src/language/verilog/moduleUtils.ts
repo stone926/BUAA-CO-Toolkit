@@ -188,6 +188,9 @@ function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): 
     dataWriteBlock: view.hasExternalDataMemory && view.hasClk
       ? separatedBlock(externalDataMemoryWriteLines(view.hasReset, view.isP7ExternalInterface, view.hasDataMemoryTrace))
       : '',
+    storeContractBlock: view.hasExternalInstructionMemory && view.hasDataMemoryTrace && view.hasClk
+      ? storeContractBlock(view.hasReset, courseExternalInstructionMemoryWords, courseExternalDataMemoryWords)
+      : '',
     writebackTraceBlock: view.hasWritebackTrace && view.hasClk ? separatedBlock(writebackTraceLines(view.hasReset)) : '',
     courseInitialBlock: separatedBlock(courseExternalInitialLines(view.module, view.hasClk, view.hasReset)),
     clockBlock: view.hasClk ? separatedBlock(['    always #2 clk <= ~clk;']) : ''
@@ -216,7 +219,17 @@ function buildP7OfficialTestbench(
     instructionMemoryWords: p7InstructionMemoryWords,
     instructionMemoryLastIndex: p7InstructionMemoryWords - 1,
     userTextBase: verilogHex32(p7UserTextBaseAddress),
+    storeContractBlock: storeContractBlock(true, p7InstructionMemoryWords, p7DataMemoryWords),
     interruptBlock: p7Probe ? p7ProbeBlock(p7Probe) : p7InterruptBlock(interruptSchedule)
+  });
+}
+
+function storeContractBlock(hasReset: boolean, instructionMemoryWords: number, dataMemoryWords: number): string {
+  return renderResourceTemplate('verilog/dm_store_contract.v', {
+    activeCondition: hasReset ? '!reset && ' : '',
+    userTextBase: verilogHex32(p7UserTextBaseAddress),
+    instructionMemoryWords,
+    dataMemoryBytes: dataMemoryWords * 4
   });
 }
 

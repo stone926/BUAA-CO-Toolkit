@@ -398,12 +398,24 @@ describe('Logisim trace helpers', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
     const text = [
       '00000000\t00003000\t1\t0 0000\t00000001\t0\txxxxxxxx\txxxxxxxx',
+      '00000000\t00003000\t1\t0 0000\txxxxxxxx\t0\txxxxxxxx\txxxxxxxx',
+      '00000000\t00003000\t1\t0 0000\tzzzzzzzz\t0\txxxxxxxx\txxxxxxxx',
       '00000000\t00003004\t0\t0 0010\txxxxxxxx\t0\txxxxxxxx\txxxxxxxx'
     ].join('\n');
 
     const parsed = parseLogisimTraceOutput(text, spec);
 
     expect(parsed.events).toEqual([]);
+  });
+
+  it('retains a zero-valued write to a nonzero register and requires a known destination', () => {
+    const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
+    const row = '00000000\t00003000\t1\t0 0010\t00000000\t0\txxxxxxxx\txxxxxxxx';
+
+    expect(parseLogisimTraceOutput(row, spec).events).toMatchObject([
+      { kind: 'grf', target: '2', value: '00000000' }
+    ]);
+    expect(() => parseLogisimTraceOutput(row.replace('0 0010', 'x xxxx'), spec)).toThrow('unknown regaddr');
   });
 
   it('validates fetched Instr values against generated machine code', () => {

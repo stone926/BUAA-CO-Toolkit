@@ -260,9 +260,9 @@ describe('P7 timer cycle state machine', () => {
   });
 
   it('exposes 0, 0, PRESET when PRESET or CTRL is the colliding third write', () => {
-    // This is the architectural observation used by the generated student-DUT probe.
-    // Each write is one M-stage WE edge; each following read samples Dout before its
-    // non-WE edge advances IDLE -> LOAD -> CNT.
+    // This device-only vector explicitly controls every WE and non-WE edge.
+    // Adjacent assembly accesses do not establish this cadence for a CPU probe.
+    // Each read samples Dout before its non-WE edge advances IDLE -> LOAD -> CNT.
     const timer = new CourseTimerDevice('timer0');
     timer.write(timerRegisterIndex.preset, 0x20);
     timer.tick();

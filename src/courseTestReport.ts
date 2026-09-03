@@ -22,6 +22,7 @@ import {
 } from './verilog/simulationDiagnostic';
 
 const escapeHtml = html.text;
+const courseTraceScopeNote = html.raw('<p class="muted">通过表示本次程序的可观察结果满足对应检查；无写回指令的完整执行、课程周期范围和内部结构仍需另行验证。</p>');
 
 export type CourseTraceStatus = 'passed' | 'failed' | 'error';
 export type ExecutorShadowReportStatus = 'matched' | 'not-comparable' | 'course-correct' | 'mars-compatible' | 'inconclusive';
@@ -488,6 +489,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
   <div class="paths">
     <div>失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现数据已自动保存。</div>
   </div>
+  ${courseTraceScopeNote}
   ${hiddenNote}
   ${renderTable(['#', '状态', '用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows)}
 `)
@@ -561,6 +563,7 @@ export function renderBatchTraceReport(
   ${generatedAt ? `<div class="paths">生成时间: <code>${escapeHtml(generatedAt)}</code></div>` : ''}
   ${renderBatchSource(source)}
   <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
+  ${courseTraceScopeNote}
   ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', 'DUT 后端', '首个差异', '首个差异详情', '产物', '事件', '消息'], rows)}
 `)
   });
@@ -588,6 +591,7 @@ function renderAutomaticBatchTraceReport(results: CourseTraceCaseResult[]): stri
     { label: '错误', value: summary.errors }
   ])}
   <div class="paths">失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现信息已自动保存。</div>
+  ${courseTraceScopeNote}
   ${renderTable(['#', '状态', '测试点', '结果'], rows)}
 `)
   });

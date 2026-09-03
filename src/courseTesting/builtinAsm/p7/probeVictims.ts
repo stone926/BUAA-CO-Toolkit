@@ -323,18 +323,23 @@ function planYoungerMduVictim(variant: string): InternalExceptionVictimPlan {
     'syscall'
   ];
   const victimInstructionIndex = instructions.length - 1;
+  let completedPair: [number, number];
   switch (variant) {
     case 'young-mult':
       instructions.push('mult $20, $21');
+      completedPair = [0, 63];
       break;
     case 'young-div':
       instructions.push('div $20, $21');
+      completedPair = [2, 14];
       break;
     case 'young-mthi':
       instructions.push('mthi $20');
+      completedPair = [7, p7ProbeLoSentinel];
       break;
     case 'young-mtlo':
       instructions.push('mtlo $21');
+      completedPair = [p7ProbeHiSentinel, 9];
       break;
     default:
       throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported younger MDU probe variant ${variant}.`);
@@ -345,7 +350,12 @@ function planYoungerMduVictim(variant: string): InternalExceptionVictimPlan {
     epcInstructionIndex: victimInstructionIndex,
     victimInstructionIndex,
     recordHiLo: true,
-    allowedAuxPairs: [[p7ProbeHiSentinel, p7ProbeLoSentinel]]
+    // P7 permits already-started younger MDU operations to finish when the
+    // exception is taken. Public reads establish complete results, not the
+    // internal stage at which the operation started. Reject torn/corrupt pairs
+    // and require mthi/mtlo to preserve the half they do not modify.
+    allowedAuxPairs: [[p7ProbeHiSentinel, p7ProbeLoSentinel], completedPair],
+    auxPairDescription: `${variant.slice(6)} younger HI/LO (unchanged or already started)`
   };
 }
 

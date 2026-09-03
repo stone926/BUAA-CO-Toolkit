@@ -51,6 +51,7 @@ import {
   courseAsmHaltLoop
 } from '../mipsUtil';
 import { Random, hashSeed } from '../random';
+import { emitGeneralRegisterCoverage, emitRegisterJumpCoverage, RegisterCoverageWriter } from './registerCoverage';
 import { p7SafeInterruptAnchorMnemonics } from '../p7InterruptAnchor';
 import {
   p7RiWordCatalog,
@@ -318,6 +319,7 @@ class ProgramGenerator {
   private interruptAnchorTargetIndex: number | undefined;
   private labelIndex = 0;
   private emittedCount = 0;
+  private completionMarkerPending: boolean;
   private nextRiWordOccurrence = 0;
   private nextMduProbeMode: MduReadProbeMode = 'busy';
   private readonly nextBranchOutcome = new Map<string, boolean>();
@@ -338,6 +340,8 @@ class ProgramGenerator {
     this.profile = profile;
     this.allowed = new Set(mnemonics);
     this.targetCount = targetCount;
+    // All default automatic programs fit this scaffold; retain historical tiny/focus-only cases.
+    this.completionMarkerPending = targetCount >= 256 && this.allowed.has('ori');
     this.seed = seed;
     this.generatedAt = generatedAt;
     this.interruptEnabled = profile === 'P7' && options.interrupt;
@@ -356,6 +360,15 @@ class ProgramGenerator {
   }
 
   generate(): BuiltinAsmGeneratorResult {
+    const coverageWriter: RegisterCoverageWriter = {
+      remaining: () => this.remaining(),
+      pc: () => this.currentPc(),
+      emit: (mnemonic, text) => this.emitStaticInstruction(mnemonic, text),
+      label: (label) => this.addLabel(label)
+    };
+    emitGeneralRegisterCoverage(coverageWriter, this.state, this.allowed,
+      (this.p7HandlerEnabled ? p7PrologueInstructionCount : 0) +
+      (this.interruptEnabled ? p7InterruptAnchorInstructionCount : 0));
     if (this.p7HandlerEnabled) {
       this.emitP7Prologue();
     }
@@ -364,6 +377,7 @@ class ProgramGenerator {
     }
     this.emitMemoryCoverageSeed();
     this.emitControlTargetCoverage();
+    emitRegisterJumpCoverage(coverageWriter, this.state, this.allowed, this.usesDelaySlot());
 
     const coverageQueue = this.shuffle(Array.from(this.allowed));
     let guard = this.targetCount * 30 + 200;
@@ -391,6 +405,12 @@ class ProgramGenerator {
       const startIndex = this.emittedCount;
       this.emitMnemonic(mnemonic);
       this.noteInterruptCandidate(mnemonic, startIndex);
+    }
+
+    if (this.completionMarkerPending) {
+      this.completionMarkerPending = false;
+      this.addLabel('_co_test_complete');
+      this.emitStaticInstruction('ori', 'ori $25, $0, 0x6d6e');
     }
 
     if (this.emittedCount !== this.targetCount) {
@@ -452,7 +472,7 @@ class ProgramGenerator {
     //    acknowledges/clears the interrupt generator at 0x7F20.
     // 2. Internal exceptions advance EPC by 4 to skip the faulting instruction, but must not ack
     //    the external interrupt generator: a pending interrupt may have arrived while EXL was set.
-    // Only $k0/$k1 ($26/$27) are touched; generated user code never reads them, so the handler
+    // Only $k0/$k1 ($26/$27) are touched; the randomized body never reads them, so the handler
     // is transparent to user-visible state. eret has no delay slot.
     return renderP7ExceptionHandlerUnified(p7ExternalInterruptAckAddress, p7ExceptionHandlerAddress);
   }
@@ -1766,7 +1786,10 @@ class ProgramGenerator {
   }
 
   private chooseReadRegister(): string {
-    const recent = this.state.recentWrites.filter((register) => register !== '$0');
+    // Directed coverage also writes the poison/handler registers. Keep those outside all
+    // state-dependent operands once control-flow and P7 handler code can modify them.
+    const recent = this.state.recentWrites.filter((register) =>
+      register !== '$0' && register !== '$26' && register !== '$27');
     if (recent.length && this.rng.chance(this.pipelineProfile() ? 0.62 : 0.35)) {
       return this.rng.pick(recent.slice(0, 4));
     }
@@ -2080,7 +2103,7 @@ class ProgramGenerator {
   }
 
   private remaining(): number {
-    return this.targetCount - this.emittedCount;
+    return this.targetCount - this.emittedCount - Number(this.completionMarkerPending);
   }
 
   private currentPc(): number {

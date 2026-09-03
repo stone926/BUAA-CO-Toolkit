@@ -655,7 +655,7 @@ describe('P7 probe checker', () => {
       .some((failure) => failure.message.includes('one-shot'))).toBe(true);
   });
 
-  it('checks exact HI/LO sentinels and post-handler completion for younger MDU probes', () => {
+  it('preserves historical HI/LO expectations and checks post-handler completion', () => {
     const metadata: P7ProbeMetadata = {
       version: 1,
       logBase: p7ProbeLogBase,

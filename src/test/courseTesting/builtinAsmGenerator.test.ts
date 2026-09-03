@@ -968,7 +968,7 @@ describe('built-in ASM generator', () => {
     for (const kind of ['timer0', 'timer1'] as const) {
       const timers = timerResult.probe?.scenarios.filter((item) => item.kind === kind) ?? [];
       expect(new Set(timers.map((item) => item.variant))).toEqual(new Set([
-        'mode0-min', 'mode0-max', 'mode1-repeat', 'disable-reload', 'write-priority'
+        'mode0-min', 'mode0-max', 'mode1-repeat', 'disable-reload', 'pending-writes'
       ]));
       expect(timers.find((item) => item.variant === 'mode0-min')?.timerPreset).toBe(p7ProbeTimerPresetMin);
       expect(timers.find((item) => item.variant === 'mode0-max')?.timerPreset).toBe(p7ProbeTimerPresetMax);
@@ -1002,23 +1002,25 @@ describe('built-in ASM generator', () => {
       expect(probeScenarioBlock(timerResult.text, reload?.id ?? 0)).toMatch(
         /bne \$10, \$11, _co_probe_s\d+_bad_timer_state[\s\S]*sltu \$12, \$10, \$11[\s\S]*beq \$12, \$0, _co_probe_s\d+_bad_timer_state/
       );
-      const writePriority = timers.find((item) => item.variant === 'write-priority');
-      expect(writePriority?.expectedExcCode).toBe(8);
-      expect(writePriority?.requiredPreHandlerCommits).toEqual([
-        expect.objectContaining({ kind: 'grf', target: 11, value: 0 }),
+      const pendingWrites = timers.find((item) => item.variant === 'pending-writes');
+      expect(pendingWrites?.expectedExcCode).toBe(8);
+      const ipMask = kind === 'timer0' ? 0x400 : 0x800;
+      expect(pendingWrites?.requiredPreHandlerCommits).toEqual([
+        expect.objectContaining({ kind: 'dm', target: 0x27dc, value: ipMask }),
+        expect.objectContaining({ kind: 'grf', target: 11, value: 8 }),
         expect.objectContaining({ kind: 'grf', target: 12, value: 0 }),
-        expect.objectContaining({ kind: 'grf', target: 13, value: 0x40 }),
-        expect.objectContaining({ kind: 'grf', target: 14, value: 0 }),
+        expect.objectContaining({ kind: 'grf', target: 13, value: 0 }),
+        expect.objectContaining({ kind: 'grf', target: 14, value: 0x20 }),
         expect.objectContaining({ kind: 'grf', target: 15, value: 0 }),
-        expect.objectContaining({ kind: 'grf', target: 16, value: 0x20 })
+        expect.objectContaining({ kind: 'grf', target: 16, value: 0 }),
+        expect.objectContaining({ kind: 'grf', target: 13, value: 8 }),
+        expect.objectContaining({ kind: 'grf', target: 14, value: 0x20 }),
+        expect.objectContaining({ kind: 'grf', target: 15, value: 0 }),
+        expect.objectContaining({ kind: 'grf', target: 16, value: ipMask })
       ]);
-      const writePriorityBlock = probeScenarioBlock(timerResult.text, writePriority?.id ?? 0);
-      expect(writePriorityBlock).toMatch(
-        /sw \$8, 0x7f(?:04|14)\(\$0\)\s*\n\s*sw \$9, 0x7f(?:00|10)\(\$0\)\s*\n\s*sw \$10, 0x7f(?:04|14)\(\$0\)\s*\n\s*lw \$11, 0x7f(?:08|18)\(\$0\)\s*\n\s*lw \$12, 0x7f(?:08|18)\(\$0\)\s*\n\s*lw \$13, 0x7f(?:08|18)\(\$0\)/
-      );
-      expect(writePriorityBlock).toMatch(
-        /sw \$8, 0x7f(?:04|14)\(\$0\)\s*\n\s*sw \$9, 0x7f(?:00|10)\(\$0\)\s*\n\s*sw \$9, 0x7f(?:00|10)\(\$0\)\s*\n\s*lw \$14, 0x7f(?:08|18)\(\$0\)\s*\n\s*lw \$15, 0x7f(?:08|18)\(\$0\)\s*\n\s*lw \$16, 0x7f(?:08|18)\(\$0\)/
-      );
+      const pendingWritesBlock = probeScenarioBlock(timerResult.text, pendingWrites?.id ?? 0);
+      expect(pendingWritesBlock).toContain(`_co_probe_s${pendingWrites?.id}_pending_timer:`);
+      expect(pendingWritesBlock).toMatch(/mfc0 \$16, \$13\s*\n\s*andi \$16, \$16, 0x(?:400|800)/);
     }
     const handler = timerResult.text.slice(timerResult.text.indexOf('_co_probe_handler:'));
     expect(timerResult.text).not.toContain('${');
@@ -1032,7 +1034,7 @@ describe('built-in ASM generator', () => {
     expect(timerResult.text).toContain('_co_probe_write_repeat_timer_record:');
   });
 
-  it('covers every younger state-changing MDU instruction with exact HI/LO sentinels', () => {
+  it('covers every younger state-changing MDU instruction with complete old/new HI/LO pairs', () => {
     const result = generateBuiltinAsmTestCase({
       profile: 'P7',
       instructionText: '',
@@ -1044,13 +1046,16 @@ describe('built-in ASM generator', () => {
       timerInterrupt: true,
       probeScenarioCount: p7ProbeDefaultScenarioCount
     });
-    const variants = ['young-mult', 'young-div', 'young-mthi', 'young-mtlo'];
+    const variants = [
+      ['young-mult', [0, 63]], ['young-div', [2, 14]],
+      ['young-mthi', [7, 0x2468ace0]], ['young-mtlo', [0x13579bdf, 9]]
+    ] as const;
 
-    for (const variant of variants) {
+    for (const [variant, completedPair] of variants) {
       const scenario = result.probe?.scenarios.find((item) => item.variant === variant);
       expect(scenario?.kind).toBe('syscall');
       expect(scenario?.expectedBd).toBe(false);
-      expect(scenario?.expectedRecords?.[0].allowedAuxPairs).toEqual([[0x13579bdf, 0x2468ace0]]);
+      expect(scenario?.expectedRecords?.[0].allowedAuxPairs).toEqual([[0x13579bdf, 0x2468ace0], completedPair]);
       expect(scenario?.requireCompletion).toBe(true);
       expect(probeScenarioBlock(result.text, scenario?.id ?? 0)).toMatch(new RegExp(`syscall\\s*\\n\\s*${variant.slice(6)}`));
     }

@@ -95,6 +95,7 @@ module ${tbName};
         end
     end
 
+${storeContractBlock}
     // ----------- For Registers -----------
 
     always @(posedge clk) begin

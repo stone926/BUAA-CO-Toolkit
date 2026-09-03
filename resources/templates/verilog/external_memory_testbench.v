@@ -5,4 +5,4 @@ ${declarations}${memoryDeclarations}
     ${topModuleName} uut (
 ${connections}    );
 
-${memoryInitialBlock}${memoryReadBlock}${dataWriteBlock}${writebackTraceBlock}${courseInitialBlock}${clockBlock}endmodule
+${memoryInitialBlock}${memoryReadBlock}${dataWriteBlock}${storeContractBlock}${writebackTraceBlock}${courseInitialBlock}${clockBlock}endmodule

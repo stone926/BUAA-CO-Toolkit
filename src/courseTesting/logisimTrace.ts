@@ -398,11 +398,11 @@ function logisimRowToTraceEvents(row: LogisimTraceRow): CpuTraceEvent[] {
 
   if (regWrite !== 0) {
     const reg = requiredKnown(row, 'regaddr');
-    const value = requiredKnown(row, 'regdata');
     if (reg.numeric === undefined) {
       throw new Error(`Logisim row ${row.lineNumber} has non-numeric register address.`);
     }
     if (reg.numeric !== 0) {
+      const value = requiredKnown(row, 'regdata');
       events.push(makeTraceEvent(row, pc.hex, 'grf', String(reg.numeric), value.hex));
     }
   }
