@@ -235,7 +235,7 @@ describe('builtin generator workflow', () => {
     );
   });
 
-  it('expands strongest hybrid P7 testing into anchor, core probe, and timer probe shards', async () => {
+  it('expands strongest hybrid P7 testing into anchor and every bounded probe shard', async () => {
     vi.mocked(generateBuiltinAsmTestCase)
       .mockReturnValueOnce({
         profile: 'P7',
@@ -258,6 +258,11 @@ describe('builtin generator workflow', () => {
         probe: { version: 1, shard: 'core', logBase: 0x3000, recordWords: 4, scenarios: [] }
       } as never)
       .mockReturnValueOnce({
+        profile: 'P7', mode: 'probe', text: 'mmio-probe', instructionCount: 10,
+        instructionSet: ['addu'], seed: 'mmio-probe-seed', interruptSchedule: [],
+        probe: { version: 1, shard: 'mmio', logBase: 0x2800, recordWords: 8, scenarios: [] }
+      } as never)
+      .mockReturnValueOnce({
         profile: 'P7',
         mode: 'probe',
         text: 'timer-probe',
@@ -275,7 +280,7 @@ describe('builtin generator workflow', () => {
       probeScenarioCount: 64
     }), { revealOutput: false });
 
-    expect(batch?.asmCases).toHaveLength(3);
+    expect(batch?.asmCases).toHaveLength(6);
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(1, expect.objectContaining({ p7StressMode: 'anchor' }));
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(2, expect.objectContaining({
       p7StressMode: 'probe',
@@ -283,12 +288,13 @@ describe('builtin generator workflow', () => {
       probeScenarioCount: 64,
       exceptionRate: 0
     }));
-    expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      p7StressMode: 'probe',
-      probeShard: 'timer',
-      probeScenarioCount: 10,
-      exceptionRate: 0
-    }));
+    for (const [index, probeShard, probeScenarioCount] of [
+      [3, 'mmio', 26], [4, 'timer', 10], [5, 'priority', 14], [6, 'mdu', 18]
+    ] as const) {
+      expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(index, expect.objectContaining({
+        p7StressMode: 'probe', probeShard, probeScenarioCount, exceptionRate: 0
+      }));
+    }
     expect(createAsmCaseFromText).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({ 'source.seed': 'anchor-seed', 'source.mode': 'anchor' })
     }));
@@ -299,7 +305,7 @@ describe('builtin generator workflow', () => {
         'source.probeShard': 'core'
       })
     }));
-    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(3, expect.anything(), expect.anything(), expect.objectContaining({
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(4, expect.anything(), expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({
         'source.seed': 'timer-probe-seed',
         'source.mode': 'probe',

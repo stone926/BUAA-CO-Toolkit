@@ -21,7 +21,7 @@ import {
   type P7ProbeShard,
   type P7StressMode
 } from './builtinAsmGenerator';
-import { probeVariantCount } from './builtinAsm/p7/probeVariants';
+import { automaticProbeShards, probeVariantCount } from './builtinAsm/p7/probeVariants';
 import {
   buildGeneratorInvocation,
   changedAsmFiles,
@@ -249,7 +249,7 @@ async function runBuiltinGeneratorAndCollectAsms(
         generatedAt,
         interrupt: setup.interrupt && mode !== 'off' && spec.probeShard !== 'timer',
         p7StressMode: mode,
-        timerInterrupt: mode === 'probe' && spec.probeShard === 'timer' && setup.timerInterrupt,
+        timerInterrupt: mode === 'probe' && setup.timerInterrupt,
         externalInterruptIntensity: setup.externalInterruptIntensity,
         timerIntensity: setup.timerIntensity,
         probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
@@ -353,28 +353,20 @@ function builtinGenerationSpecs(setup: BuiltinGeneratorRunSetup): BuiltinGenerat
     return [{ mode: setup.p7StressMode }];
   }
 
-  const probes: BuiltinGenerationSpec[] = [{
-    mode: 'probe',
-    probeShard: 'core',
-    // Every core variant plus twelve short deterministic RI raw-word repeats. This uses the
-    // complete 64-record DM budget while keeping the user program below the 0x4180 handler.
-    probeScenarioCount: Math.min(setup.probeScenarioCount, coreProbeVariantCount() + 12)
-  }];
-  if (setup.timerInterrupt) {
-    probes.push({
-      mode: 'probe',
-      probeShard: 'timer',
-      probeScenarioCount: probeVariantCount('timer0') + probeVariantCount('timer1')
-    });
-  }
+  const probes: BuiltinGenerationSpec[] = automaticProbeShards.flatMap((probeShard) => {
+    const count = (['external', 'adel', 'ades', 'syscall', 'ri', 'ov', 'timer0', 'timer1'] as const)
+      .filter((kind) => setup.timerInterrupt || (kind !== 'timer0' && kind !== 'timer1'))
+      .filter((kind) => setup.interrupt || kind !== 'external')
+      .reduce((total, kind) => total + probeVariantCount(kind, probeShard), 0);
+    return count ? [{
+      mode: 'probe' as const,
+      probeShard,
+      probeScenarioCount: probeShard === 'core' ? Math.max(count, setup.probeScenarioCount) : count
+    }] : [];
+  });
   return setup.p7StressMode === 'hybrid'
     ? [{ mode: 'anchor' }, ...probes]
     : probes;
-}
-
-function coreProbeVariantCount(): number {
-  return (['external', 'adel', 'ades', 'syscall', 'ri', 'ov'] as const)
-    .reduce((total, kind) => total + probeVariantCount(kind), 0);
 }
 
 function builtinAsmFileName(profile: string, generatedAt: Date): string {

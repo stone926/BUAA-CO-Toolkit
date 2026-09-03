@@ -9,7 +9,7 @@ import {
   resolveBuiltinInstructionSet
 } from '../randomBody';
 import { ProgramWriter } from '../programWriter';
-import { P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario, P7ProbeScenarioKind } from '../types';
+import { P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario, P7ProbeScenarioKind, P7ProbeShard } from '../types';
 import {
   p7CauseExcCodeMask,
   p7CauseIpExternalMask,
@@ -82,6 +82,8 @@ import {
   resolveInternalExceptionVictim
 } from './probeVictims';
 import { emitExternalRetryScenario, isExternalRetryVariant } from './probeExternalScenarios';
+import { emitInterruptMduScenario, isInterruptMduVariant } from './probeMduScenarios';
+import { emitInterruptPriorityScenario } from './probePriorityScenarios';
 import {
   ProbePaddingProfile,
   emitClearTimers,
@@ -98,7 +100,7 @@ import { renderResourceTemplate } from '../../../templates/templateRegistry';
 
 const requiredProbeMnemonics = [
   'nop', 'add', 'sub', 'sltu', 'ori', 'lui', 'addi', 'andi', 'beq', 'bne', 'jal', 'jr',
-  'lb', 'lh', 'lw', 'sb', 'sh', 'sw', 'mult', 'div', 'mfhi', 'mflo', 'mthi', 'mtlo',
+  'lb', 'lh', 'lw', 'sb', 'sh', 'sw', 'mult', 'multu', 'div', 'divu', 'mfhi', 'mflo', 'mthi', 'mtlo',
   'mfc0', 'mtc0', 'eret', 'syscall'
 ] as const;
 // Probe user text stays below 0x10000, so storing donePc is one ORI plus one SW.
@@ -140,7 +142,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
   scenarioKinds.forEach((kind, index) => {
     const occurrence = occurrences.get(kind) ?? 0;
     occurrences.set(kind, occurrence + 1);
-    const scenario = emitScenario(main, index + 1, kind, occurrence, rng, padding);
+    const scenario = emitScenario(main, index + 1, kind, occurrence, rng, padding, shard);
     scenarios.push(scenario);
   });
 
@@ -226,9 +228,10 @@ function emitScenario(
   kind: P7ProbeScenarioKind,
   occurrence: number,
   rng: Random,
-  padding: ProbePaddingProfile
+  padding: ProbePaddingProfile,
+  shard: P7ProbeShard
 ): P7ProbeScenario {
-  const variant = probeVariantAt(kind, occurrence);
+  const variant = probeVariantAt(kind, occurrence, shard);
   writer.raw('');
   writer.raw(`# probe scenario ${id}: ${kind}${variant ? `/${variant}` : ''}`);
   emitScenarioGuardCall(writer);
@@ -236,8 +239,11 @@ function emitScenario(
   emitStoreImmediate(writer, probeKindCode(kind), p7ProbeStateKind);
   emitPadding(writer, rng, 0, padding.setupMax);
 
-  if (kind === 'external' && variant?.startsWith('priority-')) {
-    return emitInterruptPriorityScenario(writer, id, variant, rng, padding);
+  if ((kind === 'external' || kind === 'timer0' || kind === 'timer1') && isInterruptMduVariant(variant)) {
+    return emitInterruptMduScenario(writer, id, kind, variant!, rng, padding);
+  }
+  if ((kind === 'external' || kind === 'timer0' || kind === 'timer1') && variant?.startsWith('priority-')) {
+    return emitInterruptPriorityScenario(writer, id, kind, variant, rng, padding);
   }
   if (kind === 'external' && (variant === 'masked-ie' || variant === 'masked-im2')) {
     return emitMaskedExternalScenario(writer, id, variant, rng, padding);
@@ -332,83 +338,6 @@ function emitInternalScenario(
       }]
     } : {})
   };
-}
-
-function emitInterruptPriorityScenario(
-  writer: ProgramWriter,
-  id: number,
-  variant: string,
-  rng: Random,
-  padding: ProbePaddingProfile
-): P7ProbeScenario {
-  const exceptionKind = priorityExceptionKind(variant);
-  const setup = exceptionKind === 'ov'
-    ? loadImmediateInstructions('$8', 0x7fffffff)
-    : [];
-  for (const instruction of setup) {
-    writer.emit(instruction);
-  }
-  emitStoreImmediate(writer, p7ProbeFlagResumeInterruptEpc, p7ProbeStateFlags);
-  // donePc follows: done-PC store, arm store, interrupt enable, and one exception victim.
-  const donePc = writer.pc() + 7 * 4;
-  emitStoreImmediate(writer, donePc, p7ProbeStateDonePc);
-  emitStoreImmediate(writer, id, p7ProbeExternalArmAddress);
-  emitEnableInterrupts(writer);
-  const victimPc = writer.pc();
-  writer.emit(priorityVictimInstruction(exceptionKind));
-  if (writer.pc() !== donePc) {
-    throw new BuiltinAsmGeneratorError(`Internal generator error: P7 priority probe scenario ${id} return PC was miscalculated.`);
-  }
-  writer.label(`_co_probe_s${id}_done`);
-  writer.emit(`ori $1, $0, ${id}`);
-  emitPadding(writer, rng, padding.postMin, padding.postMax);
-  return {
-    ...scenarioWithLocations(id, 'external', victimPc, donePc),
-    expectedBd: false,
-    allowedEpc: [victimPc],
-    variant,
-    victimPc,
-    waitPc: victimPc,
-    armAddress: p7ProbeExternalArmAddress,
-    armValue: id,
-    externalDelayCycles: 0,
-    expectedRecords: [
-      {
-        expectedIpMask: p7CauseIpExternalMask,
-        expectedExcCode: 0,
-        expectedBd: false,
-        allowedEpc: [victimPc]
-      },
-      {
-        expectedIpMask: 0,
-        expectedExcCode: expectedExcCode(exceptionKind),
-        expectedBd: false,
-        allowedEpc: [victimPc]
-      }
-    ],
-    requireCompletion: true
-  };
-}
-
-function priorityExceptionKind(variant: string): 'adel' | 'ades' | 'syscall' | 'ov' {
-  const kind = variant.slice('priority-'.length);
-  if (kind === 'adel' || kind === 'ades' || kind === 'syscall' || kind === 'ov') {
-    return kind;
-  }
-  throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported P7 priority probe variant ${variant}.`);
-}
-
-function priorityVictimInstruction(kind: 'adel' | 'ades' | 'syscall' | 'ov'): string {
-  switch (kind) {
-    case 'adel':
-      return 'lw $8, 1($0)';
-    case 'ades':
-      return 'sw $8, 1($0)';
-    case 'syscall':
-      return 'syscall';
-    case 'ov':
-      return 'addi $9, $8, 1';
-  }
 }
 
 function emitMaskedExternalScenario(
@@ -694,6 +623,7 @@ function emitTimerMode1RepeatScenario(
     allowedEpc: freshAllowedEpcs,
     timerPreset,
     requireCompletion: true,
+    replayStatusAddress: p7ProbePostEretStatusAddress,
     expectedRecords: [
       {
         expectedIpMask: ipMask,
@@ -983,6 +913,7 @@ function renderProbeHandler(): string[] {
     mode1FailureMarkerHiHex: asmHex(mode1FailureMarkerHi),
     mode1FailureMarkerLoHex: asmHex(mode1FailureMarkerLo),
     mode1MarkerAddressHex: asmHex(p7ProbeMaskedInterruptMarkerAddress),
+    replayStatusAddressHex: asmHex(p7ProbePostEretStatusAddress),
     probeKindTimer1: p7ProbeKindTimer1,
     eretPoisonAddressHex: asmHex(p7ProbeEretPoisonAddress),
     probeFlagRecordHiLo: p7ProbeFlagRecordHiLo,

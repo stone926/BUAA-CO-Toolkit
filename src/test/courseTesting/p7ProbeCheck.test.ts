@@ -32,6 +32,34 @@ const baseMetadata: P7ProbeMetadata = {
 };
 
 describe('P7 probe checker', () => {
+  it('requires an independent second Status sample inside its packed record', () => {
+    const metadata: P7ProbeMetadata = {
+      version: 1, logBase: p7ProbeLogBase, recordWords: p7ProbeRecordWords,
+      scenarios: [{
+        id: 1, kind: 'timer0', expectedIpMask: 0x400, allowedEpc: [0x3020], donePc: 0x3024,
+        replayStatusAddress: 0x27d8,
+        expectedRecords: [
+          { expectedIpMask: 0x400, expectedExcCode: 0, allowedEpc: [0x3020] },
+          { expectedIpMask: 0, expectedExcCode: 10, allowedEpc: [0x3020] }
+        ]
+      }]
+    };
+    const lines = recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0x400, 0x3020, 10 << 2, 0x3020]);
+    const sample = '0@00004190: *000027d8 <= 00001c03';
+    const valid = [lines[0], sample, ...lines.slice(1)].join('\n');
+    expect(checkP7Probe(valid, parseSimOutput(valid), metadata).passed).toBe(true);
+    for (const invalid of [
+      lines.join('\n'),
+      [sample, ...lines].join('\n'),
+      [...lines, sample].join('\n'),
+      [lines[0], sample, sample, ...lines.slice(1)].join('\n'),
+      valid.replace('*000027d8 <= 00001c03', '*000027d8 <= 00001c01')
+    ]) {
+      const checked = checkP7Probe(invalid, parseSimOutput(invalid), metadata);
+      expect(checked.failures.some((failure) => failure.message.includes('Status'))).toBe(true);
+    }
+  });
+
   it('accepts valid external and timer records', () => {
     const sim = [
       ...recordLines(0, [p7ProbeMagic, 1, 1, 0x1c03, 0x1000, 0x3020, 0, 0]),

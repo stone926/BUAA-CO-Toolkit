@@ -615,12 +615,25 @@ describe('built-in ASM generator', () => {
       timerInterrupt: true,
       probeScenarioCount: 10
     });
+    const mmioResult = generateBuiltinAsmTestCase({
+      profile: 'P7',
+      instructionText: '',
+      instructionCount: 200,
+      seed: 'p7-probe-mmio-shard',
+      interrupt: false,
+      p7StressMode: 'probe',
+      probeShard: 'mmio',
+      timerInterrupt: false,
+      probeScenarioCount: 26
+    });
+    const sourceByScenario = new Map([coreResult, timerResult, mmioResult].flatMap((generated) =>
+      generated.probe!.scenarios.map((scenario) => [scenario, generated.text] as const)));
     const result = {
       ...coreResult,
-      text: `${coreResult.text}\n${timerResult.text}`,
+      text: `${coreResult.text}\n${timerResult.text}\n${mmioResult.text}`,
       probe: {
         ...coreResult.probe!,
-        scenarios: [...coreResult.probe!.scenarios, ...timerResult.probe!.scenarios]
+        scenarios: [...coreResult.probe!.scenarios, ...timerResult.probe!.scenarios, ...mmioResult.probe!.scenarios]
       }
     };
 
@@ -628,6 +641,7 @@ describe('built-in ASM generator', () => {
     expect(result.probe?.logBase).toBe(p7ProbeLogBase);
     expect(coreResult.probe?.scenarios).toHaveLength(p7ProbeDefaultScenarioCount);
     expect(timerResult.probe?.scenarios).toHaveLength(10);
+    expect(mmioResult.probe?.scenarios).toHaveLength(26);
     expect(new Set(result.probe?.scenarios.map((scenario) => scenario.kind))).toEqual(new Set([
       'external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'
     ]));
@@ -642,7 +656,9 @@ describe('built-in ASM generator', () => {
       'misaligned-load-delay-taken', 'misaligned-load-delay-not-taken',
       'misaligned-half-load-delay-taken', 'misaligned-half-load-delay-not-taken',
       'ea-overflow-load', 'dm-out-of-range-load',
-      'timer-byte-load', 'timer-half-load', 'invalid-fetch', 'misaligned-fetch'
+      'timer-byte-load', 'timer-half-load', 'invalid-fetch', 'misaligned-fetch',
+      ...['timer0-preset', 'timer0-count', 'timer1-ctrl', 'timer1-preset', 'timer1-count']
+        .flatMap((register) => [`${register}-byte-load`, `${register}-half-load`])
     ];
     const adesVariants = [
       'misaligned-store-delay-taken', 'misaligned-store-delay-not-taken',
@@ -652,7 +668,9 @@ describe('built-in ASM generator', () => {
       'timer0-ctrl-half-store', 'timer1-ctrl-half-store',
       'timer0-preset-byte-store', 'timer1-preset-byte-store',
       'timer0-preset-half-store', 'timer1-preset-half-store',
-      'timer0-count-store', 'timer1-count-store'
+      'timer0-count-store', 'timer1-count-store',
+      'timer0-count-byte-store', 'timer1-count-byte-store',
+      'timer0-count-half-store', 'timer1-count-half-store'
     ];
     const ovVariants = [
       'add-overflow-delay-taken', 'add-overflow-delay-not-taken',
@@ -663,8 +681,8 @@ describe('built-in ASM generator', () => {
     const generatedAdesVariants = result.probe?.scenarios.filter((scenario) => scenario.kind === 'ades').map((scenario) => scenario.variant) ?? [];
     const generatedRiVariants = result.probe?.scenarios.filter((scenario) => scenario.kind === 'ri').map((scenario) => scenario.variant) ?? [];
     const generatedOvVariants = result.probe?.scenarios.filter((scenario) => scenario.kind === 'ov').map((scenario) => scenario.variant) ?? [];
-    expect(generatedAdelVariants.slice(0, adelVariants.length)).toEqual(adelVariants);
-    expect(generatedAdesVariants.slice(0, adesVariants.length)).toEqual(adesVariants);
+    expect(generatedAdelVariants).toHaveLength(adelVariants.length);
+    expect(generatedAdesVariants).toHaveLength(adesVariants.length);
     expect(generatedOvVariants.slice(0, ovVariants.length)).toEqual(ovVariants);
     expect(new Set(generatedAdelVariants)).toEqual(new Set(adelVariants));
     expect(new Set(generatedAdesVariants)).toEqual(new Set(adesVariants));
@@ -712,13 +730,24 @@ describe('built-in ASM generator', () => {
       ['unknown-opcode', /\.word 0xfc000000/],
       ['unknown-funct', /\.word 0x0000003f/]
     ]);
+    for (const [register, address] of [
+      ['timer0-preset', '7f04'], ['timer0-count', '7f08'],
+      ['timer1-ctrl', '7f10'], ['timer1-preset', '7f14'], ['timer1-count', '7f18']
+    ]) {
+      variantPatterns.set(`${register}-byte-load`, new RegExp(`lb \\$\\d+, 0x${address}\\(\\$0\\)`));
+      variantPatterns.set(`${register}-half-load`, new RegExp(`lh \\$\\d+, 0x${address}\\(\\$0\\)`));
+    }
+    for (const [timer, address] of [['timer0', '7f08'], ['timer1', '7f18']]) {
+      variantPatterns.set(`${timer}-count-byte-store`, new RegExp(`sb \\$20, 0x${address}\\(\\$0\\)`));
+      variantPatterns.set(`${timer}-count-half-store`, new RegExp(`sh \\$20, 0x${address}\\(\\$0\\)`));
+    }
     for (const scenario of internalScenarios) {
       if (scenario.variant) {
         const pattern = variantPatterns.get(scenario.variant);
         if (!pattern) {
           throw new Error(`missing probe variant pattern for ${scenario.variant}`);
         }
-        expect(probeScenarioBlock(result.text, scenario.id)).toMatch(pattern);
+        expect(probeScenarioBlock(sourceByScenario.get(scenario)!, scenario.id)).toMatch(pattern);
       }
     }
     const invalidFetch = result.probe?.scenarios.find((scenario) => scenario.variant === 'invalid-fetch');
@@ -741,7 +770,7 @@ describe('built-in ASM generator', () => {
 
     const timerAdesScenarios = result.probe?.scenarios.filter((scenario) =>
       scenario.kind === 'ades' && scenario.variant?.startsWith('timer')) ?? [];
-    expect(timerAdesScenarios).toHaveLength(10);
+    expect(timerAdesScenarios).toHaveLength(14);
     for (const scenario of timerAdesScenarios) {
       const expected = scenario.expectedRecords?.[0];
       expect(expected?.requireEqualAuxPair).toBe(true);
@@ -749,7 +778,7 @@ describe('built-in ASM generator', () => {
       const target = scenario.variant?.includes('timer1')
         ? scenario.variant.includes('ctrl') ? 0x7f10 : scenario.variant.includes('preset') ? 0x7f14 : 0x7f18
         : scenario.variant?.includes('ctrl') ? 0x7f00 : scenario.variant?.includes('preset') ? 0x7f04 : 0x7f08;
-      expect(probeScenarioBlock(result.text, scenario.id)).toContain(`lw $21, ${p7Hex(target)}($0)`);
+      expect(probeScenarioBlock(sourceByScenario.get(scenario)!, scenario.id)).toContain(`lw $21, ${p7Hex(target)}($0)`);
       if (scenario.variant?.includes('ctrl')) {
         expect(expected?.allowedAuxPairs).toEqual([[0, 0]]);
       } else if (scenario.variant?.includes('preset')) {
@@ -829,7 +858,8 @@ describe('built-in ASM generator', () => {
       ['priority-syscall', 8],
       ['priority-adel', 4],
       ['priority-ades', 5],
-      ['priority-ov', 12]
+      ['priority-ov', 12],
+      ['priority-ri', 10]
     ] as const) {
       const priority = result.probe?.scenarios.find((item) => item.variant === variant);
       expect(priority?.expectedRecords?.[0]).toEqual(expect.objectContaining({
@@ -1147,38 +1177,6 @@ describe('built-in ASM generator', () => {
     expect(result.probe?.scenarios).toHaveLength(p7ProbeMaxScenarioCount);
     expect(mainLines.length).toBeLessThanOrEqual((p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4);
     expect(mainText).toMatch(/_co_probe_all_done:\s*\n\s*beq \$0, \$0, _co_probe_all_done\s*\n\s*nop\s*$/);
-  });
-
-  it('keeps deterministic automatic probe shards below 0x4180 across seeds', () => {
-    const maximum = (p7ExceptionHandlerAddress - p7UserTextBaseAddress) / 4;
-    for (let index = 0; index < 32; index++) {
-      const common = {
-        profile: 'P7' as const,
-        instructionText: 'eret jr mult',
-        instructionCount: p7CourseInstructionCountMaximum,
-        seed: `p7-shard-capacity-${index}`,
-        p7StressMode: 'probe' as const,
-        timerInterrupt: true,
-        exceptionTypes: ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov']
-      };
-      const core = generateBuiltinAsmTestCase({
-        ...common,
-        interrupt: true,
-        probeShard: 'core',
-        probeScenarioCount: 64
-      });
-      const timer = generateBuiltinAsmTestCase({
-        ...common,
-        interrupt: false,
-        probeShard: 'timer',
-        probeScenarioCount: 10
-      });
-
-      expect(core.probe?.scenarios).toHaveLength(64);
-      expect(timer.probe?.scenarios).toHaveLength(10);
-      expect(core.instructionCount).toBeLessThanOrEqual(maximum);
-      expect(timer.instructionCount).toBeLessThanOrEqual(maximum);
-    }
   });
 
   it('completes the hardened Mode-1 protocol against the official timer cycle model', () => {

@@ -25,6 +25,7 @@ test/language/logisim/:
 
 test/courseTesting/:
   builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous；覆盖 continuous P7 首失败/取消/展开与部分生成异常的会话所有权清理，以及 terminal/manual/session mismatch 的 fail-closed 保留
+  p7ProbeScenarios, p7ProbeMmio, p7ProbePriority, p7ProbeMdu — 五分片多 seed 的完整变体覆盖、实际汇编与 IM/DM 容量；Timer 非法读写、pending 优先级、外部/Timer MDU 的真实汇编执行和损坏 CP0/HI/LO/重试写回负例；模型执行不冒充真实 DUT 的流水线证据
 
 test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsReplay/:
   ISA catalog/encode/decode golden 与 core/LSP/generator 多目标 projection 收敛/--check；有界 JSONL CLI；Worker protocol v2、从 0 连续 sequence、consumer 成功后 ACK、slice 取消与 crash generation；provider preflight immutable request/launch；source graph、ProgramImage、engine trust registry、exact replay/re-evaluate、真实 MARS 可选集成

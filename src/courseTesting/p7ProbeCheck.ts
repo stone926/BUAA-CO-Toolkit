@@ -39,6 +39,7 @@ export interface P7ProbeRecord {
   epc: number;
   aux0: number;
   aux1: number;
+  firstLineNumber: number;
   lastLineNumber: number;
   duplicateFields: number[];
 }
@@ -153,8 +154,18 @@ export function checkP7Probe(
       finalRecord = record;
       validateExpectedRecord(record, expectedRecords[0], scenario, 0, failures);
       if (expectedRecords.length > 1) {
+        const statusSamples = scenario.replayStatusAddress === undefined ? [] : simEvents.filter((event) =>
+          event.kind === 'dm' && parseHex(event.target) === (scenario.replayStatusAddress! >>> 0)
+          && event.lineNumber > record.firstLineNumber && event.lineNumber < record.lastLineNumber);
+        if (scenario.replayStatusAddress !== undefined && statusSamples.length !== 1) {
+          failures.push(failure(scenario, `record 2: expected one independently sampled Status, got ${statusSamples.length}`));
+        }
         const replayRecord: P7ProbeRecord = {
           ...record,
+          // Historical metadata predates the separate observation. Newly generated probes
+          // must supply it; never infer the second EXL from the first interrupt entry.
+          status: scenario.replayStatusAddress === undefined ? record.status
+            : statusSamples.length === 1 ? parseHex(statusSamples[0].value) : 0,
           cause: record.aux0,
           epc: record.aux1,
           aux0: 0,
@@ -223,6 +234,15 @@ export function checkP7Probe(
         ));
       } else if (finalRecord && completionEvents[0].lineNumber <= finalRecord.lastLineNumber) {
         failures.push(failure(scenario, 'completion marker appeared before the final handler record'));
+      }
+    }
+    const requiredCommits = [...(scenario.requiredPreHandlerCommits ?? []), ...(scenario.requiredCommits ?? [])];
+    for (const pc of new Set(requiredCommits.map((commit) => commit.pc >>> 0))) {
+      const expectedCount = requiredCommits.filter((commit) => (commit.pc >>> 0) === pc).length;
+      const actualCount = simEvents.filter((event) => parseHex(event.pc) === pc).length;
+      if (actualCount !== expectedCount) {
+        failures.push(failure(scenario,
+          `required commit PC 0x${pc.toString(16)}: expected ${expectedCount} total writes, got ${actualCount}`));
       }
     }
     for (const expectedCommit of scenario.requiredPreHandlerCommits ?? []) {
@@ -427,6 +447,7 @@ function reconstructProbeRecords(
       epc: values[5] >>> 0,
       aux0: values[6] >>> 0,
       aux1: values[7] >>> 0,
+      firstLineNumber: Math.min(...lineNumbers.filter(Number.isFinite)),
       lastLineNumber: Math.max(...lineNumbers.filter(Number.isFinite)),
       duplicateFields: counts
         .map((count, fieldIndex) => count > 1 ? fieldIndex : -1)

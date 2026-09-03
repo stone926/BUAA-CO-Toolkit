@@ -6,7 +6,9 @@ MARS reference 按角色严格拆分：assembly compatibility 使用 `mars-assem
 
 生成程序边界：自动测试强度由 `automaticTestPolicy.ts` 内部固定，用户只可通过 `co.test.instructions` 选择重点 payload 指令。instruction_count 只统计 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop。P3-P6 自动使用 4094 条 payload，P7 使用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 兼容路径因 Compact* 排他 bug 单独采用 4095-word policy（末址 0x6ff8），不属于 automatic policy。P7 DUT image 把 text/ktext 等非 data 段按绝对地址合并并用零填补空洞，不再丢失 0x4180 内核段。
 
-P7 自动固定运行 hybrid：anchor(TS 课程 oracle 精确对拍+中断注入)与 probe(DM 探针黑盒检查)同时覆盖；probe 在内部确定性拆为 core 64 场景与 Timer 10 场景，使 62 个显式变体全部覆盖、core 用满 64-record 容量且每个程序都留在 0x4180 前。外部中断、Timer 与全部课程异常类型始终启用。probe 为 DUT-only，不能冒充 full-stack reference evidence；低层 mode/分片仅为历史 replay/内部测试类型，不是公共设置。
+P7 自动固定运行 hybrid：anchor(TS 课程 oracle 精确对拍+中断注入)与 probe(DM 探针黑盒检查)同时覆盖；probe 在内部确定性拆为 core 64、MMIO 26、Timer 10、priority 14、MDU 18 场景，每轮覆盖全部 109 个显式变体，core 剩余位置补 RI；每个程序都留在 0x4180 前，最多使用 64 个 DM 记录。外部中断、Timer 与全部课程异常类型始终启用。probe 为 DUT-only，不能冒充 full-stack reference evidence；低层 mode/分片仅为历史 replay/内部测试类型，不是公共设置。
+
+P7 系统组合使用合法的程序可见状态同步：Timer Mode0 在 IE=0 下通过 Cause.IP 轮询确认 pending，再设置 EXL/EPC，经 handler 内独立 eret 入口精确返回受害指令。Timer 与 RI/AdEL/AdES/Ov/Syscall 的直接组合检查 Int 优先、随后重试异常；两种分支组合先中断分支，再检查延迟槽异常的 BD/EPC。外部与两路 Timer 分别组合六种 MDU 写操作，handler 接受课程允许的完整旧/新 HI/LO 状态，返回后必须精确读回结果，mthi/mtlo 未修改的半部必须保留。该观察不能区分产生相同完整结果的合法早启动与非法晚启动，因此不把黑盒结果宣称为内部 MDU 启动时刻的证明。
 
 阶段 6 引擎边界：automatic case 直接建立 builtin `CourseEnginePlan`，生成规模、工具链预检、prepare 与 oracle 均不读取 workspace rollback，也不会启动 legacy capability probe；这保证 text/ktext `.word` RI 可稳定执行。手动 case 开始时读取一次 resource-scoped `co.mips.engine` 并生成原子计划，prepare 与 oracle 必须复用：`auto` 对 P3–P7 选 builtin，stdin/交互能力在阶段 7 前明确选 legacy；`builtin` 强制 builtin；`mars` 强制 configured legacy；`verify-both` 主路径 builtin，并用固定 reference 的独立汇编结果喂给独立 legacy executor。builtin event artifact 在持久化时复核 event count/digest、final-state digest、engine/image/profile/stop 绑定；assembler 与 executor 使用各自逻辑 artifact/revision 身份。
 
@@ -27,7 +29,7 @@ generation:
   courseTesting/batchRunner.ts — 批量课程 Trace case 调度、结果汇总和 trace-batch-report.json 写入；会话级 AbortController 贯穿 assembler/oracle/Icarus/Logisim，`stopCourseTraceBatch()` 支持停止当前 batch；新报告固定 schemaVersion 2 与 assemble/oracle/dut/compare/probe/internal 中立 stage，未分类框架异常不得伪装成 compare 失败
   courseTesting/courseTestSession.ts — batch 与 continuous 共用的原子会话租约；任意单次/持续课程测试互斥，避免共享 Icarus/Logisim 工作目录、testbench 和机器码被并发覆写，release 幂等并在 finally 中执行
   courseTesting/automaticTestPolicy.ts — 自动测试引擎、强度与外部工具预算唯一入口：固定 builtin；P3-P6 4094 payload，P7 1118+hybrid+全异常，中断/Timer 固定开启；持续测试的停止/留存策略也在此冻结
-  courseTesting/generatorWorkflow.ts — 自动入口始终使用内置 generator 和 internal policy，不再由活动外部生成器文件接管；生成器 provenance/实际指令数/continuous ownership 随 case 首次 manifest 原子写入，不再紧接第二次 metadata 提交，部分生成失败时回收已创建且仍属本 session 的 case；P7 hybrid 内部展开为 anchor/core-probe/timer-probe，分片写入 manifest 供精确 replay 但不形成用户设置；历史 external setup 与完整 CourseTraceBatchSource provenance 仅供隐藏兼容/精确 replay
+  courseTesting/generatorWorkflow.ts — 自动入口始终使用内置 generator 和 internal policy，不再由活动外部生成器文件接管；生成器 provenance/实际指令数/continuous ownership 随 case 首次 manifest 原子写入，不再紧接第二次 metadata 提交，部分生成失败时回收已创建且仍属本 session 的 case；P7 hybrid 内部展开为 anchor 与目录定义的五个 probe 分片，分片写入 manifest 供精确 replay 但不形成用户设置；历史 external setup 与完整 CourseTraceBatchSource provenance 仅供隐藏兼容/精确 replay
   courseTesting/executorShadowRunner.ts — executor-only shadow 宿主：同一 legacy ProgramImage 证据上对比 builtin executor；结果显式标为 `executor-only`，不能计入 full-stack gate
   courseTesting/fullStackShadowRunner.ts + shadowBundleArtifacts.ts — full-stack shadow：从已哈希 v2 source closure 建立隔离 materialization，builtin assembler→builtin executor 与 fixed legacy assembler→其自身 legacy executor 双端独立运行；前后复验 fixed hash、逐字比较实际 image，matched/mismatch/inconclusive 都原子保存 source/image/raw trace/engine/contracts/result bundle，未登记或不可比较结果阻断
 
@@ -69,8 +71,11 @@ p7-probe:
   courseTesting/builtinAsm/p7/probeAsm.ts — 安全噪声填充、中断启停、Timer 清零、立即数/探针状态写入等辅助原语
   courseTesting/builtinAsm/p7/probeEmitter.ts — Probe 主程序和统一异常处理程序生成；固定脚手架不依赖用户 payload 重点集；每场景 guard->触发/中断窗口->完成标记，写入单个 8-word 物理记录；中断优先级重放把第二次 Cause/EPC 打包进 aux，Timer 在 handler 软件清零前捕获 CTRL/COUNT；Mode1 先屏蔽设备 IM，再以软件轮询证明至少两次 COUNT 回卷、重新开 CPU 中断前 Cause.IP 已撤销，最后才接受新的 IRQ；另覆盖 disable/re-enable reload 与 WE 对状态机的优先级
   courseTesting/builtinAsm/p7/probeExternalScenarios.ts — 外部中断的真实受害位置与重试路径：store、load-use 依赖、jal、已取/未取分支延迟槽 store；描述必须且仅能在异常处理后出现一次的 GPR/DM 提交
-  courseTesting/builtinAsm/p7/probeScenarios.ts — 场景 kind 规划：先覆盖启用的 external/timer/异常类别，再依据变体数量补齐轮换，最后按强度加权填充并随机截取；内部 core/timer 分片不互相泄漏
-  courseTesting/builtinAsm/p7/probeVariants.ts — 场景变体目录和最小覆盖计数：外部 Syscall/AdEL/AdES/Ov 优先级、IE/IM 屏蔽窗口、等待与五类重试；AdEL/AdES/Ov 的已取/未取分支延迟槽；Timer Mode0 min/max、Mode1 双回卷+旧 IRQ 撤销+新 IRQ、disable/re-enable reload、WE 优先；syscall 后置 Status/年轻 MDU；RI catalog unknown opcode/funct
+  courseTesting/builtinAsm/p7/probeScenarios.ts — 场景 kind 规划：先覆盖启用类别，再按当前分片的变体计数补齐轮换；core 余量以 RI 填充，其余分片只在自身类别内填充
+  courseTesting/builtinAsm/p7/probeVariants.ts — 109 个变体及唯一分片归属：外部 Syscall/AdEL/AdES/Ov/RI 优先级、Timer 与五种内部异常优先级、两路 Timer 六寄存器 lb/lh 和 Count sb/sh/sw、六种 MDU 中断重试；保留屏蔽/等待/访存与跳转重试、延迟槽异常、Timer Mode0/Mode1/reload/WE、年轻 MDU、RI raw words
+  courseTesting/builtinAsm/p7/probePriorityScenarios.ts — 外部与 Timer 中断优先级序列、Cause.IP pending 证据和 handler eret 释放原语；Int 后重试异常独立检查两次 Status
+  courseTesting/builtinAsm/p7/probeMduOperations.ts — 中断 MDU 六种操作及变体名称的纯目录，生成器与分片共用
+  courseTesting/builtinAsm/p7/probeMduScenarios.ts — 外部/Timer0/Timer1 的 HI/LO 初始化哨兵、中断允许态、精确 EPC 重试和返回后 GRF/DM 结果检查；复用 Timer pending/eret 原语
   courseTesting/builtinAsm/p7/probeVictims.ts — 内部异常精确触发序列：计算 victim PC、EPC/BD，覆盖对齐/越界/MMIO 宽度/取指异常与溢出；RI 在分支延迟槽使用共享 catalog 的 `.word` raw word；用 handler aux 回读 Timer 前后状态捕获内部副作用；syscall 后置 mult/div/mthi/mtlo 用 HI/LO 哨兵验证年轻 MDU 指令不得启动
   courseTesting/builtinAsm/p7/constants.ts — 课程映射常量：用户段 0x3000、异常入口 0x4180、DM 探针区 0x2800(8 words/场景)、Timer 0x7f00-0x7f1c、外部中断应答 0x7f20、magic 0xc0a70001
 
@@ -78,7 +83,7 @@ logisim/verilog-observer:
   courseTesting/logisimTraceProfile.ts — P3 Logisim Trace profile：从 courseConfig 读取/校验 text base、ROM 容量、列顺序/宽度、halt 和 PC 监控策略
   courseTesting/logisimPrep.ts — LogisimPrepareCaseResult、preparedCircuitFileName
   courseTesting/logisimTrace.ts — 电路分析(XML 端口标注/label 推导/appearance 排序)、Trace 解析(TTY table->CpuTraceEvent)、识别源码已有停机尾并以自环首条计算 halt PC、PC 监控自动 kill、Fetch 校验
-  courseTesting/p7ProbeCheck.ts — P7 黑盒精确检查：严格解析 DM Trace 并按物理顺序重建完整记录，拒绝未知/重复字段、0x2fff 之外 DM 写及任一 eret 后 poison 写；要求 Status 精确为 0x1c03、Cause 未实现位为 0，并校验 ExcCode/IP/BD、EPC、HI/LO、Timer 捕获/异常前后回读一致、任一期望异常 record 的 victim 无提交、handler 前后精确 commit，以及外部 arm/raise/ack 顺序
+  courseTesting/p7ProbeCheck.ts — P7 黑盒精确检查：严格解析 DM Trace 并按物理顺序重建完整记录，拒绝未知/重复字段、0x2fff 之外 DM 写及任一 eret 后 poison 写；要求 Status 精确为 0x1c03，新生成 packed replay 在记录窗口内独立采样第二次 Status（兼容旧 metadata），并校验 Cause 未实现位、ExcCode/IP/BD、EPC、HI/LO、Timer 前后状态、异常 victim 无提交、handler 前后精确 commit 及外部 arm/raise/ack 顺序；期望提交 PC 上的额外错误值/目标/种类写回也会失败
   resources/templates/verilog/p7_probe_invalid_store_observer.v + p7_probe_invalid_store_case.v — 仅通过公开的 m_inst_addr/m_data_byteen/m_int_byteen 观察 AdES victim；若无效 store 仍产生任一 byte-enable，输出 invalid_store_effect 并令 Probe 失败
 
 case-storage:

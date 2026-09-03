@@ -1,5 +1,5 @@
 export type P7StressMode = 'anchor' | 'probe' | 'hybrid' | 'off';
-export type P7ProbeShard = 'all' | 'core' | 'timer';
+export type P7ProbeShard = 'all' | 'core' | 'timer' | 'mmio' | 'priority' | 'mdu';
 export type P7ProbeScenarioKind = 'external' | 'timer0' | 'timer1' | 'adel' | 'ades' | 'syscall' | 'ri' | 'ov' | 'internal';
 
 export interface P7ProbeExpectedRecord {
@@ -44,6 +44,8 @@ export interface P7ProbeScenario {
   externalDelayCycles?: number;
   /** Ordered CP0 observations; a replay probe packs its second Cause/EPC into aux0/aux1. */
   expectedRecords?: P7ProbeExpectedRecord[];
+  /** DM scratch address containing the independently sampled second handler Status. */
+  replayStatusAddress?: number;
   /** Require the generated done marker (`ori $1, $0, id`) after the final handler record. */
   requireCompletion?: boolean;
   /** Exact commits which must occur once, after this scenario's handler record. */

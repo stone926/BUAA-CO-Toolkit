@@ -62,14 +62,22 @@ _co_probe_check_timer1:
     sw $0, ${timer1CtrlHex}($0)
 _co_probe_check_external:
     andi $26, $24, ${causeIpExternalMaskHex}
-    beq $26, $0, _co_probe_record_interrupt
+    beq $26, $0, _co_probe_check_priority_interrupt
     nop
     sb $0, ${externalInterruptAckHex}($0)
+_co_probe_check_priority_interrupt:
     lw $22, ${stateFlagsHex}($0)
     andi $22, $22, ${probeFlagResumeInterruptEpc}
     bne $22, $0, _co_probe_capture_priority_interrupt
     nop
 _co_probe_record_interrupt:
+    lw $22, ${stateFlagsHex}($0)
+    andi $22, $22, ${probeFlagRecordHiLo}
+    beq $22, $0, _co_probe_write_interrupt_record
+    nop
+    mfhi $20
+    mflo $21
+_co_probe_write_interrupt_record:
     lw $26, ${stateRecordPtrHex}($0)
     lui $27, ${magicHiHex}
     ori $27, $27, ${magicLoHex}
@@ -116,6 +124,7 @@ _co_probe_write_repeat_timer_record:
     lui $27, ${magicHiHex}
     ori $27, $27, ${magicLoHex}
     sw $27, 0($26)
+    sw $25, ${replayStatusAddressHex}($0)
     lw $27, ${stateScenarioIdHex}($0)
     sw $27, 4($26)
     lw $27, ${stateKindHex}($0)
@@ -238,6 +247,7 @@ _co_probe_record_priority_exception:
     lui $27, ${magicHiHex}
     ori $27, $27, ${magicLoHex}
     sw $27, 0($26)
+    sw $25, ${replayStatusAddressHex}($0)
     lw $27, ${stateScenarioIdHex}($0)
     sw $27, 4($26)
     lw $27, ${stateKindHex}($0)
@@ -254,5 +264,8 @@ _co_probe_record_priority_exception:
     sw $26, ${stateRecordPtrHex}($0)
     lw $23, ${stateDonePcHex}($0)
     mtc0 $23, $14
+    eret
+    sw $0, ${eretPoisonAddressHex}($0)
+_co_probe_priority_release:
     eret
     sw $0, ${eretPoisonAddressHex}($0)

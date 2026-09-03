@@ -21,6 +21,12 @@ export const p7ProbeHiSentinel = 0x13579bdf;
 export const p7ProbeLoSentinel = 0x2468ace0;
 export const p7ProbeTimerPresetSentinel = 0x13579bdf;
 
+type TimerRegister = 'ctrl' | 'preset' | 'count';
+const timerRegisters: readonly Record<TimerRegister, number>[] = [
+  { ctrl: p7Timer0Ctrl, preset: p7Timer0Preset, count: p7Timer0Count },
+  { ctrl: p7Timer1Ctrl, preset: p7Timer1Preset, count: p7Timer1Count }
+];
+
 export type P7ProbeTimerObservation =
   | 'timer0-ctrl'
   | 'timer0-preset'
@@ -136,9 +142,29 @@ function planAdelVictim(variant: string | undefined, rng: Random, doneLabel: str
     case 'dm-out-of-range-load':
       return directVictimPlan([`lw ${target}, ${hex(p7DmEndExclusive)}($0)`]);
     case 'timer-byte-load':
-      return directVictimPlan([`lb ${target}, ${hex(p7Timer0Ctrl)}($0)`]);
+      return planTimerLoadVictim(0, 'ctrl', 'lb', target);
     case 'timer-half-load':
-      return directVictimPlan([`lh ${target}, ${hex(p7Timer0Ctrl)}($0)`]);
+      return planTimerLoadVictim(0, 'ctrl', 'lh', target);
+    case 'timer0-preset-byte-load':
+      return planTimerLoadVictim(0, 'preset', 'lb', target);
+    case 'timer0-preset-half-load':
+      return planTimerLoadVictim(0, 'preset', 'lh', target);
+    case 'timer0-count-byte-load':
+      return planTimerLoadVictim(0, 'count', 'lb', target);
+    case 'timer0-count-half-load':
+      return planTimerLoadVictim(0, 'count', 'lh', target);
+    case 'timer1-ctrl-byte-load':
+      return planTimerLoadVictim(1, 'ctrl', 'lb', target);
+    case 'timer1-ctrl-half-load':
+      return planTimerLoadVictim(1, 'ctrl', 'lh', target);
+    case 'timer1-preset-byte-load':
+      return planTimerLoadVictim(1, 'preset', 'lb', target);
+    case 'timer1-preset-half-load':
+      return planTimerLoadVictim(1, 'preset', 'lh', target);
+    case 'timer1-count-byte-load':
+      return planTimerLoadVictim(1, 'count', 'lb', target);
+    case 'timer1-count-half-load':
+      return planTimerLoadVictim(1, 'count', 'lh', target);
     case 'invalid-fetch':
       return {
         instructions: [...loadImmediateInstructions('$20', p7InvalidFetchPc), 'jr $20', 'nop'],
@@ -194,19 +220,34 @@ function planAdesVictim(variant: string | undefined, rng: Random, doneLabel: str
       return planTimerStoreVictim(0, 'count', 'sw');
     case 'timer1-count-store':
       return planTimerStoreVictim(1, 'count', 'sw');
+    case 'timer0-count-byte-store':
+      return planTimerStoreVictim(0, 'count', 'sb');
+    case 'timer1-count-byte-store':
+      return planTimerStoreVictim(1, 'count', 'sb');
+    case 'timer0-count-half-store':
+      return planTimerStoreVictim(0, 'count', 'sh');
+    case 'timer1-count-half-store':
+      return planTimerStoreVictim(1, 'count', 'sh');
     default:
       throw new BuiltinAsmGeneratorError(`Internal generator error: unsupported P7 AdES probe variant ${String(variant)}.`);
   }
 }
 
+function planTimerLoadVictim(
+  timer: 0 | 1,
+  register: TimerRegister,
+  mnemonic: 'lb' | 'lh',
+  target: string
+): InternalExceptionVictimPlan {
+  return directVictimPlan([`${mnemonic} ${target}, ${hex(timerRegisters[timer][register])}($0)`]);
+}
+
 function planTimerStoreVictim(
   timer: 0 | 1,
-  register: 'ctrl' | 'preset' | 'count',
+  register: TimerRegister,
   mnemonic: 'sb' | 'sh' | 'sw'
 ): InternalExceptionVictimPlan {
-  const registers = timer === 0
-    ? { ctrl: p7Timer0Ctrl, preset: p7Timer0Preset, count: p7Timer0Count }
-    : { ctrl: p7Timer1Ctrl, preset: p7Timer1Preset, count: p7Timer1Count };
+  const registers = timerRegisters[timer];
   const address = registers[register];
   const observation = `timer${timer}-${register}` as P7ProbeTimerObservation;
   const setup = [`sw $0, ${hex(registers.ctrl)}($0)`];
@@ -219,6 +260,10 @@ function planTimerStoreVictim(
       ...loadImmediateInstructions('$20', expectedValue),
       `sw $20, ${hex(address)}($0)`
     );
+  } else {
+    // A stopped official timer may still be in LOAD; let LOAD -> CNT -> IDLE
+    // settle before taking the baseline, regardless of the prior scenario.
+    setup.push('nop', 'nop');
   }
 
   // Low nibble 0b0110 keeps a wrongly-written CTRL stopped and IRQ-disabled, while
