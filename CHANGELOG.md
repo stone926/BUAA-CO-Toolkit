@@ -4,6 +4,13 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-04
+
+- fix(test): restore strict TypeScript checks (819d591)
+- fix(course-testing): address CPU automatic test audit (ef55a70)
+- update doc (dcf2f08)
+- fix(course-testing): cover P7 interrupt and Timer probe gaps (a2feeb6)
+
 ## [1.2.0] - 2026-09-02
 
 - feat(verilog): bundle Icarus Verilog 13.0 for Linux x64 and ARM64, built and verified on Ubuntu 22.04 with no separate Icarus installation required
