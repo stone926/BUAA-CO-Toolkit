@@ -111,7 +111,7 @@ test('shared default policy is maximum-strength P7 and unbounded continuous test
   });
 });
 
-test('default CLI generates anchor, core probe, and timer probe and writes a sanitized report', {
+test('default CLI generates the anchor and every automatic probe shard and writes a sanitized report', {
   skip: process.platform !== 'win32' ? 'bundled Icarus is supported on Windows x64 only' : false
 }, (t) => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'co-test-cli-'));
@@ -170,15 +170,19 @@ test('default CLI generates anchor, core probe, and timer probe and writes a san
   const caseDirs = fs.readdirSync(casesRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(casesRoot, entry.name));
-  assert.equal(caseDirs.length, 3);
+  // The default hybrid round prepares one anchor case plus one case per automatic probe shard.
+  const { automaticProbeShards } = require(
+    path.join(testCliDir, 'dist', 'src', 'courseTesting', 'builtinAsm', 'p7', 'probeVariants.js')
+  );
+  assert.equal(caseDirs.length, 1 + automaticProbeShards.length);
   const manifests = caseDirs.map((caseDir) => JSON.parse(fs.readFileSync(path.join(caseDir, 'case.json'), 'utf8')));
   assert.deepEqual(
     manifests.map((manifest) => manifest.metadata?.['source.mode']).sort(),
-    ['anchor', 'probe', 'probe']
+    ['anchor', ...automaticProbeShards.map(() => 'probe')]
   );
   assert.deepEqual(
     manifests.map((manifest) => manifest.metadata?.['source.probeShard']).filter(Boolean).sort(),
-    ['core', 'timer']
+    [...automaticProbeShards].sort()
   );
   assert.equal(manifests.some((manifest) => manifest.metadata?.['test.status']), true);
 

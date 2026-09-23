@@ -172,7 +172,8 @@ export function verifyBundledIverilogCourseCompatibility({
     module: verilogModule("mips", p6Ports),
     testbenchOptions: { profile: "P6", finishDelay: false },
     dutText: p6Dut(p6Ports),
-    machineCode: courseMachineCode("3401002a"),
+    // The DUT stores at 0x3004; the DM store contract requires a real SW there.
+    machineCode: courseMachineCode({ 0: "3401002a", 1: "ac010004" }),
     expectedTestbenchText: [
       '$readmemh("code.txt", inst);',
       "assign i_inst_rdata = inst[(i_inst_addr - 32'h3000) >> 2];",
@@ -203,7 +204,8 @@ export function verifyBundledIverilogCourseCompatibility({
   });
 
   const p7Module = verilogModule("mips", p7Ports);
-  const p7MachineCode = courseMachineCode("3401002a");
+  // The DUT's arm write at 0x300c must be backed by `sw $1, 0x27d0($0)` for the DM store contract.
+  const p7MachineCode = courseMachineCode({ 0: "3401002a", 3: "ac0127d0" });
   const p7DutText = p7Dut(p7Ports);
 
   runSelectedCourseCase({
@@ -573,10 +575,11 @@ function p7Dut(ports) {
   ].join("\n");
 }
 
-function courseMachineCode(firstWord) {
+/** Full course IM image: `words` maps instruction indexes to hex encodings; every other word is zero. */
+function courseMachineCode(words) {
   return Array.from(
     { length: courseInstructionWords },
-    (_unused, index) => (index === 0 ? firstWord : "00000000"),
+    (_unused, index) => words[index] ?? "00000000",
   ).join("\n") + "\n";
 }
 
