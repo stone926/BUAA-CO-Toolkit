@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-09-23
+
 - fix(ci): back the bundled Icarus course smoke's P6/P7 data-memory writes with real `sw` instructions so the DM store contract passes and all five platform VSIX packages verify again
 - test(test-cli): expect the default hybrid P7 round to prepare the anchor plus every automatic probe shard
 - chore(release): first Marketplace and GitHub release since 1.2.0; it also ships the 1.2.1 and 1.2.2 changes listed below, whose release packaging failed
