@@ -63,6 +63,7 @@ import {
   findUserTestbenchSourceUris,
   recordTestbenchForAsmCase,
   resolveNamedTestbench,
+  testbenchCompileSources,
   TestbenchResolution
 } from './testbenchResolver';
 import { runSerializedWorkspaceOperation } from './workspaceOperationQueue';
@@ -291,7 +292,7 @@ async function runIverilogInWorkspace(
 
   const extraVerilogFiles = dedupeUris([
     ...(options.extraVerilogFiles ?? []),
-    ...(testbench.generatedUri ? [testbench.generatedUri] : [])
+    ...testbenchCompileSources(folder, testbench)
   ]);
   const configuredTestbench = getTestbench(activeUri);
   const excludedTestbenchSources = nonInteractive

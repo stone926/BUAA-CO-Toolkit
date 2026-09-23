@@ -197,11 +197,11 @@ function renderExternalMemoryTestbench(view: ExternalMemoryTestbenchViewModel): 
   });
 }
 
-function lineList(lines: string[]): string {
+export function lineList(lines: string[]): string {
   return lines.length ? `${lines.join('\n')}\n` : '';
 }
 
-function separatedBlock(lines: string[]): string {
+export function separatedBlock(lines: string[]): string {
   return lines.length ? `${lines.join('\n')}\n\n` : '';
 }
 

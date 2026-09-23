@@ -10,7 +10,6 @@ import {
   getTopModule
 } from './config';
 import {
-  buildTestbench,
   moduleAtPosition,
   parseVerilog
 } from './language/verilog/service';
@@ -27,13 +26,17 @@ import {
 } from './verilog/iseProject';
 import {
   coSettingsForUri,
-  toTextDocument,
-  verilogDelayFromSimTime
+  toTextDocument
 } from './verilog/documentContext';
 import {
-  defaultUserTestbenchUri,
   findExistingTestbenchResolution,
+  userTestbenchText
 } from './verilog/testbenchResolver';
+import {
+  createUserTestbench,
+  isUserTestbenchUri,
+  userTestbenchUri
+} from './verilog/userTestbench';
 import {
   compileIsim as compileIsimCore,
 } from './verilog/isimRunner';
@@ -91,6 +94,10 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
   if (!profile) {
     return;
   }
+  if (isUserTestbenchUri(editor.document.uri)) {
+    vscode.window.showInformationMessage('当前文件已是 .co/tb 下的 testbench，编写激励后点击运行即可仿真');
+    return;
+  }
   const document = toTextDocument(editor.document);
   const parsed = parseVerilog(document, coSettingsForUri(editor.document.uri), false);
   const target = moduleAtPosition(parsed.modules, {
@@ -113,8 +120,14 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
     await vscode.window.showTextDocument(existing.resolution.sourceUri);
     return;
   }
-  const tbUri = await defaultUserTestbenchUri(editor.document.uri, tbName, isConfiguredTop);
+  const tbUri = userTestbenchUri(editor.document.uri, tbName);
+  const tbText = userTestbenchText(target, tbName, {
+    profile,
+    configuredTop: isConfiguredTop,
+    simTime: getSimTime(editor.document.uri)
+  });
   if (await pathExists(tbUri.fsPath)) {
+    // The file exists but declares no usable testbench module; replace it only on request.
     const choice = await vscode.window.showWarningMessage(`${path.basename(tbUri.fsPath)} 已存在`, '打开', '覆盖');
     if (choice === '打开') {
       await vscode.window.showTextDocument(tbUri);
@@ -123,13 +136,11 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
     if (choice !== '覆盖') {
       return;
     }
+    await writeTextFile(tbUri, tbText);
+  } else {
+    await createUserTestbench(tbUri, tbText);
   }
-  await writeTextFile(tbUri, buildTestbench(target, tbName, {
-    finishDelay: verilogDelayFromSimTime(getSimTime(editor.document.uri)),
-    profile
-  }));
-  moduleRegistry?.updateUri(tbUri);
-  await vscode.window.showTextDocument(tbUri);
+  await vscode.window.showTextDocument(tbUri, { preview: false });
 }
 
 async function runIseOnlyCommand<T>(action: () => Promise<T>): Promise<T | undefined> {

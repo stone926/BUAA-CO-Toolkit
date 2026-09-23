@@ -116,7 +116,9 @@ vi.mock('../../verilog/testbenchResolver', () => ({
   ensureRunnableTestbench: vi.fn(),
   findUserTestbenchSourceUris: vi.fn(),
   recordTestbenchForAsmCase: vi.fn(async () => undefined),
-  resolveNamedTestbench: vi.fn()
+  resolveNamedTestbench: vi.fn(),
+  testbenchCompileSources: vi.fn((_folder: unknown, resolution: { generatedUri?: unknown }) =>
+    resolution.generatedUri ? [resolution.generatedUri] : [])
 }));
 
 const resource = URI.file('E:/work/src/mips.v');

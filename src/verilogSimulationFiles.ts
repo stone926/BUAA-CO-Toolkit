@@ -1,3 +1,5 @@
+import * as path from 'path';
+import { CO_TB_DIR } from './constants';
 import { renderResourceTemplate } from './templates/templateRegistry';
 
 export const generatedTestbenchMarker = '// CO_GENERATED_RUNTIME_TESTBENCH';
@@ -5,8 +7,29 @@ export const automaticRuntimeTestbenchName = 'co_generated_auto_tb';
 export const p7AutoRuntimeTestbenchName = 'co_generated_p7_auto_tb';
 export const verilogProjectExcludeGlob = '**/{node_modules,out,.git,.co,.vscode,.vscode-test}/**';
 
+const userTestbenchDirectoryParts = CO_TB_DIR.split('/');
+
 export function runtimeTestbenchFileName(testbenchName: string): string {
   return `co_generated_${safeFileStem(testbenchName)}.v`;
+}
+
+/** File name of a user-owned testbench under `.co/tb`; it matches the module name when that is filename-safe. */
+export function userTestbenchFileName(testbenchName: string): string {
+  return `${safeFileStem(testbenchName)}.v`;
+}
+
+/**
+ * Whether `file` lies under `<workspaceRoot>/.co/tb`. Project discovery skips
+ * `.co`, so callers must compile or check these user testbenches explicitly.
+ */
+export function isUserTestbenchPath(workspaceRoot: string, file: string): boolean {
+  const relative = path.relative(workspaceRoot, file);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return false;
+  }
+  const parts = relative.split(/[\\/]+/);
+  return parts.length > userTestbenchDirectoryParts.length
+    && userTestbenchDirectoryParts.every((part, index) => parts[index].toLowerCase() === part);
 }
 
 export function generatedRuntimeTestbenchText(testbenchText: string): string {

@@ -477,7 +477,8 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
       `当前 Verilog:\n${active.fsPath}`,
       '',
       'P1/独立模块没有统一 Top/TB。',
-      '运行时会优先使用当前 testbench；否则为当前模块生成临时 <module>_tb。',
+      '运行时优先使用当前 testbench；否则使用 .co/tb/<module>_tb.v。',
+      '首次运行会在 .co/tb 生成激励模板并打开，编写激励后再次运行；插件不会覆盖该文件。',
       `仿真工作目录: .co/isim`,
       `仿真输出: .co/out`
     ].join('\n');
@@ -488,7 +489,7 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
     '',
     `仿真工作目录: .co/isim`,
     `仿真输出: .co/out`,
-    `运行时 TB: .co/isim/co_generated_<tb>.v`
+    `TB 查找: 工作区 <tb> → .co/tb/<tb>.v → 临时 .co/isim/co_generated_<tb>.v`
   ];
   if (context.profile !== 'P1') {
     lines.push('ASM 会在执行时选择，导入 .co/cases/<caseId>，再复制 code.txt 到 .co/isim/<machineCode>。');

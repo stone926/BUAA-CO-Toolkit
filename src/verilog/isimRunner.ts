@@ -57,6 +57,7 @@ import {
   findUserTestbenchSourceUris,
   recordTestbenchForAsmCase,
   resolveNamedTestbench,
+  testbenchCompileSources,
   TestbenchResolution
 } from './testbenchResolver';
 import { automaticExternalToolTimeoutMs } from '../courseTesting/automaticTestPolicy';
@@ -257,7 +258,7 @@ async function attemptCompileIsim(
   }
   const extraVerilogFiles = dedupeUris([
     ...(options.extraVerilogFiles ?? []),
-    ...(resolved.generatedUri ? [resolved.generatedUri] : [])
+    ...testbenchCompileSources(folder, resolved)
   ]);
   const configuredTestbench = getTestbench(activeUri);
   const excludedTestbenchSources = options.nonInteractive

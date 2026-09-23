@@ -16,6 +16,21 @@ export function toTextDocument(document: vscode.TextDocument): TextDocument {
   return TextDocument.create(document.uri.toString(), document.languageId, document.version, document.getText());
 }
 
+/** Prefer the active editor's unsaved text; otherwise read the file, skipping unreadable ones. */
+export async function verilogDocumentForUri(uri: vscode.Uri): Promise<TextDocument | undefined> {
+  const active = vscode.window.activeTextEditor?.document;
+  if (active && active.uri.toString() === uri.toString()) {
+    return toTextDocument(active);
+  }
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    return TextDocument.create(uri.toString(), 'verilog', 1, Buffer.from(bytes).toString('utf8'));
+  } catch {
+    // 文件不可读时跳过该 Verilog 候选
+    return undefined;
+  }
+}
+
 export function coSettingsForUri(uri: vscode.Uri): CoSettings {
   return {
     ...defaultCoSettings,

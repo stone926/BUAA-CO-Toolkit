@@ -57,6 +57,9 @@ export const CO_OUT_DIR = '.co/out';
 /** Verilog 仿真工作目录（兼容沿用 isim 名称）。 */
 export const CO_ISIM_DIR = '.co/isim';
 
+/** 用户 testbench 目录：插件只在缺失时生成一次，之后归用户编辑，从不覆盖。 */
+export const CO_TB_DIR = '.co/tb';
+
 /** Hazard 分析输出目录。 */
 export const CO_HAZARD_DIR = '.co/hazard';
 

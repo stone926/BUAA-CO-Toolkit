@@ -32,7 +32,7 @@ workspace:
   workspaceDiagnostics.ts — 跨文件: 模块重复定义/缺失模块/接口一致性
 
 external-compiler:
-  externalSyntaxProject.ts — 发现与排序外部检查使用的工作区 Verilog 源文件
+  externalSyntaxProject.ts — 发现与排序外部检查使用的工作区 Verilog 源文件；触发保存的 `.co/tb` testbench 追加在末尾
   externalSyntaxCheck.ts — 通用/on-save 检查固定使用 bundled Icarus；仅显式 internal `isim` 请求保留 ISE fuse 兼容分支，工具路径本身不选择后端
   iverilogSyntaxCheck.ts — bundled Icarus `-tnull -i` 检查与最小 stderr 诊断解析
   iseSyntaxCheck.ts — ISE fuse 集成与错误输出解析

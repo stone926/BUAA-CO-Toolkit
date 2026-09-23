@@ -1,7 +1,6 @@
 // @index verilog-testbench-resolver — Verilog testbench 发现、生成和 case 记录
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CO_DIR, CO_ISIM_DIR } from '../constants';
 import {
   getProfile,
@@ -10,6 +9,7 @@ import {
   getTopModule
 } from '../config';
 import {
+  buildStimulusTestbench,
   buildTestbench,
   moduleAtPosition,
   parseVerilog,
@@ -19,6 +19,7 @@ import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolde
 import { AppServices } from '../types';
 import { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import type { MutableVerilogModuleProvider } from '../language/verilog/moduleProvider';
+import type { ConcreteProjectProfile } from '../projectProfile';
 import {
   AsmCase,
   copyAsmCaseArtifact,
@@ -39,9 +40,16 @@ import {
 } from '../pathUtils';
 import {
   coSettingsForUri,
-  toTextDocument,
-  verilogDelayFromSimTime
+  verilogDelayFromSimTime,
+  verilogDocumentForUri
 } from './documentContext';
+import { isIseProjectDiscoveryCandidate } from './iseProject';
+import {
+  createUserTestbench,
+  findUserTestbench,
+  isUserTestbenchUri,
+  userTestbenchUri
+} from './userTestbench';
 import { findWorkspaceFileCandidates } from '../workflowInputs';
 
 export interface VerilogModuleDefinition {
@@ -71,14 +79,49 @@ export interface TestbenchResolutionOptions {
   nonInteractive?: boolean;
 }
 
-export async function defaultUserTestbenchUri(resource: vscode.Uri, tbName: string, configuredTop: boolean): Promise<vscode.Uri> {
-  const folder = workspaceFolderFor(resource);
-  if (configuredTop && folder) {
-    const testDir = vscode.Uri.file(path.join(folder.uri.fsPath, 'test'));
-    await ensureDirectory(testDir);
-    return vscode.Uri.file(path.join(testDir.fsPath, `${tbName}.v`));
+/** Outcome of resolving the testbench for the module under the cursor (P1 module runs). */
+type ActiveModuleTestbenchResult =
+  | { status: 'resolved'; resolution: TestbenchResolution }
+  /** A conflict was reported, or a new `.co/tb` scaffold now awaits the user's stimulus. */
+  | { status: 'stopped' }
+  | { status: 'no-module' };
+
+/**
+ * Initial text of a new `.co/tb` testbench. A P4–P7 configured CPU top keeps the
+ * complete course testbench (memories, trace, termination); every other module
+ * gets the editable stimulus scaffold, because only the user knows its inputs.
+ */
+export function userTestbenchText(
+  module: VerilogModule,
+  tbName: string,
+  context: { profile: ConcreteProjectProfile; configuredTop: boolean; simTime: string }
+): string {
+  if (context.configuredTop && context.profile !== 'P1') {
+    return buildTestbench(module, tbName, {
+      finishDelay: verilogDelayFromSimTime(context.simTime),
+      profile: context.profile
+    });
   }
-  return vscode.Uri.file(path.join(path.dirname(resource.fsPath), `${tbName}.v`));
+  return buildStimulusTestbench(module, tbName);
+}
+
+/**
+ * Testbench files a simulator must append after the project sources: generated
+ * runtime testbenches and user testbenches that project discovery never returns
+ * (for example `.co/tb`). Discoverable sources keep their project/XISE position.
+ */
+export function testbenchCompileSources(
+  folder: vscode.WorkspaceFolder,
+  resolution: TestbenchResolution
+): vscode.Uri[] {
+  const sources: vscode.Uri[] = [];
+  if (resolution.generatedUri) {
+    sources.push(resolution.generatedUri);
+  }
+  if (resolution.sourceUri?.scheme === 'file' && !isIseProjectDiscoveryCandidate(folder, resolution.sourceUri)) {
+    sources.push(resolution.sourceUri);
+  }
+  return sources;
 }
 
 /**
@@ -186,15 +229,21 @@ export async function ensureRunnableTestbench(
     };
   }
 
+  // P1 has no project-wide top: the module under the cursor owns the run,
+  // even when a wizard-created `main` module also exists.
+  if (getProfile(resource) === 'P1') {
+    const moduleRun = await resolveActiveModuleTestbench(services, resource, showMessages, moduleRegistry, options);
+    if (moduleRun.status === 'resolved') {
+      return moduleRun.resolution;
+    }
+    if (moduleRun.status === 'stopped') {
+      return undefined;
+    }
+  }
+
   const topName = getTopModule(resource);
   const topDefinition = await findTopModuleDefinition(resource, topName, moduleRegistry);
   if (!topDefinition) {
-    if (getProfile(resource) === 'P1') {
-      const activeTestbench = await ensureActiveModuleTestbench(services, resource, showMessages, moduleRegistry, options);
-      if (activeTestbench) {
-        return activeTestbench;
-      }
-    }
     if (!options.nonInteractive) {
       services.output.appendLine(`未找到顶层模块 ${topName}；使用配置的 testbench ${configuredTestbench}`);
     }
@@ -249,6 +298,19 @@ export async function findExistingTestbenchResolution(
 ): Promise<ExistingTestbenchSearchResult> {
   const candidates = await testbenchCandidates(resource, tbName, moduleRegistry);
   if (!candidates.length) {
+    // Project sources win; `.co/tb` holds the testbenches this extension created for the user.
+    const userTestbench = await findUserTestbench(resource, tbName);
+    if (userTestbench) {
+      return {
+        conflict: false,
+        resolution: {
+          moduleName: userTestbench.module.name,
+          kind: 'user',
+          sourceUri: userTestbench.uri,
+          sha256: await fileSha256(userTestbench.uri)
+        }
+      };
+    }
     if (moduleRegistry?.scanning && !options.nonInteractive) {
       vscode.window.showWarningMessage('项目 Verilog 模块仍在解析，未找到跨文件 testbench 时可稍后重试');
     }
@@ -316,40 +378,43 @@ export async function recordTestbenchForAsmCase(asmCase: AsmCase, resolution: Te
   await updateAsmCaseMetadata(asmCase, metadata);
 }
 
-async function ensureActiveModuleTestbench(
+async function resolveActiveModuleTestbench(
   services: AppServices,
   resource: vscode.Uri | undefined,
   showMessages: boolean,
   moduleRegistry?: MutableVerilogModuleProvider,
   options: TestbenchResolutionOptions = {}
-): Promise<TestbenchResolution | undefined> {
+): Promise<ActiveModuleTestbenchResult> {
   const definition = await activeModuleDefinition(resource);
   if (!definition) {
-    return undefined;
+    return { status: 'no-module' };
   }
   const tbName = `${definition.module.name}_tb`;
   const existing = await findExistingTestbenchResolution(definition.uri, tbName, moduleRegistry, options);
   if (existing.conflict) {
-    return undefined;
+    return { status: 'stopped' };
   }
   if (existing.resolution) {
-    return existing.resolution;
+    return { status: 'resolved', resolution: existing.resolution };
   }
-  const tbUri = await runtimeTestbenchUri(definition.uri, tbName);
-  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(definition.module, tbName, {
-    finishDelay: options.nonInteractive ? false : verilogDelayFromSimTime(getSimTime(definition.uri)),
-    profile: getProfile(definition.uri)
-  }), options);
-  if (!sha256) {
-    return undefined;
+  // Simulating a scaffold without stimulus prints nothing useful: create the
+  // editable testbench and let the user's next run exercise their inputs.
+  const tbUri = userTestbenchUri(definition.uri, tbName);
+  const relativePath = vscode.workspace.asRelativePath(tbUri);
+  if (await createUserTestbench(tbUri, buildStimulusTestbench(definition.module, tbName))) {
+    services.output.appendLine(`已生成激励 testbench ${tbUri.fsPath}；编写激励后再次运行即可仿真`);
+    if (showMessages) {
+      vscode.window.showInformationMessage(`已生成 ${relativePath}：请在“在此编写激励”处添加输入，然后再次点击运行`);
+    }
+  } else {
+    // The file exists but declares no usable testbench module; keep the user's content.
+    services.output.appendLine(`${tbUri.fsPath} 已存在，但未找到 testbench 模块 ${tbName}`);
+    if (showMessages) {
+      vscode.window.showErrorMessage(`${relativePath} 已存在，但未找到 testbench 模块 ${tbName}；请检查该文件`);
+    }
   }
-  if (!options.nonInteractive) {
-    services.output.appendLine(`已生成 P1 testbench ${tbUri.fsPath}`);
-  }
-  if (showMessages && !options.nonInteractive) {
-    vscode.window.showInformationMessage(`已生成 Verilog testbench ${path.basename(tbUri.fsPath)}`);
-  }
-  return { moduleName: tbName, kind: 'generated', generatedUri: tbUri, sha256 };
+  await vscode.window.showTextDocument(tbUri, { preview: false });
+  return { status: 'stopped' };
 }
 
 async function runtimeTestbenchUri(resource: vscode.Uri, testbenchName: string): Promise<vscode.Uri> {
@@ -515,24 +580,15 @@ async function activeTestbenchModuleName(resource: vscode.Uri | undefined, confi
     ? activeEditor.selection.active
     : undefined;
   const activeModule = activePosition ? moduleAtPosition(parsed.modules, activePosition) : undefined;
+  if (isUserTestbenchUri(resource)) {
+    // Files under .co/tb are testbenches whatever their names; prefer the module named after the file.
+    const fileStem = path.basename(resource.fsPath, path.extname(resource.fsPath));
+    return (parsed.modules.find((module) => module.name === fileStem) ?? activeModule ?? parsed.modules[0])?.name;
+  }
   if (activeModule && isTestbenchModule(activeModule, configuredTestbench)) {
     return activeModule.name;
   }
   return parsed.modules.find((module) => isTestbenchModule(module, configuredTestbench))?.name;
-}
-
-async function verilogDocumentForUri(uri: vscode.Uri): Promise<TextDocument | undefined> {
-  const active = vscode.window.activeTextEditor?.document;
-  if (active && active.uri.toString() === uri.toString()) {
-    return toTextDocument(active);
-  }
-  try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    return TextDocument.create(uri.toString(), 'verilog', 1, Buffer.from(bytes).toString('utf8'));
-  } catch {
-    // 文件不可读时跳过该 Verilog 候选
-    return undefined;
-  }
 }
 
 function isTestbenchModule(module: { name: string; ports: unknown[] }, configuredTestbench: string): boolean {

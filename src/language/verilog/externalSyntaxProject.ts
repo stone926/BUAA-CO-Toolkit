@@ -6,6 +6,7 @@ import { URI } from 'vscode-uri';
 import { CO_DIR } from '../../constants';
 import { yieldEventLoop } from '../../nodeFs';
 import { orderIseProjectFiles, parseXiseVerilogFileOrder } from '../../verilog/iseProjectOrder';
+import { isUserTestbenchPath } from '../../verilogSimulationFiles';
 
 export interface ExternalSyntaxProject {
   root: string;
@@ -34,9 +35,21 @@ export async function resolveExternalSyntaxProject(
   }
   const sources = orderIseProjectFiles(
     discovered.verilogFiles.map((fsPath) => ({ fsPath })),
-    xiseFileOrder
+    xiseFileOrder,
+    userTestbenchTrigger(root, triggerUri)
   ).map((file) => file.fsPath);
   return { root, sources };
+}
+
+/**
+ * Discovery skips `.co`, but a saved `.co/tb` testbench should still be checked
+ * together with the project modules it instantiates, after all of them.
+ */
+function userTestbenchTrigger(root: string, triggerUri: string): Array<{ fsPath: string }> {
+  const triggerPath = fsPathFromUri(triggerUri);
+  return triggerPath && triggerPath.toLowerCase().endsWith('.v') && isUserTestbenchPath(root, triggerPath)
+    ? [{ fsPath: triggerPath }]
+    : [];
 }
 
 export function workspaceRootFor(

@@ -9,14 +9,18 @@ import { openIsimWaveform, exportVcdWaveform } from '../verilogWaveform';
 import { generateIseProject } from '../verilog/iseProject';
 import { pathExists, writeTextFile } from '../fsUtil';
 import {
-  buildTestbench,
   moduleAtPosition,
   parseVerilog
 } from '../language/verilog/service';
 import {
-  defaultUserTestbenchUri,
-  findExistingTestbenchResolution
+  findExistingTestbenchResolution,
+  userTestbenchText
 } from '../verilog/testbenchResolver';
+import {
+  createUserTestbench,
+  isUserTestbenchUri,
+  userTestbenchUri
+} from '../verilog/userTestbench';
 
 const vscodeState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined,
@@ -41,7 +45,6 @@ vi.mock('../config', () => ({
 }));
 
 vi.mock('../language/verilog/service', () => ({
-  buildTestbench: vi.fn(() => 'module mips_tb; endmodule\n'),
   moduleAtPosition: vi.fn(),
   parseVerilog: vi.fn()
 }));
@@ -66,13 +69,18 @@ vi.mock('../verilog/iseProject', () => ({
 
 vi.mock('../verilog/documentContext', () => ({
   coSettingsForUri: vi.fn(() => defaultCoSettings),
-  toTextDocument: vi.fn(() => ({ uri: 'file:///E:/work/mips.v', getText: () => 'module mips; endmodule' })),
-  verilogDelayFromSimTime: vi.fn(() => 200000)
+  toTextDocument: vi.fn(() => ({ uri: 'file:///E:/work/mips.v', getText: () => 'module mips; endmodule' }))
 }));
 
 vi.mock('../verilog/testbenchResolver', () => ({
-  defaultUserTestbenchUri: vi.fn(),
-  findExistingTestbenchResolution: vi.fn()
+  findExistingTestbenchResolution: vi.fn(),
+  userTestbenchText: vi.fn(() => 'module mips_tb; endmodule\n')
+}));
+
+vi.mock('../verilog/userTestbench', () => ({
+  createUserTestbench: vi.fn(async () => true),
+  isUserTestbenchUri: vi.fn(() => false),
+  userTestbenchUri: vi.fn()
 }));
 
 vi.mock('../verilog/isimRunner', () => ({
@@ -124,7 +132,9 @@ describe('Verilog command registration and entry behavior', () => {
     vi.mocked(parseVerilog).mockReturnValue({ modules: [{ name: 'mips' }] } as never);
     vi.mocked(moduleAtPosition).mockReturnValue({ name: 'mips' } as never);
     vi.mocked(findExistingTestbenchResolution).mockResolvedValue({} as never);
-    vi.mocked(defaultUserTestbenchUri).mockResolvedValue(vscode.Uri.file('E:/work/mips_tb.v'));
+    vi.mocked(userTestbenchUri).mockReturnValue(vscode.Uri.file('E:/work/.co/tb/mips_tb.v'));
+    vi.mocked(isUserTestbenchUri).mockReturnValue(false);
+    vi.mocked(userTestbenchText).mockReturnValue('module mips_tb; endmodule\n');
     vi.mocked(pathExists).mockResolvedValue(false);
   });
 
@@ -217,7 +227,7 @@ describe('Verilog command registration and entry behavior', () => {
     expect(writeTextFile).not.toHaveBeenCalled();
   });
 
-  it('opens an existing testbench when requested and only overwrites after confirmation', async () => {
+  it('opens an unusable existing .co/tb file when requested and only overwrites after confirmation', async () => {
     const commands = commandMap();
     const moduleRegistry = { updateUri: vi.fn() };
     setActiveDocument('E:/work/mips.v', 'verilog', 'module mips; endmodule');
@@ -227,16 +237,80 @@ describe('Verilog command registration and entry behavior', () => {
     vscodeState.showWarningMessage.mockResolvedValueOnce('打开');
     await commands.get(Commands.Verilog.GenerateTestbench)!();
     const openedUri = vi.mocked(vscode.window.showTextDocument).mock.calls[0]?.[0] as vscode.Uri;
-    expect(normalizedFsPath(openedUri)).toBe('e:/work/mips_tb.v');
+    expect(normalizedFsPath(openedUri)).toBe('e:/work/.co/tb/mips_tb.v');
     expect(writeTextFile).not.toHaveBeenCalled();
 
     vscodeState.showWarningMessage.mockResolvedValueOnce('覆盖');
     await commands.get(Commands.Verilog.GenerateTestbench)!();
     const [writtenUri, writtenText] = vi.mocked(writeTextFile).mock.calls[0];
-    expect(normalizedFsPath(writtenUri as vscode.Uri)).toBe('e:/work/mips_tb.v');
+    expect(normalizedFsPath(writtenUri as vscode.Uri)).toBe('e:/work/.co/tb/mips_tb.v');
     expect(writtenText).toBe('module mips_tb; endmodule\n');
-    expect(buildTestbench).toHaveBeenCalledWith(expect.objectContaining({ name: 'mips' }), 'mips_tb', expect.objectContaining({ profile: 'P4' }));
-    const updatedUri = vi.mocked(moduleRegistry.updateUri).mock.calls[0]?.[0] as vscode.Uri;
-    expect(normalizedFsPath(updatedUri)).toBe('e:/work/mips_tb.v');
+    expect(userTestbenchText).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'mips' }),
+      'mips_tb',
+      { profile: 'P4', configuredTop: true, simTime: '200us' }
+    );
+    expect(createUserTestbench).not.toHaveBeenCalled();
+    // .co/tb stays outside the project module registry.
+    expect(moduleRegistry.updateUri).not.toHaveBeenCalled();
+  });
+
+  it('creates a missing testbench in .co/tb without replacing existing files', async () => {
+    const commands = commandMap();
+    setActiveDocument('E:/work/alu.v', 'verilog', 'module alu; endmodule');
+    vi.mocked(parseVerilog).mockReturnValue({ modules: [{ name: 'alu' }] } as never);
+    vi.mocked(moduleAtPosition).mockReturnValue({ name: 'alu' } as never);
+    vi.mocked(userTestbenchUri).mockReturnValue(vscode.Uri.file('E:/work/.co/tb/alu_tb.v'));
+    vi.mocked(userTestbenchText).mockReturnValue('module alu_tb; endmodule\n');
+    registerVerilog({ subscriptions: [] } as never, services());
+
+    await commands.get(Commands.Verilog.GenerateTestbench)!();
+
+    expect(vi.mocked(userTestbenchUri).mock.calls[0]?.[1]).toBe('alu_tb');
+    expect(userTestbenchText).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'alu' }),
+      'alu_tb',
+      { profile: 'P4', configuredTop: false, simTime: '200us' }
+    );
+    const [createdUri, createdText] = vi.mocked(createUserTestbench).mock.calls[0];
+    expect(normalizedFsPath(createdUri)).toBe('e:/work/.co/tb/alu_tb.v');
+    expect(createdText).toBe('module alu_tb; endmodule\n');
+    expect(writeTextFile).not.toHaveBeenCalled();
+    const [openedUri, openOptions] = vi.mocked(vscode.window.showTextDocument).mock.calls[0] ?? [];
+    expect(normalizedFsPath(openedUri as vscode.Uri)).toBe('e:/work/.co/tb/alu_tb.v');
+    expect(openOptions).toEqual({ preview: false });
+  });
+
+  it('opens the resolved testbench instead of generating another one', async () => {
+    const commands = commandMap();
+    setActiveDocument('E:/work/alu.v', 'verilog', 'module alu; endmodule');
+    vi.mocked(moduleAtPosition).mockReturnValue({ name: 'alu' } as never);
+    vi.mocked(findExistingTestbenchResolution).mockResolvedValue({
+      conflict: false,
+      resolution: { moduleName: 'alu_tb', kind: 'user', sourceUri: vscode.Uri.file('E:/work/.co/tb/alu_tb.v') }
+    });
+    registerVerilog({ subscriptions: [] } as never, services());
+
+    await commands.get(Commands.Verilog.GenerateTestbench)!();
+
+    const openedUri = vi.mocked(vscode.window.showTextDocument).mock.calls[0]?.[0] as vscode.Uri;
+    expect(normalizedFsPath(openedUri)).toBe('e:/work/.co/tb/alu_tb.v');
+    expect(createUserTestbench).not.toHaveBeenCalled();
+    expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it('does not generate a testbench for a file that already is a .co/tb testbench', async () => {
+    const commands = commandMap();
+    setActiveDocument('E:/work/.co/tb/alu_tb.v', 'verilog', 'module alu_tb; endmodule');
+    vi.mocked(isUserTestbenchUri).mockReturnValue(true);
+    registerVerilog({ subscriptions: [] } as never, services());
+
+    await commands.get(Commands.Verilog.GenerateTestbench)!();
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+      '当前文件已是 .co/tb 下的 testbench，编写激励后点击运行即可仿真'
+    );
+    expect(createUserTestbench).not.toHaveBeenCalled();
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
 });

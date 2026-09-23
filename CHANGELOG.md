@@ -4,6 +4,11 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- feat(verilog): simulate P1 modules with an editable `.co/tb/<module>_tb.v` testbench; the first run creates and opens a stimulus scaffold (declared ports, input initialization, clock/reset detection including `Clk`/`Reset`/`clr`/active-low resets, `$monitor` output, parameter-aware widths, and a marked stimulus block) instead of silently simulating an input-less runtime testbench, and later runs use the user's stimulus
+- feat(verilog): write **Generate Testbench** output to `.co/tb`, never overwrite existing `.co/tb` files without confirmation, compile `.co/tb` testbenches explicitly after project sources in Icarus and ISim runs, and include a saved `.co/tb` testbench in on-save compiler checks
+- fix(verilog): make P1 runs target the module under the cursor even when a wizard-created `main` top module exists
+- docs: describe the `.co/tb` workflow and keep `.co/tb/` out of the recommended `.gitignore` pattern
+
 ## [1.2.1] - 2026-09-04
 
 - fix(test): restore strict TypeScript checks (819d591)

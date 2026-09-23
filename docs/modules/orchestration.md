@@ -1,4 +1,4 @@
-# orchestration | src/ | ~53 files
+# orchestration | src/ | ~54 files
 
 扩展宿主层: 生命周期/命令注册/配置读取/Profile推断/UI/工具链/MIPS+Verilog+Logisim操作命令/用例存储
 不含语言智能逻辑(在src/language/ LSP Server端)
@@ -33,7 +33,7 @@ process:
   textChunks.ts — TextChunkAccumulator(零拷贝chunk收集), LineChunkScanner(流式逐行CRLF兼容)
 
 fs:
-  fsUtil.ts — workspaceFolderFor/workspaceFolderForOrFirst/dirname/basenameNoExt/readTextFile/writeTextFile(VSCode API)/coTmpDir(.co/tmp/)/cleanupCoTmp
+  fsUtil.ts — workspaceFolderFor/workspaceFolderForOrFirst/dirname/basenameNoExt/readTextFile/writeTextFile(VSCode API)/writeTextFileIfAbsent(本地文件独占创建，已存在即不写)/coTmpDir(.co/tmp/)/cleanupCoTmp
   nodeFs.ts — pathExists/isFile/isDirectory/fileMtimeMs/yieldEventLoop
   pathUtils.ts — normalizePathKey/samePath/dedupePaths/dedupeUris/sanitizeFileStem 纯路径工具
 
@@ -43,8 +43,8 @@ mips-commands:
   mips.ts — legacy runMarsFile(run/dumpText/dumpKernel)：使用 provider preflight 的 immutable launch；流式捕获/授权 MARS JAR 与 RI class 后仅执行本次运行的私有 registry staged artifact；stdout/stderr 各有 16 MiB raw ceiling，data/text/kernel dump 有界读取；课程 Trace 源码/动态停机尾、P7 0x4180 合并、原生 max-step 与共享稳定版兼容诊断(coL1/coL2/efc/p7irq/cl)
 
 verilog-commands:
-  verilog.ts — Verilog 命令入口：generateTestbench、默认 Icarus 仿真/外部语法检查、ISE 工程文件生成、ISim 波形/VCD handler gate、lint禁用和 registerVerilog()；兼容保留既有 command ID
-  verilog/documentContext.ts — VS Code 文档到 Verilog LSP TextDocument/CoSettings 的适配
+  verilog.ts — Verilog 命令入口：generateTestbench（统一写入 `.co/tb/<tb>.v`，已有同名 testbench 直接打开，已存在但无可用模块的文件仅在确认后覆盖）、默认 Icarus 仿真/外部语法检查、ISE 工程文件生成、ISim 波形/VCD handler gate、lint禁用和 registerVerilog()；兼容保留既有 command ID
+  verilog/documentContext.ts — VS Code 文档到 Verilog LSP TextDocument/CoSettings 的适配；verilogDocumentForUri 优先取活动编辑器未保存文本
   verilog/iseProject.ts — ISE PRJ/TCL生成、Verilog文件收集（排除 `.co`、`.vscode`、`.vscode-test` 等非 DUT 目录）、顺序敏感的项目签名；工作区 `.v`/`.xise` 发现与唯一 XISE 解析使用 session 内 8-workspace LRU，并合并同根并发首次查询，extra/protected/exclusion 每次基于缓存原始基线重算，嵌套 multi-root 事件逐根失效；工作区唯一 `.xise` 存在时按 FILE_VERILOG 的 BehavioralSimulation seqID 编译，未列入的普通 `.v` 稳定排序后前置，运行时生成源固定置尾；无唯一/可读 XISE 时确定性排序
   verilog/iseProjectOrder.ts — 纯函数解析 XISE FILE_VERILOG 路径和 BehavioralSimulation seqID（全部有效且唯一时升序，否则稳定回退文档顺序），并组合普通/XISE/运行时源顺序，处理相对路径、XML 实体、去重和跨平台路径
   verilog/verilogBackend.ts — 显式两值偏好解析；省略偏好固定 bundled Icarus，仅显式 `isim` 请求进入 ISim，工具路径存在性不再参与选择
@@ -61,11 +61,12 @@ verilog-commands:
   verilog/isimRunner.ts — ISim compile/run 核心: ASM case准备、testbench解析/生成、fuse缓存、run tcl、sim输出落盘；自动 case 的指定 sim.out 同样由已持有 stdout 一次写入并登记 artifact；fuse/仿真分阶段设置 byte cap，run 入口在 fuse 失败时保留 generated/fuseResult，自动报告与手动错误均显示脱敏首条诊断而不误报为准备失败
   verilog/simulationAsmCase.ts — P4–P7 ASM case 选择与 provider-neutral 机器码准备；默认内置汇编器，不把失败误报为 MARS 问题
   verilog/simulationInputs.ts — Icarus/ISim 运行前机器码源定位与复制；保留配置文件名并同步生成课程 TB 固定读取的 `code.txt` alias
-  verilog/testbenchResolver.ts — Verilog testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录；P7 自动 top 查找复用增量 module registry，生成文本直接复用内存 SHA，case snapshot 与 DUT metadata 以同一份 bytes 一次提交；发现顶层/testbench 时复用 ISE 源文件排除规则，不把 `.vscode`/`.vscode-test` 内编辑器副本误判为重复模块
+  verilog/testbenchResolver.ts — Verilog testbench 发现、生成、P7 auto/probe testbench 和 ASM case 记录；交互运行按 活动 testbench(`.co/tb` 文件一律视为 TB) → P1 光标所在模块 `<module>_tb` → 配置 Top/TB 解析，同名工程 testbench 优先于 `.co/tb`；P1 缺少 testbench 时在 `.co/tb` 创建激励模板并打开、本次不仿真；testbenchCompileSources 只把生成的运行时 TB 与工程发现之外的 TB 源（如 `.co/tb`）追加到编译列表末尾，Icarus/ISim 共用；userTestbenchText 为 P4–P7 配置 Top 保留完整课程 TB，其余模块生成激励模板；自动测试车道仍只用私有运行时 TB；P7 自动 top 查找复用增量 module registry，生成文本直接复用内存 SHA，case snapshot 与 DUT metadata 以同一份 bytes 一次提交；发现顶层/testbench 时复用 ISE 源文件排除规则，不把 `.vscode`/`.vscode-test` 内编辑器副本误判为重复模块
+  verilog/userTestbench.ts — `.co/tb` 用户 testbench：`<workspace>/.co/tb/<tb>.v` 路径约定、按模块名精确解析、只创建不覆盖；目录被工程发现、模块注册表与自动测试排除
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
   verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper
-  verilogSimulationFiles.ts — 按调用方顺序渲染 ISE 项目文本/ISim TCL(从resources/templates/isim渲染)；运行时 testbench(含P7 auto/probe)开头恢复 `` `default_nettype wire ``，避免前一编译单元泄漏；isGeneratedRuntimeTestbench
+  verilogSimulationFiles.ts — 按调用方顺序渲染 ISE 项目文本/ISim TCL(从resources/templates/isim渲染)；userTestbenchFileName/isUserTestbenchPath 为扩展与 LSP 共享 `.co/tb` 路径约定；运行时 testbench(含P7 auto/probe)开头恢复 `` `default_nettype wire ``，避免前一编译单元泄漏；isGeneratedRuntimeTestbench
   verilogWaveform.ts — openIsimWaveform(ISim GUI+wave add -r /), exportVcdWaveform(TCL批处理VCD)
 
 logisim-commands:

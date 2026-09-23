@@ -1,5 +1,6 @@
 // @index(Verilog language-service public exports)
 export { buildTestbench, moduleAtPosition, parseVerilog } from './parser';
+export { buildStimulusTestbench } from './stimulusTestbench';
 export { getVerilogFoldingRanges } from './folding';
 export { getVerilogFormattingEdits } from './formatting';
 export { getVerilogSemanticTokens, clearVerilogSemanticTokenCache } from './semanticTokens';

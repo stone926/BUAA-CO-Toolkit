@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 64 files
+# verilog-lsp | src/language/verilog/ | 65 files
 
 Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
 
@@ -27,6 +27,7 @@ expr-support:
   tokenUtils.ts — token辅助: 区间/种类/文本提取
   preprocessor.ts — 预处理指令集(define/include/ifdef/...)供补全
   moduleUtils.ts — moduleAtPosition/declDetail/buildTestbench, P7 testbench shell/block 从 resources/templates/verilog 渲染
+  stimulusTestbench.ts — buildStimulusTestbench: 独立模块的可编辑激励 testbench 模板（输入/输出声明、端口位宽引用的参数镜像与覆盖、Clk/clock 与 reset/rst/clr/低有效复位识别、排除时钟的 $monitor、激励区与可选 VCD）；不用于课程 CPU/自动测试 TB
   moduleProvider.ts — MutableVerilogModuleProvider接口
   lintRuleCatalog.ts — Verilog lint 规则元数据 catalog, 从 resources/verilog/lintRules.json 加载
   statementUtils.ts — splitTopLevelCommaSpans
@@ -62,7 +63,7 @@ cross-file:
 
 external-compiler:
   externalSyntaxCheck.ts — 通用/on-save 检查固定 bundled Icarus；仅显式 internal backend 请求保留 ISE fuse 兼容支路，`isePath` 本身不再选择后端
-  externalSyntaxProject.ts — LSP 侧有界发现 `.v`/唯一 XISE 并复用确定性 source order，跳过编辑器/构建产物目录
+  externalSyntaxProject.ts — LSP 侧有界发现 `.v`/唯一 XISE 并复用确定性 source order，跳过编辑器/构建产物目录；保存的 `.co/tb` testbench 作为末尾源与工程一起检查
   iverilogSyntaxCheck.ts — 从 initializationOptions 的扩展安装根运行绝对路径 `iverilog -g2005 -tnull -i`，解析常见 path:line[:column] 诊断
   iseSyntaxCheck.ts — 保留 fuse 检查，并与 Icarus 共用外部源码发现；ISE warning suppression 只作用于该分支
 

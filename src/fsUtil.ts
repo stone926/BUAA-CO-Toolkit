@@ -74,6 +74,32 @@ export async function readTextFile(uri: vscode.Uri): Promise<string> {
   return Buffer.from(bytes).toString('utf8');
 }
 
+/**
+ * Create UTF-8 text only when the target does not exist yet. An existing file
+ * may hold user edits and is never replaced; local files use an exclusive create.
+ */
+export async function writeTextFileIfAbsent(uri: vscode.Uri, content: string): Promise<boolean> {
+  if (uri.scheme === 'file') {
+    try {
+      await fs.promises.writeFile(uri.fsPath, content, { encoding: 'utf8', flag: 'wx' });
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        return false;
+      }
+      throw error;
+    }
+  }
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return false;
+  } catch {
+    // Missing virtual-file targets continue through the ordinary write path.
+  }
+  await writeTextFile(uri, content);
+  return true;
+}
+
 export function toUri(file: string): vscode.Uri {
   return vscode.Uri.file(file);
 }
