@@ -66,6 +66,7 @@ describe('advanced tool model', () => {
       'co.verilog.checkSyntaxWithIse',
       'co.verilog.generateIseProject',
       'co.verilog.exportVcd',
+      'co.waveform.openFile',
       'co.logisim.generateRom',
       'co.logisim.convertLogToCsv',
       'co.hazard.analyzeCurrentMachineCode',

@@ -17,6 +17,9 @@ test/language/mips/:
 test/language/verilog/:
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
+test/waveform/:
+  vcdReader, valueFormat, viewLogic, signalModel, hostServices, waveformPanel, designDump — VCD 流式解析（跨 chunk、重复 scope、别名、四态、截断/倒退/上限诊断）、进制与反汇编、视窗/周期/LOD/时间输入、信号树/行模型/默认信号/状态清洗、trace 配对与中文空格路径、面板消息与 CSP；designDump 用真实 bundled Icarus 编译生成的 dump 顶层，逐条核对 GRF 字与 trace
+
 test/verilog/:
   dmStoreContract — 真实 bundled Icarus 执行 P6/P7 完整 testbench：SB/SH 错误全使能读改写在旧实现整条 trace 相同、新实现失败；覆盖各宽度/扩展 store、无效事务、使能 lane、忽略的地址低位 X/Z，以及失败摘要接线
   verilogBackend, iseProjectOrder, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、ISE 源发现/XISE 顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime 纯映射与 unsupported 分支、五 target 路径/预检、Unix `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化

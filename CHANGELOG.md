@@ -4,6 +4,10 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- feat(verilog): add a built-in waveform viewer that opens `.vcd` files as a VS Code editor tab: signal tree with search, canvas waveforms with distinct 0/1/x/z rendering, cursor values, adaptive time ruler, zoom/pan/drag-to-zoom, change and clock-cycle stepping, markers with Δt and cycle counts, hex/binary/signed/unsigned/ASCII/MIPS-instruction radixes, groups and colors, jump to Verilog source, light/dark/high-contrast themes, and signal lists that survive reopening and re-simulation
+- feat(verilog): **Simulate and View Waveform** runs the testbench with the bundled Icarus, records every signal plus each word of small memories such as the GRF (shown with `$sp`-style aliases), and overlays the testbench's `$display` GRF/DM writes on the time axis with click-to-jump
+- fix(mips-core): encode `sllv`/`srlv`/`srav` in MARS operand order (`rd, rt, rs`); the builtin assembler previously swapped `rs` and `rt`
+
 ## [1.2.3] - 2026-09-23
 
 - fix(ci): back the bundled Icarus course smoke's P6/P7 data-memory writes with real `sw` instructions so the DM store contract passes and all five platform VSIX packages verify again

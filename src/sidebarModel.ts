@@ -280,6 +280,14 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         verilogSimulationTooltip(context, active)
       ),
       actionItem(
+        'core.viewWaveform',
+        '仿真并查看波形',
+        Commands.Verilog.ViewWaveform,
+        'pulse',
+        '内置波形查看器，GRF 逐寄存器记录',
+        `${verilogSimulationTooltip(context, active)}\n\n用内置 Icarus 运行同一个 testbench，并自动记录全部信号（含 GRF 等小存储器的每个字）到 .co/wave，然后在 VS Code 中打开波形。无需手写 $dumpfile。`
+      ),
+      actionItem(
         'core.inspectSignal',
         '查看信号连线',
         Commands.Verilog.InspectSignal,

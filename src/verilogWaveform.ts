@@ -1,4 +1,4 @@
-import { CO_ISIM_DIR } from './constants';
+import { CO_ISIM_DIR, Commands } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getIsePath, getSimTime, getTestbench } from './config';
@@ -117,7 +117,8 @@ export async function exportVcdWaveform(
     if (compiled.asmCase) {
       await copyAsmCaseArtifact(compiled.asmCase, 'verilog', vcd, path.basename(vcd.fsPath), 'vcd');
     }
-    await vscode.commands.executeCommand('revealFileInOS', vcd);
+    // Show the dump in the built-in viewer; the file stays in .co/out for other tools.
+    await vscode.commands.executeCommand(Commands.Waveform.OpenFile, vcd);
     vscode.window.showInformationMessage(`已导出 VCD 波形：${path.basename(vcd.fsPath)}`);
   } else {
     vscode.window.showErrorMessage('导出 VCD 波形失败。请查看插件输出面板');

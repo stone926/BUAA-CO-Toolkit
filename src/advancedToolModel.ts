@@ -47,7 +47,8 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
     items.push(
       tool('verilog.testbench', '生成 Verilog Testbench', 'Verilog', activeDetail, Commands.Verilog.GenerateTestbench),
       tool('verilog.syntax', '检查 Verilog 语法', 'Icarus（内置）', activeDetail, Commands.Verilog.CheckSyntaxWithIse),
-      tool('verilog.iseProject', '生成 ISE 工程文件', 'ISE 工程', '仅生成 .co/isim PRJ/TCL，不要求已安装 ISE', Commands.Verilog.GenerateIseProject)
+      tool('verilog.iseProject', '生成 ISE 工程文件', 'ISE 工程', '仅生成 .co/isim PRJ/TCL，不要求已安装 ISE', Commands.Verilog.GenerateIseProject),
+      tool('verilog.openVcd', '打开 VCD 波形文件', '内置波形查看器', '选择任意仿真器生成的 .vcd 文件', Commands.Waveform.OpenFile)
     );
     if (context.iseConfigured) {
       items.push(

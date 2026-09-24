@@ -46,6 +46,7 @@ resources/templates/verilog/:
   p7_official_testbench.v — P7 official-style testbench shell
   p7_interrupt_block*.v — P7 external interrupt主动/注释模板
   p7_probe_block.v — P7 probe interrupt/MMIO观测模板
+  waveform_dumper.v — “仿真并查看波形”生成的 Icarus dump 顶层（$printtimescale/$dumpfile/$dumpvars 与小存储器逐字 dump）
   加载: templateRegistry 受控占位替换
 
 resources/templates/isim/:
@@ -58,6 +59,7 @@ resources/templates/isim/:
 resources/templates/webview/:
   report_page.html — 报告 Webview 页面 shell
   report.css — 报告 Webview 共享 CSS
+  waveform_page.html — 波形查看器 Webview 页面 shell（严格 CSP，脚本/样式来自 out/media 打包产物）
   加载: templateRegistry 受控占位替换
 
 resources/templates/wizard/:

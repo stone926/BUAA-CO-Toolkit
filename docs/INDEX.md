@@ -16,6 +16,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~54 files| 扩展宿主层
   course-testing | docs/modules/course-testing.md | 51 files | 自动化测试框架
+  waveform       | docs/modules/waveform.md       | 55 files | 内置 VCD 波形查看器（自定义编辑器 + 仿真并查看波形）
   test-suite     | docs/modules/test-suite.md     | 197 files| Vitest 测试
   resources      | docs/modules/resources.md      | ~15 files| 静态资源
   highlighting   | docs/modules/syntax-highlighting.md | ~8 files | TextMate/semantic 分层高亮
@@ -23,6 +24,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 数据流:
   MIPS: Text -> syntax.ts -> ast.ts -> semantic.ts -> parser.ts -> diagnostics, cache: parseCache.ts
   Verilog: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts 调度: syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag, cache: parseCache.ts
+  Waveform: 仿真并查看波形 -> runIverilog + 生成的 dump 顶层(GRF 逐字) -> .co/wave/<tb>.vcd -> 宿主流式解析为列式模型 -> Webview Canvas 渲染（esbuild 打包到 out/media），同名 .sim.out trace 叠加
   Test: SourceUnit immutable bundle -> 一次性 CourseEnginePlan -> assembler provider -> serialized ProgramImage/DUT bytes -> CourseTracePipeline -> 同一计划的 oracle provider -> bundled Icarus/Logisim DUT -> traceCompare -> HTML/JSON v2 report（P3–P7 automatic 固定 builtin-ts；mars/verify-both 仅供手动与历史回滚验证；case 可 exact replay）
 
 P7 test modes: anchor(TS课程oracle+bundled Icarus精确对拍), probe(DM探针黑盒检查), hybrid(两者), off(无中断)；probe 为 DUT-only，不能冒充 full-stack reference evidence

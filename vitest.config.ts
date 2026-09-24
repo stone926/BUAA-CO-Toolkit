@@ -10,6 +10,8 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/test/**',
+        // Browser-only DOM/canvas glue; its pure view logic lives in src/waveform/view and is tested.
+        'src/waveform/webview/**',
         'out/**',
         'src/extension.ts',
         'src/languageClient.ts',

@@ -25,6 +25,7 @@ import { checkToolchain } from './toolchain';
 import { AppServices, ProjectProfile, ToolDetection } from './types';
 import { registerVerilog } from './verilog';
 import { registerVerilogSignalView } from './verilogSignalView';
+import { registerWaveform } from './waveform/waveform';
 import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
 import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
@@ -176,6 +177,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(mipsRuntime);
   registerVerilog(context, services, moduleRegistry);
   registerVerilogSignalView(context, moduleRegistry);
+  registerWaveform(context, services, moduleRegistry);
   registerLogisim(context, services);
   registerHazard(context, services);
   registerTraceCompare(context, services);

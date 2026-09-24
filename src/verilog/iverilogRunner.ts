@@ -96,6 +96,32 @@ export interface IverilogRunOptions extends IseProjectOptions, Pick<IsimRunOptio
   watchdogLimitPs?: number;
   /** Existing automatic pipeline budget, e.g. `run 4195us;\nexit`. */
   tclText?: string;
+  /**
+   * Extra generated top-level modules (e.g. the waveform dumper) elaborated beside
+   * the testbench. Called once the testbench is known; the files are written to the
+   * simulation directory and compiled after every design source.
+   */
+  generatedTopModules?: (context: IverilogGeneratedTopContext) => Promise<readonly IverilogGeneratedTopModule[]>;
+  /** Show the "simulation finished" notification (default true). Errors are always reported. */
+  announceSuccess?: boolean;
+  /** Directory for `<testbench>.sim.out` instead of `.co/out` (ignored when simOutputUri is set). */
+  simOutputDirectory?: vscode.Uri;
+  /** Return false to keep a compile failure out of the UI because the caller will retry. */
+  shouldReportCompileFailure?: (result: RunResult) => boolean;
+}
+
+export interface IverilogGeneratedTopContext {
+  readonly folder: vscode.WorkspaceFolder;
+  /** VVP working directory; relative paths inside generated sources resolve against it. */
+  readonly outDir: vscode.Uri;
+  readonly testbench: TestbenchResolution;
+}
+
+export interface IverilogGeneratedTopModule {
+  readonly moduleName: string;
+  /** File name inside the simulation directory. */
+  readonly fileName: string;
+  readonly text: string;
 }
 
 export interface IverilogGeneratedFiles {
@@ -126,21 +152,29 @@ export interface IverilogCompileArguments {
   workspaceRoot: string;
   sourceFiles: readonly string[];
   watchdogFile: string;
+  /** Additional generated roots, compiled after the watchdog. */
+  extraTopModules?: readonly { readonly moduleName: string; readonly file: string }[];
 }
 
 /** Build the exact MVP compile argv, keeping generated sources last. */
 export function buildIverilogCompileArgs(input: IverilogCompileArguments): string[] {
   assertVerilogModuleName(input.testbenchModule, 'testbenchModule');
   assertVerilogModuleName(input.watchdogModule, 'watchdogModule');
+  const extraTopModules = input.extraTopModules ?? [];
+  for (const extra of extraTopModules) {
+    assertVerilogModuleName(extra.moduleName, 'extraTopModules.moduleName');
+  }
   if (!input.outputFile.trim()) {
     throw new RangeError('outputFile must not be empty');
   }
+  const extraFiles = extraTopModules.map((extra) => extra.file);
   return [
     ...buildIverilogRuntimeArgs(input.runtime),
     '-g2005',
     ...buildIverilogIncludeArgs(input.workspaceRoot, [
       ...input.sourceFiles,
-      input.watchdogFile
+      input.watchdogFile,
+      ...extraFiles
     ]),
     `-Mall=${input.dependencyFile}`,
     '-t',
@@ -149,10 +183,12 @@ export function buildIverilogCompileArgs(input: IverilogCompileArguments): strin
     input.testbenchModule,
     '-s',
     input.watchdogModule,
+    ...extraTopModules.flatMap((extra) => ['-s', extra.moduleName]),
     '-o',
     input.outputFile,
     ...input.sourceFiles,
-    input.watchdogFile
+    input.watchdogFile,
+    ...extraFiles
   ];
 }
 
@@ -322,6 +358,12 @@ async function runIverilogInWorkspace(
   const watchdogLimitPs = resolveWatchdogLimitPs(activeUri, options);
   await writeTextFileIfChanged(watchdog, buildIverilogWatchdog(watchdogModule));
   const generated: IverilogGeneratedFiles = { outDir, compiled, watchdog };
+  const extraTopModules: { moduleName: string; file: string }[] = [];
+  for (const extra of await options.generatedTopModules?.({ folder, outDir, testbench }) ?? []) {
+    const file = vscode.Uri.file(path.join(outDir.fsPath, path.basename(extra.fileName)));
+    await writeTextFileIfChanged(file, extra.text);
+    extraTopModules.push({ moduleName: extra.moduleName, file: file.fsPath });
+  }
 
   await prepareIverilogRunInputs(services, activeUri, outDir, options, asmCase, testbench, showMessages);
   if (!nonInteractive && options.revealOutput !== false) {
@@ -341,7 +383,8 @@ async function runIverilogInWorkspace(
   const sourceFilePaths = sourceFiles.map((uri) => uri.fsPath);
   const directSourceFiles = [
     ...sourceFilePaths,
-    watchdog.fsPath
+    watchdog.fsPath,
+    ...extraTopModules.map((extra) => extra.file)
   ];
   const compileArguments = buildIverilogCompileArgs({
     runtime: preflight.runtime,
@@ -351,7 +394,8 @@ async function runIverilogInWorkspace(
     dependencyFile: dependencies.fsPath,
     workspaceRoot: folder.uri.fsPath,
     sourceFiles: sourceFilePaths,
-    watchdogFile: watchdog.fsPath
+    watchdogFile: watchdog.fsPath,
+    extraTopModules
   });
   const cacheInput: IverilogCompileCacheInput = {
     workspaceRoot: folder.uri.fsPath,
@@ -397,7 +441,7 @@ async function runIverilogInWorkspace(
   };
   if (!compileResult.ok) {
     await persistIverilogFailureLog(services, asmCase, 'compile', compileResult);
-    if (showMessages) {
+    if (showMessages && options.shouldReportCompileFailure?.(compileResult) !== false) {
       vscode.window.showErrorMessage(verilogSimulationFailureMessage(
         createVerilogSimulationFailure('iverilog', 'compile', compileResult, folder.uri.fsPath),
         'iverilog'
@@ -422,6 +466,9 @@ async function runIverilogInWorkspace(
       : isimOutputFileName(testbench.moduleName, options.simOutputFileName);
     if (options.simOutputUri) {
       simOut = options.simOutputUri;
+    } else if (options.simOutputDirectory) {
+      await ensureDirectory(options.simOutputDirectory);
+      simOut = vscode.Uri.joinPath(options.simOutputDirectory, simFileName);
     } else {
       const outputDir = await simulationOutputDirectory(activeUri, outDir);
       simOut = vscode.Uri.file(path.join(outputDir.fsPath, simFileName));
@@ -451,7 +498,7 @@ async function runIverilogInWorkspace(
         await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
       }
     }
-    if (showMessages) {
+    if (showMessages && options.announceSuccess !== false) {
       vscode.window.showInformationMessage('Icarus Verilog 仿真完成，输出见 .co/out');
     }
   } else {

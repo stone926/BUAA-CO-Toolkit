@@ -60,6 +60,12 @@ export const CO_ISIM_DIR = '.co/isim';
 /** 用户 testbench 目录：插件只在缺失时生成一次，之后归用户编辑，从不覆盖。 */
 export const CO_TB_DIR = '.co/tb';
 
+/** “查看波形”仿真产物目录：同名 VCD 与 trace 只由同一次波形仿真成对写入。 */
+export const CO_WAVE_DIR = '.co/wave';
+
+/** 内置波形查看器（VCD 自定义编辑器）的 viewType。 */
+export const WAVEFORM_VIEW_TYPE = 'co.waveform.viewer';
+
 /** Hazard 分析输出目录。 */
 export const CO_HAZARD_DIR = '.co/hazard';
 
@@ -99,7 +105,12 @@ export const Commands = {
     RunIsim: 'co.verilog.runIsim',
     OpenIsimWaveform: 'co.verilog.openIsimWaveform',
     ExportVcd: 'co.verilog.exportVcd',
-    InspectSignal: 'co.verilog.inspectSignal'
+    InspectSignal: 'co.verilog.inspectSignal',
+    ViewWaveform: 'co.verilog.viewWaveform'
+  },
+
+  Waveform: {
+    OpenFile: 'co.waveform.openFile'
   },
 
   Test: {

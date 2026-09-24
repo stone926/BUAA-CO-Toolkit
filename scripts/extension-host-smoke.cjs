@@ -17,6 +17,21 @@ const commandTestbench = `module command_fixture_tb;
   end
 endmodule
 `;
+// Sequential fixture for the waveform flow: a counter plus a small memory that
+// `$dumpvars` alone would never record.
+const waveTestbench = `\`timescale 1ns/1ps
+module wave_fixture_tb;
+  reg clk = 0;
+  reg [3:0] count = 0;
+  reg [7:0] regs [0:3];
+  always #5 clk = ~clk;
+  always @(posedge clk) begin
+    count <= count + 1;
+    regs[count[1:0]] <= {4'h0, count};
+  end
+  initial #100 $finish;
+endmodule
+`;
 const courseAsm = `.text
   ori $8, $0, 42
   sw $8, 0($0)
@@ -115,6 +130,7 @@ async function run() {
   const files = {
     '诊断 fixture.v': validVerilog,
     'command_fixture_tb.v': commandTestbench,
+    'wave_fixture_tb.v': waveTestbench,
     'course_fixture.v': courseVerilog,
     'course_fixture_tb.v': courseTestbench,
     'course smoke.asm': courseAsm
@@ -172,6 +188,21 @@ async function run() {
   assert.equal(simulation.simResult?.ok, true, simulation.simResult?.stderr);
   assert.match(await fs.readFile(simulation.simOut.fsPath, 'utf8'), /CO_EXTENSION_HOST_SIM_OK/);
   console.log('PASS Verilog simulation command and persisted output');
+
+  await configure(folder, { 'project.testbench': 'wave_fixture_tb' });
+  await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, 'wave_fixture_tb.v')));
+  await bounded('Waveform simulation command', () => vscode.commands.executeCommand('co.verilog.viewWaveform'));
+  const dumpPath = path.join(root, '.co', 'wave', 'wave_fixture_tb.vcd');
+  const dump = await fs.readFile(dumpPath, 'utf8');
+  assert.match(dump, /\$var reg 4 \S+ count \[3:0\] \$end/);
+  assert.match(dump, /\$var reg 8 \S+ \\regs\[3\] \[7:0\] \$end/, 'small memories must be dumped word by word');
+  const waveTrace = await fs.readFile(path.join(root, '.co', 'wave', 'wave_fixture_tb.sim.out'), 'utf8');
+  assert.match(waveTrace, /Time scale of \(wave_fixture_tb\)/);
+  await waitFor('Waveform viewer tab', () => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) =>
+    tab.input instanceof vscode.TabInputCustom
+      && tab.input.viewType === 'co.waveform.viewer'
+      && path.resolve(tab.input.uri.fsPath) === path.resolve(dumpPath))));
+  console.log('PASS waveform simulation, per-word memory dump, and built-in viewer');
 
   await configure(folder, {
     'project.profile': 'P4',

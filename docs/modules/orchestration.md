@@ -67,7 +67,7 @@ verilog-commands:
   verilogIsimCache.ts — IsimCompileCache接口+isimCompileCacheKey(workspaceRoot+isePath+moduleName+testbench签名+projectSignature+tclText+debug)
   verilogIsimOutput.ts — simulationOutputDirectory(.co/out/), isimOutputFileName, 兼容 re-export 路径 helper
   verilogSimulationFiles.ts — 按调用方顺序渲染 ISE 项目文本/ISim TCL(从resources/templates/isim渲染)；userTestbenchFileName/isUserTestbenchPath 为扩展与 LSP 共享 `.co/tb` 路径约定；运行时 testbench(含P7 auto/probe)开头恢复 `` `default_nettype wire ``，避免前一编译单元泄漏；isGeneratedRuntimeTestbench
-  verilogWaveform.ts — openIsimWaveform(ISim GUI+wave add -r /), exportVcdWaveform(TCL批处理VCD)
+  verilogWaveform.ts — openIsimWaveform(ISim GUI+wave add -r /), exportVcdWaveform(TCL批处理VCD，完成后交给内置波形查看器打开)；内置 Icarus 波形流程见 waveform.md
 
 logisim-commands:
   logisim.ts — registerLogisim()4命令: 打开电路(GUI), 生成ROM, 注入ROM(修改.circ XML), 日志转CSV
@@ -80,7 +80,7 @@ hazard:
 
 ui:
   sidebar.ts — CoSidebarProvider TreeView: buildTree()->buildSidebarModel()->TreeItem
-  sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作三段，根据Profile+活跃文件+工具链状态构建；Verilog 常规上下文只强调当前文件与后端，避免把手动 Top/TB/时长误解成自动测试输入；操作区只提供“启动持续测试”这一测试启动入口
+  sidebarModel.ts — 纯函数数据模型: 项目信息/上下文/操作三段，根据Profile+活跃文件+工具链状态构建；Verilog 文件提供“运行仿真/仿真并查看波形/信号连线”；Verilog 常规上下文只强调当前文件与后端，避免把手动 Top/TB/时长误解成自动测试输入；操作区只提供“启动持续测试”这一测试启动入口
   wizard.ts + wizardSettings.ts — 4步向导: 选Profile->项目名->配置必需外部工具(可选)->创建目录+模板；Verilog Profile 使用 bundled Icarus，不再询问 ISE；纯写入计划只把 Profile 写入对应 WorkspaceFolder，实际询问到的机器路径写 Global，不再把绝对路径或 Profile 派生默认写进项目
   configurationResource.ts — 诊断快速修复携带来源文档 URI，在多根工作区内精确选择配置资源；仅命令面板直调时回退活动编辑器
   diagnosticSettings.ts — MIPS 伪指令与 Verilog lint 快速修复的配置读改写；与命令注册解耦并统一使用来源资源作用域

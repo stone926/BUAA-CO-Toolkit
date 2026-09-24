@@ -11,7 +11,8 @@ ${connections}    );
 ${clockBlock}${monitorBlock}    initial begin
 ${stimulusBody}    end
 
-    // 如需波形：取消下面的注释，运行后用 VCD 查看器打开 .co/isim/${tbName}.vcd
+    // 查看波形：点击编辑器右上角的「仿真并查看波形」，插件会自动记录全部信号并在 VS Code 中打开，无需手写 $dumpfile。
+    // 如需用其他工具查看，也可以取消下面的注释，运行后 VCD 写入 .co/isim/${tbName}.vcd
     // initial begin
     //     $dumpfile("${tbName}.vcd");
     //     $dumpvars(0, ${tbName});
