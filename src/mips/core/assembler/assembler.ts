@@ -45,9 +45,9 @@ import {
 import { CourseSegmentBuilder, CourseSectionId, courseSectionLayout } from './sections';
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import type { ParsedInstructionOperand } from './operands';
-import { realInstructionForms } from './instructionForms';
+import { immediateSignedKind, realInstructionForms } from './instructionForms';
 
-export const courseAssemblerSemanticsRevision = 3 as const;
+export const courseAssemblerSemanticsRevision = 4 as const;
 
 export interface CourseAssemblerOptions {
   readonly profile: CourseProfile;
@@ -1509,20 +1509,6 @@ function evaluateImmediate(
     };
   }
   return { value: evaluation.value };
-}
-
-function immediateSignedKind(mnemonic: string): 'signed' | 'unsigned' | 'none' {
-  switch (mnemonic) {
-    case 'andi':
-    case 'ori':
-    case 'xori':
-    case 'lui':
-      return mnemonic === 'lui' ? 'unsigned' : 'unsigned';
-    case 'sltiu':
-      return 'signed';
-    default:
-      return 'signed';
-  }
 }
 
 function invalidOperand(instruction: WorkInstruction, message: string): { diagnostic: AssemblerDiagnostic } {

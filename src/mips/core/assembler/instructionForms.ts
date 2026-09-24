@@ -37,6 +37,14 @@ export function realInstructionForms(mnemonic: string, entry: IsaInstructionEntr
           { kind: 'shamt' }
         ];
       }
+      if (mnemonic === 'sllv' || mnemonic === 'srlv' || mnemonic === 'srav') {
+        // MARS/MIPS order: `sllv rd, rt, rs` shifts rt by rs[4:0].
+        return [
+          { kind: 'register', role: 'rd' },
+          { kind: 'register', role: 'rt' },
+          { kind: 'register', role: 'rs' }
+        ];
+      }
       if (mnemonic === 'jr') return [{ kind: 'register', role: 'rs' }];
       if (mnemonic === 'jalr') {
         return [
@@ -105,3 +113,15 @@ export function realInstructionForms(mnemonic: string, entry: IsaInstructionEntr
   }
 }
 
+/** How a real instruction's 16-bit immediate operand is interpreted (assembly range checks and disassembly). */
+export function immediateSignedKind(mnemonic: string): 'signed' | 'unsigned' {
+  switch (mnemonic) {
+    case 'andi':
+    case 'ori':
+    case 'xori':
+    case 'lui':
+      return 'unsigned';
+    default:
+      return 'signed';
+  }
+}

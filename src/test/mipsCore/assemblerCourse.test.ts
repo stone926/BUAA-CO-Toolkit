@@ -115,6 +115,18 @@ describe('course assembler directives and pseudo', () => {
     expect(text.words[0].toString(16).padStart(8, '0')).toBe('2408ffff');
   });
 
+  it('encodes variable shifts in MARS operand order (rd, rt, rs)', () => {
+    const asm = ['.text', '    sllv $t0, $t1, $t2', '    srlv $t0, $t1, $t2', '    srav $t0, $t1, $t2'].join('\n');
+    const result = assembleCourseSource({ id: 'root', text: asm }, {
+      profile: 'P5',
+      layers: ['required', 'commonExtensions', 'marsCompatibility']
+    });
+    expect(result.ok).toBe(true);
+    const text = result.image!.segments.find((segment) => segment.name === 'text')!;
+    // Words produced by MARS 4.5 `dump .text HexText` for the same source.
+    expect(text.words.map((word) => word.toString(16).padStart(8, '0'))).toEqual(['01494004', '01494006', '01494007']);
+  });
+
   it('materializes zero-filled .space allocation as a serializable data segment', () => {
     const asm = [
       '.data',
