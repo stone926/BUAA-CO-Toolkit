@@ -96,6 +96,7 @@
 | `missing-port:<port>` | 信息 | 实例连接 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 命名连接未连接输入端口 |
 | `port-width-mismatch` | 警告 | 实例连接/数据流 | `src/language/verilog/instanceConnectionDiagnostics.ts`, `src/language/verilog/diagnostics.ts` | 1 位端口连接 32 位信号 |
 | `unknown-parameter` | 错误 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.BAD(1))` |
+| `localparam-override` | 错误 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.L(1))`，`L` 是 localparam（仿真器拒绝） |
 | `duplicate-parameter-connection` | 警告 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.W(1), .W(2))` |
 | `parameter-index-out-of-range` | 错误 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 位置参数数量超过目标模块参数数 |
 | `parameter-not-constant` | 警告 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 用普通信号覆盖 parameter |

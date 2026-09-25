@@ -23,7 +23,7 @@ usage:
   usageDiagnostics.ts — 未使用信号, 基于AST assignment uses+semantic references
 
 driver:
-  driverDiagnostics.ts — 多驱动检测
+  driverDiagnostics.ts — 多驱动检测：generate 块内声明的同名信号分开统计，同一条件 generate 的不同 if/else 分支互斥不算冲突（generateScopes.ts）
 
 assignment:
   assignmentAnalysis.ts — 从连续/过程赋值提取AssignmentUse(name/operator/range/blockIndex)

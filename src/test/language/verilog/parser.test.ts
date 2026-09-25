@@ -47,6 +47,7 @@ function makeModule(overrides: Partial<VerilogModule> = {}): VerilogModule {
     parameters: [],
     declarations: new Map(),
     instances: [],
+    generateBlocks: [],
     range: { start: { line: 0, character: 0 }, end: { line: 10, character: 0 } },
     selectionRange: { start: { line: 0, character: 7 }, end: { line: 0, character: 11 } },
     headerEnd: { line: 0, character: 20 },

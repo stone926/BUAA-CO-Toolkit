@@ -91,6 +91,22 @@ describe('design hierarchy for waveform dumps', () => {
     expect(resolveHierarchy(lookup('tb')!, ['uut', 'genblk1', 'GRF'], lookup).module.name).toBe('grf');
   });
 
+  it('resolves signals declared inside generate blocks to their own declaration', () => {
+    const generated = lookupFor(`module core;
+  wire [7:0] w;
+  genvar g;
+  generate for (g = 0; g < 2; g = g + 1) begin : lane
+    wire [7:0] w;
+  end endgenerate
+endmodule
+module tb; core uut(); endmodule`);
+    const resolved = resolveHierarchy(generated('tb')!, ['uut', 'lane[1]'], generated);
+    expect(resolved.module.name).toBe('core');
+    expect(resolved.blocks).toEqual(['lane']);
+    expect(findDeclaration(resolved.module, 'w', resolved.blocks)?.range.start.line).toBe(4);
+    expect(findDeclaration(resolved.module, 'w')?.range.start.line).toBe(1);
+  });
+
   it('evaluates overrides the way Icarus elaborates them', () => {
     const chained = lookupFor(`module grf; localparam W = 32; parameter SIZE = 32; reg [W-1:0] r [0:SIZE-1]; endmodule
 module cpu; parameter N = 32; grf #(.SIZE(N)) g(); endmodule

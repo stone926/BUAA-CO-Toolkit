@@ -15,10 +15,10 @@ core:
   moduleParser.ts — 薄门面: lexer+astParser组合
   ast.ts — VerilogAstDocument, VerilogModuleAst(items/alwaysBlocks/proceduralBlocks/subroutines)
   syntaxParser.ts — 语法树+语法诊断, 模块项发现从AST遍历
-  semanticModel.ts — 符号表/作用域/AST引用收集, subroutine/localDecl/blockControl/loopControl/assignment/instance/gatePrimitive已接入AST
+  semanticModel.ts — 符号表/作用域/AST引用收集, subroutine/localDecl/blockControl/loopControl/assignment/instance/gatePrimitive已接入AST；generate begin 块各成作用域（块内声明、其中的过程块与 task 按块解析）
 
 model:
-  model.ts — VerilogDecl(width/initializer/constantValue/direction/explicitPortNetType), VerilogInstance(portConnections/parameterConnections), VerilogModule(ports/parameters/declarations/instances), VerilogMacro, VerilogInclude, VerilogDeclKind
+  model.ts — VerilogDecl(width/initializer/constantValue/direction/explicitPortNetType), VerilogInstance(portConnections/parameterConnections/inGenerateBlock), VerilogModule(ports/parameters/declarations/instances/generateBlocks), VerilogGenerateBlock(标签/范围/块内声明/if-else 分支路径), VerilogMacro, VerilogInclude, VerilogDeclKind
 
 expr-support:
   expressions.ts — 宽度推断(widthOfDecl/widthOfExpressionAst), 常量折叠(evalExpressionAstConstant), VerilogConstantOverrides
@@ -34,19 +34,20 @@ expr-support:
   textUtils.ts — 文本/空白处理供formatting
   displayFormats.ts — $display/$write格式字符串提取供trace格式推断
   numericLiterals.ts — 数字字面量hover格式化+代码操作(进制转换/位宽)
-  parameterOverrides.ts — 模块实例参数覆盖解析：按名/按位（位置覆盖跳过 localparam），可传入父实例覆盖逐级求值；resolveParameterOverrides 额外报告无法求值的覆盖
+  generateScopes.ts — generate 块作用域查询（纯模型）：位置所在 generate 块、按作用域区分的信号键、条件 generate 的 if/else 分支互斥
+  parameterOverrides.ts — 模块实例参数覆盖解析：按名/按位（位置覆盖跳过 localparam），可传入父实例覆盖逐级求值；resolveParameterOverrides 额外报告无法求值的覆盖；overridableParameters 供补全/签名帮助/填充参数/诊断共用
   parseCache.ts — 解析缓存(DocumentResultCache wrapper)
 
 lsp-providers:
   service.ts — 聚合facade: 只 re-export parser/diagnostic/provider 公共入口
   diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
   completions.ts — completionProvider 依赖装配入口, 注入实例连接上下文 resolver
-  completionProvider.ts — 补全provider: 实例连接上下文/宏/关键字/snippet/workspace模块补全
+  completionProvider.ts — 补全provider: 实例连接上下文（#(...) 只列可覆盖的 parameter）/宏/关键字/snippet/workspace模块补全
   hover.ts — hover provider: 宽度/常量/实例参数/include 状态/表达式 AST
   navigation.ts — definition/reference provider: 跨文件 module/interface/macro/include 引用收集和去重
   rename.ts — rename provider: 基于 reference provider 生成 workspace edit, 标识符边界校验
   codeActions.ts — quick fix/refactor provider: 隐式连线声明、lint 禁用、case default、表达式折叠/抽取、实例连接补全
-  signatureHelp.ts — 实例端口/参数列表签名帮助
+  signatureHelp.ts — 实例端口/参数列表签名帮助（参数列表不含 localparam，按位下标与仿真器一致）
   inlayHints.ts — 实例连接端口方向/宽度与参数提示
   resolveSymbol.ts — 语义模型+语法 fallback 的 Verilog symbol resolution, 实例连接上下文
   display.ts — hover/inlay/signature markdown 文案、宽度/参数显示 helper

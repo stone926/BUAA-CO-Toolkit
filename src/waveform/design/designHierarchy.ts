@@ -12,6 +12,11 @@ export interface HierarchyResolution {
   readonly module: VerilogModule;
   /** Instance that created `module`, when the path descended at least once. */
   readonly instance?: { readonly parent: VerilogModule; readonly instance: VerilogInstance };
+  /**
+   * Named-block segments after the last instance, outermost first, without
+   * generate-loop indices (`lane[0]` becomes `lane`).
+   */
+  readonly blocks: readonly string[];
 }
 
 /**
@@ -22,24 +27,43 @@ export interface HierarchyResolution {
 export function resolveHierarchy(root: VerilogModule, segments: readonly string[], lookup: ModuleLookup): HierarchyResolution {
   let module = root;
   let created: HierarchyResolution['instance'];
+  let blocks: string[] = [];
   const visited = new Set<VerilogModule>([root]);
   for (const segment of segments) {
     const instance = module.instances.find((candidate) => candidate.instanceName === segment);
     const target = instance ? lookup(instance.moduleName) : undefined;
     if (!instance || !target || visited.has(target)) {
+      blocks.push(withoutIndex(segment));
       continue;
     }
     visited.add(target);
     created = { parent: module, instance };
     module = target;
+    blocks = [];
   }
-  return created ? { module, instance: created } : { module };
+  return created ? { module, instance: created, blocks } : { module, blocks };
 }
 
-/** Declaration for a VCD leaf name; memory words (`register[3]`) resolve to their array. */
-export function findDeclaration(module: VerilogModule, leafName: string): VerilogDecl | undefined {
-  const name = leafName.replace(/\[[^\]]*\]$/, '');
+/**
+ * Declaration for a VCD leaf name; memory words (`register[3]`) resolve to their
+ * array. `blocks` (from `resolveHierarchy`) prefers declarations local to those
+ * named generate blocks, innermost first, over module-level ones.
+ */
+export function findDeclaration(module: VerilogModule, leafName: string, blocks: readonly string[] = []): VerilogDecl | undefined {
+  const name = withoutIndex(leafName);
+  for (const label of [...blocks].reverse()) {
+    for (const block of module.generateBlocks) {
+      const declaration = block.name === label ? block.declarations.find((candidate) => candidate.name === name) : undefined;
+      if (declaration) {
+        return declaration;
+      }
+    }
+  }
   return module.declarations.get(name) ?? module.ports.find((port) => port.name === name);
+}
+
+function withoutIndex(segment: string): string {
+  return segment.replace(/\[[^\]]*\]$/, '');
 }
 
 export interface MemoryDump {

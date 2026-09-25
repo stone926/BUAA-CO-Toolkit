@@ -559,8 +559,9 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
 
   const namedParams = new Set(instance.parameterConnections.map((connection) => connection.name).filter((name): name is string => Boolean(name)));
   const hasOrderedParameterConnections = instance.parameterConnections.some((connection) => !connection.name);
-  const missingParams = target.parameters.filter((param) => !namedParams.has(param.name));
-  if (target.parameters.length && missingParams.length && !hasOrderedParameterConnections) {
+  const targetParams = overridableParameters(target);
+  const missingParams = targetParams.filter((param) => !namedParams.has(param.name));
+  if (targetParams.length && missingParams.length && !hasOrderedParameterConnections) {
     actions.push({
       title: 'Fill parameters',
       kind: CodeActionKind.RefactorRewrite,
@@ -648,7 +649,7 @@ function fillPortConnectionsEdit(document: TextDocument, instance: VerilogInstan
 
 function fillParameterConnectionsEdit(document: TextDocument, instance: VerilogInstance, target: VerilogModule): TextEdit {
   const existingByName = new Map(instance.parameterConnections.filter((connection) => connection.name).map((connection) => [connection.name as string, connection]));
-  const lines = target.parameters.map((param) => {
+  const lines = overridableParameters(target).map((param) => {
     const existing = existingByName.get(param.name);
     return existing ? document.getText(existing.range).trim() : `.${param.name}(${param.name})`;
   });

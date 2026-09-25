@@ -13,6 +13,7 @@ import { declDetail } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { moduleMarkdown } from './display';
 import { activeConnectionIndex, findInstanceContext } from './resolveSymbol';
+import { overridableParameters } from './parameterOverrides';
 
 export function getVerilogSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): SignatureHelp | undefined {
   const parsed = getCachedVerilogParse(document, settings, false);
@@ -20,7 +21,7 @@ export function getVerilogSignatureHelp(document: TextDocument, position: Positi
   if (!context?.targetModule) {
     return undefined;
   }
-  const entries = context.listKind === 'parameters' ? context.targetModule.parameters : context.targetModule.ports;
+  const entries = context.listKind === 'parameters' ? overridableParameters(context.targetModule) : context.targetModule.ports;
   if (!entries.length) {
     return undefined;
   }

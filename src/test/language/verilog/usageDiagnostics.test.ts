@@ -81,3 +81,46 @@ endmodule
     expect(yDiagnostics).not.toContain('unused-signal');
   });
 });
+
+describe('generate block scopes', () => {
+  const source = `
+\`default_nettype none
+module top(input wire clk, input wire [7:0] a, output wire [7:0] y);
+    genvar g;
+    generate for (g = 0; g < 2; g = g + 1) begin : lane
+        wire [7:0] w;
+        reg [7:0] r;
+        assign w = a + g;
+        always @(posedge clk) r <= w;
+    end endgenerate
+    generate if (1) begin : fast
+        wire [7:0] v;
+        assign v = a;
+        begin : inner
+            wire [7:0] u;
+            assign u = v;
+        end
+    end else begin : slow
+        wire [7:0] v;
+        assign v = ~a;
+    end endgenerate
+    assign y = a;
+endmodule
+`;
+
+  it('resolves names declared in generate blocks without implicit-net or multi-driver noise', () => {
+    const result = codes(doc('top', source));
+    expect(result.filter((code) => code.startsWith('implicit-net'))).toEqual([]);
+    expect(result).not.toContain('multi-driver');
+  });
+
+  it('still reports names used outside the generate block that declares them', () => {
+    const outside = source.replace('assign y = a;', 'assign y = w;');
+    expect(codes(doc('top', outside))).toContain('implicit-net:w');
+  });
+
+  it('still reports two drivers on the same branch of a conditional generate', () => {
+    const doubled = source.replace('assign v = ~a;', 'assign v = ~a;\n        assign v = a;');
+    expect(codes(doc('top', doubled))).toContain('multi-driver');
+  });
+});

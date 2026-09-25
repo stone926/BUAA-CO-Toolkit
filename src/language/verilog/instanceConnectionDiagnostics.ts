@@ -135,6 +135,11 @@ function collectParameterConnectionDiagnostics(
         diagnostics.push(makeDiagnostic(connection.nameRange ?? connection.range, `Module '${targetModule.name}' has no parameter named '${connection.name}'.`, DiagnosticSeverity.Error, 'unknown-parameter'));
         continue;
       }
+      if (targetParameter.kind === 'localparam') {
+        // Elaboration rejects this ("Cannot override localparam").
+        diagnostics.push(makeDiagnostic(connection.nameRange ?? connection.range, `'${connection.name}' is a localparam of module '${targetModule.name}' and cannot be overridden.`, DiagnosticSeverity.Error, 'localparam-override'));
+        continue;
+      }
     } else if (!targetParameter) {
       diagnostics.push(makeDiagnostic(connection.range, `Module '${targetModule.name}' has only ${positionalParameters.length} parameter(s); positional parameter override ${connection.positionalIndex + 1} is out of range.`, DiagnosticSeverity.Error, 'parameter-index-out-of-range'));
       continue;

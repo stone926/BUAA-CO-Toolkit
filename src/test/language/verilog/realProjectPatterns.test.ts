@@ -627,6 +627,7 @@ endmodule
           ['imm16', { name: 'imm16', kind: 'wire' as const, width: '[15:0]', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, selectionRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } }]
         ]),
         instances: [],
+        generateBlocks: [],
         range: { start: { line: 0, character: 0 }, end: { line: 10, character: 0 } },
         selectionRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 4 } },
         headerEnd: { line: 0, character: 0 },
@@ -648,6 +649,7 @@ endmodule
           ['PC', { name: 'PC', kind: 'wire' as const, width: '[31:0]', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, selectionRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } }]
         ]),
         instances: [],
+        generateBlocks: [],
         range: { start: { line: 0, character: 0 }, end: { line: 10, character: 0 } },
         selectionRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 4 } },
         headerEnd: { line: 0, character: 0 },

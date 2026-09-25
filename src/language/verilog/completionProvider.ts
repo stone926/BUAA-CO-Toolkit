@@ -19,6 +19,7 @@ import { declDetail, moduleAtPosition } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { preprocessorDirectives } from './preprocessor';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
+import { overridableParameters } from './parameterOverrides';
 
 type VerilogConnectionListKind = 'ports' | 'parameters';
 
@@ -59,7 +60,7 @@ export function getVerilogCompletions(
   const connectionContext = dependencies.findInstanceContext(parsed.modules, position, index);
   if (connectionContext?.targetModule) {
     const connected = new Set(connectionContext.connections.map((connection) => connection.name).filter((name): name is string => Boolean(name)));
-    const entries = connectionContext.listKind === 'parameters' ? connectionContext.targetModule.parameters : connectionContext.targetModule.ports;
+    const entries = connectionContext.listKind === 'parameters' ? overridableParameters(connectionContext.targetModule) : connectionContext.targetModule.ports;
     return entries
       .filter((entry) => !connected.has(entry.name))
       .map((entry) => ({

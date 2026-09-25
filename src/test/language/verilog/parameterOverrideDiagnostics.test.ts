@@ -131,6 +131,20 @@ endmodule
     expect(result).toContain('parameter-index-out-of-range');
   });
 
+  it('rejects a named override of a localparam', () => {
+    const result = codes(`
+module child #(parameter W = 4)();
+    localparam L = W * 2;
+endmodule
+
+module top();
+    child #(.L(8)) u_child();
+endmodule
+`.trim());
+    expect(result).toContain('localparam-override');
+    expect(result).not.toContain('unknown-parameter');
+  });
+
   it('reports non-constant parameter override expressions', () => {
     const result = codes(`
 module child #(parameter WIDTH = 4)();

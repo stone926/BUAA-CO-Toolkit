@@ -8,6 +8,9 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 - feat(verilog): **Simulate and View Waveform** runs the testbench with the bundled Icarus, records every signal plus each word of small memories such as the GRF (shown with `$sp`-style aliases), and overlays the testbench's `$display` GRF/DM writes on the time axis with click-to-jump
 - fix(mips-core): encode `sllv`/`srlv`/`srav` in MARS operand order (`rd, rt, rs`); the builtin assembler previously swapped `rs` and `rt`
 - fix(verilog-lsp): map positional `#(...)` parameter overrides onto `parameter`s only, skipping `localparam`s as elaboration does, so width diagnostics, inlay hints and the named-parameter code action target the overridden `parameter`
+- fix(verilog-lsp): report a named override of a `localparam` (`localparam-override`), and leave localparams out of `#(...)` completion, signature help and **Fill parameters**
+- fix(verilog-lsp): scope declarations inside generate `begin … end` blocks: signals used in their block no longer raise implicit-net warnings, go-to-definition picks the declaring branch, and drivers on different `if`/`else` generate branches are not reported as multiple drivers
+- feat(verilog): waveform **jump to source** resolves signals declared inside generate blocks (for example `tb.uut.lane[0].w`) to their own declaration
 
 ## [1.2.3] - 2026-09-23
 

@@ -31,7 +31,7 @@ vcd:
   vcd/vcdReader.ts — 解析会话门面与一次性 parseVcd
 
 design:
-  design/designHierarchy.ts — 按实例名解析层次、查声明；在 testbench 下查找可逐字 dump 的一维小存储器：参数覆盖逐级传递，跳过 task/function 内数组与 generate 块内实例；覆盖无法求值或模块含 defparam 时，其下只信任字面量边界；递归/规模有界
+  design/designHierarchy.ts — 按实例名解析层次（实例之后的具名块段记为 generate 块标签）、查声明（优先所在 generate 块内的声明）；在 testbench 下查找可逐字 dump 的一维小存储器：参数覆盖逐级传递，跳过 task/function 内数组与 generate 块内实例；覆盖无法求值或模块含 defparam 时，其下只信任字面量边界；递归/规模有界
   design/waveformDumper.ts — 从 resources/templates/verilog/waveform_dumper.v 渲染 dump 顶层（存储器字用常量下标，越界在编译期告警而非 VVP 崩溃），workspace 摘要命名，dump 路径相对 VVP 工作目录；dumperRejection 把 Icarus 对 dump 顶层的报错按行号归因到具体存储器
 
 host:

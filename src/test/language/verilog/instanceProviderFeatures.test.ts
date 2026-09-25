@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Range } from 'vscode-languageserver/node';
 import { defaultCoSettings } from '../../../language/common/settings';
 import {
+  getVerilogCompletions,
   getVerilogDefinition,
   getVerilogHover,
   getVerilogInlayHints,
@@ -43,6 +44,29 @@ endmodule
     expect(hoverText(getVerilogHover(document, positionOf(document, '.din', 1), defaultCoSettings, index))).toContain('Effective width: `8`');
     expect(getVerilogSignatureHelp(document, positionOf(document, '.dout', 2), defaultCoSettings, index)?.activeParameter).toBe(1);
     expect(inlayLabels(document, index)).toEqual(expect.arrayContaining([': param', ': in[8]', ': out[16]']));
+  });
+
+  it('offers only overridable parameters in #(...) completion and signature help', () => {
+    const document = verilogDoc(`
+module child #(parameter WIDTH = 4)();
+    localparam HALF = WIDTH / 2;
+    parameter DEPTH = 16;
+endmodule
+
+module top();
+    child #(8, ) u_ordered();
+    child #(.WIDTH(8), ) u_named();
+endmodule
+`.trim());
+    const index = new VerilogWorkspaceIndex();
+    index.updateDocument(document, defaultCoSettings);
+
+    const signature = getVerilogSignatureHelp(document, positionOf(document, '#(8, ', 5), defaultCoSettings, index);
+    expect(signature?.signatures[0].label).toBe('child(WIDTH, DEPTH)');
+    expect(signature?.activeParameter).toBe(1);
+    const labels = getVerilogCompletions(document, positionOf(document, '#(.WIDTH(8), ', 13), defaultCoSettings, index).map((item) => item.label);
+    expect(labels).toContain('DEPTH');
+    expect(labels).not.toContain('HALF');
   });
 
   it('computes active parameters for positional parameter and port lists', () => {

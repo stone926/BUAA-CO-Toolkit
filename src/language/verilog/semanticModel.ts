@@ -261,7 +261,8 @@ function collectSymbols(
       }));
     }
     const moduleAst = source.ast.modules.find((item) => item.module === module);
-    for (const decl of collectBlockLocalDeclarations(source.document, moduleAst)) {
+    const generateDeclarations = module.generateBlocks.flatMap((block) => block.declarations);
+    for (const decl of [...generateDeclarations, ...collectBlockLocalDeclarations(source.document, moduleAst)]) {
       const declScope = declarationScopeFor(module, scope, blockScopes, decl);
       if (declScope.symbols.get(decl.name)?.some((symbol) => rangesEqual(symbol.selectionRange, decl.selectionRange))) {
         continue;
@@ -384,10 +385,27 @@ function collectBlockScopes(moduleAsts: VerilogModuleAst[], moduleScopes: Verilo
     if (!moduleScope) {
       continue;
     }
+    const generateScopes = collectGenerateBlockScopes(module, moduleScope);
+    result.push(...generateScopes);
+    // Procedural blocks and subroutines inside a generate block resolve names through it.
+    const enclosing = (range: Range) => scopeAtPosition(moduleScope, generateScopes, range.start);
     for (const block of moduleAst.proceduralBlocks) {
-      result.push(...collectProceduralStatementBlockScopes(module, moduleScope, block.statementTree));
+      result.push(...collectProceduralStatementBlockScopes(module, enclosing(block.range), block.statementTree));
     }
-    result.push(...collectSubroutineBlockScopes(moduleAst, moduleScope));
+    result.push(...collectSubroutineBlockScopes(moduleAst, enclosing));
+  }
+  return result;
+}
+
+/** One scope per generate `begin ... end` block, nested by containment. */
+function collectGenerateBlockScopes(module: VerilogModule, moduleScope: VerilogSemanticScope): VerilogSemanticScope[] {
+  const result: VerilogSemanticScope[] = [];
+  const outermostFirst = [...module.generateBlocks].sort((left, right) => rangeSize(right.range) - rangeSize(left.range));
+  for (const block of outermostFirst) {
+    const parent = scopeAtPosition(moduleScope, result, block.range.start);
+    const scope = makeBlockScopeFromRange(module, parent, block.name ?? 'generate', block.range);
+    parent.children.push(scope);
+    result.push(scope);
   }
   return result;
 }
@@ -438,11 +456,15 @@ function collectProceduralStatementBlockScopes(
   }
 }
 
-function collectSubroutineBlockScopes(moduleAst: VerilogModuleAst, moduleScope: VerilogSemanticScope): VerilogSemanticScope[] {
+function collectSubroutineBlockScopes(
+  moduleAst: VerilogModuleAst,
+  enclosing: (range: Range) => VerilogSemanticScope
+): VerilogSemanticScope[] {
   const result: VerilogSemanticScope[] = [];
   for (const subroutine of moduleAst.subroutines) {
-    const scope = makeBlockScopeFromRange(moduleAst.module, moduleScope, subroutine.subroutineKind, subroutine.range);
-    moduleScope.children.push(scope);
+    const parent = enclosing(subroutine.range);
+    const scope = makeBlockScopeFromRange(moduleAst.module, parent, subroutine.subroutineKind, subroutine.range);
+    parent.children.push(scope);
     result.push(scope);
   }
   return result;

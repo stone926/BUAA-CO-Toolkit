@@ -68,6 +68,11 @@ export interface VerilogModule {
   parameters: VerilogDecl[];
   declarations: Map<string, VerilogDecl>;
   instances: VerilogInstance[];
+  /**
+   * Scoped generate blocks (`begin ... end` inside generate constructs) with the
+   * declarations local to each; nested blocks are separate entries.
+   */
+  generateBlocks: VerilogGenerateBlock[];
   range: Range;
   selectionRange: Range;
   headerEnd: Position;
@@ -75,6 +80,27 @@ export interface VerilogModule {
   bodyText: string;
   hasEndmodule: boolean;
   endmoduleRange?: Range;
+}
+
+export interface VerilogGenerateBlock {
+  /** Block label (`g` in `begin : g`), when present. */
+  name?: string;
+  range: Range;
+  /** Nets, variables and localparams declared directly in this block. */
+  declarations: VerilogDecl[];
+  /**
+   * Conditional-generate branches enclosing (and including) this block, outermost
+   * first. Blocks on different branches of the same `if`/`else` chain never
+   * elaborate together.
+   */
+  branches: VerilogGenerateBranch[];
+}
+
+export interface VerilogGenerateBranch {
+  /** Identifies one `if (...) ... else ...` construct within the module. */
+  readonly construct: number;
+  /** 0 for the `if` branch, 1 for its `else`. */
+  readonly branch: number;
 }
 
 export interface VerilogMacro {

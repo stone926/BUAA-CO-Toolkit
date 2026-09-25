@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { URI } from 'vscode-uri';
 import { defaultCoSettings } from '../../../language/common/settings';
 import {
+  getVerilogDefinition,
   getVerilogHover,
   getVerilogReferences,
   getVerilogRenameEdits,
@@ -90,5 +91,27 @@ endmodule
 
     expect(referencedTexts.filter((text) => text === 'din')).toHaveLength(2);
     expect(refs.some((location) => location.range.start.line === 5 && document.getText(location.range) === 'din')).toBe(false);
+  });
+});
+
+describe('generate block navigation', () => {
+  it('resolves same-named signals to the generate branch that declares them', () => {
+    const document = verilogDoc(`
+module top(input [7:0] a);
+    generate if (1) begin : fast
+        wire [7:0] v;
+        assign v = a;
+    end else begin : slow
+        wire [7:0] v;
+        assign v = ~a;
+    end endgenerate
+endmodule
+`.trim());
+    const index = new VerilogWorkspaceIndex();
+    index.updateDocument(document, defaultCoSettings);
+    const definitionLine = (text: string) =>
+      getVerilogDefinition(document, positionOf(document, text, 'assign '.length), defaultCoSettings, index)?.range.start.line;
+    expect(definitionLine('assign v = a;')).toBe(2);
+    expect(definitionLine('assign v = ~a;')).toBe(5);
   });
 });

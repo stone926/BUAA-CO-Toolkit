@@ -33,12 +33,12 @@ export async function locateWaveformSource(
     return `未找到顶层模块 ${segments[0]} 的源码`;
   }
   const scopeSegments = isScope ? segments.slice(1) : segments.slice(1, -1);
-  const { module } = resolveHierarchy(root, scopeSegments, lookup);
+  const { module, blocks } = resolveHierarchy(root, scopeSegments, lookup);
   if (isScope) {
     return { uri: vscode.Uri.parse(module.uri), range: toRange(module.selectionRange) };
   }
   const leaf = segments[segments.length - 1];
-  const declaration = findDeclaration(module, leaf);
+  const declaration = findDeclaration(module, leaf, blocks);
   if (!declaration) {
     return `模块 ${module.name} 中没有找到 ${leaf} 的声明`;
   }

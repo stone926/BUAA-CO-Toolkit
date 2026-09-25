@@ -9,6 +9,8 @@ import {
   VerilogDecl,
   VerilogDeclDimension,
   VerilogDeclKind,
+  VerilogGenerateBlock,
+  VerilogGenerateBranch,
   VerilogInstance,
   VerilogModule,
   VerilogPortConnection,
@@ -91,6 +93,7 @@ export function parseModulesFromTokens(
       parameters: [],
       declarations: new Map(),
       instances: [],
+      generateBlocks: [],
       range: Range.create(document.positionAt(header.moduleToken.start), document.positionAt(header.endOffset)),
       selectionRange: tokenRange(document, header.nameToken),
       headerEnd: document.positionAt(header.bodyStartOffset),
@@ -140,6 +143,7 @@ export function parseModulesFromTokens(
     }
 
     module.instances = parseInstances(document, text, bodyTokens, module.name);
+    module.generateBlocks = parseGenerateBlocks(document, text, bodyTokens);
     // task/function names, arguments and locals are not module ports/parameters, but they ARE
     // declared identifiers — register them (without promotion) so implicit-net / references don't
     // mis-report them. They never overwrite a real module-level declaration of the same name.
@@ -498,10 +502,9 @@ function parseInstances(
       instances.push(inGenerateBlock ? { ...instance, inGenerateBlock } : instance);
       continue;
     }
-    const nested = nestedGenerateInstanceTokens(statement);
-    if (nested.length > 0 && nested.length < statement.length) {
-      // A bare generate region adds no scope; if/for/case/begin generate blocks do.
-      const scoped = inGenerateBlock || statement[0].value !== 'generate';
+    // A bare generate region adds no scope; if/for/case/begin generate blocks do.
+    const scoped = inGenerateBlock || statement[0]?.value !== 'generate';
+    for (const nested of nestedGenerateItems(statement)) {
       instances.push(...parseInstances(document, text, nested, currentModuleName, scoped));
     }
   }
@@ -576,24 +579,68 @@ function parseInstanceStatement(document: TextDocument, text: string, statement:
   };
 }
 
-function nestedGenerateInstanceTokens(statement: VerilogToken[]): VerilogToken[] {
+/**
+ * `begin ... end` blocks inside generate constructs, each with its own local
+ * declarations. Declarations there are not module items: they live in the block's
+ * scope (`g[0].w`), so they are kept apart from `module.declarations`.
+ */
+function parseGenerateBlocks(
+  document: TextDocument,
+  text: string,
+  tokens: VerilogToken[],
+  branches: readonly VerilogGenerateBranch[] = [],
+  constructs = { next: 0 }
+): VerilogGenerateBlock[] {
+  const blocks: VerilogGenerateBlock[] = [];
+  for (const statement of statementSlices(tokens)) {
+    if (statement[0]?.value !== 'begin') {
+      for (const nested of nestedGenerateItems(statement)) {
+        blocks.push(...parseGenerateBlocks(document, text, nested, branches, constructs));
+      }
+      continue;
+    }
+    const end = findMatchingToken(statement, 0, 'begin', 'end');
+    const tail = end >= 0 ? statement.slice(end + 1) : [];
+    // `begin ... end else ...`: the block is the if branch, the tail its alternative.
+    const construct = tail[0]?.value === 'else' ? constructs.next++ : undefined;
+    const own = construct === undefined ? [...branches] : [...branches, { construct, branch: 0 }];
+    const label = statement[1]?.value === ':' && statement[2] && isIdentifierLike(statement[2].kind) ? statement[2].value : undefined;
+    const body = beginBodyTokens(statement, 0);
+    blocks.push({
+      name: label,
+      range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[end >= 0 ? end : statement.length - 1].end)),
+      declarations: parseBodyDeclarations(document, text, body),
+      branches: own
+    });
+    blocks.push(...parseGenerateBlocks(document, text, body, own, constructs));
+    if (tail.length) {
+      const alternative = construct === undefined ? branches : [...branches, { construct, branch: 1 }];
+      blocks.push(...parseGenerateBlocks(document, text, tail, alternative, constructs));
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Token runs nested in a generate construct: the body of a generate region or
+ * `begin` block, the tail of `if`/`for`/`else`, and an `else` branch that
+ * follows a `begin ... end` in the same statement (`begin ... end else begin ... end`).
+ * Every run is strictly shorter than `statement`, so recursion terminates.
+ */
+function nestedGenerateItems(statement: VerilogToken[]): VerilogToken[][] {
   const first = statement[0];
-  if (!first) {
-    return [];
+  let items: VerilogToken[][] = [];
+  if (first?.value === 'generate') {
+    items = [blockBodyTokens(statement, 0, 'generate', 'endgenerate')];
+  } else if (first?.value === 'begin') {
+    const end = findMatchingToken(statement, 0, 'begin', 'end');
+    items = [beginBodyTokens(statement, 0), end >= 0 ? statement.slice(end + 1) : []];
+  } else if (first?.value === 'if' || first?.value === 'for') {
+    items = [controlTailTokens(statement, 0)];
+  } else if (first?.value === 'else') {
+    items = [statement.slice(1)];
   }
-  if (first.value === 'generate') {
-    return blockBodyTokens(statement, 0, 'generate', 'endgenerate');
-  }
-  if (first.value === 'begin') {
-    return beginBodyTokens(statement, 0);
-  }
-  if (first.value === 'if' || first.value === 'for') {
-    return controlTailTokens(statement, 0);
-  }
-  if (first.value === 'else') {
-    return statement.slice(1);
-  }
-  return [];
+  return items.filter((item) => item.length > 0 && item.length < statement.length);
 }
 
 function controlTailTokens(statement: VerilogToken[], keywordIndex: number): VerilogToken[] {
