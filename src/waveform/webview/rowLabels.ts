@@ -1,7 +1,7 @@
 // @index waveform-webview-labels — 信号名/当前值列：虚拟化行池、GRF 别名与重名前缀、x/z 与本刻跳变高亮、选择、拖动排序、分组重命名
 
 import { changeIndexAt, changeTime, valueState, ValueState } from '../model/signalValues';
-import { formatTrackValue } from '../model/valueFormat';
+import { eventTriggerText, formatEventAt, formatTrackValue } from '../model/valueFormat';
 import { shortestUniqueNames } from '../view/displayNames';
 import { registerAlias } from '../view/signalDefaults';
 import type { SignalRow, VisibleRow } from '../view/waveRows';
@@ -36,6 +36,8 @@ export class RowLabels {
   private names = new Map<number, { prefix: string; leaf: string }>();
   private namesKey = '';
   private renaming: number | undefined;
+  /** Tears down the in-flight row press/drag gesture, if any. */
+  private endGesture: (() => void) | undefined;
 
   constructor(
     private readonly store: WaveStore,
@@ -45,6 +47,7 @@ export class RowLabels {
   ) {
     this.element = h('div', { className: 'labels' });
     this.indicator = h('div', { className: 'drop-indicator' });
+    this.indicator.hidden = true;
     this.element.append(this.indicator);
     this.element.addEventListener('pointerdown', (event) => this.onPointerDown(event));
     this.element.addEventListener('dblclick', (event) => this.onDoubleClick(event));
@@ -90,13 +93,23 @@ export class RowLabels {
       if (!row || row.kind !== 'signal' || !data || row.varIndex < 0) {
         setText(element.value, row?.kind === 'group' ? `${row.children.length} 个信号` : '');
         element.value.className = 'cell value dim';
+        element.value.title = '';
         continue;
       }
-      const track = data.vars[row.varIndex].track;
+      const variable = data.vars[row.varIndex];
+      const track = variable.track;
+      if (variable.kind === 'event') {
+        const text = formatEventAt(data.tracks, track, this.store.cursor);
+        setText(element.value, text);
+        element.value.className = text === eventTriggerText ? 'cell value changed' : 'cell value dim';
+        element.value.title = '';
+        continue;
+      }
       const index = changeIndexAt(data.tracks, track, this.store.cursor);
       if (index < 0) {
         setText(element.value, '—');
         element.value.className = 'cell value dim';
+        element.value.title = '';
         continue;
       }
       const state = valueState(data.tracks, track, index);
@@ -166,7 +179,12 @@ export class RowLabels {
     return { index: within > rowHeight / 2 ? index + 1 : index };
   }
 
-  /** First row at or after `index` that is not being moved (undefined = end of list). */
+  /** The row shown at visible `index` (undefined = past the end): the anchor for external drops. */
+  rowIdAtIndex(index: number): number | undefined {
+    return this.rows[index]?.row.id;
+  }
+
+  /** First row at or after `index` that is not being moved (undefined = end of list): the anchor for internal moves. */
   rowIdBefore(index: number): number | undefined {
     for (let position = index; position < this.rows.length; position++) {
       const visible = this.rows[position];
@@ -265,6 +283,7 @@ export class RowLabels {
   }
 
   private onPointerDown(event: PointerEvent): void {
+    this.endGesture?.();
     if (event.button !== 0 || (event.target as HTMLElement).closest('.rename-input')) {
       return;
     }
@@ -290,10 +309,32 @@ export class RowLabels {
     }
     const startY = event.clientY;
     let dragging = false;
-    this.element.setPointerCapture(event.pointerId);
+    // Capture only once a drag starts: capturing on press would retarget the
+    // following click/dblclick to the container and break double-click on rows.
+    // Until then the gesture is tracked on the window so a release outside the
+    // list still ends it.
+    const end = (): void => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      this.element.classList.remove('dragging');
+      this.hideDropIndicator();
+      if (this.endGesture === end) {
+        this.endGesture = undefined;
+      }
+    };
     const move = (moveEvent: PointerEvent): void => {
+      if (moveEvent.pointerId !== event.pointerId) {
+        return;
+      }
+      if ((moveEvent.buttons & 1) === 0) {
+        // The release happened where this document could not see it: abandon the gesture.
+        end();
+        return;
+      }
       if (!dragging && Math.abs(moveEvent.clientY - startY) > 4 && !additive && !event.shiftKey) {
         dragging = true;
+        this.element.setPointerCapture(event.pointerId);
         this.element.classList.add('dragging');
       }
       if (dragging) {
@@ -302,11 +343,10 @@ export class RowLabels {
       }
     };
     const up = (upEvent: PointerEvent): void => {
-      this.element.removeEventListener('pointermove', move);
-      this.element.removeEventListener('pointerup', up);
-      this.element.removeEventListener('pointercancel', up);
-      this.element.classList.remove('dragging');
-      this.hideDropIndicator();
+      if (upEvent.pointerId !== event.pointerId) {
+        return;
+      }
+      end();
       if (dragging && upEvent.type === 'pointerup') {
         const target = this.dropTarget(upEvent.clientY);
         const ids = [...this.store.selection];
@@ -315,12 +355,13 @@ export class RowLabels {
         } else {
           this.actions.moveRows(ids, this.rowIdBefore(target.index));
         }
-      } else if (!dragging && wasSelected && !additive && !event.shiftKey) {
+      } else if (!dragging && wasSelected && !additive && !event.shiftKey && upEvent.type === 'pointerup') {
         this.actions.select(id, 'replace');
       }
     };
-    this.element.addEventListener('pointermove', move);
-    this.element.addEventListener('pointerup', up);
-    this.element.addEventListener('pointercancel', up);
+    this.endGesture = end;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   }
 }

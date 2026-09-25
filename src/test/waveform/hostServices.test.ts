@@ -65,7 +65,7 @@ describe('trace pairing', () => {
 
     it('streams files with progress and honours cancellation', async () => {
       const dump = path.join(directory, 'big.vcd');
-      const body = Array.from({ length: 420_000 }, (_, index) => `#${index * 5}\n${index % 2}!`).join('\n');
+      const body = Array.from({ length: 420_000 }, (_, index) => `#${index * 5}\n${index % 2}!\n`).join('');
       fs.writeFileSync(dump, vcd.replace(/#0[\s\S]*$/, '') + body);
       // > 4 MiB so at least one progress report is due.
       const progress: number[] = [];

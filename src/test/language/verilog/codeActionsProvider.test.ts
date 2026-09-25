@@ -70,6 +70,22 @@ endmodule
     expect(replacement).toContain('\n        .din(a),\n        .dout(y)\n    ');
   });
 
+  it('names ordered parameter overrides after the overridable parameters, skipping localparams', () => {
+    const document = verilogDoc(`
+module child(din);
+    localparam L = 1;
+    parameter W = 4;
+    input [W-1:0] din;
+endmodule
+module top(input [7:0] a);
+    child #(8) u_ordered(.din(a));
+endmodule
+`.trim());
+    const action = actionAt(document, 'u_ordered', 'Convert ordered parameter assignments to named assignments');
+
+    expect(action?.edit?.changes?.[document.uri]?.[0].newText).toContain('.W(8)');
+  });
+
   it('does not return unrelated refactors at ordinary declaration positions', () => {
     const document = verilogDoc(`
 module top;

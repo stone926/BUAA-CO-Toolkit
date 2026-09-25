@@ -24,6 +24,7 @@ import type { VerilogModuleAst, VerilogStatementAst } from './ast';
 import type { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 import { findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
 import type { VerilogExpressionMatch } from './exprAstUtils';
+import { overridableParameters } from './parameterOverrides';
 import { InstanceContext, resolveInstanceTargetModule } from './resolveSymbol';
 
 interface VerilogExpressionActionContext extends VerilogExpressionMatch {
@@ -589,7 +590,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
-          [document.uri]: [TextEdit.replace(instance.parameterListRange, formatConvertedConnections(document, instance, target.parameters, instance.parameterConnections))]
+          [document.uri]: [TextEdit.replace(instance.parameterListRange, formatConvertedConnections(document, instance, overridableParameters(target), instance.parameterConnections))]
         }
       }
     });

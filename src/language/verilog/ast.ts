@@ -1,6 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { rangesEqual } from '../common/lsp';
+import { containsRange, rangesEqual } from '../common/lsp';
 import { VerilogLexDiagnostic, VerilogToken } from './lexer';
 import {
   VerilogDecl,
@@ -471,17 +471,6 @@ function classifyStatement(statement: VerilogStatementSource, module?: VerilogMo
     return 'proceduralBlock';
   }
   return 'other';
-}
-
-function containsRange(outer: Range, inner: Range): boolean {
-  return comparePosition(outer.start, inner.start) <= 0 && comparePosition(outer.end, inner.end) >= 0;
-}
-
-function comparePosition(left: { line: number; character: number }, right: { line: number; character: number }): number {
-  if (left.line !== right.line) {
-    return left.line - right.line;
-  }
-  return left.character - right.character;
 }
 
 function documentRange(document: TextDocument): Range {

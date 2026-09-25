@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { disassembleMipsWord } from '../../waveform/model/mipsDisassembly';
-import { formatBits, formatReal } from '../../waveform/model/valueFormat';
+import { eventTriggerText, formatBits, formatEventAt, formatReal } from '../../waveform/model/valueFormat';
+import { parseVcd } from '../../waveform/vcd/vcdReader';
 import {
   chooseTickStep,
   displayUnitFor,
@@ -73,6 +74,22 @@ describe('value formatting', () => {
     expect(format(word.toString(2).padStart(32, '0'), 'instr')).toBe('addu $t1, $t2, $t3');
     expect(format('1'.repeat(32), 'instr', '1'.repeat(32))).toBe('xxxxxxxx');
     expect(format('1111', 'instr')).toBe('f');
+  });
+
+  it('shows a named event only at its trigger times', () => {
+    const data = parseVcd(`$timescale 1ps $end
+$scope module tb $end
+$var event 1 ! ev $end
+$upscope $end
+$enddefinitions $end
+#10
+1!
+#20
+1!
+`);
+    const track = data.vars[0].track;
+    expect([5, 10, 15, 20, 25].map((time) => formatEventAt(data.tracks, track, time)))
+      .toEqual(['—', eventTriggerText, '—', eventTriggerText, '—']);
   });
 
   it('prints reals compactly', () => {

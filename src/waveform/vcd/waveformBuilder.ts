@@ -13,11 +13,16 @@ import type { VcdHandler, VcdParseSummary } from './vcdParser';
 
 /** Upper bound on stored value changes; beyond it recording stops with a warning. */
 export const defaultMaximumChanges = 16_000_000;
+/** Upper bound on stored value words (4 bytes each) across all bit tracks. */
+export const defaultMaximumStoredWords = 64_000_000;
+/** Wider declarations are rejected: every change of such a signal costs `width` bits of work. */
+export const maximumVarWidth = 65_536;
 const maximumDiagnostics = 50;
 const discardedTrack = -1;
 
 export interface WaveformBuilderOptions {
   maximumChanges?: number;
+  maximumStoredWords?: number;
 }
 
 class GrowableFloat64 {
@@ -65,7 +70,11 @@ class TrackBuilder {
   texts: string[] | undefined;
   count = 0;
 
-  constructor(readonly width: number, readonly encoding: TrackEncoding) {
+  /**
+   * Named events: every trigger is kept even though the dumped value never
+   * changes (Icarus writes `1<id>` for each `-> event`).
+   */
+  constructor(readonly width: number, readonly encoding: TrackEncoding, readonly impulses = false) {
     this.words = encoding === TrackEncoding.Bits ? Math.max(1, Math.ceil(width / 32)) : 0;
     this.aval = new GrowableUint32(encoding === TrackEncoding.Bits ? 8 * this.words : 0);
     if (encoding === TrackEncoding.Real) {
@@ -84,7 +93,11 @@ class TrackBuilder {
     const words = this.words;
     if (this.count > 0) {
       const last = (this.count - 1) * words;
-      if (this.bitsEqualAt(last, a, b, hasUnknown)) {
+      if (this.impulses) {
+        if (this.lastTime === time) {
+          return 0;
+        }
+      } else if (this.bitsEqualAt(last, a, b, hasUnknown)) {
         return 0;
       }
       if (this.lastTime === time) {
@@ -218,6 +231,8 @@ export class WaveformBuilder implements VcdHandler {
   private readonly diagnostics: WaveDiagnostic[] = [];
   private readonly unknownIds = new Set<string>();
   private readonly maximumChanges: number;
+  private readonly maximumStoredWords: number;
+  private storedWords = 0;
   private timescale: TimeScale = defaultTimeScale;
   private timescaleSeen = false;
   private date: string | undefined;
@@ -226,12 +241,14 @@ export class WaveformBuilder implements VcdHandler {
   private startTime: number | undefined;
   private changeCount = 0;
   private limitReached = false;
+  private inCheckpoint = false;
   private backwardsTimeReported = false;
   private scratchA = new Uint32Array(1);
   private scratchB = new Uint32Array(1);
 
   constructor(options: WaveformBuilderOptions = {}) {
     this.maximumChanges = options.maximumChanges ?? defaultMaximumChanges;
+    this.maximumStoredWords = options.maximumStoredWords ?? defaultMaximumStoredWords;
   }
 
   headerCommand(command: string, body: readonly string[]): void {
@@ -308,8 +325,16 @@ export class WaveformBuilder implements VcdHandler {
       this.warnOnce(`type:${id}`, `信号 ${id} 的值类型与声明不符，已忽略`);
       return;
     }
+    if (builder.impulses && this.inCheckpoint) {
+      // Icarus restates every event as `1<id>` in $dumpvars/$dumpon; that is no trigger.
+      return;
+    }
     const hasUnknown = this.decodeBits(builder.width, builder.words, bits, start, end);
-    this.record(builder.appendBits(this.currentTime, this.scratchA, this.scratchB, hasUnknown));
+    this.record(builder.appendBits(this.currentTime, this.scratchA, this.scratchB, hasUnknown), builder.words);
+  }
+
+  checkpoint(open: boolean): void {
+    this.inCheckpoint = open;
   }
 
   real(id: string, value: number): void {
@@ -415,6 +440,13 @@ export class WaveformBuilder implements VcdHandler {
         ? Math.abs(reference.msb - reference.lsb) + 1
         : 1;
     }
+    if (width > maximumVarWidth) {
+      this.warn(`${reference.name} 声明了 ${width} 位，超过 ${maximumVarWidth} 位上限，已忽略`);
+      if (!this.trackById.has(id)) {
+        this.trackById.set(id, discardedTrack);
+      }
+      return;
+    }
     const scopePath = this.scopes[scope].path;
     let path = `${scopePath}.${reference.name}`;
     if (reference.range && !reference.range.includes(':') && !reference.name.endsWith(']')) {
@@ -431,7 +463,7 @@ export class WaveformBuilder implements VcdHandler {
     let track = this.trackById.get(id);
     if (track === undefined || track === discardedTrack) {
       track = this.tracks.length;
-      this.tracks.push(new TrackBuilder(encoding === TrackEncoding.Real ? 64 : width, encoding));
+      this.tracks.push(new TrackBuilder(encoding === TrackEncoding.Real ? 64 : width, encoding, kind === 'event'));
       this.trackById.set(id, track);
     } else if (this.tracks[track].encoding !== encoding || this.tracks[track].width !== width) {
       this.warn(`别名信号 ${path} 与同 id 的其他信号类型或位宽不同，按首次声明显示`);
@@ -532,11 +564,18 @@ export class WaveformBuilder implements VcdHandler {
     return hasUnknown;
   }
 
-  private record(delta: number): void {
+  private record(delta: number, words = 1): void {
     this.changeCount += delta;
-    if (this.changeCount >= this.maximumChanges && !this.limitReached) {
+    this.storedWords += delta * words;
+    if (this.limitReached) {
+      return;
+    }
+    if (this.changeCount >= this.maximumChanges) {
       this.limitReached = true;
       this.warn(`值变化数量超过 ${this.maximumChanges.toLocaleString()} 条上限，之后的波形已截断`);
+    } else if (this.storedWords >= this.maximumStoredWords) {
+      this.limitReached = true;
+      this.warn(`波形数据超过 ${Math.round(this.maximumStoredWords * 4 / 1024 / 1024)} MiB 上限，之后的波形已截断`);
     }
   }
 

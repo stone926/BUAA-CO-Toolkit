@@ -11,7 +11,7 @@ core:
   parser.ts — 主解析入口: parseVerilog/buildTestbench/moduleAtPosition
   lexer.ts — 词法: VerilogToken流(关键字/标识符/数字/字符串/注释/预处理/系统任务/操作符)
   statementParser.ts — 语句源切片: module item边界/过程块边界
-  astParser.ts — 模块/声明/实例结构解析: ports/parameters/declarations/instances/connections/generate
+  astParser.ts — 模块/声明/实例结构解析: ports/parameters/declarations/instances/connections/generate（实例标记是否位于带作用域的 generate 块内）
   moduleParser.ts — 薄门面: lexer+astParser组合
   ast.ts — VerilogAstDocument, VerilogModuleAst(items/alwaysBlocks/proceduralBlocks/subroutines)
   syntaxParser.ts — 语法树+语法诊断, 模块项发现从AST遍历
@@ -34,7 +34,7 @@ expr-support:
   textUtils.ts — 文本/空白处理供formatting
   displayFormats.ts — $display/$write格式字符串提取供trace格式推断
   numericLiterals.ts — 数字字面量hover格式化+代码操作(进制转换/位宽)
-  parameterOverrides.ts — 模块实例参数覆盖解析
+  parameterOverrides.ts — 模块实例参数覆盖解析：按名/按位（位置覆盖跳过 localparam），可传入父实例覆盖逐级求值；resolveParameterOverrides 额外报告无法求值的覆盖
   parseCache.ts — 解析缓存(DocumentResultCache wrapper)
 
 lsp-providers:

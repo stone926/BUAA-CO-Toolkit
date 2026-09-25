@@ -44,6 +44,11 @@ export interface VerilogInstance {
   parameterListRange?: Range;
   portConnections: VerilogPortConnection[];
   parameterConnections: VerilogPortConnection[];
+  /**
+   * Declared inside a generate block (`if`/`for`/`begin`), so its hierarchical
+   * name carries an extra scope (`g[0].u`, `genblk1.u`) that the model omits.
+   */
+  inGenerateBlock?: boolean;
 }
 
 export interface VerilogPortConnection {

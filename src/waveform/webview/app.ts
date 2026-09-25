@@ -1,11 +1,11 @@
-// @index waveform-webview-app — Webview 组装与消息处理：布局装配、主题/尺寸变化重绘、宿主消息（init/进度/文档/trace/定位/错误）分派
+// @index waveform-webview-app — Webview 组装与消息处理：布局装配、主题/尺寸变化重绘、宿主消息（init/进度/文档/trace/定位/快捷键/错误）分派
 
-import type { HostToWebviewMessage } from '../model/protocol';
+import { isWaveformShortcut, type HostToWebviewMessage } from '../model/protocol';
 import { WaveActions } from './actions';
 import { closeContextMenu } from './contextMenu';
 import { h } from './dom';
 import { HostChannel } from './hostChannel';
-import { HelpOverlay, installKeyboard } from './keyboard';
+import { HelpOverlay, installKeyboard, runShortcut, type KeyboardTargets } from './keyboard';
 import { SignalBrowser } from './signalBrowser';
 import { Sidebar } from './sidebar';
 import { LoadOverlay, StatusBar } from './statusBar';
@@ -29,9 +29,10 @@ export class WaveformApp {
   private readonly overlay: LoadOverlay;
   private readonly help = new HelpOverlay();
   private readonly tooltip = new Tooltip();
+  private readonly keys: KeyboardTargets;
 
   constructor(root: HTMLElement) {
-    this.store = new WaveStore((state) => this.host.saveState(state));
+    this.store = new WaveStore((state) => this.host.saveState(state), (callback) => requestAnimationFrame(callback));
     this.actions = new WaveActions(this.store);
     const palette = (): Palette => this.palette;
     const notify = (message: string): void => this.status.notify(message);
@@ -54,7 +55,7 @@ export class WaveformApp {
       this.help.element
     );
     this.store.onChange((dirty) => this.render(dirty));
-    installKeyboard({
+    this.keys = {
       store: this.store,
       actions: this.actions,
       focusSearch: () => {
@@ -72,7 +73,8 @@ export class WaveformApp {
         }
         return this.pane.cancelInteraction();
       }
-    });
+    };
+    installKeyboard(this.keys);
     observeTheme(() => {
       this.palette = readPalette();
       this.store.invalidate();
@@ -126,6 +128,11 @@ export class WaveformApp {
         this.actions.addSignals(indexes);
         return;
       }
+      case 'shortcut':
+        if (isWaveformShortcut(message.shortcut)) {
+          runShortcut(this.keys, message.shortcut, document.activeElement);
+        }
+        return;
       case 'error':
         this.store.loading = undefined;
         this.store.error = { message: message.message, canRetry: message.canRetry };

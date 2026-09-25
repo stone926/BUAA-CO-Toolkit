@@ -53,7 +53,7 @@ verilog-commands:
   verilog/iseDiagnostics.ts — 纯 ISE fuse error/warning/info 解析，保留可操作的文件、行号和消息，供 LSP 与仿真失败报告共同复用
   verilog/simulationDiagnostic.ts — Icarus/ISim 失败结构化为 phase/reason/exit/首条诊断；公开报告边界统一做工作区相对路径、外部路径 basename、ANSI/控制符清理和限长
   verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + bundled `vvp -N`，macOS / Linux compile argv 复用 runtime helper 注入 `-B <runtime>/lib/ivl`，不直接执行带构建时 shebang 的 `.vvp`；复用源文件顺序/testbench/`code.txt`，用 workspace-hash 命名的稳定 watchdog top + VVP plusarg 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物；自动 case 的指定 sim.out 直接由已持有 stdout 一次写入并登记 artifact，不再落盘后重读复制；编译/VVP stdout/stderr 分阶段设置 byte cap，失败为 case 保存有界私有原始 log，交互命令直接显示首条可定位诊断
-  verilog/iverilogCompileCache.ts — session 内按 workspace 保存单条 content-verified Icarus 编译缓存（全局 8-workspace LRU）；key 固定 runtime/version/完整 argv/有序直接源 SHA，`-Mall` 依赖闭包与 VVP artifact 每次命中按内容复验；取消中的 lookup 不驱逐原有效项，磁盘只复用固定 vvp/depfile，不按 case 增长
+  verilog/iverilogCompileCache.ts — session 内按 workspace 保存单条 content-verified Icarus 编译缓存（全局 8-workspace LRU）；key 固定 runtime/version/完整 argv/有序直接源 SHA，`-Mall` 依赖闭包与 VVP artifact 每次命中按内容复验；取消中的 lookup 不驱逐原有效项，调用方 acceptCompileResult 拒绝的编译不发布（缓存不保留编译告警），磁盘只复用固定 vvp/depfile，不按 case 增长
   verilog/iverilogCompileCacheIo.ts — 编译缓存专用的可取消、有界同句柄读取与 SHA/节点身份指纹；Windows case-fold 路径碰撞 fail-open，受限并发 hash
   verilog/iverilogIncludeResolution.ts — literal `include` 纯解析、source-relative/cwd/`-I` 搜索顺序与 shadow 负依赖验证；动态 include、边界超限或不可验证状态 fail-open
   verilog/workspaceOperationQueue.ts — 以规范化 workspace path 为键的轻量 Promise 队列；等待者取消会释放自身 turn，不中断前序也不阻塞后续仿真

@@ -2,7 +2,8 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { HostToWebviewMessage, WebviewToHostMessage } from '../model/protocol';
+import { samePath } from '../../pathUtils';
+import type { HostToWebviewMessage, WaveformShortcut, WebviewToHostMessage } from '../model/protocol';
 import { sanitizePersistedViewState } from '../model/viewStateContract';
 import type { WaveformData } from '../model/waveformData';
 import { parseVcdBytes, parseVcdFile, waveformFileSize } from './waveformFileLoader';
@@ -68,6 +69,13 @@ export class WaveformPanel implements vscode.Disposable {
     }
   }
 
+  /** Run a shortcut VS Code routed here through an extension keybinding. */
+  runShortcut(shortcut: WaveformShortcut): void {
+    if (this.ready) {
+      this.post({ type: 'shortcut', shortcut });
+    }
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;
@@ -86,8 +94,15 @@ export class WaveformPanel implements vscode.Disposable {
     if (this.uri.scheme !== 'file') {
       return;
     }
-    const pattern = new vscode.RelativePattern(vscode.Uri.file(path.dirname(this.uri.fsPath)), path.basename(this.uri.fsPath));
+    // Watch the folder rather than using the file name as the glob: names such as
+    // `cpu[1].vcd` or `{a}.vcd` are glob syntax and would never match themselves.
+    const pattern = new vscode.RelativePattern(vscode.Uri.file(path.dirname(this.uri.fsPath)), '*');
     const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+    const forThisFile = (listener: () => void) => (changed: vscode.Uri): void => {
+      if (samePath(changed.fsPath, this.uri.fsPath)) {
+        listener();
+      }
+    };
     const schedule = (): void => {
       if (this.reloadTimer) {
         clearTimeout(this.reloadTimer);
@@ -101,9 +116,9 @@ export class WaveformPanel implements vscode.Disposable {
     };
     this.disposables.push(
       watcher,
-      watcher.onDidChange(schedule),
-      watcher.onDidCreate(schedule),
-      watcher.onDidDelete(() => this.post({ type: 'error', message: '波形文件已被删除', canRetry: true }))
+      watcher.onDidChange(forThisFile(schedule)),
+      watcher.onDidCreate(forThisFile(schedule)),
+      watcher.onDidDelete(forThisFile(() => this.post({ type: 'error', message: '波形文件已被删除', canRetry: true })))
     );
   }
 

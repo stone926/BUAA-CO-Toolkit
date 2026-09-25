@@ -216,7 +216,8 @@ export class WavePane {
         return;
       }
       const target = this.labels.dropTarget(event.clientY);
-      const beforeId = this.labels.rowIdBefore(target.index);
+      // Nothing in the list is being moved, so anchor on the row the indicator sits above.
+      const beforeId = this.labels.rowIdAtIndex(target.index);
       const insertion = target.into !== undefined
         ? { kind: 'group-end' as const, groupId: target.into }
         : beforeId !== undefined ? { kind: 'before' as const, rowId: beforeId } : { kind: 'end' as const };

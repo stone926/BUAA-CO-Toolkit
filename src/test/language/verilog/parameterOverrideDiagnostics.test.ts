@@ -68,6 +68,26 @@ endmodule
     expect(result).toContain('port-width-mismatch');
   });
 
+  it('maps positional overrides past body localparams like Icarus does', () => {
+    const child = `
+module child(din);
+    localparam L = 1;
+    parameter W = 4;
+    input [W-1:0] din;
+endmodule
+`.trim();
+    expect(codes(`${child}
+
+module top(input [7:0] a);
+    child #(8) u_child(.din(a));
+endmodule`)).not.toContain('port-width-mismatch');
+    expect(codes(`${child}
+
+module top(input [7:0] a);
+    child #(8, 9) u_child(.din(a));
+endmodule`)).toContain('parameter-index-out-of-range');
+  });
+
   it('re-evaluates dependent localparams with parameter overrides', () => {
     const result = codes(`
 module child #(parameter WIDTH = 4)(input [DOUBLE-1:0] din);

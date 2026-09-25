@@ -2,7 +2,7 @@
 
 import { radixes, radixLabels } from '../model/radix';
 import { changeIndexAt } from '../model/signalValues';
-import { formatTrackValue } from '../model/valueFormat';
+import { formatEventAt, formatTrackValue } from '../model/valueFormat';
 import type { SignalRow } from '../view/waveRows';
 import type { WaveActions } from './actions';
 import type { MenuEntry } from './contextMenu';
@@ -92,7 +92,10 @@ export function valueAtCursor(store: WaveStore, row: SignalRow): string {
   if (!data || row.varIndex < 0) {
     return '';
   }
-  const track = data.vars[row.varIndex].track;
-  const index = changeIndexAt(data.tracks, track, store.cursor);
-  return index < 0 ? '' : formatTrackValue(data.tracks, track, index, row.radix);
+  const variable = data.vars[row.varIndex];
+  if (variable.kind === 'event') {
+    return formatEventAt(data.tracks, variable.track, store.cursor);
+  }
+  const index = changeIndexAt(data.tracks, variable.track, store.cursor);
+  return index < 0 ? '' : formatTrackValue(data.tracks, variable.track, index, row.radix);
 }

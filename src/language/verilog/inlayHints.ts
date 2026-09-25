@@ -5,7 +5,7 @@ import { CoSettings } from '../common/settings';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { getCachedVerilogParse } from './parseCache';
 import { widthOfDecl } from './expressions';
-import { parameterOverridesForInstance } from './parameterOverrides';
+import { overridableParameters, parameterOverridesForInstance } from './parameterOverrides';
 import {
   lineInRange,
   parameterConnectionTooltip,
@@ -59,7 +59,7 @@ export function getVerilogInlayHints(document: TextDocument, range: Range, setti
       for (const connection of instance.parameterConnections) {
         const parameter = connection.name
           ? target.parameters.find((item) => item.name === connection.name)
-          : target.parameters[connection.positionalIndex];
+          : overridableParameters(target)[connection.positionalIndex];
         if (!parameter) {
           continue;
         }

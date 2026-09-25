@@ -9,6 +9,11 @@ export interface VcdHandler {
   vector(id: string, bits: Uint8Array, start: number, end: number): void;
   real(id: string, value: number): void;
   text(id: string, value: string): void;
+  /**
+   * A `$dumpvars`/`$dumpall`/`$dumpon`/`$dumpoff` block opens (true) or closes
+   * (false). Values inside it restate the current state rather than change it.
+   */
+  checkpoint?(open: boolean): void;
   diagnostic(message: string): void;
 }
 
@@ -39,6 +44,7 @@ export class VcdParser {
   private headerCommand: string | undefined;
   private headerBody: string[] = [];
   private skippingCommand = false;
+  private inCheckpoint = false;
   private pending = PendingValue.None;
   private pendingBytes = new Uint8Array(256);
   private pendingLength = 0;
@@ -74,15 +80,16 @@ export class VcdParser {
     this.tokenLength = length;
   }
 
+  /**
+   * Finish parsing. Writers end every record with a newline, so a token still
+   * open at end of input is a record cut off mid-write (e.g. a dump the simulator
+   * is still producing); it is dropped and the parse is reported incomplete.
+   */
   end(): VcdParseSummary {
-    if (!this.finished) {
-      if (this.tokenLength > 0) {
-        this.dispatch();
-      }
-      this.finished = true;
-    }
+    const truncatedToken = !this.finished && this.tokenLength > 0;
+    this.finished = true;
     return {
-      incomplete: this.inHeader || this.headerCommand !== undefined || this.skippingCommand || this.pending !== PendingValue.None,
+      incomplete: truncatedToken || this.inHeader || this.headerCommand !== undefined || this.skippingCommand || this.pending !== PendingValue.None,
       headerComplete: !this.inHeader
     };
   }
@@ -185,11 +192,21 @@ export class VcdParser {
       case '$dumpall':
       case '$dumpon':
       case '$dumpoff':
+        this.setCheckpoint(true);
+        return;
       case '$end':
+        this.setCheckpoint(false);
         return;
       default:
         // $comment and any unexpected command are skipped up to their $end.
         this.skippingCommand = true;
+    }
+  }
+
+  private setCheckpoint(open: boolean): void {
+    if (this.inCheckpoint !== open) {
+      this.inCheckpoint = open;
+      this.handler.checkpoint?.(open);
     }
   }
 
@@ -213,8 +230,8 @@ export class VcdParser {
         this.handler.vector(id, bytes, 0, length);
         return;
       case PendingValue.Real: {
-        const value = Number(latin1(bytes, 0, length));
-        if (Number.isNaN(value) && latin1(bytes, 0, length).toLowerCase() !== 'nan') {
+        const value = parseRealValue(latin1(bytes, 0, length));
+        if (value === undefined) {
           this.reportToken(`无法解析实数值 “${truncate(latin1(bytes, 0, length))}”`);
           return;
         }
@@ -270,6 +287,19 @@ function isScalarLevel(byte: number): boolean {
     default:
       return false;
   }
+}
+
+/** C `%g` spellings, including `inf`, `-nan` and MSVC's `nan(ind)`. */
+function parseRealValue(text: string): number | undefined {
+  const lower = text.toLowerCase();
+  if (/^[+-]?(inf|infinity)$/.test(lower)) {
+    return lower.startsWith('-') ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+  }
+  if (/^[+-]?nan(\([^)]*\))?$/.test(lower)) {
+    return Number.NaN;
+  }
+  const value = Number(text);
+  return Number.isNaN(value) || text.trim() === '' ? undefined : value;
 }
 
 function isEndKeyword(token: Uint8Array, length: number): boolean {

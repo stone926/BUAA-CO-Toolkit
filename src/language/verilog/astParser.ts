@@ -484,17 +484,25 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   };
 }
 
-function parseInstances(document: TextDocument, text: string, tokens: VerilogToken[], currentModuleName: string): VerilogInstance[] {
+function parseInstances(
+  document: TextDocument,
+  text: string,
+  tokens: VerilogToken[],
+  currentModuleName: string,
+  inGenerateBlock = false
+): VerilogInstance[] {
   const instances: VerilogInstance[] = [];
   for (const statement of statementSlices(tokens)) {
     const instance = parseInstanceStatement(document, text, statement, currentModuleName);
     if (instance) {
-      instances.push(instance);
+      instances.push(inGenerateBlock ? { ...instance, inGenerateBlock } : instance);
       continue;
     }
     const nested = nestedGenerateInstanceTokens(statement);
     if (nested.length > 0 && nested.length < statement.length) {
-      instances.push(...parseInstances(document, text, nested, currentModuleName));
+      // A bare generate region adds no scope; if/for/case/begin generate blocks do.
+      const scoped = inGenerateBlock || statement[0].value !== 'generate';
+      instances.push(...parseInstances(document, text, nested, currentModuleName, scoped));
     }
   }
   return instances;

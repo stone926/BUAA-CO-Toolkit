@@ -1,6 +1,6 @@
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { makeDiagnostic } from '../common/lsp';
+import { containsRange, makeDiagnostic } from '../common/lsp';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst, VerilogSubroutineAst } from './ast';
 import { verilogAstCodeTokens } from './astTokens';
@@ -534,19 +534,8 @@ function isEndmoduleStatement(statement: VerilogStatementAst): boolean {
   return statement.tokens.find((token) => token.kind !== 'eof')?.value === 'endmodule';
 }
 
-function containsRange(outer: Range, inner: Range): boolean {
-  return comparePosition(outer.start, inner.start) <= 0 && comparePosition(outer.end, inner.end) >= 0;
-}
-
 function rangeFromOffsets(document: TextDocument, start: number, end: number): Range {
   return Range.create(document.positionAt(start), document.positionAt(end));
-}
-
-function comparePosition(left: { line: number; character: number }, right: { line: number; character: number }): number {
-  if (left.line !== right.line) {
-    return left.line - right.line;
-  }
-  return left.character - right.character;
 }
 
 function validateGatePrimitiveStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {

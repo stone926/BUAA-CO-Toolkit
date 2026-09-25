@@ -9,6 +9,10 @@ import type { MemoryDump } from './designHierarchy';
 export const waveformDumperFileName = 'co_iverilog_wave.v';
 export const waveformDumperMarker = 'CO_GENERATED_WAVEFORM_DUMPER';
 
+const wordsPerLine = 4;
+const dumperDiagnosticPattern = /(?:^|[\\/])co_iverilog_wave\.v:(\d+): (error|warning): (.*)/gm;
+const boundsWarningPrefix = "returning 'bx for out of bounds array access";
+
 export interface WaveformDumperInput {
   readonly moduleName: string;
   readonly testbench: string;
@@ -23,16 +27,64 @@ export function waveformDumperModuleName(workspaceRoot: string): string {
   return `__co_iverilog_wave_${digest}`;
 }
 
+/**
+ * Memory words are listed with constant indices, each line holding words of a
+ * single memory. When the statically evaluated bounds are wrong, Icarus then
+ * reports the out-of-range word while compiling instead of VVP aborting the whole
+ * simulation once `$dumpvars` reaches it, and every diagnostic line names the
+ * memory to blame (see `dumperRejection`).
+ */
 export function buildWaveformDumper(input: WaveformDumperInput): string {
-  const memoryDumps = input.memories.map((memory) =>
-    `        for (__co_word = ${memory.first}; __co_word <= ${memory.last}; __co_word = __co_word + 1) $dumpvars(0, ${memory.path}[__co_word]);\n`
-  ).join('');
+  const memoryDumps = input.memories.map((memory) => {
+    const words: string[] = [];
+    for (let index = memory.first; index <= memory.last; index++) {
+      words.push(`${memory.path}[${index}]`);
+    }
+    const lines: string[] = [];
+    for (let start = 0; start < words.length; start += wordsPerLine) {
+      lines.push(words.slice(start, start + wordsPerLine).join(', '));
+    }
+    return `        $dumpvars(0,\n            ${lines.join(',\n            ')});\n`;
+  }).join('');
   return renderResourceTemplate('verilog/waveform_dumper.v', {
     moduleName: input.moduleName,
     testbench: input.testbench,
     dumpFile: verilogStringLiteral(input.dumpFile),
     memoryDumps
   });
+}
+
+export interface DumperRejection {
+  /** Memories named on a rejected line of the dumper. */
+  readonly memories: readonly MemoryDump[];
+  /** Some diagnostic points at a dumper line that names no memory. */
+  readonly unattributed: boolean;
+}
+
+/**
+ * Compiler complaints about the generated dumper: any error, or a warning that a
+ * dumped word lies outside its array (the static bounds were wrong). Undefined
+ * when the dumper compiled cleanly.
+ */
+export function dumperRejection(compilerOutput: string, dumperText: string, memories: readonly MemoryDump[]): DumperRejection | undefined {
+  const lines = dumperText.split(/\r?\n/);
+  const rejected = new Set<MemoryDump>();
+  let unattributed = false;
+  let found = false;
+  for (const match of compilerOutput.matchAll(dumperDiagnosticPattern)) {
+    if (match[2] === 'warning' && !match[3].startsWith(boundsWarningPrefix)) {
+      continue;
+    }
+    found = true;
+    const line = lines[Number(match[1]) - 1] ?? '';
+    const memory = memories.find((candidate) => line.split(/[\s,()]+/).some((word) => word.startsWith(`${candidate.path}[`)));
+    if (memory) {
+      rejected.add(memory);
+    } else {
+      unattributed = true;
+    }
+  }
+  return found ? { memories: [...rejected], unattributed } : undefined;
 }
 
 /** Relative, forward-slash path from the simulator's working directory to the dump. */

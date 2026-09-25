@@ -275,7 +275,14 @@ export class WaveActions {
   }
 
   ungroup(groupId: number): void {
+    const group = this.store.rows.find(groupId)?.row;
+    // A selected group hands its selection (and anchor) to the signals it releases.
+    const released = group?.kind === 'group' && this.store.selection.has(groupId) ? group.children.map((child) => child.id) : [];
     this.store.rows.ungroup(groupId);
+    released.forEach((id) => this.store.selection.add(id));
+    if (released.length && this.store.selectionAnchor === groupId) {
+      this.store.selectionAnchor = released[0];
+    }
     this.rowsChanged();
   }
 
@@ -344,6 +351,7 @@ export class WaveActions {
 
   select(id: number, mode: 'replace' | 'toggle' | 'range'): void {
     const selection = this.store.selection;
+    const range = mode === 'range' ? this.visibleRange(this.store.selectionAnchor, id) : undefined;
     if (mode === 'toggle') {
       if (selection.has(id)) {
         selection.delete(id);
@@ -351,17 +359,11 @@ export class WaveActions {
         selection.add(id);
       }
       this.store.selectionAnchor = id;
-    } else if (mode === 'range' && this.store.selectionAnchor !== undefined) {
-      const visible = this.store.rows.visibleRows().map((row) => row.row.id);
-      const from = visible.indexOf(this.store.selectionAnchor);
-      const to = visible.indexOf(id);
-      if (from >= 0 && to >= 0) {
-        selection.clear();
-        for (let index = Math.min(from, to); index <= Math.max(from, to); index++) {
-          selection.add(visible[index]);
-        }
-      }
+    } else if (range) {
+      selection.clear();
+      range.forEach((rowId) => selection.add(rowId));
     } else {
+      // A plain click, or a range without a visible anchor to extend from.
       selection.clear();
       selection.add(id);
       this.store.selectionAnchor = id;
@@ -378,6 +380,14 @@ export class WaveActions {
 
   selectAll(): void {
     this.selectOnly(this.store.rows.visibleRows().map((row) => row.row.id));
+  }
+
+  /** Ids of the visible rows from `from` to `to` inclusive, or undefined when either is not visible. */
+  private visibleRange(from: number | undefined, to: number): number[] | undefined {
+    const visible = this.store.rows.visibleRows().map((row) => row.row.id);
+    const start = from === undefined ? -1 : visible.indexOf(from);
+    const end = visible.indexOf(to);
+    return start >= 0 && end >= 0 ? visible.slice(Math.min(start, end), Math.max(start, end) + 1) : undefined;
   }
 
   /** Move the single selection up/down through visible rows. */
@@ -457,7 +467,30 @@ export class WaveActions {
   }
 
   private rowsChanged(): void {
+    this.reconcileSelection();
     this.changed('labels', 'values', 'waves', 'toolbar', 'layout', 'status');
+  }
+
+  /**
+   * Keep the selection and its anchor on visible rows after any change to the row
+   * structure: a row hidden in a collapsed group is represented by that group, and
+   * removed rows are dropped. An anchor that is gone falls back to the most
+   * recently selected row, so ranges and edge stepping never act on hidden rows.
+   */
+  private reconcileSelection(): void {
+    const shownAs = new Map<number, number>();
+    for (const row of this.store.rows.topLevel) {
+      shownAs.set(row.id, row.id);
+      if (row.kind === 'group') {
+        row.children.forEach((child) => shownAs.set(child.id, row.collapsed ? row.id : child.id));
+      }
+    }
+    const selection = this.store.selection;
+    const selected = [...selection].map((id) => shownAs.get(id)).filter((id): id is number => id !== undefined);
+    selection.clear();
+    selected.forEach((id) => selection.add(id));
+    const anchor = this.store.selectionAnchor;
+    this.store.selectionAnchor = (anchor !== undefined ? shownAs.get(anchor) : undefined) ?? selected[selected.length - 1];
   }
 
   private changed(...flags: DirtyFlag[]): void {

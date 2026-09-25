@@ -1,4 +1,4 @@
-// @index waveform-register — 波形功能注册入口：VCD 自定义编辑器、“仿真并查看波形”与“打开波形文件”命令、源码跳转接线
+// @index waveform-register — 波形功能注册入口：VCD 自定义编辑器、“仿真并查看波形”与“打开波形文件”命令、快捷键命令转发、源码跳转接线
 
 import * as vscode from 'vscode';
 import { Commands } from '../constants';
@@ -8,6 +8,14 @@ import { openWaveformEditor, WaveformEditorProvider } from './host/waveformEdito
 import { simulateAndShowWaveform } from './host/waveformSimulation';
 import { locateWaveformSource, revealSourceLocation } from './host/waveformSourceLocator';
 import { WaveformViewStateStore } from './host/waveformViewStateStore';
+import type { WaveformShortcut } from './model/protocol';
+
+/** Extension keybindings (package.json, scoped to the waveform editor) and the page action each one runs. */
+const shortcutCommands: ReadonlyArray<readonly [string, WaveformShortcut]> = [
+  [Commands.Waveform.GoToTime, 'goToTime'],
+  [Commands.Waveform.ShowHelp, 'showHelp'],
+  [Commands.Waveform.SelectAllRows, 'selectAllRows']
+];
 
 export function registerWaveform(
   context: vscode.ExtensionContext,
@@ -34,7 +42,9 @@ export function registerWaveform(
     registration,
     vscode.commands.registerCommand(Commands.Verilog.ViewWaveform, () =>
       simulateAndShowWaveform({ services, moduleRegistry, showWaveform })),
-    vscode.commands.registerCommand(Commands.Waveform.OpenFile, (uri?: vscode.Uri) => openWaveformFile(uri))
+    vscode.commands.registerCommand(Commands.Waveform.OpenFile, (uri?: vscode.Uri) => openWaveformFile(uri)),
+    ...shortcutCommands.map(([command, shortcut]) =>
+      vscode.commands.registerCommand(command, () => provider.activePanel()?.runShortcut(shortcut)))
   );
 }
 

@@ -40,7 +40,8 @@ export interface WaveVar {
 /**
  * Columnar value-change storage. Track `t` owns changes
  * `changeStart[t] .. changeStart[t + 1] - 1`, whose times are ascending and whose
- * consecutive values always differ. For bit tracks, change `i` (relative to the
+ * consecutive values always differ (except named-event tracks, where every change
+ * is one trigger of the same value). For bit tracks, change `i` (relative to the
  * track) occupies `wordsPerValue[t]` words starting at `valueStart[t] + i * wordsPerValue[t]`
  * in `aval`, and in `bval` at `bvalStart[t] + …` when `bvalStart[t] >= 0`
  * (a negative `bvalStart` means the track never held x/z). Words are little-endian:

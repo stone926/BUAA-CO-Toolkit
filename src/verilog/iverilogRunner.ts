@@ -108,6 +108,12 @@ export interface IverilogRunOptions extends IseProjectOptions, Pick<IsimRunOptio
   simOutputDirectory?: vscode.Uri;
   /** Return false to keep a compile failure out of the UI because the caller will retry. */
   shouldReportCompileFailure?: (result: RunResult) => boolean;
+  /**
+   * Inspect a successful compile before simulating; return false to skip the
+   * simulation (e.g. warnings show generated sources would fail at run time).
+   * The output then has no simResult, and a rejected compile is not cached.
+   */
+  acceptCompileResult?: (result: RunResult) => boolean;
 }
 
 export interface IverilogGeneratedTopContext {
@@ -417,6 +423,12 @@ async function runIverilogInWorkspace(
       maxStderrBytes: maximumIverilogCompileOutputBytes
     }
   );
+  // The caller's verdict is taken once per compile. A rejected compile is never
+  // published: the cache keeps no compiler warnings, so a later hit could not be
+  // rejected again.
+  let compileAccepted: boolean | undefined;
+  const acceptCompile = (result: RunResult): boolean =>
+    compileAccepted ??= options.acceptCompileResult?.(result) !== false;
   let compileResult: RunResult;
   if (cacheLookup.hit) {
     compileResult = cacheLookup.hit.compileResult;
@@ -427,7 +439,7 @@ async function runIverilogInWorkspace(
   } else {
     const cacheCanBeStored = await prepareIverilogCompileCacheMiss(cacheInput);
     compileResult = await compile();
-    if (cacheCanBeStored && cacheLookup.snapshot && compileResult.ok) {
+    if (cacheCanBeStored && cacheLookup.snapshot && compileResult.ok && acceptCompile(compileResult)) {
       await storeIverilogCompileCache(cacheLookup.snapshot, compileResult, options.signal);
     }
   }
@@ -447,6 +459,9 @@ async function runIverilogInWorkspace(
         'iverilog'
       ));
     }
+    return { ...baseOutput, compileResult };
+  }
+  if (!acceptCompile(compileResult)) {
     return { ...baseOutput, compileResult };
   }
 

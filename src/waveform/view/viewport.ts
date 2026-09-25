@@ -23,13 +23,16 @@ export function fitView(bounds: TimeRange): TimeRange {
   return { start: bounds.start, end: bounds.end };
 }
 
+/** Widest allowed view: the whole dump plus the overscroll on both sides. */
+function maximumViewSpan(bounds: TimeRange): number {
+  return viewSpan(bounds) * (1 + 2 * overscroll);
+}
+
 /** Keep the span within limits and the window overlapping the data. */
 export function clampView(view: TimeRange, bounds: TimeRange): TimeRange {
-  const dataSpan = viewSpan(bounds);
-  const maximumSpan = dataSpan * (1 + 2 * overscroll);
-  let span = Math.min(Math.max(viewSpan(view), minimumViewSpan), maximumSpan);
+  let span = Math.min(Math.max(viewSpan(view), minimumViewSpan), maximumViewSpan(bounds));
   if (!Number.isFinite(span) || span <= 0) {
-    span = dataSpan;
+    span = viewSpan(bounds);
   }
   const margin = span * overscroll;
   let start = Number.isFinite(view.start) ? view.start : bounds.start;
@@ -38,10 +41,17 @@ export function clampView(view: TimeRange, bounds: TimeRange): TimeRange {
   return { start, end: start + span };
 }
 
-/** Zoom by `factor` (>1 zooms in) keeping `anchor` at the same screen position. */
+/**
+ * Zoom by `factor` (>1 zooms in) keeping `anchor` at the same screen position.
+ * The span is limited before placing the window, so zooming past either limit
+ * leaves the view where it is instead of panning it.
+ */
 export function zoomView(view: TimeRange, factor: number, anchor: number, bounds: TimeRange): TimeRange {
   const span = viewSpan(view);
-  const nextSpan = span / factor;
+  const nextSpan = Math.min(Math.max(span / factor, minimumViewSpan), maximumViewSpan(bounds));
+  if (nextSpan === span) {
+    return view;
+  }
   const ratio = span > 0 ? (anchor - view.start) / span : 0.5;
   const start = anchor - ratio * nextSpan;
   return clampView({ start, end: start + nextSpan }, bounds);

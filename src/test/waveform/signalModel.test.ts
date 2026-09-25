@@ -131,6 +131,17 @@ describe('waveform rows', () => {
     expect(rows.allSignals().map((row) => row.path)).toEqual(['tb.b', 'tb.c', 'tb.d']);
   });
 
+  it('never nests a new group inside another group', () => {
+    const rows = new WaveRowList();
+    const [a, b, c] = rows.addSignals([input('tb.a'), input('tb.b'), input('tb.c')]);
+    const outer = rows.groupSignals([b, c], 'outer')!;
+    const beforeChild = rows.addGroup('dropped', [input('tb.x'), input('tb.y')], false, { kind: 'before', rowId: c });
+    const intoGroup = rows.addGroup('tail', [input('tb.z')], false, { kind: 'group-end', groupId: outer });
+    expect(rows.topLevel.map((row) => row.id)).toEqual([a, beforeChild, outer, intoGroup]);
+    expect(rows.allSignals().every((row) => row.kind === 'signal')).toBe(true);
+    expect(rows.allSignals().map((row) => row.path)).toEqual(['tb.a', 'tb.x', 'tb.y', 'tb.b', 'tb.c', 'tb.z']);
+  });
+
   it('round-trips persisted rows and rebinds after a reload', () => {
     const rows = new WaveRowList();
     rows.addSignals([{ ...input('tb.a', 3), radix: 'sdec', color: 2 }]);

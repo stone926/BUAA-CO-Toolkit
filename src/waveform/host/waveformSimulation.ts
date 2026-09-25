@@ -1,4 +1,4 @@
-// @index waveform-simulation — “仿真并查看波形”命令：bundled Icarus 附加 dump 顶层模块运行，GRF 等小存储器逐字记录，失败时去掉存储器重试，最后打开 VCD
+// @index waveform-simulation — “仿真并查看波形”命令：bundled Icarus 附加 dump 顶层模块运行，GRF 等小存储器逐字记录，编译器拒绝时去掉出错的存储器重试，最后打开 VCD
 
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -6,12 +6,15 @@ import { CO_WAVE_DIR } from '../../constants';
 import { ensureDirectory, workspaceFolderFor } from '../../fsUtil';
 import type { MutableVerilogModuleProvider } from '../../language/verilog/moduleProvider';
 import { pathExists } from '../../nodeFs';
+import { samePath } from '../../pathUtils';
 import type { AppServices, RunResult } from '../../types';
 import { IverilogRunOutput, runIverilog } from '../../verilog/iverilogRunner';
 import type { TestbenchResolution } from '../../verilog/testbenchResolver';
 import { findDumpableMemories, MemoryDump } from '../design/designHierarchy';
 import {
   buildWaveformDumper,
+  dumperRejection,
+  DumperRejection,
   dumpFileArgument,
   waveformDumperFileName,
   waveformDumperModuleName
@@ -35,15 +38,23 @@ export async function simulateAndShowWaveform(dependencies: WaveformSimulationDe
     return;
   }
   const waveDirectory = vscode.Uri.joinPath(folder.uri, ...CO_WAVE_DIR.split('/'));
-  let output = await runWithDumper(dependencies, resource, waveDirectory, true);
-  if (output.run && !output.run.compileResult.ok && output.memories.length && mentionsDumper(output.run.compileResult)) {
-    dependencies.services.output.appendLine('存储器逐字 dump 无法编译（层次路径可能位于 generate 块内），改为只记录普通信号后重试');
-    output = await runWithDumper(dependencies, resource, waveDirectory, false);
-    if (output.run?.compileResult.ok) {
-      vscode.window.showWarningMessage('寄存器堆等存储器的层次路径无法解析，本次波形只包含普通信号');
-    }
+  let attempt = await runWithDumper(dependencies, resource, waveDirectory, undefined);
+  const dropped: MemoryDump[] = [];
+  // Drop the memories the compiler blamed and retry; once nothing is dumped no rejection can occur.
+  while (attempt.rejection) {
+    const rejected = attempt.rejection.unattributed
+      ? attempt.memories
+      : attempt.memories.filter((memory) => attempt.rejection?.memories.includes(memory));
+    dropped.push(...rejected);
+    dependencies.services.output.appendLine(`存储器逐字 dump 被编译器拒绝（层次路径或大小与静态推算不一致），去掉 ${describeMemories(rejected)} 后重试`);
+    attempt = await runWithDumper(dependencies, resource, waveDirectory, attempt.memories.filter((memory) => !rejected.includes(memory)));
   }
-  const run = output.run;
+  if (dropped.length && attempt.run?.simResult) {
+    vscode.window.showWarningMessage(attempt.memories.length
+      ? `未能确定 ${describeMemories(dropped)} 的层次路径或大小，这些存储器没有逐字记录`
+      : '未能确定寄存器堆等存储器的层次路径或大小，本次波形只包含普通信号');
+  }
+  const run = attempt.run;
   if (!run?.compileResult.ok || !run.simResult) {
     return;
   }
@@ -55,19 +66,34 @@ export async function simulateAndShowWaveform(dependencies: WaveformSimulationDe
     return;
   }
   const expected = path.join(waveDirectory.fsPath, `${run.testbench.moduleName}.vcd`);
-  if (path.resolve(dump.fsPath) !== path.resolve(expected)) {
+  if (!samePath(dump.fsPath, expected)) {
     vscode.window.showInformationMessage(`testbench 自带 $dumpfile，波形写入了 ${path.basename(dump.fsPath)}`);
   }
   await dependencies.showWaveform(dump);
 }
 
+interface DumperAttempt {
+  readonly run: IverilogRunOutput | undefined;
+  /** Memories this attempt dumped word by word. */
+  readonly memories: readonly MemoryDump[];
+  /** Set when the compiler rejected part of the memory dump; the run then stopped before simulating. */
+  readonly rejection: DumperRejection | undefined;
+}
+
+/** One compile + simulate run; `requestedMemories` undefined discovers them from the design. */
 async function runWithDumper(
   dependencies: WaveformSimulationDependencies,
   resource: vscode.Uri | undefined,
   waveDirectory: vscode.Uri,
-  includeMemories: boolean
-): Promise<{ run: IverilogRunOutput | undefined; memories: readonly MemoryDump[] }> {
-  let memories: readonly MemoryDump[] = [];
+  requestedMemories: readonly MemoryDump[] | undefined
+): Promise<DumperAttempt> {
+  let memories: readonly MemoryDump[] = requestedMemories ?? [];
+  let dumperText = '';
+  let rejection: DumperRejection | undefined;
+  const rejectsMemoryDump = (result: RunResult): boolean => {
+    rejection = memories.length ? dumperRejection(`${result.stderr}\n${result.stdout}`, dumperText, memories) : undefined;
+    return rejection !== undefined;
+  };
   const run = await vscode.window.withProgress({
     location: vscode.ProgressLocation.Notification,
     title: '正在仿真并生成波形…',
@@ -83,29 +109,27 @@ async function runWithDumper(
         revealOutput: false,
         announceSuccess: false,
         simOutputDirectory: waveDirectory,
-        shouldReportCompileFailure: (result) => !(includeMemories && memories.length && mentionsDumper(result)),
+        shouldReportCompileFailure: (result) => !rejectsMemoryDump(result),
+        acceptCompileResult: (result) => !rejectsMemoryDump(result),
         generatedTopModules: async ({ folder, outDir, testbench }) => {
           await ensureDirectory(waveDirectory);
-          memories = includeMemories ? await discoverMemories(testbench, dependencies.moduleRegistry) : [];
+          memories = requestedMemories ?? await discoverMemories(testbench, dependencies.moduleRegistry);
           const dumpPath = path.join(waveDirectory.fsPath, `${testbench.moduleName}.vcd`);
           const moduleName = waveformDumperModuleName(folder.uri.fsPath);
-          return [{
+          dumperText = buildWaveformDumper({
             moduleName,
-            fileName: waveformDumperFileName,
-            text: buildWaveformDumper({
-              moduleName,
-              testbench: testbench.moduleName,
-              dumpFile: dumpFileArgument(outDir.fsPath, dumpPath),
-              memories
-            })
-          }];
+            testbench: testbench.moduleName,
+            dumpFile: dumpFileArgument(outDir.fsPath, dumpPath),
+            memories
+          });
+          return [{ moduleName, fileName: waveformDumperFileName, text: dumperText }];
         }
       });
     } finally {
       cancellation.dispose();
     }
   });
-  return { run, memories };
+  return { run, memories, rejection };
 }
 
 async function discoverMemories(
@@ -120,8 +144,9 @@ async function discoverMemories(
   return root ? findDumpableMemories(root, lookup) : [];
 }
 
-function mentionsDumper(result: RunResult): boolean {
-  return `${result.stderr}\n${result.stdout}`.includes(waveformDumperFileName);
+function describeMemories(memories: readonly MemoryDump[]): string {
+  const names = memories.slice(0, 3).map((memory) => memory.path);
+  return memories.length > names.length ? `${names.join('、')} 等 ${memories.length} 个存储器` : names.join('、');
 }
 
 /** The dump the simulator actually opened (a testbench's own `$dumpfile` may win the race). */

@@ -27,11 +27,15 @@ export class TracePanel {
   private readonly list: HTMLDivElement;
   private readonly spacer: HTMLDivElement;
   private readonly pool: TraceRowElement[] = [];
+  /** Indexes into trace.events that pass the type toggles and filter, ascending. */
   private filtered: number[] = [];
+  /** Time of each filtered event, index-aligned with `filtered`. */
+  private filteredTimes = new Float64Array(0);
   private trace: WaveStore['trace'];
   private showGrf = true;
   private showDm = true;
   private filter = '';
+  /** Highlighted event as an index into trace.events (not into `filtered`), or -1. */
   private current = -1;
   private visible = false;
 
@@ -68,8 +72,8 @@ export class TracePanel {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         event.stopPropagation();
-        const next = Math.max(0, Math.min(this.filtered.length - 1, this.current + (event.key === 'ArrowDown' ? 1 : -1)));
-        this.activate(next);
+        const position = this.positionOf(this.current);
+        this.activate(Math.max(0, Math.min(this.filtered.length - 1, position + (event.key === 'ArrowDown' ? 1 : -1))));
       }
     });
     this.element = h('div', { className: 'trace-panel' }, [
@@ -84,21 +88,27 @@ export class TracePanel {
   setVisible(visible: boolean): void {
     this.visible = visible;
     if (visible) {
-      this.syncCurrent(true);
-      this.renderRows();
+      this.followCursor();
     }
   }
 
   render(dirty: ReadonlySet<DirtyFlag>): void {
     if (this.store.trace !== this.trace) {
       this.trace = this.store.trace;
+      this.current = -1;
       this.refilter();
       return;
     }
     if (dirty.has('trace') && this.visible) {
-      this.syncCurrent(true);
-      this.renderRows();
+      this.followCursor();
     }
+  }
+
+  private followCursor(): void {
+    if (this.syncCurrent()) {
+      this.revealCurrent();
+    }
+    this.renderRows();
   }
 
   private refilter(): void {
@@ -111,6 +121,7 @@ export class TracePanel {
         this.filtered.push(index);
       }
     });
+    this.filteredTimes = Float64Array.from(this.filtered, (index) => events[index].time);
     this.spacer.style.height = `${this.filtered.length * traceRowHeight}px`;
     if (!this.trace) {
       setText(this.note, '没有与此波形配对的 trace。用「仿真并查看波形」生成的波形会自动附带 GRF/DM 写入记录（来自 testbench 的 $display）。');
@@ -118,24 +129,39 @@ export class TracePanel {
       const counts = `${this.trace.source} · ${events.length} 条写入${this.filtered.length !== events.length ? `，显示 ${this.filtered.length} 条` : ''}`;
       setText(this.note, this.trace.note ? `${counts}\n${this.trace.note}` : counts);
     }
-    this.syncCurrent(true);
+    // Rows moved, so reveal the current event even when it stayed the same.
+    this.syncCurrent();
+    this.revealCurrent();
     this.renderRows();
   }
 
-  /** Highlight the last filtered event at or before the cursor. */
-  private syncCurrent(scroll: boolean): void {
-    const events = this.trace?.events;
-    if (!events || !this.filtered.length) {
-      this.current = -1;
-      return;
-    }
-    const times = this.filtered.map((index) => events[index].time);
-    const next = lowerBound(times, this.store.cursor + 0.5) - 1;
-    if (next !== this.current) {
-      this.current = next;
-      if (scroll && next >= 0) {
-        this.scrollIntoView(next);
-      }
+  /**
+   * Highlight the last filtered event at or before the cursor. Several writes can
+   * share a timestamp; the one picked by click or arrow key stays current while
+   * the cursor remains at its time. Returns whether the current event changed.
+   */
+  private syncCurrent(): boolean {
+    const times = this.filteredTimes;
+    const last = lowerBound(times, this.store.cursor + 0.5) - 1;
+    const position = this.positionOf(this.current);
+    const next = position >= 0 && last >= 0 && times[position] === times[last]
+      ? this.current
+      : last >= 0 ? this.filtered[last] : -1;
+    const changed = next !== this.current;
+    this.current = next;
+    return changed;
+  }
+
+  /** Position of an event within `filtered`, or -1 when it is filtered out. */
+  private positionOf(eventIndex: number): number {
+    const position = lowerBound(this.filtered, eventIndex);
+    return eventIndex >= 0 && this.filtered[position] === eventIndex ? position : -1;
+  }
+
+  private revealCurrent(): void {
+    const position = this.positionOf(this.current);
+    if (position >= 0) {
+      this.scrollIntoView(position);
     }
   }
 
@@ -152,7 +178,7 @@ export class TracePanel {
     if (!event) {
       return;
     }
-    this.current = index;
+    this.current = this.filtered[index];
     this.scrollIntoView(index);
     this.actions.activateTraceEvent(event);
     this.renderRows();
@@ -176,7 +202,7 @@ export class TracePanel {
       element.root.hidden = false;
       element.root.dataset.index = String(index);
       element.root.style.top = `${index * traceRowHeight}px`;
-      toggleClass(element.root, 'current', index === this.current);
+      toggleClass(element.root, 'current', this.filtered[index] === this.current);
       toggleClass(element.root, 'dm', event.kind === 'dm');
       setText(element.time, scale ? formatTicks(event.time, scale) : String(event.time));
       setText(element.pc, event.pc);

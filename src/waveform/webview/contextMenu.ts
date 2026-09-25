@@ -173,7 +173,8 @@ class ContextMenu {
         event.preventDefault();
         const count = menu.items.length;
         const direction = event.key === 'ArrowDown' ? 1 : -1;
-        let next = menu.active;
+        // With nothing highlighted, start just outside the list so the first step lands on its first/last item.
+        let next = menu.active < 0 ? (direction > 0 ? -1 : count) : menu.active;
         for (let step = 0; step < count; step++) {
           next = (next + direction + count) % count;
           if (!menu.entryAt(next)?.disabled) {

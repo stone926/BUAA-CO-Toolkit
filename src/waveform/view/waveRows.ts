@@ -102,14 +102,14 @@ export class WaveRowList {
     return created.map((row) => row.id);
   }
 
+  /** Add a new top-level group; insertions aimed inside a group land beside it (see topLevelIndexFor). */
   addGroup(name: string, inputs: readonly SignalRowInput[], collapsed = false, insertion: RowInsertion = { kind: 'end' }): number {
     const seen = new Set<string>();
     const children = inputs
       .filter((input) => (seen.has(input.path) ? false : (seen.add(input.path), true)))
       .map((input) => this.createSignal(input));
     const group: GroupRow = { kind: 'group', id: this.nextId++, name, collapsed, children };
-    const container = this.containerFor(insertion.kind === 'group-end' ? { kind: 'end' } : insertion);
-    container.list.splice(container.index, 0, group);
+    this.rows.splice(this.topLevelIndexFor(insertion), 0, group);
     return group.id;
   }
 
@@ -244,6 +244,7 @@ export class WaveRowList {
     };
   }
 
+  /** Container and index for new signal rows; groups use topLevelIndexFor instead. */
   private containerFor(insertion: RowInsertion): { list: WaveRow[]; index: number } {
     if (insertion.kind === 'group-end') {
       const group = this.find(insertion.groupId)?.row;
@@ -261,6 +262,26 @@ export class WaveRowList {
       }
     }
     return { list: this.rows, index: this.rows.length };
+  }
+
+  /**
+   * Top-level position for a new group. Groups are never nested, so an insertion
+   * aimed inside a group resolves to that group's own slot: before it for a
+   * 'before' a grouped signal, right after it for 'group-end'.
+   */
+  private topLevelIndexFor(insertion: RowInsertion): number {
+    if (insertion.kind === 'before') {
+      const target = this.find(insertion.rowId);
+      if (target) {
+        return this.rows.indexOf(target.group ?? target.row);
+      }
+    } else if (insertion.kind === 'group-end') {
+      const index = this.rows.findIndex((row) => row.id === insertion.groupId);
+      if (index >= 0) {
+        return index + 1;
+      }
+    }
+    return this.rows.length;
   }
 
   private detach(ids: ReadonlySet<number>): void {

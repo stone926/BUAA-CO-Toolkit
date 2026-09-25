@@ -1,6 +1,8 @@
-// @index waveform-webview-keys — 全局快捷键分派（输入框内不拦截）与快捷键帮助浮层
+// @index waveform-webview-keys — 全局快捷键分派（输入框内不拦截；VS Code 占用的组合键经宿主 keybinding 转发）与快捷键帮助浮层
 
+import type { WaveformShortcut } from '../model/protocol';
 import { radixes } from '../model/radix';
+import { hostShortcutForChord, type KeyChord } from '../view/hostShortcuts';
 import type { WaveActions } from './actions';
 import { h } from './dom';
 import type { WaveStore } from './store';
@@ -39,10 +41,11 @@ export const shortcutHelp: ReadonlyArray<readonly [string, string]> = [
   ['Esc', '取消拖动 / 关闭浮层']
 ];
 
+const macPlatform = /Mac|iPhone|iPad/.test(navigator.userAgent);
+
 export function installKeyboard(targets: KeyboardTargets): void {
   window.addEventListener('keydown', (event) => {
-    const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) {
+    if (isFormField(event.target as Element | null)) {
       return;
     }
     if (handleKey(targets, event)) {
@@ -52,9 +55,37 @@ export function installKeyboard(targets: KeyboardTargets): void {
   });
 }
 
-function handleKey(targets: KeyboardTargets, event: KeyboardEvent): boolean {
+/**
+ * Run a shortcut VS Code delivered through an extension keybinding. The workbench sees
+ * these chords even while a form field has focus, so select-all keeps its text meaning there.
+ */
+export function runShortcut(targets: KeyboardTargets, shortcut: WaveformShortcut, focused: Element | null): void {
+  switch (shortcut) {
+    case 'goToTime':
+      targets.focusTime();
+      return;
+    case 'showHelp':
+      targets.toggleHelp();
+      return;
+    case 'selectAllRows':
+      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) {
+        focused.select();
+      } else if (!isFormField(focused)) {
+        targets.actions.selectAll();
+      }
+      return;
+  }
+}
+
+/** Returns true when the key was consumed (the caller suppresses the browser default). */
+function handleKey(targets: KeyboardTargets, event: KeyChord): boolean {
   const { actions, store } = targets;
   const control = event.ctrlKey || event.metaKey;
+  if (hostShortcutForChord(event, macPlatform)) {
+    // Consumed so the browser default (e.g. Ctrl+A text selection) does not run; the
+    // action itself arrives as a `shortcut` message, so running it here would double it.
+    return true;
+  }
   switch (event.key) {
     case 'ArrowLeft':
     case 'ArrowRight': {
@@ -98,7 +129,6 @@ function handleKey(targets: KeyboardTargets, event: KeyboardEvent): boolean {
       actions.navigateMarker(event.key === '[' ? -1 : 1);
       return true;
     case '?':
-    case 'F1':
       targets.toggleHelp();
       return true;
     case '/':
@@ -109,19 +139,11 @@ function handleKey(targets: KeyboardTargets, event: KeyboardEvent): boolean {
   }
   const key = event.key.toLowerCase();
   if (control) {
-    switch (key) {
-      case 'a':
-        actions.selectAll();
-        return true;
-      case 'f':
-        targets.focusSearch();
-        return true;
-      case 'g':
-        targets.focusTime();
-        return true;
-      default:
-        return false;
+    if (key === 'f') {
+      targets.focusSearch();
+      return true;
     }
+    return false;
   }
   if (event.altKey) {
     return false;
@@ -154,6 +176,10 @@ function handleKey(targets: KeyboardTargets, event: KeyboardEvent): boolean {
     default:
       return false;
   }
+}
+
+function isFormField(element: Element | null): boolean {
+  return element !== null && (element.tagName === 'INPUT' || element.tagName === 'SELECT' || element.tagName === 'TEXTAREA');
 }
 
 /** Modal list of shortcuts. */

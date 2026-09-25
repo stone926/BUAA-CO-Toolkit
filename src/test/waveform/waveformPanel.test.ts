@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 
 const vscodeMock = vi.hoisted(() => ({
-  watchers: [] as Array<{ disposed: boolean; listeners: Record<string, Array<() => void>> }>,
+  watchers: [] as Array<{ disposed: boolean; pattern: string; listeners: Record<string, Array<(uri: URI) => void>> }>,
   clipboard: [] as string[]
 }));
 
@@ -20,10 +20,10 @@ vi.mock('vscode', async () => {
     ViewColumn: { One: 1, Beside: -2 },
     env: { clipboard: { writeText: async (text: string) => { vscodeMock.clipboard.push(text); } } },
     workspace: {
-      createFileSystemWatcher: () => {
-        const watcher = { disposed: false, listeners: {} as Record<string, Array<() => void>> };
+      createFileSystemWatcher: (pattern: { pattern: string }) => {
+        const watcher = { disposed: false, pattern: pattern.pattern, listeners: {} as Record<string, Array<(uri: URI) => void>> };
         vscodeMock.watchers.push(watcher);
-        const on = (kind: string) => (listener: () => void) => {
+        const on = (kind: string) => (listener: (uri: URI) => void) => {
           (watcher.listeners[kind] ??= []).push(listener);
           return { dispose: () => undefined };
         };
@@ -45,6 +45,7 @@ vi.mock('vscode', async () => {
   };
 });
 
+import { WaveformEditorProvider } from '../../waveform/host/waveformEditorProvider';
 import { WaveformPanel } from '../../waveform/host/waveformPanel';
 import type { HostToWebviewMessage } from '../../waveform/model/protocol';
 
@@ -53,7 +54,7 @@ const vcd = '$timescale 1ps $end\n$scope module tb $end\n$var reg 1 ! clk $end\n
 function createPanel() {
   const posted: HostToWebviewMessage[] = [];
   let receive: (message: unknown) => void = () => undefined;
-  let disposePanel: () => void = () => undefined;
+  const disposeListeners: Array<() => void> = [];
   const webview = {
     options: {} as unknown,
     html: '',
@@ -71,12 +72,18 @@ function createPanel() {
   const panel = {
     webview,
     viewColumn: 1,
+    active: false,
     onDidDispose: (listener: () => void) => {
-      disposePanel = listener;
+      disposeListeners.push(listener);
       return { dispose: () => undefined };
     }
   };
-  return { panel, webview, posted, send: (message: unknown) => receive(message), dispose: () => disposePanel() };
+  const dispose = (): void => {
+    for (const listener of disposeListeners) {
+      listener();
+    }
+  };
+  return { panel, webview, posted, send: (message: unknown) => receive(message), dispose };
 }
 
 async function settle(): Promise<void> {
@@ -156,6 +163,66 @@ describe('waveform panel host controller', () => {
 
     dispose();
     expect(vscodeMock.watchers.every((watcher) => watcher.disposed)).toBe(true);
+  });
+
+  it('watches dumps whose names are glob syntax and ignores sibling files', async () => {
+    const globDump = path.join(directory, 'cpu[1] {p5}.vcd');
+    fs.writeFileSync(globDump, vcd);
+    const { panel, posted, send } = createPanel();
+    new WaveformPanel(URI.file(globDump) as never, panel as never, {
+      extensionUri: URI.file(directory) as never,
+      stateStore: { load: () => undefined, save: async () => undefined } as never,
+      openSource: async () => undefined
+    });
+    send({ type: 'ready' });
+    await vi.waitFor(() => expect(posted.map((message) => message.type)).toContain('trace'));
+    const [watcher] = vscodeMock.watchers;
+    const fire = (kind: string, file: string): void => {
+      for (const listener of watcher.listeners[kind] ?? []) {
+        listener(URI.file(file));
+      }
+    };
+
+    posted.length = 0;
+    fs.appendFileSync(globDump, '#10\n0!\n');
+    fire('change', path.join(directory, 'other.vcd'));
+    fire('delete', path.join(directory, 'tb.vcd'));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(posted).toEqual([]);
+
+    fire('change', globDump);
+    await vi.waitFor(() => expect(posted.map((message) => message.type)).toEqual(['progress', 'document', 'trace']));
+    fire('delete', globDump);
+    expect(posted[posted.length - 1]).toMatchObject({ type: 'error', message: '波形文件已被删除' });
+  });
+
+  it('forwards keybinding shortcuts to the active, ready waveform editor', async () => {
+    const provider = new WaveformEditorProvider({
+      extensionUri: URI.file(directory) as never,
+      stateStore: { load: () => undefined, save: async () => undefined } as never,
+      openSource: async () => undefined
+    });
+    const background = createPanel();
+    const active = createPanel();
+    active.panel.active = true;
+    for (const { panel } of [background, active]) {
+      provider.resolveCustomEditor(provider.openCustomDocument(URI.file(dump) as never), panel as never);
+    }
+
+    // Not ready yet: the page could not handle it.
+    provider.activePanel()?.runShortcut('goToTime');
+    expect(active.posted).toEqual([]);
+
+    active.send({ type: 'ready' });
+    await vi.waitFor(() => expect(active.posted.map((message) => message.type)).toContain('trace'));
+    active.posted.length = 0;
+    provider.activePanel()?.runShortcut('selectAllRows');
+    expect(active.posted).toEqual([{ type: 'shortcut', shortcut: 'selectAllRows' }]);
+    expect(background.posted).toEqual([]);
+
+    active.dispose();
+    expect(provider.activePanel()).toBeUndefined();
+    expect(provider.isOpen(URI.file(dump) as never)).toBe(true);
   });
 
   it('reports unreadable files as retryable errors', async () => {

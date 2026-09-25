@@ -9,7 +9,7 @@ diagnostic-actions:
   diagnosticActions.ts — 诊断过滤和QuickFix生成 | exports: filterDisabledDiagnostics, getDiagnosticSuppressActions
 
 lsp-helpers:
-  lsp.ts — Position/Range辅助: lineAt, containsPosition, rangesEqual, makeDiagnostic | exports: lineAt, containsPosition, rangesEqual, makeDiagnostic
+  lsp.ts — Position/Range辅助: lineAt, containsPosition, containsRange, comparePosition, rangesEqual, makeDiagnostic | exports: lineAt, containsPosition, containsRange, comparePosition, rangesEqual, makeDiagnostic
   semanticTokens.ts — SemanticTokenCollector: 单行边界校验、去重、排序、重叠保护和 LSP 相对位置编码 | exports: SemanticTokenCollector
 
 utilities:

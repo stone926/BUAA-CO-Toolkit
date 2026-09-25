@@ -467,6 +467,18 @@
         "icon": "$(graph-line)"
       },
       {
+        "command": "co.waveform.goToTime",
+        "title": "CO: 波形跳转到时间或周期"
+      },
+      {
+        "command": "co.waveform.showHelp",
+        "title": "CO: 波形查看器快捷键帮助"
+      },
+      {
+        "command": "co.waveform.selectAllRows",
+        "title": "CO: 波形全选信号行"
+      },
+      {
         "command": "co.verilog.inspectSignal",
         "title": "CO: 查看 Verilog 信号连线",
         "icon": "$(circuit-board)"
@@ -657,6 +669,18 @@
           "when": "false"
         },
         {
+          "command": "co.waveform.goToTime",
+          "when": "false"
+        },
+        {
+          "command": "co.waveform.showHelp",
+          "when": "false"
+        },
+        {
+          "command": "co.waveform.selectAllRows",
+          "when": "false"
+        },
+        {
           "command": "co.verilog.inspectSignal",
           "when": "false"
         },
@@ -693,6 +717,25 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "co.waveform.goToTime",
+        "key": "ctrl+g",
+        "mac": "cmd+g",
+        "when": "activeCustomEditorId == 'co.waveform.viewer' && !inputFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "co.waveform.showHelp",
+        "key": "f1",
+        "when": "activeCustomEditorId == 'co.waveform.viewer' && !inputFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      },
+      {
+        "command": "co.waveform.selectAllRows",
+        "key": "ctrl+a",
+        "mac": "cmd+a",
+        "when": "activeCustomEditorId == 'co.waveform.viewer' && !inputFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
+      }
+    ],
     "configuration": [
       {
         "title": "课程项目",

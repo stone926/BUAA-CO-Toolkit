@@ -18,7 +18,7 @@ import {
   VerilogModule,
   VerilogPortConnection
 } from './model';
-import { parameterOverridesForInstance } from './parameterOverrides';
+import { overridableParameters, parameterOverridesForInstance } from './parameterOverrides';
 
 export interface InstanceConnectionDiagnosticOptions {
   checkPorts?: boolean;
@@ -120,9 +120,10 @@ function collectParameterConnectionDiagnostics(
   checkWidths: boolean
 ): void {
   const targetParameters = new Map(targetModule.parameters.map((parameter) => [parameter.name, parameter]));
+  const positionalParameters = overridableParameters(targetModule);
   const seenConnections = new Map<string, VerilogPortConnection>();
   for (const connection of instance.parameterConnections) {
-    const targetParameter = targetDeclForConnection(targetModule.parameters, targetParameters, connection);
+    const targetParameter = targetDeclForConnection(positionalParameters, targetParameters, connection);
     if (connection.name) {
       const previous = seenConnections.get(connection.name);
       if (previous) {
@@ -135,7 +136,7 @@ function collectParameterConnectionDiagnostics(
         continue;
       }
     } else if (!targetParameter) {
-      diagnostics.push(makeDiagnostic(connection.range, `Module '${targetModule.name}' has only ${targetModule.parameters.length} parameter(s); positional parameter override ${connection.positionalIndex + 1} is out of range.`, DiagnosticSeverity.Error, 'parameter-index-out-of-range'));
+      diagnostics.push(makeDiagnostic(connection.range, `Module '${targetModule.name}' has only ${positionalParameters.length} parameter(s); positional parameter override ${connection.positionalIndex + 1} is out of range.`, DiagnosticSeverity.Error, 'parameter-index-out-of-range'));
       continue;
     }
 

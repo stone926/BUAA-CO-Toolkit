@@ -1,6 +1,6 @@
 // @index waveform-webview-browser — 侧栏信号树：搜索过滤与高亮、虚拟列表、展开折叠、已显示标记、双击/+/拖拽添加、右键菜单与键盘导航
 
-import { collectVarIndexes, FlatTreeNode, flattenSignalTree, TreeNode } from '../view/signalTree';
+import { collectVarIndexes, firstMatchIndex, FlatTreeNode, flattenSignalTree, TreeNode } from '../view/signalTree';
 import type { WaveActions } from './actions';
 import { showContextMenu, MenuEntry } from './contextMenu';
 import { h, setText, toggleClass } from './dom';
@@ -52,26 +52,24 @@ export class SignalBrowser {
       if (this.searchTimer) {
         clearTimeout(this.searchTimer);
       }
-      this.searchTimer = setTimeout(() => {
-        this.query = this.search.value;
-        this.selected = 0;
-        this.rebuild();
-      }, 90);
+      this.searchTimer = setTimeout(() => this.applyQuery(), 90);
     });
     this.search.addEventListener('keydown', (event) => {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
+        this.flushQuery();
         this.list.focus();
         this.moveSelection(Math.max(0, this.selected));
       } else if (event.key === 'Enter') {
         event.preventDefault();
+        // Typing then pressing Enter at once must act on what was typed, not the stale list.
+        this.flushQuery();
         this.addNode(this.flat[Math.max(0, this.selected)]?.node);
       } else if (event.key === 'Escape' && this.search.value) {
         event.preventDefault();
         event.stopPropagation();
         this.search.value = '';
-        this.query = '';
-        this.rebuild();
+        this.applyQuery();
       }
     });
     this.spacer = h('div', { className: 'tree-spacer' });
@@ -122,12 +120,38 @@ export class SignalBrowser {
     }
   }
 
-  private rebuild(): void {
+  /** Apply a pending search immediately (the input is debounced). */
+  private flushQuery(): void {
+    if (this.search.value !== this.query) {
+      this.applyQuery();
+    }
+  }
+
+  /** Filter by the search box and select the first result that matches by itself. */
+  private applyQuery(): void {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = undefined;
+    }
+    this.query = this.search.value;
+    this.rebuild(true);
+  }
+
+  /**
+   * Re-flatten the tree. `selectFirstMatch` moves the selection to the first real
+   * match: filtered results start with the ancestors of the matches, and Enter on
+   * the root scope would add every testbench signal instead of what was searched.
+   */
+  private rebuild(selectFirstMatch = false): void {
     const result = flattenSignalTree(this.store.tree, this.expanded, this.query);
     this.flat = result.nodes;
     this.truncated = result.truncated;
-    this.selected = Math.min(this.selected, this.flat.length - 1);
+    this.selected = selectFirstMatch ? firstMatchIndex(this.flat) : Math.min(this.selected, this.flat.length - 1);
     this.spacer.style.height = `${this.flat.length * treeRowHeight}px`;
+    if (selectFirstMatch) {
+      this.list.scrollTop = 0;
+      this.scrollToSelected();
+    }
     const signals = this.store.data?.vars.length ?? 0;
     setText(this.footer, this.query.trim()
       ? `${this.flat.filter((entry) => entry.node.kind === 'var').length} 个匹配${this.truncated ? '（结果过多，已截断）' : ''}`
@@ -313,13 +337,20 @@ export class SignalBrowser {
       return;
     }
     this.selected = Math.max(0, Math.min(this.flat.length - 1, index));
+    this.scrollToSelected();
+    this.renderRows();
+  }
+
+  private scrollToSelected(): void {
+    if (this.selected < 0) {
+      return;
+    }
     const top = this.selected * treeRowHeight;
     if (top < this.list.scrollTop) {
       this.list.scrollTop = top;
     } else if (top + treeRowHeight > this.list.scrollTop + this.list.clientHeight) {
       this.list.scrollTop = top + treeRowHeight - this.list.clientHeight;
     }
-    this.renderRows();
   }
 
   private toggle(node: TreeNode): void {

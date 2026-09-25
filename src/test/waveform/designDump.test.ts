@@ -7,7 +7,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseModules } from '../../language/verilog/parser';
 import type { VerilogModule } from '../../language/verilog/model';
 import { findDeclaration, findDumpableMemories, resolveHierarchy } from '../../waveform/design/designHierarchy';
-import { buildWaveformDumper, dumpFileArgument, waveformDumperModuleName } from '../../waveform/design/waveformDumper';
+import { buildWaveformDumper, dumperRejection, dumpFileArgument, waveformDumperModuleName } from '../../waveform/design/waveformDumper';
 import { traceFromSimulationOutput } from '../../waveform/host/waveformTraceSource';
 import { changeIndexAt } from '../../waveform/model/signalValues';
 import { formatTrackValue } from '../../waveform/model/valueFormat';
@@ -91,6 +91,70 @@ describe('design hierarchy for waveform dumps', () => {
     expect(resolveHierarchy(lookup('tb')!, ['uut', 'genblk1', 'GRF'], lookup).module.name).toBe('grf');
   });
 
+  it('evaluates overrides the way Icarus elaborates them', () => {
+    const chained = lookupFor(`module grf; localparam W = 32; parameter SIZE = 32; reg [W-1:0] r [0:SIZE-1]; endmodule
+module cpu; parameter N = 32; grf #(.SIZE(N)) g(); endmodule
+module tb; grf #(4) positional(); cpu #(.N(8)) c(); endmodule`);
+    // Positional overrides skip localparams; a parent's own override reaches its children.
+    expect(findDumpableMemories(chained('tb')!, chained)).toEqual([
+      { path: 'tb.positional.r', first: 0, last: 3 },
+      { path: 'tb.c.g.r', first: 0, last: 7 }
+    ]);
+  });
+
+  it('keeps only memories whose bounds are certain', () => {
+    const uncertain = lookupFor(`module grf; parameter SIZE = 32; reg [7:0] r [0:SIZE-1]; reg [7:0] fixed [0:3]; endmodule
+module cpu; grf g(); endmodule
+module tb; grf #(.SIZE(\`WORDS)) byMacro(); cpu c(); defparam c.g.SIZE = 4; endmodule`);
+    // A macro override or any defparam leaves only literal bounds trustworthy.
+    expect(findDumpableMemories(uncertain('tb')!, uncertain)).toEqual([
+      { path: 'tb.byMacro.fixed', first: 0, last: 3 },
+      { path: 'tb.c.g.fixed', first: 0, last: 3 }
+    ]);
+  });
+
+  it('skips arrays whose hierarchical scope the module model does not name', () => {
+    const scoped = lookupFor(`module sub; reg [7:0] m [0:3]; endmodule
+module tb;
+  reg [7:0] top [0:1];
+  task t; reg [7:0] tm [0:3]; begin end endtask
+  function [7:0] f; input a; reg [7:0] fm [0:1]; begin f = 0; end endfunction
+  genvar gi;
+  generate for (gi = 0; gi < 2; gi = gi + 1) begin : g sub s(); end endgenerate
+  generate if (1) sub cond(); endgenerate
+  generate sub plain(); endgenerate
+endmodule`);
+    expect(findDumpableMemories(scoped('tb')!, scoped)).toEqual([
+      { path: 'tb.top', first: 0, last: 1 },
+      { path: 'tb.plain.m', first: 0, last: 3 }
+    ]);
+  });
+
+  it('blames the memories named on rejected dumper lines', () => {
+    const memories = [
+      { path: 'tb.a.r', first: 0, last: 5 },
+      { path: 'tb.b.a.r', first: 0, last: 1 },
+      { path: 'tb.t', first: 0, last: 1 }
+    ];
+    const text = buildWaveformDumper({ moduleName: 'w', testbench: 'tb', dumpFile: 'tb.vcd', memories });
+    const lines = text.split('\n');
+    const lineOf = (word: string) => lines.findIndex((line) => line.includes(word)) + 1;
+    const output = [
+      `E:\\ws\\.co\\isim\\co_iverilog_wave.v:${lineOf('tb.a.r[4]')}: warning: returning 'bx for out of bounds array access r[4].`,
+      `co_iverilog_wave.v:${lineOf('tb.t[0]')}: warning: some harmless warning.`,
+      'design.v:3: error: something unrelated'
+    ].join('\n');
+    expect(dumperRejection(output, text, memories)).toEqual({ memories: [memories[0]], unattributed: false });
+    expect(dumperRejection(`co_iverilog_wave.v:${lineOf('tb.b.a.r[0]')}: error: Unable to bind wire/reg/memory \`tb.b.a.r['sd0]'`, text, memories))
+      .toEqual({ memories: [memories[1]], unattributed: false });
+    expect(dumperRejection('co_iverilog_wave.v:3: error: Unknown module type: tb', text, memories)).toEqual({ memories: [], unattributed: true });
+    expect(dumperRejection('design.v:3: warning: implicit wire', text, memories)).toBeUndefined();
+    // A user file whose name merely ends like the dumper's is not the dumper.
+    expect(dumperRejection(`E:/ws/my_co_iverilog_wave.v:${lineOf('tb.a.r[4]')}: error: syntax error`, text, memories)).toBeUndefined();
+    expect(dumperRejection(`E:/ws/x/co_iverilog_wave.v:${lineOf('tb.a.r[4]')}: error: x`, text, memories))
+      .toEqual({ memories: [memories[0]], unattributed: false });
+  });
+
   it('generates a dumper with a stable, collision-resistant module name', () => {
     const name = waveformDumperModuleName('E:/工作区/cpu project');
     expect(name).toMatch(/^__co_iverilog_wave_[0-9a-f]{16}$/);
@@ -100,7 +164,10 @@ describe('design hierarchy for waveform dumps', () => {
     expect(text).toContain('$printtimescale(tb);');
     expect(text).toContain('$dumpfile("../wave/t\\"b.vcd");');
     expect(text).toContain('$dumpvars(0, tb);');
-    expect(text).toContain('for (__co_word = 0; __co_word <= 31; __co_word = __co_word + 1) $dumpvars(0, tb.uut.GRF.regs[__co_word]);');
+    // Constant indices: a wrong static bound becomes a compile-time warning instead of a VVP abort.
+    expect(text).toContain('$dumpvars(0,\n            tb.uut.GRF.regs[0], tb.uut.GRF.regs[1], tb.uut.GRF.regs[2], tb.uut.GRF.regs[3],\n');
+    expect(text).toContain('tb.uut.GRF.regs[28], tb.uut.GRF.regs[29], tb.uut.GRF.regs[30], tb.uut.GRF.regs[31]);');
+    expect(text).not.toContain('__co_word');
     expect(dumpFileArgument(path.join('ws', '.co', 'isim'), path.join('ws', '.co', 'wave', 'tb.vcd'))).toBe('../wave/tb.vcd');
   });
 });
@@ -168,5 +235,50 @@ describe.skipIf(!runtimeAvailable)('waveform dumper with bundled Icarus', () => 
       const index = changeIndexAt(data.tracks, variable.track, event.time);
       expect(formatTrackValue(data.tracks, variable.track, index, 'hex'), `${event.time} $${event.target}`).toBe(event.value);
     }
+  });
+
+  it('lets the compiler blame memories whose static bounds or paths are wrong', () => {
+    const wrong = `module sub; reg [7:0] m [0:3]; endmodule
+module grfx; parameter SIZE = 32; reg [7:0] r [0:SIZE-1]; endmodule
+module tb;
+  reg [7:0] ok [0:1];
+  genvar gi;
+  generate for (gi = 0; gi < 1; gi = gi + 1) begin : g sub s(); end endgenerate
+  grfx u();
+  defparam u.SIZE = 4;
+  initial #1 $finish;
+endmodule
+`;
+    const directory = path.join(workDir, 'wrong');
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'design.v'), wrong);
+    // As if a model had missed the defparam and the generate scope.
+    const memories = [
+      { path: 'tb.ok', first: 0, last: 1 },
+      { path: 'tb.s.m', first: 0, last: 3 },
+      { path: 'tb.u.r', first: 0, last: 31 }
+    ];
+    const text = buildWaveformDumper({ moduleName: 'w', testbench: 'tb', dumpFile: 'tb.vcd', memories });
+    fs.writeFileSync(path.join(directory, 'co_iverilog_wave.v'), text);
+    const compile = (files: string[]) => spawnSync(compiler, [
+      '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', 'tb', '-s', 'w', '-o', 'sim.vvp', ...files
+    ], { cwd: directory, encoding: 'utf8', timeout: 20000 });
+    const rejected = compile(['design.v', 'co_iverilog_wave.v']);
+    expect(rejected.status).not.toBe(0);
+    // One pass blames both the unbindable path and the word past the real array end.
+    expect(dumperRejection(`${rejected.stderr}\n${rejected.stdout}`, text, memories)).toEqual({ memories: [memories[1], memories[2]], unattributed: false });
+
+    const outOfBounds = [memories[0], memories[2]];
+    const boundsText = buildWaveformDumper({ moduleName: 'w', testbench: 'tb', dumpFile: 'tb.vcd', memories: outOfBounds });
+    fs.writeFileSync(path.join(directory, 'co_iverilog_wave.v'), boundsText);
+    const warned = compile(['design.v', 'co_iverilog_wave.v']);
+    expect(warned.status, warned.stderr).toBe(0);
+    expect(dumperRejection(`${warned.stderr}\n${warned.stdout}`, boundsText, outOfBounds)).toEqual({ memories: [memories[2]], unattributed: false });
+
+    const retryText = buildWaveformDumper({ moduleName: 'w', testbench: 'tb', dumpFile: 'tb.vcd', memories: [memories[0]] });
+    fs.writeFileSync(path.join(directory, 'co_iverilog_wave.v'), retryText);
+    const clean = compile(['design.v', 'co_iverilog_wave.v']);
+    expect(clean.status, clean.stderr).toBe(0);
+    expect(dumperRejection(`${clean.stderr}\n${clean.stdout}`, retryText, [memories[0]])).toBeUndefined();
   });
 });

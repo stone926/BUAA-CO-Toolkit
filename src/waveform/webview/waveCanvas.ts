@@ -1,7 +1,7 @@
 // @index waveform-webview-canvas — 波形画布交互：点击放游标（吸附跳变）、拖动框选放大、拖动游标/标记、中键平移、Ctrl+滚轮缩放、悬停值提示
 
 import { radixLabels } from '../model/radix';
-import { changeIndexAt, changeTime } from '../model/signalValues';
+import { changeCount, changeIndexAt, changeTime } from '../model/signalValues';
 import { formatTicks } from '../model/timeScale';
 import { formatTrackValue } from '../model/valueFormat';
 import { timeToX, xToTime } from '../view/viewport';
@@ -266,7 +266,12 @@ export class WaveCanvas {
       const track = variable.track;
       const index = changeIndexAt(data.tracks, track, time);
       lines.push({ value: variable.path, className: 'title' });
-      if (index >= 0) {
+      if (variable.kind === 'event') {
+        // Events have no level to hold: show the surrounding triggers instead.
+        const next = index + 1 < changeCount(data.tracks, track) ? changeTime(data.tracks, track, index + 1) : undefined;
+        lines.push({ label: '上次触发', value: index >= 0 ? formatTicks(changeTime(data.tracks, track, index), data.timescale) : '无' });
+        lines.push({ label: '下次触发', value: next !== undefined ? formatTicks(next, data.timescale) : '无' });
+      } else if (index >= 0) {
         lines.push({ label: radixLabels[row.radix], value: formatTrackValue(data.tracks, track, index, row.radix) });
         if (variable.width > 1 && row.radix !== 'hex') {
           lines.push({ label: radixLabels.hex, value: formatTrackValue(data.tracks, track, index, 'hex') });

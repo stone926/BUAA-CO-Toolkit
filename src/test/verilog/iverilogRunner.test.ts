@@ -466,6 +466,30 @@ describe('Icarus runner orchestration', () => {
     expect(storeIverilogCompileCache).toHaveBeenCalledTimes(1);
   });
 
+  it('skips VVP and never caches a compile the caller rejects', async () => {
+    const warned = toolResult({ stderr: "co_iverilog_wave.v:9: warning: returning 'bx for out of bounds array access regs[4]." });
+    vi.mocked(runTool).mockResolvedValueOnce(warned);
+    const acceptCompileResult = vi.fn(() => false);
+
+    const result = await runIverilog(services(), { resource, showMessages: false, acceptCompileResult });
+
+    expect(result?.compileResult).toBe(warned);
+    expect(result?.simResult).toBeUndefined();
+    expect(acceptCompileResult).toHaveBeenCalledTimes(1);
+    expect(storeIverilogCompileCache).not.toHaveBeenCalled();
+    expect(runTool).toHaveBeenCalledTimes(1);
+  });
+
+  it('caches an accepted compile after asking the caller once', async () => {
+    const acceptCompileResult = vi.fn(() => true);
+
+    const result = await runIverilog(services(), { resource, showMessages: false, acceptCompileResult });
+
+    expect(result?.simResult?.ok).toBe(true);
+    expect(acceptCompileResult).toHaveBeenCalledTimes(1);
+    expect(storeIverilogCompileCache).toHaveBeenCalledTimes(1);
+  });
+
   it('returns compile stderr/timeout state without starting VVP', async () => {
     vi.mocked(runTool).mockResolvedValueOnce(toolResult({
       ok: false,

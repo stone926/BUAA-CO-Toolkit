@@ -1,4 +1,4 @@
-// @index waveform-protocol — 波形编辑器宿主与 Webview 之间的消息契约（加载进度/文档/trace/定位/持久化/源码跳转）
+// @index waveform-protocol — 波形编辑器宿主与 Webview 之间的消息契约（加载进度/文档/trace/定位/快捷键/持久化/源码跳转）
 
 import type { PersistedViewState } from './viewStateContract';
 import type { WaveformData } from './waveformData';
@@ -25,6 +25,19 @@ export interface WaveformTraceData {
   readonly note?: string;
 }
 
+/**
+ * Shortcuts whose chords VS Code binds itself (Ctrl+G go to line, F1 Command Palette,
+ * Ctrl+A select all). The webview host forwards every keydown to the workbench even
+ * when the page handles it, so these are contributed as extension keybindings scoped
+ * to the waveform editor and reach the page as a `shortcut` message instead.
+ */
+export const waveformShortcuts = ['goToTime', 'showHelp', 'selectAllRows'] as const;
+export type WaveformShortcut = typeof waveformShortcuts[number];
+
+export function isWaveformShortcut(value: unknown): value is WaveformShortcut {
+  return (waveformShortcuts as readonly unknown[]).includes(value);
+}
+
 export type HostToWebviewMessage =
   | { readonly type: 'init'; readonly fileName: string; readonly state?: PersistedViewState }
   | { readonly type: 'progress'; readonly loadedBytes: number; readonly totalBytes: number }
@@ -32,7 +45,8 @@ export type HostToWebviewMessage =
   | { readonly type: 'trace'; readonly trace?: WaveformTraceData }
   | { readonly type: 'error'; readonly message: string; readonly canRetry: boolean }
   | { readonly type: 'revealTime'; readonly time: number }
-  | { readonly type: 'addSignals'; readonly paths: readonly string[] };
+  | { readonly type: 'addSignals'; readonly paths: readonly string[] }
+  | { readonly type: 'shortcut'; readonly shortcut: WaveformShortcut };
 
 export type WebviewToHostMessage =
   | { readonly type: 'ready' }

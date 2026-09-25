@@ -1,8 +1,9 @@
 // @index waveform-design — 设计层次遍历（纯模型）：按实例名解析 VCD 层次路径到模块，并在 testbench 之下查找可逐字 dump 的小存储器
 
+import { containsRange } from '../../language/common/lsp';
 import { evalExpressionAstConstant, VerilogConstantOverrides } from '../../language/verilog/expressions';
 import type { VerilogDecl, VerilogInstance, VerilogModule } from '../../language/verilog/model';
-import { parameterOverridesForInstance } from '../../language/verilog/parameterOverrides';
+import { resolveParameterOverrides } from '../../language/verilog/parameterOverrides';
 
 export type ModuleLookup = (name: string) => VerilogModule | undefined;
 
@@ -65,11 +66,24 @@ export const defaultMemorySearchLimits: MemorySearchLimits = {
 
 const simpleIdentifier = /^[A-Za-z_][A-Za-z0-9_$]*$/;
 const memoryKinds = new Set(['reg', 'logic', 'wire', 'integer']);
+const defparamPattern = /\bdefparam\b/;
+
+/**
+ * How far statically evaluated parameters can be trusted below an instance.
+ * Once an override cannot be evaluated (macro, function) or a defparam may
+ * retarget parameters, only memories with literal bounds are dumped.
+ */
+interface ParameterContext {
+  readonly overrides: VerilogConstantOverrides | undefined;
+  readonly trusted: boolean;
+}
 
 /**
  * Small one-dimensional memories below `root` (the testbench), e.g. a 32-word GRF.
  * `$dumpvars` without arguments never includes memories, so these need explicit
- * per-word dumps. Paths with escaped identifiers are skipped rather than risking a
+ * per-word dumps. Only paths and bounds known for certain are returned: escaped
+ * identifiers, arrays local to tasks/functions and instances inside generate
+ * blocks (whose scopes the model does not name) are skipped rather than risking a
  * compile error in the generated dumper.
  */
 export function findDumpableMemories(
@@ -82,12 +96,17 @@ export function findDumpableMemories(
     return memories;
   }
   let instances = 0;
-  const visit = (module: VerilogModule, path: string, depth: number, overrides: VerilogConstantOverrides | undefined, ancestors: ReadonlySet<string>): void => {
+  const visit = (module: VerilogModule, path: string, depth: number, inherited: ParameterContext, ancestors: ReadonlySet<string>): void => {
+    const context = inherited.trusted && defparamPattern.test(module.bodyText) ? { ...inherited, trusted: false } : inherited;
+    const subroutines = [...module.declarations.values()].filter((declaration) => declaration.kind === 'task' || declaration.kind === 'function');
     for (const declaration of module.declarations.values()) {
       if (memories.length >= limits.maximumMemories) {
         return;
       }
-      const bounds = memoryBounds(declaration, module, overrides);
+      if (subroutines.some((subroutine) => subroutine !== declaration && containsRange(subroutine.range, declaration.range))) {
+        continue;
+      }
+      const bounds = memoryBounds(declaration, context.trusted ? module : undefined, context.overrides);
       if (bounds && bounds.last - bounds.first + 1 <= limits.maximumWords && simpleIdentifier.test(declaration.name)) {
         memories.push({ path: `${path}.${declaration.name}`, ...bounds });
       }
@@ -100,21 +119,24 @@ export function findDumpableMemories(
         return;
       }
       const target = lookup(instance.moduleName);
-      if (!target || ancestors.has(target.name) || !simpleIdentifier.test(instance.instanceName)) {
+      if (!target || instance.inGenerateBlock || ancestors.has(target.name) || !simpleIdentifier.test(instance.instanceName)) {
         continue;
       }
       instances++;
       const nextAncestors = new Set(ancestors).add(target.name);
-      visit(target, `${path}.${instance.instanceName}`, depth + 1, parameterOverridesForInstance(instance, module, target), nextAncestors);
+      const resolved = resolveParameterOverrides(instance, module, target, context.overrides);
+      const childContext = { overrides: resolved.overrides, trusted: context.trusted && resolved.unresolved.length === 0 };
+      visit(target, `${path}.${instance.instanceName}`, depth + 1, childContext, nextAncestors);
     }
   };
-  visit(root, root.name, 0, undefined, new Set([root.name]));
+  visit(root, root.name, 0, { overrides: undefined, trusted: true }, new Set([root.name]));
   return memories;
 }
 
+/** Array bounds; without `module` only literal bounds evaluate. */
 function memoryBounds(
   declaration: VerilogDecl,
-  module: VerilogModule,
+  module: VerilogModule | undefined,
   overrides: VerilogConstantOverrides | undefined
 ): { first: number; last: number } | undefined {
   const dimensions = declaration.unpackedDimensions;

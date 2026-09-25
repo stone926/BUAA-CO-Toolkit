@@ -71,12 +71,16 @@ export class WaveStore {
   private readonly pathToVar = new Map<string, number>();
   private readonly listeners: Array<(dirty: ReadonlySet<DirtyFlag>) => void> = [];
   private readonly pending = new Set<DirtyFlag>();
-  private frame = 0;
+  private frameRequested = false;
   private persistTimer: ReturnType<typeof setTimeout> | undefined;
   private savedState: PersistedViewState | undefined;
   private persistEnabled = false;
 
-  constructor(private readonly persistCallback: (state: PersistedViewState) => void) {}
+  /** `scheduleFrame` runs one render pass later (the browser's requestAnimationFrame). */
+  constructor(
+    private readonly persistCallback: (state: PersistedViewState) => void,
+    private readonly scheduleFrame: (callback: () => void) => void
+  ) {}
 
   onChange(listener: (dirty: ReadonlySet<DirtyFlag>) => void): void {
     this.listeners.push(listener);
@@ -86,13 +90,14 @@ export class WaveStore {
     for (const flag of flags.length ? flags : allDirty) {
       this.pending.add(flag);
     }
-    if (!this.frame) {
-      this.frame = requestAnimationFrame(() => this.flush());
+    if (!this.frameRequested) {
+      this.frameRequested = true;
+      this.scheduleFrame(() => this.flush());
     }
   }
 
   private flush(): void {
-    this.frame = 0;
+    this.frameRequested = false;
     const dirty = new Set(this.pending);
     this.pending.clear();
     for (const listener of this.listeners) {
@@ -170,7 +175,7 @@ export class WaveStore {
   setClock(varIndex: number | undefined): void {
     this.clockPreference = varIndex === undefined ? null : this.data?.vars[varIndex]?.path;
     this.refreshClock();
-    this.invalidate('waves', 'ruler', 'toolbar', 'labels');
+    this.invalidate('waves', 'ruler', 'toolbar', 'labels', 'status');
     this.persist();
   }
 

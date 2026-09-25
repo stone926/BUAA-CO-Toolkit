@@ -22,6 +22,8 @@ export interface FlatTreeNode {
   readonly depth: number;
   readonly expanded: boolean;
   readonly expandable: boolean;
+  /** Matches the search query itself rather than being shown as an ancestor of a match. */
+  readonly matched?: boolean;
 }
 
 const memoryWordPattern = /^(.+)\[(-?\d+)\]$/;
@@ -180,7 +182,7 @@ export function flattenSignalTree(
     }
     const selfMatches = matches(node);
     const position = nodes.length;
-    const placeholder: FlatTreeNode = { node, depth, expanded: true, expandable: node.children.length > 0 };
+    const placeholder: FlatTreeNode = { node, depth, expanded: true, expandable: node.children.length > 0, matched: selfMatches };
     nodes.push(placeholder);
     let childMatched = false;
     if (!selfMatches || node.kind === 'scope') {
@@ -216,4 +218,10 @@ export function flattenSignalTree(
   };
   roots.forEach((root) => visitFiltered(root, 0));
   return { nodes, truncated };
+}
+
+/** Entry to select after a search: the first actual match, else the first entry (-1 when empty). */
+export function firstMatchIndex(flat: readonly FlatTreeNode[]): number {
+  const index = flat.findIndex((entry) => entry.matched);
+  return index >= 0 ? index : Math.min(0, flat.length - 1);
 }

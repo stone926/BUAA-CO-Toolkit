@@ -279,6 +279,119 @@ $enddefinitions $end
     expect(previousChangeTime(data.tracks, track, 10)).toBeUndefined();
   });
 
+  it('keeps every trigger of a named event', () => {
+    // Icarus output for `#3 -> ev; #4 -> ev; #4 -> ev;`: the value never changes from 1,
+    // and $dumpvars/$dumpon restate `1!` although nothing triggered then.
+    const data = parseVcd(`$timescale 1ps $end
+$scope module tb $end
+$var event 1 ! ev $end
+$var reg 1 " r $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+0"
+1!
+$end
+#3000
+1!
+#7000
+1!
+1!
+#8000
+$dumpoff
+x"
+$end
+#9000
+$dumpon
+0"
+1!
+$end
+#11000
+1!
+`);
+    expect(values(data, 'tb.ev').map(([time]) => time)).toEqual([3000, 7000, 11000]);
+    expect(values(data, 'tb.r').map(([time]) => time)).toEqual([0, 8000, 9000]);
+  });
+
+  it('rejects absurd widths and bounds the stored value words', () => {
+    const wide = parseVcd(`$timescale 1ns $end
+$scope module t $end
+$var wire 1000000000 ! a $end
+$var wire 1 " b $end
+$upscope $end
+$enddefinitions $end
+#0
+b0 !
+1"
+#1
+b1 !
+`);
+    expect(wide.vars.map((variable) => variable.path)).toEqual(['t.b']);
+    expect(wide.diagnostics.some((diagnostic) => diagnostic.message.includes('位上限'))).toBe(true);
+
+    const limited = parseVcd(`$timescale 1ps $end
+$scope module t $end
+$var wire 64 ! a [63:0] $end
+$upscope $end
+$enddefinitions $end
+#0
+b0 !
+#1
+b1 !
+#2
+b10 !
+#3
+b11 !
+`, { maximumStoredWords: 4 });
+    // Two 64-bit changes fill four words; later changes are dropped with a warning.
+    expect(values(limited, 't.a', 'udec').length).toBeLessThanOrEqual(3);
+    expect(limited.diagnostics.some((diagnostic) => diagnostic.message.includes('MiB'))).toBe(true);
+  });
+
+  it('drops a record cut off at the end of a dump that is still being written', () => {
+    const header = '$timescale 1ps $end\n$scope module t $end\n$var wire 1 ! a $end\n$var wire 1 " b $end\n$upscope $end\n$enddefinitions $end\n#0\n0!\n0"\n';
+    // `1"!` would be a later record; only `1"` (b's id) reached the file.
+    const cutValue = parseVcd(`${header}#500\n1"`);
+    expect(cutValue.metadata.incomplete).toBe(true);
+    expect(values(cutValue, 't.b')).toEqual([[0, '0']]);
+    // A timestamp cut from #12000 to #12 must not read as time going backwards.
+    const cutTime = parseVcd(`${header}#500\n1!\n#12`);
+    expect(cutTime.metadata.incomplete).toBe(true);
+    expect(cutTime.diagnostics.some((diagnostic) => diagnostic.message.includes('倒退'))).toBe(false);
+    expect(values(cutTime, 't.a')).toEqual([[0, '0'], [500, '1']]);
+  });
+
+  it('reads the C spellings of infinite and NaN reals', () => {
+    const data = parseVcd(`$timescale 1ps $end
+$scope module t $end
+$var real 1 ! r $end
+$upscope $end
+$enddefinitions $end
+#0
+r1.5 !
+#1
+rinf !
+#2
+r-inf !
+#3
+r-nan !
+#4
+rnan(ind) !
+#5
+r2 !
+#6
+rnano !
+`);
+    expect(data.diagnostics.map((diagnostic) => diagnostic.message)).toEqual([expect.stringContaining('nano')]);
+    const variable = data.vars.find((candidate) => candidate.path === 't.r')!;
+    const reals = Array.from({ length: changeCount(data.tracks, variable.track) }, (_, index) =>
+      formatTrackValue(data.tracks, variable.track, index, 'hex'));
+    expect(reals).toHaveLength(5);
+    expect(reals[1]).toMatch(/Infinity|inf/i);
+    expect(reals[2]).toMatch(/-(Infinity|inf)/i);
+  });
+
   it('streams tokens to a handler without building a model', () => {
     const seen: string[] = [];
     const handler: VcdHandler = {
@@ -291,7 +404,7 @@ $enddefinitions $end
       diagnostic: (message) => seen.push(`!${message}`)
     };
     const parser = new VcdParser(handler);
-    parser.push(new TextEncoder().encode('$scope module a $end $enddefinitions $end #1 1% b01 & R0.5 ( S中文 )'));
+    parser.push(new TextEncoder().encode('$scope module a $end $enddefinitions $end #1 1% b01 & R0.5 ( S中文 )\n'));
     expect(parser.end()).toEqual({ incomplete: false, headerComplete: true });
     expect(seen).toEqual(['$scope(module a)', 'end', '#1', '%=1', '&=01', '(=r0.5', ')=s中文']);
   });

@@ -1,4 +1,4 @@
-// @index waveform-webview-renderer — 波形画布绘制：单比特阶梯线/总线六边形/四态 x z/密集带、折叠分组活动、网格与周期线、游标/标记/测量/框选叠加
+// @index waveform-webview-renderer — 波形画布绘制：单比特阶梯线/事件脉冲/总线六边形/四态 x z/密集带、折叠分组活动、网格与周期线、游标/标记/测量/框选叠加
 
 import type { Radix } from '../model/radix';
 import { BitLevel, bitLevel, valueState, ValueState } from '../model/signalValues';
@@ -6,7 +6,7 @@ import type { TimeScale } from '../model/timeScale';
 import { chooseTickStep } from '../model/timeScale';
 import { formatTrackValue } from '../model/valueFormat';
 import { TrackEncoding, WaveformData } from '../model/waveformData';
-import { visitSegments } from '../view/waveSegments';
+import { visitPoints, visitSegments } from '../view/waveSegments';
 import type { TimeRange } from '../view/viewport';
 import { timeToX } from '../view/viewport';
 import type { GroupRow, SignalRow, VisibleRow } from '../view/waveRows';
@@ -97,12 +97,34 @@ function drawSignalRow(context: WaveRenderContext, store: WaveStore, data: Wavef
   const variable = data.vars[row.varIndex];
   const track = variable.track;
   const encoding = data.tracks.encoding[track];
-  if (encoding === TrackEncoding.Bits && data.tracks.width[track] === 1) {
+  if (variable.kind === 'event') {
+    drawEventTrack(context, store, data, track, top, signalColor(palette, row));
+  } else if (encoding === TrackEncoding.Bits && data.tracks.width[track] === 1) {
     drawBitTrack(context, store, data, track, top, signalColor(palette, row));
   } else {
     drawBusTrack(context, store, data, track, top, signalColor(palette, row), row.radix);
   }
   void width;
+}
+
+/** Named events have no level: every change is one trigger, drawn as an upward arrow. */
+function drawEventTrack(context: WaveRenderContext, store: WaveStore, data: WaveformData, track: number, top: number, color: string): void {
+  const { ctx, width, dpr } = context;
+  const high = snap(top + levelInset, dpr);
+  const low = snap(top + rowHeight - levelInset, dpr);
+  const arrows = new Path2D();
+  const times = data.tracks.times.subarray(data.tracks.changeStart[track], data.tracks.changeStart[track + 1]);
+  visitPoints(times, store.view, width, (x) => {
+    const column = snap(x, dpr);
+    arrows.moveTo(column, low);
+    arrows.lineTo(column, high);
+    arrows.moveTo(column - 3, high + 4);
+    arrows.lineTo(column, high);
+    arrows.lineTo(column + 3, high + 4);
+  });
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = color;
+  ctx.stroke(arrows);
 }
 
 function drawBitTrack(context: WaveRenderContext, store: WaveStore, data: WaveformData, track: number, top: number, color: string): void {

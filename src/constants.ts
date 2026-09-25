@@ -110,7 +110,11 @@ export const Commands = {
   },
 
   Waveform: {
-    OpenFile: 'co.waveform.openFile'
+    OpenFile: 'co.waveform.openFile',
+    // Keybinding targets for chords VS Code binds itself; forwarded to the active waveform editor.
+    GoToTime: 'co.waveform.goToTime',
+    ShowHelp: 'co.waveform.showHelp',
+    SelectAllRows: 'co.waveform.selectAllRows'
   },
 
   Test: {

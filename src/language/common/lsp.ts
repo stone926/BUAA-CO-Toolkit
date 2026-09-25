@@ -35,6 +35,15 @@ export function containsPosition(range: Range, position: Position): boolean {
   return afterStart && beforeEnd;
 }
 
+/** Whether `inner` lies within `outer` (inclusive). */
+export function containsRange(outer: Range, inner: Range): boolean {
+  return comparePosition(outer.start, inner.start) <= 0 && comparePosition(outer.end, inner.end) >= 0;
+}
+
+export function comparePosition(left: Position, right: Position): number {
+  return left.line - right.line || left.character - right.character;
+}
+
 export function rangesEqual(left: Range, right: Range): boolean {
   return left.start.line === right.start.line &&
     left.start.character === right.start.character &&

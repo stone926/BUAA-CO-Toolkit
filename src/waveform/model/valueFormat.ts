@@ -2,8 +2,16 @@
 
 import { disassembleMipsWord } from './mipsDisassembly';
 import type { Radix } from './radix';
-import { avalOffset, bvalOffset, wordMask } from './signalValues';
+import { avalOffset, bvalOffset, changeIndexAt, changeTime, wordMask } from './signalValues';
 import { TrackEncoding, WaveTracks } from './waveformData';
+
+export const eventTriggerText = '触发';
+
+/** A named event holds no value between triggers: `eventTriggerText` at a trigger time, else '—'. */
+export function formatEventAt(tracks: WaveTracks, track: number, time: number): string {
+  const index = changeIndexAt(tracks, track, time);
+  return index >= 0 && changeTime(tracks, track, index) === time ? eventTriggerText : '—';
+}
 
 /** Format change `index` of `track` in the requested radix. */
 export function formatTrackValue(tracks: WaveTracks, track: number, index: number, radix: Radix): string {

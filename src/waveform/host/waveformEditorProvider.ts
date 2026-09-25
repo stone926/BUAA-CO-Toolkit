@@ -1,4 +1,4 @@
-// @index waveform-provider — VCD 只读自定义编辑器 provider：为每个页签创建 WaveformPanel，按文件追踪打开的页签以便仿真后重载/定位
+// @index waveform-provider — VCD 只读自定义编辑器 provider：为每个页签创建 WaveformPanel，按文件追踪打开的页签以便仿真后重载/定位，向活动页签转发快捷键
 
 import * as vscode from 'vscode';
 import { WAVEFORM_VIEW_TYPE } from '../../constants';
@@ -58,6 +58,18 @@ export class WaveformEditorProvider implements vscode.CustomReadonlyEditorProvid
     for (const panel of this.panels.get(keyFor(uri)) ?? []) {
       panel.revealTime(time);
     }
+  }
+
+  /** The waveform editor that is the active editor, if any. */
+  activePanel(): WaveformPanel | undefined {
+    for (const set of this.panels.values()) {
+      for (const panel of set) {
+        if (panel.panel.active) {
+          return panel;
+        }
+      }
+    }
+    return undefined;
   }
 }
 
