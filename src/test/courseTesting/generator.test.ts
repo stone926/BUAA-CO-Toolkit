@@ -125,8 +125,10 @@ describe('course test generator helpers', () => {
     fs.writeFileSync(path.join(root, '.co', 'generated', 'old-generated.asm'), '.text\n');
     fs.mkdirSync(path.join(root, '.co', 'cases', 'case-id'), { recursive: true });
     fs.writeFileSync(path.join(root, '.co', 'cases', 'case-id', 'program.asm'), '.text\n');
+    fs.mkdirSync(path.join(root, '.co', 'iverilog'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.co', 'iverilog', 'runtime.asm'), '.text\n');
     fs.mkdirSync(path.join(root, '.co', 'isim'), { recursive: true });
-    fs.writeFileSync(path.join(root, '.co', 'isim', 'runtime.asm'), '.text\n');
+    fs.writeFileSync(path.join(root, '.co', 'isim', 'legacy-runtime.asm'), '.text\n');
     fs.mkdirSync(path.join(root, '.co', 'out'), { recursive: true });
     fs.writeFileSync(path.join(root, '.co', 'out', 'trace.asm'), '.text\n');
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });

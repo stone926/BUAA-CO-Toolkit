@@ -40,7 +40,7 @@ try {
     schemaVersion: 1,
     scope: {
       proves: ['runProcessCore JVM descendant-tree termination', 'inherited-pipe close', 'single settlement'],
-      requiresSeparateAdapterWiringTests: ['legacy Java/MARS', 'ISim', 'Logisim']
+      requiresSeparateAdapterWiringTests: ['legacy Java/MARS', 'Logisim']
     },
     platform: process.platform,
     arch: process.arch,

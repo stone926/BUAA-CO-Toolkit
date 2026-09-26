@@ -25,7 +25,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "This extension runs workspace projects with its bundled assembler/Icarus runtime and optional configured Java, MARS, ISE, Logisim, and other external toolchains."
+      "description": "This extension runs workspace projects with its bundled assembler/Icarus runtime and optional configured Java, MARS, Logisim, and other external toolchains."
     }
   },
   "repository": {
@@ -428,33 +428,17 @@
         "title": "CO: Verilog 生成 Testbench"
       },
       {
-        "command": "co.verilog.generateIseProject",
-        "title": "CO: Verilog 生成 ISE 工程文件"
-      },
-      {
-        "command": "co.verilog.checkSyntaxWithIse",
+        "command": "co.verilog.checkSyntax",
         "title": "CO: Verilog 检查语法",
         "icon": "$(checklist)"
       },
       {
-        "command": "co.verilog.runIsim",
+        "command": "co.verilog.runSimulation",
         "title": "CO: Verilog 运行仿真",
         "icon": {
-          "light": "icons/run-isim-light.svg",
-          "dark": "icons/run-isim-dark.svg"
+          "light": "icons/run-simulation-light.svg",
+          "dark": "icons/run-simulation-dark.svg"
         }
-      },
-      {
-        "command": "co.verilog.openIsimWaveform",
-        "title": "CO: Verilog 查看 ISim 波形",
-        "icon": "$(pulse)",
-        "enablement": "co.iseConfigured"
-      },
-      {
-        "command": "co.verilog.exportVcd",
-        "title": "CO: Verilog 导出 VCD 波形",
-        "icon": "$(save)",
-        "enablement": "co.iseConfigured"
       },
       {
         "command": "co.verilog.viewWaveform",
@@ -544,7 +528,7 @@
           "group": "navigation@11"
         },
         {
-          "command": "co.verilog.runIsim",
+          "command": "co.verilog.runSimulation",
           "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
           "group": "navigation@10"
         },
@@ -576,7 +560,7 @@
           "group": "co@10"
         },
         {
-          "command": "co.verilog.checkSyntaxWithIse",
+          "command": "co.verilog.checkSyntax",
           "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
           "group": "co@11"
         },
@@ -641,23 +625,11 @@
           "when": "false"
         },
         {
-          "command": "co.verilog.generateIseProject",
+          "command": "co.verilog.checkSyntax",
           "when": "false"
         },
         {
-          "command": "co.verilog.checkSyntaxWithIse",
-          "when": "false"
-        },
-        {
-          "command": "co.verilog.runIsim",
-          "when": "false"
-        },
-        {
-          "command": "co.verilog.openIsimWaveform",
-          "when": "false"
-        },
-        {
-          "command": "co.verilog.exportVcd",
+          "command": "co.verilog.runSimulation",
           "when": "false"
         },
         {
@@ -812,18 +784,11 @@
             "order": 40,
             "default": ""
           },
-          "co.toolchain.isePath": {
-            "type": "string",
-            "description": "仅供 ISim GUI 波形和当前 ISim VCD 导出使用的 Xilinx ISE 安装路径，例如 C:/Xilinx/14.7/ISE_DS/ISE。通用语法检查、仿真和自动测试始终使用扩展内置 Icarus",
-            "scope": "machine-overridable",
-            "order": 50,
-            "default": ""
-          },
           "co.toolchain.hazardCalculator": {
             "type": "string",
             "description": "课程提供的 hazard_analysis 路径（含 Hazard-Calculator.jar 和 analyzer.py）",
             "scope": "machine-overridable",
-            "order": 60,
+            "order": 50,
             "default": ""
           }
         }
@@ -888,7 +853,7 @@
               "保存 Verilog 文件时自动运行编译器检查",
               "只在运行 CO: Verilog 检查语法 命令时检查"
             ],
-            "description": "控制内置 Icarus Verilog 编译器语法检查的触发时机；ISE 路径不会改变此后端",
+            "description": "控制内置 Icarus Verilog 编译器语法检查的触发时机",
             "scope": "resource",
             "order": 50,
             "default": "onSave"
@@ -936,7 +901,7 @@
           },
           "co.project.simTime": {
             "type": "string",
-            "description": "手动运行 Verilog 仿真或导出 ISim 波形时使用的仿真时长。自动测试会自行计算预算",
+            "description": "手动运行 Verilog 仿真或查看波形时使用的仿真时长。自动测试会自行计算预算",
             "scope": "resource",
             "order": 40,
             "default": "200us"
@@ -1031,19 +996,6 @@
             "deprecationMessage": "仅为兼容已有语法检查超时保留。插件会使用安全预算；建议删除该设置。",
             "scope": "resource",
             "order": 80
-          },
-          "co.verilog.syntax.ise.suppressedWarnings": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "ise-unconnected-port"
-              ]
-            },
-            "description": "需要抑制的 ISE fuse 噪声 warning",
-            "deprecationMessage": "仅为兼容已有 ISE warning 过滤配置保留。插件会自动过滤课程无关噪声；建议删除该设置。",
-            "scope": "resource",
-            "order": 90
           },
           "co.verilog.implicitNet.ignorePatterns": {
             "type": "array",

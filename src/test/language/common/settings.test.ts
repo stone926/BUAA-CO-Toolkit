@@ -149,7 +149,7 @@ describe('mergeCoSettings', () => {
       }
     });
     expect(result.verilog.syntax.external).toEqual(defaultCoSettings.verilog.syntax.external);
-    expect(result.verilog.syntax.ise).toEqual(defaultCoSettings.verilog.syntax.ise);
+    expect(result.verilog.syntax).toEqual(defaultCoSettings.verilog.syntax);
   });
 
   it('ignores old flattened Verilog format alignment keys', () => {

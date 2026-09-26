@@ -1,6 +1,6 @@
 # course-testing | src/courseTesting/ | 51 files + host adapters
 
-P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(bundled Icarus)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。通用 Verilog 仿真和自动 DUT lane 固定使用扩展内置 Icarus；resource-scoped `isePath` 仅服务 ISim GUI 波形和当前 ISim VCD 等专属功能，不再充当默认后端 selector。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于手动测试、历史 replay 和显式开发者验证。
+P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(bundled Icarus)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。通用 Verilog 仿真和自动 DUT lane 固定使用扩展内置 Icarus，运行目录为 `.co/iverilog`。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于手动测试、历史 replay 和显式开发者验证。
 
 MARS reference 按角色严格拆分：assembly compatibility 使用 `mars-assembler-v0.6.3`（8b53a49，SHA-256 `599957…afb31`）；真实 execution/full-stack gate 使用 `legacy-course-executor` v0.6.3-course1（c6197f4，SHA-256 `d13456…0c64`）。`mars` 模式是 configured legacy 回滚，只有 `verify-both`/开发命令要求后一固定身份。legacy 课程 oracle 强制 coL2，coL1 仅作兼容探针；P7 按需使用 efc/p7irq，只有历史 `_co_internal_unknown_instruction` 用例才额外使用 cl，新生成 RI raw word 不需要。MARS 的 dump、停机尾、SWL/SWR、REGIMM link、Compact 初态/边界 bug 修复只存在于 `mips/legacy` normalizer 和 conformance，不进入 builtin provider/core。任一含非零 `.data` 初值的课程 case 会在 provider-neutral ProgramImage policy 处拒绝，因为 DUT 复位内存为全零。
 

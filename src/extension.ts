@@ -8,7 +8,6 @@ import {
 } from './constants';
 import {
   configurationTargetForResource,
-  getIsePath,
   getProfileResolution,
   setProfileInferenceProvider
 } from './config';
@@ -39,9 +38,9 @@ import { timeStartup, traceStartup } from './startupTrace';
 import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
 import { disableDiagnosticCode } from './diagnosticSettings';
 import {
-  clearIseProjectDiscoveryCache,
-  invalidateIseProjectDiscoveryCachesForUri
-} from './verilog/iseProject';
+  clearVerilogProjectDiscoveryCache,
+  invalidateVerilogProjectDiscoveryCachesForUri
+} from './verilog/verilogProject';
 
 const escapeHtml = html.text;
 const verilogModuleRegistryStartupDelayMs = 1000;
@@ -120,35 +119,28 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     verilogWatcher,
     verilogWatcher.onDidCreate((uri) => {
-      invalidateIseProjectDiscovery(uri);
+      invalidateVerilogProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
       moduleRegistry.updateUri(uri);
     }),
     verilogWatcher.onDidChange((uri) => {
-      invalidateIseProjectDiscovery(uri);
+      invalidateVerilogProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
       moduleRegistry.updateUri(uri);
     }),
     verilogWatcher.onDidDelete((uri) => {
-      invalidateIseProjectDiscovery(uri);
+      invalidateVerilogProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
       moduleRegistry.removeUri(uri);
     })
   );
-  const xiseWatcher = vscode.workspace.createFileSystemWatcher('**/*.xise');
-  context.subscriptions.push(
-    xiseWatcher,
-    xiseWatcher.onDidCreate(invalidateIseProjectDiscovery),
-    xiseWatcher.onDidChange(invalidateIseProjectDiscovery),
-    xiseWatcher.onDidDelete(invalidateIseProjectDiscovery)
-  );
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     // Folder changes are infrequent. A full in-memory clear also covers a root
     // removed, edited while detached, then re-added at the same path.
-    clearIseProjectDiscoveryCache();
+    clearVerilogProjectDiscoveryCache();
   }));
   const profileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{asm,s,mips,circ}');
   context.subscriptions.push(
@@ -198,13 +190,13 @@ export function activate(context: vscode.ExtensionContext): void {
     toolchainCache.clear();
   }
 
-  function invalidateIseProjectDiscovery(uri: vscode.Uri): void {
+  function invalidateVerilogProjectDiscovery(uri: vscode.Uri): void {
     const folders = vscode.workspace.workspaceFolders ?? [];
     if (!vscode.workspace.getWorkspaceFolder(uri)) {
-      clearIseProjectDiscoveryCache();
+      clearVerilogProjectDiscoveryCache();
       return;
     }
-    invalidateIseProjectDiscoveryCachesForUri(folders, uri);
+    invalidateVerilogProjectDiscoveryCachesForUri(folders, uri);
   }
 
   context.subscriptions.push(
@@ -262,7 +254,6 @@ function updateCoContext(resource?: vscode.Uri): void {
   void vscode.commands.executeCommand('setContext', 'co.hasVerilogProfile', hasVerilogProfile);
   void vscode.commands.executeCommand('setContext', 'co.activeCoKind', activeKind);
   void vscode.commands.executeCommand('setContext', 'co.verilogSignalVisible', activeKind === 'verilog');
-  void vscode.commands.executeCommand('setContext', 'co.iseConfigured', Boolean(getIsePath(resource).trim()));
 }
 
 export async function deactivate(): Promise<void> {

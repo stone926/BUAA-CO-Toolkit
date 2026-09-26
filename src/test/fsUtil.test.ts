@@ -17,7 +17,7 @@ vi.mock('vscode', async () => {
 });
 
 describe('writeTextFileIfChanged', () => {
-  const target = URI.file('E:/work/.co/isim/co_iverilog_watchdog.v');
+  const target = URI.file('E:/work/.co/iverilog/co_iverilog_watchdog.v');
 
   beforeEach(() => {
     vi.clearAllMocks();

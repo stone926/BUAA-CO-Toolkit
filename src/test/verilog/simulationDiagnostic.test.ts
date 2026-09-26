@@ -122,33 +122,6 @@ describe('Verilog simulation diagnostics', () => {
     );
   });
 
-  it('extracts a path-safe actionable ISim fuse diagnostic', () => {
-    const failure = createVerilogSimulationFailure(
-      'isim',
-      'compile',
-      failedRun({
-        exitCode: 1,
-        stderr: 'ERROR:HDLCompiler:806 - "E:/work/rtl/CPU.v" Line 28: Syntax error near "endmodule".'
-      }),
-      'E:/work'
-    );
-
-    expect(failure).toEqual({
-      phase: 'compile',
-      reason: 'exit',
-      exitCode: 1,
-      diagnostic: {
-        file: 'rtl/CPU.v',
-        line: 28,
-        message: 'Syntax error near "endmodule".'
-      }
-    });
-    expect(verilogSimulationFailureMessage(failure, 'isim')).toBe(
-      'ISim 编译失败（退出码 1）：rtl/CPU.v:28: Syntax error near "endmodule".'
-    );
-    expect(JSON.stringify(failure)).not.toContain('E:/work');
-  });
-
   it('keeps only the basename for paths outside the workspace and redacts raw paths in messages', () => {
     const failure = createVerilogSimulationFailure(
       'iverilog',
@@ -254,7 +227,7 @@ describe('Verilog simulation diagnostics', () => {
   });
 
   it('describes a successful process that failed to produce a trace separately', () => {
-    expect(verilogSimulationFailureMessage(missingVerilogSimulationOutputFailure(), 'isim'))
-      .toBe('ISim 输出处理未生成可读取的结果');
+    expect(verilogSimulationFailureMessage(missingVerilogSimulationOutputFailure(), 'iverilog'))
+      .toBe('Icarus 输出处理未生成可读取的结果');
   });
 });

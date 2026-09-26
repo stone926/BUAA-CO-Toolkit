@@ -6,7 +6,7 @@ test/helpers/:
   appServices.ts — 完整 AppServices / RunResult 测试样例；保留 Vitest mock 调用签名供断言使用，以真实接口校验 fixture 字段。
 
 test/:
-  manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogIsimCache, verilogIsimOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 20 项公开配置/22 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
+  manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogSimulationOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 19 项公开配置/21 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
 
 test/language/common/:
   settings, diagnosticActions, lsp, util, documentResultCache, semanticTokens
@@ -15,14 +15,14 @@ test/language/mips/:
   parser, syntax, instructionValidation, semantic, resources, hover, formatting, traceParser, traceCompare, realProjectPatterns, completions, signatureHelp, codeActions
 
 test/language/verilog/:
-  syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iseSyntaxCheck, iverilogSyntaxCheck, externalSyntaxCheck, iseDiagnosticFilters, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
+  syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iverilogSyntaxCheck, externalSyntaxCheck, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/waveform/:
   vcdReader, valueFormat, viewLogic, signalModel, interactionLogic, hostShortcuts, hostServices, waveformPanel, sourceNavigation, designDump — VCD 流式解析（跨 chunk、重复 scope、别名、四态、event 触发、截断/倒退/位宽/上限诊断、inf/nan 实数）、进制与反汇编、视窗/周期/LOD/时间输入、信号树/行模型/默认信号/状态清洗、store/actions 选择校正与搜索选中（node 下运行）、宿主转发快捷键与 keybindings 一致性、trace 配对与中文空格路径、面板消息/CSP/含 glob 字符文件名的监视、信号/scope 跳转源码与实际 dumpfile 定位；designDump 覆盖参数逐级覆盖/不确定边界/作用域跳过，并用真实 bundled Icarus 编译 dump 顶层，核对 GRF 字、trace 与编译器报错归因
 
 test/verilog/:
   dmStoreContract — 真实 bundled Icarus 执行 P6/P7 完整 testbench：SB/SH 错误全使能读改写在旧实现整条 trace 相同、新实现失败；覆盖各宽度/扩展 store、无效事务、使能 lane、忽略的地址低位 X/Z，以及失败摘要接线
-  verilogBackend, iseProjectOrder, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — 默认 Icarus/显式 ISim 选择、ISE 源发现/XISE 顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime 纯映射与 unsupported 分支、五 target 路径/预检、Unix `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
+  verilogProject, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — Icarus 执行、Verilog 源发现与确定性顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime 纯映射与 unsupported 分支、五 target 路径/预检、Unix `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 
 TextMate:
   使用 vscode-textmate + vscode-oniguruma 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步及课程真实宏/数字片段
@@ -62,6 +62,6 @@ fixtures:
 
 真实 VS Code 扩展宿主:
   scripts/verify-extension-host.mjs — @vscode/test-electron 下载当前稳定版，加载最终 VSIX 解包目录；隔离用户配置/其他扩展，创建中文空格工作区，保留日志；本地可用 CO_VSCODE_VERSION 指定排查版本
-  scripts/extension-host-smoke.cjs — 四项小型测试：实际扩展激活、DocumentSymbol/LSP 保存 Icarus 错误诊断与修复（包含无关 editor 设置变化不应取消保存检查的回归）、co.verilog.runIsim 命令及输出、co.test.runFullTest 固定 P4 用例的真实 assembler/Worker oracle/Icarus 双侧 golden trace 与报告 Webview；内嵌协议 fixture，不复制完整课程 CPU，不 mock VS Code 或增加生产测试接口
+  scripts/extension-host-smoke.cjs — 四项小型测试：实际扩展激活、DocumentSymbol/LSP 保存 Icarus 错误诊断与修复（包含无关 editor 设置变化不应取消保存检查的回归）、co.verilog.runSimulation 命令及输出、co.test.runFullTest 固定 P4 用例的真实 assembler/Worker oracle/Icarus 双侧 golden trace 与报告 Webview；内嵌协议 fixture，不复制完整课程 CPU，不 mock VS Code 或增加生产测试接口
   .github/workflows/extension-platforms.yml — PR/main push/手动五 target 原生验证；.github/actions/verify-extension-package/action.yml 与 release 共用打包、解包、Icarus smoke、真实扩展宿主检查，Linux 用 Xvfb；不逐平台重复全量单元测试，失败上传宿主日志
   首次宿主验证（2026-09-03）：[五个平台最终 VSIX 的真实 VS Code 验证](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33659011560) 全部通过；保存诊断回归另以旧 server 失败、新 server 通过作本地对照。

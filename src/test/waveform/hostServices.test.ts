@@ -80,14 +80,14 @@ describe('trace pairing', () => {
       expect(fromBytes.metadata.changeCount).toBe(420_000);
     });
 
-    it('parses .co testbenches that the module registry skips', async () => {
+    it('parses user testbenches while keeping private runtime modules out of source navigation', async () => {
       fs.mkdirSync(path.join(directory, '.co', 'tb'), { recursive: true });
-      fs.mkdirSync(path.join(directory, '.co', 'isim'), { recursive: true });
+      fs.mkdirSync(path.join(directory, '.co', 'iverilog'), { recursive: true });
       fs.writeFileSync(path.join(directory, '.co', 'tb', 'alu_tb.v'), 'module alu_tb; alu uut(); endmodule\n');
-      fs.writeFileSync(path.join(directory, '.co', 'isim', 'co_generated_tb.v'), 'module gen_tb; endmodule\n');
-      fs.writeFileSync(path.join(directory, '.co', 'isim', 'co_iverilog_watchdog.v'), 'module w; endmodule\n');
+      fs.writeFileSync(path.join(directory, '.co', 'iverilog', 'co_generated_tb.v'), 'module gen_tb; endmodule\n');
+      fs.writeFileSync(path.join(directory, '.co', 'iverilog', 'co_iverilog_watchdog.v'), 'module w; endmodule\n');
       const sources = await workspaceTestbenchSources(directory);
-      expect(sources.map((file) => path.basename(file))).toEqual(['alu_tb.v', 'co_generated_tb.v']);
+      expect(sources.map((file) => path.basename(file))).toEqual(['alu_tb.v']);
       const registry: VerilogModuleProvider = {
         scanning: false,
         getModule: (name) => (name === 'alu' ? { name: 'alu' } as ReturnType<VerilogModuleProvider['getModule']> : undefined),
@@ -98,7 +98,7 @@ describe('trace pairing', () => {
       expect(lookup('alu_tb')?.instances.map((instance) => instance.instanceName)).toEqual(['uut']);
       expect(lookup('alu_tb')?.uri).toBe(URI.file(sources[0]).toString());
       expect(lookup('alu')?.name).toBe('alu');
-      expect(lookup('gen_tb')).toBeDefined();
+      expect(lookup('gen_tb')).toBeUndefined();
       expect(lookup('nothing')).toBeUndefined();
     });
   });

@@ -23,7 +23,7 @@ resources/verilog/:
 resources/co/:
   configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐；`co.mips.engine=auto`；外部 Verilog 检查默认 onSave
   configManifest.json — co.* VS Code settings schema 源: 分组/类型/描述/枚举/范围, default 由 configDefaults.json 注入；Verilog 外部检查键为 `syntax.external.mode/timeoutMs`
-  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/无条件工具/端口；P1/P4–P7 声明逻辑 `verilogSimulator` 而非固定 ISE，P4–P7 不再声明 MARS/Java，legacy lane 依赖由 toolchainPolicy 动态追加；外置测试台 IM=4096 words、DM=3072 words；指令描述/Profile推断hints
+  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/无条件工具/端口；P1/P4–P7 声明逻辑 `verilogSimulator` （bundled Icarus），P4–P7 不再声明 MARS/Java，legacy lane 依赖由 toolchainPolicy 动态追加；外置测试台 IM=4096 words、DM=3072 words；指令描述/Profile推断hints
   p7Hardware.json — P7 课程硬件布局: 0x3000 起 4096-word IM、3072-word DM、0x4180 异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
 
@@ -47,13 +47,6 @@ resources/templates/verilog/:
   p7_interrupt_block*.v — P7 external interrupt主动/注释模板
   p7_probe_block.v — P7 probe interrupt/MMIO观测模板
   waveform_dumper.v — “仿真并查看波形”生成的 Icarus dump 顶层（$printtimescale/$dumpfile/$dumpvars 与小存储器逐字 dump）
-  加载: templateRegistry 受控占位替换
-
-resources/templates/isim/:
-  project.prj — ISE PRJ 文件模板
-  run.tcl — ISim 批处理运行 TCL 模板
-  wave.tcl — ISim GUI 波形 TCL 模板
-  vcd.tcl — ISim VCD 导出 TCL 模板
   加载: templateRegistry 受控占位替换
 
 resources/templates/webview/:

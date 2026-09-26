@@ -4,8 +4,7 @@ import type { AppServices } from '../../types';
 import type { MutableVerilogModuleProvider } from '../../language/verilog/moduleProvider';
 import { parseModules } from '../../language/verilog/parser';
 import { verilogDoc } from '../helpers/textDocument';
-import { getSimTime } from '../../config';
-import { writeTextFile } from '../../fsUtil';
+import { writeTextFile, writeTextFileIfAbsent } from '../../fsUtil';
 import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
@@ -31,7 +30,6 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../config', () => ({
   config: vi.fn((_key: string, fallback: unknown) => fallback),
-  getIsePath: vi.fn(() => 'D:/ISE'),
   getProfile: vi.fn(() => 'P6'),
   getRunTimeout: vi.fn(() => 120000),
   getSimTime: vi.fn(() => '200us'),
@@ -48,7 +46,8 @@ vi.mock('../../fsUtil', async () => {
     pathExists: vi.fn(async () => false),
     workspaceFolderFor: vi.fn(() => ({ uri: URI.file('E:/work'), name: 'work', index: 0 })),
     workspaceFolderForOrFirst: vi.fn(() => ({ uri: URI.file('E:/work'), name: 'work', index: 0 })),
-    writeTextFile: vi.fn(async () => undefined)
+    writeTextFile: vi.fn(async () => undefined),
+    writeTextFileIfAbsent: vi.fn(async () => true)
   };
 });
 
@@ -65,7 +64,6 @@ describe('testbench workspace discovery', () => {
       uri: URI.file('E:/work'),
       name: 'work'
     });
-    vi.mocked(getSimTime).mockReturnValue('1ns');
     vi.mocked(findWorkspaceFileCandidates).mockResolvedValue([]);
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips_tb; endmodule\n'));
   });
@@ -147,7 +145,7 @@ describe('testbench workspace discovery', () => {
     expect(generatedText).not.toContain('module mips_tb;');
   });
 
-  it('keeps configured simTime and generation messages for manual runtime testbenches', async () => {
+  it('creates an editable .co/tb scaffold and stops a manual P6 run', async () => {
     const resource = URI.file('E:/work/mips.v');
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from([
       'module mips(clk, reset);',
@@ -157,12 +155,18 @@ describe('testbench workspace discovery', () => {
     ].join('\n')));
     const currentServices = services();
 
-    await ensureRunnableTestbench(currentServices, resource, true);
+    const result = await ensureRunnableTestbench(currentServices, resource, true);
 
-    const generatedText = vi.mocked(writeTextFile).mock.calls.at(-1)?.[1] as string | undefined;
-    expect(generatedText).toContain('#1;');
-    expect(generatedText).toContain('$finish;');
-    expect(currentServices.output.appendLine).toHaveBeenCalledWith(expect.stringContaining('co_generated_mips_tb.v'));
+    expect(result).toBeUndefined();
+    expect(writeTextFile).not.toHaveBeenCalled();
+    expect(writeTextFileIfAbsent).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }),
+      expect.stringContaining('在此编写激励')
+    );
+    expect(vscodeState.module!.window.showTextDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }),
+      { preview: false }
+    );
     expect(vscodeState.module!.window.showInformationMessage).toHaveBeenCalled();
   });
 
@@ -197,6 +201,15 @@ describe('testbench workspace discovery', () => {
     expect(vscodeState.module!.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
+  it('does not create a private P7 testbench for an interactive run', async () => {
+    const result = await ensureP7InterruptTestbench(
+      services(), URI.file('E:/work/mips.v'), [0x3010], undefined, true
+    );
+
+    expect(result).toBeUndefined();
+    expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
   it('uses the module registry for P7 top lookup without scanning the workspace', async () => {
     const topUri = URI.file('E:/work/src/mips.v');
     const document = verilogDoc('module mips; endmodule', topUri.toString());
@@ -227,6 +240,29 @@ describe('testbench workspace discovery', () => {
     expect(result?.designSourceUri?.fsPath.toLowerCase()).toBe(topUri.fsPath.toLowerCase());
     expect(registry.getModules).toHaveBeenCalledWith('mips');
     expect(findWorkspaceFileCandidates).not.toHaveBeenCalled();
+  });
+
+  it('ignores a custom testbench source when locating the automatic DUT top', async () => {
+    const testbenchUri = URI.file('E:/work/test/fake_tb.v');
+    const dutUri = URI.file('E:/work/src/mips.v');
+    const testbenchDoc = verilogDoc('module mips(input bogus); endmodule', testbenchUri.toString());
+    const customModules = parseModules(testbenchDoc, testbenchDoc.getText());
+    const registry = {
+      scanning: false,
+      getModule: vi.fn(),
+      getModules: vi.fn(() => customModules),
+      allModules: vi.fn(() => []),
+      updateUri: vi.fn(),
+      removeUri: vi.fn()
+    } satisfies MutableVerilogModuleProvider;
+    vi.mocked(findWorkspaceFileCandidates).mockResolvedValue([{ uri: dutUri, rank: 0 }]);
+    vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips(input clk, input reset); endmodule'));
+
+    const result = await ensureRunnableTestbench(
+      services(), URI.file('E:/work/program.asm'), false, registry, { nonInteractive: true }
+    );
+
+    expect(result?.designSourceUri?.fsPath.toLowerCase()).toBe(dutUri.fsPath.toLowerCase());
   });
 });
 

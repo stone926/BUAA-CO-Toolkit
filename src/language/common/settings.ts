@@ -20,9 +20,6 @@ export interface CoSettings {
     machineCode: string;
     simTime: string;
   };
-  toolchain: {
-    isePath: string;
-  };
   run: {
     timeoutMs: number;
   };
@@ -36,9 +33,6 @@ export interface CoSettings {
       external: {
         mode: 'off' | 'onSave' | 'commandOnly';
         timeoutMs: number;
-      };
-      ise: {
-        suppressedWarnings: string[];
       };
     };
     implicitNet: {
@@ -76,9 +70,6 @@ export const defaultCoSettings: CoSettings = {
     machineCode: configDefault<string>('project.machineCode'),
     simTime: configDefault<string>('project.simTime')
   },
-  toolchain: {
-    isePath: configDefault<string>('toolchain.isePath')
-  },
   run: {
     timeoutMs: configDefault<number>('run.timeoutMs')
   },
@@ -92,9 +83,6 @@ export const defaultCoSettings: CoSettings = {
       external: {
         mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.external.mode'),
         timeoutMs: configDefault<number>('verilog.syntax.external.timeoutMs')
-      },
-      ise: {
-        suppressedWarnings: configDefaultArray('verilog.syntax.ise.suppressedWarnings')
       }
     },
     implicitNet: {
@@ -130,11 +118,6 @@ export function mergeCoSettings(value: unknown): CoSettings {
       disabledFileCodes: normalizeDisabledDiagnosticFileCodes(candidate.diagnostics?.disabledFileCodes)
     },
     project: normalizeProject(candidate.project),
-    toolchain: {
-      ...defaultCoSettings.toolchain,
-      ...(candidate.toolchain ?? {}),
-      isePath: typeof candidate.toolchain?.isePath === 'string' ? candidate.toolchain.isePath.trim() : defaultCoSettings.toolchain.isePath
-    },
     run: {
       ...defaultCoSettings.run,
       ...(candidate.run ?? {}),
@@ -205,9 +188,6 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
   const externalCandidate = typeof candidate.external === 'object' && candidate.external !== null
     ? candidate.external as Partial<CoSettings['verilog']['syntax']['external']>
     : {};
-  const iseCandidate = typeof candidate.ise === 'object' && candidate.ise !== null
-    ? candidate.ise as Partial<CoSettings['verilog']['syntax']['ise']>
-    : {};
   const mode = externalCandidate.mode === 'off' || externalCandidate.mode === 'commandOnly' || externalCandidate.mode === 'onSave'
     ? externalCandidate.mode
     : defaultCoSettings.verilog.syntax.external.mode;
@@ -220,9 +200,6 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
         0,
         600000
       )
-    },
-    ise: {
-      suppressedWarnings: normalizeStringArray(iseCandidate.suppressedWarnings, defaultCoSettings.verilog.syntax.ise.suppressedWarnings)
     }
   };
 }

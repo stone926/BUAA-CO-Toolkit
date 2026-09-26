@@ -214,7 +214,7 @@ const state: ServerState = {
   configurationVersion: 0,
   effectiveSettingsCache: new Map()
 };
-const verilogExternalSyntaxCommand = Commands.Server.InternalVerilogCheckSyntaxWithIse;
+const verilogExternalSyntaxCommand = Commands.Server.InternalVerilogCheckSyntax;
 const maxEffectiveSettingsCacheEntries = 200;
 const verilogIndexStartupDelayMs = 750;
 let verilogIndexRebuildTimer: ReturnType<typeof setTimeout> | undefined;
@@ -613,22 +613,13 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
   state.verilogExternalControllers.get(controllerKey)?.abort();
   const controller = new AbortController();
   state.verilogExternalControllers.set(controllerKey, controller);
-  const configuredTop = settings.project.topModule.trim();
-  const fallbackTop = verilogIndex.indexedModules()[0]?.name;
-  const topModule = configuredTop && verilogIndex.getModule(configuredTop)
-    ? configuredTop
-    : fallbackTop ?? configuredTop;
   let result: Awaited<ReturnType<typeof executeExternalVerilogSyntaxCheck>>;
   try {
     result = await executeExternalVerilogSyntaxCheck({
       workspaceFolders: state.workspaceFolders,
       triggerUri: uri,
       extensionRoot: state.extensionRoot,
-      isePath: settings.toolchain.isePath,
-      topModule,
-      fallbackTopModule: fallbackTop,
       timeoutMs: external.timeoutMs > 0 ? external.timeoutMs : settings.run.timeoutMs,
-      settings,
       signal: controller.signal
     });
   } catch (error) {

@@ -30,7 +30,8 @@ const snapshotStatBatchSize = 32;
 const generatorExtensions = new Set(['.py', '.js', '.mjs', '.cjs', '.jar', '.bat', '.cmd', '.exe', '.ps1']);
 const asmExtensions = new Set(['.asm', '.s', '.mips']);
 const ignoredDirectories = new Set(['.git', 'node_modules', 'out', '.vscode-test']);
-const ignoredCoDirectories = new Set(['cases', 'out', 'isim', 'logisim', 'tmp']);
+// Old runtime artifacts remain excluded after the directory rename.
+const ignoredCoDirectories = new Set(['cases', 'out', 'iverilog', 'isim', 'logisim', 'tmp']);
 
 export function isSupportedGeneratorFile(file: string): boolean {
   return generatorExtensions.has(path.extname(file).toLowerCase());

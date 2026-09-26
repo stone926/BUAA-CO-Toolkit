@@ -60,7 +60,6 @@ const publicConfigurationGroups = [
       'co.toolchain.python',
       'co.toolchain.mars',
       'co.toolchain.logisim',
-      'co.toolchain.isePath',
       'co.toolchain.hazardCalculator'
     ]
   },
@@ -101,7 +100,6 @@ const compatibilityConfigurationKeys = [
   'co.run.timeoutMs',
   'co.mips.extraArgs',
   'co.verilog.syntax.external.timeoutMs',
-  'co.verilog.syntax.ise.suppressedWarnings',
   'co.verilog.implicitNet.ignorePatterns',
   'co.verilog.lint.disabledRules',
   'co.diagnostics.disabledCodes',
@@ -194,18 +192,19 @@ describe('package manifest', () => {
     }
   });
 
-  it('keeps low-frequency Verilog waveform commands out of editor context and command palette', () => {
+  it('removes ISE and ISim commands from the extension surface', () => {
     const pkg = readPackage();
     const commands = new Set((pkg.contributes?.commands ?? []).map((command) => command.command));
     const contextCommands = new Set((pkg.contributes?.menus?.['editor/context'] ?? []).map((item) => item.command));
     const palette = new Map((pkg.contributes?.menus?.commandPalette ?? []).map((item) => [item.command, item]));
 
-    expect(commands.has('co.verilog.openIsimWaveform')).toBe(true);
-    expect(commands.has('co.verilog.exportVcd')).toBe(true);
+    expect(commands.has('co.verilog.generateIseProject')).toBe(false);
+    expect(commands.has('co.verilog.openIsimWaveform')).toBe(false);
+    expect(commands.has('co.verilog.exportVcd')).toBe(false);
     expect(contextCommands.has('co.verilog.openIsimWaveform')).toBe(false);
     expect(contextCommands.has('co.verilog.exportVcd')).toBe(false);
-    expect(palette.get('co.verilog.openIsimWaveform')?.when).toBe('false');
-    expect(palette.get('co.verilog.exportVcd')?.when).toBe('false');
+    expect(palette.has('co.verilog.openIsimWaveform')).toBe(false);
+    expect(palette.has('co.verilog.exportVcd')).toBe(false);
   });
 
   it('gates Verilog editor menus by Verilog profiles', () => {
@@ -264,7 +263,7 @@ describe('package manifest', () => {
     expect(signalView?.when).toContain('co.verilogSignalVisible');
   });
 
-  it('exposes exactly the ordered 20-setting public surface', () => {
+  it('exposes exactly the ordered 19-setting public surface', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const publicGroups = groups.filter((group) => group.title !== '兼容设置（仅已配置用户可见）');
@@ -275,7 +274,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(20);
+    expect(expectedPublicKeys).toHaveLength(19);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);
@@ -330,7 +329,7 @@ describe('package manifest', () => {
       expect(property?.default, key).toBeUndefined();
       expect(property?.deprecationMessage?.trim().length, key).toBeGreaterThan(0);
       expect(property?.scope, key).toBe(key === 'co.toolchain.marsP7' ? 'machine-overridable' : 'resource');
-      expect(property?.order, key).toBe((index + 1) * 10);
+      expect(property?.order, key).toBe((index < 8 ? index + 1 : index + 2) * 10);
     });
   });
 

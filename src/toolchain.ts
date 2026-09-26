@@ -9,7 +9,6 @@ import { runTool } from './process';
 import { ToolDetection } from './types';
 import { iterCpuTraceEvents, iterMarsDetailedTraceEvents } from './language/mips/traceParser';
 import { getEffectiveRequiredTools } from './toolchainPolicy';
-export { buildIseEnvironment, findFuse, findIsimGui, isimExecutableName } from './iseCommon';
 import { IverilogRuntimeError, preflightIverilogRuntime } from './verilog/iverilogRuntime';
 
 const marsCapabilityGpCopyRegister = '3';

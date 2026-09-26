@@ -43,20 +43,20 @@ describe('course test toolchain helpers', () => {
 
   it('formats failed toolchain checks with optional suggestions', () => {
     expect(formatToolchainFailure({ name: 'MARS', ok: false, detail: '未配置' })).toBe('MARS 未配置');
-    expect(formatToolchainFailure({ name: 'ISE fuse', ok: false, detail: '不可用', suggestion: '检查 ISE 路径' }))
-      .toBe('ISE fuse 不可用（检查 ISE 路径）');
+    expect(formatToolchainFailure({ name: 'Icarus Verilog', ok: false, detail: '不可用', suggestion: '检查插件安装' }))
+      .toBe('Icarus Verilog 不可用（检查插件安装）');
   });
 
   it('keeps automatic toolchain failures free of local paths and raw details', () => {
     const message = formatAutomaticToolchainFailure({
-      name: 'ISE fuse',
+      name: 'Icarus Verilog',
       ok: false,
-      detail: 'E:/SECRET_ISE_PATH/bin/nt64/fuse.exe',
-      suggestion: '检查 ISE 路径'
+      detail: 'E:/SECRET_RUNTIME_PATH/bin/iverilog.exe',
+      suggestion: '检查插件安装'
     });
 
-    expect(message).toBe('ISE fuse 不可用，请检查工具链设置');
-    expect(message).not.toContain('SECRET_ISE_PATH');
+    expect(message).toBe('Icarus Verilog 不可用，请检查工具链设置');
+    expect(message).not.toContain('SECRET_RUNTIME_PATH');
   });
 
   it('treats a required capability that was never checked as a failure', () => {

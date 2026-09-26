@@ -653,7 +653,7 @@ function machineCodeLines(text: string): string[] {
 }
 
 /**
- * 非 P7 的流水线/CPU Profile（P4/P5/P6）：其 dump 出的 code.txt 会被 ISim CPU 和 hazard 对拍工具执行。
+ * 非 P7 的流水线/CPU Profile（P4/P5/P6）：其 dump 出的 code.txt 会被 Icarus CPU 和 hazard 对拍工具执行。
  * 这些工具会在执行完最后一条指令后继续向指令存储器末尾之外取指，触发取指 AdEL。P7 由
  * mergeP7KernelTextDump 自带停机自环，这里覆盖 P4/P5/P6。
  */

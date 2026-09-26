@@ -13,7 +13,7 @@ describe('external syntax project sources', () => {
     write('alu.v', 'module alu(input a, output y); assign y = a; endmodule\n');
     write('.co/tb/alu_tb.v', 'module alu_tb; reg a; wire y; alu uut(.a(a), .y(y)); endmodule\n');
     write('.co/tb/ext_tb.v', 'module ext_tb; broken syntax\n');
-    write('.co/isim/co_generated_alu_tb.v', 'module co_generated_alu_tb; endmodule\n');
+    write('.co/iverilog/co_generated_alu_tb.v', 'module co_generated_alu_tb; endmodule\n');
   });
 
   afterEach(() => {
@@ -39,6 +39,6 @@ describe('external syntax project sources', () => {
 
   it('keeps .co/tb and generated testbenches out of checks triggered by project files', async () => {
     expect(await sourcesFor('alu.v')).toEqual(['alu.v']);
-    expect(await sourcesFor('.co/isim/co_generated_alu_tb.v')).toEqual(['alu.v']);
+    expect(await sourcesFor('.co/iverilog/co_generated_alu_tb.v')).toEqual(['alu.v']);
   });
 });

@@ -18,15 +18,15 @@ vi.mock('vscode', async () => {
   };
 });
 
-import { isimOutputFileName, samePath } from '../verilogIsimOutput';
+import { simulationOutputFileName, samePath } from '../verilogSimulationOutput';
 
-describe('Verilog ISim output helpers', () => {
+describe('Verilog simulation output helpers', () => {
   it('uses the testbench name for default simulation output', () => {
-    expect(isimOutputFileName('mips_tb')).toBe('mips_tb.sim.out');
+    expect(simulationOutputFileName('mips_tb')).toBe('mips_tb.sim.out');
   });
 
   it('keeps only the basename of configured simulation output', () => {
-    expect(isimOutputFileName('mips_tb', 'logs/custom.out')).toBe('custom.out');
+    expect(simulationOutputFileName('mips_tb', 'logs/custom.out')).toBe('custom.out');
   });
 
   it('compares normalized filesystem paths', () => {

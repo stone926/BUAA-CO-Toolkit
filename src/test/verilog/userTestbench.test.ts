@@ -40,7 +40,6 @@ vi.mock('vscode', async () => {
 
 vi.mock('../../config', () => ({
   config: vi.fn((_key: string, fallback: unknown) => fallback),
-  getIsePath: vi.fn(() => ''),
   getProfile: vi.fn(() => 'P1'),
   getRunTimeout: vi.fn(() => 120000),
   getSimTime: vi.fn(() => '200us'),
@@ -182,6 +181,45 @@ describe('P1 module runs with .co/tb testbenches', () => {
     expect(testbenchCompileSources(workspaceFolder, result!).map(normalized)).toEqual(['e:/work/.co/tb/check_alu.v']);
   });
 
+  it.each(['alu_tb.v', 'alu_testbench.v'])('runs a user-created %s as a testbench', async (fileName) => {
+    const testbench = setFile(`E:/work/test/${fileName}`, 'module helper; endmodule\nmodule alu_tb; endmodule\n');
+
+    const result = await ensureRunnableTestbench(services(), testbench, true);
+
+    expect(result).toMatchObject({ moduleName: 'alu_tb', kind: 'active' });
+    expect(normalized(result?.sourceUri)).toBe(`e:/work/test/${fileName}`);
+    expect(writeTextFileIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a non-suffix source file as a testbench because of its module name', async () => {
+    const source = setFile('E:/work/alu.v', 'module alu_tb; endmodule\n');
+
+    const result = await ensureRunnableTestbench(services(), source, true);
+
+    expect(result).toBeUndefined();
+    expect(readFile('E:/work/.co/tb/alu_tb_tb.v')).toContain('在此编写激励');
+  });
+
+  it('stops on an incomplete active custom testbench instead of running another top', async () => {
+    const testbench = setFile('E:/work/test/alu_tb.v', 'module alu_tb(');
+    setFile('E:/work/main.v', 'module main; endmodule\n');
+
+    const result = await ensureRunnableTestbench(services(), testbench, true);
+
+    expect(result).toBeUndefined();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('未找到可仿真的模块'));
+    expect(writeTextFileIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it('does not run a private generated testbench opened in the editor', async () => {
+    const privateTb = setFile('E:/work/.co/iverilog/co_generated_auto_tb.v', 'module co_generated_auto_tb; endmodule\n');
+
+    const result = await ensureRunnableTestbench(services(), privateTb, true);
+
+    expect(result).toBeUndefined();
+    expect(writeTextFileIfAbsent).not.toHaveBeenCalled();
+  });
+
   it('keeps an existing .co/tb file that no longer declares the testbench module', async () => {
     const alu = setFile('E:/work/alu.v', aluSource);
     setFile('E:/work/.co/tb/alu_tb.v', 'module renamed_tb; endmodule\n');
@@ -204,7 +242,7 @@ describe('P1 module runs with .co/tb testbenches', () => {
 
     expect(result).toMatchObject({ moduleName: 'co_generated_auto_tb', kind: 'generated' });
     expect(result?.sourceUri).toBeUndefined();
-    expect(testbenchCompileSources(workspaceFolder, result!).map(normalized)).toEqual(['e:/work/.co/isim/co_generated_auto_tb.v']);
+    expect(testbenchCompileSources(workspaceFolder, result!).map(normalized)).toEqual(['e:/work/.co/iverilog/co_generated_auto_tb.v']);
   });
 });
 
@@ -219,7 +257,7 @@ describe('.co/tb helpers', () => {
     expect(normalized(userTestbenchUri(URI.file('E:/work/src/alu.v'), 'alu_tb'))).toBe('e:/work/.co/tb/alu_tb.v');
     expect(isUserTestbenchUri(URI.file('E:/work/.co/tb/alu_tb.v'))).toBe(true);
     expect(isUserTestbenchUri(URI.file('E:/work/src/alu_tb.v'))).toBe(false);
-    expect(isUserTestbenchUri(URI.file('E:/work/.co/isim/co_generated_alu_tb.v'))).toBe(false);
+    expect(isUserTestbenchUri(URI.file('E:/work/.co/iverilog/co_generated_alu_tb.v'))).toBe(false);
   });
 
   it('finds a .co/tb testbench only by its declared module name', async () => {
@@ -232,7 +270,7 @@ describe('.co/tb helpers', () => {
   });
 
   it('appends only generated and undiscoverable testbench sources', () => {
-    const generated = URI.file('E:/work/.co/isim/co_generated_mips_tb.v');
+    const generated = URI.file('E:/work/.co/iverilog/co_generated_mips_tb.v');
     expect(testbenchCompileSources(workspaceFolder, { moduleName: 'mips_tb', kind: 'generated', generatedUri: generated }))
       .toEqual([generated]);
     expect(testbenchCompileSources(workspaceFolder, { moduleName: 'mips_tb', kind: 'user', sourceUri: URI.file('E:/work/test/mips_tb.v') }))
@@ -243,12 +281,12 @@ describe('.co/tb helpers', () => {
       .map(normalized)).toEqual(['e:/other/x_tb.v']);
   });
 
-  it('keeps the course testbench for P4–P7 configured tops and scaffolds every other module', () => {
+  it('scaffolds configured course tops and other modules for manual stimulus', () => {
     const [mips] = parseVerilog(verilogDoc('module mips(input clk, input reset); endmodule'), defaultCoSettings, false).modules;
 
     const course = userTestbenchText(mips, 'mips_tb', { profile: 'P5', configuredTop: true, simTime: '1us' });
-    expect(course).toContain('#1000;');
-    expect(course).not.toContain('$monitor');
+    expect(course).toContain('在此编写激励');
+    expect(course).toContain('$monitor');
 
     expect(userTestbenchText(mips, 'mips_tb', { profile: 'P1', configuredTop: true, simTime: '1us' })).toContain('$monitor');
     expect(userTestbenchText(mips, 'mips_tb', { profile: 'P5', configuredTop: false, simTime: '1us' })).toContain('在此编写激励');

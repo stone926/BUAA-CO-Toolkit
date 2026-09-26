@@ -1397,7 +1397,7 @@ function collectUnsupportedConstructDiagnostics(document: TextDocument, tokens: 
     reported.add(token.value);
     diagnostics.push(makeDiagnostic(
       tokenRange(document, token),
-      `Verilog construct '${token.value}' is outside the supported CO course subset; ISE may still accept it.`,
+      `Verilog construct '${token.value}' is outside the supported CO course subset; Icarus may still accept it.`,
       DiagnosticSeverity.Information,
       'syntax-unsupported-construct'
     ));

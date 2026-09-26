@@ -66,7 +66,7 @@ export interface CourseTraceCaseResult {
   machineCode?: string;
   oracleOut?: string;
   dutOut?: string;
-  /** Simulator selected for this DUT run. */
+  /** Simulator used by this run; `isim` is accepted only when reading historical reports. */
   dutBackend?: 'iverilog' | 'isim' | 'logisim';
   /** Bounded, path-safe terminal failure detail for reports and history. */
   dutFailure?: VerilogSimulationFailure;
@@ -349,7 +349,7 @@ export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): s
       return '[AUTO-ORACLE] 参考结果未生成';
     case 'dut':
       return item.dutFailure
-        ? `[AUTO-DUT] ${verilogSimulationFailureMessage(item.dutFailure, item.dutBackend)}`
+        ? `[AUTO-DUT] ${verilogSimulationFailureMessage(item.dutFailure, item.dutBackend === 'isim' ? undefined : item.dutBackend)}`
         : '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口';
     case 'compare':
       return '[AUTO-COMPARE] 结果比较未完成';

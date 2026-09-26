@@ -35,7 +35,7 @@ import { normalizePathKey } from '../pathUtils';
 import {
   courseExecutionInstructionBudget,
   courseExecutionInstructionBudgetFromCount,
-  courseTraceIsimRunTcl,
+  courseTraceSimulationTime,
   p7ProbeExecutionInstructionBudget
 } from './pipeline/executionBudget';
 import { CourseTracePipeline } from './pipeline/courseTracePipeline';
@@ -231,7 +231,7 @@ export async function runCourseTraceCase(
       simOutputFileName: simOutputFileNameForCase(item),
       simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
       p7Probe: probe,
-      tclText: courseTraceIsimRunTcl(p7ProbeExecutionInstructionBudget),
+      simTime: courseTraceSimulationTime(p7ProbeExecutionInstructionBudget),
       nonInteractive: automatic,
       signal: options.signal
     });
@@ -459,7 +459,7 @@ export async function runCourseTraceCase(
     simOutputFileName: simOutputFileNameForCase(item),
     simOutputUri: caseOutputMode ? asmCaseArtifactUri(asmCase, 'verilog', simOutputFileNameForCase(item)) : undefined,
     interruptSchedule,
-    tclText: courseTraceIsimRunTcl(maxSteps),
+    simTime: courseTraceSimulationTime(maxSteps),
     nonInteractive: automatic,
     signal: options.signal
   });

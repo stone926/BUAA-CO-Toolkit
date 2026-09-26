@@ -4,7 +4,6 @@ import { ProjectProfile } from './types';
 export interface WizardToolchainSettings {
   mars?: string;
   marsP7?: string;
-  isePath?: string;
   logisim?: string;
   java?: string;
   python?: string;
@@ -49,7 +48,7 @@ export function buildWizardSettingUpdates(
       continue;
     }
     const value = rawValue.trim();
-    if (!value && key !== 'isePath') {
+    if (!value) {
       continue;
     }
     updates.push({ key: `toolchain.${key}`, value, target: 'global' });

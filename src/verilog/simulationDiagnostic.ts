@@ -2,7 +2,6 @@
 import * as path from 'path';
 import type { RunResult } from '../types';
 import { parseIverilogDiagnosticRecords } from './iverilogDiagnostics';
-import { parseIseDiagnosticRecords } from './iseDiagnostics';
 
 export type VerilogSimulationFailurePhase = 'prepare' | 'compile' | 'simulate' | 'output';
 export type VerilogSimulationFailureReason =
@@ -33,7 +32,7 @@ const maximumDiagnosticFileLength = 160;
 const maximumDiagnosticMessageLength = 320;
 
 export function createVerilogSimulationFailure(
-  backend: 'iverilog' | 'isim',
+  _backend: 'iverilog',
   phase: VerilogSimulationFailurePhase,
   result: RunResult | undefined,
   workspaceRoot?: string
@@ -44,7 +43,7 @@ export function createVerilogSimulationFailure(
   const reason = failureReason(result);
   const diagnostic = reason === 'timeout' || reason === 'cancelled' || reason === 'output-limit'
     ? undefined
-    : processDiagnostic(backend, result, workspaceRoot);
+    : processDiagnostic(result, workspaceRoot);
   return normalizeVerilogSimulationFailure({
     phase,
     reason,
@@ -77,10 +76,10 @@ export function normalizeVerilogSimulationFailure(
 
 export function verilogSimulationFailureMessage(
   failure: VerilogSimulationFailure,
-  backend: 'iverilog' | 'isim' | 'logisim' | undefined
+  backend: 'iverilog' | 'logisim' | undefined
 ): string {
   const normalized = normalizeVerilogSimulationFailure(failure);
-  const tool = backend === 'iverilog' ? 'Icarus' : backend === 'isim' ? 'ISim' : 'Verilog';
+  const tool = backend === 'iverilog' ? 'Icarus' : 'Verilog';
   const operation = normalized.phase === 'compile'
     ? '编译'
     : normalized.phase === 'simulate'
@@ -126,44 +125,31 @@ function failureReason(result: RunResult): VerilogSimulationFailureReason {
 }
 
 function processDiagnostic(
-  backend: 'iverilog' | 'isim',
   result: RunResult,
   workspaceRoot?: string
 ): VerilogSimulationDiagnostic | undefined {
   const combined = [result.stderr, result.stdout].filter(Boolean).join('\n');
-  if (backend === 'iverilog') {
-    const records = parseIverilogDiagnosticRecords(combined);
-    const errorIndex = records.findIndex((item) => item.severity === 'error');
-    const recordIndex = errorIndex >= 0 ? errorIndex : 0;
-    const record = records[recordIndex];
-    if (record) {
-      const declarationAfterUse = records
-        .slice(recordIndex + 1, recordIndex + 3)
-        .find((item) => item.file === record.file
-          && /symbol.*declared here.*declaration after use/i.test(item.message));
-      const primaryMessage = record.message
-        .replace(/\s+in\s+`[^']+'$/i, '')
-        .replace(/`([^']+)'/g, '“$1”');
-      const message = declarationAfterUse
-        ? `${primaryMessage}；同一符号在第 ${declarationAfterUse.line} 行才声明（请将声明移到首次使用之前）`
-        : primaryMessage;
-      return normalizeDiagnostic({
-        file: record.file,
-        line: record.line,
-        ...(record.column === undefined ? {} : { column: record.column }),
-        message
-      }, workspaceRoot);
-    }
-  } else {
-    const records = parseIseDiagnosticRecords(combined);
-    const record = records.find((item) => item.severity === 'error') ?? records[0];
-    if (record) {
-      return normalizeDiagnostic({
-        ...(record.file ? { file: record.file } : {}),
-        ...(record.line === undefined ? {} : { line: record.line }),
-        message: record.message
-      }, workspaceRoot);
-    }
+  const records = parseIverilogDiagnosticRecords(combined);
+  const errorIndex = records.findIndex((item) => item.severity === 'error');
+  const recordIndex = errorIndex >= 0 ? errorIndex : 0;
+  const record = records[recordIndex];
+  if (record) {
+    const declarationAfterUse = records
+      .slice(recordIndex + 1, recordIndex + 3)
+      .find((item) => item.file === record.file
+        && /symbol.*declared here.*declaration after use/i.test(item.message));
+    const primaryMessage = record.message
+      .replace(/\s+in\s+`[^']+'$/i, '')
+      .replace(/`([^']+)'/g, '“$1”');
+    const message = declarationAfterUse
+      ? `${primaryMessage}；同一符号在第 ${declarationAfterUse.line} 行才声明（请将声明移到首次使用之前）`
+      : primaryMessage;
+    return normalizeDiagnostic({
+      file: record.file,
+      line: record.line,
+      ...(record.column === undefined ? {} : { column: record.column }),
+      message
+    }, workspaceRoot);
   }
   const line = combined.split(/\r?\n/).map((item) => item.trim()).find(Boolean);
   return line ? normalizeDiagnostic({ message: line }, workspaceRoot) : undefined;

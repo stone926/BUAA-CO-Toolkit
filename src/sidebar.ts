@@ -11,7 +11,6 @@ import {
   getPython,
   getMarsJar,
   getLogisimJar,
-  getIsePath,
   getHazardCalculator,
   getMipsEngine
 } from './config';
@@ -68,7 +67,6 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
       machineCode: getMachineCode(resource),
       simTime: getSimTime(resource),
       verilogBackend: 'Icarus Verilog（内置）',
-      iseConfigured: Boolean(getIsePath(resource).trim()),
       activeFile: this.activeFileModel(activeDocument),
       tools: this.createToolModels(profile, resource)
     };

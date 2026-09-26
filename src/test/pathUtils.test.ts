@@ -14,7 +14,7 @@ describe('path utilities', () => {
   });
 
   it('normalizes Windows separators consistently on every host platform', () => {
-    expect(normalizePathKey('E:\\work\\cpu\\.co\\isim\\tb.v')).toBe(normalizePathKey('E:/work/cpu/.co/isim/tb.v'));
+    expect(normalizePathKey('E:\\work\\cpu\\.co\\iverilog\\tb.v')).toBe(normalizePathKey('E:/work/cpu/.co/iverilog/tb.v'));
     expect(normalizePathKey('root\\out\\..\\code.txt')).toBe(normalizePathKey('root/code.txt'));
   });
 

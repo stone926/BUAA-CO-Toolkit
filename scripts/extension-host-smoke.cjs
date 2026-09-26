@@ -182,7 +182,7 @@ async function run() {
 
   await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, 'command_fixture_tb.v')));
   const simulation = await bounded('Verilog simulation command', () =>
-    vscode.commands.executeCommand('co.verilog.runIsim'));
+    vscode.commands.executeCommand('co.verilog.runSimulation'));
   assert.equal(simulation?.backend, 'iverilog');
   assert.equal(simulation.compileResult.ok, true, simulation.compileResult.stderr);
   assert.equal(simulation.simResult?.ok, true, simulation.simResult?.stderr);

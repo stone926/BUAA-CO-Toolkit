@@ -39,7 +39,6 @@
 | P2 ASM 运行 | MARS JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.mars`、`co.toolchain.java` |
 | P1、P4–P7 标准 Verilog 工作流 | 无 | — |
 | P5–P7 流水线冲突分析（可选） | 课程 `hazard_analysis` 目录；必要时指定 Python | `co.toolchain.hazardCalculator`、`co.toolchain.python` |
-| ISim GUI 波形 / 集成 VCD（可选） | Windows x64 上的 ISE 安装目录 | `co.toolchain.isePath` |
 
 工具路径是本机配置；不要把个人绝对路径提交到项目的 `.vscode/settings.json`。配置后运行 **`CO: 检查工具链`**，它只检查当前 Profile 和操作实际需要的工具。
 
@@ -99,7 +98,6 @@ P3–P7 的自动测试链路如下：
 | P3 电路运行与对拍 | Logisim + Java |
 | P1、P4–P7 Verilog 检查与仿真 | 随包 Icarus + VVP |
 | 波形查看 | 内置查看器（任意仿真器生成的 VCD） |
-| ISim GUI 波形与集成 VCD | 仅 Windows x64 的可选 ISE 功能 |
 
 内置汇编器面向 P3–P7 课程硬件，支持课程指令集、常用伪指令、`.text`、`.ktext`、`.data`、宏、`.eqv` 和有界 `.include`。它不是完整的 MARS 替代品：不提供 P2 syscall 控制台、标准输入或交互终端，也不承诺支持所有 MARS 扩展。CPU 测试中，数据存储器按课程约定从全零开始，因此含非零 `.data` 初值的用例会被拒绝；请在程序运行时用 store 初始化数据。
 
@@ -135,14 +133,16 @@ P3–P7 的自动测试链路如下：
 | `.co/cases/<caseId>/` | 测试程序、机器码、报告、trace 和复现元数据；失败与错误用例会保留 |
 | `.co/out/` | 手动运行或批量运行的输出与摘要 |
 | `.co/wave/` | “仿真并查看波形”生成的 `<testbench>.vcd` 与配对的 `<testbench>.sim.out` |
-| `.co/isim/`、`.co/logisim/`、`.co/hazard/` | 仿真、电路与冲突分析的工作文件 |
+| `.co/iverilog/`、`.co/logisim/`、`.co/hazard/` | 仿真、电路与冲突分析的工作文件 |
+
+Testbench 只有三种来源：自动测试在 `.co/iverilog/` 使用私有内部 TB；插件面向用户生成的 TB 统一放在 `.co/tb/`，需要你编写输入和激励；你自己创建的 `_tb.v` 或 `_testbench.v` 文件也可直接运行，插件不会管理或改写它们。手动仿真缺少 TB 时会创建并打开激励模板，填写后再次运行。
 
 除 `.co/tb/` 外，这些文件都是本地工作产物，不是学生源代码；建议在自己的课程项目的 `.gitignore` 中写入 `.co/*` 和 `!.co/tb/`，忽略生成物但保留 testbench。
 
 ## 兼容性与边界
 
-- Icarus 是常规 Verilog 后端。`co.toolchain.isePath` 不会切换保存时检查、手动仿真或自动测试到 ISE。
-- Linux 内置 Icarus 保留文本 trace、`$readmemh` 和基础 VCD，不提供 FST / LXT / LXT2 压缩波形或 readline 行编辑。ISE / ISim GUI 功能仍仅支持 Windows。
+- Verilog 语法检查、手动仿真、自动测试和波形统一使用随包 Icarus。
+- Linux 内置 Icarus 保留文本 trace、`$readmemh` 和基础 VCD，不提供 FST / LXT / LXT2 压缩波形或 readline 行编辑。
 - 插件不覆盖 Xilinx vendor IP、综合、实现、时序仿真或 bitstream 工作流；这些请在相应 Xilinx 工具中完成。
 - P3 trace 对拍要求课程标准的单个 32 位 ROM 和 trace 接口；无法可靠识别时，插件会给出缺失或冲突端口的诊断。
 - 随机和定向测试能有效发现很多问题，但“通过”不等于所有场景都正确；课程最终结果仍以课程测评环境为准。

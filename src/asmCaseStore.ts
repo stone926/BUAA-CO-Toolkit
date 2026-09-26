@@ -1065,7 +1065,7 @@ export function isAsmFile(uri: vscode.Uri): boolean {
   return ['.asm', '.s', '.mips'].includes(path.extname(uri.fsPath).toLowerCase());
 }
 
-const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/isim,.co/logisim,.co/tmp,.co/trash}/**';
+const asmCaseInputExcludeGlob = '**/{node_modules,out,.git,.co/cases,.co/out,.co/iverilog,.co/isim,.co/logisim,.co/tmp,.co/trash}/**';
 
 async function nextAsmCasePaths(root: string, createdAt: Date, asmHash: string): Promise<ReturnType<typeof asmCasePaths>> {
   for (let attempt = 0; attempt < 100; attempt++) {

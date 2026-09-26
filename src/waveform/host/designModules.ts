@@ -4,7 +4,7 @@ import { readFile, readdir, stat } from 'fs/promises';
 import * as path from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
-import { CO_ISIM_DIR, CO_TB_DIR } from '../../constants';
+import { CO_TB_DIR } from '../../constants';
 import type { VerilogModule } from '../../language/verilog/model';
 import { parseModules } from '../../language/verilog/moduleParser';
 import type { VerilogModuleProvider } from '../../language/verilog/moduleProvider';
@@ -32,10 +32,10 @@ export async function createDesignModuleLookup(
   return (name) => extra.get(name) ?? registry?.getModule(name);
 }
 
-/** `.co/tb` testbenches and generated runtime testbenches of a workspace. */
+/** User-owned `.co/tb` sources; private automatic testbenches are not navigation targets. */
 export async function workspaceTestbenchSources(workspaceRoot: string): Promise<string[]> {
   const files: string[] = [];
-  for (const directory of [CO_TB_DIR, CO_ISIM_DIR]) {
+  for (const directory of [CO_TB_DIR]) {
     const absolute = path.join(workspaceRoot, ...directory.split('/'));
     let entries: string[];
     try {
@@ -44,7 +44,7 @@ export async function workspaceTestbenchSources(workspaceRoot: string): Promise<
       continue;
     }
     for (const entry of entries.sort()) {
-      if (/\.(v|sv)$/i.test(entry) && (directory === CO_TB_DIR || entry.startsWith('co_generated_'))) {
+      if (/\.(v|sv)$/i.test(entry)) {
         files.push(path.join(absolute, entry));
       }
     }

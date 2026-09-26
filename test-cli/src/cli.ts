@@ -51,7 +51,6 @@ const INTERNAL_POLICY_OPTIONS = new Set([
 interface CliOptions {
   projectRoot: string;
   instructions: string;
-  isePath: string;
   topModule: string;
   reportFile: string;
   quiet: boolean;
@@ -117,7 +116,6 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   const options: CliOptions = {
     projectRoot: process.cwd(),
     instructions: defaultString(defaults, 'test.instructions', ''),
-    isePath: defaultString(defaults, 'toolchain.isePath', ''),
     topModule: defaultString(defaults, 'project.topModule', 'mips'),
     reportFile: '',
     quiet: false,
@@ -174,10 +172,6 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
       case 'instruction':
         options.instructions = readValue();
         break;
-      case 'ise':
-      case 'ise-path':
-        options.isePath = readValue();
-        break;
       case 'top-module':
         options.topModule = readValue();
         break;
@@ -228,7 +222,6 @@ function printHelp(): void {
 选项:
   --project <dir>                 项目/工作区根目录（默认当前目录）
   --instructions <list>           自定义 P7 指令集，逗号或空白分隔；留空使用 Profile 默认
-  --ise <path>                    Xilinx ISE 安装目录
   --top-module <name>             Verilog 顶层模块（默认 mips）
   --report <path>                 JSON 报告输出位置
   --json                          结束后向 stdout 输出最终 JSON 报告
@@ -252,7 +245,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     workspaceRoot: options.projectRoot,
     config: {
       'project.profile': PROFILE,
-      'toolchain.isePath': options.isePath,
       'project.topModule': options.topModule,
       'mips.engine': automaticTestEngineMode,
       'mips.memoryConfiguration': 'auto',

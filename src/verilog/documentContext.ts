@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   config,
-  getIsePath,
   getProfile,
   getRunTimeout,
   getSimTime,
@@ -41,9 +40,6 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
       testbench: getTestbench(uri),
       simTime: getSimTime(uri)
     },
-    toolchain: {
-      isePath: getIsePath(uri)
-    },
     run: {
       timeoutMs: getRunTimeout(uri)
     },
@@ -52,9 +48,6 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
         external: {
           mode: config<CoSettings['verilog']['syntax']['external']['mode']>('verilog.syntax.external.mode', defaultCoSettings.verilog.syntax.external.mode, uri),
           timeoutMs: config<number>('verilog.syntax.external.timeoutMs', defaultCoSettings.verilog.syntax.external.timeoutMs, uri)
-        },
-        ise: {
-          suppressedWarnings: config<string[]>('verilog.syntax.ise.suppressedWarnings', defaultCoSettings.verilog.syntax.ise.suppressedWarnings, uri)
         }
       },
       implicitNet: {

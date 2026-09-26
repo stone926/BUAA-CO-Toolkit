@@ -49,20 +49,19 @@ const removedPolicyOptions = [
   'machine-code'
 ];
 
-test('help exposes only project, ISE, DUT wiring, instructions, and output controls', () => {
+test('help exposes only project, DUT wiring, instructions, and output controls', () => {
   const result = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
   assert.equal(result.status, 0);
   for (const option of [
     '--project',
     '--instructions',
-    '--ise',
     '--top-module',
     '--report',
     '--json'
   ]) {
     assert.match(result.stdout, new RegExp(option.replace('-', '\\-')));
   }
-  for (const option of [...removedPolicyOptions, 'java', 'mars', 'mars-p7']) {
+  for (const option of [...removedPolicyOptions, 'ise', 'ise-path', 'java', 'mars', 'mars-p7']) {
     assert.equal(result.stdout.includes(`--${option}`), false, `help leaked --${option}`);
   }
   assert.match(result.stdout, /启动持续测试/);
@@ -80,6 +79,14 @@ test('former automatic-policy options are explicitly rejected', () => {
     const result = spawnSync(process.execPath, [cli, `--${option}`], { encoding: 'utf8' });
     assert.equal(result.status, 2, `--${option}: ${result.stderr || result.stdout}`);
     assert.match(result.stderr, /最强持续测试策略接管/);
+  }
+});
+
+test('removed ISE path options are explicitly rejected', () => {
+  for (const option of ['ise', 'ise-path']) {
+    const result = spawnSync(process.execPath, [cli, `--${option}`, 'C:/Xilinx/ISE'], { encoding: 'utf8' });
+    assert.equal(result.status, 2, `--${option}: ${result.stderr || result.stdout}`);
+    assert.match(result.stderr, new RegExp(`未知命令行参数: --${option}`));
   }
 });
 
@@ -118,14 +125,9 @@ test('default CLI generates the anchor and every automatic probe shard and write
   t.after(() => fs.rmSync(project, { recursive: true, force: true }));
   fs.writeFileSync(path.join(project, 'mips.v'), 'module mips; endmodule\n');
 
-  const fakeFuse = path.join(project, 'ise', 'bin', 'nt64', 'fuse.exe');
-  fs.mkdirSync(path.dirname(fakeFuse), { recursive: true });
-  fs.writeFileSync(fakeFuse, 'not an executable');
-
   const result = spawnSync(process.execPath, [
     cli,
     '--project', project,
-    '--ise', path.join(project, 'ise'),
     '--instructions', 'add sub'
   ], { encoding: 'utf8', timeout: 30000 });
 

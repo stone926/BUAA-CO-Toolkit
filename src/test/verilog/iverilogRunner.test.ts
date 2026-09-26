@@ -7,8 +7,7 @@ import {
   buildIverilogCompileArgs,
   buildIverilogWatchdog,
   runIverilog,
-  verilogDurationToPicoseconds,
-  watchdogLimitPsFromTcl
+  verilogDurationToPicoseconds
 } from '../../verilog/iverilogRunner';
 import {
   ensureConcreteProfile,
@@ -24,9 +23,10 @@ import {
 import { revealOutputChannel, runTool } from '../../process';
 import {
   copyAsmCaseArtifact,
+  resolveAsmCaseInput,
   writeAsmCaseArtifact
 } from '../../asmCaseStore';
-import { resolveIseProjectFiles } from '../../verilog/iseProject';
+import { resolveVerilogProjectFiles } from '../../verilog/verilogProject';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
@@ -90,12 +90,12 @@ vi.mock('../../asmCaseStore', () => ({
     URI.file(`E:/work/.co/cases/case-1/verilog/${fileName}`))
 }));
 
-vi.mock('../../verilogIsimOutput', () => ({
-  isimOutputFileName: vi.fn((testbenchName: string, override?: string) => override ?? `${testbenchName}.sim.out`),
+vi.mock('../../verilogSimulationOutput', () => ({
+  simulationOutputFileName: vi.fn((testbenchName: string, override?: string) => override ?? `${testbenchName}.sim.out`),
   simulationOutputDirectory: vi.fn(async () => URI.file('E:/work/.co/out'))
 }));
 
-vi.mock('../../verilog/iseProject', () => ({ resolveIseProjectFiles: vi.fn() }));
+vi.mock('../../verilog/verilogProject', () => ({ resolveVerilogProjectFiles: vi.fn() }));
 
 vi.mock('../../verilog/iverilogRuntime', () => ({
   buildIverilogIncludeArgs: vi.fn((root: string) => ['-grelative-include', '-I', root]),
@@ -157,7 +157,7 @@ function toolResult(overrides: Partial<RunResult> = {}): RunResult {
     ok: true,
     exitCode: 0,
     commandLine: '',
-    cwd: 'E:/work/.co/isim',
+    cwd: 'E:/work/.co/iverilog',
     stdout: 'trace stdout',
     stderr: '',
     timedOut: false,
@@ -224,12 +224,11 @@ describe('Icarus compile arguments and watchdog', () => {
     }
   );
 
-  it('converts automatic TCL budgets into the 1ps watchdog time base', () => {
+  it('converts simulation durations into the 1ps watchdog time base', () => {
     expect(verilogDurationToPicoseconds('4195us')).toBe(4_195_000_000);
     expect(verilogDurationToPicoseconds('1.5 ns')).toBe(1_500);
     expect(verilogDurationToPicoseconds('0.5fs')).toBe(1);
     expect(verilogDurationToPicoseconds('not-a-time')).toBeUndefined();
-    expect(watchdogLimitPsFromTcl('run 200us;\nrun 4195us;\nexit\n')).toBe(4_195_000_000);
   });
 
   it('emits a separate, bounded Verilog root with a final delta before finish', () => {
@@ -271,7 +270,7 @@ describe('Icarus runner orchestration', () => {
       sourceUri: URI.file('E:/work/test/mips_tb.v')
     });
     vi.mocked(findUserTestbenchSourceUris).mockResolvedValue([URI.file('E:/work/test/mips_tb.v')]);
-    vi.mocked(resolveIseProjectFiles).mockResolvedValue([
+    vi.mocked(resolveVerilogProjectFiles).mockResolvedValue([
       URI.file('E:/work/src/a.v'),
       URI.file('E:/work/src/z.v'),
       URI.file('E:/work/test/mips_tb.v')
@@ -283,12 +282,46 @@ describe('Icarus runner orchestration', () => {
     vi.mocked(resolveMachineCodeSource).mockResolvedValue(undefined);
   });
 
+  it('runs a manual P4 testbench without an ASM picker or private testbench', async () => {
+    vi.mocked(getProfile).mockReturnValue('P4');
+    vi.mocked(ensureConcreteProfile).mockResolvedValue('P4');
+
+    const result = await runIverilog(services(), { resource, showMessages: false });
+
+    expect(result?.simResult?.ok).toBe(true);
+    expect(resolveAsmCaseInput).not.toHaveBeenCalled();
+    expect(ensureP7InterruptTestbench).not.toHaveBeenCalled();
+    expect(recordTestbenchForAsmCase).not.toHaveBeenCalled();
+    const selected = expect.objectContaining({ path: '/E:/work/test/mips_tb.v' });
+    expect(resolveVerilogProjectFiles).toHaveBeenCalledWith(expect.anything(), [selected], {
+      protectedFiles: [selected],
+      excludeCustomTestbenches: true
+    });
+  });
+
+  it('keeps user TBs out of automatic extra sources while retaining design helpers', async () => {
+    const generated = URI.file('E:/work/.co/iverilog/co_generated_auto_tb.v');
+    const helper = URI.file('E:/work/helpers.v');
+    vi.mocked(ensureRunnableTestbench).mockResolvedValue({
+      kind: 'generated', moduleName: 'co_generated_auto_tb', generatedUri: generated
+    });
+
+    await runIverilog(services(), {
+      resource, nonInteractive: true,
+      extraVerilogFiles: [URI.file('E:/work/broken_tb.v'), URI.file('E:/work/.co/tb/editable.v'), helper]
+    });
+
+    expect(resolveVerilogProjectFiles).toHaveBeenCalledWith(
+      expect.anything(), [helper, generated], expect.objectContaining({ excludeCustomTestbenches: true })
+    );
+  });
+
   it('runs absolute iverilog then vvp -N in one cwd and writes stdout unchanged', async () => {
     const controller = new AbortController();
     const result = await runIverilog(services(), {
       resource,
       showMessages: false,
-      tclText: 'run 4195us;\nexit\n',
+      simTime: '4195us',
       signal: controller.signal
     });
 
@@ -317,7 +350,7 @@ describe('Icarus runner orchestration', () => {
     ]);
     expect(normalized(compileArgs.at(-1) ?? '')).toMatch(/co_iverilog_watchdog\.v$/);
     expect(compileOptions).toEqual(expect.objectContaining({
-      cwd: expect.stringMatching(/[\\/]\.co[\\/]isim$/i),
+      cwd: expect.stringMatching(/[\\/]\.co[\\/]iverilog$/i),
       env: { Path: 'bundled-bin' },
       signal: controller.signal,
       maxStdoutBytes: 4 * 1024 * 1024,
@@ -602,7 +635,7 @@ describe('Icarus runner orchestration', () => {
 
   it('uses the private automatic testbench/source exclusions and prepares code.txt in the shared cwd', async () => {
     vi.mocked(getProfile).mockReturnValue('P7');
-    const generatedTb = URI.file('E:/work/.co/isim/co_generated_p7_auto_tb.v');
+    const generatedTb = URI.file('E:/work/.co/iverilog/co_generated_p7_auto_tb.v');
     vi.mocked(ensureP7InterruptTestbench).mockResolvedValue({
       kind: 'p7-auto',
       moduleName: 'co_generated_p7_auto_tb',
@@ -634,7 +667,7 @@ describe('Icarus runner orchestration', () => {
       moduleRegistry,
       nonInteractive: true,
       interruptSchedule: [0x3000],
-      tclText: 'run 5000us;\nexit\n'
+      simTime: '5000us'
     });
 
     expect(ensureP7InterruptTestbench).toHaveBeenCalledWith(
@@ -646,7 +679,7 @@ describe('Icarus runner orchestration', () => {
       { nonInteractive: true },
       moduleRegistry
     );
-    expect(resolveIseProjectFiles).toHaveBeenCalledWith(
+    expect(resolveVerilogProjectFiles).toHaveBeenCalledWith(
       expect.anything(),
       [generatedTb],
       expect.objectContaining({
@@ -657,13 +690,13 @@ describe('Icarus runner orchestration', () => {
     );
     expect(copyMachineCodeToSimDirectory).toHaveBeenCalledWith(
       currentCase.machineCode,
-      expect.objectContaining({ path: expect.stringMatching(/[\\/]\.co[\\/]isim$/i) }),
+      expect.objectContaining({ path: expect.stringMatching(/[\\/]\.co[\\/]iverilog$/i) }),
       resource
     );
     expect(copyAsmCaseArtifact).toHaveBeenCalledWith(
       currentCase,
       'verilog',
-      expect.objectContaining({ path: expect.stringMatching(/[\\/]\.co[\\/]isim[\\/]code\.txt$/i) }),
+      expect.objectContaining({ path: expect.stringMatching(/[\\/]\.co[\\/]iverilog[\\/]code\.txt$/i) }),
       'machine-code-in-sim.txt',
       'machineCodeInSim'
     );

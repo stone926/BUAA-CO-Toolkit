@@ -1,4 +1,4 @@
-// @index verilog-simulation-inputs — ISim 运行输入文件定位与复制
+// @index verilog-simulation-inputs — Icarus 运行输入文件定位与复制
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getMachineCode } from '../config';

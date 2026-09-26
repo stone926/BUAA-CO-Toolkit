@@ -2,7 +2,7 @@
 import { createHash } from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CO_ISIM_DIR } from '../constants';
+import { CO_IVERILOG_DIR } from '../constants';
 import {
   ensureConcreteProfile,
   getMachineCode,
@@ -29,12 +29,11 @@ import {
   writeAsmCaseArtifact
 } from '../asmCaseStore';
 import {
-  isimOutputFileName,
+  simulationOutputFileName,
   simulationOutputDirectory
-} from '../verilogIsimOutput';
-import type { IseProjectOptions } from './iseProject';
-import { resolveIseProjectFiles } from './iseProject';
-import type { IsimRunOptions } from './isimRunner';
+} from '../verilogSimulationOutput';
+import { isCustomTestbenchPath, isUserTestbenchPath } from '../verilogSimulationFiles';
+import { resolveVerilogProjectFiles } from './verilogProject';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
@@ -53,10 +52,6 @@ import {
   copyMachineCodeToSimDirectory,
   resolveMachineCodeSource
 } from './simulationInputs';
-import {
-  ensureSimulationAsmCase,
-  requiresSimulationAsmCase
-} from './simulationAsmCase';
 import {
   ensureP7InterruptTestbench,
   ensureRunnableTestbench,
@@ -80,22 +75,27 @@ const maximumIverilogSimulationOutputBytes = 16 * 1024 * 1024;
 const iverilogWatchdogFileName = 'co_iverilog_watchdog.v';
 const iverilogDependencyFileName = 'simulation.dependencies';
 
-export interface IverilogRunOptions extends IseProjectOptions, Pick<IsimRunOptions,
-  | 'machineCodeSource'
-  | 'asmCase'
-  | 'moduleRegistry'
-  | 'simOutputFileName'
-  | 'simOutputUri'
-  | 'interruptSchedule'
-  | 'p7Probe'
-  | 'signal'
-> {
+export interface IverilogRunOptions {
+  resource?: vscode.Uri;
+  showMessages?: boolean;
+  revealOutput?: boolean;
+  testbenchName?: string;
+  extraVerilogFiles?: vscode.Uri[];
+  nonInteractive?: boolean;
+  machineCodeSource?: vscode.Uri;
+  asmCase?: AsmCase;
+  moduleRegistry?: MutableVerilogModuleProvider;
+  simOutputFileName?: string;
+  simOutputUri?: vscode.Uri;
+  interruptSchedule?: number[];
+  p7Probe?: P7ProbeMetadata;
+  signal?: AbortSignal;
   /** Extension installation root. Production callers normally provide it through AppServices. */
   extensionRoot?: string;
-  /** Explicit watchdog budget in picoseconds; mainly useful to non-TCL callers and tests. */
+  /** Explicit watchdog budget in picoseconds. */
   watchdogLimitPs?: number;
-  /** Existing automatic pipeline budget, e.g. `run 4195us;\nexit`. */
-  tclText?: string;
+  /** Automatic pipeline duration, e.g. `4195us`. */
+  simTime?: string;
   /**
    * Extra generated top-level modules (e.g. the waveform dumper) elaborated beside
    * the testbench. Called once the testbench is known; the files are written to the
@@ -217,7 +217,7 @@ export function buildIverilogWatchdog(moduleName: string): string {
   ].join('\n');
 }
 
-/** Parse a Verilog/ISim duration into the watchdog's 1ps time base. */
+/** Parse a Verilog duration into the watchdog's 1ps time base. */
 export function verilogDurationToPicoseconds(duration: string): number | undefined {
   const match = /^(\d+(?:\.\d+)?)\s*(fs|ps|ns|us|ms|s)?$/i.exec(duration.trim());
   if (!match) {
@@ -235,16 +235,6 @@ export function verilogDurationToPicoseconds(duration: string): number | undefin
   };
   const picoseconds = Math.ceil(value * multipliers[unit]);
   return Number.isSafeInteger(picoseconds) && picoseconds >= 0 ? picoseconds : undefined;
-}
-
-/** Read the final `run <duration>` command from an existing automatic ISim TCL. */
-export function watchdogLimitPsFromTcl(tclText: string): number | undefined {
-  const pattern = /\brun\s+(\d+(?:\.\d+)?\s*(?:fs|ps|ns|us|ms|s)?)\s*;?/gi;
-  let result: number | undefined;
-  for (const match of tclText.matchAll(pattern)) {
-    result = verilogDurationToPicoseconds(match[1]);
-  }
-  return result;
 }
 
 export async function runIverilog(
@@ -294,22 +284,13 @@ export async function runIverilog(
     return undefined;
   }
 
-  const asmCase = options.asmCase ?? await ensureSimulationAsmCase(services, activeUri, {
-    showMessages,
-    signal: options.signal,
-    nonInteractive
-  });
-  if (requiresSimulationAsmCase(activeUri) && !asmCase) {
-    return undefined;
-  }
-
   return await runSerializedWorkspaceOperation(folder.uri.fsPath, options.signal, async () =>
     await runIverilogInWorkspace(
       services,
       options,
       activeUri,
       folder,
-      asmCase,
+      options.asmCase,
       preflight,
       showMessages,
       nonInteractive
@@ -334,25 +315,31 @@ async function runIverilogInWorkspace(
 
   const extraVerilogFiles = dedupeUris([
     ...(options.extraVerilogFiles ?? []),
-    ...testbenchCompileSources(folder, testbench)
-  ]);
+    ...testbenchCompileSources(folder, testbench),
+    ...(!nonInteractive && testbench.sourceUri ? [testbench.sourceUri] : [])
+  ]).filter((uri) => !nonInteractive || (
+    !isCustomTestbenchPath(uri.fsPath)
+    && !isUserTestbenchPath(folder.uri.fsPath, uri.fsPath)
+  ));
   const configuredTestbench = getTestbench(activeUri);
   const excludedTestbenchSources = nonInteractive
     ? await findUserTestbenchSourceUris(activeUri ?? folder.uri, configuredTestbench, options.moduleRegistry)
     : [];
-  const sourceFiles = await resolveIseProjectFiles(folder, extraVerilogFiles, nonInteractive
-    ? {
-        excludedFiles: excludedTestbenchSources,
-        excludedBasenames: [`${configuredTestbench}.v`],
-        protectedFiles: testbench.designSourceUri ? [testbench.designSourceUri] : []
-      }
-    : {});
+  const sourceFiles = await resolveVerilogProjectFiles(folder, extraVerilogFiles, {
+    ...(nonInteractive ? {
+      excludedFiles: excludedTestbenchSources,
+      excludedBasenames: [`${configuredTestbench}.v`]
+    } : {}),
+    protectedFiles: [testbench.designSourceUri, testbench.sourceUri]
+      .filter((uri): uri is vscode.Uri => Boolean(uri)),
+    excludeCustomTestbenches: true
+  });
   if (!sourceFiles.length) {
     reportRunnerError(services, activeUri, showMessages, '工作区中未找到 Verilog 文件');
     return undefined;
   }
 
-  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_ISIM_DIR));
+  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_IVERILOG_DIR));
   await ensureDirectory(outDir);
   // Workspace operations are serialized, so one deterministic watchdog is sufficient.
   // The workspace digest keeps the name stable for caching while making collision with
@@ -478,7 +465,7 @@ async function runIverilogInWorkspace(
   if (simResult.ok) {
     const simFileName = options.simOutputUri
       ? path.basename(options.simOutputUri.fsPath)
-      : isimOutputFileName(testbench.moduleName, options.simOutputFileName);
+      : simulationOutputFileName(testbench.moduleName, options.simOutputFileName);
     if (options.simOutputUri) {
       simOut = options.simOutputUri;
     } else if (options.simOutputDirectory) {
@@ -569,15 +556,7 @@ async function resolveSimulationTestbench(
       resolutionOptions
     );
   }
-  return (await ensureP7InterruptTestbench(
-    services,
-    activeUri,
-    options.interruptSchedule,
-    options.p7Probe as P7ProbeMetadata | undefined,
-    showMessages,
-    resolutionOptions,
-    options.moduleRegistry
-  )) ?? await ensureRunnableTestbench(
+  return await ensureRunnableTestbench(
     services,
     activeUri,
     showMessages,
@@ -636,7 +615,7 @@ function resolveWatchdogLimitPs(
     assertWatchdogLimit(options.watchdogLimitPs);
     return options.watchdogLimitPs;
   }
-  return (options.tclText ? watchdogLimitPsFromTcl(options.tclText) : undefined)
+  return (options.simTime ? verilogDurationToPicoseconds(options.simTime) : undefined)
     ?? verilogDurationToPicoseconds(getSimTime(resource))
     ?? defaultWatchdogLimitPs;
 }

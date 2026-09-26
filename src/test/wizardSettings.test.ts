@@ -14,12 +14,10 @@ describe('buildWizardSettingUpdates', () => {
   it('keeps machine paths global and trims user input', () => {
     expect(buildWizardSettingUpdates('P7', {
       mars: '  C:\\Tools\\Mars.jar  ',
-      logisim: '',
-      isePath: ''
+      logisim: ''
     }, true)).toEqual([
       { key: 'project.profile', value: 'P7', target: 'workspaceFolder' },
-      { key: 'toolchain.mars', value: 'C:\\Tools\\Mars.jar', target: 'global' },
-      { key: 'toolchain.isePath', value: '', target: 'global' }
+      { key: 'toolchain.mars', value: 'C:\\Tools\\Mars.jar', target: 'global' }
     ]);
   });
 
@@ -48,19 +46,6 @@ describe('buildWizardSettingUpdates', () => {
     ]);
   });
 
-  it('migrates an explicit blank ISE choice so an old project value cannot re-enable ISE', () => {
-    expect(buildWizardSettingUpdates('P7', {
-      isePath: ''
-    }, true, {
-      isePath: { workspaceFolder: true, workspace: true }
-    })).toEqual([
-      { key: 'project.profile', value: 'P7', target: 'workspaceFolder' },
-      { key: 'toolchain.isePath', value: '', target: 'global' },
-      { key: 'toolchain.isePath', value: undefined, target: 'workspaceFolder' },
-      { key: 'toolchain.isePath', value: undefined, target: 'workspace' }
-    ]);
-  });
-
   it('never clears a folder setting when no resource folder is in scope', () => {
     expect(buildWizardSettingUpdates('P2', {
       mars: 'C:\\Tools\\Mars.jar'
@@ -74,15 +59,15 @@ describe('buildWizardSettingUpdates', () => {
   });
 
   it('inspects only paths written by this run and detects both shadowing scopes', () => {
-    const updates = buildWizardSettingUpdates('P7', { isePath: '' }, true);
+    const updates = buildWizardSettingUpdates('P7', { mars: 'C:\\Tools\\Mars.jar' }, true);
     const inspected: string[] = [];
 
     expect(inspectWizardToolchainLegacyScopes(updates, true, (key) => {
       inspected.push(key);
       return { workspaceValue: 'D:/old-workspace', workspaceFolderValue: 'D:/old-folder' };
     })).toEqual({
-      isePath: { workspace: true, workspaceFolder: true }
+      mars: { workspace: true, workspaceFolder: true }
     });
-    expect(inspected).toEqual(['toolchain.isePath']);
+    expect(inspected).toEqual(['toolchain.mars']);
   });
 });

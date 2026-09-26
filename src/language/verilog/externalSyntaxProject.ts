@@ -5,7 +5,7 @@ import { WorkspaceFolder } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { CO_DIR } from '../../constants';
 import { yieldEventLoop } from '../../nodeFs';
-import { orderIseProjectFiles, parseXiseVerilogFileOrder } from '../../verilog/iseProjectOrder';
+import { orderVerilogProjectFiles } from '../../verilog/verilogProjectOrder';
 import { isUserTestbenchPath } from '../../verilogSimulationFiles';
 
 export interface ExternalSyntaxProject {
@@ -23,19 +23,8 @@ export async function resolveExternalSyntaxProject(
     return undefined;
   }
   const discovered = await scanProjectFiles(root, limit);
-  let xiseFileOrder: string[] = [];
-  if (discovered.xiseFiles.length === 1) {
-    try {
-      const xiseText = await fs.promises.readFile(discovered.xiseFiles[0], 'utf8');
-      xiseFileOrder = parseXiseVerilogFileOrder(xiseText, discovered.xiseFiles[0]);
-    } catch {
-      // An unreadable XISE file uses the same stable fallback as a project
-      // without a unique XISE file.
-    }
-  }
-  const sources = orderIseProjectFiles(
-    discovered.verilogFiles.map((fsPath) => ({ fsPath })),
-    xiseFileOrder,
+  const sources = orderVerilogProjectFiles(
+    discovered.map((fsPath) => ({ fsPath })),
     userTestbenchTrigger(root, triggerUri)
   ).map((file) => file.fsPath);
   return { root, sources };
@@ -65,14 +54,8 @@ export function workspaceRootFor(
   return matching ?? (triggerPath ? path.dirname(triggerPath) : undefined);
 }
 
-interface ScannedProjectFiles {
-  verilogFiles: string[];
-  xiseFiles: string[];
-}
-
-async function scanProjectFiles(root: string, limit: number): Promise<ScannedProjectFiles> {
+async function scanProjectFiles(root: string, limit: number): Promise<string[]> {
   const verilogFiles: string[] = [];
-  const xiseFiles: string[] = [];
   const stack = [root];
   while (stack.length && verilogFiles.length < limit) {
     const current = stack.pop();
@@ -102,13 +85,11 @@ async function scanProjectFiles(root: string, limit: number): Promise<ScannedPro
         if (verilogFiles.length >= limit) {
           break;
         }
-      } else if (lowerName.endsWith('.xise') && xiseFiles.length < 2) {
-        xiseFiles.push(fullPath);
       }
     }
     await yieldEventLoop();
   }
-  return { verilogFiles, xiseFiles };
+  return verilogFiles;
 }
 
 function shouldSkipDirectory(name: string): boolean {

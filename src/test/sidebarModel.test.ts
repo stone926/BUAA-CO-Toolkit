@@ -16,7 +16,6 @@ function baseContext(overrides: Partial<SidebarModelContext> = {}): SidebarModel
     machineCode: 'code.txt',
     simTime: '200us',
     verilogBackend: 'Icarus Verilog（内置）',
-    iseConfigured: false,
     tools: [],
     ...overrides
   };
@@ -63,7 +62,7 @@ describe('sidebar model', () => {
     expect(model.map((node) => node.label)).toEqual(['项目', '当前上下文', '操作']);
     const context = section(model, '当前上下文');
     expect(childLabels(context)).toEqual(['当前 Verilog', '仿真后端']);
-    expect(context.children?.find((item) => item.label === '仿真后端')?.tooltip).toContain('不影响持续测试');
+    expect(context.children?.find((item) => item.label === '仿真后端')?.tooltip).toContain('持续测试');
     const actions = section(model, '操作');
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
@@ -71,10 +70,11 @@ describe('sidebar model', () => {
     expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
 
-    const runIsim = findCommand(actions.children ?? [], 'co.verilog.runIsim');
-    expect(runIsim?.description).toContain('Top/TB');
-    expect(runIsim?.description).toContain('ASM 运行时选择');
-    expect(runIsim?.tooltip).toContain('.co/cases/<caseId>');
+    const runSimulation = findCommand(actions.children ?? [], 'co.verilog.runSimulation');
+    expect(runSimulation?.description).toContain('Top/TB');
+    expect(runSimulation?.description).toContain('用户 testbench 提供激励');
+    expect(runSimulation?.tooltip).toContain('.co/iverilog');
+    expect(runSimulation?.tooltip).toContain('.co/tb 中由插件生成、需由用户编写');
   });
 
   it('does not show active-editor commands without a current file but keeps continuous testing visible', () => {
@@ -87,7 +87,7 @@ describe('sidebar model', () => {
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
-    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
+    expect(findCommand(model, 'co.verilog.runSimulation')).toBeUndefined();
     expect(findCommand(model, 'co.verilog.generateTestbench')).toBeUndefined();
     expect(findCommand(model, 'co.sidebar.refresh')).toBeUndefined();
   });
@@ -154,8 +154,8 @@ describe('sidebar model', () => {
     expect(childLabels(context)).toEqual(['当前 Verilog', '仿真模式']);
     expect(context.children?.find((item) => item.label === '仿真模式')?.description).toBe('独立模块');
     expect(findCommand(actions.children ?? [], 'co.verilog.generateTestbench')).toBeUndefined();
-    expect(hasCommand(actions.children, 'co.verilog.runIsim')).toBe(true);
-    expect(findCommand(actions.children ?? [], 'co.verilog.runIsim')?.description).toContain('当前模块/testbench');
+    expect(hasCommand(actions.children, 'co.verilog.runSimulation')).toBe(true);
+    expect(findCommand(actions.children ?? [], 'co.verilog.runSimulation')?.description).toContain('当前模块/testbench');
     expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
   });
@@ -173,8 +173,7 @@ describe('sidebar model', () => {
 
     const context = section(model, '当前上下文');
     expect(childLabels(context)).toEqual(['当前文件']);
-    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
-    expect(findCommand(model, 'co.verilog.openIsimWaveform')).toBeUndefined();
+    expect(findCommand(model, 'co.verilog.runSimulation')).toBeUndefined();
     expect(findCommand(model, 'co.tools.openAdvanced')).toBeDefined();
   });
 
@@ -192,7 +191,7 @@ describe('sidebar model', () => {
     const context = section(model, '当前上下文');
     expect(childLabels(context)).toEqual(['当前文件']);
     expect(findCommand(model, 'co.verilog.inspectSignal')).toBeUndefined();
-    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
+    expect(findCommand(model, 'co.verilog.runSimulation')).toBeUndefined();
   });
 
   it('does not expose course actions while auto remains unresolved', () => {
@@ -207,7 +206,7 @@ describe('sidebar model', () => {
     }));
 
     expect(findCommand(model, 'co.selectProjectProfile')).toBeDefined();
-    expect(findCommand(model, 'co.verilog.runIsim')).toBeUndefined();
+    expect(findCommand(model, 'co.verilog.runSimulation')).toBeUndefined();
     expect(findCommand(model, 'co.test.startContinuousGeneratedTraceTests')).toBeUndefined();
     const project = section(model, '项目');
     expect(project.children?.find((item) => item.id === 'project.profile')?.description).toBe('未推断');
@@ -236,7 +235,7 @@ describe('sidebar model', () => {
     const model = buildSidebarModel(baseContext({
       tools: [
         { id: 'mars', name: 'Mars', value: 'D:\\Program Files\\Mars\\Mars.jar', configured: true },
-        { id: 'ise', name: 'ISE', value: 'D:\\ISE\\14.7', configured: true }
+        { id: 'logisim', name: 'Logisim', value: 'D:\\Program Files\\Logisim\\logisim.jar', configured: true }
       ]
     }));
 

@@ -34,7 +34,7 @@ describe('simulation machine-code inputs', () => {
 
   it('preserves the configured filename and also writes the generated-testbench code.txt alias', async () => {
     const source = URI.file('E:/course case/source.hex');
-    const outDir = URI.file('E:/课程 workspace/.co/isim');
+    const outDir = URI.file('E:/课程 workspace/.co/iverilog');
 
     await copyMachineCodeToSimDirectory(source, outDir, URI.file('E:/课程 workspace/mips.v'));
 
@@ -44,8 +44,8 @@ describe('simulation machine-code inputs', () => {
   });
 
   it('still refreshes code.txt when the source already is the configured target', async () => {
-    const outDir = URI.file('E:/work/.co/isim');
-    const source = URI.file('E:/work/.co/isim/program.hex');
+    const outDir = URI.file('E:/work/.co/iverilog');
+    const source = URI.file('E:/work/.co/iverilog/program.hex');
 
     await copyMachineCodeToSimDirectory(source, outDir);
 
@@ -58,7 +58,7 @@ describe('simulation machine-code inputs', () => {
 
     await copyMachineCodeToSimDirectory(
       URI.file('E:/case/code.txt'),
-      URI.file('E:/work/.co/isim')
+      URI.file('E:/work/.co/iverilog')
     );
 
     expect(writtenBasenames()).toEqual(['code.txt']);

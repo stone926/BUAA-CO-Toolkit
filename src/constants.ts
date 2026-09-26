@@ -54,8 +54,8 @@ export const CO_CASES_DIR = '.co/cases';
 /** Oracle、仿真器与 legacy MARS 输出目录。 */
 export const CO_OUT_DIR = '.co/out';
 
-/** Verilog 仿真工作目录（兼容沿用 isim 名称）。 */
-export const CO_ISIM_DIR = '.co/isim';
+/** Verilog 仿真工作目录；自动测试的私有 testbench 也保存在这里。 */
+export const CO_IVERILOG_DIR = '.co/iverilog';
 
 /** 用户 testbench 目录：插件只在缺失时生成一次，之后归用户编辑，从不覆盖。 */
 export const CO_TB_DIR = '.co/tb';
@@ -71,9 +71,6 @@ export const CO_HAZARD_DIR = '.co/hazard';
 
 /** 临时文件目录。 */
 export const CO_TMP_DIR = '.co/tmp';
-
-/** ISE 语法检查临时目录。 */
-export const CO_ISE_CHECK_DIR = '.co/ise-check';
 
 /** Logisim 用例准备目录。 */
 export const CO_LOGISIM_DIR = '.co/logisim';
@@ -100,11 +97,8 @@ export const Commands = {
   Verilog: {
     DisableLintRule: 'co.verilog.disableLintRule',
     GenerateTestbench: 'co.verilog.generateTestbench',
-    GenerateIseProject: 'co.verilog.generateIseProject',
-    CheckSyntaxWithIse: 'co.verilog.checkSyntaxWithIse',
-    RunIsim: 'co.verilog.runIsim',
-    OpenIsimWaveform: 'co.verilog.openIsimWaveform',
-    ExportVcd: 'co.verilog.exportVcd',
+    CheckSyntax: 'co.verilog.checkSyntax',
+    RunSimulation: 'co.verilog.runSimulation',
     InspectSignal: 'co.verilog.inspectSignal',
     ViewWaveform: 'co.verilog.viewWaveform'
   },
@@ -155,6 +149,6 @@ export const Commands = {
   Server: {
     MipsIgnorePseudoWarningsForFile: 'co.server.mips.ignorePseudoWarningsForFile',
     MipsIgnorePseudoWarningsForMnemonic: 'co.server.mips.ignorePseudoWarningsForMnemonic',
-    InternalVerilogCheckSyntaxWithIse: 'co.internal.verilog.checkSyntaxWithIse'
+    InternalVerilogCheckSyntax: 'co.internal.verilog.checkSyntax'
   }
 } as const;

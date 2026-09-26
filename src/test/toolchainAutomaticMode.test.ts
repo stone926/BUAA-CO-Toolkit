@@ -15,7 +15,6 @@ vi.mock('../config', async (importOriginal) => ({
   ...await importOriginal<typeof import('../config')>(),
   ensureConcreteProfile: vi.fn(async () => 'P7'),
   getHazardCalculator: vi.fn(() => ''),
-  getIsePath: vi.fn(() => 'D:/stale-and-invalid-ISE'),
   getJava: vi.fn(() => 'SECRET_JAVA'),
   getLogisimJar: vi.fn(() => 'SECRET_LOGISIM'),
   getMarsJar: vi.fn(() => 'SECRET_MARS'),
@@ -46,7 +45,7 @@ describe('automatic toolchain engine boundary', () => {
     expect(JSON.stringify(checks)).not.toContain('SECRET_MARS');
   });
 
-  it('preflights bundled Icarus even when a stale ISE path is configured', async () => {
+  it('preflights the bundled Icarus runtime for Verilog profiles', async () => {
     const checks = await checkToolchain(
       { append: vi.fn(), appendLine: vi.fn() } as never,
       undefined,

@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import type { AppServices } from '../../types';
-import { getIsePath } from '../../config';
-import { runIsim } from '../../verilog/isimRunner';
 import { runIverilog } from '../../verilog/iverilogRunner';
 import {
   runVerilogSimulation,
@@ -11,174 +9,62 @@ import {
   verilogSimulationTerminalResult
 } from '../../verilog/simulationRunner';
 
-const vscodeState = vi.hoisted(() => ({
-  state: undefined as ReturnType<typeof import('../helpers/vscodeMock').createVscodeMockState> | undefined
-}));
-
-vi.mock('vscode', async () => {
-  const { createVscodeMockState, createVscodeModuleMock } = await import('../helpers/vscodeMock');
-  vscodeState.state = createVscodeMockState();
-  return createVscodeModuleMock(vscodeState.state, vi.fn);
-});
-
-vi.mock('../../config', () => ({ getIsePath: vi.fn() }));
-vi.mock('../../verilog/isimRunner', () => ({ runIsim: vi.fn() }));
 vi.mock('../../verilog/iverilogRunner', () => ({ runIverilog: vi.fn() }));
 
 const resource = URI.file('E:/work/src/mips.v');
-const services = {
-  output: { appendLine: vi.fn() },
-  statusBar: {},
-  extensionRoot: 'E:/extension'
-} as unknown as AppServices;
+const services = { output: { appendLine: vi.fn() }, extensionRoot: 'E:/extension' } as unknown as AppServices;
 
-describe('Verilog simulation dispatcher', () => {
+describe('Verilog simulation runner', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setVerilogSimulationModuleRegistry(undefined);
-    vscodeState.state!.activeTextEditor = undefined;
   });
 
-  it('uses Icarus by default even when an ISE path is configured', async () => {
-    vi.mocked(getIsePath).mockReturnValue('D:/ISE/14.7/ISE_DS/ISE');
+  it('runs Icarus with the given duration and shared module registry', async () => {
     vi.mocked(runIverilog).mockResolvedValue({ backend: 'iverilog' } as never);
-    const options = { resource, tclText: 'run 4195us;\nexit\n' };
+    const registry = { kind: 'shared' } as never;
+    setVerilogSimulationModuleRegistry(registry);
+    const options = { resource, simTime: '4195us' };
 
     await expect(runVerilogSimulation(services, options)).resolves.toMatchObject({ backend: 'iverilog' });
-
-    expect(runIverilog).toHaveBeenCalledWith(services, options);
-    expect(runIsim).not.toHaveBeenCalled();
-    expect(getIsePath).not.toHaveBeenCalled();
+    expect(runIverilog).toHaveBeenCalledWith(services, { ...options, moduleRegistry: registry });
   });
 
-  it('uses ISim only for an explicit backend request and adds the configured path', async () => {
-    vi.mocked(getIsePath).mockReturnValue('D:/invalid-but-explicit-ISE');
-    vi.mocked(runIsim).mockResolvedValue({ simResult: { ok: true } } as never);
-
-    await expect(runVerilogSimulation(services, { resource, backend: 'isim' })).resolves.toMatchObject({
-      backend: 'isim',
-      simResult: { ok: true }
-    });
-
-    expect(runIsim).toHaveBeenCalledOnce();
-    expect(runIsim).toHaveBeenCalledWith(services, expect.objectContaining({
-      resource,
-      isePath: 'D:/invalid-but-explicit-ISE'
-    }));
-    expect(runIverilog).not.toHaveBeenCalled();
+  it('lets an operation use its own module registry', async () => {
+    const shared = { kind: 'shared' } as never;
+    const operation = { kind: 'operation' } as never;
+    setVerilogSimulationModuleRegistry(shared);
+    await runVerilogSimulation(services, { resource, moduleRegistry: operation });
+    expect(runIverilog).toHaveBeenCalledWith(services, { resource, moduleRegistry: operation });
   });
 
-  it('does not fall back when an explicitly requested ISim branch fails', async () => {
-    vi.mocked(getIsePath).mockReturnValue('D:/invalid-ISE');
-    vi.mocked(runIsim).mockResolvedValue(undefined);
-
-    await expect(runVerilogSimulation(services, { resource, backend: 'isim' })).resolves.toBeUndefined();
-
-    expect(runIverilog).not.toHaveBeenCalled();
-  });
-
-  it('uses the shared module registry unless an operation supplies its own', async () => {
-    vi.mocked(getIsePath).mockReturnValue('');
-    vi.mocked(runIverilog).mockResolvedValue({ backend: 'iverilog' } as never);
-    const sharedRegistry = { kind: 'shared' } as never;
-    const operationRegistry = { kind: 'operation' } as never;
-    setVerilogSimulationModuleRegistry(sharedRegistry);
-
-    await runVerilogSimulation(services, { resource });
-    await runVerilogSimulation(services, { resource, moduleRegistry: operationRegistry });
-
-    expect(runIverilog).toHaveBeenNthCalledWith(1, services, { resource, moduleRegistry: sharedRegistry });
-    expect(runIverilog).toHaveBeenNthCalledWith(2, services, { resource, moduleRegistry: operationRegistry });
-  });
-
-  it('uses an Icarus compile failure as the terminal process result', () => {
+  it('uses the simulation result when launched and compile result otherwise', () => {
     const compileResult = { ok: false, stopReason: 'aborted' };
-    expect(verilogSimulationTerminalResult({
-      backend: 'iverilog',
-      compileResult
-    } as never)).toBe(compileResult);
-
     const simResult = { ok: false, stopReason: 'timeout' };
-    expect(verilogSimulationTerminalResult({
-      backend: 'iverilog',
-      compileResult: { ok: true },
-      simResult
-    } as never)).toBe(simResult);
-  });
-
-  it('keeps an ISim fuse failure as the terminal compile result', async () => {
-    const fuseResult = {
-      ok: false,
-      exitCode: 1,
-      commandLine: 'D:/ISE/fuse.exe',
-      cwd: 'E:/work/.co/isim',
-      stdout: '',
-      stderr: 'ERROR:HDLCompiler:806 - "E:/work/CPU.v" Line 28: Syntax error.',
-      timedOut: false,
-      stopped: false
-    };
-    vi.mocked(getIsePath).mockReturnValue('D:/ISE');
-    vi.mocked(runIsim).mockResolvedValue({
-      generated: {},
-      fuseResult
-    } as never);
-
-    const output = await runVerilogSimulation(services, { resource, backend: 'isim' });
-
-    expect(output).toMatchObject({ backend: 'isim', fuseResult });
-    expect(verilogSimulationTerminalResult(output)).toBe(fuseResult);
-    expect(verilogSimulationFailure(output, 'E:/work')).toEqual({
-      phase: 'compile',
-      reason: 'exit',
-      exitCode: 1,
-      diagnostic: {
-        file: 'CPU.v',
-        line: 28,
-        message: 'Syntax error.'
-      }
-    });
+    expect(verilogSimulationTerminalResult({ compileResult } as never)).toBe(compileResult);
+    expect(verilogSimulationTerminalResult({ compileResult, simResult } as never)).toBe(simResult);
   });
 
   it('classifies compile, simulation, missing-output, and setup failures', () => {
     const compile = verilogSimulationFailure({
       backend: 'iverilog',
       compileResult: {
-        ok: false,
-        exitCode: 26,
-        stderr: 'E:/work/CPU.v:449: error: unable to bind',
-        stdout: '',
-        timedOut: false,
-        stopped: false,
-        commandLine: 'secret',
-        cwd: 'E:/work/.co/isim'
+        ok: false, exitCode: 26, stderr: 'E:/work/CPU.v:449: error: unable to bind',
+        stdout: '', timedOut: false, stopped: false, commandLine: 'secret', cwd: 'E:/work/.co/iverilog'
       }
     } as never, 'E:/work');
     const simulation = verilogSimulationFailure({
-      backend: 'iverilog',
-      compileResult: { ok: true },
+      backend: 'iverilog', compileResult: { ok: true },
       simResult: {
-        ok: false,
-        exitCode: null,
-        stderr: '',
-        stdout: '',
-        timedOut: true,
-        stopped: true,
-        stopReason: 'timeout',
-        commandLine: 'secret',
-        cwd: 'E:/work/.co/isim'
+        ok: false, exitCode: null, stderr: '', stdout: '', timedOut: true,
+        stopped: true, stopReason: 'timeout', commandLine: 'secret', cwd: 'E:/work/.co/iverilog'
       }
     } as never, 'E:/work');
 
-    expect(compile).toMatchObject({
-      phase: 'compile',
-      reason: 'exit',
-      diagnostic: { file: 'CPU.v', line: 449 }
-    });
+    expect(compile).toMatchObject({ phase: 'compile', reason: 'exit', diagnostic: { file: 'CPU.v', line: 449 } });
     expect(simulation).toEqual({ phase: 'simulate', reason: 'timeout' });
-    expect(verilogSimulationFailure({
-      backend: 'isim',
-      simResult: { ok: true }
-    } as never)).toEqual({ phase: 'output', reason: 'missing-output' });
+    expect(verilogSimulationFailure({ backend: 'iverilog', compileResult: { ok: true } } as never))
+      .toEqual({ phase: 'output', reason: 'missing-output' });
     expect(verilogSimulationFailure(undefined)).toEqual({ phase: 'prepare', reason: 'unavailable' });
   });
 });

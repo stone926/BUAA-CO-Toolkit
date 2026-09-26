@@ -56,7 +56,6 @@ export interface SidebarModelContext {
   machineCode: string;
   simTime: string;
   verilogBackend: string;
-  iseConfigured: boolean;
   activeFile?: SidebarActiveFileModel;
   tools: SidebarToolModel[];
 }
@@ -159,7 +158,7 @@ function contextSection(context: SidebarModelContext): SidebarNodeModel {
           'context.backend',
           '仿真后端',
           context.verilogBackend,
-          '通用仿真与持续测试固定使用插件内置 Icarus。ISE 路径只启用 ISim 波形等专属功能，不会切换默认后端，也不影响持续测试。Top/TB 等参数只影响手动仿真。',
+          '仿真与持续测试均使用插件内置 Icarus。Top/TB 等参数只影响手动仿真。',
           'circuit-board'
         )
       );
@@ -274,7 +273,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       actionItem(
         'core.runVerilogSimulation',
         '运行 Verilog 仿真',
-        Commands.Verilog.RunIsim,
+        Commands.Verilog.RunSimulation,
         'run',
         verilogSimulationDescription(context),
         verilogSimulationTooltip(context, active)
@@ -296,16 +295,6 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         '将光标放在任一信号上，侧边栏会显示声明、驱动和读取位置。'
       )
     );
-    if (context.iseConfigured) {
-      children.splice(children.length - 1, 0, actionItem(
-        'core.openWave',
-        '查看 ISim 波形',
-        Commands.Verilog.OpenIsimWaveform,
-        'pulse',
-        verilogSimulationDescription(context),
-        `${verilogSimulationTooltip(context, active)}\n\nGUI 启动后执行 wave add -r /。`
-      ));
-    }
   }
 
   children.push(
@@ -476,7 +465,7 @@ function verilogSimulationDescription(context: SidebarModelContext): string {
   if (!usesConfiguredVerilogProject(context.profile)) {
     return '当前模块/testbench，无 ASM';
   }
-  return 'Top/TB 来自配置，ASM 运行时选择';
+  return 'Top/TB 来自配置，用户 testbench 提供激励';
 }
 
 function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarActiveFileModel): string {
@@ -485,9 +474,9 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
       `当前 Verilog:\n${active.fsPath}`,
       '',
       'P1/独立模块没有统一 Top/TB。',
-      '运行时优先使用当前 testbench；否则使用 .co/tb/<module>_tb.v。',
-      '首次运行会在 .co/tb 生成激励模板并打开，编写激励后再次运行；插件不会覆盖该文件。',
-      `仿真工作目录: .co/isim`,
+      '手动生成的 testbench 位于 .co/tb，由用户编写输入与激励；用户自建的 *_tb.v 和 *_testbench.v 也会作为 testbench 运行。',
+      '运行时先识别用户自建 testbench，再使用 .co/tb 中的用户 testbench。',
+      `仿真工作目录: .co/iverilog`,
       `仿真输出: .co/out`
     ].join('\n');
   }
@@ -495,13 +484,11 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
   const lines = [
     verilogConfigTooltip(context, active),
     '',
-    `仿真工作目录: .co/isim`,
+    `仿真工作目录: .co/iverilog`,
     `仿真输出: .co/out`,
-    `TB 查找: 工作区 <tb> → .co/tb/<tb>.v → 临时 .co/isim/co_generated_<tb>.v`
+    '手动 testbench 提供输入与激励，支持 .co/tb 中由插件生成、需由用户编写的 testbench，也支持文件名以 _tb 或 _testbench 结尾的用户自建 testbench。自动测试使用 .co/iverilog 中仅供内部组件驱动测试的私有 testbench。'
   ];
-  if (context.profile !== 'P1') {
-    lines.push('ASM 会在执行时选择，导入 .co/cases/<caseId>，再复制 code.txt 到 .co/isim/<machineCode>。');
-  }
+  lines.push('机器码输入为可选项；需要机器码的 DUT 会读取项目中的 machineCode/code.txt。');
   return lines.join('\n');
 }
 

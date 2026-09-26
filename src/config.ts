@@ -296,10 +296,6 @@ export function getLogisimJar(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.logisim', configDefault<string>('toolchain.logisim'), resource);
 }
 
-export function getIsePath(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.isePath', configDefault<string>('toolchain.isePath'), resource);
-}
-
 export function getHazardCalculator(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.hazardCalculator', configDefault<string>('toolchain.hazardCalculator'), resource);
 }

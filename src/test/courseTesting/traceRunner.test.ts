@@ -202,15 +202,23 @@ describe('course trace runner orchestration', () => {
       } as never;
     });
     vi.mocked(runVerilogSimulation).mockImplementation(async () => {
-      callOrder.push('isim');
+      callOrder.push('iverilog');
       return {
-        backend: 'isim',
+        backend: 'iverilog',
+        runtimeVersion: 'Icarus fixture',
+        runtime: {
+          target: 'win32-x64', rootDir: 'E:/runtime', binDir: 'E:/runtime/bin',
+          libDir: 'E:/runtime/lib', iverilogPath: 'E:/runtime/bin/iverilog.exe',
+          vvpPath: 'E:/runtime/bin/vvp.exe'
+        },
+        testbench: { moduleName: 'co_generated_auto_tb', kind: 'generated' },
+        compileCacheHit: false,
         generated: {
-          prj: URI.file('E:/work/test.prj'),
-          tcl: URI.file('E:/work/test.tcl'),
+          compiled: URI.file('E:/work/.co/iverilog/simulation.vvp'),
+          watchdog: URI.file('E:/work/.co/iverilog/watchdog.v'),
           outDir: URI.file('E:/work')
         },
-        fuseResult: createTestRunResult(),
+        compileResult: createTestRunResult(),
         simResult: createTestRunResult({ stdout: 'trace\n' }),
         simOut: URI.file('E:/work/sim.out')
       };
@@ -232,15 +240,15 @@ describe('course trace runner orchestration', () => {
     vi.mocked(checkP7Probe).mockReturnValue({ passed: true, failures: [] } as never);
   });
 
-  it('creates a case, assembles a ProgramImage, runs an oracle and ISim, then compares canonical traces', async () => {
+  it('creates a case, assembles a ProgramImage, runs an oracle and Icarus, then compares canonical traces', async () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('passed');
-    expect(callOrder).toEqual(expect.arrayContaining(['create-case', 'dump', 'oracle', 'isim', 'compare']));
+    expect(callOrder).toEqual(expect.arrayContaining(['create-case', 'dump', 'oracle', 'iverilog', 'compare']));
     expect(callOrder.indexOf('create-case')).toBeLessThan(callOrder.indexOf('dump'));
     expect(callOrder.indexOf('dump')).toBeLessThan(callOrder.indexOf('oracle'));
-    expect(callOrder.indexOf('oracle')).toBeLessThan(callOrder.indexOf('isim'));
-    expect(callOrder.indexOf('isim')).toBeLessThan(callOrder.indexOf('compare'));
+    expect(callOrder.indexOf('oracle')).toBeLessThan(callOrder.indexOf('iverilog'));
+    expect(callOrder.indexOf('iverilog')).toBeLessThan(callOrder.indexOf('compare'));
     const executeRequest = vi.mocked(executeWithPreflight).mock.calls[0][1];
     expect(executeRequest).toMatchObject({
       image: testProgramImage,
@@ -452,7 +460,7 @@ describe('course trace runner orchestration', () => {
     expect(request).not.toHaveProperty('traceOutput');
   });
 
-  it('rejects an actually executed tutorial undefined behavior before running ISim', async () => {
+  it('rejects an actually executed tutorial undefined behavior before running Icarus', async () => {
     const descriptor = { id: 'legacy-mars-v0.6.3' } as never;
     vi.mocked(executeWithPreflight).mockResolvedValueOnce({
       ok: false,
@@ -502,7 +510,7 @@ describe('course trace runner orchestration', () => {
     expect(runVerilogSimulation).not.toHaveBeenCalled();
   });
 
-  it('stops after a failed assembly without running the oracle or ISim', async () => {
+  it('stops after a failed assembly without running the oracle or Icarus', async () => {
     vi.mocked(prepareAsmCaseMachineCode).mockResolvedValueOnce({
       ok: false,
       status: { ok: false, exitCode: 1, stdout: '', stderr: 'bad', timedOut: false },
@@ -536,9 +544,9 @@ describe('course trace runner orchestration', () => {
 
   it('returns a DUT-stage failure with case metadata and prior oracle output', async () => {
     vi.mocked(runVerilogSimulation).mockResolvedValueOnce({
-      backend: 'isim',
+      backend: 'iverilog',
       generated: {} as never,
-      fuseResult: { ok: true, code: 0, stdout: '', stderr: '' },
+      compileResult: { ok: true, code: 0, stdout: '', stderr: '' },
       simResult: { ok: false, code: 1, stdout: '', stderr: 'bad' }
     } as never);
 
@@ -608,7 +616,7 @@ describe('course trace runner orchestration', () => {
         ok: false,
         exitCode: 26,
         commandLine: '',
-        cwd: 'E:/work/.co/isim',
+        cwd: 'E:/work/.co/iverilog',
         stdout: '',
         stderr: 'E:/work/CPU.v:500: error: Unable to bind `M_RD2_from_W`',
         timedOut: false,
@@ -660,7 +668,7 @@ describe('course trace runner orchestration', () => {
     expect(result.message).toContain('仅有一端');
   });
 
-  it('passes P7 interrupt and probe metadata from the case manifest into ISim', async () => {
+  it('passes P7 interrupt and probe metadata from the case manifest into Icarus', async () => {
     const probe = { version: 1, logBase: 0x3000, recordWords: 4, scenarios: [{ id: 's0', kind: 'mmio' }] };
     const currentCase = makeAsmCase({ p7: { interruptSchedule: [0x4180], probe } as never });
     vi.mocked(createAsmCaseFromAsm).mockResolvedValueOnce(currentCase);
@@ -671,7 +679,7 @@ describe('course trace runner orchestration', () => {
     expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       asmCase: currentCase,
       p7Probe: probe,
-      tclText: 'run 4195us;\nexit\n'
+      simTime: '4195us'
     }));
     expect(checkP7Probe).toHaveBeenCalled();
     expect(executeWithPreflight).not.toHaveBeenCalled();
@@ -708,7 +716,7 @@ describe('course trace runner orchestration', () => {
     }
   );
 
-  it('passes a private execution-budget-derived TCL window to automatic ISim', async () => {
+  it('passes a private execution-budget-derived simulation window to automatic Icarus', async () => {
     const result = await runCourseTraceCase(
       services(),
       { asm: URI.file('E:/work/src/test.asm') },
@@ -717,7 +725,7 @@ describe('course trace runner orchestration', () => {
 
     expect(result.status).toBe('passed');
     expect(runVerilogSimulation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      tclText: 'run 4195us;\nexit\n',
+      simTime: '4195us',
       nonInteractive: true
     }));
   });
@@ -761,7 +769,7 @@ describe('course trace runner orchestration', () => {
     expect(result.status).toBe('passed');
     expect(vi.mocked(executeWithPreflight).mock.calls.at(-1)?.[1].maxSteps).toBe(8064);
     expect(runVerilogSimulation).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      tclText: 'run 517us;\nexit\n'
+      simTime: '517us'
     }));
     expect(readTextFile).not.toHaveBeenCalledWith(currentCase.sourceAsm);
   });

@@ -17,24 +17,24 @@ describe('updateProjectSettings tool-path migration', () => {
     vi.clearAllMocks();
   });
 
-  it('writes Global before clearing folder and workspace values', async () => {
+  it('writes the MARS path globally before clearing folder and workspace values', async () => {
     const update = vi.fn(async () => undefined);
     vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
       get: vi.fn(),
       inspect: vi.fn(() => ({
-        workspaceFolderValue: 'D:/old-folder/ISE',
-        workspaceValue: 'D:/old-workspace/ISE'
+        workspaceFolderValue: 'D:/old-folder/Mars.jar',
+        workspaceValue: 'D:/old-workspace/Mars.jar'
       })),
       update
     } as never);
 
-    await updateProjectSettings('P7', { isePath: '' }, vscode.Uri.file('E:/work'));
+    await updateProjectSettings('P7', { mars: 'D:/new/Mars.jar' }, vscode.Uri.file('E:/work'));
 
     expect(update.mock.calls).toEqual([
       ['project.profile', 'P7', vscode.ConfigurationTarget.WorkspaceFolder],
-      ['toolchain.isePath', '', vscode.ConfigurationTarget.Global],
-      ['toolchain.isePath', undefined, vscode.ConfigurationTarget.WorkspaceFolder],
-      ['toolchain.isePath', undefined, vscode.ConfigurationTarget.Workspace]
+      ['toolchain.mars', 'D:/new/Mars.jar', vscode.ConfigurationTarget.Global],
+      ['toolchain.mars', undefined, vscode.ConfigurationTarget.WorkspaceFolder],
+      ['toolchain.mars', undefined, vscode.ConfigurationTarget.Workspace]
     ]);
   });
 
@@ -47,18 +47,18 @@ describe('updateProjectSettings tool-path migration', () => {
     vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
       get: vi.fn(),
       inspect: vi.fn(() => ({
-        workspaceFolderValue: 'D:/old-folder/ISE',
-        workspaceValue: 'D:/old-workspace/ISE'
+        workspaceFolderValue: 'D:/old-folder/Mars.jar',
+        workspaceValue: 'D:/old-workspace/Mars.jar'
       })),
       update
     } as never);
 
-    await expect(updateProjectSettings('P7', { isePath: '' }, vscode.Uri.file('E:/work')))
+    await expect(updateProjectSettings('P7', { mars: 'D:/new/Mars.jar' }, vscode.Uri.file('E:/work')))
       .rejects.toThrow('global settings are read-only');
 
     expect(update.mock.calls).toEqual([
       ['project.profile', 'P7', vscode.ConfigurationTarget.WorkspaceFolder],
-      ['toolchain.isePath', '', vscode.ConfigurationTarget.Global]
+      ['toolchain.mars', 'D:/new/Mars.jar', vscode.ConfigurationTarget.Global]
     ]);
   });
 

@@ -3,41 +3,34 @@ import { buildAdvancedToolItems } from '../advancedToolModel';
 
 function commandsFor(
   profile: Parameters<typeof buildAdvancedToolItems>[0]['profile'],
-  activeKind: Parameters<typeof buildAdvancedToolItems>[0]['activeKind'],
-  iseConfigured = false
+  activeKind: Parameters<typeof buildAdvancedToolItems>[0]['activeKind']
 ): string[] {
-  return buildAdvancedToolItems({ profile, activeKind, activeFileName: 'current.v', iseConfigured })
+  return buildAdvancedToolItems({ profile, activeKind, activeFileName: 'current.v' })
     .map((item) => item.command);
 }
 
 describe('advanced tool model', () => {
   it('filters Verilog tools by profile and active editor kind', () => {
-    const commands = commandsFor('P7', 'verilog', true);
+    const commands = commandsFor('P7', 'verilog');
 
     expect(commands).toContain('co.verilog.generateTestbench');
-    expect(commands).toContain('co.verilog.generateIseProject');
-    expect(commands).toContain('co.verilog.exportVcd');
+    expect(commands).toContain('co.verilog.checkSyntax');
+    expect(commands).not.toContain('co.verilog.generateIseProject');
+    expect(commands).not.toContain('co.verilog.exportVcd');
     expect(commands.some((command) => command.startsWith('co.test.'))).toBe(false);
     expect(commands).toContain('co.hazard.analyzeCurrentMachineCode');
     expect(commands).not.toContain('co.logisim.convertLogToCsv');
   });
 
-  it('keeps Icarus checks and ISE project generation available while gating ISim execution tools', () => {
-    const items = buildAdvancedToolItems({
-      profile: 'P7',
-      activeKind: 'verilog',
-      activeFileName: 'current.v',
-      iseConfigured: false
-    });
+  it('exposes Icarus syntax checks without ISE-only tools', () => {
+    const items = buildAdvancedToolItems({ profile: 'P7', activeKind: 'verilog', activeFileName: 'current.v' });
     const commands = items.map((item) => item.command);
 
-    expect(commands).toContain('co.verilog.checkSyntaxWithIse');
-    expect(commands).toContain('co.verilog.generateIseProject');
+    expect(commands).toContain('co.verilog.checkSyntax');
+    expect(commands).not.toContain('co.verilog.generateIseProject');
     expect(commands).not.toContain('co.verilog.exportVcd');
-    expect(items.find((item) => item.command === 'co.verilog.checkSyntaxWithIse')?.description)
+    expect(items.find((item) => item.command === 'co.verilog.checkSyntax')?.description)
       .toContain('Icarus');
-    expect(items.find((item) => item.command === 'co.verilog.generateIseProject')?.detail)
-      .toContain('不要求已安装 ISE');
   });
 
   it('keeps Logisim utilities but hides test preparation and diagnostics for P3', () => {
@@ -63,9 +56,7 @@ describe('advanced tool model', () => {
       'co.mips.runInTerminal',
       'co.mips.dumpKernelText',
       'co.verilog.generateTestbench',
-      'co.verilog.checkSyntaxWithIse',
-      'co.verilog.generateIseProject',
-      'co.verilog.exportVcd',
+      'co.verilog.checkSyntax',
       'co.waveform.openFile',
       'co.logisim.generateRom',
       'co.logisim.convertLogToCsv',
@@ -74,7 +65,7 @@ describe('advanced tool model', () => {
     ]);
     const commands = [
       ...commandsFor('P7', 'mips'),
-      ...commandsFor('P7', 'verilog', true),
+      ...commandsFor('P7', 'verilog'),
       ...commandsFor('P3', 'logisim')
     ];
 

@@ -1,10 +1,9 @@
-// @index verilog-commands — Icarus 通用工作流与 ISE/ISim 专属工程、波形能力
+// @index verilog-commands — Icarus 仿真、语法检查与用户 testbench 生成
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Commands } from './constants';
 import {
   ensureConcreteProfile,
-  getIsePath,
   getSimTime,
   getTestbench,
   getTopModule
@@ -17,13 +16,6 @@ import { pathExists, writeTextFile } from './fsUtil';
 import { AppServices } from './types';
 import { executeLanguageServerCommand } from './languageClient';
 import type { MutableVerilogModuleProvider } from './language/verilog/moduleProvider';
-import {
-  exportVcdWaveform,
-  openIsimWaveform
-} from './verilogWaveform';
-import {
-  generateIseProject
-} from './verilog/iseProject';
 import {
   coSettingsForUri,
   toTextDocument
@@ -38,19 +30,14 @@ import {
   userTestbenchUri
 } from './verilog/userTestbench';
 import {
-  compileIsim as compileIsimCore,
-} from './verilog/isimRunner';
-import {
   runVerilogSimulation,
   setVerilogSimulationModuleRegistry
 } from './verilog/simulationRunner';
 import { disableVerilogLintRule } from './diagnosticSettings';
+import { isCustomTestbenchPath, isPrivateRuntimeTestbenchPath } from './verilogSimulationFiles';
 
-export { generateIseProject } from './verilog/iseProject';
 export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
-export { runIsim } from './verilog/isimRunner';
 export { runVerilogSimulation };
-export type { IsimRunOptions, IsimRunOutput, CompileIsimOptions, CompiledIsimOutput } from './verilog/isimRunner';
 export type { VerilogSimulationRunOptions, VerilogSimulationRunOutput } from './verilog/simulationRunner';
 
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
@@ -61,11 +48,8 @@ export function registerVerilog(context: vscode.ExtensionContext, services: AppS
       disableVerilogLintRule
     ),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
-    vscode.commands.registerCommand(Commands.Verilog.GenerateIseProject, () => generateIseProject(services)),
-    vscode.commands.registerCommand(Commands.Verilog.CheckSyntaxWithIse, () => checkVerilogSyntax()),
-    vscode.commands.registerCommand(Commands.Verilog.RunIsim, () => runVerilogSimulation(services, { moduleRegistry })),
-    vscode.commands.registerCommand(Commands.Verilog.OpenIsimWaveform, () => runIseOnlyCommand(() => openIsimWaveform(services, { compileIsim: compileIsimCore, moduleRegistry }))),
-    vscode.commands.registerCommand(Commands.Verilog.ExportVcd, () => runIseOnlyCommand(() => exportVcdWaveform(services, { compileIsim: compileIsimCore, moduleRegistry })))
+    vscode.commands.registerCommand(Commands.Verilog.CheckSyntax, () => checkVerilogSyntax()),
+    vscode.commands.registerCommand(Commands.Verilog.RunSimulation, () => runVerilogSimulation(services, { moduleRegistry }))
   );
 }
 
@@ -80,7 +64,7 @@ async function checkVerilogSyntax(): Promise<void> {
     return;
   }
   await editor.document.save();
-  await executeLanguageServerCommand(Commands.Server.InternalVerilogCheckSyntaxWithIse, [editor.document.uri.toString()]);
+  await executeLanguageServerCommand(Commands.Server.InternalVerilogCheckSyntax, [editor.document.uri.toString()]);
   vscode.window.showInformationMessage('已触发外部 Verilog 语法检查，结果会显示在问题面板');
 }
 
@@ -90,12 +74,16 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
     vscode.window.showErrorMessage('请先打开一个 Verilog 文件');
     return;
   }
+  if (isPrivateRuntimeTestbenchPath(editor.document.uri.fsPath)) {
+    vscode.window.showInformationMessage('此文件是自动测试的私有组件，请打开设计模块生成用户 testbench');
+    return;
+  }
   const profile = await ensureConcreteProfile(editor.document.uri, '生成 Testbench 需要先确定项目 Profile');
   if (!profile) {
     return;
   }
-  if (isUserTestbenchUri(editor.document.uri)) {
-    vscode.window.showInformationMessage('当前文件已是 .co/tb 下的 testbench，编写激励后点击运行即可仿真');
+  if (isUserTestbenchUri(editor.document.uri) || isCustomTestbenchPath(editor.document.uri.fsPath)) {
+    vscode.window.showInformationMessage('当前文件已是用户 testbench，编写激励后点击运行即可仿真');
     return;
   }
   const document = toTextDocument(editor.document);
@@ -141,13 +129,4 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
     await createUserTestbench(tbUri, tbText);
   }
   await vscode.window.showTextDocument(tbUri, { preview: false });
-}
-
-async function runIseOnlyCommand<T>(action: () => Promise<T>): Promise<T | undefined> {
-  const resource = vscode.window.activeTextEditor?.document.uri;
-  if (!getIsePath(resource).trim()) {
-    vscode.window.showErrorMessage('此功能需要 Xilinx ISE。请先设置 co.toolchain.isePath');
-    return undefined;
-  }
-  return await action();
 }

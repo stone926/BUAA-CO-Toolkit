@@ -5,7 +5,7 @@
  * Scans archived .co/cases under caller-provided real CPU repositories, rebuilds
  * the legacy ProgramImage from the archived HexText, runs the compiled builtin TS
  * executor, and compares its projected architectural writes with the archived
- * legacy MARS trace. Java/MARS and ISim are not required: both sides come from
+ * legacy MARS trace. Java/MARS are not required: both sides come from
  * immutable case artifacts plus the in-process TS core.
  *
  * Usage:
