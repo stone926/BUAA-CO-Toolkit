@@ -2,6 +2,7 @@
 
 import { isRadix, radixes, radixLabels } from '../model/radix';
 import { displayUnitFor, formatTicks } from '../model/timeScale';
+import { markerName } from '../view/markers';
 import { parseTimeInput } from '../view/timeInput';
 import type { WaveActions } from './actions';
 import { h, setText, toggleClass } from './dom';
@@ -111,10 +112,10 @@ export class Toolbar {
     const cycles = this.store.cycles;
     setText(this.cycleLabel, cycles ? `第 ${cycles.cycleAt(this.store.cursor)} 周期` : '');
     this.cycleLabel.hidden = !cycles;
-    const marker = this.store.markers[this.store.activeMarker];
-    const measuring = data !== undefined && marker !== undefined && marker !== this.store.cursor;
+    const marker = this.store.markers.active;
+    const measuring = data !== undefined && marker !== undefined && marker.time !== this.store.cursor;
     setText(this.measureLabel, measuring
-      ? `M${this.store.activeMarker + 1} ${measurementLabel(this.store, Math.min(marker, this.store.cursor), Math.max(marker, this.store.cursor))}`
+      ? `${markerName(marker)} ${measurementLabel(this.store, Math.min(marker.time, this.store.cursor), Math.max(marker.time, this.store.cursor))}`
       : '');
     this.measureLabel.hidden = !measuring;
     for (const button of this.cycleButtons) {

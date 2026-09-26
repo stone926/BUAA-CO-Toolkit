@@ -73,8 +73,8 @@ export class Overview {
     ctx.lineWidth = 1;
     ctx.strokeRect(snap(left, dpr), 0.5, Math.max(1, snap(right, dpr) - snap(left, dpr)), overviewHeight - 1);
     ctx.strokeStyle = palette.marker;
-    for (const marker of this.store.markers) {
-      const x = snap(timeToX(bounds, width, marker), dpr);
+    for (const marker of this.store.markers.all) {
+      const x = snap(timeToX(bounds, width, marker.time), dpr);
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, overviewHeight);

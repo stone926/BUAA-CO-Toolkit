@@ -4,6 +4,7 @@ import { gprNames } from '../../mips/core/assembler/registers';
 import type { WaveformTraceEvent } from '../model/protocol';
 import type { Radix } from '../model/radix';
 import { changeIndexAt, changeTime, nextChangeTime, previousChangeTime } from '../model/signalValues';
+import type { WaveMarker } from '../view/markers';
 import { registerAlias } from '../view/signalDefaults';
 import type { TimeInputTarget } from '../view/timeInput';
 import {
@@ -155,76 +156,53 @@ export class WaveActions {
   // ── markers ──────────────────────────────────────────────────────────
 
   addMarker(time = this.store.cursor): void {
-    if (this.store.markers.includes(time)) {
-      this.store.activeMarker = this.store.markers.indexOf(time);
-    } else {
-      this.store.markers.push(time);
-      this.store.activeMarker = this.store.markers.length - 1;
-    }
-    this.changed('waves', 'ruler', 'overview', 'toolbar');
+    this.store.markers.add(time);
+    this.markersChanged();
   }
 
-  moveMarker(index: number, time: number): void {
-    if (index < 0 || index >= this.store.markers.length) {
-      return;
+  moveMarker(label: number, time: number): void {
+    const bounded = Math.round(Math.min(Math.max(time, this.store.bounds.start), this.store.bounds.end));
+    if (this.store.markers.move(label, bounded)) {
+      this.markersChanged();
     }
-    this.store.markers[index] = Math.round(Math.min(Math.max(time, this.store.bounds.start), this.store.bounds.end));
-    this.store.activeMarker = index;
-    this.changed('waves', 'ruler', 'overview', 'toolbar');
   }
 
-  removeMarker(index: number): void {
-    const markers = this.store.markers;
-    if (index < 0 || index >= markers.length) {
-      return;
+  /** Measure Δ against this marker. */
+  activateMarker(label: number): void {
+    this.store.markers.activate(label);
+    this.markersChanged();
+  }
+
+  removeMarker(label: number): void {
+    if (this.store.markers.remove(label)) {
+      this.markersChanged();
     }
-    markers.splice(index, 1);
-    // Keep measuring against the same marker when an earlier one disappears.
-    const active = this.store.activeMarker;
-    this.store.activeMarker = !markers.length
-      ? -1
-      : active > index ? active - 1 : active === index ? Math.min(index, markers.length - 1) : active;
-    this.changed('waves', 'ruler', 'overview', 'toolbar');
   }
 
   clearMarkers(): void {
-    this.store.markers = [];
-    this.store.activeMarker = -1;
-    this.changed('waves', 'ruler', 'overview', 'toolbar');
+    this.store.markers.clear();
+    this.markersChanged();
   }
 
   /** Remove the marker closest to the cursor. */
   removeNearestMarker(): void {
-    const index = this.nearestMarker(this.store.cursor);
-    if (index >= 0) {
-      this.removeMarker(index);
+    const marker = this.store.markers.nearest(this.store.cursor);
+    if (marker) {
+      this.removeMarker(marker.label);
     }
   }
 
   navigateMarker(direction: -1 | 1): void {
-    const sorted = this.store.markers.map((time, index) => ({ time, index })).sort((left, right) => left.time - right.time);
-    const cursor = this.store.cursor;
-    const target = direction > 0
-      ? sorted.find((marker) => marker.time > cursor)
-      : [...sorted].reverse().find((marker) => marker.time < cursor);
+    const target = this.store.markers.adjacent(this.store.cursor, direction);
     if (target) {
-      this.store.activeMarker = target.index;
+      this.store.markers.activate(target.label);
       this.setCursor(target.time, { reveal: true });
     }
   }
 
-  nearestMarker(time: number, maximumPixels = Number.POSITIVE_INFINITY): number {
-    const ticksPerPixel = viewSpan(this.store.view) / Math.max(1, this.waveWidth);
-    let best = -1;
-    let bestDistance = maximumPixels * ticksPerPixel;
-    this.store.markers.forEach((marker, index) => {
-      const distance = Math.abs(marker - time);
-      if (distance <= bestDistance) {
-        best = index;
-        bestDistance = distance;
-      }
-    });
-    return best;
+  /** The marker closest to `time` within `maximumPixels` on screen. */
+  nearestMarker(time: number, maximumPixels: number): WaveMarker | undefined {
+    return this.store.markers.nearest(time, (maximumPixels * viewSpan(this.store.view)) / Math.max(1, this.waveWidth));
   }
 
   // ── rows ─────────────────────────────────────────────────────────────
@@ -469,6 +447,10 @@ export class WaveActions {
   private rowsChanged(): void {
     this.reconcileSelection();
     this.changed('labels', 'values', 'waves', 'toolbar', 'layout', 'status');
+  }
+
+  private markersChanged(): void {
+    this.changed('waves', 'ruler', 'overview', 'toolbar');
   }
 
   /**

@@ -1,4 +1,4 @@
-// @index waveform-state — 持久化的波形视图状态契约（信号行/分组/进制/颜色/游标/标记/布局）与宿主侧不信任输入的清洗
+// @index waveform-state — 持久化的波形视图状态契约（信号行/分组/进制/颜色/游标/标记及其编号/布局）与宿主侧不信任输入的清洗
 
 import { isRadix, Radix } from './radix';
 
@@ -35,6 +35,12 @@ export interface PersistedLayout {
   readonly sidebar?: SidebarPanel;
 }
 
+export interface PersistedMarker {
+  readonly time: number;
+  /** Display number (M1, M2 …); absent in states saved before markers kept their numbers. */
+  readonly label?: number;
+}
+
 export interface PersistedViewState {
   readonly version: typeof persistedViewStateVersion;
   readonly rows: readonly PersistedRow[];
@@ -43,7 +49,7 @@ export interface PersistedViewState {
   readonly viewStart?: number;
   readonly viewEnd?: number;
   readonly cursor?: number;
-  readonly markers?: readonly number[];
+  readonly markers?: readonly PersistedMarker[];
   readonly layout?: PersistedLayout;
 }
 
@@ -78,9 +84,7 @@ export function sanitizePersistedViewState(value: unknown): PersistedViewState |
       rowCount++;
     }
   }
-  const markers = Array.isArray(value.markers)
-    ? value.markers.filter(isFiniteNumber).slice(0, maximumPersistedMarkers)
-    : undefined;
+  const markers = sanitizeMarkers(value.markers);
   const layout = sanitizeLayout(value.layout);
   return {
     version: persistedViewStateVersion,
@@ -90,9 +94,39 @@ export function sanitizePersistedViewState(value: unknown): PersistedViewState |
     ...(isFiniteNumber(value.viewStart) ? { viewStart: value.viewStart } : {}),
     ...(isFiniteNumber(value.viewEnd) ? { viewEnd: value.viewEnd } : {}),
     ...(isFiniteNumber(value.cursor) ? { cursor: value.cursor } : {}),
-    ...(markers && markers.length ? { markers } : {}),
+    ...(markers.length ? { markers } : {}),
     ...(layout ? { layout } : {})
   };
+}
+
+/** Markers with a finite time; a bare number is a time saved before markers kept their labels. Invalid or repeated labels are dropped. */
+function sanitizeMarkers(value: unknown): PersistedMarker[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const markers: PersistedMarker[] = [];
+  const labels = new Set<number>();
+  for (const entry of value) {
+    if (markers.length >= maximumPersistedMarkers) {
+      break;
+    }
+    const time = isRecord(entry) ? entry.time : entry;
+    if (!isFiniteNumber(time)) {
+      continue;
+    }
+    const label = isRecord(entry) ? entry.label : undefined;
+    if (isMarkerLabel(label) && !labels.has(label)) {
+      labels.add(label);
+      markers.push({ time, label });
+    } else {
+      markers.push({ time });
+    }
+  }
+  return markers;
+}
+
+function isMarkerLabel(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 1;
 }
 
 function sanitizeSignalRow(value: unknown): PersistedSignalRow | undefined {

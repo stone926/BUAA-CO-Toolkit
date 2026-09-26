@@ -185,8 +185,19 @@ describe('waveform rows', () => {
       clock: null,
       viewStart: 0,
       cursor: 5,
-      markers: [1, 3],
+      markers: [{ time: 1 }, { time: 3 }],
       layout: { valueWidth: 120, sidebar: 'trace' }
     });
+  });
+
+  it('keeps unique marker labels and still reads markers saved as bare times', () => {
+    const state = sanitizePersistedViewState({
+      version: 1,
+      rows: [],
+      markers: [{ time: 5, label: 2 }, { time: 6, label: 2 }, { time: 7, label: 0 }, { time: 8, label: 1.5 }, { time: 'x', label: 3 }, 9, { label: 4 }, null]
+    });
+    expect(state?.markers).toEqual([{ time: 5, label: 2 }, { time: 6 }, { time: 7 }, { time: 8 }, { time: 9 }]);
+    const many = sanitizePersistedViewState({ version: 1, rows: [], markers: Array.from({ length: 70 }, (_, index) => ({ time: index, label: index + 1 })) });
+    expect(many?.markers).toHaveLength(64);
   });
 });

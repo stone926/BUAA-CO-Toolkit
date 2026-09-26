@@ -353,13 +353,13 @@ function drawGrid(context: WaveRenderContext, store: WaveStore, scale: TimeScale
 }
 
 function drawMeasureBand(context: WaveRenderContext, store: WaveStore): void {
-  const marker = store.markers[store.activeMarker];
+  const marker = store.markers.active;
   if (marker === undefined) {
     return;
   }
   const { ctx, width, height, palette } = context;
-  const x0 = timeToX(store.view, width, Math.min(marker, store.cursor));
-  const x1 = timeToX(store.view, width, Math.max(marker, store.cursor));
+  const x0 = timeToX(store.view, width, Math.min(marker.time, store.cursor));
+  const x1 = timeToX(store.view, width, Math.max(marker.time, store.cursor));
   if (x1 < 0 || x0 > width) {
     return;
   }
@@ -380,19 +380,21 @@ function drawOverlays(context: WaveRenderContext, store: WaveStore, overlay: Wav
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  store.markers.forEach((marker, index) => {
-    const x = timeToX(view, width, marker);
+  const active = store.markers.active;
+  for (const marker of store.markers.all) {
+    const x = timeToX(view, width, marker.time);
     if (x < -1 || x > width + 1) {
-      return;
+      continue;
     }
+    const isActive = marker.label === active?.label;
     ctx.strokeStyle = palette.marker;
-    ctx.lineWidth = index === store.activeMarker ? 1.5 : 1;
-    ctx.setLineDash(index === store.activeMarker ? [] : [5, 3]);
+    ctx.lineWidth = isActive ? 1.5 : 1;
+    ctx.setLineDash(isActive ? [] : [5, 3]);
     ctx.beginPath();
     ctx.moveTo(snap(x, dpr), 0);
     ctx.lineTo(snap(x, dpr), height);
     ctx.stroke();
-  });
+  }
   ctx.setLineDash([]);
   const cursorX = timeToX(view, width, store.cursor);
   if (cursorX >= -1 && cursorX <= width + 1) {

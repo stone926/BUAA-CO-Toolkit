@@ -6,6 +6,7 @@ import type { PersistedLayout, PersistedViewState, SidebarPanel } from '../model
 import { persistedViewStateVersion } from '../model/viewStateContract';
 import type { WaveformData } from '../model/waveformData';
 import { CycleCounter } from '../view/cycleCounter';
+import { MarkerList } from '../view/markers';
 import { defaultRadix, defaultSignalPlan, detectClock } from '../view/signalDefaults';
 import { buildSignalTree, TreeNode } from '../view/signalTree';
 import { clampView, dataBounds, fitView, TimeRange } from '../view/viewport';
@@ -50,9 +51,7 @@ export class WaveStore {
   view: TimeRange = { start: 0, end: 2 };
   cursor = 0;
   hoverTime: number | undefined;
-  markers: number[] = [];
-  /** Marker used for Δ measurements, or -1. */
-  activeMarker = -1;
+  readonly markers = new MarkerList();
   readonly rows = new WaveRowList();
   readonly selection = new Set<number>();
   selectionAnchor: number | undefined;
@@ -126,8 +125,7 @@ export class WaveStore {
       this.rows.rebind((path) => this.varIndex(path));
       this.view = clampView(this.view, this.bounds);
       this.cursor = Math.min(Math.max(this.cursor, this.bounds.start), this.bounds.end);
-      this.markers = this.markers.filter((marker) => marker >= this.bounds.start && marker <= this.bounds.end);
-      this.activeMarker = Math.min(this.activeMarker, this.markers.length - 1);
+      this.markers.retain(this.bounds.start, this.bounds.end);
     } else if (this.savedState) {
       this.restore(this.savedState);
     } else {
@@ -214,8 +212,7 @@ export class WaveStore {
       : fitView(this.bounds);
     this.view = clampView(view, this.bounds);
     this.cursor = state.cursor !== undefined ? Math.min(Math.max(state.cursor, this.bounds.start), this.bounds.end) : this.bounds.start;
-    this.markers = (state.markers ?? []).filter((marker) => marker >= this.bounds.start && marker <= this.bounds.end);
-    this.activeMarker = this.markers.length ? 0 : -1;
+    this.markers.restore(state.markers ?? [], this.bounds.start, this.bounds.end);
   }
 
   private applyDefaults(data: WaveformData): void {
@@ -262,7 +259,7 @@ export class WaveStore {
       viewStart: this.view.start,
       viewEnd: this.view.end,
       cursor: this.cursor,
-      ...(this.markers.length ? { markers: [...this.markers] } : {}),
+      ...(this.markers.size ? { markers: this.markers.toPersisted() } : {}),
       layout: { ...this.layout }
     };
   }

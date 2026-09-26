@@ -1,7 +1,7 @@
 // @index waveform-webview-pane — 波形主区装配：表头（信号/值/标尺）、粘性画布 + 虚拟标签行的纵向滚动、缩略条、列宽拖拽、空状态与从信号树拖入
 
 import { rowHeight, WaveActions } from './actions';
-import { showContextMenu, MenuEntry } from './contextMenu';
+import { showContextMenu } from './contextMenu';
 import { h, listen } from './dom';
 import { decodeSignalDrag, signalDragType } from './dragData';
 import type { HostChannel } from './hostChannel';
@@ -11,6 +11,7 @@ import { rowMenuEntries } from './rowMenu';
 import { RulerView } from './rulerView';
 import type { DirtyFlag, WaveStore } from './store';
 import type { Palette } from './theme';
+import { timeMenuEntries } from './timeMenu';
 import { Tooltip } from './tooltip';
 import { WaveCanvas } from './waveCanvas';
 
@@ -41,18 +42,15 @@ export class WavePane {
       onOpenSource: (row) => host.openSource(row.path, false)
     });
     this.canvas = new WaveCanvas(store, actions, palette, tooltip, {
-      onContextMenu: (event, rowId, time) => {
+      onContextMenu: (event, rowId, time, marker) => {
+        const timeEntries = timeMenuEntries(store, actions, time, marker);
         if (rowId !== undefined) {
           if (!store.selection.has(rowId)) {
             actions.select(rowId, 'replace');
           }
-          showContextMenu(event.clientX, event.clientY, [
-            ...this.timeMenu(time),
-            'separator',
-            ...rowMenuEntries(menuContext(), rowId)
-          ]);
+          showContextMenu(event.clientX, event.clientY, [...timeEntries, 'separator', ...rowMenuEntries(menuContext(), rowId)]);
         } else {
-          showContextMenu(event.clientX, event.clientY, this.timeMenu(time));
+          showContextMenu(event.clientX, event.clientY, timeEntries);
         }
       },
       onDragRange: (range) => {
@@ -60,7 +58,8 @@ export class WavePane {
         this.ruler.setExternalRange(range);
       }
     });
-    this.ruler = new RulerView(store, actions, palette, (event, time) => showContextMenu(event.clientX, event.clientY, this.timeMenu(time)));
+    this.ruler = new RulerView(store, actions, palette, (event, time, marker) =>
+      showContextMenu(event.clientX, event.clientY, timeMenuEntries(store, actions, time, marker)));
     this.canvas.externalRange = () => this.ruler.activeRange;
     this.overview = new Overview(store, actions, palette);
 
@@ -228,18 +227,6 @@ export class WavePane {
       }
       this.focus();
     });
-  }
-
-  private timeMenu(time: number): MenuEntry[] {
-    const rounded = Math.round(time);
-    return [
-      { label: '游标移到此处', action: () => this.actions.setCursor(rounded) },
-      { label: '在此处添加标记', shortcut: 'M', action: () => this.actions.addMarker(rounded) },
-      { label: '清除全部标记', disabled: !this.store.markers.length, action: () => this.actions.clearMarkers() },
-      'separator',
-      { label: '以此处为中心放大', shortcut: 'Ctrl+滚轮', action: () => this.actions.zoom(2, rounded) },
-      { label: '显示全部', shortcut: 'F', action: () => this.actions.zoomFit() }
-    ];
   }
 
   /** Keep the dragged range reference alive for debugging overlays. */

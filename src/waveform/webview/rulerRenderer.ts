@@ -1,6 +1,7 @@
 // @index waveform-webview-ruler — 时间标尺绘制：自适应刻度与单位、时钟周期序号、trace 事件刻痕、标记/游标旗标与 Δ 测量
 
 import { chooseTickStep, formatTicks, timeUnitFemtoseconds } from '../model/timeScale';
+import { markerName } from '../view/markers';
 import { lowerBound, visitPoints } from '../view/waveSegments';
 import { timeToX, TimeRange } from '../view/viewport';
 import type { WaveStore } from './store';
@@ -54,12 +55,12 @@ export function renderRuler(
 
   ctx.font = `${labelFont}px ${palette.uiFamily}`;
   const flags: Flag[] = [];
-  store.markers.forEach((marker, index) => {
-    const x = timeToX(view, width, marker);
+  for (const marker of store.markers.all) {
+    const x = timeToX(view, width, marker.time);
     if (x >= -20 && x <= width + 20) {
-      flags.push(layoutFlag(ctx, width, x, `M${index + 1}`, palette.marker));
+      flags.push(layoutFlag(ctx, width, x, markerName(marker), palette.marker));
     }
-  });
+  }
   const cursorX = timeToX(view, width, store.cursor);
   if (cursorX >= -1 && cursorX <= width + 1) {
     flags.push(layoutFlag(ctx, width, cursorX, formatTicks(store.cursor, scale), palette.cursor));
@@ -134,12 +135,12 @@ function drawTraceTicks(ctx: CanvasRenderingContext2D, width: number, palette: P
 }
 
 function drawMeasurement(ctx: CanvasRenderingContext2D, width: number, palette: Palette, store: WaveStore, view: TimeRange): void {
-  const marker = store.markers[store.activeMarker];
-  if (marker === undefined || marker === store.cursor || !store.data) {
+  const marker = store.markers.active;
+  if (marker === undefined || marker.time === store.cursor || !store.data) {
     return;
   }
-  const from = Math.min(marker, store.cursor);
-  const to = Math.max(marker, store.cursor);
+  const from = Math.min(marker.time, store.cursor);
+  const to = Math.max(marker.time, store.cursor);
   const x0 = timeToX(view, width, from);
   const x1 = timeToX(view, width, to);
   if (x1 < 0 || x0 > width) {

@@ -1,11 +1,15 @@
-// @index waveform-webview-ruler-view — 时间标尺交互：点击放游标、拖动框选放大、拖动标记、滚轮缩放、双击适配全部
+// @index waveform-webview-ruler-view — 时间标尺交互：点击放游标、拖动框选放大、拖动标记、右键菜单（带旗标下的标记）、滚轮缩放、双击适配全部
 
-import { timeToX, xToTime } from '../view/viewport';
+import type { WaveMarker } from '../view/markers';
+import { xToTime } from '../view/viewport';
 import type { WaveActions } from './actions';
 import { fitCanvas } from './dom';
 import { renderRuler, rulerHeight } from './rulerRenderer';
 import type { WaveStore } from './store';
 import type { Palette } from './theme';
+
+/** Roughly half a marker flag's width: how far from its line the flag can be grabbed. */
+const flagGrabPixels = 12;
 
 export class RulerView {
   readonly element: HTMLCanvasElement;
@@ -17,11 +21,12 @@ export class RulerView {
     private readonly store: WaveStore,
     private readonly actions: WaveActions,
     private readonly palette: () => Palette,
-    private readonly onContextMenu: (event: MouseEvent, time: number) => void
+    /** `marker` is the marker whose flag is under the pointer, if any. */
+    private readonly onContextMenu: (event: MouseEvent, time: number, marker: WaveMarker | undefined) => void
   ) {
     this.element = document.createElement('canvas');
     this.element.className = 'ruler';
-    this.element.title = '点击放置游标，拖动选择区间放大，双击显示全部';
+    this.element.title = '点击放置游标，拖动选择区间放大，双击显示全部；拖动标记旗标可移动标记，右键旗标可删除';
     this.element.addEventListener('pointerdown', (event) => this.onPointerDown(event));
     this.element.addEventListener('wheel', (event) => {
       event.preventDefault();
@@ -31,7 +36,7 @@ export class RulerView {
     this.element.addEventListener('dblclick', () => this.actions.zoomFit());
     this.element.addEventListener('contextmenu', (event) => {
       event.preventDefault();
-      this.onContextMenu(event, xToTime(this.store.view, this.width, event.offsetX));
+      this.onContextMenu(event, xToTime(this.store.view, this.width, event.offsetX), this.markerAt(event.offsetX));
     });
   }
 
@@ -56,16 +61,15 @@ export class RulerView {
     event.preventDefault();
     this.element.setPointerCapture(event.pointerId);
     const startX = event.offsetX;
-    const markerIndex = this.markerAt(startX);
-    let mode: 'pending' | 'range' | 'marker' = markerIndex >= 0 ? 'marker' : 'pending';
-    if (markerIndex >= 0) {
-      this.store.activeMarker = markerIndex;
-      this.store.invalidate('waves', 'ruler', 'toolbar');
+    const marker = this.markerAt(startX);
+    let mode: 'pending' | 'range' | 'marker' = marker ? 'marker' : 'pending';
+    if (marker) {
+      this.actions.activateMarker(marker.label);
     }
     const move = (moveEvent: PointerEvent): void => {
       const x = Math.max(0, Math.min(this.width, moveEvent.offsetX));
-      if (mode === 'marker') {
-        this.actions.moveMarker(markerIndex, xToTime(this.store.view, this.width, x));
+      if (marker) {
+        this.actions.moveMarker(marker.label, xToTime(this.store.view, this.width, x));
         return;
       }
       if (mode === 'pending' && Math.abs(x - startX) > 3) {
@@ -102,17 +106,8 @@ export class RulerView {
   }
 
   /** Marker whose flag (top half of the ruler) is under x. */
-  private markerAt(x: number): number {
-    let best = -1;
-    let bestDistance = 12;
-    this.store.markers.forEach((marker, index) => {
-      const distance = Math.abs(timeToX(this.store.view, this.width, marker) - x);
-      if (distance < bestDistance) {
-        best = index;
-        bestDistance = distance;
-      }
-    });
-    return best;
+  private markerAt(x: number): WaveMarker | undefined {
+    return this.actions.nearestMarker(xToTime(this.store.view, this.width, x), flagGrabPixels);
   }
 
   /** The marker range drawn in the waveform canvas mirrors the local ruler drag too. */

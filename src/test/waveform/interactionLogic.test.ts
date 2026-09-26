@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sanitizePersistedViewState } from '../../waveform/model/viewStateContract';
 import { parseVcd } from '../../waveform/vcd/vcdReader';
+import { markerName } from '../../waveform/view/markers';
 import { buildSignalTree, firstMatchIndex, flattenSignalTree } from '../../waveform/view/signalTree';
 import { dataBounds, minimumViewSpan, zoomView } from '../../waveform/view/viewport';
 import { WaveActions } from '../../waveform/webview/actions';
@@ -137,6 +139,40 @@ describe('webview store and actions', () => {
 
     actions.removeAll();
     expect(store.selectionAnchor).toBeUndefined();
+  });
+
+  it('deletes a single marker without renaming the others, across saving and reopening', () => {
+    [10, 20, 30].forEach((time) => actions.addMarker(time));
+    drain();
+    actions.removeMarker(2);
+    expect(drain()).toEqual(new Set(['waves', 'ruler', 'overview', 'toolbar']));
+    expect(store.markers.all.map(markerName)).toEqual(['M1', 'M3']);
+    expect(store.markers.active?.label).toBe(3);
+
+    const saved = sanitizePersistedViewState(store.snapshot());
+    expect(saved?.markers).toEqual([{ time: 10, label: 1 }, { time: 30, label: 3 }]);
+    const reopened = new WaveStore(() => undefined, () => undefined);
+    reopened.setSavedState(saved);
+    reopened.setDocument(dump, false);
+    expect(reopened.markers.all.map(markerName)).toEqual(['M1', 'M3']);
+  });
+
+  it('steps to markers in time order and drops the ones a shorter reload leaves out', () => {
+    actions.setCursor(0);
+    [30, 10].forEach((time) => actions.addMarker(time));
+    actions.navigateMarker(1);
+    expect(store.cursor).toBe(10);
+    expect(store.markers.active?.label).toBe(2);
+    actions.navigateMarker(1);
+    expect(store.cursor).toBe(30);
+    expect(store.markers.active?.label).toBe(1);
+    actions.removeNearestMarker();
+    expect(store.markers.all.map(markerName)).toEqual(['M2']);
+
+    actions.addMarker(40);
+    store.setDocument(parseVcd(['$timescale 1ps $end', '$scope module tb $end', '$var reg 1 ! clk $end', '$upscope $end', '$enddefinitions $end', '#0', '0!', '#20', '1!'].join('\n')), true);
+    expect(store.markers.all.map(markerName)).toEqual(['M2']);
+    expect(store.markers.active?.label).toBe(2);
   });
 
   it('extends a range from a visible anchor', () => {

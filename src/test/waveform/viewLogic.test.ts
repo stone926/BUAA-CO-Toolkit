@@ -4,6 +4,7 @@ import { WaveformData } from '../../waveform/model/waveformData';
 import { parseVcd } from '../../waveform/vcd/vcdReader';
 import { CycleCounter } from '../../waveform/view/cycleCounter';
 import { shortestUniqueNames } from '../../waveform/view/displayNames';
+import { MarkerList, markerName } from '../../waveform/view/markers';
 import { parseTimeInput } from '../../waveform/view/timeInput';
 import {
   centerView,
@@ -126,6 +127,70 @@ describe('segment traversal', () => {
     const columns: Array<[number, number, number]> = [];
     visitPoints(times, { start: 0, end: 100 }, 10, (x, first, last) => columns.push([x, first, last]));
     expect(columns).toEqual([[0.1, 0, 2], [5, 3, 3], [9.9, 4, 4]]);
+  });
+});
+
+describe('markers', () => {
+  it('keeps labels when other markers are removed and reuses the smallest free one', () => {
+    const markers = new MarkerList();
+    const placed = [10, 20, 30].map((time) => markers.add(time));
+    expect(placed.map(markerName)).toEqual(['M1', 'M2', 'M3']);
+    expect(markers.remove(2)).toBe(true);
+    expect(markers.all.map(markerName)).toEqual(['M1', 'M3']);
+    expect(markers.remove(2)).toBe(false);
+    expect(markerName(markers.add(40))).toBe('M2');
+  });
+
+  it('reuses a marker at the same time and keeps the label when one is moved', () => {
+    const markers = new MarkerList();
+    markers.add(10);
+    markers.add(20);
+    expect(markers.add(10).label).toBe(1);
+    expect(markers.size).toBe(2);
+    expect(markers.active?.label).toBe(1);
+    expect(markers.move(2, 25)).toBe(true);
+    expect(markers.active).toEqual({ time: 25, label: 2 });
+    expect(markers.move(7, 30)).toBe(false);
+  });
+
+  it('measures against the nearest remaining marker when the active one is removed', () => {
+    const markers = new MarkerList();
+    [10, 50, 30].forEach((time) => markers.add(time));
+    markers.activate(2);
+    markers.remove(1);
+    expect(markers.active?.label).toBe(2);
+    markers.remove(2);
+    expect(markers.active).toEqual({ time: 30, label: 3 });
+    markers.clear();
+    expect(markers.size).toBe(0);
+    expect(markers.active).toBeUndefined();
+  });
+
+  it('finds markers near a time and steps between them in time order', () => {
+    const markers = new MarkerList();
+    [30, 10, 20].forEach((time) => markers.add(time));
+    expect(markers.nearest(12)?.label).toBe(2);
+    // Equally close: the later-placed marker is drawn on top, so it wins.
+    expect(markers.nearest(15)?.label).toBe(3);
+    expect(markers.nearest(15, 4)).toBeUndefined();
+    expect(markers.adjacent(10, 1)?.time).toBe(20);
+    expect(markers.adjacent(20, -1)?.time).toBe(10);
+    expect(markers.adjacent(25, 1)?.time).toBe(30);
+    expect(markers.adjacent(30, 1)).toBeUndefined();
+    expect(markers.adjacent(10, -1)).toBeUndefined();
+  });
+
+  it('restores saved markers inside the dump, numbering unlabeled and repeated ones', () => {
+    const markers = new MarkerList();
+    markers.restore([{ time: 5 }, { time: 10, label: 1 }, { time: 99, label: 4 }, { time: 20, label: 1 }, { time: 30, label: 3 }], 0, 40);
+    const restored = [{ time: 5, label: 2 }, { time: 10, label: 1 }, { time: 20, label: 4 }, { time: 30, label: 3 }];
+    expect(markers.all).toEqual(restored);
+    expect(markers.active?.label).toBe(2);
+    expect(markers.toPersisted()).toEqual(restored);
+    markers.retain(0, 15);
+    expect(markers.all.map(markerName)).toEqual(['M2', 'M1']);
+    markers.restore([], 0, 40);
+    expect(markers.size).toBe(0);
   });
 });
 

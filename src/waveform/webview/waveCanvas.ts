@@ -1,9 +1,10 @@
-// @index waveform-webview-canvas — 波形画布交互：点击放游标（吸附跳变）、拖动框选放大、拖动游标/标记、中键平移、Ctrl+滚轮缩放、悬停值提示
+// @index waveform-webview-canvas — 波形画布交互：点击放游标（吸附跳变）、拖动框选放大、拖动游标/标记、右键菜单（带指针下的标记）、中键平移、Ctrl+滚轮缩放、悬停值提示
 
 import { radixLabels } from '../model/radix';
 import { changeCount, changeIndexAt, changeTime } from '../model/signalValues';
 import { formatTicks } from '../model/timeScale';
 import { formatTrackValue } from '../model/valueFormat';
+import { markerName, type WaveMarker } from '../view/markers';
 import { timeToX, xToTime } from '../view/viewport';
 import type { VisibleRow } from '../view/waveRows';
 import { rowHeight, WaveActions } from './actions';
@@ -18,7 +19,8 @@ const grabPixels = 4;
 const dragThreshold = 3;
 
 export interface CanvasCallbacks {
-  readonly onContextMenu: (event: MouseEvent, rowId: number | undefined, time: number) => void;
+  /** `marker` is the marker line under the pointer, if any. */
+  readonly onContextMenu: (event: MouseEvent, rowId: number | undefined, time: number, marker: WaveMarker | undefined) => void;
   /** Range selection changed (for the ruler's Δ tag); undefined when it ends. */
   readonly onDragRange: (range: { x0: number; x1: number } | undefined) => void;
 }
@@ -27,7 +29,7 @@ type DragMode =
   | { kind: 'pending'; startX: number; startY: number; rowId: number | undefined; additive: boolean }
   | { kind: 'range'; startX: number; currentX: number }
   | { kind: 'cursor' }
-  | { kind: 'marker'; index: number }
+  | { kind: 'marker'; label: number }
   | { kind: 'pan'; lastX: number };
 
 export class WaveCanvas {
@@ -65,7 +67,8 @@ export class WaveCanvas {
     this.element.addEventListener('wheel', (event) => this.onWheel(event), { passive: false });
     this.element.addEventListener('contextmenu', (event) => {
       event.preventDefault();
-      this.callbacks.onContextMenu(event, this.rowAt(event.offsetY), this.timeAt(event.offsetX));
+      const time = this.timeAt(event.offsetX);
+      this.callbacks.onContextMenu(event, this.rowAt(event.offsetY), time, this.actions.nearestMarker(time, grabPixels));
     });
     this.element.addEventListener('auxclick', (event) => {
       if (event.button === 1) {
@@ -152,8 +155,8 @@ export class WaveCanvas {
       return;
     }
     const marker = this.actions.nearestMarker(this.timeAt(event.offsetX), grabPixels);
-    if (marker >= 0) {
-      this.drag = { kind: 'marker', index: marker };
+    if (marker) {
+      this.drag = { kind: 'marker', label: marker.label };
       return;
     }
     this.drag = {
@@ -193,7 +196,7 @@ export class WaveCanvas {
         this.actions.setCursor(this.actions.snapTime(this.timeAt(event.offsetX), this.signalVarAt(event.offsetY)));
         return;
       case 'marker':
-        this.actions.moveMarker(drag.index, this.actions.snapTime(this.timeAt(event.offsetX), this.signalVarAt(event.offsetY)));
+        this.actions.moveMarker(drag.label, this.actions.snapTime(this.timeAt(event.offsetX), this.signalVarAt(event.offsetY)));
         return;
       case 'pan':
         this.actions.panPixels(drag.lastX - event.offsetX);
@@ -246,7 +249,7 @@ export class WaveCanvas {
 
   private hoverCursor(x: number): string {
     const cursorX = timeToX(this.store.view, this.width, this.store.cursor);
-    if (Math.abs(cursorX - x) <= grabPixels || this.actions.nearestMarker(this.timeAt(x), grabPixels) >= 0) {
+    if (Math.abs(cursorX - x) <= grabPixels || this.actions.nearestMarker(this.timeAt(x), grabPixels)) {
       return 'ew-resize';
     }
     return 'crosshair';
@@ -294,6 +297,10 @@ export class WaveCanvas {
     lines.push({ label: '时刻', value: formatTicks(time, data.timescale) + (this.store.cycles ? ` · 第 ${this.store.cycles.cycleAt(time)} 周期` : '') });
     if (time !== this.store.cursor) {
       lines.push({ label: '距游标', value: measurementLabel(this.store, Math.min(time, this.store.cursor), Math.max(time, this.store.cursor)) });
+    }
+    const marker = this.actions.nearestMarker(this.timeAt(x), grabPixels);
+    if (marker) {
+      lines.push({ label: `标记 ${markerName(marker)}`, value: '拖动可移动，右键可删除' });
     }
     return lines;
   }

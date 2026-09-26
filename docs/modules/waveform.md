@@ -1,4 +1,4 @@
-# waveform | src/waveform/ | 55 files
+# waveform | src/waveform/ | 57 files
 
 内置 VCD 波形查看器：VS Code 只读自定义编辑器（`*.vcd` 默认打开）+ “仿真并查看波形”命令。宿主侧流式解析 VCD 为列式 typed-array 模型并经 postMessage 交给 Webview；Webview 用 Canvas 绘制波形、DOM 虚拟列表绘制信号名/值。面向课程：GRF 等小存储器逐字记录并显示 `$sp` 等别名，32 位指令信号默认反汇编，testbench `$display` 的 GRF/DM 写入 trace 叠加到时间轴并可点击联动。
 
@@ -22,7 +22,7 @@ model:
   model/radix.ts — 进制枚举与中文标签
   model/mipsDisassembly.ts — 机器字反汇编，复用 core 解码器、instructionForms 与寄存器名表
   model/timeScale.ts — `$timescale` 解析、tick 物理时间文本、1/2/5 刻度步长
-  model/viewStateContract.ts — 持久化视图状态（行/分组/进制/颜色/时钟/视窗/游标/标记/布局）与不信任输入清洗
+  model/viewStateContract.ts — 持久化视图状态（行/分组/进制/颜色/时钟/视窗/游标/标记及其编号/布局）与不信任输入清洗；旧状态中只存时间的标记仍可读入
   model/protocol.ts — 宿主与 Webview 消息契约、trace 事件结构
 
 vcd:
@@ -49,6 +49,7 @@ view (纯逻辑，Webview 使用，单测覆盖):
   view/viewport.ts — 视窗：适配、锚点缩放、平移、框选、确保可见、像素换算与 overscroll 限制
   view/waveSegments.ts — LOD 遍历：亚像素跳变合并为密集带，工作量受画布宽度约束；有序时间点按列聚合
   view/cycleCounter.ts — 时钟上升沿前缀计数：周期序号、上/下一个沿、区间周期数、周期网格
+  view/markers.ts — 时间标记集合：稳定编号（删除其他标记不改名，空出的最小编号复用）、测量用活动标记（被删时改用时间上最近的标记）、就近/相邻查找、持久化往返
   view/signalTree.ts — 信号树：存储器字归并为数组节点、参数折叠、自然排序、搜索（含路径片段）与扁平化，标记真正命中项供回车选中
   view/waveRows.ts — 信号行/分组模型：去重添加、移动、分组/取消分组、持久化往返、重载后按路径重绑
   view/signalDefaults.ts — 课程默认：指令信号用 instr 进制、时钟识别、首开信号集 + 寄存器堆分组、GRF `$sp` 别名
@@ -61,7 +62,7 @@ webview (浏览器端，esbuild 打包，覆盖率排除):
   webview/store.ts — 状态中心与合批脏区（帧调度由 app 注入 rAF，store/actions 不依赖 DOM，可在 node 单测）；webview/actions.ts — 缩放/导航/标记/行操作/trace 联动，行结构变化后统一校正选择与锚点
   webview/wavePane.ts — 表头+粘性画布+虚拟标签行+缩略条装配与拖入；webview/waveCanvas.ts — 画布交互（吸附游标、框选放大、拖动游标/标记、平移、缩放、悬停提示）
   webview/waveRenderer.ts — 波形绘制（event 画触发箭头）；webview/rulerRenderer.ts、webview/rulerView.ts — 标尺绘制与交互；webview/overview.ts — 缩略条
-  webview/rowLabels.ts — 信号名/值列；webview/rowMenu.ts — 行右键菜单；webview/contextMenu.ts — 通用菜单；webview/tooltip.ts — 悬停提示
+  webview/rowLabels.ts — 信号名/值列；webview/rowMenu.ts — 行右键菜单；webview/timeMenu.ts — 时间点右键菜单（删除指针下的标记，或从列表选择要删除的标记）；webview/contextMenu.ts — 通用菜单（子菜单须悬停停留 250ms 才打开/切换，斜穿兄弟项进入已开子菜单不会误切换）；webview/tooltip.ts — 悬停提示
   webview/signalBrowser.ts — 信号树；webview/tracePanel.ts — trace 列表；webview/sidebar.ts — 侧栏；webview/toolbar.ts — 工具栏；webview/statusBar.ts — 状态栏与加载/错误覆盖层
   webview/keyboard.ts — 快捷键与帮助；webview/theme.ts — 主题调色板；webview/icons.ts — SVG 图标；webview/dom.ts — DOM 工具；webview/dragData.ts — 拖放载荷
   webview/styles.css — 主题变量驱动的样式
