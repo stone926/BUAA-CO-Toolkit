@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 65 files
+# verilog-lsp | src/language/verilog/ | 64 files
 
 Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
 
@@ -69,6 +69,5 @@ external-compiler:
   iverilogSyntaxCheck.ts — 从 initializationOptions 的扩展安装根运行绝对路径 `iverilog -g2005 -tnull -i`，解析常见 path:line[:column] 诊断
 
 legacy:
-  cst.ts — deprecated CST兼容包装, 生产路径已不使用
 
 Diagnostic子模块: verilog-diagnostics.md | AST子模块: verilog-ast.md

@@ -41,17 +41,13 @@ const deprecatedExportGroups: readonly DeprecatedExportGroup[] = [
 ];
 
 describe('deprecated compatibility exports', () => {
-  it('are not consumed by production source outside their compatibility module', () => {
+  it('are absent from production source', () => {
     const productionFiles = listProductionSourceFiles(path.join(process.cwd(), 'src'));
     const violations: string[] = [];
 
     for (const group of deprecatedExportGroups) {
-      const sourcePath = normalizeRelativePath(group.source);
       const pattern = new RegExp(`\\b(?:${group.identifiers.map(escapeRegExp).join('|')})\\b`, 'g');
       for (const file of productionFiles) {
-        if (file === sourcePath) {
-          continue;
-        }
         const text = readFileSync(path.join(process.cwd(), file), 'utf8');
         const matches = [...new Set(text.match(pattern) ?? [])];
         if (matches.length > 0) {

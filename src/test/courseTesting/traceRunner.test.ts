@@ -85,10 +85,6 @@ vi.mock('../../language/verilog/traceParser', () => ({
   parseSimOutput: vi.fn(() => [{ pc: 0x3000 }])
 }));
 
-vi.mock('../../traceCompare', () => ({
-  defaultTraceCompareMode: { compareCycles: true }
-}));
-
 vi.mock('../../courseTestLogisim', () => ({
   runP3LogisimTraceCase: vi.fn()
 }));

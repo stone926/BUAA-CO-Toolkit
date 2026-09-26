@@ -2,9 +2,7 @@
 import {
   CourseExecutionProfile,
   Cp0Policy,
-  cp0RegisterNumbers,
-  CourseExceptionName,
-  courseExceptionCodes
+  cp0RegisterNumbers
 } from '../profiles/profile';
 import { u32 } from '../values';
 
@@ -255,9 +253,4 @@ export class MachineState {
     }
     return this.cp0;
   }
-}
-
-/** Exception code for a course exception name. */
-export function exceptionCode(name: CourseExceptionName): number {
-  return courseExceptionCodes[name];
 }

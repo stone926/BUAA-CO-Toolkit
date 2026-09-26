@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { URI } from 'vscode-uri';
 import { createTestServices as services } from '../helpers/appServices';
 import {
-  resolveGeneratedAsmBatch,
   resolveGeneratorRunSetup,
   runGeneratorAndCollectAsms,
   type BuiltinGeneratorRunSetup
@@ -28,18 +27,13 @@ vi.mock('vscode', async () => {
 });
 
 vi.mock('../../config', () => ({
-  resolvePython: vi.fn(async () => 'python'),
-  getJava: vi.fn(() => 'java'),
-  getGeneratorArgs: vi.fn(() => []),
-  getGeneratedAsmLimit: vi.fn(() => 10),
   ensureConcreteProfile: vi.fn(async () => 'P5'),
   getAutomaticTestInstructions: vi.fn(() => 'addu subu'),
   getMipsEngine: vi.fn(() => 'mars')
 }));
 
 vi.mock('../../process', () => ({
-  revealOutputChannel: vi.fn(),
-  runTool: vi.fn()
+  revealOutputChannel: vi.fn()
 }));
 
 vi.mock('../../asmCaseStore', () => ({
@@ -166,7 +160,7 @@ describe('builtin generator workflow', () => {
     );
   });
 
-  it('keeps the public one-shot automatic generator quiet', async () => {
+  it('keeps automatic generation quiet when requested', async () => {
     const state = vscodeState.state!;
     const process = await import('../../process');
     state.workspaceFolders.splice(0, state.workspaceFolders.length, {
@@ -175,9 +169,7 @@ describe('builtin generator workflow', () => {
     });
     state.activeTextEditor = { document: { uri: URI.file('E:/work/main.asm') } };
 
-    const batch = await resolveGeneratedAsmBatch(services(), {
-      resolveAsmBatchInputs: vi.fn(async () => [])
-    });
+    const batch = await runGeneratorAndCollectAsms(services(), setup(), { revealOutput: false });
 
     expect(batch?.asmCases).toHaveLength(1);
     expect(process.revealOutputChannel).not.toHaveBeenCalled();

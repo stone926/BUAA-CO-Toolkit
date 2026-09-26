@@ -8,7 +8,7 @@ import {
   programImageIssues,
   serializeProgramImage
 } from '../../mips/replay/programImage';
-import { commitEventSourceMap, sourceMapEntryForAddress } from '../../mips/core/assembler/sourceMap';
+import { commitEventSourceMap, sourceMapEntryForAddress } from '../helpers/sourceMap';
 
 const corpusRoot = path.resolve(process.cwd(), 'conformance/mips/corpus/spec-microprograms');
 

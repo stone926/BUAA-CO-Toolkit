@@ -73,26 +73,3 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
     }
   };
 }
-
-export function verilogDelayFromSimTime(simTime: string): string {
-  const match = /^(\d+(?:\.\d+)?)\s*(fs|ps|ns|us|ms|s)?$/i.exec(simTime.trim());
-  if (!match) {
-    return '200000';
-  }
-  const value = Number(match[1]);
-  const unit = (match[2] ?? 'ns').toLowerCase();
-  const multipliers: Record<string, number> = {
-    fs: 0.000001,
-    ps: 0.001,
-    ns: 1,
-    us: 1000,
-    ms: 1000000,
-    s: 1000000000
-  };
-  const delay = value * multipliers[unit];
-  if (!Number.isFinite(delay) || delay < 0) {
-    return '200000';
-  }
-  const rounded = Math.round(delay);
-  return Math.abs(delay - rounded) < 1e-9 ? String(rounded) : Number(delay.toFixed(6)).toString();
-}

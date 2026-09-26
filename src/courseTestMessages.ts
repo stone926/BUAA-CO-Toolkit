@@ -17,9 +17,6 @@ export function engineRunWasCancelled(
   return signal?.aborted === true;
 }
 
-/** @deprecated Compatibility export for callers not yet migrated to provider-neutral naming. */
-export const marsStageFailureMessage = engineStageFailureMessage;
-
 export function diffMessage(diff: TraceDiffResult): string {
   if (diff.matched) {
     return `${diff.summary.matchedEvents} 个事件匹配`;

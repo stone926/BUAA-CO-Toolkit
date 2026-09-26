@@ -4,11 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   ensureConcreteProfile,
-  getAutomaticTestInstructions,
-  getGeneratedAsmLimit,
-  getGeneratorArgs,
-  getJava,
-  resolvePython
+  getAutomaticTestInstructions
 } from '../config';
 import {
   AsmCase,
@@ -22,32 +18,15 @@ import {
   type P7StressMode
 } from './builtinAsmGenerator';
 import { automaticProbeShards, probeVariantCount } from './builtinAsm/p7/probeVariants';
-import {
-  buildGeneratorInvocation,
-  changedAsmFiles,
-  GeneratorInvocation,
-  isSupportedGeneratorFile,
-  snapshotAsmFiles
-} from './generator';
 import { CourseTraceBatchSource } from '../courseTestReport';
 import { workspaceFolderForOrFirst } from '../fsUtil';
-import { revealOutputChannel, runTool } from '../process';
+import { revealOutputChannel } from '../process';
 import { AppServices, ProjectProfile } from '../types';
-import { resolveFileInput } from '../workflowInputs';
 import {
   automaticTestEngineMode,
   automaticTestPolicy
 } from './automaticTestPolicy';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
-
-export type GeneratorRunSetup = ExternalGeneratorRunSetup | BuiltinGeneratorRunSetup;
-
-export interface ExternalGeneratorRunSetup {
-  kind: 'external';
-  folder: vscode.WorkspaceFolder;
-  generator: vscode.Uri;
-  invocation: GeneratorInvocation;
-}
 
 export interface BuiltinGeneratorRunSetup {
   kind: 'builtin';
@@ -81,29 +60,7 @@ export interface GeneratorRunOptions {
   };
 }
 
-export interface ResolveGeneratedAsmBatchOptions {
-  resolveAsmBatchInputs: () => Promise<vscode.Uri[]>;
-}
-
-export async function resolveGeneratedAsmBatch(
-  services: AppServices,
-  _options: ResolveGeneratedAsmBatchOptions
-): Promise<GeneratedAsmBatch | undefined> {
-  const setup = await resolveGeneratorRunSetup();
-  if (!setup) {
-    return undefined;
-  }
-  // The public automatic facade stays quiet even when the generic run setting asks
-  // manual tools to reveal their output panel. Failures are surfaced by the compact
-  // automatic-test report instead.
-  const generated = await runGeneratorAndCollectAsms(services, setup, { revealOutput: false });
-  if (generated) {
-    return generated;
-  }
-  return undefined;
-}
-
-export async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | undefined> {
+export async function resolveGeneratorRunSetup(): Promise<BuiltinGeneratorRunSetup | undefined> {
   const folder = workspaceFolderForOrFirst(vscode.window.activeTextEditor?.document.uri);
   if (!folder) {
     vscode.window.showErrorMessage('运行测试生成器前请先打开一个工作区文件夹');
@@ -134,99 +91,43 @@ export async function resolveGeneratorRunSetup(): Promise<GeneratorRunSetup | un
   };
 }
 
-export async function runGeneratorAndCollectAsms(
-  services: AppServices,
-  setup: GeneratorRunSetup,
-  options: GeneratorRunOptions = {}
-): Promise<GeneratedAsmBatch | undefined> {
-  if (setup.kind === 'builtin') {
-    return await runBuiltinGeneratorAndCollectAsms(services, setup, options);
-  }
-
-  const before = await snapshotAsmFiles(setup.folder.uri.fsPath);
-  if (options.revealOutput !== false) {
-    revealOutputChannel(services.output, setup.generator);
-  }
-  services.output.appendLine('');
-  services.output.appendLine(`正在运行测试生成器: ${setup.generator.fsPath}`);
-  const result = await runTool(setup.invocation.command, setup.invocation.args, {
-    cwd: setup.invocation.cwd,
-    output: services.output,
-    resource: setup.generator,
-    signal: options.signal
-  });
-  if (!result.ok) {
-    vscode.window.showErrorMessage('测试生成器运行失败。请查看插件输出面板');
-    return undefined;
-  }
-
-  const after = await snapshotAsmFiles(setup.folder.uri.fsPath);
-  const generated = changedAsmFiles(before, after, getGeneratedAsmLimit(setup.generator)).map((file) => vscode.Uri.file(file));
-  const source: CourseTraceBatchSource = generatorSource(setup, generated, result.commandLine, result.cwd);
-  if (generated.length) {
-    return { asms: generated, source };
-  }
-  return undefined;
+export function generatorResource(setup: BuiltinGeneratorRunSetup): vscode.Uri {
+  return setup.resource;
 }
 
-export function generatorResource(setup: GeneratorRunSetup): vscode.Uri {
-  return setup.kind === 'external' ? setup.generator : setup.resource;
-}
-
-export function generatorFolder(setup: GeneratorRunSetup): vscode.WorkspaceFolder {
+export function generatorFolder(setup: BuiltinGeneratorRunSetup): vscode.WorkspaceFolder {
   return setup.folder;
 }
 
-export function generatorLabel(setup: GeneratorRunSetup): string {
-  return setup.kind === 'external' ? setup.generator.fsPath : 'builtin:random-asm';
+export function generatorLabel(): string {
+  return 'builtin:random-asm';
 }
 
-export function generatorCommandLine(setup: GeneratorRunSetup): string {
-  if (setup.kind === 'external') {
-    return [setup.invocation.command, ...setup.invocation.args].join(' ');
-  }
+export function generatorCommandLine(setup: BuiltinGeneratorRunSetup): string {
   const instructionArg = setup.instructionText.trim() ? ` --instructions "${setup.instructionText.trim()}"` : ' --instructions <profile-default>';
   return `builtin-random-asm --profile ${setup.profile} --count ${setup.instructionCount}${instructionArg}`;
 }
 
-export function generatorCwd(setup: GeneratorRunSetup): string {
-  return setup.kind === 'external' ? setup.invocation.cwd : path.join(setup.folder.uri.fsPath, '.co', 'cases');
+export function generatorCwd(setup: BuiltinGeneratorRunSetup): string {
+  return path.join(setup.folder.uri.fsPath, '.co', 'cases');
 }
 
 export function generatorSource(
-  setup: GeneratorRunSetup,
+  setup: BuiltinGeneratorRunSetup,
   asms: vscode.Uri[],
   commandLine = generatorCommandLine(setup),
   cwd = generatorCwd(setup)
 ): CourseTraceBatchSource {
   return {
     kind: 'generator',
-    generator: generatorLabel(setup),
+    generator: generatorLabel(),
     commandLine,
     cwd,
     asmFiles: asms.map((uri) => uri.fsPath)
   };
 }
 
-async function buildExternalGeneratorRunSetup(
-  folder: vscode.WorkspaceFolder,
-  generator: vscode.Uri
-): Promise<GeneratorRunSetup | undefined> {
-  const invocation = buildGeneratorInvocation(generator.fsPath, {
-    python: await resolvePython(generator),
-    java: getJava(generator),
-    cwd: path.dirname(generator.fsPath),
-    extraArgs: getGeneratorArgs(generator)
-  });
-  if (!invocation) {
-    vscode.window.showErrorMessage(`不支持的测试生成器类型: ${path.extname(generator.fsPath) || '(无扩展名)'}`);
-    return undefined;
-  }
-
-  return { kind: 'external', folder, generator, invocation };
-}
-
-async function runBuiltinGeneratorAndCollectAsms(
+export async function runGeneratorAndCollectAsms(
   services: AppServices,
   setup: BuiltinGeneratorRunSetup,
   options: GeneratorRunOptions = {}
@@ -373,22 +274,4 @@ function builtinAsmFileName(profile: string, generatedAt: Date): string {
   const timestamp = generatedAt.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   const suffix = randomBytes(3).toString('hex');
   return `builtin-${profile.toLowerCase()}-${timestamp}-${suffix}.asm`;
-}
-
-async function resolveGeneratorInput(folder: vscode.WorkspaceFolder): Promise<vscode.Uri | undefined> {
-  return await resolveFileInput({
-    title: '选择随机测试生成器',
-    active: {
-      predicate: (uri) => isSupportedGeneratorFile(uri.fsPath),
-      saveDirty: true
-    },
-    folder,
-    include: '**/*.{py,js,mjs,cjs,jar,bat,cmd,exe,ps1}',
-    exclude: '**/{node_modules,out,.git,.co}/**',
-    maxResults: 200,
-    filters: {
-    Generator: ['py', 'js', 'mjs', 'cjs', 'jar', 'bat', 'cmd', 'exe', 'ps1'],
-    All: ['*']
-    }
-  });
 }

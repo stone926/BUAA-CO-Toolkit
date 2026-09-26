@@ -1,12 +1,13 @@
-# test-suite | src/test/ | 205 files | 框架: Vitest
+# test-suite | src/test/ | 214 files | 框架: Vitest
 
 单元/集成测试, 镜像src/结构. npm test / npm run test:coverage 先同步生成文件，再运行 npm run typecheck，最后执行 Vitest；CI 和 release 的 npm test 同样包含该门禁。npm run typecheck 使用 tsconfig.test.json 严格检查生产源码、测试源码及 Vitest 配置，且不生成文件；npm run compile 仍只构建生产源码。以下为<name>.test.ts
 
 test/helpers/:
+  sourceMap.ts — 汇编/执行回归专用的 ProgramImage origin 查询辅助，不进入生产构建。
   appServices.ts — 完整 AppServices / RunResult 测试样例；保留 Vitest mock 调用签名供断言使用，以真实接口校验 fixture 字段。
 
 test/:
-  manifest, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogSimulationOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 19 项公开配置/21 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
+  manifest, courseTestCommands, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogSimulationOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 19 项公开配置/21 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
 
 test/language/common/:
   settings, diagnosticActions, lsp, util, documentResultCache, semanticTokens
@@ -15,7 +16,7 @@ test/language/mips/:
   parser, syntax, instructionValidation, semantic, resources, hover, formatting, traceParser, traceCompare, realProjectPatterns, completions, signatureHelp, codeActions
 
 test/language/verilog/:
-  syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iverilogSyntaxCheck, externalSyntaxCheck, semanticModel, parser, formatting, folding, traceParser, cst, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
+  syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iverilogSyntaxCheck, externalSyntaxCheck, semanticModel, parser, formatting, folding, traceParser, statementParser, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/waveform/:
   vcdReader, valueFormat, viewLogic, signalModel, interactionLogic, hostShortcuts, hostServices, waveformPanel, sourceNavigation, designDump — VCD 流式解析（跨 chunk、重复 scope、别名、四态、event 触发、截断/倒退/位宽/上限诊断、inf/nan 实数）、进制与反汇编、视窗/周期/LOD/时间输入、信号树/行模型/默认信号/状态清洗、store/actions 选择校正与搜索选中（node 下运行）、宿主转发快捷键与 keybindings 一致性、trace 配对与中文空格路径、面板消息/CSP/含 glob 字符文件名的监视、信号/scope 跳转源码与实际 dumpfile 定位；designDump 覆盖参数逐级覆盖/不确定边界/作用域跳过，并用真实 bundled Icarus 编译 dump 顶层，核对 GRF 字、trace 与编译器报错归因
@@ -34,11 +35,11 @@ test/courseTesting/:
   builtinRegisterCoverage — P3–P7 默认最大 payload 的全 GPR 双端口读与存储观察、真实 RegisterFile 的 $28 恒零/$28-$29 别名变异；P4/P5 十二种 jr 生产者/间隔的陈旧目标变异；完成标记、halt 和各阶段容量
   dmStoreCheck — 原始公开 DM 事务对拍：同整字下的错误 mask/字节选择、目标 word、缺失/重复/乱序写、使能 lane 的错误与 X/Z；禁用 lane 任意数据、SW 忽略的低地址位和不同 GPR 写回时序均可接受，traceRunner 回归覆盖整字匹配时仍判失败
   p7ProbeAudit — young-MDU 完整旧/新 HI/LO 允许态与损坏反例、Timer 稳定 pending-writes 的额外时钟间隔、首次 CP0 reset 样本错误/丢失/重复/延迟与后续覆盖，全部自动 probe 分片容量
-  builtinAsmGenerator, generator, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous；覆盖 continuous P7 首失败/取消/展开与部分生成异常的会话所有权清理，以及 terminal/manual/session mismatch 的 fail-closed 保留
+  builtinAsmGenerator, generatorWorkflow, mipsUtil, p7ProbeCheck, p7InterruptAnchor, manifestCodec, machineCode/mars compatibility, logisimPrep, logisimTrace, continuous；覆盖 continuous P7 首失败/取消/展开与部分生成异常的会话所有权清理，以及 terminal/manual/session mismatch 的 fail-closed 保留
   p7ProbeScenarios, p7ProbeMmio, p7ProbePriority, p7ProbeMdu — 五分片多 seed 的完整变体覆盖、实际汇编与 IM/DM 容量；Timer 非法读写、pending 优先级、外部/Timer MDU 的真实汇编执行和损坏 CP0/HI/LO/重试写回负例；模型执行不冒充真实 DUT 的流水线证据
 
 test/mipsCore/, test/mipsCli/, test/mipsHost/, test/mipsProviders/, test/mipsReplay/:
-  ISA catalog/encode/decode golden 与 core/LSP/generator 多目标 projection 收敛/--check；有界 JSONL CLI；Worker protocol v2、从 0 连续 sequence、consumer 成功后 ACK、slice 取消与 crash generation；provider preflight immutable request/launch；source graph、ProgramImage、engine trust registry、exact replay/re-evaluate、真实 MARS 可选集成
+  ISA catalog/encode/decode golden 与 core/LSP/generator 多目标 projection 收敛/--check；有界 JSONL CLI；Worker protocol v2、从 0 连续 sequence、consumer 成功后 ACK、slice 取消与 crash generation；provider preflight immutable request/launch；source graph、ProgramImage、engine trust registry 与 bundle 完整性校验
 
 阶段 6 定向回归:
   courseEnginePolicy/providerResolver — auto/builtin/mars/verify-both 的稳定 id 原子选择、resource snapshot、无 preflight/runtime fallback
@@ -62,6 +63,6 @@ fixtures:
 
 真实 VS Code 扩展宿主:
   scripts/verify-extension-host.mjs — @vscode/test-electron 下载当前稳定版，加载最终 VSIX 解包目录；隔离用户配置/其他扩展，创建中文空格工作区，保留日志；本地可用 CO_VSCODE_VERSION 指定排查版本
-  scripts/extension-host-smoke.cjs — 四项小型测试：实际扩展激活、DocumentSymbol/LSP 保存 Icarus 错误诊断与修复（包含无关 editor 设置变化不应取消保存检查的回归）、co.verilog.runSimulation 命令及输出、co.test.runFullTest 固定 P4 用例的真实 assembler/Worker oracle/Icarus 双侧 golden trace 与报告 Webview；内嵌协议 fixture，不复制完整课程 CPU，不 mock VS Code 或增加生产测试接口
+  scripts/extension-host-smoke.cjs — 真实入口测试：实际扩展激活、DocumentSymbol/LSP 保存 Icarus 错误诊断与修复（包含无关 editor 设置变化不应取消保存检查的回归）、co.verilog.runSimulation 命令及输出、co.test.startContinuousGeneratedTraceTests 的 P4 内置生成器/assembler/Worker oracle/Icarus 故意错误 DUT、首失败停止与历史 Webview；内嵌协议 fixture，不复制完整课程 CPU，不 mock VS Code 或增加生产测试接口
   .github/workflows/extension-platforms.yml — PR/main push/手动五 target 原生验证；.github/actions/verify-extension-package/action.yml 与 release 共用打包、解包、Icarus smoke、真实扩展宿主检查，Linux 用 Xvfb；不逐平台重复全量单元测试，失败上传宿主日志
   首次宿主验证（2026-09-03）：[五个平台最终 VSIX 的真实 VS Code 验证](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33659011560) 全部通过；保存诊断回归另以旧 server 失败、新 server 通过作本地对照。

@@ -96,7 +96,6 @@ export function registerMips(context: vscode.ExtensionContext, services: AppServ
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Mips.DisablePseudoWarnings, disableMipsPseudoWarnings),
     vscode.commands.registerCommand(Commands.Mips.RunCurrentFile, () => runMarsCurrentFile(services)),
-    vscode.commands.registerCommand(Commands.Mips.RunAndCapture, () => runMarsCurrentFile(services)),
     vscode.commands.registerCommand(Commands.Mips.RunWithStdinFile, () => runMarsCurrentFileWithStdinFile(services)),
     vscode.commands.registerCommand(Commands.Mips.RunInTerminal, () => runMarsCurrentFileInTerminal())
   );
@@ -568,7 +567,6 @@ async function mergeP7KernelTextDump(
   }
 
   try {
-    const kernelOutput = `${kernelResult.stdout}\n${kernelResult.stderr}`;
     const dumpDiagnostic = marsDumpFailureDiagnostic(kernelResult.stdout, kernelResult.stderr);
     if (dumpDiagnostic) {
       const message = `P7 内核机器码导出失败：MARS 报告“${dumpDiagnostic}”。不能以缺失异常处理程序的 code.txt 继续测试。`;

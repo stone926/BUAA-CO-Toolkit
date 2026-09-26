@@ -23,7 +23,6 @@ import {
   type MipsExecutionProvider
 } from '../mips/providers/contracts';
 import {
-  compareExecutorShadow,
   ExecutorShadowDifferential
 } from './oracle/differentialRunner';
 import type {

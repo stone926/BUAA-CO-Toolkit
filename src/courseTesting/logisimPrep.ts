@@ -1,33 +1,6 @@
+// @index logisim-prep — 课程 Logisim 用例电路的稳定文件命名
 import * as path from 'path';
 import { sanitizeFileStem } from '../pathUtils';
-
-export type LogisimPrepareStatus = 'prepared' | 'error';
-
-export interface LogisimPrepareCaseResult {
-  asm: string;
-  caseId?: string;
-  caseManifest?: string;
-  asmSnapshot?: string;
-  status: LogisimPrepareStatus;
-  message: string;
-  machineCode?: string;
-  circuit?: string;
-  wordCount?: number;
-}
-
-export interface LogisimPrepareSummary {
-  total: number;
-  prepared: number;
-  errors: number;
-}
-
-export function logisimPrepSummary(results: readonly LogisimPrepareCaseResult[]): LogisimPrepareSummary {
-  return {
-    total: results.length,
-    prepared: results.filter((item) => item.status === 'prepared').length,
-    errors: results.filter((item) => item.status === 'error').length
-  };
-}
 
 export function preparedCircuitFileName(circuitFile: string, asmFile: string, root?: string): string {
   const circuitStem = path.basename(circuitFile, path.extname(circuitFile));

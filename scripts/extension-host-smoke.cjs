@@ -39,42 +39,19 @@ _co_test_end:
   beq $0, $0, _co_test_end
   nop
 `;
-// A tiny protocol fixture, not a student CPU: check the actual assembler's
-// code.txt, then emit two independently specified architectural write events.
+// A deliberately incorrect DUT checks the public continuous workflow end to end.
+// The generated program and oracle are real; this nonzero-register mismatch must
+// stop the first iteration, retain its case, and produce a user-visible report.
 const courseVerilog = `module course_fixture(input clk, input reset);
   reg [31:0] code [0:4095];
-  integer step;
   initial $readmemh("code.txt", code);
   always @(posedge clk) begin
-    if (reset) step <= 0;
-    else begin
-      case (step)
-        0: begin
-          if (code[0] !== 32'h3408002a) $fatal(1, "unexpected ori machine code");
-          $display("@00003000: $8 <= 0000002a");
-        end
-        1: begin
-          if (code[1] !== 32'hac080000) $fatal(1, "unexpected sw machine code");
-          $display("@00003004: *00000000 <= 0000002a");
-        end
-        2: begin
-          if (code[2] !== 32'h1000ffff || code[3] !== 32'h00000000)
-            $fatal(1, "unexpected halt machine code");
-          $finish;
-        end
-      endcase
-      step <= step + 1;
+    if (!reset) begin
+      if (^code[0] === 1'bx) $fatal(1, "missing assembled machine code");
+      $display("@00003000: $1 <= ffffffff");
+      $finish;
     end
   end
-endmodule
-`;
-const courseTestbench = `\`timescale 1ns/1ps
-module course_fixture_tb;
-  reg clk = 0;
-  reg reset = 1;
-  course_fixture dut(.clk(clk), .reset(reset));
-  always #5 clk = ~clk;
-  initial #20 reset = 0;
 endmodule
 `;
 
@@ -116,12 +93,6 @@ async function configure(folder, values) {
   }
 }
 
-function traceLines(text) {
-  return text.split(/\r?\n/)
-    .filter((line) => /^\s*@/.test(line))
-    .map((line) => line.replace(/\s+/g, '').toLowerCase());
-}
-
 async function run() {
   const folder = vscode.workspace.workspaceFolders?.[0];
   assert.ok(folder, 'The test runner must open an isolated workspace');
@@ -132,7 +103,6 @@ async function run() {
     'command_fixture_tb.v': commandTestbench,
     'wave_fixture_tb.v': waveTestbench,
     'course_fixture.v': courseVerilog,
-    'course_fixture_tb.v': courseTestbench,
     'course smoke.asm': courseAsm
   };
   await Promise.all(Object.entries(files).map(([name, text]) => fs.writeFile(path.join(root, name), text)));
@@ -212,15 +182,32 @@ async function run() {
   const asm = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(root, 'course smoke.asm')));
   await vscode.window.showTextDocument(asm);
   assert.equal(asm.languageId, 'mipsasm');
-  await bounded('P4 course test command', () => vscode.commands.executeCommand('co.test.runFullTest'));
-  const expectedTrace = ['@00003000:$8<=0000002a', '@00003004:*00000000<=0000002a'];
-  for (const suffix of ['oracle.out', 'sim.out']) {
-    const text = await fs.readFile(path.join(root, '.co', 'out', `course smoke.${suffix}`), 'utf8');
-    assert.deepEqual(traceLines(text), expectedTrace, `${suffix} must contain the two golden write events`);
+  try {
+    await bounded('P4 continuous test command', () =>
+      vscode.commands.executeCommand('co.test.startContinuousGeneratedTraceTests'));
+  } finally {
+    await vscode.commands.executeCommand('co.test.stopContinuousTests');
   }
-  await waitFor('Course comparison report tab', () => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) =>
-    tab.label === 'CO Trace 比较' && tab.input instanceof vscode.TabInputWebview)));
-  console.log('PASS course command: builtin assembler, Worker oracle, Icarus DUT, and comparison report');
+  const report = JSON.parse(await fs.readFile(
+    path.join(root, '.co', 'out', 'continuous-trace-report.json'), 'utf8'));
+  assert.equal(report.running, false);
+  assert.equal(report.totalIterations, 1);
+  const result = report.iterations[0].results[0];
+  assert.equal(result.status, 'failed', result.message);
+  assert.equal(result.stage, 'compare');
+  assert.equal(result.dutBackend, 'iverilog');
+  assert.ok(result.caseId, 'The failing generated case must be retained');
+  const manifest = JSON.parse(await fs.readFile(
+    path.join(root, '.co', 'cases', result.caseId, 'case.json'), 'utf8'));
+  assert.equal(manifest.version, 2);
+  assert.equal(manifest.program.assembler.id, 'builtin-ts');
+  assert.equal(manifest.oracle.engine.id, 'builtin-ts');
+  await waitFor('Continuous report tab', () => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) =>
+    tab.label === '持续测试' && tab.input instanceof vscode.TabInputWebview)));
+  await vscode.commands.executeCommand('co.test.openAsmCaseIndex');
+  await waitFor('Test history tab', () => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) =>
+    tab.label === '测试历史 / 失败用例' && tab.input instanceof vscode.TabInputWebview)));
+  console.log('PASS continuous command: generator, builtin assembler, Worker oracle, Icarus mismatch, and history');
 }
 
 module.exports = { run };

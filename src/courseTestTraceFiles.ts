@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { workspaceFolderFor } from './fsUtil';
 import { CourseTraceCaseInput } from './courseTestCases';
-import { normalizePathKey, sanitizeFileStem } from './pathUtils';
+import { sanitizeFileStem } from './pathUtils';
 
 export function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.sim.out`;
@@ -11,10 +11,6 @@ export function simOutputFileNameForCase(item: CourseTraceCaseInput): string {
 export function oracleOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.oracle.out`;
 }
-
-/** @deprecated v1 artifact-name compatibility. New runs use oracleOutputFileNameForCase. */
-export const marsOutputFileNameForCase = (item: CourseTraceCaseInput): string =>
-  `${traceOutputStem(item)}.mars.out`;
 
 export function logisimRawOutputFileNameForCase(item: CourseTraceCaseInput): string {
   return `${traceOutputStem(item)}.logisim.out`;

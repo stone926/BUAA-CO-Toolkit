@@ -204,16 +204,6 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
   };
 }
 
-function normalizeStringArray(value: unknown, fallback: string[]): string[] {
-  if (!Array.isArray(value)) {
-    return [...fallback];
-  }
-  return [...new Set(value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean))].sort();
-}
-
 export function isVerilogLintRuleEnabled(settings: CoSettings, rule: string): boolean {
   const normalized = rule.toLowerCase();
   return !settings.verilog.lint.disabledRules.some((item) => item.toLowerCase() === normalized);

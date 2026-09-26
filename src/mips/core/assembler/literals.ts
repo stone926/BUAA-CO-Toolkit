@@ -13,13 +13,6 @@ export function parseIntegerLiteral(text: string): number | undefined {
   return parsed === undefined ? undefined : Number(parsed);
 }
 
-export function parseNonNegativeIntegerLiteral(text: string): number | undefined {
-  const parsed = tryParseIntegerLiteral(text);
-  return parsed !== undefined && parsed >= 0n && parsed <= maximumInteger
-    ? Number(parsed)
-    : undefined;
-}
-
 function tryParseIntegerLiteral(text: string): bigint | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;

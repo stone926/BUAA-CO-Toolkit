@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 import { findCourseHaltPc } from '../../mips/core/assembler/artifacts';
-import { commitEventSourceMap, sourceMapEntryForAddress } from '../../mips/core/assembler/sourceMap';
+import { commitEventSourceMap, sourceMapEntryForAddress } from '../helpers/sourceMap';
 import { executeProgramForService, executeProgramForServiceAsync } from '../../mips/core/machine/executeService';
 
 const corpusRoot = path.resolve(process.cwd(), 'conformance/mips/corpus/spec-microprograms');

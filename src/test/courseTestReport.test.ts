@@ -13,19 +13,15 @@ vi.mock('vscode', () => ({
   }
 }));
 
-import * as vscode from 'vscode';
 
 import {
-  batchSummary,
   continuousTraceMonitorMaxRows,
-  createCourseTraceBatchReport,
   neutralCourseTraceCaseResult,
   neutralCourseTraceStage,
   publicAutomaticDiagnosticMessage,
+  publicAutomaticCourseTraceCaseResult,
   renderAsmCaseIndex,
-  renderBatchTraceReport,
-  renderContinuousTraceMonitor,
-  showBatchTraceReport
+  renderContinuousTraceMonitor
 } from '../courseTestReport';
 import type { ContinuousTraceReport, CourseTraceCaseResult } from '../courseTestReport';
 
@@ -59,18 +55,19 @@ describe('course test reports', () => {
       }
     };
     const message = publicAutomaticDiagnosticMessage(result);
-    const report = createCourseTraceBatchReport([result], { kind: 'generator' });
-    const rendered = renderBatchTraceReport(
-      [result],
-      { fsPath: 'E:/SECRET/report.json' } as never,
-      undefined,
-      { kind: 'generator' }
-    );
+    const report = publicAutomaticCourseTraceCaseResult(result, 0);
+    const rendered = renderContinuousTraceMonitor({
+      generatedAt: '2026-09-26T00:00:00.000Z', running: false, stopRequested: false,
+      generator: 'builtin:random-asm', commandLine: '', cwd: '',
+      options: { intervalMs: 0, maxIterations: 0, stopOnFailure: true },
+      iterations: [{ index: 1, status: 'error', startedAt: '',
+        summary: { total: 1, passed: 0, failed: 0, errors: 1 }, results: [result] }]
+    }, { fsPath: 'E:/SECRET/report.json' } as never);
 
     expect(message).toBe(
       '[AUTO-DUT] Icarus 编译失败（退出码 26）：CPU.v:449: Unable to bind <module>&signal'
     );
-    expect(report.results[0]).toMatchObject({
+    expect(report).toMatchObject({
       dutFailure: {
         phase: 'compile',
         diagnostic: { file: 'CPU.v', line: 449 }
@@ -153,23 +150,6 @@ describe('course test reports', () => {
     expect(html).not.toContain('SECRET');
   });
 
-  it('uses an automatic-test title for the public automatic result panel', () => {
-    showBatchTraceReport(
-      [{ asm: 'hidden.asm', status: 'passed', stage: 'compare', message: 'ok' }],
-      { fsPath: 'hidden.json' } as never,
-      undefined,
-      { kind: 'generator' }
-    );
-
-    expect(vi.mocked(vscode.window.createWebviewPanel))
-      .toHaveBeenLastCalledWith(
-        'coBatchTraceReport',
-        '自动测试结果',
-        2,
-        { enableScripts: false }
-      );
-  });
-
   it('writes role-neutral v2 results while preserving v1 input compatibility', () => {
     const legacy: CourseTraceCaseResult = {
       asm: 'legacy.asm',
@@ -210,19 +190,10 @@ describe('course test reports', () => {
     expect(normalized.firstDiff).not.toHaveProperty('mars');
     expect(normalized.firstDiff).not.toHaveProperty('sim');
 
-    const report = createCourseTraceBatchReport([legacy], undefined, '2026-08-26T00:00:00.000Z');
-    expect(report.schemaVersion).toBe(2);
-    expect(report.results[0]).toEqual(normalized);
     expect(neutralCourseTraceStage('dump')).toBe('assemble');
     expect(neutralCourseTraceStage('isim')).toBe('dut');
     expect(neutralCourseTraceStage('logisim')).toBe('dut');
 
-    const oldReportHtml = renderBatchTraceReport(
-      [legacy],
-      { fsPath: 'E:/out/legacy-report.json' } as unknown as import('vscode').Uri
-    );
-    expect(oldReportHtml).toContain('<td>oracle</td>');
-    expect(oldReportHtml).toContain('Oracle 2, DUT 3');
   });
 
   it('keeps a legacy raw-only Logisim output out of the canonical DUT slot', () => {
@@ -236,103 +207,6 @@ describe('course test reports', () => {
 
     expect(normalized.dutOut).toBeUndefined();
     expect(normalized.dutRawOut).toBe('legacy.logisim.raw.out');
-  });
-
-  it('summarizes trace results by status', () => {
-    const results: CourseTraceCaseResult[] = [
-      { asm: 'case1.asm', status: 'passed', stage: 'compare', message: 'OK' },
-      { asm: 'case2.asm', status: 'failed', stage: 'compare', message: 'WA' },
-      { asm: 'case3.asm', status: 'error', stage: 'mars', message: 'MARS error' }
-    ];
-
-    expect(batchSummary(results)).toEqual({
-      total: 3,
-      passed: 1,
-      failed: 1,
-      errors: 1
-    });
-  });
-
-  it('escapes external report content in batch HTML', () => {
-    const results: CourseTraceCaseResult[] = [
-      {
-        asm: 'E:/cases/bad<name>.asm',
-        stdin: 'E:/cases/in&1.txt',
-        caseId: 'case<&1',
-        asmSnapshot: 'E:/cases/snap<shot>.asm',
-        machineCode: 'E:/cases/code&latest.txt',
-        marsOut: 'E:/cases/mars"out.txt',
-        simOut: 'E:/cases/sim<out>.txt',
-        status: 'error',
-        stage: 'compare',
-        message: '<script>alert("x")</script>'
-      }
-    ];
-    const report = { fsPath: 'E:/out/report&latest.json' } as unknown as import('vscode').Uri;
-
-    const html = renderBatchTraceReport(results, report);
-
-    expect(html).toContain('bad&lt;name&gt;.asm');
-    expect(html).toContain('in&amp;1.txt');
-    expect(html).toContain('case&lt;&amp;1');
-    expect(html).toContain('snap&lt;shot&gt;.asm');
-    expect(html).toContain('code&amp;latest.txt');
-    expect(html).toContain('mars&quot;out.txt');
-    expect(html).toContain('sim&lt;out&gt;.txt');
-    expect(html).toContain('Oracle');
-    expect(html).toContain('DUT');
-    expect(html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
-    expect(html).toContain('report&amp;latest.json');
-  });
-
-  it('keeps automatic reports compact without serializing generator controls or shard filenames', () => {
-    const results: CourseTraceCaseResult[] = [{
-      asm: 'E:/SECRET_CASE_DIR/automatic-failure.asm',
-      status: 'failed',
-      stage: 'compare',
-      message: 'SECRET_BACKEND_MESSAGE E:/SECRET_OUTPUT',
-      firstDiff: {
-        index: 0,
-        status: 'diff',
-        reason: 'register value differs',
-        oracle: { pc: '00003000', kind: 'grf', target: '1', value: '00000001', raw: '', lineNumber: 1 },
-        dut: { pc: '00003000', kind: 'grf', target: '1', value: '00000002', raw: '', lineNumber: 1 }
-      }
-    }];
-    const source = {
-      kind: 'generator' as const,
-      generator: 'SECRET_GENERATOR',
-      commandLine: 'SECRET_COMMAND --count 4094',
-      cwd: 'E:/SECRET_CWD',
-      asmFiles: ['E:/SECRET_CASE_DIR/automatic-failure.asm']
-    };
-    const report = createCourseTraceBatchReport(results, source);
-    const html = renderBatchTraceReport(
-      results,
-      { fsPath: 'E:/SECRET_REPORT/report.json' } as unknown as import('vscode').Uri,
-      undefined,
-      source
-    );
-
-    expect(report.source).toEqual({ kind: 'generator' });
-    expect(report.results[0]).toMatchObject({
-      asm: '测试点 1',
-      status: 'failed',
-      message: '[AUTO-MISMATCH] CPU 输出与参考结果不一致'
-    });
-    expect(JSON.stringify(report)).not.toMatch(/SECRET|automatic-failure\.asm|4094/);
-    expect(html).toContain('测试点 1');
-    expect(html).not.toContain('automatic-failure.asm');
-    expect(html).toContain('register value differs');
-    expect(html).toContain('测试历史');
-    expect(html).not.toContain('SECRET_GENERATOR');
-    expect(html).not.toContain('SECRET_COMMAND');
-    expect(html).not.toContain('SECRET_CWD');
-    expect(html).not.toContain('SECRET_CASE_DIR');
-    expect(html).not.toContain('SECRET_BACKEND_MESSAGE');
-    expect(html).not.toContain('SECRET_OUTPUT');
-    expect(html).not.toContain('SECRET_REPORT');
-    expect(html).not.toContain('4094');
   });
 
   it('maps continuous monitor statuses into row classes and summary metrics', () => {

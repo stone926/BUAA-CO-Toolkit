@@ -120,11 +120,6 @@ export function getProfileConfig(profile: string): ProfileConfig | undefined {
   return loadCourseConfig().profiles[profile];
 }
 
-export function getProfileDescription(profile: string): string {
-  const config = getProfileConfig(profile);
-  return config?.description ?? '';
-}
-
 export function getProfileName(profile: string): string {
   const config = getProfileConfig(profile);
   return config?.name ?? profile;
@@ -138,10 +133,6 @@ export function getProfileDirectories(profile: string): string[] {
 export function getProfileRequiredTools(profile: string): string[] {
   const config = getProfileConfig(profile);
   return config?.requiredTools ?? [];
-}
-
-export function getProfileCapabilities(profile: string): Partial<Record<ProfileCapability, boolean>> {
-  return getProfileConfig(profile)?.capabilities ?? {};
 }
 
 export function getProfileDefaults(profile: string): Partial<ProfileDefaults> {
@@ -197,19 +188,6 @@ export function buildExpectedPorts(profile: string): Record<string, string | und
 
 export function getTraceFormatPatterns(profile: string): string[] {
   return loadCourseConfig().traceFormatPatterns[profile] ?? [];
-}
-
-export function getMemoryRange(section: string): MemoryRange | undefined {
-  const layout = loadCourseConfig().memoryLayout['CompactDataAtZero'];
-  return layout?.[section];
-}
-
-export function getDirectiveDescription(directive: string): string | undefined {
-  return loadCourseConfig().directiveDescriptions[directive];
-}
-
-export function getDirectiveDetail(directive: string): { description: string; commonValues?: Record<string, string> } | undefined {
-  return loadCourseConfig().directiveDetails[directive];
 }
 
 export function getCourseConfig(): CourseConfig {

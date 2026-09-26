@@ -27,7 +27,6 @@ import {
   controlMnemonics,
   branchMnemonics,
   linkBranchMnemonics,
-  jumpLinkMnemonics,
   divideMnemonics,
   hiLoWriteMnemonics,
   hiLoReadMnemonics,

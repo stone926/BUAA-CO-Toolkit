@@ -8,7 +8,6 @@ import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
 import { VerilogAlwaysBlockAst } from './blockAst';
 import { evalExpressionAstConstant, widthOfExpressionAst } from './expressions';
-import { VerilogExpressionAst } from './exprAst';
 import { VerilogModule } from './model';
 import { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 

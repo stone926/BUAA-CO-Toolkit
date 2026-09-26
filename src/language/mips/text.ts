@@ -4,7 +4,6 @@ import { buildMipsAst } from './ast';
 import type { MipsAstDocument, MipsOperandAst } from './ast';
 import { getNumericLikeRanges, isCharLiteral } from './literals';
 import { collectMipsOperandReferences } from './operandReferences';
-import { findCommentIndex } from './syntax';
 
 export function getMipsWordRange(document: TextDocument, position: Position, ast: MipsAstDocument = buildMipsAst(document)): Range | undefined {
   const line = ast.lines[position.line];
@@ -59,15 +58,6 @@ export function prefixedCompletionReplaceRange(linePrefix: string, position: Pos
 export function suffixCompletionReplaceRange(linePrefix: string, position: Position, isPart: (char: string, index: number, text: string) => boolean): Range {
   const start = scanPrefixStart(linePrefix, linePrefix.length, isPart);
   return Range.create(position.line, position.character - (linePrefix.length - start), position.line, position.character);
-}
-
-export function stripLineComment(line: string): string {
-  const commentIndex = findCommentIndex(line);
-  return commentIndex >= 0 ? line.slice(0, commentIndex) : line;
-}
-
-export function isIdentifierPart(char: string): boolean {
-  return isAsciiLetter(char) || isAsciiDigit(char) || char === '_' || char === '.';
 }
 
 export function isRegisterPart(char: string): boolean {

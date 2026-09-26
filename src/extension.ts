@@ -28,7 +28,6 @@ import { registerWaveform } from './waveform/waveform';
 import { WorkspaceModuleRegistry } from './language/verilog/workspaceModuleRegistry';
 import { runProjectWizard } from './wizard';
 import { registerHazard } from './hazard';
-import { registerTraceCompare } from './traceCompare';
 import { registerCourseTest } from './courseTest';
 import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
@@ -67,7 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
   void migrateLegacySemanticColorRules(context, output);
 
   // Register sidebar
-  const sidebarProvider = new CoSidebarProvider(context);
+  const sidebarProvider = new CoSidebarProvider();
   const sidebarView = vscode.window.registerTreeDataProvider('coSidebar', sidebarProvider);
   context.subscriptions.push(sidebarView);
 
@@ -172,7 +171,6 @@ export function activate(context: vscode.ExtensionContext): void {
   registerWaveform(context, services, moduleRegistry);
   registerLogisim(context, services);
   registerHazard(context, services);
-  registerTraceCompare(context, services);
   registerCourseTest(context, services);
   registerAdvancedTools(context);
 

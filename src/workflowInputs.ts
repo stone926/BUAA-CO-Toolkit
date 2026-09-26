@@ -1,8 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getMachineCode } from './config';
-import { workspaceFolderFor } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
 
 export interface ResolveWorkspaceFileOptions {
@@ -43,26 +41,6 @@ export interface ResolveFileInputOptions extends FindWorkspaceFileCandidatesOpti
   fallbackOpenDialog?: boolean;
 }
 
-export async function resolveMachineCodeInput(title = 'Select MARS HexText machine code file'): Promise<vscode.Uri | undefined> {
-  const editor = vscode.window.activeTextEditor;
-  if (editor && editor.document.uri.scheme === 'file' && path.basename(editor.document.uri.fsPath).toLowerCase() === getMachineCode(editor.document.uri).toLowerCase()) {
-    return editor.document.uri;
-  }
-  const base = editor?.document.uri.scheme === 'file'
-    ? path.dirname(editor.document.uri.fsPath)
-    : workspaceFolderFor()?.uri.fsPath;
-  if (base) {
-    const candidate = path.join(base, getMachineCode(editor?.document.uri));
-    if (fs.existsSync(candidate)) {
-      return vscode.Uri.file(candidate);
-    }
-  }
-  return await pickOneFile(title, {
-    Code: ['txt'],
-    All: ['*']
-  });
-}
-
 export async function resolveActiveOrPickedTextFile(title: string): Promise<vscode.Uri | undefined> {
   const editor = vscode.window.activeTextEditor;
   if (editor && editor.document.uri.scheme === 'file') {
@@ -86,38 +64,6 @@ export async function resolveWorkspaceFile(options: ResolveWorkspaceFileOptions)
       saveDirty: options.saveActive
     } : false
   });
-}
-
-export async function resolveWorkspaceFiles(options: ResolveWorkspaceFileOptions): Promise<vscode.Uri[]> {
-  const candidates = await findWorkspaceFileCandidates({
-    include: options.include,
-    exclude: options.exclude,
-    maxResults: options.maxResults ?? 500
-  });
-  if (candidates.length) {
-    const picked = await vscode.window.showQuickPick(
-      candidates.map((candidate) => ({
-        label: vscode.workspace.asRelativePath(candidate.uri),
-        description: path.dirname(candidate.uri.fsPath),
-        uri: candidate.uri
-      })),
-      {
-        title: options.title,
-        matchOnDescription: true,
-        canPickMany: true
-      }
-    );
-    return picked?.map((item) => item.uri) ?? [];
-  }
-
-  const picked = await vscode.window.showOpenDialog({
-    title: options.title,
-    canSelectFiles: true,
-    canSelectFolders: false,
-    canSelectMany: true,
-    filters: options.filters
-  });
-  return picked ?? [];
 }
 
 export async function resolveActiveFile(options: ResolveActiveFileOptions = {}): Promise<vscode.Uri | undefined> {

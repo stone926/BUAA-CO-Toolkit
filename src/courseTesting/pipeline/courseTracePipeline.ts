@@ -14,7 +14,6 @@ import type { executeWithPreflight } from '../../mips/providers/providerResolver
 import type { runVerilogSimulation } from '../../verilog/simulationRunner';
 import type { AppServices } from '../../types';
 import type {
-  AsmCase,
   copyAsmCaseArtifact,
   createAsmCaseFromAsm,
   prepareAsmCaseMachineCode,

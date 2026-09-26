@@ -9,7 +9,7 @@ entry:
 
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
-  config.ts — 所有co.*设置读取(getProfile/getMipsEngine/getMarsJar/getRunTimeout...), 分层取值(WorkspaceFolder/Workspace/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；显式 Profile 的 top/TB/机器码/时长默认直接来自 courseConfig，向导无需写冗余项目设置；`co.mips.engine` 无效值 fail-safe 为 auto
+  config.ts — 现行co.*设置读取(getProfile/getMipsEngine/getMarsJar/getRunTimeout...), 分层取值(WorkspaceFolder/Workspace/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；显式 Profile 的 top/TB/机器码/时长默认直接来自 courseConfig，向导无需写冗余项目设置；`co.mips.engine` 无效值 fail-safe 为 auto
   resources/co/configManifest.json + configDefaults.json — 公开 schema 与内部运行默认解耦：日常 UI 精确 19 项，底层 legacy/策略键以无默认的 deprecated schema 仅对已有配置可见；项目/诊断使用 resource scope，工具路径使用 machine-overridable scope
   scripts/generate-manifest-config.mjs — 只向非 deprecated 公开项注入默认值，允许内部默认作为受测超集，并从课程资源生成 Profile/指令说明
 
@@ -38,7 +38,7 @@ fs:
 
 mips-commands:
   mipsCommands.ts — registerMipsAssemblyCommands() 与机器码导出命令分派；P3–P7 普通 text/P7 kernel dump 强制使用 builtin assembler，P2 dump 保留 MARS provider，不做 capability fallback
-  mips.ts — legacy MARS runner 与普通运行/capture/stdin/terminal 命令；这些 console/交互语义仍明确依赖 MARS
+  mips.ts — legacy MARS runner 与普通运行/stdin/terminal 命令；这些 console/交互语义仍明确依赖 MARS
   mips.ts — legacy runMarsFile(run/dumpText/dumpKernel)：使用 provider preflight 的 immutable launch；流式捕获/授权 MARS JAR 与 RI class 后仅执行本次运行的私有 registry staged artifact；stdout/stderr 各有 16 MiB raw ceiling，data/text/kernel dump 有界读取；课程 Trace 源码/动态停机尾、P7 0x4180 合并、原生 max-step 与共享稳定版兼容诊断(coL1/coL2/efc/p7irq/cl)
 
 verilog-commands:
@@ -67,9 +67,6 @@ verilog-commands:
 logisim-commands:
   logisim.ts — registerLogisim()4命令: 打开电路(GUI), 生成ROM, 注入ROM(修改.circ XML), 日志转CSV
 
-trace-compare:
-  traceCompare.ts — compareTracePair调用核心引擎(language/mips/traceCompare.ts), HTML diff报告, registerTraceCompare()2命令
-
 hazard:
   hazard.ts — runHazardAnalysis: ZIP用例->Hazard-Calculator.jar->解析statistic.json->展示forward/stall覆盖率. registerHazard()2命令
 
@@ -86,5 +83,5 @@ ui:
 
 other:
   legacySemanticColorMigration.ts — 一次性清理旧版本曾注入且用户未修改的全局 semantic token 规则；迁移后不再触碰颜色配置
-  workflowInputs.ts — resolveWorkspaceFile(s)、resolveMachineCodeInput(智能查找code.txt), resolveActiveOrPickedTextFile, pickOneFile
+  workflowInputs.ts — resolveWorkspaceFile、resolveActiveOrPickedTextFile, pickOneFile
   types.ts — AppServices(OutputChannel+StatusBarItem+扩展安装根+可选 MIPS Worker), RunResult, ToolDetection

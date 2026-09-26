@@ -178,15 +178,6 @@ function loadVerilogLanguageCatalog(): VerilogLanguageCatalog {
   return parsed as VerilogLanguageCatalog;
 }
 
-/**
- * 期望的 Verilog 顶层端口定义（按 Profile）。
- * 数据来源为 resources/co/courseConfig.json 的 verilogPorts，
- * 通过 courseConfig.buildExpectedPorts() 转换为 expectedPorts 格式。
- */
-export function getExpectedPorts(profile: string): Record<string, string | undefined> {
-  return buildExpectedPorts(profile);
-}
-
 // 保留旧对象形态供直接读取（向后兼容已加载的模块）
 const _expected: Record<string, Record<string, string | undefined>> = {};
 for (const p of ['P4', 'P5', 'P6', 'P7']) {

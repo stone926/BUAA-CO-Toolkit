@@ -1,7 +1,7 @@
 // @index mips-core — ProgramImage → course HexText/kernel 导出与停机 PC 检测（纯 TS）
 
 import { ProgramImage } from '../api';
-import { CourseProfile, isaProfilePolicies } from '../generated/isaCatalog';
+import { CourseProfile } from '../generated/isaCatalog';
 import { courseExecutionProfiles } from '../profiles/courseProfiles';
 import { hex8 } from '../values';
 
@@ -154,8 +154,4 @@ export function findCourseHaltPc(image: ProgramImage, profile: CourseProfile): n
     break;
   }
   return haltPc;
-}
-
-export function profileHasDelaySlot(profile: CourseProfile): boolean {
-  return isaProfilePolicies[profile].controlTransferDelaySlot;
 }

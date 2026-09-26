@@ -336,18 +336,6 @@ export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
   return layeredGetArray('mips.extraArgs', configDefaultArray('mips.extraArgs'), resource);
 }
 
-export function getGeneratorArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('test.generatorArgs', [], resource);
-}
-
-export function getGeneratedAsmLimit(resource?: vscode.Uri): number {
-  const configured = inspectedValue<number>('test.generatedAsmLimit', resource);
-  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
-    return Math.floor(configured);
-  }
-  return 100;
-}
-
 /** The sole public automatic-test customization. The old key is migration-only. */
 export function getAutomaticTestInstructions(resource?: vscode.Uri): string {
   const current = inspectedValue<string>('test.instructions', resource);

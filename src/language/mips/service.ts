@@ -1,4 +1,4 @@
-import { Diagnostic, FoldingRange, SignatureHelp, WorkspaceEdit } from 'vscode-languageserver/node';
+import { Diagnostic } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { getMipsCodeActions } from './codeActions';

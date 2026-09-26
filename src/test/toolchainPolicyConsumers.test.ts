@@ -25,19 +25,16 @@ describe('mode-aware toolchain policy consumers', () => {
 
   it('keeps manual P3 engine selection while pinning generated Logisim work to builtin', () => {
     const text = source('courseTestLogisim.ts');
-    expect(text).toContain("const automatic = source.kind === 'generator'");
-    expect(text).toContain('automatic ? automaticTestEngineMode : getMipsEngine(asm)');
+    expect(text).toContain("const automatic = options.source?.kind === 'generator'");
+    expect(text).toContain('automatic ? automaticTestEngineMode : options.engineMode ?? getMipsEngine(asm)');
     expect(text).toContain('nonInteractive: automatic');
     expect(text).toContain('engineMode: options.nonInteractive ? automaticTestEngineMode : undefined');
     expect(text).not.toMatch(/tools:\s*\[\s*['"]java['"]\s*,\s*['"]mars['"]/);
   });
 
-  it('pins generated case provenance and hidden dump compatibility to builtin', () => {
+  it('pins generated case provenance to builtin', () => {
     const workflow = source(path.join('courseTesting', 'generatorWorkflow.ts'));
-    const coordinator = source('courseTest.ts');
     expect(workflow).toContain('resolveCourseEnginePlan(automaticTestEngineMode, setup.profile)');
     expect(workflow).toContain('enginePlan,');
-    expect(coordinator).toContain('resolveCourseEnginePlan(automaticTestEngineMode, setup.profile)');
-    expect(coordinator).toContain('nonInteractive: true');
   });
 });

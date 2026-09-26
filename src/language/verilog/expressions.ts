@@ -42,10 +42,6 @@ export function widthOfExpression(expression: string, module: VerilogModule): Wi
   return widthOfExpressionAst(parseVerilogExpression(expression), module);
 }
 
-export function widthOfConstantInitializer(expression: string): WidthInfo {
-  return widthOfExpressionAst(parseVerilogExpression(expression), undefined);
-}
-
 export function shouldReportWidthMismatch(expected: WidthInfo, actual: WidthInfo): boolean {
   if (!expected.width || !actual.width) {
     return false;

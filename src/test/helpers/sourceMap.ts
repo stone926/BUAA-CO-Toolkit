@@ -1,8 +1,7 @@
-// @index mips-core — ProgramImage.sourceMap 查询：CommitEvent/PC/访存地址 -> source/macro origin（纯 TS）
 
-import { ProgramImage, ProgramSegment, SourceMapEntry } from '../api';
-import type { CommitEvent } from '../events/commitEvent';
-import { u32 } from '../values';
+import { ProgramImage, ProgramSegment, SourceMapEntry } from '../../mips/core/api';
+import type { CommitEvent } from '../../mips/core/events/commitEvent';
+import { u32 } from '../../mips/core/values';
 
 export interface SourceMapHit {
   readonly entry: SourceMapEntry;

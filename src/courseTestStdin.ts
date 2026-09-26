@@ -6,36 +6,6 @@ import { isDirectory } from './fsUtil';
 const stdinExtensions = ['.in', '.input', '.stdin', '.dat'];
 const stdinSubdirectories = ['input', 'inputs', 'test', 'tests', 'data'];
 
-export async function resolveSingleStdinInput(asm: vscode.Uri): Promise<vscode.Uri | undefined> {
-  const candidates = await findStdinCandidatesForAsm(asm);
-  if (!candidates.length) {
-    return undefined;
-  }
-  if (candidates.length === 1) {
-    return candidates[0];
-  }
-
-  const picked = await vscode.window.showQuickPick(
-    [
-      {
-        label: '无标准输入',
-        description: '不使用标准输入运行',
-        uri: undefined
-      },
-      ...candidates.map((uri) => ({
-        label: vscode.workspace.asRelativePath(uri),
-        description: path.dirname(uri.fsPath),
-        uri
-      }))
-    ],
-    {
-      title: '为此 ASM 用例选择标准输入文件',
-      matchOnDescription: true
-    }
-  );
-  return picked?.uri;
-}
-
 export async function findStdinCandidatesForAsm(asm: vscode.Uri): Promise<vscode.Uri[]> {
   const asmDir = path.dirname(asm.fsPath);
   const asmStem = path.basename(asm.fsPath, path.extname(asm.fsPath)).toLowerCase();

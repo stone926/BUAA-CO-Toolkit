@@ -149,10 +149,6 @@ interface AssemblyState {
   externAddress: number;
 }
 
-/** Compatibility aliases for callers that name the pure assembler entry point. */
-export const assembleProgram = assembleCourseSource;
-export const assembleCourseProgram = assembleCourseSource;
-
 export function assembleCourseSource(
   root: SourceUnit,
   options: CourseAssemblerOptions

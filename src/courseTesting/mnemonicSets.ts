@@ -1,5 +1,4 @@
 import { TRACE_PROFILES } from '../constants';
-import { ProjectProfile } from '../projectProfile';
 import { generatorInstructionCatalog, type CpuProfile } from './generatorInstructionCatalog';
 
 export type { CpuProfile } from './generatorInstructionCatalog';
@@ -34,14 +33,12 @@ export const supportedMnemonics = new Set(generatorInstructionCatalog.categories
 export const controlMnemonics = new Set<string>(generatorInstructionCatalog.categories.control);
 export const branchMnemonics = new Set<string>(generatorInstructionCatalog.categories.branch);
 export const linkBranchMnemonics = new Set<string>(generatorInstructionCatalog.categories.linkBranch);
-export const jumpLinkMnemonics = new Set<string>(generatorInstructionCatalog.categories.jumpLink);
 export const divideMnemonics = new Set<string>(generatorInstructionCatalog.categories.divide);
 export const hiLoWriteMnemonics = new Set<string>(generatorInstructionCatalog.categories.hiLoWrite);
 export const hiLoReadMnemonics = new Set<string>(generatorInstructionCatalog.categories.hiLoRead);
 export const longLatencyHiLoWriteMnemonics = new Set<string>(generatorInstructionCatalog.categories.longLatencyHiLoWrite);
 export const loadMnemonics = new Set<string>(generatorInstructionCatalog.categories.load);
 export const storeMnemonics = new Set<string>(generatorInstructionCatalog.categories.store);
-export const cp0Mnemonics = new Set<string>(generatorInstructionCatalog.categories.cp0);
 
 export function falseTrapImmediateOperands(mnemonic: string): [string, string] {
   return generatorInstructionCatalog.falseTrapImmediateOperands[mnemonic]

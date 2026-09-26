@@ -600,7 +600,6 @@ function validateDirective(
     return;
   }
   const directive = executable.lowerMnemonic;
-  const operandText = executable.operandText;
   const directiveRange = executable.mnemonicRange;
   // A raw 32-bit cell is also a valid instruction-segment payload. The course
   // generator uses this standard MARS syntax to exercise P7 RI decoder cases.

@@ -119,11 +119,6 @@ export function decodeCourseInstructionWord(word: number, scope?: InstructionSco
   return entry.mnemonic;
 }
 
-/** True when the word matches runtime recognition regardless of reserved bits. */
-export function isRuntimeInstruction(word: number, mnemonic: string, scope: InstructionScope): boolean {
-  return matchRuntimeInstruction(word >>> 0, scope)?.exactInstruction?.mnemonic === mnemonic;
-}
-
 function popcount(value: number): number {
   let count = 0;
   let remaining = value >>> 0;

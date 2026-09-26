@@ -21,7 +21,6 @@ import { parseSimOutput } from '../language/verilog/traceParser';
 import { executeWithPreflight, preflightFailureMessage } from '../mips/providers/providerResolver';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { verifyConfiguredFixedMarsReference } from '../mips/providers/fixedMarsReference';
-import { defaultTraceCompareMode } from '../traceCompare';
 import {
   runVerilogSimulation,
   verilogSimulationFailure,
@@ -52,7 +51,6 @@ import {
   updateAsmCaseArtifacts
 } from '../asmCaseStore';
 import {
-  AsmCaseManifestUnion,
   manifestMachineCodeOf,
   manifestP7Of,
   manifestSourceOf
@@ -469,7 +467,7 @@ export async function runCourseTraceCase(
 
   const simText = dut.simResult.stdout;
   const diff = pipeline.compareTraces(oracle.trace.events, iterCpuTraceEvents(simText), {
-    compareCycles: defaultTraceCompareMode.compareCycles,
+    compareCycles: false,
     retainedEntryLimit: batchTraceCompareRetainedEntries
   });
   const storeDifference = diff.matched && oracle.events && (profile === 'P6' || profile === 'P7')

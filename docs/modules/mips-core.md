@@ -1,4 +1,4 @@
-# mips-core | src/mips/core/ | 41 files
+# mips-core | src/mips/core/ | 40 files
 
 纯 TypeScript MIPS 引擎核心。无 VS Code/LSP/文件系统/Worker 依赖；模块边界由 scripts/check-module-boundaries.mjs 检查。汇编器（阶段 5）与执行器（阶段 2/3）通过不可变 ProgramImage 连接，二者可独立验证。
 
@@ -26,7 +26,6 @@
 - assembler/assembler.ts — 两遍汇编：MARS 风格递归 `.eqv` token substitution、layout/symbol/relocation、伪指令展开、ProgramImage 生成；任一诊断存在时不返回 image
 - assembler/assemblyService.ts — CLI/Worker 共用的有界 assembler DTO；显式 include 边，不解释文件路径
 - assembler/artifacts.ts — ProgramImage 到课程 HexText/kernel dump 与停机 PC 检测；DUT user image 将 text/ktext 等所有非 data 段按绝对地址投影到 0x3000..0x6fff，空洞补零，严格拒绝错位/重叠/越界并保留末尾零 word
-- assembler/sourceMap.ts — CommitEvent/PC/访存地址到 source/macro origin 的查询；include、嵌套 macro 与 pseudo 生成的每个真实 word 都保留 expansion stack
 - profiles/profile.ts — CourseExecutionProfile 契约：地址空间、延迟槽/link、溢出策略、CP0/异常策略、trace 投影与停机策略
 - profiles/courseProfiles.ts — 冻结的 P3–P7 profile 数据（DM 0..0x2fff、IM 0x3000..0x6fff、handler 0x4180、Timer/IG 地址、CP0 位域）
 - events/commitEvent.ts — canonical CommitEvent 事件模型、defined/observable 标记、TrapRecord、out-of-domain 分类与稳定诊断码

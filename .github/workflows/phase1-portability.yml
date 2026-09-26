@@ -82,17 +82,12 @@ jobs:
       - name: Assembly differential lane (pinned MARS vs TS assembler)
         run: npm --prefix conformance/mips run run:assembly-diff
 
-      - name: Verify ISim, Logisim, and legacy MARS signal wiring
+      - name: Verify Icarus, Logisim, and legacy MARS signal wiring
         run: >-
           npx vitest run
-          src/test/verilog/isimRunner.test.ts
+          src/test/verilog/iverilogRunner.test.ts
           src/test/courseTestLogisimSignal.test.ts
           src/test/mipsProviders/providerResolver.test.ts
-
-      - name: Verify real legacy MARS offline replay
-        run: npx vitest run src/test/mipsReplay/realLegacyMarsReplay.integration.test.ts
-        env:
-          CO_REAL_MARS_JAR: conformance/.cache/Mars_CO_v0.6.3-course1.jar
 
       - name: Verify old/new legacy equivalence
         run: npm --prefix test-cli run verify:legacy-equivalence

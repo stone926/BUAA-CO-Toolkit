@@ -161,7 +161,7 @@ export async function startContinuousGeneratedTraceTests<
   services: AppServices,
   deps: ContinuousGeneratedTraceDependencies<TSetup, TCase, TAsmCase, TRunOptions>
 ): Promise<void> {
-  const sessionLease = tryAcquireCourseTestSession('continuous');
+  const sessionLease = tryAcquireCourseTestSession();
   if (!sessionLease || activeContinuousTraceSession || continuousTraceStartReserved) {
     sessionLease?.release();
     vscode.window.showWarningMessage('已有一个测试任务正在运行');

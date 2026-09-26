@@ -6,7 +6,6 @@ import { isIdentifierLike, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
 import { verilogCodeTokens } from './directiveBoundaries';
 import {
-  systemTasks,
   VerilogDecl,
   VerilogDeclDimension,
   VerilogDeclKind,

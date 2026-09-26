@@ -45,10 +45,6 @@ export function commitEventStreamDigest(events: readonly CommitEvent[]): string 
   return sha256Canonical(commitEventsCanonical(events) as CanonicalJson);
 }
 
-export function serializeCommitEvents(events: readonly CommitEvent[]): string {
-  return canonicalJson(commitEventsCanonical(events) as CanonicalJson);
-}
-
 export function projectCommitEvent(event: CommitEvent): CommitEventView {
   return {
     sequence: event.sequence,
@@ -77,15 +73,6 @@ export function projectCommitEvent(event: CommitEvent): CommitEventView {
       : {}),
     ...(event.haltReason ? { haltReason: event.haltReason } : {})
   };
-}
-
-/** Locate the first committed event at a PC (returning an instruction, exception, or interrupt victim). */
-export function findCommitEventAtPc(
-  events: readonly CommitEvent[],
-  pc: number
-): CommitEvent | undefined {
-  const address = pc >>> 0;
-  return events.find((event) => event.pcBefore === address);
 }
 
 /** First structured-stream difference; undefined when both canonical streams are identical. */

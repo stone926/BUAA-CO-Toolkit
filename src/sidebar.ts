@@ -1,4 +1,3 @@
-import { Commands } from './constants';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -29,8 +28,6 @@ export type SidebarItem = vscode.TreeItem & { children?: SidebarItem[]; contextV
 export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<SidebarItem | undefined | null | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-  constructor(private readonly context: vscode.ExtensionContext) {}
 
   refresh(): void {
     this._onDidChangeTreeData.fire();

@@ -396,10 +396,6 @@
         "title": "CO: MARS 运行当前文件"
       },
       {
-        "command": "co.mips.runAndCapture",
-        "title": "CO: MARS 运行并捕获输出"
-      },
-      {
         "command": "co.mips.runWithStdinFile",
         "title": "CO: MARS 带标准输入运行"
       },
@@ -598,10 +594,6 @@
         },
         {
           "command": "co.mips.runCurrentFile",
-          "when": "false"
-        },
-        {
-          "command": "co.mips.runAndCapture",
           "when": "false"
         },
         {
@@ -1175,9 +1167,9 @@
     "verify:process-supervisor": "node scripts/verify-process-supervisor.mjs",
     "verify:bundled-iverilog": "npm run compile && node scripts/verify-bundled-iverilog.mjs .",
     "verify:extension-host": "node scripts/verify-extension-host.mjs",
-    "verify:phase4": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && node --test scripts/verify-real-cpu-shadow.test.mjs && vitest run src/test/courseTesting/builtinExecutionProvider.test.ts src/test/courseTesting/oracleDifferential.test.ts src/test/courseTesting/executorShadowRunner.test.ts src/test/courseTesting/executionAssertions.test.ts src/test/mipsReplay/builtinExecutionAdapter.test.ts src/test/mipsProviders/phase4ProviderResolver.test.ts src/test/courseTesting/traceRunner.test.ts src/test/courseTestLogisim.test.ts src/test/courseTestLogisimSignal.test.ts src/test/mipsCli/executeProtocol.test.ts src/test/mipsHost/workerExecutionJobs.test.ts src/test/courseTesting/batchRunner.test.ts src/test/courseTesting/courseTracePipeline.test.ts",
+    "verify:phase4": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && node --test scripts/verify-real-cpu-shadow.test.mjs && vitest run src/test/courseTesting/builtinExecutionProvider.test.ts src/test/courseTesting/oracleDifferential.test.ts src/test/courseTesting/executorShadowRunner.test.ts src/test/courseTesting/executionAssertions.test.ts src/test/mipsProviders/phase4ProviderResolver.test.ts src/test/courseTesting/traceRunner.test.ts src/test/courseTestLogisim.test.ts src/test/courseTestLogisimSignal.test.ts src/test/mipsCli/executeProtocol.test.ts src/test/mipsHost/workerExecutionJobs.test.ts src/test/courseTesting/courseTracePipeline.test.ts",
     "verify:phase4-real-cpu": "npm run compile && node --test scripts/verify-real-cpu-shadow.test.mjs && node scripts/verify-real-cpu-shadow.mjs",
-    "verify:phase5": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && vitest run src/test/mipsCore/assemblerCourse.test.ts src/test/mipsCore/assemblerFullStack.test.ts src/test/mipsCore/assemblerPseudoGolden.test.ts src/test/mipsProviders/builtinAssemblerProvider.test.ts src/test/mipsProviders/phase5ProviderResolver.test.ts src/test/mipsReplay/builtinExecutionAdapter.test.ts src/test/mipsReplay/builtinCaseExactReplay.test.ts src/test/mipsCli/protocol.test.ts src/test/mipsHost/workerJobs.test.ts",
+    "verify:phase5": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && vitest run src/test/mipsCore/assemblerCourse.test.ts src/test/mipsCore/assemblerFullStack.test.ts src/test/mipsCore/assemblerPseudoGolden.test.ts src/test/mipsProviders/builtinAssemblerProvider.test.ts src/test/mipsProviders/phase5ProviderResolver.test.ts src/test/mipsCli/protocol.test.ts src/test/mipsHost/workerJobs.test.ts",
     "verify:phase6:unit": "npm run compile && node scripts/check-module-boundaries.mjs && vitest run src/test/configProfile.test.ts src/test/courseConfig.test.ts src/test/toolchainPolicy.test.ts src/test/toolchainPolicyConsumers.test.ts src/test/mipsCore/assemblerArtifacts.test.ts src/test/mipsProviders/courseEnginePolicy.test.ts src/test/mipsProviders/providerResolver.test.ts src/test/mipsProviders/fixedMarsReference.test.ts src/test/courseTesting/fullStackShadowRunner.test.ts src/test/courseTesting/executorShadowRunner.test.ts src/test/courseTesting/traceRunner.test.ts src/test/courseTesting/machineCodeValidation.test.ts src/test/courseTesting/manifestCodec.test.ts src/test/courseTestLogisim.test.ts src/test/courseTestLogisimSignal.test.ts src/test/courseTestToolchain.test.ts src/test/courseTestContinuous.test.ts src/test/manifest.test.ts src/test/advancedToolModel.test.ts",
     "verify:phase6": "npm run verify:phase6:unit && npm --prefix conformance/mips run verify:phase6"
   },

@@ -1,9 +1,6 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { continuousCounts, ContinuousCounts, ContinuousRunStatus } from './courseTesting/continuous';
-import { logisimPrepSummary, LogisimPrepareCaseResult } from './courseTesting/logisimPrep';
 import { P7ProbeCheckResult } from './courseTesting/p7ProbeCheck';
-import { LogisimRomTarget } from './language/logisim/rom';
 import {
   NeutralTraceDiffSnapshot,
   TraceDiffSnapshot,
@@ -104,43 +101,12 @@ export type NeutralCourseTraceCaseResult = Omit<
   firstDiff?: NeutralTraceDiffSnapshot;
 };
 
-export interface CourseTraceBatchSummary {
-  total: number;
-  passed: number;
-  failed: number;
-  errors: number;
-}
-
-export interface CourseTraceBatchReport {
-  /** Missing means a legacy v1 report. New writes use schema 2. */
-  schemaVersion?: 1 | 2;
-  generatedAt: string;
-  source?: CourseTraceBatchSource;
-  summary: CourseTraceBatchSummary;
-  results: CourseTraceCaseResult[];
-}
-
 export interface CourseTraceBatchSource {
   kind: 'selected' | 'generator';
   generator?: string;
   commandLine?: string;
   cwd?: string;
   asmFiles?: string[];
-}
-
-export interface LogisimPrepareReport {
-  generatedAt: string;
-  source: CourseTraceBatchSource;
-  circuitTemplate: string;
-  romTarget: {
-    index: number;
-    label?: string;
-    loc?: string;
-    addrWidth?: number;
-    dataWidth?: number;
-  };
-  summary: ReturnType<typeof logisimPrepSummary>;
-  results: LogisimPrepareCaseResult[];
 }
 
 export interface ContinuousTraceIteration {
@@ -258,23 +224,6 @@ export function neutralCourseTraceCaseResult(item: CourseTraceCaseResult): Neutr
   };
 }
 
-export function createCourseTraceBatchReport(
-  results: CourseTraceCaseResult[],
-  source?: CourseTraceBatchSource,
-  generatedAt = new Date().toISOString()
-): CourseTraceBatchReport {
-  const neutralResults = source?.kind === 'generator'
-    ? results.map(publicAutomaticCourseTraceCaseResult)
-    : results.map(neutralCourseTraceCaseResult);
-  return {
-    schemaVersion: 2,
-    generatedAt,
-    ...(source ? { source: publicBatchReportSource(source) } : {}),
-    summary: batchSummary(neutralResults),
-    results: neutralResults
-  };
-}
-
 /**
  * Public automatic reports keep actionable CPU evidence and a replay id, but never serialize
  * private paths, generator controls, backend commands, or raw artifact locations.
@@ -310,7 +259,7 @@ export function publicAutomaticCourseTraceCaseResult(
   };
 }
 
-/** Serialize the continuous monitor through the same compact public boundary as one-shot runs. */
+/** Serialize the continuous monitor through the compact public result boundary. */
 export function publicContinuousTraceReport(report: ContinuousTraceReport): ContinuousTraceReport {
   return {
     ...(report.schemaVersion === undefined ? {} : { schemaVersion: report.schemaVersion }),
@@ -391,17 +340,6 @@ const traceStatusCss = `
     }
 `;
 
-const logisimPrepareStatusCss = `
-    .prepared td:nth-child(2) {
-      color: var(--vscode-testing-iconPassed);
-      font-weight: 600;
-    }
-    .error td:nth-child(2) {
-      color: var(--vscode-testing-iconFailed);
-      font-weight: 600;
-    }
-`;
-
 const historyStatusCss = `
     .passed td:nth-child(6) {
       color: var(--vscode-testing-iconPassed);
@@ -412,36 +350,6 @@ const historyStatusCss = `
       font-weight: 600;
     }
 `;
-
-export function showLogisimPrepareReport(
-  report: vscode.Uri,
-  results: LogisimPrepareCaseResult[],
-  source: CourseTraceBatchSource,
-  circuit: vscode.Uri,
-  target: LogisimRomTarget
-): void {
-  const panel = vscode.window.createWebviewPanel('coLogisimPrepareReport', 'CO Logisim 用例准备', vscode.ViewColumn.Beside, {
-    enableScripts: false
-  });
-  panel.webview.html = renderLogisimPrepareReport(report, results, source, circuit, target);
-}
-
-export function showBatchTraceReport(
-  results: CourseTraceCaseResult[],
-  report: vscode.Uri,
-  generatedAt?: string,
-  source?: CourseTraceBatchSource
-): void {
-  const panel = vscode.window.createWebviewPanel(
-    'coBatchTraceReport',
-    source?.kind === 'generator' ? '自动测试结果' : 'CO 批量 Trace 测试',
-    vscode.ViewColumn.Beside,
-    {
-    enableScripts: false
-    }
-  );
-  panel.webview.html = renderBatchTraceReport(results, report, generatedAt, source);
-}
 
 export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _reportFile: vscode.Uri): string {
   const latest = report.iterations[0];
@@ -522,152 +430,6 @@ function renderContinuousFirstProblem(item: CourseTraceCaseResult): SafeHtml {
   return html.text(publicAutomaticDiagnosticMessage(item));
 }
 
-export function renderBatchTraceReport(
-  results: CourseTraceCaseResult[],
-  report: vscode.Uri,
-  generatedAt?: string,
-  source?: CourseTraceBatchSource
-): string {
-  if (source?.kind === 'generator') {
-    return renderAutomaticBatchTraceReport(results);
-  }
-  const summary = batchSummary(results);
-  const rows = results.map((item, index) => ({
-    className: item.status,
-    cells: [
-      String(index + 1),
-      escapeHtml(item.status.toUpperCase()),
-      item.caseId ? html.code(item.caseId) : '',
-      escapeHtml(path.basename(item.asm)),
-      item.stdin ? escapeHtml(path.basename(item.stdin)) : '',
-      escapeHtml(neutralCourseTraceStage(item.stage)),
-      escapeHtml(item.dutBackend ?? ''),
-      item.firstDiffIndex === undefined ? '' : String(item.firstDiffIndex + 1),
-      renderFirstDiffSummary(item),
-      renderCaseArtifacts(item),
-      escapeHtml(summaryText(item)),
-      escapeHtml(item.message)
-    ]
-  }));
-
-  return renderReportPage({
-    title: 'CO 批量 Trace 测试',
-    extraCss: traceStatusCss,
-    body: html.raw(`
-  ${renderMetricGrid([
-    { label: '总数', value: summary.total },
-    { label: '通过', value: summary.passed },
-    { label: '失败', value: summary.failed },
-    { label: '错误', value: summary.errors }
-  ])}
-  ${generatedAt ? `<div class="paths">生成时间: <code>${escapeHtml(generatedAt)}</code></div>` : ''}
-  ${renderBatchSource(source)}
-  <div class="paths">JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
-  ${courseTraceScopeNote}
-  ${renderTable(['#', '状态', 'Case', 'ASM', '输入', '阶段', 'DUT 后端', '首个差异', '首个差异详情', '产物', '事件', '消息'], rows)}
-`)
-  });
-}
-
-function renderAutomaticBatchTraceReport(results: CourseTraceCaseResult[]): string {
-  const summary = batchSummary(results);
-  const rows = results.map((item, index) => ({
-    className: item.status,
-    cells: [
-      String(index + 1),
-      escapeHtml(item.status === 'passed' ? '通过' : item.status === 'failed' ? '失败' : '错误'),
-      renderAutomaticCaseLabel(index, item),
-      item.status === 'passed' ? html.text('通过') : renderContinuousFirstProblem(item)
-    ]
-  }));
-  return renderReportPage({
-    title: '自动测试',
-    extraCss: traceStatusCss,
-    body: html.raw(`
-  ${renderMetricGrid([
-    { label: '总数', value: summary.total },
-    { label: '通过', value: summary.passed },
-    { label: '失败', value: summary.failed },
-    { label: '错误', value: summary.errors }
-  ])}
-  <div class="paths">失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现信息已自动保存。</div>
-  ${courseTraceScopeNote}
-  ${renderTable(['#', '状态', '测试点', '结果'], rows)}
-`)
-  });
-}
-
-function publicBatchReportSource(source: CourseTraceBatchSource): CourseTraceBatchSource {
-  if (source.kind === 'generator') {
-    // Full generator provenance is already sealed in each case manifest. Keep only the marker
-    // required to reopen this JSON with the compact automatic-test renderer.
-    return { kind: 'generator' };
-  }
-  return source;
-}
-
-function renderAutomaticCaseLabel(index: number, item: CourseTraceCaseResult): SafeHtml {
-  const label = `测试点 ${index + 1}`;
-  if (item.status === 'passed' || !item.caseId) {
-    return html.text(label);
-  }
-  return html.raw(`${html.text(label)}<div class="muted">Case ${html.code(item.caseId)}</div>`);
-}
-
-export function renderLogisimPrepareReport(
-  report: vscode.Uri,
-  results: LogisimPrepareCaseResult[],
-  source: CourseTraceBatchSource,
-  circuit: vscode.Uri,
-  target: LogisimRomTarget
-): string {
-  const summary = logisimPrepSummary(results);
-  const rows = results.map((item, index) => ({
-    className: item.status,
-    cells: [
-      String(index + 1),
-      escapeHtml(item.status.toUpperCase()),
-      item.caseId ? html.code(item.caseId) : '',
-      escapeHtml(path.basename(item.asm)),
-      item.wordCount === undefined ? '' : String(item.wordCount),
-      item.circuit ? html.code(item.circuit) : '',
-      escapeHtml(item.message)
-    ]
-  }));
-
-  return renderReportPage({
-    title: 'CO Logisim 用例准备',
-    extraCss: logisimPrepareStatusCss,
-    body: html.raw(`
-  ${renderMetricGrid([
-    { label: '总数', value: summary.total },
-    { label: '已准备', value: summary.prepared },
-    { label: '错误', value: summary.errors }
-  ])}
-  ${renderBatchSource(source)}
-  <div class="paths">
-    <div>电路模板: <code>${escapeHtml(circuit.fsPath)}</code></div>
-    <div>ROM 目标: <code>${escapeHtml(target.label ?? 'ROM')} #${target.index}${target.loc ? ` ${target.loc}` : ''}</code></div>
-    <div>JSON 报告: <code>${escapeHtml(report.fsPath)}</code></div>
-  </div>
-  ${renderTable(['#', '状态', 'Case', 'ASM', '字数', '已准备电路', '消息'], rows)}
-`)
-  });
-}
-
-export function renderBatchSource(source: CourseTraceBatchSource | undefined): SafeHtml {
-  if (!source) {
-    return html.raw('');
-  }
-  if (source.kind !== 'generator') {
-    return html.raw('<div class="paths">来源: 手动选择的 ASM 文件</div>');
-  }
-  const asmCount = source.asmFiles?.length ?? 0;
-  return html.raw(`<div class="paths">
-    <div>来源: 自动测试${asmCount ? ` (${asmCount})` : ''}</div>
-  </div>`);
-}
-
 export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
   const rows = cases.map(({ manifest }, index) => {
     const automatic = manifestSourceOf(manifest).kind !== 'selected';
@@ -695,47 +457,6 @@ export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
   ${renderTable(['#', '时间', '课程阶段', '来源', '复现编号', '结果', '诊断'], rows)}
 `)
   });
-}
-
-export function batchSummary(results: CourseTraceCaseResult[]): CourseTraceBatchSummary {
-  return {
-    total: results.length,
-    passed: results.filter((item) => item.status === 'passed').length,
-    failed: results.filter((item) => item.status === 'failed').length,
-    errors: results.filter((item) => item.status === 'error').length
-  };
-}
-
-function summaryText(item: CourseTraceCaseResult): string {
-  const backend = item.dutBackend ? `${item.dutBackend}: ` : '';
-  if (item.probe) {
-    return `${backend}Probe records ${item.probe.records.length}, failures ${item.probe.failures.length}`;
-  }
-  const oracleEvents = courseTraceOracleEvents(item);
-  const dutEvents = courseTraceDutEvents(item);
-  if (oracleEvents === undefined || dutEvents === undefined) {
-    return '';
-  }
-  return `${backend}Oracle ${oracleEvents}, DUT ${dutEvents}, matched ${item.matchedEvents ?? 0}, diff ${item.diffEvents ?? 0}`;
-}
-
-function renderCaseArtifacts(item: CourseTraceCaseResult): SafeHtml {
-  const dutOut = courseTraceDutOutput(item);
-  const dutRawOut = courseTraceDutRawOutput(item);
-  const entries = [
-    ['ASM Snapshot', item.asmSnapshot],
-    ['Machine Code', item.machineCode],
-    ['Oracle', courseTraceOracleOutput(item)],
-    ['DUT', dutOut],
-    ['DUT Raw', dutRawOut === dutOut ? undefined : dutRawOut],
-    [item.shadow?.evidenceKind === 'full-stack' ? 'Full-stack Evidence' : 'Executor Shadow', item.shadow?.resultFile]
-  ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
-  if (!entries.length) {
-    return html.raw('');
-  }
-  return html.raw(entries
-    .map(([label, value]) => `<div>${html.text(label)}: ${html.path(value)}</div>`)
-    .join(''));
 }
 
 function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
@@ -772,4 +493,12 @@ function traceEventSummary(event: TraceEventSnapshot | undefined): string {
   const cycle = event.cycle === undefined ? '' : `${event.cycle}@`;
   const target = event.kind === 'grf' ? `$${event.target}` : `*${event.target}`;
   return `${cycle}${event.pc}: ${target} <= ${event.value} (line ${event.lineNumber})`;
+}
+
+function renderAutomaticCaseLabel(index: number, item: CourseTraceCaseResult): SafeHtml {
+  const label = `测试点 ${index + 1}`;
+  if (item.status === 'passed' || !item.caseId) {
+    return html.text(label);
+  }
+  return html.raw(`${html.text(label)}<div class="muted">Case ${html.code(item.caseId)}</div>`);
 }

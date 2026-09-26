@@ -19,7 +19,7 @@ vi.mock('vscode', async () => {
 });
 
 import * as vscode from 'vscode';
-import { findStdinCandidatesForAsm, resolveSingleStdinInput } from '../courseTestStdin';
+import { findStdinCandidatesForAsm } from '../courseTestStdin';
 
 const tempRoots: string[] = [];
 
@@ -52,17 +52,6 @@ describe('course test stdin helpers', () => {
       'input/case.in'
     ]);
   });
-
-  it('returns the only stdin candidate without showing a picker', async () => {
-    const root = makeTempRoot();
-    const asm = writeFile(root, 'test.asm', 'nop\n');
-    const stdin = writeFile(root, 'test.in', '1\n');
-
-    const resolved = await resolveSingleStdinInput(vscode.Uri.file(asm));
-
-    expect(normalizedPath(resolved?.fsPath)).toBe(normalizedPath(stdin));
-    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
-  });
 });
 
 function makeTempRoot(): string {
@@ -80,8 +69,4 @@ function writeFile(root: string, relativePath: string, content: string): string 
 
 function relative(root: string, file: string): string {
   return path.relative(root, file).replace(/\\/g, '/');
-}
-
-function normalizedPath(file: string | undefined): string | undefined {
-  return file === undefined ? undefined : path.normalize(file).toLowerCase();
 }

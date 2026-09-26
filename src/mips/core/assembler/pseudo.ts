@@ -764,18 +764,3 @@ function digitValueForPseudo(char: string): number | undefined {
 function containsArithmetic(text: string): boolean {
   return /[+\-*/%&|^~<>]/.test(text.replace(/\s/g, ''));
 }
-
-export function realInstructionWithOperands(
-  statement: ParsedStatement,
-  mnemonic: string,
-  operands: readonly WorkOperand[],
-  pseudoMnemonic?: string
-): WorkInstruction {
-  return {
-    mnemonic,
-    operands,
-    origin: workOriginFor(statement),
-    pseudo: pseudoMnemonic !== undefined,
-    ...(pseudoMnemonic ? { pseudoMnemonic } : {})
-  };
-}

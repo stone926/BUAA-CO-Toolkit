@@ -5,7 +5,7 @@ import { lineAt } from '../common/lsp';
 import { MipsMacro, MipsParseResult } from './model';
 import { instructionWritesRegister } from './instructionValidation';
 import { macroCallArgumentsAtPosition } from './queries';
-import type { MipsAstLine, MipsExecutableAst, MipsOperandAst, MipsStatementAst } from './ast';
+import type { MipsAstLine, MipsOperandAst, MipsStatementAst } from './ast';
 import { collectMipsOperandReferences } from './operandReferences';
 import {
   cp0RegistersByNumber, pseudoExpansions,
@@ -415,25 +415,6 @@ function upper16(immediate: ImmediateInfo): string {
 
 function lower16(immediate: ImmediateInfo): string {
   return formatHex16(immediate.unsigned);
-}
-
-function loadFullImmediateToAt(immediate: ImmediateInfo): string[] {
-  return [`lui $at, ${upper16(immediate)}`, `ori $at, $at, ${lower16(immediate)}`];
-}
-
-function loadSignedImmediateToAt(operand: string): string[] | undefined {
-  const immediate = parseImmediate(operand);
-  if (!immediate) {
-    return undefined;
-  }
-  if (fitsSigned16(immediate.signed)) {
-    return [`addi $at, $zero, ${formatSignedImmediate(immediate.signed)}`];
-  }
-  return loadFullImmediateToAt(immediate);
-}
-
-function operandText(operand: { kind: string; tokenText: string; }): string {
-  return operand.tokenText;
 }
 
 function matchOperandPattern(patterns: string[], operands: string[]): boolean {

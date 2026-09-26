@@ -222,7 +222,6 @@ describe('MIPS assembly command routing', () => {
     expect([...registeredLegacyCommands().keys()]).toEqual([
       Commands.Mips.DisablePseudoWarnings,
       Commands.Mips.RunCurrentFile,
-      Commands.Mips.RunAndCapture,
       Commands.Mips.RunWithStdinFile,
       Commands.Mips.RunInTerminal
     ]);

@@ -1,13 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   stripComment,
-  parseOperands,
   parseMacroArguments,
   parseMacroArgumentNodes,
-  parseMipsCstDocument,
-  parseMipsCstLine,
   parseMipsSourceDocument,
-  parseMipsSourceLine,
   formatMipsLine,
   findCommentIndex,
   getStringRanges,
@@ -21,9 +17,7 @@ import {
   isCharLiteral,
   isSymbolLike,
   signed32ImmediateValue,
-  integerFitsRange,
-  mipsCstRange,
-  mipsParsedRange
+  integerFitsRange
 } from '../../../language/mips/syntax';
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -458,51 +452,6 @@ describe('findCommentIndex', () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
-// parseOperands
-// ────────────────────────────────────────────────────────────────────────────────
-describe('parseOperands', () => {
-  it('returns empty array for empty string', () => {
-    expect(parseOperands('')).toEqual([]);
-  });
-
-  it('returns empty array for whitespace-only', () => {
-    expect(parseOperands('   ')).toEqual([]);
-  });
-
-  it('parses a single operand', () => {
-    expect(parseOperands('$t0')).toEqual(['$t0']);
-  });
-
-  it('parses multiple comma-separated operands', () => {
-    expect(parseOperands('$t0, $t1, $t2')).toEqual(['$t0', '$t1', '$t2']);
-  });
-
-  it('trims whitespace around operands', () => {
-    expect(parseOperands('  $t0 ,  $t1  , $t2  ')).toEqual(['$t0', '$t1', '$t2']);
-  });
-
-  it('strips surrounding parentheses', () => {
-    expect(parseOperands('($t0, $t1)')).toEqual(['$t0', '$t1']);
-  });
-
-  it('parses memory operand format', () => {
-    expect(parseOperands('$t0, 4($sp)')).toEqual(['$t0', '4($sp)']);
-  });
-
-  it('handles operands with no spaces after commas', () => {
-    expect(parseOperands('$t0,$t1,$t2')).toEqual(['$t0', '$t1', '$t2']);
-  });
-
-  it('filters out empty operands from trailing commas', () => {
-    expect(parseOperands('$t0,')).toEqual(['$t0']);
-  });
-
-  it('does not split commas inside strings or memory operands', () => {
-    expect(parseOperands('"hello, world", 4($sp), $t0')).toEqual(['"hello, world"', '4($sp)', '$t0']);
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────────
 // parseMacroArguments
 // ────────────────────────────────────────────────────────────────────────────────
 describe('parseMacroArguments', () => {
@@ -547,10 +496,10 @@ describe('parseMacroArguments', () => {
   });
 });
 
-describe('parseMipsCstDocument', () => {
+describe('parseMipsSourceDocument', () => {
   it('captures labels, executable ranges, operands, strings, and comments once', () => {
     const text = 'main: loop: add $t0, 4($sp), "a#b" # comment';
-    const cst = parseMipsCstDocument(text);
+    const cst = parseMipsSourceDocument(text);
     const line = cst.lines[0];
 
     expect(line.kind).toBe('statement');
@@ -566,7 +515,7 @@ describe('parseMipsCstDocument', () => {
   });
 
   it('tokenizes character literals as number-like tokens', () => {
-    const cst = parseMipsCstDocument(".word 'a', '\\n', '\\377'");
+    const cst = parseMipsSourceDocument(".word 'a', '\\n', '\\377'");
     const line = cst.lines[0];
 
     expect(line.kind).toBe('statement');
@@ -595,14 +544,6 @@ describe('parseMipsSourceDocument', () => {
     expect(line.executable?.operands.map((operand) => operand.text)).toEqual(['$t0', '4($sp)', '"a#b"']);
     expect(line.comment?.value).toBe('# comment');
     expect(line.tokens.filter((token) => token.kind === 'comment')).toHaveLength(1);
-  });
-
-  it('keeps legacy cst wrappers equivalent to parsed source helpers', () => {
-    const text = 'main: add $t0, $t1, $t2 # comment';
-
-    expect(parseMipsCstDocument(text)).toEqual(parseMipsSourceDocument(text));
-    expect(parseMipsCstLine(text, 3)).toEqual(parseMipsSourceLine(text, 3));
-    expect(mipsCstRange(3, { start: 6, end: 9 })).toEqual(mipsParsedRange(3, { start: 6, end: 9 }));
   });
 });
 
@@ -820,25 +761,6 @@ describe('stripComment — edge cases', () => {
 
   it('handles empty string in line', () => {
     expect(stripComment('.asciiz "" # comment')).toBe('.asciiz "" ');
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────────
-// parseOperands — additional edge cases
-// ────────────────────────────────────────────────────────────────────────────────
-describe('parseOperands — edge cases', () => {
-  it('handles nested parentheses in memory operand', () => {
-    // Not typical in MIPS but tests robustness
-    expect(parseOperands('$t0')).toEqual(['$t0']);
-  });
-
-  it('preserves internal whitespace in operands', () => {
-    // e.g., expressions like 4+4 might appear
-    expect(parseOperands('$t0, 4+4')).toEqual(['$t0', '4+4']);
-  });
-
-  it('handles single operand with leading/trailing spaces', () => {
-    expect(parseOperands('  $t0  ')).toEqual(['$t0']);
   });
 });
 

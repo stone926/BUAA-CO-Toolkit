@@ -168,8 +168,8 @@ describe('continuous generated trace orchestration', () => {
     await first;
   });
 
-  it('refuses to start while a batch owns the shared artifact session', async () => {
-    const lease = tryAcquireCourseTestSession('batch');
+  it('refuses to start while another run owns the artifact session', async () => {
+    const lease = tryAcquireCourseTestSession();
     expect(lease).toBeDefined();
     const deps = createDependencies();
     try {

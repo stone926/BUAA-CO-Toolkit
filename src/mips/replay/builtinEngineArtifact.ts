@@ -87,9 +87,3 @@ export function builtinExecutionEngineArtifact(): BuiltinExecutionEngineArtifact
     document: builtinExecutionEngineDocument()
   };
 }
-
-/** True when staged registry bytes still describe this compiled executor revision tuple. */
-export function builtinExecutionArtifactMatchesBytes(bytes: Uint8Array): boolean {
-  const expected = builtinExecutionArtifactBytes();
-  return bytes.byteLength === expected.byteLength && sha256Bytes(bytes) === sha256Bytes(expected);
-}

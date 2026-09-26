@@ -1,6 +1,5 @@
-import { Position, Range } from 'vscode-languageserver/node';
+import { Position } from 'vscode-languageserver/node';
 import { containsPosition } from '../common/lsp';
-import { rangeKey } from '../common/util';
 import {
   resolveMipsSemanticMacroAtPosition
 } from './semantic';
@@ -36,11 +35,4 @@ export function macroCallArgumentsAtPosition(parsed: MipsParseResult, name: stri
     return undefined;
   }
   return executable.macroArguments.map((argument) => argument.text);
-}
-
-/**
- * O(1) 声明范围查找，使用预计算的 rangeKey 集合。
- */
-export function isKnownDeclarationRange(range: Range, parsed: MipsParseResult): boolean {
-  return parsed.semantic.declarationRangeKeys.has(rangeKey(range));
 }

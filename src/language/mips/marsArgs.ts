@@ -6,7 +6,7 @@ import {
   getProfile,
   useDelayedBranching
 } from '../../config';
-import { isFile, readTextFile } from '../../fsUtil';
+import { readTextFile } from '../../fsUtil';
 import {
   p7InternalUnknownInstructionMnemonic,
   sourceUnitsUseP7RiInstruction

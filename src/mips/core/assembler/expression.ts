@@ -50,12 +50,6 @@ export function evaluateExpression(
   return parser.parse();
 }
 
-export function isExpressionText(text: string): boolean {
-  const value = text.trim();
-  return value.length > 0 && !value.startsWith('"') && !value.startsWith("'")
-    && !/^[+-]?(?:0x[0-9a-f]+|0b[01]+|\d+)$/i.test(value.replace(/_/g, ''));
-}
-
 function tokenizeExpression(text: string): { value?: Token[]; error?: string } {
   const tokens: Token[] = [];
   let index = 0;

@@ -72,9 +72,6 @@ export const CO_HAZARD_DIR = '.co/hazard';
 /** 临时文件目录。 */
 export const CO_TMP_DIR = '.co/tmp';
 
-/** Logisim 用例准备目录。 */
-export const CO_LOGISIM_DIR = '.co/logisim';
-
 // ── 命令 ID ──
 
 export const Commands = {
@@ -87,7 +84,6 @@ export const Commands = {
   Mips: {
     DisablePseudoWarnings: 'co.mips.disablePseudoWarnings',
     RunCurrentFile: 'co.mips.runCurrentFile',
-    RunAndCapture: 'co.mips.runAndCapture',
     RunWithStdinFile: 'co.mips.runWithStdinFile',
     RunInTerminal: 'co.mips.runInTerminal',
     DumpText: 'co.mips.dumpText',
@@ -112,22 +108,9 @@ export const Commands = {
   },
 
   Test: {
-    RunFullTest: 'co.test.runFullTest',
-    RunExecutorShadow: 'co.test.runExecutorShadow',
-    VerifyWithFixedMars: 'co.test.verifyWithFixedMars',
-    RunBatchTraceTests: 'co.test.runBatchTraceTests',
     StartContinuousGeneratedTraceTests: 'co.test.startContinuousGeneratedTraceTests',
-    StopBatchTraceTests: 'co.test.stopBatchTraceTests',
-    GenerateAsmTests: 'co.test.generateAsmTests',
-    GenerateAndDumpAsmTests: 'co.test.generateAndDumpAsmTests',
     StopContinuousTests: 'co.test.stopContinuousTests',
-    PrepareLogisimCases: 'co.test.prepareLogisimCases',
-    DiagnoseP3LogisimTraceCircuit: 'co.test.diagnoseP3LogisimTraceCircuit',
-    PrepareGeneratedLogisimCases: 'co.test.prepareGeneratedLogisimCases',
-    OpenBatchTraceReport: 'co.test.openBatchTraceReport',
-    OpenAsmCaseIndex: 'co.test.openAsmCaseIndex',
-    CompareTraceFiles: 'co.test.compareTraceFiles',
-    CompareLatestOutputs: 'co.test.compareLatestOutputs'
+    OpenAsmCaseIndex: 'co.test.openAsmCaseIndex'
   },
 
   Logisim: {

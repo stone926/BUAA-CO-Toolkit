@@ -234,20 +234,6 @@ function splitOperandTextRaw(text: string, sourceId: string, baseOffset: number)
   return splitOperandText(text, sourceId, baseOffset);
 }
 
-export function splitTopLevelOperands(
-  code: string,
-  sourceId: string,
-  lineStartOffset: number,
-  localStartOffset: number,
-  localEndOffset: number
-): ParsedOperand[] {
-  return splitOperandTextRaw(
-    code.slice(localStartOffset, localEndOffset),
-    sourceId,
-    lineStartOffset + localStartOffset
-  );
-}
-
 function splitOperandText(text: string, sourceId: string, baseOffset: number): ParsedOperand[] {
   const result: ParsedOperand[] = [];
   let depth = 0;

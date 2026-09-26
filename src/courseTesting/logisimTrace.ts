@@ -378,14 +378,6 @@ function* iterTextLines(text: string): IterableIterator<{ line: string; lineNumb
   }
 }
 
-export function logisimRowsToTraceEvents(rows: readonly LogisimTraceRow[]): CpuTraceEvent[] {
-  const events: CpuTraceEvent[] = [];
-  for (const row of rows) {
-    events.push(...logisimRowToTraceEvents(row));
-  }
-  return events;
-}
-
 function logisimRowToTraceEvents(row: LogisimTraceRow): CpuTraceEvent[] {
   const events: CpuTraceEvent[] = [];
   const pc = requiredKnown(row, 'pc');

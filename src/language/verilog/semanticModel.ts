@@ -164,10 +164,6 @@ export function resolveVerilogSemanticAtPosition(model: VerilogSemanticModel, po
   return symbol ? { symbol } : undefined;
 }
 
-export function moduleScopeAtPosition(model: VerilogSemanticModel, position: Position): VerilogSemanticScope | undefined {
-  return model.moduleScopes.find((scope) => containsPosition(scope.range, position));
-}
-
 export function verilogSemanticTargetFromSymbol(symbol: VerilogSemanticSymbol): VerilogSemanticTarget {
   return {
     name: symbol.name,

@@ -20,10 +20,6 @@ export function workspaceFolderForOrFirst(uri?: vscode.Uri): vscode.WorkspaceFol
   return workspaceFolderFor(uri) ?? vscode.workspace.workspaceFolders?.[0];
 }
 
-export function workspaceRootFor(uri?: vscode.Uri): string | undefined {
-  return workspaceFolderFor(uri)?.uri.fsPath;
-}
-
 export function dirname(uri: vscode.Uri): string {
   return path.dirname(uri.fsPath);
 }
@@ -98,10 +94,6 @@ export async function writeTextFileIfAbsent(uri: vscode.Uri, content: string): P
   }
   await writeTextFile(uri, content);
   return true;
-}
-
-export function toUri(file: string): vscode.Uri {
-  return vscode.Uri.file(file);
 }
 
 /**
