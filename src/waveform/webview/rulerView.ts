@@ -4,18 +4,17 @@ import type { WaveMarker } from '../view/markers';
 import { xToTime } from '../view/viewport';
 import type { WaveActions } from './actions';
 import { fitCanvas } from './dom';
-import { renderRuler, rulerHeight } from './rulerRenderer';
+import { type MarkerFlagBox, renderRuler, rulerHeight } from './rulerRenderer';
 import type { WaveStore } from './store';
 import type { Palette } from './theme';
-
-/** Roughly half a marker flag's width: how far from its line the flag can be grabbed. */
-const flagGrabPixels = 12;
 
 export class RulerView {
   readonly element: HTMLCanvasElement;
   private width = 0;
   private externalRange: { x0: number; x1: number } | undefined;
   private localRange: { x0: number; x1: number } | undefined;
+  /** Marker flags as last drawn: edge flags are shifted inside the ruler and later ones cover earlier ones. */
+  private flags: readonly MarkerFlagBox[] = [];
 
   constructor(
     private readonly store: WaveStore,
@@ -51,7 +50,7 @@ export class RulerView {
 
   render(): void {
     const { ctx, dpr } = fitCanvas(this.element, this.width, rulerHeight);
-    renderRuler(ctx, dpr, this.width, this.palette(), this.store, { dragRange: this.localRange ?? this.externalRange });
+    this.flags = renderRuler(ctx, dpr, this.width, this.palette(), this.store, { dragRange: this.localRange ?? this.externalRange });
   }
 
   private onPointerDown(event: PointerEvent): void {
@@ -105,9 +104,16 @@ export class RulerView {
     this.element.addEventListener('pointercancel', up);
   }
 
-  /** Marker whose flag (top half of the ruler) is under x. */
+  /** Marker whose flag is drawn at x, the topmost one where flags overlap. */
   private markerAt(x: number): WaveMarker | undefined {
-    return this.actions.nearestMarker(xToTime(this.store.view, this.width, x), flagGrabPixels);
+    for (let index = this.flags.length - 1; index >= 0; index--) {
+      const flag = this.flags[index];
+      const marker = x >= flag.left && x <= flag.right ? this.store.markers.find(flag.label) : undefined;
+      if (marker) {
+        return marker;
+      }
+    }
+    return undefined;
   }
 
   /** The marker range drawn in the waveform canvas mirrors the local ruler drag too. */

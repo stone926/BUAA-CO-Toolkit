@@ -1,4 +1,4 @@
-// @index waveform-webview-ruler — 时间标尺绘制：自适应刻度与单位、时钟周期序号、trace 事件刻痕、标记/游标旗标与 Δ 测量
+// @index waveform-webview-ruler — 时间标尺绘制：自适应刻度与单位、时钟周期序号、trace 事件刻痕、标记/游标旗标（返回旗标位置供命中）与 Δ 测量
 
 import { chooseTickStep, formatTicks, timeUnitFemtoseconds } from '../model/timeScale';
 import { markerName } from '../view/markers';
@@ -16,6 +16,14 @@ export interface RulerOverlay {
   readonly dragRange?: { readonly x0: number; readonly x1: number };
 }
 
+/** Horizontal extent of a drawn marker flag, for hit testing. */
+export interface MarkerFlagBox {
+  readonly label: number;
+  readonly left: number;
+  readonly right: number;
+}
+
+/** Draw the ruler; returns the marker flags as drawn, in drawing order (later ones on top). */
 export function renderRuler(
   ctx: CanvasRenderingContext2D,
   dpr: number,
@@ -23,14 +31,14 @@ export function renderRuler(
   palette: Palette,
   store: WaveStore,
   overlay: RulerOverlay
-): void {
+): MarkerFlagBox[] {
   const height = rulerHeight;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.rulerBackground;
   ctx.fillRect(0, 0, width, height);
   const data = store.data;
   if (!data) {
-    return;
+    return [];
   }
   const view = store.view;
   const scale = data.timescale;
@@ -55,10 +63,13 @@ export function renderRuler(
 
   ctx.font = `${labelFont}px ${palette.uiFamily}`;
   const flags: Flag[] = [];
+  const markerFlags: MarkerFlagBox[] = [];
   for (const marker of store.markers.all) {
     const x = timeToX(view, width, marker.time);
     if (x >= -20 && x <= width + 20) {
-      flags.push(layoutFlag(ctx, width, x, markerName(marker), palette.marker));
+      const flag = layoutFlag(ctx, width, x, markerName(marker), palette.marker);
+      flags.push(flag);
+      markerFlags.push({ label: marker.label, left: flag.left, right: flag.left + flag.width });
     }
   }
   const cursorX = timeToX(view, width, store.cursor);
@@ -93,6 +104,7 @@ export function renderRuler(
   for (const flag of flags) {
     drawFlag(ctx, flag, palette);
   }
+  return markerFlags;
 }
 
 function drawCycleNumbers(ctx: CanvasRenderingContext2D, width: number, palette: Palette, store: WaveStore, view: TimeRange): void {

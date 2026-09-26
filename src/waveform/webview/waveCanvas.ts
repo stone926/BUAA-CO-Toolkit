@@ -149,14 +149,9 @@ export class WaveCanvas {
       return;
     }
     this.element.setPointerCapture(event.pointerId);
-    const cursorX = timeToX(this.store.view, this.width, this.store.cursor);
-    if (Math.abs(cursorX - event.offsetX) <= grabPixels) {
-      this.drag = { kind: 'cursor' };
-      return;
-    }
-    const marker = this.actions.nearestMarker(this.timeAt(event.offsetX), grabPixels);
-    if (marker) {
-      this.drag = { kind: 'marker', label: marker.label };
+    const grabbed = this.grabAt(event.offsetX);
+    if (grabbed) {
+      this.drag = grabbed === 'cursor' ? { kind: 'cursor' } : { kind: 'marker', label: grabbed.label };
       return;
     }
     this.drag = {
@@ -247,12 +242,17 @@ export class WaveCanvas {
     // Plain vertical wheel falls through to the rows viewport and scrolls rows.
   }
 
-  private hoverCursor(x: number): string {
+  /**
+   * What a drag starting at x moves. The cursor wins over a marker at the same spot, so a
+   * marker just placed at the cursor (M) still lets the cursor be dragged off to measure.
+   */
+  private grabAt(x: number): 'cursor' | WaveMarker | undefined {
     const cursorX = timeToX(this.store.view, this.width, this.store.cursor);
-    if (Math.abs(cursorX - x) <= grabPixels || this.actions.nearestMarker(this.timeAt(x), grabPixels)) {
-      return 'ew-resize';
-    }
-    return 'crosshair';
+    return Math.abs(cursorX - x) <= grabPixels ? 'cursor' : this.actions.nearestMarker(this.timeAt(x), grabPixels);
+  }
+
+  private hoverCursor(x: number): string {
+    return this.grabAt(x) ? 'ew-resize' : 'crosshair';
   }
 
   private tooltipLines(x: number, y: number): readonly TooltipLine[] | undefined {
@@ -300,7 +300,8 @@ export class WaveCanvas {
     }
     const marker = this.actions.nearestMarker(this.timeAt(x), grabPixels);
     if (marker) {
-      lines.push({ label: `标记 ${markerName(marker)}`, value: '拖动可移动，右键可删除' });
+      // Under the cursor line a drag moves the cursor, so only offer what works there.
+      lines.push({ label: `标记 ${markerName(marker)}`, value: this.grabAt(x) === marker ? '拖动可移动，右键可删除' : '右键可删除' });
     }
     return lines;
   }

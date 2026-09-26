@@ -41,6 +41,8 @@ class ContextMenu {
   private child: ContextMenu | undefined;
   /** Index of the item whose submenu `child` is. */
   private childOwner = -1;
+  /** Item the pointer last moved onto, or -1 after it left the menu. */
+  private pointerItem = -1;
   private hoverTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly onDocumentPointer = (event: PointerEvent): void => {
     if (!this.contains(event.target as Node)) {
@@ -74,7 +76,8 @@ class ContextMenu {
       ]);
       const index = this.items.length;
       this.items.push(item);
-      item.addEventListener('pointerenter', () => this.hover(index));
+      // pointermove, not pointerenter: Chromium also fires enter when scrolling or a new menu moves an item under a still pointer.
+      item.addEventListener('pointermove', () => this.hover(index));
       item.addEventListener('click', (event) => {
         event.stopPropagation();
         this.activate(index, false);
@@ -137,6 +140,11 @@ class ContextMenu {
 
   /** Pointer over item `index`: highlight it now; open, replace or close the submenu once the pointer rests there. */
   private hover(index: number): void {
+    if (index === this.pointerItem) {
+      // Still moving over the same item: keep the rest timer, and don't undo keyboard moves or an Esc-closed submenu.
+      return;
+    }
+    this.pointerItem = index;
     this.setActive(index);
     this.cancelHover();
     if (index !== this.childOwner && (this.child || this.entryAt(index)?.submenu)) {
@@ -154,8 +162,9 @@ class ContextMenu {
     }
   }
 
-  /** Drop a pending submenu change and highlight the item whose submenu is open again. */
+  /** The pointer left this menu: drop a pending submenu change and highlight the item whose submenu is open again. */
   private settle(): void {
+    this.pointerItem = -1;
     this.cancelHover();
     if (this.child) {
       this.setActive(this.childOwner);
@@ -215,12 +224,14 @@ class ContextMenu {
     for (let step = 0; step < count; step++) {
       next = (next + direction + count) % count;
       if (!this.entryAt(next)?.disabled) {
-        break;
+        this.setActive(next);
+        // Long menus scroll; keep the keyboard highlight in view.
+        this.items[next].scrollIntoView({ block: 'nearest' });
+        return;
       }
     }
-    this.setActive(next);
-    // Long menus scroll; keep the keyboard highlight in view.
-    this.items[next]?.scrollIntoView({ block: 'nearest' });
+    // Nothing can be highlighted (a read-only list such as the parse diagnostics): scroll it by a row instead.
+    this.element.scrollBy({ top: direction * (this.items[0]?.offsetHeight ?? 0) });
   }
 
   private handleKey(event: KeyboardEvent): void {
@@ -260,9 +271,17 @@ class ContextMenu {
     }
   }
 
-  /** Keys act on the deepest open menu; pending pointer-driven submenu changes are dropped along the way. */
+  /**
+   * Keys act on the deepest open menu. A submenu change still waiting for the pointer to rest
+   * is decided in favour of the item the user sees highlighted: the submenu the pointer moved
+   * away from closes, so a key never lands in it.
+   */
   private keyboardTarget(): ContextMenu {
-    this.settle();
+    if (this.hoverTimer !== undefined) {
+      // A pending change means the highlighted item is not the open submenu's owner.
+      this.cancelHover();
+      this.closeSubmenu();
+    }
     return this.child ? this.child.keyboardTarget() : this;
   }
 }

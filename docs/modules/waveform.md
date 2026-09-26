@@ -62,8 +62,8 @@ webview (浏览器端，esbuild 打包，覆盖率排除):
   webview/main.ts — 入口；webview/app.ts — 组装与宿主消息分派；webview/hostChannel.ts — acquireVsCodeApi 封装
   webview/store.ts — 状态中心与合批脏区（帧调度由 app 注入 rAF，store/actions 不依赖 DOM，可在 node 单测）；webview/actions.ts — 缩放/导航/标记/行操作/trace 联动，行结构变化后统一校正选择与锚点
   webview/wavePane.ts — 表头+粘性画布+虚拟标签行+缩略条装配与拖入；webview/waveCanvas.ts — 画布交互（吸附游标、框选放大、拖动游标/标记、平移、缩放、悬停提示）
-  webview/waveRenderer.ts — 波形绘制（event 画触发箭头）；webview/rulerRenderer.ts、webview/rulerView.ts — 标尺绘制与交互；webview/overview.ts — 缩略条
-  webview/rowLabels.ts — 信号名/值列；webview/rowMenu.ts — 行右键菜单；webview/timeMenu.ts — 时间点右键菜单（删除指针下的标记，或从列表选择要删除的标记）；webview/contextMenu.ts — 通用菜单（子菜单须悬停停留 250ms 才打开/切换，斜穿兄弟项进入已开子菜单不会误切换）；webview/tooltip.ts — 悬停提示
+  webview/waveRenderer.ts — 波形绘制（event 画触发箭头）；webview/rulerRenderer.ts、webview/rulerView.ts — 标尺绘制与交互（标记旗标按实际绘制的位置命中：贴边平移、重叠时取上层）；webview/overview.ts — 缩略条
+  webview/rowLabels.ts — 信号名/值列；webview/rowMenu.ts — 行右键菜单；webview/timeMenu.ts — 时间点右键菜单（删除指针下的标记，或从列表选择要删除的标记）；webview/contextMenu.ts — 通用菜单（悬停由指针移动驱动，滚动或弹出不会抢走高亮；子菜单须停留 250ms 才打开/切换，斜穿兄弟项进入已开子菜单不会误切换；按键作用于当前高亮项；只读列表方向键按行滚动）；webview/tooltip.ts — 悬停提示
   webview/signalBrowser.ts — 信号树；webview/tracePanel.ts — trace 列表；webview/sidebar.ts — 侧栏；webview/toolbar.ts — 工具栏；webview/statusBar.ts — 状态栏与加载/错误覆盖层
   webview/keyboard.ts — 快捷键与帮助；webview/theme.ts — 主题调色板；webview/icons.ts — SVG 图标；webview/dom.ts — DOM 工具；webview/dragData.ts — 拖放载荷
   webview/styles.css — 主题变量驱动的样式
