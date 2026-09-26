@@ -22,7 +22,7 @@ import {
   validateIverilogIncludeResolutionGuards
 } from './iverilogIncludeResolution';
 
-const cacheSchemaRevision = 2;
+const cacheSchemaRevision = 3;
 const maximumDependencyFileBytes = 4 * 1024 * 1024;
 const maximumDependencyEntries = 20_000;
 export const maximumIverilogCompileCacheWorkspaces = 8;
@@ -44,6 +44,8 @@ export interface IverilogCompileCacheInput {
   compileArguments: readonly string[];
   /** Ordered compiler source inputs, including generated testbench and watchdog sources. */
   directSourceFiles: readonly string[];
+  /** Generated scalar-only -f options (no source/include paths); not reported by -Mall. */
+  configurationFiles?: readonly string[];
   compiledFile: string;
   dependencyFile: string;
 }
@@ -53,7 +55,10 @@ export interface IverilogCompileCacheSnapshot {
   readonly workspaceKey: string;
   readonly key: string;
   readonly input: IverilogCompileCacheInput;
+  /** All content-addressed direct inputs, including configuration files. */
   readonly directFiles: readonly FileFingerprint[];
+  /** Source files must still be present in Icarus's -Mall dependency closure. */
+  readonly sourceFiles: readonly FileFingerprint[];
 }
 
 export interface IverilogCompileCacheHit {
@@ -179,14 +184,17 @@ export async function storeIverilogCompileCache(
       signal
     );
     const dependencyKeys = new Set(dependencyPaths.map(normalizePathKey));
-    if (snapshot.directFiles.some((source) => !dependencyKeys.has(source.path))) {
+    if (snapshot.sourceFiles.some((source) => !dependencyKeys.has(source.path))) {
       entriesByWorkspace.delete(workspaceKey);
       return false;
     }
 
     // Hash the compiler-reported closure once after compilation. Selecting the
     // direct inputs back out detects edits that raced the compiler.
-    const dependencies = await fingerprintOrderedFiles(dependencyPaths, signal);
+    const dependencies = await fingerprintOrderedFiles([
+      ...dependencyPaths,
+      ...(input.configurationFiles ?? [])
+    ], signal);
     const dependencyByPath = new Map(dependencies.map((dependency) => [dependency.path, dependency]));
     const currentDirectFiles = snapshot.directFiles.map((source) => dependencyByPath.get(source.path));
     if (currentDirectFiles.some((source) => source === undefined)
@@ -272,7 +280,9 @@ async function createCompileSnapshot(
   signal?: AbortSignal
 ): Promise<IverilogCompileCacheSnapshot> {
   const stableInput = cloneInput(input);
-  const directFiles = await fingerprintOrderedFiles(stableInput.directSourceFiles, signal);
+  const sourceFiles = await fingerprintOrderedFiles(stableInput.directSourceFiles, signal);
+  const configurationFiles = await fingerprintOrderedFiles(stableInput.configurationFiles ?? [], signal);
+  const directFiles = [...sourceFiles, ...configurationFiles];
   const key = JSON.stringify({
     schemaRevision: cacheSchemaRevision,
     workspaceRoot: workspaceKey,
@@ -291,7 +301,7 @@ async function createCompileSnapshot(
     compileArguments: stableInput.compileArguments,
     directFiles: directFiles.map(fileContentSignature)
   });
-  return { workspaceKey, key, input: stableInput, directFiles };
+  return { workspaceKey, key, input: stableInput, directFiles, sourceFiles };
 }
 
 function setWorkspaceEntry(workspaceKey: string, entry: IverilogCompileCacheEntry): void {
@@ -312,6 +322,9 @@ function cloneInput(input: IverilogCompileCacheInput): IverilogCompileCacheInput
     runtime: { ...input.runtime },
     compileArguments: [...input.compileArguments],
     directSourceFiles: input.directSourceFiles.map((file) => resolveCompilerPath(file, compileCwd)),
+    ...(input.configurationFiles
+      ? { configurationFiles: input.configurationFiles.map((file) => resolveCompilerPath(file, compileCwd)) }
+      : {}),
     compiledFile: resolveCompilerPath(input.compiledFile, compileCwd),
     dependencyFile: resolveCompilerPath(input.dependencyFile, compileCwd)
   };

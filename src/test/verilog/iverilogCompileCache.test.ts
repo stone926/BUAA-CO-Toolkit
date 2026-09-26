@@ -73,6 +73,35 @@ describe('Icarus session compile cache', () => {
     expect(lookup.snapshot).toBeDefined();
   });
 
+  it('caches -f configuration files separately from the -Mall source closure', async () => {
+    const fixture = await createFixture();
+    const configuration = await addConfigurationFile(fixture);
+    await compileAndStore(fixture);
+
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeDefined();
+    await fs.promises.writeFile(configuration, '+timescale+1us/1ps\n');
+
+    const lookup = await lookupIverilogCompileCache(fixture.input);
+    expect(lookup.hit).toBeUndefined();
+    expect(lookup.snapshot).toBeDefined();
+  });
+
+  it('does not publish a compile if an -f configuration file changes during compilation', async () => {
+    const fixture = await createFixture();
+    const configuration = await addConfigurationFile(fixture);
+    const lookup = await lookupIverilogCompileCache(fixture.input);
+    expect(lookup.snapshot).toBeDefined();
+    await prepareIverilogCompileCacheMiss(fixture.input);
+    await writeCompilerOutputs(fixture);
+    await fs.promises.writeFile(configuration, '+timescale+1us/1ps\n');
+
+    expect(await storeIverilogCompileCache(
+      lookup.snapshot!,
+      successfulCompileResult()
+    )).toBe(false);
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeUndefined();
+  });
+
   it.each(['rewrite', 'delete'] as const)('misses when a transitive dependency is %s', async (operation) => {
     const fixture = await createFixture();
     await compileAndStore(fixture);
@@ -329,6 +358,17 @@ async function compileAndStore(fixture: CacheFixture): Promise<void> {
     lookup.snapshot!,
     successfulCompileResult()
   )).toBe(true);
+}
+
+async function addConfigurationFile(fixture: CacheFixture): Promise<string> {
+  const configuration = path.join(fixture.root, '.co', 'isim', 'iverilog-defaults.f');
+  await fs.promises.writeFile(configuration, '+timescale+1ns/1ps\n');
+  fixture.input = {
+    ...fixture.input,
+    compileArguments: [...fixture.input.compileArguments, '-f', configuration],
+    configurationFiles: [configuration]
+  };
+  return configuration;
 }
 
 async function writeCompilerOutputs(fixture: CacheFixture): Promise<void> {

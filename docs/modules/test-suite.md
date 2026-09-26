@@ -23,6 +23,8 @@ test/waveform/:
   vcdReader, valueFormat, viewLogic, signalModel, interactionLogic, hostShortcuts, hostServices, waveformPanel, sourceNavigation, designDump — VCD 流式解析（跨 chunk、重复 scope、别名、四态、event 触发、截断/倒退/位宽/上限诊断、inf/nan 实数）、进制与反汇编、视窗/周期/LOD/时间输入、信号树/行模型/默认信号/状态清洗、store/actions 选择校正与搜索选中（node 下运行）、宿主转发快捷键与 keybindings 一致性、trace 配对与中文空格路径、面板消息/CSP/含 glob 字符文件名的监视、信号/scope 跳转源码与实际 dumpfile 定位；designDump 覆盖参数逐级覆盖/不确定边界/作用域跳过，并用真实 bundled Icarus 编译 dump 顶层，核对 GRF 字、trace 与编译器报错归因
 
 test/verilog/:
+
+  iverilogTiming — 真实 bundled Icarus 验证课程默认 `1ns/1ps`：无声明 GRF/DM 的 `$time` 与 VCD 跳变对齐、TB 前后两种源码顺序、`resetall` 恢复默认、显式尺度与 watchdog 保持生效；iverilogCompileCache 另覆盖 `-f` 配置文件命中、修改失效与编译期间变化拒绝
   dmStoreContract — 真实 bundled Icarus 执行 P6/P7 完整 testbench：SB/SH 错误全使能读改写在旧实现整条 trace 相同、新实现失败；覆盖各宽度/扩展 store、无效事务、使能 lane、忽略的地址低位 X/Z，以及失败摘要接线
   verilogProject, iverilogRuntime, iverilogRunner, iverilogCompileCache, simulationRunner, simulationDiagnostic, simulationInputs — Icarus 执行、Verilog 源发现与确定性顺序的并发合并缓存（调用级 extra/exclusion 重算、按根失效、LRU 上界）、win32-x64/darwin-arm64/darwin-x64/linux-x64/linux-arm64 runtime 纯映射与 unsupported 分支、五 target 路径/预检、Unix `-B <lib/ivl>` 与 Windows argv 不变、源码目录 include、compile+VVP/watchdog argv、workspace 串行/排队取消、session compile cache 的源码/依赖/include-shadow/artifact 失效与 LRU 上界、自定义机器码名 alias 与无 fallback 分派；失败 phase/reason、Windows/POSIX/中文路径脱敏、首条诊断、限长和私有 raw artifact 持久化
 

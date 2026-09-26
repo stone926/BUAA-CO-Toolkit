@@ -75,6 +75,11 @@ const maximumIverilogCompileOutputBytes = 4 * 1024 * 1024;
 const maximumIverilogSimulationOutputBytes = 16 * 1024 * 1024;
 const iverilogWatchdogFileName = 'co_iverilog_watchdog.v';
 const iverilogDependencyFileName = 'simulation.dependencies';
+const iverilogDefaultsFileName = 'co_iverilog_defaults.f';
+// Course delays and %d $time traces use nanoseconds. Icarus otherwise defaults
+// unscaled modules to 1s/1s, rounding their timestamps to zero. A command-file
+// default also survives `resetall without overriding explicit source timescales.
+export const iverilogSimulationDefaults = '+timescale+1ns/1ps\n';
 
 export interface IverilogRunOptions {
   /** One user action may retry compilation without asking for its ASM again. */
@@ -158,6 +163,7 @@ export interface IverilogCompileArguments {
   watchdogModule: string;
   outputFile: string;
   dependencyFile: string;
+  defaultsFile: string;
   workspaceRoot: string;
   sourceFiles: readonly string[];
   watchdogFile: string;
@@ -180,6 +186,7 @@ export function buildIverilogCompileArgs(input: IverilogCompileArguments): strin
   return [
     ...buildIverilogRuntimeArgs(input.runtime),
     '-g2005',
+    '-f', input.defaultsFile,
     ...buildIverilogIncludeArgs(input.workspaceRoot, [
       ...input.sourceFiles,
       input.watchdogFile,
@@ -358,7 +365,9 @@ async function runIverilogInWorkspace(
   const watchdog = vscode.Uri.file(path.join(outDir.fsPath, iverilogWatchdogFileName));
   const compiled = vscode.Uri.file(path.join(outDir.fsPath, 'simulation.vvp'));
   const dependencies = vscode.Uri.file(path.join(outDir.fsPath, iverilogDependencyFileName));
+  const defaults = vscode.Uri.file(path.join(outDir.fsPath, iverilogDefaultsFileName));
   const watchdogLimitPs = resolveWatchdogLimitPs(activeUri, options);
+  await writeTextFileIfChanged(defaults, iverilogSimulationDefaults);
   await writeTextFileIfChanged(watchdog, buildIverilogWatchdog(watchdogModule));
   const generated: IverilogGeneratedFiles = { outDir, compiled, watchdog };
   const extraTopModules: { moduleName: string; file: string }[] = [];
@@ -395,6 +404,7 @@ async function runIverilogInWorkspace(
     watchdogModule,
     outputFile: compiled.fsPath,
     dependencyFile: dependencies.fsPath,
+    defaultsFile: defaults.fsPath,
     workspaceRoot: folder.uri.fsPath,
     sourceFiles: sourceFilePaths,
     watchdogFile: watchdog.fsPath,
@@ -406,6 +416,7 @@ async function runIverilogInWorkspace(
     runtime: { ...preflight.runtime, version: preflight.version },
     compileArguments,
     directSourceFiles,
+    configurationFiles: [defaults.fsPath],
     compiledFile: compiled.fsPath,
     dependencyFile: dependencies.fsPath
   };

@@ -11,6 +11,7 @@
   model/、view/、vcd/、design/ 为纯 TS（无 vscode/DOM），宿主、Webview、测试共用；Webview 由 esbuild 打包到 `out/media/`（scripts/build-webview.mjs），tsc 与 tsconfig.webview.json 分别做类型检查
   Webview 严格 CSP：nonce 脚本、仅 `out/media` 本地资源、无内联 style 属性（样式经 CSSOM 设置）；宿主校验全部入站消息，持久化状态经 viewStateContract 清洗
   时间一律用 dump 整数 tick（Float64 精确到 2^53），显示时自适应 ps/ns/µs
+  仿真默认时间尺度由 runIverilog 的 `co_iverilog_defaults.f` 设置为课程 `1ns/1ps`（普通/波形/自动仿真共用）；保留源码显式声明与 Verilog 指令继承语义，`resetall` 恢复课程默认值，避免无声明的 GRF/DM 按 Icarus 原默认 `1s/1s` 把 `$time` 舍入为 0
 
 entry:
   waveform.ts — registerWaveform(): 注册自定义编辑器 provider、`co.verilog.viewWaveform`、`co.waveform.openFile`、转发到活动页签的快捷键命令，接线源码跳转

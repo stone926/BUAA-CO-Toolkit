@@ -178,13 +178,15 @@ describe('Icarus compile arguments and watchdog', () => {
       watchdogModule: '__co_iverilog_watchdog_ab12',
       outputFile: 'E:/work path/simulation.vvp',
       dependencyFile: 'E:/work path/simulation.dependencies',
+      defaultsFile: 'E:/work path/co_iverilog_defaults.f',
       workspaceRoot: 'E:/课程 workspace path',
       sourceFiles: ['E:/work/a.v', 'E:/work/z.v', 'E:/work/generated_tb.v'],
       watchdogFile: 'E:/work/watchdog.v'
     });
 
     expect(args).toEqual([
-      '-g2005', '-grelative-include', '-I', 'E:/课程 workspace path',
+      '-g2005', '-f', 'E:/work path/co_iverilog_defaults.f',
+      '-grelative-include', '-I', 'E:/课程 workspace path',
       '-Mall=E:/work path/simulation.dependencies',
       '-t', 'vvp',
       '-s', 'mips_tb',
@@ -218,6 +220,7 @@ describe('Icarus compile arguments and watchdog', () => {
         watchdogModule: '__co_iverilog_watchdog_ab12',
         outputFile: '/work/simulation.vvp',
         dependencyFile: '/work/simulation.dependencies',
+        defaultsFile: '/work/co_iverilog_defaults.f',
         workspaceRoot: '/work',
         sourceFiles: ['/work/mips.v'],
         watchdogFile: '/work/watchdog.v'
@@ -365,15 +368,16 @@ describe('Icarus runner orchestration', () => {
     expect(runTool).toHaveBeenCalledTimes(2);
     const [compileCommand, compileArgs, compileOptions] = vi.mocked(runTool).mock.calls[0];
     expect(compileCommand).toBe(runtime.iverilogPath);
-    expect(compileArgs.slice(0, 13)).toEqual([
-      '-g2005', '-grelative-include', '-I', expect.stringMatching(/e:[\\/]work/i),
+    expect(compileArgs.slice(0, 15)).toEqual([
+      '-g2005', '-f', expect.stringMatching(/co_iverilog_defaults\.f$/i),
+      '-grelative-include', '-I', expect.stringMatching(/e:[\\/]work/i),
       expect.stringMatching(/^-Mall=.*simulation\.dependencies$/i),
       '-t', 'vvp', '-s', 'mips_tb', '-s',
       expect.stringMatching(/^__co_iverilog_watchdog_[0-9a-f]{16}$/),
       '-o',
       expect.stringMatching(/simulation\.vvp$/i)
     ]);
-    expect(compileArgs.slice(13, -1).map(normalized)).toEqual([
+    expect(compileArgs.slice(15, -1).map(normalized)).toEqual([
       'e:/work/src/a.v',
       'e:/work/src/z.v',
       'e:/work/test/mips_tb.v'
@@ -408,6 +412,14 @@ describe('Icarus runner orchestration', () => {
     expect(writeTextFileIfChanged).toHaveBeenCalledWith(
       expect.objectContaining({ path: expect.stringMatching(/co_iverilog_watchdog\.v$/i) }),
       expect.stringContaining('$value$plusargs("co_watchdog_limit_ps=%d", limit_ps)')
+    );
+    expect(writeTextFileIfChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ path: expect.stringMatching(/co_iverilog_defaults\.f$/i) }),
+      '+timescale+1ns/1ps\n'
+    );
+    expect(lookupIverilogCompileCache).toHaveBeenCalledWith(
+      expect.objectContaining({ configurationFiles: [compileArgs[2]] }),
+      controller.signal
     );
   });
 
