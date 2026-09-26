@@ -44,7 +44,7 @@ endmodule
     expect(codes(second, [first, second], { project: { topModule: 'child' } })).toContain('duplicate-module');
   });
 
-  it('reports modules that are not instantiated by the workspace hierarchy', () => {
+  it('allows standalone and alternative top modules', () => {
     const top = doc('top', `
 module used; endmodule
 module unused; endmodule
@@ -53,7 +53,7 @@ module top;
 endmodule
 `);
 
-    expect(codes(top, [top], { project: { topModule: 'top' } })).toContain('uninstantiated-module');
+    expect(codes(top, [top], { project: { topModule: 'top' } })).not.toContain('uninstantiated-module');
   });
 
   it('defers global hierarchy diagnostics while the workspace index is incomplete', () => {

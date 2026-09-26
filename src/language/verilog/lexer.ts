@@ -249,6 +249,13 @@ function readNumber(text: string, start: number): VerilogToken {
   while (index < text.length && /[0-9_]/.test(text[index])) {
     index++;
   }
+  let apostrophe = index;
+  while (apostrophe < text.length && /\s/.test(text[apostrophe])) {
+    apostrophe++;
+  }
+  if (text[apostrophe] === "'") {
+    index = apostrophe;
+  }
   if (text[index] === '\'') {
     index++;
     if (/[sS]/.test(text[index] ?? '')) {
@@ -257,8 +264,27 @@ function readNumber(text: string, start: number): VerilogToken {
     if (/[bBoOdDhH]/.test(text[index] ?? '')) {
       index++;
     }
+    while (index < text.length && /\s/.test(text[index])) {
+      index++;
+    }
     while (index < text.length && /[0-9a-fA-F_xXzZ?]/.test(text[index])) {
       index++;
+    }
+  } else {
+    if (text[index] === '.' && /[0-9]/.test(text[index + 1] ?? '')) {
+      index++;
+      while (index < text.length && /[0-9_]/.test(text[index])) {
+        index++;
+      }
+    }
+    if (/[eE]/.test(text[index] ?? '')) {
+      index++;
+      if (text[index] === '+' || text[index] === '-') {
+        index++;
+      }
+      while (index < text.length && /[0-9_]/.test(text[index])) {
+        index++;
+      }
     }
   }
   return { kind: 'number', value: text.slice(start, index), start, end: index };

@@ -48,7 +48,7 @@ function inlayLabels(document: TextDocument): string[] {
 }
 
 describe('Verilog expression AST LSP integration', () => {
-  it('shows expression AST hover on operators', () => {
+  it('shows concise expression hover on operators', () => {
     const text = `
 module m(input [3:0] a, input [3:0] b, output [7:0] y);
     assign y = a + b * 3;
@@ -63,7 +63,7 @@ endmodule
     );
 
     expect(hoverText(hover)).toContain('Expression `a + b * 3`');
-    expect(hoverText(hover)).toContain('AST: `binaryExpression`');
+    expect(hoverText(hover)).not.toMatch(/AST:|Node range:|flexible|min:/);
     expect(hoverText(hover)).toContain('Width: `32`');
   });
 
@@ -82,7 +82,7 @@ endmodule
     );
 
     expect(hoverText(hover)).toContain('Expression `a + b`');
-    expect(hoverText(hover)).toContain('AST: `binaryExpression`');
+    expect(hoverText(hover)).not.toMatch(/AST:|Node range:|flexible|min:/);
     expect(hoverText(hover)).toContain('Width: `4`');
   });
 

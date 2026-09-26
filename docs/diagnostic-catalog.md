@@ -68,7 +68,6 @@
 | verilog | `<profile>-port` | `src/language/verilog/diagnostics.ts` |
 | verilog | `<profile>-port-width` | `src/language/verilog/diagnostics.ts` |
 | verilog | `constant-division-by-zero` | `src/language/verilog/diagnostics.ts` |
-| verilog | `default-nettype-none` | `src/language/verilog/diagnostics.ts` |
 | verilog | `display-format` | `src/language/verilog/diagnostics.ts` |
 | verilog | `duplicate-module` | `src/language/verilog/diagnostics.ts`, `src/language/verilog/workspaceDiagnostics.ts` |
 | verilog | `duplicate-parameter-connection` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
@@ -124,10 +123,6 @@
 | verilog | `synth-initial` | `resources/verilog/lintRules.json`, `src/language/verilog/lintDiagnostics.ts` |
 | verilog | `synth-mul-div` | `resources/verilog/lintRules.json`, `src/language/verilog/lintDiagnostics.ts` |
 | verilog | `tb-clock` | `src/language/verilog/lintDiagnostics.ts` |
-| verilog | `tb-readmemh` | `src/language/verilog/lintDiagnostics.ts` |
-| verilog | `tb-reset` | `src/language/verilog/lintDiagnostics.ts` |
-| verilog | `tb-timescale` | `src/language/verilog/lintDiagnostics.ts` |
-| verilog | `uninstantiated-module` | `src/language/verilog/workspaceDiagnostics.ts` |
 | verilog | `unknown-parameter` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
 | verilog | `unknown-port` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
 | verilog | `unused-parameter` | `src/language/verilog/usageDiagnostics.ts` |
@@ -186,20 +181,20 @@
 | 代码 | 严重级别 | 默认 | 可配置 | 标题 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `vc-001` | 信息 | 禁用 | 是 | 信号命名风格 | 信号名应保持一种可识别且一致的命名风格。 |
-| `vc-002` | 信息 | 启用 | 是 | 低有效后缀 | 低有效信号名应使用 _n 后缀。 |
+| `vc-002` | 信息 | 禁用 | 是 | 低有效后缀 | 低有效信号名应使用 _n 后缀。 |
 | `vc-003` | 信息 | 禁用 | 是 | 多路选择器命名 | 多路选择器信号名应体现位宽或输入数量。 |
 | `vc-004` | 信息 | 禁用 | 是 | 魔数 | 将缺少说明的数字字面量替换为 localparam、parameter 或宏。 |
 | `vc-005` | 警告 | 启用 | 是 | 多个 always 驱动 | 避免在多个 always 块中给同一个信号赋值。 |
-| `vc-006` | 警告 | 启用 | 是 | 组合逻辑敏感列表 | 组合逻辑应使用 always @(*) 或 assign。 |
+| `vc-006` | 警告 | 禁用 | 是 | 组合逻辑敏感列表 | 组合逻辑应使用 always @(*) 或 assign。 |
 | `vc-007` | 警告 | 启用 | 是 | 组合逻辑阻塞赋值 | 组合逻辑 always 块应使用阻塞赋值。 |
 | `vc-008` | 信息 | 禁用 | 是 | 组合逻辑完备性 | 组合逻辑分支和 case 语句应覆盖每条输出赋值路径。 |
-| `vc-009` | 警告 | 启用 | 是 | 时序逻辑 posedge | 时序逻辑应使用 always @(posedge clock)。 |
+| `vc-009` | 警告 | 禁用 | 是 | 时序逻辑 posedge | 时序逻辑应使用 always @(posedge clock)。 |
 | `vc-010` | 警告 | 启用 | 是 | 时序逻辑非阻塞赋值 | 时序逻辑 always 块应使用非阻塞赋值。 |
-| `vc-011` | 警告 | 启用 | 是 | negedge 触发 | 除非协议需要，否则避免使用 negedge 触发逻辑。 |
-| `vc-012` | 警告 | 启用 | 是 | 边沿触发信号类型 | 边沿触发敏感信号应为时钟或复位。 |
-| `vc-013` | 信息 | 启用 | 是 | 时钟作为数据 | 时钟信号不应在时序逻辑中作为普通数据使用。 |
-| `vc-014` | 信息 | 启用 | 是 | 同步复位偏好 | 当敏感列表中出现异步复位时，优先考虑同步复位写法。 |
-| `vc-015` | 警告 | 启用 | 是 | 内部 inout 端口 | 内部模块应避免使用 inout 端口。 |
+| `vc-011` | 警告 | 禁用 | 是 | negedge 触发 | 除非协议需要，否则避免使用 negedge 触发逻辑。 |
+| `vc-012` | 警告 | 禁用 | 是 | 边沿触发信号类型 | 边沿触发敏感信号应为时钟或复位。 |
+| `vc-013` | 信息 | 禁用 | 是 | 时钟作为数据 | 时钟信号不应在时序逻辑中作为普通数据使用。 |
+| `vc-014` | 信息 | 禁用 | 是 | 同步复位偏好 | 当敏感列表中出现异步复位时，优先考虑同步复位写法。 |
+| `vc-015` | 警告 | 禁用 | 是 | 内部 inout 端口 | 内部模块应避免使用 inout 端口。 |
 | `vc-017` | 信息 | 禁用 | 是 | 实例端口格式 | 模块实例应使用命名映射、多行格式，并让每个端口单独占一行。 |
 | `vc-021` | 信息 | 禁用 | 是 | 显式信号位宽 | 非参数信号应显式声明位宽。 |
 | `synth-decl-init` | 信息 | 启用 | 否 | 声明初始化器 | 可综合模块中的寄存器应避免在声明处初始化。 |

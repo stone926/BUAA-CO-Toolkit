@@ -70,12 +70,12 @@
 | --- | --- | --- |
 | 模块头 | 空端口、传统端口、ANSI 端口、`#(...)` 参数列表 | `syntax-module-declaration`, `syntax-malformed-port-list` |
 | 声明 | `input/output/inout/wire/reg/logic/integer/time/real/realtime/genvar/parameter/localparam`，并支持 `signed/unsigned/automatic/scalared/vectored` 等修饰符 | `syntax-malformed-declaration` |
-| 连续赋值 | 普通 `assign`；驱动强度元组会被剥离后继续解析并提示课程外 | `syntax-malformed-assignment`, `syntax-missing-semicolon`, `syntax-unsupported-construct` |
+| 连续赋值 | 普通 `assign`、同句多赋值、带驱动强度前缀的赋值；每个 lvalue/RHS 独立建模 | `syntax-malformed-assignment`, `syntax-missing-semicolon` |
 | 过程赋值 | `always`/`initial` 内阻塞与非阻塞赋值 | `syntax-malformed-assignment`, `mixed-assignment`, `vc-007-*`, `vc-010-*` |
-| 表达式 | 一元、二元、三元、拼接、重复拼接、函数/系统函数调用、位选、范围选择、索引式部分选择、转义标识符、基数字面量 | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance`, `syntax-malformed-number` |
-| 过程控制 | `if/else`, `case/casex/casez`, `for/while/repeat/forever`, 事件控制、延迟控制；`for` 的 init/condition/step 会结构化检查 | `syntax-malformed-if`, `syntax-malformed-case`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-malformed-event-control` |
+| 表达式 | 一元、二元、三元、拼接、重复拼接、函数/系统函数调用、位选、范围选择、索引式部分选择、转义标识符、基数字面量（含 size/base/digits 之间合法空白）、实数/指数数字（仅解析，不做整数折叠） | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance`, `syntax-malformed-number` |
+| 过程控制 | `if/else`, `case/casex/casez`, `for/while/repeat/forever`, 事件控制、延迟控制；always/initial 后不强制 begin/end，case 标签支持三元表达式和 default 可选冒号；`for` 的 init/condition/step 会结构化检查 | `syntax-malformed-if`, `syntax-malformed-case`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-malformed-event-control` |
 | 块结构 | `begin/end`, `case/endcase`, `generate/endgenerate`, `function/endfunction`, `task/endtask` | `syntax-unclosed-*`, `syntax-unmatched-*` |
-| 实例化 | 命名端口、位置端口、空连接、参数覆盖、常见门级原语 | `syntax-malformed-instance`, `syntax-malformed-gate-primitive`, `unknown-port`, `unknown-parameter` |
+| 实例化 | 命名端口、位置端口、空连接（保留位置空槽）、参数覆盖、同语句多实例、常见门级原语 | `syntax-malformed-instance`, `syntax-malformed-gate-primitive`, `unknown-port`, `unknown-parameter` |
 | 预处理 | 静态识别 ``include``、``define``、``default_nettype``；宏可用于位宽/表达式文本；不做完整条件编译展开 | `missing-include`, `implicit-net:*`, `default-nettype-none` |
 | generate | 常见 generate-for；课程子集要求 `begin : name` 命名块；generate-if/generate-case 只做足够的语句边界识别 | `syntax-malformed-generate`, `syntax-unclosed-generate` |
 | task/function | 常见头部、参数/局部声明和过程体；名称和局部声明进入语义作用域 | `syntax-malformed-procedural-block`, `syntax-unclosed-task`, `syntax-unclosed-function` |
@@ -84,8 +84,8 @@
 
 | 构造 | 当前行为 | 原因 |
 | --- | --- | --- |
-| `tri`, `tri0`, `tri1`, `supply0`, `supply1`, `wand`, `wor`, `triand`, `trior`, `trireg` | 按 wire 类声明建模，同时发 `syntax-unsupported-construct` 信息提示 | 合法 Verilog，但 CO 项目很少需要 |
-| 驱动强度，例如 `assign (weak1, weak0) y = a;` | 剥离强度元组后继续解析赋值，并发 `syntax-unsupported-construct` 信息提示 | 合法 Verilog，但超出课程子集 |
+| `tri`, `tri0`, `tri1`, `supply0`, `supply1`, `wand`, `wor`, `triand`, `trior`, `trireg` | 按 wire 类声明建模，不再产生课程外风格提示 | 为合法库/综合网表提供符号和表达式支持，不模拟电气语义 |
+| 驱动强度，例如 `assign (weak1, weak0) y = a;`、`tri (weak1, strong0) y = a;` | 识别并跳过强度元组，继续构建声明/赋值及引用 | 保留语法和源码位置，不模拟驱动强度 |
 | `specify`, `primitive`, `defparam`, `fork`, `event` | 发 `syntax-unsupported-construct`；可恢复时继续做周边语法分析 | 仿真/库建模或高级行为构造，不属于课程常用子集 |
 | SystemVerilog 特性，例如 `always_ff`、interface、package、typedef/enum/struct | `.sv/.svh` 使用独立 SystemVerilog language id 和 TextMate 词法高亮，不进入 Verilog parser/LSP | 本地 parser 面向 Verilog 课程子集；隔离语言可避免错误 AST 与误诊断 |
 

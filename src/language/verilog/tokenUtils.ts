@@ -15,7 +15,7 @@ export function stripLeadingGenerateBlockLabelTokens(tokens: VerilogToken[]): Ve
     : tokens;
 }
 
-export function splitTopLevelTokens(tokens: VerilogToken[], separator: string): VerilogToken[][] {
+export function splitTopLevelTokens(tokens: VerilogToken[], separator: string, keepEmpty = false): VerilogToken[][] {
   const parts: VerilogToken[][] = [];
   let start = 0;
   let paren = 0;
@@ -42,7 +42,7 @@ export function splitTopLevelTokens(tokens: VerilogToken[], separator: string): 
     }
   }
   parts.push(trimEofTokens(tokens.slice(start)));
-  return parts.filter((part) => part.length > 0);
+  return keepEmpty ? parts : parts.filter((part) => part.length > 0);
 }
 
 export function findMatchingTokenForward(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {

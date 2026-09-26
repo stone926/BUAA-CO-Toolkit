@@ -12,7 +12,7 @@
     "id": "vc-002",
     "title": "低有效后缀",
     "severity": "information",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "低有效信号名应使用 _n 后缀。"
@@ -48,7 +48,7 @@
     "id": "vc-006",
     "title": "组合逻辑敏感列表",
     "severity": "warning",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "组合逻辑应使用 always @(*) 或 assign。"
@@ -75,7 +75,7 @@
     "id": "vc-009",
     "title": "时序逻辑 posedge",
     "severity": "warning",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "时序逻辑应使用 always @(posedge clock)。"
@@ -93,7 +93,7 @@
     "id": "vc-011",
     "title": "negedge 触发",
     "severity": "warning",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "除非协议需要，否则避免使用 negedge 触发逻辑。"
@@ -102,7 +102,7 @@
     "id": "vc-012",
     "title": "边沿触发信号类型",
     "severity": "warning",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "边沿触发敏感信号应为时钟或复位。"
@@ -111,7 +111,7 @@
     "id": "vc-013",
     "title": "时钟作为数据",
     "severity": "information",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "时钟信号不应在时序逻辑中作为普通数据使用。"
@@ -120,7 +120,7 @@
     "id": "vc-014",
     "title": "同步复位偏好",
     "severity": "information",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "当敏感列表中出现异步复位时，优先考虑同步复位写法。"
@@ -129,7 +129,7 @@
     "id": "vc-015",
     "title": "内部 inout 端口",
     "severity": "warning",
-    "enabledByDefault": true,
+    "enabledByDefault": false,
     "configurable": true,
     "quickFixCommand": "co.verilog.disableLintRule",
     "description": "内部模块应避免使用 inout 端口。"

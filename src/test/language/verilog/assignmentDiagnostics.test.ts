@@ -27,7 +27,7 @@ module demo(input clk);
 endmodule
 `.trim());
 
-    expect(result).toContain('synth-decl-init');
+    expect(result).not.toContain('synth-decl-init');
     expect(result).not.toContain('mixed-assignment');
   });
 

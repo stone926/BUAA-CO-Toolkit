@@ -219,7 +219,7 @@ endmodule
     expect(result).not.toContain('syntax-malformed-assignment');
   });
 
-  it('does not silently accept netgen-only net types or drive-strength assigns', () => {
+  it('accepts supported net types and drive-strength assigns', () => {
     const result = codes(`
 module glbl();
     wire GSR_int;
@@ -227,7 +227,7 @@ module glbl();
     assign (weak1, weak0) GSR = GSR_int;
 endmodule
 `.trim());
-    expect(result).toContain('syntax-unsupported-construct');
+    expect(result).not.toContain('syntax-unsupported-construct');
     expect(result).not.toContain('syntax-unexpected-token');
     expect(result).not.toContain('syntax-malformed-assignment');
   });

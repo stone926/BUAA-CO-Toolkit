@@ -149,8 +149,8 @@ function makeExtractConstantLocalparamAction(
   if (statement.kind !== 'continuousAssign' || expression.kind === 'numberLiteral' || expression.kind === 'identifier') {
     return undefined;
   }
-  const assignment = statement.assignment;
-  if (!assignment || !containsExpression(assignment.rhs, expression)) {
+  const assignment = statement.assignments.find((item) => containsExpression(item.rhs, expression));
+  if (!assignment) {
     return undefined;
   }
   if (evalExpressionAstConstant(expression, module) === undefined) {
@@ -190,8 +190,8 @@ function makeExtractWireAction(
   if (statement.kind !== 'continuousAssign' || expression.kind === 'numberLiteral' || expression.kind === 'identifier' || expression.kind === 'stringLiteral') {
     return undefined;
   }
-  const assignment = statement.assignment;
-  if (!assignment || !containsExpression(assignment.rhs, expression)) {
+  const assignment = statement.assignments.find((item) => containsExpression(item.rhs, expression));
+  if (!assignment) {
     return undefined;
   }
   if (evalExpressionAstConstant(expression, module) !== undefined) {

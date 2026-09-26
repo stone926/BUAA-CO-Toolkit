@@ -11,7 +11,7 @@ import { getCachedVerilogParse } from './parseCache';
 import { formatNumericLiteralHover, numericLiteralAt } from './numericLiterals';
 import { evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './expressions';
 import { findSmallestVerilogExpressionAtOffset } from './exprAstUtils';
-import { connectionMarkdown, formatBigInt, instanceMarkdown, markdownHover, moduleMarkdown } from './display';
+import { connectionMarkdown, formatBigInt, instanceMarkdown, markdownHover, moduleMarkdown, compactHoverSource } from './display';
 import { resolveInstanceTargetModule, resolveVerilogSymbol, resolvedRange } from './resolveSymbol';
 
 export function getVerilogHover(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): Hover | undefined {
@@ -37,13 +37,7 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
       const widthInfo = widthOfDecl(resolved.decl, resolved.module);
       let widthLine = '';
       if (widthInfo.width !== undefined) {
-        widthLine = `\n\nInferred width: \`${widthInfo.width}\``;
-        if (widthInfo.minWidth !== undefined && widthInfo.minWidth !== widthInfo.width) {
-          widthLine += ` (min: \`${widthInfo.minWidth}\`)`;
-        }
-        if (widthInfo.flexible) {
-          widthLine += ' *(flexible)*';
-        }
+        widthLine = `\n\nWidth: \`${widthInfo.width}\` bits`;
       }
       const valueLine = resolved.decl.constantValue !== undefined
         ? `\n\nConstant value: \`${formatBigInt(resolved.decl.constantValue)}\``
@@ -106,20 +100,12 @@ function getVerilogExpressionHover(document: TextDocument, position: Position, s
   if (width.width === undefined && value === undefined) {
     return undefined;
   }
-  const lines = [`Expression \`${source}\``, '', `AST: \`${expression.kind}\``];
+  const lines = [`Expression \`${compactHoverSource(source)}\``];
   if (width.width !== undefined) {
-    let widthText = `Width: \`${width.width}\``;
-    if (width.minWidth !== undefined && width.minWidth !== width.width) {
-      widthText += ` (min: \`${width.minWidth}\`)`;
-    }
-    if (width.flexible) {
-      widthText += ' *(flexible)*';
-    }
-    lines.push(widthText);
+    lines.push('', `Width: \`${width.width}\` bits`);
   }
   if (value !== undefined) {
-    lines.push(`Constant value: \`${formatBigInt(value)}\``);
+    lines.push('', `Constant value: \`${formatBigInt(value)}\``);
   }
-  lines.push('', `Node range: \`${expression.start}..${expression.end}\``);
   return markdownHover(lines.join('\n'), range);
 }

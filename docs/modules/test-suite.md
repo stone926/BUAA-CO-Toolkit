@@ -16,6 +16,7 @@ test/language/mips/:
   parser, syntax, instructionValidation, semantic, resources, hover, formatting, traceParser, traceCompare, realProjectPatterns, completions, signatureHelp, codeActions
 
 test/language/verilog/:
+  editorPatterns — 多实例及空端口位置、连续赋值列表、声明位宽继承、实数/强度前缀、过程语句边界与恢复、hover 精简、默认诊断降噪、签名/跳转/重构的集成回归
   syntaxDiagnostics, widthDiagnostics, usageDiagnostics, workspaceDiagnostics, iverilogSyntaxCheck, externalSyntaxCheck, semanticModel, parser, formatting, folding, traceParser, statementParser, model, workspaceModuleRegistry, completions, semanticTokens, crossFileSemantic, signalWiring, taskDeclarations, parseCache, workspaceIndex, expressionAstLsp, realProjectPatterns, performance, constantDivisorDiagnostics, selectBoundsDiagnostics, parameterOverrideDiagnostics, assignmentDiagnostics, lintRules
 
 test/waveform/:

@@ -123,6 +123,7 @@ P3–P7 的自动测试链路如下：
 | `co.project.profile` | 当前课程阶段；默认 `auto` |
 | `co.test.instructions` | 自动测试要重点覆盖的真实指令；留空使用默认全集 |
 | `co.verilog.syntax.external.mode` | 内置 Icarus 检查的触发时机；默认保存时检查 |
+| `co.verilog.lint.synthesizableHints` | 可选综合风格建议；默认关闭 |
 | `co.project.topModule`、`co.project.testbench`、`co.project.machineCode`、`co.project.simTime` | 非标准工程或手动仿真的高级覆盖项；自动测试不读取这些手动参数 |
 
 插件会在工作区的 `.co/` 下保存生成物：

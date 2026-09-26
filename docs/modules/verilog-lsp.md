@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 64 files
+# verilog-lsp | src/language/verilog/ | 68 files
 
 Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
 
@@ -12,6 +12,9 @@ core:
   lexer.ts — 词法: VerilogToken流(关键字/标识符/数字/字符串/注释/预处理/系统任务/操作符)
   statementParser.ts — 语句源切片: module item边界/过程块边界
   astParser.ts — 模块/声明/实例结构解析: ports/parameters/declarations/instances/connections/generate（实例标记是否位于带作用域的 generate 块内）
+  instanceParser.ts — 独立实例/连接建模：同句多实例共享参数头，保留位置端口的空槽及源码范围
+  instanceSyntax.ts — 解析和语法验证共用的实例组 token 边界
+  proceduralBoundary.ts — always/initial 的单条过程语句边界，覆盖无 begin/end 的 if/else、case、循环和模块边界恢复
   moduleParser.ts — 薄门面: lexer+astParser组合
   ast.ts — VerilogAstDocument, VerilogModuleAst(items/alwaysBlocks/proceduralBlocks/subroutines)
   syntaxParser.ts — 语法树+语法诊断, 模块项发现从AST遍历
@@ -23,6 +26,7 @@ model:
 expr-support:
   expressions.ts — 宽度推断(widthOfDecl/widthOfExpressionAst), 常量折叠(evalExpressionAstConstant), VerilogConstantOverrides
   declarations.ts — 声明类型分类: port方向/net类型/variable类型/parameter类型/course-out net类型
+  driveStrength.ts — 声明与连续赋值共用的驱动强度前缀识别，保留源码偏移；不模拟驱动强度
   gatePrimitives.ts — 内建门级原语关键字(and/or/not/buf/...)
   tokenUtils.ts — token辅助: 区间/种类/文本提取
   preprocessor.ts — 预处理指令集(define/include/ifdef/...)供补全
@@ -44,7 +48,7 @@ lsp-providers:
   diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
   completions.ts — completionProvider 依赖装配入口, 注入实例连接上下文 resolver
   completionProvider.ts — 补全provider: 实例连接上下文（#(...) 只列可覆盖的 parameter）/宏/关键字/snippet/workspace模块补全
-  hover.ts — hover provider: 宽度/常量/实例参数/include 状态/表达式 AST
+  hover.ts — hover provider: 声明/表达式宽度、常量、实例参数、include 状态；不展示 AST 类型/节点偏移/内部宽度推断属性，长表达式和接口列表限制展示长度
   navigation.ts — definition/reference provider: 跨文件 module/interface/macro/include 引用收集和去重
   rename.ts — rename provider: 基于 reference provider 生成 workspace edit, 标识符边界校验
   codeActions.ts — quick fix/refactor provider: 隐式连线声明、lint 禁用、case default、表达式折叠/抽取、实例连接补全
@@ -71,3 +75,7 @@ external-compiler:
 legacy:
 
 Diagnostic子模块: verilog-diagnostics.md | AST子模块: verilog-ast.md
+
+编辑体验回归：`editorPatterns.test.ts` 覆盖连续赋值列表、多实例、空位置端口、参数宽度继承、未知宏宽度、实数延时、无 begin/end 的过程控制、错误恢复和 LSP 跳转/签名/重构。`valid/editor-patterns.v` 可用 bundled Icarus `-g2005 -tnull` 检查。
+
+2026-09-27 本地真实语料验证：`E:\VSCode\BUAA-CO\cpu` 中 rg 默认可见的 360 个 `.v/.vh` 文件，按源文件父目录分别构建索引（不混合不同 CPU 版本），默认 LSP 诊断由 608 条降至 142 条，其中 120 条为未使用声明的 Hint；唯一 `syntax-*` 是原文件 `gyc/test/sales-tb.v` 的非法模块名。此统计不等同于所有 CPU 工程的完整仿真验证。

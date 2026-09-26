@@ -224,13 +224,16 @@ class ProceduralStatementParser {
 
     while (this.cursor < this.tokens.length && this.current()?.value !== 'endcase') {
       const labelStart = this.cursor;
-      const colon = this.findTopLevelValue(':', this.cursor);
+      const defaultItem = this.current()?.value === 'default';
+      const colon = defaultItem ? this.cursor : this.findCaseLabelColon(this.cursor);
       if (colon < 0) {
         break;
       }
-      const labelTokens = this.tokens.slice(labelStart, colon).filter((token) => token.kind !== 'eof');
+      const labelTokens = this.tokens.slice(labelStart, defaultItem ? colon + 1 : colon).filter((token) => token.kind !== 'eof');
       this.cursor = colon + 1;
-      const defaultItem = labelTokens.some((token) => token.value === 'default');
+      if (defaultItem && this.current()?.value === ':') {
+        this.cursor++;
+      }
       const labels = defaultItem
         ? []
         : splitTopLevelTokens(labelTokens, ',')
@@ -351,10 +354,11 @@ class ProceduralStatementParser {
     return label.value;
   }
 
-  private findTopLevelValue(value: string, start: number): number {
+  private findCaseLabelColon(start: number): number {
     let paren = 0;
     let bracket = 0;
     let brace = 0;
+    let conditional = 0;
     for (let index = start; index < this.tokens.length; index++) {
       const token = this.tokens[index];
       if (token.value === 'endcase') {
@@ -372,8 +376,17 @@ class ProceduralStatementParser {
         brace++;
       } else if (token.value === '}') {
         brace = Math.max(0, brace - 1);
-      } else if (token.value === value && paren === 0 && bracket === 0 && brace === 0) {
-        return index;
+      } else if (paren === 0 && bracket === 0 && brace === 0) {
+        if (token.value === '?') {
+          conditional++;
+        } else if (token.value === ':') {
+          if (conditional === 0) {
+            return index;
+          }
+          conditional--;
+        } else if (token.value === ';' || token.value === 'end') {
+          return -1;
+        }
       }
     }
     return -1;

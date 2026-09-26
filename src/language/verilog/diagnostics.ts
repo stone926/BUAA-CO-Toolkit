@@ -52,7 +52,7 @@ export function collectVerilogDiagnostics(
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, ast, diagnostics);
     collectAssignmentDiagnostics(document, settings, ast, diagnostics);
-    collectCourseStyleDiagnostics(document, settings, text, ast, diagnostics);
+    collectCourseStyleDiagnostics(document, settings, ast, diagnostics);
   }
   if (settings.verilog.lint.synthesizableHints) {
     collectSynthesizableHintDiagnostics(document, settings, ast, diagnostics);
@@ -470,23 +470,21 @@ function collectStatementAssignmentWidthDiagnostic(
   statement: VerilogStatementAst,
   diagnostics: Diagnostic[]
 ): void {
-  const assignment = statement.assignment;
-  if (!assignment) {
-    return;
+  for (const assignment of statement.assignments) {
+    const lhs = widthOfExpressionAst(assignment.lhs, module);
+    const rhs = widthOfExpressionAst(assignment.rhs, module);
+    if (!shouldReportWidthMismatch(lhs, rhs)) {
+      continue;
+    }
+    const lhsRange = Range.create(document.positionAt(assignment.lhs.start), document.positionAt(assignment.lhs.end));
+    const rhsRange = Range.create(document.positionAt(assignment.rhs.start), document.positionAt(assignment.rhs.end));
+    diagnostics.push(makeDiagnostic(
+      rhsRange,
+      `Width mismatch: '${document.getText(lhsRange).trim()}' is ${lhs.width} bit(s), but this expression is ${rhs.width} bit(s).`,
+      DiagnosticSeverity.Warning,
+      'width-mismatch'
+    ));
   }
-  const lhs = widthOfExpressionAst(assignment.lhs, module);
-  const rhs = widthOfExpressionAst(assignment.rhs, module);
-  if (!shouldReportWidthMismatch(lhs, rhs)) {
-    return;
-  }
-  const lhsRange = Range.create(document.positionAt(assignment.lhs.start), document.positionAt(assignment.lhs.end));
-  const rhsRange = Range.create(document.positionAt(assignment.rhs.start), document.positionAt(assignment.rhs.end));
-  diagnostics.push(makeDiagnostic(
-    rhsRange,
-    `Width mismatch: '${document.getText(lhsRange).trim()}' is ${lhs.width} bit(s), but this expression is ${rhs.width} bit(s).`,
-    DiagnosticSeverity.Warning,
-    'width-mismatch'
-  ));
 }
 
 // parameter/localparam widths are inferred FROM their initializer, so checking them is circular;
@@ -543,10 +541,6 @@ function collectCourseDiagnostics(document: TextDocument, settings: CoSettings, 
     validateDisplayFormats(document, ast, profile, diagnostics);
   }
 
-  if (!hasDefaultNettypeNone(ast)) {
-    const firstLine = lineAt(document, 0).text;
-    diagnostics.push(makeDiagnostic(Range.create(0, 0, 0, Math.max(1, firstLine.length)), 'Consider adding `default_nettype none to catch implicit wires early.', DiagnosticSeverity.Information, 'default-nettype-none'));
-  }
 }
 
 function checkExpectedPorts(module: VerilogModule, profile: ProjectProfile, diagnostics: Diagnostic[]): void {
@@ -654,14 +648,6 @@ function unquoteVerilogString(raw: string): string {
 
 function callCalleeRange(document: TextDocument, call: VerilogCallExpressionAst): Range {
   return Range.create(document.positionAt(call.start), document.positionAt(call.start + call.callee.length));
-}
-
-function hasDefaultNettypeNone(ast: VerilogAstDocument): boolean {
-  return ast.preprocessor.some((item) =>
-    item.kind === 'directive' &&
-    item.name === 'default_nettype' &&
-    item.argument === 'none'
-  );
 }
 
 function traceFormatLooksOk(format: string, profile: ProjectProfile): boolean {

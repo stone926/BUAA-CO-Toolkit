@@ -40,13 +40,21 @@
   "verilog.lint.courseRules": true,
   "verilog.lint.disabledRules": [
     "vc-001",
+    "vc-002",
     "vc-003",
     "vc-004",
+    "vc-006",
     "vc-008",
+    "vc-009",
+    "vc-011",
+    "vc-012",
+    "vc-013",
+    "vc-014",
+    "vc-015",
     "vc-017",
     "vc-021"
   ],
-  "verilog.lint.synthesizableHints": true,
+  "verilog.lint.synthesizableHints": false,
   "verilog.syntax.external.mode": "onSave",
   "verilog.syntax.external.timeoutMs": 0
 }

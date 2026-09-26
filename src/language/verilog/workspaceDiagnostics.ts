@@ -41,7 +41,7 @@ export function addVerilogWorkspaceDiagnostics(
 ): Diagnostic[] {
   const resolved = parsed ?? getCachedVerilogParse(document, settings, false);
   const diagnostics = filterWorkspaceAwareDiagnostics(baseDiagnostics, settings, index, resolved);
-  diagnostics.push(...getWorkspaceModuleDiagnostics(settings, index, resolved));
+  diagnostics.push(...getWorkspaceModuleDiagnostics(index, resolved));
   diagnostics.push(...getWorkspaceInstanceDiagnostics(document, settings, index, resolved));
   if (!index.complete) {
     return diagnostics;
@@ -81,10 +81,8 @@ function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSet
   return diagnostics;
 }
 
-function getWorkspaceModuleDiagnostics(settings: CoSettings, index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
+function getWorkspaceModuleDiagnostics(index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  const topName = settings.project.topModule.trim() || 'mips';
-  const testbenchName = settings.project.testbench.trim();
   for (const module of parsed.modules) {
     const duplicates = index.getModules(module.name).filter((candidate) => candidate.uri !== module.uri);
     if (duplicates.length) {
@@ -95,20 +93,6 @@ function getWorkspaceModuleDiagnostics(settings: CoSettings, index: VerilogWorks
         'duplicate-module'
       ));
     }
-    if (
-      settings.verilog.lint.courseRules &&
-      index.complete &&
-      module.name !== topName &&
-      module.name !== testbenchName &&
-      !hasInstanceOfModule(index, parsed.modules, module.name)
-    ) {
-      diagnostics.push(makeDiagnostic(
-        module.selectionRange,
-        `Module '${module.name}' is not instantiated by any indexed module.`,
-        DiagnosticSeverity.Information,
-        'uninstantiated-module'
-      ));
-    }
   }
 
   return diagnostics;
@@ -117,13 +101,6 @@ function getWorkspaceModuleDiagnostics(settings: CoSettings, index: VerilogWorks
 function resolveInstanceTarget(index: VerilogWorkspaceIndex, localModules: VerilogModule[], instance: VerilogInstance): VerilogModule | undefined {
   return index.getModule(instance.moduleName) ?? localModules.find((module) => module.name === instance.moduleName);
 }
-
-function hasInstanceOfModule(index: VerilogWorkspaceIndex, localModules: VerilogModule[], moduleName: string): boolean {
-  return index.moduleReferenceLocations(moduleName).length > 0 || localModules.some((module) =>
-    module.instances.some((instance) => instance.moduleName === moduleName)
-  );
-}
-
 function formatModuleLocation(module: VerilogModule): string {
   return `${formatUri(module.uri)}:${module.selectionRange.start.line + 1}`;
 }

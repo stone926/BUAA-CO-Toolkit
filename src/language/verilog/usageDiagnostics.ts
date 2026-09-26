@@ -1,6 +1,7 @@
 import {
   Diagnostic,
   DiagnosticSeverity,
+  DiagnosticTag,
   Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -43,7 +44,7 @@ export function collectWorkspaceUsageDiagnostics(
       if (shouldCheckParameterUsage(decl)) {
         const parameterReads = parameterReadRanges(parsed.semantic, module, decl);
         if (!parameterReads.length) {
-          diagnostics.push(makeDiagnostic(decl.selectionRange, `Parameter '${decl.name}' is declared but never used.`, DiagnosticSeverity.Information, 'unused-parameter'));
+          diagnostics.push(unusedDiagnostic(decl, 'Parameter', 'unused-parameter'));
         }
         continue;
       }
@@ -52,11 +53,18 @@ export function collectWorkspaceUsageDiagnostics(
       }
       const entry = usage.get(decl.name) ?? { reads: [], writes: [] };
       if (!entry.reads.length && !entry.writes.length) {
-        diagnostics.push(makeDiagnostic(decl.selectionRange, `Signal '${decl.name}' is declared but never used.`, DiagnosticSeverity.Information, 'unused-signal'));
+        diagnostics.push(unusedDiagnostic(decl, 'Signal', 'unused-signal'));
       }
     }
   }
   return diagnostics;
+}
+
+function unusedDiagnostic(decl: VerilogDecl, label: string, code: string): Diagnostic {
+  return {
+    ...makeDiagnostic(decl.selectionRange, `${label} '${decl.name}' is declared but never used.`, DiagnosticSeverity.Hint, code),
+    tags: [DiagnosticTag.Unnecessary]
+  };
 }
 
 function collectModuleUsage(

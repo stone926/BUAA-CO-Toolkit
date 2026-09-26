@@ -22,6 +22,10 @@ export function widthOfDecl(decl: VerilogDecl, module?: VerilogModule, overrides
   if (rangeWidth !== undefined) {
     return { width: rangeWidth };
   }
+  // A macro or unresolved parameter is not a scalar declaration.
+  if (decl.width) {
+    return {};
+  }
   if (decl.inferredWidth !== undefined) {
     const inferred: WidthInfo = { width: decl.inferredWidth };
     if (decl.inferredMinWidth !== undefined) {
@@ -32,7 +36,10 @@ export function widthOfDecl(decl: VerilogDecl, module?: VerilogModule, overrides
     }
     return inferred;
   }
-  if (decl.kind === 'integer' || decl.kind === 'time') {
+  if (decl.kind === 'time') {
+    return { width: 64 };
+  }
+  if (decl.kind === 'integer') {
     return { width: 32 };
   }
   return { width: 1 };
@@ -214,7 +221,7 @@ function widthOfMultipleConcatenation(
 }
 
 function literalWidth(parsed: ParsedVerilogNumberLiteral | undefined): WidthInfo {
-  if (!parsed) {
+  if (!parsed || parsed.kind === 'real') {
     return {};
   }
   if (parsed.kind === 'based') {

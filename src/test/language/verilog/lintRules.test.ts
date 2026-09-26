@@ -66,7 +66,7 @@ endmodule
   });
 
   it('loads lint rule defaults from the catalog', () => {
-    expect(defaultDisabledVerilogLintRuleIds).toEqual(['vc-001', 'vc-003', 'vc-004', 'vc-008', 'vc-017', 'vc-021']);
+    expect(defaultDisabledVerilogLintRuleIds).toEqual(['vc-001', 'vc-002', 'vc-003', 'vc-004', 'vc-006', 'vc-008', 'vc-009', 'vc-011', 'vc-012', 'vc-013', 'vc-014', 'vc-015', 'vc-017', 'vc-021']);
     expect(verilogLintRuleCatalog.filter((rule) => rule.configurable).map((rule) => rule.id)).toEqual([
       'vc-001', 'vc-002', 'vc-003', 'vc-004', 'vc-005', 'vc-006', 'vc-007', 'vc-008',
       'vc-009', 'vc-010', 'vc-011', 'vc-012', 'vc-013', 'vc-014', 'vc-015', 'vc-017', 'vc-021'
@@ -193,7 +193,7 @@ module demo(input [3:0] a, input [3:0] b, output [3:0] y);
     assign y = (a * b) / 2 % 3;
 endmodule
 `.trim();
-    const codes = diagnosticCodes(text);
+    const codes = diagnosticCodesWithSettings(text, { verilog: { lint: { synthesizableHints: true } } });
     expect(codes.filter((code) => code === 'synth-mul-div')).toHaveLength(3);
   });
 
@@ -204,7 +204,7 @@ module demo(input [3:0] a, input [3:0] b, output [3:0] y);
 endmodule
 `.trim();
     const document = doc(text);
-    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({}))
+    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { synthesizableHints: true } } }))
       .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
     expect(diagnostics).toHaveLength(1);
     expect(document.getText(diagnostics[0].range)).toBe('*');
@@ -223,7 +223,7 @@ module demo #(parameter W = 2, parameter H = 2)(input [3:0] a, input [3:0] b, ou
 endmodule
 `.trim();
     const document = doc(text);
-    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({}))
+    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { synthesizableHints: true } } }))
       .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
     expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['*', '*', '*']);
   });
@@ -280,8 +280,8 @@ module demo(input clk, input data, output reg y);
     end
 endmodule
 `.trim();
-    expect(diagnosticCodes(clockData)).toContain('vc-013-clock-data');
-    expect(diagnosticCodes(normalData)).not.toContain('vc-013-clock-data');
+    expect(diagnosticCodes(clockData, [])).toContain('vc-013-clock-data');
+    expect(diagnosticCodes(normalData, [])).not.toContain('vc-013-clock-data');
   });
 
   it('recognizes common delayed testbench clock generation forms', () => {

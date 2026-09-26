@@ -14,13 +14,15 @@ procedural-ast:
   proceduralAst.ts — 过程语句AST(632行), parseVerilogProceduralStatement, VerilogCaseStatementAst. Malformed有token fallback
 
 block-ast:
-  blockAst.ts — always/initial块解析: sensitivity list AST(显式信号/*/posedge/negedge), header control AST, 内部语句树
+  blockAst.ts — always/initial块解析: sensitivity list AST(显式信号/*/posedge/negedge), header control AST, 内部语句树；共用 verilog-lsp 索引下的过程语句边界扫描器
 
 expr-ast-utils:
   exprAstUtils.ts — walkVerilogExpression, findSmallestVerilogExpressionAtOffset, findSmallestVerilogExpressionMatchAtOffset
 
 assignment-ast:
   assignmentAst.ts — collectAssignmentUsesFromModuleAst: 从连续+过程赋值收集AssignmentUse
+
+连续赋值节点使用 `assignments[]`，保留同句中每个 lvalue/RHS；诊断、引用、驱动分析和表达式提取共享此模型。实数字面量进入 numberLiteral，但不参与整数常量折叠或位宽推断。缺失 endmodule/闭合分隔符时在下一个 module 恢复，避免吞掉后续模块。
 
 ast-tokens:
   astTokens.ts — verilogAstCodeTokens(过滤排序), verilogAstStatementTokens(枚举)

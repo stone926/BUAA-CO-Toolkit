@@ -4,7 +4,6 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings, isVerilogLintRuleEnabled } from '../common/settings';
 import {
-  collectAssignmentUsesFromModuleAst,
   collectAssignmentUsesFromProceduralStatementAst
 } from './assignmentAst';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
@@ -31,7 +30,10 @@ export function collectAssignmentDiagnostics(
     const module = moduleAst.module;
     const assignmentKinds = new Map<string, Set<string>>();
     const isTestbench = isTestbenchModule(module, settings);
-    for (const assignment of collectAssignmentUsesFromModuleAst(document, moduleAst)) {
+    // Initialization and continuous drivers are separate from procedural assignment style.
+    const assignments = moduleAst.alwaysBlocks.flatMap((block, index) =>
+      collectAssignmentUsesFromProceduralStatementAst(document, block.statementTree, index));
+    for (const assignment of assignments) {
       if (!assignmentKinds.has(assignment.name)) {
         assignmentKinds.set(assignment.name, new Set());
       }
@@ -54,7 +56,6 @@ export function collectAssignmentDiagnostics(
 export function collectCourseStyleDiagnostics(
   document: TextDocument,
   settings: CoSettings,
-  text: string,
   ast: VerilogAstDocument,
   diagnostics: Diagnostic[]
 ): void {
@@ -67,17 +68,17 @@ export function collectCourseStyleDiagnostics(
     collectMagicNumberDiagnostics(document, settings, moduleAst, diagnostics);
     collectInoutDiagnostics(settings, module, diagnostics);
   }
-  collectTestbenchDiagnostics(document, settings, text, ast, diagnostics);
+  collectTestbenchDiagnostics(settings, ast, diagnostics);
 }
 
 export function collectSynthesizableHintDiagnostics(document: TextDocument, settings: CoSettings, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   for (const moduleAst of ast.modules) {
     const module = moduleAst.module;
-    const isTestbench = isTestbenchModule(module, settings);
-    const isMdu = isMduModule(module);
-    if (!isTestbench) {
-      collectInitialBlockHintDiagnostics(moduleAst, diagnostics);
+    if (isTestbenchModule(module, settings)) {
+      continue;
     }
+    const isMdu = isMduModule(module);
+    collectInitialBlockHintDiagnostics(moduleAst, diagnostics);
     if (!isMdu) {
       collectSynthesizableOperatorDiagnostics(document, moduleAst, diagnostics);
     }
@@ -362,10 +363,8 @@ function collectAlwaysStyleDiagnostics(document: TextDocument, settings: CoSetti
       if (isVerilogLintRuleEnabled(settings, 'vc-014') && edgeSignals.length > 1) {
         diagnostics.push(makeDiagnostic(block.headerRange, 'VC-014: prefer synchronous reset; async reset appears in the sensitivity list.', lintSeverity('vc-014', DiagnosticSeverity.Information), 'vc-014-sync-reset'));
       }
-      for (const assignment of blockAssignments) {
-        if (isVerilogLintRuleEnabled(settings, 'vc-010') && assignment.operator === '=') {
-          diagnostics.push(makeDiagnostic(assignment.range, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', lintSeverity('vc-010', DiagnosticSeverity.Warning), 'vc-010-seq-blocking'));
-        }
+      if (isVerilogLintRuleEnabled(settings, 'vc-010') && blockAssignments.some((assignment) => assignment.operator === '=')) {
+        diagnostics.push(makeDiagnostic(block.headerRange, 'VC-010: sequential always blocks should use nonblocking assignments (<=).', lintSeverity('vc-010', DiagnosticSeverity.Warning), 'vc-010-seq-blocking'));
       }
       const clockSignals = edgeSignals.filter(isClockSignalName);
       for (const clock of clockSignals) {
@@ -577,26 +576,14 @@ function collectInoutDiagnostics(settings: CoSettings, module: VerilogModule, di
   }
 }
 
-function collectTestbenchDiagnostics(document: TextDocument, settings: CoSettings, text: string, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
+function collectTestbenchDiagnostics(settings: CoSettings, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   for (const moduleAst of ast.modules) {
     const module = moduleAst.module;
     if (!isTestbenchModule(module, settings)) {
       continue;
     }
-    const bodyStart = document.offsetAt(module.headerEnd);
-    const bodyEnd = document.offsetAt(module.range.end);
-    const body = text.slice(bodyStart, bodyEnd);
-    if (!/`timescale\s+1ns\s*\/\s*1ps/.test(text)) {
-      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: standard course testbenches should use `timescale 1ns / 1ps.', DiagnosticSeverity.Information, 'tb-timescale'));
-    }
-    if (!hasTestbenchClockGeneration(module, moduleAst.proceduralBlocks)) {
+    if (declaredClockNames(module).size && !hasTestbenchClockGeneration(module, moduleAst.proceduralBlocks)) {
       diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: include clk generation logic.', DiagnosticSeverity.Information, 'tb-clock'));
-    }
-    if (!/\breset\b/.test(body)) {
-      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: include reset generation logic.', DiagnosticSeverity.Information, 'tb-reset'));
-    }
-    if (!/\$readmemh\s*\(\s*"code\.txt"/.test(body)) {
-      diagnostics.push(makeDiagnostic(module.selectionRange, 'Testbench: use $readmemh("code.txt", im) to load machine code when simulating CPU projects.', DiagnosticSeverity.Information, 'tb-readmemh'));
     }
   }
 }

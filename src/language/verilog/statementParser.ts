@@ -62,6 +62,16 @@ export function collectVerilogStatementSources(document: TextDocument, tokens: V
     if (token.kind === 'eof') {
       break;
     }
+    // An unfinished expression/block must not absorb the next module in the file.
+    if (token.value === 'module' || token.value === 'endmodule') {
+      flush();
+      paren = bracket = brace = 0;
+      blockStack.length = 0;
+      if (token.value === 'endmodule') {
+        statements.push(makeStatement(document, [token]));
+        continue;
+      }
+    }
     if (!current.length) {
       current = [token];
     } else {

@@ -26,10 +26,12 @@ export function collectAssignmentUsesFromModuleAst(document: TextDocument, modul
 export function collectContinuousAssignmentUsesFromAst(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
   const result: AssignmentUse[] = [];
   for (const statement of moduleAst.items) {
-    if (statement.kind !== 'continuousAssign' || !statement.assignment) {
+    if (statement.kind !== 'continuousAssign') {
       continue;
     }
-    result.push(...assignmentUsesFromAssignmentAst(document, statement.assignment, -1));
+    for (const assignment of statement.assignments) {
+      result.push(...assignmentUsesFromAssignmentAst(document, assignment, -1));
+    }
   }
   return result;
 }

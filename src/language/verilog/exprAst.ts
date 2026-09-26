@@ -128,6 +128,11 @@ export interface VerilogParenthesizedExpressionAst extends VerilogExpressionBase
 
 export type ParsedVerilogNumberLiteral =
   | {
+      kind: 'real';
+      digits: string;
+      value?: undefined;
+    }
+  | {
       kind: 'decimal';
       digits: string;
       value?: bigint;
@@ -247,6 +252,11 @@ export function verilogExpressionHasError(expression: VerilogExpressionAst | und
 }
 
 export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLiteral | undefined {
+  value = value.replace(/\s+/g, '');
+  if (/^[0-9][0-9_]*(?:\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?|[eE][+-]?[0-9][0-9_]*)$/.test(value)) {
+    // Real values participate in parsing/references, not integer folding or bit widths.
+    return { kind: 'real', digits: value.replace(/_/g, '') };
+  }
   const apostrophe = value.indexOf("'");
   if (apostrophe < 0) {
     if (!allDecimalDigits(value)) {
@@ -1171,7 +1181,7 @@ function constantWidthOfConcatenation(
 }
 
 function literalWidth(parsed: ParsedVerilogNumberLiteral | undefined): number | undefined {
-  if (!parsed) {
+  if (!parsed || parsed.kind === 'real') {
     return undefined;
   }
   if (parsed.kind === 'based') {

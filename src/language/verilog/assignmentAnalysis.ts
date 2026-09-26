@@ -9,6 +9,7 @@ import {
   trimTrailingSemicolonTokens
 } from './tokenUtils';
 import { verilogDeclarationKeywords } from './declarations';
+import { stripDriveStrength } from './driveStrength';
 
 export interface AssignmentTarget {
   name: string;
@@ -22,6 +23,11 @@ export interface ParsedAssignmentTokens {
   lhsTokens: VerilogToken[];
   rhsTokens: VerilogToken[];
   targets: AssignmentTarget[];
+}
+
+/** Each continuous assignment has its own lvalue/RHS; nested commas are expressions. */
+export function continuousAssignmentParts(tokens: VerilogToken[]): VerilogToken[][] {
+  return splitTopLevelTokens(stripDriveStrength(trimTrailingSemicolonTokens(tokens)), ',', true);
 }
 
 export function parseAssignmentTokens(rawTokens: VerilogToken[]): ParsedAssignmentTokens | undefined {
@@ -120,7 +126,7 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
     }
     return start;
   }
-  let start = 0;
+  let start = tokens[0]?.value === 'default' ? 1 : 0;
   while (start < operatorIndex) {
     const token = tokens[start];
     if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for') {

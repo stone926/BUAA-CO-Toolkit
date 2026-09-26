@@ -1,4 +1,5 @@
 import { VerilogToken } from './lexer';
+import { proceduralStatementEnd } from './proceduralBoundary';
 
 const blockOpeners = new Map([
   ['begin', 'begin'],
@@ -40,6 +41,13 @@ export function splitVerilogModuleItems(tokens: VerilogToken[]): VerilogToken[][
     const token = tokens[index];
     if (token.kind === 'eof') {
       break;
+    }
+    if (index === start && (token.value === 'always' || token.value === 'initial')) {
+      const end = proceduralStatementEnd(tokens, index + 1);
+      pushTokenSlice(statements, tokens, start, Math.max(index + 1, end));
+      start = Math.max(index + 1, end);
+      index = start - 1;
+      continue;
     }
 
     if (token.value === '(') {

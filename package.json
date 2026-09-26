@@ -859,10 +859,10 @@
           },
           "co.verilog.lint.synthesizableHints": {
             "type": "boolean",
-            "description": "启用 Verilog 可综合性检查，如 initial 块、声明初始化器和乘除运算符",
+            "description": "显示可选的 Verilog 综合风格建议，如 initial 块、声明初始化器和乘除运算符；这些写法并不一定是错误",
             "scope": "resource",
             "order": 70,
-            "default": true
+            "default": false
           }
         }
       },

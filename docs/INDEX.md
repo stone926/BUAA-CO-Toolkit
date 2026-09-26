@@ -12,7 +12,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   mips-providers | docs/modules/mips-providers.md | 8 files  | Provider-neutral 引擎契约与阶段 6 原子选择策略
   mips-host      | docs/modules/mips-host.md      | 5 files  | 懒启动 Worker、真实 ISA batch 与 ACK 背压
   mips-replay    | docs/modules/mips-replay.md    | 9 files  | v2 用例闭包、可信引擎注册表与证据校验
-  verilog-lsp    | docs/modules/verilog-lsp.md    | 64 files | Verilog HDL 语言支持
+  verilog-lsp    | docs/modules/verilog-lsp.md    | 68 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~54 files| 扩展宿主层
   course-testing | docs/modules/course-testing.md | 52 files | 自动化测试框架

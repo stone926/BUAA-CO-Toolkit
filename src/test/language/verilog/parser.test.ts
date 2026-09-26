@@ -241,8 +241,8 @@ describe('widthOfDecl', () => {
     expect(widthOfDecl(makeDecl({ kind: 'integer' }))).toEqual({ width: 32 });
   });
 
-  it('returns 32 for time kind', () => {
-    expect(widthOfDecl(makeDecl({ kind: 'time' }))).toEqual({ width: 32 });
+  it('returns 64 for time kind', () => {
+    expect(widthOfDecl(makeDecl({ kind: 'time' }))).toEqual({ width: 64 });
   });
 
   it('returns inferred width for untyped parameters', () => {
@@ -528,9 +528,9 @@ endmodule
 `.trim();
     const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
     const statement = parsed.ast.modules[0].items.find((item) => item.kind === 'continuousAssign');
-    expect(statement?.assignment?.rhs.kind).toBe('binaryExpression');
-    if (statement?.assignment?.rhs.kind === 'binaryExpression') {
-      expect(statement.assignment.rhs.operator).toBe('+');
+    expect(statement?.assignments[0]?.rhs.kind).toBe('binaryExpression');
+    if (statement?.assignments[0]?.rhs.kind === 'binaryExpression') {
+      expect(statement.assignments[0].rhs.operator).toBe('+');
     }
   });
 
@@ -553,10 +553,10 @@ endmodule
 
     expect(instanceStatement?.kind).toBe('instance');
     expect(missingRhsAssignment?.kind).toBe('other');
-    expect(missingRhsAssignment?.assignment).toBeUndefined();
+    expect(missingRhsAssignment?.assignments).toEqual([]);
     expect(missingRhsAssignment?.expressions.map((expression) => expression.kind)).toEqual(['identifier']);
     expect(missingLhsAssignment?.kind).toBe('other');
-    expect(missingLhsAssignment?.assignment).toBeUndefined();
+    expect(missingLhsAssignment?.assignments).toEqual([]);
     expect(missingLhsAssignment?.expressions.map((expression) => expression.kind)).toEqual(['identifier']);
   });
 

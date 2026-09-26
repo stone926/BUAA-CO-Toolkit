@@ -1,9 +1,11 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
-import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
+import { parseInstanceGroup } from './instanceParser';
+import { splitTopLevelTokens as splitTopLevel } from './tokenUtils';
+import { stripDriveStrength } from './driveStrength';
 import { verilogCodeTokens } from './directiveBoundaries';
 import {
   VerilogDecl,
@@ -13,7 +15,6 @@ import {
   VerilogGenerateBranch,
   VerilogInstance,
   VerilogModule,
-  VerilogPortConnection,
   verilogKeywords
 } from './model';
 import { widthOfExpressionAst, WidthInfo } from './expressions';
@@ -38,32 +39,6 @@ interface ModuleHeaderInfo {
   endOffset: number;
   nextIndex: number;
 }
-
-const instanceExcludedFirstTokens = new Set([
-  'module',
-  'endmodule',
-  'assign',
-  'always',
-  'initial',
-  'begin',
-  'end',
-  'if',
-  'else',
-  'case',
-  'casex',
-  'casez',
-  'endcase',
-  'for',
-  'forever',
-  'repeat',
-  'while',
-  'task',
-  'endtask',
-  'function',
-  'endfunction',
-  'generate',
-  'endgenerate'
-]);
 
 export function parseModulesFromTokens(
   document: TextDocument,
@@ -197,6 +172,8 @@ function readModuleHeader(tokens: VerilogToken[], moduleIndex: number, text: str
   const bodyStartOffset = tokens[index].end;
   const endmoduleIndex = findEndmoduleToken(tokens, index + 1);
   const endmoduleToken = endmoduleIndex >= 0 ? tokens[endmoduleIndex] : undefined;
+  const nextModuleIndex = endmoduleToken ? -1 : tokens.findIndex((token, cursor) => cursor > index && token.value === 'module');
+  const recoveryEnd = nextModuleIndex >= 0 ? tokens[nextModuleIndex].start : text.length;
   return {
     moduleToken,
     nameToken,
@@ -204,8 +181,8 @@ function readModuleHeader(tokens: VerilogToken[], moduleIndex: number, text: str
     headerTokens,
     bodyStartOffset,
     endmoduleToken,
-    endOffset: endmoduleToken?.end ?? text.length,
-    nextIndex: endmoduleIndex >= 0 ? endmoduleIndex + 1 : tokens.length
+    endOffset: endmoduleToken?.end ?? recoveryEnd,
+    nextIndex: endmoduleIndex >= 0 ? endmoduleIndex + 1 : nextModuleIndex >= 0 ? nextModuleIndex : tokens.length
   };
 }
 
@@ -245,9 +222,23 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
 }
 
 function parseParameterDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
-  return splitTopLevel(tokens, ',')
-    .map((part) => parseDeclFragment(document, text, part, 'parameter'))
-    .filter((decl): decl is VerilogDecl => Boolean(decl));
+  const declarations: VerilogDecl[] = [];
+  let inheritedWidth: DeclarationWidthInfo | undefined;
+  let inheritedKind: VerilogDeclKind = 'parameter';
+  for (const part of splitTopLevel(tokens, ',')) {
+    const decl = parseDeclFragment(document, text, part, inheritedKind);
+    if (!decl) {
+      continue;
+    }
+    if (part[0]?.value === 'parameter' || part[0]?.value === 'localparam') {
+      inheritedWidth = firstRangeInfo(document, text, part);
+      inheritedKind = decl.kind;
+    } else if (!decl.width && inheritedWidth) {
+      applyDeclarationWidth(decl, inheritedWidth);
+    }
+    declarations.push(decl);
+  }
+  return declarations;
 }
 
 function parseBodyDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
@@ -257,7 +248,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
     if (!first || !verilogDeclarationKeywords.has(first.value)) {
       continue;
     }
-    const semicolonTrimmed = trimTrailingSemicolon(statement);
+    const semicolonTrimmed = stripDriveStrength(trimTrailingSemicolon(statement));
     const firstName = firstDeclaratorIndex(semicolonTrimmed, 1);
     if (firstName < 0) {
       continue;
@@ -498,9 +489,9 @@ function parseInstances(
 ): VerilogInstance[] {
   const instances: VerilogInstance[] = [];
   for (const statement of statementSlices(tokens)) {
-    const instance = parseInstanceStatement(document, text, statement, currentModuleName);
-    if (instance) {
-      instances.push(inGenerateBlock ? { ...instance, inGenerateBlock } : instance);
+    const group = parseInstanceGroup(document, text, statement, currentModuleName);
+    if (group.length) {
+      instances.push(...group.map((instance) => inGenerateBlock ? { ...instance, inGenerateBlock } : instance));
       continue;
     }
     // A bare generate region adds no scope; if/for/case/begin generate blocks do.
@@ -510,74 +501,6 @@ function parseInstances(
     }
   }
   return instances;
-}
-
-function parseInstanceStatement(document: TextDocument, text: string, statement: VerilogToken[], currentModuleName: string): VerilogInstance | undefined {
-  const first = statement[0];
-  if (!first || !isIdentifierLike(first.kind) || first.value === currentModuleName || isVerilogGatePrimitive(first.value)) {
-    return undefined;
-  }
-  if (instanceExcludedFirstTokens.has(first.value)) {
-    return undefined;
-  }
-  // 拒绝将声明关键字（reg, wire, input 等）误认为模块名来实例化
-  if (first.kind === 'keyword' && verilogDeclarationKeywords.has(first.value)) {
-    return undefined;
-  }
-  let index = 1;
-  let parameterConnections: VerilogPortConnection[] = [];
-  let parameterListRange: Range | undefined;
-  if (statement[index]?.value === '#') {
-    if (statement[index + 1]?.value !== '(') {
-      return undefined;
-    }
-    const close = findMatchingToken(statement, index + 1, '(', ')');
-    if (close < 0) {
-      return undefined;
-    }
-    const content = statement.slice(index + 2, close);
-    parameterConnections = parseConnectionList(document, text, content);
-    parameterListRange = listRange(document, statement[index + 1], statement[close]);
-    index = close + 1;
-  }
-  const instanceToken = statement[index];
-  if (!instanceToken || !isIdentifierLike(instanceToken.kind)) {
-    return undefined;
-  }
-  index++;
-  const moduleSelectionRange = tokenRange(document, first);
-  const selectionRange = tokenRange(document, instanceToken);
-  if (statement[index]?.value === ';') {
-    return {
-      moduleName: first.value,
-      instanceName: instanceToken.value,
-      range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
-      moduleSelectionRange,
-      selectionRange,
-      parameterListRange,
-      portConnections: [],
-      parameterConnections
-    };
-  }
-  if (statement[index]?.value !== '(') {
-    return undefined;
-  }
-  const close = findMatchingToken(statement, index, '(', ')');
-  if (close < 0 || statement[close + 1]?.value !== ';') {
-    return undefined;
-  }
-  const content = statement.slice(index + 1, close);
-  return {
-    moduleName: first.value,
-    instanceName: instanceToken.value,
-    range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
-    moduleSelectionRange,
-    selectionRange,
-    portListRange: content.length ? Range.create(document.positionAt(content[0].start), document.positionAt(content[content.length - 1].end)) : Range.create(document.positionAt(statement[index].end), document.positionAt(statement[index].end)),
-    parameterListRange,
-    portConnections: parseConnectionList(document, text, content),
-    parameterConnections
-  };
 }
 
 /**
@@ -667,90 +590,8 @@ function blockBodyTokens(statement: VerilogToken[], startIndex: number, openValu
   return end > startIndex ? statement.slice(startIndex + 1, end) : statement.slice(startIndex + 1);
 }
 
-function parseConnectionList(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogPortConnection[] {
-  const connections: VerilogPortConnection[] = [];
-  let positionalIndex = 0;
-  for (const part of splitTopLevel(tokens, ',')) {
-    const first = part[0];
-    if (!first) {
-      continue;
-    }
-    if (first.value === '.' && part[1] && isIdentifierLike(part[1].kind)) {
-      const nameToken = part[1];
-      if (part[2]?.value === '(') {
-        const close = findMatchingToken(part, 2, '(', ')');
-        if (close >= 0) {
-          const expressionTokens = part.slice(3, close);
-          const expressionRange = tokensRange(document, expressionTokens, part[2].end, part[close].start);
-          connections.push({
-            name: nameToken.value,
-            nameRange: tokenRange(document, nameToken),
-            expression: text.slice(document.offsetAt(expressionRange.start), document.offsetAt(expressionRange.end)),
-            expressionRange,
-            expressionAst: parseVerilogExpressionTokens(expressionTokens),
-            range: Range.create(document.positionAt(first.start), document.positionAt(part[part.length - 1].end)),
-            positionalIndex
-          });
-        }
-      } else {
-        const end = part[part.length - 1].end;
-        connections.push({
-          name: nameToken.value,
-          nameRange: tokenRange(document, nameToken),
-          expression: '',
-          expressionRange: Range.create(document.positionAt(end), document.positionAt(end)),
-          range: Range.create(document.positionAt(first.start), document.positionAt(end)),
-          positionalIndex,
-          shorthand: true
-        });
-      }
-    } else {
-      const expressionRange = tokensRange(document, part, first.start, part[part.length - 1].end);
-      connections.push({
-        expression: text.slice(document.offsetAt(expressionRange.start), document.offsetAt(expressionRange.end)).trim(),
-        expressionRange,
-        expressionAst: parseVerilogExpressionTokens(part),
-        range: expressionRange,
-        positionalIndex
-      });
-    }
-    positionalIndex++;
-  }
-  return connections;
-}
-
 function statementSlices(tokens: VerilogToken[]): VerilogToken[][] {
   return splitVerilogModuleItems(tokens);
-}
-
-function splitTopLevel(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const parts: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    }
-    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      parts.push(tokens.slice(start, index));
-      start = index + 1;
-    }
-  }
-  parts.push(tokens.slice(start));
-  return parts.map(trimTokenList).filter((part) => part.length > 0);
 }
 
 function firstDeclaratorIndex(tokens: VerilogToken[], from: number): number {
@@ -878,6 +719,8 @@ function applyDeclarationWidth(decl: VerilogDecl, width: DeclarationWidthInfo | 
 }
 
 function firstRangeInfo(document: TextDocument, text: string, tokens: VerilogToken[]): DeclarationWidthInfo | undefined {
+  const nameIndex = firstDeclaratorIndex(tokens, 0);
+  tokens = nameIndex >= 0 ? tokens.slice(0, nameIndex) : tokens;
   const open = tokens.findIndex((token) => token.value === '[');
   if (open < 0) {
     return undefined;
@@ -970,6 +813,9 @@ function hasExplicitPortNetTypeInTokens(tokens: VerilogToken[], directionIndex: 
 
 function findEndmoduleToken(tokens: VerilogToken[], start: number): number {
   for (let index = start; index < tokens.length; index++) {
+    if (tokens[index].value === 'module') {
+      return -1;
+    }
     if (tokens[index].value === 'endmodule') {
       return index;
     }
@@ -980,6 +826,9 @@ function findEndmoduleToken(tokens: VerilogToken[], start: number): number {
 function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {
   let depth = 0;
   for (let index = openIndex; index < tokens.length; index++) {
+    if (tokens[index].value === 'module' || tokens[index].value === 'endmodule') {
+      return -1;
+    }
     if (tokens[index].value === openValue) {
       depth++;
     } else if (tokens[index].value === closeValue) {
@@ -1005,10 +854,6 @@ function tokenRange(document: TextDocument, token: VerilogToken): Range {
   return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }
 
-function listRange(document: TextDocument, open: VerilogToken, close: VerilogToken): Range {
-  return Range.create(document.positionAt(open.start + 1), document.positionAt(close.start));
-}
-
 function tokensRange(document: TextDocument, tokens: VerilogToken[], fallbackStart: number, fallbackEnd: number): Range {
   if (!tokens.length) {
     return rangeAtOffset(document, fallbackStart, Math.max(0, fallbackEnd - fallbackStart));
@@ -1025,10 +870,6 @@ function tokenText(text: string, tokens: VerilogToken[]): string {
 
 function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {
   return tokens[tokens.length - 1]?.value === ';' ? tokens.slice(0, -1) : tokens;
-}
-
-function trimTokenList(tokens: VerilogToken[]): VerilogToken[] {
-  return tokens.filter((token) => token.kind !== 'eof');
 }
 
 function isPortKind(kind: VerilogDeclKind): kind is 'input' | 'output' | 'inout' {

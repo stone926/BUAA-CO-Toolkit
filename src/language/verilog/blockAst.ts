@@ -1,3 +1,4 @@
+import { proceduralStatementEnd } from './proceduralBoundary';
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
@@ -134,15 +135,7 @@ function parseAlwaysBlockAt(document: TextDocument, tokens: VerilogToken[], alwa
     return undefined;
   }
 
-  let endIndex: number;
-  if (bodyStartToken.value === 'begin') {
-    endIndex = findMatchingBeginEnd(tokens, cursor);
-  } else {
-    endIndex = findStatementSemicolon(tokens, cursor);
-  }
-  if (endIndex < cursor) {
-    endIndex = cursor;
-  }
+  const endIndex = Math.max(cursor, proceduralStatementEnd(tokens, cursor, moduleEnd) - 1);
 
   const bodyEndToken = tokens[endIndex];
   const bodyStart = bodyStartToken.start;
@@ -228,15 +221,7 @@ function parseProceduralBlockAt(document: TextDocument, tokens: VerilogToken[], 
     return undefined;
   }
 
-  let endIndex: number;
-  if (bodyStartToken.value === 'begin') {
-    endIndex = findMatchingBeginEnd(tokens, cursor);
-  } else {
-    endIndex = findStatementSemicolon(tokens, cursor);
-  }
-  if (endIndex < cursor) {
-    endIndex = cursor;
-  }
+  const endIndex = Math.max(cursor, proceduralStatementEnd(tokens, cursor, moduleEnd) - 1);
 
   const bodyEndToken = tokens[endIndex];
   const bodyStart = bodyStartToken.start;
@@ -379,46 +364,6 @@ function findMatchingForward(tokens: VerilogToken[], openIndex: number, open: st
     }
   }
   return -1;
-}
-
-function findMatchingBeginEnd(tokens: VerilogToken[], beginIndex: number): number {
-  let depth = 0;
-  for (let index = beginIndex; index < tokens.length; index++) {
-    if (tokens[index].value === 'begin') {
-      depth++;
-    } else if (tokens[index].value === 'end') {
-      depth--;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
-function findStatementSemicolon(tokens: VerilogToken[], start: number): number {
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = start; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    } else if (token.value === ';' && paren === 0 && bracket === 0 && brace === 0) {
-      return index;
-    }
-  }
-  return tokens.length - 1;
 }
 
 function nextIdentifierIndex(tokens: VerilogToken[], start: number): number {

@@ -1,17 +1,18 @@
 import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsRange, makeDiagnostic } from '../common/lsp';
-import { parseAssignmentTokens } from './assignmentAnalysis';
+import { continuousAssignmentParts, parseAssignmentTokens } from './assignmentAnalysis';
 import { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst, VerilogSubroutineAst } from './ast';
 import { verilogAstCodeTokens } from './astTokens';
 import { VerilogProceduralBlockAst } from './blockAst';
-import { parseVerilogExpressionTokens, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
+import { parseVerilogExpressionTokens, parseVerilogNumberLiteral, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
 import { childrenOfVerilogExpression } from './exprAstUtils';
 import { isVerilogGatePrimitive } from './gatePrimitives';
+import { splitInstanceTokenGroup } from './instanceSyntax';
+import { stripDriveStrength } from './driveStrength';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { systemTasks, VerilogModule, verilogKeywords } from './model';
 import {
-  verilogCourseOutNetDeclarationTypes,
   verilogDeclarationKeywords,
   verilogDeclarationModifiers,
   verilogDeclarationPrefixKeywords,
@@ -62,25 +63,6 @@ const unsupportedConstructs = new Set([
   'defparam',
   'fork',
   'event'
-]);
-
-const driveStrengthKeywords = new Set([
-  'supply0',
-  'supply1',
-  'strong0',
-  'strong1',
-  'pull0',
-  'pull1',
-  'weak0',
-  'weak1',
-  'highz0',
-  'highz1'
-]);
-
-const courseOutConstructs = new Set([
-  ...unsupportedConstructs,
-  ...verilogCourseOutNetDeclarationTypes,
-  ...driveStrengthKeywords
 ]);
 
 interface GenerateBlockRange {
@@ -626,7 +608,7 @@ function validateDeclarationLikeStatement(document: TextDocument, tokens: Verilo
   if (!hasTrailingSemicolon(tokens)) {
     reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
   }
-  const statement = trimTrailingSemicolon(tokens);
+  const statement = stripDriveStrength(trimTrailingSemicolon(tokens));
   const declaratorStart = declarationDeclaratorStart(document, statement, diagnostics);
   if (declaratorStart < 0) {
     diagnostics.push(makeDiagnostic(
@@ -750,13 +732,24 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
   if (!hasTrailingSemicolon(tokens)) {
     reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
   }
-  const normalizedTokens = stripContinuousAssignDriveStrength(document, tokens, diagnostics);
+  const normalizedTokens = stripDriveStrength(tokens);
   const semicolon = firstTopLevelToken(normalizedTokens, ';', 1);
   const limit = semicolon >= 0 ? semicolon : normalizedTokens.length;
-  const assignment = parseAssignmentTokens(normalizedTokens.slice(0, limit));
+  for (const part of continuousAssignmentParts(normalizedTokens.slice(0, limit))) {
+    if (part.length) {
+      validateContinuousAssignmentPart(document, part, diagnostics);
+    } else {
+      diagnostics.push(makeDiagnostic(tokenRange(document, tokens[0]),
+        'Syntax error: expected an assignment between commas.', DiagnosticSeverity.Error, 'syntax-malformed-assignment'));
+    }
+  }
+}
+
+function validateContinuousAssignmentPart(document: TextDocument, normalizedTokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+  const assignment = parseAssignmentTokens(normalizedTokens);
   if (!assignment) {
     diagnostics.push(makeDiagnostic(
-      tokenRange(document, normalizedTokens[0] ?? tokens[0]),
+      tokenRange(document, normalizedTokens[0]),
       'Syntax error: continuous assign is missing an assignment operator.',
       DiagnosticSeverity.Error,
       'syntax-malformed-assignment'
@@ -781,31 +774,6 @@ function validateContinuousAssign(document: TextDocument, tokens: VerilogToken[]
     ));
   }
   validateExpressionSyntax(document, assignment.rhsTokens, diagnostics, 'syntax-malformed-assignment');
-}
-
-function stripContinuousAssignDriveStrength(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): VerilogToken[] {
-  if (tokens[0]?.value !== 'assign' || tokens[1]?.value !== '(') {
-    return tokens;
-  }
-  const close = findMatchingToken(tokens, 1, '(', ')');
-  if (close < 0 || !isDriveStrengthList(tokens.slice(2, close))) {
-    return tokens;
-  }
-  diagnostics.push(makeDiagnostic(
-    Range.create(document.positionAt(tokens[1].start), document.positionAt(tokens[close].end)),
-    'Drive-strength continuous assignments are legal Verilog but outside the supported CO course subset.',
-    DiagnosticSeverity.Information,
-    'syntax-unsupported-construct'
-  ));
-  return [tokens[0], ...tokens.slice(close + 1)];
-}
-
-function isDriveStrengthList(tokens: VerilogToken[]): boolean {
-  const parts = splitTopLevel(tokens, ',');
-  return parts.length > 0 && parts.every((part) =>
-    part.length === 1 &&
-    driveStrengthKeywords.has(part[0].value)
-  );
 }
 
 function validateExpressionSyntax(
@@ -861,6 +829,18 @@ function missingTokenIssue(document: TextDocument, missing: VerilogMissingTokenA
 }
 
 function validateInstanceStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+  const group = splitInstanceTokenGroup(tokens);
+  if (!group || group.declarators.length === 1) {
+    validateSingleInstance(document, tokens, diagnostics);
+    return;
+  }
+  const terminator = tokens[tokens.length - 1];
+  for (const declarator of group.declarators) {
+    validateSingleInstance(document, [...group.prefix, ...declarator, ...(terminator?.value === ';' ? [terminator] : [])], diagnostics);
+  }
+}
+
+function validateSingleInstance(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
   let instanceIndex = 1;
   if (tokens[instanceIndex]?.value === '#') {
     if (tokens[instanceIndex + 1]?.value !== '(') {
@@ -1391,7 +1371,7 @@ function collectNumberLiteralDiagnostics(document: TextDocument, tokens: Verilog
 function collectUnsupportedConstructDiagnostics(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
   const reported = new Set<string>();
   for (const token of tokens) {
-    if (!courseOutConstructs.has(token.value) || reported.has(token.value)) {
+    if (!unsupportedConstructs.has(token.value) || reported.has(token.value)) {
       continue;
     }
     reported.add(token.value);
@@ -1423,6 +1403,10 @@ function collectOrphanControlDiagnostics(document: TextDocument, tokens: Verilog
 }
 
 function numberLiteralError(value: string): string | undefined {
+  value = value.replace(/\s+/g, '');
+  if (parseVerilogNumberLiteral(value)?.kind === 'real') {
+    return undefined;
+  }
   const apostrophe = value.indexOf("'");
   if (apostrophe < 0) {
     return /^[0-9_]+$/.test(value) && /[0-9]/.test(value) ? undefined : `malformed decimal literal '${value}'.`;

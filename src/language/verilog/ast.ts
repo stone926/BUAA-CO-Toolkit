@@ -1,6 +1,6 @@
 import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { containsRange, rangesEqual } from '../common/lsp';
+import { containsRange } from '../common/lsp';
 import { VerilogLexDiagnostic, VerilogToken } from './lexer';
 import {
   VerilogDecl,
@@ -17,7 +17,7 @@ import {
   VerilogAlwaysBlockAst,
   VerilogProceduralBlockAst
 } from './blockAst';
-import { parseAssignmentTokens } from './assignmentAnalysis';
+import { continuousAssignmentParts, parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { isVerilogGatePrimitive } from './gatePrimitives';
 import { parseVerilogProceduralBlockBody, VerilogBlockStatementAst } from './proceduralAst';
@@ -159,7 +159,7 @@ export interface VerilogStatementAst {
   end: number;
   tokens: VerilogToken[];
   expressions: VerilogExpressionAst[];
-  assignment?: VerilogAssignmentExpressionAst;
+  assignments: VerilogAssignmentExpressionAst[];
   module?: VerilogModule;
 }
 
@@ -284,26 +284,39 @@ function buildStatementAst(statement: VerilogStatementSource, module?: VerilogMo
     end: statement.end,
     tokens: statement.tokens,
     expressions: assignment.expressions,
-    assignment: assignment.assignment,
+    assignments: assignment.assignments,
     module
   };
 }
 
 function statementExpressionAsts(rawTokens: VerilogToken[], kind: VerilogStatementKind): {
-  assignment?: VerilogAssignmentExpressionAst;
+  assignments: VerilogAssignmentExpressionAst[];
   expressions: VerilogExpressionAst[];
 } {
   const tokens = stripLeadingGenerateBlockLabelTokens(rawTokens);
+  if (kind === 'continuousAssign') {
+    const parts = continuousAssignmentParts(tokens).map((part) => assignmentExpressionAsts(part));
+    return {
+      assignments: parts.flatMap((part) => part.assignments),
+      expressions: parts.flatMap((part) => part.expressions)
+    };
+  }
+  const result = assignmentExpressionAsts(tokens);
+  return kind === 'gatePrimitive' ? { assignments: [], expressions: gatePrimitiveExpressionAsts(tokens) } : result;
+}
+
+function assignmentExpressionAsts(tokens: VerilogToken[]): {
+  assignments: VerilogAssignmentExpressionAst[];
+  expressions: VerilogExpressionAst[];
+} {
   const parsed = parseAssignmentTokens(tokens);
   if (!parsed) {
-    return {
-      expressions: kind === 'gatePrimitive' ? gatePrimitiveExpressionAsts(tokens) : []
-    };
+    return { assignments: [], expressions: [] };
   }
   const lhs = parseVerilogExpressionTokens(parsed.lhsTokens);
   const rhs = parseVerilogExpressionTokens(parsed.rhsTokens);
   return {
-    assignment: lhs && rhs ? { operator: parsed.operator, lhs, rhs } : undefined,
+    assignments: lhs && rhs ? [{ operator: parsed.operator, lhs, rhs }] : [],
     expressions: [lhs, rhs].filter((expression): expression is VerilogExpressionAst => Boolean(expression))
   };
 }
@@ -455,7 +468,7 @@ function classifyStatement(statement: VerilogStatementSource, module?: VerilogMo
   if (isVerilogGatePrimitive(first.value)) {
     return 'gatePrimitive';
   }
-  if (module && module.instances.some((instance) => rangesEqual(instance.range, statement.range))) {
+  if (module && module.instances.some((instance) => containsRange(statement.range, instance.range))) {
     return 'instance';
   }
   if (first.value === 'module') {

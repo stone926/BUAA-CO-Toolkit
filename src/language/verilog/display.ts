@@ -1,7 +1,7 @@
 // @index(render Verilog language-service hover and hint text)
 import { Hover, MarkupKind, Range } from 'vscode-languageserver/node';
 import { VerilogConstantOverrides, WidthInfo, evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './expressions';
-import { parameterOverridesForInstance } from './parameterOverrides';
+import { overridableParameters, parameterOverridesForInstance } from './parameterOverrides';
 import { VerilogDecl, VerilogInstance, VerilogModule, VerilogPortConnection } from './model';
 import { declDetail } from './parser';
 import { ResolvedPortConnection } from './resolveSymbol';
@@ -23,7 +23,7 @@ export function instanceMarkdown(instance: VerilogInstance, parentModule: Verilo
   const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
   const parameterLines = effectiveParameterLines(targetModule, overrides);
   if (parameterLines.length) {
-    lines.push('', 'Effective parameters:', '```verilog', ...parameterLines, '```');
+    lines.push('', 'Effective parameters:', '```verilog', ...limitedLines(parameterLines, 8), '```');
   }
   return lines.join('\n');
 }
@@ -105,7 +105,7 @@ export function parameterConnectionTooltip(
 }
 
 export function effectiveParameterLines(module: VerilogModule, overrides?: VerilogConstantOverrides): string[] {
-  return module.parameters
+  return overridableParameters(module)
     .map((parameter) => {
       const value = effectiveParameterValue(parameter, module, overrides);
       if (value === undefined) {
@@ -136,14 +136,12 @@ export function widthMarkdownLines(label: string, info: WidthInfo): string[] {
   if (info.width === undefined) {
     return [];
   }
-  let text = `${label}: \`${info.width}\``;
-  if (info.minWidth !== undefined && info.minWidth !== info.width) {
-    text += ` (min: \`${info.minWidth}\`)`;
-  }
-  if (info.flexible) {
-    text += ' *(flexible)*';
-  }
-  return ['', text];
+  return ['', `${label}: \`${info.width}\` bits`];
+}
+
+export function compactHoverSource(source: string): string {
+  const text = source.replace(/\s+/g, ' ').trim();
+  return text.length > 160 ? `${text.slice(0, 157)}…` : text;
 }
 
 export function formatBigInt(value: bigint): string {
@@ -154,16 +152,20 @@ export function formatBigInt(value: bigint): string {
 }
 
 export function moduleMarkdown(module: VerilogModule): string {
-  const params = module.parameters.map((param) => declDetail(param));
+  const params = overridableParameters(module).map((param) => declDetail(param));
   const ports = module.ports.map((port) => declDetail(port));
   const sections = [`**module ${module.name}**`];
   if (params.length) {
-    sections.push('', 'Parameters:', '```verilog', ...params, '```');
+    sections.push('', 'Parameters:', '```verilog', ...limitedLines(params, 8), '```');
   }
   if (ports.length) {
-    sections.push('', 'Ports:', '```verilog', ...ports, '```');
+    sections.push('', 'Ports:', '```verilog', ...limitedLines(ports, 12), '```');
   }
   return sections.join('\n');
+}
+
+function limitedLines(lines: string[], limit: number): string[] {
+  return lines.length > limit ? [...lines.slice(0, limit), `// … ${lines.length - limit} more`] : lines;
 }
 
 export function portDirectionLabel(port: VerilogDecl): 'in' | 'out' | 'inout' {
