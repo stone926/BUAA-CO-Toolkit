@@ -8,6 +8,7 @@ import {
   TransportKind
 } from 'vscode-languageclient/node';
 import { StartupTraceOutput, timeStartup, traceStartup } from './startupTrace';
+import { languageDocumentSelector, languageFileGlob } from './language/languageRegistry';
 
 let client: LanguageClient | undefined;
 
@@ -29,14 +30,10 @@ export function startLanguageServer(context: vscode.ExtensionContext, output?: S
     }
   };
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [
-      { scheme: 'file', language: 'mipsasm' },
-      { scheme: 'file', language: 'verilog' },
-      { scheme: 'file', pattern: '**/*.circ' }
-    ],
+    documentSelector: languageDocumentSelector(),
     synchronize: {
       configurationSection: 'co',
-      fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{v,vh,asm,s,mips}')
+      fileEvents: vscode.workspace.createFileSystemWatcher(languageFileGlob())
     },
     initializationOptions: {
       extensionRoot: context.extensionUri.fsPath

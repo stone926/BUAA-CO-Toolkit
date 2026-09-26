@@ -4,10 +4,10 @@
 
 resources/mips/:
   isa.json — versioned 真实指令唯一 catalog：encoding/runtime/canonical/effects/control/profile，以及 generator 稳定顺序和安全策略
-  instructions.json — 指令元数据(助记符/类型R-I-J-special-pseudo/格式/操作数/描述/延迟槽/Profile)
+  instructions.json — 指令展示元数据(助记符/类型R-I-J-special-pseudo/格式/操作数/描述)；真实指令 Profile 来自 isa.json
   instructionMeta.json — pseudo/非 catalog 指令及 parser directive 的附加元数据；真实指令 read-write/alignment facts 由 isa.json 生成，不在此重复
   generatorProfiles.json — 从 isa.json 生成的内置 ASM generator 投影（勿手改）：默认指令集、分类、访存对齐、MDU延迟
-  pseudoExpansions.json — 伪指令展开模板
+  pseudoExpansions.json — MARS 伪指令/扩展操作数形式的展示模板；内建可执行能力由 core 的展开 handler registry 定义
   pseudoForms.json — 伪指令操作数形式
   registers.json — 寄存器表(编号/名称/用途)
   cp0Registers.json — CP0寄存器(编号/sel/名称/用途)
@@ -21,17 +21,18 @@ resources/verilog/:
   lintRules.json — Verilog course lint 规则 catalog: id/title/severity/default/configurable/quickFix
 
 resources/co/:
-  configDefaults.json — co.* 配置默认值单一资源, package manifest 与运行时默认值对齐；`co.mips.engine=auto`；外部 Verilog 检查默认 onSave
-  configManifest.json — co.* VS Code settings schema 源: 分组/类型/描述/枚举/范围, default 由 configDefaults.json 注入；Verilog 外部检查键为 `syntax.external.mode/timeoutMs`
+  configManifest.json — co.* 唯一配置源：分组/schema/兼容声明/runtimeDefault；defaultFrom 显式引用其他领域目录的派生值，default 仅用于 UI sentinel 覆盖
+  configDefaults.json — 从 configManifest.json 生成的运行默认值（勿手改）；`co.mips.engine=auto`；外部 Verilog 检查默认 onSave
+  languages.json — 语言 ID/扩展名/grammar/snippets/LSP 能力唯一目录，生成 package 语言贡献与无宿主运行注册表；SystemVerilog 仅词法高亮，Logisim 按扩展名路由
   courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/无条件工具/端口；P1/P4–P7 声明逻辑 `verilogSimulator` （bundled Icarus），P4–P7 不再声明 MARS/Java，legacy lane 依赖由 toolchainPolicy 动态追加；外置测试台 IM=4096 words、DM=3072 words；指令描述/Profile推断hints
   p7Hardware.json — P7 课程硬件布局: 0x3000 起 4096-word IM、3072-word DM、0x4180 异常入口/probe/Timer/CP0/中断确认/testbench容量
   加载: courseConfig loader, P7 hardware loader
 
 配置资源维护:
-  源文件: resources/co/configManifest.json + resources/co/configDefaults.json + courseConfig/p7Hardware/generatorProfiles/lintRules 等派生输入
-  派生产物: package.json contributes.configuration 与 resources/co/configDefaults.json 中的派生默认值
+  源文件: resources/co/configManifest.json；Profile/指令说明/默认禁用规则分别引用 courseConfig/generatorProfiles/lintRules
+  派生产物: package.json contributes.configuration 与完整 resources/co/configDefaults.json
   命令: npm run generate:manifest-config 生成, npm run check:manifest-config 检查, npm run sync:manifest-config 生成后检查
-  自动流程: compile/test/test:coverage/package:vsix 都会先运行 sync:generated（manifest config + syntaxes）
+  自动流程: compile/test/test:coverage/package:vsix 都会先运行 sync:generated（Profile → ISA → config → languages → syntaxes → diagnostics）；CI 在任何生成前运行 check:generated，防止自动修复掩盖提交漂移
   规则: 不手写 package.json contributes.configuration; 修改配置资源后提交生成结果
 
 ISA 生成维护:

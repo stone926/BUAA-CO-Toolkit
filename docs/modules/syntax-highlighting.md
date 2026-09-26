@@ -8,6 +8,9 @@ MIPS、Verilog 与 SystemVerilog 的 TextMate 词法高亮，以及和 LSP seman
   约束 — semantic provider 不重复发送整段注释、字符串、数字或关键字，避免覆盖主题的嵌套 TextMate scope
 
 single source of truth:
+  resources/co/languages.json — 语言 ID/扩展名/grammar 路径与 scope/LSP 能力；scripts/generate-languages.mjs 生成 package 语言贡献及运行目录
+  src/language/generated/languages.ts — 无宿主生成目录，勿手改
+  src/language/languageRegistry.ts — 从目录派生 client selector、格式化 selector、watcher glob、文件谓词和 service 路由；server service map 按生成的 service ID 类型穷举
   resources/mips/instructions.json + directives.json + registers.json — MIPS 指令/directive/寄存器目录
   resources/verilog/keywords.json — Verilog keyword group、compiler directive、system task 和 operator 目录
   resources/verilog/systemverilog.json — SystemVerilog 专用 keyword/operator 目录

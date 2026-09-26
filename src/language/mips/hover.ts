@@ -22,6 +22,7 @@ import { getCachedMipsParse } from './parseCache';
 import { findMacroOverloadAtPosition } from './queries';
 import { MipsSymbol } from './model';
 import {
+  builtinPseudoAvailability,
   canonicalRegister,
   MipsInstruction,
   instructions,
@@ -63,11 +64,14 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   if (instruction) {
     const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));
     const details = instructionHoverMarkdown(instruction, parsedInstruction);
+    if (builtinPseudoAvailability(instruction, settings.project.profile) === false) {
+      details.push('', '内建汇编器暂不支持此伪指令；MARS 仍可使用下方展开形式。');
+    }
     const expansion = parsedInstruction && (instruction.pseudo || parsedInstruction.usesPseudoForm)
       ? pseudoExpansionPreview(instruction.mnemonic, parsedInstruction.operands)
       : undefined;
     if (expansion?.length) {
-      details.push('', '展开预览：', '', '```mipsasm', expansion.join('\n'), '```');
+      details.push('', 'MARS 展开预览：', '', '```mipsasm', expansion.join('\n'), '```');
       if (expansion.some((line) => usesAtRegister(line))) {
         details.push('', '提示：展开会使用 `$at` (`$1`) 作为临时寄存器');
       }

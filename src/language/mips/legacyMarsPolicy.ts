@@ -1,4 +1,5 @@
 // @index mars-args — Legacy MARS profile/memory launch policy shared by preflight and replay
+import { courseProfileIds } from '../../generated/projectProfiles';
 
 /** P7 课程约定：异常处理程序入口 0x4180 需要大内存布局。 */
 export const P7_COURSE_MEMORY_CONFIG = 'CompactLargeText';
@@ -10,7 +11,7 @@ export const LARGE_TEXT_MEMORY_CONFIGS = new Set([
 ]);
 
 export const LEGACY_MARS_SUPPORTED_PROFILES = new Set([
-  'P2', 'P3', 'P4', 'P5', 'P6', 'P7'
+  'P2', ...courseProfileIds
 ]);
 
 export type LegacyMarsPolicyMode = 'run' | 'dumpText' | 'dumpKernel';
@@ -39,7 +40,7 @@ export function legacyMarsConfigurationPolicyIssues(
   if (!LEGACY_MARS_SUPPORTED_PROFILES.has(profile)) {
     issues.push({
       code: 'legacy-mars.profile-unsupported',
-      message: `legacy MARS provider 不支持 profile ${profile}（支持 P2–P7）`,
+      message: `legacy MARS provider 不支持 profile ${profile}（支持 ${[...LEGACY_MARS_SUPPORTED_PROFILES].join('/')}）`,
       capability: `profile:${profile}`
     });
     return issues;

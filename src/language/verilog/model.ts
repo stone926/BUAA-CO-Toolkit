@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
-import { buildExpectedPorts } from '../../courseConfig';
+import { buildExpectedPorts, profilesWithCapability } from '../../courseConfig';
 import type { VerilogAstDocument } from './ast';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogExpressionAst } from './exprAst';
@@ -180,7 +180,7 @@ function loadVerilogLanguageCatalog(): VerilogLanguageCatalog {
 
 // 保留旧对象形态供直接读取（向后兼容已加载的模块）
 const _expected: Record<string, Record<string, string | undefined>> = {};
-for (const p of ['P4', 'P5', 'P6', 'P7']) {
+for (const p of profilesWithCapability('asmNeededForVerilog')) {
   _expected[p] = buildExpectedPorts(p);
 }
 export const expectedPorts: Record<string, Record<string, string | undefined>> = _expected;

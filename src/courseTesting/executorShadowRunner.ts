@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import type { AsmCase } from '../asmCaseStore';
 import { AppServices } from '../types';
 import type { ProgramImage } from '../mips/core/api';
+import type { CourseProfile } from '../mips/core/generated/isaCatalog';
 import { commitEventsCanonical } from '../mips/core/events/commitEvent';
 import { serializeProgramImage } from '../mips/replay/programImage';
 import { canonicalJson, sha256Canonical, type CanonicalJson } from '../mips/replay/canonical';
@@ -82,7 +83,7 @@ export async function runExecutorShadow(
     }
   });
   const imagePolicyIssues = pipeline.validateProgram(
-    options.profile as 'P3' | 'P4' | 'P5' | 'P6' | 'P7',
+    options.profile as CourseProfile,
     options.image,
     options.haltPc
   );

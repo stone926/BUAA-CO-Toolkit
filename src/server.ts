@@ -98,11 +98,11 @@ import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspac
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
 import { samePath } from './pathUtils';
 import { startupTraceEnabled, timeStartup, traceStartup } from './startupTrace';
+import { languageIds, languageDocumentSelector, languageServiceForDocument, LanguageServiceId } from './language/languageRegistry';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 const verilogIndex = new VerilogWorkspaceIndex({ workspaceComplete: false });
-const logisimLanguageId = 'logisim-circ';
 const mipsState: MipsServerState = {
   ignoredPseudoInstructionFiles: new Set(),
   ignoredPseudoInstructionMnemonics: new Set()
@@ -127,8 +127,8 @@ interface CoLanguageService {
   removeDocument?: (uri: string, settings: CoSettings) => void | Promise<void>;
 }
 
-const languageServices = new Map<string, CoLanguageService>([
-  ['mipsasm', {
+const languageServices: Record<LanguageServiceId, CoLanguageService> = {
+  [languageIds.mips]: {
     getDiagnostics: (document, settings) => getMipsDiagnostics(document, settings, mipsState),
     getCompletions: (document, position, settings) => getMipsCompletions(document, position, settings, mipsState),
     getHover: (document, position, settings) => getMipsHover(document, position, settings, mipsState),
@@ -144,8 +144,8 @@ const languageServices = new Map<string, CoLanguageService>([
     getRenameEdits: (document, position, newName, settings) => getMipsRenameEdits(document, position, newName, settings, mipsState),
     getRenamePrepare: (document, position, settings) => getMipsRenamePrepare(document, position, settings, mipsState),
     removeDocument: clearMipsParseCache
-  }],
-  ['verilog', {
+  },
+  [languageIds.verilog]: {
     getDiagnostics: (document, settings) => getVerilogDiagnostics(document, settings, verilogIndex),
     getCompletions: (document, position, settings) => getVerilogCompletions(document, position, settings, verilogIndex),
     getHover: (document, position, settings) => getVerilogHover(document, position, settings, verilogIndex),
@@ -162,13 +162,13 @@ const languageServices = new Map<string, CoLanguageService>([
     getRenamePrepare: (document, position, settings) => getVerilogRenamePrepare(document, position, settings, verilogIndex),
     updateDocument: (document, settings) => verilogIndex.updateDocument(document, settings),
     removeDocument: closeVerilogDocument
-  }],
-  [logisimLanguageId, {
+  },
+  [languageIds.logisim]: {
     getDiagnostics: (document) => getLogisimDiagnostics(document),
     getHover: (document, position) => getLogisimHover(document, position),
     getDocumentSymbols: (document) => getLogisimDocumentSymbols(document)
-  }]
-]);
+  }
+};
 
 interface ServerState {
   hasConfigurationCapability: boolean;
@@ -324,10 +324,7 @@ connection.onInitialized(() => {
   traceServerStartup('server initialized');
   if (state.hasFormattingDynamicRegistration) {
     void connection.client.register(DocumentFormattingRequest.type, {
-      documentSelector: [
-        { scheme: 'file', language: 'mipsasm' },
-        { scheme: 'file', language: 'verilog' }
-      ]
+      documentSelector: languageDocumentSelector(true)
     });
   }
   scheduleVerilogIndexRebuild(verilogIndexStartupDelayMs);
@@ -395,7 +392,7 @@ async function handleDocumentClosed(document: TextDocument): Promise<void> {
     uri: document.uri,
     diagnostics: []
   });
-  if (document.languageId === 'verilog') {
+  if (document.languageId === languageIds.verilog) {
     await validateOpenVerilogDocuments();
   }
 }
@@ -509,7 +506,7 @@ connection.onExecuteCommand(async (params) => {
   } else if (params.command === verilogExternalSyntaxCommand) {
     const uri = typeof params.arguments?.[0] === 'string'
       ? params.arguments[0]
-      : documents.all().find((document) => document.languageId === 'verilog')?.uri;
+      : documents.all().find((document) => document.languageId === languageIds.verilog)?.uri;
     if (uri) {
       await runExternalVerilogSyntaxCheck(uri, await settingsForUri(uri), true);
     }
@@ -552,7 +549,7 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
 }
 
 function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnostic[]): Diagnostic[] {
-  if (document.languageId !== 'verilog') {
+  if (document.languageId !== languageIds.verilog) {
     return diagnostics;
   }
   const externalDiagnostics = state.verilogExternalDiagnostics.get(document.uri) ?? [];
@@ -568,7 +565,7 @@ function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnosti
 }
 
 function scheduleExternalVerilogSyntaxCheck(document: TextDocument, settings: CoSettings): void {
-  if (document.languageId !== 'verilog') {
+  if (document.languageId !== languageIds.verilog) {
     return;
   }
   const external = settings.verilog.syntax.external;
@@ -673,7 +670,7 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
 }
 
 async function validateOpenVerilogDocuments(): Promise<void> {
-  await validateDocuments((document) => document.languageId === 'verilog');
+  await validateDocuments((document) => document.languageId === languageIds.verilog);
 }
 
 function getCodeActions(
@@ -764,8 +761,8 @@ function verilogProfileSnapshot(): VerilogProfileSnapshot {
     return state.verilogProfileSnapshot;
   }
   const files = verilogIndex.indexedFiles()
-    .map((file) => ({ path: fsPathFromUri(file.uri), languageId: 'verilog' }))
-    .filter((file): file is { path: string; languageId: string } => Boolean(file.path));
+    .map((file) => ({ path: fsPathFromUri(file.uri), languageId: languageIds.verilog }))
+    .filter((file): file is { path: string; languageId: typeof languageIds.verilog } => Boolean(file.path));
   const snapshot: VerilogProfileSnapshot = {
     indexVersion: verilogIndex.version,
     files,
@@ -779,12 +776,12 @@ function verilogProfileSnapshot(): VerilogProfileSnapshot {
 function verilogDisplayFormatsWithActive(snapshot: VerilogProfileSnapshot, document?: TextDocument): string[] {
   const formats: string[] = [];
   for (const [uri, fileFormats] of snapshot.verilogDisplayFormatsByUri) {
-    if (document?.languageId === 'verilog' && uri === document.uri) {
+    if (document?.languageId === languageIds.verilog && uri === document.uri) {
       continue;
     }
     formats.push(...fileFormats);
   }
-  if (document?.languageId === 'verilog') {
+  if (document?.languageId === languageIds.verilog) {
     formats.push(...extractVerilogDisplayFormats(document.getText()));
   }
   return formats;
@@ -906,22 +903,16 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<stri
 }
 
 function isMipsDocument(document: TextDocument): boolean {
-  return document.languageId === 'mipsasm';
+  return document.languageId === languageIds.mips;
 }
 
 function serviceForDocument(document: TextDocument): CoLanguageService | undefined {
-  return languageServices.get(serviceKeyForDocument(document));
+  const id = languageServiceForDocument(document);
+  return id ? languageServices[id] : undefined;
 }
 
 function serviceKeyForDocument(document: TextDocument): string {
-  if (isLogisimCircuitUri(document.uri)) {
-    return logisimLanguageId;
-  }
-  return document.languageId;
-}
-
-function isLogisimCircuitUri(uri: string): boolean {
-  return uri.split(/[?#]/, 1)[0].toLowerCase().endsWith('.circ');
+  return languageServiceForDocument(document) ?? document.languageId;
 }
 
 async function getDocumentSettings(resource: string): Promise<CoSettings> {
@@ -949,7 +940,7 @@ async function settingsForUri(uri: string): Promise<CoSettings> {
     return settings;
   }
   return cachedEffectiveSettings(effectiveSettingsCacheKey(uri, 0), () => {
-    const languageId = isVerilogUri(uri) ? 'verilog' : '';
+    const languageId = isVerilogUri(uri) ? languageIds.verilog : '';
     const snapshot = verilogProfileSnapshot();
     return applyResolvedProfile(settings, {
       activeLanguageId: languageId,

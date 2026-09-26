@@ -1,3 +1,4 @@
+import { isLanguageFileName, languageIds } from '../languageRegistry';
 import { CO_DIR } from '../../constants';
 // @index workspace-index — 跨文件模块数据库：索引/查找/增量更新
 import * as fs from 'fs';
@@ -567,6 +568,5 @@ export function isVerilogUri(uri: string): boolean {
 }
 
 function isVerilogFileName(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return lower.endsWith('.v') || lower.endsWith('.vh');
+  return isLanguageFileName(fileName, languageIds.verilog);
 }

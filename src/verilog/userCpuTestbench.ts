@@ -1,9 +1,9 @@
 // @index verilog-user-cpu-testbench — 用户 CPU TB 的课程模板与稳定识别标记
 import type { VerilogModule } from '../language/verilog/service';
 import { buildStimulusTestbench, buildTestbench } from '../language/verilog/service';
-import type { ConcreteProjectProfile } from '../projectProfile';
+import { isVerilogCpuProfile, type ConcreteProjectProfile, type VerilogCpuProfile } from '../projectProfile';
 
-export type UserCpuTestbenchProfile = 'P4' | 'P5' | 'P6' | 'P7';
+export type UserCpuTestbenchProfile = VerilogCpuProfile;
 
 export interface UserTestbenchContext {
   profile: ConcreteProjectProfile;
@@ -12,12 +12,13 @@ export interface UserTestbenchContext {
 }
 
 function isCpuProfile(profile: ConcreteProjectProfile): profile is UserCpuTestbenchProfile {
-  return profile === 'P4' || profile === 'P5' || profile === 'P6' || profile === 'P7';
+  return isVerilogCpuProfile(profile);
 }
 
 /** Only generated CPU top templates opt into the optional ASM picker. */
 export function userCpuTestbenchProfile(text: string): UserCpuTestbenchProfile | undefined {
-  return /^\uFEFF?\/\/ CO_USER_CPU_TESTBENCH (P[4-7])(?:\r?\n|$)/.exec(text)?.[1] as UserCpuTestbenchProfile | undefined;
+  const profile = /^\uFEFF?\/\/ CO_USER_CPU_TESTBENCH (P\d+)(?:\r?\n|$)/.exec(text)?.[1];
+  return isVerilogCpuProfile(profile) ? profile : undefined;
 }
 
 export function buildUserTestbenchText(module: VerilogModule, tbName: string, context: UserTestbenchContext): string {

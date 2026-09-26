@@ -13,6 +13,7 @@ import type { CommitEvent } from '../core/events/commitEvent';
 import type { CoverageBin } from '../core/events/coverage';
 import type { CpuTraceEvent } from '../../language/mips/traceParser';
 import { isaInstructions } from '../core/generated/isaCatalog';
+import { LEGACY_MARS_SUPPORTED_PROFILES } from '../../language/mips/legacyMarsPolicy';
 import {
   BUILTIN_TS_ENGINE_ID,
   LEGACY_MARS_ENGINE_ID
@@ -277,7 +278,7 @@ export const BUILTIN_TS_DESCRIPTOR: EngineDescriptor = {
 
 /** Capabilities the legacy engine currently provides (behavior of the existing pipeline). */
 export const LEGACY_MARS_CAPABILITIES: EngineCapabilities = {
-  profiles: ['P2', 'P3', 'P4', 'P5', 'P6', 'P7'],
+  profiles: [...LEGACY_MARS_SUPPORTED_PROFILES],
   instructionLayers: Object.fromEntries(
     (['required', 'commonExtensions', 'marsCompatibility'] as const).map((layer) => [
       layer,

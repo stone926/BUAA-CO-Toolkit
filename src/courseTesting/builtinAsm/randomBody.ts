@@ -195,8 +195,8 @@ export function resolveBuiltinInstructionSet(profile: ProjectProfile, instructio
       unsupported.push(raw);
       continue;
     }
-    if (instruction.projects && !instruction.projects.includes(effectiveProfile)) {
-      profileMismatches.push(`${raw}(${instruction.projects.join('/')})`);
+    if (instruction.isa && !instruction.isa.profiles.includes(effectiveProfile)) {
+      profileMismatches.push(`${raw}(${instruction.isa.profiles.join('/')})`);
       continue;
     }
     mnemonics.push(mnemonic);

@@ -43,7 +43,7 @@ import {
 export const mipsEngineCliProtocolVersion = 1 as const;
 export const mipsEngineCliMaximumBatch = 4096;
 
-const courseProfiles = new Set<CourseProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
+const courseProfiles = new Set<CourseProfile>(courseProfileIds);
 const instructionLayers = new Set<InstructionLayer>([
   'required',
   'commonExtensions',

@@ -2,8 +2,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isaInstructionByMnemonic } from '../mips/core/generated/isaCatalog';
+import { courseProfileIds, CourseProjectProfile } from '../projectProfile';
 
-export type CpuProfile = 'P3' | 'P4' | 'P5' | 'P6' | 'P7';
+export type CpuProfile = CourseProjectProfile;
 
 export interface GeneratorInstructionCatalog {
   profiles: Record<CpuProfile, string[]>;
@@ -46,7 +47,7 @@ function validateCatalog(value: unknown): asserts value is GeneratorInstructionC
   const memoryAlignment = recordAt(value, 'memoryAlignment');
   const mduBusyCycles = recordAt(value, 'mduBusyCycles');
 
-  for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7']) {
+  for (const profile of courseProfileIds) {
     stringArrayAt(profiles, profile);
   }
   for (const category of [

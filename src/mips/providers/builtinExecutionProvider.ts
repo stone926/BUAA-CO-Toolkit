@@ -47,7 +47,7 @@ import type { EngineCapabilities } from '../core/api';
  * consume a `ProgramImage` produced and frozen by the legacy/phase-5 assembler.
  */
 export const BUILTIN_TS_EXECUTION_CAPABILITIES: EngineCapabilities = {
-  profiles: ['P3', 'P4', 'P5', 'P6', 'P7'],
+  profiles: [...courseProfileIds],
   instructionLayers: Object.fromEntries(
     (['required', 'commonExtensions', 'marsCompatibility'] as const).map((layer) => [
       layer,

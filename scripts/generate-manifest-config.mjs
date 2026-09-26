@@ -8,7 +8,6 @@ const configDefaultsPath = path.join(root, 'resources', 'co', 'configDefaults.js
 
 const args = new Set(process.argv.slice(2));
 const checkOnly = args.has('--check');
-const initManifest = args.has('--init');
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -40,20 +39,13 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function stripPackageDefaults(configurationGroups) {
-  const groups = clone(configurationGroups);
-  for (const group of groups) {
-    for (const property of Object.values(group.properties ?? {})) {
-      delete property.default;
-    }
-  }
-  return groups;
-}
-
 function propertyMap(groups) {
   const properties = {};
   for (const group of groups) {
     for (const [key, property] of Object.entries(group.properties ?? {})) {
+      if (!key.startsWith('co.') || Object.hasOwn(properties, key)) {
+        throw new Error(`Invalid or duplicate setting key: ${key}`);
+      }
       properties[key] = property;
     }
   }
@@ -86,13 +78,28 @@ function generatorInstructionMarkdownDescription(generatorProfiles) {
   ].join('\n');
 }
 
-function deriveConfigDefaults(baseDefaults, resources) {
-  const defaults = clone(baseDefaults);
-  const { lintRules } = resources;
-  defaults['project.profile'] = defaults['project.profile'] ?? 'auto';
-  defaults['verilog.lint.disabledRules'] = lintRules
-    .filter((rule) => rule.configurable && !rule.enabledByDefault)
-    .map((rule) => rule.id);
+function deriveConfigDefaults(groups, { lintRules }) {
+  const defaults = {};
+  for (const [key, property] of Object.entries(propertyMap(groups))) {
+    const hasDefault = Object.hasOwn(property, 'runtimeDefault');
+    if (hasDefault === Object.hasOwn(property, 'defaultFrom')) {
+      throw new Error(`${key} must declare exactly one runtimeDefault or defaultFrom.`);
+    }
+    if (hasDefault) {
+      defaults[key.slice(3)] = clone(property.runtimeDefault);
+    } else if (property.defaultFrom === 'disabledVerilogLintRules') {
+      defaults[key.slice(3)] = lintRules
+        .filter((rule) => rule.configurable && !rule.enabledByDefault)
+        .map((rule) => rule.id);
+    } else {
+      throw new Error(`Unknown default source for ${key}: ${property.defaultFrom}`);
+    }
+    const value = defaults[key.slice(3)];
+    const type = Array.isArray(value) ? 'array' : typeof value;
+    if (type !== property.type || (property.enum && !property.enum.includes(value))) {
+      throw new Error(`Invalid runtime default for ${key}.`);
+    }
+  }
   return sortedObject(defaults);
 }
 
@@ -101,6 +108,8 @@ function applyGeneratedSchema(groups, defaults, resources) {
   const properties = propertyMap(generated);
 
   for (const [key, property] of Object.entries(properties)) {
+    delete property.runtimeDefault;
+    delete property.defaultFrom;
     // Deprecated compatibility settings intentionally have no contributed
     // default. VS Code then keeps them out of the normal Settings UI while
     // still recognizing values already present in older workspaces.
@@ -119,7 +128,7 @@ function applyGeneratedSchema(groups, defaults, resources) {
     }
   }
 
-  const { courseConfig, generatorProfiles } = resources;
+  const { courseConfig, generatorProfiles, lintRules } = resources;
   const profileIds = Object.keys(courseConfig.profiles);
   properties['co.project.profile'].enum = ['auto', ...profileIds];
   properties['co.project.profile'].enumDescriptions = [
@@ -130,32 +139,26 @@ function applyGeneratedSchema(groups, defaults, resources) {
   properties['co.test.instructions'].description = generatorInstructionDescription();
   properties['co.test.instructions'].markdownDescription =
     generatorInstructionMarkdownDescription(generatorProfiles);
+  properties['co.verilog.lint.disabledRules'].items.enum = lintRules
+    .filter((rule) => rule.configurable).map((rule) => rule.id);
 
   return generated;
 }
 
 function main() {
   const pkg = readJson(packagePath);
-  if (initManifest) {
-    if (!pkg.contributes?.configuration) {
-      throw new Error('package.json has no contributes.configuration to bootstrap.');
-    }
-    writeJsonIfChanged(configManifestPath, stripPackageDefaults(pkg.contributes.configuration));
+  if ([...args].some((arg) => arg !== '--check')) {
+    throw new Error('Only --check is supported; edit resources/co/configManifest.json.');
   }
-  if (!fs.existsSync(configManifestPath)) {
-    throw new Error('Missing resources/co/configManifest.json. Run with --init once to bootstrap it from package.json.');
-  }
-
-  const baseDefaults = readJson(configDefaultsPath);
+  const configManifest = readJson(configManifestPath);
   const courseConfig = readJson(path.join(root, 'resources', 'co', 'courseConfig.json'));
   const generatorProfiles = readJson(path.join(root, 'resources', 'mips', 'generatorProfiles.json'));
   const lintRules = readJson(path.join(root, 'resources', 'verilog', 'lintRules.json'));
   const resources = { courseConfig, generatorProfiles, lintRules };
 
-  const nextDefaults = deriveConfigDefaults(baseDefaults, resources);
+  const nextDefaults = deriveConfigDefaults(configManifest, resources);
   writeJsonIfChanged(configDefaultsPath, nextDefaults);
 
-  const configManifest = readJson(configManifestPath);
   pkg.contributes.configuration = applyGeneratedSchema(configManifest, nextDefaults, resources);
   writeJsonIfChanged(packagePath, pkg);
 

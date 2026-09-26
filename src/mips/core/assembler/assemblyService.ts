@@ -1,6 +1,7 @@
 // @index mips-core — CLI/Worker 共用的纯汇编服务 DTO：显式 source/include graph 上限与稳定错误投影
 
 import { CourseProfile, InstructionLayer } from '../generated/isaCatalog';
+import { courseProfileIds, isCourseProfile } from '../profiles/profileIds';
 import { ProgramImage } from '../api';
 import { AssemblerDiagnostic } from './diagnostics';
 import {
@@ -59,8 +60,8 @@ export interface AssemblerServiceResult {
 }
 
 export function parseAssemblerServiceRequest(value: Record<string, unknown>): ParsedAssemblerServiceRequest {
-  if (typeof value.profile !== 'string' || !['P3', 'P4', 'P5', 'P6', 'P7'].includes(value.profile)) {
-    throw new Error('profile must be one of P3, P4, P5, P6, P7');
+  if (!isCourseProfile(value.profile)) {
+    throw new Error(`profile must be one of ${courseProfileIds.join(', ')}`);
   }
   if (!Array.isArray(value.sources) || value.sources.length === 0 || value.sources.length > maximumAssemblerSourceUnits) {
     throw new Error(`sources must contain 1..${maximumAssemblerSourceUnits} entries`);

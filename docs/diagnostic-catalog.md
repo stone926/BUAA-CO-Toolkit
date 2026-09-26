@@ -1,6 +1,6 @@
 # 内置诊断目录
 
-本目录记录插件内置 MIPS 与 Verilog 分析器当前会产生的稳定诊断码。历史代码需要保持兼容，因为用户可以通过 `co.diagnostics.disabledCodes` 和 `co.diagnostics.disabledFileCodes` 精确禁用诊断；Verilog 课程 Lint 还可以通过 `co.verilog.lint.disabledRules` 按基础规则 ID 禁用一组 `vc-xxx-*` 子码。
+本目录记录内置 MIPS、Verilog 和 Logisim 分析器当前会产生的稳定诊断码。历史代码需要保持兼容，因为用户可以通过 `co.diagnostics.disabledCodes` 和 `co.diagnostics.disabledFileCodes` 精确禁用诊断；Verilog 课程 Lint 还可以通过 `co.verilog.lint.disabledRules` 按基础规则 ID 禁用一组 `vc-xxx-*` 子码。
 
 带 `<...>` 的条目表示带动态后缀的诊断码模式，例如 `implicit-net:<name>` 会实际发出 `implicit-net:missing`。带 `*` 的条目表示同一基础规则下的多个稳定子码。
 
@@ -11,126 +11,169 @@
 - 信息：课程建议、风格提示、可选质量提示。
 - 可配置：严重级别由设置决定，或可关闭。
 
-## MIPS
+## 当前诊断码清单
 
-| 代码 | 严重级别 | 层级 | 来源 | 触发示例 |
-| --- | --- | --- | --- | --- |
-| `mips-lex-unknown-token` | 错误 | 词法 | `src/language/mips/parser.ts` | `@` |
-| `mips-lex-unclosed-string` | 错误 | 词法 | `src/language/mips/parser.ts` | `.asciiz "abc` |
-| `mips-lex-string-escape` | 错误 | 词法 | `src/language/mips/parser.ts` | `.asciiz "\q"` |
-| `mips-lex-char-literal` | 错误 | 词法 | `src/language/mips/parser.ts` | `.byte '\x'` |
-| `mips-lex-unclosed-char` | 错误 | 词法 | `src/language/mips/parser.ts` | `.byte '\` |
-| `mips-syntax-line` | 错误 | 行语法 | `src/language/mips/parser.ts` | `1bad: nop`、`:`、寄存器作标签 |
-| `unknown-directive` | 错误 | 解析 | `src/language/mips/parser.ts` | `.unknown` |
-| `unknown-instruction` | 错误 | 解析 | `src/language/mips/parser.ts` | `ad $t0, $t1, $t2` |
-| `unknown-register` | 错误 | 语义 | `src/language/mips/parser.ts` | `$bad` |
-| `reserved-symbol` | 错误 | 语义 | `src/language/mips/parser.ts` | `add:`、`.eqv add 1` |
-| `duplicate-symbol` | 错误 | 语义 | `src/language/mips/parser.ts` | 重复标签或数据符号 |
-| `missing-label` | 错误 | 语义 | `src/language/mips/parser.ts` | `beq $t0, $t1, missing` |
-| `undeclared-symbol` | 错误 | 语义 | `src/language/mips/parser.ts` | `.word missing` 或未声明宏参数 |
-| `eqv-forward-reference` | 错误 | 语义 | `src/language/mips/parser.ts` | 在 `.eqv` 声明前使用该符号 |
-| `directive-segment` | 错误 | 伪指令 | `src/language/mips/parser.ts` | 在 `.text` 中写 `.word 1` |
-| `directive-operand-count` | 错误 | 伪指令 | `src/language/mips/parser.ts` | `.word` 到 EOF 仍无操作数 |
-| `directive-operand` | 错误 | 伪指令 | `src/language/mips/parser.ts` | `.space foo` |
-| `co-section-address` | 错误 | 课程 Lint | `src/language/mips/parser.ts` | `.data 0x10010000` |
-| `section-address-range` | 警告 | 课程 Lint | `src/language/mips/parser.ts` | `.text 0x80000000` |
-| `set-ignored` | 警告 | 伪指令 | `src/language/mips/parser.ts` | `.set noreorder` |
-| `space-alignment` | 警告 | 课程 Lint | `src/language/mips/parser.ts` | `.space 3` |
-| `align-large` | 警告 | 课程 Lint | `src/language/mips/parser.ts` | `.align 8` |
-| `macro-header` | 错误 | 宏结构 | `src/language/mips/parser.ts` | `.macro` |
-| `macro-unclosed` | 错误 | 宏结构 | `src/language/mips/parser.ts` | 缺少 `.end_macro` |
-| `macro-end` | 错误 | 宏结构 | `src/language/mips/parser.ts` | 孤立 `.end_macro` |
-| `nested-macro` | 警告 | 宏结构 | `src/language/mips/parser.ts` | `.macro` 中再定义 `.macro` |
-| `duplicate-macro` | 错误 | 宏结构 | `src/language/mips/parser.ts` | 重复同名同参数数量宏 |
-| `duplicate-macro-parameter` | 错误 | 宏结构 | `src/language/mips/parser.ts` | `.macro m(%a, %a)` |
-| `macro-parameter` | 错误 | 宏结构 | `src/language/mips/parser.ts` | 形参没有以 `%` 或 `$` 开头 |
-| `macro-argument` | 错误 | 宏调用 | `src/language/mips/parser.ts` | 宏实参为 `4($t0)` |
-| `macro-argument-count` | 错误 | 宏调用 | `src/language/mips/parser.ts` | 宏调用参数数量错误 |
-| `operand-count` | 错误 | 指令 | `src/language/mips/instructionValidation.ts` | `add $t0, $t1` |
-| `operand-type` | 错误 | 指令 | `src/language/mips/instructionValidation.ts` | 需要立即数却传入标签 |
-| `memory-alignment` | 警告 | 指令 | `src/language/mips/instructionValidation.ts` | `lw $t0, 2($sp)` |
-| `cp0-write` | 警告 | 课程 Lint | `src/language/mips/instructionValidation.ts` | `mtc0 $t0, 13` |
-| `pseudo-instruction:<mnemonic>` | 信息 | 课程 Lint | `src/language/mips/instructionValidation.ts` | `pseudo-instruction:li` |
-| `project-instruction` | 警告 | 课程 Profile | `src/language/mips/instructionValidation.ts` | 在非 P7 Profile 下使用 `eret` |
-| `instruction-in-data` | 错误 | 结构 | `src/language/mips/parser.ts` | `.data` 中出现 `add` |
-| `syscall-v0-uninitialized` | 警告 | 课程 Lint | `src/language/mips/parser.ts` | P2 中 `syscall` 前未写 `$v0` |
-| `missing-syscall` | 警告 | 课程 Lint | `src/language/mips/parser.ts` | P2 文件没有 `syscall` |
+<!-- generated:diagnostic-codes:start -->
 
-## Verilog
+此清单由 MIPS、Verilog、Logisim 诊断生产代码和 `resources/verilog/lintRules.json` 生成。新增诊断码、动态码模式或遗漏更新都会使 `check:diagnostic-catalog` 失败。
 
-| 代码 | 严重级别 | 层级 | 来源 | 触发示例 |
-| --- | --- | --- | --- | --- |
-| `syntax-unexpected-character` | 错误 | 词法 | `src/language/verilog/lexer.ts` | 非 Verilog 控制字符 |
-| `syntax-unclosed-comment` | 错误 | 词法 | `src/language/verilog/lexer.ts` | `/*` |
-| `syntax-unclosed-string` | 错误 | 词法 | `src/language/verilog/lexer.ts` | `"abc` |
-| `syntax-malformed-number` | 错误 | 词法/表达式 | `src/language/verilog/syntaxParser.ts` | `4'b1020` |
-| `syntax-module-declaration` | 错误 | 解析 | `src/language/verilog/syntaxDiagnostics.ts` | `module ;` |
-| `syntax-unmatched-delimiter` | 错误 | 解析 | `src/language/verilog/syntaxDiagnostics.ts` | 多余的 `)` |
-| `syntax-unclosed-delimiter` | 错误 | 解析 | `src/language/verilog/syntaxDiagnostics.ts` | 缺少 `]` |
-| `syntax-unmatched-<end>` | 错误 | 解析 | `src/language/verilog/syntaxDiagnostics.ts` | 孤立 `endcase` |
-| `syntax-unclosed-<block>` | 错误 | 解析 | `src/language/verilog/syntaxDiagnostics.ts` | `begin/case/generate/function/task` 缺少结束关键字 |
-| `syntax-missing-semicolon` | 错误 | 解析 | `src/language/verilog/syntaxDiagnostics.ts` | 声明或 `assign` 缺少 `;` |
-| `syntax-malformed-declaration` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `wire reg foo;` |
-| `syntax-malformed-port-list` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | ANSI 端口列表缺少逗号 |
-| `syntax-malformed-assignment` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `assign y = ;` |
-| `syntax-malformed-instance` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `.a a` 或实例参数列表残缺 |
-| `syntax-malformed-gate-primitive` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `not ;` |
-| `syntax-malformed-procedural-block` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | 残缺 `always` 或 `initial` |
-| `syntax-malformed-event-control` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `always @(posedge clk` |
-| `syntax-malformed-if` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `if a)` |
-| `syntax-malformed-case` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `case sel` |
-| `syntax-malformed-for` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `for (i = ; i < 4; i = i + 1)` |
-| `syntax-malformed-while` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `while a)` |
-| `syntax-malformed-repeat` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `repeat ()` |
-| `syntax-malformed-generate` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | generate-for 缺少 `begin : name` |
-| `syntax-orphan-else` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `else y = 1;` 不在 `if` 后 |
-| `syntax-orphan-default` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | `default: y = 1;` 不在 `case` 中 |
-| `syntax-unexpected-token` | 错误 | 解析 | `src/language/verilog/syntaxParser.ts` | 模块作用域出现不支持的语句 |
-| `syntax-unsupported-construct` | 信息 | 课程外语法 | `src/language/verilog/syntaxParser.ts` | `specify`、`primitive`、`defparam`、`fork`、`event`、`tri1`、驱动强度 |
-| `missing-endmodule` | 错误 | 结构 | `src/language/verilog/diagnostics.ts` | 模块没有 `endmodule` |
-| `duplicate-module` | 错误 | 结构/工作区 | `src/language/verilog/diagnostics.ts`, `src/language/verilog/workspaceDiagnostics.ts` | 重复模块名 |
-| `missing-include` | 警告 | 预处理 | `src/language/verilog/diagnostics.ts` | ``include "missing.v"` |
-| `unknown-port` | 错误 | 实例连接 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `.bad(signal)` |
-| `duplicate-port-connection` | 警告 | 实例连接 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `.a(x), .a(y)` |
-| `port-index-out-of-range` | 错误 | 实例连接 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 位置端口数量超过目标模块端口数 |
-| `missing-port:<port>` | 信息 | 实例连接 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 命名连接未连接输入端口 |
-| `port-width-mismatch` | 警告 | 实例连接/数据流 | `src/language/verilog/instanceConnectionDiagnostics.ts`, `src/language/verilog/diagnostics.ts` | 1 位端口连接 32 位信号 |
-| `unknown-parameter` | 错误 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.BAD(1))` |
-| `localparam-override` | 错误 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.L(1))`，`L` 是 localparam（仿真器拒绝） |
-| `duplicate-parameter-connection` | 警告 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | `#(.W(1), .W(2))` |
-| `parameter-index-out-of-range` | 错误 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 位置参数数量超过目标模块参数数 |
-| `parameter-not-constant` | 警告 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 用普通信号覆盖 parameter |
-| `parameter-width-mismatch` | 警告 | 参数覆盖 | `src/language/verilog/instanceConnectionDiagnostics.ts` | 4 位参数覆盖为 32 位表达式 |
-| `width-mismatch` | 警告 | 数据流 | `src/language/verilog/diagnostics.ts` | 赋值或声明初始化发生截断 |
-| `select-out-of-range` | 警告 | 数据流 | `src/language/verilog/diagnostics.ts` | `a[8]` 访问 4 位信号 |
-| `constant-division-by-zero` | 警告 | 数据流 | `src/language/verilog/diagnostics.ts` | `a / 0` 或 `a % 0` |
-| `implicit-net:<name>` | 可配置 | 语义 | `src/language/verilog/lintDiagnostics.ts` | 未声明标识符 `missing` |
-| `explicit-port-wire` | 错误 | 语义 | `src/language/verilog/lintDiagnostics.ts` | ``default_nettype none` 下老式端口声明缺少 `wire` |
-| `mixed-assignment` | 警告 | 赋值分析 | `src/language/verilog/lintDiagnostics.ts` | 同一信号混用 `=` 和 `<=` |
-| `multi-driver` | 警告 | 驱动分析 | `src/language/verilog/driverDiagnostics.ts` | 连续赋值和实例输出同时驱动同一信号 |
-| `unused-parameter` | 信息 | 使用分析 | `src/language/verilog/usageDiagnostics.ts` | parameter/localparam 从未被引用 |
-| `unused-signal` | 信息 | 使用分析 | `src/language/verilog/usageDiagnostics.ts` | 内部 wire/reg/logic/time 未读写 |
-| `uninstantiated-module` | 信息 | 工作区 | `src/language/verilog/workspaceDiagnostics.ts` | 模块未被索引到的层次实例化 |
-| `missing-top` | 警告 | 课程 Profile | `src/language/verilog/diagnostics.ts` | P4-P7 找不到顶层模块 |
-| `default-nettype-none` | 信息 | 课程 Lint | `src/language/verilog/diagnostics.ts` | 未写 ``default_nettype none` |
-| `display-format` | 警告 | 课程 Profile | `src/language/verilog/diagnostics.ts` | P4/P5 `$display` trace 格式不匹配 |
-| `p6-display`, `p7-display` | 错误 | 课程 Profile | `src/language/verilog/diagnostics.ts` | P6/P7 顶层设计中使用 `$display` |
-| `p4-port` - `p7-port` | 错误 | 课程 Profile | `src/language/verilog/diagnostics.ts` | 顶层模块缺少课程要求端口 |
-| `p4-port-width` - `p7-port-width` | 警告 | 课程 Profile | `src/language/verilog/diagnostics.ts` | 顶层端口位宽与课程要求不一致 |
-| `project-pc-reset` | 信息 | 工作区 Profile | `src/language/verilog/workspaceDiagnostics.ts` | P4/P5 工作区未发现 `0x3000` 复位常量 |
-| `project-im-size` | 信息 | 工作区 Profile | `src/language/verilog/workspaceDiagnostics.ts` | P4/P5 指令存储器深度不像 4096 字 |
-| `project-dm-size` | 信息 | 工作区 Profile | `src/language/verilog/workspaceDiagnostics.ts` | P4/P5 数据存储器深度不像 3072 字 |
-| `p7-module-cpu`, `p7-module-bridge`, `p7-module-tc`, `p7-module-cp0` | 警告 | 工作区 Profile | `src/language/verilog/workspaceDiagnostics.ts` | P7 工作区缺少关键模块 |
-| `p7-instance-cpu`, `p7-instance-bridge`, `p7-instance-tc` | 信息 | 工作区 Profile | `src/language/verilog/workspaceDiagnostics.ts` | P7 关键模块存在但未明显实例化 |
-| `p7-cp0-sr`, `p7-cp0-cause`, `p7-cp0-epc` | 警告 | 工作区 Profile | `src/language/verilog/workspaceDiagnostics.ts` | CP0 模块缺少关键寄存器 |
-| `tb-timescale` | 信息 | 测试台 Lint | `src/language/verilog/lintDiagnostics.ts` | testbench 缺少 ``timescale 1ns / 1ps` |
-| `tb-clock` | 信息 | 测试台 Lint | `src/language/verilog/lintDiagnostics.ts` | testbench 缺少自由运行时钟 |
-| `tb-reset` | 信息 | 测试台 Lint | `src/language/verilog/lintDiagnostics.ts` | testbench 缺少 reset 逻辑 |
-| `tb-readmemh` | 信息 | 测试台 Lint | `src/language/verilog/lintDiagnostics.ts` | testbench 未用 `$readmemh("code.txt", im)` |
-| `synth-*` | 信息 | 可综合性提示 | `src/language/verilog/lintDiagnostics.ts` | `initial`、声明初始化、乘除取模 |
-| `vc-001-*` 等 VC 子码 | 可配置 | 课程 Lint | `src/language/verilog/lintDiagnostics.ts`, `src/language/verilog/dataflowDiagnostics.ts` | 课程风格、组合/时序逻辑规则；基础规则见下表 |
-| `iverilog-syntax` | 错误/警告/信息 | 外部 Icarus | `src/language/verilog/iverilogSyntaxCheck.ts` | bundled Icarus 输出的可定位编译诊断 |
-| `iverilog-toolchain` | 错误 | 外部 Icarus | `src/language/verilog/iverilogSyntaxCheck.ts` | 扩展根缺失、bundled runtime 缺失或预检失败 |
+| 语言 | 发出的代码或动态模式 | 来源 |
+| --- | --- | --- |
+| logisim | `circ-project` | `src/language/logisim/service.ts` |
+| logisim | `circ-xml` | `src/language/logisim/service.ts` |
+| logisim | `memory-contents` | `src/language/logisim/service.ts` |
+| logisim | `memory-widths` | `src/language/logisim/service.ts` |
+| logisim | `missing-label` | `src/language/logisim/service.ts` |
+| mips | `align-large` | `src/language/mips/parser.ts` |
+| mips | `co-section-address` | `src/language/mips/parser.ts` |
+| mips | `cp0-write` | `src/language/mips/instructionValidation.ts` |
+| mips | `directive-operand` | `src/language/mips/parser.ts` |
+| mips | `directive-operand-count` | `src/language/mips/parser.ts` |
+| mips | `directive-segment` | `src/language/mips/parser.ts` |
+| mips | `duplicate-macro` | `src/language/mips/parser.ts` |
+| mips | `duplicate-macro-parameter` | `src/language/mips/parser.ts` |
+| mips | `duplicate-symbol` | `src/language/mips/parser.ts` |
+| mips | `eqv-forward-reference` | `src/language/mips/parser.ts` |
+| mips | `instruction-in-data` | `src/language/mips/parser.ts` |
+| mips | `macro-argument` | `src/language/mips/parser.ts` |
+| mips | `macro-argument-count` | `src/language/mips/parser.ts` |
+| mips | `macro-end` | `src/language/mips/parser.ts` |
+| mips | `macro-header` | `src/language/mips/parser.ts` |
+| mips | `macro-parameter` | `src/language/mips/parser.ts` |
+| mips | `macro-unclosed` | `src/language/mips/parser.ts` |
+| mips | `memory-alignment` | `src/language/mips/instructionValidation.ts` |
+| mips | `mips-lex-char-literal` | `src/language/mips/parser.ts` |
+| mips | `mips-lex-string-escape` | `src/language/mips/parser.ts` |
+| mips | `mips-lex-unclosed-char` | `src/language/mips/parser.ts` |
+| mips | `mips-lex-unclosed-string` | `src/language/mips/parser.ts` |
+| mips | `mips-lex-unknown-token` | `src/language/mips/parser.ts` |
+| mips | `mips-syntax-line` | `src/language/mips/parser.ts` |
+| mips | `missing-label` | `src/language/mips/parser.ts` |
+| mips | `missing-syscall` | `src/language/mips/parser.ts` |
+| mips | `nested-macro` | `src/language/mips/parser.ts` |
+| mips | `operand-count` | `src/language/mips/instructionValidation.ts` |
+| mips | `operand-type` | `src/language/mips/instructionValidation.ts` |
+| mips | `project-instruction` | `src/language/mips/instructionValidation.ts` |
+| mips | `pseudo-instruction:<mnemonic>` | `src/language/mips/instructionValidation.ts` |
+| mips | `reserved-symbol` | `src/language/mips/parser.ts` |
+| mips | `section-address-range` | `src/language/mips/parser.ts` |
+| mips | `set-ignored` | `src/language/mips/parser.ts` |
+| mips | `space-alignment` | `src/language/mips/parser.ts` |
+| mips | `syscall-v0-uninitialized` | `src/language/mips/parser.ts` |
+| mips | `undeclared-symbol` | `src/language/mips/parser.ts` |
+| mips | `unknown-directive` | `src/language/mips/parser.ts` |
+| mips | `unknown-instruction` | `src/language/mips/parser.ts` |
+| mips | `unknown-register` | `src/language/mips/parser.ts` |
+| verilog | `<profile>-display` | `src/language/verilog/diagnostics.ts` |
+| verilog | `<profile>-port` | `src/language/verilog/diagnostics.ts` |
+| verilog | `<profile>-port-width` | `src/language/verilog/diagnostics.ts` |
+| verilog | `constant-division-by-zero` | `src/language/verilog/diagnostics.ts` |
+| verilog | `default-nettype-none` | `src/language/verilog/diagnostics.ts` |
+| verilog | `display-format` | `src/language/verilog/diagnostics.ts` |
+| verilog | `duplicate-module` | `src/language/verilog/diagnostics.ts`, `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `duplicate-parameter-connection` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `duplicate-port-connection` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `explicit-port-wire` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `implicit-net:<name>` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `iverilog-syntax` | `src/language/verilog/iverilogSyntaxCheck.ts` |
+| verilog | `iverilog-toolchain` | `src/language/verilog/externalSyntaxCheck.ts`, `src/language/verilog/iverilogSyntaxCheck.ts` |
+| verilog | `localparam-override` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `missing-endmodule` | `src/language/verilog/diagnostics.ts` |
+| verilog | `missing-include` | `src/language/verilog/diagnostics.ts` |
+| verilog | `missing-port:<name>` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `missing-top` | `src/language/verilog/diagnostics.ts` |
+| verilog | `mixed-assignment` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `multi-driver` | `src/language/verilog/driverDiagnostics.ts` |
+| verilog | `p7-cp0-<registerName>` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `p7-instance-<required>` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `p7-module-<required>` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `p7-module-cp0` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `parameter-index-out-of-range` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `parameter-not-constant` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `parameter-width-mismatch` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `port-index-out-of-range` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `port-width-mismatch` | `src/language/verilog/diagnostics.ts`, `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `project-dm-size` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `project-im-size` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `project-pc-reset` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `select-out-of-range` | `src/language/verilog/diagnostics.ts` |
+| verilog | `syntax-malformed-<kind>` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-assignment` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-declaration` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-event-control` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-for` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-gate-primitive` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-generate` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-instance` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-number` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-port-list` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-procedural-block` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-missing-semicolon` | `src/language/verilog/syntaxDiagnostics.ts`, `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-module-declaration` | `src/language/verilog/syntaxDiagnostics.ts` |
+| verilog | `syntax-orphan-<value>` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-orphan-default` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-orphan-else` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-unclosed-<token>` | `src/language/verilog/syntaxDiagnostics.ts` |
+| verilog | `syntax-unclosed-<value>` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-unclosed-delimiter` | `src/language/verilog/syntaxDiagnostics.ts` |
+| verilog | `syntax-unexpected-token` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-unmatched-<value>` | `src/language/verilog/syntaxDiagnostics.ts` |
+| verilog | `syntax-unmatched-delimiter` | `src/language/verilog/syntaxDiagnostics.ts` |
+| verilog | `syntax-unsupported-construct` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `synth-decl-init` | `resources/verilog/lintRules.json`, `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `synth-initial` | `resources/verilog/lintRules.json`, `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `synth-mul-div` | `resources/verilog/lintRules.json`, `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `tb-clock` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `tb-readmemh` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `tb-reset` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `tb-timescale` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `uninstantiated-module` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `unknown-parameter` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `unknown-port` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `unused-parameter` | `src/language/verilog/usageDiagnostics.ts` |
+| verilog | `unused-signal` | `src/language/verilog/usageDiagnostics.ts` |
+| verilog | `vc-001` | `resources/verilog/lintRules.json` |
+| verilog | `vc-001-mixed-name-style` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-001-name-style` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-002` | `resources/verilog/lintRules.json` |
+| verilog | `vc-002-low-active-suffix` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-003` | `resources/verilog/lintRules.json` |
+| verilog | `vc-003-mux-name` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-004` | `resources/verilog/lintRules.json` |
+| verilog | `vc-004-magic-number` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-005` | `resources/verilog/lintRules.json` |
+| verilog | `vc-005-multiple-always` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-006` | `resources/verilog/lintRules.json` |
+| verilog | `vc-006-comb-sensitivity` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-007` | `resources/verilog/lintRules.json` |
+| verilog | `vc-007-comb-nonblocking` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-008` | `resources/verilog/lintRules.json` |
+| verilog | `vc-008-case-default` | `src/language/verilog/dataflowDiagnostics.ts` |
+| verilog | `vc-008-comb-branch` | `src/language/verilog/dataflowDiagnostics.ts` |
+| verilog | `vc-008-comb-incomplete-assignment` | `src/language/verilog/dataflowDiagnostics.ts` |
+| verilog | `vc-009` | `resources/verilog/lintRules.json` |
+| verilog | `vc-009-seq-posedge` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-010` | `resources/verilog/lintRules.json` |
+| verilog | `vc-010-seq-blocking` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-011` | `resources/verilog/lintRules.json` |
+| verilog | `vc-011-negedge` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-012` | `resources/verilog/lintRules.json` |
+| verilog | `vc-012-edge-signal` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-013` | `resources/verilog/lintRules.json` |
+| verilog | `vc-013-clock-data` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-014` | `resources/verilog/lintRules.json` |
+| verilog | `vc-014-sync-reset` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-015` | `resources/verilog/lintRules.json` |
+| verilog | `vc-015-inout` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-017` | `resources/verilog/lintRules.json` |
+| verilog | `vc-017-multiline-instance` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-017-named-ports` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-017-one-port-per-line` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `vc-021` | `resources/verilog/lintRules.json` |
+| verilog | `vc-021-explicit-width` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `width-mismatch` | `src/language/verilog/diagnostics.ts` |
+
+<!-- generated:diagnostic-codes:end -->
 
 ### Verilog 课程 Lint 规则目录
 

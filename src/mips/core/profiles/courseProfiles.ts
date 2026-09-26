@@ -1,4 +1,4 @@
-// @index mips-core — 冻结的 P3–P7 课程执行 profile 数据（唯一 profile 事实来源）
+// @index mips-core — 冻结的 P3–P7 课程执行语义数据
 import { CourseProfile, InstructionLayer, isaProfilePolicies } from '../generated/isaCatalog';
 import {
   CourseExecutionProfile,
@@ -9,6 +9,7 @@ import {
   ResetState,
   TraceProjectionPolicy
 } from './profile';
+export { courseProfileIds } from './profileIds';
 
 /**
  * 课程地址空间与执行策略（[P7-2-2] 系统桥地址表、[P6-1]/[P5-5-2] 存储器容量、
@@ -169,6 +170,3 @@ export const courseExecutionProfiles: Readonly<Record<CourseProfile, CourseExecu
 export function resolveCourseProfile(id: CourseProfile): CourseExecutionProfile {
   return courseExecutionProfiles[id];
 }
-
-/** Course profile ids in tutorial order. */
-export const courseProfileIds: readonly CourseProfile[] = ['P3', 'P4', 'P5', 'P6', 'P7'];

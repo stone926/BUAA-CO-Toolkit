@@ -24,11 +24,48 @@ export interface PseudoInstructionShape {
   readonly operands: readonly ParsedInstructionOperand[];
 }
 
-export const supportedPseudoMnemonics: ReadonlySet<string> = new Set([
-  'li', 'la', 'move', 'b', 'beqz', 'bnez', 'not', 'neg', 'negu',
-  'blt', 'bltu', 'bgt', 'bgtu', 'ble', 'bleu', 'bge', 'bgeu',
-  'seq', 'sne', 'sgt', 'sgtu', 'sge', 'sgeu', 'sle', 'sleu'
-]);
+type PseudoExpander = (
+  mnemonic: string,
+  operands: readonly ParsedInstructionOperand[],
+  origin: WorkInstruction['origin'],
+  statement: ParsedStatement,
+  options: PseudoExpansionOptions
+) => WorkInstruction[];
+
+/** Executable builtin capabilities. MARS preview templates are a separate resource. */
+const pseudoExpanders: Readonly<Record<string, PseudoExpander>> = {
+  move: expandMove,
+  not: expandNot,
+  neg: expandNegation,
+  negu: expandNegation,
+  li: (_mnemonic, operands, origin, statement, options) => expandLoadImmediate('li', operands, origin, statement, options),
+  la: (_mnemonic, operands, origin, statement, options) => expandLoadImmediate('la', operands, origin, statement, options),
+  b: expandUnconditionalBranch,
+  beqz: expandZeroBranch,
+  bnez: expandZeroBranch,
+  blt: expandBranchComparison,
+  bltu: expandBranchComparison,
+  bgt: expandBranchComparison,
+  bgtu: expandBranchComparison,
+  ble: expandBranchComparison,
+  bleu: expandBranchComparison,
+  bge: expandBranchComparison,
+  bgeu: expandBranchComparison,
+  seq: expandSetComparison,
+  sne: expandSetComparison,
+  sgt: expandSetComparison,
+  sgtu: expandSetComparison,
+  sge: expandSetComparison,
+  sgeu: expandSetComparison,
+  sle: expandSetComparison,
+  sleu: expandSetComparison
+};
+
+export const builtinPseudoMnemonics: ReadonlySet<string> = new Set(Object.keys(pseudoExpanders));
+
+export function isBuiltinPseudoMnemonic(mnemonic: string): boolean {
+  return builtinPseudoMnemonics.has(mnemonic.toLowerCase());
+}
 
 export function expandPseudoInstruction(
   shape: PseudoInstructionShape,
@@ -39,7 +76,13 @@ export function expandPseudoInstruction(
   const operands = shape.operands;
   const origin = workOriginFor(statement);
   try {
-    const instructions = expand(mnemonic, operands, origin, statement, options);
+    const expander = Object.prototype.hasOwnProperty.call(pseudoExpanders, mnemonic)
+      ? pseudoExpanders[mnemonic]
+      : undefined;
+    if (!expander) {
+      throw new Error(`不支持的 pseudo 指令 ${mnemonic}`);
+    }
+    const instructions = expander(mnemonic, operands, origin, statement, options);
     if (instructions.length === 0) {
       return { ok: false, error: `pseudo ${mnemonic} 展开为空` };
     }
@@ -55,87 +98,48 @@ export function expandPseudoInstruction(
   }
 }
 
-function expand(
-  mnemonic: string,
-  operands: readonly ParsedInstructionOperand[],
-  origin: WorkInstruction['origin'],
-  statement: ParsedStatement,
-  options: PseudoExpansionOptions
-): WorkInstruction[] {
-  if (!supportedPseudoMnemonics.has(mnemonic)) {
-    throw new Error(`不支持的 pseudo 指令 ${mnemonic}`);
-  }
-  switch (mnemonic) {
-    case 'move': {
-      requireCount(mnemonic, operands, 2);
-      return [real('addu', [
-        registerOperand(operands[0]),
-        registerNumber(0, operandSpan(operands[0])),
-        registerOperand(operands[1])
-      ], origin, mnemonic)];
-    }
-    case 'not': {
-      requireCount(mnemonic, operands, 2);
-      return [real('nor', [
-        registerOperand(operands[0]),
-        registerOperand(operands[1]),
-        registerNumber(0, operandSpan(operands[0]))
-      ], origin, mnemonic)];
-    }
-    case 'neg': {
-      requireCount(mnemonic, operands, 2);
-      return [real('sub', [
-        registerOperand(operands[0]),
-        registerNumber(0, operandSpan(operands[0])),
-        registerOperand(operands[1])
-      ], origin, mnemonic)];
-    }
-    case 'negu': {
-      requireCount(mnemonic, operands, 2);
-      return [real('subu', [
-        registerOperand(operands[0]),
-        registerNumber(0, operandSpan(operands[0])),
-        registerOperand(operands[1])
-      ], origin, mnemonic)];
-    }
-    case 'li':
-    case 'la':
-      return expandLoadImmediate(mnemonic, operands, origin, statement, options);
-    case 'b':
-      requireCount(mnemonic, operands, 1);
-      return [real('bgez', [
-        registerNumber(0, operandSpan(operands[0])),
-        labelOperand(operands[0])
-      ], origin, mnemonic)];
-    case 'beqz':
-    case 'bnez':
-      requireCount(mnemonic, operands, 2);
-      return [real(mnemonic === 'beqz' ? 'beq' : 'bne', [
-        registerOperand(operands[0]),
-        registerNumber(0, operandSpan(operands[0])),
-        labelOperand(operands[1])
-      ], origin, mnemonic)];
-    case 'blt':
-    case 'bltu':
-    case 'bgt':
-    case 'bgtu':
-    case 'ble':
-    case 'bleu':
-    case 'bge':
-    case 'bgeu':
-      return expandBranchComparison(mnemonic, operands, origin);
-    case 'seq':
-    case 'sne':
-    case 'sgt':
-    case 'sgtu':
-    case 'sge':
-    case 'sgeu':
-    case 'sle':
-    case 'sleu':
-      return expandSetComparison(mnemonic, operands, origin);
-    default:
-      throw new Error(`不支持的 pseudo 指令 ${mnemonic}`);
-  }
+function expandMove(mnemonic: string, operands: readonly ParsedInstructionOperand[], origin: WorkInstruction['origin']): WorkInstruction[] {
+  requireCount(mnemonic, operands, 2);
+  return [real('addu', [
+    registerOperand(operands[0]),
+    registerNumber(0, operandSpan(operands[0])),
+    registerOperand(operands[1])
+  ], origin, mnemonic)];
+}
+
+function expandNot(mnemonic: string, operands: readonly ParsedInstructionOperand[], origin: WorkInstruction['origin']): WorkInstruction[] {
+  requireCount(mnemonic, operands, 2);
+  return [real('nor', [
+    registerOperand(operands[0]),
+    registerOperand(operands[1]),
+    registerNumber(0, operandSpan(operands[0]))
+  ], origin, mnemonic)];
+}
+
+function expandNegation(mnemonic: string, operands: readonly ParsedInstructionOperand[], origin: WorkInstruction['origin']): WorkInstruction[] {
+  requireCount(mnemonic, operands, 2);
+  return [real(mnemonic === 'neg' ? 'sub' : 'subu', [
+    registerOperand(operands[0]),
+    registerNumber(0, operandSpan(operands[0])),
+    registerOperand(operands[1])
+  ], origin, mnemonic)];
+}
+
+function expandUnconditionalBranch(mnemonic: string, operands: readonly ParsedInstructionOperand[], origin: WorkInstruction['origin']): WorkInstruction[] {
+  requireCount(mnemonic, operands, 1);
+  return [real('bgez', [
+    registerNumber(0, operandSpan(operands[0])),
+    labelOperand(operands[0])
+  ], origin, mnemonic)];
+}
+
+function expandZeroBranch(mnemonic: string, operands: readonly ParsedInstructionOperand[], origin: WorkInstruction['origin']): WorkInstruction[] {
+  requireCount(mnemonic, operands, 2);
+  return [real(mnemonic === 'beqz' ? 'beq' : 'bne', [
+    registerOperand(operands[0]),
+    registerNumber(0, operandSpan(operands[0])),
+    labelOperand(operands[1])
+  ], origin, mnemonic)];
 }
 
 function expandLoadImmediate(

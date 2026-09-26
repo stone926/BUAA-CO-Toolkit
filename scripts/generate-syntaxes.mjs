@@ -13,11 +13,9 @@ const inputPaths = {
   systemVerilogKeywords: path.join(projectRoot, 'resources', 'verilog', 'systemverilog.json'),
 };
 
-const outputPaths = {
-  mips: path.join(projectRoot, 'syntaxes', 'mips.tmLanguage.json'),
-  verilog: path.join(projectRoot, 'syntaxes', 'verilog.tmLanguage.json'),
-  systemVerilog: path.join(projectRoot, 'syntaxes', 'systemverilog.tmLanguage.json'),
-};
+const languages = JSON.parse(await readFile(path.join(projectRoot, 'resources/co/languages.json'), 'utf8'));
+const grammars = Object.fromEntries(languages.filter(({ grammar }) => grammar).map(({ key, grammar }) => [key, grammar]));
+const outputPaths = Object.fromEntries(Object.entries(grammars).map(([key, grammar]) => [key, path.join(projectRoot, grammar.path)]));
 
 const MIPS_IDENTIFIER = '[A-Za-z_.$][A-Za-z0-9_.$]*';
 const MIPS_CALLABLE_IDENTIFIER = '[A-Za-z_.][A-Za-z0-9_.$]*';
@@ -437,7 +435,7 @@ function buildMipsGrammar(instructionEntries, directiveEntries, registerEntries)
 
   return generatedGrammar(
     'MIPS ASM',
-    'source.mips',
+    grammars.mips.scopeName,
     ['asm', 's', 'mips'],
     [{ include: '#line' }],
     repository,
@@ -843,7 +841,7 @@ function buildVerilogGrammar(keywordResource) {
 
   return generatedGrammar(
     'Verilog',
-    'source.verilog',
+    grammars.verilog.scopeName,
     ['v', 'vh'],
     [
       { include: '#comments' },
@@ -911,14 +909,14 @@ function buildSystemVerilogGrammar(keywordResource, systemVerilogResource) {
 
   return generatedGrammar(
     'SystemVerilog',
-    'source.systemverilog.co',
+    grammars.systemVerilog.scopeName,
     ['sv', 'svh'],
     [
       // Ordering is intentional: identical matches are resolved in favour of
       // these SystemVerilog scopes before falling back to source.verilog.
       { include: '#systemVerilogKeywords' },
       { include: '#systemVerilogOperators' },
-      { include: 'source.verilog' },
+      { include: grammars.verilog.scopeName },
     ],
     repository,
     [

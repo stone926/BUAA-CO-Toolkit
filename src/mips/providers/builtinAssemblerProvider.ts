@@ -20,6 +20,7 @@ import {
 } from './contracts';
 import { EngineCapabilities, SourceUnit } from '../core/api';
 import { CourseProfile, isaInstructions } from '../core/generated/isaCatalog';
+import { courseProfileIds, isCourseProjectProfile } from '../../projectProfile';
 import {
   AssemblerServiceInclude,
   AssemblerServiceSource,
@@ -51,7 +52,7 @@ export const BUILTIN_TS_ASSEMBLER_DESCRIPTOR = Object.freeze({
 });
 
 export const BUILTIN_TS_ASSEMBLER_CAPABILITIES: EngineCapabilities = {
-  profiles: ['P3', 'P4', 'P5', 'P6', 'P7'],
+  profiles: [...courseProfileIds],
   instructionLayers: Object.fromEntries(
     (['required', 'commonExtensions', 'marsCompatibility'] as const).map((layer) => [
       layer,
@@ -119,8 +120,8 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       });
     }
     const resolvedProfile = getProfile(request.sourceUri);
-    const profile = (request.requirements?.profile
-      ?? (['P3', 'P4', 'P5', 'P6', 'P7'].includes(resolvedProfile) ? resolvedProfile : undefined)) as CourseProfile | undefined;
+    const candidateProfile = request.requirements?.profile ?? resolvedProfile;
+    const profile = isCourseProjectProfile(candidateProfile) ? candidateProfile : undefined;
     if (!profile) {
       diagnostics.push({
         code: 'builtin-ts-assembler.profile-required',
@@ -176,7 +177,16 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
   }
 
   async assemble(request: AssembleRequest, context?: ProviderRunContext): Promise<AssembleResult> {
-    const snapshot = snapshotAssembleRequest(request, context?.signal);
+    const candidateProfile = request.requirements?.profile ?? getProfile(request.sourceUri);
+    if (!isCourseProjectProfile(candidateProfile)) {
+      this.preflightFingerprints.delete(request);
+      return this.preflightFailure([{
+        code: 'builtin-ts-assembler.profile-required',
+        capability: 'profile',
+        message: `builtin assembler 需要具体课程 profile，当前解析为 ${candidateProfile}`
+      }]);
+    }
+    const snapshot = snapshotAssembleRequest(request, candidateProfile, context?.signal);
     const expectedFingerprint = this.preflightFingerprints.get(request);
     this.preflightFingerprints.delete(request);
     if (expectedFingerprint === undefined) {
@@ -188,6 +198,20 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
         code: 'builtin-ts-assembler.request-changed-after-preflight',
         capability: 'immutable-preflight',
         message: 'assemble request 在 preflight 后发生变化；已拒绝执行'
+      }]);
+    }
+    if (snapshot.requestFingerprint !== builtinAssembleRequestFingerprint(request)) {
+      return this.preflightFailure([{
+        code: 'builtin-ts-assembler.request-changed-after-preflight',
+        capability: 'immutable-preflight',
+        message: 'assemble request 在 preflight 后发生变化；已拒绝执行'
+      }]);
+    }
+    if ((request.requirements?.profile ?? getProfile(request.sourceUri)) !== snapshot.profile) {
+      return this.preflightFailure([{
+        code: 'builtin-ts-assembler.profile-changed-after-preflight',
+        capability: 'profile',
+        message: '项目 Profile 在 preflight 后发生变化；已拒绝执行'
       }]);
     }
     const started = Date.now();
@@ -369,10 +393,11 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
   }
 }
 
-function snapshotAssembleRequest(request: AssembleRequest, signal: AbortSignal | undefined): BuiltinAssembleSnapshot {
-  const resolvedProfile = getProfile(request.sourceUri) as CourseProfile;
-  const profile = (request.requirements?.profile as CourseProfile | undefined)
-    ?? (['P3', 'P4', 'P5', 'P6', 'P7'].includes(resolvedProfile) ? resolvedProfile : 'P5');
+function snapshotAssembleRequest(
+  request: AssembleRequest,
+  profile: CourseProfile,
+  signal: AbortSignal | undefined
+): BuiltinAssembleSnapshot {
   return {
     requestFingerprint: builtinAssembleRequestFingerprint(request),
     sourceUri: request.sourceUri,

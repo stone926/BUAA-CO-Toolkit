@@ -1,4 +1,5 @@
-import { CO_CASES_DIR } from './constants';
+import { CO_CASES_DIR, DELAYED_BRANCHING_PROFILES } from './constants';
+import { isConcreteProjectProfile } from './projectProfile';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
@@ -1331,7 +1332,8 @@ async function completeReplayRunConfiguration(
     ...configuration,
     interruptSchedule: interrupts,
     executionOptions: {
-      delayedBranching: ['P5', 'P6', 'P7'].includes(configuration.profile),
+      delayedBranching: isConcreteProjectProfile(configuration.profile)
+        && DELAYED_BRANCHING_PROFILES.has(configuration.profile),
       courseTrace: configuration.courseTrace ?? false,
       traceOutput: configuration.traceOutput ?? false,
       traceLevel,

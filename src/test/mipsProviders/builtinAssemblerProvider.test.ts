@@ -27,12 +27,55 @@ import {
 } from '../../mips/core/assembler/artifacts';
 import {
   assembleProgramForService,
-  courseAssemblerSemanticsRevision
+  courseAssemblerSemanticsRevision,
+  parseAssemblerServiceRequest
 } from '../../mips/core/assembler/assemblyService';
 import { builtinAssemblerEngineDocument } from '../../mips/replay/builtinAssemblerEngineArtifact';
 import type { AssembleRequest } from '../../mips/providers/contracts';
 
 describe('BuiltinTsAssemblerProvider', () => {
+  it('rejects an unknown course profile at both provider and service boundaries', async () => {
+    expect(() => parseAssemblerServiceRequest({
+      profile: 'P8',
+      sources: [{ id: 'root', text: '.text\nnop' }]
+    })).toThrow(/profile must be one of/);
+
+    const provider = new BuiltinTsAssemblerProvider();
+    const request: AssembleRequest = {
+      sourceUri: URI.file(path.join(os.tmpdir(), 'unknown-profile.asm')),
+      target: { kind: 'userText' },
+      requirements: { profile: 'P8' }
+    };
+    expect((await provider.preflight(request)).ok).toBe(false);
+    const result = await provider.assemble(request);
+    expect(result.ok).toBe(false);
+    expect(result.status.stderr).toMatch(/profile/);
+  });
+
+  it('rejects a request changed while asynchronous preflight runs', async () => {
+    const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-builtin-assembler-race-'));
+    try {
+      const sourceUri = URI.file(path.join(directory, 'main.asm'));
+      await fs.promises.writeFile(sourceUri.fsPath, '.text\nnop\n', 'utf8');
+      const request: AssembleRequest = {
+        sourceUri,
+        target: { kind: 'userText' },
+        requirements: { profile: 'P3' }
+      };
+      const provider = new BuiltinTsAssemblerProvider();
+      const originalPreflight = provider.preflight.bind(provider);
+      provider.preflight = async (value) => {
+        value.requirements!.profile = 'P4';
+        return originalPreflight(value);
+      };
+      const result = await provider.assemble(request);
+      expect(result.ok).toBe(false);
+      expect(result.status.stderr).toMatch(/request-changed-after-preflight/);
+    } finally {
+      await fs.promises.rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('uses one assembler semantics revision across service, descriptor, and artifact identity', () => {
     const service = assembleProgramForService({
       profile: 'P3',

@@ -1,6 +1,7 @@
 // @index mips-providers — phase-6 course engine selection: pure, atomic and fail-closed
 
 import type { MipsEngineMode } from '../../config';
+import { courseProfileIds } from '../../generated/projectProfiles';
 
 /** Stable provider ids shared by policy, descriptors and replay evidence. */
 export const LEGACY_MARS_ENGINE_ID = 'legacy-mars-configured' as const;
@@ -38,7 +39,7 @@ export function courseEnginePlanProfileError(
     : undefined;
 }
 
-const builtinDefaultProfiles = new Set(['P3', 'P4', 'P5', 'P6', 'P7']);
+const builtinDefaultProfiles: ReadonlySet<string> = new Set(courseProfileIds);
 
 /**
  * Resolve a course engine without consulting configuration, the filesystem or

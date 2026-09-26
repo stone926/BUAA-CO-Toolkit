@@ -1077,9 +1077,6 @@
       2
     ],
     "description": "rt ← CP0[cp0]。BUAA CO P7 常用 $12(SR)、$13(Cause)、$14(EPC)，以及 $15(PRId)、$8(BadVAddr)",
-    "projects": [
-      "P7"
-    ],
     "type": "special"
   },
   {
@@ -1093,9 +1090,6 @@
       2
     ],
     "description": "CP0[cp0] ← rt。BUAA CO P7 测试程序可能写入 $12(SR) 和 $14(EPC)，并保证不写入 $13(Cause)",
-    "projects": [
-      "P7"
-    ],
     "type": "special"
   },
   {
@@ -1109,9 +1103,6 @@
       0
     ],
     "description": "从异常返回。在 BUAA CO P7 中，eret 无延迟槽",
-    "projects": [
-      "P7"
-    ],
     "type": "special"
   },
   {
@@ -1125,9 +1116,6 @@
       2
     ],
     "description": "若 rs == rt 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "R-type"
   },
   {
@@ -1141,9 +1129,6 @@
       2
     ],
     "description": "若 rs != rt 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "R-type"
   },
   {
@@ -1157,9 +1142,6 @@
       2
     ],
     "description": "若 signed(rs) >= signed(rt) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "R-type"
   },
   {
@@ -1173,9 +1155,6 @@
       2
     ],
     "description": "若 unsigned(rs) >= unsigned(rt) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "R-type"
   },
   {
@@ -1189,9 +1168,6 @@
       2
     ],
     "description": "若 signed(rs) < signed(rt) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "R-type"
   },
   {
@@ -1205,9 +1181,6 @@
       2
     ],
     "description": "若 unsigned(rs) < unsigned(rt) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "R-type"
   },
   {
@@ -1221,9 +1194,6 @@
       2
     ],
     "description": "若 rs == sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "I-type"
   },
   {
@@ -1237,9 +1207,6 @@
       2
     ],
     "description": "若 rs != sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "I-type"
   },
   {
@@ -1253,9 +1220,6 @@
       2
     ],
     "description": "若 signed(rs) >= sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "I-type"
   },
   {
@@ -1269,9 +1233,6 @@
       2
     ],
     "description": "若 unsigned(rs) >= sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "I-type"
   },
   {
@@ -1285,9 +1246,6 @@
       2
     ],
     "description": "若 signed(rs) < sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "I-type"
   },
   {
@@ -1301,9 +1259,6 @@
       2
     ],
     "description": "若 unsigned(rs) < sign_extend(simm16) 则触发陷阱异常（ExcCode=13）",
-    "projects": [
-      "P7"
-    ],
     "type": "I-type"
   },
   {

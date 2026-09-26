@@ -7,7 +7,8 @@
 - canonicalJson.ts — canonical JSON（递归键排序、数组保序）；core fingerprint 与 replay digest 共用同一字节序列定义
 - digest.ts — 纯 TS SHA-256 与 UTF-8 编码；模块边界禁止 core 依赖 node:crypto，由 test 对照 node crypto 交叉验证
 - programImage.ts — ProgramImage canonical 载荷、内容 fingerprint 与执行器输入构造；replay 层复用同一载荷
-- generated/isaCatalog.ts — 由 scripts/generate-mips-isa.mjs 从唯一源 resources/mips/isa.json 生成（勿手改）；同一命令也生成 LSP facts 与 generatorProfiles，`--check` 对三者 fail closed
+- generated/isaCatalog.ts — 由 scripts/generate-mips-isa.mjs 从 resources/mips/isa.json 生成（勿手改）；执行 Profile ID 从 courseConfig 的 trace 能力导出，并校验与 ISA profilePolicies 一致；同一命令也生成 LSP facts 与 generatorProfiles，`--check` 对三者 fail closed
+- profiles/profileIds.ts — 从生成的 ISA profilePolicies 键导出核心使用的 P3–P7 列表与校验器；保持 core 无宿主依赖
 - isa/decoder.ts — 基于生成 catalog、profile 与 layer scope 的三层机器码解码（runtime RI candidate group / REGIMM-COP0 exact dispatch / 课程 canonical）
 - isa/encoder.ts — 基于生成 catalog 的真实指令编码；拒绝未使用 operand、非 canonical 保留字段和课程外 CP0 rd
 - isa/service.ts — CLI/Worker 共用的无宿主 encode/decode 服务 DTO；固定字宽输出且不泄露 generated entry 对象
@@ -17,7 +18,7 @@
 - assembler/literals.ts — 整数/字符/字符串字面量解析（dec/hex/bin/oct、转义）
 - assembler/expression.ts — MARS 风格有符号 32 位归一化的常量表达式、符号解析回调与稳定 undefined-symbol 分类；移位运算同级且左结合
 - assembler/macros.ts — `.macro` 定义、形参替换、宏内标签 `_M#` 去重、递归/总膨胀限额与嵌套展开栈
-- assembler/pseudo.ts — 课程常用 pseudo 展开（li/la/move/b/blt/... 与便捷访存寻址）；最终真实指令仍统一经过 catalog profile/layer 校验
+- assembler/pseudo.ts — 课程常用 pseudo 展开（li/la/move/b/blt/... 与便捷访存寻址）；独立伪指令的内建能力直接由展开 handler 注册表给出，MARS 模板不代表内建支持；最终真实指令仍统一经过 catalog profile/layer 校验
 - assembler/sections.ts — text/ktext/data 绝对光标、前向空洞、容量/重叠检查、小端字节车道、`.space` 零填充分配与 MARS 4 KiB 数据块 padding
 - assembler/instructionForms.ts — 指令形式的操作数模式/参数化辅助（encoder、pseudo 校验与波形反汇编共享）；变量移位按 MARS 顺序 `sllv rd, rt, rs`；16 位立即数的有/无符号解释
 - assembler/operands.ts — 操作数解析：`off($base)` 内存形式、寄存器/$0/立即数分类与括号配对

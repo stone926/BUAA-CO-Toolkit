@@ -9,6 +9,7 @@ import {
   shouldRevealOutput
 } from './config';
 import { Commands } from './constants';
+import { isCourseProjectProfile } from './projectProfile';
 import { ensureDirectory, writeTextFile } from './fsUtil';
 import {
   courseInstructionImageWordsWithOrdinaryHalt,
@@ -74,7 +75,7 @@ export async function dumpMipsFile(
     vscode.window.showErrorMessage('内核文本段导出仅适用于 P7 Profile');
     return false;
   }
-  if (!['P2', 'P3', 'P4', 'P5', 'P6', 'P7'].includes(profile)) {
+  if (profile !== 'P2' && !isCourseProjectProfile(profile)) {
     vscode.window.showErrorMessage('ASM 导出仅支持 P2–P7 Profile');
     return false;
   }

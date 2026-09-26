@@ -3,8 +3,9 @@
 import type { MipsEngineMode } from './config';
 import { getProfileRequiredTools } from './courseConfig';
 import type { ProjectProfile } from './projectProfile';
+import { courseProfileIds } from './projectProfile';
 
-const courseEngineProfiles = new Set<ProjectProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
+const courseEngineProfiles = new Set<ProjectProfile>(courseProfileIds);
 
 /**
  * Whether the selected course-engine mode includes a legacy MARS lane.

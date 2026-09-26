@@ -1,5 +1,6 @@
 // @index mips-host — 可取消、按固定 slice yield 的真实 ISA Worker 作业
 import { CourseProfile, InstructionLayer } from '../core/generated/isaCatalog';
+import { courseProfileIds } from '../core/profiles/courseProfiles';
 import { InstructionScope } from '../core/isa/decoder';
 import { EncodeOperands, InstructionEncodeError } from '../core/isa/encoder';
 import {
@@ -18,7 +19,7 @@ import { assembleProgramForService, parseAssemblerServiceRequest } from '../core
 export const mipsWorkerSliceSize = 128;
 export const mipsWorkerMaximumBatch = 65_536;
 
-const profiles = new Set<CourseProfile>(['P3', 'P4', 'P5', 'P6', 'P7']);
+const profiles = new Set<CourseProfile>(courseProfileIds);
 const layers = new Set<InstructionLayer>(['required', 'commonExtensions', 'marsCompatibility']);
 const operandFields = ['rs', 'rt', 'rd', 'shamt', 'immediate', 'index'] as const;
 

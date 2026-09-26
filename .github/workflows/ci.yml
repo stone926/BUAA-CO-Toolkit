@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check source catalogs before generators can rewrite stale output
+        run: npm run check:generated
+
       - name: Module boundary check
         run: node scripts/check-module-boundaries.mjs
 

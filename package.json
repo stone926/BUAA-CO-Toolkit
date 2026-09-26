@@ -707,6 +707,10 @@
         "properties": {
           "co.project.profile": {
             "type": "string",
+            "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法推断时会要求手动选择并保存",
+            "scope": "resource",
+            "order": 10,
+            "default": "auto",
             "enum": [
               "auto",
               "P0",
@@ -718,10 +722,6 @@
               "P6",
               "P7"
             ],
-            "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法推断时会要求手动选择并保存",
-            "scope": "resource",
-            "order": 10,
-            "default": "auto",
             "enumDescriptions": [
               "根据当前工作区内容自动推断 Profile",
               "初识 Logisim",
@@ -1148,8 +1148,8 @@
     "generate:syntaxes": "node scripts/generate-syntaxes.mjs",
     "check:syntaxes": "node scripts/generate-syntaxes.mjs --check",
     "sync:syntaxes": "npm run generate:syntaxes && npm run check:syntaxes",
-    "sync:generated": "npm run sync:manifest-config && npm run sync:syntaxes && npm run sync:isa-catalog",
-    "check:generated": "npm run check:manifest-config && npm run check:syntaxes && npm run check:isa-catalog",
+    "sync:generated": "npm run generate:project-profiles && npm run sync:isa-catalog && npm run sync:manifest-config && npm run generate:languages && npm run sync:syntaxes && npm run generate:diagnostic-catalog",
+    "check:generated": "npm run check:project-profiles && npm run check:isa-catalog && npm run check:manifest-config && npm run check:languages && npm run check:syntaxes && npm run check:diagnostic-catalog",
     "verify:generated-tree-clean": "node scripts/verify-generated-tree-clean.mjs",
     "clean:compile": "node scripts/clean-compile-output.mjs",
     "generate:diagnostic-catalog": "node scripts/generate-diagnostic-catalog.mjs",
@@ -1171,7 +1171,11 @@
     "verify:phase4-real-cpu": "npm run compile && node --test scripts/verify-real-cpu-shadow.test.mjs && node scripts/verify-real-cpu-shadow.mjs",
     "verify:phase5": "npm run compile && node scripts/check-module-boundaries.mjs && node scripts/verify-mips-worker.mjs && vitest run src/test/mipsCore/assemblerCourse.test.ts src/test/mipsCore/assemblerFullStack.test.ts src/test/mipsCore/assemblerPseudoGolden.test.ts src/test/mipsProviders/builtinAssemblerProvider.test.ts src/test/mipsProviders/phase5ProviderResolver.test.ts src/test/mipsCli/protocol.test.ts src/test/mipsHost/workerJobs.test.ts",
     "verify:phase6:unit": "npm run compile && node scripts/check-module-boundaries.mjs && vitest run src/test/configProfile.test.ts src/test/courseConfig.test.ts src/test/toolchainPolicy.test.ts src/test/toolchainPolicyConsumers.test.ts src/test/mipsCore/assemblerArtifacts.test.ts src/test/mipsProviders/courseEnginePolicy.test.ts src/test/mipsProviders/providerResolver.test.ts src/test/mipsProviders/fixedMarsReference.test.ts src/test/courseTesting/fullStackShadowRunner.test.ts src/test/courseTesting/executorShadowRunner.test.ts src/test/courseTesting/traceRunner.test.ts src/test/courseTesting/machineCodeValidation.test.ts src/test/courseTesting/manifestCodec.test.ts src/test/courseTestLogisim.test.ts src/test/courseTestLogisimSignal.test.ts src/test/courseTestToolchain.test.ts src/test/courseTestContinuous.test.ts src/test/manifest.test.ts src/test/advancedToolModel.test.ts",
-    "verify:phase6": "npm run verify:phase6:unit && npm --prefix conformance/mips run verify:phase6"
+    "verify:phase6": "npm run verify:phase6:unit && npm --prefix conformance/mips run verify:phase6",
+    "generate:project-profiles": "node scripts/generate-project-profiles.mjs",
+    "check:project-profiles": "node scripts/generate-project-profiles.mjs --check",
+    "generate:languages": "node scripts/generate-languages.mjs",
+    "check:languages": "node scripts/generate-languages.mjs --check"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",

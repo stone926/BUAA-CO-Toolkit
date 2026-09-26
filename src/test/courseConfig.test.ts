@@ -7,10 +7,31 @@ import {
   getProfileRequiredTools,
   getVerilogTestbenchConfig,
   getVerilogPorts,
+  getCourseConfig,
   profilesWithCapability
 } from '../courseConfig';
+import {
+  concreteProjectProfiles,
+  courseProfileIds,
+  isConcreteProjectProfile,
+  isCourseProjectProfile,
+  isVerilogCpuProfile,
+  verilogCpuProfileIds
+} from '../projectProfile';
+import { isaProfilePolicies } from '../mips/core/generated/isaCatalog';
 
 describe('course config alignment', () => {
+  it('keeps the generated profile registry aligned with course and ISA resources', () => {
+    expect([...concreteProjectProfiles]).toEqual(Object.keys(getCourseConfig().profiles));
+    expect([...courseProfileIds]).toEqual(profilesWithCapability('trace'));
+    expect([...courseProfileIds]).toEqual(Object.keys(isaProfilePolicies));
+    expect([...verilogCpuProfileIds]).toEqual(profilesWithCapability('asmNeededForVerilog'));
+    expect(isConcreteProjectProfile('P0')).toBe(true);
+    expect(isCourseProjectProfile('P0')).toBe(false);
+    expect(isVerilogCpuProfile('P3')).toBe(false);
+    expect(isVerilogCpuProfile('P7')).toBe(true);
+    expect(isConcreteProjectProfile('P8')).toBe(false);
+  });
   it('uses the bundled-capable simulator dependency for P1', () => {
     expect(getProfileDirectories('P1')).toEqual(['.co', 'src', 'test', 'sim']);
     expect(getProfileRequiredTools('P1')).toEqual(['verilogSimulator']);

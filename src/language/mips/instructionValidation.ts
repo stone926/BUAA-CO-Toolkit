@@ -6,6 +6,7 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from '../../projectProfile';
+import { isCourseProjectProfile } from '../../generated/projectProfiles';
 import { makeDiagnostic, rangeOfText } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import type { MipsLabelPlusImmediateAst, MipsOperandAst } from './ast';
@@ -94,11 +95,11 @@ export function validateInstruction(
     );
   }
 
-  if (profile !== 'auto' && instruction.projects && !instruction.projects.includes(profile)) {
+  if (isCourseProjectProfile(profile) && instruction.isa && !instruction.isa.profiles.includes(profile)) {
     diagnostics.push(
       makeDiagnostic(
         rangeOfText(document, lineNumber, instruction.mnemonic),
-        `${instruction.mnemonic} is normally used in ${instruction.projects.join('/')} profile(s), not ${profile}.`,
+        `${instruction.mnemonic} is normally used in ${instruction.isa.profiles.join('/')} profile(s), not ${profile}.`,
         DiagnosticSeverity.Warning,
         'project-instruction'
       )

@@ -10,14 +10,15 @@ entry:
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
   config.ts — 现行co.*设置读取(getProfile/getMipsEngine/getMarsJar/getRunTimeout...), 分层取值(WorkspaceFolder/Workspace/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；显式 Profile 的 top/TB/机器码/时长默认直接来自 courseConfig，向导无需写冗余项目设置；`co.mips.engine` 无效值 fail-safe 为 auto
-  resources/co/configManifest.json + configDefaults.json — 公开 schema 与内部运行默认解耦：日常 UI 精确 19 项，底层 legacy/策略键以无默认的 deprecated schema 仅对已有配置可见；项目/诊断使用 resource scope，工具路径使用 machine-overridable scope
-  scripts/generate-manifest-config.mjs — 只向非 deprecated 公开项注入默认值，允许内部默认作为受测超集，并从课程资源生成 Profile/指令说明
+  resources/co/configManifest.json — schema 与运行默认值唯一源：40 项中日常 UI 19 项、兼容项 21 项；后者保留运行默认值，以无 contributed default 的 deprecated schema 识别已有配置；项目/诊断使用 resource scope，工具路径使用 machine-overridable scope
+  scripts/generate-manifest-config.mjs — 从配置源生成完整 configDefaults.json 与 package schema；只向非 deprecated 公开项注入默认值，从课程资源派生 Profile/指令说明/禁用规则，并拒绝重复键和多重默认值来源
 
 build:
   scripts/clean-compile-output.mjs — 编译前安全清空固定 `out/`，避免已删除模块的陈旧 JS 被打入 VSIX
   configDefaults.ts — 从resources/co/configDefaults.json加载 co.* 默认值, 供扩展宿主/LSP/测试共享
   courseConfig.ts — Profile定义(P0-P7): 名称/描述/语言/目录/必需工具/端口/内存布局/P3 Logisim trace, 从resources/co/courseConfig.json加载缓存
-  projectProfile.ts — ProjectProfile(auto|P0-P7), ConcreteProjectProfile, isConcreteProjectProfile
+  projectProfile.ts — generated/projectProfiles.ts 的稳定导出入口；身份/类型/验证与课程能力子集均由 courseConfig 生成，并检查 ISA profilePolicies 一致性
+  generated/projectProfiles.ts — scripts/generate-project-profiles.mjs 的无宿主生成物，勿手改
   profileInference.ts — buildProfileInferenceInput: 从文件列表+模块注册表收集端口/扩展名/display格式
   profileResolver.ts — 推断核心: 端口签名(P6外部存储器/P7中断外设), display格式(P4 vs P5时间戳), P7结构(CP0+Bridge+Timer), 文件类型分布, 四级置信度(explicit/strong/weak/none)
 

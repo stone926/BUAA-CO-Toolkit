@@ -1,18 +1,14 @@
 // @index constants — 集中常量：Profile分组/路径约定/输出目录名
 import { profilesWithCapability } from './courseConfig';
-import { ProjectProfile } from './projectProfile';
+import { ProjectProfile, concreteProjectProfiles } from './projectProfile';
 
 // ── Profile 分组 ──
 
 /** 所有可选 Profile（含 auto）。 */
-export const ALL_PROFILES: ProjectProfile[] = [
-  'auto', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'
-];
+export const ALL_PROFILES: ProjectProfile[] = ['auto', ...concreteProjectProfiles];
 
 /** 具体 Project Profile（不含 auto）。 */
-export const CONCRETE_PROFILES: ProjectProfile[] = [
-  'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'
-];
+export const CONCRETE_PROFILES: ProjectProfile[] = [...concreteProjectProfiles];
 
 /** 产生 CPU Trace 的 Profile。 */
 export const TRACE_PROFILES = new Set<ProjectProfile>(profilesWithCapability('trace'));

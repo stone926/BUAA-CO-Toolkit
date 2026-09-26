@@ -17,10 +17,10 @@ ast-helpers:
   operandAst.ts — 内存操作数解析, 格式值提取, signed32
   operandReferences.ts — 递归操作数AST访问, 引用收集
   literals.ts — 字面量扫描: 字符串/数字/字符范围, 解析
-  instructionValidation.ts — 纯AST指令校验: 操作数数量/寄存器类型/立即数范围/内存对齐/CP0权限 | 被 parser.ts 调用
+  instructionValidation.ts — 纯AST指令校验: 操作数数量/寄存器类型/立即数范围/内存对齐/CP0权限；P3–P7 Profile 警告读取 instruction.isa.profiles，P0–P2 无课程 ISA 闸门 | 被 parser.ts 调用
 
 resources:
-  resources.ts — ISA静态资源加载: instructions/registers/cp0/directives/syscalls/pseudo/meta；真实指令的 type/delay/read-write/memory facts 合并自 generated/isaDisplayCatalog（由唯一 isa.json 生成） | exports: instructions, registers, cp0Registers, mipsSemanticTokenTypes
+  resources.ts — ISA静态资源加载: instructions/registers/cp0/directives/syscalls/pseudo/meta；真实指令的 type/delay/read-write/memory/Profile facts 合并自 generated/isaDisplayCatalog（由唯一 isa.json 生成）；MARS 伪指令预览和内建展开能力分别标注，后者由 core handler 注册表给出 | exports: instructions, registers, cp0Registers, mipsSemanticTokenTypes
   generated/isaDisplayCatalog.ts — 与 core catalog 同 schema revision/SHA 的 LSP 结构事实生成物（勿手改）
   marsArgs.ts — MARS 命令行参数构造: run/dumpText/dumpKernel, P7 efc/p7irq/cl 参数, 内存配置常量
   legacyMarsPolicy.ts — 稳定版 MARS 兼容内存配置/异常入口策略（大文本段容纳 0x3000→0x4180 handler）

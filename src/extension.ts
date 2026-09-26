@@ -1,5 +1,6 @@
 // @index entry — activate()入口，注册全部命令/UI/FileWatcher
 import * as vscode from 'vscode';
+import { languageFileGlob, languageIds } from './language/languageRegistry';
 import {
   Commands,
   ALL_PROFILES,
@@ -109,12 +110,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // 监听文件保存事件，增量更新注册表
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (doc.languageId === 'verilog') {
+      if (doc.languageId === languageIds.verilog) {
         moduleRegistry.updateDocument(doc);
       }
     })
   );
-  const verilogWatcher = vscode.workspace.createFileSystemWatcher('**/*.{v,vh}');
+  const verilogWatcher = vscode.workspace.createFileSystemWatcher(languageFileGlob([languageIds.verilog]));
   context.subscriptions.push(
     verilogWatcher,
     verilogWatcher.onDidCreate((uri) => {
@@ -141,7 +142,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // removed, edited while detached, then re-added at the same path.
     clearVerilogProjectDiscoveryCache();
   }));
-  const profileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{asm,s,mips,circ}');
+  const profileWatcher = vscode.workspace.createFileSystemWatcher(languageFileGlob([languageIds.mips, languageIds.logisim]));
   context.subscriptions.push(
     profileWatcher,
     profileWatcher.onDidCreate(() => {

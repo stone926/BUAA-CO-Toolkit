@@ -50,7 +50,8 @@ import {
   courseMachineCodeCapacityError,
   stableMarsMachineCodeCapacityPolicy
 } from './machineCodeValidation';
-import type { ProjectProfile } from '../projectProfile';
+import { isConcreteProjectProfile, type ProjectProfile } from '../projectProfile';
+import { DELAYED_BRANCHING_PROFILES } from '../constants';
 
 /**
  * Manifest v2（计划第 5.8 节）。v1 永久只读兼容；新 case 默认写 v2。
@@ -1084,7 +1085,8 @@ function completeRunConfigurationIssues(
       || configuration.executionOptions.traceLevel !== (configuration.traceLevel ?? null)) {
       issues.push('oracle.runConfiguration.executionOptions disagrees with legacy-compatible trace fields');
     }
-    const expectedDelayed = ['P5', 'P6', 'P7'].includes(configuration.profile);
+    const expectedDelayed = isConcreteProjectProfile(configuration.profile)
+      && DELAYED_BRANCHING_PROFILES.has(configuration.profile);
     if (configuration.executionOptions.delayedBranching !== expectedDelayed) {
       issues.push('oracle.runConfiguration.executionOptions.delayedBranching disagrees with profile contract');
     }

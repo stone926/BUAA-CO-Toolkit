@@ -17,6 +17,7 @@ import {
 } from './semantic';
 import { getCachedMipsParse } from './parseCache';
 import {
+  builtinPseudoAvailability,
   cp0Registers,
   directives,
   instructions,
@@ -81,10 +82,11 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   }
 
   for (const instruction of Object.values(instructions)) {
+    const builtinAvailability = builtinPseudoAvailability(instruction, settings.project.profile);
     items.push({
       label: instruction.mnemonic,
       kind: CompletionItemKind.Keyword,
-      detail: `${instructionTypeLabel(instruction.type)} - ${instruction.summary}`,
+      detail: `${instructionTypeLabel(instruction.type)} - ${instruction.summary}${builtinAvailability === false ? '（内建汇编器暂不支持）' : ''}`,
       documentation: {
         kind: MarkupKind.Markdown,
         value: '```mipsasm\n' + instruction.formats.join('\n') + '\n```'

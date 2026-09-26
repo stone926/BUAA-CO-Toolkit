@@ -3,6 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DocumentUri } from 'vscode-languageserver/node';
 import { CoSettings } from '../common/settings';
+import { isCourseProjectProfile } from '../../generated/projectProfiles';
+import { isBuiltinPseudoMnemonic } from '../../mips/core/assembler/pseudo';
+import type { ProjectProfile } from '../../projectProfile';
 import {
   IsaDisplayInstructionFact,
   isaDisplayInstructionByMnemonic,
@@ -17,7 +20,6 @@ export interface MipsInstruction {
   operands: [number, number];
   description: string;
   pseudo?: boolean;
-  projects?: string[];
   labelOperand?: 'first' | 'second' | 'last';
   delaySlot?: boolean;
   /** Versioned structural facts generated from resources/mips/isa.json. */
@@ -148,6 +150,12 @@ export const cp0RegistersByNumber = new Map(cp0Registers.map((register) => [regi
 export const pseudoForms = mipsResourceData.pseudoForms;
 export const instructionMeta = mipsInstructionMeta;
 export const pseudoExpansions = loadPseudoExpansions();
+
+/** Availability of a standalone pseudo in the P3–P7 builtin assembler. */
+export function builtinPseudoAvailability(instruction: MipsInstruction, profile: ProjectProfile): boolean | undefined {
+  if (!instruction.pseudo || !isCourseProjectProfile(profile)) return undefined;
+  return isBuiltinPseudoMnemonic(instruction.mnemonic);
+}
 
 for (const info of registerInfos) {
   const names = info.names.join(' / ');
