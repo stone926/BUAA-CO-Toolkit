@@ -10,6 +10,7 @@ import { samePath } from '../../pathUtils';
 import type { AppServices, RunResult } from '../../types';
 import { IverilogRunOutput, runIverilog } from '../../verilog/iverilogRunner';
 import type { TestbenchResolution } from '../../verilog/testbenchResolver';
+import type { UserCpuProgramSession } from '../../verilog/userCpuProgram';
 import { findDumpableMemories, MemoryDump } from '../design/designHierarchy';
 import {
   buildWaveformDumper,
@@ -38,7 +39,8 @@ export async function simulateAndShowWaveform(dependencies: WaveformSimulationDe
     return;
   }
   const waveDirectory = vscode.Uri.joinPath(folder.uri, ...CO_WAVE_DIR.split('/'));
-  let attempt = await runWithDumper(dependencies, resource, waveDirectory, undefined);
+  const userCpuProgramSession: UserCpuProgramSession = {};
+  let attempt = await runWithDumper(dependencies, resource, waveDirectory, undefined, userCpuProgramSession);
   const dropped: MemoryDump[] = [];
   // Drop the memories the compiler blamed and retry; once nothing is dumped no rejection can occur.
   while (attempt.rejection) {
@@ -47,7 +49,7 @@ export async function simulateAndShowWaveform(dependencies: WaveformSimulationDe
       : attempt.memories.filter((memory) => attempt.rejection?.memories.includes(memory));
     dropped.push(...rejected);
     dependencies.services.output.appendLine(`存储器逐字 dump 被编译器拒绝（层次路径或大小与静态推算不一致），去掉 ${describeMemories(rejected)} 后重试`);
-    attempt = await runWithDumper(dependencies, resource, waveDirectory, attempt.memories.filter((memory) => !rejected.includes(memory)));
+    attempt = await runWithDumper(dependencies, resource, waveDirectory, attempt.memories.filter((memory) => !rejected.includes(memory)), userCpuProgramSession);
   }
   if (dropped.length && attempt.run?.simResult) {
     vscode.window.showWarningMessage(attempt.memories.length
@@ -85,7 +87,8 @@ async function runWithDumper(
   dependencies: WaveformSimulationDependencies,
   resource: vscode.Uri | undefined,
   waveDirectory: vscode.Uri,
-  requestedMemories: readonly MemoryDump[] | undefined
+  requestedMemories: readonly MemoryDump[] | undefined,
+  userCpuProgramSession: UserCpuProgramSession
 ): Promise<DumperAttempt> {
   let memories: readonly MemoryDump[] = requestedMemories ?? [];
   let dumperText = '';
@@ -104,6 +107,7 @@ async function runWithDumper(
     try {
       return await runIverilog(dependencies.services, {
         resource,
+        userCpuProgramSession,
         moduleRegistry: dependencies.moduleRegistry,
         signal: controller.signal,
         revealOutput: false,

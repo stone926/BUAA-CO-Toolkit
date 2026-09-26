@@ -488,7 +488,7 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
     `仿真输出: .co/out`,
     '手动 testbench 提供输入与激励，支持 .co/tb 中由插件生成、需由用户编写的 testbench，也支持文件名以 _tb 或 _testbench 结尾的用户自建 testbench。自动测试使用 .co/iverilog 中仅供内部组件驱动测试的私有 testbench。'
   ];
-  lines.push('机器码输入为可选项；需要机器码的 DUT 会读取项目中的 machineCode/code.txt。');
+  lines.push('.co/tb 中新生成的 CPU testbench 在运行时可选择 ASM，由插件自动汇编加载；也可不选，使用空程序。普通模块与自建 testbench 不会询问 ASM。');
   return lines.join('\n');
 }
 

@@ -8,7 +8,6 @@ import {
   getTopModule
 } from '../config';
 import {
-  buildStimulusTestbench,
   buildTestbench,
   moduleAtPosition,
   parseVerilog,
@@ -50,6 +49,8 @@ import {
   userTestbenchUri
 } from './userTestbench';
 import { findWorkspaceFileCandidates } from '../workflowInputs';
+import { buildUserTestbenchText, userCpuTestbenchProfile } from './userCpuTestbench';
+export { userCpuTestbenchProfile } from './userCpuTestbench';
 
 export interface VerilogModuleDefinition {
   module: VerilogModule;
@@ -86,15 +87,15 @@ type ActiveModuleTestbenchResult =
   | { status: 'no-module' };
 
 /**
- * Every user-facing generated testbench starts as an editable stimulus scaffold.
- * Course trace and probe testbenches belong only to the private automation lane.
+ * CPU tops use the course shell with an editable stimulus area. Other modules
+ * use the generic stimulus scaffold. Private automatic templates are separate.
  */
 export function userTestbenchText(
   module: VerilogModule,
   tbName: string,
-  _context: { profile: ConcreteProjectProfile; configuredTop: boolean; simTime: string }
+  context: { profile: ConcreteProjectProfile; configuredTop: boolean; simTime: string }
 ): string {
-  return buildStimulusTestbench(module, tbName);
+  return buildUserTestbenchText(module, tbName, context);
 }
 
 /**
@@ -385,10 +386,19 @@ async function createAndOpenUserTestbench(
 ): Promise<void> {
   const tbUri = userTestbenchUri(definition.uri, tbName);
   const relativePath = vscode.workspace.asRelativePath(tbUri);
-  if (await createUserTestbench(tbUri, buildStimulusTestbench(definition.module, tbName))) {
-    services.output.appendLine(`已生成激励 testbench ${tbUri.fsPath}；编写激励后再次运行即可仿真`);
+  const profile = getProfile(definition.uri);
+  const text = userTestbenchText(definition.module, tbName, {
+    profile: profile === 'auto' ? 'P1' : profile,
+    configuredTop: definition.module.name === getTopModule(definition.uri),
+    simTime: ''
+  });
+  if (await createUserTestbench(tbUri, text)) {
+    const isCpu = userCpuTestbenchProfile(text) !== undefined;
+    services.output.appendLine(`已生成 testbench ${tbUri.fsPath}；${isCpu ? '再次运行时可选择 ASM' : '编写激励后再次运行即可仿真'}`);
     if (showMessages) {
-      vscode.window.showInformationMessage(`已生成 ${relativePath}：请在“在此编写激励”处添加输入，然后再次点击运行`);
+      vscode.window.showInformationMessage(isCpu
+        ? `已生成 ${relativePath}：再次点击运行时可选择 ASM，也可跳过`
+        : `已生成 ${relativePath}：请在“在此编写激励”处添加输入，然后再次点击运行`);
     }
   } else {
     // The file exists but declares no usable testbench module; keep the user's content.

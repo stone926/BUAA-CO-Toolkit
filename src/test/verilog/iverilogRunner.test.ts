@@ -27,6 +27,7 @@ import {
   writeAsmCaseArtifact
 } from '../../asmCaseStore';
 import { resolveVerilogProjectFiles } from '../../verilog/verilogProject';
+import { prepareUserCpuProgram } from '../../verilog/userCpuProgram';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
@@ -96,6 +97,9 @@ vi.mock('../../verilogSimulationOutput', () => ({
 }));
 
 vi.mock('../../verilog/verilogProject', () => ({ resolveVerilogProjectFiles: vi.fn() }));
+vi.mock('../../verilog/userCpuProgram', () => ({
+  prepareUserCpuProgram: vi.fn(async () => ({ kind: 'unmanaged' }))
+}));
 
 vi.mock('../../verilog/iverilogRuntime', () => ({
   buildIverilogIncludeArgs: vi.fn((root: string) => ['-grelative-include', '-I', root]),
@@ -280,6 +284,32 @@ describe('Icarus runner orchestration', () => {
     vi.mocked(prepareIverilogCompileCacheMiss).mockResolvedValue(true);
     vi.mocked(storeIverilogCompileCache).mockResolvedValue(true);
     vi.mocked(resolveMachineCodeSource).mockResolvedValue(undefined);
+    vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'unmanaged' });
+  });
+
+  it('loads the optional generated CPU program instead of a stale workspace input', async () => {
+    vi.mocked(getProfile).mockReturnValue('P6');
+    const program = URI.file('E:/work/.co/iverilog/co_user_program.txt');
+    vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'ready', machineCodeSource: program });
+
+    const output = await runIverilog(services(), { resource, showMessages: false });
+
+    expect(output?.simResult?.ok).toBe(true);
+    expect(copyMachineCodeToSimDirectory).toHaveBeenCalledWith(program, expect.anything(), resource);
+    expect(resolveMachineCodeSource).not.toHaveBeenCalled();
+  });
+
+  it('stops before compilation when optional program preparation fails or is cancelled', async () => {
+    vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'stopped' });
+    await expect(runIverilog(services(), { resource })).resolves.toBeUndefined();
+    expect(runTool).not.toHaveBeenCalled();
+    expect(copyMachineCodeToSimDirectory).not.toHaveBeenCalled();
+  });
+
+  it('does not prompt for a program in automatic runs or with explicit machine code', async () => {
+    await runIverilog(services(), { resource, nonInteractive: true });
+    await runIverilog(services(), { resource, machineCodeSource: URI.file('E:/work/chosen.txt') });
+    expect(prepareUserCpuProgram).not.toHaveBeenCalled();
   });
 
   it('runs a manual P4 testbench without an ASM picker or private testbench', async () => {

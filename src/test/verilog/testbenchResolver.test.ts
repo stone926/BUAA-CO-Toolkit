@@ -145,7 +145,7 @@ describe('testbench workspace discovery', () => {
     expect(generatedText).not.toContain('module mips_tb;');
   });
 
-  it('creates an editable .co/tb scaffold and stops a manual P6 run', async () => {
+  it('creates an editable course CPU .co/tb and stops the first manual P6 run', async () => {
     const resource = URI.file('E:/work/mips.v');
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from([
       'module mips(clk, reset);',
@@ -161,7 +161,7 @@ describe('testbench workspace discovery', () => {
     expect(writeTextFile).not.toHaveBeenCalled();
     expect(writeTextFileIfAbsent).toHaveBeenCalledWith(
       expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }),
-      expect.stringContaining('在此编写激励')
+      expect.stringContaining('// CO_USER_CPU_TESTBENCH P6')
     );
     expect(vscodeState.module!.window.showTextDocument).toHaveBeenCalledWith(
       expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }),

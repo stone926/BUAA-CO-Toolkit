@@ -9,6 +9,7 @@ import { writeTextFile, writeTextFileIfAbsent } from '../../fsUtil';
 import {
   ensureRunnableTestbench,
   testbenchCompileSources,
+  userCpuTestbenchProfile,
   userTestbenchText
 } from '../../verilog/testbenchResolver';
 import {
@@ -281,14 +282,55 @@ describe('.co/tb helpers', () => {
       .map(normalized)).toEqual(['e:/other/x_tb.v']);
   });
 
-  it('scaffolds configured course tops and other modules for manual stimulus', () => {
+  it('scaffolds configured CPU tops with course wiring and a stable ASM marker', () => {
     const [mips] = parseVerilog(verilogDoc('module mips(input clk, input reset); endmodule'), defaultCoSettings, false).modules;
 
     const course = userTestbenchText(mips, 'mips_tb', { profile: 'P5', configuredTop: true, simTime: '1us' });
-    expect(course).toContain('在此编写激励');
-    expect(course).toContain('$monitor');
+    expect(course).toContain('在此编写额外激励');
+    expect(course).toContain('CO_USER_CPU_TESTBENCH P5');
+    expect(course).toContain('forever #5 clk = ~clk');
+    expect(course).not.toContain('$finish;');
+    expect(userCpuTestbenchProfile(course)).toBe('P5');
 
     expect(userTestbenchText(mips, 'mips_tb', { profile: 'P1', configuredTop: true, simTime: '1us' })).toContain('$monitor');
-    expect(userTestbenchText(mips, 'mips_tb', { profile: 'P5', configuredTop: false, simTime: '1us' })).toContain('在此编写激励');
+    const helper = userTestbenchText(mips, 'mips_tb', { profile: 'P5', configuredTop: false, simTime: '1us' });
+    expect(helper).toContain('在此编写激励');
+    expect(helper).toContain('$monitor');
+    expect(userCpuTestbenchProfile(helper)).toBeUndefined();
+    expect(userCpuTestbenchProfile('// CO_USER_CPU_TESTBENCH P3\nmodule mips_tb; endmodule')).toBeUndefined();
+    expect(userCpuTestbenchProfile('module mips_tb; // CO_USER_CPU_TESTBENCH P5\nendmodule')).toBeUndefined();
+  });
+
+  it('creates a course CPU template when a configured top is run without a testbench', async () => {
+    vi.mocked(getProfile).mockReturnValue('P5');
+    const main = setFile('E:/work/main.v', 'module main(input clk, input reset); endmodule\n');
+
+    const result = await ensureRunnableTestbench(services(), main, true);
+
+    expect(result).toBeUndefined();
+    const text = readFile('E:/work/.co/tb/main_tb.v');
+    expect(userCpuTestbenchProfile(text ?? '')).toBe('P5');
+    expect(text).toContain('在此编写额外激励');
+    expect(text).not.toContain('$finish;');
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('可选择 ASM'));
+  });
+
+  it('uses course external memories for P6 and P7 CPU tops', () => {
+    const [p6] = parseVerilog(verilogDoc([
+      'module mips(input clk, input reset, output [31:0] i_inst_addr, input [31:0] i_inst_rdata,',
+      '  output [31:0] m_data_addr, input [31:0] m_data_rdata, output [31:0] m_data_wdata, output [3:0] m_data_byteen);',
+      'endmodule'
+    ].join('\n')), defaultCoSettings, false).modules;
+    const p6Text = userTestbenchText(p6, 'mips_tb', { profile: 'P6', configuredTop: true, simTime: '1us' });
+    expect(userCpuTestbenchProfile(p6Text)).toBe('P6');
+    expect(p6Text).toContain('$readmemh("code.txt", inst);');
+    expect(p6Text).toContain('assign i_inst_rdata = inst[');
+    expect(p6Text).toContain('在此编写额外激励');
+
+    const p7Text = userTestbenchText(p6, 'mips_tb', { profile: 'P7', configuredTop: true, simTime: '1us' });
+    expect(userCpuTestbenchProfile(p7Text)).toBe('P7');
+    expect(p7Text).toContain('$readmemh("code.txt", inst);');
+    expect(p7Text).toContain('.interrupt(interrupt)');
+    expect(p7Text).toContain('在此编写额外激励');
   });
 });

@@ -62,6 +62,7 @@ import {
   TestbenchResolution
 } from './testbenchResolver';
 import { runSerializedWorkspaceOperation } from './workspaceOperationQueue';
+import { prepareUserCpuProgram, type UserCpuProgramSession } from './userCpuProgram';
 import {
   createVerilogSimulationFailure,
   verilogSimulationFailureMessage
@@ -76,6 +77,8 @@ const iverilogWatchdogFileName = 'co_iverilog_watchdog.v';
 const iverilogDependencyFileName = 'simulation.dependencies';
 
 export interface IverilogRunOptions {
+  /** One user action may retry compilation without asking for its ASM again. */
+  userCpuProgramSession?: UserCpuProgramSession;
   resource?: vscode.Uri;
   showMessages?: boolean;
   revealOutput?: boolean;
@@ -341,6 +344,13 @@ async function runIverilogInWorkspace(
 
   const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_IVERILOG_DIR));
   await ensureDirectory(outDir);
+  const userProgram = !nonInteractive && !asmCase && !options.machineCodeSource
+    ? await prepareUserCpuProgram(services, testbench.sourceUri, outDir, options.signal, options.userCpuProgramSession)
+    : { kind: 'unmanaged' as const };
+  if (userProgram.kind === 'stopped') return undefined;
+  const inputOptions = userProgram.kind === 'ready'
+    ? { ...options, machineCodeSource: userProgram.machineCodeSource }
+    : options;
   // Workspace operations are serialized, so one deterministic watchdog is sufficient.
   // The workspace digest keeps the name stable for caching while making collision with
   // a user's fixed module name negligibly likely; the old random name leaked one file/case.
@@ -358,7 +368,7 @@ async function runIverilogInWorkspace(
     extraTopModules.push({ moduleName: extra.moduleName, file: file.fsPath });
   }
 
-  await prepareIverilogRunInputs(services, activeUri, outDir, options, asmCase, testbench, showMessages);
+  await prepareIverilogRunInputs(services, activeUri, outDir, inputOptions, asmCase, testbench, showMessages);
   if (!nonInteractive && options.revealOutput !== false) {
     revealOutputChannel(services.output, activeUri);
   }
