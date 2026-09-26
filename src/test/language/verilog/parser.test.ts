@@ -1303,6 +1303,49 @@ describe('parseDirectives', () => {
     expect(defaultNettype?.argument).toBe('none');
     expect(defaultNettype?.argumentRange ? d.getText(defaultNettype.argumentRange) : undefined).toBe('none');
   });
+
+  it('keeps declarations after compiler directives, including same-line code and continued macros', () => {
+    const text = [
+      'module m;',
+      '`default_nettype /* explanation */ none wire a;',
+      '`timescale 1ns/1ps wire b;',
+      '`ifdef FEATURE reg c;',
+      '`endif wire d;',
+      '`define VALUE 1 + \\',
+      '  2',
+      'wire e;',
+      'assign e = `VALUE;',
+      'endmodule'
+    ].join('\r\n');
+    const document = doc(text);
+    const parsed = parseVerilog(document, mergeCoSettings({}), false);
+
+    expect([...parsed.modules[0].declarations.keys()]).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect([...parseModules(document, text)[0].declarations.keys()]).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(parsed.ast.modules[0].items.filter((item) => item.kind === 'declaration')).toHaveLength(5);
+    expect(parsed.ast.preprocessor.some((item) => item.kind === 'directive' && item.name === 'timescale')).toBe(true);
+    expect(parsed.macros[0]?.name).toBe('VALUE');
+    expect(parsed.macroUses.some((use) => use.name === 'VALUE')).toBe(true);
+  });
+
+  it('recovers at directive boundaries when arguments are malformed', () => {
+    const text = [
+      'module m;',
+      '`default_nettype invalid',
+      'wire a;',
+      '`timescale 2ns/1ps',
+      'wire b;',
+      '`default_nettype wire wire c;',
+      '`timescale 1 ns / 1 ps wire d;',
+      '`default_nettype `timescale 1ns/1ps',
+      'wire e;',
+      '`timescale `PRECISION/1ps wire f;',
+      'endmodule'
+    ].join('\n');
+    const parsed = parseVerilog(doc(text), mergeCoSettings({}), false);
+
+    expect([...parsed.modules[0].declarations.keys()]).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { rangeAtOffset } from '../common/lsp';
 import { isVerilogGatePrimitive } from './gatePrimitives';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
+import { verilogCodeTokens } from './directiveBoundaries';
 import {
   systemTasks,
   VerilogDecl,
@@ -70,6 +71,7 @@ export function parseModulesFromTokens(
   text: string,
   tokens: VerilogToken[]
 ): VerilogModule[] {
+  tokens = verilogCodeTokens(text, tokens);
   const modules: VerilogModule[] = [];
   let index = 0;
   while (index < tokens.length) {

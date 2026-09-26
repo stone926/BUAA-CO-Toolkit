@@ -15,7 +15,7 @@ single source of truth:
 
 grammars:
   syntaxes/mips.tmLanguage.json — MIPS，支持大小写无关指令、同一行 label 后正文、参数/无参宏、字符、FPR、浮点与通用未知 dot-directive
-  syntaxes/verilog.tmLanguage.json — Verilog，支持预处理器宏、compiler directive、escaped identifier、系统标识符、数字进制/下划线/unknown digit、字符串续行边界
+  syntaxes/verilog.tmLanguage.json — Verilog，支持预处理器宏、compiler directive（default_nettype 参数与 timescale 数值/时间单位使用局部 scope）、escaped identifier、系统标识符、数字进制/下划线/unknown digit、字符串续行边界
   syntaxes/systemverilog.tmLanguage.json — 复用 Verilog 底层并增加课程所需 SystemVerilog 关键字、assignment pattern 和 wildcard port
 
 language ids:

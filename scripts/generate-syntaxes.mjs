@@ -511,6 +511,10 @@ function buildVerilogGrammar(keywordResource) {
   const operators = [...new Set(operatorGroups)];
 
   const directiveAlternation = regexAlternation(compilerDirectives);
+  const directiveArgumentEnd = `$|(?=\`(?:${directiveAlternation})${VERILOG_IDENTIFIER_END})`;
+  const netTypeAlternation = regexAlternation(keywordResource.keywordGroups.storage);
+  const directiveGap = '([\\t ]*(?:/\\*.*?\\*/[\\t ]*)*)';
+  const timeArgument = `(1|10|100)${directiveGap}([munpf]?s)${VERILOG_IDENTIFIER_END}`;
   const systemTaskAlternation = regexAlternation(systemTasks);
   const formatSystemTasks = systemTasks.filter((task) =>
     VERILOG_FORMAT_SYSTEM_TASK_NAMES.has(task),
@@ -650,6 +654,69 @@ function buildVerilogGrammar(keywordResource) {
         },
       ],
     },
+    directiveArguments: {
+      // Keep directive-only values local: `none` and `ns` are legal ordinary
+      // identifiers elsewhere. A line boundary also recovers incomplete edits.
+      patterns: [
+        {
+          name: 'meta.preprocessor.default-nettype.verilog',
+          begin: `(\`)(default_nettype)${VERILOG_IDENTIFIER_END}`,
+          beginCaptures: {
+            1: { name: 'punctuation.definition.directive.verilog' },
+            2: { name: 'keyword.control.directive.verilog' },
+          },
+          end: `${VERILOG_IDENTIFIER_START}(?:(none)|(${netTypeAlternation}))${VERILOG_IDENTIFIER_END}|${directiveArgumentEnd}`,
+          endCaptures: {
+            1: { name: 'constant.language.verilog' },
+            2: { name: 'storage.type.verilog' },
+          },
+          patterns: [
+            { include: '#comments' },
+            { include: '#userMacros' },
+            { include: '#escapedIdentifiers' },
+            { include: '#keywords' },
+          ],
+        },
+        {
+          name: 'meta.preprocessor.timescale.verilog',
+          begin: `(\`)(timescale)${VERILOG_IDENTIFIER_END}`,
+          beginCaptures: {
+            1: { name: 'punctuation.definition.directive.verilog' },
+            2: { name: 'keyword.control.directive.verilog' },
+          },
+          end: `${VERILOG_IDENTIFIER_START}${timeArgument}${directiveGap}(/)${directiveGap}${timeArgument}|${directiveArgumentEnd}`,
+          endCaptures: {
+            1: { name: 'constant.numeric.verilog' },
+            2: { patterns: [{ include: '#comments' }] },
+            3: { name: 'storage.type.unit.verilog' },
+            4: { patterns: [{ include: '#comments' }] },
+            5: { name: 'keyword.operator.verilog' },
+            6: { patterns: [{ include: '#comments' }] },
+            7: { name: 'constant.numeric.verilog' },
+            8: { patterns: [{ include: '#comments' }] },
+            9: { name: 'storage.type.unit.verilog' },
+          },
+          patterns: [
+            { include: '#comments' },
+            { include: '#userMacros' },
+            {
+              match: `${VERILOG_IDENTIFIER_START}(1|10|100)([\\t ]*)([munpf]?s)${VERILOG_IDENTIFIER_END}`,
+              captures: {
+                1: { name: 'constant.numeric.verilog' },
+                3: { name: 'storage.type.unit.verilog' },
+              },
+            },
+            {
+              // Comments can separate the magnitude from its unit.
+              name: 'storage.type.unit.verilog',
+              match: `${VERILOG_IDENTIFIER_START}[munpf]?s${VERILOG_IDENTIFIER_END}`,
+            },
+            { include: '#numbers' },
+            { include: '#operators' },
+          ],
+        },
+      ],
+    },
     compilerDirectives: {
       patterns: [
         {
@@ -785,6 +852,7 @@ function buildVerilogGrammar(keywordResource) {
       { include: '#directiveDefinitions' },
       { include: '#directiveConditions' },
       { include: '#directiveMacroReferences' },
+      { include: '#directiveArguments' },
       { include: '#compilerDirectives' },
       { include: '#userMacros' },
       { include: '#numbers' },

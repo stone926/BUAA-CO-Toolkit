@@ -78,6 +78,21 @@ describe('Verilog semantic tokens', () => {
     expect(tokens.some((token) => token.type < mipsSemanticTokenTypes.length)).toBe(false);
   });
 
+  it('does not classify compiler directive arguments as signals or references', () => {
+    const text = [
+      'module m;',
+      '`default_nettype none',
+      '`timescale 1ns/1ps',
+      'wire a;',
+      'assign a = 1;',
+      'endmodule'
+    ].join('\n');
+    const tokens = decode(getVerilogSemanticTokens(doc(text), mergeCoSettings({})).data);
+
+    expect(tokens.some((token) => token.line === 1 || token.line === 2)).toBe(false);
+    expect(tokenAt(tokens, 3, text.split('\n')[3].indexOf('a'))?.type).toBe(type('verilogSignal'));
+  });
+
   it('classifies modules, ports, parameters, instances and signals by AST role', () => {
     const text = [
       'module Child #(parameter WIDTH = 8) (input wire a); endmodule',

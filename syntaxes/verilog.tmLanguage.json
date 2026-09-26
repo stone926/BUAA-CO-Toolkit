@@ -29,6 +29,9 @@
       "include": "#directiveMacroReferences"
     },
     {
+      "include": "#directiveArguments"
+    },
+    {
       "include": "#compilerDirectives"
     },
     {
@@ -304,6 +307,132 @@
               "name": "entity.name.function.preprocessor.verilog"
             }
           }
+        }
+      ]
+    },
+    "directiveArguments": {
+      "patterns": [
+        {
+          "name": "meta.preprocessor.default-nettype.verilog",
+          "begin": "(`)(default_nettype)(?![A-Za-z0-9_$])",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.directive.verilog"
+            },
+            "2": {
+              "name": "keyword.control.directive.verilog"
+            }
+          },
+          "end": "(?<![A-Za-z0-9_$])(?:(none)|(realtime|integer|supply0|supply1|triand|trireg|event|logic|trior|real|time|tri0|tri1|wand|wire|reg|tri|wor))(?![A-Za-z0-9_$])|$|(?=`(?:nounconnected_drive|unconnected_drive|default_nettype|begin_keywords|endcelldefine|end_keywords|undefineall|celldefine|timescale|resetall|include|define|ifndef|pragma|elsif|endif|ifdef|undef|else|line)(?![A-Za-z0-9_$]))",
+          "endCaptures": {
+            "1": {
+              "name": "constant.language.verilog"
+            },
+            "2": {
+              "name": "storage.type.verilog"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#userMacros"
+            },
+            {
+              "include": "#escapedIdentifiers"
+            },
+            {
+              "include": "#keywords"
+            }
+          ]
+        },
+        {
+          "name": "meta.preprocessor.timescale.verilog",
+          "begin": "(`)(timescale)(?![A-Za-z0-9_$])",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.directive.verilog"
+            },
+            "2": {
+              "name": "keyword.control.directive.verilog"
+            }
+          },
+          "end": "(?<![A-Za-z0-9_$])(1|10|100)([\\t ]*(?:/\\*.*?\\*/[\\t ]*)*)([munpf]?s)(?![A-Za-z0-9_$])([\\t ]*(?:/\\*.*?\\*/[\\t ]*)*)(/)([\\t ]*(?:/\\*.*?\\*/[\\t ]*)*)(1|10|100)([\\t ]*(?:/\\*.*?\\*/[\\t ]*)*)([munpf]?s)(?![A-Za-z0-9_$])|$|(?=`(?:nounconnected_drive|unconnected_drive|default_nettype|begin_keywords|endcelldefine|end_keywords|undefineall|celldefine|timescale|resetall|include|define|ifndef|pragma|elsif|endif|ifdef|undef|else|line)(?![A-Za-z0-9_$]))",
+          "endCaptures": {
+            "1": {
+              "name": "constant.numeric.verilog"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "include": "#comments"
+                }
+              ]
+            },
+            "3": {
+              "name": "storage.type.unit.verilog"
+            },
+            "4": {
+              "patterns": [
+                {
+                  "include": "#comments"
+                }
+              ]
+            },
+            "5": {
+              "name": "keyword.operator.verilog"
+            },
+            "6": {
+              "patterns": [
+                {
+                  "include": "#comments"
+                }
+              ]
+            },
+            "7": {
+              "name": "constant.numeric.verilog"
+            },
+            "8": {
+              "patterns": [
+                {
+                  "include": "#comments"
+                }
+              ]
+            },
+            "9": {
+              "name": "storage.type.unit.verilog"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#userMacros"
+            },
+            {
+              "match": "(?<![A-Za-z0-9_$])(1|10|100)([\\t ]*)([munpf]?s)(?![A-Za-z0-9_$])",
+              "captures": {
+                "1": {
+                  "name": "constant.numeric.verilog"
+                },
+                "3": {
+                  "name": "storage.type.unit.verilog"
+                }
+              }
+            },
+            {
+              "name": "storage.type.unit.verilog",
+              "match": "(?<![A-Za-z0-9_$])[munpf]?s(?![A-Za-z0-9_$])"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#operators"
+            }
+          ]
         }
       ]
     },

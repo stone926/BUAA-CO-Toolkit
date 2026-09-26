@@ -26,6 +26,7 @@ expr-support:
   gatePrimitives.ts — 内建门级原语关键字(and/or/not/buf/...)
   tokenUtils.ts — token辅助: 区间/种类/文本提取
   preprocessor.ts — 预处理指令集(define/include/ifdef/...)供补全
+  directiveBoundaries.ts — 在代码解析入口划出编译指令及参数的 token 边界；原始 token 保留给预处理元数据和宏引用
   moduleUtils.ts — moduleAtPosition/declDetail/buildTestbench, P7 testbench shell/block 从 resources/templates/verilog 渲染
   stimulusTestbench.ts — buildStimulusTestbench: 独立模块的可编辑激励 testbench 模板（输入/输出声明、端口位宽引用的参数镜像与覆盖、Clk/clock 与 reset/rst/clr/低有效复位识别、排除时钟的 $monitor、激励区与可选 VCD）；不用于课程 CPU/自动测试 TB
   moduleProvider.ts — MutableVerilogModuleProvider接口

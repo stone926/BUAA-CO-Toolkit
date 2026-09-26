@@ -267,6 +267,85 @@ describe('generated TextMate grammars', () => {
     expectScope(scopesAt(lines, 1, '%h'), 'constant.other.placeholder.verilog');
   });
 
+  it.each(['verilog', 'systemverilog'])('scopes compiler directive arguments in %s', (language) => {
+    const grammar = language === 'verilog' ? verilogGrammar : systemVerilogGrammar;
+    const lines = tokenize(grammar, [
+      '`define init 2\'d0',
+      '`default_nettype none // none stays a comment',
+      '  `default_nettype wire',
+      '`default_nettype /* explanation */ none',
+      '`timescale 1ns/1ps // 10us is a comment',
+      '  `timescale 100 ms / 10 us',
+      '`timescale 1s / 100fs',
+      'module m; wire none, ns, none_suffix; endmodule',
+      '`default_nettype none_suffix',
+      '`default_nettype none$extra',
+      '`default_nettype_extra none',
+      '`timescale_extra 1ns/1ps',
+      '`timescale 1 /* unit */ ns / 10 /* precision */ ps',
+      '`default_nettype none `timescale 1ns/1ps `resetall',
+      '`default_nettype none wire none;',
+      '`timescale 1 /* unit */ ns / 10ps wire ns;',
+    ].join('\r\n'));
+
+    expectScope(scopesAt(lines, 0, 'init'), 'entity.name.function.preprocessor.verilog');
+    expectScope(scopesAt(lines, 1, 'default_nettype'), 'keyword.control.directive.verilog');
+    expectScope(scopesAt(lines, 1, 'none'), 'constant.language.verilog');
+    expectScope(scopesAt(lines, 1, 'none', 1), 'comment.line.double-slash.verilog');
+    expectScope(scopesAt(lines, 2, 'wire'), 'storage.type.verilog');
+    expectScope(scopesAt(lines, 3, 'explanation'), 'comment.block.verilog');
+    expectScope(scopesAt(lines, 3, 'none'), 'constant.language.verilog');
+    expectScope(scopesAt(lines, 4, 'timescale'), 'keyword.control.directive.verilog');
+    expectScope(scopesAt(lines, 4, '1ns'), 'constant.numeric.verilog');
+    expectScope(scopesAt(lines, 4, 'ns'), 'storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 4, '1ps'), 'constant.numeric.verilog');
+    expectScope(scopesAt(lines, 4, 'ps'), 'storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 4, '/'), 'keyword.operator.verilog');
+    expectScope(scopesAt(lines, 4, '10us'), 'comment.line.double-slash.verilog');
+    for (const [line, units] of [[5, ['ms', 'us']], [6, ['s', 'fs']]] as const) {
+      for (const unit of units) {
+        const needle = unit === 's' ? 's /' : unit;
+        expectScope(scopesAt(lines, line, needle), 'storage.type.unit.verilog');
+      }
+    }
+    for (const line of [7, 8, 9, 10]) {
+      expect(scopesAt(lines, line, 'none')).not.toContain('constant.language.verilog');
+    }
+    expect(scopesAt(lines, 7, 'ns')).not.toContain('storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 10, 'default_nettype_extra'), 'entity.name.function.preprocessor.verilog');
+    expect(scopesAt(lines, 11, 'ns')).not.toContain('storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 12, 'unit'), 'comment.block.verilog');
+    expectScope(scopesAt(lines, 12, 'ns'), 'storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 12, 'ps'), 'storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 13, 'none'), 'constant.language.verilog');
+    expectScope(scopesAt(lines, 13, 'timescale'), 'keyword.control.directive.verilog');
+    expectScope(scopesAt(lines, 13, 'ns'), 'storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 13, 'resetall'), 'keyword.control.directive.verilog');
+    expectScope(scopesAt(lines, 14, 'wire'), 'storage.type.verilog');
+    expect(scopesAt(lines, 14, 'none', 1)).not.toContain('constant.language.verilog');
+    expectScope(scopesAt(lines, 15, 'wire'), 'storage.type.verilog');
+    expect(scopesAt(lines, 15, 'ns', 1)).not.toContain('storage.type.unit.verilog');
+  });
+
+  it('recovers incomplete directives without coloring the next line as an argument', () => {
+    const lines = tokenize(verilogGrammar, [
+      '`default_nettype',
+      'module m; wire none;',
+      '`timescale 1ns/',
+      'wire ns; endmodule',
+      '// `default_nettype none',
+      '"`timescale 1ns/1ps"',
+    ].join('\n'));
+
+    expectScope(scopesAt(lines, 1, 'module'), 'keyword.declaration.verilog');
+    expect(scopesAt(lines, 1, 'none')).not.toContain('constant.language.verilog');
+    expectScope(scopesAt(lines, 3, 'wire'), 'storage.type.verilog');
+    expect(scopesAt(lines, 3, 'ns')).not.toContain('storage.type.unit.verilog');
+    expectScope(scopesAt(lines, 4, 'none'), 'comment.line.double-slash.verilog');
+    expectScope(scopesAt(lines, 5, '1ns'), 'string.quoted.double.verilog');
+    expect(lines.every((line) => line.ruleStackDepth === 1)).toBe(true);
+  });
+
   it('ends an unterminated Verilog string at the physical line boundary', () => {
     const lines = tokenize(verilogGrammar, 'wire value = "unterminated\nmodule recovered;');
 
