@@ -27,7 +27,7 @@ import {
   writeAsmCaseArtifact
 } from '../../asmCaseStore';
 import { resolveVerilogProjectFiles } from '../../verilog/verilogProject';
-import { prepareUserCpuProgram } from '../../verilog/userCpuProgram';
+import { prepareUserCpuProgram, prepareUserCpuProgramForTestbench } from '../../verilog/userCpuProgram';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
@@ -98,7 +98,8 @@ vi.mock('../../verilogSimulationOutput', () => ({
 
 vi.mock('../../verilog/verilogProject', () => ({ resolveVerilogProjectFiles: vi.fn() }));
 vi.mock('../../verilog/userCpuProgram', () => ({
-  prepareUserCpuProgram: vi.fn(async () => ({ kind: 'unmanaged' }))
+  prepareUserCpuProgram: vi.fn(async () => ({ kind: 'unmanaged' })),
+  prepareUserCpuProgramForTestbench: vi.fn(async () => ({ kind: 'ready' }))
 }));
 
 vi.mock('../../verilog/iverilogRuntime', () => ({
@@ -290,7 +291,23 @@ describe('Icarus runner orchestration', () => {
     vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'unmanaged' });
   });
 
-  it('loads the optional generated CPU program instead of a stale workspace input', async () => {
+  it('prepares CPU input through the resolver before compiling the newly created testbench', async () => {
+    const tbUri = URI.file('E:/work/.co/tb/mips_tb.v');
+    vi.mocked(ensureRunnableTestbench).mockImplementationOnce(async (_services, _resource, _messages, _registry, options) => {
+      expect(await options?.beforeCreateUserCpuTestbench?.(tbUri, 'P6')).toBe(true);
+      expect(runTool).not.toHaveBeenCalled();
+      return { moduleName: 'mips_tb', kind: 'user', sourceUri: tbUri };
+    });
+    const output = await runIverilog(services(), { resource });
+    expect(output?.simResult?.ok).toBe(true);
+    expect(prepareUserCpuProgramForTestbench).toHaveBeenCalledWith(
+      expect.anything(), tbUri, 'P6', expect.anything(), undefined, expect.anything()
+    );
+    expect(vi.mocked(prepareUserCpuProgram).mock.calls[0][4])
+      .toBe(vi.mocked(prepareUserCpuProgramForTestbench).mock.calls[0][5]);
+  });
+
+  it('loads the generated CPU program instead of a stale workspace input', async () => {
     vi.mocked(getProfile).mockReturnValue('P6');
     const program = URI.file('E:/work/.co/iverilog/co_user_program.txt');
     vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'ready', machineCodeSource: program });
@@ -302,7 +319,7 @@ describe('Icarus runner orchestration', () => {
     expect(resolveMachineCodeSource).not.toHaveBeenCalled();
   });
 
-  it('stops before compilation when optional program preparation fails or is cancelled', async () => {
+  it('stops before compilation when program preparation fails or is cancelled', async () => {
     vi.mocked(prepareUserCpuProgram).mockResolvedValue({ kind: 'stopped' });
     await expect(runIverilog(services(), { resource })).resolves.toBeUndefined();
     expect(runTool).not.toHaveBeenCalled();

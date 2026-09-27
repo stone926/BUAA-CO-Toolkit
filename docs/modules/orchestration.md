@@ -50,16 +50,16 @@ verilog-commands:
   verilog/iverilogRuntime.ts — 以纯 platform/arch 映射选择 `vendor/iverilog/win32-x64|darwin-arm64|darwin-x64|linux-x64|linux-arm64` 及对应 executable 名，为子进程前置 bundled bin 并清除可重定向 compiler config 的 `IVERILOG_ICONFIG`（保留 VVP dumper/VPI 运行时控制），校验 exe/lib 并会话级执行 `iverilog -V`；所有 macOS / Linux `iverilog` argv 都通过共享 helper 前置 `-B <runtime>/lib/ivl`，覆盖构建时 prefix，不设置私有 `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH`；Windows 六个原生 EXE 继续通过可复现的 manifest-only 补丁启用 UTF-8 process code page，兼容系统 ANSI code page 无法表示的中文路径；统一生成 source-relative、各源码目录和 workspace root 的 include 参数
   verilog/iverilogDiagnostics.ts — 纯 Icarus `path:line[:column]` stderr 解析，供 LSP syntax diagnostics 与运行失败归因共同复用
   verilog/simulationDiagnostic.ts — Icarus 失败结构化为 phase/reason/exit/首条诊断；公开报告边界统一做工作区相对路径、外部路径 basename、ANSI/控制符清理和限长
-  verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + bundled `vvp -N`，macOS / Linux compile argv 复用 runtime helper 注入 `-B <runtime>/lib/ivl`，不直接执行带构建时 shebang 的 `.vvp`；复用源文件顺序/testbench/`code.txt`；生成的用户 CPU TB 可选 ASM，其他手动 TB 不询问 ASM，自动用例显式传入机器码，用 workspace-hash 命名的稳定 watchdog top + VVP plusarg 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物；自动 case 的指定 sim.out 直接由已持有 stdout 一次写入并登记 artifact，不再落盘后重读复制；编译/VVP stdout/stderr 分阶段设置 byte cap，失败为 case 保存有界私有原始 log，交互命令直接显示首条可定位诊断
+  verilog/iverilogRunner.ts — Icarus `-g2005 -t vvp` 编译 + bundled `vvp -N`，macOS / Linux compile argv 复用 runtime helper 注入 `-B <runtime>/lib/ivl`，不直接执行带构建时 shebang 的 `.vvp`；复用源文件顺序/testbench/`code.txt`；生成的用户 CPU TB 选择 ASM，缺失时先准备程序再生成并继续仿真，其他手动 TB 不询问 ASM，自动用例显式传入机器码，用 workspace-hash 命名的稳定 watchdog top + VVP plusarg 结束永久时钟；同工作区按 operation 可取消串行，保护共享 TB/input/vvp 产物；自动 case 的指定 sim.out 直接由已持有 stdout 一次写入并登记 artifact，不再落盘后重读复制；编译/VVP stdout/stderr 分阶段设置 byte cap，失败为 case 保存有界私有原始 log，交互命令直接显示首条可定位诊断
   verilog/iverilogCompileCache.ts — session 内按 workspace 保存单条 content-verified Icarus 编译缓存（全局 8-workspace LRU）；key 固定 runtime/version/完整 argv/有序直接源 SHA，并单独指纹与复验不在 `-Mall` 中的生成配置文件；`-Mall` 依赖闭包与 VVP artifact 每次命中按内容复验；取消中的 lookup 不驱逐原有效项，调用方 acceptCompileResult 拒绝的编译不发布（缓存不保留编译告警），磁盘只复用固定 vvp/depfile，不按 case 增长
   verilog/iverilogCompileCacheIo.ts — 编译缓存专用的可取消、有界同句柄读取与 SHA/节点身份指纹；Windows case-fold 路径碰撞 fail-open，受限并发 hash
   verilog/iverilogIncludeResolution.ts — literal `include` 纯解析、source-relative/cwd/`-I` 搜索顺序与 shadow 负依赖验证；动态 include、边界超限或不可验证状态 fail-open
   verilog/workspaceOperationQueue.ts — 以规范化 workspace path 为键的轻量 Promise 队列；等待者取消会释放自身 turn，不中断前序也不阻塞后续仿真
   verilog/simulationRunner.ts — 通用 Verilog 仿真入口，固定使用 bundled Icarus；共享增量模块注册表，统一编译、仿真和输出失败结果。
   verilog/simulationInputs.ts — Icarus 运行前机器码源定位与复制；保留配置文件名并同步生成课程 TB 固定读取的 `code.txt` alias
-  verilog/testbenchResolver.ts — 三种 TB 来源：自动测试使用 `.co/iverilog` 私有课程 TB；所有用户模板生成到 `.co/tb`，手工编写激励；自建 `_tb.v` / `_testbench.v` 按文件名识别。手动运行优先活动 TB，缺失时生成并打开模板后停止，所有阶段均不回退私有 TB。自动 TB 字节与 case 元数据一并记录。
-  verilog/userCpuProgram.ts — `.co/tb` CPU 标记识别后提供选择 ASM/空程序；复用内置汇编器与课程镜像投影、停机尾及 P7 内核地址映射；每次完整初始化机器码，失败或取消停止仿真，波形重试在单次操作内复用输入字节。
-  verilog/userCpuTestbench.ts — P4–P7 已配置 CPU top 的 `.co/tb` 模板复用课程时钟/复位/存储器接线，插入稳定 CPU 标记供手动仿真时可选 ASM；其他模块继续使用通用激励模板。
+  verilog/testbenchResolver.ts — 三种 TB 来源：自动测试使用 `.co/iverilog` 私有课程 TB；所有用户模板生成到 `.co/tb`，手工编写激励；自建 `_tb.v` / `_testbench.v` 按文件名识别。手动运行优先活动 TB，缺失的 CPU TB 在程序准备成功后生成并继续运行，普通模块生成并打开模板后停止，所有阶段均不回退私有 TB。自动 TB 字节与 case 元数据一并记录。
+  verilog/userCpuProgram.ts — `.co/tb` CPU 标记识别后直接选择 ASM（取消则停止），支持在 CPU TB 创建前准备程序；复用内置汇编器与课程镜像投影、停机尾及 P7 内核地址映射；每次完整初始化机器码，失败或取消停止仿真，波形重试在单次操作内复用输入字节。
+  verilog/userCpuTestbench.ts — P4–P7 已配置 CPU top 的 `.co/tb` 模板复用课程时钟/复位/存储器接线，插入稳定 CPU 标记供手动仿真时选择 ASM；其他模块继续使用通用激励模板。
   verilog/userTestbench.ts — `.co/tb` 用户 testbench：`<workspace>/.co/tb/<tb>.v` 路径约定、按模块名精确解析、只创建不覆盖；目录被工程发现、模块注册表与自动测试排除
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航
   verilogSimulationOutput.ts — simulationOutputDirectory(.co/out/)、simulationOutputFileName 和路径 helper。

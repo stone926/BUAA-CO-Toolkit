@@ -15,7 +15,7 @@ function isCpuProfile(profile: ConcreteProjectProfile): profile is UserCpuTestbe
   return isVerilogCpuProfile(profile);
 }
 
-/** Only generated CPU top templates opt into the optional ASM picker. */
+/** Only generated CPU top templates opt into the ASM picker. */
 export function userCpuTestbenchProfile(text: string): UserCpuTestbenchProfile | undefined {
   const profile = /^\uFEFF?\/\/ CO_USER_CPU_TESTBENCH (P\d+)(?:\r?\n|$)/.exec(text)?.[1];
   return isVerilogCpuProfile(profile) ? profile : undefined;
@@ -31,7 +31,7 @@ export function buildUserTestbenchText(module: VerilogModule, tbName: string, co
   const shell = buildTestbench(module, tbName, { profile: context.profile, finishDelay: false });
   const extraStimulus = [
     `// CO_USER_CPU_TESTBENCH ${context.profile}`,
-    '// 运行仿真时可选择 ASM；插件会汇编并准备 code.txt，也可跳过选择。',
+    '// 运行仿真时选择 ASM，插件会自动汇编并准备 code.txt。',
     '// P4/P5 CPU 的内部 IM 按课程约定读取 code.txt；P6/P7 的外部 IM 由本 TB 读取。',
     shell.replace(/endmodule\s*$/, [
       '    // ===== 在此编写额外激励（如中断），按需添加 initial/always 块 =====',

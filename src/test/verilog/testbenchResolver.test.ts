@@ -170,6 +170,49 @@ describe('testbench workspace discovery', () => {
     expect(vscodeState.module!.window.showInformationMessage).toHaveBeenCalled();
   });
 
+  it('creates an editable course CPU .co/tb and continues the first manual P6 run after input preparation', async () => {
+    const resource = URI.file('E:/work/mips.v');
+    vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from([
+      'module mips(clk, reset);',
+      '  input clk;',
+      '  input reset;',
+      'endmodule'
+    ].join('\n')));
+    const currentServices = services();
+
+    const beforeCreateUserCpuTestbench = vi.fn(async () => {
+      expect(writeTextFileIfAbsent).not.toHaveBeenCalled();
+      return true;
+    });
+    const result = await ensureRunnableTestbench(currentServices, resource, true, undefined, { beforeCreateUserCpuTestbench });
+    expect(beforeCreateUserCpuTestbench).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }), 'P6'
+    );
+
+    expect(result).toMatchObject({ moduleName: 'mips_tb', kind: 'user', designSourceUri: resource });
+    expect(writeTextFile).not.toHaveBeenCalled();
+    expect(writeTextFileIfAbsent).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }),
+      expect.stringContaining('// CO_USER_CPU_TESTBENCH P6')
+    );
+    expect(vscodeState.module!.window.showTextDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: expect.stringMatching(/\.co[\\/]tb[\\/]mips_tb\.v$/i) }),
+      { preview: false }
+    );
+    expect(vscodeState.module!.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not create a CPU testbench when input preparation is cancelled', async () => {
+    const resource = URI.file('E:/work/mips.v');
+    vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips(input clk, reset); endmodule'));
+    const result = await ensureRunnableTestbench(services(), resource, true, undefined, {
+      beforeCreateUserCpuTestbench: async () => false
+    });
+    expect(result).toBeUndefined();
+    expect(writeTextFileIfAbsent).not.toHaveBeenCalled();
+    expect(vscodeState.module!.window.showTextDocument).not.toHaveBeenCalled();
+  });
+
   it('does not expose automatic P7 testbench paths, target PCs, or probe scenarios', async () => {
     const resource = URI.file('E:/work/mips.v');
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from([

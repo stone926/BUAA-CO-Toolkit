@@ -59,10 +59,11 @@ import {
   recordTestbenchForAsmCase,
   resolveNamedTestbench,
   testbenchCompileSources,
-  TestbenchResolution
+  TestbenchResolution,
+  type TestbenchResolutionOptions
 } from './testbenchResolver';
 import { runSerializedWorkspaceOperation } from './workspaceOperationQueue';
-import { prepareUserCpuProgram, type UserCpuProgramSession } from './userCpuProgram';
+import { prepareUserCpuProgram, prepareUserCpuProgramForTestbench, type UserCpuProgramSession } from './userCpuProgram';
 import {
   createVerilogSimulationFailure,
   verilogSimulationFailureMessage
@@ -318,7 +319,15 @@ async function runIverilogInWorkspace(
   showMessages: boolean,
   nonInteractive: boolean
 ): Promise<IverilogRunOutput | undefined> {
-  const testbench = await resolveSimulationTestbench(services, activeUri, options, showMessages);
+  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_IVERILOG_DIR));
+  const programSession = options.userCpuProgramSession ?? {};
+  const beforeCreateUserCpuTestbench: TestbenchResolutionOptions['beforeCreateUserCpuTestbench'] = async (uri, profile) => {
+    if (asmCase || options.machineCodeSource) return true;
+    await ensureDirectory(outDir);
+    const program = await prepareUserCpuProgramForTestbench(services, uri, profile, outDir, options.signal, programSession);
+    return program.kind === 'ready';
+  };
+  const testbench = await resolveSimulationTestbench(services, activeUri, options, showMessages, beforeCreateUserCpuTestbench);
   if (!testbench?.moduleName) {
     return undefined;
   }
@@ -349,10 +358,9 @@ async function runIverilogInWorkspace(
     return undefined;
   }
 
-  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_IVERILOG_DIR));
   await ensureDirectory(outDir);
   const userProgram = !nonInteractive && !asmCase && !options.machineCodeSource
-    ? await prepareUserCpuProgram(services, testbench.sourceUri, outDir, options.signal, options.userCpuProgramSession)
+    ? await prepareUserCpuProgram(services, testbench.sourceUri, outDir, options.signal, programSession)
     : { kind: 'unmanaged' as const };
   if (userProgram.kind === 'stopped') return undefined;
   const inputOptions = userProgram.kind === 'ready'
@@ -549,9 +557,13 @@ async function resolveSimulationTestbench(
   services: AppServices,
   activeUri: vscode.Uri | undefined,
   options: IverilogRunOptions,
-  showMessages: boolean
+  showMessages: boolean,
+  beforeCreateUserCpuTestbench: TestbenchResolutionOptions['beforeCreateUserCpuTestbench']
 ): Promise<TestbenchResolution | undefined> {
-  const resolutionOptions = { nonInteractive: options.nonInteractive };
+  const resolutionOptions: TestbenchResolutionOptions = {
+    nonInteractive: options.nonInteractive,
+    ...(!options.nonInteractive ? { beforeCreateUserCpuTestbench } : {})
+  };
   if (options.nonInteractive) {
     return (await ensureP7InterruptTestbench(
       services,

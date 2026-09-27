@@ -312,7 +312,7 @@ describe('.co/tb helpers', () => {
     expect(userCpuTestbenchProfile(text ?? '')).toBe('P5');
     expect(text).toContain('在此编写额外激励');
     expect(text).not.toContain('$finish;');
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('可选择 ASM'));
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('选择 ASM'));
   });
 
   it('uses course external memories for P6 and P7 CPU tops', () => {

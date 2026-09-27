@@ -1,4 +1,4 @@
-// @index verilog-user-cpu-program — 用户 CPU testbench 的可选 ASM 选择、汇编与本次运行输入
+// @index verilog-user-cpu-program — 用户 CPU testbench 的 ASM 选择、汇编与本次运行输入
 import * as vscode from 'vscode';
 import type { AppServices } from '../types';
 import { getProfile } from '../config';
@@ -13,7 +13,7 @@ import { assembleWithPreflight, preflightFailureMessage } from '../mips/provider
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { verilogDocumentForUri } from './documentContext';
 import { isUserTestbenchUri } from './userTestbench';
-import { userCpuTestbenchProfile } from './userCpuTestbench';
+import { userCpuTestbenchProfile, type UserCpuTestbenchProfile } from './userCpuTestbench';
 
 export type UserCpuProgramPreparation =
   | { kind: 'unmanaged' }
@@ -37,6 +37,18 @@ export async function prepareUserCpuProgram(
   const document = await verilogDocumentForUri(testbench);
   const profile = document && userCpuTestbenchProfile(document.getText());
   if (!profile) return { kind: 'unmanaged' };
+  return prepareUserCpuProgramForTestbench(services, testbench, profile, outDir, signal, session);
+}
+
+/** Also prepares input before a missing CPU testbench is created. */
+export async function prepareUserCpuProgramForTestbench(
+  services: AppServices,
+  testbench: vscode.Uri,
+  profile: UserCpuTestbenchProfile,
+  outDir: vscode.Uri,
+  signal?: AbortSignal,
+  session?: UserCpuProgramSession
+): Promise<UserCpuProgramPreparation> {
   if (signal?.aborted) return { kind: 'stopped' };
   try {
     if (getProfile(testbench) !== profile) {
@@ -47,38 +59,27 @@ export async function prepareUserCpuProgram(
       await writeTextFile(machineCodeSource, session.program.hexText);
       return { kind: 'ready', machineCodeSource };
     }
-    const choice = await vscode.window.showQuickPick([
-      { label: '选择 ASM', description: '自动汇编并加载指令，无需修改 testbench', program: true },
-      { label: '不选择 ASM', description: '使用全零空程序，保留手动激励', program: false }
-    ], { title: 'CPU testbench 的程序输入', placeHolder: '选择 ASM，或使用空程序运行' });
-    if (!choice || signal?.aborted) return { kind: 'stopped' };
-
     // A separate staging file keeps a failed/cancelled assembly out of code.txt.
-    let words: readonly number[] = [];
-    if (choice.program) {
-      const asm = await resolveAsmCaseInput('选择 CPU testbench 使用的 ASM（取消则停止本次运行）');
-      if (!asm || signal?.aborted) return { kind: 'stopped' };
-      const invocation = await assembleWithPreflight(services, {
-        sourceUri: asm,
-        target: { kind: 'userText', outputFile: machineCodeSource },
-        revealOutput: false,
-        requirements: {
-          profile,
-          instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
-          pseudoInstructions: true
-        }
-      }, { signal }, resolveCourseEnginePlan('builtin', profile));
-      if (signal?.aborted) return { kind: 'stopped' };
-      const result = invocation.result;
-      if (!result?.ok || !result.image) {
-        throw new Error(result?.status.stderr.trim() || preflightFailureMessage(invocation.preflight)
-          || '内置汇编器未返回可加载的程序');
+    const asm = await resolveAsmCaseInput('选择 CPU testbench 使用的 ASM（取消则停止本次运行）');
+    if (!asm || signal?.aborted) return { kind: 'stopped' };
+    const invocation = await assembleWithPreflight(services, {
+      sourceUri: asm,
+      target: { kind: 'userText', outputFile: machineCodeSource },
+      revealOutput: false,
+      requirements: {
+        profile,
+        instructionLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+        pseudoInstructions: true
       }
-      words = courseInstructionImageWordsWithOrdinaryHalt(result.image, profile);
-      services.output.appendLine(`CPU testbench 已汇编 ${asm.fsPath}`);
-    } else {
-      services.output.appendLine('CPU testbench 使用空程序，不加载上次运行的机器码');
+    }, { signal }, resolveCourseEnginePlan('builtin', profile));
+    if (signal?.aborted) return { kind: 'stopped' };
+    const result = invocation.result;
+    if (!result?.ok || !result.image) {
+      throw new Error(result?.status.stderr.trim() || preflightFailureMessage(invocation.preflight)
+        || '内置汇编器未返回可加载的程序');
     }
+    const words = courseInstructionImageWordsWithOrdinaryHalt(result.image, profile);
+    services.output.appendLine(`CPU testbench 已汇编 ${asm.fsPath}`);
     if (signal?.aborted) return { kind: 'stopped' };
     // Fully initialize IM, including the P7 kernel gap and words after the halt tail.
     const initialized = Array.from({ length: courseInstructionImageWordCapacity }, (_, index) => words[index] ?? 0);

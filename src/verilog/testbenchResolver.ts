@@ -49,7 +49,7 @@ import {
   userTestbenchUri
 } from './userTestbench';
 import { findWorkspaceFileCandidates } from '../workflowInputs';
-import { buildUserTestbenchText, userCpuTestbenchProfile } from './userCpuTestbench';
+import { buildUserTestbenchText, userCpuTestbenchProfile, type UserCpuTestbenchProfile } from './userCpuTestbench';
 export { userCpuTestbenchProfile } from './userCpuTestbench';
 
 export interface VerilogModuleDefinition {
@@ -77,6 +77,8 @@ export interface ExistingTestbenchSearchResult {
 export interface TestbenchResolutionOptions {
   /** Internal automation lane: suppress UI/path details and let the runner control termination. */
   nonInteractive?: boolean;
+  /** Prepare CPU input before creating its runnable user template; false cancels. */
+  beforeCreateUserCpuTestbench?: (uri: vscode.Uri, profile: UserCpuTestbenchProfile) => Promise<boolean>;
 }
 
 /** Outcome of resolving the testbench for the module under the cursor (P1 module runs). */
@@ -248,8 +250,7 @@ export async function ensureRunnableTestbench(
     return existing.resolution;
   }
 
-  await createAndOpenUserTestbench(services, topDefinition, configuredTestbench, showMessages);
-  return undefined;
+  return await createAndOpenUserTestbench(services, topDefinition, configuredTestbench, showMessages, options);
 }
 
 export async function resolveNamedTestbench(
@@ -382,8 +383,9 @@ async function createAndOpenUserTestbench(
   services: AppServices,
   definition: VerilogModuleDefinition,
   tbName: string,
-  showMessages: boolean
-): Promise<void> {
+  showMessages: boolean,
+  options: TestbenchResolutionOptions = {}
+): Promise<TestbenchResolution | undefined> {
   const tbUri = userTestbenchUri(definition.uri, tbName);
   const relativePath = vscode.workspace.asRelativePath(tbUri);
   const profile = getProfile(definition.uri);
@@ -392,12 +394,21 @@ async function createAndOpenUserTestbench(
     configuredTop: definition.module.name === getTopModule(definition.uri),
     simTime: ''
   });
+  const cpuProfile = userCpuTestbenchProfile(text);
+  const continueRun = cpuProfile !== undefined && options.beforeCreateUserCpuTestbench !== undefined;
+  if (cpuProfile && options.beforeCreateUserCpuTestbench
+    && !await options.beforeCreateUserCpuTestbench(tbUri, cpuProfile)) return undefined;
   if (await createUserTestbench(tbUri, text)) {
-    const isCpu = userCpuTestbenchProfile(text) !== undefined;
-    services.output.appendLine(`已生成 testbench ${tbUri.fsPath}；${isCpu ? '再次运行时可选择 ASM' : '编写激励后再次运行即可仿真'}`);
+    if (continueRun) {
+      services.output.appendLine(`已生成 testbench ${tbUri.fsPath}，继续仿真`);
+      await vscode.window.showTextDocument(tbUri, { preview: false });
+      return { moduleName: tbName, kind: 'user', sourceUri: tbUri, designSourceUri: definition.uri, sha256: await fileSha256(tbUri) };
+    }
+    const isCpu = cpuProfile !== undefined;
+    services.output.appendLine(`已生成 testbench ${tbUri.fsPath}；${isCpu ? '再次运行时选择 ASM' : '编写激励后再次运行即可仿真'}`);
     if (showMessages) {
       vscode.window.showInformationMessage(isCpu
-        ? `已生成 ${relativePath}：再次点击运行时可选择 ASM，也可跳过`
+        ? `已生成 ${relativePath}：再次点击运行时选择 ASM`
         : `已生成 ${relativePath}：请在“在此编写激励”处添加输入，然后再次点击运行`);
     }
   } else {

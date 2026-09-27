@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 
 import { buildProgramImage } from '../../mips/core/programImage';
 import { resolveCourseEnginePlan } from '../../mips/providers/courseEnginePolicy';
-import { prepareUserCpuProgram } from '../../verilog/userCpuProgram';
+import { prepareUserCpuProgram, prepareUserCpuProgramForTestbench } from '../../verilog/userCpuProgram';
 import { createVscodeMockState } from '../helpers/vscodeMock';
 import { createTestServices } from '../helpers/appServices';
 
@@ -66,7 +66,7 @@ function latestWrittenText(): string {
   return mocks.writeTextFile.mock.calls.at(-1)?.[1] as string;
 }
 
-describe('optional program preparation for generated CPU testbenches', () => {
+describe('program preparation for generated CPU testbenches', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.verilogDocumentForUri.mockReset();
@@ -89,20 +89,16 @@ describe('optional program preparation for generated CPU testbenches', () => {
     }));
   });
 
-  it('offers ASM selection or skip, and skip fully clears stale input with 4096 zero words', async () => {
-    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce({ program: false } as never);
-
-    await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(), outDir)).resolves.toMatchObject({
-      kind: 'ready', machineCodeSource: expect.objectContaining({ fsPath: expect.stringContaining('co_user_program.txt') })
-    });
-
-    const choices = vi.mocked(vscode.window.showQuickPick).mock.calls[0][0] as Array<{ label: string }>;
-    expect(choices.map(({ label }) => label)).toEqual(['选择 ASM', '不选择 ASM']);
-    expect(mocks.resolveAsmCaseInput).not.toHaveBeenCalled();
-    expect(mocks.assembleWithPreflight).not.toHaveBeenCalled();
-    const words = latestWrittenText().trim().split(/\r?\n/);
-    expect(words).toHaveLength(4096);
-    expect(new Set(words)).toEqual(new Set(['00000000']));
+  it('selects ASM before a missing CPU testbench exists and reuses it after creation', async () => {
+    const session = {};
+    await expect(prepareUserCpuProgramForTestbench(createTestServices(), testbenchUri(), 'P4', outDir, undefined, session))
+      .resolves.toMatchObject({ kind: 'ready' });
+    expect(mocks.verilogDocumentForUri).not.toHaveBeenCalled();
+    await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(), outDir, undefined, session))
+      .resolves.toMatchObject({ kind: 'ready' });
+    expect(mocks.resolveAsmCaseInput).toHaveBeenCalledTimes(1);
+    expect(mocks.assembleWithPreflight).toHaveBeenCalledTimes(1);
+    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
   });
 
   it.each(['P4', 'P7'] as const)(
@@ -110,7 +106,6 @@ describe('optional program preparation for generated CPU testbenches', () => {
     async (profile) => {
       const tb = testbenchUri(`.co/tb/${profile}.v`);
       mocks.getProfile.mockReturnValue(profile);
-      vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce({ program: true } as never);
 
       await expect(prepareUserCpuProgram(createTestServices(), tb, outDir)).resolves.toMatchObject({ kind: 'ready' });
 
@@ -140,17 +135,7 @@ describe('optional program preparation for generated CPU testbenches', () => {
     }
   );
 
-  it('stops without writes when the program choice is cancelled', async () => {
-    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce(undefined);
-
-    await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(), outDir)).resolves.toEqual({ kind: 'stopped' });
-
-    expect(mocks.resolveAsmCaseInput).not.toHaveBeenCalled();
-    expect(mocks.writeTextFile).not.toHaveBeenCalled();
-  });
-
   it('stops without writes when the ASM picker is cancelled', async () => {
-    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce({ program: true } as never);
     mocks.resolveAsmCaseInput.mockResolvedValueOnce(undefined);
 
     await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(), outDir)).resolves.toEqual({ kind: 'stopped' });
@@ -160,7 +145,6 @@ describe('optional program preparation for generated CPU testbenches', () => {
   });
 
   it('stops before writing simulation input when assembly fails', async () => {
-    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce({ program: true } as never);
     mocks.assembleWithPreflight.mockResolvedValueOnce({
       result: { ok: false, status: { stderr: 'bad assembly' } }
     });
@@ -175,19 +159,17 @@ describe('optional program preparation for generated CPU testbenches', () => {
   it('restores the same session program after another run overwrites the staging file', async () => {
     const cpuTb = testbenchUri();
     const session = {};
-    vi.mocked(vscode.window.showQuickPick)
-      .mockResolvedValueOnce({ program: true } as never)
-      .mockResolvedValueOnce({ program: false } as never);
+
 
     await expect(prepareUserCpuProgram(createTestServices(), cpuTb, outDir, undefined, session)).resolves.toMatchObject({ kind: 'ready' });
     const selectedProgram = latestWrittenText();
-    await expect(prepareUserCpuProgram(createTestServices(), testbenchUri('.co/tb/other_tb.v'), outDir)).resolves.toMatchObject({ kind: 'ready' });
+    await mocks.writeTextFile(vscode.Uri.joinPath(outDir, 'co_user_program.txt'), 'overwritten input');
     expect(latestWrittenText()).not.toBe(selectedProgram);
 
     await expect(prepareUserCpuProgram(createTestServices(), cpuTb, outDir, undefined, session)).resolves.toMatchObject({ kind: 'ready' });
 
     expect(latestWrittenText()).toBe(selectedProgram);
-    expect(vscode.window.showQuickPick).toHaveBeenCalledTimes(2);
+    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
     expect(mocks.resolveAsmCaseInput).toHaveBeenCalledTimes(1);
     expect(mocks.assembleWithPreflight).toHaveBeenCalledTimes(1);
   });
@@ -201,7 +183,7 @@ describe('optional program preparation for generated CPU testbenches', () => {
 
     await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(relative), outDir)).resolves.toEqual({ kind: 'unmanaged' });
 
-    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
+    expect(mocks.resolveAsmCaseInput).not.toHaveBeenCalled();
     expect(mocks.writeTextFile).not.toHaveBeenCalled();
   });
 
@@ -210,7 +192,7 @@ describe('optional program preparation for generated CPU testbenches', () => {
 
     await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(), outDir)).resolves.toEqual({ kind: 'stopped' });
 
-    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
+    expect(mocks.resolveAsmCaseInput).not.toHaveBeenCalled();
     expect(mocks.writeTextFile).not.toHaveBeenCalled();
   });
 
@@ -221,7 +203,7 @@ describe('optional program preparation for generated CPU testbenches', () => {
     await expect(prepareUserCpuProgram(createTestServices(), testbenchUri(), outDir, controller.signal))
       .resolves.toEqual({ kind: 'stopped' });
 
-    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
+    expect(mocks.resolveAsmCaseInput).not.toHaveBeenCalled();
     expect(mocks.writeTextFile).not.toHaveBeenCalled();
   });
 });
