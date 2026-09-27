@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-27
+
 - feat(hazard): replace external Hazard-Calculator/Java/Python analysis with the built-in MIPS engine and shared course pipeline model; analyze ASM, HexText, Logisim raw and COE with cancellation, bounded execution, persisted reports, searchable events, coverage filters and theme-aware UI
 - feat(verilog): add a built-in waveform viewer that opens `.vcd` files as a VS Code editor tab: signal tree with search, canvas waveforms with distinct 0/1/x/z rendering, cursor values, adaptive time ruler, zoom/pan/drag-to-zoom, change and clock-cycle stepping, markers with Δt and cycle counts, hex/binary/signed/unsigned/ASCII/MIPS-instruction radixes, groups and colors, jump to Verilog source, light/dark/high-contrast themes, and signal lists that survive reopening and re-simulation
 - feat(verilog): **Simulate and View Waveform** runs the testbench with the bundled Icarus, records every signal plus each word of small memories such as the GRF (shown with `$sp`-style aliases), and overlays the testbench's `$display` GRF/DM writes on the time axis with click-to-jump
