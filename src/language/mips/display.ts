@@ -37,7 +37,7 @@ export function directiveHoverText(directive: string): string | undefined {
   if (directive === '.set') {
     return '**.set**\n\nSPIM 兼容 directive。MARS 4.5 会识别它，但当前会忽略其效果并给出 warning';
   }
-  return `MIPS 汇编指令 \`${directive}\`.`;
+  return undefined;
 }
 
 export function macroBody(document: TextDocument, bodyStartLine: number, bodyEndLine?: number): string {
@@ -503,5 +503,4 @@ function interpolateTemplates(templates: string[], patterns: string[], operands:
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-
 

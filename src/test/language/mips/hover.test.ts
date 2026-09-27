@@ -281,6 +281,7 @@ describe('getMipsHover instruction markdown', () => {
     expect(text).toContain('机器码为 0');
     expect(text).not.toContain('展开预览');
     expect(text).not.toContain('sll $zero, $zero, 0');
+    expect(text).not.toContain('```mipsasm\nnop\n```');
   });
 
   it('does not show pseudo expansion for basic mul register form', () => {
@@ -311,10 +312,12 @@ describe('getMipsHover instruction markdown', () => {
 
     const declaration = hoverText(source, 1, 0);
     expect(declaration).toContain('数据符号');
+    expect(declaration).not.toContain('定义于第');
     expect(declaration).not.toContain('Unconditional branch');
 
     const reference = hoverText(source, 3, 12);
     expect(reference).toContain('数据符号');
+    expect(reference).toContain('定义于第 2 行');
     expect(reference).not.toContain('Unconditional branch');
 
     const branch = hoverText(source, 4, 5);
@@ -347,6 +350,10 @@ describe('getMipsHover instruction markdown', () => {
     expect(text).toContain('展开预览');
     expect(text).toContain('    .asciiz "%reg"');
     expect(text).toContain('done: sw $t0, 4($sp) # %reg');
+    expect(text).not.toContain('%label: sw %reg, 4($sp)');
+    const declaration = hoverText(source, 0, 8);
+    expect(declaration).toContain('宏定义');
+    expect(declaration).not.toContain('.asciiz "%reg"');
   });
 });
 

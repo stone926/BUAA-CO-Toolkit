@@ -11,9 +11,7 @@ const settings = mergeCoSettings({
       diagnostic: 'off'
     },
     lint: {
-      courseRules: false,
-      synthesizableHints: false,
-      disabledRules: []
+      courseRules: false
     }
   }
 });

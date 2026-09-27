@@ -15,6 +15,27 @@ export function markdownHover(value: string, range?: Range): Hover {
   };
 }
 
+/** Hover text for a resolved declaration, without echoing the source declaration. */
+export function declarationMarkdown(decl: VerilogDecl, module: VerilogModule): string {
+  const kind = decl.direction && decl.kind !== decl.direction
+    ? `${decl.direction} ${decl.kind}`
+    : decl.kind;
+  const parts = [`**${kind}**`];
+  const width = widthOfDecl(decl, module).width;
+  if (width !== undefined && decl.kind !== 'task' && decl.kind !== 'function') {
+    parts.push(`Width: \`${width}\` bits`);
+  } else if (decl.width) {
+    parts.push(`Range: \`${decl.width}\``);
+  }
+  if (decl.constantValue !== undefined) {
+    parts.push(`Constant value: \`${formatBigInt(decl.constantValue)}\``);
+  }
+  if (decl.unpackedDimensions?.length) {
+    parts.push(`Array: \`${decl.unpackedDimensions.map((dimension) => dimension.text).join('')}\``);
+  }
+  return parts.join(' · ');
+}
+
 export function instanceMarkdown(instance: VerilogInstance, parentModule: VerilogModule, targetModule: VerilogModule | undefined): string {
   const lines = [`Instance \`${instance.instanceName}\` of module \`${instance.moduleName}\`.`];
   if (!targetModule) {
@@ -41,17 +62,15 @@ export function portConnectionMarkdown(
   port: VerilogDecl,
   connection: VerilogPortConnection
 ): string {
-  const lines = [
-    `Port \`${port.name}\` on module \`${targetModule.name}\``,
-    '',
-    `\`${declDetail(port)}\``
-  ];
+  const lines = [`Port \`${port.name}\` on module \`${targetModule.name}\` · **${port.direction ?? port.kind}**`];
   const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
   const expected = widthOfDecl(port, targetModule, overrides);
   const actual = connection.expressionAst ? widthOfExpressionAst(connection.expressionAst, parentModule) : undefined;
-  lines.push(...widthMarkdownLines('Effective width', expected));
-  if (actual) {
-    lines.push(...widthMarkdownLines('Connection width', actual));
+  if (expected.width !== undefined) {
+    lines.push('', `Effective width: \`${expected.width}\` bits`);
+  }
+  if (actual?.width !== undefined && actual.width !== expected.width) {
+    lines.push('', `Connection width: \`${actual.width}\` bits`);
   }
   return lines.join('\n');
 }
@@ -63,11 +82,7 @@ export function parameterConnectionMarkdown(
   parameter: VerilogDecl,
   connection: VerilogPortConnection
 ): string {
-  const lines = [
-    `Parameter \`${parameter.name}\` on module \`${targetModule.name}\``,
-    '',
-    `\`${declDetail(parameter)}\``
-  ];
+  const lines = [`Parameter \`${parameter.name}\` on module \`${targetModule.name}\` · **${parameter.kind}**`];
   const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
   const effective = effectiveParameterValue(parameter, targetModule, overrides);
   if (effective !== undefined) {
@@ -76,8 +91,8 @@ export function parameterConnectionMarkdown(
   const supplied = connection.expressionAst
     ? evalExpressionAstConstant(connection.expressionAst, parentModule)
     : undefined;
-  if (supplied !== undefined) {
-    lines.push(`Connection value: \`${formatBigInt(supplied)}\``);
+  if (supplied !== undefined && supplied !== effective) {
+    lines.push('', `Connection value: \`${formatBigInt(supplied)}\``);
   }
   const width = widthOfDecl(parameter, targetModule, overrides);
   lines.push(...widthMarkdownLines('Parameter width', width));
@@ -137,11 +152,6 @@ export function widthMarkdownLines(label: string, info: WidthInfo): string[] {
     return [];
   }
   return ['', `${label}: \`${info.width}\` bits`];
-}
-
-export function compactHoverSource(source: string): string {
-  const text = source.replace(/\s+/g, ' ').trim();
-  return text.length > 160 ? `${text.slice(0, 157)}…` : text;
 }
 
 export function formatBigInt(value: bigint): string {

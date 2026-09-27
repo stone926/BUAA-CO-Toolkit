@@ -5,11 +5,8 @@ import ts from 'typescript';
 const root = process.cwd();
 const checkOnly = process.argv.includes('--check');
 const docPath = path.join(root, 'docs', 'diagnostic-catalog.md');
-const lintRulesPath = path.join(root, 'resources', 'verilog', 'lintRules.json');
 const generatedStart = '<!-- generated:diagnostic-codes:start -->';
 const generatedEnd = '<!-- generated:diagnostic-codes:end -->';
-const lintStart = '<!-- generated:verilog-lint-rules:start -->';
-const lintEnd = '<!-- generated:verilog-lint-rules:end -->';
 const languageDirectories = ['mips', 'verilog', 'logisim'];
 
 function markdownCell(value) {
@@ -132,20 +129,13 @@ function collectDiagnosticCodes(filePath, language) {
   return [...found].map((code) => ({ code, source: sourceLabel(filePath), language }));
 }
 
-function collectCatalog(lintRules) {
+function collectCatalog() {
   const entries = new Map();
   for (const language of languageDirectories) {
     const directory = path.join(root, 'src', 'language', language);
     for (const filePath of sourceFiles(directory)) {
       for (const entry of collectDiagnosticCodes(filePath, language)) addEntry(entries, entry);
     }
-  }
-  for (const rule of lintRules) {
-    addEntry(entries, {
-      code: rule.id,
-      source: 'resources/verilog/lintRules.json',
-      language: 'verilog'
-    });
   }
   return [...entries.values()].sort((left, right) =>
     left.language < right.language ? -1 : left.language > right.language ? 1
@@ -164,48 +154,13 @@ function generatedCodeInventory(entries) {
   return [
     generatedStart,
     '',
-    '此清单由 MIPS、Verilog、Logisim 诊断生产代码和 `resources/verilog/lintRules.json` 生成。新增诊断码、动态码模式或遗漏更新都会使 `check:diagnostic-catalog` 失败。',
+    '此清单由 MIPS、Verilog 和 Logisim 诊断生产代码生成。新增诊断码、动态码模式或遗漏更新都会使 `check:diagnostic-catalog` 失败。',
     '',
     '| 语言 | 发出的代码或动态模式 | 来源 |',
     '| --- | --- | --- |',
     ...rows,
     '',
     generatedEnd
-  ].join('\n');
-}
-
-function severityLabel(value) {
-  switch (value) {
-    case 'error': return '错误';
-    case 'warning': return '警告';
-    case 'information': return '信息';
-    case 'hint': return '提示';
-    default: return value;
-  }
-}
-
-function generatedLintCatalog(rules) {
-  const configurableIds = rules.filter((rule) => rule.configurable).map((rule) => `\`${rule.id}\``).join(', ');
-  const rows = rules.map((rule) => [
-    `\`${rule.id}\``,
-    severityLabel(rule.severity),
-    rule.enabledByDefault ? '启用' : '禁用',
-    rule.configurable ? '是' : '否',
-    markdownCell(rule.title),
-    markdownCell(rule.description)
-  ]);
-  return [
-    lintStart,
-    '',
-    '可配置 VC 规则和可综合性提示规则由 `resources/verilog/lintRules.json` 生成。',
-    '',
-    `可配置规则 ID：${configurableIds}。`,
-    '',
-    '| 代码 | 严重级别 | 默认 | 可配置 | 标题 | 说明 |',
-    '| --- | --- | --- | --- | --- | --- |',
-    ...rows.map((row) => `| ${row.join(' | ')} |`),
-    '',
-    lintEnd
   ].join('\n');
 }
 
@@ -217,14 +172,11 @@ function replaceSection(documentText, startMarker, endMarker, generated) {
 }
 
 function main() {
-  const rules = JSON.parse(fs.readFileSync(lintRulesPath, 'utf8'));
-  if (!Array.isArray(rules)) throw new Error('resources/verilog/lintRules.json must contain an array.');
-  const entries = collectCatalog(rules);
+  const entries = collectCatalog();
   let previous = fs.readFileSync(docPath, 'utf8');
   let next = replaceSection(previous, generatedStart, generatedEnd, generatedCodeInventory(entries));
-  next = replaceSection(next, lintStart, lintEnd, generatedLintCatalog(rules));
   if (previous.replace(/\r\n/g, '\n') === next.replace(/\r\n/g, '\n')) return;
-  if (checkOnly) throw new Error(`${path.relative(root, docPath)} is not generated from diagnostic producers and lintRules.json.`);
+  if (checkOnly) throw new Error(`${path.relative(root, docPath)} is not generated from diagnostic producers.`);
   fs.writeFileSync(docPath, next);
   console.log('Generated docs/diagnostic-catalog.md diagnostic inventory.');
 }

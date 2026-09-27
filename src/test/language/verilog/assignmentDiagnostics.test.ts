@@ -46,7 +46,7 @@ endmodule
     expect(result).not.toContain('mixed-assignment');
   });
 
-  it('still reports real blocking and nonblocking assignment mixing', () => {
+  it('reports conflicting always drivers without assignment style warnings', () => {
     const result = codes(`
 module demo(input clk, output reg [2:0] m);
     always @(*) begin
@@ -59,7 +59,8 @@ module demo(input clk, output reg [2:0] m);
 endmodule
 `.trim());
 
-    expect(result).toContain('mixed-assignment');
+    expect(result).toContain('multi-driver');
+    expect(result).not.toContain('mixed-assignment');
   });
 
   it('does not apply sequential blocking rules to continuous assigns after a clocked block', () => {
@@ -174,5 +175,43 @@ endmodule
 `.trim());
 
     expect(result).toContain('multi-driver');
+  });
+
+  it('accepts mixed assignment operators within a single process', () => {
+    const result = codes(`module demo(input clk, input a, output reg y);
+      always @(posedge clk) begin y = a; y <= ~a; end
+    endmodule`);
+    expect(result).not.toContain('mixed-assignment');
+    expect(result).not.toContain('multi-driver');
+  });
+
+  it('does not count initialization or exclusive generate branches as conflicting always drivers', () => {
+    const result = codes(`module demo #(parameter MODE = 0)(input clk, input a, output reg y);
+      initial y = 0;
+      generate
+        if (MODE) begin : first
+          always @(posedge clk) y <= a;
+        end else begin : second
+          always @(posedge clk) y <= ~a;
+        end
+      endgenerate
+    endmodule`);
+    expect(result).not.toContain('multi-driver');
+  });
+
+  it('keeps generate-local signals separate when checking always drivers', () => {
+    const result = codes(`module demo(input clk, input a);
+      generate
+        begin : first
+          reg y;
+          always @(posedge clk) y <= a;
+        end
+        begin : second
+          reg y;
+          always @(posedge clk) y <= ~a;
+        end
+      endgenerate
+    endmodule`);
+    expect(result).not.toContain('multi-driver');
   });
 });

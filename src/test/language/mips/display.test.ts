@@ -51,11 +51,8 @@ describe('directiveHoverText', () => {
     expect(text!).toContain('warning');
   });
 
-  it('returns generic markdown for other known directives', () => {
-    const text = directiveHoverText('.asciiz');
-    expect(text).toBeDefined();
-    expect(text!).toContain('.asciiz');
-    expect(text!).toContain('MIPS 汇编指令');
+  it('omits a hover when a directive has no explanatory content', () => {
+    expect(directiveHoverText('.asciiz')).toBeUndefined();
   });
 });
 

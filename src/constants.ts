@@ -87,7 +87,6 @@ export const Commands = {
   },
 
   Verilog: {
-    DisableLintRule: 'co.verilog.disableLintRule',
     GenerateTestbench: 'co.verilog.generateTestbench',
     CheckSyntax: 'co.verilog.checkSyntax',
     RunSimulation: 'co.verilog.runSimulation',

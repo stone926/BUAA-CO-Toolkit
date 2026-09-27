@@ -55,7 +55,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const semanticSymbol = semanticSymbolAtWordRange(parsed, word, position, wordRange);
   if (semanticSymbol) {
     return {
-      contents: semanticSymbolHoverContents(parsed, semanticSymbol),
+      contents: semanticSymbolHoverContents(parsed, semanticSymbol, wordRange),
       range: wordRange
     };
   }
@@ -124,7 +124,9 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const param = resolveMipsSemanticMacroParamAtPosition(parsed.semantic, word, position);
   if (param) {
     return {
-      contents: `宏参数，定义于第 ${param.range.start.line + 1} 行`,
+      contents: rangesEqual(param.selectionRange, wordRange)
+        ? '宏参数'
+        : `宏参数，定义于第 ${param.range.start.line + 1} 行`,
       range: wordRange
     };
   }
@@ -132,7 +134,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const symbol = resolveMipsSemanticSymbolAtPosition(parsed.semantic, word, position);
   if (symbol) {
     return {
-      contents: semanticSymbolHoverContents(parsed, symbol),
+      contents: semanticSymbolHoverContents(parsed, symbol, wordRange),
       range: wordRange
     };
   }
@@ -140,15 +142,17 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   const macro = findMacroOverloadAtPosition(parsed, word, position);
   if (macro) {
     const expansion = macroExpansionPreview(document, parsed, macro, word, position);
-    const value = [
-      `**宏** \`${macro.name}(${macro.params.join(', ')})\``,
-      '',
-      '```mipsasm',
-      macroBody(document, macro.bodyStartLine, macro.bodyEndLine),
-      '```'
-    ];
+    const declaration = rangesEqual(macro.selectionRange, wordRange);
+    const value = [declaration
+      ? `**宏定义** · ${macro.params.length} 个参数`
+      : `**宏** \`${macro.name}(${macro.params.join(', ')})\``];
     if (expansion) {
       value.push('', '展开预览：', '', '```mipsasm', expansion, '```');
+    } else if (!declaration) {
+      const body = macroBody(document, macro.bodyStartLine, macro.bodyEndLine);
+      if (body) {
+        value.push('', '```mipsasm', body, '```');
+      }
     }
     return {
       contents: {
@@ -182,32 +186,30 @@ function semanticSymbolAtWordRange(parsed: ReturnType<typeof getCachedMipsParse>
   return reference?.symbol;
 }
 
-function semanticSymbolHoverContents(parsed: ReturnType<typeof getCachedMipsParse>, symbol: MipsSymbol): string {
+function semanticSymbolHoverContents(parsed: ReturnType<typeof getCachedMipsParse>, symbol: MipsSymbol, hoveredRange: { start: Position; end: Position }): string {
   const kind = symbol.kind === 'data' ? '数据符号' : symbol.kind === 'eqv' ? '.eqv 符号' : '标签';
+  const location = rangesEqual(symbol.selectionRange, hoveredRange)
+    ? ''
+    : `，定义于第 ${symbol.range.start.line + 1} 行`;
   if (symbol.kind === 'eqv') {
     const replacement = eqvReplacementText(parsed, symbol.selectionRange.start.line, symbol.name);
-    return replacement ? `${kind}，定义于第 ${symbol.range.start.line + 1} 行\n\n替换为：\`${replacement}\`` : `${kind}，定义于第 ${symbol.range.start.line + 1} 行`;
+    return replacement ? `${kind}${location}\n\n替换为：\`${replacement}\`` : `${kind}${location}`;
   }
-  return `${kind}，定义于第 ${symbol.range.start.line + 1} 行`;
+  return `${kind}${location}`;
 }
 
 function instructionHoverMarkdown(instruction: MipsInstruction, parsedInstruction?: { usesPseudoForm: boolean }): string[] {
   const details = [
     `**${instruction.mnemonic}** - ${instruction.summary}`,
     '',
-    instructionStatusLine(instruction, parsedInstruction),
-    '',
-    '格式：',
-    '',
-    '```mipsasm',
-    ...instruction.formats,
-    '```',
-    '',
-    `说明：${instruction.description}`
+    instructionStatusLine(instruction, parsedInstruction)
   ];
-
-  if (instruction.pseudo || parsedInstruction?.usesPseudoForm) {
-    details.push('', '请确认展开后的真指令');
+  const formats = [...new Set(instruction.formats)].filter((format) => format !== instruction.mnemonic);
+  if (formats.length) {
+    details.push('', '格式：', '', '```mipsasm', ...formats, '```');
+  }
+  if (instruction.description.trim() && instruction.description.trim() !== instruction.summary.trim()) {
+    details.push('', instruction.description);
   }
   return details;
 }

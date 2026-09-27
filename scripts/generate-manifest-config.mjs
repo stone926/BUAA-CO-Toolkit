@@ -78,7 +78,7 @@ function generatorInstructionMarkdownDescription(generatorProfiles) {
   ].join('\n');
 }
 
-function deriveConfigDefaults(groups, { lintRules }) {
+function deriveConfigDefaults(groups) {
   const defaults = {};
   for (const [key, property] of Object.entries(propertyMap(groups))) {
     const hasDefault = Object.hasOwn(property, 'runtimeDefault');
@@ -87,10 +87,6 @@ function deriveConfigDefaults(groups, { lintRules }) {
     }
     if (hasDefault) {
       defaults[key.slice(3)] = clone(property.runtimeDefault);
-    } else if (property.defaultFrom === 'disabledVerilogLintRules') {
-      defaults[key.slice(3)] = lintRules
-        .filter((rule) => rule.configurable && !rule.enabledByDefault)
-        .map((rule) => rule.id);
     } else {
       throw new Error(`Unknown default source for ${key}: ${property.defaultFrom}`);
     }
@@ -128,7 +124,7 @@ function applyGeneratedSchema(groups, defaults, resources) {
     }
   }
 
-  const { courseConfig, generatorProfiles, lintRules } = resources;
+  const { courseConfig, generatorProfiles } = resources;
   const profileIds = Object.keys(courseConfig.profiles);
   properties['co.project.profile'].enum = ['auto', ...profileIds];
   properties['co.project.profile'].enumDescriptions = [
@@ -139,9 +135,6 @@ function applyGeneratedSchema(groups, defaults, resources) {
   properties['co.test.instructions'].description = generatorInstructionDescription();
   properties['co.test.instructions'].markdownDescription =
     generatorInstructionMarkdownDescription(generatorProfiles);
-  properties['co.verilog.lint.disabledRules'].items.enum = lintRules
-    .filter((rule) => rule.configurable).map((rule) => rule.id);
-
   return generated;
 }
 
@@ -153,10 +146,9 @@ function main() {
   const configManifest = readJson(configManifestPath);
   const courseConfig = readJson(path.join(root, 'resources', 'co', 'courseConfig.json'));
   const generatorProfiles = readJson(path.join(root, 'resources', 'mips', 'generatorProfiles.json'));
-  const lintRules = readJson(path.join(root, 'resources', 'verilog', 'lintRules.json'));
-  const resources = { courseConfig, generatorProfiles, lintRules };
+  const resources = { courseConfig, generatorProfiles };
 
-  const nextDefaults = deriveConfigDefaults(configManifest, resources);
+  const nextDefaults = deriveConfigDefaults(configManifest);
   writeJsonIfChanged(configDefaultsPath, nextDefaults);
 
   pkg.contributes.configuration = applyGeneratedSchema(configManifest, nextDefaults, resources);

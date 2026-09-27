@@ -42,6 +42,18 @@ export function collectContinuousProceduralDriverDiagnostics(
     const buckets = collectAssignmentDriverBuckets(document, module, moduleAst);
     for (const drivers of buckets.values()) {
       const { name } = drivers;
+      const alwaysDrivers = [...new Map(drivers.procedural
+        .filter((use) => moduleAst.proceduralBlocks[use.blockIndex]?.kind === 'always')
+        .map((use) => [use.blockIndex, use])).values()];
+      const conflictingAlways = firstConflictingIndex(module, alwaysDrivers.map((use) => use.range.start));
+      if (conflictingAlways >= 0) {
+        diagnostics.push(makeDiagnostic(
+          driverDiagnosticRange(module, drivers, alwaysDrivers[conflictingAlways].range),
+          `Signal '${name}' is driven by multiple always blocks.`,
+          DiagnosticSeverity.Warning,
+          'multi-driver'
+        ));
+      }
       // Drivers on different branches of one conditional generate never coexist.
       const conflicting = firstConflictingIndex(module, drivers.continuous.map((use) => use.range.start));
       if (conflicting >= 0) {

@@ -21,20 +21,6 @@ export async function disableMipsPseudoWarnings(documentUri?: string): Promise<v
   vscode.window.showInformationMessage('已在当前工作区中禁用 MIPS 伪指令警告');
 }
 
-export async function disableVerilogLintRule(rule?: string, documentUri?: string): Promise<void> {
-  const normalized = normalizeLintRule(rule);
-  if (!normalized) {
-    vscode.window.showErrorMessage('无法禁用此 Verilog Lint 规则，因为规则 ID 无效');
-    return;
-  }
-  const resource = configurationResource(documentUri);
-  const config = vscode.workspace.getConfiguration('co', resource);
-  const current = config.get<string[]>('verilog.lint.disabledRules', defaultCoSettings.verilog.lint.disabledRules);
-  const merged = [...new Set([...current.map((item) => item.toLowerCase()), normalized])].sort();
-  await config.update('verilog.lint.disabledRules', merged, configurationTargetForResource(resource));
-  vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalized.toUpperCase()}`);
-}
-
 export async function disableDiagnosticCode(
   languageId?: string,
   code?: string,
@@ -68,9 +54,4 @@ export async function disableDiagnosticCode(
   const merged = [...new Set([...current.map((item) => item.trim().toLowerCase()).filter(Boolean), key])].sort();
   await config.update('diagnostics.disabledCodes', merged, target);
   vscode.window.showInformationMessage(`已在当前工作区中禁用 ${normalizedCode} 诊断`);
-}
-
-function normalizeLintRule(rule?: string): string | undefined {
-  const normalized = rule?.trim().toLowerCase();
-  return normalized && /^vc-\d{3}$/.test(normalized) ? normalized : undefined;
 }

@@ -62,7 +62,8 @@ endmodule
       new VerilogWorkspaceIndex()
     );
 
-    expect(hoverText(hover)).toContain('Expression `a + b * 3`');
+    expect(hoverText(hover)).toContain('**Expression**');
+    expect(hoverText(hover)).not.toContain('a + b * 3');
     expect(hoverText(hover)).not.toMatch(/AST:|Node range:|flexible|min:/);
     expect(hoverText(hover)).toContain('Width: `32`');
   });
@@ -81,7 +82,8 @@ endmodule
       new VerilogWorkspaceIndex()
     );
 
-    expect(hoverText(hover)).toContain('Expression `a + b`');
+    expect(hoverText(hover)).toContain('**Expression**');
+    expect(hoverText(hover)).not.toContain('a + b');
     expect(hoverText(hover)).not.toMatch(/AST:|Node range:|flexible|min:/);
     expect(hoverText(hover)).toContain('Width: `4`');
   });
@@ -146,7 +148,8 @@ endmodule
     const portHover = getVerilogHover(document, positionOf(document, '.din', 1), settings, index);
     expect(hoverText(portHover)).toContain('Port `din` on module `child`');
     expect(hoverText(portHover)).toContain('Effective width: `8`');
-    expect(hoverText(portHover)).toContain('Connection width: `8`');
+    expect(hoverText(portHover)).not.toContain('Connection width: `8`');
+    expect(hoverText(portHover)).not.toContain('input [WIDTH-1:0] din');
 
     expect(inlayLabels(document)).toEqual(expect.arrayContaining([
       ': param',

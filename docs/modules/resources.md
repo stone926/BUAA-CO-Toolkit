@@ -18,7 +18,6 @@ resources/mips/:
 resources/verilog/:
   keywords.json — Verilog keyword group、compiler directive、system task、operator 单一目录，供 lexer/TextMate generator 共用
   systemverilog.json — 独立 SystemVerilog TextMate keyword/operator 目录；不进入 Verilog parser
-  lintRules.json — Verilog course lint 规则 catalog: id/title/severity/default/configurable/quickFix
 
 resources/co/:
   configManifest.json — co.* 唯一配置源：分组/schema/兼容声明/runtimeDefault；defaultFrom 显式引用其他领域目录的派生值，default 仅用于 UI sentinel 覆盖
@@ -29,7 +28,7 @@ resources/co/:
   加载: courseConfig loader, P7 hardware loader
 
 配置资源维护:
-  源文件: resources/co/configManifest.json；Profile/指令说明/默认禁用规则分别引用 courseConfig/generatorProfiles/lintRules
+  源文件: resources/co/configManifest.json；Profile/指令说明分别引用 courseConfig/generatorProfiles
   派生产物: package.json contributes.configuration 与完整 resources/co/configDefaults.json
   命令: npm run generate:manifest-config 生成, npm run check:manifest-config 检查, npm run sync:manifest-config 生成后检查
   自动流程: compile/test/test:coverage/package:vsix 都会先运行 sync:generated（Profile → ISA → config → languages → syntaxes → diagnostics）；CI 在任何生成前运行 check:generated，防止自动修复掩盖提交漂移

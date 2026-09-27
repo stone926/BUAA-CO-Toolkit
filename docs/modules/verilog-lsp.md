@@ -1,8 +1,8 @@
-# verilog-lsp | src/language/verilog/ | 68 files
+# verilog-lsp | src/language/verilog/ | 66 files
 
 Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
 
-数据流: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts(调度): syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag -> service.ts(provider barrel)
+数据流: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts(调度): syntaxDiag/lintDiag/instanceConnectionDiag/usageDiag/workspaceDiag -> service.ts(provider barrel)
 跨文件: workspaceModuleRegistry.ts(VSCode端) <-> workspaceIndex.ts(LSP端) -> signalWiring.ts
 
 See also: verilog-diagnostics.md(诊断子模块10文件), verilog-ast.md(AST/解析子模块8文件), ARCHITECTURE_REVIEW.md(迁移状态)
@@ -34,7 +34,6 @@ expr-support:
   moduleUtils.ts — moduleAtPosition/declDetail/buildTestbench, P7 testbench shell/block 从 resources/templates/verilog 渲染
   stimulusTestbench.ts — buildStimulusTestbench: 独立模块的可编辑激励 testbench 模板（输入/输出声明、端口位宽引用的参数镜像与覆盖、Clk/clock 与 reset/rst/clr/低有效复位识别、排除时钟的 $monitor、激励区与可选 VCD）；不用于课程 CPU/自动测试 TB
   moduleProvider.ts — MutableVerilogModuleProvider接口
-  lintRuleCatalog.ts — Verilog lint 规则元数据 catalog, 从 resources/verilog/lintRules.json 加载
   statementUtils.ts — splitTopLevelCommaSpans
   textUtils.ts — 文本/空白处理供formatting
   displayFormats.ts — $display/$write格式字符串提取供trace格式推断
@@ -48,10 +47,10 @@ lsp-providers:
   diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
   completions.ts — completionProvider 依赖装配入口, 注入实例连接上下文 resolver
   completionProvider.ts — 补全provider: 实例连接上下文（#(...) 只列可覆盖的 parameter）/宏/关键字/snippet/workspace模块补全
-  hover.ts — hover provider: 声明/表达式宽度、常量、实例参数、include 状态；不展示 AST 类型/节点偏移/内部宽度推断属性，长表达式和接口列表限制展示长度
+  hover.ts — hover provider: 声明/表达式宽度、常量、实例参数、include 状态；声明与表达式不回显源码，端口/参数连接合并相同的宽度和值；不展示 AST 类型/节点偏移/内部宽度推断属性，接口列表限制展示长度
   navigation.ts — definition/reference provider: 跨文件 module/interface/macro/include 引用收集和去重
   rename.ts — rename provider: 基于 reference provider 生成 workspace edit, 标识符边界校验
-  codeActions.ts — quick fix/refactor provider: 隐式连线声明、lint 禁用、case default、表达式折叠/抽取、实例连接补全
+  codeActions.ts — quick fix/refactor provider: 隐式连线声明、表达式折叠/抽取、实例连接补全
   signatureHelp.ts — 实例端口/参数列表签名帮助（参数列表不含 localparam，按位下标与仿真器一致）
   inlayHints.ts — 实例连接端口方向/宽度与参数提示
   resolveSymbol.ts — 语义模型+语法 fallback 的 Verilog symbol resolution, 实例连接上下文

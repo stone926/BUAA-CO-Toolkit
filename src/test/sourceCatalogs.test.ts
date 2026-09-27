@@ -35,7 +35,7 @@ describe('configuration source', () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'co-config-source-'));
     try {
       for (const file of ['package.json', 'resources/co/configManifest.json', 'resources/co/configDefaults.json',
-        'resources/co/courseConfig.json', 'resources/mips/generatorProfiles.json', 'resources/verilog/lintRules.json']) {
+        'resources/co/courseConfig.json', 'resources/mips/generatorProfiles.json']) {
         fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
         fs.copyFileSync(path.join(root, file), path.join(cwd, file));
       }
@@ -78,7 +78,7 @@ describe('configuration source', () => {
       fs.writeFileSync(file, JSON.stringify(manifest));
       expect(() => generate(cwd)).toThrow(/duplicate setting/);
       manifest.pop();
-      manifest[0].properties['co.project.profile'].defaultFrom = 'disabledVerilogLintRules';
+      manifest[0].properties['co.project.profile'].defaultFrom = 'unknownSource';
       fs.writeFileSync(file, JSON.stringify(manifest));
       expect(() => generate(cwd)).toThrow(/exactly one/);
     });

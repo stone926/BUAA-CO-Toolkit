@@ -2,10 +2,6 @@
 import { isConcreteProjectProfile, ProjectProfile } from '../../projectProfile';
 import { getProfileDefaults } from '../../courseConfig';
 import { configDefault, configDefaultArray } from '../../configDefaults';
-import { configurableVerilogLintRuleIds, defaultDisabledVerilogLintRuleIds } from '../verilog/lintRuleCatalog';
-
-export const defaultDisabledVerilogLintRules = defaultDisabledVerilogLintRuleIds as readonly string[];
-const configurableVerilogLintRuleSet = new Set(configurableVerilogLintRuleIds);
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
@@ -41,8 +37,6 @@ export interface CoSettings {
     };
     lint: {
       courseRules: boolean;
-      synthesizableHints: boolean;
-      disabledRules: string[];
     };
     format: {
       continuationIndent: number;
@@ -90,9 +84,7 @@ export const defaultCoSettings: CoSettings = {
       ignorePatterns: configDefaultArray('verilog.implicitNet.ignorePatterns')
     },
     lint: {
-      courseRules: configDefault<boolean>('verilog.lint.courseRules'),
-      synthesizableHints: configDefault<boolean>('verilog.lint.synthesizableHints'),
-      disabledRules: [...defaultDisabledVerilogLintRules]
+      courseRules: configDefault<boolean>('verilog.lint.courseRules')
     },
     format: {
       continuationIndent: configDefault<number>('verilog.format.continuationIndent'),
@@ -134,9 +126,9 @@ export function mergeCoSettings(value: unknown): CoSettings {
         ...(candidate.verilog?.implicitNet ?? {})
       },
       lint: {
-        ...defaultCoSettings.verilog.lint,
-        ...(candidate.verilog?.lint ?? {}),
-        disabledRules: normalizeDisabledRules(candidate.verilog?.lint?.disabledRules)
+        courseRules: typeof candidate.verilog?.lint?.courseRules === 'boolean'
+          ? candidate.verilog.lint.courseRules
+          : defaultCoSettings.verilog.lint.courseRules
       },
       format: normalizeVerilogFormat(candidate.verilog?.format)
     }
@@ -202,11 +194,6 @@ function normalizeVerilogSyntax(value: unknown): CoSettings['verilog']['syntax']
       )
     }
   };
-}
-
-export function isVerilogLintRuleEnabled(settings: CoSettings, rule: string): boolean {
-  const normalized = rule.toLowerCase();
-  return !settings.verilog.lint.disabledRules.some((item) => item.toLowerCase() === normalized);
 }
 
 export function diagnosticCodeKey(languageId: string, code: string): string {
@@ -288,16 +275,6 @@ function normalizeDiagnosticFileCode(value: string): string | undefined {
   }
   const normalizedCodePart = normalizeDisabledDiagnosticCodes([codePart])[0];
   return normalizedCodePart ? `${normalizedCodePart}@${uriPart}` : undefined;
-}
-
-function normalizeDisabledRules(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [...defaultCoSettings.verilog.lint.disabledRules];
-  }
-  return [...new Set(value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim().toLowerCase())
-    .filter((item) => configurableVerilogLintRuleSet.has(item)))];
 }
 
 type VerilogFormatAlignmentCandidate = {

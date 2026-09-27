@@ -55,10 +55,6 @@ export function formatNumericLiteralHover(literal: NumericLiteralInfo): string {
     .replace(/(.{4})/g, '$1_').replace(/_$/, '');
   lines.push('', `Binary: \`${grouped.length > 80 ? `${grouped.slice(0, 77)}…` : grouped}\``);
 
-  if (literal.size !== undefined) {
-    lines.push('', `Bit width: \`${literal.size}\` bits`);
-  }
-
   return lines.join('\n');
 }
 

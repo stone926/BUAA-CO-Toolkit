@@ -33,7 +33,6 @@ import {
   runVerilogSimulation,
   setVerilogSimulationModuleRegistry
 } from './verilog/simulationRunner';
-import { disableVerilogLintRule } from './diagnosticSettings';
 import { isCustomTestbenchPath, isPrivateRuntimeTestbenchPath } from './verilogSimulationFiles';
 
 export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
@@ -43,10 +42,6 @@ export type { VerilogSimulationRunOptions, VerilogSimulationRunOutput } from './
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
   setVerilogSimulationModuleRegistry(moduleRegistry);
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      Commands.Verilog.DisableLintRule,
-      disableVerilogLintRule
-    ),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
     vscode.commands.registerCommand(Commands.Verilog.CheckSyntax, () => checkVerilogSyntax()),
     vscode.commands.registerCommand(Commands.Verilog.RunSimulation, () => runVerilogSimulation(services, { moduleRegistry }))

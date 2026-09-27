@@ -33,7 +33,7 @@ display:
 lsp-providers:
   service.ts — 注册中心, re-export全部provider, 诊断委托parseCache | exports: 全部LSP函数, MipsServerState, clearMipsParseCache
   completions.ts — 指令/伪指令/寄存器(含浮点/CP0)/标签/宏/EQV补全
-  hover.ts — 指令详情/寄存器描述/伪指令/宏/syscall/CP0 hover
+  hover.ts — 指令详情/寄存器描述/伪指令/宏/syscall/CP0 hover；符号定义不重复展示当前行号，单格式无操作数指令不重复展示格式，宏定义不回显宏体，调用展开可用时仅展示展开结果
   navigation.ts — 跳转定义/查找引用/文档符号
   formatting.ts — 4空格缩进, 逗号空格, 32列注释对齐
   signatureHelp.ts — 指令格式(rd,rs,rt)+类型标签, 宏参数, 自动高亮当前操作数

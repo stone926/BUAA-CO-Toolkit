@@ -10,9 +10,8 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Commands } from '../../constants';
-import { containsPosition, lineAt, rangesEqual } from '../common/lsp';
+import { containsPosition, lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import { rangeKey } from '../common/util';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { VerilogDecl, VerilogInstance, VerilogModule, VerilogPortConnection } from './model';
 import { moduleAtPosition } from './parser';
@@ -21,7 +20,6 @@ import { getVerilogLiteralCodeActions } from './numericLiterals';
 import { evalExpressionAstConstant, widthOfExpressionAst } from './expressions';
 import type { VerilogExpressionAst } from './exprAst';
 import type { VerilogModuleAst, VerilogStatementAst } from './ast';
-import type { VerilogCaseStatementAst, VerilogProceduralStatementAst } from './proceduralAst';
 import { findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
 import type { VerilogExpressionMatch } from './exprAstUtils';
 import { overridableParameters } from './parameterOverrides';
@@ -43,19 +41,6 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
     }
   }
 
-  const defaultNettype = diagnostics.find((diagnostic) => diagnostic.code === 'default-nettype-none');
-  if (defaultNettype) {
-    actions.push({
-      title: 'Add `default_nettype none',
-      kind: CodeActionKind.QuickFix,
-      edit: {
-        changes: {
-          [document.uri]: [TextEdit.insert(Position.create(0, 0), '`default_nettype none\n')]
-        }
-      }
-    });
-  }
-
   const explicitWireDiagnostics = diagnostics.filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
   for (const diagnostic of explicitWireDiagnostics) {
     actions.push({
@@ -71,8 +56,6 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
   }
 
   actions.push(...getWidthMismatchCodeActions(document, diagnostics, settings));
-  actions.push(...getVerilogDataflowCodeActions(document, diagnostics, settings));
-  actions.push(...getVerilogLintRuleCodeActions(document, diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogExpressionCodeActions(document, range, settings));
   actions.push(...getVerilogLiteralCodeActions(document, range));
@@ -353,130 +336,6 @@ function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagno
     });
   }
   return actions;
-}
-
-function getVerilogDataflowCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
-  const actions: CodeAction[] = [];
-  const parsed = getCachedVerilogParse(document, settings, false);
-  const seen = new Set<string>();
-  for (const diagnostic of diagnostics) {
-    if (diagnostic.code !== 'vc-008-case-default') {
-      continue;
-    }
-    const key = rangeKey(diagnostic.range);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    const caseStatement = findCaseStatementForRange(parsed.ast.modules, diagnostic.range);
-    const edit = caseStatement ? addDefaultCaseItemEdit(document, caseStatement) : undefined;
-    if (!edit) {
-      continue;
-    }
-    actions.push({
-      title: 'Add default case item',
-      kind: CodeActionKind.QuickFix,
-      diagnostics: [diagnostic],
-      edit: {
-        changes: {
-          [document.uri]: [edit]
-        }
-      }
-    });
-  }
-  return actions;
-}
-
-function findCaseStatementForRange(modules: VerilogModuleAst[], range: Range): VerilogCaseStatementAst | undefined {
-  for (const moduleAst of modules) {
-    for (const block of moduleAst.alwaysBlocks) {
-      const found = findCaseStatementInProceduralAst(block.statementTree, range);
-      if (found) {
-        return found;
-      }
-    }
-    for (const block of moduleAst.proceduralBlocks) {
-      const found = findCaseStatementInProceduralAst(block.statementTree, range);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  return undefined;
-}
-
-function findCaseStatementInProceduralAst(node: VerilogProceduralStatementAst, range: Range): VerilogCaseStatementAst | undefined {
-  if (node.kind === 'case' && rangesEqual(node.range, range)) {
-    return node;
-  }
-  for (const child of proceduralStatementChildren(node)) {
-    const found = findCaseStatementInProceduralAst(child, range);
-    if (found) {
-      return found;
-    }
-  }
-  return undefined;
-}
-
-function proceduralStatementChildren(node: VerilogProceduralStatementAst): VerilogProceduralStatementAst[] {
-  switch (node.kind) {
-    case 'block':
-      return node.statements;
-    case 'if':
-      return [node.consequent, ...(node.alternate ? [node.alternate] : [])];
-    case 'case':
-      return node.items.map((item) => item.body);
-    case 'loop':
-      return [node.body];
-    default:
-      return [];
-  }
-}
-
-function addDefaultCaseItemEdit(document: TextDocument, statement: VerilogCaseStatementAst): TextEdit | undefined {
-  if (statement.items.some((item) => item.defaultItem)) {
-    return undefined;
-  }
-  if (statement.range.end.line < statement.range.start.line) {
-    return undefined;
-  }
-  const indent = defaultCaseIndent(document, statement);
-  return TextEdit.insert(Position.create(statement.range.end.line, 0), `${indent}default: ;\n`);
-}
-
-function defaultCaseIndent(document: TextDocument, statement: VerilogCaseStatementAst): string {
-  const firstItem = statement.items[0];
-  if (firstItem) {
-    return lineAt(document, firstItem.labelRange.start.line).text.match(/^\s*/)?.[0] ?? '';
-  }
-  const caseIndent = lineAt(document, statement.range.start.line).text.match(/^\s*/)?.[0] ?? '';
-  return `${caseIndent}    `;
-}
-
-function getVerilogLintRuleCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
-  const actions: CodeAction[] = [];
-  const seen = new Set<string>();
-  const disabled = new Set(settings.verilog.lint.disabledRules.map((rule) => rule.toLowerCase()));
-  for (const diagnostic of diagnostics) {
-    const rule = verilogLintRuleFromDiagnostic(diagnostic);
-    if (!rule || seen.has(rule) || disabled.has(rule)) {
-      continue;
-    }
-    seen.add(rule);
-    actions.push({
-      title: `Disable ${rule.toUpperCase()} in this workspace`,
-      kind: CodeActionKind.QuickFix,
-      diagnostics: [diagnostic],
-      command: Command.create(`Disable ${rule.toUpperCase()}`, Commands.Verilog.DisableLintRule, rule, document.uri)
-    });
-  }
-  return actions;
-}
-
-function verilogLintRuleFromDiagnostic(diagnostic: Diagnostic): string | undefined {
-  const code = typeof diagnostic.code === 'string' ? diagnostic.code : undefined;
-  const source = code ?? diagnostic.message;
-  return source.match(/\bvc-\d{3}\b/i)?.[0].toLowerCase();
 }
 
 function makeDeclareWireAction(document: TextDocument, module: VerilogModule, name: string): CodeAction {

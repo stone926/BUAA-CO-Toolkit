@@ -43,9 +43,40 @@ endmodule
 `.trim());
     const text = hoverText(getVerilogHover(document, positionOf(document, 'WIDTH ='), defaultCoSettings, new VerilogWorkspaceIndex()));
 
-    expect(text).toContain('`localparam WIDTH`');
+    expect(text).toContain('**localparam**');
     expect(text).toContain('Constant value: `8 (0x8)`');
+    expect(text).not.toContain('localparam WIDTH');
     expect(text).not.toContain('Expression `WIDTH`');
+  });
+
+  it('summarizes declaration and reference widths without repeating the source line', () => {
+    const document = verilogDoc('module top; wire [3:0] W_t_rsuse; assign W_t_rsuse = 4\'b0; endmodule');
+    const index = new VerilogWorkspaceIndex();
+    for (const sourceOffset of [document.getText().indexOf('W_t_rsuse'), document.getText().lastIndexOf('W_t_rsuse')]) {
+      const text = hoverText(getVerilogHover(document, document.positionAt(sourceOffset), defaultCoSettings, index));
+      expect(text).toContain('**wire**');
+      expect(text).toContain('Width: `4` bits');
+      expect(text).not.toContain('wire [3:0] W_t_rsuse');
+    }
+  });
+
+  it('preserves symbolic ranges and unpacked array dimensions in a compact hover', () => {
+    const document = verilogDoc('module top; wire [UNKNOWN-1:0] memory [0:3]; assign memory[0] = 0; endmodule');
+    const text = hoverText(getVerilogHover(document, positionOf(document, 'memory [0:3]'), defaultCoSettings, new VerilogWorkspaceIndex()));
+
+    expect(text).toContain('Range: `[UNKNOWN-1:0]`');
+    expect(text).toContain('Array: `[0:3]`');
+    expect(text).not.toContain('wire [UNKNOWN-1:0] memory [0:3]');
+  });
+
+  it('shows both widths only when a port connection differs from its target', () => {
+    const document = verilogDoc('module child(input [7:0] din); endmodule\nmodule top; wire [3:0] data; child u(.din(data)); endmodule');
+    const index = new VerilogWorkspaceIndex();
+    const text = hoverText(getVerilogHover(document, positionOf(document, '.din', 1), defaultCoSettings, index));
+
+    expect(text).toContain('Effective width: `8` bits');
+    expect(text).toContain('Connection width: `4` bits');
+    expect(text).not.toContain('input [7:0] din');
   });
 
   it('prepares rename for module, port, parameter, and macro symbols but rejects includes and invalid replacement names', () => {

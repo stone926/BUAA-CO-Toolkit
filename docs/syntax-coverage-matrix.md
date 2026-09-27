@@ -71,7 +71,7 @@
 | 模块头 | 空端口、传统端口、ANSI 端口、`#(...)` 参数列表 | `syntax-module-declaration`, `syntax-malformed-port-list` |
 | 声明 | `input/output/inout/wire/reg/logic/integer/time/real/realtime/genvar/parameter/localparam`，并支持 `signed/unsigned/automatic/scalared/vectored` 等修饰符 | `syntax-malformed-declaration` |
 | 连续赋值 | 普通 `assign`、同句多赋值、带驱动强度前缀的赋值；每个 lvalue/RHS 独立建模 | `syntax-malformed-assignment`, `syntax-missing-semicolon` |
-| 过程赋值 | `always`/`initial` 内阻塞与非阻塞赋值 | `syntax-malformed-assignment`, `mixed-assignment`, `vc-007-*`, `vc-010-*` |
+| 过程赋值 | `always`/`initial` 内阻塞与非阻塞赋值 | `syntax-malformed-assignment`, `multi-driver`；不检查赋值风格 |
 | 表达式 | 一元、二元、三元、拼接、重复拼接、函数/系统函数调用、位选、范围选择、索引式部分选择、转义标识符、基数字面量（含 size/base/digits 之间合法空白）、实数/指数数字（仅解析，不做整数折叠） | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance`, `syntax-malformed-number` |
 | 过程控制 | `if/else`, `case/casex/casez`, `for/while/repeat/forever`, 事件控制、延迟控制；always/initial 后不强制 begin/end，case 标签支持三元表达式和 default 可选冒号；`for` 的 init/condition/step 会结构化检查 | `syntax-malformed-if`, `syntax-malformed-case`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-malformed-event-control` |
 | 块结构 | `begin/end`, `case/endcase`, `generate/endgenerate`, `function/endfunction`, `task/endtask` | `syntax-unclosed-*`, `syntax-unmatched-*` |

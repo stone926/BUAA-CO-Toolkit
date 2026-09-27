@@ -31,6 +31,7 @@ export interface VerilogDecl {
 
 export interface VerilogDeclDimension {
   range: Range;
+  text: string;
   expressions: VerilogExpressionAst[];
 }
 

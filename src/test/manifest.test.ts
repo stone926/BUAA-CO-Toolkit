@@ -73,8 +73,7 @@ const publicConfigurationGroups = [
       'co.mips.warnMissingExitSyscall',
       'co.verilog.implicitNet.diagnostic',
       'co.verilog.syntax.external.mode',
-      'co.verilog.lint.courseRules',
-      'co.verilog.lint.synthesizableHints'
+      'co.verilog.lint.courseRules'
     ]
   },
   {
@@ -101,7 +100,6 @@ const compatibilityConfigurationKeys = [
   'co.mips.extraArgs',
   'co.verilog.syntax.external.timeoutMs',
   'co.verilog.implicitNet.ignorePatterns',
-  'co.verilog.lint.disabledRules',
   'co.diagnostics.disabledCodes',
   'co.diagnostics.disabledFileCodes',
   'co.verilog.format.continuationIndent',
@@ -274,7 +272,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(19);
+    expect(expectedPublicKeys).toHaveLength(18);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);

@@ -856,13 +856,6 @@
             "scope": "resource",
             "order": 60,
             "default": true
-          },
-          "co.verilog.lint.synthesizableHints": {
-            "type": "boolean",
-            "description": "显示可选的 Verilog 综合风格建议，如 initial 块、声明初始化器和乘除运算符；这些写法并不一定是错误",
-            "scope": "resource",
-            "order": 70,
-            "default": false
           }
         }
       },
@@ -999,35 +992,6 @@
             "scope": "resource",
             "order": 100
           },
-          "co.verilog.lint.disabledRules": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "vc-001",
-                "vc-002",
-                "vc-003",
-                "vc-004",
-                "vc-005",
-                "vc-006",
-                "vc-007",
-                "vc-008",
-                "vc-009",
-                "vc-010",
-                "vc-011",
-                "vc-012",
-                "vc-013",
-                "vc-014",
-                "vc-015",
-                "vc-017",
-                "vc-021"
-              ]
-            },
-            "description": "需要禁用的 Verilog Lint 规则",
-            "deprecationMessage": "仅为兼容已有 Lint 忽略项保留。建议通过诊断快速修复管理例外，不再手工编辑此设置。",
-            "scope": "resource",
-            "order": 110
-          },
           "co.diagnostics.disabledCodes": {
             "type": "array",
             "items": {
@@ -1036,7 +1000,7 @@
             "description": "在当前工作区中禁用的诊断",
             "deprecationMessage": "仅为兼容已有诊断忽略项保留。建议通过诊断快速修复管理例外，不再手工编辑此设置。",
             "scope": "resource",
-            "order": 120
+            "order": 110
           },
           "co.diagnostics.disabledFileCodes": {
             "type": "array",
@@ -1046,7 +1010,7 @@
             "description": "在当前工作区中对特定文件禁用的诊断",
             "deprecationMessage": "仅为兼容已有按文件诊断忽略项保留。建议通过诊断快速修复管理例外，不再手工编辑此设置。",
             "scope": "resource",
-            "order": 130
+            "order": 120
           },
           "co.verilog.format.continuationIndent": {
             "type": "number",
@@ -1055,14 +1019,14 @@
             "description": "模块端口和实例连接续行的额外缩进量",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 140
+            "order": 130
           },
           "co.verilog.format.spaceInRange": {
             "type": "boolean",
             "description": "是否在范围冒号后保留空格",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 150
+            "order": 140
           },
           "co.verilog.format.declarationRangeSpacing": {
             "type": "string",
@@ -1074,21 +1038,21 @@
             "description": "声明范围方括号周围的间距",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 160
+            "order": 150
           },
           "co.verilog.format.spaceBeforeInstancePorts": {
             "type": "boolean",
             "description": "是否在实例端口列表前保留空格",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 170
+            "order": 160
           },
           "co.verilog.format.separateElse": {
             "type": "boolean",
             "description": "是否将 else 放在单独一行",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 180
+            "order": 170
           },
           "co.verilog.format.maxBlankLines": {
             "type": "number",
@@ -1097,7 +1061,7 @@
             "description": "格式化器保留的最大连续空行数",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 190
+            "order": 180
           },
           "co.verilog.format.alignment.parameter": {
             "type": "string",
@@ -1108,7 +1072,7 @@
             "description": "parameter/localparam 声明的纵向对齐方式",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 200
+            "order": 190
           },
           "co.verilog.format.alignment.modulePort": {
             "type": "string",
@@ -1119,7 +1083,7 @@
             "description": "module 声明端口的纵向对齐方式",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 210
+            "order": 200
           },
           "co.verilog.format.alignment.ternary": {
             "type": "string",
@@ -1130,7 +1094,7 @@
             "description": "多行三目运算符链的纵向对齐方式",
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
-            "order": 220
+            "order": 210
           }
         }
       }

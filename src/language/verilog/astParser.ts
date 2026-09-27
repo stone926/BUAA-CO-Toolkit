@@ -677,6 +677,7 @@ function declarationDimensionInfos(
     const dimension = declarationWidthInfo(document, text, tokens, index, close);
     dimensions.push({
       range: dimension.widthRange,
+      text: dimension.width,
       expressions: dimension.widthAst
     });
     index = close;

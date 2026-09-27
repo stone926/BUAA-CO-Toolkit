@@ -23,12 +23,11 @@ import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
 import { parameterOverridesForInstance } from './parameterOverrides';
 import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
 import {
-  collectAssignmentDiagnostics,
-  collectCourseStyleDiagnostics,
   collectExplicitPortNetTypeDiagnostics,
   collectImplicitNetDiagnostics,
-  collectSynthesizableHintDiagnostics
+  collectTestbenchDiagnostics
 } from './lintDiagnostics';
+import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { normalizeWidth } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
 
@@ -51,12 +50,9 @@ export function collectVerilogDiagnostics(
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, ast, diagnostics);
-    collectAssignmentDiagnostics(document, settings, ast, diagnostics);
-    collectCourseStyleDiagnostics(document, settings, ast, diagnostics);
+    collectTestbenchDiagnostics(settings, ast, diagnostics);
   }
-  if (settings.verilog.lint.synthesizableHints) {
-    collectSynthesizableHintDiagnostics(document, settings, ast, diagnostics);
-  }
+  collectContinuousProceduralDriverDiagnostics(document, ast, diagnostics);
   collectExplicitPortNetTypeDiagnostics(ast, diagnostics);
   collectImplicitNetDiagnostics(settings, diagnostics, semantic);
   return diagnostics;

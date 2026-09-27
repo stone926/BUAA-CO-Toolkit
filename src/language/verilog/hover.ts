@@ -6,12 +6,12 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import { CoSettings } from '../common/settings';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
-import { declDetail, moduleAtPosition } from './parser';
+import { moduleAtPosition } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { formatNumericLiteralHover, numericLiteralAt } from './numericLiterals';
-import { evalExpressionAstConstant, widthOfDecl, widthOfExpressionAst } from './expressions';
+import { evalExpressionAstConstant, widthOfExpressionAst } from './expressions';
 import { findSmallestVerilogExpressionAtOffset } from './exprAstUtils';
-import { connectionMarkdown, formatBigInt, instanceMarkdown, markdownHover, moduleMarkdown, compactHoverSource } from './display';
+import { connectionMarkdown, declarationMarkdown, formatBigInt, instanceMarkdown, markdownHover, moduleMarkdown } from './display';
 import { resolveInstanceTargetModule, resolveVerilogSymbol, resolvedRange } from './resolveSymbol';
 
 export function getVerilogHover(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): Hover | undefined {
@@ -33,16 +33,7 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
     : resolved.sourceRange ?? resolvedRange(resolved);
   switch (resolved.kind) {
     case 'decl': {
-      const detail = declDetail(resolved.decl);
-      const widthInfo = widthOfDecl(resolved.decl, resolved.module);
-      let widthLine = '';
-      if (widthInfo.width !== undefined) {
-        widthLine = `\n\nWidth: \`${widthInfo.width}\` bits`;
-      }
-      const valueLine = resolved.decl.constantValue !== undefined
-        ? `\n\nConstant value: \`${formatBigInt(resolved.decl.constantValue)}\``
-        : '';
-      return markdownHover(`\`${detail}\`${widthLine}${valueLine}`, hoverRange);
+      return markdownHover(declarationMarkdown(resolved.decl, resolved.module), hoverRange);
     }
     case 'instance': {
       const target = resolveInstanceTargetModule(index, parsed.modules, resolved.instance);
@@ -91,8 +82,7 @@ function getVerilogExpressionHover(document: TextDocument, position: Position, s
     return undefined;
   }
   const range = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
-  const source = document.getText(range).trim();
-  if (!source) {
+  if (!document.getText(range).trim()) {
     return undefined;
   }
   const width = widthOfExpressionAst(expression, module);
@@ -100,7 +90,7 @@ function getVerilogExpressionHover(document: TextDocument, position: Position, s
   if (width.width === undefined && value === undefined) {
     return undefined;
   }
-  const lines = [`Expression \`${compactHoverSource(source)}\``];
+  const lines = ['**Expression**'];
   if (width.width !== undefined) {
     lines.push('', `Width: \`${width.width}\` bits`);
   }

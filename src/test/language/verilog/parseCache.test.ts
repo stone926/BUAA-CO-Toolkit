@@ -25,8 +25,7 @@ describe('Verilog parse cache', () => {
           diagnostic: 'off'
         },
         lint: {
-          courseRules: false,
-          synthesizableHints: false
+          courseRules: false
         }
       }
     });

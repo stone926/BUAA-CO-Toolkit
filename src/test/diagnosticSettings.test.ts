@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import {
   disableDiagnosticCode,
-  disableMipsPseudoWarnings,
-  disableVerilogLintRule
+  disableMipsPseudoWarnings
 } from '../diagnosticSettings';
 
 const vscodeState = vi.hoisted(() => ({
@@ -39,21 +38,6 @@ describe('diagnostic setting commands', () => {
     expect(config.update).toHaveBeenLastCalledWith(
       'mips.warnPseudoInstruction',
       false,
-      vscode.ConfigurationTarget.WorkspaceFolder
-    );
-  });
-
-  it('merges Verilog lint suppression in the diagnostic document folder', async () => {
-    vscodeState.state!.config.set('co.verilog.lint.disabledRules', ['vc-002']);
-
-    await disableVerilogLintRule('VC-001', 'file:///E:/work/cpu.v');
-
-    const configuredResource = vi.mocked(vscode.workspace.getConfiguration).mock.calls[0]?.[1] as vscode.Uri;
-    expect(configuredResource.fsPath.replace(/\\/g, '/').toLowerCase()).toBe('e:/work/cpu.v');
-    const config = vscode.workspace.getConfiguration('co', configuredResource);
-    expect(config.update).toHaveBeenLastCalledWith(
-      'verilog.lint.disabledRules',
-      ['vc-001', 'vc-002'],
       vscode.ConfigurationTarget.WorkspaceFolder
     );
   });

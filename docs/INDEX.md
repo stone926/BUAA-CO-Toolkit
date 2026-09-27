@@ -12,7 +12,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   mips-providers | docs/modules/mips-providers.md | 8 files  | Provider-neutral 引擎契约与阶段 6 原子选择策略
   mips-host      | docs/modules/mips-host.md      | 5 files  | 懒启动 Worker、真实 ISA batch 与 ACK 背压
   mips-replay    | docs/modules/mips-replay.md    | 9 files  | v2 用例闭包、可信引擎注册表与证据校验
-  verilog-lsp    | docs/modules/verilog-lsp.md    | 68 files | Verilog HDL 语言支持
+  verilog-lsp    | docs/modules/verilog-lsp.md    | 66 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~54 files| 扩展宿主层
   course-testing | docs/modules/course-testing.md | 52 files | 自动化测试框架
@@ -23,7 +23,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 
 数据流:
   MIPS: Text -> syntax.ts -> ast.ts -> semantic.ts -> parser.ts -> diagnostics, cache: parseCache.ts
-  Verilog: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts 调度: syntaxDiag/lintDiag/dataflowDiag/instanceConnectionDiag/usageDiag/workspaceDiag, cache: parseCache.ts
+  Verilog: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts 调度: syntaxDiag/lintDiag/instanceConnectionDiag/usageDiag/workspaceDiag, cache: parseCache.ts
   Waveform: 仿真并查看波形 -> runIverilog + 生成的 dump 顶层(GRF 逐字) -> .co/wave/<tb>.vcd -> 宿主流式解析为列式模型 -> Webview Canvas 渲染（esbuild 打包到 out/media），同名 .sim.out trace 叠加
   Test: SourceUnit immutable bundle -> 一次性 CourseEnginePlan -> assembler provider -> serialized ProgramImage/DUT bytes -> CourseTracePipeline -> 同一计划的 oracle provider -> bundled Icarus/Logisim DUT -> traceCompare -> HTML/JSON v2 report（P3–P7 automatic 固定 builtin-ts；mars/verify-both 仅供手动与历史回滚验证；case 保存完整输入与结果证据）
 

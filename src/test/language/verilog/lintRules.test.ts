@@ -3,10 +3,6 @@ import { DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
 import { getVerilogCodeActions, getVerilogDiagnostics } from '../../../language/verilog/service';
-import {
-  defaultDisabledVerilogLintRuleIds,
-  verilogLintRuleCatalog
-} from '../../../language/verilog/lintRuleCatalog';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
 let documentVersion = 1;
@@ -15,17 +11,8 @@ function doc(text: string): TextDocument {
   return TextDocument.create(`test://lint-${documentVersion}.v`, 'verilog', documentVersion++, text);
 }
 
-function diagnosticCodes(text: string, disabledRules?: string[]): string[] {
-  const settings = mergeCoSettings({
-    verilog: {
-      lint: {
-        disabledRules
-      }
-    }
-  });
-  return getVerilogDiagnostics(doc(text), settings)
-    .map((diagnostic) => diagnostic.code)
-    .filter((code): code is string => typeof code === 'string');
+function diagnosticCodes(text: string): string[] {
+  return diagnosticCodesWithSettings(text, {});
 }
 
 function diagnosticCodesWithSettings(text: string, settingsValue: unknown): string[] {
@@ -34,105 +21,40 @@ function diagnosticCodesWithSettings(text: string, settingsValue: unknown): stri
     .filter((code): code is string => typeof code === 'string');
 }
 
-describe('Verilog course lint rule configuration', () => {
-  const disabledByDefaultSample = `
-module demo(input a, output reg y);
-    wire BAD_name;
-    wire mux;
-    wire bare;
-    always @(*) begin
-        if (a) y = 1;
-        y = 42;
-    end
-endmodule
-`.trim();
-
-  it('keeps requested noisy rules disabled by default', () => {
-    const codes = diagnosticCodes(disabledByDefaultSample);
-    expect(codes.some((code) => code.startsWith('vc-001'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-003'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-004'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-008'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-021'))).toBe(false);
+describe('Verilog diagnostic behavior', () => {
+  it('removes style diagnostics even when legacy settings explicitly enabled them', () => {
+    const text = `module demo(input clk, input rst, input [3:0] a, inout bus, output reg [3:0] y);
+  wire [3:0] W_t_rsuse;
+  wire mux;
+  reg [3:0] state = 4'd3;
+  initial state = 4'd2;
+  always @(a) begin
+    if (a) y <= 4'd3;
+    case (a) 0: y = 4'd2; endcase
+  end
+  always @(negedge clk or posedge rst) begin
+    state = a * 4'd3;
+  end
+endmodule`;
+    for (const settings of [{}, { verilog: { lint: { courseRules: true, disabledRules: [], synthesizableHints: true } } }]) {
+      const codes = diagnosticCodesWithSettings(text, settings);
+      expect(codes.filter((code) => /^(vc-|synth-)|^mixed-assignment$/.test(code))).toEqual([]);
+    }
   });
 
-  it('emits default-disabled rules when the user enables them', () => {
-    const codes = diagnosticCodes(disabledByDefaultSample, []);
-    expect(codes.some((code) => code.startsWith('vc-001'))).toBe(true);
-    expect(codes.some((code) => code.startsWith('vc-003'))).toBe(true);
-    expect(codes.some((code) => code.startsWith('vc-004'))).toBe(true);
-    expect(codes.some((code) => code.startsWith('vc-008'))).toBe(true);
-    expect(codes.some((code) => code.startsWith('vc-021'))).toBe(true);
+  it('retains undeclared identifier, width and syntax diagnostics', () => {
+    expect(diagnosticCodes('module demo(output [3:0] y); assign y = missing; endmodule'))
+      .toContain('implicit-net:missing');
+    expect(diagnosticCodes('module demo(input [7:0] a, output [3:0] y); assign y = a; endmodule'))
+      .toContain('width-mismatch');
+    expect(diagnosticCodes('module demo;')).toContain('missing-endmodule');
   });
 
-  it('loads lint rule defaults from the catalog', () => {
-    expect(defaultDisabledVerilogLintRuleIds).toEqual(['vc-001', 'vc-002', 'vc-003', 'vc-004', 'vc-006', 'vc-008', 'vc-009', 'vc-011', 'vc-012', 'vc-013', 'vc-014', 'vc-015', 'vc-017', 'vc-021']);
-    expect(verilogLintRuleCatalog.filter((rule) => rule.configurable).map((rule) => rule.id)).toEqual([
-      'vc-001', 'vc-002', 'vc-003', 'vc-004', 'vc-005', 'vc-006', 'vc-007', 'vc-008',
-      'vc-009', 'vc-010', 'vc-011', 'vc-012', 'vc-013', 'vc-014', 'vc-015', 'vc-017', 'vc-021'
-    ]);
-  });
-
-  it('reports magic numbers from AST expressions but skips parameters and selects', () => {
-    const text = `
-module demo(input [7:0] a, output [7:0] y);
-    parameter P = 42;
-    assign y = a[3:0] + P + 42;
-endmodule
-`.trim();
-    const document = doc(text);
-    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { disabledRules: [] } } }))
-      .filter((diagnostic) => diagnostic.code === 'vc-004-magic-number');
-    expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['42']);
-  });
-
-  it('reports magic numbers in procedural local initializers without flagging localparams or widths', () => {
-    const text = `
-module demo(input [7:0] a, output reg [7:0] y);
-    always @(*) begin
-        localparam LIMIT = 99;
-        reg [7:0] tmp = 42;
-        y = tmp + LIMIT + a;
-    end
-endmodule
-`.trim();
-    const document = doc(text);
-    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { disabledRules: [] } } }))
-      .filter((diagnostic) => diagnostic.code === 'vc-004-magic-number');
-    expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['42']);
-  });
-
-  it('does not emit removed formatting or abstraction rules', () => {
-    const text = `
-module huge(input a,output reg y);
-assign y=a;
-${Array.from({ length: 170 }, (_, index) => `wire sig_${index};`).join('\n')}
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text, []);
-    expect(codes.some((code) => code.startsWith('vc-018'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-019'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-020'))).toBe(false);
-    expect(codes.some((code) => code.startsWith('vc-022'))).toBe(false);
-  });
-
-  it('offers a quick fix to disable every emitted VC rule', () => {
-    const text = `
-module demo(input a, output reg y);
-    always @(*) begin
-        y <= a;
-    end
-endmodule
-`.trim();
-    const document = doc(text);
-    const settings = mergeCoSettings({});
-    const diagnostics = getVerilogDiagnostics(document, settings);
-    const vc007 = diagnostics.find((diagnostic) => diagnostic.code === 'vc-007-comb-nonblocking');
-    expect(vc007).toBeDefined();
-
-    const actions = getVerilogCodeActions(document, vc007!.range, [vc007!], settings, new VerilogWorkspaceIndex());
-    const disableAction = actions.find((action) => action.command?.command === 'co.verilog.disableLintRule');
-    expect(disableAction?.command?.arguments).toEqual(['vc-007', document.uri]);
+  it('does not offer obsolete style quick fixes for stale diagnostics', () => {
+    const document = doc('module demo(input a, output reg y); always @* case(a) 0: y = 0; endcase endmodule');
+    const diagnostic = { range: Range.create(0, 51, 0, 83), message: 'VC-008', code: 'vc-008-case-default' };
+    const actions = getVerilogCodeActions(document, diagnostic.range, [diagnostic], mergeCoSettings({}), new VerilogWorkspaceIndex());
+    expect(actions.some((action) => action.title === 'Add default case item' || action.command?.command === 'co.verilog.disableLintRule')).toBe(false);
   });
 
   it('keeps width suppression scope explicit while targeting the diagnostic document root', () => {
@@ -156,132 +78,6 @@ endmodule
       ['verilog', 'width-mismatch', 'file', document.uri],
       ['verilog', 'width-mismatch', 'workspace', document.uri]
     ]);
-  });
-
-  it('does not treat <= comparisons as combinational nonblocking assignments', () => {
-    const text = `
-module demo(input [3:0] a, input [3:0] b, output reg y);
-    always @(*) begin
-        y = a <= b;
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text);
-    expect(codes).not.toContain('vc-007-comb-nonblocking');
-  });
-
-  it('does not report synth-mul-div for sensitivity wildcards, attributes, or timescale directives', () => {
-    const text = `
-\`timescale 1ns / 1ps
-module demo(input a, output reg y);
-    (* keep = "true" *) wire kept;
-    always @(*) begin
-        y = a | kept;
-    end
-    always @* begin
-        y = y ^ a;
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text);
-    expect(codes).not.toContain('synth-mul-div');
-  });
-
-  it('still reports actual multiply, divide, and modulo operators', () => {
-    const text = `
-module demo(input [3:0] a, input [3:0] b, output [3:0] y);
-    assign y = (a * b) / 2 % 3;
-endmodule
-`.trim();
-    const codes = diagnosticCodesWithSettings(text, { verilog: { lint: { synthesizableHints: true } } });
-    expect(codes.filter((code) => code === 'synth-mul-div')).toHaveLength(3);
-  });
-
-  it('reports synthesizable multiply hints on AST operator ranges', () => {
-    const text = `
-module demo(input [3:0] a, input [3:0] b, output [3:0] y);
-    assign y = a * b;
-endmodule
-`.trim();
-    const document = doc(text);
-    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { synthesizableHints: true } } }))
-      .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
-    expect(diagnostics).toHaveLength(1);
-    expect(document.getText(diagnostics[0].range)).toBe('*');
-  });
-
-  it('reports synthesizable operators in procedural declaration and loop AST expressions', () => {
-    const text = `
-module demo #(parameter W = 2, parameter H = 2)(input [3:0] a, input [3:0] b, output reg [3:0] y);
-    always @(*) begin
-        reg [W*H:0] tmp = a * b;
-        integer i;
-        for (i = 1; i < 4; i = i * 2) begin
-            y = tmp;
-        end
-    end
-endmodule
-`.trim();
-    const document = doc(text);
-    const diagnostics = getVerilogDiagnostics(document, mergeCoSettings({ verilog: { lint: { synthesizableHints: true } } }))
-      .filter((diagnostic) => diagnostic.code === 'synth-mul-div');
-    expect(diagnostics.map((diagnostic) => document.getText(diagnostic.range))).toEqual(['*', '*', '*']);
-  });
-
-  it('does not report multiply, divide, or modulo synthesizable hints inside MDU by default', () => {
-    const text = `
-module MDU(input [31:0] a, input [31:0] b, output [31:0] y);
-    assign y = (a * b) / 2 % 3;
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text);
-    expect(codes).not.toContain('synth-mul-div');
-  });
-
-  it('does not report initial synthesizable hints inside testbench modules by default', () => {
-    const text = `
-module cpu_tb;
-    initial begin
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text);
-    expect(codes).not.toContain('synth-initial');
-  });
-
-  it('does not report mixed assignment for testbench clock signals by default', () => {
-    const text = `
-module cpu_tb;
-    reg clk;
-    initial begin
-        clk = 0;
-    end
-    always @(posedge clk) begin
-        clk <= ~clk;
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text);
-    expect(codes).not.toContain('mixed-assignment');
-  });
-
-  it('reports clock signals used as sequential assignment data from AST RHS expressions', () => {
-    const clockData = `
-module demo(input clk, input data, output reg y);
-    always @(posedge clk) begin
-        y <= data ? clk : 1'b0;
-    end
-endmodule
-`.trim();
-    const normalData = `
-module demo(input clk, input data, output reg y);
-    always @(posedge clk) begin
-        y <= data;
-    end
-endmodule
-`.trim();
-    expect(diagnosticCodes(clockData, [])).toContain('vc-013-clock-data');
-    expect(diagnosticCodes(normalData, [])).not.toContain('vc-013-clock-data');
   });
 
   it('recognizes common delayed testbench clock generation forms', () => {
@@ -377,20 +173,6 @@ endmodule
       const codes = diagnosticCodes(text);
       expect(codes).toContain('tb-clock');
     }
-  });
-
-  it('filters diagnostics disabled through the generic diagnostic suppress setting', () => {
-    const text = `
-module demo(input [3:0] a, input [3:0] b, output [3:0] y);
-    assign y = a * b;
-endmodule
-`.trim();
-    const codes = diagnosticCodesWithSettings(text, {
-      diagnostics: {
-        disabledCodes: ['verilog:synth-mul-div']
-      }
-    });
-    expect(codes).not.toContain('synth-mul-div');
   });
 
   it('does not report declarations after procedural blocks as implicit nets', () => {
@@ -495,91 +277,4 @@ endmodule
     expect(edit?.range.start).toEqual({ line: 1, character: 0 });
   });
 
-  it('reports combinational assignments that are missing on some if paths', () => {
-    const text = `
-module demo(input a, input b, output reg y);
-    always @(*) begin
-        if (a) begin
-            y = b;
-        end
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text, []);
-    expect(codes).toContain('vc-008-comb-branch');
-    expect(codes).toContain('vc-008-comb-incomplete-assignment');
-  });
-
-  it('accepts default assignments before partial if branches', () => {
-    const text = `
-module demo(input a, input b, output reg y);
-    always @(*) begin
-        y = 1'b0;
-        if (a) begin
-            y = b;
-        end
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text, []);
-    expect(codes).not.toContain('vc-008-comb-branch');
-    expect(codes).not.toContain('vc-008-comb-incomplete-assignment');
-  });
-
-  it('accepts fully covered small constant case statements without default', () => {
-    const text = `
-module demo(input [1:0] sel, output reg y);
-    always @(*) begin
-        case (sel)
-            2'b00: y = 1'b0;
-            2'b01: y = 1'b0;
-            2'b10: y = 1'b1;
-            2'b11: y = 1'b1;
-        endcase
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text, []);
-    expect(codes).not.toContain('vc-008-case-default');
-    expect(codes).not.toContain('vc-008-comb-incomplete-assignment');
-  });
-
-  it('reports case assignments that lack default or full coverage', () => {
-    const text = `
-module demo(input sel, output reg y);
-    always @(*) begin
-        case (sel)
-            1'b0: y = 1'b0;
-        endcase
-    end
-endmodule
-`.trim();
-    const codes = diagnosticCodes(text, []);
-    expect(codes).toContain('vc-008-case-default');
-    expect(codes).toContain('vc-008-comb-incomplete-assignment');
-  });
-
-  it('offers a quick fix to add a default case item', () => {
-    const text = `
-module demo(input sel, output reg y);
-    always @(*) begin
-        case (sel)
-            1'b0: y = 1'b0;
-        endcase
-    end
-endmodule
-`.trim();
-    const document = doc(text);
-    const settings = mergeCoSettings({ verilog: { lint: { disabledRules: [] } } });
-    const diagnostics = getVerilogDiagnostics(document, settings);
-    const missingDefault = diagnostics.find((diagnostic) => diagnostic.code === 'vc-008-case-default');
-    expect(missingDefault).toBeDefined();
-
-    const actions = getVerilogCodeActions(document, missingDefault!.range, [missingDefault!], settings, new VerilogWorkspaceIndex());
-    const action = actions.find((candidate) => candidate.title === 'Add default case item');
-    const edit = action?.edit?.changes?.[document.uri]?.[0];
-    expect(action?.kind).toBe('quickfix');
-    expect(edit?.newText).toBe('            default: ;\n');
-    expect(edit?.range.start).toEqual({ line: 4, character: 0 });
-  });
 });

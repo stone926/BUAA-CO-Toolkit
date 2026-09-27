@@ -1,13 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   defaultCoSettings,
-  defaultDisabledVerilogLintRules,
   diagnosticCodeKey,
   diagnosticFileCodeKey,
   diagnosticCodeToString,
   isDiagnosticCodeDisabled,
   isDiagnosticCodeDisabledForFile,
-  isVerilogLintRuleEnabled,
   mergeCoSettings
 } from '../../../language/common/settings';
 
@@ -88,8 +86,6 @@ describe('mergeCoSettings', () => {
   it('merges a partial verilog.lint section', () => {
     const result = mergeCoSettings({ verilog: { lint: { courseRules: false } } });
     expect(result.verilog.lint.courseRules).toBe(false);
-    expect(result.verilog.lint.synthesizableHints).toBe(defaultCoSettings.verilog.lint.synthesizableHints);
-    expect(result.verilog.lint.disabledRules).toEqual(defaultCoSettings.verilog.lint.disabledRules);
     expect(result.verilog.implicitNet).toEqual(defaultCoSettings.verilog.implicitNet);
     expect(result.verilog.format).toEqual(defaultCoSettings.verilog.format);
   });
@@ -167,18 +163,6 @@ describe('mergeCoSettings', () => {
     expect(result.verilog.format.ternaryAlignment).toBe(defaultCoSettings.verilog.format.ternaryAlignment);
   });
 
-  it('defaults selected Verilog course lint rules to disabled', () => {
-    const result = mergeCoSettings({});
-    expect(result.verilog.lint.disabledRules).toEqual([...defaultDisabledVerilogLintRules]);
-    expect(isVerilogLintRuleEnabled(result, 'vc-001')).toBe(false);
-    expect(isVerilogLintRuleEnabled(result, 'VC-002')).toBe(false);
-  });
-
-  it('normalizes custom disabled Verilog lint rules', () => {
-    const result = mergeCoSettings({ verilog: { lint: { disabledRules: ['VC-002', 'bad', 'vc-999', 'vc-002', ' vc-017 '] } } });
-    expect(result.verilog.lint.disabledRules).toEqual(['vc-002', 'vc-017']);
-  });
-
   it('normalizes disabled diagnostic codes', () => {
     const result = mergeCoSettings({
       diagnostics: {
@@ -214,13 +198,13 @@ describe('mergeCoSettings', () => {
     const result = mergeCoSettings({
       project: { profile: 'P7', topModule: 'cpu' },
       mips: { warnPseudoInstruction: false },
-      verilog: { lint: { synthesizableHints: false } }
+      verilog: { lint: { courseRules: false } }
     });
     expect(result.project.profile).toBe('P7');
     expect(result.project.topModule).toBe('cpu');
     expect(result.project.testbench).toBe(defaultCoSettings.project.testbench);
     expect(result.mips.warnPseudoInstruction).toBe(false);
-    expect(result.verilog.lint.synthesizableHints).toBe(false);
+    expect(result.verilog.lint.courseRules).toBe(false);
   });
 
   it('ignores extra keys gracefully', () => {
