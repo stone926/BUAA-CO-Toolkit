@@ -48,7 +48,7 @@ describe('directiveHoverText', () => {
     expect(text!).toContain('.set');
     expect(text!).toContain('SPIM');
     expect(text!).toContain('MARS');
-    expect(text!).toContain('warning');
+    expect(text!).toContain('警告');
   });
 
   it('omits a hover when a directive has no explanatory content', () => {
@@ -73,7 +73,7 @@ describe('syscallMarkdown', () => {
 
   it('includes syscall code and name', () => {
     const text = syscallMarkdown(basicSyscall);
-    expect(text).toContain('MARS syscall 1');
+    expect(text).toContain('MARS 系统调用 1');
     expect(text).toContain('print_int');
   });
 

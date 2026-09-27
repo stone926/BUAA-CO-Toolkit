@@ -30,8 +30,8 @@ describe('Verilog hover, navigation, and rename behavior', () => {
     ].join('\n'), URI.file(path.join(root, 'top.v')).toString());
     const index = new VerilogWorkspaceIndex();
 
-    expect(hoverText(getVerilogHover(document, positionOf(document, 'defs.vh'), defaultCoSettings, index))).toContain('Resolved:');
-    expect(hoverText(getVerilogHover(document, positionOf(document, 'missing.vh'), defaultCoSettings, index))).toContain('**Unresolved**');
+    expect(hoverText(getVerilogHover(document, positionOf(document, 'defs.vh'), defaultCoSettings, index))).toContain('实际路径：');
+    expect(hoverText(getVerilogHover(document, positionOf(document, 'missing.vh'), defaultCoSettings, index))).toContain('**未找到文件**');
   });
 
   it('prefers declaration hover over expression hover at a declaration name', () => {
@@ -44,7 +44,7 @@ endmodule
     const text = hoverText(getVerilogHover(document, positionOf(document, 'WIDTH ='), defaultCoSettings, new VerilogWorkspaceIndex()));
 
     expect(text).toContain('**localparam**');
-    expect(text).toContain('Constant value: `8 (0x8)`');
+    expect(text).toContain('常量值：`8 (0x8)`');
     expect(text).not.toContain('localparam WIDTH');
     expect(text).not.toContain('Expression `WIDTH`');
   });
@@ -55,7 +55,7 @@ endmodule
     for (const sourceOffset of [document.getText().indexOf('W_t_rsuse'), document.getText().lastIndexOf('W_t_rsuse')]) {
       const text = hoverText(getVerilogHover(document, document.positionAt(sourceOffset), defaultCoSettings, index));
       expect(text).toContain('**wire**');
-      expect(text).toContain('Width: `4` bits');
+      expect(text).toContain('位宽：`4` 位');
       expect(text).not.toContain('wire [3:0] W_t_rsuse');
     }
   });
@@ -64,8 +64,8 @@ endmodule
     const document = verilogDoc('module top; wire [UNKNOWN-1:0] memory [0:3]; assign memory[0] = 0; endmodule');
     const text = hoverText(getVerilogHover(document, positionOf(document, 'memory [0:3]'), defaultCoSettings, new VerilogWorkspaceIndex()));
 
-    expect(text).toContain('Range: `[UNKNOWN-1:0]`');
-    expect(text).toContain('Array: `[0:3]`');
+    expect(text).toContain('范围：`[UNKNOWN-1:0]`');
+    expect(text).toContain('数组维度：`[0:3]`');
     expect(text).not.toContain('wire [UNKNOWN-1:0] memory [0:3]');
   });
 
@@ -74,8 +74,8 @@ endmodule
     const index = new VerilogWorkspaceIndex();
     const text = hoverText(getVerilogHover(document, positionOf(document, '.din', 1), defaultCoSettings, index));
 
-    expect(text).toContain('Effective width: `8` bits');
-    expect(text).toContain('Connection width: `4` bits');
+    expect(text).toContain('端口位宽：`8` 位');
+    expect(text).toContain('连接位宽：`4` 位');
     expect(text).not.toContain('input [7:0] din');
   });
 

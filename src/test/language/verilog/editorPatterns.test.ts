@@ -124,7 +124,7 @@ endmodule`);
     const hover = getVerilogHover(document, document.positionAt(document.getText().lastIndexOf('+')), settings, new VerilogWorkspaceIndex());
     const text = typeof hover?.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
     expect(text.length).toBeLessThan(230);
-    expect(text).toContain('**Expression**');
+    expect(text).toContain('**表达式**');
     expect(text).not.toContain('a + a + a');
     expect(text).not.toMatch(/AST|Node range|flexible|min:/);
   });

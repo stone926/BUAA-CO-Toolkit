@@ -29,13 +29,13 @@ export function directiveHoverText(directive: string): string | undefined {
     return '**.align n**\n\n将下一个数据项按 2^n 字节边界对齐。常用值为 `.align 0`、`.align 1` 和 `.align 2`';
   }
   if (directive === '.data' || directive === '.text') {
-    return `**${directive}**\n\n切换当前汇编段。内置课程引擎会按当前 Profile 使用固定内存布局，通常不应传递自定义段地址`;
+    return `**${directive}**\n\n切换当前汇编段。内置课程引擎会按当前课程阶段使用固定内存布局，通常不应传递自定义段地址`;
   }
   if (directive === '.ktext') {
     return `**.ktext**\n\n切换到内核文本段。P7 异常处理程序使用课程固定入口 \`.ktext 0x${p7ExceptionHandlerAddress.toString(16)}\``;
   }
   if (directive === '.set') {
-    return '**.set**\n\nSPIM 兼容 directive。MARS 4.5 会识别它，但当前会忽略其效果并给出 warning';
+    return '**.set**\n\nSPIM 兼容汇编指示符。MARS 4.5 会识别它，但当前会忽略其效果并给出警告';
   }
   return undefined;
 }
@@ -102,7 +102,7 @@ export function pseudoExpansionPreview(mnemonic: string, operands: string[]): st
 
 export function syscallMarkdown(syscall: MipsSyscallInfo): string {
   return [
-    `**MARS syscall ${syscall.code}** - ${syscall.name}`,
+    `**MARS 系统调用 ${syscall.code}** - ${syscall.name}`,
     '',
     syscall.description,
     '',
@@ -503,4 +503,3 @@ function interpolateTemplates(templates: string[], patterns: string[], operands:
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-

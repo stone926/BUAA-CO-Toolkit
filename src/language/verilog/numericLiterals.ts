@@ -42,18 +42,18 @@ export function getVerilogLiteralCodeActions(document: TextDocument, range: Rang
 export function formatNumericLiteralHover(literal: NumericLiteralInfo): string {
   const value = literal.value;
   const lines: string[] = [];
-  const sizeLabel = literal.size !== undefined ? `${literal.size}'${literal.base}` : 'decimal';
+  const sizeLabel = literal.size !== undefined ? `${literal.size}'${literal.base}` : '十进制';
 
-  lines.push(`**Number** \`${sizeLabel}\``);
+  lines.push(`**数值** \`${sizeLabel}\``);
   lines.push('');
 
   const dec = value.toString(10);
-  lines.push(`Decimal: \`${dec}\` · Hex: \`0x${value.toString(16).toUpperCase()}\``);
+  lines.push(`十进制：\`${dec}\` · 十六进制：\`0x${value.toString(16).toUpperCase()}\``);
 
   const bin = value.toString(2);
   const grouped = bin.padStart(Math.ceil(bin.length / 4) * 4, '0')
     .replace(/(.{4})/g, '$1_').replace(/_$/, '');
-  lines.push('', `Binary: \`${grouped.length > 80 ? `${grouped.slice(0, 77)}…` : grouped}\``);
+  lines.push('', `二进制：\`${grouped}\``);
 
   return lines.join('\n');
 }

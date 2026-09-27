@@ -47,7 +47,7 @@ lsp-providers:
   diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
   completions.ts — completionProvider 依赖装配入口, 注入实例连接上下文 resolver
   completionProvider.ts — 补全provider: 实例连接上下文（#(...) 只列可覆盖的 parameter）/宏/关键字/snippet/workspace模块补全
-  hover.ts — hover provider: 声明/表达式宽度、常量、实例参数、include 状态；声明与表达式不回显源码，端口/参数连接合并相同的宽度和值；不展示 AST 类型/节点偏移/内部宽度推断属性，接口列表限制展示长度
+  hover.ts — hover provider: 声明/表达式宽度、常量、实例参数、include 状态；声明与表达式不回显源码，端口/参数连接合并相同的宽度和值；不展示 AST 类型/节点偏移/内部宽度推断属性，说明文字使用中文，完整展示端口和参数列表（先端口后参数）
   navigation.ts — definition/reference provider: 跨文件 module/interface/macro/include 引用收集和去重
   rename.ts — rename provider: 基于 reference provider 生成 workspace edit, 标识符边界校验
   codeActions.ts — quick fix/refactor provider: 隐式连线声明、表达式折叠/抽取、实例连接补全

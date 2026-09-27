@@ -62,10 +62,10 @@ endmodule
       new VerilogWorkspaceIndex()
     );
 
-    expect(hoverText(hover)).toContain('**Expression**');
+    expect(hoverText(hover)).toContain('**表达式**');
     expect(hoverText(hover)).not.toContain('a + b * 3');
     expect(hoverText(hover)).not.toMatch(/AST:|Node range:|flexible|min:/);
-    expect(hoverText(hover)).toContain('Width: `32`');
+    expect(hoverText(hover)).toContain('位宽：`32`');
   });
 
   it('keeps hover on parsed subexpressions when an assignment is incomplete', () => {
@@ -82,10 +82,10 @@ endmodule
       new VerilogWorkspaceIndex()
     );
 
-    expect(hoverText(hover)).toContain('**Expression**');
+    expect(hoverText(hover)).toContain('**表达式**');
     expect(hoverText(hover)).not.toContain('a + b');
     expect(hoverText(hover)).not.toMatch(/AST:|Node range:|flexible|min:/);
-    expect(hoverText(hover)).toContain('Width: `4`');
+    expect(hoverText(hover)).toContain('位宽：`4`');
   });
 
   it('includes evaluated parameter constants in declaration hover', () => {
@@ -103,7 +103,7 @@ endmodule
       new VerilogWorkspaceIndex()
     );
 
-    expect(hoverText(hover)).toContain('Constant value: `8 (0x8)`');
+    expect(hoverText(hover)).toContain('常量值：`8 (0x8)`');
   });
 
   it('uses parameterized port widths in diagnostics', () => {
@@ -138,17 +138,17 @@ endmodule
     const index = new VerilogWorkspaceIndex();
 
     const instanceHover = getVerilogHover(document, positionOf(document, 'u_child'), settings, index);
-    expect(hoverText(instanceHover)).toContain('WIDTH = 8 (0x8) // override');
-    expect(hoverText(instanceHover)).toContain('DEPTH = 16 (0x10) // override');
+    expect(hoverText(instanceHover)).toContain('WIDTH = 8 (0x8) // 已覆盖');
+    expect(hoverText(instanceHover)).toContain('DEPTH = 16 (0x10) // 已覆盖');
 
     const parameterHover = getVerilogHover(document, positionOf(document, '.WIDTH', 1), settings, index);
-    expect(hoverText(parameterHover)).toContain('Parameter `WIDTH` on module `child`');
-    expect(hoverText(parameterHover)).toContain('Effective value: `8 (0x8)`');
+    expect(hoverText(parameterHover)).toContain('模块 `child` 的参数 `WIDTH`');
+    expect(hoverText(parameterHover)).toContain('生效值：`8 (0x8)`');
 
     const portHover = getVerilogHover(document, positionOf(document, '.din', 1), settings, index);
-    expect(hoverText(portHover)).toContain('Port `din` on module `child`');
-    expect(hoverText(portHover)).toContain('Effective width: `8`');
-    expect(hoverText(portHover)).not.toContain('Connection width: `8`');
+    expect(hoverText(portHover)).toContain('模块 `child` 的端口 `din`');
+    expect(hoverText(portHover)).toContain('端口位宽：`8`');
+    expect(hoverText(portHover)).not.toContain('连接位宽：`8`');
     expect(hoverText(portHover)).not.toContain('input [WIDTH-1:0] din');
 
     expect(inlayLabels(document)).toEqual(expect.arrayContaining([

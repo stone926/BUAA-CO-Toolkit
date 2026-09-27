@@ -47,7 +47,7 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
     case 'macro': {
       const macroDef = resolved.macro ?? index.getMacro(resolved.name);
       const bodyMd = macroDef?.body ? `\n\n\`\`\`verilog\n${macroDef.body}\n\`\`\`` : '';
-      return markdownHover(`Verilog macro \`${resolved.name}\`${bodyMd}`, hoverRange);
+      return markdownHover(`Verilog 宏 \`${resolved.name}\`${bodyMd}`, hoverRange);
     }
     case 'include': {
       let status = '';
@@ -56,15 +56,15 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
           const currentPath = URI.parse(document.uri).fsPath;
           const resolvedPath = path.resolve(path.dirname(currentPath), resolved.include.path);
           if (fs.existsSync(resolvedPath)) {
-            status = `\n\nResolved: \`${resolvedPath}\``;
+            status = `\n\n实际路径：\`${resolvedPath}\``;
           } else {
-            status = '\n\n**Unresolved**';
+            status = '\n\n**未找到文件**';
           }
         } catch {
-          status = '\n\n**Unresolved**';
+          status = '\n\n**未找到文件**';
         }
       }
-      return markdownHover(`Included file \`${resolved.include.path}\`${status}`, hoverRange);
+      return markdownHover(`包含文件 \`${resolved.include.path}\`${status}`, hoverRange);
     }
   }
 }
@@ -90,12 +90,12 @@ function getVerilogExpressionHover(document: TextDocument, position: Position, s
   if (width.width === undefined && value === undefined) {
     return undefined;
   }
-  const lines = ['**Expression**'];
+  const lines = ['**表达式**'];
   if (width.width !== undefined) {
-    lines.push('', `Width: \`${width.width}\` bits`);
+    lines.push('', `位宽：\`${width.width}\` 位`);
   }
   if (value !== undefined) {
-    lines.push('', `Constant value: \`${formatBigInt(value)}\``);
+    lines.push('', `常量值：\`${formatBigInt(value)}\``);
   }
   return markdownHover(lines.join('\n'), range);
 }

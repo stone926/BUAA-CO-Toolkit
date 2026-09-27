@@ -23,28 +23,28 @@ export function declarationMarkdown(decl: VerilogDecl, module: VerilogModule): s
   const parts = [`**${kind}**`];
   const width = widthOfDecl(decl, module).width;
   if (width !== undefined && decl.kind !== 'task' && decl.kind !== 'function') {
-    parts.push(`Width: \`${width}\` bits`);
+    parts.push(`位宽：\`${width}\` 位`);
   } else if (decl.width) {
-    parts.push(`Range: \`${decl.width}\``);
+    parts.push(`范围：\`${decl.width}\``);
   }
   if (decl.constantValue !== undefined) {
-    parts.push(`Constant value: \`${formatBigInt(decl.constantValue)}\``);
+    parts.push(`常量值：\`${formatBigInt(decl.constantValue)}\``);
   }
   if (decl.unpackedDimensions?.length) {
-    parts.push(`Array: \`${decl.unpackedDimensions.map((dimension) => dimension.text).join('')}\``);
+    parts.push(`数组维度：\`${decl.unpackedDimensions.map((dimension) => dimension.text).join('')}\``);
   }
   return parts.join(' · ');
 }
 
 export function instanceMarkdown(instance: VerilogInstance, parentModule: VerilogModule, targetModule: VerilogModule | undefined): string {
-  const lines = [`Instance \`${instance.instanceName}\` of module \`${instance.moduleName}\`.`];
+  const lines = [`模块 \`${instance.moduleName}\` 的实例 \`${instance.instanceName}\``];
   if (!targetModule) {
     return lines.join('\n');
   }
   const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
   const parameterLines = effectiveParameterLines(targetModule, overrides);
   if (parameterLines.length) {
-    lines.push('', 'Effective parameters:', '```verilog', ...limitedLines(parameterLines, 8), '```');
+    lines.push('', '生效参数：', '```verilog', ...parameterLines, '```');
   }
   return lines.join('\n');
 }
@@ -62,15 +62,15 @@ export function portConnectionMarkdown(
   port: VerilogDecl,
   connection: VerilogPortConnection
 ): string {
-  const lines = [`Port \`${port.name}\` on module \`${targetModule.name}\` · **${port.direction ?? port.kind}**`];
+  const lines = [`模块 \`${targetModule.name}\` 的端口 \`${port.name}\` · **${port.direction ?? port.kind}**`];
   const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
   const expected = widthOfDecl(port, targetModule, overrides);
   const actual = connection.expressionAst ? widthOfExpressionAst(connection.expressionAst, parentModule) : undefined;
   if (expected.width !== undefined) {
-    lines.push('', `Effective width: \`${expected.width}\` bits`);
+    lines.push('', `端口位宽：\`${expected.width}\` 位`);
   }
   if (actual?.width !== undefined && actual.width !== expected.width) {
-    lines.push('', `Connection width: \`${actual.width}\` bits`);
+    lines.push('', `连接位宽：\`${actual.width}\` 位`);
   }
   return lines.join('\n');
 }
@@ -82,20 +82,20 @@ export function parameterConnectionMarkdown(
   parameter: VerilogDecl,
   connection: VerilogPortConnection
 ): string {
-  const lines = [`Parameter \`${parameter.name}\` on module \`${targetModule.name}\` · **${parameter.kind}**`];
+  const lines = [`模块 \`${targetModule.name}\` 的参数 \`${parameter.name}\` · **${parameter.kind}**`];
   const overrides = parameterOverridesForInstance(instance, parentModule, targetModule);
   const effective = effectiveParameterValue(parameter, targetModule, overrides);
   if (effective !== undefined) {
-    lines.push('', `Effective value: \`${formatBigInt(effective)}\``);
+    lines.push('', `生效值：\`${formatBigInt(effective)}\``);
   }
   const supplied = connection.expressionAst
     ? evalExpressionAstConstant(connection.expressionAst, parentModule)
     : undefined;
   if (supplied !== undefined && supplied !== effective) {
-    lines.push('', `Connection value: \`${formatBigInt(supplied)}\``);
+    lines.push('', `传入值：\`${formatBigInt(supplied)}\``);
   }
   const width = widthOfDecl(parameter, targetModule, overrides);
-  lines.push(...widthMarkdownLines('Parameter width', width));
+  lines.push(...widthMarkdownLines('参数位宽', width));
   return lines.join('\n');
 }
 
@@ -126,7 +126,7 @@ export function effectiveParameterLines(module: VerilogModule, overrides?: Veril
       if (value === undefined) {
         return undefined;
       }
-      const source = overrides?.has(parameter.name) ? ' // override' : '';
+      const source = overrides?.has(parameter.name) ? ' // 已覆盖' : '';
       return `${parameter.name} = ${formatBigInt(value)}${source}`;
     })
     .filter((line): line is string => Boolean(line));
@@ -151,7 +151,7 @@ export function widthMarkdownLines(label: string, info: WidthInfo): string[] {
   if (info.width === undefined) {
     return [];
   }
-  return ['', `${label}: \`${info.width}\` bits`];
+  return ['', `${label}：\`${info.width}\` 位`];
 }
 
 export function formatBigInt(value: bigint): string {
@@ -164,18 +164,14 @@ export function formatBigInt(value: bigint): string {
 export function moduleMarkdown(module: VerilogModule): string {
   const params = overridableParameters(module).map((param) => declDetail(param));
   const ports = module.ports.map((port) => declDetail(port));
-  const sections = [`**module ${module.name}**`];
-  if (params.length) {
-    sections.push('', 'Parameters:', '```verilog', ...limitedLines(params, 8), '```');
-  }
+  const sections = [`**模块 ${module.name}**`];
   if (ports.length) {
-    sections.push('', 'Ports:', '```verilog', ...limitedLines(ports, 12), '```');
+    sections.push('', '端口：', '```verilog', ...ports, '```');
+  }
+  if (params.length) {
+    sections.push('', '参数：', '```verilog', ...params, '```');
   }
   return sections.join('\n');
-}
-
-function limitedLines(lines: string[], limit: number): string[] {
-  return lines.length > limit ? [...lines.slice(0, limit), `// … ${lines.length - limit} more`] : lines;
 }
 
 export function portDirectionLabel(port: VerilogDecl): 'in' | 'out' | 'inout' {

@@ -41,7 +41,7 @@ endmodule
     const portDefinition = getVerilogDefinition(document, positionOf(document, '.din', 1), defaultCoSettings, index);
     expect(document.getText(parameterDefinition!.range)).toBe('WIDTH');
     expect(document.getText(portDefinition!.range)).toBe('din');
-    expect(hoverText(getVerilogHover(document, positionOf(document, '.din', 1), defaultCoSettings, index))).toContain('Effective width: `8`');
+    expect(hoverText(getVerilogHover(document, positionOf(document, '.din', 1), defaultCoSettings, index))).toContain('端口位宽：`8`');
     expect(getVerilogSignatureHelp(document, positionOf(document, '.dout', 2), defaultCoSettings, index)?.activeParameter).toBe(1);
     expect(inlayLabels(document, index)).toEqual(expect.arrayContaining([': param', ': in[8]', ': out[16]']));
   });
