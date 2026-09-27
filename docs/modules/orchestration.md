@@ -58,7 +58,7 @@ verilog-commands:
   verilog/simulationRunner.ts — 通用 Verilog 仿真入口，固定使用 bundled Icarus；共享增量模块注册表，统一编译、仿真和输出失败结果。
   verilog/simulationInputs.ts — Icarus 运行前机器码源定位与复制；保留配置文件名并同步生成课程 TB 固定读取的 `code.txt` alias
   verilog/testbenchResolver.ts — 三种 TB 来源：自动测试使用 `.co/iverilog` 私有课程 TB；所有用户模板生成到 `.co/tb`，手工编写激励；自建 `_tb.v` / `_testbench.v` 按文件名识别。手动运行优先活动 TB，缺失的 CPU TB 在程序准备成功后生成并继续运行，普通模块生成并打开模板后停止，所有阶段均不回退私有 TB。自动 TB 字节与 case 元数据一并记录。
-  verilog/userCpuProgram.ts — `.co/tb` CPU 标记识别后直接选择 ASM（取消则停止），支持在 CPU TB 创建前准备程序；复用内置汇编器与课程镜像投影、停机尾及 P7 内核地址映射；每次完整初始化机器码，失败或取消停止仿真，波形重试在单次操作内复用输入字节。
+  verilog/userCpuProgram.ts — `.co/tb` CPU 标记识别后每次操作显式弹出 ASM 文件选择框（单文件或活动 ASM 也不自动选中，取消则停止），支持在 CPU TB 创建前准备程序；复用内置汇编器与课程镜像投影、停机尾及 P7 内核地址映射；每次完整初始化机器码，失败或取消停止仿真，波形重试在单次操作内复用输入字节。
   verilog/userCpuTestbench.ts — P4–P7 已配置 CPU top 的 `.co/tb` 模板复用课程时钟/复位/存储器接线，插入稳定 CPU 标记供手动仿真时选择 ASM；其他模块继续使用通用激励模板。
   verilog/userTestbench.ts — `.co/tb` 用户 testbench：`<workspace>/.co/tb/<tb>.v` 路径约定、按模块名精确解析、只创建不覆盖；目录被工程发现、模块注册表与自动测试排除
   verilogSignalView.ts — 信号连线面板(coVerilogSignal视图): 光标处信号声明/驱动/读取, 跨模块导航

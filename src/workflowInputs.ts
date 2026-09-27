@@ -156,12 +156,17 @@ export async function resolveFileInput(options: ResolveFileInputOptions): Promis
   return options.fallbackOpenDialog === false ? undefined : await pickOneFile(options.title, options.filters);
 }
 
-export async function pickOneFile(title: string, filters: Record<string, string[]>): Promise<vscode.Uri | undefined> {
+export async function pickOneFile(
+  title: string,
+  filters: Record<string, string[]>,
+  defaultUri?: vscode.Uri
+): Promise<vscode.Uri | undefined> {
   const picked = await vscode.window.showOpenDialog({
     title,
     canSelectFiles: true,
     canSelectFolders: false,
     canSelectMany: false,
+    ...(defaultUri ? { defaultUri } : {}),
     filters
   });
   return picked?.[0];

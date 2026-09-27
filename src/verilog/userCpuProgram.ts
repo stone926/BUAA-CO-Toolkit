@@ -2,8 +2,8 @@
 import * as vscode from 'vscode';
 import type { AppServices } from '../types';
 import { getProfile } from '../config';
-import { resolveAsmCaseInput } from '../asmCaseStore';
-import { writeTextFile } from '../fsUtil';
+import { pickOneFile } from '../workflowInputs';
+import { workspaceFolderFor, writeTextFile } from '../fsUtil';
 import {
   courseInstructionImageWordCapacity,
   courseInstructionImageWordsWithOrdinaryHalt,
@@ -60,7 +60,12 @@ export async function prepareUserCpuProgramForTestbench(
       return { kind: 'ready', machineCodeSource };
     }
     // A separate staging file keeps a failed/cancelled assembly out of code.txt.
-    const asm = await resolveAsmCaseInput('选择 CPU testbench 使用的 ASM（取消则停止本次运行）');
+    // Always ask, even when only one ASM exists or an ASM editor is active.
+    const asm = await pickOneFile(
+      '选择 CPU testbench 使用的 ASM（取消则停止本次运行）',
+      { ASM: ['asm', 's', 'mips'] },
+      workspaceFolderFor(testbench)?.uri
+    );
     if (!asm || signal?.aborted) return { kind: 'stopped' };
     const invocation = await assembleWithPreflight(services, {
       sourceUri: asm,
