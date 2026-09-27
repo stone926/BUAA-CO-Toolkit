@@ -65,6 +65,9 @@ export function displayUnitFor(femtoseconds: number): TimeUnit {
  * Format a tick count as physical time. Values keep at most `maximumFractionDigits`
  * decimals with trailing zeros trimmed, so exact edges read as `474 ns` and
  * sub-unit positions as `474.5 ns`.
+ *
+ * Without an explicit unit, a larger unit is used only when it is exact and not
+ * longer: `10000 ns` becomes `10 µs`, but `12345 ns` stays as written.
  */
 export function formatTicks(
   ticks: number,
@@ -72,8 +75,38 @@ export function formatTicks(
   options: { unit?: TimeUnit; maximumFractionDigits?: number } = {}
 ): string {
   const femtoseconds = ticks * scale.femtoseconds;
-  const unit = options.unit ?? displayUnitFor(femtoseconds);
-  return `${formatNumber(femtoseconds / unitFemtoseconds[unit], options.maximumFractionDigits ?? 3)} ${unitLabel(unit)}`;
+  const digits = options.maximumFractionDigits ?? 3;
+  if (options.unit) {
+    return formatIn(femtoseconds, options.unit, digits);
+  }
+  const largest = displayUnitFor(femtoseconds);
+  let best = formatIn(femtoseconds, largest, digits);
+  let bestExact = isExactIn(femtoseconds, largest, digits);
+  for (let index = displayUnits.indexOf(largest) + 1; index < displayUnits.length; index++) {
+    const unit = displayUnits[index];
+    if (!isExactIn(femtoseconds, unit, digits)) {
+      continue;
+    }
+    const text = formatIn(femtoseconds, unit, digits);
+    if (!bestExact || text.length < best.length) {
+      best = text;
+      bestExact = true;
+    }
+    if (Number.isInteger(femtoseconds / unitFemtoseconds[unit])) {
+      break; // Smaller units only append zeros.
+    }
+  }
+  return best;
+}
+
+function formatIn(femtoseconds: number, unit: TimeUnit, maximumFractionDigits: number): string {
+  return `${formatNumber(femtoseconds / unitFemtoseconds[unit], maximumFractionDigits)} ${unitLabel(unit)}`;
+}
+
+/** Whether `maximumFractionDigits` decimals represent the duration in `unit` without rounding. */
+function isExactIn(femtoseconds: number, unit: TimeUnit, maximumFractionDigits: number): boolean {
+  const scaled = (femtoseconds / unitFemtoseconds[unit]) * 10 ** maximumFractionDigits;
+  return Math.abs(scaled - Math.round(scaled)) <= 1e-6 + 1e-12 * Math.abs(scaled);
 }
 
 function formatNumber(value: number, maximumFractionDigits: number): string {

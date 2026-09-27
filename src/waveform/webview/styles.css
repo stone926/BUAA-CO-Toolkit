@@ -482,7 +482,7 @@ button {
   right: 0;
   height: 22px;
   display: grid;
-  grid-template-columns: 50px 60px minmax(0, 1fr);
+  grid-template-columns: var(--trace-time-width, 50px) 60px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   padding: 0 8px;

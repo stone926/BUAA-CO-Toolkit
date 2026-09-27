@@ -122,6 +122,7 @@ export class TracePanel {
       }
     });
     this.filteredTimes = Float64Array.from(this.filtered, (index) => events[index].time);
+    this.fitTimeColumn(events);
     this.spacer.style.height = `${this.filtered.length * traceRowHeight}px`;
     if (!this.trace) {
       setText(this.note, '没有与此波形配对的 trace。用「仿真并查看波形」生成的波形会自动附带 GRF/DM 写入记录（来自 testbench 的 $display）。');
@@ -184,12 +185,25 @@ export class TracePanel {
     this.renderRows();
   }
 
+  /** Size the time column to its widest label (monospace, so characters map to `ch`). */
+  private fitTimeColumn(events: readonly { time: number }[]): void {
+    let widest = 4;
+    for (const index of this.filtered) {
+      widest = Math.max(widest, this.timeLabel(events[index].time).length);
+    }
+    this.list.style.setProperty('--trace-time-width', `${widest}ch`);
+  }
+
+  private timeLabel(time: number): string {
+    const scale = this.store.data?.timescale;
+    return scale ? formatTicks(time, scale) : String(time);
+  }
+
   private renderRows(): void {
     if (!this.visible) {
       return;
     }
     const events = this.trace?.events ?? [];
-    const scale = this.store.data?.timescale;
     const top = this.list.scrollTop;
     const height = this.list.clientHeight || 400;
     const first = Math.max(0, Math.floor(top / traceRowHeight) - 3);
@@ -204,7 +218,7 @@ export class TracePanel {
       element.root.style.top = `${index * traceRowHeight}px`;
       toggleClass(element.root, 'current', this.filtered[index] === this.current);
       toggleClass(element.root, 'dm', event.kind === 'dm');
-      setText(element.time, scale ? formatTicks(event.time, scale) : String(event.time));
+      setText(element.time, this.timeLabel(event.time));
       setText(element.pc, event.pc);
       setText(element.target, targetLabel(event));
       setText(element.value, event.value);

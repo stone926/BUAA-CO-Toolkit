@@ -145,6 +145,11 @@ describe('time scale', () => {
     expect(formatTicks(200_000_000, ps)).toBe('200 µs');
     expect(formatTicks(0, ps)).toBe('0 ns');
     expect(formatTicks(5, ps)).toBe('5 ps');
+    expect(formatTicks(12_345_000, ps)).toBe('12345 ns');
+    expect(formatTicks(10_000_000, ps)).toBe('10 µs');
+    expect(formatTicks(1_500_000, ps)).toBe('1.5 µs');
+    expect(formatTicks(1_234_567, ps)).toBe('1234567 ps');
+    expect(formatTicks(1_234_567_800, ps)).toBe('1234567.8 ns');
     expect(formatTicks(1500, ps, { unit: 'ns', maximumFractionDigits: 0 })).toBe('2 ns');
     expect(displayUnitFor(1e9)).toBe('us');
     expect(ticksFromPhysical(1.5, 'us', ps)).toBe(1_500_000);
