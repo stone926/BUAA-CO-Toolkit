@@ -24,7 +24,7 @@ const simulationOutput = [
 
 describe('trace pairing', () => {
   it('places course trace events on the dump time axis', () => {
-    const trace = traceFromSimulationOutput(simulationOutput, 'TB.vcd', ps, 'tb.sim.out');
+    const trace = traceFromSimulationOutput(simulationOutput, 'tb.vcd', ps, 'tb.sim.out');
     expect(trace?.source).toBe('tb.sim.out');
     expect(trace?.events).toEqual([
       { time: 38_000, kind: 'dm', pc: '00003004', target: '00000000', value: '00000001' },
