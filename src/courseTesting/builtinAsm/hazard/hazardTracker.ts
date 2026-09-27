@@ -1,8 +1,8 @@
 // @index hazard-tracker — 把生成器按静态顺序发出的指令转成动态执行流送入流水线模型并累计冒险覆盖
 import { CpuState } from '../../cpuState';
-import { HazardCoverage } from './hazardCoverage';
-import { decodeHazardInstruction, HazardInstruction } from './hazardInstruction';
-import { HazardObservationValues, HazardPipelineModel } from './hazardPipeline';
+import { HazardCoverage } from '../../../hazardAnalysis/hazardCoverage';
+import { decodeHazardInstruction, HazardInstruction } from '../../../hazardAnalysis/hazardInstruction';
+import { HazardObservationValues, HazardPipelineModel } from '../../../hazardAnalysis/hazardPipeline';
 
 interface PendingRecord {
   readonly index: number;

@@ -7,10 +7,8 @@ import {
   getMachineCode,
   getSimTime,
   getJava,
-  getPython,
   getMarsJar,
   getLogisimJar,
-  getHazardCalculator,
   getMipsEngine
 } from './config';
 import {
@@ -126,9 +124,6 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     if (showAllTools || requiredTools.has('java')) {
       tools.push(this.createToolModel('java', 'Java', getJava(resource)));
     }
-    if (showAllTools) {
-      tools.push(this.createToolModel('python', 'Python', getPython(resource)));
-    }
     if (showAllTools || requiredTools.has('mars') || requiredTools.has('marsp7')) {
       tools.push(this.createToolModel('mars', 'MARS', getMarsJar(resource)));
     }
@@ -137,10 +132,6 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     }
     if (showAllTools || requiredTools.has('verilogsimulator')) {
       tools.push(this.createToolModel('verilogSimulator', 'Verilog simulator', 'Icarus Verilog（内置）'));
-    }
-    const hazardDir = getHazardCalculator(resource);
-    if (hazardDir) {
-      tools.push(this.createToolModel('hazard', 'Hazard 工具', hazardDir));
     }
     return tools;
   }

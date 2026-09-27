@@ -7,7 +7,11 @@ test/helpers/:
   appServices.ts — 完整 AppServices / RunResult 测试样例；保留 Vitest mock 调用签名供断言使用，以真实接口校验 fixture 字段。
 
 test/:
-  manifest, courseTestCommands, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogSimulationOutput, verilogSimulationFiles, python, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 19 项公开配置/21 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
+  manifest, courseTestCommands, configProfile, wizardSettings, wizardUpdate, configurationResource, diagnosticSettings, advancedToolModel, asmCaseStoreCore, fsUtil, sidebarModel, verilogSimulationOutput, verilogSimulationFiles, toolchain, courseConfig, courseTestToolchain, courseTestCases, courseTestStdin, courseTestLogisim, courseTestReport, profileResolver；manifest 精确锁定 16 项公开配置/22 项仅已配置可见兼容 schema 及 scope/order，fsUtil 锁定 generated write-if-changed 的同内容跳过/大文件免读/symlink 拒绝
+  hazard, hazardReportView — 原生冲突分析命令、进度取消、内置汇编、机器码未保存内容、JSON 持久化与重开、报告结构校验、Webview 固定动作、转义与 nonce CSP
+
+test/hazardAnalysis/:
+  analyzer — HexText/Logisim/COE 解析、错误行号/输入上限、动态分支与延迟槽、有效/无效转发、load-use、MDU、$0、初始 data、取消与步数限制
 
 test/language/common/:
   settings, diagnosticActions, lsp, util, documentResultCache, semanticTokens

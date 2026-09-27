@@ -57,10 +57,8 @@ const publicConfigurationGroups = [
     scope: 'machine-overridable',
     keys: [
       'co.toolchain.java',
-      'co.toolchain.python',
       'co.toolchain.mars',
-      'co.toolchain.logisim',
-      'co.toolchain.hazardCalculator'
+      'co.toolchain.logisim'
     ]
   },
   {
@@ -110,7 +108,9 @@ const compatibilityConfigurationKeys = [
   'co.verilog.format.maxBlankLines',
   'co.verilog.format.alignment.parameter',
   'co.verilog.format.alignment.modulePort',
-  'co.verilog.format.alignment.ternary'
+  'co.verilog.format.alignment.ternary',
+  'co.toolchain.python',
+  'co.toolchain.hazardCalculator'
 ] as const;
 
 function readPackage(): PackageJson {
@@ -163,7 +163,9 @@ describe('package manifest', () => {
       'co.test.startContinuousGeneratedTraceTests',
       'co.test.stopContinuousTests',
       'co.test.openAsmCaseIndex',
-      'co.tools.openAdvanced'
+      'co.tools.openAdvanced',
+      'co.hazard.analyzeCurrentMachineCode',
+      'co.hazard.openReport'
     ]);
 
     const paletteByCommand = new Map(commandPalette.map((item) => [item.command, item]));
@@ -261,7 +263,7 @@ describe('package manifest', () => {
     expect(signalView?.when).toContain('co.verilogSignalVisible');
   });
 
-  it('exposes exactly the ordered 19-setting public surface', () => {
+  it('exposes exactly the ordered public configuration surface', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];
     const publicGroups = groups.filter((group) => group.title !== '兼容设置（仅已配置用户可见）');
@@ -272,7 +274,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(18);
+    expect(expectedPublicKeys).toHaveLength(16);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);
@@ -326,7 +328,9 @@ describe('package manifest', () => {
       const property = compatibilityGroup?.properties?.[key];
       expect(property?.default, key).toBeUndefined();
       expect(property?.deprecationMessage?.trim().length, key).toBeGreaterThan(0);
-      expect(property?.scope, key).toBe(key === 'co.toolchain.marsP7' ? 'machine-overridable' : 'resource');
+      expect(property?.scope, key).toBe(['co.toolchain.marsP7', 'co.toolchain.python', 'co.toolchain.hazardCalculator'].includes(key)
+        ? 'machine-overridable'
+        : 'resource');
       expect(property?.order, key).toBe((index < 8 ? index + 1 : index + 2) * 10);
     });
   });

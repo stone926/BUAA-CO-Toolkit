@@ -8,10 +8,10 @@ import {
   priorityClassKey,
   stallTupleKey,
   zeroClassKey
-} from './hazardCoverage';
-import { hazardInstructionFor } from './hazardInstruction';
-import { HazardPipelineModel } from './hazardPipeline';
-import { HazardClass, hazardClassOf, hazardSourceRoles, SourceRole } from './hazardTiming';
+} from '../../../hazardAnalysis/hazardCoverage';
+import { hazardInstructionFor } from '../../../hazardAnalysis/hazardInstruction';
+import { HazardPipelineModel } from '../../../hazardAnalysis/hazardPipeline';
+import { HazardClass, hazardClassOf, hazardSourceRoles, SourceRole } from '../../../hazardAnalysis/hazardTiming';
 
 export type HazardGap = 0 | 1 | 2;
 

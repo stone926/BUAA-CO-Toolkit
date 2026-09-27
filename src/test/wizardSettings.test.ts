@@ -22,7 +22,7 @@ describe('buildWizardSettingUpdates', () => {
   });
 
   it('does not write redundant Profile-derived project defaults', () => {
-    const keys = buildWizardSettingUpdates('P7', { python: 'python3' }, true)
+    const keys = buildWizardSettingUpdates('P7', { java: 'java' }, true)
       .map((update) => update.key);
 
     expect(keys).not.toEqual(expect.arrayContaining([

@@ -1,6 +1,6 @@
 // @index hazard-timing — 课程 AT 法：指令冒险类别、各源操作数 Tuse 阶段与写回值就绪阶段
-import { isaInstructionByMnemonic } from '../../../mips/core/generated/isaCatalog';
-import { hiLoReadMnemonics, hiLoWriteMnemonics, longLatencyHiLoWriteMnemonics, mduBusyCycles } from '../../mnemonicSets';
+import { isaInstructionByMnemonic } from '../mips/core/generated/isaCatalog';
+import { hiLoReadMnemonics, hiLoWriteMnemonics, longLatencyHiLoWriteMnemonics, mduBusyCycles } from '../courseTesting/mnemonicSets';
 
 export type PipelineStage = 'D' | 'E' | 'M' | 'W';
 export type SourceRole = 'rs' | 'rt';

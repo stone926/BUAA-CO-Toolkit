@@ -1,6 +1,7 @@
 // @index hazard-instruction — 把生成器发出的 ASM 行解码为冒险模型所需的读写寄存器事实（按指令格式与 ISA 目录）
-import { canonicalRegister, instructions, numericRegisters } from '../../../language/mips/resources';
-import { isaInstructionByMnemonic } from '../../../mips/core/generated/isaCatalog';
+import { parseGprRegister } from '../mips/core/assembler/registers';
+import { realInstructionForms } from '../mips/core/assembler/instructionForms';
+import { isaInstructionByMnemonic } from '../mips/core/generated/isaCatalog';
 import {
   hazardClassOf,
   hazardReadyStage,
@@ -34,7 +35,6 @@ export type RegisterField = 'rd' | 'rs' | 'rt';
 type OperandSlot = { kind: 'register'; role: RegisterField } | { kind: 'base' } | { kind: 'other' };
 
 const layoutCache = new Map<string, readonly OperandSlot[] | null>();
-const numericByCanonical = new Map(numericRegisters().map((register) => [canonicalRegister(register), register]));
 
 /** Decodes one generated instruction line; returns undefined for directives and unknown text. */
 export function decodeHazardInstruction(text: string): HazardInstruction | undefined {
@@ -105,26 +105,17 @@ function operandLayout(mnemonic: string): readonly OperandSlot[] | undefined {
   if (cached !== undefined) {
     return cached ?? undefined;
   }
-  // The first documented format is the canonical real-instruction operand order.
-  const format = instructions[mnemonic]?.formats[0];
-  const operandText = format?.replace(/^\S+\s*/, '') ?? '';
-  const layout = format === undefined
-    ? null
-    : operandText.split(',').filter((operand) => operand.trim()).map((operand): OperandSlot => {
-      const token = operand.trim();
-      if (/\(\$base\)$/.test(token)) return { kind: 'base' };
-      if (token === '$rd' || token === '$rs' || token === '$rt') {
-        return { kind: 'register', role: token.slice(1) as RegisterField };
-      }
-      return { kind: 'other' };
-    });
+  // Share the assembler's real operand order without loading LSP display resources.
+  const entry = isaInstructionByMnemonic.get(mnemonic);
+  const layout = entry ? realInstructionForms(mnemonic, entry).map((form): OperandSlot => {
+    if (form.kind === 'register') return form;
+    return { kind: form.kind === 'memory' ? 'base' : 'other' };
+  }) : null;
   layoutCache.set(mnemonic, layout);
   return layout ?? undefined;
 }
 
 function numericRegister(operand: string): string | undefined {
-  if (/^\$(?:[0-9]|[12][0-9]|3[01])$/.test(operand)) {
-    return operand;
-  }
-  return numericByCanonical.get(canonicalRegister(operand));
+  const number = parseGprRegister(operand);
+  return number === undefined ? undefined : `$${number}`;
 }

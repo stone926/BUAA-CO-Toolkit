@@ -1,8 +1,6 @@
 # course-testing | src/courseTesting/ | 52 files + host adapters
 
-P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(bundled Icarus)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。通用 Verilog 仿真和自动 DUT lane 固定使用扩展内置 Icarus，运行目录为 `.co/iverilog`。所有 `source.kind=generator` 自动用例固定使用 builtin reference stack，不继承 resource-scoped `co.mips.engine`；`mars` 回滚、`verify-both` 与固定 MARS reference 只属于底层手动执行、历史数据兼容和显式开发者验证。
-
-MARS reference 按角色严格拆分：assembly compatibility 使用 `mars-assembler-v0.6.3`（8b53a49，SHA-256 `599957…afb31`）；真实 execution/full-stack gate 使用 `legacy-course-executor` v0.6.3-course1（c6197f4，SHA-256 `d13456…0c64`）。`mars` 模式是 configured legacy 回滚，只有 `verify-both`/开发验证脚本要求后一固定身份。legacy 课程 oracle 强制 coL2，coL1 仅作兼容探针；P7 按需使用 efc/p7irq，只有历史 `_co_internal_unknown_instruction` 用例才额外使用 cl，新生成 RI raw word 不需要。MARS 的 dump、停机尾、SWL/SWR、REGIMM link、Compact 初态/边界 bug 修复只存在于 `mips/legacy` normalizer 和 conformance，不进入 builtin provider/core。任一含非零 `.data` 初值的课程 case 会在 provider-neutral ProgramImage policy 处拒绝，因为 DUT 复位内存为全零。
+P3-P7 自动化测试：生成 ASM -> 内置 TS assembler/ProgramImage -> 内置 TS 课程 oracle -> Verilog(bundled Icarus)/Logisim 仿真 Trace -> 对比/Probe 检查 -> HTML/JSON 报告。通用 Verilog 仿真和自动 DUT lane 固定使用扩展内置 Icarus，运行目录为 `.co/iverilog`。
 
 生成程序边界：自动测试强度由 `automaticTestPolicy.ts` 内部固定，用户只可通过 `co.test.instructions` 选择重点 payload 指令。instruction_count 只统计 payload；P3-P7 内置生成器统一追加 `_co_test_end` 自分支+nop。P3-P6 自动使用 4094 条 payload，P7 使用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 兼容路径因 Compact* 排他 bug 单独采用 4095-word policy（末址 0x6ff8），不属于 automatic policy。P7 DUT image 把 text/ktext 等非 data 段按绝对地址合并并用零填补空洞，不再丢失 0x4180 内核段。
 
@@ -65,7 +63,10 @@ builtin-asm:
   courseTesting/builtinAsm/facade.ts — 高层 API：generateBuiltinAsmTestCase/resolveBuiltinInstructionSet
   courseTesting/builtinAsm/randomBody.ts — 核心随机引擎：课程 DM 内的对齐访存、正/负偏移、分支双路径与有界控制流、稳定版 MARS 局部字访问；所有普通随机路径均避免有符号溢出、未初始化 HI/LO、除零等非法输入，P7 只通过受控场景制造异常；RI 以 `.word` 轮换共享目录并在默认 anchor 预算内覆盖 unknown opcode/funct；单指令发射器接受 OperandSteer（绑定源/目的寄存器、立即数、精确地址、取值谓词、“错误转发值须改变结果”偏好），P5–P7 约 55% payload 交给冒险块，其余保留随机；ASM 头部 `# hazard_coverage` 记录课程参考流水线下的覆盖；payload 后生成停机尾
   courseTesting/builtinAsm/instructionSemantics.ts — ALU/立即数/移位/计数/分支判定与溢出的纯语义，随机体与冒险块共用
-  courseTesting/builtinAsm/hazard/ — 阻塞/转发定向生成（仅流水线档位）：hazardTiming（课程 AT 法类别、Tuse、结果就绪级、MDU 忙周期）、hazardInstruction（按规范格式+ISA 目录解码读写寄存器）、hazardPipeline（课程参考流水线：D 级暴力阻塞、全力转发、首次正确值转发点、有效性=转发值≠GRF 值、$0 写、双写优先级、HI/LO）、hazardCoverage（课程转发四元组/阻塞三元组+类别键）、hazardTracker（静态发射→动态执行流，跳过路径/异常受害者冲刷/调用返回重排）、hazardTargets（生产者类×消费者端口×间隔 0/1/2、JR/JALR 值域匹配可行性、按覆盖缺口先类别后元组选择，实现失败 3 次放弃）、hazardBlocks（生产者→无关指令→消费者；BEQ/BNE 陈旧值孪生寄存器、JR/JALR 精确地址配方+陈旧目标指向毒指令、JAL 链接/调用返回、$0 写、优先级、mthi/mtlo→mf*）。覆盖以默认 P6 用例对课程 Hazard-Calculator 验证：单例转发/阻塞元组约 641/73（旧 287/27），4 例约 974/1036、104/110
+  courseTesting/builtinAsm/hazard/hazardTracker.ts — 静态发射到动态执行流，跳过路径/异常受害者冲刷/调用返回重排；复用 hazard-analysis.md 的共享 AT 模型和覆盖统计
+  courseTesting/builtinAsm/hazard/hazardTargets.ts — 生产者类×消费者端口×间隔 0/1/2、JR/JALR 值域匹配可行性、按覆盖缺口先类别后元组选择，实现失败 3 次放弃
+  courseTesting/builtinAsm/hazard/hazardBlocks.ts — 定向生成生产者/消费者对、BEQ/BNE 陈旧值孪生寄存器、JR/JALR 精确地址与毒指令、JAL 调用返回、$0、优先级和 HI/LO；历史默认 P6 单例外部校准约 641/73 元组，4 例约 974/1036、104/110
+  courseTesting/builtinAsm/hazard/operandSteer.ts — 根据待消费生产者选择操作数与寄存器，避免重复实现模型事实
   courseTesting/builtinAsm/registerCoverage.ts — 固定全 GPR 写入/双读端口/DM 传播，与 jr 生产者及 0/1/2 间隔矩阵；共享生成器 CpuState，预算不足时不发出半套覆盖段，毒写不污染正常模型状态
   courseTesting/builtinAsm/programWriter.ts — ProgramWriter：label/emit/raw 累积汇编行并跟踪 PC
   courseTesting/builtinAsm/types.ts — P7StressMode、场景 kind/variant、按序 CP0 期望、精确 retry commit、完成标记与 P7ProbeMetadata

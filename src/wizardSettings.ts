@@ -6,8 +6,6 @@ export interface WizardToolchainSettings {
   marsP7?: string;
   logisim?: string;
   java?: string;
-  python?: string;
-  hazardCalculator?: string;
 }
 
 export interface WizardSettingUpdate {

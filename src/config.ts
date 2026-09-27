@@ -1,4 +1,4 @@
-// @index config — co.*设置读取，分层取值+值域裁剪+Python探测缓存
+// @index config — co.*设置读取，分层取值+值域裁剪
 import * as vscode from 'vscode';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
 import { configDefault, configDefaultArray } from './configDefaults';
@@ -14,7 +14,6 @@ import {
   getProfileName,
   type ProfileDefaults
 } from './courseConfig';
-import { commandResponds, defaultPythonCommand, firstWorkingCommand, pythonCandidates } from './python';
 import {
   ProfileConfiguredSource,
   ProfileResolution,
@@ -231,53 +230,6 @@ export function getJava(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.java', configDefault<string>('toolchain.java'), resource);
 }
 
-/**
- * 用户显式配置的 Python 命令（VSCode 设置）。未显式配置时返回
- * undefined，交给 {@link resolvePython} 按平台探测兜底。
- */
-export function getConfiguredPython(resource?: vscode.Uri): string | undefined {
-  const vsValue = inspectedValue<string>('toolchain.python', resource)?.trim();
-  if (vsValue) {
-    return vsValue;
-  }
-  return undefined;
-}
-
-/**
- * 同步获取 Python 命令：显式配置优先，否则用平台默认（非 Windows 为 python3）。
- * 用于侧边栏展示等同步场景；执行 Python 工具前应优先用 {@link resolvePython} 探测。
- */
-export function getPython(resource?: vscode.Uri): string {
-  return getConfiguredPython(resource) ?? defaultPythonCommand();
-}
-
-const resolvedPythonCache = new Map<string, string>();
-
-/**
- * 解析实际可用的 Python 命令：
- * 1. 用户显式配置时原样返回（尊重用户意图，不探测）；
- * 2. 否则按平台候选顺序探测，返回首个可用命令并缓存（成功才缓存，失败不缓存以便后续重试）；
- * 3. 全部不可用时回退到平台默认命令，让后续错误信息可读。
- */
-export async function resolvePython(resource?: vscode.Uri): Promise<string> {
-  const configured = getConfiguredPython(resource);
-  if (configured) {
-    return configured;
-  }
-  const candidates = pythonCandidates();
-  const key = candidates.join('|');
-  const cached = resolvedPythonCache.get(key);
-  if (cached) {
-    return cached;
-  }
-  const found = await firstWorkingCommand(candidates, commandResponds);
-  if (found) {
-    resolvedPythonCache.set(key, found);
-    return found;
-  }
-  return defaultPythonCommand();
-}
-
 export function getMarsJar(resource?: vscode.Uri): string {
   const profile = getProfile(resource);
   if (profile === 'P7') {
@@ -294,10 +246,6 @@ export function getMarsP7Jar(resource?: vscode.Uri): string {
 
 export function getLogisimJar(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.logisim', configDefault<string>('toolchain.logisim'), resource);
-}
-
-export function getHazardCalculator(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.hazardCalculator', configDefault<string>('toolchain.hazardCalculator'), resource);
 }
 
 export function getRunTimeout(resource?: vscode.Uri): number {

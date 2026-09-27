@@ -1,8 +1,8 @@
-// @index toolchain — bundled Icarus 与可选 Java/Python/MARS/Logisim/Hazard 检测
+// @index toolchain — bundled Icarus 与可选 Java/MARS/Logisim 检测
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ensureConcreteProfile, getHazardCalculator, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, resolvePython, type MipsEngineMode } from './config';
+import { ensureConcreteProfile, getJava, getLogisimJar, getMarsJar, getMipsEngine, getProfile, type MipsEngineMode } from './config';
 import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
 import { MARS_P7_CHECK } from './courseTestToolchain';
 import { runTool } from './process';
@@ -66,23 +66,6 @@ export async function checkToolchain(
     });
   }
 
-  if (checkAll) {
-    const python = await resolvePython(resource);
-    const pythonResult = await runTool(python, ['--version'], {
-      cwd,
-      output,
-      resource,
-      timeoutMs: 10000,
-      nonInteractive: options.nonInteractive
-    });
-    checks.push({
-      name: 'Python',
-      ok: pythonResult.ok,
-      detail: firstLine(pythonResult.stdout || pythonResult.stderr) || python,
-      suggestion: pythonResult.ok ? undefined : '请安装 Python3 或设置 co.toolchain.python（macOS/Linux 通常为 python3）'
-    });
-  }
-
   if (checkAll || requiredTools.has('mars') || requiredTools.has('marsp7')) {
     const mars = getMarsJar(resource);
     const marsFile = await fileCheck('MARS', mars, profile === 'P7' ? '请设置 co.toolchain.marsP7 为可用于 P7 CompactLargeText dump 的 Mars jar' : '请设置 co.toolchain.mars 为支持 coL1 和 large text 的修改版 Mars jar');
@@ -123,11 +106,6 @@ export async function checkToolchain(
         });
       }
     }
-  }
-
-  const hazardDir = getHazardCalculator(resource);
-  if (hazardDir || profile === 'P5' || profile === 'P6' || profile === 'P7') {
-    checks.push(await hazardDirCheck(hazardDir));
   }
 
   return checks;
@@ -338,30 +316,6 @@ async function fileHasText(file: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function hazardDirCheck(dir: string): Promise<ToolDetection> {
-  if (!dir) {
-    return {
-      name: '冲突分析',
-      ok: false,
-      detail: '未配置',
-      suggestion: '请设置 co.toolchain.hazardCalculator 为 hazard_analysis 目录'
-    };
-  }
-  const jarExists = await isFile(path.join(dir, 'Hazard-Calculator.jar'));
-  const analyzerExists = await isFile(path.join(dir, 'analyzer.py'));
-  const ok = jarExists && analyzerExists;
-  const missing = [
-    !jarExists && 'Hazard-Calculator.jar',
-    !analyzerExists && 'analyzer.py'
-  ].filter(Boolean).join(', ');
-  return {
-    name: '冲突分析',
-    ok,
-    detail: dir,
-    suggestion: ok ? undefined : `${dir} 中缺少 ${missing}`
-  };
 }
 
 function normalizeToolName(name: string): string {

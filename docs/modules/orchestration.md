@@ -9,8 +9,8 @@ entry:
 
 config:
   constants.ts — 命令ID/Profile能力集合/输出目录名等扩展公共常量, Profile集合从courseConfig能力矩阵推导
-  config.ts — 现行co.*设置读取(getProfile/getMipsEngine/getMarsJar/getRunTimeout...), 分层取值(WorkspaceFolder/Workspace/Global/Default), Python异步探测缓存, Profile持久化, 值域裁剪；显式 Profile 的 top/TB/机器码/时长默认直接来自 courseConfig，向导无需写冗余项目设置；`co.mips.engine` 无效值 fail-safe 为 auto
-  resources/co/configManifest.json — schema 与运行默认值唯一源：40 项中日常 UI 19 项、兼容项 21 项；后者保留运行默认值，以无 contributed default 的 deprecated schema 识别已有配置；项目/诊断使用 resource scope，工具路径使用 machine-overridable scope
+  config.ts — 现行co.*设置读取(getProfile/getMipsEngine/getMarsJar/getRunTimeout...), 分层取值(WorkspaceFolder/Workspace/Global/Default), Profile持久化, 值域裁剪；显式 Profile 的 top/TB/机器码/时长默认直接来自 courseConfig，向导无需写冗余项目设置；`co.mips.engine` 无效值 fail-safe 为 auto
+  resources/co/configManifest.json — schema 与运行默认值唯一源：38 项中日常 UI 16 项、兼容项 22 项；后者保留运行默认值，以无 contributed default 的 deprecated schema 识别已有配置；已废弃 Python/Hazard 路径不会被运行时读取；项目/诊断使用 resource scope，工具路径使用 machine-overridable scope
   scripts/generate-manifest-config.mjs — 从配置源生成完整 configDefaults.json 与 package schema；只向非 deprecated 公开项注入默认值，从课程资源派生 Profile/指令说明/禁用规则，并拒绝重复键和多重默认值来源
 
 build:
@@ -24,7 +24,6 @@ build:
 
 toolchain:
   toolchain.ts + toolchainPolicy.ts — checkToolchain 与 UI 使用 mode-aware effective dependency：P1/P4–P7 的逻辑 `verilogSimulator` 固定预检扩展内置 Icarus；P3 保留 Logisim/Java；mars/verify-both 再添加 profile 对应 MARS/Java。configured legacy 检查覆盖 v0.6.3 的 coL1/coL2、Compact 初态/配置及 P7 efc/p7irq；verify-both 另要求 v0.6.3-course1 `legacy-course-executor` 精确 bytes/SHA-256，不能与 assembly compatibility 角色混用
-  python.ts — pythonCandidates(win32:python/py/python3, other:python3/python), firstWorkingCommand, commandResponds
 
 process:
   process.ts — runTool(同步等待,stdout/stderr流式写入OutputChannel,透传 stopped/stopReason), launchTool(GUI分离启动,spawn延迟判定,unref), commandLine, quoteArg
@@ -69,7 +68,7 @@ logisim-commands:
   logisim.ts — registerLogisim()4命令: 打开电路(GUI), 生成ROM, 注入ROM(修改.circ XML), 日志转CSV
 
 hazard:
-  hazard.ts — runHazardAnalysis: ZIP用例->Hazard-Calculator.jar->解析statistic.json->展示forward/stall覆盖率. registerHazard()2命令
+  hazard.ts — registerHazard() 注册分析/打开报告两个命令，首次调用惰性加载内置引擎与宿主编排；详见 hazard-analysis.md
 
 ui:
   sidebar.ts — CoSidebarProvider TreeView: buildTree()->buildSidebarModel()->TreeItem

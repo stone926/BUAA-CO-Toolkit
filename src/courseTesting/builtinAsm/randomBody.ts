@@ -64,10 +64,10 @@ import {
   signedAddOverflows,
   signedSubtractOverflows
 } from './instructionSemantics';
-import { forwardClassKey, HazardCoverageSummary } from './hazard/hazardCoverage';
+import { forwardClassKey, HazardCoverageSummary } from '../../hazardAnalysis/hazardCoverage';
 import { HazardBlockEmitter, HazardEmitHost } from './hazard/hazardBlocks';
 import { HazardTargetPlanner } from './hazard/hazardTargets';
-import { hazardClassOf, SourceRole } from './hazard/hazardTiming';
+import { hazardClassOf, SourceRole } from '../../hazardAnalysis/hazardTiming';
 import { HazardTracker } from './hazard/hazardTracker';
 import { OperandSteer, SteeredEmission } from './hazard/operandSteer';
 

@@ -666,11 +666,10 @@
         },
         {
           "command": "co.hazard.analyzeCurrentMachineCode",
-          "when": "false"
+          "when": "co.profile == P5 || co.profile == P6 || co.profile == P7"
         },
         {
-          "command": "co.hazard.openReport",
-          "when": "false"
+          "command": "co.hazard.openReport"
         }
       ],
       "explorer/context": [
@@ -755,32 +754,18 @@
             "order": 10,
             "default": "java"
           },
-          "co.toolchain.python": {
-            "type": "string",
-            "description": "运行流水线冲突分析使用的 Python 命令。留空时自动检测",
-            "scope": "machine-overridable",
-            "order": 20,
-            "default": ""
-          },
           "co.toolchain.mars": {
             "type": "string",
             "description": "P2 汇编/运行，以及 P3-P7 通用 MARS 运行、stdin、终端命令使用的 Mars jar 路径；P7 可由兼容项 marsP7 覆盖。P3-P7 汇编导出和自动测试无需配置",
             "scope": "machine-overridable",
-            "order": 30,
+            "order": 20,
             "default": ""
           },
           "co.toolchain.logisim": {
             "type": "string",
             "description": "P0 和 P3 使用的 Logisim jar 路径",
             "scope": "machine-overridable",
-            "order": 40,
-            "default": ""
-          },
-          "co.toolchain.hazardCalculator": {
-            "type": "string",
-            "description": "课程提供的 hazard_analysis 路径（含 Hazard-Calculator.jar 和 analyzer.py）",
-            "scope": "machine-overridable",
-            "order": 50,
+            "order": 30,
             "default": ""
           }
         }
@@ -1095,6 +1080,20 @@
             "deprecationMessage": "仅为兼容已有格式化偏好保留。建议删除该设置并使用课程默认格式化风格。",
             "scope": "resource",
             "order": 210
+          },
+          "co.toolchain.python": {
+            "type": "string",
+            "description": "旧版本流水线冲突分析使用的 Python 命令",
+            "deprecationMessage": "内置冲突分析器不再使用 Python。此项仅为兼容已有设置保留，可删除。",
+            "scope": "machine-overridable",
+            "order": 220
+          },
+          "co.toolchain.hazardCalculator": {
+            "type": "string",
+            "description": "旧版本外部 Hazard-Calculator 工具目录",
+            "deprecationMessage": "内置冲突分析器不再使用外部 Hazard-Calculator。此项仅为兼容已有设置保留，可删除。",
+            "scope": "machine-overridable",
+            "order": 230
           }
         }
       }

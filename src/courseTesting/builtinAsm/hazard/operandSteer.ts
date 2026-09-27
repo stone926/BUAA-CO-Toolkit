@@ -1,5 +1,5 @@
 // @index operand-steer — 冒险块对内置生成器单条指令的操作数约束（绑定源/目的寄存器、立即数、地址、取值谓词）
-import { SourceRole } from './hazardTiming';
+import { SourceRole } from '../../../hazardAnalysis/hazardTiming';
 
 export interface OperandSteer {
   /** Destination register; the emitter chooses one when absent. */

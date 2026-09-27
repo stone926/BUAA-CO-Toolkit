@@ -3,6 +3,7 @@ import { HazardInstruction } from './hazardInstruction';
 import { HazardClass, pipelineStageIndex, pipelineStages, PipelineStage, SourceRole } from './hazardTiming';
 
 export interface HazardObservationValues {
+  readonly pc?: number;
   /** Destination value before this instruction (architectural stale value). */
   readonly previous?: number;
   /** Destination value after this instruction. */
@@ -15,7 +16,11 @@ export interface HazardObservationValues {
 
 export interface ForwardEvent {
   readonly producer: string;
+  readonly producerPc?: number;
   readonly producerClass: HazardClass;
+  /** Dynamic index of the producer (0 = first observed instruction). */
+  readonly producerOrder: number;
+  readonly register: string;
   readonly consumer: string;
   readonly consumerClass: HazardClass;
   readonly role: SourceRole;
@@ -31,12 +36,19 @@ export interface StallEvent {
   readonly consumer: string;
   readonly consumerClass: HazardClass;
   readonly cause: string;
+  readonly causePc?: number;
   readonly causeClass: HazardClass;
+  /** Dynamic index of the stalling producer. */
+  readonly causeOrder: number;
+  readonly register: string;
   /** Course interval: instructions between D and the stalling stage (E=0, M=1). */
   readonly interval: number;
 }
 
 export interface ZeroDestinationEvent {
+  readonly producer: string;
+  readonly producerPc?: number;
+  readonly producerOrder: number;
   readonly producerClass: HazardClass;
   readonly consumerClass: HazardClass;
   readonly role: SourceRole;
@@ -57,6 +69,7 @@ export interface PriorityEvent {
 
 export interface HiLoEvent {
   readonly writer: string;
+  readonly writerPc?: number;
   readonly reader: string;
   readonly gap: number;
   readonly valid: boolean;
@@ -72,6 +85,7 @@ export interface HazardObservation {
 
 interface InFlightWrite {
   readonly order: number;
+  readonly pc?: number;
   readonly mnemonic: string;
   readonly hazardClass: HazardClass;
   readonly register: string;
@@ -84,6 +98,7 @@ interface InFlightWrite {
 
 interface HiLoWrite {
   readonly order: number;
+  readonly pc?: number;
   readonly mnemonic: string;
   readonly changed: boolean;
 }
@@ -97,6 +112,22 @@ const hiLoHazardWindow = 2;
  */
 export class HazardPipelineModel {
   private nextDecodeCycle = 0;
+  private lastWritebackCycle = -1;
+  private instructionCount = 0;
+  /** D-stage bubbles caused by data hazards (AT method). */
+  dataStallCycles = 0;
+  /** D-stage bubbles caused by a busy multiply/divide unit. */
+  multiplyDivideStallCycles = 0;
+
+  /** Committed instructions observed so far. */
+  get instructions(): number {
+    return this.instructionCount;
+  }
+
+  /** Clock cycles from the first fetch until the last instruction leaves W. */
+  get cycles(): number {
+    return this.lastWritebackCycle < 0 ? 0 : this.lastWritebackCycle + 2;
+  }
   private order = 0;
   private writes: InFlightWrite[] = [];
   private zeroWrites: InFlightWrite[] = [];
@@ -106,6 +137,7 @@ export class HazardPipelineModel {
   observe(instruction: HazardInstruction, values: HazardObservationValues = {}): HazardObservation {
     const decodeCycle = this.nextDecodeCycle;
     const order = this.order++;
+    this.instructionCount++;
     const dependencies: Array<{
       readonly role: SourceRole;
       readonly register: string;
@@ -136,7 +168,11 @@ export class HazardPipelineModel {
           cause = dependency;
         }
       }
-      if (!cause) continue; // Multiply/divide busy stall; the course statistics exclude it.
+      if (!cause) {
+        this.multiplyDivideStallCycles++; // Busy MDU; the course statistics exclude it.
+        continue;
+      }
+      this.dataStallCycles++;
       const interval = cycle - cause.writer.executeCycle;
       const key = `${cause.writer.order}:${interval}`;
       if (stallKeys.has(key)) continue;
@@ -145,7 +181,10 @@ export class HazardPipelineModel {
         consumer: instruction.mnemonic,
         consumerClass: instruction.hazardClass,
         cause: cause.writer.mnemonic,
+        ...(cause.writer.pc === undefined ? {} : { causePc: cause.writer.pc }),
         causeClass: cause.writer.hazardClass,
+        causeOrder: cause.writer.order,
+        register: cause.register,
         interval
       });
     }
@@ -158,7 +197,10 @@ export class HazardPipelineModel {
       const destinationIndex = forwardCycle < executeCycle ? 0 : 1 + forwardCycle - executeCycle;
       forwards.push({
         producer: writer.mnemonic,
+        ...(writer.pc === undefined ? {} : { producerPc: writer.pc }),
         producerClass: writer.hazardClass,
+        producerOrder: writer.order,
+        register: dependency.register,
         consumer: instruction.mnemonic,
         consumerClass: instruction.hazardClass,
         role: dependency.role,
@@ -184,6 +226,9 @@ export class HazardPipelineModel {
       for (const zero of this.zeroWrites) {
         if (zero.writebackCycle < decodeCycle) continue;
         zeroDestinations.push({
+          producer: zero.mnemonic,
+          ...(zero.pc === undefined ? {} : { producerPc: zero.pc }),
+          producerOrder: zero.order,
           producerClass: zero.hazardClass,
           consumerClass: instruction.hazardClass,
           role: read.role,
@@ -199,7 +244,7 @@ export class HazardPipelineModel {
         const writer = this.hiLoWrites.get(half);
         const gap = writer ? order - writer.order - 1 : Infinity;
         if (writer && gap <= hiLoHazardWindow) {
-          hiLo.push({ writer: writer.mnemonic, reader: instruction.mnemonic, gap, valid: writer.changed });
+          hiLo.push({ writer: writer.mnemonic, ...(writer.pc === undefined ? {} : { writerPc: writer.pc }), reader: instruction.mnemonic, gap, valid: writer.changed });
         }
       }
     }
@@ -263,6 +308,7 @@ export class HazardPipelineModel {
     if (write) {
       const record: InFlightWrite = {
         order,
+        ...(values.pc === undefined ? {} : { pc: values.pc }),
         mnemonic: instruction.mnemonic,
         hazardClass: instruction.hazardClass,
         register: write.register,
@@ -275,14 +321,16 @@ export class HazardPipelineModel {
       (write.register === '$0' ? this.zeroWrites : this.writes).push(record);
     }
     if (instruction.mduBusyCycles > 0) {
-      this.mduFreeCycle = executeCycle + instruction.mduBusyCycles + 1;
+      // A five-cycle MULT occupies its issue cycle plus four following cycles.
+      this.mduFreeCycle = executeCycle + instruction.mduBusyCycles;
     }
     for (const half of instruction.hiLoWrites) {
       const before = values.hiLoPrevious?.[half];
       const after = values.hiLoNext?.[half];
-      this.hiLoWrites.set(half, { order, mnemonic: instruction.mnemonic, changed: before !== after });
+      this.hiLoWrites.set(half, { order, ...(values.pc === undefined ? {} : { pc: values.pc }), mnemonic: instruction.mnemonic, changed: before !== after });
     }
     this.nextDecodeCycle = executeCycle;
+    this.lastWritebackCycle = executeCycle + 2;
     this.writes = this.writes.filter((item) => item.writebackCycle >= executeCycle);
     this.zeroWrites = this.zeroWrites.filter((item) => item.writebackCycle >= executeCycle);
   }

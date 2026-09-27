@@ -38,7 +38,7 @@
 | P0 / P3 Logisim | Logisim JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.logisim`、`co.toolchain.java` |
 | P2 ASM 运行 | MARS JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.mars`、`co.toolchain.java` |
 | P1、P4–P7 标准 Verilog 工作流 | 无 | — |
-| P5–P7 流水线冲突分析（可选） | 课程 `hazard_analysis` 目录；必要时指定 Python | `co.toolchain.hazardCalculator`、`co.toolchain.python` |
+| P5–P7 流水线冲突分析 | 无，使用插件内置分析器 | — |
 
 工具路径是本机配置；不要把个人绝对路径提交到项目的 `.vscode/settings.json`。配置后运行 **`CO: 检查工具链`**，它只检查当前 Profile 和操作实际需要的工具。
 
@@ -112,7 +112,15 @@ P3–P7 的自动测试链路如下：
 | 波形（`.vcd`） | 内置查看器：四态波形、游标取值、缩放导航、周期计数、标记测量、多进制与 MIPS 反汇编、GRF 逐寄存器、trace 联动、跳转源码 |
 | SystemVerilog（`.sv` / `.svh`） | 仅词法高亮；不进入 Verilog LSP、编译器检查或仿真 |
 | Logisim（`.circ`） | 电路与组件大纲、标签诊断、打开电路、ROM 生成/注入、日志转 CSV，以及 P3 trace 对拍 |
-| P5–P7 | 可选的流水线冲突分析与报告 |
+| P5–P7 | 内置流水线冲突分析：转发/阻塞覆盖、有效率、类别评分与可筛选事件报告 |
+
+### 流水线冲突分析
+
+打开汇编或机器码文件，运行 **`CO: 分析流水线冲突`**，也可从 **`CO: 更多工具`** 进入。支持 `.asm` / `.s` / `.mips`、逐行十六进制机器码、Logisim v2 raw 和 COE。汇编由插件内置引擎处理，无需安装 Hazard-Calculator、Java 或 Python；汇编失败会直接提示原因。
+
+报告展示转发与阻塞覆盖率、转发有效率、课程参考分和类别缺口，可按类型、有效性、指令、寄存器或 PC 筛选事件。页面上可以重新分析、打开输入或查看 JSON；历史报告用 **`CO: 打开冲突报告`** 重开。报告保存在 `.co/hazard/`，不同输入分别保留，同一输入重新分析会更新其报告。
+
+分析默认最多执行 100000 步，可以在进度通知中取消。达到上限或遇到未定义行为时，报告明确标出部分结果。P7 使用 P6 的覆盖表；周期数是课程参考流水线模型的估算，不是实际 CPU 的测量结果。旧外部工具的 JSON 请使用原始程序重新生成。
 
 ## 常用设置与生成文件
 

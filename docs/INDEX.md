@@ -15,6 +15,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   verilog-lsp    | docs/modules/verilog-lsp.md    | 66 files | Verilog HDL 语言支持
   logisim-lsp    | docs/modules/logisim-lsp.md    | 2 files  | Logisim 电路文件
   orchestration  | docs/modules/orchestration.md  | ~54 files| 扩展宿主层
+  hazard-analysis | docs/modules/hazard-analysis.md | 14 files | 内置流水线冲突分析与交互报告
   course-testing | docs/modules/course-testing.md | 52 files | 自动化测试框架
   waveform       | docs/modules/waveform.md       | 57 files | 内置 VCD 波形查看器（自定义编辑器 + 仿真并查看波形）
   test-suite     | docs/modules/test-suite.md     | 214 files| Vitest 测试

@@ -5,7 +5,7 @@ import { alignDown } from '../../mipsUtil';
 import { Random } from '../../random';
 import { branchTaken, isSmallArithmeticOperand } from '../instructionSemantics';
 import { HazardTarget, HazardTargetPlanner } from './hazardTargets';
-import { hazardClassOf, SourceRole } from './hazardTiming';
+import { hazardClassOf, SourceRole } from '../../../hazardAnalysis/hazardTiming';
 import { OperandSteer, SteeredEmission } from './operandSteer';
 
 /** Narrow view of the random-body generator that hazard blocks emit through. */

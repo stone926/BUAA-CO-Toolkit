@@ -59,8 +59,8 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
 
   if (hazardProfiles.has(context.profile)) {
     items.push(
-      tool('hazard.analyze', '分析流水线冲突', 'Hazard', '当前 ASM 或运行时选择机器码', Commands.Hazard.AnalyzeCurrentMachineCode),
-      tool('hazard.report', '打开冲突报告', 'Hazard', '打开最近一次分析结果', Commands.Hazard.OpenReport)
+      tool('hazard.analyze', '分析流水线冲突', '内置冲突分析器', '选择 ASM 文件并生成覆盖率报告', Commands.Hazard.AnalyzeCurrentMachineCode),
+      tool('hazard.report', '打开冲突报告', '内置冲突分析器', '打开最近一次分析结果', Commands.Hazard.OpenReport)
     );
   }
 

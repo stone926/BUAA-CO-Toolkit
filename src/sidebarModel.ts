@@ -304,7 +304,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
       Commands.ToolsOpenAdvanced,
       'tools',
       '按当前 Profile 显示低频工具',
-      '打开高级工具选择器，包含 VCD、Logisim CSV、Hazard 分析等低频入口。'
+      '打开高级工具选择器，包含 VCD、Logisim CSV、内置冲突分析等低频入口。'
     )
   );
 

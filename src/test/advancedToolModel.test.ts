@@ -50,6 +50,14 @@ describe('advanced tool model', () => {
     expect(commandsFor('auto', 'verilog')).toEqual([]);
   });
 
+  it('describes pipeline analysis as built in', () => {
+    const item = buildAdvancedToolItems({ profile: 'P7', activeKind: 'mips' })
+      .find((entry) => entry.command === 'co.hazard.analyzeCurrentMachineCode');
+
+    expect(item?.description).toBe('内置冲突分析器');
+    expect(item?.detail).toContain('选择 ASM 文件');
+  });
+
   it('uses existing command identifiers only', () => {
     const contributedCommands = new Set([
       'co.mips.runWithStdinFile',

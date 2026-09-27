@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { automaticTestPolicy } from '../../courseTesting/automaticTestPolicy';
 import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
-import { forwardTupleKey, stallTupleKey } from '../../courseTesting/builtinAsm/hazard/hazardCoverage';
-import { decodeHazardInstruction } from '../../courseTesting/builtinAsm/hazard/hazardInstruction';
-import { HazardObservation, HazardPipelineModel } from '../../courseTesting/builtinAsm/hazard/hazardPipeline';
+import { forwardTupleKey, stallTupleKey } from '../../hazardAnalysis/hazardCoverage';
+import { decodeHazardInstruction } from '../../hazardAnalysis/hazardInstruction';
+import { HazardObservation, HazardPipelineModel } from '../../hazardAnalysis/hazardPipeline';
 import { predictForwardTuples } from '../../courseTesting/builtinAsm/hazard/hazardTargets';
 import { CpuState } from '../../courseTesting/cpuState';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';

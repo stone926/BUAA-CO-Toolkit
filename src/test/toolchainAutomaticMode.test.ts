@@ -14,13 +14,11 @@ vi.mock('vscode', () => ({
 vi.mock('../config', async (importOriginal) => ({
   ...await importOriginal<typeof import('../config')>(),
   ensureConcreteProfile: vi.fn(async () => 'P7'),
-  getHazardCalculator: vi.fn(() => ''),
   getJava: vi.fn(() => 'SECRET_JAVA'),
   getLogisimJar: vi.fn(() => 'SECRET_LOGISIM'),
   getMarsJar: vi.fn(() => 'SECRET_MARS'),
   getMipsEngine: mocks.getMipsEngine,
-  getProfile: vi.fn(() => 'P7'),
-  resolvePython: vi.fn(async () => 'SECRET_PYTHON')
+  getProfile: vi.fn(() => 'P7')
 }));
 
 vi.mock('../process', () => ({ runTool: mocks.runTool }));
@@ -42,6 +40,8 @@ describe('automatic toolchain engine boundary', () => {
     expect(mocks.getMipsEngine).not.toHaveBeenCalled();
     expect(mocks.runTool).not.toHaveBeenCalled();
     expect(checks.map((check) => check.name)).not.toContain('MARS');
+    expect(checks.map((check) => check.name)).not.toContain('Python');
+    expect(checks.map((check) => check.name)).not.toContain('冲突分析');
     expect(JSON.stringify(checks)).not.toContain('SECRET_MARS');
   });
 
