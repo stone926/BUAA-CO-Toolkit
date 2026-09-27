@@ -15,7 +15,7 @@ P5–P7 内置冲突冒险分析：汇编 / 机器码 → 内置 MIPS 动态执�
 
 宿主与界面：
 
-  hazardUi/input.ts — 当前文件/选择文件与有界读取；ASM 固定内置汇编，保存取消或汇编失败即停止；保留 data/sourceMap，不回退旧机器码
+  hazardUi/input.ts — 系统文件对话框选择汇编/机器码（默认打开工作区目录，不自动采用活动文件、不扫描工作区）与有界读取；ASM 固定内置汇编，保存取消或汇编失败即停止；保留 data/sourceMap，不回退旧机器码
   hazardUi/workflow.ts — 进度通知、取消、同工作区分析互斥、保存和重开；扩展退出取消运行并关闭面板
   hazardUi/reportValidation.ts — 导入报告的字段类型、枚举、数值和集合上限检查
   hazardUi/reportStore.ts — `.co/hazard/<源文件名>-<路径hash>-hazard.json` 原子保存；同源更新、不同源独立保留；4 MiB 有界读取，只发现该目录的最近报告

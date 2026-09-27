@@ -3,6 +3,7 @@ import * as path from 'path';
 import {
   Commands,
   ASM_NEEDED_VERILOG_PROFILES,
+  HAZARD_PROFILES,
   LOGISIM_PROFILES,
   MIPS_PROFILES,
   TRACE_PROFILES,
@@ -285,16 +286,19 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         'pulse',
         '内置波形查看器，GRF 逐寄存器记录',
         `${verilogSimulationTooltip(context, active)}\n\n用内置 Icarus 运行同一个 testbench，并自动记录全部信号（含 GRF 等小存储器的每个字）到 .co/wave，然后在 VS Code 中打开波形。无需手写 $dumpfile。`
-      ),
-      actionItem(
-        'core.inspectSignal',
-        '查看信号连线',
-        Commands.Verilog.InspectSignal,
-        'circuit-board',
-        `使用当前 Verilog: ${active.basename}`,
-        '将光标放在任一信号上，侧边栏会显示声明、驱动和读取位置。'
       )
     );
+  }
+
+  if (HAZARD_PROFILES.has(context.profile)) {
+    children.push(actionItem(
+      'core.analyzeHazard',
+      '分析流水线冲突',
+      Commands.Hazard.AnalyzeCurrentMachineCode,
+      'graph',
+      '选择汇编或机器码',
+      '选择输入文件，查看转发、阻塞覆盖率和冲突事件。'
+    ));
   }
 
   children.push(

@@ -1,9 +1,8 @@
 // @index hazard-input — 文件选择、内置汇编与有界机器码读取；保持完整 ProgramImage 的 data/sourceMap
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getMachineCode } from '../config';
 import { CO_HAZARD_DIR } from '../constants';
-import { resolveFileInput } from '../workflowInputs';
+import { pickOneFile } from '../workflowInputs';
 import { assembleWithPreflight, preflightFailureMessage } from '../mips/providers/providerResolver';
 import { resolveCourseEnginePlan } from '../mips/providers/courseEnginePolicy';
 import { readBoundedRegularFile } from '../mips/replay/boundedFile';
@@ -23,18 +22,11 @@ export function isAssemblyInput(uri: vscode.Uri): boolean {
 }
 
 export async function selectHazardInput(folder?: vscode.WorkspaceFolder): Promise<vscode.Uri | undefined> {
-  const configured = getMachineCode(folder?.uri);
-  return resolveFileInput({
-    title: '分析流水线冲突 · 选择汇编或机器码',
-    folder,
-    active: { predicate: isHazardInput },
-    include: '**/*.{asm,s,mips,hex,coe,txt}',
-    exclude: '**/{node_modules,out,dist,.git,.co}/**',
-    maxResults: 100,
-    candidatePaths: folder ? [path.resolve(folder.uri.fsPath, configured)] : [],
-    pick: 'quickPick',
-    filters: { '汇编 / 机器码': ['asm', 's', 'mips', 'txt', 'hex', 'coe'] }
-  });
+  return pickOneFile(
+    '选择冲突分析使用的汇编或机器码（取消则停止本次分析）',
+    { '汇编 / 机器码': ['asm', 's', 'mips', 'txt', 'hex', 'coe'] },
+    folder?.uri
+  );
 }
 
 export async function prepareHazardInput(

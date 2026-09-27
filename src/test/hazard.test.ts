@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Commands } from '../constants';
 import { registerHazard } from '../hazard';
-import { resolveFileInput } from '../workflowInputs';
 import { assembleWithPreflight } from '../mips/providers/providerResolver';
 import { ensureConcreteProfile } from '../config';
 import { createTestServices } from './helpers/appServices';
@@ -38,9 +37,8 @@ vi.mock('vscode', async () => {
     }
   };
 });
-vi.mock('../config', () => ({ ensureConcreteProfile: vi.fn(async () => 'P6'), getMachineCode: vi.fn(() => 'code.txt') }));
+vi.mock('../config', () => ({ ensureConcreteProfile: vi.fn(async () => 'P6') }));
 vi.mock('../mips/providers/providerResolver', () => ({ assembleWithPreflight: vi.fn(), preflightFailureMessage: vi.fn(() => '汇编语法错误') }));
-vi.mock('../workflowInputs', () => ({ resolveFileInput: vi.fn() }));
 
 function commandMap() {
   const commands = new Map<string, (...args: unknown[]) => unknown>();
@@ -64,7 +62,7 @@ beforeEach(async () => {
   await fs.promises.writeFile(source.fsPath, '34010001\n00211021\n1000ffff\n00000000\n');
   testState.state!.workspaceFolders.splice(0, testState.state!.workspaceFolders.length, { uri: vscode.Uri.file(root), name: 'cpu' });
   testState.state!.textDocuments.splice(0);
-  vi.mocked(resolveFileInput).mockResolvedValue(source);
+  vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([source]);
   vi.mocked(ensureConcreteProfile).mockResolvedValue('P6');
   vi.mocked(vscode.workspace.saveAll).mockResolvedValue(true);
 });
@@ -84,6 +82,13 @@ describe('native hazard command workflow', () => {
   it('runs actual machine code without tools, saves a reopenable report, and shows interactive HTML', async () => {
     const commands = commandMap();
     await commands.get(Commands.Hazard.AnalyzeCurrentMachineCode)!();
+    expect(vscode.window.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+      canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
+      filters: { '汇编 / 机器码': ['asm', 's', 'mips', 'txt', 'hex', 'coe'] }
+    }));
+    expect(vi.mocked(vscode.window.showOpenDialog).mock.calls[0][0]?.defaultUri?.toString()).toBe(vscode.Uri.file(root).toString());
+    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
+    expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
     expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
     const { uri, saved } = await generatedReport();
     expect(saved.report.summary.validForwardEvents).toBeGreaterThan(0);
@@ -107,7 +112,7 @@ describe('native hazard command workflow', () => {
 
   it('stops quietly on selection or progress cancellation', async () => {
     const commands = commandMap();
-    vi.mocked(resolveFileInput).mockResolvedValueOnce(undefined);
+    vi.mocked(vscode.window.showOpenDialog).mockResolvedValueOnce(undefined);
     await commands.get(Commands.Hazard.AnalyzeCurrentMachineCode)!();
     testState.cancel = true;
     await commands.get(Commands.Hazard.AnalyzeCurrentMachineCode)!();

@@ -67,7 +67,8 @@ describe('sidebar model', () => {
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
     expect(hasCommand(actions.children, 'co.verilog.generateTestbench')).toBe(false);
-    expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
+    expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(false);
+    expect(hasCommand(actions.children, 'co.hazard.analyzeCurrentMachineCode')).toBe(true);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
 
     const runSimulation = findCommand(actions.children ?? [], 'co.verilog.runSimulation');
@@ -85,6 +86,7 @@ describe('sidebar model', () => {
 
     const actions = section(model, '操作');
     expect(hasCommand(actions.children, 'co.test.startContinuousGeneratedTraceTests')).toBe(true);
+    expect(hasCommand(actions.children, 'co.hazard.analyzeCurrentMachineCode')).toBe(true);
     expect(hasCommand(actions.children, 'co.test.runGeneratedTraceTests')).toBe(false);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
     expect(findCommand(model, 'co.verilog.runSimulation')).toBeUndefined();
@@ -112,6 +114,7 @@ describe('sidebar model', () => {
     expect(runAsm?.description).toContain('matrix.asm');
     expect(runAsm?.tooltip).toContain(asmPath);
     expect(findCommand(model, 'co.mips.runWithStdinFile')).toBeUndefined();
+    expect(findCommand(model, 'co.hazard.analyzeCurrentMachineCode')).toBeUndefined();
     expect(findCommand(model, 'co.tools.openAdvanced')).toBeDefined();
   });
 
@@ -156,7 +159,8 @@ describe('sidebar model', () => {
     expect(findCommand(actions.children ?? [], 'co.verilog.generateTestbench')).toBeUndefined();
     expect(hasCommand(actions.children, 'co.verilog.runSimulation')).toBe(true);
     expect(findCommand(actions.children ?? [], 'co.verilog.runSimulation')?.description).toContain('当前模块/testbench');
-    expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(true);
+    expect(hasCommand(actions.children, 'co.verilog.inspectSignal')).toBe(false);
+    expect(hasCommand(actions.children, 'co.hazard.analyzeCurrentMachineCode')).toBe(false);
     expect(hasCommand(actions.children, 'co.tools.openAdvanced')).toBe(true);
   });
 
