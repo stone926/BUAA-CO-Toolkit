@@ -4,6 +4,9 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- Ships all 1.3.0 features listed below; the 1.3.0 release was blocked before publishing by a Linux test fixture filename mismatch.
+- test(waveform): use the exact dump filename in trace timing tests so they pass on case-sensitive platforms.
+
 ## [1.3.0] - 2026-09-27
 
 - feat(hazard): replace external Hazard-Calculator/Java/Python analysis with the built-in MIPS engine and shared course pipeline model; analyze ASM, HexText, Logisim raw and COE with cancellation, bounded execution, persisted reports, searchable events, coverage filters and theme-aware UI
