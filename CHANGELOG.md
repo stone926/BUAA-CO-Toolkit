@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-27
+
 - Ships all 1.3.0 features listed below; the 1.3.0 release was blocked before publishing by a Linux test fixture filename mismatch.
 - test(waveform): use the exact dump filename in trace timing tests so they pass on case-sensitive platforms.
 
