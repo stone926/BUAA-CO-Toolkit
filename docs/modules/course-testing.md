@@ -63,7 +63,9 @@ generation:
 builtin-asm:
   courseTesting/builtinAsm/asmTemplates.ts — 从 resources/templates/asm/*.asm 加载 P7 异常处理模板并做受控变量插值
   courseTesting/builtinAsm/facade.ts — 高层 API：generateBuiltinAsmTestCase/resolveBuiltinInstructionSet
-  courseTesting/builtinAsm/randomBody.ts — 核心随机引擎(约 2100 行)：课程 DM 内的对齐访存、正/负偏移、分支双路径与有界控制流、稳定版 MARS 局部字访问；所有普通随机路径均避免有符号溢出、未初始化 HI/LO、除零等非法输入，P7 只通过受控场景制造异常；RI 以 `.word` 轮换共享目录并在默认 anchor 预算内覆盖 unknown opcode/funct；payload 后生成停机尾
+  courseTesting/builtinAsm/randomBody.ts — 核心随机引擎：课程 DM 内的对齐访存、正/负偏移、分支双路径与有界控制流、稳定版 MARS 局部字访问；所有普通随机路径均避免有符号溢出、未初始化 HI/LO、除零等非法输入，P7 只通过受控场景制造异常；RI 以 `.word` 轮换共享目录并在默认 anchor 预算内覆盖 unknown opcode/funct；单指令发射器接受 OperandSteer（绑定源/目的寄存器、立即数、精确地址、取值谓词、“错误转发值须改变结果”偏好），P5–P7 约 55% payload 交给冒险块，其余保留随机；ASM 头部 `# hazard_coverage` 记录课程参考流水线下的覆盖；payload 后生成停机尾
+  courseTesting/builtinAsm/instructionSemantics.ts — ALU/立即数/移位/计数/分支判定与溢出的纯语义，随机体与冒险块共用
+  courseTesting/builtinAsm/hazard/ — 阻塞/转发定向生成（仅流水线档位）：hazardTiming（课程 AT 法类别、Tuse、结果就绪级、MDU 忙周期）、hazardInstruction（按规范格式+ISA 目录解码读写寄存器）、hazardPipeline（课程参考流水线：D 级暴力阻塞、全力转发、首次正确值转发点、有效性=转发值≠GRF 值、$0 写、双写优先级、HI/LO）、hazardCoverage（课程转发四元组/阻塞三元组+类别键）、hazardTracker（静态发射→动态执行流，跳过路径/异常受害者冲刷/调用返回重排）、hazardTargets（生产者类×消费者端口×间隔 0/1/2、JR/JALR 值域匹配可行性、按覆盖缺口先类别后元组选择，实现失败 3 次放弃）、hazardBlocks（生产者→无关指令→消费者；BEQ/BNE 陈旧值孪生寄存器、JR/JALR 精确地址配方+陈旧目标指向毒指令、JAL 链接/调用返回、$0 写、优先级、mthi/mtlo→mf*）。覆盖以默认 P6 用例对课程 Hazard-Calculator 验证：单例转发/阻塞元组约 641/73（旧 287/27），4 例约 974/1036、104/110
   courseTesting/builtinAsm/registerCoverage.ts — 固定全 GPR 写入/双读端口/DM 传播，与 jr 生产者及 0/1/2 间隔矩阵；共享生成器 CpuState，预算不足时不发出半套覆盖段，毒写不污染正常模型状态
   courseTesting/builtinAsm/programWriter.ts — ProgramWriter：label/emit/raw 累积汇编行并跟踪 PC
   courseTesting/builtinAsm/types.ts — P7StressMode、场景 kind/variant、按序 CP0 期望、精确 retry commit、完成标记与 P7ProbeMetadata

@@ -19,6 +19,8 @@ export class CpuState {
   cp0_sr = 0;
   cp0_cause = 0;
   cp0_epc = 0;
+  /** Most recent GPR write request, kept before `$0` discards it (hazard observation). */
+  lastWrite: { register: string; value: number } | undefined;
 
   constructor() {
     for (let i = 0; i <= 31; i++) {
@@ -30,6 +32,7 @@ export class CpuState {
   }
 
   setRegister(register: string, value: number): void {
+    this.lastWrite = { register, value: value | 0 };
     if (register === '$0') {
       this.regs.set('$0', 0);
       return;
