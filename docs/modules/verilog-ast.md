@@ -1,34 +1,24 @@
 # verilog-ast | src/language/verilog/ | 8 files | parent: verilog-lsp.md
 
-递归下降解析器AST构建层: 表达式AST(40+节点)/过程块AST/block AST + 遍历/匹配/赋值分析工具
+递归下降解析器的 AST 构建层：表达式 AST、过程语句 AST、always/initial 块 AST，加遍历/匹配/赋值分析工具。全部基于 token 与语义模型构建，token 回退仅用于语法错误边界。
 
-AST类型层级:
-  VerilogExpressionAst: numberLiteral/stringLiteral/identifier/selectExpression(位选择/部分选择[+:-])/callExpression/memberExpression/concatenation/multipleConcatenation/unaryExpression/binaryExpression/conditionalExpression/parenthesizedExpression/assignmentPattern
-  VerilogProceduralStatementAst: block(begin-end/fork-join)/if/case(casex/casez)/loop(for/forever/repeat/while)/assignment(=/<=)/localDeclaration/control(delay/event/wait)/systemTask/subroutineCall
-  VerilogBlockAst: alwaysBlock/initialBlock, header(sensitivity+event/delay control)
+- `exprAst.ts` — 递归下降表达式解析与整数常量求值
+- `proceduralAst.ts` — 过程语句 AST（block/if/case/loop/assign/声明/控制/systemTask/子程序调用），malformed 时有 token fallback
+- `blockAst.ts` — always/initial 块：sensitivity list、header control 与内部语句树
+- `exprAstUtils.ts` — AST 遍历与"最小包含表达式"定位
+- `assignmentAst.ts` — 从连续赋值与过程赋值收集 `AssignmentUse`
+- `astTokens.ts` — code tokens / statement tokens 提取
+- `gatePrimitives.ts` — 内建门级原语关键字集
+- `ast.ts` — `VerilogAstDocument` / `VerilogModuleAst` 顶层结构
 
-expr-ast:
-  exprAst.ts — 递归下降表达式解析器(1265行), parseVerilogExpression, evalVerilogIntegerConstant
+**AST 类型层级**
 
-procedural-ast:
-  proceduralAst.ts — 过程语句AST(632行), parseVerilogProceduralStatement, VerilogCaseStatementAst. Malformed有token fallback
+- 表达式：number/string literal、identifier、select（位选择与 `[+:-]`）、call、member、concatenation、multiple concatenation、unary/binary/conditional、parenthesized、assignment pattern
+- 过程语句：block（begin-end / fork-join）、if、case（casex/casez）、loop（for/forever/repeat/while）、assignment（`=`/`<=`）、localDeclaration、control（delay/event/wait）、systemTask、subroutineCall
+- 块：alwaysBlock / initialBlock + header（sensitivity + event/delay control）
 
-block-ast:
-  blockAst.ts — always/initial块解析: sensitivity list AST(显式信号/*/posedge/negedge), header control AST, 内部语句树；共用 verilog-lsp 索引下的过程语句边界扫描器
+**设计决策**
 
-expr-ast-utils:
-  exprAstUtils.ts — walkVerilogExpression, findSmallestVerilogExpressionAtOffset, findSmallestVerilogExpressionMatchAtOffset
-
-assignment-ast:
-  assignmentAst.ts — collectAssignmentUsesFromModuleAst: 从连续+过程赋值收集AssignmentUse
-
-连续赋值节点使用 `assignments[]`，保留同句中每个 lvalue/RHS；诊断、引用、驱动分析和表达式提取共享此模型。实数字面量进入 numberLiteral，但不参与整数常量折叠或位宽推断。缺失 endmodule/闭合分隔符时在下一个 module 恢复，避免吞掉后续模块。
-
-ast-tokens:
-  astTokens.ts — verilogAstCodeTokens(过滤排序), verilogAstStatementTokens(枚举)
-
-gate-primitives:
-  gatePrimitives.ts — 内建门级原语关键字集(and/or/not/buf/...)
-
-ast:
-  ast.ts — VerilogAstDocument/VerilogModuleAst/VerilogStatementAst(详见verilog-lsp.md core)
+- 连续赋值节点使用 `assignments[]` 保留同句中每个 lvalue/RHS，诊断、引用、驱动分析与表达式提取共享此模型。
+- 实数字面量进入 `numberLiteral`，但**不**参与整数常量折叠或位宽推断。
+- 缺失 `endmodule` 或闭合分隔符时在下一个 module 恢复，不吞掉后续模块。

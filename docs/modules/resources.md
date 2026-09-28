@@ -1,106 +1,51 @@
-# resources | resources/ + syntaxes/ + snippets/ + language-configuration/ | ~40 files
+# resources | resources/ + syntaxes/ + snippets/ + language-configuration/ | ~55 files + 5 bundled Icarus runtimes
 
-静态资产, 编译打包进VSIX
+静态资产，随 VSIX 打包。**所有 `co.*` 配置、课程事实与语言目录都有唯一源文件**，package.json 与运行时代码都是生成物。
 
-resources/mips/:
-  isa.json — versioned 真实指令唯一 catalog：encoding/runtime/canonical/effects/control/profile，以及 generator 稳定顺序和安全策略
-  instructions.json — 指令展示元数据(助记符/类型R-I-J-special-pseudo/格式/操作数/描述)；真实指令 Profile 来自 isa.json
-  instructionMeta.json — pseudo/非 catalog 指令及 parser directive 的附加元数据；真实指令 read-write/alignment facts 由 isa.json 生成，不在此重复
-  generatorProfiles.json — 从 isa.json 生成的内置 ASM generator 投影（勿手改）：默认指令集、分类、访存对齐、MDU延迟
-  pseudoExpansions.json — MARS 伪指令/扩展操作数形式的展示模板；内建可执行能力由 core 的展开 handler registry 定义
-  pseudoForms.json — 伪指令操作数形式
-  registers.json — 寄存器表(编号/名称/用途)
-  cp0Registers.json — CP0寄存器(编号/sel/名称/用途)
-  directives.json — 汇编器指令描述+常用值
-  syscalls.json — 系统调用表(调用号->服务名/参数/描述)
-  加载: src/language/mips/resources.ts
+## 唯一源与生成物
 
-resources/verilog/:
-  keywords.json — Verilog keyword group、compiler directive、system task、operator 单一目录，供 lexer/TextMate generator 共用
-  systemverilog.json — 独立 SystemVerilog TextMate keyword/operator 目录；不进入 Verilog parser
+| 源 | 生成物 | 命令 |
+| --- | --- | --- |
+| `resources/co/configManifest.json` | `package.json` `contributes.configuration` + `resources/co/configDefaults.json` | `npm run sync:manifest-config` |
+| `resources/mips/isa.json` | `src/mips/core/generated/isaCatalog.ts`、`src/language/mips/generated/isaDisplayCatalog.ts`、`resources/mips/generatorProfiles.json` | `npm run sync:isa-catalog` |
+| `resources/co/languages.json` | package 语言贡献 + `src/language/generated/languages.ts` | `npm run generate:languages` |
+| `resources/mips/*.json` + `resources/verilog/*.json` | `syntaxes/*.tmLanguage.json` | `npm run sync:syntaxes` |
 
-resources/co/:
-  configManifest.json — co.* 唯一配置源：分组/schema/兼容声明/runtimeDefault；defaultFrom 显式引用其他领域目录的派生值，default 仅用于 UI sentinel 覆盖
-  configDefaults.json — 从 configManifest.json 生成的运行默认值（勿手改）；`co.mips.engine=auto`；外部 Verilog 检查默认 onSave
-  languages.json — 语言 ID/扩展名/grammar/snippets/LSP 能力唯一目录，生成 package 语言贡献与无宿主运行注册表；SystemVerilog 仅词法高亮，Logisim 按扩展名路由
-  courseConfig.json — Profile定义(P0-P7): 名称/描述/能力矩阵/默认项/语言/目录/无条件工具/端口；P1/P4–P7 声明逻辑 `verilogSimulator` （bundled Icarus），P4–P7 不再声明 MARS/Java，legacy lane 依赖由 toolchainPolicy 动态追加；外置测试台 IM=4096 words、DM=3072 words；指令描述/Profile推断hints
-  p7Hardware.json — P7 课程硬件布局: 0x3000 起 4096-word IM、3072-word DM、0x4180 异常入口/probe/Timer/CP0/中断确认/testbench容量
-  加载: courseConfig loader, P7 hardware loader
+规则：不手写生成物；修改源后提交生成结果。`compile` / `test` / `package:vsix` 都先跑 `sync:generated`（Profile → ISA → config → languages → syntaxes → diagnostics），CI 在任何生成前运行 `check:generated`，防止自动修复掩盖提交漂移；`npm run verify:generated-tree-clean` 证明 clean checkout 编译后 tree clean。
 
-配置资源维护:
-  源文件: resources/co/configManifest.json；Profile/指令说明分别引用 courseConfig/generatorProfiles
-  派生产物: package.json contributes.configuration 与完整 resources/co/configDefaults.json
-  命令: npm run generate:manifest-config 生成, npm run check:manifest-config 检查, npm run sync:manifest-config 生成后检查
-  自动流程: compile/test/test:coverage/package:vsix 都会先运行 sync:generated（Profile → ISA → config → languages → syntaxes → diagnostics）；CI 在任何生成前运行 check:generated，防止自动修复掩盖提交漂移
-  规则: 不手写 package.json contributes.configuration; 修改配置资源后提交生成结果
+## 课程与语言事实
 
-ISA 生成维护:
-  源文件: resources/mips/isa.json
-  派生产物: src/mips/core/generated/isaCatalog.ts、src/language/mips/generated/isaDisplayCatalog.ts、resources/mips/generatorProfiles.json
-  命令: npm run generate:isa-catalog / npm run check:isa-catalog；CI clean checkout 可用 npm run verify:generated-tree-clean 证明 compile 后 tree clean
+- `mips/isa.json` — 真实指令唯一 catalog：encoding / runtime / canonical / effects / control / profile 与 generator 稳定顺序
+- `mips/instructions.json` — 展示元数据（助记符、类型、格式、操作数、描述）
+- `mips/instructionMeta.json` — 伪指令、非 catalog 指令与 parser directive 的附加元数据
+- `mips/pseudoExpansions.json` / `pseudoForms.json` — MARS 伪指令/扩展操作数形式的**展示**模板；内建可执行能力由 core 展开 handler registry 定义
+- `mips/registers.json` / `cp0Registers.json` / `directives.json` / `syscalls.json` — 寄存器、CP0、汇编器指令、系统调用表；由 `src/language/mips/resources.ts` 加载
+- `verilog/keywords.json` / `systemverilog.json` — keyword group、compiler directive、system task 与 operator 目录（SystemVerilog 不进 Verilog parser）
+- `co/courseConfig.json` — Profile 定义（P0–P7）：能力矩阵、默认项、语言、目录、端口、内存布局与推断 hints
+- `co/p7Hardware.json` — P7 硬件布局：4096-word IM、3072-word DM、0x4180 异常入口、probe、Timer、CP0 与中断确认
 
-resources/templates/verilog/:
-  basic_testbench.v — 通用 Verilog testbench shell
-  external_memory_testbench.v — P6-style 外部指令/数据存储器 testbench shell
-  dm_store_contract.v — P6/P7 共享的有效 DM 写事务记录与地址/opcode/byte-enable/使能 lane 契约检查；保留 CO_DM_STORE 原始字段供 builtin oracle 对拍
-  p7_official_testbench.v — P7 official-style testbench shell
-  p7_interrupt_block*.v — P7 external interrupt主动/注释模板
-  p7_probe_block.v — P7 probe interrupt/MMIO观测模板
-  waveform_dumper.v — “仿真并查看波形”生成的 Icarus dump 顶层（$printtimescale/$dumpfile/$dumpvars 与小存储器逐字 dump）
-  加载: templateRegistry 受控占位替换
+## 模板
 
-resources/templates/webview/:
-  report_page.html — 报告 Webview 页面 shell
-  report.css — 报告 Webview 共享 CSS
-  waveform_page.html — 波形查看器 Webview 页面 shell（严格 CSP，脚本/样式来自 out/media 打包产物）
-  加载: templateRegistry 受控占位替换
+`resources/templates/` 经 `templates/templateRegistry.ts` 做受控占位替换，保证生成产物可审计。
 
-resources/templates/wizard/:
-  p2_main.asm — 项目向导生成的 P2 初始汇编入口
-  verilog_top.v — 项目向导生成的 Verilog 顶层模块
-  basic_testbench.v — 项目向导解析失败时的基础 testbench fallback
-  加载: templateRegistry 受控占位替换
+- `verilog/` — `basic_testbench.v`、`external_memory_testbench.v`、`p7_official_testbench.v`、`p7_interrupt_block*.v`、`p7_probe_block.v`、`waveform_dumper.v`（波形 dump 顶层）、`dm_store_contract.v`（P6/P7 有效 DM 写事务契约，保留 `CO_DM_STORE` 原始字段供 builtin oracle 对拍）、`p7_probe_invalid_store_observer.v` + `p7_probe_invalid_store_case.v`
+- `webview/` — `report_page.html`、`report.css`、`waveform_page.html`（严格 CSP，脚本/样式来自 `out/media`）
+- `wizard/` — `p2_main.asm`、`verilog_top.v`、基础 testbench fallback
+- `asm/` — `p7_exception_handler*.asm`、`p7_probe_prologue.asm`、`p7_probe_handler.asm`
+- `hazard/` — 冲突报告模板
 
-vendor/iverilog/win32-x64/:
-  bin/ + lib/ivl/ — 固定的 MSYS2 UCRT64 Icarus 13.0 可执行文件、目标与运行依赖
-  THIRD_PARTY_NOTICES.md + licenses/ — 实际分发组件的许可、版权、二进制来源与对应源码说明
-  CORRESPONDING_SOURCES.json — 7 个精确 source-only archive 的 URL、大小与 SHA-256；`file` 使用 GitHub Release 不会重写的稳定资产名，`SHA256SUMS` 因此与最终下载名一致
+## 编辑器资产
 
-vendor/iverilog/darwin-arm64/ + darwin-x64/:
-  bin/ + lib/ivl/ + include/ + share/ — 固定的 Homebrew Icarus 13.0 Sonoma bottle 完整 prefix；分别面向 Apple Silicon 与 Intel，binary deployment target 为 macOS 14
-  THIRD_PARTY_NOTICES.md + licenses/ — bottle URL/SHA、Homebrew formula revision、Icarus 许可与上游 v13.0 source URL；运行时不依赖 Homebrew，也不额外携带 dylib
-  Git 保留 `bin/iverilog`、`bin/vvp`、`lib/ivl/ivl`、`lib/ivl/ivlpp` 等入口的 executable bit；release workflow 还会在原生 macOS runner 打包前显式恢复并从解包 VSIX 验收
+- `syntaxes/` — `mips`、`verilog`、`systemverilog` TextMate grammar（由目录确定性生成）
+- `snippets/` — `mipsasm.json`、`verilog.json`
+- `language-configuration/` — `mipsasm.json`、`verilog.json`（括号配对、注释与自动闭合）
 
-vendor/iverilog/CORRESPONDING_SOURCES.json:
-  macOS / Linux 四个 target 共享的 Icarus v13.0 上游源码清单；release fetch 按 URL/SHA 与 Windows 清单合并去重，GitHub Release 继续附加 8 个源码归档与统一 `SHA256SUMS`
+## Bundled Icarus 运行时
 
-vendor/iverilog/linux-x64/ + linux-arm64/:
-  bin/ + lib/ivl/ + include/ + share/ — 固定 Icarus 13.0 上游源码在原生 Ubuntu 22.04 容器构建的完整安装目录；使用系统 glibc / libstdc++ / libgcc，不分发私有 loader 或设置 LD_LIBRARY_PATH
-  THIRD_PARTY_NOTICES.md + licenses/iverilog-COPYING.txt — 版本、构建环境、参数及对应源码 URL/SHA；禁用 readline / termcap / zlib / bzip2，保留课程文本 trace、readmemh 与基础 VCD
-  vendor/iverilog/build-linux.sh — 共享下载/校验/编译配方，随 VSIX 分发；.github/workflows/build-iverilog-linux.yml 仅手动生成保权限的 tar artifact，普通 release 使用已入库产物
-  首次导入验证（2026-09-03）：[原生双架构构建与 Ubuntu 22.04 smoke](https://github.com/stone926/BUAA-CO-Toolkit/actions/runs/33655749189) 均通过；readelf/ldd 检查覆盖全部可执行 ELF、VPI 与 target，仅依赖系统 libc/libm/libstdc++/libgcc 及加载器，无 RPATH/RUNPATH 或缺失依赖。两架构实际引用的最高符号版本均为 GLIBC_2.35、GLIBCXX_3.4.30；以 Ubuntu 22.04 标准更新环境验收，不据此扩大其他发行版承诺。
+`vendor/iverilog/{win32-x64,darwin-arm64,darwin-x64,linux-x64,linux-arm64}/` 提供固定的 Icarus 13.0 运行时（Windows 为 MSYS2 UCRT64，macOS 为 Homebrew bottle，Linux 为 Ubuntu 22.04 原生构建），使用系统 libc/GLIBC，不分发私有 loader。
 
-平台打包:
-  scripts/package-vsix.mjs — 本地与 release 共用必填 --target / 可选 --out 的入口；合并根 .vscodeignore 与非目标 runtime 目录排除规则到临时 ignoreFile，保留目标完整目录及共享来源/配方，结束清理临时文件
-  .github/workflows/release.yml — Windows x64、macOS 两架构、Linux 两架构原生打包；Unix 恢复入口可执行位，解包确认唯一目标 runtime 后运行同一 smoke；不发布 universal 或 alpine 包
-  .github/actions/verify-extension-package/action.yml — release 与 Extension platforms 常规 CI 共用上述打包检查，并从最终 VSIX 启动真实 VS Code 验证核心命令/LSP/Worker；测试脚本和 devDependencies 不进入 VSIX
+每个 target 附 `THIRD_PARTY_NOTICES.md` + `licenses/`，`CORRESPONDING_SOURCES.json` 记录上游源码 URL、大小与 SHA-256（`file` 使用 GitHub Release 不会重写的稳定资产名）。macOS/Linux 额外保留 `include/` 与 `share/` 完整 prefix，Git 保留可执行位，release 打包前会恢复。
 
-resources/templates/asm/:
-  p7_exception_handler*.asm — P7 anchor/hybrid 异常处理模板
-  p7_probe_prologue.asm — P7 probe 用户段初始化指令模板, 逐行 emit 保持 PC/预算计数
-  p7_probe_handler.asm — P7 probe kernel handler 模板
-  加载: templateRegistry 受控占位替换
+## 打包
 
-syntaxes/:
-  mips.tmLanguage.json — 从 MIPS 资源生成的 TextMate grammar
-  verilog.tmLanguage.json — 从 Verilog catalog 生成的 TextMate grammar
-  systemverilog.tmLanguage.json — 复用/扩展 Verilog 的 SystemVerilog 词法 grammar
-  维护: npm run generate:syntaxes 生成，npm run check:syntaxes 检查漂移
-
-snippets/:
-  mipsasm.json — MIPS代码片段(指令/模板/syscall)
-  verilog.json — Verilog代码片段(always/case/for/if-else/module/testbench)
-
-language-configuration/:
-  mipsasm.json — 括号配对/#注释/自动闭合
-  verilog.json — 括号配对///和/**/注释/自动闭合
+`scripts/package-vsix.mjs` 是本地与 release 共用的入口（必填 `--target`、可选 `--out`），按目标裁剪 runtime 目录并保留共享来源/配方。`.github/actions/verify-extension-package/action.yml` 被 release 与 Extension platforms CI 共用：解包确认唯一目标 runtime 后运行 Icarus smoke 与真实 VS Code 宿主检查（Linux 用 Xvfb）。测试脚本与 devDependencies 不进入 VSIX。

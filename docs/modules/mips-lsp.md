@@ -1,56 +1,56 @@
 # mips-lsp | src/language/mips/ | 33 files
 
-MIPS汇编(.asm/.s/.mips) LSP: 解析->AST->语义->诊断->补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作 + MARS trace解析对比
+MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊断 → 补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作，另含 MARS trace 解析对比。
 
-数据流: Text -> syntax.ts(词法行) -> ast.ts -> semantic.ts -> parser.ts(编排) -> diagnostics -> service.ts
-  LSP层: service.ts -> parseCache.ts -> completions/hover/navigation/formatting/signatureHelp/folding/rename/semanticTokens/inlayHints/codeActions
-  Trace: traceParser.ts(MARS coL1/coL2；课程 oracle 固定 coL2) -> traceCompare.ts(事件对比)
+数据流: `syntax.ts`（行词法）→ `ast.ts` → `semantic.ts` → `parser.ts`（编排）→ 诊断 → `service.ts`；`parseCache.ts` 按 URI/设置缓存。诊断委托 `parseCache.ts`，LSP 层只做 provider。
 
-core:
-  parser.ts — 解析编排: source->parsed lines->AST->semantic model->diagnostics；`.word` 同时允许 data 存储与 text/ktext raw instruction cell，其余 storage directive 仍限 data | exports: parseMips
-  syntax.ts — 词法解析/格式化API；已移除无生产调用的旧 CST/parseOperands 包装 | exports: parseMipsSourceDocument, parseMipsFormatDocument, printMipsFormatDocument
-  ast.ts — 类型化AST: MipsOperandAst(register/symbol/memory/immediate/string/labelPlusImmediate), .eqv/.macro头 | exports: buildMipsAst, MipsAstDocument, MipsOperandAst
-  semantic.ts — 语义: 符号收集/作用域/引用, 跳转定义/查找引用查询 | exports: buildMipsSemanticModel, resolveMipsSemanticTarget, mipsSemanticReferenceRanges
-  model.ts — MipsSymbol, MipsMacro, MipsParseResult
+## 核心
 
-ast-helpers:
-  operandAst.ts — 内存操作数解析, 格式值提取, signed32
-  operandReferences.ts — 递归操作数AST访问, 引用收集
-  literals.ts — 字面量扫描: 字符串/数字/字符范围, 解析
-  instructionValidation.ts — 纯AST指令校验: 操作数数量/寄存器类型/立即数范围/内存对齐/CP0权限；P3–P7 Profile 警告读取 instruction.isa.profiles，P0–P2 无课程 ISA 闸门 | 被 parser.ts 调用
+- `parser.ts` — 解析编排：source → parsed lines → AST → semantic model → diagnostics
+- `syntax.ts` — 词法解析与格式化 API
+- `ast.ts` — 类型化 AST（operand / `.eqv` / `.macro` 头）
+- `semantic.ts` — 符号收集、作用域、引用与跳转查询
+- `model.ts` — MipsSymbol / MipsMacro / MipsParseResult
+- `instructionValidation.ts` — 纯 AST 指令校验（操作数、寄存器类型、立即数、内存对齐、CP0 权限）
 
-resources:
-  resources.ts — ISA静态资源加载: instructions/registers/cp0/directives/syscalls/pseudo/meta；真实指令的 type/delay/read-write/memory/Profile facts 合并自 generated/isaDisplayCatalog（由唯一 isa.json 生成）；MARS 伪指令预览和内建展开能力分别标注，后者由 core handler 注册表给出 | exports: instructions, registers, cp0Registers, mipsSemanticTokenTypes
-  generated/isaDisplayCatalog.ts — 与 core catalog 同 schema revision/SHA 的 LSP 结构事实生成物（勿手改）
-  marsArgs.ts — MARS 命令行参数构造: run/dumpText/dumpKernel, P7 efc/p7irq/cl 参数, 内存配置常量
-  legacyMarsPolicy.ts — 稳定版 MARS 兼容内存配置/异常入口策略（大文本段容纳 0x3000→0x4180 handler）
-  legacyMarsDiagnostics.ts — 稳定版 MARS 兼容诊断映射：coL1/coL2/efc/p7irq/cl 组合与原始输出归一化；被多个子系统复用
+## AST 辅助
 
-display:
-  display.ts — hover/inlay Markdown: syscall详情, CP0寄存器, 宏体/展开预览
-  queries.ts — 宏重载查找, 宏调用参数提取
+- `operandAst.ts` — 内存操作数解析与格式值提取
+- `operandReferences.ts` — 递归操作数访问与引用收集
+- `literals.ts` — 字符串/数字/字符字面量扫描与解析
 
-lsp-providers:
-  service.ts — 注册中心, re-export全部provider, 诊断委托parseCache | exports: 全部LSP函数, MipsServerState, clearMipsParseCache
-  completions.ts — 指令/伪指令/寄存器(含浮点/CP0)/标签/宏/EQV补全
-  hover.ts — 指令详情/寄存器描述/伪指令/宏/syscall/CP0 hover；符号定义不重复展示当前行号，单格式无操作数指令不重复展示格式，宏定义不回显宏体，调用展开可用时仅展示展开结果
-  navigation.ts — 跳转定义/查找引用/文档符号
-  formatting.ts — 4空格缩进, 逗号空格, 32列注释对齐
-  signatureHelp.ts — 指令格式(rd,rs,rt)+类型标签, 宏参数, 自动高亮当前操作数
-  folding.ts — .macro/.end_macro, #region/#endregion
-  rename.ts — 标签/数据符号/EQV/宏重命名
-  semanticTokens.ts — 仅输出上下文 semantic token（指令类别/寄存器/宏/符号）, 支持 instructionTokenMode；词法类别由 TextMate 提供，颜色由 VS Code 决定
-  inlayHints.ts — syscall服务名/CP0寄存器名/分支目标 inlay
-  codeActions.ts — pseudo-instruction:* QuickFix
+## 静态资源
 
-infra:
-  parseCache.ts — diagnostics/semantic 共享解析；每 URI/设置只保留最新一代，跨 version 精确文本复用
-  state.ts — MipsServerState: ignoredPseudoInstructionFiles/Mnemonics
-  commands.ts — 内部命令ID: co.server.mips.ignorePseudoWarningsForFile/ForMnemonic
-  text.ts — getMipsWordRange, 字符分类
+- `resources.ts` — ISA 资源加载（instructions/registers/cp0/directives/syscalls/pseudo）；真实指令 facts 合并自生成 catalog
+- `generated/isaDisplayCatalog.ts` — 与 core catalog 同 schema revision 的 LSP 展示事实（勿手改）
+- `marsArgs.ts` — MARS 命令行参数与内存配置常量
+- `legacyMarsPolicy.ts` — 稳定版 MARS 兼容内存配置/异常入口策略
+- `legacyMarsDiagnostics.ts` — coL1/coL2/efc/p7irq/cl 诊断映射，被多子系统复用
 
-trace:
-  traceParser.ts — 解析 coL1 写回行及 coL2 动态指令块为 CpuTraceEvent[]；legacy MARS oracle 固定使用 coL2，以支持停机尾证明、SWL/SWR 合并、REGIMM 分支事件修复/后续状态限制和动态兼容检查，coL1 仅用于工具链能力探针；默认 builtin TS oracle 不经过该文本解析器
-  traceCompare.ts — 事件对比引擎, TraceDiffResult
+## LSP providers
 
-迁移状态: 已从CST完全迁移到AST, Cst*和parseOperands为deprecated. 详见 ARCHITECTURE_REVIEW.md
+- `service.ts` — 注册中心，re-export 全部 provider
+- `completions.ts` — 指令/伪指令/寄存器/标签/宏/`.eqv` 补全
+- `hover.ts` — 指令/寄存器/伪指令/宏/syscall/CP0 说明（中文，不回显冗余上下文）
+- `navigation.ts` — 定义跳转、引用查找、文档符号
+- `formatting.ts` — 4 空格缩进、逗号空格、注释列对齐
+- `signatureHelp.ts` — 指令格式与宏参数签名
+- `folding.ts` — `.macro` 与 `#region` 折叠
+- `rename.ts` — 标签/数据符号/`.eqv`/宏重命名
+- `semanticTokens.ts` — 只输出上下文 semantic token（指令类别/寄存器/宏/符号）；词法类别交给 TextMate
+- `inlayHints.ts` — syscall 服务名/CP0 名/分支目标
+- `codeActions.ts` — `pseudo-instruction:*` QuickFix
+- `display.ts` — hover/inlay 的 Markdown 文案（syscall 详情、CP0 描述、宏体预览）
+- `queries.ts` — 宏重载查找与宏调用参数提取
+
+## 基础设施
+
+- `parseCache.ts` — diagnostics/semantic 共享解析缓存
+- `state.ts` — MipsServerState（忽略伪指令告警的文件/助记符）
+- `commands.ts` — 内部命令 ID（忽略伪指令告警）
+- `text.ts` — 词范围与字符分类工具
+
+## Trace
+
+- `traceParser.ts` — 解析 coL1/coL2 为 `CpuTraceEvent[]`；legacy MARS oracle 固定用 coL2（支持停机尾证明与动态兼容检查），默认 builtin TS oracle 不经过此解析器
+- `traceCompare.ts` — 事件对比引擎

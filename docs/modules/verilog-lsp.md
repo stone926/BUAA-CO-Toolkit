@@ -1,80 +1,68 @@
 # verilog-lsp | src/language/verilog/ | 66 files
 
-Verilog HDL(.v/.vh) LSP: 词法->递归下降解析->表达式AST(40+节点)->过程块AST->语义模型(符号表+引用)->多类型诊断->补全/hover(含宽度推断+常量折叠)/跳转/格式化/高亮/折叠/签名帮助/重命名/内联提示/代码操作 + 跨文件WorkspaceIndex。SystemVerilog(.sv/.svh) 当前使用独立 language id 和 TextMate grammar，不接此 parser。
+Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断。
 
-数据流: Text -> lexer.ts -> statementParser.ts -> astParser.ts/exprAst.ts/blockAst.ts/proceduralAst.ts -> ast.ts -> semanticModel.ts -> diagnostics.ts(调度): syntaxDiag/lintDiag/instanceConnectionDiag/usageDiag/workspaceDiag -> service.ts(provider barrel)
-跨文件: workspaceModuleRegistry.ts(VSCode端) <-> workspaceIndex.ts(LSP端) -> signalWiring.ts
+数据流: `lexer.ts` → `statementParser.ts` → `astParser.ts` / 表达式与块 AST（见 verilog-ast.md）→ `ast.ts` → `semanticModel.ts` → 诊断调度 → `service.ts`（provider barrel）
+跨文件: `workspaceModuleRegistry.ts`（VS Code 端）↔ `workspaceIndex.ts`（LSP 端）→ `signalWiring.ts`
 
-See also: verilog-diagnostics.md(诊断子模块10文件), verilog-ast.md(AST/解析子模块8文件), ARCHITECTURE_REVIEW.md(迁移状态)
+子模块：诊断见 verilog-diagnostics.md，AST 见 verilog-ast.md。
 
-core:
-  parser.ts — 主解析入口: parseVerilog/buildTestbench/moduleAtPosition
-  lexer.ts — 词法: VerilogToken流(关键字/标识符/数字/字符串/注释/预处理/系统任务/操作符)
-  statementParser.ts — 语句源切片: module item边界/过程块边界
-  astParser.ts — 模块/声明/实例结构解析: ports/parameters/declarations/instances/connections/generate（实例标记是否位于带作用域的 generate 块内）
-  instanceParser.ts — 独立实例/连接建模：同句多实例共享参数头，保留位置端口的空槽及源码范围
-  instanceSyntax.ts — 解析和语法验证共用的实例组 token 边界
-  proceduralBoundary.ts — always/initial 的单条过程语句边界，覆盖无 begin/end 的 if/else、case、循环和模块边界恢复
-  moduleParser.ts — 薄门面: lexer+astParser组合
-  ast.ts — VerilogAstDocument, VerilogModuleAst(items/alwaysBlocks/proceduralBlocks/subroutines)
-  syntaxParser.ts — 语法树+语法诊断, 模块项发现从AST遍历
-  semanticModel.ts — 符号表/作用域/AST引用收集, subroutine/localDecl/blockControl/loopControl/assignment/instance/gatePrimitive已接入AST；generate begin 块各成作用域（块内声明、其中的过程块与 task 按块解析）
+## 解析核心
 
-model:
-  model.ts — VerilogDecl(width/initializer/constantValue/direction/explicitPortNetType), VerilogInstance(portConnections/parameterConnections/inGenerateBlock), VerilogModule(ports/parameters/declarations/instances/generateBlocks), VerilogGenerateBlock(标签/范围/块内声明/if-else 分支路径), VerilogMacro, VerilogInclude, VerilogDeclKind
+- `parser.ts` — 主入口：`parseVerilog` / `buildTestbench` / `moduleAtPosition`
+- `moduleParser.ts` — 薄门面：lexer + astParser
+- `lexer.ts` — 词法：关键字/标识符/数字/字符串/注释/预处理/系统任务/操作符
+- `statementParser.ts` — 语句源切片：module item 与过程块边界
+- `astParser.ts` — 模块、声明、实例、端口连接、generate 结构
+- `instanceParser.ts` — 独立实例/连接建模（同句多实例共享参数头，保留空槽与源码范围）
+- `instanceSyntax.ts` — 解析与语法验证共用的实例组 token 边界
+- `proceduralBoundary.ts` — always/initial 的单条过程语句边界与错误恢复
+- `syntaxParser.ts` — 语法树 + 语法诊断
+- `semanticModel.ts` — 符号表/作用域/AST 引用收集；generate 块各自成作用域
+- `model.ts` — VerilogDecl / VerilogInstance / VerilogModule / VerilogGenerateBlock / VerilogMacro 等模型类型
 
-expr-support:
-  expressions.ts — 宽度推断(widthOfDecl/widthOfExpressionAst), 常量折叠(evalExpressionAstConstant), VerilogConstantOverrides
-  declarations.ts — 声明类型分类: port方向/net类型/variable类型/parameter类型/course-out net类型
-  driveStrength.ts — 声明与连续赋值共用的驱动强度前缀识别，保留源码偏移；不模拟驱动强度
-  gatePrimitives.ts — 内建门级原语关键字(and/or/not/buf/...)
-  tokenUtils.ts — token辅助: 区间/种类/文本提取
-  preprocessor.ts — 预处理指令集(define/include/ifdef/...)供补全
-  directiveBoundaries.ts — 在代码解析入口划出编译指令及参数的 token 边界；原始 token 保留给预处理元数据和宏引用
-  moduleUtils.ts — moduleAtPosition/declDetail/buildTestbench, P7 testbench shell/block 从 resources/templates/verilog 渲染
-  stimulusTestbench.ts — buildStimulusTestbench: 独立模块的可编辑激励 testbench 模板（输入/输出声明、端口位宽引用的参数镜像与覆盖、Clk/clock 与 reset/rst/clr/低有效复位识别、排除时钟的 $monitor、激励区与可选 VCD）；不用于课程 CPU/自动测试 TB
-  moduleProvider.ts — MutableVerilogModuleProvider接口
-  statementUtils.ts — splitTopLevelCommaSpans
-  textUtils.ts — 文本/空白处理供formatting
-  displayFormats.ts — $display/$write格式字符串提取供trace格式推断
-  numericLiterals.ts — 数字字面量hover格式化+代码操作(进制转换/位宽)
-  generateScopes.ts — generate 块作用域查询（纯模型）：位置所在 generate 块、按作用域区分的信号键、条件 generate 的 if/else 分支互斥
-  parameterOverrides.ts — 模块实例参数覆盖解析：按名/按位（位置覆盖跳过 localparam），可传入父实例覆盖逐级求值；resolveParameterOverrides 额外报告无法求值的覆盖；overridableParameters 供补全/签名帮助/填充参数/诊断共用
-  parseCache.ts — 解析缓存(DocumentResultCache wrapper)
+## 表达式与声明支持
 
-lsp-providers:
-  service.ts — 聚合facade: 只 re-export parser/diagnostic/provider 公共入口
-  diagnosticProvider.ts — 诊断provider facade: parse cache + workspace diagnostics + disabled-code过滤
-  completions.ts — completionProvider 依赖装配入口, 注入实例连接上下文 resolver
-  completionProvider.ts — 补全provider: 实例连接上下文（#(...) 只列可覆盖的 parameter）/宏/关键字/snippet/workspace模块补全
-  hover.ts — hover provider: 声明/表达式宽度、常量、实例参数、include 状态；声明与表达式不回显源码，端口/参数连接合并相同的宽度和值；不展示 AST 类型/节点偏移/内部宽度推断属性，说明文字使用中文，完整展示端口和参数列表（先端口后参数）
-  navigation.ts — definition/reference provider: 跨文件 module/interface/macro/include 引用收集和去重
-  rename.ts — rename provider: 基于 reference provider 生成 workspace edit, 标识符边界校验
-  codeActions.ts — quick fix/refactor provider: 隐式连线声明、表达式折叠/抽取、实例连接补全
-  signatureHelp.ts — 实例端口/参数列表签名帮助（参数列表不含 localparam，按位下标与仿真器一致）
-  inlayHints.ts — 实例连接端口方向/宽度与参数提示
-  resolveSymbol.ts — 语义模型+语法 fallback 的 Verilog symbol resolution, 实例连接上下文
-  display.ts — hover/inlay/signature markdown 文案、宽度/参数显示 helper
-  semanticTokens.ts — 上下文语义高亮: module/port/signal/parameter/instance/macro/task/function；命名端口/参数按语法稳定分类，不依赖 workspace index；词法类别由 TextMate 提供
-  formatting.ts — Verilog 细项格式化配置
-  folding.ts — module/always/initial/function/task/generate/case/预处理条件块
-  symbols.ts — 文档符号树(模块->端口/参数/声明/实例)
-  traceParser.ts — Verilog `$display` trace 输出解析为 CpuTraceEvent[]（Icarus）
+- `expressions.ts` — 位宽推断与常量折叠
+- `declarations.ts` — 声明类型分类（port 方向、net/variable、parameter）
+- `driveStrength.ts` — 驱动强度前缀识别（保留源码偏移，不模拟强度）
+- `preprocessor.ts` — `define`/`include`/`ifdef` 等指令集，供补全使用
+- `directiveBoundaries.ts` — 在代码解析入口划出编译指令及参数边界
+- `parameterOverrides.ts` — 实例参数按名/按位覆盖解析，逐级求值并报告不可求值项
+- `generateScopes.ts` — generate 块作用域查询（纯模型，含条件分支互斥）
+- `numericLiterals.ts` — 数字字面量 hover 格式化与进制/位宽代码操作
+- `displayFormats.ts` — `$display`/`$write` 格式串提取，供 trace 格式推断
+- `tokenUtils.ts` — token 区间/种类/文本提取
+- `statementUtils.ts` — 顶层逗号区间切分
+- `textUtils.ts` — 格式化用文本/空白处理
+- `parseCache.ts` — 解析缓存（`DocumentResultCache` wrapper）
+- `moduleUtils.ts` — `moduleAtPosition` / `declDetail` / `buildTestbench`，P7 testbench shell 从模板渲染
+- `stimulusTestbench.ts` — 非课程 CPU 的可编辑激励 testbench 模板
+- `moduleProvider.ts` — `MutableVerilogModuleProvider` 接口
 
-cross-file:
-  workspaceModuleRegistry.ts — VSCode端后台索引: FileSystemWatcher `.v/.vh`, onDidSaveTextDocument增量更新
-  workspaceIndex.ts — LSP端模块数据库: 索引模块/宏/引用/display格式, 跨文件查找, 增量更新(≤50逐文件,>50全量)
-  signalWiring.ts — 跨模块信号driver/reader追踪
+## LSP providers
 
-external-compiler:
-  externalSyntaxCheck.ts — 通用/on-save 检查固定 bundled Icarus
-  externalSyntaxProject.ts — LSP 侧有界发现 `.v` 并复用确定性 source order，跳过编辑器/构建产物目录；保存的 `.co/tb` testbench 作为末尾源与工程一起检查
-  iverilogSyntaxCheck.ts — 从 initializationOptions 的扩展安装根运行绝对路径 `iverilog -g2005 -tnull -i`，解析常见 path:line[:column] 诊断
+- `service.ts` — 聚合 facade，只 re-export 公共入口
+- `diagnosticProvider.ts` — 诊断 facade：parse cache + workspace 诊断 + disabled-code 过滤
+- `completions.ts` / `completionProvider.ts` — 依赖装配与补全（实例连接上下文、宏、关键字、snippet、workspace 模块）
+- `hover.ts` — 声明/表达式宽度、常量、实例参数、include 状态；说明文字用中文，不回显源码
+- `navigation.ts` — 跨文件 module/interface/macro/include 定义与引用
+- `rename.ts` — 基于引用 provider 生成 workspace edit
+- `codeActions.ts` — 隐式连线声明、表达式折叠/抽取、实例连接补全
+- `signatureHelp.ts` — 实例端口/参数签名帮助（不含 localparam）
+- `inlayHints.ts` — 实例连接端口方向/宽度与参数提示
+- `resolveSymbol.ts` — 语义模型 + 语法 fallback 的 symbol resolution
+- `display.ts` — hover/inlay/signature 文案与宽度/参数显示 helper
+- `semanticTokens.ts` — 上下文语义高亮（module/port/signal/parameter/instance/macro/task/function）；词法类别由 TextMate 提供
+- `formatting.ts` / `folding.ts` / `symbols.ts` — 格式化、折叠、文档符号树
+- `traceParser.ts` — Verilog `$display` trace 输出解析为 `CpuTraceEvent[]`
 
-legacy:
+## 跨文件
 
-Diagnostic子模块: verilog-diagnostics.md | AST子模块: verilog-ast.md
+- `workspaceModuleRegistry.ts` — VS Code 端后台索引：FileSystemWatcher + 保存时增量更新
+- `workspaceIndex.ts` — LSP 端模块/宏/引用/display 格式数据库，增量更新（≤50 逐文件，>50 全量）
+- `signalWiring.ts` — 跨模块 signal driver/reader 追踪
 
-编辑体验回归：`editorPatterns.test.ts` 覆盖连续赋值列表、多实例、空位置端口、参数宽度继承、未知宏宽度、实数延时、无 begin/end 的过程控制、错误恢复和 LSP 跳转/签名/重构。`valid/editor-patterns.v` 可用 bundled Icarus `-g2005 -tnull` 检查。
+## 外部编译器
 
-2026-09-27 本地真实语料验证：`E:\VSCode\BUAA-CO\cpu` 中 rg 默认可见的 360 个 `.v/.vh` 文件，按源文件父目录分别构建索引（不混合不同 CPU 版本），默认 LSP 诊断由 608 条降至 142 条，其中 120 条为未使用声明的 Hint；唯一 `syntax-*` 是原文件 `gyc/test/sales-tb.v` 的非法模块名。此统计不等同于所有 CPU 工程的完整仿真验证。
+外部语法检查（`externalSyntaxProject.ts` / `externalSyntaxCheck.ts` / `iverilogSyntaxCheck.ts`）固定使用 bundled Icarus `-g2005 -tnull -i`，源集合与顺序复用确定性排序，保存的 `.co/tb` testbench 作为末尾源一并检查。详见 verilog-diagnostics.md。

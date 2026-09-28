@@ -1,19 +1,10 @@
 # common-lsp | src/language/common/ | 6 files
 
-各语言共用基础设施: 配置合并、诊断过滤、LSP 辅助、缓存
+各语言共用的 LSP 基础设施：配置合并、诊断过滤与快速修复、位置/语义 token 辅助、解析缓存。
 
-  settings:
-  settings.ts — CoSettings接口/默认值/mergeCoSettings/诊断禁用键；Verilog courseRules保留课程接口验证开关，外部检查使用 backend-neutral external mode/timeout | exports: CoSettings, defaultCoSettings, mergeCoSettings, diagnosticCodeKey, diagnosticFileCodeKey, isDiagnosticCodeDisabledForFile
-
-diagnostic-actions:
-  diagnosticActions.ts — 诊断过滤和QuickFix生成 | exports: filterDisabledDiagnostics, getDiagnosticSuppressActions
-
-lsp-helpers:
-  lsp.ts — Position/Range辅助: lineAt, containsPosition, containsRange, comparePosition, rangesEqual, makeDiagnostic | exports: lineAt, containsPosition, containsRange, comparePosition, rangesEqual, makeDiagnostic
-  semanticTokens.ts — SemanticTokenCollector: 单行边界校验、去重、排序、重叠保护和 LSP 相对位置编码 | exports: SemanticTokenCollector
-
-utilities:
-  util.ts — rangeKey(去重键), escapeRegExp, escapeHtml, createMipsTokenRegex | exports: rangeKey, escapeRegExp, escapeHtml, createMipsTokenRegex
-
-parse-cache:
-  documentResultCache.ts — 每个 URI/discriminator 仅保留最新一代；跨 version 精确文本复用；LRU 16条目 | exports: DocumentResultCache
+- `settings.ts` — `CoSettings` 接口、默认值与 `mergeCoSettings`；诊断禁用键解析
+- `diagnosticActions.ts` — 诊断过滤（按 code / 按文件 code）与 QuickFix 生成
+- `lsp.ts` — Position/Range 辅助（`lineAt`、`containsPosition`、`rangesEqual`、`makeDiagnostic` 等）
+- `semanticTokens.ts` — `SemanticTokenCollector`：单行边界校验、去重、排序、重叠保护与 LSP 相对位置编码
+- `util.ts` — `rangeKey`（去重键）、`escapeRegExp`、`escapeHtml`、`createMipsTokenRegex`
+- `documentResultCache.ts` — 每个 URI/discriminator 只保留最新一代，跨 version 精确文本复用，LRU 16 条目

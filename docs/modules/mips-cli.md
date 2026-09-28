@@ -1,12 +1,16 @@
 # mips-cli | src/mips/cli/ | 2 files
 
-供独立 conformance process 调用的纯 TypeScript JSONL 边界；不导入 VS Code、课程 runner 或 expected-value 生成链。当前暴露 describe、ISA encode/decode（单项及 batch）、`assembler.assemble`（阶段 5 课程汇编器）、`machine.execute`（阶段 2/3 执行器）与 `device.cycleVector`（官方 Timer 周期向量）。`assembler.assemble` 接收 root/include source unit 与显式 include 边，返回 ProgramImage、诊断和 sourceMap origin。
+独立 conformance process 调用生产引擎的唯一进程边界：纯 TypeScript JSONL over stdio，**不**导入 VS Code、课程 runner 或 expected-value 生成链。
 
-- `protocol.ts` — protocol v1 的严格请求校验、未知字段拒绝、profile/layer scope、最多 4096 项 batch/segment、执行与设备向量上限，以及稳定的结构化错误。
-- `main.ts` — 每行最多 4 MiB 的流式 JSONL 入口；超长行边读边丢弃，非无损 UTF-8 拒绝，每个非空请求恰有一个响应，并等待 stdout drain 形成背压。
+- `protocol.ts` — protocol v1 严格校验：未知字段拒绝、profile/layer scope、batch/segment/执行/设备向量上限、稳定结构化错误
+- `main.ts` — 每行最多 4 MiB 的流式 JSONL 入口（超长行边读边丢弃、非无损 UTF-8 拒绝、每请求恰一响应、等待 stdout drain 形成背压）
 
-构建后入口为 `out/mips/cli/main.js`。`scripts/verify-mips-cli.mjs` 验证 describe、encode/decode、P3 assembler smoke、畸形输入、超限和进程退出语义；独立 `conformance/mips/runner/verify-ts-cli.mjs` 覆盖 ISA golden、P3 assembler smoke，并固定断言一个 P3 `machine.execute` 的停机、完整最终状态与 trace。conformance 只能通过该进程边界访问生产 ISA/汇编/执行服务。
+**暴露的操作**：`describe`、`isa.encode` / `isa.decode`（另有 `isa.encodeBatch` / `isa.decodeBatch`）、`assembler.assemble`、`machine.execute`、`device.cycleVector`。构建后入口为 `out/mips/cli/main.js`。
 
-course-vector lane 中，P3–P6 的 7 个 `program-final-state` 用例通过该边界先汇编再执行，P7 Timer vector 调用 `device.cycleVector`。P7 CP0 exception 与 external IRQ vector 当前没有对应的独立 CLI operation，runner 明确报告为 `directed-artifact-only` 并使用 `validated` 而非 `passed`；它们不是 CLI 执行覆盖。assembly-diff 也通过该边界运行 assembler，但当前 10 个对拍源都是单文件直接指令用例，复杂 include graph/macro/pseudo 与非空 data 的正确性来自 core/provider 测试而非该独立 lane。
+**设计决策**
 
-`describe` 分别返回 `catalog`、`assembler`、`executor` 与 `device` 四组 revision：汇编证据含 assembler semantics/catalog，执行证据只含 executor/catalog 之外的字段，设备证据只含 CycleContract revision，避免不同 evidence kind 互相作废（计划第 7.6 节）。
+- `describe` 返回 `catalog` / `assembler` / `executor` / `device` 四组**独立** revision，使执行/设备证据不会因汇编器或 catalog 变更而作废，反之亦然。
+- 一切走有界 DTO：`assembler.assemble` 接收 root/include source unit 与显式 include 边，返回 ProgramImage、诊断与 sourceMap origin；conformance 无法绕过此边界直接调内部服务。
+- P7 CP0 exception 与 external IRQ vector 目前没有对应 CLI operation，runner 明确报告为 `directed-artifact-only` 而非 `passed`——不得把定向 artifact 冒充 CLI 执行覆盖。
+
+验证：`scripts/verify-mips-cli.mjs`（协议/畸形输入/超限/退出语义）+ `conformance/mips/runner/verify-ts-cli.mjs`（ISA golden、P3 assembler smoke、固定 P3 `machine.execute` 停机与最终状态）。默认切换门 `npm run verify:phase6`。

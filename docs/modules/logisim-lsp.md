@@ -1,9 +1,6 @@
 # logisim-lsp | src/language/logisim/ | 2 files
 
-Logisim .circ 文件语言支持: XML解析、诊断、ROM注入
+Logisim `.circ` 文件支持：XML 解析、诊断与 ROM 注入。
 
-lsp-service:
-  service.ts — 解析circuit XML, 诊断(组件属性), hover, document symbols | exports: getLogisimDiagnostics, getLogisimHover, getLogisimDocumentSymbols
-
-rom-injection:
-  rom.ts — ROM组件定位、机器码写入circuit XML | 被 src/logisim.ts 调用
+- `service.ts` — 解析 circuit XML，诊断组件属性，提供 hover 与文档符号
+- `rom.ts` — 定位 ROM 组件并把机器码写入 circuit XML；由 `src/logisim.ts` 调用
