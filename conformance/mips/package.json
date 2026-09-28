@@ -23,8 +23,6 @@
     "run:execution-diff": "node runner/executionDifferential.mjs --output-dir ../.cache/phase6-execution-differential",
     "verify:phase6-aggregate": "node runner/validatePhase6Evidence.mjs --execution-dir ../.cache/phase6-execution-differential",
     "verify:phase6": "npm run verify:execution-corpus && npm run verify:references && npm run run:assembly-diff && npm run run:execution-diff && npm run verify:phase6-aggregate",
-    "benchmark:fixed": "node bench/fixed-runner-benchmark.mjs",
-    "benchmark:validate": "node bench/validate-fixed-benchmark.mjs",
     "run": "node runner/run-conformance.mjs --lane legacy-baseline --lane course-vector",
     "record:goldens": "node runner/run-conformance.mjs --lane legacy-baseline --record-golden",
     "test": "node --test",

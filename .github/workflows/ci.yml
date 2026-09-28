@@ -6,13 +6,7 @@ on:
       - main
   pull_request:
   workflow_dispatch:
-    inputs:
-      run_fixed_benchmark:
-        description: Generate controlled Windows/Linux MARS baseline candidates
-        required: true
-        default: false
-        type: boolean
-      
+
 jobs:
   test:
     name: Test and compile
@@ -171,81 +165,3 @@ jobs:
           path: conformance/.cache/phase6-execution-differential
           if-no-files-found: error
           retention-days: 30
-
-  fixed-mars-benchmark:
-    name: MARS baseline candidate (${{ matrix.runner_id }})
-    if: github.event_name == 'workflow_dispatch' && inputs.run_fixed_benchmark
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            runner_id: github-hosted:ubuntu-24.04
-          - os: windows-2025
-            runner_id: github-hosted:windows-2025
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Reject non-main benchmark evidence
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_REF -ne 'refs/heads/main') {
-            throw "fixed benchmark evidence must be dispatched from protected main"
-          }
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Setup Java 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - name: Verify pinned MARS artifacts
-        run: node conformance/mips/reference/download-references.mjs --require-all
-
-      - name: Record Linux runner policy
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          test -n "${ImageOS:-}" && test -n "${ImageVersion:-}" || { echo "hosted runner image metadata missing" >&2; exit 1; }
-          governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo github-managed-unavailable)
-          echo "CONFORMANCE_BENCHMARK_CPU_POLICY=github-managed;governor=${governor}" >> "$GITHUB_ENV"
-          echo "CONFORMANCE_BENCHMARK_IMAGE_VERSION=${ImageOS}:${ImageVersion}" >> "$GITHUB_ENV"
-
-      - name: Record Windows runner policy
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:ImageOS) -or [string]::IsNullOrWhiteSpace($env:ImageVersion)) {
-            throw "hosted runner image metadata missing"
-          }
-          $scheme = (powercfg /getactivescheme) -join ' '
-          "CONFORMANCE_BENCHMARK_CPU_POLICY=github-managed;$scheme" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CONFORMANCE_BENCHMARK_IMAGE_VERSION=$($env:ImageOS):$($env:ImageVersion)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Collect full controlled-runner candidate
-        shell: pwsh
-        env:
-          CONFORMANCE_BENCHMARK_RUNNER_ID: ${{ matrix.runner_id }}
-          CONFORMANCE_BENCHMARK_CONCURRENCY: "1"
-        run: |
-          node conformance/mips/bench/fixed-runner-benchmark.mjs --samples 7 --output benchmark-candidate.json
-
-      - name: Recompute matrix, statistics, resources, and hashes
-        run: node conformance/mips/bench/validate-fixed-benchmark.mjs --input benchmark-candidate.json --require-eligible
-
-      - name: Upload immutable raw candidate for human approval
-        uses: actions/upload-artifact@v4
-        with:
-          name: mars-baseline-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: benchmark-candidate.json
-          if-no-files-found: error
-          retention-days: 90
