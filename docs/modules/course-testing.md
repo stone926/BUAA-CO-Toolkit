@@ -77,6 +77,6 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `courseTest.ts` — 仅注册持续测试启动/停止/测试历史三个公共入口
 - `courseTestContinuous.ts` — 持续生成循环：首个失败即停、有界产物与报告、1 秒窗口合并
 - `courseTestToolchain.ts` — mode-aware 校验，automatic 固定 builtin override 且不泄漏本机路径
-- `courseTestLogisim.ts` — P3 自动电路诊断与 ROM 注入对拍
+- `courseTestLogisim.ts` — P3 自动电路诊断与 ROM 注入对拍；原始 stdout 最多 64 MiB，触顶终止并报告截断原因
 - `courseTestReport.ts` / `courseTestMessages.ts` / `courseTestStdin.ts` / `courseTestTraceFiles.ts` / `courseTestCases.ts` / `continuous.ts` — HTML 报告、中文 diff 提示、stdin 发现、输出命名（`.co/out/{stem}.oracle.out` 与 `.sim.out`）、case 输入与留存裁剪
 - `asmCaseStore.ts` / `asmCaseStoreCore.ts` / `manifestCodec.ts` / `continuousCaseRetention.ts` / `pathContainment.ts` — 用例持久化与 manifest v1（只读）/v2 codec：创建时捕获完整 SourceUnit/include graph，后续汇编与 oracle 只读 case 内 immutable materialization；所有路径只接受 canonical `/`，大小写碰撞、symlink 与 containment escape fail closed

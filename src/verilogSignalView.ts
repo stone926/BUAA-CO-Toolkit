@@ -1,9 +1,9 @@
 import { Commands } from './constants';
 import * as vscode from 'vscode';
-import { Range as LspRange } from 'vscode-languageserver/node';
-import { parseVerilog } from './language/verilog/service';
+import { Range as LspRange } from 'vscode-languageserver-types';
+import { parseVerilogCore } from './language/verilog/parseCore';
 import { analyzeSignalWiring, SignalWiringEntry, SignalWiringEntryKind } from './language/verilog/signalWiring';
-import { coSettingsForUri, toTextDocument } from './verilog';
+import { toTextDocument } from './verilog/documentContext';
 import type { VerilogModuleProvider } from './language/verilog/moduleProvider';
 
 const placeholderMessage = '将光标放在 Verilog 信号上以查看其连线';
@@ -33,7 +33,7 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
   message: string | undefined = placeholderMessage;
 
   private cacheKey: string | undefined;
-  private cacheParsed: ReturnType<typeof parseVerilog> | undefined;
+  private cacheParsed: ReturnType<typeof parseVerilogCore> | undefined;
 
   constructor(private readonly moduleRegistry: VerilogModuleProvider) {}
 
@@ -139,12 +139,12 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
     };
   }
 
-  private parse(doc: vscode.TextDocument): ReturnType<typeof parseVerilog> {
+  private parse(doc: vscode.TextDocument): ReturnType<typeof parseVerilogCore> {
     const key = `${doc.uri.toString()}@${doc.version}`;
     if (this.cacheKey === key && this.cacheParsed) {
       return this.cacheParsed;
     }
-    const parsed = parseVerilog(toTextDocument(doc), coSettingsForUri(doc.uri), false);
+    const parsed = parseVerilogCore(toTextDocument(doc));
     this.cacheKey = key;
     this.cacheParsed = parsed;
     return parsed;

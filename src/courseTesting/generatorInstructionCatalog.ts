@@ -1,6 +1,6 @@
 // @index generator-catalog — 内置 ASM 生成器指令集/分类资源加载
 import * as fs from 'fs';
-import * as path from 'path';
+import { resourcePath } from '../resourcePaths';
 import { isaInstructionByMnemonic } from '../mips/core/generated/isaCatalog';
 import { courseProfileIds, CourseProjectProfile } from '../projectProfile';
 
@@ -31,7 +31,7 @@ export type GeneratorInstructionCategory =
 export const generatorInstructionCatalog = loadGeneratorInstructionCatalog();
 
 function loadGeneratorInstructionCatalog(): GeneratorInstructionCatalog {
-  const filePath = path.join(__dirname, '..', '..', 'resources', 'mips', 'generatorProfiles.json');
+  const filePath = resourcePath('mips', 'generatorProfiles.json');
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
   validateCatalog(parsed);
   return parsed;

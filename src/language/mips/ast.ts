@@ -651,9 +651,8 @@ function trimmedSpan(text: string, start: number, end: number): MipsParsedRange 
 }
 
 function documentRange(document: TextDocument): Range {
-  const lines = document.getText().split(/\r?\n/);
-  const lastLine = Math.max(0, lines.length - 1);
-  return Range.create(0, 0, lastLine, lines[lastLine]?.length ?? 0);
+  const end = document.positionAt(document.getText().length);
+  return Range.create(0, 0, end.line, end.character);
 }
 
 function skipAsciiWhitespace(text: string, start: number): number {

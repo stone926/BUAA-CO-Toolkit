@@ -1,4 +1,4 @@
-import { Range } from 'vscode-languageserver/node';
+import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lineAt } from '../common/lsp';
 import { rangeKey } from '../common/util';

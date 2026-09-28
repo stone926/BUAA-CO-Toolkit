@@ -1,6 +1,6 @@
 // @index templates — 资源模板加载与受控占位替换
 import * as fs from 'fs';
-import * as path from 'path';
+import { resourcePath } from '../resourcePaths';
 
 type TemplateValue = string | number | boolean | null | undefined;
 
@@ -26,7 +26,7 @@ function readResourceTemplate(relativePath: string): string {
   if (cached !== undefined) {
     return cached;
   }
-  const templatePath = path.join(__dirname, '..', '..', 'resources', 'templates', ...normalized.split('/'));
+  const templatePath = resourcePath('templates', ...normalized.split('/'));
   // Normalize to LF at load: the extension's rendered outputs (Tcl scripts,
   // project files, Verilog) must not depend on whether the checkout used CRLF.
   const text = fs.readFileSync(templatePath, 'utf8').replace(/\r\n/g, '\n');

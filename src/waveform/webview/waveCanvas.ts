@@ -13,7 +13,7 @@ import { measurementLabel } from './rulerRenderer';
 import type { WaveStore } from './store';
 import type { Palette } from './theme';
 import { Tooltip, TooltipLine } from './tooltip';
-import { renderWaves, waveFont, WaveOverlay } from './waveRenderer';
+import { renderWaveOverlay, renderWaves, waveFont, WaveOverlay } from './waveRenderer';
 
 const grabPixels = 4;
 const dragThreshold = 3;
@@ -34,6 +34,7 @@ type DragMode =
 
 export class WaveCanvas {
   readonly element: HTMLCanvasElement;
+  readonly overlayElement: HTMLCanvasElement;
   private width = 0;
   private height = 0;
   private rows: readonly VisibleRow[] = [];
@@ -53,6 +54,8 @@ export class WaveCanvas {
   ) {
     this.element = document.createElement('canvas');
     this.element.className = 'wave-canvas';
+    this.overlayElement = document.createElement('canvas');
+    this.overlayElement.className = 'wave-overlay';
     this.element.addEventListener('pointerdown', (event) => this.onPointerDown(event));
     this.element.addEventListener('pointermove', (event) => this.onPointerMove(event));
     this.element.addEventListener('pointerup', (event) => this.onPointerUp(event));
@@ -61,7 +64,7 @@ export class WaveCanvas {
       if (!this.drag) {
         this.hoverX = undefined;
         this.tooltip.hide();
-        this.store.invalidate('waves');
+        this.store.invalidate('overlay');
       }
     });
     this.element.addEventListener('wheel', (event) => this.onWheel(event), { passive: false });
@@ -96,11 +99,23 @@ export class WaveCanvas {
       this.charWidth = ctx.measureText('0123456789abcdef').width / 16 || 7;
       this.charWidthFont = font;
     }
+    renderWaves({ ctx, dpr, width: this.width, height: this.height, palette, charWidth: this.charWidth }, this.store, rows);
+  }
+
+  renderOverlay(): void {
+    // Moving a webview to a display with another DPR can change backing size
+    // without changing its CSS box. Keep both layers at the same resolution.
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    if (this.element.width !== Math.max(1, Math.round(this.width * dpr))
+      || this.element.height !== Math.max(1, Math.round(this.height * dpr))) {
+      this.render(this.rows);
+    }
+    const fitted = fitCanvas(this.overlayElement, this.width, this.height);
     const overlay: WaveOverlay = {
       hoverX: this.hoverX,
       dragRange: this.drag?.kind === 'range' ? { x0: this.drag.startX, x1: this.drag.currentX } : this.externalRange?.()
     };
-    renderWaves({ ctx, dpr, width: this.width, height: this.height, palette, charWidth: this.charWidth }, this.store, rows, overlay);
+    renderWaveOverlay({ ctx: fitted.ctx, dpr: fitted.dpr, width: this.width, height: this.height, palette: this.palette(), charWidth: this.charWidth }, this.store, overlay);
   }
 
   /** Cancel an in-progress drag (Escape). Returns true when one was active. */
@@ -114,7 +129,7 @@ export class WaveCanvas {
     if (wasRange) {
       this.callbacks.onDragRange(undefined);
     }
-    this.store.invalidate('waves', 'ruler');
+    this.store.invalidate('overlay', 'ruler');
     return true;
   }
 
@@ -168,7 +183,7 @@ export class WaveCanvas {
     if (!drag) {
       this.hoverX = event.offsetX;
       this.store.hoverTime = this.timeAt(event.offsetX);
-      this.store.invalidate('waves');
+      this.store.invalidate('overlay');
       this.element.style.cursor = this.hoverCursor(event.offsetX);
       this.tooltip.schedule(event.clientX, event.clientY, () => this.tooltipLines(event.offsetX, event.offsetY));
       return;
@@ -179,13 +194,13 @@ export class WaveCanvas {
         if (Math.abs(event.offsetX - drag.startX) > dragThreshold) {
           this.drag = { kind: 'range', startX: drag.startX, currentX: event.offsetX };
           this.callbacks.onDragRange({ x0: drag.startX, x1: event.offsetX });
-          this.store.invalidate('waves', 'ruler');
+          this.store.invalidate('overlay', 'ruler');
         }
         return;
       case 'range':
         drag.currentX = Math.max(0, Math.min(this.width, event.offsetX));
         this.callbacks.onDragRange({ x0: drag.startX, x1: drag.currentX });
-        this.store.invalidate('waves', 'ruler');
+        this.store.invalidate('overlay', 'ruler');
         return;
       case 'cursor':
         this.actions.setCursor(this.actions.snapTime(this.timeAt(event.offsetX), this.signalVarAt(event.offsetY)));
@@ -220,7 +235,7 @@ export class WaveCanvas {
       if (Math.abs(drag.currentX - drag.startX) > dragThreshold) {
         this.actions.zoomToRange(from, to);
       }
-      this.store.invalidate('waves', 'ruler');
+      this.store.invalidate('overlay', 'ruler');
     }
   }
 

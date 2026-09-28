@@ -6,7 +6,7 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 
 ## 核心
 
-- `parser.ts` — 解析编排：source → parsed lines → AST → semantic model → diagnostics
+- `parser.ts` — 解析编排：source → parsed lines → AST → semantic model → diagnostics；未声明符号检查在单次解析内复用宏重载匹配与 label 参数分析
 - `syntax.ts` — 词法解析与格式化 API
 - `ast.ts` — 类型化 AST（operand / `.eqv` / `.macro` 头）
 - `semantic.ts` — 符号收集、作用域、引用与跳转查询

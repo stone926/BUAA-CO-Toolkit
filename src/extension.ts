@@ -122,13 +122,14 @@ export function activate(context: vscode.ExtensionContext): void {
       invalidateVerilogProjectDiscovery(uri);
       clearProfileInferenceCache();
       invalidateToolchainCache();
-      moduleRegistry.updateUri(uri);
+      void moduleRegistry.updateUriAsync(uri);
     }),
     verilogWatcher.onDidChange((uri) => {
       invalidateVerilogProjectDiscovery(uri);
-      clearProfileInferenceCache();
       invalidateToolchainCache();
-      moduleRegistry.updateUri(uri);
+      // The registry compares content after the async read, so save echoes are
+      // skipped while external edits to an open file are still indexed.
+      void moduleRegistry.updateUriAsync(uri);
     }),
     verilogWatcher.onDidDelete((uri) => {
       invalidateVerilogProjectDiscovery(uri);
@@ -151,7 +152,6 @@ export function activate(context: vscode.ExtensionContext): void {
       scheduleRefreshProjectUi();
     }),
     profileWatcher.onDidChange(() => {
-      clearProfileInferenceCache();
       invalidateToolchainCache();
       scheduleRefreshProjectUi();
     }),

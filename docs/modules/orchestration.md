@@ -1,20 +1,22 @@
-# orchestration | src/ | 57 files
+# orchestration | src/ | 58 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
 ## 入口
 
 - `extension.ts` — `activate()`：注册全部命令/侧边栏/StatusBar/FileWatcher/工具链缓存；属于源文件发现基线的 Verilog 事件会失效所有包含该路径的嵌套 workspace 缓存，folder 增删保守清空基线并忽略 `.co` 生成物；`deactivate()` 停 LSP
-- `languageClient.ts` — `startLanguageServer`（IPC 模式，initializationOptions 传扩展安装根供 bundled runtime 定位）/ `stopLanguageServer` / `executeLanguageServerCommand`
+- `languageClient.ts` — 文档选择器命中 MIPS、Verilog 或 `.circ` 文档时按需启动 IPC LSP；LSP 命令也可触发启动。`initializationOptions` 传扩展安装根供 bundled runtime 定位；启动 Promise 去重，停用等待启动完成
 
 ## 配置与 Profile
 
 - `constants.ts` — 命令 ID、Profile 能力集合、输出目录名（`.co/*`）等公共常量
 - `config.ts` — `co.*` 设置读取（分层取值 + Profile 持久化 + 值域裁剪）；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置
 - `configDefaults.ts` — 从 `resources/co/configDefaults.json` 加载默认值，宿主/LSP/测试共享
+- `resourcePaths.ts` — 宿主、LSP 与独立辅助入口共享扩展根与静态资源定位；Worker 管理器据此定位 Worker 入口
 - `courseConfig.ts` — Profile 定义（P0–P7）：名称/描述/能力矩阵/语言/目录/端口/内存布局，从 `resources/co/courseConfig.json` 加载缓存
 - `projectProfile.ts` / `generated/projectProfiles.ts` — 生成物（勿手改）与稳定导出入口，并校验 ISA profilePolicies 一致性
 - `profileInference.ts` / `profileResolver.ts` — Profile 推断：端口签名、display 格式、文件类型分布与四级置信度
+- `extension.ts` 的文件监听仅在文件增删或配置变化时清理 Profile 文件列表；普通内容变更仍失效工具链状态并更新工程视图
 
 ## 工具链与进程
 

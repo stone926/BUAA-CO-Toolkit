@@ -1,4 +1,4 @@
-import { Range } from 'vscode-languageserver/node';
+import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
 import { isIdentifierLike, VerilogToken } from './lexer';

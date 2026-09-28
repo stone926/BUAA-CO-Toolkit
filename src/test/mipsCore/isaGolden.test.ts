@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeInstructionWord } from '../../mips/core/isa/encoder';
-import { decodeCourseInstructionWord, matchRuntimeInstruction } from '../../mips/core/isa/decoder';
+import { decodeCourseInstructionWord, matchExactInstruction, matchRuntimeInstruction } from '../../mips/core/isa/decoder';
 import {
   instructionExceptionsForProfile,
   instructionHasDelaySlot,
@@ -132,6 +132,23 @@ describe('ISA catalog encode golden', () => {
 });
 
 describe('ISA catalog runtime recognition vs canonical decode', () => {
+  it('memoizes immutable results per equivalent scope while respecting layer changes', () => {
+    const layers: Array<'required' | 'marsCompatibility'> = ['required'];
+    const scope = { profile: 'P7' as const, enabledLayers: layers };
+    const word = 0x012a4026; // xor is available only in the compatibility layer
+    expect(matchRuntimeInstruction(word, scope)).toBeUndefined();
+
+    layers.push('marsCompatibility');
+    const match = matchRuntimeInstruction(word, scope);
+    expect(match?.exactInstruction?.mnemonic).toBe('xor');
+    expect(matchRuntimeInstruction(word, {
+      profile: 'P7', enabledLayers: ['marsCompatibility', 'required', 'required']
+    })).toBe(match);
+    expect(Object.isFrozen(match)).toBe(true);
+    expect(Object.isFrozen(match?.candidates)).toBe(true);
+    expect(matchExactInstruction(word, scope)).toBe(match?.exactInstruction);
+  });
+
   it('does not trigger P7 RI for non-canonical reserved bits (course contract counterexample)', () => {
     // add with non-zero shamt: runtime recognition must still name `add`,
     // while the canonical validator rejects the word.

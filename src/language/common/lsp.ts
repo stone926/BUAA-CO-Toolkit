@@ -3,7 +3,7 @@ import {
   DiagnosticSeverity,
   Position,
   Range
-} from 'vscode-languageserver/node';
+} from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 export interface TextLine {

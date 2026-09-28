@@ -5,10 +5,8 @@ import { registerVerilog } from '../verilog';
 import { defaultCoSettings } from '../language/common/settings';
 import { runVerilogSimulation as runVerilogSimulationCore } from '../verilog/simulationRunner';
 import { pathExists, writeTextFile } from '../fsUtil';
-import {
-  moduleAtPosition,
-  parseVerilog
-} from '../language/verilog/service';
+import { moduleAtPosition } from '../language/verilog/moduleUtils';
+import { parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
 import {
   findExistingTestbenchResolution,
   userTestbenchText
@@ -40,10 +38,8 @@ vi.mock('../config', () => ({
   getTopModule: vi.fn(() => 'mips')
 }));
 
-vi.mock('../language/verilog/service', () => ({
-  moduleAtPosition: vi.fn(),
-  parseVerilog: vi.fn()
-}));
+vi.mock('../language/verilog/moduleUtils', () => ({ moduleAtPosition: vi.fn() }));
+vi.mock('../language/verilog/moduleDeclarations', () => ({ parseVerilogModuleDeclarations: vi.fn() }));
 
 vi.mock('../fsUtil', () => ({
   pathExists: vi.fn(),
@@ -110,7 +106,7 @@ describe('Verilog command registration and entry behavior', () => {
     vi.clearAllMocks();
     vscodeState.state!.activeTextEditor = undefined;
     vscodeState.state!.config.clear();
-    vi.mocked(parseVerilog).mockReturnValue({ modules: [{ name: 'mips' }] } as never);
+    vi.mocked(parseVerilogModuleDeclarations).mockReturnValue([{ name: 'mips' }] as never);
     vi.mocked(moduleAtPosition).mockReturnValue({ name: 'mips' } as never);
     vi.mocked(findExistingTestbenchResolution).mockResolvedValue({} as never);
     vi.mocked(userTestbenchUri).mockReturnValue(vscode.Uri.file('E:/work/.co/tb/mips_tb.v'));
@@ -177,7 +173,7 @@ describe('Verilog command registration and entry behavior', () => {
   it('creates a missing testbench in .co/tb without replacing existing files', async () => {
     const commands = commandMap();
     setActiveDocument('E:/work/alu.v', 'verilog', 'module alu; endmodule');
-    vi.mocked(parseVerilog).mockReturnValue({ modules: [{ name: 'alu' }] } as never);
+    vi.mocked(parseVerilogModuleDeclarations).mockReturnValue([{ name: 'alu' }] as never);
     vi.mocked(moduleAtPosition).mockReturnValue({ name: 'alu' } as never);
     vi.mocked(userTestbenchUri).mockReturnValue(vscode.Uri.file('E:/work/.co/tb/alu_tb.v'));
     vi.mocked(userTestbenchText).mockReturnValue('module alu_tb; endmodule\n');

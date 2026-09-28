@@ -1100,9 +1100,10 @@
     ]
   },
   "scripts": {
-    "compile": "npm run sync:generated && npm run clean:compile && tsc -p ./ && npm run build:webview",
+    "compile": "npm run sync:generated && npm run clean:compile && tsc -p ./ && npm run build:webview && node scripts/build-host.mjs",
+    "build:host": "node scripts/build-host.mjs",
     "build:webview": "node scripts/build-webview.mjs",
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile -- --production",
     "package:vsix": "npm run sync:generated && node scripts/package-vsix.mjs --target win32-x64",
     "publish": "node scripts/release.mjs",
     "generate:manifest-config": "node scripts/generate-manifest-config.mjs",
@@ -1156,6 +1157,7 @@
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-languageserver-types": "^3.17.5",
     "vscode-uri": "^3.1.0"
   }
 }

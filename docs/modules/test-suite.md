@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 220 files | 框架: Vitest
+# test-suite | src/test/ | 222 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 

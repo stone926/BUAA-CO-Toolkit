@@ -39,8 +39,8 @@ export function waveFont(palette: Palette): string {
   return `${waveFontSize}px ${palette.monoFamily}`;
 }
 
-/** Draw the whole waveform canvas for the rows currently scrolled into view. */
-export function renderWaves(context: WaveRenderContext, store: WaveStore, rows: readonly VisibleRow[], overlay: WaveOverlay): void {
+/** Draw the waveform and its stable decorations for the rows currently scrolled into view. */
+export function renderWaves(context: WaveRenderContext, store: WaveStore, rows: readonly VisibleRow[]): void {
   const { ctx, width, height, palette } = context;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.background;
@@ -80,7 +80,14 @@ export function renderWaves(context: WaveRenderContext, store: WaveStore, rows: 
     }
     drawSignalRow(context, store, data, row, top);
   }
-  drawOverlays(context, store, overlay);
+}
+
+/** Draw pointer feedback and time markers on a transparent canvas above the waves. */
+export function renderWaveOverlay(context: WaveRenderContext, store: WaveStore, overlay: WaveOverlay): void {
+  context.ctx.clearRect(0, 0, context.width, context.height);
+  if (store.data) {
+    drawOverlays(context, store, overlay);
+  }
 }
 
 function signalColor(palette: Palette, row: SignalRow): string {

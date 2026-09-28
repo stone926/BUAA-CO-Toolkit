@@ -28,6 +28,7 @@ await writeFile(join(userData, 'User', 'settings.json'), JSON.stringify({
 console.log(`VS Code smoke workspace and logs: ${sessionRoot}`);
 try {
   await runTests({
+    vscodeExecutablePath: process.env.CO_VSCODE_EXECUTABLE,
     version: process.env.CO_VSCODE_VERSION || 'stable',
     extensionDevelopmentPath: extensionRoot,
     extensionTestsPath: fileURLToPath(new URL('./extension-host-smoke.cjs', import.meta.url)),

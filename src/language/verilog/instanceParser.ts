@@ -1,5 +1,5 @@
 // @index instance-parser — module instance groups and named/positional connection models
-import { Range } from 'vscode-languageserver/node';
+import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
 import { VerilogInstance, VerilogPortConnection } from './model';

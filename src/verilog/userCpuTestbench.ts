@@ -1,6 +1,7 @@
 // @index verilog-user-cpu-testbench — 用户 CPU TB 的课程模板与稳定识别标记
-import type { VerilogModule } from '../language/verilog/service';
-import { buildStimulusTestbench, buildTestbench } from '../language/verilog/service';
+import type { VerilogModule } from '../language/verilog/model';
+import { buildStimulusTestbench } from '../language/verilog/stimulusTestbench';
+import { buildTestbench } from '../language/verilog/moduleUtils';
 import { isVerilogCpuProfile, type ConcreteProjectProfile, type VerilogCpuProfile } from '../projectProfile';
 
 export type UserCpuTestbenchProfile = VerilogCpuProfile;

@@ -1,4 +1,4 @@
-import { Position } from 'vscode-languageserver/node';
+import { Position } from 'vscode-languageserver-types';
 import { containsPosition } from '../common/lsp';
 import { ProjectProfile } from '../../projectProfile';
 import {

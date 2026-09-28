@@ -1,5 +1,5 @@
 import { proceduralStatementEnd } from './proceduralBoundary';
-import { Range } from 'vscode-languageserver/node';
+import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';

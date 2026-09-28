@@ -12,9 +12,9 @@ import { buildSignalTree, TreeNode } from '../view/signalTree';
 import { clampView, dataBounds, fitView, TimeRange } from '../view/viewport';
 import { SignalRowInput, WaveRowList } from '../view/waveRows';
 
-export type DirtyFlag = 'waves' | 'ruler' | 'overview' | 'labels' | 'values' | 'toolbar' | 'browser' | 'trace' | 'layout' | 'status';
+export type DirtyFlag = 'waves' | 'overlay' | 'ruler' | 'overview' | 'labels' | 'values' | 'toolbar' | 'browser' | 'trace' | 'layout' | 'status';
 
-export const allDirty: readonly DirtyFlag[] = ['waves', 'ruler', 'overview', 'labels', 'values', 'toolbar', 'browser', 'trace', 'layout', 'status'];
+export const allDirty: readonly DirtyFlag[] = ['waves', 'overlay', 'ruler', 'overview', 'labels', 'values', 'toolbar', 'browser', 'trace', 'layout', 'status'];
 
 export interface Layout {
   sidebarWidth: number;

@@ -76,7 +76,7 @@ export class RulerView {
       }
       if (mode === 'range') {
         this.localRange = { x0: startX, x1: x };
-        this.store.invalidate('ruler', 'waves');
+        this.store.invalidate('ruler', 'overlay');
       }
     };
     const up = (upEvent: PointerEvent): void => {
@@ -86,7 +86,7 @@ export class RulerView {
       const range = this.localRange;
       this.localRange = undefined;
       if (upEvent.type !== 'pointerup') {
-        this.store.invalidate('ruler');
+        this.store.invalidate('ruler', 'overlay');
         return;
       }
       if (mode === 'pending') {
@@ -97,7 +97,7 @@ export class RulerView {
           xToTime(this.store.view, this.width, Math.max(range.x0, range.x1))
         );
       }
-      this.store.invalidate('ruler', 'waves');
+      this.store.invalidate('ruler', 'overlay');
     };
     this.element.addEventListener('pointermove', move);
     this.element.addEventListener('pointerup', up);

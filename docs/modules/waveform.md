@@ -70,8 +70,8 @@
 ## Webview（浏览器端，esbuild 打包，覆盖率排除）
 
 - `webview/main.ts`、`webview/app.ts`、`webview/hostChannel.ts` — 入口、组装与消息分派、`acquireVsCodeApi` 封装
-- `webview/store.ts`、`webview/actions.ts` — 状态中心与合批脏区（帧调度由 app 注入 rAF，store/actions 不依赖 DOM，可在 node 单测）、缩放/导航/标记/行操作与选择校正
-- `webview/wavePane.ts`、`webview/waveCanvas.ts`、`webview/waveRenderer.ts` — 装配与拖入、画布交互、波形绘制
+- `webview/store.ts`、`webview/actions.ts` — 状态中心与合批脏区（帧调度由 app 注入 rAF，store/actions 不依赖 DOM，可在 node 单测）、缩放/导航/标记/行操作与选择校正；`overlay` 脏区仅重绘透明交互层，`waves`/布局重绘时同步两层
+- `webview/wavePane.ts`、`webview/waveCanvas.ts`、`webview/waveRenderer.ts` — 装配与拖入、画布交互、波形绘制；主画布绘制信号和网格，透明画布绘制悬停线、游标/标记与框选
 - `webview/rulerRenderer.ts`、`webview/rulerView.ts`、`webview/overview.ts` — 标尺绘制与交互、缩略条
 - `webview/rowLabels.ts`、`webview/rowMenu.ts`、`webview/timeMenu.ts`、`webview/contextMenu.ts`、`webview/tooltip.ts` — 信号名与值列、行与时间点右键菜单、通用菜单、悬停提示
 - `webview/signalBrowser.ts`、`webview/tracePanel.ts`、`webview/sidebar.ts`、`webview/toolbar.ts`、`webview/statusBar.ts` — 信号树、trace 列表、侧栏、工具栏、状态栏与加载/错误覆盖层

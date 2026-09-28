@@ -1,6 +1,7 @@
 // @index resources — ISA静态资源：指令/寄存器/CP0/syscall加载
 import * as fs from 'fs';
 import * as path from 'path';
+import { resourcePath } from '../../resourcePaths';
 import { DocumentUri } from 'vscode-languageserver/node';
 import { CoSettings } from '../common/settings';
 import { isCourseProjectProfile } from '../../generated/projectProfiles';
@@ -241,7 +242,7 @@ export function shouldWarnPseudoInstruction(settings: CoSettings, uri: DocumentU
 }
 
 function loadMipsResourceData(): MipsResourceData {
-  const resourceRoot = path.join(__dirname, '..', '..', '..', 'resources', 'mips');
+  const resourceRoot = resourcePath('mips');
   const registers = readJsonResource<MipsRegisterInfo[]>(path.join(resourceRoot, 'registers.json'));
   const directiveList = readJsonResource<string[]>(path.join(resourceRoot, 'directives.json')).map((directive) => directive.toLowerCase());
   const syscalls = readJsonResource<MipsSyscallInfo[]>(path.join(resourceRoot, 'syscalls.json'));
@@ -267,7 +268,7 @@ function loadMipsResourceData(): MipsResourceData {
 }
 
 function loadMipsInstructionMeta(): MipsInstructionMeta {
-  const resourceRoot = path.join(__dirname, '..', '..', '..', 'resources', 'mips');
+  const resourceRoot = resourcePath('mips');
   const loaded = readJsonResource<MipsInstructionMeta>(path.join(resourceRoot, 'instructionMeta.json'));
   return {
     ...loaded,
@@ -398,7 +399,7 @@ function makeLowercaseSet(values: string[]): ReadonlySet<string> {
 
 function loadPseudoExpansions(): MipsPseudoExpansions {
   try {
-    const resourceRoot = path.join(__dirname, '..', '..', '..', 'resources', 'mips');
+    const resourceRoot = resourcePath('mips');
     return readJsonResource<MipsPseudoExpansions>(path.join(resourceRoot, 'pseudoExpansions.json'));
   } catch {
     return {};

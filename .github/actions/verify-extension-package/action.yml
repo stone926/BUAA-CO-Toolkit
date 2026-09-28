@@ -58,7 +58,7 @@ runs:
           echo "VSIX manifest is not targeted to ${TARGET}." >&2
           exit 1
         fi
-        for forbidden in src scripts test-cli tmp node_modules/@rolldown; do
+        for forbidden in src scripts test-cli tmp node_modules; do
           if [[ -e "${extract_root}/extension/${forbidden}" ]]; then
             echo "VSIX contains development-only path: ${forbidden}" >&2
             exit 1

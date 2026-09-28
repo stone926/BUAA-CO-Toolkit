@@ -48,4 +48,6 @@
 
 ## 打包
 
-`scripts/package-vsix.mjs` 是本地与 release 共用的入口（必填 `--target`、可选 `--out`），按目标裁剪 runtime 目录并保留共享来源/配方。`.github/actions/verify-extension-package/action.yml` 被 release 与 Extension platforms CI 共用：解包确认唯一目标 runtime 后运行 Icarus smoke 与真实 VS Code 宿主检查（Linux 用 Xvfb）。测试脚本与 devDependencies 不进入 VSIX。
+`scripts/package-vsix.mjs` 是本地与 release 共用的入口（必填 `--target`、可选 `--out`），按目标裁剪 runtime 目录并保留共享来源/配方。`scripts/build-host.mjs` 将宿主、LSP、Worker 与 CLI 各自打包；Icarus 门禁使用的三个公共 helper 也有独立 bundle。所有资源加载入口位于 `out/` 根目录，共享安装根定位，Worker/CLI 保留原嵌套路径且不加载安装资源。构建检查外部依赖及宿主误引服务端模块，并生成依赖许可证合集。
+
+`npm run compile` 默认生成未压缩且带 source map 的宿主 bundle，保留 F5 调试；`vscode:prepublish` 用 `--production` 生成发布 bundle。`tsc` 的逐文件输出保留供本地验证脚本使用；VSIX 仅允许 bundle 入口、Webview 与许可证，排除 `node_modules`、源码、测试与构建元数据。`.github/actions/verify-extension-package/action.yml` 被 release 与 Extension platforms CI 共用：解包确认唯一目标 runtime 后运行 Icarus smoke 与真实 VS Code 宿主检查（Linux 用 Xvfb）。`CO_VSCODE_EXECUTABLE` 可指定本机 VS Code 进行隔离宿主验证，默认仍下载指定版本。

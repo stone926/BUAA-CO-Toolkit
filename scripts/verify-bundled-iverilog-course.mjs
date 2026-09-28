@@ -24,21 +24,16 @@ export function verifyBundledIverilogCourseCompatibility({
   const moduleUtilsPath = join(
     extensionRoot,
     "out",
-    "language",
-    "verilog",
     "moduleUtils.js",
   );
   const traceParserPath = join(
     extensionRoot,
     "out",
-    "language",
-    "verilog",
     "traceParser.js",
   );
   const iverilogRuntimePath = join(
     extensionRoot,
     "out",
-    "verilog",
     "iverilogRuntime.js",
   );
   const courseConfigPath = join(extensionRoot, "resources", "co", "courseConfig.json");

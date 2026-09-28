@@ -1,6 +1,6 @@
 // @index config-defaults — 从 resources/co/configDefaults.json 加载 co.* 默认值
 import * as fs from 'fs';
-import * as path from 'path';
+import { resourcePath } from './resourcePaths';
 
 export type ConfigDefaultValue = string | number | boolean | string[] | Record<string, unknown>;
 export type ConfigDefaults = Record<string, ConfigDefaultValue>;
@@ -27,7 +27,7 @@ export function configDefaultArray<T extends string = string>(key: string): T[] 
 }
 
 function loadConfigDefaults(): ConfigDefaults {
-  const filePath = path.join(__dirname, '..', 'resources', 'co', 'configDefaults.json');
+  const filePath = resourcePath('co', 'configDefaults.json');
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
   if (!isRecord(parsed)) {
     throw new Error('configDefaults.json must contain an object.');

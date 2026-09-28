@@ -42,16 +42,16 @@ assertOneFile(
 );
 assertFile(join(extensionRoot, "package.json"), "package.json");
 assertFile(
-  join(extensionRoot, "out", "language", "verilog", "moduleUtils.js"),
-  "out/language/verilog/moduleUtils.js",
+  join(extensionRoot, "out", "moduleUtils.js"),
+  "out/moduleUtils.js",
 );
 assertFile(
-  join(extensionRoot, "out", "language", "verilog", "traceParser.js"),
-  "out/language/verilog/traceParser.js",
+  join(extensionRoot, "out", "traceParser.js"),
+  "out/traceParser.js",
 );
 assertFile(
-  join(extensionRoot, "out", "verilog", "iverilogRuntime.js"),
-  "out/verilog/iverilogRuntime.js",
+  join(extensionRoot, "out", "iverilogRuntime.js"),
+  "out/iverilogRuntime.js",
 );
 const extensionManifest = JSON.parse(readFileSync(join(extensionRoot, "package.json"), "utf8"));
 if (extensionManifest.license !== "SEE LICENSE IN LICENSE") {

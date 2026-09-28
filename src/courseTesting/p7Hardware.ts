@@ -1,6 +1,6 @@
 // @index p7-hardware — 课程 P7 硬件布局资源加载与类型化常量
 import * as fs from 'fs';
-import * as path from 'path';
+import { resourcePath } from '../resourcePaths';
 
 export interface P7HardwareConfig {
   memoryLayout: {
@@ -152,7 +152,7 @@ export function p7Hex(value: number): string {
 }
 
 function loadP7Hardware(): P7HardwareConfig {
-  const filePath = path.join(__dirname, '..', '..', 'resources', 'co', 'p7Hardware.json');
+  const filePath = resourcePath('co', 'p7Hardware.json');
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
   validateP7Hardware(parsed);
   return parsed;

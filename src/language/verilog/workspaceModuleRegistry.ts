@@ -1,6 +1,7 @@
 import { CO_DIR } from '../../constants';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseModules } from './moduleParser';
@@ -16,6 +17,8 @@ import { yieldEventLoop } from '../../nodeFs';
 export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private readonly modules = new Map<string, VerilogModule[]>();
   private readonly modulesByUri = new Map<string, VerilogModule[]>();
+  private readonly textHashes = new Map<string, string>();
+  private readonly revisions = new Map<string, number>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private scanTimer: ReturnType<typeof setTimeout> | undefined;
   private _scanning = true;
@@ -55,14 +58,22 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     if (uri.scheme !== 'file' || !isVerilogFileName(uri.fsPath) || shouldSkipPath(uri.fsPath)) {
       return;
     }
-    this.indexFile(uri.fsPath);
-    this.fireDidChange();
+    this.nextRevision(uri.toString());
+    if (this.indexFile(uri.fsPath)) this.fireDidChange();
+  }
+
+  /** Watcher updates read from disk without blocking the extension host. */
+  async updateUriAsync(uri: vscode.Uri): Promise<void> {
+    if (uri.scheme !== 'file' || !isVerilogFileName(uri.fsPath) || shouldSkipPath(uri.fsPath)) {
+      return;
+    }
+    await this.indexFileAsync(uri.fsPath, true);
   }
 
   /** 公开的文件移除入口。用于文件系统删除事件清理旧模块记录。 */
   removeUri(uri: vscode.Uri): void {
-    this.removeDocument(uri.toString());
-    this.fireDidChange();
+    this.nextRevision(uri.toString());
+    if (this.removeDocument(uri.toString())) this.fireDidChange();
   }
 
   /** 启动后台扫描 */
@@ -98,22 +109,22 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     if (document.languageId !== 'verilog') {
       return;
     }
-    // 先移除旧条目
-    this.removeDocument(document.uri.toString());
-    this.indexDocument(document);
-    this.fireDidChange();
+    this.nextRevision(document.uri.toString());
+    if (this.indexDocument(document)) this.fireDidChange();
   }
 
   /** 移除某个文件的所有模块 */
-  removeDocument(uri: string): void {
+  removeDocument(uri: string): boolean {
+    const hadText = this.textHashes.delete(uri);
     const existing = this.modulesByUri.get(uri);
     if (!existing) {
-      return;
+      return hadText;
     }
     this.modulesByUri.delete(uri);
     for (const module of existing) {
       removeModuleByUri(this.modules, module.name, uri);
     }
+    return true;
   }
 
   dispose(): void {
@@ -125,36 +136,43 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     this._onDidChange.dispose();
     this.modules.clear();
     this.modulesByUri.clear();
+    this.textHashes.clear();
+    this.revisions.clear();
     this._scanning = false;
   }
 
-  private indexDocument(document: vscode.TextDocument): void {
+  private indexDocument(document: vscode.TextDocument): boolean {
     try {
       const text = document.getText();
-      this.indexFileText(document.uri.toString(), text, document.version);
+      return this.indexFileText(document.uri.toString(), text, document.version);
     } catch {
       // 解析失败则跳过该文件
+      return false;
     }
   }
 
-  private indexFile(filePath: string): void {
+  private indexFile(filePath: string): boolean {
     if (this._disposed) {
-      return;
+      return false;
     }
     const uri = vscode.Uri.file(filePath).toString();
     if (!fs.existsSync(filePath)) {
-      this.removeDocument(uri);
-      return;
+      return this.removeDocument(uri);
     }
     try {
       const text = fs.readFileSync(filePath, 'utf8');
-      this.indexFileText(uri, text, 0);
+      return this.indexFileText(uri, text, 0);
     } catch {
       // 读取失败或解析失败则跳过
+      return false;
     }
   }
 
-  private indexFileText(uri: string, text: string, version: number): void {
+  private indexFileText(uri: string, text: string, version: number): boolean {
+    const hash = createHash('sha256').update(text).digest('hex');
+    if (this.textHashes.get(uri) === hash) {
+      return false;
+    }
     const parsed = parseModules(
       TextDocument.create(uri, 'verilog', version, text),
       text
@@ -162,6 +180,8 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     // 清除该文件的旧条目后再添加
     this.removeDocument(uri);
     this.addModules(uri, parsed);
+    this.textHashes.set(uri, hash);
+    return true;
   }
 
   private addModules(uri: string, modules: VerilogModule[]): void {
@@ -247,19 +267,30 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     await Promise.all(files.map((file) => this.indexFileAsync(file)));
   }
 
-  private async indexFileAsync(filePath: string): Promise<void> {
+  private async indexFileAsync(filePath: string, notify = false): Promise<void> {
     if (this._disposed) {
       return;
     }
     const uri = vscode.Uri.file(filePath).toString();
+    const revision = this.nextRevision(uri);
     try {
       const text = await fs.promises.readFile(filePath, 'utf8');
-      if (!this._disposed) {
-        this.indexFileText(uri, text, 0);
+      if (!this._disposed && this.revisions.get(uri) === revision) {
+        if (this.indexFileText(uri, text, 0) && notify) this.fireDidChange();
       }
-    } catch {
-      // 初始扫描中读取或解析失败的文件直接跳过
+    } catch (error) {
+      if (notify && !this._disposed && this.revisions.get(uri) === revision &&
+          (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (this.removeDocument(uri)) this.fireDidChange();
+      }
+      // Unreadable or partially written files are retried by a later event.
     }
+  }
+
+  private nextRevision(uri: string): number {
+    const revision = (this.revisions.get(uri) ?? 0) + 1;
+    this.revisions.set(uri, revision);
+    return revision;
   }
 }
 

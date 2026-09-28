@@ -7,12 +7,9 @@ import {
   getTestbench,
   getTopModule
 } from '../config';
-import {
-  buildTestbench,
-  moduleAtPosition,
-  parseVerilog,
-  VerilogModule
-} from '../language/verilog/service';
+import { buildTestbench, moduleAtPosition } from '../language/verilog/moduleUtils';
+import { parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
+import type { VerilogModule } from '../language/verilog/model';
 import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from '../fsUtil';
 import { AppServices } from '../types';
 import { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
@@ -38,7 +35,6 @@ import {
   samePath
 } from '../pathUtils';
 import {
-  coSettingsForUri,
   verilogDocumentForUri
 } from './documentContext';
 import { isVerilogProjectDiscoveryCandidate } from './verilogProject';
@@ -504,8 +500,8 @@ async function scanWorkspaceModulesByName(resource: vscode.Uri, moduleName: stri
     if (!document) {
       continue;
     }
-    const parsed = parseVerilog(document, coSettingsForUri(uri), false);
-    found.push(...parsed.modules.filter((module) => module.name === moduleName));
+    const modules = parseVerilogModuleDeclarations(document);
+    found.push(...modules.filter((module) => module.name === moduleName));
   }
   return found;
 }
@@ -551,14 +547,14 @@ async function activeModuleDefinition(resource: vscode.Uri | undefined): Promise
   if (!document) {
     return undefined;
   }
-  const parsed = parseVerilog(document, coSettingsForUri(resource), false);
+  const modules = parseVerilogModuleDeclarations(document);
   const activeEditor = vscode.window.activeTextEditor;
   const activePosition = activeEditor?.document.uri.toString() === resource.toString()
     ? activeEditor.selection.active
     : undefined;
   const module = activePosition
-    ? moduleAtPosition(parsed.modules, activePosition) ?? parsed.modules[0]
-    : parsed.modules[0];
+    ? moduleAtPosition(modules, activePosition) ?? modules[0]
+    : modules[0];
   return module ? { module, uri: resource } : undefined;
 }
 
@@ -572,17 +568,17 @@ async function activeTestbenchModuleName(resource: vscode.Uri | undefined): Prom
   if (!document) {
     return undefined;
   }
-  const parsed = parseVerilog(document, coSettingsForUri(resource), false);
+  const modules = parseVerilogModuleDeclarations(document);
   const activeEditor = vscode.window.activeTextEditor;
   const activePosition = activeEditor?.document.uri.toString() === resource.toString()
     ? activeEditor.selection.active
     : undefined;
-  const activeModule = activePosition ? moduleAtPosition(parsed.modules, activePosition) : undefined;
+  const activeModule = activePosition ? moduleAtPosition(modules, activePosition) : undefined;
   const fileStem = path.basename(resource.fsPath, path.extname(resource.fsPath));
-  return (parsed.modules.find((module) => module.name === fileStem)
+  return (modules.find((module) => module.name === fileStem)
     ?? activeModule
-    ?? parsed.modules.find((module) => /(?:_tb|_testbench)$/i.test(module.name))
-    ?? parsed.modules[0])?.name;
+    ?? modules.find((module) => /(?:_tb|_testbench)$/i.test(module.name))
+    ?? modules[0])?.name;
 }
 
 async function findTopModuleDefinition(
@@ -634,8 +630,8 @@ async function topModuleDefinitionFromUri(uri: vscode.Uri | undefined, topName: 
   if (!document) {
     return undefined;
   }
-  const parsed = parseVerilog(document, coSettingsForUri(uri), false);
-  const module = parsed.modules.find((candidate) => candidate.name === topName);
+  const modules = parseVerilogModuleDeclarations(document);
+  const module = modules.find((candidate) => candidate.name === topName);
   return module ? { module, uri } : undefined;
 }
 

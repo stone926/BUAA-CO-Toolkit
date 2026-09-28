@@ -8,10 +8,8 @@ import {
   getTestbench,
   getTopModule
 } from './config';
-import {
-  moduleAtPosition,
-  parseVerilog
-} from './language/verilog/service';
+import { moduleAtPosition } from './language/verilog/moduleUtils';
+import { parseVerilogModuleDeclarations } from './language/verilog/moduleDeclarations';
 import { pathExists, writeTextFile } from './fsUtil';
 import { AppServices } from './types';
 import { executeLanguageServerCommand } from './languageClient';
@@ -82,11 +80,11 @@ async function generateTestbench(moduleRegistry?: MutableVerilogModuleProvider):
     return;
   }
   const document = toTextDocument(editor.document);
-  const parsed = parseVerilog(document, coSettingsForUri(editor.document.uri), false);
-  const target = moduleAtPosition(parsed.modules, {
+  const modules = parseVerilogModuleDeclarations(document);
+  const target = moduleAtPosition(modules, {
     line: editor.selection.active.line,
     character: editor.selection.active.character
-  }) ?? parsed.modules[0];
+  }) ?? modules[0];
   if (!target) {
     vscode.window.showErrorMessage('当前文件中未找到 Verilog 模块');
     return;

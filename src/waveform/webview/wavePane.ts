@@ -67,7 +67,7 @@ export class WavePane {
     const valueHeader = h('div', { className: 'header-cell value-header', text: '游标处的值' }, [this.resizer('value')]);
     const header = h('div', { className: 'wave-header' }, [nameHeader, valueHeader, this.ruler.element]);
 
-    this.canvasLayer = h('div', { className: 'canvas-layer' }, [this.canvas.element]);
+    this.canvasLayer = h('div', { className: 'canvas-layer' }, [this.canvas.element, this.canvas.overlayElement]);
     this.empty = h('div', { className: 'empty-hint' }, [
       h('div', { className: 'empty-title', text: '还没有信号' }),
       h('div', { text: '在左侧信号树中双击、点击 + 或拖入信号即可显示波形' })
@@ -103,8 +103,9 @@ export class WavePane {
     if (dirty.has('layout')) {
       this.applyLayout();
     }
-    const rows = this.store.rows.visibleRows();
-    if (dirty.has('labels') || dirty.has('layout')) {
+    const redrawRows = dirty.has('waves') || dirty.has('labels') || dirty.has('layout');
+    const rows = redrawRows ? this.store.rows.visibleRows() : undefined;
+    if (rows && (dirty.has('labels') || dirty.has('layout'))) {
       const maximumScroll = Math.max(0, rows.length * rowHeight - this.viewportHeight);
       if (this.store.scrollTop > maximumScroll) {
         this.store.scrollTop = maximumScroll;
@@ -120,8 +121,11 @@ export class WavePane {
     } else if (dirty.has('values')) {
       this.labels.updateValues();
     }
-    if (dirty.has('waves') || dirty.has('labels') || dirty.has('layout')) {
+    if (rows) {
       this.canvas.render(rows);
+    }
+    if (redrawRows || dirty.has('overlay')) {
+      this.canvas.renderOverlay();
     }
     if (dirty.has('ruler') || dirty.has('layout')) {
       this.ruler.render();

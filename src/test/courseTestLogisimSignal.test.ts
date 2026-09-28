@@ -24,7 +24,11 @@ vi.mock('../config', () => ({
 vi.mock('../processCore', () => ({ runProcessCore: processState.run }));
 vi.mock('../toolchain', () => ({ checkToolchain: vi.fn(async () => []) }));
 
-import { resolveP3LogisimTraceSetup, runLogisimTraceCli } from '../courseTestLogisim';
+import {
+  maximumLogisimTraceOutputBytes,
+  resolveP3LogisimTraceSetup,
+  runLogisimTraceCli
+} from '../courseTestLogisim';
 import { showCommandBeforeRun } from '../config';
 import { checkToolchain } from '../toolchain';
 
@@ -56,8 +60,44 @@ describe('Logisim CLI cancellation boundary', () => {
 
     expect(processState.run).toHaveBeenCalledOnce();
     expect(processState.run.mock.calls[0][2]).toEqual(expect.objectContaining({
-      signal: controller.signal
+      signal: controller.signal,
+      maxStdoutBytes: maximumLogisimTraceOutputBytes
     }));
+  });
+
+  it('reports a truncated trace as a failed DUT run', async () => {
+    processState.run.mockResolvedValue({
+      ok: false,
+      exitCode: null,
+      stdout: 'partial trace',
+      stderr: '',
+      timedOut: false,
+      stopped: true,
+      stopReason: 'stdout-limit',
+      commandLine: 'java -jar logisim.jar',
+      cwd: 'E:/work'
+    });
+    const services = createTestServices();
+    const result = await runLogisimTraceCli(
+      services,
+      { traceSpec: {} } as never,
+      { fsPath: 'E:/work/cpu.circ' } as never,
+      '00003000',
+      { fsPath: 'E:/work/program.asm' } as never,
+      false
+    );
+
+    expect(result.result.ok).toBe(false);
+    expect(result.result.stopReason).toBe('stdout-limit');
+    expect(result.result.stderr).toContain('64 MiB 上限');
+    expect(result.result.stderr).toContain('已截断');
+    expect(services.output.appendLine).toHaveBeenCalledWith(expect.stringContaining('64 MiB 上限'));
+    expect(processState.run.mock.calls.at(-1)?.[2].successPredicate({
+      stopped: true,
+      stopReason: 'stdout-limit',
+      timedOut: false,
+      exitCode: 0
+    })).toBe(false);
   });
 
   it('keeps an automatic Logisim run non-interactive and hides command paths', async () => {

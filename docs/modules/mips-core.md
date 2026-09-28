@@ -13,7 +13,7 @@
 
 ## ISA 与 Profile
 
-- `isa/decoder.ts` — 基于生成 catalog 的机器码解码（runtime candidate group / REGIMM-COP0 精确分派 / 课程 canonical）
+- `isa/decoder.ts` — 基于生成 catalog 的机器码解码（runtime candidate group / REGIMM-COP0 精确分派 / 课程 canonical）；预筛 Profile/layer 表并缓存解码结果，全部作用域合计最多 65,536 项，runtime 结果与候选数组冻结
 - `isa/encoder.ts` — 真实指令编码；拒绝未用操作数、非 canonical 保留字段与课程外 CP0 rd
 - `isa/service.ts` — CLI/Worker 共用的无宿主 encode/decode DTO
 - `profiles/profile.ts` — CourseExecutionProfile 契约：地址空间、延迟槽/link、溢出、CP0/异常、trace 投影、停机策略

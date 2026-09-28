@@ -158,6 +158,65 @@ describe('WorkspaceModuleRegistry', () => {
     expect(changes).toBe(2);
   });
 
+  it('does not let an earlier watcher read replace a newer saved document', async () => {
+    const root = makeTempDir();
+    const file = writeVerilog(root, 'src/top.v', 'module beforeSave; endmodule\n');
+    const uri = vscodeMock.MockUri.file(file);
+    const registry = new WorkspaceModuleRegistry();
+    const pending = registry.updateUriAsync(uri as never);
+
+    registry.updateDocument({
+      uri,
+      languageId: 'verilog',
+      version: 2,
+      getText: () => 'module afterSave; endmodule\n'
+    } as never);
+    await pending;
+
+    expect(registry.getModule('afterSave')).toBeDefined();
+    expect(registry.getModule('beforeSave')).toBeUndefined();
+  });
+
+  it('skips save echoes but indexes external changes to an open file', async () => {
+    const root = makeTempDir();
+    const file = writeVerilog(root, 'src/top.v', 'module saved; endmodule\n');
+    const uri = vscodeMock.MockUri.file(file);
+    const registry = new WorkspaceModuleRegistry();
+    let changes = 0;
+    registry.onDidChange(() => { changes++; });
+    registry.updateDocument({
+      uri, languageId: 'verilog', version: 2,
+      getText: () => 'module saved; endmodule\n'
+    } as never);
+
+    await registry.updateUriAsync(uri as never);
+    expect(changes).toBe(1);
+
+    fs.writeFileSync(file, 'module externallyChanged; endmodule\n');
+    await registry.updateUriAsync(uri as never);
+    expect(registry.getModule('saved')).toBeUndefined();
+    expect(registry.getModule('externallyChanged')).toBeDefined();
+    expect(changes).toBe(2);
+  });
+
+  it('also skips a save event delivered after the watcher', async () => {
+    const root = makeTempDir();
+    const file = writeVerilog(root, 'src/top.v', 'module current; endmodule\n');
+    const uri = vscodeMock.MockUri.file(file);
+    const registry = new WorkspaceModuleRegistry();
+    let changes = 0;
+    registry.onDidChange(() => { changes++; });
+
+    await registry.updateUriAsync(uri as never);
+    registry.updateDocument({
+      uri, languageId: 'verilog', version: 3,
+      getText: () => 'module current; endmodule\n'
+    } as never);
+
+    expect(changes).toBe(1);
+    expect(registry.getModule('current')).toBeDefined();
+  });
+
   it('indexes workspace files during asynchronous activation', async () => {
     const root = makeTempDir();
     const file = writeVerilog(root, 'src/top.v', 'module mips; endmodule\n');

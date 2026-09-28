@@ -3,9 +3,10 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { CO_TB_DIR } from '../constants';
 import { ensureDirectory, isFile, workspaceFolderForOrFirst, writeTextFileIfAbsent } from '../fsUtil';
-import { parseVerilog, VerilogModule } from '../language/verilog/service';
+import { parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
+import type { VerilogModule } from '../language/verilog/model';
 import { isUserTestbenchPath, userTestbenchFileName } from '../verilogSimulationFiles';
-import { coSettingsForUri, verilogDocumentForUri } from './documentContext';
+import { verilogDocumentForUri } from './documentContext';
 
 export interface UserTestbenchDefinition {
   uri: vscode.Uri;
@@ -35,7 +36,7 @@ export async function findUserTestbench(
   if (!document) {
     return undefined;
   }
-  const module = parseVerilog(document, coSettingsForUri(uri), false).modules
+  const module = parseVerilogModuleDeclarations(document)
     .find((candidate) => candidate.name === testbenchName);
   return module ? { uri, module } : undefined;
 }

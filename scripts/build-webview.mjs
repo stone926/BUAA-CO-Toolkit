@@ -2,7 +2,7 @@
 /**
  * Bundle browser-side webview code into out/media.
  *
- * The extension host is compiled by tsc to CommonJS; webviews run in a browser
+ * The extension host is bundled separately; webviews run in a browser
  * sandbox and need one self-contained IIFE script plus its stylesheet. Shared pure
  * modules (waveform model/view logic, the MIPS decoder) are bundled from source.
  *

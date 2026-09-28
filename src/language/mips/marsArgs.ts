@@ -1,5 +1,6 @@
 // @index mars-args — MARS CLI参数构建：buildMarsArgs + 内存配置/中断schedule/P7特殊模式
 import * as path from 'path';
+import { resourcePath } from '../../resourcePaths';
 import {
   getMemoryConfiguration,
   getMipsExtraArgs,
@@ -131,7 +132,7 @@ export function hasMarsArg(args: readonly string[], value: string): boolean {
 }
 
 export function p7InternalUnknownInstructionClassDir(): string {
-  return path.resolve(__dirname, '..', '..', '..', 'resources', 'mars');
+  return resourcePath('mars');
 }
 
 export function p7InternalUnknownInstructionClassPath(): string {

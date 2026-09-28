@@ -11,8 +11,8 @@ import {
   getProfileName,
   getVerilogPorts as getCourseVerilogPorts
 } from './courseConfig';
-import { defaultCoSettings } from './language/common/settings';
-import { buildTestbench, parseVerilog } from './language/verilog/service';
+import { buildTestbench } from './language/verilog/moduleUtils';
+import { parseVerilogModuleDeclarations } from './language/verilog/moduleDeclarations';
 import { renderResourceTemplate } from './templates/templateRegistry';
 import { pathExists } from './fsUtil';
 import { getEffectiveRequiredTools } from './toolchainPolicy';
@@ -257,8 +257,8 @@ function defaultTopModuleForProfile(profile: ProjectProfile): string | undefined
 
 function buildWizardTestbench(topText: string, topPath: string, topModule: string, tbName: string, profile: ProjectProfile): string {
   const document = TextDocument.create(vscode.Uri.file(topPath).toString(), 'verilog', 1, topText);
-  const parsed = parseVerilog(document, defaultCoSettings, false);
-  const module = parsed.modules.find((candidate) => candidate.name === topModule) ?? parsed.modules[0];
+  const modules = parseVerilogModuleDeclarations(document);
+  const module = modules.find((candidate) => candidate.name === topModule) ?? modules[0];
   if (module) {
     return buildTestbench(module, tbName, { profile });
   }

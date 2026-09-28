@@ -703,6 +703,13 @@ export async function resolveP3LogisimTraceSetup(
   };
 }
 
+/** Raw stdout ceiling for the Logisim `-tty table` trace; exceeding it stops the process tree. */
+export const maximumLogisimTraceOutputBytes = 64 * 1024 * 1024;
+
+export function logisimTraceOutputLimitMessage(limitBytes = maximumLogisimTraceOutputBytes): string {
+  return `Logisim 输出超过 ${Math.round(limitBytes / 1024 / 1024)} MiB 上限，已截断并终止仿真；CPU 很可能没有到达停机 PC（请检查是否存在死循环）`;
+}
+
 export async function runLogisimTraceCli(
   services: AppServices,
   setup: P3LogisimTraceSetup,
@@ -754,6 +761,7 @@ export async function runLogisimTraceCli(
     timeoutMs,
     commandLine: display,
     signal,
+    maxStdoutBytes: maximumLogisimTraceOutputBytes,
     onStdout: (text) => {
       if (streamOutput) {
         services.output.append(text);
@@ -794,9 +802,13 @@ export async function runLogisimTraceCli(
   if (pcError && !nonInteractive) {
     services.output.appendLine(pcError);
   }
-  const finalStderr = pcError
-    ? [run.stderr.trimEnd(), pcError].filter(Boolean).join('\n')
-    : run.stderr;
+  const outputLimitError = run.stopReason === 'stdout-limit'
+    ? logisimTraceOutputLimitMessage()
+    : undefined;
+  if (outputLimitError && !nonInteractive) {
+    services.output.appendLine(outputLimitError);
+  }
+  const finalStderr = [run.stderr.trimEnd(), pcError, outputLimitError].filter(Boolean).join('\n');
   return {
     result: {
       ok: run.ok,

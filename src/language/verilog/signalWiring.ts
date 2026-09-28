@@ -1,4 +1,4 @@
-import { Position, Range } from 'vscode-languageserver/node';
+import type { Position, Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition } from '../common/lsp';
 import { rangeKey } from '../common/util';

@@ -1078,6 +1078,16 @@ function resolveEqvSymbolInScope(name: string, activeMacro: MipsMacro | undefine
 
 function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics: Diagnostic[], skippedRanges: Set<string>, continuationDirectives: Map<number, string>): void {
   const reported = new Set<string>();
+  const labelParamCache = new Map<MipsMacro, Set<string>>();
+  const macrosByName = new Map<string, MipsMacro[]>();
+  for (const macro of parsed.semantic.macros) {
+    const overloads = macrosByName.get(macro.name);
+    if (overloads) {
+      overloads.push(macro);
+    } else {
+      macrosByName.set(macro.name, [macro]);
+    }
+  }
   for (const statement of parsed.ast.statements) {
     const executable = statement.executable;
     const executableRange = executable?.mnemonicRange;
@@ -1090,7 +1100,7 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
     }
     const continuation = continuationDirective ? statement.dataContinuation : undefined;
     const firstContinuationWordOperand = continuationDirective === '.word';
-    const macroCall = macroCallAtStatement(parsed, statement);
+    const macroCall = macroCallAtStatement(macrosByName, statement);
     for (const reference of undeclaredSymbolReferences(statement, firstContinuationWordOperand, continuation)) {
       const token = reference.text;
       const range = reference.range;
@@ -1113,10 +1123,10 @@ function collectUndeclaredSymbolDiagnostics(parsed: MipsParseResult, diagnostics
       if (instructions[token.toLowerCase()]) {
         continue;
       }
-      if (parsed.semantic.macros.some((macro) => macro.name === token)) {
+      if (macrosByName.has(token)) {
         continue;
       }
-      if (macroCall && isMacroLabelArgument(parsed, macroCall, token)) {
+      if (macroCall && isMacroLabelArgument(parsed, macroCall, token, labelParamCache)) {
         continue;
       }
 
@@ -1172,14 +1182,14 @@ function isDeclarationRange(parsed: MipsParseResult, range: Range): boolean {
   return parsed.semantic.declarationRangeKeys.has(rangeKey(range));
 }
 
-function macroCallAtStatement(parsed: MipsParseResult, statement: MipsStatementAst): { macro: MipsMacro; operands: string[] } | undefined {
+function macroCallAtStatement(macrosByName: Map<string, MipsMacro[]>, statement: MipsStatementAst): { macro: MipsMacro; operands: string[] } | undefined {
   const executable = statement.executable;
   if (!executable) {
     return undefined;
   }
   const name = executable.mnemonic;
-  const overloads = parsed.semantic.macros.filter((macro) => macro.name === name);
-  if (!overloads.length) {
+  const overloads = macrosByName.get(name);
+  if (!overloads) {
     return undefined;
   }
   const operands = executable.macroArguments.map((operand) => operand.text);
@@ -1198,8 +1208,17 @@ function shouldSkipUndeclaredCheckForDirective(executable: { lowerMnemonic: stri
   return token.startsWith('.') && token !== '.word';
 }
 
-function isMacroLabelArgument(parsed: MipsParseResult, call: { macro: MipsMacro; operands: string[] }, token: string): boolean {
-  const labelParams = macroLabelParameters(parsed, call.macro);
+function isMacroLabelArgument(
+  parsed: MipsParseResult,
+  call: { macro: MipsMacro; operands: string[] },
+  token: string,
+  cache: Map<MipsMacro, Set<string>>
+): boolean {
+  let labelParams = cache.get(call.macro);
+  if (!labelParams) {
+    labelParams = macroLabelParameters(parsed, call.macro);
+    cache.set(call.macro, labelParams);
+  }
   return call.operands.some((operand, index) => {
     if (operand !== token) {
       return false;

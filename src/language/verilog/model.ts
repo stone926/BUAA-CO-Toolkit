@@ -1,6 +1,6 @@
 import * as fs from 'fs';
-import * as path from 'path';
-import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
+import { resourcePath } from '../../resourcePaths';
+import type { Diagnostic, Position, Range } from 'vscode-languageserver-types';
 import { buildExpectedPorts, profilesWithCapability } from '../../courseConfig';
 import type { VerilogAstDocument } from './ast';
 import type { VerilogSemanticModel } from './semanticModel';
@@ -166,7 +166,7 @@ export const verilogKeywords = new Set(Object.values(verilogLanguageCatalog.keyw
 export const systemTasks = new Set(verilogLanguageCatalog.systemTasks);
 
 function loadVerilogLanguageCatalog(): VerilogLanguageCatalog {
-  const filePath = path.resolve(__dirname, '../../../resources/verilog/keywords.json');
+  const filePath = resourcePath('verilog', 'keywords.json');
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<VerilogLanguageCatalog>;
   if (
     !parsed.keywordGroups ||

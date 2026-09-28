@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 66 files
+# verilog-lsp | src/language/verilog/ | 68 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -9,7 +9,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 ## 解析核心
 
-- `parser.ts` — 主入口：`parseVerilog` / `buildTestbench` / `moduleAtPosition`
+- `parser.ts` — LSP 入口：`parseVerilog` 与诊断装配；`moduleDeclarations.ts` 供宿主命令只取模块声明，`parseCore.ts` 供信号视图取得无诊断 AST 与语义模型，两者复用同一次词法解析入口且不加载服务端诊断和 provider
 - `moduleParser.ts` — 薄门面：lexer + astParser
 - `lexer.ts` — 词法：关键字/标识符/数字/字符串/注释/预处理/系统任务/操作符
 - `statementParser.ts` — 语句源切片：module item 与过程块边界
@@ -59,7 +59,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 ## 跨文件
 
-- `workspaceModuleRegistry.ts` — VS Code 端后台索引：FileSystemWatcher + 保存时增量更新
+- `workspaceModuleRegistry.ts` — VS Code 端后台索引：保存时从文档更新，watcher 异步读盘并按内容指纹跳过保存回声；每个 URI 的修订序号防止旧读取覆盖新索引
 - `workspaceIndex.ts` — LSP 端模块/宏/引用/display 格式数据库，增量更新（≤50 逐文件，>50 全量）
 - `signalWiring.ts` — 跨模块 signal driver/reader 追踪
 

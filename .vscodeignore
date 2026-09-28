@@ -1,4 +1,4 @@
-# Keep the VSIX to runtime code, assets, production dependencies, and notices.
+# Keep the VSIX to bundled runtime code, assets, and notices.
 # VSCE already excludes .git, .vscodeignore, package-lock.json, and *.vsix.
 
 # Source, tests, CI, and local workspace state.
@@ -22,6 +22,8 @@ tmp/**
 # Development-only configuration and local instruction files.
 tsconfig.json
 tsconfig.test.json
+tsconfig.webview.json
+.perf-findings.json
 vitest.config.ts
 AGENTS.md
 CLAUDE.md
@@ -33,8 +35,17 @@ isim.log
 resources/mars/_co_internal_unknown_instruction.java
 resources/mips/isa.json
 
-# Test and source-map output. vscode:prepublish cleans out/ before compilation,
-# so no per-file stale-output denylist is needed here.
+# Ship only self-contained entry points; per-file tsc output is for local verification.
+out/**
+!out/extension.js
+!out/server.js
+!out/mips/host/workerMain.js
+!out/mips/cli/main.js
+!out/moduleUtils.js
+!out/traceParser.js
+!out/iverilogRuntime.js
+!out/media/**
+!out/THIRD_PARTY_NOTICES.md
 **/*.map
 **/*.test.*
 out/test/**
@@ -43,15 +54,5 @@ out/test/**
 **/.gitattributes
 **/.gitignore
 
-# Dependency files useful for development but unnecessary at runtime. Keep
-# license files and third-party notices in the package.
-node_modules/**/*.d.ts
-node_modules/**/*.map
-node_modules/**/README*
-node_modules/**/CHANGELOG*
-node_modules/**/changelog*
-node_modules/**/SECURITY*
-node_modules/**/.github/**
-node_modules/**/test/**
-node_modules/**/tests/**
-node_modules/@rolldown/**
+# Dependency licenses are preserved in out/THIRD_PARTY_NOTICES.md.
+node_modules/**

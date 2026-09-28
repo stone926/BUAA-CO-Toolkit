@@ -31,35 +31,99 @@ export interface RuntimeInstructionMatch {
   exactInstruction?: IsaInstructionEntry;
 }
 
-/** Profile/layer-aware runtime recognition (RI semantics). */
+interface ScopedEntry {
+  entry: IsaInstructionEntry;
+  specificity: number;
+}
+
+interface ScopedDecodeTable {
+  entries: readonly ScopedEntry[];
+  runtimeMemo: Map<number, RuntimeInstructionMatch | null>;
+  exactMemo: Map<number, IsaInstructionEntry | null>;
+}
+
+/** Upper bound across all scopes; guards against streams of random words. */
+const maxMemoEntries = 65_536;
+const profileIndex: Record<CourseProfile, number> = { P3: 0, P4: 1, P5: 2, P6: 3, P7: 4 };
+const scopeTables = new Map<number, ScopedDecodeTable>();
+let memoEntries = 0;
+
+function scopeTable(scope: InstructionScope | undefined): ScopedDecodeTable {
+  // The catalog has three layers. A bit mask preserves set semantics without
+  // allocating or sorting a layer array on every executed instruction.
+  const layers = scope?.enabledLayers;
+  const layerMask = layers
+    ? (Number(layers.includes('required'))
+      | (Number(layers.includes('commonExtensions')) << 1)
+      | (Number(layers.includes('marsCompatibility')) << 2))
+    : 0;
+  const key = scope ? (profileIndex[scope.profile] << 3) | layerMask : -1;
+  let table = scopeTables.get(key);
+  if (!table) {
+    const entries = byMaskSpecificity
+      .filter((entry) => !scope || (entry.profiles.includes(scope.profile) && layers!.includes(entry.layer)))
+      .map((entry) => ({ entry, specificity: popcount(entry.runtimeMatchMask) }));
+    table = { entries, runtimeMemo: new Map(), exactMemo: new Map() };
+    scopeTables.set(key, table);
+  }
+  return table;
+}
+
+function remember<T>(memo: Map<number, T>, key: number, value: T): T {
+  if (memoEntries >= maxMemoEntries) {
+    for (const table of scopeTables.values()) {
+      table.runtimeMemo.clear();
+      table.exactMemo.clear();
+    }
+    memoEntries = 0;
+  }
+  memo.set(key, value);
+  memoEntries++;
+  return value;
+}
+
+/** Most specific equally-ranked entries whose runtime masks match, or undefined. */
+function runtimeCandidates(value: number, entries: readonly ScopedEntry[]): IsaInstructionEntry[] | undefined {
+  let specificity = -1;
+  const candidates: IsaInstructionEntry[] = [];
+  for (const scoped of entries) {
+    if (specificity >= 0 && scoped.specificity !== specificity) {
+      break;
+    }
+    if (((value & scoped.entry.runtimeMatchMask) >>> 0) === scoped.entry.runtimeMatchValue) {
+      specificity = scoped.specificity;
+      candidates.push(scoped.entry);
+    }
+  }
+  return candidates.length ? candidates : undefined;
+}
+
+/** Profile/layer-aware runtime recognition (RI semantics). Results are memoized; do not mutate them. */
 export function matchRuntimeInstruction(word: number, scope: InstructionScope): RuntimeInstructionMatch | undefined {
   const value = word >>> 0;
-  const matches = byMaskSpecificity.filter((entry) =>
-    entry.profiles.includes(scope.profile)
-    && scope.enabledLayers.includes(entry.layer)
-    && ((value & entry.runtimeMatchMask) >>> 0) === entry.runtimeMatchValue);
-  if (!matches.length) {
-    return undefined;
+  const table = scopeTable(scope);
+  const cached = table.runtimeMemo.get(value);
+  if (cached !== undefined) {
+    return cached ?? undefined;
   }
-  const specificity = popcount(matches[0].runtimeMatchMask);
-  const candidates = matches.filter((entry) => popcount(entry.runtimeMatchMask) === specificity);
-  return {
-    candidates,
-    exactInstruction: exactFromCandidates(value, candidates)
-  };
+  const candidates = runtimeCandidates(value, table.entries);
+  const result = candidates
+    ? Object.freeze({ candidates: Object.freeze(candidates), exactInstruction: exactFromCandidates(value, candidates) })
+    : null;
+  return remember(table.runtimeMemo, value, result) ?? undefined;
 }
 
 /** Exact instruction match among the runtime-recognized encodings. */
 export function matchExactInstruction(word: number, scope?: InstructionScope): IsaInstructionEntry | undefined {
   const value = word >>> 0;
-  const matches = byMaskSpecificity.filter((entry) => (!scope || (
-    entry.profiles.includes(scope.profile) && scope.enabledLayers.includes(entry.layer)
-  )) && ((value & entry.runtimeMatchMask) >>> 0) === entry.runtimeMatchValue);
-  if (!matches.length) {
-    return undefined;
+  const table = scopeTable(scope);
+  const cached = table.exactMemo.get(value);
+  if (cached !== undefined) {
+    return cached ?? undefined;
   }
-  const specificity = popcount(matches[0].runtimeMatchMask);
-  return exactFromCandidates(value, matches.filter((entry) => popcount(entry.runtimeMatchMask) === specificity));
+  const candidates = runtimeCandidates(value, table.entries);
+  const result = (candidates && exactFromCandidates(value, candidates)) ?? null;
+  return remember(table.exactMemo, value, result) ?? undefined;
 }
 
 function exactFromCandidates(value: number, candidates: readonly IsaInstructionEntry[]): IsaInstructionEntry | undefined {

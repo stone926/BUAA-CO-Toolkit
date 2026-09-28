@@ -551,6 +551,19 @@ describe('parseMips', () => {
   });
 
   describe('undeclared symbol detection', () => {
+    it('keeps label macro arguments valid across repeated calls', () => {
+      const text = [
+        '.macro jump(%dest)',
+        '    beq $zero, $zero, %dest',
+        '.end_macro',
+        '.text',
+        'jump(target)',
+        'jump(target)'
+      ].join('\n');
+      const result = parseMips(doc(text), settings());
+      expect(diagCodes(result)).not.toContain('undeclared-symbol');
+    });
+
     it('reports error for undefined labels', () => {
       const text = '    beq $t0, $t1, undefined_label';
       const result = parseMips(doc(text), settings());

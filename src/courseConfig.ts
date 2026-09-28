@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import * as path from 'path';
+import { resourcePath } from './resourcePaths';
 import { ProjectProfile } from './projectProfile';
 
 export interface ProfileConfig {
@@ -96,7 +96,7 @@ function loadCourseConfig(): CourseConfig {
   if (courseConfig) {
     return courseConfig;
   }
-  const configPath = path.join(__dirname, '..', 'resources', 'co', 'courseConfig.json');
+  const configPath = resourcePath('co', 'courseConfig.json');
   try {
     const content = fs.readFileSync(configPath, 'utf8');
     courseConfig = JSON.parse(content) as CourseConfig;

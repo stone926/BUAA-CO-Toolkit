@@ -612,6 +612,13 @@ button {
   touch-action: none;
 }
 
+.wave-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
 .empty-hint {
   position: absolute;
   top: 56px;

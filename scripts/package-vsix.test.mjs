@@ -44,7 +44,7 @@ test('each platform VSIX retains its complete runtime and shared files only', as
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'co-package-fixture-'));
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
   const root = join(temporaryRoot, 'extension 中文 with spaces');
-  const sharedIgnore = 'src/**\nout/test/**\n**/*.map\n';
+  const sharedIgnore = await readFile(new URL('../.vscodeignore', import.meta.url), 'utf8');
   const fixture = {
     'package.json': JSON.stringify({
       name: 'co-packaging-fixture', version: '0.0.1', publisher: 'fixture',
@@ -55,6 +55,13 @@ test('each platform VSIX retains its complete runtime and shared files only', as
     'LICENSE': 'Test fixture license.\n',
     '.vscodeignore': sharedIgnore,
     'out/extension.js': 'exports.activate = () => {};\n',
+    'out/server.js': 'packaged server',
+    'out/mips/host/workerMain.js': 'packaged worker',
+    'out/mips/cli/main.js': 'packaged CLI',
+    'out/media/waveform.js': 'packaged webview',
+    'out/THIRD_PARTY_NOTICES.md': 'bundled dependency licenses',
+    'out/stale-module.js': 'unbundled output must be excluded',
+    'out/host-meta.json': 'development build metadata',
     'out/test/development.js': 'should be excluded',
     'src/development.ts': 'should be excluded',
     'vendor/iverilog/CORRESPONDING_SOURCES.json': '{}\n',
@@ -86,6 +93,11 @@ test('each platform VSIX retains its complete runtime and shared files only', as
     ].sort();
     assert.deepEqual(vendorEntries, expected, target);
     assert.ok(entries.includes('extension/out/extension.js'), target);
+    for (const file of ['server.js', 'mips/host/workerMain.js', 'mips/cli/main.js', 'media/waveform.js', 'THIRD_PARTY_NOTICES.md']) {
+      assert.ok(entries.includes(`extension/out/${file}`), `${target}: ${file}`);
+    }
+    assert.ok(!entries.includes('extension/out/stale-module.js'), target);
+    assert.ok(!entries.includes('extension/out/host-meta.json'), target);
     assert.ok(!entries.some(file => file.startsWith('extension/src/') || file.startsWith('extension/out/test/')), target);
   }
   assert.equal(await readFile(join(root, '.vscodeignore'), 'utf8'), sharedIgnore);

@@ -1,5 +1,5 @@
 // @index semantic-model — 符号表/作用域/AST引用收集
-import { Diagnostic, Position, Range } from 'vscode-languageserver/node';
+import { Diagnostic, Position, Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { containsPosition, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';

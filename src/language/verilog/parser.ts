@@ -2,58 +2,12 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CoSettings } from '../common/settings';
 import { collectVerilogDiagnostics } from './diagnostics';
-import { buildVerilogAst } from './ast';
-import { parseModulesFromTokens } from './moduleParser';
-import { parseDirectivesFromTokens, parseIncludesFromTokens, parseMacrosFromTokens, parseMacroUsesFromTokens } from './preprocessor';
+import { parseVerilogCore } from './parseCore';
 import { VerilogParseResult } from './model';
-import { lexVerilogWithTrivia } from './lexer';
-import { collectVerilogStatementSources } from './statementParser';
-import { buildVerilogSemanticModel } from './semanticModel';
-import { verilogCodeTokens } from './directiveBoundaries';
 
 export function parseVerilog(document: TextDocument, settings: CoSettings, includeDiagnostics: boolean): VerilogParseResult {
-  const text = document.getText();
-  const lexed = lexVerilogWithTrivia(text);
-  const tokens = lexed.tokens.filter((token) => token.kind !== 'comment');
-  const codeTokens = verilogCodeTokens(text, tokens);
-  const modules = parseModulesFromTokens(document, text, codeTokens);
-  const macros = parseMacrosFromTokens(document, tokens);
-  const macroUses = parseMacroUsesFromTokens(document, macros, tokens);
-  const includes = parseIncludesFromTokens(document, tokens);
-  const directives = parseDirectivesFromTokens(document, tokens);
-  const ast = buildVerilogAst(
-    document,
-    {
-      tokens: codeTokens,
-      allTokens: lexed.tokens,
-      lexicalDiagnostics: lexed.diagnostics,
-      statements: collectVerilogStatementSources(document, codeTokens)
-    },
-    modules,
-    macros,
-    macroUses,
-    includes,
-    directives
-  );
-  const semantic = buildVerilogSemanticModel({
-    document,
-    ast,
-    modules,
-    macros,
-    macroUses,
-    includes,
-    diagnostics: []
-  });
-  const parsed: VerilogParseResult = {
-    ast,
-    semantic,
-    modules,
-    macros,
-    macroUses,
-    includes,
-    diagnostics: []
-  };
-  return includeDiagnostics ? addVerilogDiagnostics(document, settings, parsed, text) : parsed;
+  const parsed = parseVerilogCore(document);
+  return includeDiagnostics ? addVerilogDiagnostics(document, settings, parsed) : parsed;
 }
 
 export function addVerilogDiagnostics(
