@@ -17,8 +17,8 @@
 - 过程语句：block（begin-end / fork-join）、if、case（casex/casez）、loop（for/forever/repeat/while）、assignment（`=`/`<=`）、localDeclaration、control（delay/event/wait）、systemTask、subroutineCall
 - 块：alwaysBlock / initialBlock + header（sensitivity + event/delay control）
 
-**设计决策**
+**情况说明**
 
 - 连续赋值节点使用 `assignments[]` 保留同句中每个 lvalue/RHS，诊断、引用、驱动分析与表达式提取共享此模型。
-- 实数字面量进入 `numberLiteral`，但**不**参与整数常量折叠或位宽推断。
+- 实数字面量进入 `numberLiteral`，但不参与整数常量折叠或位宽推断。
 - 缺失 `endmodule` 或闭合分隔符时在下一个 module 恢复，不吞掉后续模块。

@@ -1,6 +1,6 @@
 # verilog-diagnostics | src/language/verilog/ | 12 files | parent: verilog-lsp.md
 
-多类型诊断调度层。`diagnostics.ts` 是唯一入口，按类别分发给各子系统：语法错误、课程 lint、实例连接、usage、驱动冲突、跨文件与外部 Icarus。
+多类型诊断调度层。`diagnostics.ts` 是唯一入口，按类别分发给各子系统：语法错误、课程 lint、实例连接、usage、驱动冲突、跨文件与外部 Icarus
 
 调度: `diagnostics.ts` → syntaxDiag + lintDiag + instanceConnectionDiag + usageDiag + driverDiag + workspaceDiag（external compiler 见下）
 
@@ -16,8 +16,7 @@
 - `externalSyntaxCheck.ts` — 通用/on-save 检查固定使用 bundled Icarus
 - `iverilogSyntaxCheck.ts` — bundled Icarus `-tnull -i` 检查与最小 stderr 诊断解析
 
-**设计决策**
+**情况说明**
 
 - 绝大多数规则基于 AST / 语义模型；token 回退仅限语法错误边界。发布前按 code/range/severity/message 去重。
 - 课程接口检查由 `co.verilog.lint.courseRules` 开关控制；外部检查触发时机由 `co.verilog.syntax.external.mode`（`off` / `onSave` / `commandOnly`）控制。
-- **代码风格诊断已移除**：不再发出 VC 系列、综合风格建议或 blocking/nonblocking 混用提示，旧设置也无法启用。保留语法、位宽、未声明标识符、端口连接、真实多驱动冲突与课程接口检查。

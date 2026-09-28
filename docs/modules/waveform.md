@@ -1,6 +1,6 @@
 # waveform | src/waveform/ | 59 files
 
-内置 VCD 波形查看器：VS Code 只读自定义编辑器（`*.vcd` 默认打开）+ "仿真并查看波形"命令。宿主侧流式解析 VCD 为列式 typed-array 模型并经 postMessage 交给 Webview；Webview 用 Canvas 画波形、DOM 虚拟列表画信号名与值。
+内置 VCD 波形查看器：VS Code 只读自定义编辑器（`*.vcd` 默认打开）+ "仿真并查看波形"命令。宿主侧流式解析 VCD 为列式 typed-array 模型并经 postMessage 交给 Webview；Webview 用 Canvas 画波形、DOM 虚拟列表画信号名与值
 
 数据流:
   仿真: 命令 → `iverilogRunner`（generatedTopModules 钩子）→ designHierarchy 找 testbench 下的可逐字 dump 小存储器 → `design/waveformDumper` 生成 dump 顶层 → `.co/wave/<tb>.vcd` + `.co/wave/<tb>.sim.out`
@@ -9,13 +9,13 @@
 
 课程取向: GRF 等小存储器逐字记录并显示 `$sp` 等别名；32 位指令信号默认反汇编；testbench `$display` 的 GRF/DM 写入 trace 叠加到时间轴并可点击联动。
 
-## 核心设计决策
+## 设计说明
 
-**纯逻辑与宿主/Webview 分离。** `model/`、`view/`、`vcd/`、`design/` 为纯 TS（无 vscode/DOM），宿主、Webview 与测试共用；Webview 由 esbuild 打包到 `out/media/`（`scripts/build-webview.mjs`），tsc 与 `tsconfig.webview.json` 分别做类型检查。
+**纯逻辑与宿主/Webview 分离** `model/`、`view/`、`vcd/`、`design/` 为纯 TS（无 vscode/DOM），宿主、Webview 与测试共用；Webview 由 esbuild 打包到 `out/media/`（`scripts/build-webview.mjs`），tsc 与 `tsconfig.webview.json` 分别做类型检查
 
-**安全边界。** Webview 严格 CSP：nonce 脚本、仅 `out/media` 本地资源、无内联 style 属性（样式经 CSSOM 设置）；宿主校验全部入站消息，持久化状态经 `viewStateContract` 清洗。
+**安全边界** Webview 严格 CSP：nonce 脚本、仅 `out/media` 本地资源、无内联 style 属性（样式经 CSSOM 设置）；宿主校验全部入站消息，持久化状态经 `viewStateContract` 清洗
 
-**时间是整数 tick。** 一律使用 dump 整数 tick（Float64 精确到 2^53），显示时自适应 ps/ns/µs。仿真默认时间尺度由 runIverilog 的 `co_iverilog_defaults.f` 设为课程 `1ns/1ps`（普通/波形/自动仿真共用），保留源码显式声明与 Verilog 指令继承语义，避免无声明的 GRF/DM 按 Icarus 原默认把 `$time` 舍入为 0。
+**时间是整数 tick** 一律使用 dump 整数 tick（Float64 精确到 2^53），显示时自适应 ps/ns/µs。仿真默认时间尺度由 runIverilog 的 `co_iverilog_defaults.f` 设为课程 `1ns/1ps`（普通/波形/自动仿真共用），保留源码显式声明与 Verilog 指令继承语义，避免无声明的 GRF/DM 按 Icarus 原默认把 `$time` 舍入为 0
 
 ## 入口
 

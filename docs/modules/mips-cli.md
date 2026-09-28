@@ -1,6 +1,6 @@
 # mips-cli | src/mips/cli/ | 2 files
 
-独立 conformance process 调用生产引擎的唯一进程边界：纯 TypeScript JSONL over stdio，**不**导入 VS Code、课程 runner 或 expected-value 生成链。
+独立 conformance process 调用生产引擎的唯一进程边界：纯 TypeScript JSONL over stdio
 
 - `protocol.ts` — protocol v1 严格校验：未知字段拒绝、profile/layer scope、batch/segment/执行/设备向量上限、稳定结构化错误
 - `main.ts` — 每行最多 4 MiB 的流式 JSONL 入口（超长行边读边丢弃、非无损 UTF-8 拒绝、每请求恰一响应、等待 stdout drain 形成背压）

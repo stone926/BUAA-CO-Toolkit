@@ -2,7 +2,7 @@
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
-**门禁**：`npm test` / `npm run test:coverage` 先 `sync:generated`，再 `npm run typecheck`（用 `tsconfig.test.json` 严格检查生产源码、测试源码与 Vitest 配置，且不生成文件），最后运行 Vitest；CI 与 release 的 `npm test` 同样包含该门禁。`npm run compile` 仍只构建生产源码。`npm run test:all` 追加 `node scripts/check-index.mjs`。
+`npm test` / `npm run test:coverage` 先 `sync:generated`，再 `npm run typecheck`（用 `tsconfig.test.json` 严格检查生产源码、测试源码与 Vitest 配置，且不生成文件），最后运行 Vitest；CI 与 release 的 `npm test` 同样包含该门禁。`npm run compile` 仍只构建生产源码。`npm run test:all` 追加 `node scripts/check-index.mjs`。
 
 ## 覆盖地图
 
@@ -24,7 +24,7 @@
 
 ## 真实工具与平台证据
 
-这些 lane 使用**真实**的 bundled Icarus / MARS / 真实 VS Code，不 mock 生产接口：
+这些 lane 使用真实的 bundled Icarus / MARS / 真实 VS Code，不 mock 生产接口：
 
 - `scripts/verify-bundled-iverilog.mjs` / `verify-bundled-iverilog-course.mjs` — 按 host platform/arch 选择五个 runtime 之一，在隔离 PATH 下验证中文与空格路径的 syntax success/failure、compile/VVP、`$readmemh`/`$display`、watchdog 与课程兼容
 - `scripts/verify-extension-host.mjs` + `extension-host-smoke.cjs` — `@vscode/test-electron` 加载最终 VSIX 解包目录，创建中文空格工作区，验证真实激活、LSP 保存诊断与修复、`co.verilog.runSimulation`、持续测试的内置生成器/assembler/Worker oracle/Icarus 故意错误 DUT 与首失败停止
@@ -37,5 +37,4 @@
 
 - **课程自动测试**：P3–P7 默认最大 payload 的全 GPR 双端口读与存储观察；jr 生产者 × 间隔 0/1/2 的陈旧目标变异；P7 五分片 109 个 probe 变体的完整覆盖与损坏反例；continuous 的会话所有权清理与 fail-closed 保留
 - **DUT 观测**：`CO_DM_STORE` 公开事务与 builtin CommitEvent 逐笔对拍（覆盖整字相同时仍能失败的地址/mask 漏检）；P6/P7 完整 testbench 下 `dm_store_contract.v` 捕获的错误全使能读改写
-- **证据诚实性**：executor-only shadow 不计入 full-stack gate；probe 结果不冒充 full-stack reference；报告明确"通过"只对应本次可观察结果
 - **可移植性**：`processCore` 的 stdout/stderr raw-byte cap、UTF-8 chunk 边界、timeout/abort 与子孙进程树；Windows UTF-8 code page manifest；macOS/Linux 的 bundled `-B <lib/ivl>`

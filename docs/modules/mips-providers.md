@@ -2,7 +2,7 @@
 
 Provider-neutral 引擎契约与解析。数据契约（SourceUnit / ProgramImage 等）在 mips-core，本模块只持有扩展侧（`vscode.Uri`）类型。
 
-**核心设计决策：不可变 `CourseEnginePlan`。** 一个 plan 原子绑定 assembler 与 executor，因此单次 case 内不可能出现"用 A 汇编、用 B 执行"的错配。稳定 engine id 只有两个：`builtin-ts` 与 `legacy-mars-configured`。
+不可变 `CourseEnginePlan`。一个 plan 原子绑定 assembler 与 executor，因此单次 case 内不可能出现"用 A 汇编、用 B 执行"的错配。稳定 engine id 只有两个：`builtin-ts` 与 `legacy-mars-configured`。
 
 - `contracts.ts` — EngineDescriptor、capabilities、Assemble/Execute 请求结果、preflight 诊断
 - `courseEnginePolicy.ts` — 纯函数的 profile/capability/mode 决策
