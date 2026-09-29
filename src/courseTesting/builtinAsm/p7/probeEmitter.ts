@@ -287,7 +287,7 @@ function emitScenario(
   if (kind === 'external' && isExternalRetryVariant(variant)) {
     return emitExternalRetryScenario(writer, id, variant!, rng, padding);
   }
-  if ((kind === 'timer0' || kind === 'timer1') && variant === 'mode1-repeat') {
+  if ((kind === 'timer0' || kind === 'timer1') && (variant === 'mode1-repeat' || variant === 'mode1-stopped')) {
     return emitTimerMode1RepeatScenario(writer, id, kind, variant, rng, padding);
   }
   if ((kind === 'timer0' || kind === 'timer1') && variant === 'disable-reload') {

@@ -295,7 +295,7 @@ describe('builtin generator workflow', () => {
       exceptionRate: 0
     }));
     for (const [index, probeShard, probeScenarioCount] of [
-      [3, 'mmio', 26], [4, 'timer', 10], [5, 'mdu', 10], [6, 'hazard', 11],
+      [3, 'mmio', 26], [4, 'timer', 12], [5, 'mdu', 10], [6, 'hazard', 11],
       [12, 'special-priority', 14], [13, 'special-mdu', 12], [14, 'special-hazard', 10]
     ] as const) {
       expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(index, expect.objectContaining({

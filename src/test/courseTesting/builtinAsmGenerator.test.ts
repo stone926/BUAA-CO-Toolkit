@@ -10,7 +10,9 @@ import { p7RiWordCatalog, p7RiWordDirective } from '../../courseTesting/p7RiWord
 import { checkP7Probe } from '../../courseTesting/p7ProbeCheck';
 import { parseSimOutput } from '../../language/verilog/traceParser';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
-import { executeProgramForService } from '../../mips/core/machine/executeService';
+import { executeProgramForService, prepareCourseExecution, projectCourseExecutionOutcome } from '../../mips/core/machine/executeService';
+import { runCourseProgram } from '../../mips/core/machine/execution';
+import { CourseTimerDevice } from '../../mips/core/devices/timer';
 import {
   p7ExceptionHandlerAddress,
   p7CourseInstructionCountMaximum,
@@ -613,7 +615,7 @@ describe('built-in ASM generator', () => {
       p7StressMode: 'probe',
       probeShard: 'timer',
       timerInterrupt: true,
-      probeScenarioCount: 10
+      probeScenarioCount: 12
     });
     const mmioResult = generateBuiltinAsmTestCase({
       profile: 'P7',
@@ -640,7 +642,7 @@ describe('built-in ASM generator', () => {
     expect(result.mode).toBe('probe');
     expect(result.probe?.logBase).toBe(p7ProbeLogBase);
     expect(coreResult.probe?.scenarios).toHaveLength(p7ProbeDefaultScenarioCount);
-    expect(timerResult.probe?.scenarios).toHaveLength(10);
+    expect(timerResult.probe?.scenarios).toHaveLength(12);
     expect(mmioResult.probe?.scenarios).toHaveLength(26);
     expect(new Set(result.probe?.scenarios.map((scenario) => scenario.kind))).toEqual(new Set([
       'external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'
@@ -945,7 +947,7 @@ describe('built-in ASM generator', () => {
       timerInterrupt: true,
       p7StressMode: 'probe',
       probeShard: 'timer',
-      probeScenarioCount: 10
+      probeScenarioCount: 12
     });
 
     for (const variant of ['masked-ie', 'masked-im2']) {
@@ -968,14 +970,14 @@ describe('built-in ASM generator', () => {
     for (const kind of ['timer0', 'timer1'] as const) {
       const timers = timerResult.probe?.scenarios.filter((item) => item.kind === kind) ?? [];
       expect(new Set(timers.map((item) => item.variant))).toEqual(new Set([
-        'mode0-min', 'mode0-max', 'mode1-repeat', 'disable-reload', 'pending-writes'
+        'mode0-min', 'mode0-max', 'mode1-repeat', 'mode1-stopped', 'disable-reload', 'pending-writes'
       ]));
       expect(timers.find((item) => item.variant === 'mode0-min')?.timerPreset).toBe(p7ProbeTimerPresetMin);
       expect(timers.find((item) => item.variant === 'mode0-max')?.timerPreset).toBe(p7ProbeTimerPresetMax);
       for (const timer of timers.filter((item) => item.variant?.startsWith('mode0-'))) {
         expect(timer.expectedRecords?.[0].allowedAuxPairs).toEqual([[8, 0]]);
       }
-      for (const timer of timers.filter((item) => item.variant === 'mode1-repeat')) {
+      for (const timer of timers.filter((item) => item.variant?.startsWith('mode1-'))) {
         expect(timer.expectedRecords?.[0].allowedIpMasks).toEqual([0, kind === 'timer0' ? 0x0400 : 0x0800]);
         expect(timer.expectedRecords).toHaveLength(2);
         expect(timer.expectedRecords?.[0].allowedBdEpc).toHaveLength(1);
@@ -993,9 +995,14 @@ describe('built-in ASM generator', () => {
         expect(block).toMatch(
           /lw \$12, 0x7f(?:08|18)\(\$0\)[\s\S]*sltu \$13, \$10, \$12[\s\S]*addi \$11, \$11, 1[\s\S]*bne \$11, \$14, _co_probe_s\d+_mode1_poll/
         );
-        expect(block).toMatch(
-          /ori \$14, \$0, 0x2\s*\n\s*sw \$14, 0x7f(?:00|10)\(\$0\)[\s\S]*lw \$10, 0x7f(?:08|18)\(\$0\)[\s\S]*lw \$12, 0x7f(?:08|18)\(\$0\)[\s\S]*bne \$10, \$12, _co_probe_s\d+_bad_mode1_period[\s\S]*ori \$14, \$0, 0xa\s*\n\s*sw \$14, 0x7f(?:00|10)\(\$0\)[\s\S]*_mode1_clear_ip:[\s\S]*mfc0 \$15, \$13[\s\S]*andi \$15, \$15, 0x(?:400|800)[\s\S]*bne \$15, \$0, _co_probe_s\d+_mode1_clear_ip[\s\S]*mfc0 \$15, \$13[\s\S]*andi \$15, \$15, 0x(?:400|800)[\s\S]*sw \$15, 0x27dc\(\$0\)[\s\S]*ori \$14, \$0, 0xb\s*\n\s*sw \$14, 0x7f(?:00|10)\(\$0\)/
+        if (timer.variant === 'mode1-stopped') expect(block).toMatch(
+          /ori \$14, \$0, 0x2[\s\S]*_mode1_stopped_count:[\s\S]*beq \$10, \$12, _co_probe_s\d+_mode1_stopped_count_ready[\s\S]*ori \$14, \$0, 0xa[\s\S]*_mode1_clear_ip:[\s\S]*sw \$15, 0x27dc\(\$0\)[\s\S]*ori \$14, \$0, 0xb/
         );
+        else {
+          expect(block).not.toContain('ori $14, $0, 0x2');
+          expect(block).not.toContain('ori $14, $0, 0xa');
+          expect(block).toMatch(/_mode1_clear_ip:[\s\S]*bne \$15, \$0, _co_probe_s\d+_mode1_clear_ip\s+nop\s+add \$15, \$15, \$0/);
+        }
       }
       const reload = timers.find((item) => item.variant === 'disable-reload');
       expect(reload?.expectedExcCode).toBe(8);
@@ -1194,7 +1201,7 @@ describe('built-in ASM generator', () => {
       probeShard: 'timer',
       interrupt: false,
       timerInterrupt: true,
-      probeScenarioCount: 10
+      probeScenarioCount: 12
     });
     const assembled = assembleCourseSource({ id: 'probe', text: result.text }, { profile: 'P7' });
     expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
@@ -1218,10 +1225,52 @@ describe('built-in ASM generator', () => {
 
       expect(executed, `cycles=${cycles}`).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
       expect(checked.failures, `cycles=${cycles}`).toEqual([]);
-      expect(checked.records, `cycles=${cycles}`).toHaveLength(10);
-      expect((executed.trace ?? []).filter((line) => line.includes('*000027DC <= 000071'))).toHaveLength(2);
+      expect(checked.records, `cycles=${cycles}`).toHaveLength(12);
+      expect((executed.trace ?? []).filter((line) => line.includes('*000027DC <= 000071'))).toHaveLength(4);
       expect(trace).not.toContain('BAD10001');
     }
+  });
+
+  it('rejects a Mode-1 Timer that reloads COUNT but emits only one IRQ per Enable rise', () => {
+    const program = generateBuiltinAsmTestCase({ profile: 'P7', instructionText: '', instructionCount: 1118,
+      seed: 'p7-mode1-official-cycle-model', p7StressMode: 'probe', probeShard: 'timer',
+      interrupt: false, timerInterrupt: true, probeScenarioCount: 12 });
+    const assembly = assembleCourseSource({ id: 'repeat-mutant', text: program.text }, { profile: 'P7' });
+    expect(assembly.ok).toBe(true);
+    const prepared = prepareCourseExecution({ profile: 'P7', segments: assembly.image!.segments,
+      entryPc: 0x3000, haltPc: 0x3000 + (program.instructionCount - 2) * 4, maxSteps: 6000,
+      deviceSchedule: { kind: 'timeline', entries: Array.from({ length: 6000 }, (_, afterInstruction) => ({ afterInstruction, cycles: 1 })) } });
+    const restore: Array<() => void> = [];
+    for (const timer of [prepared.session.devices!.timer0, prepared.session.devices!.timer1]) {
+      let pulses = 0, pendingBefore = false;
+      const originalWrite = timer.write.bind(timer), originalTick = timer.tick.bind(timer);
+      const originalIrq = Object.getOwnPropertyDescriptor(CourseTimerDevice.prototype, 'irq')!.get!.bind(timer) as () => boolean;
+      const write = vi.spyOn(timer, 'write').mockImplementation((register, value) => {
+        const enabledBefore = timer.read(0) & 1;
+        const events = originalWrite(register, value);
+        if (!enabledBefore && (timer.read(0) & 1)) pulses = 0;
+        return events;
+      });
+      const tick = vi.spyOn(timer, 'tick').mockImplementation(() => {
+        const events = originalTick();
+        const pending = timer.snapshot().pendingIrq;
+        if (pending && !pendingBefore) pulses++;
+        pendingBefore = pending;
+        return events;
+      });
+      const irq = vi.spyOn(timer, 'irq', 'get').mockImplementation(() =>
+        originalIrq() && ((timer.read(0) & 6) !== 2 || pulses <= 1));
+      restore.push(() => { write.mockRestore(); tick.mockRestore(); irq.mockRestore(); });
+    }
+    try {
+      const executed = projectCourseExecutionOutcome(prepared, runCourseProgram(prepared.session, { collectTrace: true, finalSnapshotLevel: 'full' }));
+      const trace = executed.trace!.join('\n');
+      const checked = checkP7Probe(trace, parseSimOutput(trace), program.probe!);
+      expect(checked.passed).toBe(false);
+      const firstIncomplete = program.probe!.scenarios.find(scenario => !checked.records.some(record => record.scenarioId === scenario.id));
+      expect(firstIncomplete?.variant).toBe('mode1-repeat');
+      expect(trace).toContain(`*000027DC <= ${(0x7100 | firstIncomplete!.id).toString(16).padStart(8, '0').toUpperCase()}`);
+    } finally { restore.forEach(undo => undo()); }
   });
 });
 

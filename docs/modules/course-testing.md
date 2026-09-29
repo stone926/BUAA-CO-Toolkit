@@ -8,7 +8,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **独立 GPR 覆盖。** 每个持续测试会话先运行一个 127 条 payload 的独立测试点，为全部 31 个可写 GPR 写入互异非零值并经两个读端口传播存入 DM，最后发出完成标记；后续随机测试点不再重复 126 条 GPR 前导。该基础检查使用课程必需指令，不受 payload 重点指令设置影响。P4–P7 随机点固定覆盖 `ori/add/sub/lw → jr` × 间隔 0/1/2（错误旧目标写毒值，正确路径独立标记）；随机跳转将可观察毒指令计入最低预算，余量不足时改发其他指令。含 `ori` 且 payload ≥256 的程序在最后一槽发出 `_co_test_complete` 可见写，再接标准两条 halt 尾。
 
-**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。正常 probe 分为 core / MMIO / Timer / MDU / hazard，另逐轮生成 5 个真实中断返回后再次中断的独立程序，最后执行 3 个特殊 Timer 分片。首轮加独立 GPR 共 15 点，后续 14 点；随机 payload 预算保持 1118。原 130 个变体全部保留，新增 4 个 older-MDU 变体与 5 个返回程序；每个程序的用户文本留在 0x4180 之前、DM 记录不超过 64 个。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode、分片与变体均不是公共设置。
+**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。正常 probe 分为 core / MMIO / Timer / MDU / hazard，另逐轮生成 5 个真实中断返回后再次中断的独立程序，最后执行 3 个特殊 Timer 分片。首轮加独立 GPR 共 15 点，后续 14 点；随机 payload 预算保持 1118。原 130 个变体全部保留，新增 4 个 older-MDU 变体、2 个 Mode1 停止态变体与 5 个返回程序；每个程序的用户文本留在 0x4180 之前、DM 记录不超过 64 个。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode、分片与变体均不是公共设置。
 
 **特殊测试说明。** 原软件设置 EXL/EPC、通过 `jal→eret` 释放 pending Timer 的 36 个变体单独放入 special-priority（14）/special-mdu（12）/special-hazard（10），保持实际检查与失败状态。ASM、manifest、运行输出、HTML/JSON 报告和历史都标明其官方保证范围尚未确认，单凭此失败不能判定课程 CPU 不合格；旧混合点按实际 scenario 类型推断同样的说明。正常测试与新返回点先运行，特殊点随后运行，不新增配置开关。
 
@@ -66,7 +66,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `builtinAsm/p7/probeExternalScenarios.ts`、`builtinAsm/p7/probePriorityScenarios.ts`、`builtinAsm/p7/probeMduScenarios.ts`、`builtinAsm/p7/probeMduOperations.ts`、`builtinAsm/p7/probeTimerWriteScenario.ts`、`builtinAsm/p7/probeAsm.ts`、`builtinAsm/p7/constants.ts` — 外部受害路径、中断优先级序列、MDU 组合、Timer pending-writes 稳定态与共用原语/常量
 - `builtinAsm/p7/probeHazardScenarios.ts` — 中断重试 load→branch/jr 和延迟槽 load-use；AdEL/AdES/Ov 与依赖链交叉；Timer 的软件 EXL 返回链作为特殊场景保留
 - `builtinAsm/p7/probeReturnProgram.ts` — 5 个带种子数据/布局变化的真实双 IRQ 程序：direct、load-jr、branch-delay、jal-delay、MDU；整个程序均有精确可观察提交义务
-- `builtinAsm/p7/probeTimerMode1Scenario.ts` — 保留两次 COUNT 重载观察与两次真实 Timer 中断，使用停止的 Mode1（CTRL=2/0xa）确认去断言，再显式启动新周期；不以读 COUNT 后的指令数假定采样相位。COUNT 增长仍受采样混叠限制，未命中重载观察不能单凭 watchdog 证明 Timer 错误
+- `builtinAsm/p7/probeTimerMode1Scenario.ts` — mode1-repeat 保持 Enable=1/PRESET 不变，验证 COUNT 重载及第二次自然 IRQ；恢复 IM 后在 IE=0 下轮询并保留实际零样本，不假定后续采样相位。额外 mode1-stopped 用 CTRL=2/0xa 建立停止态稳定观察，允许最后一次 LOAD 瞬态，再显式启动新周期。COUNT/IP 采样仍受混叠限制，未命中不能单凭 watchdog 证明 Timer 错误
 - `p7ProbeScope.ts` — 特殊压力场景范围判定与统一用户说明，兼容旧混合 metadata 和早期工具错误
 - `p7ReturnCheck.ts` — 返回协议、全部 main/handler 事务、记录字段来源、EPC/BD 提交边界与合法 jal link 重放检查；未覆盖与功能失败分别记录
 - `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit；按 PC 一次索引提交，older 必须早于记录首字段，取消的 younger/错误路径提交即失败

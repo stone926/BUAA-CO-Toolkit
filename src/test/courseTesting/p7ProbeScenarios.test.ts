@@ -17,7 +17,7 @@ const requiredKinds = [
 ] as const;
 const allRequiredKinds = new Set(requiredKinds);
 const shardScenarioCounts = {
-  core: 64, mmio: 26, timer: 10, mdu: 10, hazard: 11,
+  core: 64, mmio: 26, timer: 12, mdu: 10, hazard: 11,
   'special-priority': 14, 'special-mdu': 12, 'special-hazard': 10
 } as const;
 const enabledSources = {

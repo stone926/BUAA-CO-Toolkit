@@ -18,12 +18,12 @@ import {
 } from './probeAsm';
 import { scenarioWithLocations } from './probeScenarios';
 
-/** Preserve reload observations, then verify deassertion while the Timer is stopped. */
+/** Preserve continuous repeat IRQ coverage and independently test stopped-state deassertion. */
 export function emitTimerMode1RepeatScenario(
   writer: ProgramWriter,
   id: number,
   kind: 'timer0' | 'timer1',
-  variant: 'mode1-repeat',
+  variant: 'mode1-repeat' | 'mode1-stopped',
   rng: Random,
   padding: ProbePaddingProfile
 ): P7ProbeScenario {
@@ -35,6 +35,8 @@ export function emitTimerMode1RepeatScenario(
   const followupLabel = `_co_probe_s${id}_mode1_followup`;
   const pollLabel = `_co_probe_s${id}_mode1_poll`;
   const noReloadLabel = `_co_probe_s${id}_mode1_no_reload`;
+  const stoppedCountLabel = `_co_probe_s${id}_mode1_stopped_count`;
+  const stoppedCountReadyLabel = `_co_probe_s${id}_mode1_stopped_count_ready`;
   const clearIpLabel = `_co_probe_s${id}_mode1_clear_ip`;
   const freshWaitLabel = `_co_probe_s${id}_mode1_fresh_wait`;
   const doneLabel = `_co_probe_s${id}_done`;
@@ -45,6 +47,7 @@ export function emitTimerMode1RepeatScenario(
   const mode1WithInterrupt = 0xb;
   const mode1StoppedMasked = 0x2;
   const mode1StoppedUnmasked = 0xa;
+  const stoppedObservation = variant === 'mode1-stopped';
   const deassertMarker = p7ProbeMode1DeassertMarkerBase | id;
 
   emitStoreImmediate(writer, p7ProbeFlagRepeatTimerInterrupt, p7ProbeStateFlags);
@@ -86,49 +89,71 @@ export function emitTimerMode1RepeatScenario(
   writer.emit(`bne $11, $14, ${pollLabel}`);
   writer.emit('nop');
 
-  // Stopping CNT before zero leaves COUNT frozen at a nonzero value in the
-  // official Timer FSM. Requiring COUNT=0 after CTRL=2 would deadlock a legal
-  // device. Instead, prove that COUNT is stable with Enable=0 and that Cause.IP
-  // clears while no new counting period can start.
-  writer.emit(`ori $14, $0, 0x${mode1StoppedMasked.toString(16)}`);
-  writer.emit(`sw $14, 0x${ctrl.toString(16)}($0)`);
-  writer.emit(`lw $10, 0x${count.toString(16)}($0)`);
-  writer.emit('nop');
-  writer.emit('nop');
-  writer.emit(`lw $12, 0x${count.toString(16)}($0)`);
-  writer.emit(`bne $10, $12, ${badLabel}`);
-  writer.emit('nop');
+  // The stopped-state observation is additional coverage, not a replacement
+  // for two IRQs from one uninterrupted Enable=1 run.
+  if (stoppedObservation) {
+    // COUNT may freeze nonzero, and a previously entered LOAD may still update
+    // it once after Enable clears. Establish a stable baseline after that legal
+    // transient instead of requiring zero or rejecting the first change.
+    writer.emit(`ori $14, $0, 0x${mode1StoppedMasked.toString(16)}`);
+    writer.emit(`sw $14, 0x${ctrl.toString(16)}($0)`);
+    writer.emit(`lw $10, 0x${count.toString(16)}($0)`);
+    writer.label(stoppedCountLabel);
+    writer.emit(`lw $12, 0x${count.toString(16)}($0)`);
+    writer.emit('nop');
+    writer.emit('nop');
+    writer.emit(`beq $10, $12, ${stoppedCountReadyLabel}`);
+    writer.emit('nop');
+    writer.emit('add $10, $12, $0');
+    writer.emit(`beq $0, $0, ${stoppedCountLabel}`);
+    writer.emit('nop');
+    writer.label(stoppedCountReadyLabel);
+  }
 
-  // Device IM alone is restored; Enable stays zero. Polling Cause.IP is safe
-  // without a Timer-cycle bound because a stopped Timer cannot create a new IRQ.
-  writer.emit(`ori $14, $0, 0x${mode1StoppedUnmasked.toString(16)}`);
+  // Restore device IM. Repeat keeps Enable=1; stopped keeps Enable=0. The CTRL
+  // read-back binds the subsequent IP observation to that completed MMIO write.
+  writer.emit(`ori $14, $0, 0x${(stoppedObservation ? mode1StoppedUnmasked : mode1WithInterrupt).toString(16)}`);
   writer.emit(`sw $14, 0x${ctrl.toString(16)}($0)`);
+  writer.emit(`lw $12, 0x${ctrl.toString(16)}($0)`);
+  writer.emit(`bne $12, $14, ${badLabel}`);
+  writer.emit('nop');
   writer.label(clearIpLabel);
   writer.emit('mfc0 $15, $13');
   writer.emit(`andi $15, $15, 0x${ipMask.toString(16)}`);
   writer.emit(`bne $15, $0, ${clearIpLabel}`);
   writer.emit('nop');
-  // A separate observation must still see zero after the polling exit.
-  writer.emit('mfc0 $15, $13');
-  const causeMaskPc = writer.pc();
-  writer.emit(`andi $15, $15, 0x${ipMask.toString(16)}`);
-  writer.emit(`bne $15, $0, ${badLabel}`);
-  writer.emit('nop');
+  let causeMaskPc: number;
+  if (stoppedObservation) {
+    // With Enable=0, a separate observation must remain zero.
+    writer.emit('mfc0 $15, $13');
+    causeMaskPc = writer.pc();
+    writer.emit(`andi $15, $15, 0x${ipMask.toString(16)}`);
+    writer.emit(`bne $15, $0, ${badLabel}`);
+    writer.emit('nop');
+  } else {
+    // Preserve the zero just sampled. Do not reread: a later natural period
+    // may legally raise IP before that later instruction executes.
+    causeMaskPc = writer.pc();
+    writer.emit('add $15, $15, $0');
+  }
   emitLoadImmediate(writer, '$15', deassertMarker);
   const deassertMarkerPc = writer.pc();
   writer.emit(`sw $15, 0x${p7ProbeMaskedInterruptMarkerAddress.toString(16)}($0)`);
 
   // The second entry is accepted only after this explicit fresh-arm state.
-  const completionPc = writer.pc() + 10 * 4;
+  const completionPc = writer.pc() + (stoppedObservation ? 10 : 8) * 4;
   emitStoreImmediate(writer, completionPc, p7ProbeStateDonePc);
   emitStoreImmediate(
     writer,
     p7ProbeFlagRepeatTimerInterrupt | p7ProbeFlagRepeatTimerCaptured | p7ProbeFlagRepeatTimerFreshArmed,
     p7ProbeStateFlags
   );
-  // This write, after the zero marker and fresh-arm flag, starts a new period.
-  writer.emit(`ori $14, $0, 0x${mode1WithInterrupt.toString(16)}`);
-  writer.emit(`sw $14, 0x${ctrl.toString(16)}($0)`);
+  if (stoppedObservation) {
+    // Only the separate stopped-state test restarts Enable. Continuous repeat
+    // keeps Enable=1 and the original PRESET until the second natural IRQ.
+    writer.emit(`ori $14, $0, 0x${mode1WithInterrupt.toString(16)}`);
+    writer.emit(`sw $14, 0x${ctrl.toString(16)}($0)`);
+  }
   const freshEnableStartPc = writer.pc();
   emitEnableInterrupts(writer);
   const freshWaitPc = writer.pc();

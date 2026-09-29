@@ -36,6 +36,6 @@
 ## 回归重点
 
 - **课程自动测试**：P3–P7 独立 GPR 双端口读与存储观察（每持续会话一次），随机点保留默认最大 payload；jr 生产者 × 间隔 0/1/2 的陈旧目标变异；小预算跳转毒指令、双向控制流与错误路径变异；双端口/最新写优先/load-store lane 的可观察依赖；P7 原 130 变体完整保留（36 个特殊 Timer 变体单独说明），older-MDU 四变体、Mode1 停机去断言、五种真实双 IRQ 程序及字段/顺序/重放损坏反例；continuous 的会话所有权清理与 fail-closed 保留
-- **返回边界协议**：`p7ReturnProbe.test.ts` 校验不同种子、合法 jal link 重放、未命中与功能失败区别、handler 字段来源和路径内错误 EPC；`p7ReturnTestbench.test.ts` 使用真实 Icarus 检查不同 eret 停留长度、X/错位 PC、SW 低位 don't-care、未选中 IG 转发、应答随 interrupt 撤销等合法接口变体
+- **返回边界协议**：`p7ReturnProbe.test.ts` 校验不同种子、合法 jal link 重放、未命中与功能失败区别、handler 字段来源和路径内错误 EPC；`p7ReturnTestbench.test.ts` 使用真实 Icarus 检查不同 eret 停留长度、X/错位 PC、SW 低位 don't-care、未选中 IG 转发、应答随 interrupt 撤销等合法接口变体。Mode1 官方周期模型与“每次 Enable 仅发一次 IRQ、COUNT 仍重载”的变异，确保停止态新检查不会替代连续周期 IRQ 覆盖
 - **DUT 观测**：`CO_DM_STORE` 公开事务与 builtin CommitEvent 逐笔对拍（覆盖整字相同时仍能失败的地址/mask 漏检）；P6/P7 完整 testbench 下 `dm_store_contract.v` 捕获的错误全使能读改写
 - **可移植性**：`processCore` 的 stdout/stderr raw-byte cap、UTF-8 chunk 边界、timeout/abort 与子孙进程树；Windows UTF-8 code page manifest；macOS/Linux 的 bundled `-B <lib/ivl>`
