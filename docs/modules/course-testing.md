@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 61 files + host adapters
+# course-testing | src/courseTesting/ | 65 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -8,7 +8,11 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **独立 GPR 覆盖。** 每个持续测试会话先运行一个 127 条 payload 的独立测试点，为全部 31 个可写 GPR 写入互异非零值并经两个读端口传播存入 DM，最后发出完成标记；后续随机测试点不再重复 126 条 GPR 前导。该基础检查使用课程必需指令，不受 payload 重点指令设置影响。P4–P7 随机点固定覆盖 `ori/add/sub/lw → jr` × 间隔 0/1/2（错误旧目标写毒值，正确路径独立标记）；随机跳转将可观察毒指令计入最低预算，余量不足时改发其他指令。含 `ori` 且 payload ≥256 的程序在最后一槽发出 `_co_test_complete` 可见写，再接标准两条 halt 尾。
 
-**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。probe 在内部确定性拆为 core / MMIO / Timer / priority / MDU / hazard 六个分片，每个程序都留在 0x4180 之前且最多使用 64 个 DM 记录。hazard 分片交叉测试异常、中断、Timer 与 load-use / 分支 / jr / 延迟槽依赖，基于架构提交与 EPC/BD 检查，不假设 CP0 级位置或空泡数量。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode 与分片只是内部类型，不是公共设置。
+**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。正常 probe 分为 core / MMIO / Timer / MDU / hazard，另逐轮生成 5 个真实中断返回后再次中断的独立程序，最后执行 3 个特殊 Timer 分片。首轮加独立 GPR 共 15 点，后续 14 点；随机 payload 预算保持 1118。原 130 个变体全部保留，新增 4 个 older-MDU 变体与 5 个返回程序；每个程序的用户文本留在 0x4180 之前、DM 记录不超过 64 个。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode、分片与变体均不是公共设置。
+
+**特殊测试说明。** 原软件设置 EXL/EPC、通过 `jal→eret` 释放 pending Timer 的 36 个变体单独放入 special-priority（14）/special-mdu（12）/special-hazard（10），保持实际检查与失败状态。ASM、manifest、运行输出、HTML/JSON 报告和历史都标明其官方保证范围尚未确认，单凭此失败不能判定课程 CPU 不合格；旧混合点按实际 scenario 类型推断同样的说明。正常测试与新返回点先运行，特殊点随后运行，不新增配置开关。
+
+**真实返回边界。** return 程序通过真实外部 IRQ 进入只有一个 eret 出口的 handler。公开 TB 先确认首次应答，观察 eret 成为宏观指令，再在宏观 PC 离开时产生第二次 IRQ；保留原始 PC、不对齐掩码、不读取内部层次，也不固定 CP0 级或周期偏移。这依赖官方宏观 PC 的架构边界契约，不声称独立测得错误 DUT 的内部 EXL。未观察到触发边界时单列“未覆盖”，作为检测 error 停止本轮，不计 CPU 功能失败或通过。Checker 绑定全部主程序/handler 提交与记录来源，校验 EPC/BD 与提交先后，只允许被 BD/EPC 证明的 jal link 重放。中断发生器事务在官方下降沿消费点观察；毒写已经构成公开反例后提前结束，保留当前边沿 trace。
 
 **证据诚实。** probe 在首次 mtc0/异常前用 mfc0 读取 SR/Cause/EPC 并把原始值写入 DM，metadata 把样本绑定到各自的 store PC 并严格检查初值零、唯一、早于 handler 记录。MDU 黑盒结果无法区分产生相同完整结果的合法早启动与非法晚启动，因此**不**宣称为内部启动时刻的证明。报告也说明"通过"只对应本次可观察结果，完整无写回执行、课程周期与结构仍需独立验证。
 
@@ -55,12 +59,16 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 ## P7 probe
 
-- `builtinAsm/p7/probeVariants.ts` — 变体目录与唯一分片归属（按 `mdu-` / `priority-` / Timer 寄存器前缀分流）
+- `builtinAsm/p7/probeVariants.ts` — 变体目录与唯一分片归属；Timer 的 priority/MDU/hazard 旧释放链单独归入三个特殊分片，legacy priority 仍可复现
 - `builtinAsm/p7/probeScenarios.ts` — 场景 kind 规划（先覆盖启用类别，再按当前分片补齐变体；core 余量以 RI 填充）
 - `builtinAsm/p7/probeEmitter.ts` — probe 主程序与统一异常处理程序；每场景 guard→触发/中断窗口→完成标记，写入单个 8-word 物理记录
 - `builtinAsm/p7/probeVictims.ts` — 内部异常精确触发序列（victim PC、EPC/BD、MDU 完整旧/新 HI-LO 允许态）
 - `builtinAsm/p7/probeExternalScenarios.ts`、`builtinAsm/p7/probePriorityScenarios.ts`、`builtinAsm/p7/probeMduScenarios.ts`、`builtinAsm/p7/probeMduOperations.ts`、`builtinAsm/p7/probeTimerWriteScenario.ts`、`builtinAsm/p7/probeAsm.ts`、`builtinAsm/p7/constants.ts` — 外部受害路径、中断优先级序列、MDU 组合、Timer pending-writes 稳定态与共用原语/常量
-- `builtinAsm/p7/probeHazardScenarios.ts` — 中断重试 load→branch/jr 和延迟槽 load-use；AdEL/AdES/Ov 与依赖链交叉，检查 older 提交及被取消的 younger/错误路径提交；Timer 轮询 Cause.IP 后通过 eret 释放稳定 pending，不假定倒计时采样周期
+- `builtinAsm/p7/probeHazardScenarios.ts` — 中断重试 load→branch/jr 和延迟槽 load-use；AdEL/AdES/Ov 与依赖链交叉；Timer 的软件 EXL 返回链作为特殊场景保留
+- `builtinAsm/p7/probeReturnProgram.ts` — 5 个带种子数据/布局变化的真实双 IRQ 程序：direct、load-jr、branch-delay、jal-delay、MDU；整个程序均有精确可观察提交义务
+- `builtinAsm/p7/probeTimerMode1Scenario.ts` — 保留两次 COUNT 重载观察与两次真实 Timer 中断，使用停止的 Mode1（CTRL=2/0xa）确认去断言，再显式启动新周期；不以读 COUNT 后的指令数假定采样相位。COUNT 增长仍受采样混叠限制，未命中重载观察不能单凭 watchdog 证明 Timer 错误
+- `p7ProbeScope.ts` — 特殊压力场景范围判定与统一用户说明，兼容旧混合 metadata 和早期工具错误
+- `p7ReturnCheck.ts` — 返回协议、全部 main/handler 事务、记录字段来源、EPC/BD 提交边界与合法 jal link 重放检查；未覆盖与功能失败分别记录
 - `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit；按 PC 一次索引提交，older 必须早于记录首字段，取消的 younger/错误路径提交即失败
 
 ## Oracle 与观察

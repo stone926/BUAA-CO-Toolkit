@@ -1,7 +1,7 @@
 // @index p7-probe-variants — P7 probe 异常变体轮换目录与最小覆盖计数
 import { P7ProbeScenarioKind, P7ProbeShard } from '../types';
 import { p7RiWordCatalog } from '../../p7RiWords';
-import { interruptMduVariants as mduVariants } from './probeMduOperations';
+import { interruptMduVariants as mduVariants, olderMduVariants } from './probeMduOperations';
 
 const interruptHazardVariants = [
   'hazard-load-branch-taken', 'hazard-load-branch-not-taken', 'hazard-load-jr',
@@ -31,6 +31,7 @@ const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = 
     'retry-delay-slot-store-taken',
     'retry-delay-slot-store-not-taken',
     ...mduVariants,
+    ...olderMduVariants,
     ...interruptHazardVariants
   ],
   timer0: timerVariants,
@@ -83,11 +84,15 @@ const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = 
   ]
 };
 
-export const automaticProbeShards = ['core', 'mmio', 'timer', 'priority', 'mdu', 'hazard'] as const;
+export const automaticProbeShards = [
+  'core', 'mmio', 'timer', 'mdu', 'hazard',
+  'special-priority', 'special-mdu', 'special-hazard'
+] as const;
 
 export function probeVariantsFor(kind: P7ProbeScenarioKind, shard: P7ProbeShard = 'all'): readonly string[] {
   const variants = variantsByKind[kind] ?? [];
-  return shard === 'all' ? variants : variants.filter((variant) => probeVariantShard(kind, variant) === shard);
+  const effectiveShard = shard === 'priority' ? 'special-priority' : shard;
+  return shard === 'all' ? variants : variants.filter((variant) => probeVariantShard(kind, variant) === effectiveShard);
 }
 
 export function probeVariantCount(kind: P7ProbeScenarioKind, shard: P7ProbeShard = 'all'): number {
@@ -104,14 +109,17 @@ export function probeVariantAt(kind: P7ProbeScenarioKind, occurrence: number, sh
 }
 
 function probeVariantShard(kind: P7ProbeScenarioKind, variant: string): Exclude<P7ProbeShard, 'all'> {
+  if (kind === 'timer0' || kind === 'timer1') {
+    if (variant.startsWith('priority-')) return 'special-priority';
+    if (variant.startsWith('mdu-')) return 'special-mdu';
+    if (variant.startsWith('hazard-')) return 'special-hazard';
+    return 'timer';
+  }
   if (variant.startsWith('hazard-')) {
     return 'hazard';
   }
   if (variant.startsWith('mdu-')) {
     return 'mdu';
-  }
-  if (kind === 'timer0' || kind === 'timer1') {
-    return variant.startsWith('priority-') ? 'priority' : 'timer';
   }
   if ((kind === 'adel' || kind === 'ades') && variant.startsWith('timer')) {
     return 'mmio';

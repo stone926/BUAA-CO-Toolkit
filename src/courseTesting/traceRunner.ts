@@ -241,13 +241,15 @@ export async function runCourseTraceCase(
     const simText = dut.simResult.stdout;
     const simEvents = parseSimOutput(simText);
     const probeResult = checkP7Probe(simText, simEvents, probe);
+    const uncovered = probeResult.failures.length === 0 && probeResult.coverage?.find(item => !item.covered);
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,
       ...caseResultFields(asmCase),
-      status: probeResult.passed ? 'passed' : 'failed',
+      status: uncovered ? 'error' : probeResult.passed ? 'passed' : 'failed',
       stage: 'probe',
-      message: probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
+      message: uncovered ? uncovered.message
+        : probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
       machineCode: asmCase.machineCode.fsPath,
       dutOut: dut.simOut.fsPath,
       dutBackend: dut.backend,

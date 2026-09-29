@@ -286,7 +286,7 @@ describe('builtin generator workflow', () => {
       probeScenarioCount: 64
     }), { revealOutput: false });
 
-    expect(batch?.asmCases).toHaveLength(8);
+    expect(batch?.asmCases).toHaveLength(15);
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(1, expect.objectContaining({ p7StressMode: 'anchor' }));
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(2, expect.objectContaining({
       p7StressMode: 'probe',
@@ -295,7 +295,8 @@ describe('builtin generator workflow', () => {
       exceptionRate: 0
     }));
     for (const [index, probeShard, probeScenarioCount] of [
-      [3, 'mmio', 26], [4, 'timer', 10], [5, 'priority', 14], [6, 'mdu', 18], [7, 'hazard', 21]
+      [3, 'mmio', 26], [4, 'timer', 10], [5, 'mdu', 10], [6, 'hazard', 11],
+      [12, 'special-priority', 14], [13, 'special-mdu', 12], [14, 'special-hazard', 10]
     ] as const) {
       expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(index, expect.objectContaining({
         p7StressMode: 'probe', probeShard, probeScenarioCount, exceptionRate: 0
@@ -316,6 +317,17 @@ describe('builtin generator workflow', () => {
         'source.seed': 'timer-probe-seed',
         'source.mode': 'probe',
         'source.probeShard': 'timer'
+      })
+    }));
+    for (const [offset, probeReturnVariant] of ['direct', 'load-jr', 'branch-delay', 'jal-delay', 'mdu'].entries()) {
+      expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(7 + offset, expect.objectContaining({
+        p7StressMode: 'probe', probeShard: 'return', probeReturnVariant, probeScenarioCount: 2
+      }));
+    }
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(13, expect.anything(), expect.anything(), expect.objectContaining({
+      metadata: expect.objectContaining({
+        'source.probeShard': 'special-priority',
+        'source.probeScope': 'special-timer-exl'
       })
     }));
   });

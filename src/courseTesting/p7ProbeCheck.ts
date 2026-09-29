@@ -1,5 +1,6 @@
 import { CpuTraceEvent } from '../language/mips/traceParser';
 import { P7ProbeExpectedRecord, P7ProbeMetadata, P7ProbeScenario } from './builtinAsmGenerator';
+import { checkP7ReturnProbe } from './p7ReturnCheck';
 import {
   p7CauseExcCodeMask,
   p7ExcCodeAdel,
@@ -55,9 +56,22 @@ export interface P7ProbeCheckResult {
   records: P7ProbeRecord[];
   failures: P7ProbeFailure[];
   diagnostics: string[];
+  coverage?: Array<{ covered: boolean; message: string }>;
 }
 
 export function checkP7Probe(
+  simOutput: string,
+  simEvents: readonly CpuTraceEvent[],
+  metadata: P7ProbeMetadata
+): P7ProbeCheckResult {
+  if (metadata.returnBoundary) {
+    return checkP7ReturnProbe(simOutput, simEvents, metadata,
+      activeMetadata => checkProbeRecords(simOutput, simEvents, activeMetadata));
+  }
+  return checkProbeRecords(simOutput, simEvents, metadata);
+}
+
+function checkProbeRecords(
   simOutput: string,
   simEvents: readonly CpuTraceEvent[],
   metadata: P7ProbeMetadata

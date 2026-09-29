@@ -11,6 +11,9 @@ import {
   isManifestV2,
   manifestSourceOf
 } from './courseTesting/manifestCodec';
+import { manifestP7Of } from './courseTesting/manifestCodec';
+import { probeScopeFromCase, specialTimerExlNotice } from './courseTesting/p7ProbeScope';
+import type { P7ProbeScope } from './courseTesting/builtinAsm/types';
 import { html, renderBadge, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
 import {
   normalizeVerilogSimulationFailure,
@@ -60,6 +63,8 @@ export interface CourseTraceCaseResult {
   cancelled?: true;
   stage: CourseTraceStage;
   message: string;
+  /** Evidence scope of a P7 probe, retained even when execution fails before checking. */
+  probeScope?: P7ProbeScope;
   machineCode?: string;
   oracleOut?: string;
   dutOut?: string;
@@ -246,6 +251,7 @@ export function publicAutomaticCourseTraceCaseResult(
       dutFailure: normalizeVerilogSimulationFailure(neutral.dutFailure)
     } : {}),
     message: publicAutomaticDiagnosticMessage(neutral),
+    ...(neutral.probeScope ? { probeScope: neutral.probeScope } : {}),
     ...(neutral.firstDiffIndex === undefined ? {} : { firstDiffIndex: neutral.firstDiffIndex }),
     ...(neutral.firstDiff ? { firstDiff: neutral.firstDiff } : {}),
     ...(neutral.probe ? {
@@ -253,7 +259,8 @@ export function publicAutomaticCourseTraceCaseResult(
         passed: neutral.probe.passed,
         records: [],
         failures: neutral.probe.failures,
-        diagnostics: []
+        diagnostics: [],
+        ...(probeCoverage(neutral.probe).length ? { coverage: probeCoverage(neutral.probe) } : {})
       }
     } : {})
   };
@@ -284,7 +291,15 @@ export function publicContinuousTraceReport(report: ContinuousTraceReport): Cont
 
 /** Stable, path-free diagnosis shown by every public automatic-test surface. */
 export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): string {
+  const message = baseAutomaticDiagnosticMessage(item);
+  return item.probeScope === 'special-timer-exl' ? `${message}。${specialTimerExlNotice}` : message;
+}
+
+function baseAutomaticDiagnosticMessage(item: CourseTraceCaseResult): string {
   if (item.cancelled) return '[AUTO-STOPPED] 测试已停止';
+  if (item.status === 'error' && uncoveredProbeCoverage(item.probe).length) {
+    return '[AUTO-COVERAGE] 未覆盖：返回后中断触发窗口未观测，无法判定';
+  }
   if (item.status === 'passed') return '通过';
   if (item.status === 'failed') {
     return item.probe
@@ -338,7 +353,8 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
       className: iteration.status,
       cells: [
         String(iteration.index),
-        renderBadge(continuousStatusLabel(iteration.status), statusTone(iteration.status)),
+        renderBadge(firstProblem && uncoveredProbeCoverage(firstProblem.probe).length
+          ? '未覆盖' : continuousStatusLabel(iteration.status), statusTone(iteration.status)),
         String(iteration.summary.total),
         String(iteration.summary.passed),
         String(iteration.summary.failed),
@@ -406,14 +422,21 @@ function continuousStatusLabel(status: ContinuousRunStatus): string {
 }
 
 function renderContinuousFirstProblem(item: CourseTraceCaseResult): SafeHtml {
+  const scopeNotice = item.probeScope === 'special-timer-exl'
+    ? html.raw(`<div class="notice">${html.text(specialTimerExlNotice)}</div>`)
+    : html.raw('');
   const probeFailure = item.probe?.failures[0];
   if (probeFailure) {
-    return html.raw(`<div>${html.text(probeFailure.kind)}: ${html.text(probeFailure.message)}</div>`);
+    return html.raw(`<div>${html.text(probeFailure.kind)}: ${html.text(probeFailure.message)}</div>${scopeNotice}`);
+  }
+  const uncovered = uncoveredProbeCoverage(item.probe);
+  if (uncovered.length) {
+    return html.raw(`<div>未覆盖：${html.text(uncovered[0].message)}</div>${scopeNotice}`);
   }
   if (item.firstDiff) {
-    return renderFirstDiffSummary(item);
+    return html.raw(`${renderFirstDiffSummary(item)}${scopeNotice}`);
   }
-  return html.text(publicAutomaticDiagnosticMessage(item));
+  return html.raw(`${html.text(baseAutomaticDiagnosticMessage(item))}${scopeNotice}`);
 }
 
 export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
@@ -422,12 +445,20 @@ export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
     const metadata = isManifestV2(manifest) ? manifest.metadata : undefined;
     const outcome = metadata?.['test.status'];
     const diagnostic = metadata?.['test.diagnostic'];
+    const uncovered = outcome === 'error' && diagnostic?.startsWith('[AUTO-COVERAGE]');
+    const scope = probeScopeFromCase(manifestP7Of(manifest)?.probe, metadata);
+    const scopeNotice = scope === 'special-timer-exl'
+      ? html.raw(`<div class="notice">${html.text(specialTimerExlNotice)}</div>`)
+      : html.raw('');
+    const conciseDiagnostic = scope === 'special-timer-exl' && diagnostic?.endsWith(specialTimerExlNotice)
+      ? diagnostic.slice(0, -specialTimerExlNotice.length).replace(/。$/, '') : diagnostic;
     return {
       className: outcome === 'passed' || outcome === 'failed' || outcome === 'error' ? outcome : 'saved',
       cells: [
-        renderBadge(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : outcome === 'error' ? '错误' : '已保存', statusTone(outcome)),
+        renderBadge(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : uncovered ? '未覆盖'
+          : outcome === 'error' ? '错误' : '已保存', statusTone(outcome)),
         html.code(manifest.caseId),
-        escapeHtml(diagnostic ?? '—'),
+        html.raw(`${html.text(conciseDiagnostic ?? '—')}${scopeNotice}`),
         escapeHtml(manifest.profile),
         escapeHtml(automatic ? '自动测试' : '手动测试'),
         renderCreatedAt(manifest.createdAt)
@@ -513,7 +544,20 @@ function renderProbeDetails(probe: P7ProbeCheckResult): SafeHtml {
   const records = probe.records.slice(0, 5).map((record) =>
     `<div><code>#${html.text(record.scenarioId)}: Cause=0x${html.text((record.cause >>> 0).toString(16))} EPC=0x${html.text((record.epc >>> 0).toString(16))} aux0=0x${html.text((record.aux0 >>> 0).toString(16))}</code></div>`
   );
-  return html.raw([...failures, ...records].join(''));
+  const coverage = probeCoverage(probe).map((entry) =>
+    `<div>${entry.covered ? '已覆盖' : '未覆盖'}：${html.text(entry.message)}</div>`
+  );
+  return html.raw([...coverage, ...failures, ...records].join(''));
+}
+
+function probeCoverage(probe: P7ProbeCheckResult | undefined): Array<{ covered: boolean; message: string }> {
+  const entries = probe?.coverage;
+  return Array.isArray(entries) ? entries : [];
+}
+
+function uncoveredProbeCoverage(probe: P7ProbeCheckResult | undefined): Array<{ covered: boolean; message: string }> {
+  if (probe?.failures.length) return [];
+  return probeCoverage(probe).filter((entry) => !entry.covered);
 }
 
 function traceEventSummary(event: TraceEventSnapshot | undefined): string {

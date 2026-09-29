@@ -3,6 +3,7 @@ import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenera
 import { ProgramWriter } from '../../courseTesting/builtinAsm/programWriter';
 import { P7ProbeCommitExpectation, P7ProbeMetadata, P7ProbeScenario } from '../../courseTesting/builtinAsm/types';
 import { emitInterruptMduScenario } from '../../courseTesting/builtinAsm/p7/probeMduScenarios';
+import { olderMduVariants } from '../../courseTesting/builtinAsm/p7/probeMduOperations';
 import { emitClearTimers, emitStoreImmediate } from '../../courseTesting/builtinAsm/p7/probeAsm';
 import {
   p7ProbeKindExternal,
@@ -37,40 +38,47 @@ const cases = (['external', 'timer0', 'timer1'] as const)
   .flatMap((kind) => vectors.map((vector) => ({ kind, ...vector })));
 
 describe('P7 interrupt MDU probes', () => {
-  it('completes the automatic MDU shard with all 18 source/operation combinations', () => {
-    const generated = generateBuiltinAsmTestCase({
-      profile: 'P7', instructionText: '', instructionCount: 1118,
-      seed: 'mdu-full-shard', p7StressMode: 'probe', probeShard: 'mdu',
-      probeScenarioCount: 18, interrupt: true, timerInterrupt: true
-    });
-    expect(generated.probe!.scenarios.map((scenario) => `${scenario.kind}/${scenario.variant}`).sort())
-      .toEqual(cases.map(({ kind, operation }) => `${kind}/mdu-retry-${operation}`).sort());
-    expect(0x3000 + generated.instructionCount * 4).toBeLessThanOrEqual(0x4180);
-    const assembled = assembleCourseSource({ id: 'mdu-shard', text: generated.text }, { profile: 'P7' });
-    expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
-    const executed = executeProgramForService({
-      profile: 'P7',
-      segments: assembled.image!.segments,
-      entryPc: assembled.image!.entryPc,
-      haltPc: 0x3000 + (generated.instructionCount - 2) * 4,
-      maxSteps: 8_000,
-      enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
-      externalInterrupts: generated.probe!.scenarios.filter((scenario) => scenario.kind === 'external')
-        .map((scenario) => ({ victimPc: scenario.victimPc!, occurrence: 1 })),
-      deviceSchedule: {
-        kind: 'timeline',
-        entries: Array.from({ length: 8_000 }, (_, afterInstruction) => ({
-          afterInstruction, cycles: [1, 5, 2, 3][afterInstruction % 4]
-        }))
-      },
-      collectTrace: true
-    });
-    expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
-    const diagnostics = generated.probe!.scenarios.flatMap(externalDiagnostics);
-    const trace = [...diagnostics, ...(executed.trace ?? [])].join('\n');
-    const checked = checkP7Probe(trace, parseSimOutput(trace), generated.probe!);
-    expect(checked.failures).toEqual([]);
-    expect(checked.records).toHaveLength(18);
+  it('completes ordinary and special MDU shards with all 22 registered combinations', () => {
+    const covered: string[] = [];
+    for (const [shard, count] of [['mdu', 10], ['special-mdu', 12]] as const) {
+      const generated = generateBuiltinAsmTestCase({
+        profile: 'P7', instructionText: '', instructionCount: 1118,
+        seed: `mdu-full-${shard}`, p7StressMode: 'probe', probeShard: shard,
+        probeScenarioCount: count, interrupt: true, timerInterrupt: true
+      });
+      covered.push(...generated.probe!.scenarios.map((scenario) => `${scenario.kind}/${scenario.variant}`));
+      expect(generated.probe!.scope).toBe(shard === 'special-mdu' ? 'special-timer-exl' : 'standard');
+      expect(0x3000 + generated.instructionCount * 4).toBeLessThanOrEqual(0x4180);
+      const assembled = assembleCourseSource({ id: `mdu-${shard}`, text: generated.text }, { profile: 'P7' });
+      expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
+      const executed = executeProgramForService({
+        profile: 'P7',
+        segments: assembled.image!.segments,
+        entryPc: assembled.image!.entryPc,
+        haltPc: 0x3000 + (generated.instructionCount - 2) * 4,
+        maxSteps: 8_000,
+        enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+        externalInterrupts: generated.probe!.scenarios.filter((scenario) => scenario.kind === 'external')
+          .map((scenario) => ({ victimPc: scenario.victimPc!, occurrence: 1 })),
+        deviceSchedule: {
+          kind: 'timeline',
+          entries: Array.from({ length: 8_000 }, (_, afterInstruction) => ({
+            afterInstruction, cycles: [1, 5, 2, 3][afterInstruction % 4]
+          }))
+        },
+        collectTrace: true
+      });
+      expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
+      const diagnostics = generated.probe!.scenarios.flatMap(externalDiagnostics);
+      const trace = [...diagnostics, ...(executed.trace ?? [])].join('\n');
+      const checked = checkP7Probe(trace, parseSimOutput(trace), generated.probe!);
+      expect(checked.failures).toEqual([]);
+      expect(checked.records).toHaveLength(count);
+    }
+    expect(covered.sort()).toEqual([
+      ...cases.map(({ kind, operation }) => `${kind}/mdu-retry-${operation}`),
+      ...olderMduVariants.map((variant) => `external/${variant}`)
+    ].sort());
   });
 
   it.each(cases)('runs $kind/$operation through interrupt entry and exact EPC retry', ({ kind, operation, hi, lo }) => {

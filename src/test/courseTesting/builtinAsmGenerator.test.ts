@@ -994,7 +994,7 @@ describe('built-in ASM generator', () => {
           /lw \$12, 0x7f(?:08|18)\(\$0\)[\s\S]*sltu \$13, \$10, \$12[\s\S]*addi \$11, \$11, 1[\s\S]*bne \$11, \$14, _co_probe_s\d+_mode1_poll/
         );
         expect(block).toMatch(
-          /ori \$14, \$0, 16[\s\S]*sltu \$13, \$12, \$14[\s\S]*mfc0 \$15, \$13[\s\S]*andi \$15, \$15, 0x(?:400|800)[\s\S]*sw \$15, 0x27dc\(\$0\)/
+          /ori \$14, \$0, 0x2\s*\n\s*sw \$14, 0x7f(?:00|10)\(\$0\)[\s\S]*lw \$10, 0x7f(?:08|18)\(\$0\)[\s\S]*lw \$12, 0x7f(?:08|18)\(\$0\)[\s\S]*bne \$10, \$12, _co_probe_s\d+_bad_mode1_period[\s\S]*ori \$14, \$0, 0xa\s*\n\s*sw \$14, 0x7f(?:00|10)\(\$0\)[\s\S]*_mode1_clear_ip:[\s\S]*mfc0 \$15, \$13[\s\S]*andi \$15, \$15, 0x(?:400|800)[\s\S]*bne \$15, \$0, _co_probe_s\d+_mode1_clear_ip[\s\S]*mfc0 \$15, \$13[\s\S]*andi \$15, \$15, 0x(?:400|800)[\s\S]*sw \$15, 0x27dc\(\$0\)[\s\S]*ori \$14, \$0, 0xb\s*\n\s*sw \$14, 0x7f(?:00|10)\(\$0\)/
         );
       }
       const reload = timers.find((item) => item.variant === 'disable-reload');
@@ -1199,28 +1199,29 @@ describe('built-in ASM generator', () => {
     const assembled = assembleCourseSource({ id: 'probe', text: result.text }, { profile: 'P7' });
     expect(assembled.ok, assembled.diagnostics.map((item) => item.message).join('\n')).toBe(true);
     const haltPc = p7UserTextBaseAddress + (result.instructionCount - 2) * 4;
-    const deviceTimeline = Array.from({ length: 5_000 }, (_, afterInstruction) => ({
-      afterInstruction,
-      cycles: 1
-    }));
-    const executed = executeProgramForService({
-      profile: 'P7',
-      segments: assembled.image!.segments,
-      entryPc: assembled.image!.entryPc,
-      haltPc,
-      maxSteps: deviceTimeline.length,
-      enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
-      deviceSchedule: { kind: 'timeline', entries: deviceTimeline },
-      collectTrace: true
-    });
-    const trace = (executed.trace ?? []).join('\n');
-    const checked = checkP7Probe(trace, parseSimOutput(trace), result.probe!);
+    for (const cycles of [1, 2, 3]) {
+      const deviceTimeline = Array.from({ length: 5_000 }, (_, afterInstruction) => ({
+        afterInstruction, cycles
+      }));
+      const executed = executeProgramForService({
+        profile: 'P7',
+        segments: assembled.image!.segments,
+        entryPc: assembled.image!.entryPc,
+        haltPc,
+        maxSteps: deviceTimeline.length,
+        enabledLayers: ['required', 'commonExtensions', 'marsCompatibility'],
+        deviceSchedule: { kind: 'timeline', entries: deviceTimeline },
+        collectTrace: true
+      });
+      const trace = (executed.trace ?? []).join('\n');
+      const checked = checkP7Probe(trace, parseSimOutput(trace), result.probe!);
 
-    expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
-    expect(checked.failures).toEqual([]);
-    expect(checked.records).toHaveLength(10);
-    expect((executed.trace ?? []).filter((line) => line.includes('*000027DC <= 000071'))).toHaveLength(2);
-    expect(trace).not.toContain('BAD10001');
+      expect(executed, `cycles=${cycles}`).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
+      expect(checked.failures, `cycles=${cycles}`).toEqual([]);
+      expect(checked.records, `cycles=${cycles}`).toHaveLength(10);
+      expect((executed.trace ?? []).filter((line) => line.includes('*000027DC <= 000071'))).toHaveLength(2);
+      expect(trace).not.toContain('BAD10001');
+    }
   });
 });
 

@@ -5,10 +5,10 @@ import { parseSimOutput } from '../../language/verilog/traceParser';
 import { assembleCourseSource } from '../../mips/core/assembler/assembler';
 import { executeProgramForService } from '../../mips/core/machine/executeService';
 
-function hazardProgram(seed = 'p7-hazard-architectural-contract') {
+function hazardProgram(shard: 'hazard' | 'special-hazard', seed = 'p7-hazard-architectural-contract') {
   return generateBuiltinAsmTestCase({
     profile: 'P7', instructionText: '', instructionCount: 1118, seed,
-    p7StressMode: 'probe', probeShard: 'hazard', probeScenarioCount: 21,
+    p7StressMode: 'probe', probeShard: shard, probeScenarioCount: shard === 'hazard' ? 11 : 10,
     interrupt: true, timerInterrupt: true
   });
 }
@@ -38,17 +38,18 @@ function executeProbe(program: ReturnType<typeof hazardProgram>, cyclesAt: (step
   return { executed, diagnostics, events: parseSimOutput(executed.trace!.join('\n')) };
 }
 
-describe('P7 hazards through precise exceptions and interrupt replay', () => {
-  it('executes all 21 scenarios under different timer cadences with exact older/retry commits', () => {
-    const program = hazardProgram();
-    expect(program.probe!.scenarios).toHaveLength(21);
+describe.each(['hazard', 'special-hazard'] as const)('P7 hazards through precise exceptions and interrupt replay (%s)', shard => {
+  it('executes every registered scenario under different timer cadences with exact older/retry commits', () => {
+    const program = hazardProgram(shard);
+    const scenarioCount = shard === 'hazard' ? 11 : 10;
+    expect(program.probe!.scenarios).toHaveLength(scenarioCount);
     expect(0x3000 + program.instructionCount * 4).toBeLessThanOrEqual(0x4180);
     for (const cyclesAt of [() => 1, () => 3, (step: number) => [1, 7, 2, 11][step % 4]]) {
       const { executed, diagnostics, events } = executeProbe(program, cyclesAt);
       expect(executed).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
       const checked = checkP7Probe(diagnostics, events, program.probe!);
       expect(checked.failures).toEqual([]);
-      expect(checked.records).toHaveLength(21);
+      expect(checked.records).toHaveLength(scenarioCount);
       for (const scenario of program.probe!.scenarios) {
         const record = checked.records.find((item) => item.scenarioId === scenario.id)!;
         expect(record.epc).toBe(scenario.allowedEpc[0]);
@@ -58,7 +59,7 @@ describe('P7 hazards through precise exceptions and interrupt replay', () => {
   });
 
   it('rejects every missing, duplicate, or incorrect older/retried write', () => {
-    const program = hazardProgram();
+    const program = hazardProgram(shard);
     const { diagnostics, events } = executeProbe(program, () => 1);
     for (const scenario of program.probe!.scenarios) {
       for (const expected of [...scenario.requiredPreHandlerCommits!, ...(scenario.requiredCommits ?? [])]) {
@@ -75,7 +76,7 @@ describe('P7 hazards through precise exceptions and interrupt replay', () => {
   });
 
   it('rejects younger and wrong-path writes even when a later write repairs memory', () => {
-    const program = hazardProgram();
+    const program = hazardProgram(shard);
     const { diagnostics, events } = executeProbe(program, () => 1);
     for (const scenario of program.probe!.scenarios) {
       for (const pc of scenario.forbiddenCommitPcs ?? []) {
@@ -91,7 +92,7 @@ describe('P7 hazards through precise exceptions and interrupt replay', () => {
   });
 
   it('rejects older writes interleaved with the handler record', () => {
-    const program = hazardProgram();
+    const program = hazardProgram(shard);
     const { diagnostics, events } = executeProbe(program, () => 1);
     const records = checkP7Probe(diagnostics, events, program.probe!).records;
     for (const scenario of program.probe!.scenarios) {
@@ -106,7 +107,7 @@ describe('P7 hazards through precise exceptions and interrupt replay', () => {
   });
 
   it('rejects lost delay-slot BD/EPC and victim writes before the handler', () => {
-    const program = hazardProgram();
+    const program = hazardProgram(shard);
     const { diagnostics, events } = executeProbe(program, () => 1);
     for (const scenario of program.probe!.scenarios.filter((item) => item.expectedBd)) {
       const recordBase = program.probe!.logBase + program.probe!.scenarios.indexOf(scenario) * 32;

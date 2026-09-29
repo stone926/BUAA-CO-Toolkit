@@ -3,6 +3,7 @@ import { URI } from 'vscode-uri';
 import type { AppServices } from '../types';
 import type { ContinuousGeneratedTraceDependencies } from '../courseTestContinuous';
 import type { CourseTraceCaseResult } from '../courseTestReport';
+import type { AsmCaseManifestUnion } from '../courseTesting/manifestCodec';
 
 const vscodeMocks = vi.hoisted(() => ({
   disposeListeners: [] as Array<() => void>,
@@ -126,6 +127,7 @@ interface TestAsmCase {
   id: string;
   manifestUri: URI;
   asm: URI;
+  manifest?: AsmCaseManifestUnion;
 }
 
 interface TestRunOptions {
@@ -383,6 +385,33 @@ describe('continuous generated trace orchestration', () => {
     expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalledWith(
       asmCase.manifestUri.fsPath,
       expect.any(String)
+    );
+  });
+
+  it('retains special probe scope after a runner tool error before probe checking', async () => {
+    const asmCase: TestAsmCase = {
+      ...testAsmCase('special-tool-error'),
+      manifest: {
+        version: 1, caseId: 'special-tool-error', createdAt: new Date(0).toISOString(), profile: 'P7',
+        originalAsmPath: 'special.asm', asmSnapshot: { path: 'program.asm', sha256: '0'.repeat(64), bytes: 0 },
+        source: { kind: 'builtin' },
+        p7: { probe: { version: 1, scope: 'special-timer-exl', logBase: 0x2800, recordWords: 8, scenarios: [] } }
+      }
+    };
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: [asmCase.asm], source: { kind: 'generator' as const }, asmCases: [asmCase]
+      })),
+      expandTraceCases: vi.fn(async () => [{ asm: asmCase.asm, asmCase }]),
+      runCourseTraceCase: vi.fn(async () => ({
+        asm: asmCase.asm.fsPath, status: 'error' as const, stage: 'dut' as const,
+        message: 'Icarus failed'
+      }))
+    });
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+    expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(
+      asmCase.manifestUri.fsPath,
+      expect.objectContaining({ diagnostic: expect.stringContaining('单凭此场景失败，不能判定课程 CPU 不合格') })
     );
   });
 

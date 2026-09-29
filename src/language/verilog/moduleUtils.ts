@@ -11,6 +11,7 @@ import {
 import { getVerilogTestbenchConfig } from '../../courseConfig';
 import { renderResourceTemplate } from '../../templates/templateRegistry';
 import { VerilogDecl, VerilogModule } from './model';
+import { buildP7ReturnInterruptBlock } from './p7ReturnTestbench';
 
 const {
   externalInstructionMemoryWords: courseExternalInstructionMemoryWords,
@@ -34,6 +35,7 @@ interface TestbenchOptions {
 }
 
 interface P7ProbeTestbenchMetadata {
+  returnBoundary?: { variant: string; ackPc: number };
   scenarios: Array<{
     id: number;
     kind: string;
@@ -43,6 +45,7 @@ interface P7ProbeTestbenchMetadata {
     armValue?: number;
     externalDelayCycles?: number;
     victimPc?: number;
+    afterReturnOf?: { scenarioId: number; eretPc: number };
   }>;
 }
 
@@ -248,6 +251,7 @@ function p7InterruptBlock(interruptSchedule?: number[]): string {
 }
 
 function p7ProbeBlock(probe: P7ProbeTestbenchMetadata): string {
+  if (probe.returnBoundary) return buildP7ReturnInterruptBlock(probe.scenarios, probe.returnBoundary.ackPc);
   const externalScenarios = probe.scenarios.filter((scenario) =>
     scenario.kind === 'external' && Number.isFinite(scenario.triggerPc ?? scenario.waitPc));
   const externalScenarioViews = externalScenarios.map((scenario, index) => p7ExternalScenarioView(scenario, index));

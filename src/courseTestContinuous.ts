@@ -47,6 +47,9 @@ import {
   type ContinuousAutomaticTestPolicy
 } from './courseTesting/automaticTestPolicy';
 import { tryAcquireCourseTestSession } from './courseTesting/courseTestSession';
+import { manifestP7Of } from './courseTesting/manifestCodec';
+import type { AsmCaseManifestUnion } from './courseTesting/manifestCodec';
+import { probeScopeFromCase } from './courseTesting/p7ProbeScope';
 
 interface ContinuousTraceSession {
   id: string;
@@ -68,6 +71,7 @@ interface ContinuousTraceCaseLike {
     id: string;
     manifestUri: vscode.Uri;
     asm: vscode.Uri;
+    manifest?: AsmCaseManifestUnion;
   };
 }
 
@@ -340,6 +344,13 @@ export async function startContinuousGeneratedTraceTests<
               };
             }
             result = neutralCourseTraceCaseResult(result);
+            const caseProbeScope = item.asmCase?.manifest
+              ? probeScopeFromCase(manifestP7Of(item.asmCase.manifest)?.probe,
+                'metadata' in item.asmCase.manifest ? item.asmCase.manifest.metadata : undefined)
+              : undefined;
+            if (caseProbeScope) {
+              result = { ...result, probeScope: caseProbeScope };
+            }
             const resolvedManifestPath = result.caseManifest ?? item.asmCase?.manifestUri.fsPath;
             if (!result.caseManifest && resolvedManifestPath) {
               result = { ...result, caseManifest: resolvedManifestPath };

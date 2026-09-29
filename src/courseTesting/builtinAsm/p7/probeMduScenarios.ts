@@ -24,7 +24,7 @@ import {
   pendingTimerReleaseInstructionCount
 } from './probePriorityScenarios';
 import { expectedIpMask, scenarioWithLocations } from './probeScenarios';
-import { interruptMduVariants, MduOperation } from './probeMduOperations';
+import { interruptMduVariants, MduOperation, olderMduVariants } from './probeMduOperations';
 
 export { interruptMduVariants } from './probeMduOperations';
 
@@ -38,6 +38,94 @@ const resultLoAddress = 0x0624;
 
 export function isInterruptMduVariant(variant: string | undefined): boolean {
   return variant !== undefined && interruptMduVariants.includes(variant);
+}
+
+export function isOlderMduVariant(variant: string | undefined): variant is typeof olderMduVariants[number] {
+  return variant !== undefined && (olderMduVariants as readonly string[]).includes(variant);
+}
+
+/**
+ * Real external interrupt of a younger HI/LO reader. The MDU instruction is
+ * older than the victim and must not be replayed or cancelled by the handler.
+ * This observes the final architectural pair without requiring an internal
+ * busy-cycle alignment that the course does not expose.
+ */
+export function emitOlderMduScenario(
+  writer: ProgramWriter,
+  id: number,
+  variant: typeof olderMduVariants[number],
+  rng: Random,
+  padding: ProbePaddingProfile
+): P7ProbeScenario {
+  const operation: 'mult' | 'div' = variant.includes('-mult-') ? 'mult' : 'div';
+  const delaySlot = variant.endsWith('-branch-delay');
+  const finalPair = finalHiLo(operation);
+  emitDisableInterrupts(writer);
+  emitStoreImmediate(writer, p7ProbeFlagRecordHiLo | p7ProbeFlagRetryInterruptEpc, p7ProbeStateFlags);
+  emitLoadImmediate(writer, '$8', initialHi);
+  writer.emit('mthi $8');
+  emitLoadImmediate(writer, '$8', initialLo);
+  writer.emit('mtlo $8');
+  const requiredPreHandlerCommits: P7ProbeCommitExpectation[] = [];
+  recordRead(writer, 'mfhi', 14, initialHi, requiredPreHandlerCommits);
+  recordRead(writer, 'mflo', 15, initialLo, requiredPreHandlerCommits);
+  emitLoadImmediate(writer, '$8', operand);
+  emitLoadImmediate(writer, '$9', 3);
+
+  // done-PC and arm each use ORI+SW, enabling SR uses ORI+MTC0.
+  // The victim sequence has 5 instructions directly, or 7 with a branch
+  // and an unreachable wrong-path store.
+  const donePc = writer.pc() + (6 + (delaySlot ? 7 : 5)) * 4;
+  emitStoreImmediate(writer, donePc, p7ProbeStateDonePc);
+  emitStoreImmediate(writer, id, p7ProbeExternalArmAddress);
+  emitEnableInterrupts(writer);
+  writer.emit(`${operation} $8, $9`);
+  const branchPc = delaySlot ? writer.pc() : undefined;
+  if (delaySlot) writer.emit(`beq $0, $0, _co_probe_s${id}_after_branch`);
+  const victimPc = writer.pc();
+  const requiredCommits: P7ProbeCommitExpectation[] = [];
+  recordRead(writer, 'mflo', 10, finalPair[1], requiredCommits);
+  let forbiddenCommitPcs: number[] | undefined;
+  if (delaySlot) {
+    forbiddenCommitPcs = [writer.pc()];
+    writer.emit('sw $0, 0x628($0)');
+    writer.label(`_co_probe_s${id}_after_branch`);
+  }
+  recordRead(writer, 'mfhi', 11, finalPair[0], requiredCommits);
+  recordStore(writer, 10, resultLoAddress, finalPair[1], requiredCommits);
+  recordStore(writer, 11, resultHiAddress, finalPair[0], requiredCommits);
+  if (writer.pc() !== donePc) {
+    throw new BuiltinAsmGeneratorError(`Internal generator error: P7 older-MDU scenario ${id} done PC was miscalculated.`);
+  }
+  writer.label(`_co_probe_s${id}_done`);
+  writer.emit(`ori $1, $0, ${id}`);
+  emitPadding(writer, rng, padding.postMin, padding.postMax);
+
+  const expectedBd = delaySlot;
+  const epc = branchPc ?? victimPc;
+  return {
+    ...scenarioWithLocations(id, 'external', epc, donePc),
+    variant,
+    victimPc,
+    triggerPc: victimPc,
+    expectedBd,
+    allowedEpc: [epc],
+    armAddress: p7ProbeExternalArmAddress,
+    armValue: id,
+    externalDelayCycles: 0,
+    expectedRecords: [{
+      expectedIpMask: expectedIpMask('external'),
+      expectedExcCode: 0,
+      expectedBd,
+      allowedEpc: [epc],
+      allowedAuxPairs: [finalPair],
+      auxPairDescription: `${operation} completed older than the interrupted mflo`
+    }],
+    requiredPreHandlerCommits,
+    requiredCommits,
+    ...(forbiddenCommitPcs ? { forbiddenCommitPcs } : {}),
+    requireCompletion: true
+  };
 }
 
 export function emitInterruptMduScenario(

@@ -49,6 +49,55 @@ describe('course test reports', () => {
     })).toBe('[AUTO-INTERNAL] 自动测试内部流程未完成；请使用复现编号定位');
   });
 
+  it('keeps a special probe error and its course-scope notice visible in JSON and monitor', () => {
+    const result: CourseTraceCaseResult = {
+      asm: 'hidden.asm', status: 'error', stage: 'dut', message: 'tool failed',
+      probeScope: 'special-timer-exl'
+    };
+    const publicResult = publicAutomaticCourseTraceCaseResult(result, 0);
+    expect(publicResult.status).toBe('error');
+    expect(publicResult.probeScope).toBe('special-timer-exl');
+    expect(publicResult.message).toContain('单凭此场景失败，不能判定课程 CPU 不合格');
+    const rendered = renderContinuousTraceMonitor({
+      generatedAt: '2026-09-29T00:00:00.000Z', running: false, stopRequested: false,
+      iterations: [{ index: 1, status: 'error', startedAt: '',
+        summary: { total: 1, passed: 0, failed: 0, errors: 1 }, results: [result] }]
+    }, { fsPath: 'report.json' } as never);
+    expect(rendered).toContain('特殊压力场景');
+    expect(rendered).toContain('软件构造 EXL/EPC');
+  });
+
+  it('shows an unobserved return window as uncovered rather than a CPU failure', () => {
+    const result: CourseTraceCaseResult = {
+      asm: 'hidden.asm', status: 'error', stage: 'probe', message: 'private',
+      probe: { passed: false, failures: [], diagnostics: [], records: [],
+        coverage: [{ covered: false, message: '未观察到 eret 后恢复边界' }] }
+    };
+    const publicResult = publicAutomaticCourseTraceCaseResult(result, 0);
+    expect(publicResult.status).toBe('error');
+    expect(publicResult.message).toContain('未覆盖');
+    expect(JSON.stringify(publicResult.probe)).toContain('未观察到 eret 后恢复边界');
+    const rendered = renderContinuousTraceMonitor({
+      generatedAt: '2026-09-29T00:00:00.000Z', running: false, stopRequested: false,
+      iterations: [{ index: 1, status: 'error', startedAt: '',
+        summary: { total: 1, passed: 0, failed: 0, errors: 1 }, results: [result] }]
+    }, { fsPath: 'report.json' } as never);
+    expect(rendered).toContain('未覆盖');
+    expect(rendered).toContain('未观察到 eret 后恢复边界');
+    const failed: CourseTraceCaseResult = {
+      ...result, status: 'failed', probe: { ...result.probe!, failures: [
+        { scenarioId: 1, kind: 'return-boundary', message: 'startup was replayed' }
+      ] }
+    };
+    const withFailure = renderContinuousTraceMonitor({
+      generatedAt: '2026-09-29T00:00:00.000Z', running: false, stopRequested: false,
+      iterations: [{ index: 1, status: 'failed', startedAt: '',
+        summary: { total: 1, passed: 0, failed: 1, errors: 0 }, results: [failed] }]
+    }, { fsPath: 'report.json' } as never);
+    expect(withFailure).toContain('startup was replayed');
+    expect(withFailure).not.toContain('未覆盖');
+  });
+
   it('shows a detailed, escaped, and path-safe automatic DUT compile diagnostic', () => {
     const result: CourseTraceCaseResult = {
       asm: 'E:/SECRET/case.asm',

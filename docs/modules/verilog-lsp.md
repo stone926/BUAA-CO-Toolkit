@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 68 files
+# verilog-lsp | src/language/verilog/ | 69 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -11,6 +11,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 - `parser.ts` — LSP 入口：`parseVerilog` 与诊断装配；`moduleDeclarations.ts` 供宿主命令只取模块声明，`parseCore.ts` 供信号视图取得无诊断 AST 与语义模型，两者复用同一次词法解析入口且不加载服务端诊断和 provider
 - `moduleParser.ts` — 薄门面：lexer + astParser
+- `p7ReturnTestbench.ts` — 真实 handler 返回后的公开宏观 PC 历史触发；只用顶层端口，按官方下降沿检查中断应答，兼容 SW 忽略低地址位与未选中 IG 总线
 - `lexer.ts` — 词法：关键字/标识符/数字/字符串/注释/预处理/系统任务/操作符
 - `statementParser.ts` — 语句源切片：module item 与过程块边界
 - `astParser.ts` — 模块、声明、实例、端口连接、generate 结构

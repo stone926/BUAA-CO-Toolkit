@@ -5,6 +5,7 @@ import {
   generateBuiltinAsmTestCase as generateRandomAsmTestCase
 } from './randomBody';
 import { generateP7ProbeAsmTestCase } from './p7/probeEmitter';
+import { generateP7ReturnProbe } from './p7/probeReturnProgram';
 
 export {
   BuiltinAsmGeneratorError,
@@ -35,6 +36,7 @@ export type {
 export function generateBuiltinAsmTestCase(options: BuiltinAsmGeneratorOptions): BuiltinAsmGeneratorResult {
   const mode = options.profile === 'P7' ? (options.p7StressMode ?? 'anchor') : 'off';
   if (mode === 'probe') {
+    if (options.probeShard === 'return') return generateP7ReturnProbe(options);
     return generateP7ProbeAsmTestCase(options);
   }
   if (mode === 'off') {

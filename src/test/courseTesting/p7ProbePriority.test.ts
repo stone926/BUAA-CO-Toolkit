@@ -25,7 +25,7 @@ function timerPriorityProgram() {
     instructionCount: 1118,
     seed: 'p7-priority-course-contract',
     p7StressMode: 'probe',
-    probeShard: 'priority',
+    probeShard: 'special-priority',
     probeScenarioCount: 14,
     timerInterrupt: true,
     interrupt: false

@@ -19,6 +19,9 @@ import {
   type P7StressMode
 } from './builtinAsmGenerator';
 import { automaticProbeShards, probeVariantCount } from './builtinAsm/p7/probeVariants';
+import { automaticReturnVariants } from './builtinAsm/p7/probeReturnProgram';
+import type { P7ProbeReturnVariant } from './builtinAsm/types';
+import { isSpecialTimerExlShard, specialTimerExlNotice } from './p7ProbeScope';
 import { CourseTraceBatchSource } from '../courseTestReport';
 import { workspaceFolderForOrFirst } from '../fsUtil';
 import { revealOutputChannel } from '../process';
@@ -163,6 +166,7 @@ export async function runGeneratorAndCollectAsms(
           timerIntensity: setup.timerIntensity,
           probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
           probeShard: spec.probeShard,
+          probeReturnVariant: spec.probeReturnVariant,
           exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
           exceptionTypes: setup.exceptionTypes
         });
@@ -192,6 +196,10 @@ export async function runGeneratorAndCollectAsms(
           'source.instructionCount': String(generated.instructionCount),
           ...(spec.registerCoverage ? { 'source.coverage': 'gpr' } : {}),
           ...(spec.probeShard ? { 'source.probeShard': spec.probeShard } : {}),
+          ...(spec.probeReturnVariant ? { 'source.returnVariant': spec.probeReturnVariant } : {}),
+          ...(spec.probeShard ? {
+            'source.probeScope': isSpecialTimerExlShard(spec.probeShard) ? 'special-timer-exl' : 'standard'
+          } : {}),
           ...(options.continuous ? {
             'continuous.sessionId': options.continuous.sessionId,
             'continuous.iteration': String(options.continuous.iteration),
@@ -232,6 +240,9 @@ export async function runGeneratorAndCollectAsms(
   }
   services.output.appendLine('');
   services.output.appendLine('自动测试点已准备');
+  if (specs.some((spec) => isSpecialTimerExlShard(spec.probeShard))) {
+    services.output.appendLine(specialTimerExlNotice);
+  }
 
   return {
     asms,
@@ -256,6 +267,7 @@ interface BuiltinGenerationSpec {
   registerCoverage?: boolean;
   probeShard?: P7ProbeShard;
   probeScenarioCount?: number;
+  probeReturnVariant?: P7ProbeReturnVariant;
 }
 
 function builtinGenerationSpecs(setup: BuiltinGeneratorRunSetup): BuiltinGenerationSpec[] {
@@ -277,9 +289,17 @@ function builtinGenerationSpecs(setup: BuiltinGeneratorRunSetup): BuiltinGenerat
       probeScenarioCount: probeShard === 'core' ? Math.max(count, setup.probeScenarioCount) : count
     }] : [];
   });
+  const returnProbes: BuiltinGenerationSpec[] = setup.interrupt ? automaticReturnVariants.map(probeReturnVariant => ({
+    mode: 'probe', probeShard: 'return', probeReturnVariant, probeScenarioCount: 2
+  })) : [];
+  const ordered = [
+    ...probes.filter(spec => !isSpecialTimerExlShard(spec.probeShard)),
+    ...returnProbes,
+    ...probes.filter(spec => isSpecialTimerExlShard(spec.probeShard))
+  ];
   return setup.p7StressMode === 'hybrid'
-    ? [{ mode: 'anchor' }, ...probes]
-    : probes;
+    ? [{ mode: 'anchor' }, ...ordered]
+    : ordered;
 }
 
 function builtinAsmFileName(profile: string, generatedAt: Date): string {
