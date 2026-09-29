@@ -17,13 +17,13 @@ describe('public DM store transaction comparison', () => {
   it('rejects a full-word read-modify-write sb even when the merged memory word is unchanged', () => {
     expect(firstDmStoreDifference([store()],
       'CO_DM_STORE pc=00003000 addr=00000001 byteen=1111 wdata=11111111'
-    )?.reason).toContain('byte-enable 应为 0010');
+    )?.reason).toContain('字节使能应为 0010');
   });
 
   it('rejects a wrong byte address even when equal bytes hide it in the merged word', () => {
     expect(firstDmStoreDifference([store()],
       'CO_DM_STORE pc=00003000 addr=00000002 byteen=0100 wdata=11111111'
-    )?.reason).toContain('byte-enable 应为 0010');
+    )?.reason).toContain('字节使能应为 0010');
   });
 
   it('compares the word address without requiring ignored SW address bits to be zero', () => {
@@ -33,7 +33,7 @@ describe('public DM store transaction comparison', () => {
     )).toBeUndefined();
     expect(firstDmStoreDifference([word],
       'CO_DM_STORE pc=00003000 addr=00000004 byteen=1111 wdata=11111111'
-    )?.reason).toContain('目标 word 应为 0x00000000');
+    )?.reason).toContain('目标字地址应为 0x00000000');
   });
 
   it('uses the explicit word address when irrelevant raw low bits are unknown', () => {
@@ -45,7 +45,7 @@ describe('public DM store transaction comparison', () => {
     )).toBeUndefined();
     expect(firstDmStoreDifference([store()],
       'CO_DM_STORE pc=00003000 addr=0000000x byteen=0010 wdata=11111111'
-    )?.reason).toContain('缺少确定的 word 地址');
+    )?.reason).toContain('缺少确定的字地址');
   });
 
   it.each(['xxxx11xx', 'zzzz11zz', 'abcd11ef'])('accepts arbitrary disabled lanes: %s', (value) => {
@@ -57,7 +57,7 @@ describe('public DM store transaction comparison', () => {
   it.each(['xxxx22xx', 'xxxx1xxx', 'xxxxzzxx'])('rejects incorrect or unknown enabled lanes: %s', (value) => {
     expect(firstDmStoreDifference([store()],
       `CO_DM_STORE pc=00003000 addr=00000001 byteen=0010 wdata=${value}`
-    )?.reason).toContain('有效 byte lane 1');
+    )?.reason).toContain('有效字节通道 1');
   });
 
   it('compares high halfword and partial-word store lanes without imposing unused lane values', () => {

@@ -278,7 +278,7 @@ function planTimerStoreVictim(
   return {
     ...directVictimPlan(instructions),
     timerObservation: observation,
-    auxPairDescription: `Timer${timer} ${register.toUpperCase()} before/after invalid store`,
+    auxPairDescription: `Timer${timer} 非法存储前后的 ${register.toUpperCase()}`,
     requireEqualAuxPair: true,
     ...(expectedValue === undefined ? {} : { allowedAuxPairs: [[expectedValue, expectedValue]] })
   };
@@ -355,7 +355,7 @@ function planYoungerMduVictim(variant: string): InternalExceptionVictimPlan {
     // internal stage at which the operation started. Reject torn/corrupt pairs
     // and require mthi/mtlo to preserve the half they do not modify.
     allowedAuxPairs: [[p7ProbeHiSentinel, p7ProbeLoSentinel], completedPair],
-    auxPairDescription: `${variant.slice(6)} younger HI/LO (unchanged or already started)`
+    auxPairDescription: `${variant.slice(6)} 年轻指令的 HI/LO（未改变或已开始执行）`
   };
 }
 

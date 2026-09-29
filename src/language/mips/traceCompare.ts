@@ -304,10 +304,10 @@ function compareAtIndex(
   options: TraceCompareOptions
 ): TraceDiffEntry {
   if (!mars && sim) {
-    return diffEntry(index, 'dut-only', undefined, sim, 'DUT has an extra event.');
+    return diffEntry(index, 'dut-only', undefined, sim, '待测 CPU 多出一条写回事件。');
   }
   if (mars && !sim) {
-    return diffEntry(index, 'oracle-only', mars, undefined, 'Oracle has an extra event.');
+    return diffEntry(index, 'oracle-only', mars, undefined, '待测 CPU 缺少一条参考结果中的写回事件。');
   }
   if (!mars || !sim) {
     return { index, status: 'ok' };
@@ -318,7 +318,7 @@ function compareAtIndex(
     return diffEntry(index, 'diff', mars, sim, reason);
   }
   if (options.compareCycles && mars.cycle !== sim.cycle) {
-    return diffEntry(index, 'cycle-diff', mars, sim, 'Cycle/time differs.');
+    return diffEntry(index, 'cycle-diff', mars, sim, '周期或时间不一致。');
   }
   return diffEntry(index, 'ok', mars, sim);
 }
@@ -341,16 +341,16 @@ function diffEntry(
 
 function firstSemanticDifference(mars: CpuTraceEvent, sim: CpuTraceEvent): string | undefined {
   if (mars.pc !== sim.pc) {
-    return 'PC differs.';
+    return '指令地址（PC）不一致。';
   }
   if (mars.kind !== sim.kind) {
-    return 'Write target kind differs.';
+    return '写入目标类型不一致（寄存器或存储器）。';
   }
   if (mars.target !== sim.target) {
-    return 'Write target differs.';
+    return '写入目标不一致。';
   }
   if (mars.value !== sim.value) {
-    return 'Write value differs.';
+    return '写入值不一致。';
   }
   return undefined;
 }

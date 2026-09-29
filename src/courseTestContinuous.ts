@@ -586,7 +586,7 @@ async function discardContinuousUnfinishedCases(
     }
   }
   if (refused) {
-    services.output.appendLine('部分未完成测试点未能安全清理，已保留原始 case');
+    services.output.appendLine('部分未完成测试点未能安全清理，已保留原始用例');
   }
 }
 

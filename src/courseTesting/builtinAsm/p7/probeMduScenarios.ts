@@ -119,7 +119,7 @@ export function emitOlderMduScenario(
       expectedBd,
       allowedEpc: [epc],
       allowedAuxPairs: [finalPair],
-      auxPairDescription: `${operation} completed older than the interrupted mflo`
+      auxPairDescription: `${operation} 在被中断的 mflo 之前已完成`
     }],
     requiredPreHandlerCommits,
     requiredCommits,
@@ -205,7 +205,7 @@ export function emitInterruptMduScenario(
       // unsound. Both complete pairs are legal, but torn/corrupt pairs are not.
       // mthi/mtlo also require the untouched half to retain its exact sentinel.
       allowedAuxPairs: [[initialHi, initialLo], finalPair],
-      auxPairDescription: `${operation} interrupt HI/LO (unchanged or already started)`
+      auxPairDescription: `${operation} 中断时的 HI/LO（未改变或已开始执行）`
     }],
     requiredPreHandlerCommits,
     requiredCommits,

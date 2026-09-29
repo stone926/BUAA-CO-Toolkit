@@ -48,7 +48,7 @@ describe('real handler return boundary probes', () => {
     expect(commits).toHaveLength(3);
     expect(checkP7Probe(fixture.diagnostics, fixture.events, metadata).failures).toEqual([]);
     for (const bad of [fixture.events.filter(event => event !== commits[1]), [...fixture.events, commits[0]]]) {
-      expect(checkP7Probe(fixture.diagnostics, bad, metadata).failures.some(f => f.message.includes('jal link'))).toBe(true);
+      expect(checkP7Probe(fixture.diagnostics, bad, metadata).failures.some(f => f.message.includes('jal 链接写入'))).toBe(true);
     }
   });
 
@@ -129,6 +129,6 @@ describe('real handler return boundary probes', () => {
       || (event.kind === 'dm' && parseInt(event.target, 16) === metadata.logBase + 32 + 20)
       ? { ...event, value: donePc.toString(16) } : event);
     const result = checkP7Probe(fixture.diagnostics, corrupted, metadata);
-    expect(result.failures.some(f => f.message.includes('EPC/BD boundary'))).toBe(true);
+    expect(result.failures.some(f => f.message.includes('EPC/BD 边界'))).toBe(true);
   });
 });

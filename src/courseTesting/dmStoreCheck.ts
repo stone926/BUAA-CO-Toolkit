@@ -24,18 +24,18 @@ export function firstDmStoreDifference(
       status: !left ? 'dut-only' : right === undefined ? 'oracle-only' : 'diff',
       reason: `DM 写事务 #${index + 1}${left ? ` (PC=0x${hex8(left.pc)})` : ''}：${reason}`
     });
-    if (!left) return difference('DUT 多出有效写事务');
-    if (right === undefined) return difference('缺少 DUT 原始写事务记录');
+    if (!left) return difference('待测 CPU 多出有效写事务');
+    if (right === undefined) return difference('缺少待测 CPU 的原始写事务记录');
     const fields = /^CO_DM_STORE pc=([0-9a-f]{8}) addr=([0-9a-fxz]{8})(?: word=([0-9a-f]{8}))? byteen=([01]{4}) wdata=([0-9a-fxz]{8})(?: time=\d+)?$/i.exec(right);
     if (!fields) return difference('原始写事务字段未知或格式不合法');
     const pc = Number.parseInt(fields[1], 16);
     // A low ignored X bit renders a whole hex nibble as X. New observers carry
     // the separately aligned word address so known address bits are not lost.
     if (!fields[3] && !/^[0-9a-f]{8}$/i.test(fields[2])) {
-      return difference('未知原始地址缺少确定的 word 地址');
+      return difference('未知原始地址缺少确定的字地址');
     }
     const address = Number.parseInt(fields[3] ?? fields[2], 16);
-    if (fields[3] && (address & 3)) return difference('记录的 word 地址未对齐');
+    if (fields[3] && (address & 3)) return difference('记录的字地址未对齐');
     const mask = Number.parseInt(fields[4], 2);
     const { write } = left;
     if (pc !== left.pc) return difference(`PC 应为 0x${hex8(left.pc)}，实际为 0x${hex8(pc)}`);
@@ -43,10 +43,10 @@ export function firstDmStoreDifference(
     // P6's table explicitly ignores SW's low two address bits and SH's bit 0.
     // Opcode/address-to-mask consistency is checked by the testbench itself.
     if ((address >>> 2) !== (write.wordAddress >>> 2)) {
-      return difference(`目标 word 应为 0x${hex8(write.wordAddress)}，实际地址为 0x${hex8(address)}`);
+      return difference(`目标字地址应为 0x${hex8(write.wordAddress)}，实际地址为 0x${hex8(address)}`);
     }
     if (mask !== write.byteMask) {
-      return difference(`byte-enable 应为 ${write.byteMask.toString(2).padStart(4, '0')}，实际为 ${fields[4]}`);
+      return difference(`字节使能应为 ${write.byteMask.toString(2).padStart(4, '0')}，实际为 ${fields[4]}`);
     }
     // The merged oracle word contains the exact value of every enabled lane.
     // Ignore disabled lanes entirely, including X/Z and arbitrary known data.
@@ -56,7 +56,7 @@ export function firstDmStoreDifference(
       if (!(mask & (1 << lane))) continue;
       const start = (3 - lane) * 2;
       if (value.slice(start, start + 2) !== expectedValue.slice(start, start + 2)) {
-        return difference(`有效 byte lane ${lane} 应为 ${expectedValue.slice(start, start + 2)}，实际为 ${value.slice(start, start + 2)}`);
+        return difference(`有效字节通道 ${lane} 应为 ${expectedValue.slice(start, start + 2)}，实际为 ${value.slice(start, start + 2)}`);
       }
     }
   }

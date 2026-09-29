@@ -89,7 +89,7 @@ describe('CPU trace compare', () => {
     expect(result.firstDiffIndex).toBe(1);
     expect(result.entries[1]).toMatchObject({
       status: 'diff',
-      reason: 'Write value differs.'
+      reason: '写入值不一致。'
     });
   });
 
@@ -112,7 +112,7 @@ describe('CPU trace compare', () => {
     expect(snapshot).toMatchObject({
       index: 1,
       status: 'diff',
-      reason: 'Write value differs.',
+      reason: '写入值不一致。',
       oracle: {
         pc: '00003004',
         kind: 'grf',
@@ -165,7 +165,7 @@ describe('CPU trace compare', () => {
     expect(firstTraceDiffEntry(result)).toMatchObject({
       index: 2,
       status: 'diff',
-      reason: 'Write value differs.'
+      reason: '写入值不一致。'
     });
     expect(firstTraceDiffSnapshot(result)).toMatchObject({
       index: 2,

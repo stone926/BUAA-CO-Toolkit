@@ -56,7 +56,7 @@ describe('P7 Timer MMIO exception probes', () => {
       const wrongCommit = `0@${hex8(scenario!.victimPc!)}: $2 <= 00000000\n${trace}`;
       const rejected = checkP7Probe(wrongCommit, parseSimOutput(wrongCommit), generated.probe!);
       expect(rejected.failures.some((failure) =>
-        failure.scenarioId === scenario!.id && failure.message.includes('committed GPR'))).toBe(true);
+        failure.scenarioId === scenario!.id && failure.message.includes('不应提交，但已写入 GPR'))).toBe(true);
     }
   });
 
@@ -73,7 +73,7 @@ describe('P7 Timer MMIO exception probes', () => {
         expectedRecords: [{
           expectedExcCode: 5,
           requireEqualAuxPair: true,
-          auxPairDescription: `Timer${testCase.timer} COUNT before/after invalid store`
+          auxPairDescription: `Timer${testCase.timer} 非法存储前后的 COUNT`
         }]
       });
       expect(scenarioBlock(generated.text, scenario!.id)).toContain(
@@ -92,12 +92,12 @@ describe('P7 Timer MMIO exception probes', () => {
       expect(damagedCount).not.toBe(trace);
       const damaged = checkP7Probe(damagedCount, parseSimOutput(damagedCount), generated.probe!);
       expect(damaged.failures.some((failure) => failure.scenarioId === scenario!.id
-        && failure.message.includes('COUNT') && failure.message.includes('changed across the exception'))).toBe(true);
+        && failure.message.includes('COUNT') && failure.message.includes('在异常前后发生变化'))).toBe(true);
 
       const leakedWrite = `0@${hex8(scenario!.victimPc!)}: *00000000 <= 2468ace6\n${trace}`;
       const leaked = checkP7Probe(leakedWrite, parseSimOutput(leakedWrite), generated.probe!);
       expect(leaked.failures.some((failure) =>
-        failure.scenarioId === scenario!.id && failure.message.includes('committed DM'))).toBe(true);
+        failure.scenarioId === scenario!.id && failure.message.includes('不应提交，但已写入 DM'))).toBe(true);
 
       const wrongPort = `${trace}\nCO_P7_PROBE mmio_on_dm pc=${hex8(scenario!.victimPc!)} addr=${hex8(testCase.address)} byteen=1 time=100`;
       expect(checkP7Probe(wrongPort, parseSimOutput(wrongPort), generated.probe!).failures

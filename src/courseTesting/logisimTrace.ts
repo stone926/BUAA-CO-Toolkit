@@ -148,7 +148,7 @@ export function analyzeP3LogisimTraceCircuit(
 
   const circuit = findCircuitBlock(circuitText, circuitName);
   if (!circuit) {
-    report.errors.push(`Logisim circuit "${circuitName}" was not found.`);
+    report.errors.push(`未找到 Logisim 电路“${circuitName}”。`);
     return report;
   }
   report.circuitFound = true;
@@ -175,7 +175,7 @@ export function analyzeP3LogisimTraceCircuit(
         logisimLabel,
         canonicalLabel,
         width,
-        reason: 'special halt output pin is not printed by Logisim -tty table'
+        reason: 'Logisim -tty table 不会输出专用停机引脚'
       });
       continue;
     }
@@ -226,52 +226,63 @@ export function parseLogisimTraceSpec(
 
 export function formatP3LogisimTraceDiagnostic(report: P3LogisimTraceAnalysisReport): string {
   const lines: string[] = [];
-  lines.push('P3 Logisim Trace diagnostic');
-  lines.push(`Circuit: ${report.circuitName}${report.circuitFound ? '' : ' (not found)'}`);
-  lines.push(`All circuits: ${report.circuits.length ? report.circuits.join(', ') : '(none)'}`);
-  lines.push(`Mapping: ${report.mappingMode ?? '(unresolved)'}`);
-  lines.push(`ROM targets: ${report.romTargets.length ? report.romTargets.map(formatRomSummary).join('; ') : '(none)'}`);
-  lines.push('Output pins printed by Logisim -tty table:');
+  lines.push('P3 Logisim 写回记录诊断');
+  lines.push(`电路：${report.circuitName}${report.circuitFound ? '' : '（未找到）'}`);
+  lines.push(`全部电路：${report.circuits.length ? report.circuits.join(', ') : '（无）'}`);
+  lines.push(`映射方式：${report.mappingMode ? formatMappingMode(report.mappingMode) : '（未解析）'}`);
+  lines.push(`ROM 目标：${report.romTargets.length ? report.romTargets.map(formatRomSummary).join('; ') : '（无）'}`);
+  lines.push('Logisim -tty table 标准输出端口：');
   if (report.columns.length) {
     for (const column of report.columns) {
       lines.push(`  ${formatColumnSummary(column)}`);
     }
   } else {
-    lines.push('  (none)');
+    lines.push('  （无）');
   }
   if (report.ignoredOutputPins.length) {
-    lines.push('Ignored output pins:');
+    lines.push('忽略的输出引脚：');
     for (const pin of report.ignoredOutputPins) {
-      const loc = pin.x === undefined || pin.y === undefined ? '(unknown)' : `(${pin.x},${pin.y})`;
-      const appearance = pin.appearanceX === undefined || pin.appearanceY === undefined ? '' : ` appearance=(${pin.appearanceX},${pin.appearanceY})`;
-      lines.push(`  label="${pin.label}" logisim="${pin.logisimLabel || '(none)'}" width=${pin.width} loc=${loc}${appearance}: ${pin.reason}`);
+      const loc = pin.x === undefined || pin.y === undefined ? '（未知）' : `(${pin.x},${pin.y})`;
+      const appearance = pin.appearanceX === undefined || pin.appearanceY === undefined ? '' : ` 外观位置=(${pin.appearanceX},${pin.appearanceY})`;
+      lines.push(`  label="${pin.label}" logisim="${pin.logisimLabel || '（无）'}" width=${pin.width} 位置=${loc}${appearance}：${pin.reason}`);
     }
   }
   if (report.spec) {
-    lines.push('Resolved semantic mapping:');
+    lines.push('语义映射结果：');
     if (report.spec.instruction) {
       lines.push(`  instr -> ${formatColumnSummary(report.spec.instruction)}`);
     } else {
-      lines.push('  instr -> (not mapped)');
+      lines.push('  instr ->（未映射）');
     }
     for (const label of requiredLabels) {
       lines.push(`  ${label} -> ${formatColumnSummary(report.spec.required[label])}`);
     }
-    lines.push(`Termination: injected halt PC via pc column${report.spec.hasHalt ? '; optional Logisim halt pin present' : '; no Logisim halt pin required'}`);
+    lines.push(`停机方式：向程序注入停机循环，通过 pc 列检测停机 PC${report.spec.hasHalt ? '；检测到可选的 Logisim 停机引脚' : '；无需 Logisim 停机引脚'}`);
   }
   if (report.warnings.length) {
-    lines.push('Warnings:');
+    lines.push('警告：');
     for (const warning of report.warnings) {
       lines.push(`  - ${warning}`);
     }
   }
   if (report.errors.length) {
-    lines.push('Errors:');
+    lines.push('错误：');
     for (const error of report.errors) {
       lines.push(`  - ${error}`);
     }
   }
   return lines.join('\n');
+}
+
+function formatMappingMode(mode: LogisimTraceMappingMode): string {
+  const label = mode === 'labels'
+    ? '按标签识别'
+    : mode === 'appearance'
+      ? '按引脚外观顺序'
+      : mode === 'position'
+        ? '按标准输出顺序'
+        : '显式列映射';
+  return `${label}（${mode}）`;
 }
 
 export function setLogisimMainCircuit(circuitText: string, circuitName: string): string {
@@ -293,12 +304,12 @@ export function prepareP3LogisimMachineCode(machineCodeText: string): P3LogisimM
   const alreadyTerminated = machineCodeHasHaltLoop(words);
   const programWordCount = alreadyTerminated ? words.length - p3LogisimHaltWords : words.length;
   if (programWordCount > p3LogisimMaxProgramWords) {
-    throw new Error(`P3 Logisim test has ${programWordCount} words before halt loop; maximum is ${p3LogisimMaxProgramWords}.`);
+    throw new Error(`P3 Logisim 测试在停机循环前有 ${programWordCount} 个机器码字，最多允许 ${p3LogisimMaxProgramWords} 个。`);
   }
   const text = appendHaltLoop(words.join('\n') + '\n');
   const terminatedWordCount = parseMachineCodeWords(text).length;
   if (terminatedWordCount > p3LogisimMaxWords) {
-    throw new Error(`P3 Logisim machine code has ${terminatedWordCount} words after halt loop; maximum is ${p3LogisimMaxWords}.`);
+    throw new Error(`P3 Logisim 测试加入停机循环后有 ${terminatedWordCount} 个机器码字，最多允许 ${p3LogisimMaxWords} 个。`);
   }
   const haltPc = p3TextBase + programWordCount * 4;
   return {
@@ -341,7 +352,7 @@ export function parseLogisimTraceLine(
     if (cells.length === 1 && !looksLikeTableLine(raw)) {
       return undefined;
     }
-    throw new Error(`Logisim table row ${lineNumber} has ${cells.length} column(s); expected ${spec.columns.length}.`);
+    throw new Error(`Logisim 表格第 ${lineNumber} 行有 ${cells.length} 列，应为 ${spec.columns.length} 列。`);
   }
 
   const values = Object.fromEntries(requiredLabels.map((label) => {
@@ -385,13 +396,13 @@ function logisimRowToTraceEvents(row: LogisimTraceRow): CpuTraceEvent[] {
   const memWrite = requiredKnown(row, 'memwrite').numeric;
 
   if (regWrite === undefined || memWrite === undefined) {
-    throw new Error(`Logisim row ${row.lineNumber} has non-numeric write-enable value.`);
+    throw new Error(`Logisim 第 ${row.lineNumber} 行的写使能值不是数字。`);
   }
 
   if (regWrite !== 0) {
     const reg = requiredKnown(row, 'regaddr');
     if (reg.numeric === undefined) {
-      throw new Error(`Logisim row ${row.lineNumber} has non-numeric register address.`);
+      throw new Error(`Logisim 第 ${row.lineNumber} 行的寄存器地址不是数字。`);
     }
     if (reg.numeric !== 0) {
       const value = requiredKnown(row, 'regdata');
@@ -493,13 +504,13 @@ export function validateP3LogisimFetchTrace(
 ): P3LogisimFetchValidationResult {
   const warnings: string[] = [];
   if (!rows.length) {
-    throw new Error('Logisim CLI did not produce any parseable table rows.');
+    throw new Error('Logisim 命令行未生成可解析的表格行。');
   }
 
   const normalizedWords = machineWords.map((word) => normalizeMachineWord(word)).filter((word): word is string => Boolean(word));
   const haltPc = Number.parseInt(haltPcHex, 16);
   if (!normalizedWords.length) {
-    throw new Error('P3 Logisim fetch validation has no machine-code words.');
+    throw new Error('P3 Logisim 取指校验没有机器码字。');
   }
 
   let reachedHaltPc = false;
@@ -507,7 +518,7 @@ export function validateP3LogisimFetchTrace(
   for (const row of rows) {
     const pc = requiredKnown(row, 'pc');
     if (pc.numeric === undefined) {
-      throw new Error(`Logisim row ${row.lineNumber} has non-numeric PC value.`);
+      throw new Error(`Logisim 第 ${row.lineNumber} 行的 PC 值不是数字。`);
     }
     const pcValue = pc.numeric;
     if (row.rowNumber === 1 && pc.hex !== initialPcHex) {
@@ -517,7 +528,7 @@ export function validateP3LogisimFetchTrace(
       throw new Error(`Logisim PC 跑出 P3 文本区：第 ${row.lineNumber} 行 PC=0x${pc.hex}，期望范围 0x${formatHex(p3TextBase, 8)}..0x${haltPcHex}。`);
     }
     if ((pcValue - p3TextBase) % p3LogisimTraceProfile.pcAlignmentBytes !== 0) {
-      throw new Error(`Logisim row ${row.lineNumber} PC=0x${pc.hex} is not ${p3LogisimTraceProfile.pcAlignmentBytes}-byte aligned from 0x${formatHex(p3TextBase, 8)}.`);
+      throw new Error(`Logisim 第 ${row.lineNumber} 行的 PC=0x${pc.hex} 未按 ${p3LogisimTraceProfile.pcAlignmentBytes} 字节对齐（基址 0x${formatHex(p3TextBase, 8)}）。`);
     }
     if (pc.hex === haltPcHex) {
       reachedHaltPc = true;
@@ -528,23 +539,23 @@ export function validateP3LogisimFetchTrace(
     }
     const instruction = row.instruction;
     if (!instruction || instruction.unknown) {
-      throw new Error(`Logisim row ${row.lineNumber} has unknown instr value at PC=0x${pc.hex}.`);
+      throw new Error(`Logisim 第 ${row.lineNumber} 行 PC=0x${pc.hex} 的 instr 值未知。`);
     }
     const wordIndex = (pcValue - p3TextBase) / 4;
     const expected = normalizedWords[wordIndex];
     if (!expected) {
-      throw new Error(`Logisim row ${row.lineNumber} PC=0x${pc.hex} has no matching machine-code word #${wordIndex}.`);
+      throw new Error(`Logisim 第 ${row.lineNumber} 行 PC=0x${pc.hex} 没有对应的第 ${wordIndex} 个机器码字。`);
     }
     if (instruction.hex !== expected) {
-      throw new Error(`Logisim row ${row.lineNumber} instr mismatch at PC=0x${pc.hex}: expected ${expected}, got ${instruction.hex}.`);
+      throw new Error(`Logisim 第 ${row.lineNumber} 行 PC=0x${pc.hex} 的 instr 不匹配：应为 ${expected}，实际为 ${instruction.hex}。`);
     }
   }
 
   if (!spec.instruction) {
-    warnings.push('Trace output has no Instr column; skipped fetch instruction self-check.');
+    warnings.push('写回记录输出没有 Instr 列，已跳过取指机器码自检。');
   }
   if (!reachedHaltPc) {
-    throw new Error(`Logisim trace did not reach injected halt PC 0x${haltPcHex}.`);
+    throw new Error(`Logisim 写回记录未到达注入的停机 PC 0x${haltPcHex}。`);
   }
   return { warnings };
 }
@@ -599,7 +610,7 @@ function findOutputPins(circuitBlock: string): LogisimOutputPinDiscovery {
         logisimLabel,
         canonicalLabel: canonicalizeP3LogisimTraceLabel(logisimLabel),
         width,
-        reason: 'output Pin has no parseable loc attribute'
+      reason: '输出引脚缺少可解析的 loc 属性'
       });
       continue;
     }
@@ -615,7 +626,7 @@ function findOutputPins(circuitBlock: string): LogisimOutputPinDiscovery {
         logisimLabel,
         canonicalLabel: canonicalizeP3LogisimTraceLabel(logisimLabel),
         width,
-        reason: 'output Pin is not present in the explicit circuit appearance'
+        reason: '输出引脚未出现在电路的显式外观定义中'
       });
       continue;
     }
@@ -750,13 +761,13 @@ function resolveRequiredColumns(
     return tableOrdered;
   }
 
-  const missing = labeled.warnings.find((warning) => warning.startsWith('missing standard labels:'));
+  const missing = labeled.warnings.find((warning) => warning.startsWith('缺少标准标签：'));
   return {
     warnings: [...labeled.warnings, ...appearanceOrdered.warnings, ...tableOrdered.warnings],
     errors: [
-      `Logisim trace circuit "${circuitName}" cannot identify P3 trace output pins.`,
-      missing ?? 'standard labels are incomplete',
-      `available stdout columns: ${columns.length ? columns.map(formatColumnSummary).join('; ') : '(none)'}`
+      `Logisim 写回记录电路“${circuitName}”无法识别 P3 写回记录输出引脚。`,
+      missing ?? '标准标签不完整',
+      `可用标准输出列：${columns.length ? columns.map(formatColumnSummary).join('; ') : '（无）'}`
     ]
   };
 }
@@ -776,13 +787,13 @@ function resolveP3LabeledColumns(
     const semantic = column.canonicalLabel;
     if (semantic === 'instr') {
       if (instruction) {
-        errors.push(`Logisim trace circuit "${circuitName}" has duplicate output label "${column.logisimLabel}".`);
+        errors.push(`Logisim 写回记录电路“${circuitName}”有重复的输出标签“${column.logisimLabel}”。`);
       }
       instruction = column;
       continue;
     }
     if (byLabel.has(semantic)) {
-      errors.push(`Logisim trace circuit "${circuitName}" has duplicate output label "${column.logisimLabel}".`);
+      errors.push(`Logisim 写回记录电路“${circuitName}”有重复的输出标签“${column.logisimLabel}”。`);
       continue;
     }
     byLabel.set(semantic, column);
@@ -794,19 +805,19 @@ function resolveP3LabeledColumns(
 
   const missing = requiredLabels.filter((label) => !byLabel.has(label));
   if (missing.length) {
-    warnings.push(`missing standard labels: ${missing.join(', ')}`);
+    warnings.push(`缺少标准标签：${missing.join(', ')}`);
     return { warnings, errors };
   }
 
   const required = Object.fromEntries(requiredLabels.map((label) => {
     const column = byLabel.get(label)!;
     if (column.width !== p3OrderedWidths[label]) {
-      errors.push(`Logisim trace output "${column.logisimLabel}" has width ${column.width}; expected ${p3OrderedWidths[label]}.`);
+      errors.push(`Logisim 写回记录输出“${column.logisimLabel}”位宽为 ${column.width}，应为 ${p3OrderedWidths[label]}。`);
     }
     return [label, column];
   })) as Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn>;
   if (instruction && instruction.width !== p3OrderedWidths.instr) {
-    errors.push(`Logisim trace output "${instruction.logisimLabel}" has width ${instruction.width}; expected ${p3OrderedWidths.instr}.`);
+    errors.push(`Logisim 写回记录输出“${instruction.logisimLabel}”位宽为 ${instruction.width}，应为 ${p3OrderedWidths.instr}。`);
   }
   return errors.length
     ? { warnings, errors }
@@ -817,7 +828,7 @@ function resolveP3AppearanceOrderedColumns(
   columns: readonly LogisimTraceOutputColumn[]
 ): LogisimTraceColumnResolution {
   if (!columns.some((column) => column.appearanceX !== undefined && column.appearanceY !== undefined)) {
-    return { warnings: ['no explicit appearance ports available for ordered P3 trace mapping'], errors: [] };
+    return { warnings: ['没有可用于 P3 写回记录顺序映射的显式外观端口'], errors: [] };
   }
   const ordered = [...columns]
     .filter((column) => column.appearanceX !== undefined && column.appearanceY !== undefined)
@@ -837,7 +848,7 @@ function resolveP3ColumnsInSemanticOrder(
   const warnings: string[] = [];
   const errors: string[] = [];
   if (columns.length < p3OrderedLabels.length) {
-    warnings.push(`${mappingMode} order has ${columns.length} column(s); expected at least ${p3OrderedLabels.length}`);
+    warnings.push(`${formatMappingMode(mappingMode)}有 ${columns.length} 列，至少需要 ${p3OrderedLabels.length} 列`);
     return { warnings, errors };
   }
 
@@ -845,7 +856,7 @@ function resolveP3ColumnsInSemanticOrder(
   for (let i = 0; i < ordered.length; i++) {
     const expected = p3OrderedLabels[i];
     if (ordered[i].width !== p3OrderedWidths[expected]) {
-      warnings.push(`${mappingMode} order column ${i} (${formatColumnSummary(ordered[i])}) has width ${ordered[i].width}; expected ${p3OrderedWidths[expected]} for ${expected}`);
+      warnings.push(`${formatMappingMode(mappingMode)}的第 ${i} 列（${formatColumnSummary(ordered[i])}）位宽为 ${ordered[i].width}，${expected} 应为 ${p3OrderedWidths[expected]}`);
       return { warnings, errors };
     }
   }
@@ -855,7 +866,7 @@ function resolveP3ColumnsInSemanticOrder(
   );
   for (const [semantic, column] of semanticColumns) {
     if (isP3LogisimTraceSemanticLabel(column.canonicalLabel) && column.canonicalLabel !== semantic) {
-      errors.push(`Logisim trace output label "${column.logisimLabel}" is at ${mappingMode} position for "${semantic}", but the label means "${column.canonicalLabel}".`);
+      errors.push(`Logisim 写回记录输出标签“${column.logisimLabel}”位于${formatMappingMode(mappingMode)}中的“${semantic}”位置，但该标签表示“${column.canonicalLabel}”。`);
     }
   }
 
@@ -881,17 +892,17 @@ function resolveP3ExplicitColumns(
     const index = explicitColumns[label];
     if (index === undefined) {
       if (label !== 'instr') {
-        errors.push(`旧版显式列映射缺少必需输出 "${label}"。请为对应 Pin 设置教程标准 label 以便自动识别。`);
+        errors.push(`旧版显式列映射缺少必需输出“${label}”。请为对应引脚设置教程标准 label 以便自动识别。`);
       }
       continue;
     }
     if (!Number.isInteger(index) || index < 0 || index >= columns.length) {
-      errors.push(`旧版显式列映射中的 "${label}"=${index} 超出 stdout 列范围 0..${Math.max(0, columns.length - 1)}。`);
+      errors.push(`旧版显式列映射中的“${label}”=${index} 超出标准输出列范围 0..${Math.max(0, columns.length - 1)}。`);
       continue;
     }
     const duplicate = usedIndexes.get(index);
     if (duplicate) {
-      errors.push(`旧版显式列映射把 "${duplicate}" 和 "${label}" 同时指向 stdout 第 ${index} 列。`);
+      errors.push(`旧版显式列映射把“${duplicate}”和“${label}”同时指向标准输出第 ${index} 列。`);
       continue;
     }
     usedIndexes.set(index, label);
@@ -900,7 +911,7 @@ function resolveP3ExplicitColumns(
       errors.push(`旧版显式列映射中的 "${label}" 指向 ${formatColumnSummary(column)}（位宽 ${column.width}），期望位宽 ${p3OrderedWidths[label]}。`);
     }
     if (isP3LogisimTraceSemanticLabel(column.canonicalLabel) && column.canonicalLabel !== label) {
-      warnings.push(`旧版显式列映射中的 "${label}" 指向 label "${column.logisimLabel}"，其外观更像 "${column.canonicalLabel}"。`);
+      warnings.push(`旧版显式列映射中的“${label}”指向 label“${column.logisimLabel}”，其外观更像“${column.canonicalLabel}”。`);
     }
     selected.set(label, column);
   }
@@ -920,7 +931,7 @@ function requiredColumnsFromSemanticMap(
   return Object.fromEntries(requiredLabels.map((label) => {
     const column = columns.get(label);
     if (!column) {
-      throw new Error(`Logisim trace profile is missing ordered column "${label}".`);
+      throw new Error(`Logisim 写回记录配置缺少顺序列“${label}”。`);
     }
     return [label, column];
   })) as Record<LogisimTraceRequiredLabel, LogisimTraceOutputColumn>;
@@ -1007,7 +1018,7 @@ function makeTraceEvent(
 function requiredKnown(row: LogisimTraceRow, label: LogisimTraceRequiredLabel): LogisimTraceValue {
   const value = row.values[label];
   if (value.unknown) {
-    throw new Error(`Logisim row ${row.lineNumber} has unknown ${label} value.`);
+    throw new Error(`Logisim 第 ${row.lineNumber} 行的 ${label} 值未知。`);
   }
   return value;
 }

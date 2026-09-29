@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { p7ProbeKindLabel, probeFailureMessage, traceDifferenceMessage } from './courseTestMessages';
 import { continuousCounts, ContinuousCounts, ContinuousRunStatus } from './courseTesting/continuous';
 import { P7ProbeCheckResult } from './courseTesting/p7ProbeCheck';
 import {
@@ -427,7 +428,7 @@ function renderContinuousFirstProblem(item: CourseTraceCaseResult): SafeHtml {
     : html.raw('');
   const probeFailure = item.probe?.failures[0];
   if (probeFailure) {
-    return html.raw(`<div>${html.text(probeFailure.kind)}: ${html.text(probeFailure.message)}</div>${scopeNotice}`);
+    return html.raw(`<div>${html.text(p7ProbeKindLabel(probeFailure.kind))}：${html.text(probeFailureMessage(probeFailure.message))}</div>${scopeNotice}`);
   }
   const uncovered = uncoveredProbeCoverage(item.probe);
   if (uncovered.length) {
@@ -527,22 +528,22 @@ function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
   if (!item.firstDiff) {
     return html.raw('');
   }
-  const reason = item.firstDiff.reason ?? item.firstDiff.status;
+  const reason = traceDifferenceMessage(item.firstDiff.reason, item.firstDiff.status);
   const oracle = item.firstDiff.oracle ?? item.firstDiff.mars;
   const dut = item.firstDiff.dut ?? item.firstDiff.sim;
   return html.raw([
     `<div>${html.text(reason)}</div>`,
-    `<div class="diff-line"><span>Oracle</span><code>${html.text(traceEventSummary(oracle))}</code></div>`,
-    `<div class="diff-line"><span>DUT</span><code>${html.text(traceEventSummary(dut))}</code></div>`
+    `<div class="diff-line"><span>参考结果</span><code>${html.text(traceEventSummary(oracle))}</code></div>`,
+    `<div class="diff-line"><span>待测 CPU</span><code>${html.text(traceEventSummary(dut))}</code></div>`
   ].join(''));
 }
 
 function renderProbeDetails(probe: P7ProbeCheckResult): SafeHtml {
   const failures = probe.failures.slice(0, 5).map((failure) =>
-    `<div><code>#${html.text(failure.scenarioId)} ${html.text(failure.kind)}: ${html.text(failure.message)}</code></div>`
+    `<div><code>场景 ${html.text(failure.scenarioId)} ${html.text(p7ProbeKindLabel(failure.kind))}：${html.text(probeFailureMessage(failure.message))}</code></div>`
   );
   const records = probe.records.slice(0, 5).map((record) =>
-    `<div><code>#${html.text(record.scenarioId)}: Cause=0x${html.text((record.cause >>> 0).toString(16))} EPC=0x${html.text((record.epc >>> 0).toString(16))} aux0=0x${html.text((record.aux0 >>> 0).toString(16))}</code></div>`
+    `<div><code>场景 ${html.text(record.scenarioId)}：Cause=0x${html.text((record.cause >>> 0).toString(16))} EPC=0x${html.text((record.epc >>> 0).toString(16))} 辅助值 0=0x${html.text((record.aux0 >>> 0).toString(16))}</code></div>`
   );
   const coverage = probeCoverage(probe).map((entry) =>
     `<div>${entry.covered ? '已覆盖' : '未覆盖'}：${html.text(entry.message)}</div>`
@@ -562,11 +563,11 @@ function uncoveredProbeCoverage(probe: P7ProbeCheckResult | undefined): Array<{ 
 
 function traceEventSummary(event: TraceEventSnapshot | undefined): string {
   if (!event) {
-    return '(missing)';
+    return '（无对应事件）';
   }
   const cycle = event.cycle === undefined ? '' : `${event.cycle}@`;
   const target = event.kind === 'grf' ? `$${event.target}` : `*${event.target}`;
-  return `${cycle}${event.pc}: ${target} <= ${event.value} (line ${event.lineNumber})`;
+  return `${cycle}${event.pc}: ${target} <= ${event.value}（第 ${event.lineNumber} 行）`;
 }
 
 function renderAutomaticCaseLabel(index: number, item: CourseTraceCaseResult): SafeHtml {
@@ -574,5 +575,5 @@ function renderAutomaticCaseLabel(index: number, item: CourseTraceCaseResult): S
   if (item.status === 'passed' || !item.caseId) {
     return html.text(label);
   }
-  return html.raw(`${html.text(label)}<div class="muted">Case ${html.code(item.caseId)}</div>`);
+  return html.raw(`${html.text(label)}<div class="muted">复现编号 ${html.code(item.caseId)}</div>`);
 }

@@ -69,7 +69,7 @@ describe.each(['hazard', 'special-hazard'] as const)('P7 hazards through precise
         for (const corrupted of [without, [...events, original], events.map((event) => event === original
           ? { ...event, value: 'deadbeef' } : event)]) {
           expect(checkP7Probe(diagnostics, corrupted, program.probe!).failures.some((failure) =>
-            failure.scenarioId === scenario.id && failure.message.includes('commit'))).toBe(true);
+            failure.scenarioId === scenario.id && failure.message.includes('提交'))).toBe(true);
         }
       }
     }
@@ -86,7 +86,7 @@ describe.each(['hazard', 'special-hazard'] as const)('P7 hazards through precise
         const repair = { ...bad, pc: scenario.donePc.toString(16), value: '00000000' };
         const failures = checkP7Probe(diagnostics, [...events, bad, repair], program.probe!).failures;
         expect(failures.some((failure) => failure.scenarioId === scenario.id
-          && failure.message.includes('forbidden younger/wrong-path'))).toBe(true);
+          && failure.message.includes('禁止提交的后续指令/错误路径'))).toBe(true);
       }
     }
   });
@@ -101,7 +101,7 @@ describe.each(['hazard', 'special-hazard'] as const)('P7 hazards through precise
         const interleaved = events.map((event) => Number.parseInt(event.pc, 16) === expected.pc
           ? { ...event, lineNumber: record.firstLineNumber + 1 } : event);
         expect(checkP7Probe(diagnostics, interleaved, program.probe!).failures.some((failure) =>
-          failure.scenarioId === scenario.id && failure.message.includes('pre-handler commit'))).toBe(true);
+          failure.scenarioId === scenario.id && failure.message.includes('异常前提交'))).toBe(true);
       }
     }
   });
@@ -125,7 +125,7 @@ describe.each(['hazard', 'special-hazard'] as const)('P7 hazards through precise
       const premature = events.map((event) => Number.parseInt(event.pc, 16) === pc
         ? { ...event, lineNumber: 0 } : event);
       expect(checkP7Probe(diagnostics, premature, program.probe!).failures.some((failure) =>
-        failure.scenarioId === scenario.id && failure.message.includes('before the handler'))).toBe(true);
+        failure.scenarioId === scenario.id && failure.message.includes('必要的重试提交出现在异常处理程序记录之前'))).toBe(true);
     }
   });
 });

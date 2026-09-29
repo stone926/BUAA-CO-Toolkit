@@ -500,7 +500,7 @@ function emitInterruptScenario(
             expectedExcCode: 0,
             allowedEpc,
             allowedAuxPairs: [[8, 0] as [number, number]],
-            auxPairDescription: `${kind} one-shot CTRL/COUNT before handler clear`
+            auxPairDescription: `${kind} 单次模式下处理程序清除前的 CTRL/COUNT`
           }]
         : undefined;
   return {

@@ -129,9 +129,9 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
     const index = metadata.scenarios.indexOf(delayed);
     const recordBase = p7ProbeLogBase + index * p7ProbeRecordWords * 4;
     const mutations = [
-      { address: recordBase + 16, value: 8 << 2, diagnostic: 'ExcCode differs' },
+      { address: recordBase + 16, value: 8 << 2, diagnostic: 'Cause.ExcCode 不符' },
       { address: recordBase + 24, value: 0x80000420, diagnostic: 'Cause.IP' },
-      { address: recordBase + 24, value: 8 << 2, diagnostic: 'Cause.BD differs' },
+      { address: recordBase + 24, value: 8 << 2, diagnostic: 'Cause.BD 不符' },
       { address: recordBase + 28, value: delayed.victimPc!, diagnostic: 'EPC' },
       { address: p7ProbePostEretStatusAddress, value: 0x1c01, diagnostic: 'Status' }
     ];
@@ -144,13 +144,13 @@ describe('P7 deterministic interrupt/exception priority probes', () => {
       expect(checked.failures.some((failure) => failure.message.includes(mutation.diagnostic)), mutation.diagnostic).toBe(true);
     }
     const missingCompletion = events.filter((event) => Number.parseInt(event.pc, 16) !== delayed.donePc);
-    expect(checkP7Probe('', missingCompletion, metadata).failures.some((failure) => failure.message.includes('completion'))).toBe(true);
+    expect(checkP7Probe('', missingCompletion, metadata).failures.some((failure) => failure.message.includes('完成标记'))).toBe(true);
 
     const pendingMarker = delayed.requiredPreHandlerCommits![0];
     const missingPendingProof = events.filter((event) => Number.parseInt(event.pc, 16) !== pendingMarker.pc);
     expect(checkP7Probe('', missingPendingProof, metadata).passed).toBe(false);
 
     const victimCommit = { ...events[0], kind: 'grf' as const, pc: delayed.victimPc!.toString(16), target: '8', value: '00000001' };
-    expect(checkP7Probe('', [...events, victimCommit], metadata).failures.some((failure) => failure.message.includes('exception victim PC'))).toBe(true);
+    expect(checkP7Probe('', [...events, victimCommit], metadata).failures.some((failure) => failure.message.includes('触发异常的指令 PC'))).toBe(true);
   });
 });

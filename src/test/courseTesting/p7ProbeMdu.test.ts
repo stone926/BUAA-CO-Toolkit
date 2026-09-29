@@ -135,7 +135,7 @@ describe('P7 interrupt MDU probes', () => {
       valid.replace(hiCommit, hiCommit.replace(hex(hi), 'deadbeef'))
     ]) {
       expect(checkP7Probe(broken, parseSimOutput(broken), metadata).failures
-        .some((failure) => failure.message.includes('required GRF'))).toBe(true);
+        .some((failure) => failure.message.includes('必要的 GRF 提交'))).toBe(true);
     }
   });
 

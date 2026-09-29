@@ -114,8 +114,8 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), baseMetadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.message.includes('Status differs'))).toBe(true);
-    expect(result.failures.filter((failure) => failure.message.includes('unimplemented bits'))).toHaveLength(2);
+    expect(result.failures.some((failure) => failure.message.includes('SR/Status 不符'))).toBe(true);
+    expect(result.failures.filter((failure) => failure.message.includes('未实现位应为 0'))).toHaveLength(2);
   });
 
   it('rejects unexpected pending sources in an isolated timer scenario', () => {
@@ -132,7 +132,7 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.message.includes('Cause.IP differs'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('Cause.IP 不符'))).toBe(true);
   });
 
   it('reports missing IP, missing ack, and uncleared timer CTRL', () => {
@@ -145,10 +145,10 @@ describe('P7 probe checker', () => {
 
     expect(result.passed).toBe(false);
     expect(result.failures.some((failure) => failure.message.includes('Cause.IP'))).toBe(true);
-    expect(result.failures.some((failure) => failure.message.includes('armed'))).toBe(true);
-    expect(result.failures.some((failure) => failure.message.includes('raised'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('启动外部中断'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('外部中断请求'))).toBe(true);
     expect(result.failures.some((failure) => failure.message.includes(p7Hex(p7ExternalInterruptAckAddress)))).toBe(true);
-    expect(result.failures.some((failure) => failure.message.includes('timer CTRL'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('计时器清除后的 CTRL'))).toBe(true);
   });
 
   it('requires timer CTRL and COUNT to be exactly zero after the handler clears CTRL', () => {
@@ -161,8 +161,8 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.message.includes('timer CTRL differs'))).toBe(true);
-    expect(result.failures.some((failure) => failure.message.includes('timer COUNT differs'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('计时器清除后的 CTRL 不符'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('计时器清除后的 COUNT 不符'))).toBe(true);
   });
 
   it('requires physical record order to match metadata scenario order', () => {
@@ -177,7 +177,7 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), baseMetadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.filter((failure) => failure.message.includes('record order'))).toHaveLength(2);
+    expect(result.failures.filter((failure) => failure.message.includes('探针记录顺序错误'))).toHaveLength(2);
   });
 
   it('fails on testbench MMIO-on-DM diagnostics', () => {
@@ -215,7 +215,7 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.scenarioId === 2 && failure.message.includes('duplicate'))).toBe(true);
+    expect(result.failures.some((failure) => failure.scenarioId === 2 && failure.message.includes('重复'))).toBe(true);
   });
 
   it('reports exact internal exception code mismatches', () => {
@@ -324,8 +324,8 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.scenarioId === 1 && failure.message.includes('committed GPR'))).toBe(true);
-    expect(result.failures.some((failure) => failure.scenarioId === 2 && failure.message.includes('committed DM'))).toBe(true);
+    expect(result.failures.some((failure) => failure.scenarioId === 1 && failure.message.includes('不应提交，但已写入 GPR'))).toBe(true);
+    expect(result.failures.some((failure) => failure.scenarioId === 2 && failure.message.includes('不应提交，但已写入 DM'))).toBe(true);
   });
 
   it('rejects a missing BD bit or non-branch EPC for delay-slot exceptions', () => {
@@ -364,7 +364,7 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.scenarioId === 1 && failure.message.includes('Cause.BD differs'))).toBe(true);
+    expect(result.failures.some((failure) => failure.scenarioId === 1 && failure.message.includes('Cause.BD 不符'))).toBe(true);
     expect(result.failures.some((failure) => failure.scenarioId === 2 && failure.message.includes('EPC'))).toBe(true);
   });
 
@@ -394,7 +394,7 @@ describe('P7 probe checker', () => {
 
     expect(result.passed).toBe(false);
     expect(result.records).toHaveLength(0);
-    expect(result.failures.some((failure) => failure.message.includes('missing probe record'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('缺少索引为'))).toBe(true);
   });
 
   it('rejects a sparse probe record instead of treating a missing field as zero', () => {
@@ -410,7 +410,7 @@ describe('P7 probe checker', () => {
 
     expect(result.passed).toBe(false);
     expect(result.records).toHaveLength(0);
-    expect(result.failures.some((failure) => failure.message.includes('missing probe record'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('缺少索引为'))).toBe(true);
   });
 
   it('validates packed interrupt-priority and retried-syscall observations in order', () => {
@@ -457,15 +457,15 @@ describe('P7 probe checker', () => {
     ].join('\n');
     const result = checkP7Probe(reversed, parseSimOutput(reversed), metadata);
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.message.includes('record 1'))).toBe(true);
-    expect(result.failures.some((failure) => failure.message.includes('record 2'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('记录 1'))).toBe(true);
+    expect(result.failures.some((failure) => failure.message.includes('记录 2'))).toBe(true);
 
     const victimCommit = sim.replace(
       'CO_P7_PROBE external_ack scenario=1 time=100',
       'CO_P7_PROBE external_ack scenario=1 time=100\n12@00003020: $8 <= deadbeef'
     );
     expect(checkP7Probe(victimCommit, parseSimOutput(victimCommit), metadata).failures
-      .some((failure) => failure.message.includes('exception victim'))).toBe(true);
+      .some((failure) => failure.message.includes('触发异常的指令'))).toBe(true);
   });
 
   it('rejects eret fall-through poison commits', () => {
@@ -481,7 +481,7 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.kind === 'eret' && failure.message.includes('poison'))).toBe(true);
+    expect(result.failures.some((failure) => failure.kind === 'eret' && failure.message.includes('毒值地址'))).toBe(true);
   });
 
   it('requires masked-window commits before the handler record', () => {
@@ -522,7 +522,7 @@ describe('P7 probe checker', () => {
       '30@00003020: *000027dc <= 00006001'
     ].join('\n');
     expect(checkP7Probe(late, parseSimOutput(late), metadata).failures
-      .some((failure) => failure.message.includes('pre-handler'))).toBe(true);
+      .some((failure) => failure.message.includes('异常前提交'))).toBe(true);
   });
 
   it('accepts a cleared Cause.IP readback for pulse-shaped timer mode', () => {
@@ -600,14 +600,14 @@ describe('P7 probe checker', () => {
 
     const missingDeassertMarker = sim.replace('13@00003044: *000027dc <= 00007101\n', '');
     expect(checkP7Probe(missingDeassertMarker, parseSimOutput(missingDeassertMarker), metadata).failures
-      .some((failure) => failure.message.includes('pre-handler DM'))).toBe(true);
+      .some((failure) => failure.message.includes('异常前 DM'))).toBe(true);
 
     const wrongRecord = [
       ...protocolCommits,
       ...recordLines(0, [p7ProbeMagic, 1, 2, 0x1c03, 0x80000400, 0x3024, 0x0400, 0x3060])
     ].join('\n');
     expect(checkP7Probe(wrongRecord, parseSimOutput(wrongRecord), metadata).failures
-      .some((failure) => failure.message.includes('record 1') && failure.message.includes('wait branch'))).toBe(true);
+      .some((failure) => failure.message.includes('记录 1') && failure.message.includes('等待分支'))).toBe(true);
   });
 
   it('rejects the Mode-1 stale-IRQ failure marker emitted before fresh arming', () => {
@@ -623,7 +623,7 @@ describe('P7 probe checker', () => {
     const result = checkP7Probe(sim, parseSimOutput(sim), metadata);
 
     expect(result.passed).toBe(false);
-    expect(result.failures.some((failure) => failure.kind === 'timer' && failure.message.includes('stale IRQ'))).toBe(true);
+    expect(result.failures.some((failure) => failure.kind === 'timer' && failure.message.includes('残留中断请求'))).toBe(true);
   });
 
   it('checks one-shot timer CTRL/COUNT before the handler clears CTRL', () => {
@@ -643,7 +643,7 @@ describe('P7 probe checker', () => {
           expectedExcCode: 0,
           allowedEpc: [0x3020],
           allowedAuxPairs: [[8, 0]],
-          auxPairDescription: 'Timer0 one-shot CTRL/COUNT before handler clear'
+          auxPairDescription: 'Timer0 单次模式下处理程序清除前的 CTRL/COUNT'
         }]
       }]
     };
@@ -652,7 +652,7 @@ describe('P7 probe checker', () => {
 
     expect(checkP7Probe(valid, parseSimOutput(valid), metadata).passed).toBe(true);
     expect(checkP7Probe(maskedByHandlerClear, parseSimOutput(maskedByHandlerClear), metadata).failures
-      .some((failure) => failure.message.includes('one-shot'))).toBe(true);
+      .some((failure) => failure.message.includes('CTRL/COUNT'))).toBe(true);
   });
 
   it('preserves historical HI/LO expectations and checks post-handler completion', () => {
@@ -694,7 +694,7 @@ describe('P7 probe checker', () => {
       ...recordLines(0, [p7ProbeMagic, 1, 7, 0x1c03, 0x20, 0x3020, 0x13579bdf, 0x2468ace0])
     ].join('\n');
     expect(checkP7Probe(earlyCompletion, parseSimOutput(earlyCompletion), metadata).failures
-      .some((failure) => failure.message.includes('before the final'))).toBe(true);
+      .some((failure) => failure.message.includes('最后一条异常处理程序记录之前'))).toBe(true);
   });
 
   it('rejects Timer register side effects observed only by handler read-back', () => {
@@ -716,7 +716,7 @@ describe('P7 probe checker', () => {
           expectedExcCode: 5,
           expectedBd: false,
           allowedEpc: [0x3020],
-          auxPairDescription: 'Timer0 COUNT before/after invalid store',
+          auxPairDescription: 'Timer0 非法存储前后的 COUNT',
           requireEqualAuxPair: true
         }]
       }]
@@ -728,7 +728,7 @@ describe('P7 probe checker', () => {
     const changedResult = checkP7Probe(changedCount, parseSimOutput(changedCount), countMetadata);
     expect(changedResult.passed).toBe(false);
     expect(changedResult.failures.some((failure) =>
-      failure.message.includes('Timer0 COUNT') && failure.message.includes('changed across the exception'))).toBe(true);
+      failure.message.includes('Timer0 非法存储前后的 COUNT') && failure.message.includes('在异常前后发生变化'))).toBe(true);
 
     const presetMetadata: P7ProbeMetadata = {
       ...countMetadata,
@@ -740,7 +740,7 @@ describe('P7 probe checker', () => {
           expectedBd: false,
           allowedEpc: [0x3020],
           allowedAuxPairs: [[0x13579bdf, 0x13579bdf]],
-          auxPairDescription: 'Timer1 PRESET before/after invalid store',
+          auxPairDescription: 'Timer1 非法存储前后的 PRESET',
           requireEqualAuxPair: true
         }]
       }]
@@ -751,7 +751,7 @@ describe('P7 probe checker', () => {
     const presetResult = checkP7Probe(wrongButStablePreset, parseSimOutput(wrongButStablePreset), presetMetadata);
     expect(presetResult.passed).toBe(false);
     expect(presetResult.failures.some((failure) =>
-      failure.message.includes('Timer1 PRESET') && failure.message.includes('observation differs'))).toBe(true);
+      failure.message.includes('Timer1 非法存储前后的 PRESET') && failure.message.includes('观测值不符'))).toBe(true);
   });
 
   it('rejects repeated record-field writes and invalid AdES output enables', () => {
@@ -773,7 +773,7 @@ describe('P7 probe checker', () => {
     const lines = recordLines(0, [p7ProbeMagic, 1, 6, 0x1c03, 0x14, 0x3020, 0, 0]);
     const duplicateField = [...lines, lines[5]].join('\n');
     expect(checkP7Probe(duplicateField, parseSimOutput(duplicateField), metadata).failures
-      .some((failure) => failure.message.includes('written more than once'))).toBe(true);
+      .some((failure) => failure.message.includes('字段被重复写入'))).toBe(true);
 
     const invalidEnable = [
       ...lines,
@@ -784,7 +784,7 @@ describe('P7 probe checker', () => {
 
     const outOfRange = [...lines, '20@00003020: *00003000 <= 12345678'].join('\n');
     expect(checkP7Probe(outOfRange, parseSimOutput(outOfRange), metadata).failures
-      .some((failure) => failure.message.includes('exceeds the tutorial range'))).toBe(true);
+      .some((failure) => failure.message.includes('超出课程规定范围'))).toBe(true);
   });
 });
 

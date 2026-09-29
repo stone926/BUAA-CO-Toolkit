@@ -86,7 +86,7 @@ describe('course test reports', () => {
     expect(rendered).toContain('未观察到 eret 后恢复边界');
     const failed: CourseTraceCaseResult = {
       ...result, status: 'failed', probe: { ...result.probe!, failures: [
-        { scenarioId: 1, kind: 'return-boundary', message: 'startup was replayed' }
+        { scenarioId: 0, kind: 'cp0-reset', message: 'CP0 reset status read-back differs: expected exactly one zero sample at PC 0x300c' }
       ] }
     };
     const withFailure = renderContinuousTraceMonitor({
@@ -94,7 +94,8 @@ describe('course test reports', () => {
       iterations: [{ index: 1, status: 'failed', startedAt: '',
         summary: { total: 1, passed: 0, failed: 1, errors: 0 }, results: [failed] }]
     }, { fsPath: 'report.json' } as never);
-    expect(withFailure).toContain('startup was replayed');
+    expect(withFailure).toContain('CP0 复位：CP0 复位后 Status 读回值不符合预期：PC 0x300c 应恰好记录一次零值样本');
+    expect(withFailure).not.toContain('CP0 reset');
     expect(withFailure).not.toContain('未覆盖');
   });
 
@@ -361,7 +362,7 @@ describe('course test reports', () => {
           firstDiff: {
             index: 0,
             status: 'diff',
-            reason: 'register value differs',
+            reason: 'Write value differs.',
             oracle: { pc: '00003000', kind: 'grf', target: '1', value: '00000001', raw: '', lineNumber: 1 },
             dut: { pc: '00003000', kind: 'grf', target: '1', value: '00000002', raw: '', lineNumber: 1 }
           }
@@ -385,7 +386,10 @@ describe('course test reports', () => {
 
     expect(html).toContain('测试点 1');
     expect(html).not.toContain('failed-case.asm');
-    expect(html).toContain('register value differs');
+    expect(html).toContain('写入值不一致。');
+    expect(html).toContain('参考结果');
+    expect(html).toContain('待测 CPU');
+    expect(html).not.toContain('Write value differs.');
     expect(html).toContain('完整复现数据已自动保存');
     expect(html).not.toContain('SECRET_GENERATOR_LABEL');
     expect(html).not.toContain('SECRET_COMMAND');

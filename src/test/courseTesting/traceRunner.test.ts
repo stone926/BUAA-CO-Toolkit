@@ -301,7 +301,7 @@ describe('course trace runner orchestration', () => {
     expect(compareTraceIterables).toHaveBeenCalled();
     expect(result).toMatchObject({
       status: 'failed', stage: 'compare',
-      firstDiff: { reason: expect.stringContaining('byte-enable 应为 0010') }
+      firstDiff: { reason: expect.stringContaining('字节使能应为 0010') }
     });
   });
 
@@ -661,7 +661,7 @@ describe('course trace runner orchestration', () => {
     const result = await runCourseTraceCase(services(), { asm: URI.file('E:/work/src/test.asm') });
 
     expect(result.status).toBe('error');
-    expect(result.message).toContain('仅有一端');
+    expect(result.message).toContain('有一方没有可解析的写回事件');
   });
 
   it('passes P7 interrupt and probe metadata from the case manifest into Icarus', async () => {

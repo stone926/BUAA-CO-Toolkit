@@ -20,6 +20,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **失败即停、有界留存。** 持续测试首个失败或错误立即停止，零延迟主动 yield 保持扩展宿主响应；取消不计测试 error。留存清理对同一 manifest 串行，捕获并复验目录/manifest identity 后原子移入受控 `.co/trash`，所有不确定状态 fail-closed 保留。
 
+**中文诊断。** P7 定向检查、普通写回差异、DM 写事务与 Logisim 检查在诊断来源生成中文消息；持续测试报告使用中文类别、参考/待测标签和复现编号。旧报告中已知的 CP0 复位及写回差异英文消息在展示时兼容转换，原始记录不改写。机器状态码、协议标记、寄存器/信号名和外部工具原始诊断保持原样。
+
 ## Pipeline
 
 - `pipeline/courseTracePipeline.ts` — 可注入的课程 Trace pipeline 对象（image policy、builtin oracle、backend-neutral DUT 执行与差分比较）

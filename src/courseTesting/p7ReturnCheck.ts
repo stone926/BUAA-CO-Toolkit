@@ -29,7 +29,7 @@ export function checkP7ReturnProbe(
   for (const expected of plan.mainCommits) {
     const actual = byPc.get(expected.pc) ?? [];
     if (actual.length !== 1 || !matches(actual[0], expected)) {
-      fail(`main commit at PC 0x${expected.pc.toString(16)}: expected exactly one ${expected.kind} write with value 0x${expected.value.toString(16)}`);
+      fail(`主程序在 PC 0x${expected.pc.toString(16)} 的提交不符：应恰好有一次 ${expected.kind === 'grf' ? '寄存器' : '存储器'}写入，值为 0x${expected.value.toString(16)}`);
     }
     if (actual.length === 1) for (const record of result.records) {
       const victimPc = record.epc + ((record.cause >>> 31) ? 4 : 0);
@@ -37,7 +37,7 @@ export function checkP7ReturnProbe(
       // halt). EPC/BD must describe the same retirement boundary as the writes.
       const older = expected.pc < victimPc;
       if (older ? actual[0].lineNumber >= record.firstLineNumber : actual[0].lineNumber <= record.lastLineNumber) {
-        fail(`main commit at PC 0x${expected.pc.toString(16)} contradicts handler ${record.scenarioId} EPC/BD boundary`);
+        fail(`主程序 PC 0x${expected.pc.toString(16)} 的提交与异常处理程序 ${record.scenarioId} 的 EPC/BD 边界矛盾`);
       }
     }
   }
@@ -49,7 +49,7 @@ export function checkP7ReturnProbe(
       (record.cause >>> 31) === 1 && record.epc === link.pc).length;
     const actual = byPc.get(link.pc) ?? [];
     if (actual.length !== count || actual.some(event => !matches(event, link))) {
-      fail(`jal link at PC 0x${link.pc.toString(16)}: expected ${count} identical writes justified by EPC/BD`);
+      fail(`PC 0x${link.pc.toString(16)} 的 jal 链接写入不符：根据 EPC/BD 应有 ${count} 次相同写入`);
     }
     for (const record of result.records) {
       const priorReplays = result.records.filter(item => item.scenarioId < record.scenarioId
@@ -58,19 +58,19 @@ export function checkP7ReturnProbe(
       const before = priorReplays + (link.pc < victimPc ? 1 : 0);
       if (actual.filter(event => event.lineNumber < record.firstLineNumber).length !== before
         || actual.some(event => event.lineNumber >= record.firstLineNumber && event.lineNumber <= record.lastLineNumber)) {
-        fail(`jal link replay order contradicts handler ${record.scenarioId} EPC/BD boundary`);
+        fail(`jal 链接写入的重放顺序与异常处理程序 ${record.scenarioId} 的 EPC/BD 边界矛盾`);
       }
     }
   }
   const expectedHandlers = activeScenarios.length;
   const ackStores = [...output.matchAll(/^CO_P7_PROBE return_ack_store\b[^\r\n]*/gm)];
   if (ackStores.length !== expectedHandlers) {
-    fail(`interrupt-generator store count differs: expected ${expectedHandlers}, got ${ackStores.length}`);
+    fail(`中断发生器的存储次数不符：应为 ${expectedHandlers} 次，实际为 ${ackStores.length} 次`);
   }
   for (const expected of plan.handlerCommits) {
     const actual = byPc.get(expected.pc) ?? [];
     if (actual.length !== expectedHandlers) {
-      fail(`handler commit at PC 0x${expected.pc.toString(16)}: expected ${expectedHandlers} writes`);
+      fail(`异常处理程序在 PC 0x${expected.pc.toString(16)} 的提交次数不符：应有 ${expectedHandlers} 次写入`);
     }
     for (let index = 0; index < expectedHandlers; index++) {
       const record = result.records.find(item => item.scenarioId === index + 1);
@@ -79,7 +79,7 @@ export function checkP7ReturnProbe(
       if (value !== undefined && !matches(actual[index], {
         kind: expected.kind, target: expected.target + index * (expected.targetStride ?? 0), value
       })) {
-        fail(`handler ${index + 1} commit at PC 0x${expected.pc.toString(16)} has the wrong kind, target or value`);
+        fail(`异常处理程序 ${index + 1} 在 PC 0x${expected.pc.toString(16)} 的提交类型、目标或值错误`);
       }
     }
   }
@@ -88,27 +88,27 @@ export function checkP7ReturnProbe(
     ...(plan.replayedLink ? [plan.replayedLink.pc] : [])
   ]);
   for (const pc of byPc.keys()) {
-    if (!allowedPcs.has(pc)) fail(`unexpected architectural write at PC 0x${pc.toString(16)}`);
+    if (!allowedPcs.has(pc)) fail(`PC 0x${pc.toString(16)} 出现非预期的架构写入`);
   }
 
   const firstAck = protocol(output, 'external_ack', 1);
   const seen = protocol(output, 'return_seen', 2);
   const exited = protocol(output, 'return_exit', 2);
   const secondAck = protocol(output, 'external_ack', 2);
-  if (seen.length > 1 || exited.length > 1) fail('return boundary was observed more than once');
+  if (seen.length > 1 || exited.length > 1) fail('返回边界被重复观测');
   if (secondRaised.length) {
     const order = [firstRaised, firstAck, seen, exited, secondRaised, secondAck];
     if (order.some(items => items.length !== 1)
       || order.some((items, index) => index > 0 && items[0] <= order[index - 1][0])) {
-      fail('second interrupt must follow first request, acknowledgement, eret observation and boundary exit');
+      fail('第二次中断必须发生在首次请求、应答、eret 观测和返回边界离开之后');
     }
   }
   const covered = firstRaised.length === 1 && secondRaised.length === 1;
   const coverage = [{
     covered,
     message: covered
-      ? '已通过公开宏观 PC 观察真实 eret 返回边界并触发第二次中断；不假定 CP0 流水级或固定周期。'
-      : '未覆盖：未观察到完整的真实 eret 返回边界与第二次中断；已有可观察行为仍被检查，不能记为重入中断通过。'
+      ? '已通过公开宏观 PC 观测到真实 eret 返回边界，并触发第二次中断；不假定 CP0 流水级或固定周期。'
+      : '未覆盖：未观测到完整的真实 eret 返回边界和第二次中断；仍会检查已观测到的行为，但不能判定重入中断通过。'
   }];
   return { ...result, passed: failures.length === 0 && covered, failures, coverage };
 }

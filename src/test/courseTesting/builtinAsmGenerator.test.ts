@@ -776,7 +776,7 @@ describe('built-in ASM generator', () => {
     for (const scenario of timerAdesScenarios) {
       const expected = scenario.expectedRecords?.[0];
       expect(expected?.requireEqualAuxPair).toBe(true);
-      expect(expected?.auxPairDescription).toContain('before/after invalid store');
+      expect(expected?.auxPairDescription).toContain('非法存储前后');
       const target = scenario.variant?.includes('timer1')
         ? scenario.variant.includes('ctrl') ? 0x7f10 : scenario.variant.includes('preset') ? 0x7f14 : 0x7f18
         : scenario.variant?.includes('ctrl') ? 0x7f00 : scenario.variant?.includes('preset') ? 0x7f04 : 0x7f08;

@@ -62,7 +62,7 @@ describe('P7 audit regressions', () => {
         [...missing, { ...original, lineNumber: events[events.length - 1].lineNumber + 1 }]
       ]) {
         expect(checkP7Probe('', corrupted, metadata).failures.some((failure) =>
-          failure.kind === 'cp0-reset' && failure.message.includes(name))).toBe(true);
+          failure.kind === 'cp0-reset' && failure.message.includes(name === 'status' ? 'Status' : name === 'cause' ? 'Cause' : 'EPC'))).toBe(true);
       }
     }
     // Historical manifests carry no raw-reset observations and stay replayable.

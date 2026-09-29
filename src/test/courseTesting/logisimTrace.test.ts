@@ -299,7 +299,7 @@ describe('Logisim trace helpers', () => {
 
   it('reports circuits that cannot be mapped by labels, appearance order, or pin position order', () => {
     expect(() => parseLogisimTraceSpec(projectWithoutUsableOrder(), 'main'))
-      .toThrow('cannot identify P3 trace output pins');
+      .toThrow('无法识别 P3 写回记录输出引脚');
   });
 
   it('supports explicit stdout column mapping for nonstandard layouts', () => {
@@ -342,7 +342,7 @@ describe('Logisim trace helpers', () => {
       .replace('<a name="label" val="Instr"/>', '<a name="label" val="pc"/>');
 
     expect(() => parseLogisimTraceSpec(conflicted, 'main'))
-      .toThrow('label means "pc"');
+      .toThrow('该标签表示“pc”');
   });
 
   it('formats a useful trace diagnostic report', () => {
@@ -350,9 +350,9 @@ describe('Logisim trace helpers', () => {
     const text = formatP3LogisimTraceDiagnostic(report);
 
     expect(report.spec?.mappingMode).toBe('labels');
-    expect(text).toContain('P3 Logisim Trace diagnostic');
+    expect(text).toContain('P3 Logisim 写回记录诊断');
     expect(text).toContain('#1 label="pc"');
-    expect(text).toContain('Termination: injected halt PC via pc column');
+    expect(text).toContain('停机方式：向程序注入停机循环，通过 pc 列检测停机 PC');
   });
 
   it('parses table rows and converts Logisim writes into CPU trace events', () => {
@@ -415,7 +415,7 @@ describe('Logisim trace helpers', () => {
     expect(parseLogisimTraceOutput(row, spec).events).toMatchObject([
       { kind: 'grf', target: '2', value: '00000000' }
     ]);
-    expect(() => parseLogisimTraceOutput(row.replace('0 0010', 'x xxxx'), spec)).toThrow('unknown regaddr');
+    expect(() => parseLogisimTraceOutput(row.replace('0 0010', 'x xxxx'), spec)).toThrow('regaddr 值未知');
   });
 
   it('validates fetched Instr values against generated machine code', () => {
@@ -437,7 +437,7 @@ describe('Logisim trace helpers', () => {
     ].join('\n'), spec);
 
     expect(() => validateP3LogisimFetchTrace(parsed.rows, spec, ['34010001', '1000ffff'], '00003004'))
-      .toThrow('instr mismatch');
+      .toThrow('instr 不匹配');
   });
 
   it('skips fetch instruction self-check when Instr is not mapped', () => {
@@ -449,7 +449,7 @@ describe('Logisim trace helpers', () => {
 
     const result = validateP3LogisimFetchTrace(parsed.rows, spec, ['34010001', '1000ffff'], '00003004');
 
-    expect(result.warnings[0]).toContain('no Instr column');
+    expect(result.warnings[0]).toContain('没有 Instr 列');
   });
 
   it('reports unaligned PCs during fetch validation', () => {
@@ -460,14 +460,14 @@ describe('Logisim trace helpers', () => {
     ].join('\n'), spec);
 
     expect(() => validateP3LogisimFetchTrace(parsed.rows, spec, ['34010001'], '00003004'))
-      .toThrow('not 4-byte aligned');
+      .toThrow('未按 4 字节对齐');
   });
 
   it('reports unknown values when the write event needs them', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
     const text = '00000000\t00003000\t1\t0 0010\txxxxxxxx\t0\txxxxxxxx\txxxxxxxx';
 
-    expect(() => parseLogisimTraceOutput(text, spec)).toThrow('unknown regdata');
+    expect(() => parseLogisimTraceOutput(text, spec)).toThrow('regdata 值未知');
   });
 
   it('computes the P3 halt PC and enforces the 4094-word payload limit', () => {
@@ -481,7 +481,7 @@ describe('Logisim trace helpers', () => {
     expect(prepareP3LogisimMachineCode(maxProgram).terminatedWordCount).toBe(4096);
 
     const tooLong = `${maxProgram}\n00000000\n`;
-    expect(() => prepareP3LogisimMachineCode(tooLong)).toThrow('maximum is 4094');
+    expect(() => prepareP3LogisimMachineCode(tooLong)).toThrow('最多允许 4094 个');
   });
 
   it('recognizes a source-provided halt loop without moving the monitored halt PC', () => {

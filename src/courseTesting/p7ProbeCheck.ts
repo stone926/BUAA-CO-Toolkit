@@ -96,12 +96,12 @@ function checkProbeRecords(
     if (writes.length !== 1 || matches.length !== 1) {
       failures.push({
         scenarioId: 0, kind: 'cp0-reset',
-        message: `CP0 reset ${name} read-back differs: expected exactly one zero sample at PC 0x${expected.pc.toString(16)}`
+        message: `CP0 复位后 ${cp0DisplayName(name)} 读回值不符合预期：PC 0x${expected.pc.toString(16)} 应恰好记录一次零值样本`
       });
     } else if (records.some((record) => record.firstLineNumber <= matches[0].lineNumber)) {
       failures.push({
         scenarioId: 0, kind: 'cp0-reset',
-        message: `CP0 reset ${name} sample appeared after an exception record`
+        message: `CP0 复位后 ${cp0DisplayName(name)} 的样本出现在异常记录之后`
       });
     }
   }
@@ -109,7 +109,7 @@ function checkProbeRecords(
     if (diagnostic.includes('mmio_on_dm')
       || diagnostic.includes('external_raise_unarmed')
       || diagnostic.includes('invalid_store_effect')) {
-      failures.push({ scenarioId: 0, kind: 'tb', message: diagnostic });
+      failures.push({ scenarioId: 0, kind: 'tb', message: protocolDiagnosticMessage(diagnostic) });
     }
   }
   for (const event of simEvents) {
@@ -117,7 +117,7 @@ function checkProbeRecords(
       failures.push({
         scenarioId: 0,
         kind: 'eret',
-        message: `instruction physically following eret committed DM at poison address 0x${p7ProbeEretPoisonAddress.toString(16)}`
+        message: `紧随 eret 的指令向毒值地址 0x${p7ProbeEretPoisonAddress.toString(16)} 提交了 DM 写入`
       });
     }
     if (event.kind === 'dm'
@@ -126,14 +126,14 @@ function checkProbeRecords(
       failures.push({
         scenarioId: 0,
         kind: 'timer',
-        message: 'Mode-1 timer exposed a stale IRQ before the fresh period was armed'
+        message: '模式 1 定时器在下一次中断的等待准备完成前仍产生了残留中断请求'
       });
     }
     if (event.kind === 'dm' && parseHex(event.target) > 0x2fff) {
       failures.push({
         scenarioId: 0,
         kind: 'tb',
-        message: `DM trace address exceeds the tutorial range 0x0000..0x2fff: 0x${parseHex(event.target).toString(16)}`
+        message: `DM 轨迹地址超出课程规定范围 0x0000..0x2fff：0x${parseHex(event.target).toString(16)}`
       });
     }
   }
@@ -142,16 +142,16 @@ function checkProbeRecords(
   const scenarioIds = new Set(metadata.scenarios.map((scenario) => scenario.id));
   for (const record of records) {
     if (record.scenarioId === 0 || !scenarioIds.has(record.scenarioId)) {
-      failures.push({ scenarioId: record.scenarioId, kind: 'record', message: `unexpected probe record scenario id ${record.scenarioId}` });
+      failures.push({ scenarioId: record.scenarioId, kind: 'record', message: `探针记录中的场景编号 ${record.scenarioId} 不在预期范围内` });
     }
     if (record.index >= expectedRecordCount) {
-      failures.push({ scenarioId: record.scenarioId, kind: 'record', message: `unexpected probe record index ${record.index}` });
+      failures.push({ scenarioId: record.scenarioId, kind: 'record', message: `探针记录索引 ${record.index} 不在预期范围内` });
     }
     if (record.duplicateFields.length) {
       failures.push({
         scenarioId: record.scenarioId,
         kind: 'record',
-        message: `probe record ${record.index} field(s) written more than once: ${record.duplicateFields.join(', ')}`
+        message: `探针记录 ${record.index} 的字段被重复写入：${record.duplicateFields.join(', ')}`
       });
     }
   }
@@ -160,7 +160,7 @@ function checkProbeRecords(
   for (const scenario of metadata.scenarios) {
     for (const pc of scenario.forbiddenCommitPcs ?? []) {
       if (atPc(pc).length) {
-        failures.push(failure(scenario, `forbidden younger/wrong-path PC 0x${(pc >>> 0).toString(16)} committed`));
+        failures.push(failure(scenario, `禁止提交的后续指令/错误路径 PC 0x${(pc >>> 0).toString(16)} 已提交`));
       }
     }
     const expectedRecords = expectedRecordsFor(scenario);
@@ -173,7 +173,7 @@ function checkProbeRecords(
         const commitTarget = victimCommit.kind === 'grf' ? `$${victimCommit.target}` : `*${victimCommit.target}`;
         failures.push(failure(
           scenario,
-          `exception victim PC 0x${(victimPc >>> 0).toString(16)} committed ${victimCommit.kind === 'grf' ? 'GPR' : 'DM'} ${commitTarget}`
+          `触发异常的指令 PC 0x${(victimPc >>> 0).toString(16)} 不应提交，但已写入 ${victimCommit.kind === 'grf' ? 'GPR' : 'DM'} ${commitTarget}`
         ));
       }
     }
@@ -182,18 +182,18 @@ function checkProbeRecords(
       const label = scenarioRecords.length > 1 ? 'duplicate' : 'missing';
       failures.push(failure(
         scenario,
-        `${label} probe records: expected 1, got ${scenarioRecords.length}`
+        `探针记录${label === 'duplicate' ? '重复' : '缺失'}：应有 1 条，实际 ${scenarioRecords.length} 条`
       ));
     }
     let finalRecord: P7ProbeRecord | undefined;
     const currentIndex = recordIndex++;
     const record = records.find((item) => item.index === currentIndex);
     if (!record) {
-      failures.push(failure(scenario, `missing probe record at index ${currentIndex}`));
+      failures.push(failure(scenario, `缺少索引为 ${currentIndex} 的探针记录`));
     } else if (record.scenarioId !== scenario.id) {
       failures.push(failure(
         scenario,
-        `probe record order differs at index ${currentIndex}: expected scenario id ${scenario.id}, got ${record.scenarioId}`
+        `探针记录顺序错误：索引 ${currentIndex} 应为场景 ${scenario.id}，实际为 ${record.scenarioId}`
       ));
     } else {
       finalRecord = record;
@@ -203,7 +203,7 @@ function checkProbeRecords(
           event.kind === 'dm' && parseHex(event.target) === (scenario.replayStatusAddress! >>> 0)
           && event.lineNumber > record.firstLineNumber && event.lineNumber < record.lastLineNumber);
         if (scenario.replayStatusAddress !== undefined && statusSamples.length !== 1) {
-          failures.push(failure(scenario, `record 2: expected one independently sampled Status, got ${statusSamples.length}`));
+          failures.push(failure(scenario, `记录 2：应独立采样一次 Status，实际 ${statusSamples.length} 次`));
         }
         const replayRecord: P7ProbeRecord = {
           ...record,
@@ -219,7 +219,7 @@ function checkProbeRecords(
         validateExpectedRecord(replayRecord, expectedRecords[1], scenario, 1, failures);
       }
       if (expectedRecords.length > 2) {
-        failures.push(failure(scenario, `unsupported packed CP0 observation count ${expectedRecords.length}`));
+        failures.push(failure(scenario, `不支持打包 ${expectedRecords.length} 组 CP0 观测值`));
       }
     }
     if (scenario.kind === 'external') {
@@ -231,28 +231,28 @@ function checkProbeRecords(
       const ackCount = diagnostics.filter((item) => item === `external_ack:${scenario.id}`).length;
       const requiresArm = Number.isFinite(scenario.armAddress) && Number.isFinite(scenario.armValue);
       if (requiresArm && armIndex < 0) {
-        failures.push(failure(scenario, 'external interrupt was not armed by software marker'));
+        failures.push(failure(scenario, '软件标记未能启动外部中断'));
       }
       if (requiresArm && raiseIndex < 0) {
-        failures.push(failure(scenario, 'external interrupt was not raised after arm marker'));
+        failures.push(failure(scenario, '启动标记之后未发出外部中断请求'));
       }
       if (ackIndex < 0) {
-        failures.push(failure(scenario, `external interrupt was not acknowledged through 0x${p7ExternalInterruptAckAddress.toString(16)}`));
+        failures.push(failure(scenario, `外部中断未通过 0x${p7ExternalInterruptAckAddress.toString(16)} 应答`));
       }
       if (requiresArm && armCount > 1) {
-        failures.push(failure(scenario, `external interrupt arm marker appeared ${armCount} times`));
+        failures.push(failure(scenario, `外部中断启动标记出现了 ${armCount} 次`));
       }
       if (raiseCount > 1) {
-        failures.push(failure(scenario, `external interrupt was raised ${raiseCount} times`));
+        failures.push(failure(scenario, `外部中断请求发出了 ${raiseCount} 次`));
       }
       if (ackCount > 1) {
-        failures.push(failure(scenario, `external interrupt was acknowledged ${ackCount} times`));
+        failures.push(failure(scenario, `外部中断应答了 ${ackCount} 次`));
       }
       if (requiresArm && armIndex >= 0 && raiseIndex >= 0 && armIndex > raiseIndex) {
-        failures.push(failure(scenario, 'external interrupt was raised before arm marker'));
+        failures.push(failure(scenario, '外部中断请求早于启动标记发出'));
       }
       if (raiseIndex >= 0 && ackIndex >= 0 && raiseIndex > ackIndex) {
-        failures.push(failure(scenario, 'external interrupt ack appeared before raise'));
+        failures.push(failure(scenario, '外部中断应答早于请求发出'));
       }
     }
     if ((scenario.kind === 'timer0' || scenario.kind === 'timer1')
@@ -264,10 +264,10 @@ function checkProbeRecords(
         continue;
       }
       if (record.aux0 !== 0) {
-        failures.push(failure(scenario, `timer CTRL differs after clear: expected 0, got 0x${(record.aux0 >>> 0).toString(16)}`));
+        failures.push(failure(scenario, `计时器清除后的 CTRL 不符：应为 0，实际为 0x${(record.aux0 >>> 0).toString(16)}`));
       }
       if (record.aux1 !== 0) {
-        failures.push(failure(scenario, `timer COUNT differs after clear: expected 0, got 0x${(record.aux1 >>> 0).toString(16)}`));
+        failures.push(failure(scenario, `计时器清除后的 COUNT 不符：应为 0，实际为 0x${(record.aux1 >>> 0).toString(16)}`));
       }
     }
     if (scenario.requireCompletion) {
@@ -275,10 +275,10 @@ function checkProbeRecords(
       if (completionEvents.length !== 1) {
         failures.push(failure(
           scenario,
-          `completion marker differs: expected exactly one $1=${scenario.id} commit at 0x${(scenario.donePc >>> 0).toString(16)}, got ${completionEvents.length}`
+          `完成标记不符：应在 0x${(scenario.donePc >>> 0).toString(16)} 恰好提交一次 $1=${scenario.id}，实际 ${completionEvents.length} 次`
         ));
       } else if (finalRecord && completionEvents[0].lineNumber <= finalRecord.lastLineNumber) {
-        failures.push(failure(scenario, 'completion marker appeared before the final handler record'));
+        failures.push(failure(scenario, '完成标记出现在最后一条异常处理程序记录之前'));
       }
     }
     const requiredCommits = [...(scenario.requiredPreHandlerCommits ?? []), ...(scenario.requiredCommits ?? [])];
@@ -287,7 +287,7 @@ function checkProbeRecords(
       const actualCount = atPc(pc).length;
       if (actualCount !== expectedCount) {
         failures.push(failure(scenario,
-          `required commit PC 0x${pc.toString(16)}: expected ${expectedCount} total writes, got ${actualCount}`));
+          `必要提交 PC 0x${pc.toString(16)}：应有 ${expectedCount} 次写入，实际 ${actualCount} 次`));
       }
     }
     for (const expectedCommit of scenario.requiredPreHandlerCommits ?? []) {
@@ -295,10 +295,10 @@ function checkProbeRecords(
       if (commits.length !== 1) {
         failures.push(failure(
           scenario,
-          `required pre-handler ${expectedCommit.kind.toUpperCase()} commit at 0x${(expectedCommit.pc >>> 0).toString(16)}: expected exactly once, got ${commits.length}`
+          `必要的异常前 ${expectedCommit.kind.toUpperCase()} 提交（PC 0x${(expectedCommit.pc >>> 0).toString(16)}）：应恰好一次，实际 ${commits.length} 次`
         ));
       } else if (finalRecord && commits[0].lineNumber >= finalRecord.firstLineNumber) {
-        failures.push(failure(scenario, 'required pre-handler commit appeared after the handler record began'));
+        failures.push(failure(scenario, '必要的异常前提交出现在异常处理程序记录开始之后'));
       }
     }
     for (const expectedCommit of scenario.requiredCommits ?? []) {
@@ -306,10 +306,10 @@ function checkProbeRecords(
       if (commits.length !== 1) {
         failures.push(failure(
           scenario,
-          `required ${expectedCommit.kind.toUpperCase()} commit at 0x${(expectedCommit.pc >>> 0).toString(16)}: expected exactly once, got ${commits.length}`
+          `必要的 ${expectedCommit.kind.toUpperCase()} 提交（PC 0x${(expectedCommit.pc >>> 0).toString(16)}）：应恰好一次，实际 ${commits.length} 次`
         ));
       } else if (finalRecord && commits[0].lineNumber <= finalRecord.lastLineNumber) {
-        failures.push(failure(scenario, 'required retry commit appeared before the handler record'));
+        failures.push(failure(scenario, '必要的重试提交出现在异常处理程序记录之前'));
       }
     }
   }
@@ -351,9 +351,9 @@ function validateExpectedRecord(
   scenarioRecordIndex: number,
   failures: P7ProbeFailure[]
 ): void {
-  const recordLabel = expectedRecordsFor(scenario).length > 1 ? `record ${scenarioRecordIndex + 1}: ` : '';
+  const recordLabel = expectedRecordsFor(scenario).length > 1 ? `记录 ${scenarioRecordIndex + 1}：` : '';
   if (record.kindCode !== kindCode(scenario.kind)) {
-    failures.push(failure(scenario, `${recordLabel}kind code differs: expected ${kindCode(scenario.kind)}, got ${record.kindCode}`));
+    failures.push(failure(scenario, `${recordLabel}场景类型编码不符：应为 ${kindCode(scenario.kind)}，实际为 ${record.kindCode}`));
   }
   // The tutorial requires every unimplemented CP0 bit to remain zero. The probe writes the
   // complete course interrupt mask before each scenario, so Status at handler entry is exact:
@@ -361,7 +361,7 @@ function validateExpectedRecord(
   if ((record.status >>> 0) !== (p7RequiredExceptionStatusMask >>> 0)) {
     failures.push(failure(
       scenario,
-      `${recordLabel}Status differs: expected exactly 0x${p7RequiredExceptionStatusMask.toString(16)}, got 0x${(record.status >>> 0).toString(16)}`
+      `${recordLabel}SR/Status 不符：应恰为 0x${p7RequiredExceptionStatusMask.toString(16)}，实际为 0x${(record.status >>> 0).toString(16)}`
     ));
   }
 
@@ -369,7 +369,7 @@ function validateExpectedRecord(
   if (unsupportedCauseBits !== 0) {
     failures.push(failure(
       scenario,
-      `${recordLabel}Cause contains nonzero unimplemented bits: 0x${unsupportedCauseBits.toString(16)}`
+      `${recordLabel}Cause 的未实现位应为 0，实际非零位为 0x${unsupportedCauseBits.toString(16)}`
     ));
   }
 
@@ -379,10 +379,10 @@ function validateExpectedRecord(
     || expected.expectedExcCode !== 0;
   if (expected.expectedExcCode !== undefined) {
     if (excCode !== expected.expectedExcCode) {
-      failures.push(failure(scenario, `${recordLabel}ExcCode differs: expected ${expected.expectedExcCode}, got ${excCode}`));
+      failures.push(failure(scenario, `${recordLabel}Cause.ExcCode 不符：应为 ${expected.expectedExcCode}，实际为 ${excCode}`));
     }
   } else if (scenario.kind === 'internal' && excCode === 0) {
-    failures.push(failure(scenario, `${recordLabel}internal exception recorded ExcCode 0`));
+    failures.push(failure(scenario, `${recordLabel}内部异常记录的 Cause.ExcCode 为 0`));
   }
 
   const actualIp = record.cause & p7CauseIpMask;
@@ -391,7 +391,7 @@ function validateExpectedRecord(
   if (!allowedIpMasks.includes(actualIp)) {
     failures.push(failure(
       scenario,
-      `${recordLabel}${internalException ? 'internal exception recorded unexpected' : 'Cause.IP differs: expected'} Cause.IP ${allowedIpMasks.map((value) => `0x${value.toString(16)}`).join(' or ')}, got 0x${actualIp.toString(16)}`
+      `${recordLabel}Cause.IP 不符：允许 ${allowedIpMasks.map((value) => `0x${value.toString(16)}`).join(' 或 ')}，实际为 0x${actualIp.toString(16)}`
     ));
   }
 
@@ -400,7 +400,7 @@ function validateExpectedRecord(
   if (expectedBd !== undefined && inDelaySlot !== expectedBd) {
     failures.push(failure(
       scenario,
-      `${recordLabel}Cause.BD differs: expected ${expectedBd ? 1 : 0}, got ${inDelaySlot ? 1 : 0}`
+      `${recordLabel}Cause.BD 不符：应为 ${expectedBd ? 1 : 0}，实际为 ${inDelaySlot ? 1 : 0}`
     ));
   } else if (expectedBd === undefined && inDelaySlot
     && !(expected.allowedBdEpc ?? (scenario.waitPc === undefined ? [] : [scenario.waitPc]))
@@ -409,27 +409,27 @@ function validateExpectedRecord(
       ?? (scenario.waitPc === undefined ? [] : [scenario.waitPc]);
     failures.push(failure(
       scenario,
-      `${recordLabel}Cause.BD=1 requires EPC to identify ${allowedBdEpc.length === 1 ? 'the probe wait branch' : 'an allowed wait branch'} at ${allowedBdEpc.length ? allowedBdEpc.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(' or ') : 'an unavailable PC'}`
+      `${recordLabel}Cause.BD=1 时，EPC 必须指向${allowedBdEpc.length === 1 ? '探针等待分支' : '允许的等待分支'}：${allowedBdEpc.length ? allowedBdEpc.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(' 或 ') : '无可用 PC'}`
     ));
   }
   if (expected.allowedEpc.length && !expected.allowedEpc.includes(record.epc >>> 0)) {
     failures.push(failure(
       scenario,
-      `${recordLabel}EPC 0x${(record.epc >>> 0).toString(16)} is outside allowed set ${expected.allowedEpc.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}`
+      `${recordLabel}EPC 0x${(record.epc >>> 0).toString(16)} 不在允许范围内（${expected.allowedEpc.map((pc) => `0x${(pc >>> 0).toString(16)}`).join(', ')}）`
     ));
   }
   const auxPairDescription = expected.auxPairDescription ?? 'HI/LO';
   if (expected.requireEqualAuxPair && record.aux0 !== record.aux1) {
     failures.push(failure(
       scenario,
-      `${recordLabel}${auxPairDescription} changed across the exception: before 0x${record.aux0.toString(16)}, after 0x${record.aux1.toString(16)}`
+      `${recordLabel}${auxPairDescription} 在异常前后发生变化：之前为 0x${record.aux0.toString(16)}，之后为 0x${record.aux1.toString(16)}`
     ));
   }
   if (expected.allowedAuxPairs?.length
     && !expected.allowedAuxPairs.some(([aux0, aux1]) => (aux0 >>> 0) === record.aux0 && (aux1 >>> 0) === record.aux1)) {
     failures.push(failure(
       scenario,
-      `${recordLabel}${auxPairDescription} observation differs: got 0x${record.aux0.toString(16)}/0x${record.aux1.toString(16)}`
+      `${recordLabel}${auxPairDescription} 观测值不符：实际为 0x${record.aux0.toString(16)}/0x${record.aux1.toString(16)}`
     ));
   }
 }
@@ -555,7 +555,7 @@ function kindCode(kind: P7ProbeScenario['kind']): number {
     case 'internal':
       return p7ProbeKindInternal;
     default:
-      throw new Error(`unknown P7 probe scenario kind: ${String(kind)}`);
+      throw new Error(`未知的 P7 探针场景类型：${String(kind)}`);
   }
 }
 
@@ -595,4 +595,28 @@ function parseHex(value: string): number {
   }
   const parsed = Number.parseInt(normalized, 16);
   return Number.isSafeInteger(parsed) ? parsed >>> 0 : Number.NaN;
+}
+
+function cp0DisplayName(name: string): string {
+  switch (name.toLowerCase()) {
+    case 'status':
+    case 'sr': return 'Status';
+    case 'cause': return 'Cause';
+    case 'epc': return 'EPC';
+    default: return name;
+  }
+}
+
+function protocolDiagnosticMessage(diagnostic: string): string {
+  let explanation: string;
+  if (diagnostic.includes('mmio_on_dm')) {
+    explanation = 'MMIO 错误写入了 DM';
+  } else if (diagnostic.includes('external_raise_unarmed')) {
+    explanation = '软件尚未准备外部中断，请求便已触发';
+  } else if (diagnostic.includes('invalid_store_effect')) {
+    explanation = '无效存储产生了不应有的副作用';
+  } else {
+    return diagnostic;
+  }
+  return `${explanation}（${diagnostic}）`;
 }

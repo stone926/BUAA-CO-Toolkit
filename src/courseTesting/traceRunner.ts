@@ -71,7 +71,7 @@ import {
   oracleOutputFileNameForCase,
   simOutputFileNameForCase
 } from '../courseTestTraceFiles';
-import { diffMessage, engineRunWasCancelled, engineStageFailureMessage } from '../courseTestMessages';
+import { diffMessage, engineRunWasCancelled, engineStageFailureMessage, p7ProbeKindLabel } from '../courseTestMessages';
 import { runExecutorShadow, type ExecutorShadowOutcome } from './executorShadowRunner';
 import { runFullStackShadow, type FullStackShadowOutcome } from './fullStackShadowRunner';
 import { runP3LogisimTraceCase } from '../courseTestLogisim';
@@ -120,7 +120,7 @@ export async function runCourseTraceCase(
     return failedCase(
       item,
       'oracle',
-      'Full-stack 固定 MARS 验证不支持带 stdin 的用例；此能力仍由阶段 7 处理'
+      '固定版本 MARS 的完整流程验证尚不支持带标准输入的用例'
     );
   }
   const fixedMars = enginePlan.mode === 'verify-both'
@@ -135,9 +135,9 @@ export async function runCourseTraceCase(
   }
   const pipeline = options.pipeline ?? defaultCourseTracePipeline();
 
-  services.output.appendLine(automatic ? '正在运行自动测试点' : '完整课程 Trace 测试');
+  services.output.appendLine(automatic ? '正在运行自动测试点' : '完整课程写回记录测试');
   if (!automatic) {
-    services.output.appendLine(`ASM: ${asm.fsPath}`);
+    services.output.appendLine(`汇编文件：${asm.fsPath}`);
   }
   if (item.stdin && !automatic) {
     services.output.appendLine(`标准输入: ${item.stdin.fsPath}`);
@@ -152,7 +152,7 @@ export async function runCourseTraceCase(
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
   if (!automatic) {
-    services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
+    services.output.appendLine(`汇编用例：${asmCase.manifestUri.fsPath}`);
   }
 
   if (item.asmCase && item.stdin
@@ -160,7 +160,7 @@ export async function runCourseTraceCase(
     return failedCase(
       item,
       'oracle',
-      '测试中止：已有 ASM case 不能改用另一个标准输入；请创建新 case',
+      '测试中止：已有汇编用例不能改用另一个标准输入；请创建新用例',
       undefined,
       undefined,
       asmCase
@@ -212,14 +212,14 @@ export async function runCourseTraceCase(
       return failedCase(
         item,
         'oracle',
-        'Full-stack shadow 不可比较：P7 probe 是 DUT-only 性质检查，不产生可比较的 oracle execution evidence',
+        '完整流程交叉验证不可比较：P7 定向检查仅验证待测 CPU 的可观察行为，不产生可用于比较的参考执行结果',
         asmCase.machineCode,
         undefined,
         asmCase
       );
     }
     if (!automatic) {
-      services.output.appendLine(`P7 Probe 场景: ${probe.scenarios.map((scenario) => `${scenario.id}:${scenario.kind}`).join(', ')}`);
+      services.output.appendLine(`P7 定向检查场景： ${probe.scenarios.map((scenario) => `${scenario.id}:${p7ProbeKindLabel(scenario.kind)}`).join(', ')}`);
     }
     const dut = await pipeline.runDut(services, {
       resource: asm,
@@ -249,7 +249,7 @@ export async function runCourseTraceCase(
       status: uncovered ? 'error' : probeResult.passed ? 'passed' : 'failed',
       stage: 'probe',
       message: uncovered ? uncovered.message
-        : probeResult.passed ? 'P7 Probe 检查通过' : probeResult.failures[0]?.message ?? 'P7 Probe 检查失败',
+        : probeResult.passed ? 'P7 定向检查通过' : probeResult.failures[0]?.message ?? 'P7 定向检查失败',
       machineCode: asmCase.machineCode.fsPath,
       dutOut: dut.simOut.fsPath,
       dutBackend: dut.backend,
@@ -291,24 +291,24 @@ export async function runCourseTraceCase(
   );
   const haltPc = manifestMachineCodeOf(asmCase.manifest)?.haltPc;
   if (haltPc === undefined || !Number.isSafeInteger(haltPc)) {
-    return failedCase(item, 'assemble', '测试中止：最终用户 .text dump 未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
+    return failedCase(item, 'assemble', '测试中止：最终导出的用户 .text 段未记录已验证的标准停机 PC', asmCase.machineCode, undefined, asmCase);
   }
   if (!dump.image) {
-    return failedCase(item, 'assemble', '测试中止：assembler 未返回权威 ProgramImage', asmCase.machineCode, undefined, asmCase);
+    return failedCase(item, 'assemble', '测试中止：汇编器未返回权威程序映像（ProgramImage）', asmCase.machineCode, undefined, asmCase);
   }
   const imagePolicyIssues = pipeline.validateProgram(profile, dump.image, haltPc);
   if (imagePolicyIssues.length) {
     return failedCase(
       item,
       'assemble',
-      `测试中止：ProgramImage 不符合课程硬件契约：[${imagePolicyIssues[0].code}] ${imagePolicyIssues[0].message}`,
+      `测试中止：程序映像（ProgramImage）不符合课程硬件约定：[${imagePolicyIssues[0].code}] ${imagePolicyIssues[0].message}`,
       asmCase.machineCode,
       undefined,
       asmCase
     );
   }
   if (!automatic) {
-    services.output.appendLine('Oracle 已设置有界执行预算，并要求 provider 证明标准停机尾');
+    services.output.appendLine('参考引擎已设置执行步数上限，并要求验证标准停机尾');
   }
   const oracleOutputUri = caseOutputMode
     ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
@@ -344,8 +344,8 @@ export async function runCourseTraceCase(
   }
   if (!oracle?.ok || !oracle.outputFile || !oracle.trace) {
     const detail = oracle
-      ? engineStageFailureMessage('测试中止：oracle 运行失败或未返回 canonical trace', oracle.status)
-      : `测试中止：oracle preflight 失败: ${preflightFailureMessage(oracleInvocation.preflight)}`;
+      ? engineStageFailureMessage('测试中止：参考引擎运行失败或未返回规范写回记录', oracle.status)
+      : `测试中止：参考引擎预检失败： ${preflightFailureMessage(oracleInvocation.preflight)}`;
     return failedCase(
       item,
       'oracle',
@@ -406,8 +406,8 @@ export async function runCourseTraceCase(
           item,
           'oracle',
           shadowCancelled
-            ? `测试已取消：executor shadow：${executorShadow.message}`
-            : `测试中止：executor shadow ${executorShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${executorShadow.message}`,
+            ? `测试已取消：执行器交叉验证：${executorShadow.message}`
+            : `测试中止：执行器交叉验证${executorShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${executorShadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase,
@@ -441,7 +441,7 @@ export async function runCourseTraceCase(
         ...failedCase(
           item,
           'oracle',
-          `测试中止：full-stack shadow ${fullStackShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${fullStackShadow.message}`,
+          `测试中止：完整流程交叉验证${fullStackShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${fullStackShadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase
@@ -478,8 +478,8 @@ export async function runCourseTraceCase(
 
   if (!diff.summary.oracleEvents || !diff.summary.dutEvents) {
     const emptyTraceMessage = !diff.summary.oracleEvents && !diff.summary.dutEvents
-      ? 'Oracle 与 DUT 均无可解析的写回 Trace 事件，现有观测结果无法判定 CPU 是否实际执行了程序'
-      : 'Oracle 与 DUT 仅有一端没有可解析的 Trace 事件';
+      ? '参考结果与待测 CPU 均无可解析的写回事件，现有观测结果无法判定 CPU 是否实际执行了程序'
+      : '参考结果与待测 CPU 中有一方没有可解析的写回事件';
     return {
       asm: asm.fsPath,
       stdin: item.stdin?.fsPath,

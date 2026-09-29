@@ -61,7 +61,7 @@ export function isP3LogisimTraceSemanticLabel(label: string): label is LogisimTr
 function resolveLogisimTraceProfile(profile: 'P3'): ResolvedLogisimTraceProfile {
   const config = getLogisimTraceProfileConfig(profile);
   if (!config) {
-    throw new Error(`Missing Logisim trace profile "${profile}" in courseConfig.json.`);
+    throw new Error(`courseConfig.json 中缺少 Logisim 写回记录配置“${profile}”。`);
   }
   return normalizeProfileConfig(profile, config);
 }
@@ -74,7 +74,7 @@ function normalizeProfileConfig(
   const romMaxWords = positiveInteger(config.romMaxWords, `${profile}.romMaxWords`);
   const haltLoopWords = positiveInteger(config.haltLoopWords, `${profile}.haltLoopWords`);
   if (haltLoopWords >= romMaxWords) {
-    throw new Error(`Logisim trace profile "${profile}" haltLoopWords must be smaller than romMaxWords.`);
+    throw new Error(`Logisim 写回记录配置“${profile}”中的 haltLoopWords 必须小于 romMaxWords。`);
   }
 
   const columns = Object.entries(config.columns);
@@ -82,7 +82,7 @@ function normalizeProfileConfig(
   const orderedLabels = config.orderedColumns.map((label) => requireSemanticLabel(label, `${profile}.orderedColumns`));
   for (const label of orderedLabels) {
     if (!config.columns[label]) {
-      throw new Error(`Logisim trace profile "${profile}" orderedColumns references missing column "${label}".`);
+      throw new Error(`Logisim 写回记录配置“${profile}”的 orderedColumns 引用了不存在的列“${label}”。`);
     }
   }
 
@@ -128,7 +128,7 @@ function buildAliasMap(
       }
       const existing = result.get(normalized);
       if (existing && existing !== semantic) {
-        throw new Error(`Logisim trace profile "${profile}" maps alias "${alias}" to both "${existing}" and "${semantic}".`);
+        throw new Error(`Logisim 写回记录配置“${profile}”将别名“${alias}”同时映射到“${existing}”和“${semantic}”。`);
       }
       result.set(normalized, semantic);
     }
@@ -139,7 +139,7 @@ function buildAliasMap(
 function requireSemanticLabel(label: string, context: string): LogisimTraceSemanticLabel {
   const normalized = normalizeLogisimTraceLabel(label);
   if (!knownSemanticLabels.has(normalized as LogisimTraceSemanticLabel)) {
-    throw new Error(`Unknown Logisim trace semantic label "${label}" in ${context}.`);
+    throw new Error(`${context} 中的 Logisim 写回记录语义标签“${label}”未知。`);
   }
   return normalized as LogisimTraceSemanticLabel;
 }
@@ -147,25 +147,25 @@ function requireSemanticLabel(label: string, context: string): LogisimTraceSeman
 function requireRequiredLabel(label: string, context: string): LogisimTraceRequiredLabel {
   const semantic = requireSemanticLabel(label, context);
   if (semantic === 'instr') {
-    throw new Error(`Logisim trace profile marks optional column "instr" as required in ${context}.`);
+    throw new Error(`Logisim 写回记录配置在 ${context} 中将可选列“instr”标记为必需列。`);
   }
   return semantic;
 }
 
 function parseHexAddress(value: string, context: string): number {
   if (!/^0x[0-9a-f]+$/i.test(value)) {
-    throw new Error(`Expected hexadecimal address for ${context}.`);
+    throw new Error(`${context} 应为十六进制地址。`);
   }
   const parsed = Number.parseInt(value, 16);
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error(`Address ${context} is outside the safe integer range.`);
+    throw new Error(`${context} 超出安全整数范围。`);
   }
   return parsed;
 }
 
 function positiveInteger(value: number, context: string): number {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`Expected positive integer for ${context}.`);
+    throw new Error(`${context} 应为正整数。`);
   }
   return value;
 }

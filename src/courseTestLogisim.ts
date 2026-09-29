@@ -140,9 +140,9 @@ export async function runP3LogisimTraceCase(
   const asm = item.asm;
   const pipeline = options.pipeline ?? defaultP3TracePipeline();
   const automatic = options.source?.kind === 'generator';
-  services.output.appendLine(automatic ? '正在运行自动测试点' : 'P3 Logisim Trace 测试');
+  services.output.appendLine(automatic ? '正在运行自动测试点' : 'P3 Logisim 写回记录测试');
   if (!automatic) {
-    services.output.appendLine(`ASM: ${asm.fsPath}`);
+    services.output.appendLine(`汇编源文件：${asm.fsPath}`);
   }
   if (item.stdin) {
     return {
@@ -150,7 +150,7 @@ export async function runP3LogisimTraceCase(
       stdin: item.stdin.fsPath,
       status: 'error',
       stage: 'dut',
-      message: 'P3 Logisim Trace 对拍不支持标准输入用例'
+      message: 'P3 Logisim 写回记录对拍不支持标准输入用例'
     };
   }
   const enginePlan = resolveCourseEnginePlan(
@@ -172,7 +172,7 @@ export async function runP3LogisimTraceCase(
       asm: asm.fsPath,
       status: 'error',
       stage: 'dut',
-      message: '测试中止：未准备 Logisim Trace 电路'
+      message: '测试中止：未准备 Logisim 写回记录电路'
     };
   }
 
@@ -185,9 +185,9 @@ export async function runP3LogisimTraceCase(
   });
   const caseOutputMode = options.artifactOutputMode === 'case';
   if (!automatic) {
-    services.output.appendLine(`ASM case: ${asmCase.manifestUri.fsPath}`);
-    services.output.appendLine(`Logisim 电路: ${setup.circuit.fsPath}`);
-    services.output.appendLine(`Trace 顶层: ${setup.traceCircuit}`);
+    services.output.appendLine(`汇编用例：${asmCase.manifestUri.fsPath}`);
+    services.output.appendLine(`Logisim 电路：${setup.circuit.fsPath}`);
+    services.output.appendLine(`写回记录顶层：${setup.traceCircuit}`);
   }
   await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-diagnostic.txt', setup.traceDiagnostic, 'traceDiagnostic');
 
@@ -211,7 +211,7 @@ export async function runP3LogisimTraceCase(
     );
   }
   if (!automatic) {
-    services.output.appendLine(`机器码: ${asmCase.machineCode.fsPath}`);
+    services.output.appendLine(`机器码：${asmCase.machineCode.fsPath}`);
   }
 
   const machineCodeText = await readTextFile(asmCase.machineCode);
@@ -233,7 +233,7 @@ export async function runP3LogisimTraceCase(
     );
   }
   if (!automatic) {
-    services.output.appendLine(`Logisim 停机 PC: 0x${logisimCode.haltPcHex}`);
+    services.output.appendLine(`Logisim 停机 PC：0x${logisimCode.haltPcHex}`);
   }
 
   let preparedCircuit: vscode.Uri;
@@ -285,7 +285,7 @@ export async function runP3LogisimTraceCase(
     );
   }
   if (!automatic) {
-    services.output.appendLine(`Oracle 最多执行 ${maxSteps} 条架构指令，并要求 provider 证明标准停机尾`);
+    services.output.appendLine(`参考模型最多执行 ${maxSteps} 条架构指令，并要求执行器证明标准停机尾`);
   }
   const oracleOutputUri = caseOutputMode
     ? asmCaseArtifactUri(asmCase, 'oracle', oracleOutputFileNameForCase(item))
@@ -375,8 +375,8 @@ export async function runP3LogisimTraceCase(
           item,
           'oracle',
           shadowCancelled
-            ? `测试已取消：executor shadow：${executorShadow.message}`
-            : `测试中止：executor shadow ${executorShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${executorShadow.message}`,
+            ? `测试已取消：执行器交叉验证：${executorShadow.message}`
+            : `测试中止：执行器交叉验证${executorShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${executorShadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase,
@@ -408,7 +408,7 @@ export async function runP3LogisimTraceCase(
         ...failedCase(
           item,
           'oracle',
-          `测试中止：full-stack shadow ${fullStackShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${fullStackShadow.message}`,
+          `测试中止：完整流程交叉验证${fullStackShadow.status === 'inconclusive' ? '存在未登记差异' : '不可比较'}：${fullStackShadow.message}`,
           asmCase.machineCode,
           oracle.outputFile,
           asmCase
@@ -449,7 +449,7 @@ export async function runP3LogisimTraceCase(
       status: 'error',
       ...(engineRunWasCancelled(logisimRun.result, options.signal) ? { cancelled: true as const } : {}),
       stage: 'dut',
-      message: engineStageFailureMessage('测试中止：DUT 命令行运行失败', logisimRun.result),
+      message: engineStageFailureMessage('测试中止：被测电路命令行运行失败', logisimRun.result),
       machineCode: asmCase.machineCode.fsPath,
       oracleOut: oracle.outputFile.fsPath,
       dutRawOut: rawOut.fsPath,
@@ -468,7 +468,7 @@ export async function runP3LogisimTraceCase(
       logisimCode.haltPcHex
     );
     for (const warning of fetchValidation.warnings) {
-      services.output.appendLine(`Logisim fetch check: ${warning}`);
+      services.output.appendLine(`Logisim 取指校验：${warning}`);
     }
   } catch (error) {
     return {
@@ -527,7 +527,7 @@ export async function runP3LogisimTraceCase(
       ...caseResultFields(asmCase),
       status: 'error',
       stage: 'compare',
-      message: '某一端没有可解析的 Trace 事件',
+      message: '某一端没有可解析的写回记录事件',
       machineCode: asmCase.machineCode.fsPath,
       oracleOut: oracle.outputFile.fsPath,
       dutOut: simTrace.fsPath,
@@ -636,8 +636,8 @@ export function resolveSingleP3LogisimRomTarget(
   }
 
   const message = candidates.length === 0
-    ? 'P3 Logisim Trace 电路中未找到唯一的 32 位 ROM 组件'
-    : `P3 Logisim Trace 电路应当只有一个 32 位 ROM 组件，当前找到 ${candidates.length} 个`;
+    ? 'P3 Logisim 写回记录电路中未找到唯一的 32 位 ROM 组件'
+    : `P3 Logisim 写回记录电路应当只有一个 32 位 ROM 组件，当前找到 ${candidates.length} 个`;
   services.output.appendLine(message);
   vscode.window.showErrorMessage(message);
   return undefined;
@@ -666,12 +666,12 @@ export async function resolveP3LogisimTraceSetup(
     traceSpec = traceReport.spec ?? parseLogisimTraceSpec(circuitText, traceCircuit, { traceColumns });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    vscode.window.showErrorMessage(`P3 Logisim Trace 顶层不可用：${traceReport.errors[0] ?? message}`);
+    vscode.window.showErrorMessage(`P3 Logisim 写回记录顶层不可用：${traceReport.errors[0] ?? message}`);
     services.output.appendLine(traceDiagnostic);
     return undefined;
   }
   if (!traceReport.spec) {
-    vscode.window.showErrorMessage(`P3 Logisim Trace 顶层不可用：${traceReport.errors[0] ?? '无法解析 trace 端口'}`);
+    vscode.window.showErrorMessage(`P3 Logisim 写回记录顶层不可用：${traceReport.errors[0] ?? '无法解析写回记录端口'}`);
     services.output.appendLine(traceDiagnostic);
     return undefined;
   }
@@ -684,12 +684,12 @@ export async function resolveP3LogisimTraceSetup(
   if (!options.nonInteractive) {
     revealOutputChannel(services.output, circuit);
     services.output.appendLine('');
-    services.output.appendLine('P3 Logisim Trace 设置');
-    services.output.appendLine(`电路: ${circuit.fsPath}`);
-    services.output.appendLine(`Trace 顶层: ${traceCircuit}`);
-    services.output.appendLine(`Trace 输出列: ${traceSpec.columns.map((column) => column.logisimLabel || `(col ${column.index})`).join(', ')}`);
+    services.output.appendLine('P3 Logisim 写回记录设置');
+    services.output.appendLine(`电路：${circuit.fsPath}`);
+    services.output.appendLine(`写回记录顶层：${traceCircuit}`);
+    services.output.appendLine(`写回记录输出列：${traceSpec.columns.map((column) => column.logisimLabel || `(第 ${column.index} 列)`).join(', ')}`);
     services.output.appendLine(traceDiagnostic);
-    services.output.appendLine(`ROM: ${romTarget.label ?? 'ROM'}${romTarget.loc ? ` ${romTarget.loc}` : ''}`);
+    services.output.appendLine(`ROM：${romTarget.label ?? 'ROM'}${romTarget.loc ? ` ${romTarget.loc}` : ''}`);
   }
 
   return {
@@ -727,8 +727,8 @@ export async function runLogisimTraceCli(
   const display = commandLine(java, args);
   const timeoutMs = nonInteractive ? automaticExternalToolTimeoutMs : getRunTimeout(resource);
   if (!nonInteractive) {
-    services.output.appendLine(`$ ${display}`);
-    services.output.appendLine(`cwd: ${cwd}`);
+    services.output.appendLine(`命令：${display}`);
+    services.output.appendLine(`工作目录：${cwd}`);
   }
 
   if (!nonInteractive && showCommandBeforeRun(resource)) {
@@ -856,7 +856,7 @@ async function ensureP3LogisimTraceToolchainReady(
     revealOutputChannel(services.output, resource);
   }
   services.output.appendLine('');
-  services.output.appendLine(options.nonInteractive ? '正在检查自动测试工具链' : '正在检查 P3 Logisim Trace 对拍工具链');
+  services.output.appendLine(options.nonInteractive ? '正在检查自动测试工具链' : '正在检查 P3 Logisim 写回记录对拍工具链');
 
   const engineMode = options.nonInteractive ? automaticTestEngineMode : getMipsEngine(resource);
   const memoryConfiguration = getMemoryConfiguration(resource);
@@ -878,7 +878,7 @@ async function ensureP3LogisimTraceToolchainReady(
   }
 
   const formatter = options.nonInteractive ? formatAutomaticToolchainFailure : formatToolchainFailure;
-  const message = `${options.nonInteractive ? '自动测试' : 'P3 Logisim Trace'}工具链检查失败：${failed.map(formatter).join('；')}`;
+  const message = `${options.nonInteractive ? '自动测试' : 'P3 Logisim 写回记录'}工具链检查失败：${failed.map(formatter).join('；')}`;
   services.output.appendLine(message);
   vscode.window.showErrorMessage(message);
   return false;

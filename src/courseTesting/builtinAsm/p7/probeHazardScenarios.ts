@@ -102,7 +102,7 @@ function emitInterruptHazard(
       expectedIpMask: expectedIpMask(kind), expectedExcCode: 0, expectedBd: bd, allowedEpc: [epc],
       // Mode 0 has already expired; the handler samples CTRL/COUNT before clear.
       allowedAuxPairs: [kind === 'external' ? [0, 0] : [8, 0]],
-      auxPairDescription: `${kind} stable interrupt-source CTRL/COUNT`
+      auxPairDescription: `${kind} 中断源稳定时的 CTRL/COUNT`
     }],
     requiredPreHandlerCommits: pre, requiredCommits: post, forbiddenCommitPcs, requireCompletion: true
   };
