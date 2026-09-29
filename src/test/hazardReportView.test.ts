@@ -32,14 +32,21 @@ describe('native hazard report view', () => {
     expect(page).toContain('正常结束');
     expect(page).toContain('6.7%');
     expect(page).toContain('70.0%');
-    expect(page).toContain('<progress class="meter" value="70" max="100">');
+    expect(page).toContain('<progress class="meter" aria-label="转发有效率" value="70" max="100">');
     expect(page).toContain('cal_rr &lt;~~ load');
     expect(page).toContain('0x00003004');
     expect(page).toContain('周期 4');
     expect(page).toContain('寄存器 $t0');
     expect(page).toContain('id="event-search"');
+    expect(page).toContain('id="event-reset" hidden');
+    expect(page).toContain('class="report-shell hazard-report"');
+    expect(page).toContain('class="summary overview"');
+    expect(page).toContain('aria-live="polite" aria-atomic="true"');
+    expect(page).toContain('reset.addEventListener');
+    expect(page).toContain('event.key === \'Escape\'');
     expect(page).toContain('href="#improvements-heading"');
     expect(page).toContain('id="matrix-filter"');
+    expect(page).toContain('role="region" aria-label="指令类别覆盖矩阵，可水平滚动" tabindex="0"');
     expect(page).toContain('data-observed="true" data-gap="true"');
     for (const action of ['reanalyze', 'openInput', 'openJson']) {
       expect(page).toContain(`data-action="${action}"`);

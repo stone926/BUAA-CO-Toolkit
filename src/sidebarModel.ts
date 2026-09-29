@@ -78,7 +78,7 @@ export function buildSidebarModel(context: SidebarModelContext): SidebarNodeMode
 function projectSection(context: SidebarModelContext): SidebarNodeModel {
   const toolSummary = summarizeTools(context.tools);
   const children: SidebarNodeModel[] = [
-    infoItem('project.profile', 'Profile', profileDescription(context.profile), `配置来源: ${context.configSource}`, context.profile === 'auto' ? 'warning' : 'symbol-class', {
+    infoItem('project.profile', 'Profile', profileDescription(context.profile), `${configSourceTooltip(context)}\n\n点击选择项目 Profile。`, context.profile === 'auto' ? 'warning' : 'symbol-class', {
       command: Commands.SelectProjectProfile,
       title: '选择 Profile'
     }),
@@ -89,8 +89,7 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
       context.workspacePath ?? '请先打开一个工作区文件夹',
       context.workspacePath ? 'root-folder' : 'warning'
     ),
-    infoItem('project.config', '配置来源', context.configSource, configSourceTooltip(context), 'json'),
-    infoItem('project.tools', '工具链', toolSummary.description, toolSummary.tooltip, toolSummary.icon, {
+    infoItem('project.tools', '工具链', toolSummary.description, `${toolSummary.tooltip}\n\n点击检查工具链。`, toolSummary.icon, {
       command: Commands.CheckToolchain,
       title: '检查工具链'
     }),
@@ -102,22 +101,6 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
       '创建结构 / 写入工作区设置',
       workspaceTooltip(context, '项目向导会在当前工作区创建课程目录，并写入 VS Code 工作区设置。')
     ),
-    actionItem(
-      'project.selectProfile',
-      '选择 Profile',
-      Commands.SelectProjectProfile,
-      'settings-gear',
-      context.profile === 'auto' ? '无法自动推断' : `当前 ${context.profile}`,
-      '切换 co.project.profile；auto 无法推断时会要求手动选择。'
-    ),
-    actionItem(
-      'project.checkToolchain',
-      '检查工具链',
-      Commands.CheckToolchain,
-      'check-all',
-      toolSummary.description,
-      toolSummary.tooltip
-    )
   ];
   return sectionItem('project', '项目', true, children);
 }

@@ -402,18 +402,12 @@
       {
         "command": "co.mips.runInTerminal",
         "title": "CO: MARS 在终端中运行",
-        "icon": {
-          "light": "icons/run-terminal-light.svg",
-          "dark": "icons/run-terminal-dark.svg"
-        }
+        "icon": "$(terminal)"
       },
       {
         "command": "co.mips.dumpText",
         "title": "CO: ASM 导出文本段",
-        "icon": {
-          "light": "icons/dump-text-light.svg",
-          "dark": "icons/dump-text-dark.svg"
-        }
+        "icon": "$(export)"
       },
       {
         "command": "co.mips.dumpKernelText",
@@ -431,10 +425,7 @@
       {
         "command": "co.verilog.runSimulation",
         "title": "CO: Verilog 运行仿真",
-        "icon": {
-          "light": "icons/run-simulation-light.svg",
-          "dark": "icons/run-simulation-dark.svg"
-        }
+        "icon": "$(play)"
       },
       {
         "command": "co.verilog.viewWaveform",
@@ -478,10 +469,7 @@
       {
         "command": "co.logisim.openCurrentCircuit",
         "title": "CO: Logisim 打开当前电路",
-        "icon": {
-          "light": "icons/open-circuit-light.svg",
-          "dark": "icons/open-circuit-dark.svg"
-        }
+        "icon": "$(circuit-board)"
       },
       {
         "command": "co.hazard.analyzeCurrentMachineCode",

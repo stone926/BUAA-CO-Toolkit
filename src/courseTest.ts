@@ -40,7 +40,7 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopAutomaticTests()),
-    vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, () => openAsmCaseIndex())
+    vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, (resource?: vscode.Uri) => openAsmCaseIndex(resource))
   );
 }
 
@@ -83,10 +83,12 @@ async function resolveCourseTraceRunOptions(
   return options;
 }
 
-async function openAsmCaseIndex(): Promise<void> {
-  const manifests = await listAsmCaseManifests(vscode.window.activeTextEditor?.document.uri);
+async function openAsmCaseIndex(resource?: vscode.Uri): Promise<void> {
+  const manifests = await listAsmCaseManifests(resource ?? vscode.window.activeTextEditor?.document.uri);
   const panel = vscode.window.createWebviewPanel('coAsmCaseIndex', '测试历史 / 失败用例', vscode.ViewColumn.Beside, {
-    enableScripts: false
+    enableScripts: true,
+    enableFindWidget: true,
+    localResourceRoots: []
   });
   panel.webview.html = renderAsmCaseIndex(manifests);
 }

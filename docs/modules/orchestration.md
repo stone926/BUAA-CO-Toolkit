@@ -63,7 +63,8 @@
 - `wizard.ts` / `wizardSettings.ts` — 4 步项目向导：选 Profile → 项目名 → 配置外部工具 → 创建目录与模板
 - `advancedTools.ts` / `advancedToolModel.ts` — 按 Profile 过滤的低频工具
 - `configurationResource.ts` / `diagnosticSettings.ts` — 诊断快速修复的配置读改写（精确作用域）
-- `webview/reportLayout.ts` — 报告 Webview 共享 shell/CSS
+- `webview/reportLayout.ts` — 报告 Webview 共享 shell/CSS、状态徽标、可横向滚动表格与 nonce CSP；历史报告按需加载本地筛选脚本
+- `webview/toolchainReport.ts` — 无宿主依赖的工具链报告渲染（汇总、状态与操作建议）
 - `templates/templateRegistry.ts` — `resources/templates` 受控占位替换加载器
 - `legacySemanticColorMigration.ts` — 一次性清理旧的全局 semantic token 规则
 - `workflowInputs.ts` / `types.ts` — 文件选择辅助与 `AppServices`/`RunResult`/`ToolDetection` 等公共类型

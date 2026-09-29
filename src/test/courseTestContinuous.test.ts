@@ -10,8 +10,13 @@ const vscodeMocks = vi.hoisted(() => ({
   showInformationMessage: vi.fn(async () => undefined),
   showWarningMessage: vi.fn(async () => undefined),
   showErrorMessage: vi.fn(async () => undefined),
+  executeCommand: vi.fn(async (..._args: unknown[]) => undefined),
+  messageListeners: [] as Array<(message: unknown) => Promise<void>>,
   createWebviewPanel: vi.fn(() => ({
-    webview: { html: '' },
+    webview: { html: '', onDidReceiveMessage: vi.fn((listener: (message: unknown) => Promise<void>) => {
+      vscodeMocks.messageListeners.push(listener);
+      return { dispose: vi.fn() };
+    }) },
     onDidDispose: vi.fn((listener: () => void) => {
       vscodeMocks.disposeListeners.push(listener);
       return { dispose: () => undefined };
@@ -40,6 +45,7 @@ const fileMocks = vi.hoisted(() => ({
 
 vi.mock('vscode', async () => ({
   Uri: URI,
+  commands: { executeCommand: vscodeMocks.executeCommand },
   ViewColumn: { Beside: 2 },
   workspace: {
     saveAll: vscodeMocks.saveAll
@@ -139,6 +145,7 @@ const setup: TestSetup = {
 beforeEach(() => {
   vi.clearAllMocks();
   vscodeMocks.disposeListeners.splice(0);
+  vscodeMocks.messageListeners.splice(0);
   policyMocks.intervalMs.mockReturnValue(1);
   policyMocks.maxIterations.mockReturnValue(1);
   policyMocks.reportRetainedIterations.mockReturnValue(20);
@@ -152,6 +159,23 @@ afterEach(() => {
 });
 
 describe('continuous generated trace orchestration', () => {
+  it('opens history in the monitor workspace and ignores unrecognized actions and supplied paths', async () => {
+    const deps = createDependencies();
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+    expect(vscodeMocks.createWebviewPanel).toHaveBeenCalledWith(
+      'coContinuousTraceReport', '持续测试', 2,
+      expect.objectContaining({
+        enableScripts: true,
+        localResourceRoots: []
+      })
+    );
+    const receive = vscodeMocks.messageListeners.at(-1)!;
+    await receive({ action: 'openHistory', resource: 'E:/another-workspace' });
+    expect(vscodeMocks.executeCommand).toHaveBeenCalledWith('co.test.openAsmCaseIndex', deps.generatorFolder(setup).uri);
+    await receive({ action: 'runArbitraryCommand' });
+    expect(vscodeMocks.executeCommand).toHaveBeenCalledTimes(1);
+  });
+
   it('reserves the session before asynchronous startup initialization completes', async () => {
     const pendingSetup = deferred<TestSetup | undefined>();
     const deps = createDependencies({

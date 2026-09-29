@@ -26,6 +26,20 @@ import {
 import type { ContinuousTraceReport, CourseTraceCaseResult } from '../courseTestReport';
 
 describe('course test reports', () => {
+  it('offers stop only while running and explains empty monitor/history states', () => {
+    const report: ContinuousTraceReport = { generatedAt: '', running: true, stopRequested: false, iterations: [] };
+    const render = () => renderContinuousTraceMonitor(report, {} as never);
+    expect(render()).toContain('data-report-action="stop"');
+    expect(render()).toContain('正在准备第一轮测试');
+    report.stopRequested = true;
+    expect(render()).not.toContain('data-report-action="stop"');
+    report.running = false;
+    expect(render()).not.toContain('data-report-action="stop"');
+    expect(render()).toContain('data-report-action="openHistory"');
+    expect(renderAsmCaseIndex([])).toContain('还没有测试记录');
+    expect(renderAsmCaseIndex([])).not.toContain('data-report-filters');
+  });
+
   it('labels unclassified framework failures as internal instead of compare', () => {
     expect(publicAutomaticDiagnosticMessage({
       asm: 'hidden.asm',

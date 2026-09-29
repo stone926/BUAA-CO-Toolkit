@@ -29,12 +29,14 @@
 `resources/templates/` 经 `templates/templateRegistry.ts` 做受控占位替换，保证生成产物可审计。
 
 - `verilog/` — `basic_testbench.v`、`external_memory_testbench.v`、`p7_official_testbench.v`、`p7_interrupt_block*.v`、`p7_probe_block.v`、`waveform_dumper.v`（波形 dump 顶层）、`dm_store_contract.v`（P6/P7 有效 DM 写事务契约，保留 `CO_DM_STORE` 原始字段供 builtin oracle 对拍）、`p7_probe_invalid_store_observer.v` + `p7_probe_invalid_store_case.v`
-- `webview/` — `report_page.html`、`report.css`、`waveform_page.html`（严格 CSP，脚本/样式来自 `out/media`）
+- `webview/` — `report_page.html`、`report.css`（测试/工具链/冲突分析共享主题样式）、`reportFilter.js`（测试历史搜索/结果筛选与视图状态恢复）、`continuousActions.js`（固定停止/历史操作，工作区与会话由宿主持有）；`waveform_page.html`（独立波形界面，脚本/样式来自 `out/media`）。报告均使用 nonce CSP，无远程字体、脚本或图标依赖。
 - `wizard/` — `p2_main.asm`、`verilog_top.v`、基础 testbench fallback
 - `asm/` — `p7_exception_handler*.asm`、`p7_probe_prologue.asm`、`p7_probe_handler.asm`
 - `hazard/` — 冲突报告模板
 
 ## 编辑器资产
+
+- `icons/logo.svg` / `icons/logo.png` — 简化芯片与 CO 字形品牌标识；命令、侧边栏功能图标统一使用 VS Code 内置 Codicon。
 
 - `syntaxes/` — `mips`、`verilog`、`systemverilog` TextMate grammar（由目录确定性生成）
 - `snippets/` — `mipsasm.json`、`verilog.json`

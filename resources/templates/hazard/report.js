@@ -37,6 +37,7 @@
   var search = document.getElementById('event-search');
   var count = document.getElementById('event-count');
   var empty = document.getElementById('event-empty');
+  var reset = document.getElementById('event-reset');
   var items = Array.prototype.slice.call(document.querySelectorAll('#event-list .event-card'));
   if (!kind || !validity || !search || !count || !empty) return;
 
@@ -52,10 +53,27 @@
     });
     count.textContent = '显示 ' + visible + ' / ' + items.length + ' 条';
     empty.hidden = visible !== 0;
+    if (reset) reset.hidden = kind.value === 'all' && validity.value === 'all' && !query;
   }
 
   kind.addEventListener('change', filterEvents);
   validity.addEventListener('change', filterEvents);
   search.addEventListener('input', filterEvents);
+  if (reset) {
+    reset.addEventListener('click', function () {
+      kind.value = 'all';
+      validity.value = 'all';
+      search.value = '';
+      filterEvents();
+      search.focus();
+    });
+  }
+  search.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && search.value) {
+      search.value = '';
+      filterEvents();
+      event.preventDefault();
+    }
+  });
   filterEvents();
 }());

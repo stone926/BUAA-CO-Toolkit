@@ -33,7 +33,7 @@ import { registerCourseTest } from './courseTest';
 import { buildProfileInferenceInput, clearProfileInferenceCache, onDidChangeProfileInferenceCache } from './profileInference';
 import { activeKindForDocument, registerAdvancedTools } from './advancedTools';
 import { getProfileName } from './courseConfig';
-import { html, renderReportPage, renderTable } from './webview/reportLayout';
+import { renderToolchainReport } from './webview/toolchainReport';
 import { timeStartup, traceStartup } from './startupTrace';
 import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
 import { disableDiagnosticCode } from './diagnosticSettings';
@@ -42,7 +42,6 @@ import {
   invalidateVerilogProjectDiscoveryCachesForUri
 } from './verilog/verilogProject';
 
-const escapeHtml = html.text;
 const verilogModuleRegistryStartupDelayMs = 1000;
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -272,7 +271,8 @@ async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?:
   }
 
   const panel = vscode.window.createWebviewPanel('coToolchainReport', 'CO 工具链', vscode.ViewColumn.Beside, {
-    enableScripts: false
+    enableScripts: false,
+    enableFindWidget: true
   });
   panel.webview.html = renderToolchainReport(checks);
   return checks;
@@ -358,35 +358,3 @@ function statusProfileText(resource?: vscode.Uri): string {
   }
   return '选择 Profile';
 }
-
-function renderToolchainReport(checks: ToolDetection[]): string {
-  const rows = checks.map((check) => {
-    const status = check.ok ? '正常' : '缺失';
-    const suggestion = check.suggestion ?? '';
-    return {
-      className: check.ok ? 'ok' : 'bad',
-      cells: [
-        escapeHtml(check.name),
-        escapeHtml(status),
-        escapeHtml(check.detail),
-        escapeHtml(suggestion)
-      ]
-    };
-  });
-  return renderReportPage({
-    title: 'CO 工具链',
-    extraCss: toolchainReportCss,
-    body: html.raw(`  ${renderTable(['工具', '状态', '路径 / 版本', '建议'], rows)}`)
-  });
-}
-
-const toolchainReportCss = `
-    .ok td:nth-child(2) {
-      color: var(--vscode-testing-iconPassed);
-      font-weight: 600;
-    }
-    .bad td:nth-child(2) {
-      color: var(--vscode-testing-iconFailed);
-      font-weight: 600;
-    }
-`;

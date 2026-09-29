@@ -49,6 +49,22 @@ function childLabels(node: SidebarNodeModel): string[] {
 }
 
 describe('sidebar model', () => {
+  it('keeps project information clickable without duplicating its actions', () => {
+    const model = buildSidebarModel(baseContext());
+    const project = section(model, '项目');
+    const profile = project.children?.find((item) => item.id === 'project.profile');
+    const tools = project.children?.find((item) => item.id === 'project.tools');
+
+    expect(profile?.command?.command).toBe('co.selectProjectProfile');
+    expect(profile?.tooltip).toContain('点击选择项目 Profile');
+    expect(tools?.command?.command).toBe('co.checkToolchain');
+    expect(tools?.tooltip).toContain('点击检查工具链');
+    expect(project.children?.map((item) => item.label)).toEqual([
+      'Profile', '工作区', '工具链', '项目向导'
+    ]);
+    expect(project.children?.some((item) => item.id === 'project.config')).toBe(false);
+  });
+
   it('keeps only focused P7 Verilog actions in the main operation section', () => {
     const model = buildSidebarModel(baseContext({
       activeFile: {

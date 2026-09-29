@@ -7,6 +7,23 @@ import {
 } from '../../webview/reportLayout';
 
 describe('webview report layout', () => {
+  it('uses a fresh CSP nonce and escapes header metadata even on interactive pages', () => {
+    const options = {
+      title: 'History', subtitle: '</p><script>alert(1)</script>',
+      body: html.text(''), script: 'history' as const
+    };
+    const page = renderReportPage(options);
+    const nonce = page.match(/style-src 'nonce-([^']+)'/)?.[1];
+    expect(nonce).toBeTruthy();
+    expect(page).toContain(`script-src 'nonce-${nonce}'`);
+    expect(page).toContain(`<script nonce="${nonce}">`);
+    expect(page).toContain(`<style nonce="${nonce}">`);
+    expect(page).not.toContain('unsafe-inline');
+    expect(page).not.toContain('<script>alert(1)</script>');
+    expect(renderReportPage(options)).not.toContain(`nonce-${nonce}`);
+    expect(renderReportPage({ title: 'Static', body: html.text('') })).not.toContain('<script');
+  });
+
   it('escapes page, metric, table, and code content', () => {
     const page = renderReportPage({
       title: '<Report>',

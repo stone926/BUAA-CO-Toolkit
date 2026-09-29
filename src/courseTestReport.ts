@@ -11,7 +11,7 @@ import {
   isManifestV2,
   manifestSourceOf
 } from './courseTesting/manifestCodec';
-import { html, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
+import { html, renderBadge, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
 import {
   normalizeVerilogSimulationFailure,
   verilogSimulationFailureMessage,
@@ -19,7 +19,7 @@ import {
 } from './verilog/simulationDiagnostic';
 
 const escapeHtml = html.text;
-const courseTraceScopeNote = html.raw('<p class="muted">通过表示本次程序的可观察结果满足对应检查；无写回指令的完整执行、课程周期范围和内部结构仍需另行验证。</p>');
+const courseTraceScopeNote = html.raw('<p class="report-footnote">通过表示本次程序的可观察结果满足对应检查；无写回指令的完整执行、课程周期范围和内部结构仍需另行验证。</p>');
 
 export type CourseTraceStatus = 'passed' | 'failed' | 'error';
 export type ExecutorShadowReportStatus = 'matched' | 'not-comparable' | 'course-correct' | 'mars-compatible' | 'inconclusive';
@@ -325,32 +325,6 @@ function neutralTraceDiffSnapshot(snapshot: TraceDiffSnapshot): NeutralTraceDiff
   };
 }
 
-const traceStatusCss = `
-    .passed td:nth-child(2) {
-      color: var(--vscode-testing-iconPassed);
-      font-weight: 600;
-    }
-    .failed td:nth-child(2), .error td:nth-child(2) {
-      color: var(--vscode-testing-iconFailed);
-      font-weight: 600;
-    }
-    .running td:nth-child(2), .stopped td:nth-child(2) {
-      color: var(--vscode-descriptionForeground);
-      font-weight: 600;
-    }
-`;
-
-const historyStatusCss = `
-    .passed td:nth-child(6) {
-      color: var(--vscode-testing-iconPassed);
-      font-weight: 600;
-    }
-    .failed td:nth-child(6), .error td:nth-child(6) {
-      color: var(--vscode-testing-iconFailed);
-      font-weight: 600;
-    }
-`;
-
 export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _reportFile: vscode.Uri): string {
   const latest = report.iterations[0];
   const latestSummary = latest?.summary ?? continuousCounts([]);
@@ -364,7 +338,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
       className: iteration.status,
       cells: [
         String(iteration.index),
-        escapeHtml(continuousStatusLabel(iteration.status)),
+        renderBadge(continuousStatusLabel(iteration.status), statusTone(iteration.status)),
         String(iteration.summary.total),
         String(iteration.summary.passed),
         String(iteration.summary.failed),
@@ -373,8 +347,8 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
         firstProblem
           ? renderContinuousFirstProblem(firstProblem)
           : iteration.status === 'error'
-            ? escapeHtml('本轮未完成，请打开完整报告查看诊断')
-            : ''
+            ? escapeHtml('本轮未完成，请在测试历史中查看诊断')
+            : iteration.status === 'running' ? escapeHtml('正在执行本轮测试…') : '—'
       ]
     };
   });
@@ -385,23 +359,35 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
 
   return renderReportPage({
     title: '持续测试',
-    extraCss: traceStatusCss,
+    subtitle: '持续生成测试点并与参考结果比较；发现首个失败或错误时自动停止。',
+    extraCss: 'table { min-width: 960px; } td:nth-child(7) { min-width: 160px; } td:last-child { min-width: 280px; }',
+    script: 'continuous',
+    actions: html.raw(`<button type="button" class="secondary" data-report-action="openHistory">查看测试历史</button>${report.running && !report.stopRequested
+      ? '<button type="button" class="secondary" data-report-action="stop">停止测试</button>' : ''}`),
     body: html.raw(`
   ${renderMetricGrid([
     { label: '状态', value: state },
     { label: '轮数', value: totalIterations },
-    { label: '最近一轮通过', value: latestSummary.passed },
-    { label: '最近一轮失败', value: latestSummary.failed },
-    { label: '最近一轮错误', value: latestSummary.errors }
+    { label: '最近一轮通过', value: latestSummary.passed, tone: latestSummary.passed ? 'ok' : 'neutral' },
+    { label: '最近一轮失败', value: latestSummary.failed, tone: latestSummary.failed ? 'bad' : 'neutral' },
+    { label: '最近一轮错误', value: latestSummary.errors, tone: latestSummary.errors ? 'warn' : 'neutral' }
   ])}
-  <div class="paths">
+  <div class="notice${latestSummary.failed || latestSummary.errors ? ' bad' : ''}">
     <div>失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现数据已自动保存。</div>
   </div>
-  ${courseTraceScopeNote}
+  <div class="section-heading"><h2>最近测试轮次</h2><span class="muted">最新记录在前</span></div>
   ${hiddenNote}
-  ${renderTable(['#', '状态', '用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows)}
+  ${renderTable(['轮次', '状态', '用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows, {
+    label: '最近测试轮次',
+    emptyMessage: report.running ? '正在准备第一轮测试，结果将自动显示在这里。' : '本次测试尚未产生记录。'
+  })}
+  ${courseTraceScopeNote}
 `)
   });
+}
+
+function statusTone(status: string | undefined): 'ok' | 'bad' | 'warn' | 'neutral' {
+  return status === 'passed' ? 'ok' : status === 'failed' ? 'bad' : status === 'error' ? 'warn' : 'neutral';
 }
 
 function continuousStatusLabel(status: ContinuousRunStatus): string {
@@ -431,32 +417,76 @@ function renderContinuousFirstProblem(item: CourseTraceCaseResult): SafeHtml {
 }
 
 export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
-  const rows = cases.map(({ manifest }, index) => {
+  const rows = cases.map(({ manifest }) => {
     const automatic = manifestSourceOf(manifest).kind !== 'selected';
     const metadata = isManifestV2(manifest) ? manifest.metadata : undefined;
     const outcome = metadata?.['test.status'];
     const diagnostic = metadata?.['test.diagnostic'];
     return {
-      className: outcome,
+      className: outcome === 'passed' || outcome === 'failed' || outcome === 'error' ? outcome : 'saved',
       cells: [
-        String(index + 1),
-        escapeHtml(manifest.createdAt),
+        renderBadge(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : outcome === 'error' ? '错误' : '已保存', statusTone(outcome)),
+        html.code(manifest.caseId),
+        escapeHtml(diagnostic ?? '—'),
         escapeHtml(manifest.profile),
         escapeHtml(automatic ? '自动测试' : '手动测试'),
-        html.code(manifest.caseId),
-        escapeHtml(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : outcome === 'error' ? '错误' : '已保存'),
-        escapeHtml(diagnostic ?? '—')
+        renderCreatedAt(manifest.createdAt)
       ]
     };
   });
   return renderReportPage({
     title: '测试历史 / 失败用例',
-    extraCss: historyStatusCss,
+    subtitle: '按创建时间倒序排列。使用复现编号定位已保存的用例，诊断信息已脱敏。',
+    extraCss: `
+      table { table-layout: fixed; min-width: 800px; }
+      th:nth-child(1) { width: 78px; }
+      th:nth-child(2) { width: 170px; }
+      th:nth-child(4) { width: 80px; }
+      th:nth-child(5) { width: 84px; }
+      th:nth-child(6) { width: 108px; }
+      td:nth-child(4), td:nth-child(5) { white-space: nowrap; }
+      td:last-child { color: var(--co-muted); font-size: 12px; }
+      .timestamp span { display: block; }
+    `,
+    script: cases.length > 0 ? 'history' : undefined,
     body: html.raw(`
-  <div class="summary">共 ${cases.length} 个测试点，按创建时间倒序排列。诊断已脱敏；发现问题后，可用复现编号定位已保存的数据。</div>
-  ${renderTable(['#', '时间', '课程阶段', '来源', '复现编号', '结果', '诊断'], rows)}
+  ${renderMetricGrid([
+    { label: '已保存测试点', value: cases.length },
+    { label: '通过', value: rows.filter((row) => row.className === 'passed').length, tone: 'ok' },
+    { label: '失败 / 错误', value: rows.filter((row) => row.className === 'failed' || row.className === 'error').length, tone: 'bad' }
+  ])}
+  ${cases.length ? `<div class="filters" data-report-filters role="search" aria-label="筛选测试历史">
+    <label class="search-field">搜索记录<input type="search" placeholder="复现编号、课程阶段或诊断关键词" aria-controls="history-results"></label>
+    <label>测试结果<select aria-controls="history-results">
+      <option value="">全部结果</option><option value="problem">失败 / 错误</option>
+      <option value="passed">通过</option><option value="failed">失败</option><option value="error">错误</option><option value="saved">已保存</option>
+    </select></label>
+    <button type="button" class="secondary">清除筛选</button>
+  </div>
+  <p class="filter-count" id="filter-count" role="status" aria-live="polite">共 ${cases.length} 个测试点</p>
+  <div class="empty-state" id="filter-empty" hidden><strong>没有匹配的记录</strong><p>试试其他关键词，或清除筛选查看全部测试点。</p></div>` : ''}
+  <section id="history-results" aria-label="测试历史">
+  ${renderTable(['结果', '复现编号', '诊断', '阶段', '来源', '时间'], rows, {
+    label: '测试历史', emptyMessage: '还没有测试记录。使用侧边栏的“启动持续测试”开始检查 CPU。'
+  })}
+  </section>
 `)
   });
+}
+
+let createdAtFormatter: Intl.DateTimeFormat | undefined;
+
+function renderCreatedAt(value: string): SafeHtml {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return html.text(value);
+  createdAtFormatter ??= new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  const parts = createdAtFormatter.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? '';
+  const day = `${part('year')}/${part('month')}/${part('day')}`;
+  const time = `${part('hour')}:${part('minute')}:${part('second')}`;
+  return html.raw(`<time class="timestamp" datetime="${html.text(value)}" title="${html.text(value)}"><span>${html.text(day)}</span><span>${html.text(time)}</span></time>`);
 }
 
 function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
@@ -471,8 +501,8 @@ function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
   const dut = item.firstDiff.dut ?? item.firstDiff.sim;
   return html.raw([
     `<div>${html.text(reason)}</div>`,
-    `<div><code>Oracle ${html.text(traceEventSummary(oracle))}</code></div>`,
-    `<div><code>DUT ${html.text(traceEventSummary(dut))}</code></div>`
+    `<div class="diff-line"><span>Oracle</span><code>${html.text(traceEventSummary(oracle))}</code></div>`,
+    `<div class="diff-line"><span>DUT</span><code>${html.text(traceEventSummary(dut))}</code></div>`
   ].join(''));
 }
 

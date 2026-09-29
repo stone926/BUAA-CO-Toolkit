@@ -1,4 +1,4 @@
-import { CO_DIR, CO_OUT_DIR } from './constants';
+import { CO_DIR, CO_OUT_DIR, Commands } from './constants';
 import * as path from 'path';
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
@@ -209,7 +209,9 @@ export async function startContinuousGeneratedTraceTests<
     }
     const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
     const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
-      enableScripts: false,
+      enableScripts: true,
+      enableFindWidget: true,
+      localResourceRoots: [],
       retainContextWhenHidden: true
     });
     session = {
@@ -233,7 +235,27 @@ export async function startContinuousGeneratedTraceTests<
     activeContinuousTraceSession = session;
     continuousTraceStartReserved = false;
     continuousTraceStartupStopRequested = false;
-    panel.onDidDispose(() => requestContinuousTraceStop(session!));
+    const monitorSession = session;
+    const monitorResource = deps.generatorFolder(setup).uri;
+    let openingHistory = false;
+    const actionListener = panel.webview.onDidReceiveMessage(async (message: unknown) => {
+      if (!message || typeof message !== 'object') return;
+      const action = (message as { action?: unknown }).action;
+      if (action === 'stop') {
+        if (monitorSession.report.running) requestContinuousTraceStop(monitorSession);
+      } else if (action === 'openHistory' && !openingHistory) {
+        openingHistory = true;
+        try {
+          await vscode.commands.executeCommand(Commands.Test.OpenAsmCaseIndex, monitorResource);
+        } catch (error) {
+          void vscode.window.showErrorMessage(`无法打开测试历史：${error instanceof Error ? error.message : String(error)}`);
+        } finally { openingHistory = false; }
+      }
+    });
+    panel.onDidDispose(() => {
+      actionListener.dispose();
+      requestContinuousTraceStop(monitorSession);
+    });
 
     services.output.appendLine('');
     services.output.appendLine('正在启动持续测试');

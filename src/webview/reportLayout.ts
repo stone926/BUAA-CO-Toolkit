@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { escapeHtml } from '../language/common/util';
 import { renderResourceTemplate } from '../templates/templateRegistry';
 // @index orchestration — Webview 报告页面布局、表格、metric 和转义 helper
@@ -5,7 +6,10 @@ import { renderResourceTemplate } from '../templates/templateRegistry';
 export interface ReportMetric {
   label: string;
   value: string | number | boolean;
+  tone?: ReportTone;
 }
+
+export type ReportTone = 'ok' | 'bad' | 'warn' | 'neutral';
 
 export interface SafeHtml {
   readonly kind: 'safeHtml';
@@ -30,8 +34,12 @@ export interface ReportTableRow {
 
 export interface ReportPageOptions {
   title: string;
+  eyebrow?: string;
+  subtitle?: string;
+  actions?: SafeHtml;
   body: SafeHtml;
   extraCss?: string;
+  script?: 'history' | 'continuous';
 }
 
 export const html = {
@@ -53,7 +61,15 @@ export const html = {
 };
 
 export function renderReportPage(options: ReportPageOptions): string {
+  const nonce = randomBytes(18).toString('base64');
   return renderResourceTemplate('webview/report_page.html', {
+    nonce,
+    eyebrow: String(html.text(options.eyebrow ?? 'BUAA CO TOOLKIT')),
+    subtitle: options.subtitle ? `<p class="subtitle">${html.text(options.subtitle)}</p>` : '',
+    actions: options.actions ? `<nav class="actions" aria-label="报告操作">${options.actions}</nav>` : '',
+    script: options.script ? `<script nonce="${nonce}">${renderResourceTemplate(
+      options.script === 'history' ? 'webview/reportFilter.js' : 'webview/continuousActions.js', {}
+    )}</script>` : '',
     body: renderSafeHtml(options.body),
     extraCss: options.extraCss ?? '',
     reportCss: renderResourceTemplate('webview/report.css', {}),
@@ -63,17 +79,22 @@ export function renderReportPage(options: ReportPageOptions): string {
 
 export function renderMetricGrid(metrics: readonly ReportMetric[]): SafeHtml {
   return html.raw(`<div class="summary">
-${metrics.map((metric) => `    <div class="metric"><span>${html.text(metric.label)}</span><strong>${html.text(metric.value)}</strong></div>`).join('\n')}
+${metrics.map((metric) => `    <div class="metric${metric.tone ? ` ${html.text(metric.tone)}` : ''}"><span>${html.text(metric.label)}</span><strong>${html.text(metric.value)}</strong></div>`).join('\n')}
   </div>`);
 }
 
-export function renderTable(columns: readonly string[], rows: readonly ReportTableRow[]): SafeHtml {
-  return html.raw(`<table>
+export function renderBadge(label: string, tone: ReportTone = 'neutral'): SafeHtml {
+  return html.raw(`<span class="badge ${html.text(tone)}">${html.text(label)}</span>`);
+}
+
+export function renderTable(columns: readonly string[], rows: readonly ReportTableRow[], options: { label?: string; emptyMessage?: string } = {}): SafeHtml {
+  if (!rows.length) return html.raw(`<div class="empty-state">${html.text(options.emptyMessage ?? '暂无记录')}</div>`);
+  return html.raw(`<div class="table-scroll" role="region" aria-label="${html.text(options.label ?? '报告明细')}" tabindex="0"><table>
     <thead>
-      <tr>${columns.map((column) => `<th>${html.text(column)}</th>`).join('')}</tr>
+      <tr>${columns.map((column) => `<th scope="col">${html.text(column)}</th>`).join('')}</tr>
     </thead>
     <tbody>${rows.map((row) => `<tr${row.className ? ` class="${html.text(row.className)}"` : ''}>${row.cells.map((cell) => `<td>${renderCell(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
-  </table>`);
+  </table></div>`);
 }
 
 export function renderSafeHtml(value: SafeHtml): string {
