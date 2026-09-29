@@ -415,6 +415,42 @@ describe('continuous generated trace orchestration', () => {
     );
   });
 
+  it('publishes the active special test before execution and saves its concrete failure afterwards', async () => {
+    const asmCase: TestAsmCase = {
+      ...testAsmCase('special-live'), manifest: {
+        version: 1, caseId: 'special-live', createdAt: '', profile: 'P7', source: { kind: 'builtin' },
+        originalAsmPath: 'special.asm', asmSnapshot: { path: 'program.asm', sha256: '0'.repeat(64), bytes: 1 },
+        p7: { probe: { version: 1, scope: 'special-timer-exl', logBase: 0x2800, recordWords: 8, scenarios: [] } }
+      }
+    };
+    const pending = deferred<CourseTraceCaseResult>();
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: [asmCase.asm], source: { kind: 'generator' as const }, asmCases: [asmCase]
+      })),
+      expandTraceCases: vi.fn(async () => [{ asm: asmCase.asm, asmCase }]),
+      runCourseTraceCase: vi.fn(async () => pending.promise)
+    });
+    const run = startContinuousGeneratedTraceTests(createServices(), deps);
+    await waitFor(() => vi.mocked(deps.runCourseTraceCase).mock.calls.length === 1);
+    const running = JSON.parse(fileMocks.writeTextFile.mock.calls.at(-1)![1] as string);
+    expect(running.iterations[0].activeCase).toEqual({ index: 0, caseId: 'special-live', probeScope: 'special-timer-exl' });
+    expect(running.iterations[0].results).toEqual([]);
+    pending.resolve({
+      asm: asmCase.asm.fsPath, status: 'failed', stage: 'probe', message: 'private',
+      probe: { passed: false, records: [], diagnostics: [], failures: [
+        { scenarioId: 7, kind: 'timer0', message: 'EPC 应为 0x30a0，实际为 0x4184' }
+      ] }
+    });
+    await run;
+    expect(recordAsmCaseTestOutcome).toHaveBeenCalledWith(asmCase.manifestUri.fsPath, expect.objectContaining({
+      status: 'failed', diagnostic: expect.stringContaining('场景 7 定时器 0：EPC 应为 0x30a0，实际为 0x4184')
+    }));
+    const finished = JSON.parse(fileMocks.writeTextFile.mock.calls.at(-1)![1] as string);
+    expect(finished.iterations[0]).not.toHaveProperty('activeCase');
+    expect(finished.iterations[0].results[0]).toMatchObject({ status: 'failed', probeScope: 'special-timer-exl' });
+  });
+
   it('writes continuous results with the role-neutral v2 schema', async () => {
     const deps = createDependencies({
       runCourseTraceCase: vi.fn(async (_services, item) => ({

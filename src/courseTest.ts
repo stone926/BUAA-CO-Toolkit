@@ -14,13 +14,8 @@ import {
   runCourseTraceCase
 } from './courseTesting/traceRunner';
 import { AppServices } from './types';
-import {
-  AsmCase,
-  listAsmCaseManifests
-} from './asmCaseStore';
-import {
-  renderAsmCaseIndex
-} from './courseTestReport';
+import { AsmCase } from './asmCaseStore';
+import { openAsmCaseIndex } from './courseTestHistory';
 import {
   requestContinuousTestsStop,
   startContinuousGeneratedTraceTests
@@ -81,16 +76,6 @@ async function resolveCourseTraceRunOptions(
     options.logisim = logisim;
   }
   return options;
-}
-
-async function openAsmCaseIndex(resource?: vscode.Uri): Promise<void> {
-  const manifests = await listAsmCaseManifests(resource ?? vscode.window.activeTextEditor?.document.uri);
-  const panel = vscode.window.createWebviewPanel('coAsmCaseIndex', '测试历史 / 失败用例', vscode.ViewColumn.Beside, {
-    enableScripts: true,
-    enableFindWidget: true,
-    localResourceRoots: []
-  });
-  panel.webview.html = renderAsmCaseIndex(manifests);
 }
 
 async function expandTraceCases(asms: vscode.Uri[], asmCases?: AsmCase[]): Promise<CourseTraceCaseInput[]> {

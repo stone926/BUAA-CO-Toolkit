@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { registerCourseTest } from '../courseTest';
 import { Commands } from '../constants';
 import { requestContinuousTestsStop, startContinuousGeneratedTraceTests } from '../courseTestContinuous';
-import { listAsmCaseManifests } from '../asmCaseStore';
+import { openAsmCaseIndex } from '../courseTestHistory';
 import { resolveP3LogisimTraceSetup } from '../courseTestLogisim';
 import { runCourseTraceCase } from '../courseTesting/traceRunner';
 import { createTestServices } from './helpers/appServices';
@@ -17,7 +17,7 @@ vi.mock('../courseTestContinuous', () => ({
   requestContinuousTestsStop: vi.fn(() => 'none'),
   startContinuousGeneratedTraceTests: vi.fn()
 }));
-vi.mock('../asmCaseStore', () => ({ listAsmCaseManifests: vi.fn(async () => []) }));
+vi.mock('../courseTestHistory', () => ({ openAsmCaseIndex: vi.fn() }));
 vi.mock('../courseTestLogisim', () => ({ resolveP3LogisimTraceSetup: vi.fn() }));
 vi.mock('../courseTesting/traceRunner', () => ({ runCourseTraceCase: vi.fn() }));
 vi.mock('../courseTesting/generatorWorkflow', () => ({
@@ -64,15 +64,6 @@ describe('public course-test commands', () => {
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('当前没有正在运行的持续测试');
 
     await commands.get(Commands.Test.OpenAsmCaseIndex)!();
-    expect(listAsmCaseManifests).toHaveBeenCalledOnce();
-    expect(vscode.window.createWebviewPanel).toHaveBeenCalledWith(
-      'coAsmCaseIndex', '测试历史 / 失败用例', vscode.ViewColumn.Beside, {
-        enableScripts: true,
-        enableFindWidget: true,
-        localResourceRoots: []
-      }
-    );
-    const panel = vi.mocked(vscode.window.createWebviewPanel).mock.results[0].value;
-    expect(panel.webview.html).toContain('已保存测试点');
+    expect(openAsmCaseIndex).toHaveBeenCalledOnce();
   });
 });

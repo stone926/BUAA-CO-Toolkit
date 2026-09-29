@@ -7,20 +7,18 @@ import {
   TraceDiffSnapshot,
   TraceEventSnapshot
 } from './language/mips/traceCompare';
-import {
-  AsmCaseManifestUnion,
-  isManifestV2,
-  manifestSourceOf
-} from './courseTesting/manifestCodec';
-import { manifestP7Of } from './courseTesting/manifestCodec';
-import { probeScopeFromCase, specialTimerExlNotice } from './courseTesting/p7ProbeScope';
+import type { AsmCaseManifestUnion } from './courseTesting/manifestCodec';
+import { specialTimerExlNotice } from './courseTesting/p7ProbeScope';
+export { renderAsmCaseIndex } from './courseTestHistoryReport';
 import type { P7ProbeScope } from './courseTesting/builtinAsm/types';
-import { html, renderBadge, renderMetricGrid, renderReportPage, renderTable, SafeHtml } from './webview/reportLayout';
+import { html, renderBadge, renderMetricGrid, renderReportPage, renderTable, SafeHtml, type ReportTableRow } from './webview/reportLayout';
 import {
   normalizeVerilogSimulationFailure,
-  verilogSimulationFailureMessage,
   type VerilogSimulationFailure
 } from './verilog/simulationDiagnostic';
+
+import { baseAutomaticDiagnosticMessage, publicAutomaticDiagnosticMessage, probeCoverage, uncoveredProbeCoverage, neutralCourseTraceStage } from './courseTesting/testOutcomeDiagnostic';
+export { publicAutomaticDiagnosticMessage, neutralCourseTraceStage } from './courseTesting/testOutcomeDiagnostic';
 
 const escapeHtml = html.text;
 const courseTraceScopeNote = html.raw('<p class="report-footnote">通过表示本次程序的可观察结果满足对应检查；无写回指令的完整执行、课程周期范围和内部结构仍需另行验证。</p>');
@@ -123,6 +121,7 @@ export interface ContinuousTraceIteration {
   source?: CourseTraceBatchSource;
   summary: ContinuousCounts;
   results: CourseTraceCaseResult[];
+  activeCase?: { index: number; caseId?: string; probeScope?: P7ProbeScope };
   message?: string;
 }
 
@@ -160,21 +159,6 @@ export interface AsmCaseManifestEntry {
 }
 
 export const continuousTraceMonitorMaxRows = 100;
-
-/** Map v1 engine/tool names to the stable pipeline role used by new reports. */
-export function neutralCourseTraceStage(stage: CourseTraceStage): NeutralCourseTraceStage {
-  switch (stage) {
-    case 'dump':
-      return 'assemble';
-    case 'mars':
-      return 'oracle';
-    case 'isim':
-    case 'logisim':
-      return 'dut';
-    default:
-      return stage;
-  }
-}
 
 export function courseTraceOracleOutput(item: CourseTraceCaseResult): string | undefined {
   return item.oracleOut ?? item.marsOut;
@@ -283,46 +267,16 @@ export function publicContinuousTraceReport(report: ContinuousTraceReport): Cont
       source: { kind: 'generator' },
       summary: iteration.summary,
       results: iteration.results.map(publicAutomaticCourseTraceCaseResult),
+      ...(iteration.activeCase ? { activeCase: {
+        index: iteration.activeCase.index,
+        ...(iteration.activeCase.caseId ? { caseId: iteration.activeCase.caseId } : {}),
+        ...(iteration.activeCase.probeScope ? { probeScope: iteration.activeCase.probeScope } : {})
+      } } : {}),
       ...(iteration.message ? {
         message: '[AUTO-ITERATION] 本轮未完成；请使用失败用例的复现编号定位'
       } : {})
     }))
   };
-}
-
-/** Stable, path-free diagnosis shown by every public automatic-test surface. */
-export function publicAutomaticDiagnosticMessage(item: CourseTraceCaseResult): string {
-  const message = baseAutomaticDiagnosticMessage(item);
-  return item.probeScope === 'special-timer-exl' ? `${message}。${specialTimerExlNotice}` : message;
-}
-
-function baseAutomaticDiagnosticMessage(item: CourseTraceCaseResult): string {
-  if (item.cancelled) return '[AUTO-STOPPED] 测试已停止';
-  if (item.status === 'error' && uncoveredProbeCoverage(item.probe).length) {
-    return '[AUTO-COVERAGE] 未覆盖：返回后中断触发窗口未观测，无法判定';
-  }
-  if (item.status === 'passed') return '通过';
-  if (item.status === 'failed') {
-    return item.probe
-      ? '[AUTO-PROBE] P7 定向检查未通过'
-      : '[AUTO-MISMATCH] CPU 输出与参考结果不一致';
-  }
-  switch (neutralCourseTraceStage(item.stage)) {
-    case 'assemble':
-      return '[AUTO-ASSEMBLE] 测试点汇编未完成';
-    case 'oracle':
-      return '[AUTO-ORACLE] 参考结果未生成';
-    case 'dut':
-      return item.dutFailure
-        ? `[AUTO-DUT] ${verilogSimulationFailureMessage(item.dutFailure, item.dutBackend === 'isim' ? undefined : item.dutBackend)}`
-        : '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口';
-    case 'compare':
-      return '[AUTO-COMPARE] 结果比较未完成';
-    case 'probe':
-      return '[AUTO-PROBE] P7 定向检查未完成';
-    case 'internal':
-      return '[AUTO-INTERNAL] 自动测试内部流程未完成；请使用复现编号定位';
-  }
 }
 
 function neutralTraceDiffSnapshot(snapshot: TraceDiffSnapshot): NeutralTraceDiffSnapshot {
@@ -392,6 +346,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
   <div class="notice${latestSummary.failed || latestSummary.errors ? ' bad' : ''}">
     <div>失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现数据已自动保存。</div>
   </div>
+  ${renderSpecialProbeResults(visibleIterations, report.running)}
   <div class="section-heading"><h2>最近测试轮次</h2><span class="muted">最新记录在前</span></div>
   ${hiddenNote}
   ${renderTable(['轮次', '状态', '用例', '通过', '失败', '错误', '失败用例', '首个差异'], rows, {
@@ -401,6 +356,38 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
   ${courseTraceScopeNote}
 `)
   });
+}
+
+function renderSpecialProbeResults(iterations: readonly ContinuousTraceIteration[], running: boolean): SafeHtml {
+  const recent = iterations.find(iteration => iteration.results.some(item => item.probeScope === 'special-timer-exl')
+    || running && iteration.status === 'running' && iteration.activeCase?.probeScope === 'special-timer-exl');
+  const rows = (recent ? [recent] : []).flatMap((iteration) => {
+    const completed: ReportTableRow[] = iteration.results.flatMap((item, index) => item.probeScope !== 'special-timer-exl' ? [] : [{
+      className: item.status,
+      cells: [
+        String(iteration.index), `测试点 ${index + 1}`,
+        item.caseId ? html.code(item.caseId) : '—',
+        renderBadge(continuousStatusLabel(item.status), statusTone(item.status)),
+        html.text(baseAutomaticDiagnosticMessage(item))
+      ]
+    }]);
+    const active = iteration.activeCase;
+    if (running && iteration.status === 'running' && active?.probeScope === 'special-timer-exl') {
+      completed.push({
+        className: 'running',
+        cells: [String(iteration.index), `测试点 ${active.index + 1}`,
+          active.caseId ? html.code(active.caseId) : '—',
+          renderBadge('测试中'), html.text('正在执行，尚未产生正误判定。')]
+      });
+    }
+    return completed;
+  });
+  if (!rows.length) return html.raw('');
+  return html.raw(`
+    <div class="section-heading"><h2>特殊压力测试结果</h2><span class="muted">最近含特殊测试点的一轮</span></div>
+    <div class="notice">${html.text(specialTimerExlNotice)}</div>
+    ${renderTable(['轮次', '测试点', '复现编号', '结果', '诊断'], rows, { label: '特殊压力测试结果' })}
+  `);
 }
 
 function statusTone(status: string | undefined): 'ok' | 'bad' | 'warn' | 'neutral' {
@@ -440,87 +427,6 @@ function renderContinuousFirstProblem(item: CourseTraceCaseResult): SafeHtml {
   return html.raw(`${html.text(baseAutomaticDiagnosticMessage(item))}${scopeNotice}`);
 }
 
-export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
-  const rows = cases.map(({ manifest }) => {
-    const automatic = manifestSourceOf(manifest).kind !== 'selected';
-    const metadata = isManifestV2(manifest) ? manifest.metadata : undefined;
-    const outcome = metadata?.['test.status'];
-    const diagnostic = metadata?.['test.diagnostic'];
-    const uncovered = outcome === 'error' && diagnostic?.startsWith('[AUTO-COVERAGE]');
-    const scope = probeScopeFromCase(manifestP7Of(manifest)?.probe, metadata);
-    const scopeNotice = scope === 'special-timer-exl'
-      ? html.raw(`<div class="notice">${html.text(specialTimerExlNotice)}</div>`)
-      : html.raw('');
-    const conciseDiagnostic = scope === 'special-timer-exl' && diagnostic?.endsWith(specialTimerExlNotice)
-      ? diagnostic.slice(0, -specialTimerExlNotice.length).replace(/。$/, '') : diagnostic;
-    return {
-      className: outcome === 'passed' || outcome === 'failed' || outcome === 'error' ? outcome : 'saved',
-      cells: [
-        renderBadge(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : uncovered ? '未覆盖'
-          : outcome === 'error' ? '错误' : '已保存', statusTone(outcome)),
-        html.code(manifest.caseId),
-        html.raw(`${html.text(conciseDiagnostic ?? '—')}${scopeNotice}`),
-        escapeHtml(manifest.profile),
-        escapeHtml(automatic ? '自动测试' : '手动测试'),
-        renderCreatedAt(manifest.createdAt)
-      ]
-    };
-  });
-  return renderReportPage({
-    title: '测试历史 / 失败用例',
-    subtitle: '按创建时间倒序排列。使用复现编号定位已保存的用例，诊断信息已脱敏。',
-    extraCss: `
-      table { table-layout: fixed; min-width: 800px; }
-      th:nth-child(1) { width: 78px; }
-      th:nth-child(2) { width: 170px; }
-      th:nth-child(4) { width: 80px; }
-      th:nth-child(5) { width: 84px; }
-      th:nth-child(6) { width: 108px; }
-      td:nth-child(4), td:nth-child(5) { white-space: nowrap; }
-      td:last-child { color: var(--co-muted); font-size: 12px; }
-      .timestamp span { display: block; }
-    `,
-    script: cases.length > 0 ? 'history' : undefined,
-    body: html.raw(`
-  ${renderMetricGrid([
-    { label: '已保存测试点', value: cases.length },
-    { label: '通过', value: rows.filter((row) => row.className === 'passed').length, tone: 'ok' },
-    { label: '失败 / 错误', value: rows.filter((row) => row.className === 'failed' || row.className === 'error').length, tone: 'bad' }
-  ])}
-  ${cases.length ? `<div class="filters" data-report-filters role="search" aria-label="筛选测试历史">
-    <label class="search-field">搜索记录<input type="search" placeholder="复现编号、课程阶段或诊断关键词" aria-controls="history-results"></label>
-    <label>测试结果<select aria-controls="history-results">
-      <option value="">全部结果</option><option value="problem">失败 / 错误</option>
-      <option value="passed">通过</option><option value="failed">失败</option><option value="error">错误</option><option value="saved">已保存</option>
-    </select></label>
-    <button type="button" class="secondary">清除筛选</button>
-  </div>
-  <p class="filter-count" id="filter-count" role="status" aria-live="polite">共 ${cases.length} 个测试点</p>
-  <div class="empty-state" id="filter-empty" hidden><strong>没有匹配的记录</strong><p>试试其他关键词，或清除筛选查看全部测试点。</p></div>` : ''}
-  <section id="history-results" aria-label="测试历史">
-  ${renderTable(['结果', '复现编号', '诊断', '阶段', '来源', '时间'], rows, {
-    label: '测试历史', emptyMessage: '还没有测试记录。使用侧边栏的“启动持续测试”开始检查 CPU。'
-  })}
-  </section>
-`)
-  });
-}
-
-let createdAtFormatter: Intl.DateTimeFormat | undefined;
-
-function renderCreatedAt(value: string): SafeHtml {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return html.text(value);
-  createdAtFormatter ??= new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-  });
-  const parts = createdAtFormatter.formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? '';
-  const day = `${part('year')}/${part('month')}/${part('day')}`;
-  const time = `${part('hour')}:${part('minute')}:${part('second')}`;
-  return html.raw(`<time class="timestamp" datetime="${html.text(value)}" title="${html.text(value)}"><span>${html.text(day)}</span><span>${html.text(time)}</span></time>`);
-}
-
 function renderFirstDiffSummary(item: CourseTraceCaseResult): SafeHtml {
   if (item.probe) {
     return renderProbeDetails(item.probe);
@@ -549,16 +455,6 @@ function renderProbeDetails(probe: P7ProbeCheckResult): SafeHtml {
     `<div>${entry.covered ? '已覆盖' : '未覆盖'}：${html.text(entry.message)}</div>`
   );
   return html.raw([...coverage, ...failures, ...records].join(''));
-}
-
-function probeCoverage(probe: P7ProbeCheckResult | undefined): Array<{ covered: boolean; message: string }> {
-  const entries = probe?.coverage;
-  return Array.isArray(entries) ? entries : [];
-}
-
-function uncoveredProbeCoverage(probe: P7ProbeCheckResult | undefined): Array<{ covered: boolean; message: string }> {
-  if (probe?.failures.length) return [];
-  return probeCoverage(probe).filter((entry) => !entry.covered);
 }
 
 function traceEventSummary(event: TraceEventSnapshot | undefined): string {

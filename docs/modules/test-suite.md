@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 230 files | 框架: Vitest
+# test-suite | src/test/ | 232 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -9,8 +9,8 @@
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
 | `test/language/` | 68 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
-| `test/`（根） | 44 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
-| `test/courseTesting/` | 40 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
+| `test/`（根） | 45 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
+| `test/courseTesting/` | 41 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 21 | ISA golden、汇编器、执行器、devices 与 events |
 | `test/verilog/` | 14 | 真实 bundled Icarus：时间尺度、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 10 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
@@ -35,6 +35,7 @@
 
 ## 回归重点
 
+- **特殊测试结果展示**：通过/失败/工具错误与范围说明分别保留；运行中先发布 activeCase，完成后保存具体首失败；历史无结果和取消不冒充终态，限定目录监视、合并刷新及关闭后的异步读保护
 - **课程自动测试**：P3–P7 独立 GPR 双端口读与存储观察（每持续会话一次），随机点保留默认最大 payload；jr 生产者 × 间隔 0/1/2 的陈旧目标变异；小预算跳转毒指令、双向控制流与错误路径变异；双端口/最新写优先/load-store lane 的可观察依赖；P7 原 130 变体完整保留（36 个特殊 Timer 变体单独说明），older-MDU 四变体、Mode1 停机去断言、五种真实双 IRQ 程序及字段/顺序/重放损坏反例；continuous 的会话所有权清理与 fail-closed 保留
 - **返回边界协议**：`p7ReturnProbe.test.ts` 校验不同种子、合法 jal link 重放、未命中与功能失败区别、handler 字段来源和路径内错误 EPC；`p7ReturnTestbench.test.ts` 使用真实 Icarus 检查不同 eret 停留长度、X/错位 PC、SW 低位 don't-care、未选中 IG 转发、应答随 interrupt 撤销等合法接口变体。Mode1 官方周期模型与“每次 Enable 仅发一次 IRQ、COUNT 仍重载”的变异，确保停止态新检查不会替代连续周期 IRQ 覆盖
 - **DUT 观测**：`CO_DM_STORE` 公开事务与 builtin CommitEvent 逐笔对拍（覆盖整字相同时仍能失败的地址/mask 漏检）；P6/P7 完整 testbench 下 `dm_store_contract.v` 捕获的错误全使能读改写

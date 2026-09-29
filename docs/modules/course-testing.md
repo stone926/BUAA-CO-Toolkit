@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 65 files + host adapters
+# course-testing | src/courseTesting/ | 66 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -21,6 +21,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 **失败即停、有界留存。** 持续测试首个失败或错误立即停止，零延迟主动 yield 保持扩展宿主响应；取消不计测试 error。留存清理对同一 manifest 串行，捕获并复验目录/manifest identity 后原子移入受控 `.co/trash`，所有不确定状态 fail-closed 保留。
 
 **中文诊断。** P7 定向检查、普通写回差异、DM 写事务与 Logisim 检查在诊断来源生成中文消息；持续测试报告使用中文类别、参考/待测标签和复现编号。旧报告中已知的 CP0 复位及写回差异英文消息在展示时兼容转换，原始记录不改写。机器状态码、协议标记、寄存器/信号名和外部工具原始诊断保持原样。
+
+**特殊点结果可见。** 特殊范围说明不替代测试判定：历史保存具体首个失败（场景、PC、期望与实际等有界摘要），显示通过/失败/错误；无明确终态时显示“无结果”或“已取消”，不从测试类别或产物推断通过。历史面板仅在打开时监视本工作区 `.co/cases/*/case.json`，合并变更后串行刷新。持续页在特殊点开始/结束时立即刷新，并在轮次表上方展示最近含特殊点的一轮及其真实结果；运行中的点尚无正误判定，首失败停止策略不变。
 
 ## Pipeline
 
@@ -70,6 +72,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `builtinAsm/p7/probeReturnProgram.ts` — 5 个带种子数据/布局变化的真实双 IRQ 程序：direct、load-jr、branch-delay、jal-delay、MDU；整个程序均有精确可观察提交义务
 - `builtinAsm/p7/probeTimerMode1Scenario.ts` — mode1-repeat 保持 Enable=1/PRESET 不变，验证 COUNT 重载及第二次自然 IRQ；恢复 IM 后在 IE=0 下轮询并保留实际零样本，不假定后续采样相位。额外 mode1-stopped 用 CTRL=2/0xa 建立停止态稳定观察，允许最后一次 LOAD 瞬态，再显式启动新周期。COUNT/IP 采样仍受混叠限制，未命中不能单凭 watchdog 证明 Timer 错误
 - `p7ProbeScope.ts` — 特殊压力场景范围判定与统一用户说明，兼容旧混合 metadata 和早期工具错误
+- `testOutcomeDiagnostic.ts` — 历史与持续测试共用的有界中文结果摘要，保留探针首失败、结构化写回/DM 事务差异及工具诊断；脱敏后附独立范围说明
 - `p7ReturnCheck.ts` — 返回协议、全部 main/handler 事务、记录字段来源、EPC/BD 提交边界与合法 jal link 重放检查；未覆盖与功能失败分别记录
 - `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit；按 PC 一次索引提交，older 必须早于记录首字段，取消的 younger/错误路径提交即失败
 
@@ -89,6 +92,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 ## 宿主入口与用例存储
 
 - `courseTest.ts` — 仅注册持续测试启动/停止/测试历史三个公共入口
+- `courseTestHistory.ts` / `courseTestHistoryReport.ts` — 历史页宿主监视/合并刷新与纯 HTML 渲染分离；执行终态优先，无结果明确标注，面板关闭后释放监视与定时器
 - `courseTestContinuous.ts` — 持续生成循环：首个失败即停、有界产物与报告、1 秒窗口合并
 - `courseTestToolchain.ts` — mode-aware 校验，automatic 固定 builtin override 且不泄漏本机路径
 - `courseTestLogisim.ts` — P3 自动电路诊断与 ROM 注入对拍；原始 stdout 最多 64 MiB，触顶终止并报告截断原因

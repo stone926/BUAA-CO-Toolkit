@@ -938,8 +938,19 @@ export async function copyAsmCaseArtifact(
 }
 
 export async function listAsmCaseManifests(resource?: vscode.Uri): Promise<Array<{ manifest: AsmCaseManifestUnion; uri: vscode.Uri }>> {
-  const root = caseWorkspaceRoot(resource);
-  const casesDir = path.join(root, CO_CASES_DIR);
+  return await listAsmCaseManifestsInDirectory(asmCaseIndexDirectory(resource));
+}
+
+/** Resolve the history directory once so a live index can keep watching that workspace. */
+export function asmCaseIndexDirectory(resource?: vscode.Uri): string {
+  return path.join(caseWorkspaceRoot(resource), CO_CASES_DIR);
+}
+
+/** List cases beneath a previously resolved index directory. */
+export async function listAsmCaseManifestsInDirectory(
+  casesDir: string
+): Promise<Array<{ manifest: AsmCaseManifestUnion; uri: vscode.Uri }>> {
+  const root = path.dirname(path.dirname(casesDir));
   let directory: fs.Dir;
   try {
     await assertContainedDirectoryPath(root, casesDir);

@@ -316,6 +316,18 @@ export async function startContinuousGeneratedTraceTests<
               break;
             }
             const item = cases[i];
+            const caseProbeScope = item.asmCase?.manifest
+              ? probeScopeFromCase(manifestP7Of(item.asmCase.manifest)?.probe,
+                'metadata' in item.asmCase.manifest ? item.asmCase.manifest.metadata : undefined)
+              : undefined;
+            iteration.activeCase = { index: i, caseId: item.asmCase?.id, probeScope: caseProbeScope };
+            if (caseProbeScope === 'special-timer-exl') {
+              await updateContinuousTraceMonitor(session, { force: true });
+            }
+            if (session.stopRequested) {
+              delete iteration.activeCase;
+              break;
+            }
             services.output.appendLine(`[第 ${index} 轮，测试点 ${i + 1}/${cases.length}] 正在验证`);
             let result: CourseTraceCaseResult;
             try {
@@ -342,12 +354,13 @@ export async function startContinuousGeneratedTraceTests<
                 stage: 'internal',
                 message: error instanceof Error ? error.message : String(error)
               };
+            } finally {
+              delete iteration.activeCase;
             }
             result = neutralCourseTraceCaseResult(result);
-            const caseProbeScope = item.asmCase?.manifest
-              ? probeScopeFromCase(manifestP7Of(item.asmCase.manifest)?.probe,
-                'metadata' in item.asmCase.manifest ? item.asmCase.manifest.metadata : undefined)
-              : undefined;
+            if (!result.caseId && item.asmCase?.id) {
+              result = { ...result, caseId: item.asmCase.id };
+            }
             if (caseProbeScope) {
               result = { ...result, probeScope: caseProbeScope };
             }
@@ -391,7 +404,7 @@ export async function startContinuousGeneratedTraceTests<
             iteration.results.push(result);
             addContinuousResult(iteration.summary, result);
             iteration.status = continuousStatusFromCounts(iteration.summary, true, session.stopRequested);
-            await updateContinuousTraceMonitor(session);
+            await updateContinuousTraceMonitor(session, { force: caseProbeScope === 'special-timer-exl' });
             if (shouldStopAfterIterationCounts(iteration.summary, stopOnFailure)) {
               break;
             }
@@ -408,6 +421,7 @@ export async function startContinuousGeneratedTraceTests<
         }
       }
 
+      delete iteration.activeCase;
       iteration.finishedAt = new Date().toISOString();
       if (iteration.status === 'running') {
         iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);

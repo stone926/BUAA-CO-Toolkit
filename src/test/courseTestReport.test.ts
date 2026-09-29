@@ -25,6 +25,11 @@ import {
 } from '../courseTestReport';
 import type { ContinuousTraceReport, CourseTraceCaseResult } from '../courseTestReport';
 
+const historyEngineEvidence = {
+  program: { assembler: { id: 'builtin-ts', semanticsRevision: 1, capabilitiesRevision: 1 } },
+  oracle: { engine: { id: 'builtin-ts', semanticsRevision: 1, capabilitiesRevision: 1 }, configurationHash: '0'.repeat(64), stopReason: 'unknown' as const }
+};
+
 describe('course test reports', () => {
   it('offers stop only while running and explains empty monitor/history states', () => {
     const report: ContinuousTraceReport = { generatedAt: '', running: true, stopRequested: false, iterations: [] };
@@ -65,6 +70,74 @@ describe('course test reports', () => {
     }, { fsPath: 'report.json' } as never);
     expect(rendered).toContain('特殊压力场景');
     expect(rendered).toContain('软件构造 EXL/EPC');
+  });
+
+  it.each(['passed', 'failed', 'error'] as const)('shows the actual %s special outcome and diagnostic in history and monitor', (status) => {
+    const result: CourseTraceCaseResult = {
+      asm: 'hidden.asm', caseId: 'special-result', status, stage: status === 'error' ? 'dut' : 'probe',
+      message: 'private raw message', probeScope: 'special-timer-exl',
+      ...(status === 'failed' ? { probe: { passed: false, records: [], diagnostics: [], failures: [
+        { scenarioId: 3, kind: 'timer1', message: 'EPC 不符：期望 0x30a0，实际 0x4184 <异常>' }
+      ] } } : {})
+    };
+    const diagnostic = publicAutomaticDiagnosticMessage(result);
+    const history = renderAsmCaseIndex([{
+      manifest: {
+        version: 2, caseId: 'special-result', createdAt: '', profile: 'P7', source: { kind: 'builtin' },
+        ...historyEngineEvidence,
+        originalAsmPath: 'hidden.asm', asmSnapshot: { path: 'program.asm', sha256: '0'.repeat(64), bytes: 1 },
+        metadata: { 'source.probeScope': 'special-timer-exl', 'test.status': status, 'test.diagnostic': diagnostic }
+      }, uri: {} as never
+    }]);
+    const monitor = renderContinuousTraceMonitor({
+      generatedAt: '', running: false, stopRequested: false, iterations: [{
+        index: 1, status, startedAt: '', results: [result],
+        summary: { total: 1, passed: status === 'passed' ? 1 : 0, failed: status === 'failed' ? 1 : 0, errors: status === 'error' ? 1 : 0 }
+      }]
+    }, {} as never);
+    for (const page of [history, monitor]) {
+      expect(page).toContain(`class="${status}"`);
+      expect(page).toContain(status === 'passed' ? '通过' : status === 'failed' ? '失败' : '错误');
+      expect(page).toContain('软件构造 EXL/EPC');
+      expect(page).not.toContain('private raw message');
+      if (status === 'failed') {
+        expect(page).toContain('EPC 不符：期望 0x30a0，实际 0x4184 &lt;异常&gt;');
+      }
+      if (status === 'error') expect(page).toContain('CPU 仿真未完成');
+    }
+    expect(monitor).toContain('特殊压力测试结果');
+  });
+
+  it('shows a special test while running without inventing a pass or failure', () => {
+    const monitor = renderContinuousTraceMonitor({
+      generatedAt: '', running: true, stopRequested: false, iterations: [{
+        index: 1, status: 'running', startedAt: '', results: [],
+        activeCase: { index: 12, caseId: 'special-active', probeScope: 'special-timer-exl' },
+        summary: { total: 0, passed: 0, failed: 0, errors: 0 }
+      }]
+    }, {} as never);
+    expect(monitor).toContain('测试点 13');
+    expect(monitor).toContain('special-active');
+    expect(monitor).toContain('正在执行，尚未产生正误判定');
+    expect(monitor).toContain('单凭此场景失败，不能判定课程 CPU 不合格');
+  });
+
+  it('distinguishes missing, cancelled and recorded special history results', () => {
+    const pages = ['generated', 'cancelled', 'failed'].map(state => renderAsmCaseIndex([{
+      manifest: {
+        version: 2, caseId: 'special-history', createdAt: '', profile: 'P7', source: { kind: 'builtin' },
+        ...historyEngineEvidence,
+        originalAsmPath: 'hidden.asm', asmSnapshot: { path: 'program.asm', sha256: '0'.repeat(64), bytes: 1 },
+        metadata: { 'source.probeScope': 'special-timer-exl', 'continuous.state': state }
+      }, uri: {} as never
+    }]));
+    expect(pages[0]).toContain('无结果');
+    expect(pages[0]).toContain('尚未记录判定结果');
+    expect(pages[0]).not.toContain('<tr class="passed">');
+    expect(pages[1]).toContain('已取消');
+    expect(pages[1]).not.toContain('<tr class="error">');
+    expect(pages[2]).toContain('<tr class="failed">');
+    expect(pages[2]).toContain('未保存具体诊断');
   });
 
   it('shows an unobserved return window as uncovered rather than a CPU failure', () => {
