@@ -92,6 +92,8 @@ function emitRetryLoadDependency(
   emitLoadImmediate(writer, '$8', retryLoadValue);
   writer.emit(`sw $8, 0x${retryLoadAddress.toString(16)}($0)`);
   emitLoadImmediate(writer, '$9', retryLoadValue);
+  // A stale load result must differ from the expected branch operand.
+  emitLoadImmediate(writer, '$8', retryLoadValue ^ 0xffff);
   emitRetryFlag(writer);
   const donePc = writer.pc() + 11 * 4;
   emitRetryPreamble(writer, id, donePc);

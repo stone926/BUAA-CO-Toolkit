@@ -12,7 +12,8 @@ import {
 import { discardContinuousGeneratedAsmCase } from '../../courseTesting/continuousCaseRetention';
 import {
   BuiltinAsmGeneratorError,
-  generateBuiltinAsmTestCase
+  generateBuiltinAsmTestCase,
+  generateRegisterCoverageAsmTestCase
 } from '../../courseTesting/builtinAsmGenerator';
 
 const vscodeState = vi.hoisted(() => ({
@@ -46,7 +47,8 @@ vi.mock('../../courseTesting/continuousCaseRetention', () => ({
 
 vi.mock('../../courseTesting/builtinAsmGenerator', () => ({
   BuiltinAsmGeneratorError: class BuiltinAsmGeneratorError extends Error {},
-  generateBuiltinAsmTestCase: vi.fn()
+  generateBuiltinAsmTestCase: vi.fn(),
+  generateRegisterCoverageAsmTestCase: vi.fn()
 }));
 
 function setup(overrides: Partial<BuiltinGeneratorRunSetup> = {}): BuiltinGeneratorRunSetup {
@@ -72,6 +74,11 @@ function setup(overrides: Partial<BuiltinGeneratorRunSetup> = {}): BuiltinGenera
 describe('builtin generator workflow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(generateRegisterCoverageAsmTestCase).mockReturnValue({
+      profile: 'P7', mode: 'off', text: 'gpr coverage', instructionCount: 127,
+      instructionSet: ['add', 'ori', 'sw'], usedInstructions: ['add', 'ori', 'sw'],
+      seed: 'gpr-coverage-v1', interruptSchedule: []
+    });
     vi.mocked(generateBuiltinAsmTestCase).mockReturnValue({
       profile: 'P7',
       mode: 'anchor',
@@ -106,7 +113,7 @@ describe('builtin generator workflow', () => {
   it('creates traceable ASM cases and records source artifacts for builtin random output', async () => {
     const batch = await runGeneratorAndCollectAsms(services(), setup(), { revealOutput: false });
 
-    expect(batch?.asmCases).toHaveLength(1);
+    expect(batch?.asmCases).toHaveLength(2);
     expect(batch?.asms[0].fsPath).toContain('builtin-p7-');
     expect(batch?.source).toMatchObject({
       kind: 'generator',
@@ -160,6 +167,32 @@ describe('builtin generator workflow', () => {
     );
   });
 
+  it('generates and persists GPR coverage once per continuous session, independently of payload focus', async () => {
+    const sessionId = '44444444-4444-4444-8444-444444444444';
+    const initial = await runGeneratorAndCollectAsms(services(), setup(), {
+      revealOutput: false, continuous: { sessionId, iteration: 1 }
+    });
+    expect(initial?.asmCases).toHaveLength(2);
+    expect(generateRegisterCoverageAsmTestCase).toHaveBeenCalledTimes(1);
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(1, expect.anything(), 'gpr coverage', expect.objectContaining({
+      source: expect.objectContaining({
+        generator: 'builtin:register-coverage', commandLine: 'builtin-register-coverage --profile P7'
+      }),
+      p7: { interruptSchedule: [], probe: undefined },
+      metadata: expect.objectContaining({
+        'source.coverage': 'gpr', 'source.mode': 'off', 'source.instructionCount': '127',
+        'continuous.sessionId': sessionId, 'continuous.iteration': '1'
+      })
+    }));
+    const next = await runGeneratorAndCollectAsms(services(), setup(), {
+      revealOutput: false, continuous: { sessionId, iteration: 2 }
+    });
+    expect(next?.asmCases).toHaveLength(1);
+    expect(generateRegisterCoverageAsmTestCase).toHaveBeenCalledTimes(1);
+    expect(generateBuiltinAsmTestCase).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(generateBuiltinAsmTestCase).mock.calls.every(([options]) => options.instructionCount === 20)).toBe(true);
+  });
+
   it('keeps automatic generation quiet when requested', async () => {
     const state = vscodeState.state!;
     const process = await import('../../process');
@@ -171,7 +204,7 @@ describe('builtin generator workflow', () => {
 
     const batch = await runGeneratorAndCollectAsms(services(), setup(), { revealOutput: false });
 
-    expect(batch?.asmCases).toHaveLength(1);
+    expect(batch?.asmCases).toHaveLength(2);
     expect(process.revealOutputChannel).not.toHaveBeenCalled();
   });
 
@@ -253,7 +286,7 @@ describe('builtin generator workflow', () => {
       probeScenarioCount: 64
     }), { revealOutput: false });
 
-    expect(batch?.asmCases).toHaveLength(6);
+    expect(batch?.asmCases).toHaveLength(8);
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(1, expect.objectContaining({ p7StressMode: 'anchor' }));
     expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(2, expect.objectContaining({
       p7StressMode: 'probe',
@@ -262,23 +295,23 @@ describe('builtin generator workflow', () => {
       exceptionRate: 0
     }));
     for (const [index, probeShard, probeScenarioCount] of [
-      [3, 'mmio', 26], [4, 'timer', 10], [5, 'priority', 14], [6, 'mdu', 18]
+      [3, 'mmio', 26], [4, 'timer', 10], [5, 'priority', 14], [6, 'mdu', 18], [7, 'hazard', 21]
     ] as const) {
       expect(generateBuiltinAsmTestCase).toHaveBeenNthCalledWith(index, expect.objectContaining({
         p7StressMode: 'probe', probeShard, probeScenarioCount, exceptionRate: 0
       }));
     }
-    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), expect.objectContaining({
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({ 'source.seed': 'anchor-seed', 'source.mode': 'anchor' })
     }));
-    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), expect.objectContaining({
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(3, expect.anything(), expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({
         'source.seed': 'probe-seed',
         'source.mode': 'probe',
         'source.probeShard': 'core'
       })
     }));
-    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(4, expect.anything(), expect.anything(), expect.objectContaining({
+    expect(createAsmCaseFromText).toHaveBeenNthCalledWith(5, expect.anything(), expect.anything(), expect.objectContaining({
       metadata: expect.objectContaining({
         'source.seed': 'timer-probe-seed',
         'source.mode': 'probe',

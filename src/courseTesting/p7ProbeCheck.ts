@@ -65,9 +65,20 @@ export function checkP7Probe(
   const records = reconstructProbeRecords(simEvents, metadata);
   const diagnostics = parseProbeDiagnostics(simOutput);
   const failures: P7ProbeFailure[] = [];
+  // Each scenario has several exact commit obligations. Index once instead of rescanning the
+  // complete trace for every operand/result/forbidden PC as coverage grows.
+  const commitsByPc = new Map<number, CpuTraceEvent[]>();
+  for (const event of simEvents) {
+    const pc = parseHex(event.pc);
+    if (!Number.isFinite(pc)) continue;
+    const commits = commitsByPc.get(pc);
+    if (commits) commits.push(event);
+    else commitsByPc.set(pc, [event]);
+  }
+  const atPc = (pc: number): readonly CpuTraceEvent[] => commitsByPc.get(pc >>> 0) ?? [];
   for (const [name, expected] of Object.entries(metadata.initialCp0 ?? {})) {
-    const writes = simEvents.filter((event) => parseHex(event.pc) === (expected.pc >>> 0));
-    const matches = matchingCommits(simEvents, expected);
+    const writes = atPc(expected.pc);
+    const matches = matchingCommits(writes, expected);
     if (writes.length !== 1 || matches.length !== 1) {
       failures.push({
         scenarioId: 0, kind: 'cp0-reset',
@@ -133,12 +144,17 @@ export function checkP7Probe(
 
   let recordIndex = 0;
   for (const scenario of metadata.scenarios) {
+    for (const pc of scenario.forbiddenCommitPcs ?? []) {
+      if (atPc(pc).length) {
+        failures.push(failure(scenario, `forbidden younger/wrong-path PC 0x${(pc >>> 0).toString(16)} committed`));
+      }
+    }
     const expectedRecords = expectedRecordsFor(scenario);
     const internalException = scenario.kind === 'internal'
       || expectedRecords.some((expected) => expected.expectedExcCode === undefined || expected.expectedExcCode !== 0);
     const victimPc = scenario.victimPc;
     if (internalException && victimPc !== undefined && Number.isFinite(victimPc)) {
-      const victimCommit = findCommitAtPc(simEvents, victimPc);
+      const victimCommit = atPc(victimPc)[0];
       if (victimCommit) {
         const commitTarget = victimCommit.kind === 'grf' ? `$${victimCommit.target}` : `*${victimCommit.target}`;
         failures.push(failure(
@@ -241,7 +257,7 @@ export function checkP7Probe(
       }
     }
     if (scenario.requireCompletion) {
-      const completionEvents = findCompletionEvents(simEvents, scenario);
+      const completionEvents = findCompletionEvents(atPc(scenario.donePc), scenario);
       if (completionEvents.length !== 1) {
         failures.push(failure(
           scenario,
@@ -254,25 +270,25 @@ export function checkP7Probe(
     const requiredCommits = [...(scenario.requiredPreHandlerCommits ?? []), ...(scenario.requiredCommits ?? [])];
     for (const pc of new Set(requiredCommits.map((commit) => commit.pc >>> 0))) {
       const expectedCount = requiredCommits.filter((commit) => (commit.pc >>> 0) === pc).length;
-      const actualCount = simEvents.filter((event) => parseHex(event.pc) === pc).length;
+      const actualCount = atPc(pc).length;
       if (actualCount !== expectedCount) {
         failures.push(failure(scenario,
           `required commit PC 0x${pc.toString(16)}: expected ${expectedCount} total writes, got ${actualCount}`));
       }
     }
     for (const expectedCommit of scenario.requiredPreHandlerCommits ?? []) {
-      const commits = matchingCommits(simEvents, expectedCommit);
+      const commits = matchingCommits(atPc(expectedCommit.pc), expectedCommit);
       if (commits.length !== 1) {
         failures.push(failure(
           scenario,
           `required pre-handler ${expectedCommit.kind.toUpperCase()} commit at 0x${(expectedCommit.pc >>> 0).toString(16)}: expected exactly once, got ${commits.length}`
         ));
-      } else if (finalRecord && commits[0].lineNumber >= finalRecord.lastLineNumber) {
-        failures.push(failure(scenario, 'required pre-handler commit appeared after the handler record'));
+      } else if (finalRecord && commits[0].lineNumber >= finalRecord.firstLineNumber) {
+        failures.push(failure(scenario, 'required pre-handler commit appeared after the handler record began'));
       }
     }
     for (const expectedCommit of scenario.requiredCommits ?? []) {
-      const commits = matchingCommits(simEvents, expectedCommit);
+      const commits = matchingCommits(atPc(expectedCommit.pc), expectedCommit);
       if (commits.length !== 1) {
         failures.push(failure(
           scenario,
@@ -556,14 +572,6 @@ function failure(scenario: P7ProbeScenario, message: string): P7ProbeFailure {
     kind: scenario.kind,
     message
   };
-}
-
-function findCommitAtPc(simEvents: readonly CpuTraceEvent[], pc: number): CpuTraceEvent | undefined {
-  const expectedPc = pc >>> 0;
-  return simEvents.find((event) => {
-    const eventPc = parseHex(event.pc);
-    return Number.isFinite(eventPc) && eventPc === expectedPc;
-  });
 }
 
 function parseHex(value: string): number {

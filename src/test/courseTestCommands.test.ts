@@ -66,9 +66,13 @@ describe('public course-test commands', () => {
     await commands.get(Commands.Test.OpenAsmCaseIndex)!();
     expect(listAsmCaseManifests).toHaveBeenCalledOnce();
     expect(vscode.window.createWebviewPanel).toHaveBeenCalledWith(
-      'coAsmCaseIndex', '测试历史 / 失败用例', vscode.ViewColumn.Beside, { enableScripts: false }
+      'coAsmCaseIndex', '测试历史 / 失败用例', vscode.ViewColumn.Beside, {
+        enableScripts: true,
+        enableFindWidget: true,
+        localResourceRoots: []
+      }
     );
     const panel = vi.mocked(vscode.window.createWebviewPanel).mock.results[0].value;
-    expect(panel.webview.html).toContain('共 0 个测试点');
+    expect(panel.webview.html).toContain('已保存测试点');
   });
 });

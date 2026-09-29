@@ -14,6 +14,7 @@ import { discardContinuousGeneratedAsmCase } from './continuousCaseRetention';
 import {
   BuiltinAsmGeneratorError,
   generateBuiltinAsmTestCase,
+  generateRegisterCoverageAsmTestCase,
   type P7ProbeShard,
   type P7StressMode
 } from './builtinAsmGenerator';
@@ -134,6 +135,11 @@ export async function runGeneratorAndCollectAsms(
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
   const specs = builtinGenerationSpecs(setup);
+  // A deterministic register-file check runs once per continuous session, freeing every
+  // randomized case's instruction budget for control flow, hazards and P7 exceptions.
+  if (!options.continuous || options.continuous.iteration === 1) {
+    specs.unshift({ mode: 'off', registerCoverage: true });
+  }
   const enginePlan = resolveCourseEnginePlan(automaticTestEngineMode, setup.profile);
   const asms: vscode.Uri[] = [];
   const asmCases: AsmCase[] = [];
@@ -143,21 +149,23 @@ export async function runGeneratorAndCollectAsms(
         throw new Error('continuous builtin generation cancelled');
       }
       const mode = spec.mode;
-      const generated = generateBuiltinAsmTestCase({
-        profile: setup.profile,
-        instructionText: setup.instructionText,
-        instructionCount: setup.instructionCount,
-        generatedAt,
-        interrupt: setup.interrupt && mode !== 'off' && spec.probeShard !== 'timer',
-        p7StressMode: mode,
-        timerInterrupt: mode === 'probe' && setup.timerInterrupt,
-        externalInterruptIntensity: setup.externalInterruptIntensity,
-        timerIntensity: setup.timerIntensity,
-        probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
-        probeShard: spec.probeShard,
-        exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
-        exceptionTypes: setup.exceptionTypes
-      });
+      const generated = spec.registerCoverage
+        ? generateRegisterCoverageAsmTestCase({ profile: setup.profile, generatedAt })
+        : generateBuiltinAsmTestCase({
+          profile: setup.profile,
+          instructionText: setup.instructionText,
+          instructionCount: setup.instructionCount,
+          generatedAt,
+          interrupt: setup.interrupt && mode !== 'off' && spec.probeShard !== 'timer',
+          p7StressMode: mode,
+          timerInterrupt: mode === 'probe' && setup.timerInterrupt,
+          externalInterruptIntensity: setup.externalInterruptIntensity,
+          timerIntensity: setup.timerIntensity,
+          probeScenarioCount: spec.probeScenarioCount ?? setup.probeScenarioCount,
+          probeShard: spec.probeShard,
+          exceptionRate: mode === 'probe' ? 0 : setup.exceptionRate,
+          exceptionTypes: setup.exceptionTypes
+        });
       // File names are intentionally opaque. Exact mode/shard provenance belongs in the
       // immutable case manifest, not in the public automatic-test surface.
       const fileName = builtinAsmFileName(generated.profile, generatedAt);
@@ -165,8 +173,10 @@ export async function runGeneratorAndCollectAsms(
         resource: setup.resource,
         source: {
           kind: 'builtin',
-          generator: 'builtin:random-asm',
-          commandLine: generatorCommandLine(setup),
+          generator: spec.registerCoverage ? 'builtin:register-coverage' : 'builtin:random-asm',
+          commandLine: spec.registerCoverage
+            ? `builtin-register-coverage --profile ${setup.profile}`
+            : generatorCommandLine(setup),
           cwd: generatorCwd(setup)
         },
         createdAt: generatedAt,
@@ -180,6 +190,7 @@ export async function runGeneratorAndCollectAsms(
           'source.seed': generated.seed,
           'source.mode': generated.mode ?? mode ?? 'default',
           'source.instructionCount': String(generated.instructionCount),
+          ...(spec.registerCoverage ? { 'source.coverage': 'gpr' } : {}),
           ...(spec.probeShard ? { 'source.probeShard': spec.probeShard } : {}),
           ...(options.continuous ? {
             'continuous.sessionId': options.continuous.sessionId,
@@ -242,6 +253,7 @@ function publicBuiltinGeneratorFailure(error: unknown): string {
 
 interface BuiltinGenerationSpec {
   mode: P7StressMode | undefined;
+  registerCoverage?: boolean;
   probeShard?: P7ProbeShard;
   probeScenarioCount?: number;
 }

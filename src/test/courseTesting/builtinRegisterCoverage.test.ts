@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { automaticTestPolicy } from '../../courseTesting/automaticTestPolicy';
-import { generateBuiltinAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
+import { generateBuiltinAsmTestCase, generateRegisterCoverageAsmTestCase } from '../../courseTesting/builtinAsmGenerator';
 import { emitGeneralRegisterCoverage, emitRegisterJumpCoverage } from '../../courseTesting/builtinAsm/registerCoverage';
 import { ProgramWriter } from '../../courseTesting/builtinAsm/programWriter';
 import { CpuState } from '../../courseTesting/cpuState';
@@ -84,22 +84,36 @@ describe('directed architectural register coverage', () => {
     expect(result.trace![result.trace!.length - 1]).toBe(`@${hex(markerPc)}: $25 <= 00006D6E`);
     expect(traceDiff(result.trace!, result.trace!.slice(0, -1)).matched).toBe(false);
 
-    for (let register = 1; register <= 31; register++) {
-      const address = 0x100 + (register - 1) * 4;
-      expect(result.trace!.some((line) => line.endsWith(`*${hex(address)} <= ${hex(register * 0x101)}`)), `$${register} observation`).toBe(true);
-    }
+    expect(generated.text).not.toContain('_co_gpr_coverage');
     for (const producer of generated.instructionSet.includes('jr') ? ['ori', 'add', 'sub', 'lw'] : []) {
       for (const gap of [0, 1, 2]) {
         const pc = sourceLabelPc(generated.text, `_co_jr_${producer}_gap${gap}`);
         expect(result.trace!.some((line) => line.startsWith(`@${hex(pc)}: $22 <=`)), `${producer} -> jr, gap ${gap}`).toBe(true);
       }
     }
-    const body = generated.text.split('_co_gpr_coverage_done:')[1].split('.ktext')[0];
+    const body = generated.text.split('main:\n')[1].split('.ktext')[0];
     for (const line of body.split(/\r?\n/)) {
       const registers = line.match(/\$\d+\b/g) ?? [];
       expect(registers.slice(1), line).not.toContain('$26');
       expect(registers.slice(1), line).not.toContain('$27');
     }
+  });
+
+  it.each(profiles)('observes all GPRs in a separate compact %s program', (profile) => {
+    const generated = generateRegisterCoverageAsmTestCase({ profile });
+    const prepared = prepare(generated.text, profile);
+    const result = execute(prepared);
+    expect(result, result.diagnostic?.message).toMatchObject({ status: 'halted', haltReason: 'course-halt-loop' });
+    expect(generated.instructionCount).toBe(127);
+    expect(generated.interruptSchedule).toEqual([]);
+    const words = prepared.assembled.image!.segments.find((segment) => segment.name === 'text')!.words;
+    expect(words).toHaveLength(129);
+    for (let register = 1; register <= 31; register++) {
+      const address = 0x100 + (register - 1) * 4;
+      expect(result.trace!.some((line) => line.endsWith(`*${hex(address)} <= ${hex(register * 0x101)}`)), `$${register} observation`).toBe(true);
+    }
+    const markerPc = sourceLabelPc(generated.text, '_co_test_complete');
+    expect(result.trace!.at(-1)).toBe(`@${hex(markerPc)}: $25 <= 00006D6E`);
   });
 
   it.each(['stuck-zero', 'alias-29'] as const)('exposes a $28 %s register-file fault through stored read results', (fault) => {

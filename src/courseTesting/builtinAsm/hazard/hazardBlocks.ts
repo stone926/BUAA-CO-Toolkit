@@ -7,6 +7,7 @@ import { branchTaken, isSmallArithmeticOperand } from '../instructionSemantics';
 import { HazardTarget, HazardTargetPlanner } from './hazardTargets';
 import { hazardClassOf, SourceRole } from '../../../hazardAnalysis/hazardTiming';
 import { OperandSteer, SteeredEmission } from './operandSteer';
+import { HazardWitnessEmitter } from './hazardWitnesses';
 
 /** Narrow view of the random-body generator that hazard blocks emit through. */
 export interface HazardEmitHost {
@@ -66,8 +67,11 @@ const addressSetupRegisters = 2;
  */
 export class HazardBlockEmitter {
   private exhausted = false;
+  private readonly witnesses: HazardWitnessEmitter;
 
-  constructor(private readonly host: HazardEmitHost, private readonly planner: HazardTargetPlanner) {}
+  constructor(private readonly host: HazardEmitHost, private readonly planner: HazardTargetPlanner) {
+    this.witnesses = new HazardWitnessEmitter(host);
+  }
 
   get done(): boolean {
     return this.exhausted;
@@ -77,6 +81,10 @@ export class HazardBlockEmitter {
   emitNext(): boolean {
     if (this.exhausted || this.host.remaining() < blockReserve) {
       return false;
+    }
+    if (this.witnesses.emitNext()) {
+      this.host.settleObservations();
+      return true;
     }
     const planned = this.planner.next((target) => this.realizable(target));
     if (!planned) {
@@ -94,6 +102,7 @@ export class HazardBlockEmitter {
     switch (target.kind) {
       case 'forward': {
         const consumerClass = hazardClassOf(target.consumer);
+        if ((target.producer === 'jal' || consumerClass === 'jr' || consumerClass === 'jalr') && !this.host.hasSkippedPoison()) return false;
         if (consumerClass === 'jr' || consumerClass === 'jalr') {
           return target.producer === 'jal'
             ? this.host.allowed.has('jal') && this.host.allowed.has('jr') && this.host.allowed.has('beq')
@@ -146,6 +155,7 @@ export class HazardBlockEmitter {
       register = this.pickRegister(avoid);
       avoid.add(register);
       twin = this.prepareTwin(register, avoid);
+      if (!twin) return false;
     }
     const before = this.snapshot();
     const produced = this.host.emitSteered(producer, {
@@ -170,6 +180,7 @@ export class HazardBlockEmitter {
     let twin: string | undefined;
     if (hazardClassOf(consumer) === 'br_r2') {
       twin = this.prepareTwin('$31', avoid);
+      if (!twin) return false;
     } else if (!this.consumerAccepts(consumer, role, this.host.currentPc() + 8, this.host.state.regValue('$31'))) {
       if (!this.preloadObservableLink(consumer, role)) return false;
     }
@@ -424,6 +435,9 @@ export class HazardBlockEmitter {
   }
 
   private emitZeroDestination(producer: string, consumer: string, role: SourceRole, gap: number): boolean {
+    const avoid = new Set<string>(['$0']);
+    const twin = hazardClassOf(consumer) === 'br_r2' ? this.prepareTwin('$0', avoid) : undefined;
+    if (hazardClassOf(consumer) === 'br_r2' && !twin) return false;
     const address = hazardClassOf(producer) === 'load' ? this.seedNonzeroWord() : undefined;
     const produced = this.host.emitSteered(producer, {
       write: '$0',
@@ -434,8 +448,8 @@ export class HazardBlockEmitter {
     if (!produced?.value) {
       return false;
     }
-    this.emitFillers(gap, new Set());
-    return this.emitConsumer(consumer, role, '$0', produced.value);
+    this.emitFillers(gap, avoid);
+    return this.emitConsumer(consumer, role, '$0', produced.value, twin);
   }
 
   /** DM is sparse, so a load into $0 first gets a nonzero word to discard. */
@@ -450,12 +464,17 @@ export class HazardBlockEmitter {
     const avoid = new Set<string>();
     const register = this.pickRegister(avoid);
     avoid.add(register);
+    // Prepare the comparison operand before either producer, so setup cannot age away the
+    // competing writes. Requiring the older write to preserve the stale value makes a wrong
+    // older/GRF selection flip BEQ/BNE instead of merely producing a different non-equal value.
+    const branchTwin = hazardClassOf(target.consumer) === 'br_r2' ? this.prepareTwin(register, avoid) : undefined;
+    if (hazardClassOf(target.consumer) === 'br_r2' && !branchTwin) return false;
     const original = this.host.state.regValue(register);
     const small = this.needsSmallValue(target.consumer, target.role);
     const older = this.host.emitSteered(target.older, {
       write: register,
       preferSmallReads: small,
-      accept: (value) => value !== original
+      accept: (value) => branchTwin ? value === original : value !== original
     });
     if (older?.value === undefined) return false;
     const olderValue = this.host.state.regValue(register);
@@ -468,7 +487,7 @@ export class HazardBlockEmitter {
     });
     if (!newer) return false;
     this.emitFillers(target.newerGap, avoid);
-    return this.emitConsumer(target.consumer, target.role, register, olderValue);
+    return this.emitConsumer(target.consumer, target.role, register, olderValue, branchTwin);
   }
 
   private emitHiLo(writer: 'mthi' | 'mtlo', reader: 'mfhi' | 'mflo', gap: number): boolean {
@@ -491,6 +510,7 @@ export class HazardBlockEmitter {
     const other: SourceRole = role === 'rs' ? 'rt' : 'rs';
     const steer: OperandSteer = {
       reads: twin ? { [role]: register, [other]: twin } : { [role]: register },
+      accept: (_value, destination) => destination !== '$0',
       wrong: { role, value: wrong }
     };
     if (branchMnemonics.has(consumer)) {

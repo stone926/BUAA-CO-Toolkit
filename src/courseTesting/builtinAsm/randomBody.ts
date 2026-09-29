@@ -48,7 +48,8 @@ import {
   courseAsmHaltLoop
 } from '../mipsUtil';
 import { Random, hashSeed } from '../random';
-import { emitGeneralRegisterCoverage, emitRegisterJumpCoverage, RegisterCoverageWriter } from './registerCoverage';
+import { emitRegisterJumpCoverage, RegisterCoverageWriter } from './registerCoverage';
+import { emitControlTargetCoverage } from './controlTargetCoverage';
 import { p7SafeInterruptAnchorMnemonics } from '../p7InterruptAnchor';
 import {
   p7RiWordCatalog,
@@ -358,6 +359,8 @@ class ProgramGenerator {
   private hazardInstructionCount = 0;
   /** The next recorded instruction sits on a path that no correct execution takes. */
   private recordingSkipped = false;
+  /** Directed loops replay static PCs with different values, so they are excluded from snapshot-based hazard accounting. */
+  private suppressControlHazards = false;
   /** Delay-slot emissions must stay a single instruction (no trailing MDU read probe). */
   private delaySlotDepth = 0;
 
@@ -403,9 +406,6 @@ class ProgramGenerator {
       emit: (mnemonic, text) => this.emitStaticInstruction(mnemonic, text),
       label: (label) => this.addLabel(label)
     };
-    emitGeneralRegisterCoverage(coverageWriter, this.state, this.allowed,
-      (this.p7HandlerEnabled ? p7PrologueInstructionCount : 0) +
-      (this.interruptEnabled ? p7InterruptAnchorInstructionCount : 0));
     if (this.p7HandlerEnabled) {
       this.emitP7Prologue();
     }
@@ -413,7 +413,26 @@ class ProgramGenerator {
       this.emitInterruptAnchor();
     }
     this.emitMemoryCoverageSeed();
-    this.emitControlTargetCoverage();
+    emitControlTargetCoverage({
+      allowed: this.allowed,
+      state: this.state,
+      remaining: () => this.remaining(),
+      usesDelaySlot: () => this.usesDelaySlot(),
+      emit: (mnemonic, text) => this.emitStaticInstruction(mnemonic, text),
+      label: (name) => this.addLabel(name),
+      nextLabel: (prefix) => this.nextLabel(prefix),
+      skippedPoison: (skipped) => this.emitSkippedPoisonInstruction(skipped),
+      beginControlRegion: () => {
+        this.hazards?.settle();
+        this.hazards?.model.flush();
+        this.suppressControlHazards = true;
+      },
+      endControlRegion: () => {
+        this.hazards?.settle();
+        this.suppressControlHazards = false;
+        this.hazards?.model.flush();
+      }
+    });
     emitRegisterJumpCoverage(coverageWriter, this.state, this.allowed, this.usesDelaySlot());
 
     const coverageQueue = this.shuffle(Array.from(this.allowed));
@@ -429,7 +448,10 @@ class ProgramGenerator {
         continue;
       }
 
-      if (this.wantsHazardBlock()) {
+      // Cover each currently legal focus instruction before spending the remaining budget on
+      // dependency matrices; compact cases must not lose e.g. SYSCALL to a long witness queue.
+      const coverageMnemonic = this.pickCoverageMnemonic(coverageQueue, randomBudget);
+      if (!coverageMnemonic && this.wantsHazardBlock()) {
         const before = this.emittedCount;
         const emitted = this.hazardBlocks!.emitNext();
         this.hazardInstructionCount += this.emittedCount - before;
@@ -438,7 +460,7 @@ class ProgramGenerator {
         }
       }
 
-      const mnemonic = this.pickCoverageMnemonic(coverageQueue, randomBudget)
+      const mnemonic = coverageMnemonic
         ?? this.pickBiasedMnemonic(randomBudget)
         ?? this.pickAnyMnemonic(randomBudget);
       if (!mnemonic) {
@@ -563,50 +585,6 @@ class ProgramGenerator {
       this.emit('ori', `ori ${p7ScratchRegisterA}, ${p7ScratchRegisterA}, 0xffff`);
       this.state.setRegister(p7ScratchRegisterA, -1);
     }
-  }
-
-  private emitControlTargetCoverage(): void {
-    const required = ['ori', 'sub', 'beq', 'nop'];
-    if (!required.every((mnemonic) => this.allowed.has(mnemonic))) {
-      return;
-    }
-    const instructionCost = this.usesDelaySlot() ? 9 : 6;
-    if (this.remaining() < instructionCost) {
-      return;
-    }
-
-    const counter = '$21';
-    const step = '$22';
-    const selfLabel = this.nextLabel('self');
-    const backwardLabel = this.nextLabel('backward');
-    const doneLabel = this.nextLabel('backward_done');
-
-    this.emitStaticInstruction('ori', `ori ${step}, $0, 1`);
-    this.emitStaticInstruction('ori', `ori ${counter}, $0, 2`);
-    this.addLabel(selfLabel);
-    // A self target that is deliberately not taken catches both immediate/PC errors and an
-    // incorrectly taken condition without creating a loop on a correct CPU.
-    this.emitStaticInstruction('beq', `beq $0, ${step}, ${selfLabel}`);
-    if (this.usesDelaySlot()) {
-      this.emitStaticInstruction('nop', 'nop');
-    }
-
-    // Two bounded dynamic iterations exercise a genuinely taken negative branch offset. The
-    // first exit check falls through, the backward branch is taken, and the second exit check
-    // reaches done. NOP slots keep the final software-model state deterministic.
-    this.addLabel(backwardLabel);
-    this.emitStaticInstruction('sub', `sub ${counter}, ${counter}, ${step}`);
-    this.emitStaticInstruction('beq', `beq ${counter}, $0, ${doneLabel}`);
-    if (this.usesDelaySlot()) {
-      this.emitStaticInstruction('nop', 'nop');
-    }
-    this.emitStaticInstruction('beq', `beq $0, $0, ${backwardLabel}`);
-    if (this.usesDelaySlot()) {
-      this.emitStaticInstruction('nop', 'nop');
-    }
-    this.addLabel(doneLabel);
-    this.state.setRegister(step, 1);
-    this.state.setRegister(counter, 0);
   }
 
   private emitModeledLui(register: string, imm: number): void {
@@ -1087,18 +1065,20 @@ class ProgramGenerator {
 
   private canEmitControl(mnemonic: ControlMnemonic, remaining: number): boolean {
     const delayCost = this.usesDelaySlot() ? 1 : 0;
-    if (delayCost && !this.hasDelaySlotCandidate()) {
+    // A control instruction without a path-visible write can silently test nothing (e.g. a
+    // jump to its own fall-through). Reserve the sentinel even at the end of the payload.
+    if (!this.hasStatefulPoisonCandidate() || (delayCost && !this.hasDelaySlotCandidate())) {
       return false;
     }
     if (mnemonic === 'jr' || mnemonic === 'jalr') {
-      return remaining >= 2 + delayCost && this.addressLoaderMnemonic() !== undefined;
+      return remaining >= 3 + delayCost && this.addressLoaderMnemonic() !== undefined;
     }
-    return remaining >= 1 + delayCost;
+    return remaining >= 2 + delayCost;
   }
 
   private hasDelaySlotCandidate(): boolean {
     return Array.from(this.allowed).some((mnemonic) =>
-      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && this.canEmitSingle(mnemonic));
+      !controlMnemonics.has(mnemonic) && mnemonic !== 'syscall' && !trapMnemonics.has(mnemonic) && this.canEmitSingle(mnemonic));
   }
 
   private emitMnemonic(mnemonic: string): void {
@@ -1639,10 +1619,6 @@ class ProgramGenerator {
     const label = this.nextLabel('br');
     const operands = this.steeredBranchOperands(mnemonic, steer);
     const willTake = this.branchWillTake(mnemonic, operands);
-    const emitPathProbe = (
-      this.remaining() > 1 + this.delaySlotCost() &&
-      this.hasStatefulPoisonCandidate()
-    );
 
     this.emit(mnemonic, `${mnemonic} ${operands.join(', ')}, ${label}`);
     this.nextBranchOutcome.set(mnemonic, !willTake);
@@ -1657,9 +1633,7 @@ class ProgramGenerator {
     // The instruction between the branch and label is observable on exactly one path. This makes
     // both taken and not-taken decisions detectable; its destination ($26) is excluded from the
     // generator's state-dependent operand pool, so a skipped instruction need not be modeled.
-    if (emitPathProbe && this.remaining() > 0) {
-      this.emitSkippedPoisonInstruction(willTake);
-    }
+    this.emitSkippedPoisonInstruction(willTake);
     this.addLabel(label);
   }
 
@@ -1679,7 +1653,6 @@ class ProgramGenerator {
 
   private emitJump(mnemonic: 'j' | 'jal'): void {
     const label = this.nextLabel(mnemonic);
-    const skipPoison = this.remaining() > 1 + this.delaySlotCost() && this.hasStatefulPoisonCandidate();
 
     this.emit(mnemonic, `${mnemonic} ${label}`);
     if (mnemonic === 'jal') {
@@ -1688,9 +1661,7 @@ class ProgramGenerator {
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    if (skipPoison && this.remaining() > 0) {
-      this.emitSkippedPoisonInstruction(true);
-    }
+    this.emitSkippedPoisonInstruction(true);
     this.addLabel(label);
   }
 
@@ -1702,9 +1673,8 @@ class ProgramGenerator {
 
     const label = this.nextLabel(mnemonic);
     const delayCost = this.delaySlotCost();
-    const minCost = 2 + delayCost;
-    const skipPoison = this.remaining() > minCost && this.hasStatefulPoisonCandidate();
-    const targetIndex = this.emittedCount + minCost + (skipPoison ? 1 : 0);
+    const minCost = 3 + delayCost;
+    const targetIndex = this.emittedCount + minCost;
     const targetAddress = textBaseAddress + targetIndex * 4;
     const targetRegister = '$25';
 
@@ -1718,9 +1688,7 @@ class ProgramGenerator {
     if (this.usesDelaySlot()) {
       this.emitDelaySlot();
     }
-    if (skipPoison && this.remaining() > 0) {
-      this.emitSkippedPoisonInstruction(true);
-    }
+    this.emitSkippedPoisonInstruction(true);
     this.addLabel(label);
   }
 
@@ -1741,7 +1709,7 @@ class ProgramGenerator {
   private emitSkippedPoisonInstruction(skipped: boolean): void {
     const mnemonic = this.pickStatefulPoisonMnemonic();
     if (!mnemonic) {
-      return;
+      throw new BuiltinAsmGeneratorError('Internal generator error: control-flow probe requires an observable poison instruction.');
     }
     this.recordingSkipped = skipped;
     try {
@@ -1775,9 +1743,9 @@ class ProgramGenerator {
 
   private statefulPoisonCandidates(): string[] {
     const preferred = [
-      'ori', 'addiu', 'addi', 'lui',
-      'addu', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
-      'sll', 'srl', 'sra',
+      'ori', 'addiu', 'addi', 'lui', 'andi', 'xori', 'slti', 'sltiu',
+      'add', 'sub', 'addu', 'subu', 'and', 'or', 'xor', 'nor', 'slt', 'sltu',
+      'sll', 'srl', 'sra', 'sllv', 'srlv', 'srav', 'clz', 'clo', 'mfc0',
       'lw', 'lb', 'lbu', 'lh', 'lhu',
     ];
     return preferred.filter((mnemonic) =>
@@ -1805,6 +1773,14 @@ class ProgramGenerator {
     }
     if (mnemonic === 'sll' || mnemonic === 'srl' || mnemonic === 'sra') {
       this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0, ${this.rng.int(0, 31)}`);
+      return;
+    }
+    if (mnemonic === 'clz' || mnemonic === 'clo') {
+      this.emitStaticInstruction(mnemonic, `${mnemonic} ${poisonRegister}, $0`);
+      return;
+    }
+    if (mnemonic === 'mfc0') {
+      this.emitStaticInstruction(mnemonic, `mfc0 ${poisonRegister}, $12`);
       return;
     }
     if (mnemonic === 'lw' || mnemonic === 'lb' || mnemonic === 'lbu' || mnemonic === 'lh' || mnemonic === 'lhu') {
@@ -2260,7 +2236,7 @@ class ProgramGenerator {
       throw new BuiltinAsmGeneratorError('Internal generator error: attempted to emit past the requested instruction count.');
     }
     this.lines.push(`    ${text}`);
-    this.hazards?.record(this.emittedCount, text, !this.recordingSkipped);
+    this.hazards?.record(this.emittedCount, text, !this.recordingSkipped && !this.suppressControlHazards);
     this.emittedCount++;
     this.used.add(mnemonic);
   }
@@ -2307,7 +2283,7 @@ class ProgramGenerator {
         return true;
       },
       emitControl: (mnemonic, text) => this.emit(mnemonic, text),
-      hasSkippedPoison: () => this.remaining() > 2 && this.hasStatefulPoisonCandidate(),
+      hasSkippedPoison: () => this.remaining() > 0 && this.hasStatefulPoisonCandidate(),
       emitSkippedPoison: () => this.emitSkippedPoisonInstruction(true),
       emitFiller: (avoid, delaySlot = false) => {
         const mnemonic = filler(avoid);

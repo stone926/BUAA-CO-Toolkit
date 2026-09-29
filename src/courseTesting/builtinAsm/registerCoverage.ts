@@ -10,6 +10,7 @@ export interface RegisterCoverageWriter {
 
 const registerObservationBase = 0x100;
 const jumpTargetMemory = 0x80;
+export const generalRegisterCoverageInstructionCount = 31 * 4 + 2;
 
 /** Every register gets a distinct, nonzero value before either GRF read port is observed. */
 export function emitGeneralRegisterCoverage(
@@ -18,9 +19,8 @@ export function emitGeneralRegisterCoverage(
   allowed: ReadonlySet<string>,
   reservedInstructions = 0
 ): void {
-  const instructionCount = 31 * 4 + 2;
   if (!['ori', 'add', 'sw'].every((mnemonic) => allowed.has(mnemonic)) ||
-      writer.remaining() < instructionCount + reservedInstructions) {
+      writer.remaining() < generalRegisterCoverageInstructionCount + reservedInstructions) {
     return;
   }
   writer.label('_co_gpr_coverage');

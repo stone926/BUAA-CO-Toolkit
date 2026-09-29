@@ -1,4 +1,5 @@
 // @index builtin-generator — 内置ASM生成入口，P7 stress mode分派
+export { generateRegisterCoverageAsmTestCase } from './builtinAsm/registerCoverageProgram';
 export {
   BuiltinAsmGeneratorError,
   effectiveBuiltinGeneratorProfile,

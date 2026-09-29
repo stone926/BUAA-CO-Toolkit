@@ -131,8 +131,8 @@ describe('P7 audit regressions', () => {
     }
   });
 
-  it('keeps all five automatic shards below the exception vector with reset observations included', () => {
-    for (const [shard, count] of [['core', 64], ['mmio', 26], ['timer', 10], ['priority', 14], ['mdu', 18]] as const) {
+  it('keeps every automatic shard below the exception vector with reset observations included', () => {
+    for (const [shard, count] of [['core', 64], ['mmio', 26], ['timer', 10], ['priority', 14], ['mdu', 18], ['hazard', 21]] as const) {
       const generated = generateBuiltinAsmTestCase({
         profile: 'P7', instructionText: '', instructionCount: 1118,
         seed: 'audit-shard-capacity', p7StressMode: 'probe', probeShard: shard,

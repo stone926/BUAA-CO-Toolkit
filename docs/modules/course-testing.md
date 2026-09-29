@@ -1,14 +1,14 @@
-# course-testing | src/courseTesting/ | 57 files + host adapters
+# course-testing | src/courseTesting/ | 61 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
 ## 核心设计决策
 
-**自动强度不可调。** `automaticTestPolicy.ts` 内部固定引擎、强度与外部工具预算；用户唯一的公开旋钮是 `co.test.instructions`（选择重点 payload 指令）。instruction_count 只统计 payload，生成器统一追加 `_co_test_end` 自分支 + nop。P3–P6 用满 4094 条 payload，P7 用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 路径因 Compact 内存排他 bug 单独采用 4095-word policy。
+**自动强度不可调。** `automaticTestPolicy.ts` 内部固定引擎、强度与外部工具预算；用户唯一的公开旋钮是 `co.test.instructions`（选择重点 payload 指令）。instruction_count 只统计 payload，生成器统一追加 `_co_test_end` 自分支 + nop。随机点 P3–P6 用满 4094 条 payload，P7 用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 路径因 Compact 内存排他 bug 单独采用 4095-word policy。
 
-**默认写入覆盖证据。** 生成程序先为全部 31 个可写 GPR 写入互异非零值并经两个读端口传播存入 DM；P4–P7 固定覆盖 `ori/add/sub/lw → jr` × 间隔 0/1/2（错误旧目标写毒值，正确路径独立标记）；含 `ori` 且 payload ≥256 的程序在最后一槽发出 `_co_test_complete` 可见写，再接标准两条 halt 尾。
+**独立 GPR 覆盖。** 每个持续测试会话先运行一个 127 条 payload 的独立测试点，为全部 31 个可写 GPR 写入互异非零值并经两个读端口传播存入 DM，最后发出完成标记；后续随机测试点不再重复 126 条 GPR 前导。该基础检查使用课程必需指令，不受 payload 重点指令设置影响。P4–P7 随机点固定覆盖 `ori/add/sub/lw → jr` × 间隔 0/1/2（错误旧目标写毒值，正确路径独立标记）；随机跳转将可观察毒指令计入最低预算，余量不足时改发其他指令。含 `ori` 且 payload ≥256 的程序在最后一槽发出 `_co_test_complete` 可见写，再接标准两条 halt 尾。
 
-**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。probe 在内部确定性拆为 core / MMIO / Timer / priority / MDU 五个分片，每个程序都留在 0x4180 之前且最多使用 64 个 DM 记录。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode 与分片只是内部类型，不是公共设置。
+**P7 双通道。** 自动固定 `hybrid`：`anchor`（TS 课程 oracle 精确对拍 + 中断注入）与 `probe`（DM 探针黑盒检查）同时覆盖。probe 在内部确定性拆为 core / MMIO / Timer / priority / MDU / hazard 六个分片，每个程序都留在 0x4180 之前且最多使用 64 个 DM 记录。hazard 分片交叉测试异常、中断、Timer 与 load-use / 分支 / jr / 延迟槽依赖，基于架构提交与 EPC/BD 检查，不假设 CP0 级位置或空泡数量。**probe 是 DUT-only，不能冒充 full-stack reference evidence**；mode 与分片只是内部类型，不是公共设置。
 
 **证据诚实。** probe 在首次 mtc0/异常前用 mfc0 读取 SR/Cause/EPC 并把原始值写入 DM，metadata 把样本绑定到各自的 store PC 并严格检查初值零、唯一、早于 handler 记录。MDU 黑盒结果无法区分产生相同完整结果的合法早启动与非法晚启动，因此**不**宣称为内部启动时刻的证明。报告也说明"通过"只对应本次可观察结果，完整无写回执行、课程周期与结构仍需独立验证。
 
@@ -47,8 +47,11 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `builtinAsm/randomBody.ts` — 核心随机引擎：课程 DM 内对齐访存、分支双路径、有界控制流；普通路径避免有符号溢出/未初始化 HI-LO/除零等非法输入，P7 只通过受控场景制造异常
 - `builtinAsm/instructionSemantics.ts` — ALU/立即数/移位/计数/分支判定与溢出的纯语义
 - `builtinAsm/registerCoverage.ts` — 全 GPR 写入/双读端口/DM 传播与 jr × 间隔矩阵；预算不足时不发出半套覆盖段
+- `builtinAsm/registerCoverageProgram.ts` — 独立 GPR 测试点，释放每个随机点的前导预算；由 workflow 每会话调度一次
+- `builtinAsm/controlTargetCoverage.ts` — 有界双向控制流图：自目标、低地址回边、高地址前跳、分支两臂汇合与可观察路径写；短预算使用紧凑图，循环不以静态值快照冒充动态冒险覆盖
 - `builtinAsm/programWriter.ts` / `builtinAsm/types.ts` / `builtinAsm/asmTemplates.ts` — 行累积与 PC 跟踪、P7 场景与期望类型、异常处理模板插值
 - `builtinAsm/hazard/hazardTracker.ts`、`builtinAsm/hazard/hazardTargets.ts`、`builtinAsm/hazard/hazardBlocks.ts`、`builtinAsm/hazard/operandSteer.ts` — 复用 hazard-analysis.md 的共享 AT 模型做定向冒险生成，按覆盖缺口先类别后元组选择
+- `builtinAsm/hazard/hazardWitnesses.ts` — 双端口混合生产者、较新 load/ALU 写优先、load 同时供给 store 地址与数据、字节/半字 lane 读回；错误来源必须改变架构结果
 
 ## P7 probe
 
@@ -57,7 +60,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `builtinAsm/p7/probeEmitter.ts` — probe 主程序与统一异常处理程序；每场景 guard→触发/中断窗口→完成标记，写入单个 8-word 物理记录
 - `builtinAsm/p7/probeVictims.ts` — 内部异常精确触发序列（victim PC、EPC/BD、MDU 完整旧/新 HI-LO 允许态）
 - `builtinAsm/p7/probeExternalScenarios.ts`、`builtinAsm/p7/probePriorityScenarios.ts`、`builtinAsm/p7/probeMduScenarios.ts`、`builtinAsm/p7/probeMduOperations.ts`、`builtinAsm/p7/probeTimerWriteScenario.ts`、`builtinAsm/p7/probeAsm.ts`、`builtinAsm/p7/constants.ts` — 外部受害路径、中断优先级序列、MDU 组合、Timer pending-writes 稳定态与共用原语/常量
-- `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit
+- `builtinAsm/p7/probeHazardScenarios.ts` — 中断重试 load→branch/jr 和延迟槽 load-use；AdEL/AdES/Ov 与依赖链交叉，检查 older 提交及被取消的 younger/错误路径提交；Timer 轮询 Cause.IP 后通过 eret 释放稳定 pending，不假定倒计时采样周期
+- `p7ProbeCheck.ts` — DUT-only 黑盒精确检查：重建完整 DM 记录并校验 CP0/EPC/Timer 前后状态与 handler 前后精确 commit；按 PC 一次索引提交，older 必须早于记录首字段，取消的 younger/错误路径提交即失败
 
 ## Oracle 与观察
 

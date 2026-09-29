@@ -3,12 +3,17 @@ import { P7ProbeScenarioKind, P7ProbeShard } from '../types';
 import { p7RiWordCatalog } from '../../p7RiWords';
 import { interruptMduVariants as mduVariants } from './probeMduOperations';
 
+const interruptHazardVariants = [
+  'hazard-load-branch-taken', 'hazard-load-branch-not-taken', 'hazard-load-jr',
+  'hazard-delay-load-use', 'hazard-load-younger-branch'
+];
+
 const timerPriorityVariants = [
   'priority-ri', 'priority-adel', 'priority-ades', 'priority-ov', 'priority-syscall',
   'priority-syscall-delay-taken', 'priority-syscall-delay-not-taken'
 ];
 const timerVariants = ['mode0-min', 'mode0-max', 'mode1-repeat', 'disable-reload', 'pending-writes',
-  ...timerPriorityVariants, ...mduVariants];
+  ...timerPriorityVariants, ...mduVariants, ...interruptHazardVariants];
 
 const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = {
   external: [
@@ -25,7 +30,8 @@ const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = 
     'retry-jal',
     'retry-delay-slot-store-taken',
     'retry-delay-slot-store-not-taken',
-    ...mduVariants
+    ...mduVariants,
+    ...interruptHazardVariants
   ],
   timer0: timerVariants,
   timer1: timerVariants,
@@ -41,7 +47,8 @@ const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = 
     ...['timer0-preset', 'timer0-count', 'timer1-ctrl', 'timer1-preset', 'timer1-count']
       .flatMap((register) => [`${register}-byte-load`, `${register}-half-load`]),
     'invalid-fetch',
-    'misaligned-fetch'
+    'misaligned-fetch',
+    'hazard-load-address', 'hazard-delay-load-address'
   ],
   ades: [
     'misaligned-store-delay-taken',
@@ -60,7 +67,8 @@ const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = 
     'timer1-preset-half-store',
     'timer0-count-store',
     'timer1-count-store',
-    ...['timer0-count', 'timer1-count'].flatMap((register) => [`${register}-byte-store`, `${register}-half-store`])
+    ...['timer0-count', 'timer1-count'].flatMap((register) => [`${register}-byte-store`, `${register}-half-store`]),
+    'hazard-load-address', 'hazard-delay-load-address'
   ],
   syscall: ['delay-slot', 'post-eret-status', 'young-mult', 'young-div', 'young-mthi', 'young-mtlo'],
   ri: p7RiWordCatalog.map((entry) => entry.variant),
@@ -70,11 +78,12 @@ const variantsByKind: Partial<Record<P7ProbeScenarioKind, readonly string[]>> = 
     'addi-overflow-delay-taken',
     'addi-overflow-delay-not-taken',
     'sub-overflow-delay-taken',
-    'sub-overflow-delay-not-taken'
+    'sub-overflow-delay-not-taken',
+    'hazard-load-overflow', 'hazard-delay-load-overflow'
   ]
 };
 
-export const automaticProbeShards = ['core', 'mmio', 'timer', 'priority', 'mdu'] as const;
+export const automaticProbeShards = ['core', 'mmio', 'timer', 'priority', 'mdu', 'hazard'] as const;
 
 export function probeVariantsFor(kind: P7ProbeScenarioKind, shard: P7ProbeShard = 'all'): readonly string[] {
   const variants = variantsByKind[kind] ?? [];
@@ -95,6 +104,9 @@ export function probeVariantAt(kind: P7ProbeScenarioKind, occurrence: number, sh
 }
 
 function probeVariantShard(kind: P7ProbeScenarioKind, variant: string): Exclude<P7ProbeShard, 'all'> {
+  if (variant.startsWith('hazard-')) {
+    return 'hazard';
+  }
   if (variant.startsWith('mdu-')) {
     return 'mdu';
   }

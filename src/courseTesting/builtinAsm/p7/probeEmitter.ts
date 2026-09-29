@@ -85,6 +85,7 @@ import { emitExternalRetryScenario, isExternalRetryVariant } from './probeExtern
 import { emitInterruptMduScenario, isInterruptMduVariant } from './probeMduScenarios';
 import { emitInterruptPriorityScenario } from './probePriorityScenarios';
 import { emitTimerPendingWritesScenario } from './probeTimerWriteScenario';
+import { emitHazardScenario } from './probeHazardScenarios';
 import {
   ProbePaddingProfile,
   emitClearTimers,
@@ -134,7 +135,7 @@ export function generateP7ProbeAsmTestCase(options: BuiltinAsmGeneratorOptions):
 
   const main = new ProgramWriter(p7UserTextBaseAddress);
   const scenarios: P7ProbeMetadata['scenarios'] = [];
-  const padding = paddingProfile(scenarioCount);
+  const padding = paddingProfile(shard === 'hazard' ? p7ProbeDefaultScenarioCount : scenarioCount);
 
   emitHeader(main, instructionSet.mnemonics.join(' '), seed, options.generatedAt ?? new Date());
   const initialCp0 = emitProbePrologue(main);
@@ -256,6 +257,10 @@ function emitScenario(
   emitStoreImmediate(writer, id, p7ProbeStateScenarioId);
   emitStoreImmediate(writer, probeKindCode(kind), p7ProbeStateKind);
   emitPadding(writer, rng, 0, padding.setupMax);
+
+  if (variant?.startsWith('hazard-')) {
+    return emitHazardScenario(writer, id, kind, variant);
+  }
 
   if ((kind === 'external' || kind === 'timer0' || kind === 'timer1') && isInterruptMduVariant(variant)) {
     return emitInterruptMduScenario(writer, id, kind, variant!, rng, padding);

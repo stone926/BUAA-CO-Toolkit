@@ -16,7 +16,7 @@ const requiredKinds = [
   'external', 'timer0', 'timer1', 'adel', 'ades', 'syscall', 'ri', 'ov'
 ] as const;
 const allRequiredKinds = new Set(requiredKinds);
-const shardScenarioCounts = { core: 64, mmio: 26, timer: 10, priority: 14, mdu: 18 } as const;
+const shardScenarioCounts = { core: 64, mmio: 26, timer: 10, priority: 14, mdu: 18, hazard: 21 } as const;
 const enabledSources = {
   externalInterrupt: true,
   timerInterrupt: true,
@@ -62,8 +62,8 @@ describe('P7 probe scenario planning', () => {
     }
   });
 
-  it('assigns each registered kind/variant to exactly one of the five automatic shards', () => {
-    expect(automaticProbeShards).toEqual(['core', 'mmio', 'timer', 'priority', 'mdu']);
+  it('assigns each registered kind/variant to exactly one automatic shard', () => {
+    expect(automaticProbeShards).toEqual(['core', 'mmio', 'timer', 'priority', 'mdu', 'hazard']);
     const registered = requiredKinds.flatMap((kind) => probeVariantsFor(kind).map((variant) => `${kind}/${variant}`));
     const assigned = automaticProbeShards.flatMap((shard) => requiredKinds.flatMap((kind) =>
       probeVariantsFor(kind, shard).map((variant) => `${kind}/${variant}`)));
