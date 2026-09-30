@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-30
+
 - fix(ci): update the Windows CLI smoke test to verify the complete P7 first round, including GPR coverage and all five interrupt-return variants.
 
 ## [1.4.1] - 2026-09-30
