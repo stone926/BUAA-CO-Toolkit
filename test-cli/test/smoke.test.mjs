@@ -118,7 +118,7 @@ test('shared default policy is maximum-strength P7 and unbounded continuous test
   });
 });
 
-test('default CLI generates the anchor and every automatic probe shard and writes a sanitized report', {
+test('default CLI generates GPR coverage, the anchor, every probe shard and return variant with a sanitized report', {
   skip: process.platform !== 'win32' ? 'bundled Icarus is supported on Windows x64 only' : false
 }, (t) => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'co-test-cli-'));
@@ -172,20 +172,31 @@ test('default CLI generates the anchor and every automatic probe shard and write
   const caseDirs = fs.readdirSync(casesRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(casesRoot, entry.name));
-  // The default hybrid round prepares one anchor case plus one case per automatic probe shard.
+  // The first hybrid round also includes GPR coverage and each real interrupt-return variant.
   const { automaticProbeShards } = require(
     path.join(testCliDir, 'dist', 'src', 'courseTesting', 'builtinAsm', 'p7', 'probeVariants.js')
   );
-  assert.equal(caseDirs.length, 1 + automaticProbeShards.length);
+  const { automaticReturnVariants } = require(
+    path.join(testCliDir, 'dist', 'src', 'courseTesting', 'builtinAsm', 'p7', 'probeReturnProgram.js')
+  );
+  assert.equal(caseDirs.length, 2 + automaticProbeShards.length + automaticReturnVariants.length);
   const manifests = caseDirs.map((caseDir) => JSON.parse(fs.readFileSync(path.join(caseDir, 'case.json'), 'utf8')));
   assert.deepEqual(
     manifests.map((manifest) => manifest.metadata?.['source.mode']).sort(),
-    ['anchor', ...automaticProbeShards.map(() => 'probe')]
+    ['anchor', 'off', ...automaticProbeShards.map(() => 'probe'), ...automaticReturnVariants.map(() => 'probe')].sort()
   );
   assert.deepEqual(
     manifests.map((manifest) => manifest.metadata?.['source.probeShard']).filter(Boolean).sort(),
-    [...automaticProbeShards].sort()
+    [...automaticProbeShards, ...automaticReturnVariants.map(() => 'return')].sort()
   );
+  assert.deepEqual(
+    manifests.filter((manifest) => manifest.metadata?.['source.probeShard'] === 'return')
+      .map((manifest) => manifest.metadata?.['source.returnVariant']).sort(),
+    [...automaticReturnVariants].sort()
+  );
+  const coverageManifests = manifests.filter((manifest) => manifest.metadata?.['source.coverage'] === 'gpr');
+  assert.equal(coverageManifests.length, 1);
+  assert.equal(coverageManifests[0].metadata['source.mode'], 'off');
   assert.equal(manifests.some((manifest) => manifest.metadata?.['test.status']), true);
 
   const { p7CourseInstructionCountMaximum } = require(
