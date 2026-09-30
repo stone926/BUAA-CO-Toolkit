@@ -62,7 +62,7 @@ describe('updateProjectSettings tool-path migration', () => {
     ]);
   });
 
-  it('does not prefill the P7-specific path from generic MARS under the old profile', async () => {
+  it('never asks for a P7 MARS override even with a historical MARS engine setting', async () => {
     const values = new Map<string, unknown>([
       ['project.profile', 'P6'],
       ['mips.engine', 'mars'],
@@ -84,8 +84,6 @@ describe('updateProjectSettings tool-path migration', () => {
 
     await configureToolchainPaths('P7', vscode.Uri.file('E:/work'));
 
-    expect(prompts.find((options) => options.title === 'P7 MARS 路径')?.value).toBe('');
-    expect(prompts.find((options) => options.title === 'P7 MARS 路径')?.value)
-      .not.toBe('E:/tools/Generic-Mars.jar');
+    expect(prompts).toEqual([]);
   });
 });

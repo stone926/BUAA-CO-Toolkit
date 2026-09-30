@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_TS_ENGINE_ID,
   courseEnginePlanProfileError,
-  LEGACY_MARS_ENGINE_ID,
+  OFFICIAL_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
 
@@ -14,9 +14,9 @@ describe('phase-6 course engine policy', () => {
     expect(courseEnginePlanProfileError(plan, 'P4')).toMatch(/P3.*P4/);
   });
 
-  it('keeps P2 and unknown profiles on legacy in auto mode', () => {
+  it('uses the official MARS adapter outside course profiles in auto mode', () => {
     for (const profile of ['P2', 'P1', 'auto', undefined]) {
-      expect(resolveCourseEnginePlan('auto', profile).primaryEngineId).toBe(LEGACY_MARS_ENGINE_ID);
+      expect(resolveCourseEnginePlan('auto', profile).primaryEngineId).toBe(OFFICIAL_MARS_ENGINE_ID);
     }
   });
 
@@ -33,20 +33,25 @@ describe('phase-6 course engine policy', () => {
     { deterministicConsole: true },
     { interactiveConsole: true },
     { deterministicConsole: true, interactiveConsole: true }
-  ])('keeps an auto full-stack console request on legacy: %o', (capabilities) => {
+  ])('keeps course console requests on builtin for capability validation: %o', (capabilities) => {
     expect(resolveCourseEnginePlan('auto', 'P7', capabilities).primaryEngineId)
-      .toBe(LEGACY_MARS_ENGINE_ID);
+      .toBe(BUILTIN_TS_ENGINE_ID);
   });
 
-  it('never rewrites explicit builtin, mars or verify-both modes', () => {
+  it('migrates fork modes without starting a verification lane', () => {
     expect(resolveCourseEnginePlan('builtin', 'P2', { interactiveConsole: true }))
       .toMatchObject({ primaryEngineId: BUILTIN_TS_ENGINE_ID });
     expect(resolveCourseEnginePlan('mars', 'P7'))
-      .toMatchObject({ primaryEngineId: LEGACY_MARS_ENGINE_ID });
+      .toMatchObject({ mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID });
     expect(resolveCourseEnginePlan('verify-both', 'P2', { deterministicConsole: true }))
       .toMatchObject({
-        primaryEngineId: BUILTIN_TS_ENGINE_ID,
-        verificationEngineId: LEGACY_MARS_ENGINE_ID
+        mode: 'auto', primaryEngineId: OFFICIAL_MARS_ENGINE_ID
       });
+    for (const mode of ['mars', 'verify-both'] as const) {
+      for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7']) {
+        expect(resolveCourseEnginePlan(mode, profile)).toMatchObject({ mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID });
+        expect(resolveCourseEnginePlan(mode, profile).verificationEngineId).toBeUndefined();
+      }
+    }
   });
 });

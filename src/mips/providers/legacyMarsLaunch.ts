@@ -1,4 +1,4 @@
-// @index mips-providers — Legacy MARS 无副作用 launch preflight 与不可变配置快照
+// @index mips-providers — 原版 MARS 无副作用 launch preflight 与配置快照（保留历史 API 名）
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -12,13 +12,11 @@ import {
   useDelayedBranching
 } from '../../config';
 import {
-  isCourseTraceMarsRun,
-  p7InternalUnknownInstructionClassPath,
-  p7RiInstructionNeeded,
+  officialMarsUnsupportedReason,
   type MarsRunMode,
   type MarsRunOptions
 } from '../../language/mips/marsArgs';
-import { legacyMarsConfigurationPolicyIssues } from '../../language/mips/legacyMarsPolicy';
+import { officialMarsConfigurationPolicyIssues } from '../../language/mips/legacyMarsPolicy';
 import type { CapabilityDiagnostic, ResolvedEngineRun } from './contracts';
 
 export interface ResolvedLegacyMarsLaunch extends Omit<ResolvedEngineRun, 'runtime'> {
@@ -52,18 +50,26 @@ export async function resolveLegacyMarsLaunch(
   const java = getJava(sourceUri);
   const memoryConfiguration = getMemoryConfiguration(sourceUri);
   const wallClockMs = getRunTimeout(sourceUri);
-  const courseInvocation = isCourseTraceMarsRun(mode, options);
+  const courseInvocation = options.courseTrace === true || options.traceOutput === true;
+  const extraArgs = [...getMipsExtraArgs(sourceUri)];
+  const delayedBranching = useDelayedBranching(sourceUri);
 
-  diagnostics.push(...legacyMarsConfigurationPolicyIssues(
+  diagnostics.push(...officialMarsConfigurationPolicyIssues(
     profile,
     memoryConfiguration,
     mode,
     courseInvocation
   ));
+  const unsupported = officialMarsUnsupportedReason(mode, options, extraArgs);
+  if (unsupported) {
+    diagnostics.push(diagnostic('official-mars.course-semantics-unsupported', unsupported, 'course-semantics'));
+  }
+  // Reject unsupported semantics before even probing external tools or reading source files.
+  if (diagnostics.length) return { diagnostics };
   if (!configuredMars) {
     diagnostics.push(diagnostic(
       'legacy-mars.jar-not-configured',
-      'MARS jar 未配置。请设置 co.toolchain.mars 或 co.toolchain.marsP7',
+      '原版 MARS jar 未配置。请设置 co.toolchain.mars',
       'legacy-mars'
     ));
   } else if (!await readableRegularFile(configuredMars)) {
@@ -88,25 +94,6 @@ export async function resolveLegacyMarsLaunch(
     ));
   }
 
-  if (mode === 'run' && courseInvocation) {
-    if (!Number.isSafeInteger(options.maxSteps) || (options.maxSteps ?? 0) <= 0) {
-      diagnostics.push(diagnostic(
-        'legacy-mars.max-steps-required',
-        '课程 MARS 黄金模型必须提供正整数 maxSteps',
-        'bounded-execution'
-      ));
-    }
-    if (!Number.isSafeInteger(options.haltPc)
-      || (options.haltPc ?? -1) < 0
-      || (options.haltPc ?? 0) > 0xffff_ffff) {
-      diagnostics.push(diagnostic(
-        'legacy-mars.halt-pc-required',
-        '课程 MARS 黄金模型必须提供由机器码 dump 验证得到的 32 位 haltPc',
-        'halt-loop-detection'
-      ));
-    }
-  }
-
   const sourceReadable = await readableRegularFile(sourceUri.fsPath);
   if (!sourceReadable) {
     diagnostics.push(diagnostic(
@@ -115,18 +102,6 @@ export async function resolveLegacyMarsLaunch(
       'source-input'
     ));
   }
-  const p7RiInstruction = options.p7RiInstruction
-    ?? (sourceReadable ? await p7RiInstructionNeeded(sourceUri, profile) : false);
-  if (profile === 'P7') {
-    if (p7RiInstruction && !await readableRegularFile(p7InternalUnknownInstructionClassPath())) {
-      diagnostics.push(diagnostic(
-        'legacy-mars.p7-ri-class-unavailable',
-        `P7 RI 异常测试缺少内部 instruction class：${p7InternalUnknownInstructionClassPath()}`,
-        'p7-ri-instruction'
-      ));
-    }
-  }
-
   if (diagnostics.length || !configuredMars) {
     return { diagnostics };
   }
@@ -140,9 +115,9 @@ export async function resolveLegacyMarsLaunch(
       memoryConfiguration,
       runtime: { kind: 'java', command: java },
       wallClockMs,
-      p7RiInstruction,
-      delayedBranching: useDelayedBranching(sourceUri),
-      extraArgs: [...getMipsExtraArgs(sourceUri)]
+      p7RiInstruction: false,
+      delayedBranching,
+      extraArgs
     }
   };
 }

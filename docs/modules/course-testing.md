@@ -16,7 +16,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **证据诚实。** probe 在首次 mtc0/异常前用 mfc0 读取 SR/Cause/EPC 并把原始值写入 DM，metadata 把样本绑定到各自的 store PC 并严格检查初值零、唯一、早于 handler 记录。MDU 黑盒结果无法区分产生相同完整结果的合法早启动与非法晚启动，因此**不**宣称为内部启动时刻的证明。报告也说明"通过"只对应本次可观察结果，完整无写回执行、课程周期与结构仍需独立验证。
 
-**引擎边界。** automatic case 直接建立 builtin `CourseEnginePlan`，生成规模、工具链预检、prepare 与 oracle 都不读 workspace rollback，也不启动 legacy capability probe——这保证 text/ktext `.word` RI 可稳定执行。手动 case 开始时读一次 resource-scoped `co.mips.engine` 并生成原子计划，prepare 与 oracle 必须复用。
+**引擎边界。** 手动与 automatic case 均建立 builtin `CourseEnginePlan`，prepare 与 oracle 必须复用；旧 mars/verify-both 配置归 auto，不启动魔改 MARS 或其 capability probe。text/ktext `.word` RI、P7 异常/Timer/IRQ 与课程复位、停机语义由内置引擎提供。历史 legacy adapter 与证据只用于辨认原结果，不把官方 MARS 当作课程 oracle。
 
 **失败即停、有界留存。** 持续测试首个失败或错误立即停止，零延迟主动 yield 保持扩展宿主响应；取消不计测试 error。留存清理对同一 manifest 串行，捕获并复验目录/manifest identity 后原子移入受控 `.co/trash`，所有不确定状态 fail-closed 保留。
 

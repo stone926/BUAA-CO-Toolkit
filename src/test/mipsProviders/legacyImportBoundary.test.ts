@@ -11,7 +11,8 @@ describe('legacy MARS production boundary', () => {
   it('keeps runMarsFile confined to its implementation and provider adapter', () => {
     const allowed = new Set([
       'src/mips.ts',
-      'src/mips/providers/legacyMarsProvider.ts'
+      'src/mips/providers/legacyMarsProvider.ts',
+      'src/mips/providers/officialMarsProvider.ts'
     ]);
     const violations = productionTypeScriptFiles(path.join(process.cwd(), 'src'))
       .filter((file) => !allowed.has(file))

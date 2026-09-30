@@ -233,14 +233,14 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
 
   if (active && isMipsFile(active) && shouldShowMipsActions(context.profile, active.languageId)) {
     children.push(
-      actionItem(
+      ...(context.profile === 'P7' ? [] : [actionItem(
         'core.asmRun',
-        'MARS 运行',
+        '原版 MARS 运行',
         Commands.Mips.RunCurrentFile,
         'play',
         `使用当前 ASM: ${active.basename}`,
-        `${active.fsPath}\n\n通用运行保留 MARS syscall/console 语义；文本段导出使用独立的汇编器路由。`
-      ),
+        `${active.fsPath}\n\n使用原版 MARS 4.5 的 syscall/console 和标准内存布局；课程机器码导出与 CPU 测试使用内置引擎。`
+      )]),
       actionItem(
         'core.asmDumpText',
         'ASM 导出文本段',

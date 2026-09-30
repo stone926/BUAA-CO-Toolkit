@@ -28,7 +28,8 @@ const nodeBuiltins = new Set(builtinModules.map((name) => name.replace(/^node:/,
 const violations = [];
 const legacyProcessConsumers = new Set([
   'src/mips.ts',
-  'src/mips/providers/legacyMarsProvider.ts'
+  'src/mips/providers/legacyMarsProvider.ts',
+  'src/mips/providers/officialMarsProvider.ts'
 ]);
 const providerNeutralOrchestration = new Set([
   'src/courseTesting/traceRunner.ts',

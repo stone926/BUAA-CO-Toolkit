@@ -6,9 +6,11 @@ import { courseProfileIds } from '../../generated/projectProfiles';
 /** Stable provider ids shared by policy, descriptors and replay evidence. */
 export const LEGACY_MARS_ENGINE_ID = 'legacy-mars-configured' as const;
 export const BUILTIN_TS_ENGINE_ID = 'builtin-ts' as const;
+export const OFFICIAL_MARS_ENGINE_ID = 'official-mars-configured' as const;
 
 export type CourseProviderEngineId =
   | typeof LEGACY_MARS_ENGINE_ID
+  | typeof OFFICIAL_MARS_ENGINE_ID
   | typeof BUILTIN_TS_ENGINE_ID;
 
 export interface CourseEngineCapabilityRequest {
@@ -25,7 +27,7 @@ export interface CourseEnginePlan {
   readonly mode: MipsEngineMode;
   readonly profile?: string;
   readonly primaryEngineId: CourseProviderEngineId;
-  /** Present only for the explicit verify-both mode. */
+  /** Historical plan field; current policy never schedules fork verification. */
   readonly verificationEngineId?: typeof LEGACY_MARS_ENGINE_ID;
 }
 
@@ -49,32 +51,19 @@ const builtinDefaultProfiles: ReadonlySet<string> = new Set(courseProfileIds);
 export function resolveCourseEnginePlan(
   mode: MipsEngineMode,
   profile: string | undefined,
-  capabilities: CourseEngineCapabilityRequest = {}
+  _capabilities: CourseEngineCapabilityRequest = {}
 ): CourseEnginePlan {
-  const consoleRequiresLegacy = capabilities.deterministicConsole === true
-    || capabilities.interactiveConsole === true;
-
-  let primaryEngineId: CourseProviderEngineId;
-  switch (mode) {
-    case 'builtin':
-    case 'verify-both':
-      primaryEngineId = BUILTIN_TS_ENGINE_ID;
-      break;
-    case 'mars':
-      primaryEngineId = LEGACY_MARS_ENGINE_ID;
-      break;
-    case 'auto':
-      primaryEngineId = !consoleRequiresLegacy && profile !== undefined
-        && builtinDefaultProfiles.has(profile)
-        ? BUILTIN_TS_ENGINE_ID
-        : LEGACY_MARS_ENGINE_ID;
-      break;
-  }
+  // Old workspace rollback settings must never select the fork's course oracle.
+  // Console capability failures are reported by builtin preflight, without fallback.
+  const effectiveMode = mode === 'mars' || mode === 'verify-both' ? 'auto' : mode;
+  const primaryEngineId = effectiveMode === 'builtin'
+    || (profile !== undefined && builtinDefaultProfiles.has(profile))
+    ? BUILTIN_TS_ENGINE_ID
+    : OFFICIAL_MARS_ENGINE_ID;
 
   return Object.freeze({
-    mode,
+    mode: effectiveMode,
     ...(profile === undefined ? {} : { profile }),
-    primaryEngineId,
-    ...(mode === 'verify-both' ? { verificationEngineId: LEGACY_MARS_ENGINE_ID } : {})
+    primaryEngineId
   });
 }

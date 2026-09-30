@@ -1,6 +1,10 @@
 // @index mars-args — Legacy MARS profile/memory launch policy shared by preflight and replay
 import { courseProfileIds } from '../../generated/projectProfiles';
 
+export const OFFICIAL_MARS_MEMORY_CONFIGURATIONS = [
+  'Default', 'CompactDataAtZero', 'CompactTextAtZero'
+] as const;
+
 /** P7 课程约定：异常处理程序入口 0x4180 需要大内存布局。 */
 export const P7_COURSE_MEMORY_CONFIG = 'CompactLargeText';
 
@@ -60,6 +64,29 @@ export function legacyMarsConfigurationPolicyIssues(
       message: `非 P7 课程 oracle 必须使用 FixedCompactLargeText 或 CompactLargeText，当前为 ${memoryConfiguration}`,
       capability: 'course-memory-layout'
     });
+  }
+  return issues;
+}
+
+/** Standard MARS launch policy; the policy above only validates archived fork evidence. */
+export function officialMarsConfigurationPolicyIssues(
+  profile: string,
+  memoryConfiguration: string,
+  mode: LegacyMarsPolicyMode,
+  courseInvocation: boolean
+): LegacyMarsConfigurationPolicyIssue[] {
+  const issues: LegacyMarsConfigurationPolicyIssue[] = [];
+  if (!LEGACY_MARS_SUPPORTED_PROFILES.has(profile)) {
+    issues.push({ code: 'official-mars.profile-unsupported', capability: `profile:${profile}`,
+      message: `原版 MARS 不支持当前 Profile ${profile} 的插件运行流程` });
+  }
+  if (!(OFFICIAL_MARS_MEMORY_CONFIGURATIONS as readonly string[]).includes(memoryConfiguration)) {
+    issues.push({ code: 'official-mars.memory-configuration', capability: 'memory-layout',
+      message: `原版 MARS 不支持内存配置 ${memoryConfiguration}；请选择 Default、CompactDataAtZero 或 CompactTextAtZero` });
+  }
+  if (courseInvocation || profile === 'P7' || mode === 'dumpKernel') {
+    issues.push({ code: 'official-mars.course-unsupported', capability: 'course-oracle',
+      message: '原版 MARS 不提供课程写回 Trace、P7 异常/Timer/中断或 0x4180 内核导出；请使用内置引擎的汇编导出和 CPU 测试' });
   }
   return issues;
 }

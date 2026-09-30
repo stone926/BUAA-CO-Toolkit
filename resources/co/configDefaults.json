@@ -5,7 +5,7 @@
   "mips.engine": "auto",
   "mips.extraArgs": [],
   "mips.instructionTokenMode": "realVsPseudo",
-  "mips.memoryConfiguration": "auto",
+  "mips.memoryConfiguration": "Default",
   "mips.warnMissingExitSyscall": true,
   "mips.warnPseudoInstruction": true,
   "project.machineCode": "code.txt",

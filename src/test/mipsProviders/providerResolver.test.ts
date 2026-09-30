@@ -221,12 +221,12 @@ describe('provider resolver preflight boundary', () => {
     {
       name: 'console auto',
       selection: resolveCourseEnginePlan('auto', 'P6', { deterministicConsole: true }),
-      expected: LEGACY_MARS_ENGINE_ID
+      expected: BUILTIN_TS_ENGINE_ID
     },
     {
       name: 'explicit mars rollback',
       selection: resolveCourseEnginePlan('mars', 'P6'),
-      expected: LEGACY_MARS_ENGINE_ID
+      expected: BUILTIN_TS_ENGINE_ID
     },
     {
       name: 'explicit builtin',

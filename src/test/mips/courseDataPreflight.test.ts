@@ -44,6 +44,7 @@ vi.mock('vscode', async () => {
       }
     },
     window: {
+      activeTextEditor: undefined,
       showInformationMessage: vi.fn(),
       showWarningMessage: vi.fn(),
       showErrorMessage: vi.fn(),
@@ -59,7 +60,7 @@ vi.mock('../../config', () => ({
   getJava: vi.fn(() => 'java'),
   getMachineCode: vi.fn(() => 'code.txt'),
   getMarsJar: vi.fn(() => runnerState.marsJar),
-  getMemoryConfiguration: vi.fn(() => runnerState.profile === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText'),
+  getMemoryConfiguration: vi.fn(() => 'Default'),
   getMipsExtraArgs: vi.fn(() => []),
   getProfile: vi.fn(() => runnerState.profile),
   getRunTimeout: vi.fn(() => 30_000),
@@ -73,398 +74,142 @@ vi.mock('../../process', () => ({
 }));
 
 import * as vscode from 'vscode';
-import { runMarsFile } from '../../mips';
+import { registerMips, runMarsFile, courseUserTextDumpRange, p7KernelTextDumpRange } from '../../mips';
 import { runTool } from '../../process';
-import { getProfile, getRunTimeout } from '../../config';
-import { courseDataDumpChunkWordCount } from '../../courseTesting/courseDataInitialization';
 import { maximumReplayTraceBytes } from '../../mips/replay/boundedFile';
 
-const zeroChunk = '00000000\n'.repeat(courseDataDumpChunkWordCount);
-const courseTextRange = '0x00003000-0x00006ffc';
-const p7UserTextRange = '0x00003000-0x00004180';
-const p7KernelTextRange = '0x00004180-0x00006ffc';
-const roots: string[] = [];
-
-describe('runMarsFile course DM initialization preflight', () => {
-  beforeEach(() => {
+describe('official MARS runner', () => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    runnerState.profile = 'P6';
-    runnerState.root = fs.mkdtempSync(path.join(os.tmpdir(), 'co-mars-dm-runner-'));
-    runnerState.marsJar = path.join(runnerState.root, 'Mars.jar');
-    roots.push(runnerState.root);
-    fs.writeFileSync(path.join(runnerState.root, 'case.asm'), '.text\nmain:\nbeq $0,$0,main\nnop\n');
-    fs.writeFileSync(runnerState.marsJar, 'pinned-mars-a');
+    runnerState.profile = 'P2';
+    runnerState.root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-official-mars-runner-'));
+    runnerState.marsJar = path.join(runnerState.root, 'Mars4_5.jar');
+    await fs.promises.writeFile(path.join(runnerState.root, 'case.asm'), '.text\nnop\n');
+    await fs.promises.writeFile(runnerState.marsJar, 'official-mars-fixture');
+    vi.mocked(runTool).mockResolvedValue(successResult());
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const directory = path.resolve(runnerState.root);
+    expect(path.dirname(directory)).toBe(path.resolve(os.tmpdir()));
+    expect(path.basename(directory)).toMatch(/^co-official-mars-runner-/);
+    await fs.promises.rm(directory, { recursive: true, force: true });
     runnerState.root = '';
     runnerState.marsJar = '';
-    for (const root of roots.splice(0)) {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
+    vscode.window.activeTextEditor = undefined;
   });
 
-  it('dumps all three 4 KiB blocks in the same assembly and cleans temporary files', async () => {
-    let dataDumpPaths: string[] = [];
+  it('uses original .text HexText without course data dumps or appended instructions', async () => {
+    const dumpFile = vscode.Uri.file(path.join(runnerState.root, '输出 空格.txt'));
     vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      const dumps = dumpTriples(args);
-      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
-      const dataDumps = dumps.filter((dump) => dump.range !== courseTextRange);
-      dataDumpPaths = dataDumps.map((dump) => dump.file);
-      for (const dump of dataDumps) {
-        fs.writeFileSync(dump.file, zeroChunk);
-      }
+      expect(args).toContain('ae1');
+      expect(args).toContain('se1');
+      expect(args.slice(args.indexOf('dump'), args.indexOf('dump') + 3)).toEqual(['dump', '.text', 'HexText']);
+      await fs.promises.writeFile(args[args.indexOf('HexText') + 1], '34080001\n00000000\n');
       return successResult();
     });
-
-    const output = await runMarsFile(testServices(), vscode.Uri.file(path.join(runnerState.root, 'case.asm')), 'dumpText', {
-      courseTrace: true,
-      p7RiInstruction: false,
-      showMessages: false,
-      revealOutput: false
+    const output = await runMarsFile(testServices(), sourceUri(), 'dumpText', {
+      dumpOutputFile: dumpFile, nonInteractive: true
     });
-
     expect(output?.result.ok).toBe(true);
-    expect(output?.courseHaltPc).toBe(0x3000);
-    expect(output?.engineArtifact).toMatchObject({
-      sha256: crypto.createHash('sha256').update('pinned-mars-a').digest('hex'),
-      role: 'user-configured-mars',
-      fileName: 'Mars.jar'
-    });
-    const args = vi.mocked(runTool).mock.calls[0][1];
-    expect(dumpTriples(args).map((dump) => dump.range)).toEqual([
-      courseTextRange,
-      '0x00000000-0x00001000',
-      '0x00001000-0x00002000',
-      '0x00002000-0x00003000'
-    ]);
-    expect(path.normalize(args[args.length - 1]).toLowerCase())
-      .toBe(path.normalize(path.join(runnerState.root, 'case.asm')).toLowerCase());
-    expect(dataDumpPaths).toHaveLength(3);
-    expect(dataDumpPaths.every((file) => !fs.existsSync(file))).toBe(true);
+    expect(await fs.promises.readFile(dumpFile.fsPath, 'utf8')).toBe('34080001\n00000000\n');
+    expect(output?.courseHaltPc).toBeUndefined();
+    expect(output?.engineArtifact?.sha256).toBe(crypto.createHash('sha256').update('official-mars-fixture').digest('hex'));
+    expect(vi.mocked(runTool).mock.calls).toHaveLength(1);
   });
 
-  it('keeps an automatic legacy dump quiet while preserving the generated halt-loop artifact', async () => {
+  it('preserves existing code when MARS returns success without a fresh dump', async () => {
+    const dumpFile = vscode.Uri.file(path.join(runnerState.root, 'code.txt'));
+    await fs.promises.writeFile(dumpFile.fsPath, 'old-code');
+    const output = await runMarsFile(testServices(), sourceUri(), 'dumpText', {
+      dumpOutputFile: dumpFile, nonInteractive: true
+    });
+    expect(output?.result.ok).toBe(false);
+    expect(output?.result.stderr).toMatch(/导出失败/);
+    expect(await fs.promises.readFile(dumpFile.fsPath, 'utf8')).toBe('old-code');
+  });
+
+  it('passes stdin, timeout, cancellation, and stream ceilings to the ordinary process', async () => {
     const owner = testServices();
-    const outputFile = vscode.Uri.file(path.join(runnerState.root, 'quiet-code.txt'));
-    vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      const hexTextIndex = args.indexOf('HexText');
-      fs.writeFileSync(args[hexTextIndex + 1], '34080001\n');
-      return {
-        ...successResult('raw stdout must stay private'),
-        stderr: 'raw stderr must stay private'
-      };
+    const signal = new AbortController().signal;
+    vi.mocked(runTool).mockResolvedValue(successResult('42\n'));
+    const output = await runMarsFile(owner, sourceUri(), 'run', {
+      stdin: '42\n', signal, nonInteractive: true
     });
-
-    const output = await runMarsFile(
-      owner,
-      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
-      'dumpText',
-      {
-        showMessages: false,
-        revealOutput: false,
-        nonInteractive: true,
-        dumpOutputFile: outputFile
-      }
-    );
-
-    expect(output?.result).toMatchObject({
-      ok: true,
-      stdout: 'raw stdout must stay private',
-      stderr: 'raw stderr must stay private'
-    });
-    expect(fs.readFileSync(outputFile.fsPath, 'utf8')).toContain('1000ffff');
-    expect(vi.mocked(runTool).mock.calls[0][2]).toMatchObject({ nonInteractive: true });
-    expect(owner.output.append).not.toHaveBeenCalled();
+    const processOptions = vi.mocked(runTool).mock.calls[0][2];
+    expect(processOptions).toMatchObject({ stdin: '42\n', signal, timeoutMs: 30000,
+      maxStdoutBytes: maximumReplayTraceBytes, maxStderrBytes: maximumReplayTraceBytes });
+    expect(output?.result.ok).toBe(true);
+    expect(await fs.promises.readFile(output!.outputFile!.fsPath, 'utf8')).toBe('42\n');
     expect(owner.output.appendLine).not.toHaveBeenCalled();
   });
 
-  it('preserves manual MARS dump chatter when the automatic quiet lane is absent', async () => {
-    const owner = testServices();
-    vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      const hexTextIndex = args.indexOf('HexText');
-      fs.writeFileSync(args[hexTextIndex + 1], '34080001\n');
-      return successResult();
-    });
+  it.each([
+    { courseTrace: true }, { traceOutput: true }, { p7RiInstruction: true },
+    { interruptSchedule: [0x3010] }, { p7InstructionClassDir: 'custom' }
+  ])('rejects unsupported course requests %o before output/registry/process writes', async (options) => {
+    const output = await runMarsFile(testServices(), sourceUri(), 'run', { ...options, nonInteractive: true });
+    expect(output?.result.ok).toBe(false);
+    expect(output?.result.stderr).toMatch(/builtin/);
+    expect(runTool).not.toHaveBeenCalled();
+    expect((await fs.promises.readdir(runnerState.root)).sort()).toEqual(['Mars4_5.jar', 'case.asm']);
+  });
 
-    const output = await runMarsFile(
-      owner,
-      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
-      'dumpText',
-      {
-        showMessages: false,
-        revealOutput: false,
-        dumpOutputFile: vscode.Uri.file(path.join(runnerState.root, 'manual-code.txt'))
+  it('rejects unsupported requests even when supplied with a saved launch', async () => {
+    const output = await runMarsFile(testServices(), sourceUri(), 'run', {
+      traceOutput: true, nonInteractive: true,
+      resolvedLaunch: {
+        profile: 'P2', configuredMars: runnerState.marsJar, memoryConfiguration: 'Default',
+        runtime: { kind: 'java', command: 'java' }, wallClockMs: 30000,
+        sourcePath: sourceUri().fsPath, mode: 'run', p7RiInstruction: false,
+        delayedBranching: false, extraArgs: []
       }
-    );
-
-    expect(output?.result.ok).toBe(true);
-    expect(vi.mocked(runTool).mock.calls[0][2]?.nonInteractive).toBeUndefined();
-    expect(owner.output.appendLine).toHaveBeenCalledWith(expect.stringContaining('追加停机自环'));
-  });
-
-  it('allows an unallocated data block represented by the pre-created empty file', async () => {
-    vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      const dumps = dumpTriples(args);
-      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
-      // Leave all three pre-created DM files empty, matching modified MARS for no .data writes.
-      return successResult('This segment has not been written to, there is nothing to dump.');
     });
-
-    const output = await runCourseDump();
-
-    expect(output?.result.ok).toBe(true);
+    expect(output?.result.ok).toBe(false);
+    expect(runTool).not.toHaveBeenCalled();
+    expect((await fs.promises.readdir(runnerState.root)).sort()).toEqual(['Mars4_5.jar', 'case.asm']);
   });
 
-  it('runs only the captured registry artifact when the configured JAR changes during the run', async () => {
-    const expectedSha256 = crypto.createHash('sha256').update('pinned-mars-a').digest('hex');
-    let executedJar = '';
-    let executedJarBytes = '';
-    vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      executedJar = args[1];
-      executedJarBytes = fs.readFileSync(executedJar, 'utf8');
-      const dumps = dumpTriples(args);
-      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
-      for (const dump of dumps.filter((item) => item.range !== courseTextRange)) {
-        fs.writeFileSync(dump.file, zeroChunk);
-      }
-      fs.writeFileSync(runnerState.marsJar, 'replaced-mars-b');
-      return successResult();
-    });
-
-    const output = await runCourseDump();
-
-    expect(output?.result.ok).toBe(true);
-    expect(output?.engineArtifact?.sha256).toBe(expectedSha256);
-    expect(executedJar).not.toBe(runnerState.marsJar);
-    expect(executedJarBytes).toBe('pinned-mars-a');
-    expect(executedJar).not.toContain(path.join('.co', 'engine-registry'));
-    expect(path.basename(path.dirname(path.dirname(executedJar)))).toMatch(/^co-mars-engine-/);
-    expect(fs.existsSync(executedJar)).toBe(false);
-  });
-
-  it('stages both the P7 JAR and RI class in one private directory and cleans them', async () => {
+  it('runs terminal preflight and refuses P7 before terminal creation', async () => {
     runnerState.profile = 'P7';
-    const stagedJars: string[] = [];
-    const stagedClasses: string[] = [];
-    vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      expect(args[0]).toBe('-cp');
-      const [stagedJar, classDir] = args[1].split(path.delimiter);
-      const className = args[args.indexOf('cl') + 1];
-      const stagedClass = path.join(classDir, className);
-      expect(fs.readFileSync(stagedJar, 'utf8')).toBe('pinned-mars-a');
-      expect(fs.statSync(stagedClass).isFile()).toBe(true);
-      stagedJars.push(stagedJar);
-      stagedClasses.push(stagedClass);
-
-      const dumps = dumpTriples(args);
-      const userText = dumps.find((dump) => dump.range === p7UserTextRange);
-      if (userText) {
-        fs.writeFileSync(userText.file, '1000ffff\n00000000\n');
-      }
-      const kernelText = dumps.find((dump) => dump.range === p7KernelTextRange);
-      if (kernelText) {
-        fs.writeFileSync(kernelText.file, '34010001\n');
-      }
-      return successResult();
-    });
-
-    const owner = testServices();
-    const output = await runMarsFile(
-      owner,
-      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
-      'dumpText',
-      {
-        courseTrace: true,
-        p7RiInstruction: true,
-        showMessages: false,
-        revealOutput: false,
-        nonInteractive: true
-      }
-    );
-
-    expect(output?.result.ok).toBe(true);
-    expect(output?.engineArtifact?.dependencies).toMatchObject([
-      { role: 'mars-p7-ri-instruction-class', fileName: '_co_internal_unknown_instruction.class' }
-    ]);
-    expect(stagedJars).toHaveLength(2);
-    expect(new Set(stagedJars).size).toBe(1);
-    expect(new Set(stagedClasses).size).toBe(1);
-    expect(stagedJars[0]).not.toContain(path.join('.co', 'engine-registry'));
-    expect(stagedClasses[0]).not.toContain(path.join('.co', 'engine-registry'));
-    expect(fs.existsSync(stagedJars[0])).toBe(false);
-    expect(fs.existsSync(stagedClasses[0])).toBe(false);
-    expect(vi.mocked(runTool).mock.calls.every((call) => call[2]?.nonInteractive === true)).toBe(true);
-    expect(owner.output.appendLine).not.toHaveBeenCalled();
+    vscode.window.activeTextEditor = { document: {
+      languageId: 'mipsasm', isUntitled: false, isDirty: false, uri: sourceUri()
+    } } as vscode.TextEditor;
+    registerMips({ subscriptions: [] } as unknown as vscode.ExtensionContext, testServices());
+    const callback = vi.mocked(vscode.commands.registerCommand).mock.calls.find(([id]) => id === 'co.mips.runInTerminal')?.[1];
+    expect(callback).toBeDefined();
+    await callback!();
+    expect(vscode.window.createTerminal).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringMatching(/builtin|内置/));
   });
 
-  it('rejects the first nonzero initialized word and still cleans the dump directory', async () => {
-    let tempDir = '';
-    vi.mocked(runTool).mockImplementation(async (_command, args) => {
-      const dumps = dumpTriples(args);
-      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
-      const dataDumps = dumps.filter((dump) => dump.range !== courseTextRange);
-      tempDir = path.dirname(dataDumps[0].file);
-      fs.writeFileSync(dataDumps[0].file, zeroChunk);
-      const middle = zeroChunk.split('\n');
-      middle[64] = '12345678';
-      fs.writeFileSync(dataDumps[1].file, middle.join('\n'));
-      fs.writeFileSync(dataDumps[2].file, zeroChunk);
-      return successResult();
-    });
-
-    const output = await runCourseDump();
-
+  it.each(['Invalid Command Argument: no-such-option', 'Invalid memory configuration: BadConfig',
+    'Invalid/unaligned address or invalid range: 1-5'])('rejects CLI failure despite exit zero: %s', async (message) => {
+    vi.mocked(runTool).mockResolvedValue({ ...successResult(), stderr: message });
+    const output = await runMarsFile(testServices(), sourceUri(), 'run', { nonInteractive: true });
     expect(output?.result.ok).toBe(false);
-    expect(output?.result.stderr).toContain('0x00001100');
-    expect(output?.result.stderr).toContain('0x12345678');
-    expect(output?.result.stderr).toContain('硬件 DM 复位初态全为零');
-    expect(fs.existsSync(tempDir)).toBe(false);
+    expect(output?.result.stderr).toMatch(/参数解析失败/);
   });
 
-  it('does not silently accept malformed or failed MARS dumps', async () => {
-    vi.mocked(runTool).mockImplementationOnce(async (_command, args) => {
-      const dumps = dumpTriples(args);
-      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
-      fs.writeFileSync(dumps.find((dump) => dump.range === '0x00000000-0x00001000')!.file, '00000000\n');
-      return successResult();
-    });
-    expect((await runCourseDump())?.result.stderr).toContain('dump 格式异常');
-
-    vi.mocked(runTool).mockImplementationOnce(async (_command, args) => {
-      const dumps = dumpTriples(args);
-      fs.writeFileSync(dumps.find((dump) => dump.range === courseTextRange)!.file, '1000ffff\n00000000\n');
-      return successResult('Error while attempting to save dump, file denied! Disk IO failed!');
-    });
-    expect((await runCourseDump())?.result.stderr).toContain('课程 DM 初始化 dump 失败');
-  });
-
-  it('cleans temporary dumps when the MARS invocation throws', async () => {
-    let tempDir = '';
-    vi.mocked(runTool).mockImplementationOnce(async (_command, args) => {
-      tempDir = path.dirname(dumpTriples(args).find((dump) => dump.range !== courseTextRange)!.file);
-      throw new Error('spawn failed');
-    });
-
-    const output = await runCourseDump();
-
-    expect(output?.result.ok).toBe(false);
-    expect(output?.result.stderr).toContain('课程 DM 初始化 dump 预检失败：spawn failed');
-    expect(fs.existsSync(tempDir)).toBe(false);
-  });
-
-  it('rejects an exit-zero P7 kernel dump diagnostic instead of silently omitting the handler', async () => {
-    mockP7KernelDump({
-      stdout: 'Error while attempting to save dump, file denied! Disk IO failed!'
-    });
-
-    const output = await runCourseDump();
-
-    expect(output?.result.ok).toBe(false);
-    expect(output?.result.stderr).toContain('P7 内核机器码导出失败');
-    expect(output?.result.stderr).toContain('Disk IO failed');
-  });
-
-  it('accepts only an explicitly empty P7 kernel segment when no dump file is produced', async () => {
-    mockP7KernelDump({ stdout: '' });
-    expect((await runCourseDump())?.result.stderr).toContain('未生成 kernel HexText');
-
-    mockP7KernelDump({ stdout: 'This segment has not been written to, there is nothing to dump.' });
-    expect((await runCourseDump())?.result.ok).toBe(true);
-  });
-
-  it('rejects malformed P7 kernel HexText and merges a valid contiguous handler image', async () => {
-    mockP7KernelDump({ kernelText: 'not-hex\n' });
-    expect((await runCourseDump())?.result.stderr).toContain('kernel HexText 包含非法行');
-
-    mockP7KernelDump({ kernelText: '34010001\n' });
-    const output = await runCourseDump();
-    const merged = fs.readFileSync(path.join(runnerState.root, 'code.txt'), 'utf8').trim().split(/\r?\n/);
-
+  it('allows console output that happens to look like a CLI diagnostic', async () => {
+    vi.mocked(runTool).mockResolvedValue(successResult('Invalid Command Argument: example'));
+    const output = await runMarsFile(testServices(), sourceUri(), 'run', { nonInteractive: true });
     expect(output?.result.ok).toBe(true);
-    expect(merged).toHaveLength(((0x4180 - 0x3000) / 4) + 1);
-    expect(merged[0]).toBe('1000ffff');
-    expect(merged[1]).toBe('00000000');
-    expect(merged[2]).toBe('00000000');
-    expect(merged.at(-1)).toBe('34010001');
+    expect(vi.mocked(runTool).mock.calls[0][1]).toContain('me');
   });
 
-  it('uses one immutable preflight snapshot for both P7 dump subprocesses', async () => {
-    mockP7KernelDump({ kernelText: '34010001\n' });
-
-    const output = await runCourseDump();
-
-    expect(output?.result.ok).toBe(true);
-    expect(runTool).toHaveBeenCalledTimes(2);
-    expect(getProfile).toHaveBeenCalledTimes(1);
-    expect(getRunTimeout).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(runTool).mock.calls[0][2].timeoutMs).toBe(30_000);
-    expect(vi.mocked(runTool).mock.calls[1][2].timeoutMs).toBe(30_000);
-    for (const call of vi.mocked(runTool).mock.calls) {
-      expect(call[2]).toMatchObject({
-        maxStdoutBytes: maximumReplayTraceBytes,
-        maxStderrBytes: maximumReplayTraceBytes
-      });
-    }
-  });
-
-  it('preserves ordinary dump exception behavior outside course preflight', async () => {
-    vi.mocked(runTool).mockRejectedValueOnce(new Error('spawn failed'));
-
-    await expect(runMarsFile(
-      testServices(),
-      vscode.Uri.file(path.join(runnerState.root, 'case.asm')),
-      'dumpText',
-      { p7RiInstruction: false, showMessages: false, revealOutput: false }
-    )).rejects.toThrow('spawn failed');
+  it('retains inclusive course address helpers only for archive callers', () => {
+    expect(courseUserTextDumpRange('P7')).toBe('0x00003000-0x00004180');
+    expect(courseUserTextDumpRange('P6')).toBe('0x00003000-0x00007000');
+    expect(p7KernelTextDumpRange()).toBe('0x00004180-0x00007000');
   });
 });
 
-async function runCourseDump() {
-  return runMarsFile(testServices(), vscode.Uri.file(path.join(runnerState.root, 'case.asm')), 'dumpText', {
-    courseTrace: true,
-    p7RiInstruction: false,
-    showMessages: false,
-    revealOutput: false
-  });
-}
-
-function mockP7KernelDump(options: { stdout?: string; kernelText?: string }): void {
-  runnerState.profile = 'P7';
-  vi.mocked(runTool).mockImplementation(async (_command, args) => {
-    const dumps = dumpTriples(args);
-    const userText = dumps.find((dump) => dump.range === p7UserTextRange);
-    if (userText) {
-      fs.writeFileSync(userText.file, '1000ffff\n00000000\n');
-      return successResult();
-    }
-    const kernelText = dumps.find((dump) => dump.range === p7KernelTextRange);
-    if (kernelText && options.kernelText !== undefined) {
-      fs.writeFileSync(kernelText.file, options.kernelText);
-    }
-    return successResult(options.stdout ?? '');
-  });
-}
-
-function dumpTriples(args: readonly string[]): Array<{ range: string; format: string; file: string }> {
-  const dumps: Array<{ range: string; format: string; file: string }> = [];
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === 'dump') {
-      dumps.push({ range: args[index + 1], format: args[index + 2], file: args[index + 3] });
-      index += 3;
-    }
-  }
-  return dumps;
+function sourceUri(): vscode.Uri {
+  return vscode.Uri.file(path.join(runnerState.root, 'case.asm'));
 }
 
 function successResult(stdout = '') {
-  return {
-    ok: true,
-    exitCode: 0,
-    commandLine: 'java -jar Mars.jar',
-    cwd: runnerState.root,
-    stdout,
-    stderr: '',
-    timedOut: false
-  };
+  return { ok: true, exitCode: 0, commandLine: 'java fixture', cwd: runnerState.root,
+    stdout, stderr: '', timedOut: false };
 }

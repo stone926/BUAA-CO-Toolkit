@@ -13,20 +13,21 @@ import {
 } from './contracts';
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
 import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
-import { LegacyMarsProvider } from './legacyMarsProvider';
+import { OfficialMarsProvider } from './officialMarsProvider';
 import {
   BUILTIN_TS_ENGINE_ID,
   type CourseEnginePlan,
   type CourseProviderEngineId,
   LEGACY_MARS_ENGINE_ID,
+  OFFICIAL_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from './courseEnginePolicy';
 
 /**
  * Provider resolver（计划第 5.3/9 节）。
  *
- * 阶段 1 只注册 legacy；`builtin-ts` 在对应阶段 gate 通过后按
- * profile/capability 分项注册。解析失败（preflight not ok）时调用方必须以
+ * 生产只注册 builtin 课程引擎和原版 MARS P2 adapter；历史 fork 不注册。
+ * 解析失败（preflight not ok）时调用方必须以
  * 结构化诊断结束任务——任何 provider 都不允许在部分执行后隐式 fallback。
  */
 
@@ -38,7 +39,7 @@ interface ProviderRegistry {
 let registryOverride: ProviderRegistry | undefined;
 let defaultRegistries = new WeakMap<AppServices, ProviderRegistry>();
 
-/** Register the phase-6 provider set. Resolution policy, not array order, selects a lane. */
+/** Register current providers. Resolution policy, not array order, selects a lane. */
 export function registerDefaultProviders(services: AppServices): ProviderRegistry {
   if (registryOverride) {
     return registryOverride;
@@ -47,14 +48,13 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
   if (existing) {
     return existing;
   }
-  const legacyProvider = new LegacyMarsProvider(services);
-  // Keep registration order stable for evidence/tests. Phase-6 resolution is
-  // by the immutable plan's engine id and never relies on this order.
+  const marsProvider = new OfficialMarsProvider(services);
+  // Resolution follows the immutable plan's id and never relies on array order.
   const builtinAssemblerProvider = new BuiltinTsAssemblerProvider(services.mipsRuntime);
   const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
   const registry = {
-    assemblerProviders: [legacyProvider, builtinAssemblerProvider],
-    executionProviders: [legacyProvider, builtinExecutionProvider]
+    assemblerProviders: [marsProvider, builtinAssemblerProvider],
+    executionProviders: [marsProvider, builtinExecutionProvider]
   };
   defaultRegistries.set(services, registry);
   return registry;
@@ -230,7 +230,8 @@ async function resolvePlannedProvider<
 }
 
 function isCourseProviderEngineId(engineId: string): engineId is CourseProviderEngineId {
-  return engineId === LEGACY_MARS_ENGINE_ID || engineId === BUILTIN_TS_ENGINE_ID;
+  return engineId === LEGACY_MARS_ENGINE_ID || engineId === OFFICIAL_MARS_ENGINE_ID
+    || engineId === BUILTIN_TS_ENGINE_ID;
 }
 
 /** Convenience: run preflight, fail closed with a structured result when unsupported. */

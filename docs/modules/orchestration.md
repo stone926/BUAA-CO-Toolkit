@@ -1,4 +1,4 @@
-# orchestration | src/ | 58 files
+# orchestration | src/ | 59 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -20,7 +20,7 @@
 
 ## 工具链与进程
 
-- `toolchain.ts` / `toolchainPolicy.ts` — mode-aware 有效依赖：Verilog Profile 固定预检扩展内置 Icarus；P3 保留 Logisim/Java；mars/verify-both 再追加 MARS/Java。configured legacy 检查覆盖 v0.6.3 的 coL1/coL2、Compact 初态与 P7 efc/p7irq
+- `toolchain.ts` / `toolchainPolicy.ts` — 课程有效依赖：Verilog Profile 预检内置 Icarus，P3 保留 Logisim/Java；旧引擎设置不追加 MARS。可选原版 MARS 检查标准汇编、HexText 与 syscall 执行，不探测魔改功能
 - `process.ts` / `processCore.ts` — spawn/stdout/stderr 核心：幂等 settle、raw-byte ceiling、跨 UTF-8 chunk 解码、Windows taskkill /t 与 Unix process group 整树终止
 - `startupTrace.ts` — `CO_TRACE_STARTUP` 启动耗时追踪
 - `textChunks.ts` — 零拷贝 chunk 收集与流式逐行扫描
@@ -52,7 +52,8 @@
 ## 其他命令域
 
 - `mipsCommands.ts` — 汇编与机器码导出命令分派；P3–P7 强制 builtin assembler，不做 capability fallback
-- `mips.ts` — legacy MARS runner（run/stdin/terminal/dump）；stdout/stderr 各有 16 MiB raw ceiling
+- `mips.ts` — 原版 MARS runner（P2 汇编、P2–P6 run/stdin/terminal）；终端同样预检，dump 私有暂存并验证后落盘；stdout/stderr 各有 16 MiB raw ceiling
+- `mipsTerminal.ts` — 显式 PowerShell/sh 终端参数引用；Java、ASM 的空格/中文路径作为字面参数传递
 - `logisim.ts` — 打开电路、生成 ROM、注入 ROM、日志转 CSV
 - `hazard.ts` — 注册分析/打开报告命令，首次调用惰性加载内置引擎（详见 hazard-analysis.md）
 - `courseTest*` / `asmCaseStore*`（`src/courseTest*.ts`、`src/asmCaseStore*.ts`）— 持续测试与用例存储，见 course-testing.md

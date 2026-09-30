@@ -81,7 +81,7 @@ export async function dumpMipsFile(
   }
 
   const outputFile = assemblyDumpOutput(sourceUri, target);
-  const plan = resolveCourseEnginePlan(profile === 'P2' ? 'mars' : 'builtin', profile);
+  const plan = resolveCourseEnginePlan(profile === 'P2' ? 'auto' : 'builtin', profile);
   try {
     const invocation = await assembleWithPreflight(services, {
       sourceUri,

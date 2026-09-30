@@ -4,30 +4,17 @@ import {
   courseTraceMemoryConfigurationErrorForEngine,
   formatAutomaticToolchainFailure,
   formatToolchainFailure,
-  MARS_P7_CHECK,
   requiredCourseTraceToolchainChecks,
   requiredToolchainFailures
 } from '../courseTestToolchain';
 
 describe('course test toolchain helpers', () => {
-  it('accepts the expected trace memory configurations', () => {
-    expect(courseTraceMemoryConfigurationError('P7', 'CompactLargeText')).toBeUndefined();
-    expect(courseTraceMemoryConfigurationError('P6', 'FixedCompactLargeText')).toBeUndefined();
-    expect(courseTraceMemoryConfigurationError('P6', 'CompactLargeText')).toBeUndefined();
-  });
-
-  it('reports profile-specific trace memory configuration errors', () => {
-    expect(courseTraceMemoryConfigurationError('P7', 'Default')).toBe('P7 持续生成测试必须使用 CompactLargeText，当前为 Default');
-    expect(courseTraceMemoryConfigurationError('P5', 'Default')).toBe('非 P7 Trace 测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 Default');
-  });
-
-  it('skips MARS memory-layout checks for builtin lanes', () => {
-    expect(courseTraceMemoryConfigurationErrorForEngine('P3', 'auto', 'Default')).toBeUndefined();
-    expect(courseTraceMemoryConfigurationErrorForEngine('P7', 'builtin', 'Default')).toBeUndefined();
-    expect(courseTraceMemoryConfigurationErrorForEngine('P6', 'mars', 'Default'))
-      .toBe('非 P7 Trace 测试应使用 FixedCompactLargeText 或 CompactLargeText，当前为 Default');
-    expect(courseTraceMemoryConfigurationErrorForEngine('P7', 'verify-both', 'Default'))
-      .toBe('P7 持续生成测试必须使用 CompactLargeText，当前为 Default');
+  it.each(['auto', 'builtin', 'mars', 'verify-both'] as const)('ignores MARS memory settings for course engine %s', (mode) => {
+    for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7'] as const) {
+      expect(courseTraceMemoryConfigurationError(profile, 'Default')).toBeUndefined();
+      expect(courseTraceMemoryConfigurationErrorForEngine(profile, mode, 'Default')).toBeUndefined();
+      expect(courseTraceMemoryConfigurationErrorForEngine(profile, mode, 'CompactLargeText')).toBeUndefined();
+    }
   });
 
   it('derives continuous and Logisim preflight checks from the effective engine tools', () => {
@@ -36,9 +23,9 @@ describe('course test toolchain helpers', () => {
     expect([...requiredCourseTraceToolchainChecks('P4', 'auto', 'Default')])
       .toEqual(['Verilog simulator']);
     expect([...requiredCourseTraceToolchainChecks('P4', 'mars', 'FixedCompactLargeText')])
-      .toEqual(['Java', 'MARS', 'MARS coL2', 'Verilog simulator', 'MARS FixedCompactLargeText']);
+      .toEqual(['Verilog simulator']);
     expect([...requiredCourseTraceToolchainChecks('P7', 'verify-both', 'CompactLargeText')])
-      .toEqual(['Java', 'MARS', 'MARS coL2', 'Verilog simulator', 'MARS CompactLargeText', MARS_P7_CHECK]);
+      .toEqual(['Verilog simulator']);
   });
 
   it('formats failed toolchain checks with optional suggestions', () => {
@@ -61,11 +48,11 @@ describe('course test toolchain helpers', () => {
 
   it('treats a required capability that was never checked as a failure', () => {
     const failures = requiredToolchainFailures(
-      [{ name: 'MARS coL1', ok: true, detail: 'ok' }],
-      new Set(['MARS coL1', 'MARS coL2'])
+      [{ name: 'Java', ok: true, detail: 'ok' }],
+      new Set(['Java', 'Logisim'])
     );
 
     expect(failures).toHaveLength(1);
-    expect(failures[0]).toMatchObject({ name: 'MARS coL2', ok: false, detail: '未执行能力检查' });
+    expect(failures[0]).toMatchObject({ name: 'Logisim', ok: false, detail: '未执行能力检查' });
   });
 });

@@ -367,7 +367,7 @@ describe('course trace runner orchestration', () => {
       expect.anything(),
       expect.objectContaining({ stdin: 'sealed\n' }),
       expect.anything(),
-      expect.objectContaining({ primaryEngineId: 'legacy-mars-configured' })
+      expect.objectContaining({ primaryEngineId: 'builtin-ts' })
     );
     expect(vi.mocked(executeWithPreflight).mock.calls[0][1]).not.toHaveProperty('stdinSource');
   });
@@ -801,7 +801,7 @@ describe('course trace runner orchestration', () => {
     }
   );
 
-  it('preserves verify-both full-stack validation for a manual case', async () => {
+  it('migrates a manual verify-both setting without starting the fork reference', async () => {
     vi.mocked(getMipsEngine).mockReturnValue('verify-both');
     vi.mocked(verifyConfiguredFixedMarsReference).mockResolvedValueOnce({
       ok: true,
@@ -828,13 +828,9 @@ describe('course trace runner orchestration', () => {
     );
 
     expect(result.status).toBe('passed');
-    expect(runFullStackShadow).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({
-        expectedLegacySha256: 'a'.repeat(64),
-        nonInteractive: undefined
-      })
-    );
+    expect(runFullStackShadow).not.toHaveBeenCalled();
+    expect(verifyConfiguredFixedMarsReference).not.toHaveBeenCalled();
+    expect(executeWithPreflight).toHaveBeenCalledWith(expect.anything(), expect.anything(),
+      expect.anything(), expect.objectContaining({ mode: 'auto', primaryEngineId: 'builtin-ts' }));
   });
 });

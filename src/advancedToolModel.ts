@@ -33,10 +33,12 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
   const activeDetail = context.activeFileName ? `当前文件: ${context.activeFileName}` : '运行时选择输入文件';
 
   if (context.activeKind === 'mips' && shouldShowMipsTools(context.profile)) {
-    items.push(
-      tool('mips.stdin', 'ASM 带标准输入运行', 'MARS', activeDetail, Commands.Mips.RunWithStdinFile),
-      tool('mips.terminal', 'ASM 终端运行', 'MARS', activeDetail, Commands.Mips.RunInTerminal)
-    );
+    if (context.profile !== 'P7') {
+      items.push(
+        tool('mips.stdin', 'ASM 带标准输入运行', '原版 MARS', activeDetail, Commands.Mips.RunWithStdinFile),
+        tool('mips.terminal', 'ASM 终端运行', '原版 MARS', activeDetail, Commands.Mips.RunInTerminal)
+      );
+    }
     if (context.profile === 'P7') {
       items.push(tool('mips.kernelDump', 'ASM 导出内核文本段', '内置汇编器', activeDetail, Commands.Mips.DumpKernelText));
     }

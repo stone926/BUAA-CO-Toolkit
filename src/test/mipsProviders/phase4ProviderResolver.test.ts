@@ -14,7 +14,7 @@ import type { AppServices } from '../../types';
 import type { ExecuteRequest } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
-  LEGACY_MARS_ENGINE_ID,
+  OFFICIAL_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
 
@@ -42,7 +42,7 @@ describe('phase-4 provider resolver registration', () => {
   it('keeps stable registration order but defaults a gated profile to builtin', async () => {
     const registry = registerDefaultProviders(services);
     expect(registry.executionProviders.map((provider) => provider.descriptor.id)).toEqual([
-      'legacy-mars-configured',
+      'official-mars-configured',
       'builtin-ts'
     ]);
     const selected = await resolveExecutionProvider(services, request);
@@ -56,20 +56,22 @@ describe('phase-4 provider resolver registration', () => {
     expect(selected.preflight.ok).toBe(true);
   });
 
-  it('keeps P2 and auto console execution on legacy as one full-stack policy', async () => {
+  it('reports unsupported P2 images and course console without a fork fallback', async () => {
     const p2 = await resolveExecutionProvider(services, { ...request, profile: 'P2' });
     const console = await resolveExecutionProvider(services, {
       ...request,
       requirements: { profile: 'P5', deterministicConsole: true }
     });
 
-    expect(p2.provider.descriptor.id).toBe(LEGACY_MARS_ENGINE_ID);
-    expect(console.provider.descriptor.id).toBe(LEGACY_MARS_ENGINE_ID);
+    expect(p2.provider.descriptor.id).toBe(OFFICIAL_MARS_ENGINE_ID);
+    expect(p2.preflight.ok).toBe(false);
+    expect(console.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
+    expect(console.preflight.ok).toBe(false);
   });
 
   it.each([
     ['builtin', BUILTIN_TS_ENGINE_ID],
-    ['mars', LEGACY_MARS_ENGINE_ID],
+    ['mars', BUILTIN_TS_ENGINE_ID],
     ['verify-both', BUILTIN_TS_ENGINE_ID]
   ] as const)('preserves explicit %s execution selection', async (mode, engineId) => {
     const plan = resolveCourseEnginePlan(mode, 'P5');

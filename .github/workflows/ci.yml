@@ -22,12 +22,6 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Setup Java 25 for pinned legacy course executor
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-
       - name: Install Icarus Verilog for official Timer decision vectors
         run: sudo apt-get update && sudo apt-get install -y iverilog
 
@@ -50,7 +44,7 @@ jobs:
         run: node conformance/mips/contract/validate-evidence-gates.mjs
 
       - name: Frozen decision vectors (official RTL required)
-        run: npm --prefix conformance/mips run verify:decisions
+        run: npm --prefix conformance/mips run verify:decisions:rtl
 
       - name: Candidate independent ISA/course expected data
         run: npm --prefix conformance/mips run verify:isa-golden && npm --prefix conformance/mips run verify:course-vectors
@@ -58,34 +52,14 @@ jobs:
       - name: Frozen corpus seeds and feature distribution
         run: npm --prefix conformance/mips run verify:corpus-freeze
 
-      - name: Compile production JSONL boundary for fixed seed evidence
+      - name: Compile production JSONL boundary for conformance
         run: npm run compile
-
-      - name: Reference asset verification (fail closed)
-        run: node conformance/mips/reference/download-references.mjs --require-all
-
-      - name: Frozen MARS v0.6.3 regression
-        run: node conformance/mips/reference/verify-regression.mjs
-
-      - name: Materialize and verify all 250 fixed seed source/images
-        run: npm --prefix conformance/mips run verify:seed-evidence
-
-      - name: Upload fixed seed evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: fixed-seed-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: conformance/.cache/fixed-seed-evidence.json
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Conformance smoke sentinels
         run: npm --prefix conformance/mips test
 
       - name: Conformance lanes
         run: npm --prefix conformance/mips run run
-
-      - name: Assembly differential lane (pinned MARS vs TS assembler)
-        run: npm --prefix conformance/mips run run:assembly-diff
 
       - name: Test
         run: npm test
@@ -122,8 +96,8 @@ jobs:
       - name: Verify only through the versioned JSONL process boundary
         run: npm --prefix conformance/mips run verify:ts-cli
 
-  phase6-fixed-mars-execution:
-    name: Phase 6 fixed MARS execution differential gate (${{ matrix.os }})
+  builtin-mips-conformance:
+    name: Builtin MIPS conformance gate (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -142,26 +116,8 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Setup Java 25 for fixed legacy-course-executor
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Conformance dependency whitelist
-        run: node conformance/mips/check-dependency-whitelist.mjs
-
-      - name: Phase 6 permanent fixed MARS execution gate
+      - name: Builtin MIPS conformance gate
         run: npm run verify:phase6
-
-      - name: Upload machine-readable execution differential evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase6-execution-differential-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: conformance/.cache/phase6-execution-differential
-          if-no-files-found: error
-          retention-days: 30

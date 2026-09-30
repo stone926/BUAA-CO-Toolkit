@@ -32,7 +32,7 @@
       },
       "co.toolchain.mars": {
         "type": "string",
-        "description": "P2 汇编/运行，以及 P3-P7 通用 MARS 运行、stdin、终端命令使用的 Mars jar 路径；P7 可由兼容项 marsP7 覆盖。P3-P7 汇编导出和自动测试无需配置",
+        "description": "官方 MARS 4.5 jar 路径，用于 P2 汇编/运行以及普通 MARS 运行、stdin 和终端命令。P3-P7 课程汇编导出和测试使用内置引擎，无需配置",
         "scope": "machine-overridable",
         "order": 20,
         "runtimeDefault": ""
@@ -169,8 +169,8 @@
     "properties": {
       "co.toolchain.marsP7": {
         "type": "string",
-        "description": "P7 普通 MARS 运行、显式 legacy 测试和历史复现使用的 Mars jar override",
-        "deprecationMessage": "仅为兼容已有的 P7 MARS override 保留。汇编导出和自动测试不读取此项；不使用 P7 MARS 兼容流程时可删除。",
+        "description": "已停用的 P7 MARS jar override",
+        "deprecationMessage": "此历史设置不再使用。普通 MARS 命令统一读取 co.toolchain.mars；P3-P7 课程流程使用内置引擎。请删除此项。",
         "scope": "machine-overridable",
         "order": 10,
         "runtimeDefault": ""
@@ -179,18 +179,14 @@
         "type": "string",
         "enum": [
           "auto",
-          "builtin",
-          "mars",
-          "verify-both"
+          "builtin"
         ],
         "enumDescriptions": [
-          "按 Profile 和请求能力自动选择",
-          "强制使用内置 TypeScript 汇编器和执行器",
-          "使用已配置的 MARS",
-          "同时运行内置引擎和固定 MARS reference"
+          "自动使用内置课程引擎",
+          "使用内置 TypeScript 汇编器和执行器"
         ],
-        "description": "手动测试和历史复现使用的 MIPS 引擎",
-        "deprecationMessage": "仅为兼容已有的手动测试和历史复现配置保留。自动测试固定使用内置引擎；建议删除该设置并恢复自动策略。",
+        "description": "P3-P7 课程 MIPS 引擎兼容设置",
+        "deprecationMessage": "P3-P7 课程流程统一使用内置引擎。旧 mars 和 verify-both 值自动按 auto 处理；建议删除此项。",
         "scope": "resource",
         "order": 20,
         "runtimeDefault": "auto"
@@ -210,11 +206,16 @@
       },
       "co.mips.memoryConfiguration": {
         "type": "string",
-        "description": "MARS 内存模式",
-        "deprecationMessage": "仅为兼容已有 MARS 配置保留。插件会按课程 Profile 自动选择内存布局；建议删除该设置。",
+        "enum": [
+          "Default",
+          "CompactDataAtZero",
+          "CompactTextAtZero"
+        ],
+        "description": "官方 MARS 内存模式，默认使用 Default；不影响内置课程引擎",
+        "deprecationMessage": "仅为兼容普通 MARS 命令保留。旧 auto、FixedCompactLargeText 和 CompactLargeText 值自动按官方 Default 处理；建议删除此项。",
         "scope": "resource",
         "order": 40,
-        "runtimeDefault": "auto"
+        "runtimeDefault": "Default"
       },
       "co.run.showCommandBeforeRun": {
         "type": "boolean",

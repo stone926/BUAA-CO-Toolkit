@@ -29,7 +29,7 @@ import type { AppServices } from '../../types';
 import type { AssembleRequest } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
-  LEGACY_MARS_ENGINE_ID
+  OFFICIAL_MARS_ENGINE_ID
 } from '../../mips/providers/courseEnginePolicy';
 
 const services = {
@@ -43,7 +43,7 @@ describe('phase-5 assembler provider registration', () => {
   it('keeps legacy first and registers builtin-ts behind it', () => {
     const registry = registerDefaultProviders(services);
     expect(registry.assemblerProviders.map((provider) => provider.descriptor.id)).toEqual([
-      'legacy-mars-configured',
+      'official-mars-configured',
       'builtin-ts'
     ]);
   });
@@ -69,7 +69,7 @@ describe('phase-5 assembler provider registration', () => {
     }
   });
 
-  it('uses the resource-scoped mars setting as a one-setting legacy rollback', async () => {
+  it('migrates a resource-scoped mars rollback to the builtin course assembler', async () => {
     const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-phase5-resolver-'));
     try {
       mocks.engineMode = 'mars';
@@ -82,8 +82,8 @@ describe('phase-5 assembler provider registration', () => {
         requirements: { profile: 'P6' }
       });
 
-      expect(resolved.provider.descriptor.id).toBe(LEGACY_MARS_ENGINE_ID);
-      expect(resolved.selection.mode).toBe('mars');
+      expect(resolved.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
+      expect(resolved.selection.mode).toBe('auto');
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -107,7 +107,7 @@ describe('phase-5 assembler provider registration', () => {
         target: { kind: 'userText' },
         requirements: { profile: 'P2' }
       });
-      expect(p2.provider.descriptor.id).toBe(LEGACY_MARS_ENGINE_ID);
+      expect(p2.provider.descriptor.id).toBe(OFFICIAL_MARS_ENGINE_ID);
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }

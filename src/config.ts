@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
 import { configDefault, configDefaultArray } from './configDefaults';
+import { OFFICIAL_MARS_MEMORY_CONFIGURATIONS } from './language/mips/legacyMarsPolicy';
 import {
   ConcreteProjectProfile,
   ProjectProfile,
@@ -201,13 +202,13 @@ function configuredProfileDefault(
 
 export type MipsEngineMode = 'auto' | 'builtin' | 'mars' | 'verify-both';
 
-const mipsEngineModes = new Set<MipsEngineMode>(['auto', 'builtin', 'mars', 'verify-both']);
+const mipsEngineModes = new Set<MipsEngineMode>(['auto', 'builtin']);
 
 /**
  * P3-P7 课程汇编器与架构 Oracle 的引擎选择。
  *
  * 配置按 resource 读取，以正确支持 multi-root workspace；旧版或手写 settings
- * 中的非法值统一回退到 auto，避免把不受支持的 provider id 带入运行路径。
+ * 中的旧 mars/verify-both 和非法值统一回退到 auto。
  */
 export function getMipsEngine(resource?: vscode.Uri): MipsEngineMode {
   const configured = inspectedValue<unknown>('mips.engine', resource);
@@ -231,15 +232,10 @@ export function getJava(resource?: vscode.Uri): string {
 }
 
 export function getMarsJar(resource?: vscode.Uri): string {
-  const profile = getProfile(resource);
-  if (profile === 'P7') {
-    const p7 = getMarsP7Jar(resource);
-    if (p7) { return p7; }
-  }
   return layeredGetString('toolchain.mars', configDefault<string>('toolchain.mars'), resource);
 }
 
-/** Read the dedicated P7 override without profile-dependent generic fallback. */
+/** Historical setting reader; execution never uses this retired P7 override. */
 export function getMarsP7Jar(resource?: vscode.Uri): string {
   return layeredGetString('toolchain.marsP7', configDefault<string>('toolchain.marsP7'), resource);
 }
@@ -265,19 +261,9 @@ export function shouldRevealOutput(resource?: vscode.Uri): boolean {
 }
 
 export function getMemoryConfiguration(resource?: vscode.Uri): string {
-  const configured = configuredMemoryConfiguration(resource);
-  if (configured) {
-    return configured;
-  }
-  return getProfile(resource) === 'P7' ? 'CompactLargeText' : 'FixedCompactLargeText';
-}
-
-function configuredMemoryConfiguration(resource?: vscode.Uri): string | undefined {
-  const vsValue = inspectedValue<string>('mips.memoryConfiguration', resource)?.trim();
-  if (vsValue && vsValue.toLowerCase() !== 'auto') {
-    return vsValue;
-  }
-  return undefined;
+  const configured = inspectedValue<unknown>('mips.memoryConfiguration', resource);
+  const normalized = typeof configured === 'string' ? configured.trim().toLowerCase() : '';
+  return OFFICIAL_MARS_MEMORY_CONFIGURATIONS.find((value) => value.toLowerCase() === normalized) ?? 'Default';
 }
 
 export function getMipsExtraArgs(resource?: vscode.Uri): string[] {

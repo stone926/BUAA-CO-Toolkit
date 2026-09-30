@@ -259,9 +259,12 @@ describe('course test Logisim helpers', () => {
     }
   );
 
-  it('preserves the P3 verify-both full-stack lane for a manual case', async () => {
+  it('migrates a manual P3 verify-both setting without starting the fork reference', async () => {
     const fixture = automaticP3Fixture();
-    const runOracle = vi.fn(async () => successfulOracleInvocation());
+    const runOracle = vi.fn(async () => ({
+      ok: false,
+      preflight: { ok: false, diagnostics: [{ code: 'builtin.error', message: 'stop after engine assertion' }], descriptor: { id: 'builtin-ts' } }
+    }));
     const pipeline = automaticP3Pipeline(fixture, runOracle);
     vi.mocked(verifyConfiguredFixedMarsReference).mockResolvedValueOnce({
       ok: true,
@@ -298,16 +301,10 @@ describe('course test Logisim helpers', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({ nonInteractive: undefined }),
-      expect.objectContaining({ mode: 'verify-both', primaryEngineId: 'builtin-ts' })
+      expect.objectContaining({ mode: 'auto', primaryEngineId: 'builtin-ts' })
     );
-    expect(runFullStackShadow).toHaveBeenCalledWith(
-      expect.anything(),
-      fixture.asmCase,
-      expect.objectContaining({
-        expectedLegacySha256: 'a'.repeat(64),
-        nonInteractive: undefined
-      })
-    );
+    expect(runFullStackShadow).not.toHaveBeenCalled();
+    expect(verifyConfiguredFixedMarsReference).not.toHaveBeenCalled();
   });
 });
 

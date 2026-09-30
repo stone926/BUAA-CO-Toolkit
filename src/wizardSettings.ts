@@ -3,7 +3,6 @@ import { ProjectProfile } from './types';
 
 export interface WizardToolchainSettings {
   mars?: string;
-  marsP7?: string;
   logisim?: string;
   java?: string;
 }

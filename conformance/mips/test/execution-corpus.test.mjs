@@ -16,6 +16,7 @@ import {
   executableImageFingerprint,
   observableFinalSummary
 } from '../runner/executionDifferential.mjs';
+import { validateExecutedCase } from '../runner/builtin-execution-corpus.mjs';
 
 const forbiddenExecutionOperation = /\b(?:j|jal|jr|jalr|syscall|break|eret|mfc0|mtc0)\b/i;
 const sha256Pattern = /^[0-9a-f]{64}$/;
@@ -109,4 +110,17 @@ test('execution comparison requires image identity and classifies only frozen co
   assert.equal(known.status, 'passed');
   assert.equal(known.classification, 'contract-difference');
   assert.equal(known.contractId, 'EXECUTION-FROZEN');
+});
+
+test('builtin corpus gate rejects an executor result that exhausts its instruction budget before halt', () => {
+  const entry = { id: 'EXEC-P3-0001', maxSteps: 128 };
+  assert.throws(() => validateExecutedCase(entry, {
+    status: 'budget-exhausted',
+    haltReason: 'instruction-budget',
+    haltPc: null,
+    instructions: 128,
+    finalState: { pc: '0x00003034' },
+    finalStateDigest: 'a'.repeat(64),
+    imageFingerprint: 'b'.repeat(64)
+  }, '0x00003034'), /did not halt/);
 });

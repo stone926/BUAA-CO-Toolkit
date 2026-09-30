@@ -1,33 +1,18 @@
-// @index toolchain — mode-aware course tool dependency policy
+// @index toolchain — course tool dependency policy
 
 import type { MipsEngineMode } from './config';
 import { getProfileRequiredTools } from './courseConfig';
 import type { ProjectProfile } from './projectProfile';
-import { courseProfileIds } from './projectProfile';
-
-const courseEngineProfiles = new Set<ProjectProfile>(courseProfileIds);
 
 /**
- * Whether the selected course-engine mode includes a legacy MARS lane.
- * `verify-both` still needs the complete legacy toolchain for its reference run.
- */
-export function includesLegacyMarsLane(mode: MipsEngineMode): boolean {
-  return mode === 'mars' || mode === 'verify-both';
-}
-
-/**
- * Compute the tools a profile needs after applying the P3-P7 engine selection.
- * The course configuration remains the source of unconditional dependencies;
- * explicit legacy modes append only the dependencies introduced by that lane.
+ * Course assembly and execution always use builtin providers. Historical engine
+ * settings cannot introduce external dependencies; P2 still uses official MARS.
  */
 export function getEffectiveRequiredTools(
   profile: ProjectProfile,
-  mode: MipsEngineMode
+  _mode: MipsEngineMode
 ): string[] {
   const tools = [...getProfileRequiredTools(profile)];
-  if (courseEngineProfiles.has(profile) && includesLegacyMarsLane(mode)) {
-    tools.push('java', profile === 'P7' ? 'marsP7' : 'mars');
-  }
   return deduplicateTools(tools);
 }
 

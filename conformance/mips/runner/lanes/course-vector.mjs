@@ -7,19 +7,14 @@
  * A directed vector without a production CLI operation is reported explicitly
  * as artifact-only evidence instead of pretending that it exercised the TS core.
  */
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { corpusCaseFile } from '../caseManifest.mjs';
 import { canonicalJson } from '../canonicalJson.mjs';
 import { loadCourseVector, loadTutorialSourceRegistry, validateCourseVector } from '../courseVectorArtifact.mjs';
 import { compareExpected, normalizedState, normalizedWrites } from '../stateOracle.mjs';
+import { invokeTsCli } from '../tsCliProcess.mjs';
 
 const defaultMaxSteps = 4096;
-const laneRoot = path.dirname(fileURLToPath(import.meta.url));
-const extensionRoot = path.resolve(laneRoot, '..', '..', '..', '..');
-const defaultTsCli = path.join(extensionRoot, 'out', 'mips', 'cli', 'main.js');
 
 export function runCourseVectorCase(manifestCase, options = {}) {
   const vector = options.vectorOverride
@@ -53,7 +48,7 @@ export function runCourseVectorCase(manifestCase, options = {}) {
 function runTsProgramVector(manifestCase, vector, options) {
   try {
     const source = fs.readFileSync(corpusCaseFile(manifestCase), 'utf8');
-    const assembly = runTsCli([{
+    const assembly = invokeTsCli([{
       protocolVersion: 1,
       requestId: `assemble:${manifestCase.caseId}`,
       operation: 'assembler.assemble',
@@ -69,7 +64,7 @@ function runTsProgramVector(manifestCase, vector, options) {
       return laneFailure(manifestCase, 'failed',
         `assembled halt word differs: expected ${vector.expected.haltWord}, got ${fixedHex(haltWord)}`);
     }
-    const execution = runTsCli([{
+    const execution = invokeTsCli([{
       protocolVersion: 1,
       requestId: `execute:${manifestCase.caseId}`,
       operation: 'machine.execute',
@@ -128,7 +123,7 @@ function runTsTimerVector(manifestCase, vector, options) {
       }
       throw new Error(`timer vector step ${index} cannot be represented by device.cycleVector`);
     });
-    const response = runTsCli([{
+    const response = invokeTsCli([{
       protocolVersion: 1,
       requestId: `timer:${manifestCase.caseId}`,
       operation: 'device.cycleVector',
@@ -162,32 +157,6 @@ function runTsTimerVector(manifestCase, vector, options) {
   } catch (error) {
     return laneFailure(manifestCase, 'error', error instanceof Error ? error.message : String(error));
   }
-}
-
-function runTsCli(requests, options) {
-  const cli = path.resolve(options.cli ?? process.env.BUAA_CO_MIPS_ENGINE_CLI ?? defaultTsCli);
-  if (!fs.statSync(cli, { throwIfNoEntry: false })?.isFile()) {
-    throw new Error(`compiled TS CLI is missing: ${cli}`);
-  }
-  const run = spawnSync(process.execPath, [cli], {
-    cwd: extensionRoot,
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-    input: `${requests.map((request) => JSON.stringify(request)).join('\n')}\n`
-  });
-  if (run.error) throw run.error;
-  if (run.status !== 0) {
-    throw new Error(`TS CLI exited ${run.status}: ${run.stderr.slice(0, 500)}`);
-  }
-  const responses = run.stdout.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
-  if (responses.length !== requests.length) {
-    throw new Error(`TS CLI returned ${responses.length} responses for ${requests.length} requests`);
-  }
-  const byId = new Map(responses.map((response) => [response.requestId, response]));
-  if (byId.size !== responses.length || responses.some((response) => response.protocolVersion !== 1)) {
-    throw new Error('TS CLI returned duplicate IDs or an unsupported protocol response');
-  }
-  return byId;
 }
 
 function tsFinalState(result) {

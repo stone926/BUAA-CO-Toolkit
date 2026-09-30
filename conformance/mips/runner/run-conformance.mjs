@@ -10,7 +10,7 @@ const laneRunners = Object.freeze({
   'course-vector': runCourseVectorCase,
   'assembly-diff': runAssemblyDiffCase
 });
-const defaultRequiredLanes = ['legacy-baseline', 'course-vector'];
+const defaultRequiredLanes = ['course-vector'];
 const resultStatuses = new Set(['passed', 'validated', 'failed', 'skipped', 'error', 'recorded']);
 
 function nextValue(argv, index, flag) {

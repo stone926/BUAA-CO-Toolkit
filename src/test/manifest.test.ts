@@ -335,6 +335,15 @@ describe('package manifest', () => {
     });
   });
 
+  it('publishes only official MARS memory layouts and builtin course engine choices', () => {
+    const properties = Object.assign({}, ...(readPackage().contributes?.configuration ?? []).map((group) => group.properties ?? {}));
+    expect(properties['co.mips.engine']?.enum).toEqual(['auto', 'builtin']);
+    expect(properties['co.mips.engine']?.deprecationMessage).toContain('mars 和 verify-both');
+    expect(properties['co.mips.memoryConfiguration']?.enum).toEqual(['Default', 'CompactDataAtZero', 'CompactTextAtZero']);
+    expect(getConfigDefaults()['mips.memoryConfiguration']).toBe('Default');
+    expect(properties['co.toolchain.marsP7']?.deprecationMessage).toContain('不再使用');
+  });
+
   it('derives generator profile descriptions from the ASM generator catalog', () => {
     const pkg = readPackage();
     const groups = pkg.contributes?.configuration ?? [];

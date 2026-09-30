@@ -168,12 +168,12 @@ describe('getMarsJar', () => {
     expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
   });
 
-  it('returns marsP7 path for P7 profile when marsP7 is set', () => {
+  it('ignores the retired marsP7 override for P7', () => {
     setConfig('co.project.profile', 'P7');
     setConfig('co.toolchain.marsP7', '/opt/mars/MarsP7.jar');
     setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
 
-    expect(getMarsJar()).toBe('/opt/mars/MarsP7.jar');
+    expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
   });
 
   it('falls back to mars when P7 profile has no marsP7 configured', () => {
@@ -223,29 +223,29 @@ describe('getMemoryConfiguration', () => {
     clearConfig();
   });
 
-  it('returns CompactLargeText for P7 profile', () => {
+  it('returns the official Default configuration for P7', () => {
     setConfig('co.project.profile', 'P7');
 
-    expect(getMemoryConfiguration()).toBe('CompactLargeText');
+    expect(getMemoryConfiguration()).toBe('Default');
   });
 
-  it('returns FixedCompactLargeText for non-P7 profile', () => {
+  it('returns the official Default configuration for non-P7 profiles', () => {
     setConfig('co.project.profile', 'P5');
 
-    expect(getMemoryConfiguration()).toBe('FixedCompactLargeText');
+    expect(getMemoryConfiguration()).toBe('Default');
   });
 
-  it('returns FixedCompactLargeText for P4', () => {
+  it('returns the official Default configuration for P4', () => {
     setConfig('co.project.profile', 'P4');
 
-    expect(getMemoryConfiguration()).toBe('FixedCompactLargeText');
+    expect(getMemoryConfiguration()).toBe('Default');
   });
 
-  it('returns CompactLargeText for P7 even when explicit setting says auto', () => {
+  it('migrates the old auto memory setting to Default', () => {
     setConfig('co.project.profile', 'P7');
     setConfig('co.mips.memoryConfiguration', 'auto');
 
-    expect(getMemoryConfiguration()).toBe('CompactLargeText');
+    expect(getMemoryConfiguration()).toBe('Default');
   });
 
   it('returns explicit setting when configured', () => {
@@ -255,11 +255,16 @@ describe('getMemoryConfiguration', () => {
     expect(getMemoryConfiguration()).toBe('CompactDataAtZero');
   });
 
-  it('explicit setting overrides P7 default', () => {
+  it.each(['FixedCompactLargeText', 'CompactLargeText', 'invalid-mode', ''])('migrates %s to official Default', (mode) => {
     setConfig('co.project.profile', 'P7');
-    setConfig('co.mips.memoryConfiguration', 'FixedCompactLargeText');
+    setConfig('co.mips.memoryConfiguration', mode);
 
-    expect(getMemoryConfiguration()).toBe('FixedCompactLargeText');
+    expect(getMemoryConfiguration()).toBe('Default');
+  });
+
+  it.each(['Default', 'CompactDataAtZero', 'CompactTextAtZero'])('normalizes official %s names', (mode) => {
+    setConfig('co.mips.memoryConfiguration', ` ${mode.toLowerCase()} `);
+    expect(getMemoryConfiguration(makeUri())).toBe(mode);
   });
 });
 
@@ -272,13 +277,18 @@ describe('getMipsEngine', () => {
     expect(getMipsEngine()).toBe('auto');
   });
 
-  it.each(['auto', 'builtin', 'mars', 'verify-both'] as const)(
+  it.each(['auto', 'builtin'] as const)(
     'accepts the supported %s mode',
     (mode) => {
       setConfig('co.mips.engine', mode);
       expect(getMipsEngine()).toBe(mode);
     }
   );
+
+  it.each(['mars', 'verify-both'] as const)('migrates the old %s engine to auto', (mode) => {
+    setConfig('co.mips.engine', ` ${mode.toUpperCase()} `);
+    expect(getMipsEngine(makeUri())).toBe('auto');
+  });
 
   it('normalizes a resource-scoped value', () => {
     setConfig('co.mips.engine', ' BUILTIN ');

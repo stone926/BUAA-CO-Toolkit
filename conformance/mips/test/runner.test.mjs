@@ -1,4 +1,4 @@
-/** Fail-closed conformance sentinels; pinned references are mandatory. */
+/** Builtin conformance sentinels; legacy MARS integration runs only by opt-in. */
 import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,7 @@ function caseById(caseId) {
   return manifestCase;
 }
 
-test('all three pinned reference roles are present and hash-verified', () => {
+test('archival pinned reference roles are present and hash-verified', { skip: process.env.CONFORMANCE_ARCHIVAL_MARS !== '1' }, () => {
   for (const role of Object.values(referenceRoles)) {
     const reference = resolveVerifiedReference(role);
     assert.equal(reference.role, role);
@@ -97,14 +97,14 @@ test('stock MARS reset divergence cannot pass as the course-correct challenge ex
   assert.throws(() => runCourseVectorCase(forced), /vector file/);
 });
 
-test('legacy course executor matches every candidate expectation and deterministic golden', () => {
+test('archival legacy course executor matches candidate expectations and deterministic goldens', { skip: process.env.CONFORMANCE_ARCHIVAL_MARS !== '1' }, () => {
   for (const manifestCase of manifest.cases.filter((entry) => entry.lanes.includes('legacy-baseline'))) {
     const result = runLegacyBaselineCase(manifestCase);
     assert.equal(result.status, 'passed', `${manifestCase.caseId}: ${result.status} - ${result.message}`);
   }
 });
 
-test('challenge expectation is checked independently of its golden', () => {
+test('archival challenge expectation is checked independently of its golden', { skip: process.env.CONFORMANCE_ARCHIVAL_MARS !== '1' }, () => {
   const mutated = structuredClone(caseById('MARS-BASELINE-GPSP-001'));
   mutated.legacyExpected.dm['0x00000000'] = '0xdeadbeef';
   const result = runLegacyBaselineCase(mutated);
@@ -112,7 +112,7 @@ test('challenge expectation is checked independently of its golden', () => {
   assert.match(result.message, /candidate corpus expectation/);
 });
 
-test('golden provenance changes invalidate the baseline', () => {
+test('archival golden provenance changes invalidate the baseline', { skip: process.env.CONFORMANCE_ARCHIVAL_MARS !== '1' }, () => {
   const stale = structuredClone(caseById('MARS-BASELINE-GPSP-001'));
   const result = runLegacyBaselineCase(stale, {
     corpusCandidate: { ...manifest.candidate, revision: manifest.candidate.revision + 1 }
@@ -121,7 +121,7 @@ test('golden provenance changes invalidate the baseline', () => {
   assert.match(result.message, /fingerprint is stale/);
 });
 
-test('missing legacy golden is an error, never a reachability pass', () => {
+test('missing archival legacy golden is an error, never a reachability pass', { skip: process.env.CONFORMANCE_ARCHIVAL_MARS !== '1' }, () => {
   const withoutGolden = structuredClone(caseById('MARS-BASELINE-GPSP-001'));
   withoutGolden.caseId = 'MISSING-GOLDEN-SENTINEL';
   const result = runLegacyBaselineCase(withoutGolden);
@@ -141,7 +141,7 @@ test('corpus manifest rejects unknown fields instead of silently accepting typos
   assert.throws(() => validateCorpusManifest(invalid), /unknown fields: hatlPc/);
 });
 
-test('assembly-diff lane is fail-closed when a prerequisite is missing and passes with both prerequisites', () => {
+test('archival assembly-diff lane is fail-closed when a prerequisite is missing and passes with both prerequisites', { skip: process.env.CONFORMANCE_ARCHIVAL_MARS !== '1' }, () => {
   const direct = runAssemblyDiffCase(caseById('COURSE-VEC-P3-ARITH-001'));
   assert.ok(['passed', 'skipped', 'failed'].includes(direct.status));
 
@@ -175,7 +175,7 @@ test('a single lane runs its cases and reports the plain runner gate', () => {
   assert.match(cli.stdout, /"failed":0/);
 });
 
-test('the runner no longer carries a formal approval gate and rejects the flag', () => {
+test('the default runner selects only the builtin course-vector lane', () => {
   const partial = spawnSync(process.execPath, [runnerCli, '--formal'], { encoding: 'utf8' });
   assert.equal(partial.status, 2);
   assert.match(partial.stderr, /unknown argument: --formal/);
@@ -183,7 +183,7 @@ test('the runner no longer carries a formal approval gate and rejects the flag',
   const full = spawnSync(process.execPath, [runnerCli], { encoding: 'utf8' });
   assert.equal(full.status, 0, full.stderr);
   assert.match(full.stdout, /"gate":"runner"/);
-  assert.match(full.stdout, /"passed":12/);
+  assert.match(full.stdout, /"lanes":\["course-vector"\]/);
   assert.match(full.stdout, /"validated":2/);
   assert.match(full.stdout, /"failed":0/);
 });

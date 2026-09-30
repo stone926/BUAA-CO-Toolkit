@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const config = vi.hoisted(() => ({
   java: '',
   jar: '',
-  memory: 'FixedCompactLargeText',
+  memory: 'Default',
   profile: 'P6',
   timeout: 12_345,
   delayed: true,
@@ -27,7 +27,7 @@ vi.mock('../../config', () => ({
 
 import { resolveLegacyMarsLaunch } from '../../mips/providers/legacyMarsLaunch';
 
-describe('legacy MARS launch preflight', () => {
+describe('official MARS launch preflight', () => {
   let root: string;
   let source: string;
 
@@ -36,7 +36,7 @@ describe('legacy MARS launch preflight', () => {
     source = path.join(root, 'program.asm');
     config.jar = path.join(root, 'Mars.jar');
     config.java = path.join(root, process.platform === 'win32' ? 'java.exe' : 'java');
-    config.memory = 'FixedCompactLargeText';
+    config.memory = 'Default';
     config.profile = 'P6';
     config.timeout = 12_345;
     config.delayed = true;
@@ -55,17 +55,14 @@ describe('legacy MARS launch preflight', () => {
 
   it('returns one immutable snapshot of all launch-affecting settings', async () => {
     const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {
-      courseTrace: true,
-      traceOutput: true,
-      maxSteps: 256,
-      haltPc: 0x3010
+      stdin: '42\n'
     });
 
     expect(result.diagnostics).toEqual([]);
     expect(result.launch).toMatchObject({
       profile: 'P6',
       configuredMars: path.resolve(config.jar),
-      memoryConfiguration: 'FixedCompactLargeText',
+      memoryConfiguration: 'Default',
       wallClockMs: 12_345,
       p7RiInstruction: false
     });
@@ -74,46 +71,49 @@ describe('legacy MARS launch preflight', () => {
     config.memory = 'Default';
     config.timeout = 1;
     expect(result.launch).toMatchObject({
-      memoryConfiguration: 'FixedCompactLargeText',
+      memoryConfiguration: 'Default',
       wallClockMs: 12_345
     });
     expect(result.launch?.runtime.command).not.toBe(config.java);
   });
 
-  it('fails before dispatch for unreadable artifacts and invalid course limits', async () => {
-    await fs.promises.rm(config.jar);
+  it('rejects unsupported course semantics without probing source or artifacts', async () => {
+    const open = vi.spyOn(fs.promises, 'open');
     const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {
       courseTrace: true,
       traceOutput: true
     });
-
     expect(result.launch).toBeUndefined();
-    expect(result.diagnostics.map((item) => item.code)).toEqual(expect.arrayContaining([
-      'legacy-mars.jar-unreadable',
-      'legacy-mars.max-steps-required',
-      'legacy-mars.halt-pc-required'
-    ]));
+    expect(result.diagnostics.map((item) => item.code)).toContain('official-mars.course-semantics-unsupported');
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 
-  it('rejects the wrong P7 memory layout before registry/output writes', async () => {
-    config.profile = 'P7';
-    config.memory = 'Default';
-    const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'dumpText', {
-      courseTrace: true,
-      p7RiInstruction: false
-    });
-
+  it('reports unreadable artifacts on an ordinary launch', async () => {
+    await fs.promises.rm(config.jar);
+    const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {});
     expect(result.launch).toBeUndefined();
-    expect(result.diagnostics.map((item) => item.code)).toContain('legacy-mars.p7-memory-configuration');
+    expect(result.diagnostics.map((item) => item.code)).toContain('legacy-mars.jar-unreadable');
+  });
+
+  it('rejects P7 ordinary execution with a builtin recommendation', async () => {
+    config.profile = 'P7';
+    const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {});
+    expect(result.launch).toBeUndefined();
+    expect(result.diagnostics.some((item) => /P7/.test(item.message) && /builtin|内置/.test(item.message))).toBe(true);
+  });
+
+  it.each(['coL2', 'efc', 'cl', 'p7irq=0x3010'])('rejects unsupported configured argument %s', async (arg) => {
+    config.extraArgs = [arg];
+    const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {});
+    expect(result.launch).toBeUndefined();
+    expect(result.diagnostics.map((item) => item.code)).toContain('official-mars.course-semantics-unsupported');
   });
 
   it('rejects an unbounded zero timeout before dispatch', async () => {
     config.timeout = 0;
     const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {
-      courseTrace: true,
-      traceOutput: true,
-      maxSteps: 64,
-      haltPc: 0x3004
+
     });
 
     expect(result.launch).toBeUndefined();

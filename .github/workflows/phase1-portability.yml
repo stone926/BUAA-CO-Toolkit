@@ -21,9 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # The equivalence gate creates a detached worktree at the immutable
-          # pre-migration baseline; a shallow checkout would make that evidence
-          # silently unavailable on either runner.
+          # Keep complete history for provenance and change detection.
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -31,12 +29,6 @@ jobs:
         with:
           node-version: 24
           cache: npm
-
-      - name: Setup Java 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
 
       - name: Install dependencies
         run: npm ci
@@ -76,23 +68,12 @@ jobs:
         env:
           CO_PROCESS_EVIDENCE_OUTPUT: ${{ github.workspace }}/phase1-evidence/process-supervisor-${{ runner.os }}.json
 
-      - name: Resolve pinned MARS references
-        run: node conformance/mips/reference/download-references.mjs --require-all
-
-      - name: Assembly differential lane (pinned MARS vs TS assembler)
-        run: npm --prefix conformance/mips run run:assembly-diff
-
       - name: Verify Icarus, Logisim, and legacy MARS signal wiring
         run: >-
           npx vitest run
           src/test/verilog/iverilogRunner.test.ts
           src/test/courseTestLogisimSignal.test.ts
           src/test/mipsProviders/providerResolver.test.ts
-
-      - name: Verify old/new legacy equivalence
-        run: npm --prefix test-cli run verify:legacy-equivalence
-        env:
-          CO_LEGACY_EQUIVALENCE_OUTPUT: ${{ github.workspace }}/phase1-evidence/legacy-equivalence-${{ runner.os }}.json
 
       - name: Upload phase 1 evidence
         if: always()
