@@ -4,6 +4,21 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-30
+
+- fix(testing): show special probe outcomes and live history (beedd17)
+- fix(testing): localize user-facing diagnostics in Chinese (e30b101)
+- fix(testing): preserve continuous Mode-1 interrupt coverage (09ec170)
+- feat(testing): add P7 return-boundary probes and scoped stress cases (d9ce37f)
+- feat(testing): strengthen generated control flow and P7 hazard coverage (d79220b)
+- feat(ui): refresh report views and unify extension icons (1c15f42)
+- perf: reduce activation, decoding, indexing and waveform costs (f652685)
+- 优化文档 (9f1d368)
+- chore(conformance): drop the fixed-runner MARS benchmark lane (4235cbf)
+- docs(index): correct P7 stress mode semantics and surface the conformance package (7954b22)
+- docs: refresh and condense module index documentation (f6b68bb)
+- docs: remove extra doc (5f7454b)
+
 ## [1.3.1] - 2026-09-27
 
 - Ships all 1.3.0 features listed below; the 1.3.0 release was blocked before publishing by a Linux test fixture filename mismatch.
