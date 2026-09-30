@@ -4,6 +4,10 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-30
+
+- refactor(mips): migrate MARS workflows to stock 4.5 (5249792)
+
 ## [1.4.0] - 2026-09-30
 
 - fix(testing): show special probe outcomes and live history (beedd17)
