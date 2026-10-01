@@ -77,7 +77,7 @@ function isTimeUnitOrInvalidArgument(token: VerilogToken): boolean {
   return timeUnits.has(token.value) || (token.kind === 'identifier' && !codeStarters.has(token.value));
 }
 
-function directiveLineEnd(text: string, start: number, allowContinuation: boolean): number {
+export function directiveLineEnd(text: string, start: number, allowContinuation: boolean): number {
   let end = text.indexOf('\n', start);
   if (end < 0) {
     return text.length;

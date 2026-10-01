@@ -15,11 +15,39 @@ const twoSpaceFormatting: FormattingOptions = {
 
 function format(text: string, settings = mergeCoSettings({}), options = twoSpaceFormatting): string {
   const document = doc(text);
-  const edit = getVerilogFormattingEdits(document, settings, options)[0];
-  return edit?.newText ?? text;
+  return TextDocument.applyEdits(document, getVerilogFormattingEdits(document, settings, options));
 }
 
 describe('Verilog formatting', () => {
+  it.each([
+    ['nested same-line openings', 'module m;\ninitial begin if(a) begin\nx=1;\nend end\nwire y;\nendmodule', 'module m;\n  initial begin if (a) begin\n      x = 1;\n    end end\n  wire y;\nendmodule'],
+    ['unbraced dangling else', 'module m;\ninitial\nif(a)\nif(b)\nx=1;\nelse\nx=2;\nelse\nx=3;\nendmodule', 'module m;\n  initial\n    if (a)\n      if (b)\n        x = 1;\n      else\n        x = 2;\n    else\n      x = 3;\nendmodule'],
+    ['default without colon', 'module m;\ncase(a)\ndefault\nx=1;\nendcase\nendmodule', 'module m;\n  case (a)\n    default\n      x = 1;\n  endcase\nendmodule'],
+    ['case controlled body', 'module m;\nalways @(*)\ncase(a)\n0: if(b)\nx=1;\nelse\nx=2;\n1: x=3;\nendcase\nendmodule', 'module m;\n  always @(*)\n    case (a)\n      0: if (b)\n        x = 1;\n      else\n        x = 2;\n      1: x = 3;\n    endcase\nendmodule'],
+    ['parameterized lists and multiple instances', 'module m #(\nparameter N=1\n)(\ninput a,\noutput y\n);\nsub #(\n.N(N)\n) u0(\n.a(a),\n.y()\n),u1(\na,y\n);\nendmodule', 'module m #(\n    parameter N = 1\n  ) (\n    input  a,\n    output y\n  );\n  sub #(\n      .N(N)\n    ) u0 (\n      .a(a),\n      .y()\n    ), u1 (\n      a, y\n    );\nendmodule'],
+    ['range expressions', 'module m;\nwire y=a[c?3:4];\nassign z=a[7:0];\nendmodule', 'module m;\n  wire y = a[c ? 3 : 4];\n  assign z = a[7: 0];\nendmodule'],
+    ['function task and generate', 'module m;\nfunction [3:0] f;\ninput a;\nbegin\nf=a;\nend\nendfunction\ntask t;\nbegin\nx=1;\nend\nendtask\ngenerate\nif(1) begin:g\nwire x;\nend\nendgenerate\nendmodule', 'module m;\n  function [3: 0] f;\n    input a;\n    begin\n      f = a;\n    end\n  endfunction\n  task t;\n    begin\n      x = 1;\n    end\n  endtask\n  generate\n    if (1) begin : g\n      wire x;\n    end\n  endgenerate\nendmodule'],
+    ['named block labels', 'module m;\ninitial begin:outer\nbegin:inner\nx=1;\nend:inner\nend:outer\nendmodule', 'module m;\n  initial begin : outer\n    begin : inner\n      x = 1;\n    end : inner\n  end : outer\nendmodule']
+  ])('lays out %s', (_name, input, expected) => {
+    const result = format(input);
+    expect(result).toBe(expected);
+    expect(format(result)).toBe(result);
+  });
+
+  it.each([
+    'assign x=1e-3;',
+    'assign \\a+b = 1;',
+    '$display("escaped \\\" a<=b");',
+    'assign x=/* a+b */1;',
+    '`define BODY \\\nassign x=a+b;'
+  ])('preserves lexical payload: %s', (input) => {
+    const output = format(input);
+    if (input.includes('1e-3')) expect(output).toContain('1e-3');
+    if (input.includes('\\a+b')) expect(output).toContain('\\a+b ');
+    if (input.includes('$display')) expect(output).toContain('"escaped \\\" a<=b"');
+    if (input.includes('/*')) expect(output).toContain('/* a+b */');
+    if (input.startsWith('`define')) expect(output).toBe(input);
+  });
   it('formats with the default BUAA CO formatting', () => {
     const input = [
       'module demo(',
@@ -160,7 +188,7 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
-  it('normalizes line comment slash spacing', () => {
+  it('preserves line comment bodies verbatim', () => {
     const input = [
       '//abc',
       '////sth////',
@@ -170,10 +198,10 @@ describe('Verilog formatting', () => {
     ].join('\n');
 
     expect(format(input)).toBe([
-      '// abc',
-      '//// sth ////',
+      '//abc',
+      '////sth////',
       'module demo;',
-      '  assign a = b; //// inline ////',
+      '  assign a = b; ////inline////',
       'endmodule'
     ].join('\n'));
   });
@@ -201,9 +229,9 @@ describe('Verilog formatting', () => {
       '    ADD4:',
       "      PC_reg <= PC_reg + 32'd4;",
       '    RA: PC_reg <= ra;',
-      '    IMM26: // absolute jump',
+      '    IMM26: //absolute jump',
       "      PC_reg <= {PC_plus4[31: 28], imm26, 2'b00};",
-      '    IMM16: //// branch ////',
+      '    IMM16: ////branch////',
       "      PC_reg <= zero ? PC_reg : 32'd4;",
       '    default:',
       "      PC_reg <= PC_reg + 32'd4;",
@@ -270,7 +298,7 @@ describe('Verilog formatting', () => {
 
     expect(once).toBe([
       'assign NPC_sel =',
-      '    // 0;',
+      '    //0;',
       "    (j | jal)   ? 2'b01 :",
       "    (jr | jalr) ? 2'b10 :",
       "    (beq | bne) ? 2'b11 : 2'b00;",

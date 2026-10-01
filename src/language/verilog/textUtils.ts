@@ -54,45 +54,6 @@ export function splitTopLevelCommaSpans(text: string): TextSpan[] {
   return parts;
 }
 
-export function topLevelAssignmentEquals(text: string): number {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    if (inString) {
-      escaped = char === '\\' && !escaped;
-      if (char === '"' && !escaped) {
-        inString = false;
-      } else if (char !== '\\') {
-        escaped = false;
-      }
-      continue;
-    }
-    if (char === '"') {
-      inString = true;
-      escaped = false;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth++;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth = Math.max(0, depth - 1);
-      continue;
-    }
-    if (char === '=' && depth === 0) {
-      const previous = text[index - 1] ?? '';
-      const next = text[index + 1] ?? '';
-      if (previous !== '<' && previous !== '>' && previous !== '!' && previous !== '=' && next !== '=' && next !== '>') {
-        return index;
-      }
-    }
-  }
-  return -1;
-}
-
 export function safeRegExp(pattern: string): RegExp | undefined {
   try {
     return new RegExp(pattern);

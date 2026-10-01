@@ -8,6 +8,7 @@ interface LanguageRegistration {
   readonly lsp?: {
     readonly selector: 'language' | 'extension';
     readonly formatting: boolean;
+    readonly rangeFormatting?: boolean;
   };
 }
 
@@ -20,12 +21,22 @@ export function isLanguageFileName(fileName: string, languageId: string): boolea
   return extensionsById.get(languageId)?.some((extension) => lower.endsWith(extension)) ?? false;
 }
 
-export function languageDocumentSelector(formattingOnly = false): Array<{ scheme: string; language?: string; pattern?: string }> {
-  return registrations.filter(({ lsp }) => lsp && (!formattingOnly || lsp.formatting)).flatMap<{ scheme: string; language?: string; pattern?: string }>(({ id, extensions, lsp }) =>
+type DocumentSelector = Array<{ scheme: string; language?: string; pattern?: string }>;
+
+function selectorsFor(selected: readonly LanguageRegistration[]): DocumentSelector {
+  return selected.flatMap<DocumentSelector[number]>(({ id, extensions, lsp }) =>
     lsp!.selector === 'language'
       ? [{ scheme: 'file', language: id }]
       : extensions.map((extension) => ({ scheme: 'file', pattern: `**/*${extension}` }))
   );
+}
+
+export function languageDocumentSelector(formattingOnly = false): DocumentSelector {
+  return selectorsFor(registrations.filter(({ lsp }) => lsp && (!formattingOnly || lsp.formatting)));
+}
+
+export function languageRangeFormattingSelector(): DocumentSelector {
+  return selectorsFor(registrations.filter(({ lsp }) => lsp?.rangeFormatting));
 }
 
 export function languageFileGlob(ids: readonly string[] = languageServiceIds): string {

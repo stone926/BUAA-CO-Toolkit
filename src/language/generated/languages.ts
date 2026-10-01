@@ -50,6 +50,7 @@ export const languageCatalog = [
     "lsp": {
       "selector": "language",
       "formatting": true,
+      "rangeFormatting": true,
       "semanticHighlighting": true
     }
   },

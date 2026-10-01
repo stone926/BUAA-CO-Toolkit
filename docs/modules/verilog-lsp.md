@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 69 files
+# verilog-lsp | src/language/verilog/ | 75 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -35,7 +35,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `displayFormats.ts` — `$display`/`$write` 格式串提取，供 trace 格式推断
 - `tokenUtils.ts` — token 区间/种类/文本提取
 - `statementUtils.ts` — 顶层逗号区间切分
-- `textUtils.ts` — 格式化用文本/空白处理
+- `textUtils.ts` — 解析与符号回退复用的文本、宽度和列表处理辅助；格式化不再依赖字符级等号扫描
 - `parseCache.ts` — 解析缓存（`DocumentResultCache` wrapper）
 - `moduleUtils.ts` — `moduleAtPosition` / `declDetail` / `buildTestbench`，P7 testbench shell 从模板渲染
 - `stimulusTestbench.ts` — 非课程 CPU 的可编辑激励 testbench 模板
@@ -55,8 +55,24 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `resolveSymbol.ts` — 语义模型 + 语法 fallback 的 symbol resolution
 - `display.ts` — hover/inlay/signature 文案与宽度/参数显示 helper
 - `semanticTokens.ts` — 上下文语义高亮（module/port/signal/parameter/instance/macro/task/function）；词法类别由 TextMate 提供
-- `formatting.ts` / `folding.ts` / `symbols.ts` — 格式化、折叠、文档符号树
+- `formatting.ts` / `formatting/` — 全文与选区格式化：保真源码/保护区间、轻量结构、空白布局、对齐和局部编辑；不依赖诊断或完整语义 AST
+- `folding.ts` / `symbols.ts` — 折叠、文档符号树
 - `traceParser.ts` — Verilog `$display` trace 输出解析为 `CpuTraceEvent[]`
+
+## 格式化
+
+`formatting.ts` 保留全文与选区两个 provider 入口，核心只处理当前文档，不读取工作区文件，不调用外部编译器，也不构建诊断/语义 AST：
+
+- `formatting/source.ts` — 复用全文 lexer 建立 token、源码间隙和行索引，识别指令逻辑行及 `// co-format: off/on` 保护区域
+- `formatting/structure.ts` — 块、受控语句、case 和模块/实例列表的轻量结构上下文；支持同行多个开闭事件和有界恢复
+- `formatting/spacing.ts` — 依据 token 与上下文调整间隙，不用正则改写 token 本体
+- `formatting/layout.ts` — 缩进、续行和安全换行；保留注释内部布局与已有 EOL
+- `formatting/alignment.ts` — 参数、模块端口和三元链分组对齐，按 Tab 可视列计算补齐量
+- `formatting/edits.ts` — 标准 FormattingOptions、全文/选区工作范围及合法、非重叠的局部 edits
+
+保真优先级高于布局：字符串、数字、注释正文、转义标识符及必要终止空白不被改写；指令/宏续行和关闭区域不参与普通空白清理。无法确定的语法局部保守保留，不展开宏、不增删 `begin/end`。选区以相交完整行为工作范围，末尾在下一行第 0 列时不含该行，工作范围外原文不变；不执行全局 EOF 清理。
+
+配置继续使用共享 `CoSettings` 的九项旧格式化偏好，保持既有默认与弃用状态，不增加风格预设。LSP 仅对 Verilog 注册选区能力，保持 SystemVerilog 与其他语言边界。
 
 ## 跨文件
 

@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 232 files | 框架: Vitest
+# test-suite | src/test/ | 242 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -8,15 +8,15 @@
 
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
-| `test/language/` | 68 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
-| `test/`（根） | 45 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
+| `test/language/` | 74 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
+| `test/`（根） | 46 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
 | `test/courseTesting/` | 41 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 21 | ISA golden、汇编器、执行器、devices 与 events |
-| `test/verilog/` | 14 | 真实 bundled Icarus：时间尺度、DM store 契约、runtime/runner/缓存失效 |
+| `test/verilog/` | 15 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 10 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
 | `test/mips{Providers,Host,Replay,Cli}/` | 19 | engine plan 解析与 preflight 不可变性、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI |
 | `test/mips/` | 4 | 跨模块集成 |
-| `test/{hazardAnalysis,helpers,templates,webview}/` | 7 | 冲突分析解析与动态路径、共享 fixture 辅助、模板与 Webview 回归 |
+| `test/{hazardAnalysis,helpers,templates,webview}/` | 9 | 冲突分析解析与动态路径、共享 fixture/格式化辅助、模板与 Webview 回归 |
 
 **fixtures**：`test/fixtures/syntax/{mips,verilog}/` 下分 `valid/`、`invalid/`（含 JSON 期望）与课程语料目录。
 
@@ -35,6 +35,17 @@
 - `scripts/package-vsix.test.mjs` — 通过真实 vsce fixture 验证五目标内容裁剪、共享许可/来源/配方保留与中文空格路径
 - `conformance/mips/test/` — ISA golden、决策向量、250+5 冻结执行语料与 phase6 evidence 聚合器；`npm run verify:phase6` 运行固定 v0.6.3 assembly-diff 与 course1 real execution differential
 - `.github/actions/verify-extension-package/action.yml` 与 `.github/workflows/extension-platforms.yml` — 五 target 原生 PR/main 验证，与 release 共用打包、解包、Icarus smoke 与真实宿主检查（Linux 用 Xvfb）；不逐平台重复全量单元测试
+
+## Verilog 格式化回归
+
+- `language/verilog/formatting.test.ts` 保留课程默认布局与旧偏好 golden；辅助函数实际应用完整 TextEdit 列表，不假设首条编辑是全文替换。
+- `language/verilog/formattingSafety.test.ts` 验证 token/注释/字符串/宏保真、未完成输入、结构边界、off/on、换行和幂等性。
+- `language/verilog/formattingRange.test.ts` 验证相交完整行的选区边界、范围外不变、受保护内容以及无变化编辑。
+- `language/verilog/formattingPerformance.test.ts` 覆盖 2k/10k/50k 行文档及长字面量、深嵌套等边界；使用 `CO_FORMAT_PERF_BUDGET_MS` 可调整预算，不以空结果替代正确输出。
+- `language/verilog/formattingEditRegression.test.ts` / `language/verilog/formattingStructureRegression.test.ts` 固化审查发现的数字 token 边界、选区间隙、保护区结构、条件分支与错误恢复回归。
+- `verilog/formattingEquivalence.test.ts` 用真实 bundled Icarus 分别编译原始和格式化后的合法样例，并比较确定性仿真结果；词法保真断言不替代行为证据，runtime 缺失的跳过必须单独报告。
+- `language/common/formattingRequest.test.ts` 验证配置异步等待期间的取消、文档关闭与版本变化，不允许过期 edits 返回。
+- `scripts/extension-host-formatting-smoke.cjs` 由真实宿主入口调用，通过 VS Code 全文/选区 provider 应用 edits，覆盖幂等、缩进设置和保护区域，不 mock 格式化核心。
 
 ## 回归重点
 

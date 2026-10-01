@@ -11,6 +11,8 @@ import {
   Diagnostic,
   DocumentFormattingParams,
   DocumentFormattingRequest,
+  DocumentRangeFormattingParams,
+  DocumentRangeFormattingRequest,
   DocumentSymbolParams,
   DocumentSymbol,
   FileChangeType,
@@ -84,6 +86,7 @@ import {
   getVerilogDocumentSymbols,
   getVerilogFoldingRanges,
   getVerilogFormattingEdits,
+  getVerilogRangeFormattingEdits,
   getVerilogHover,
   getVerilogInlayHints,
   getVerilogReferences,
@@ -98,7 +101,8 @@ import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspac
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
 import { samePath } from './pathUtils';
 import { startupTraceEnabled, timeStartup, traceStartup } from './startupTrace';
-import { languageIds, languageDocumentSelector, languageServiceForDocument, LanguageServiceId } from './language/languageRegistry';
+import { languageIds, languageDocumentSelector, languageRangeFormattingSelector, languageServiceForDocument, LanguageServiceId } from './language/languageRegistry';
+import { createFormattingRequestHandler } from './language/common/formattingRequest';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -117,6 +121,7 @@ interface CoLanguageService {
   getDocumentSymbols?: (document: TextDocument, settings: CoSettings) => DocumentSymbol[];
   getCodeActions?: (document: TextDocument, range: Range, diagnostics: Diagnostic[], settings: CoSettings) => CodeAction[];
   getFormattingEdits?: (document: TextDocument, settings: CoSettings, options: FormattingOptions) => TextEdit[];
+  getRangeFormattingEdits?: (document: TextDocument, range: Range, settings: CoSettings, options: FormattingOptions) => TextEdit[];
   getInlayHints?: (document: TextDocument, range: Range, settings: CoSettings) => InlayHint[];
   getSemanticTokens?: (document: TextDocument, settings: CoSettings) => SemanticTokens;
   getFoldingRanges?: (document: TextDocument, settings: CoSettings) => FoldingRange[];
@@ -154,6 +159,7 @@ const languageServices: Record<LanguageServiceId, CoLanguageService> = {
     getDocumentSymbols: getVerilogDocumentSymbols,
     getCodeActions: (document, range, diagnostics, settings) => getVerilogCodeActions(document, range, diagnostics, settings, verilogIndex),
     getFormattingEdits: (document, settings, options) => getVerilogFormattingEdits(document, settings, options),
+    getRangeFormattingEdits: getVerilogRangeFormattingEdits,
     getInlayHints: (document, range, settings) => getVerilogInlayHints(document, range, settings, verilogIndex),
     getSemanticTokens: (document, settings) => getVerilogSemanticTokens(document, settings),
     getFoldingRanges: getVerilogFoldingRanges,
@@ -173,6 +179,7 @@ const languageServices: Record<LanguageServiceId, CoLanguageService> = {
 interface ServerState {
   hasConfigurationCapability: boolean;
   hasFormattingDynamicRegistration: boolean;
+  hasRangeFormattingDynamicRegistration: boolean;
   hasSemanticTokensRefreshSupport: boolean;
   workspaceFolders: WorkspaceFolder[] | null | undefined;
   extensionRoot?: string;
@@ -200,6 +207,7 @@ interface VerilogProfileSnapshot {
 const state: ServerState = {
   hasConfigurationCapability: false,
   hasFormattingDynamicRegistration: false,
+  hasRangeFormattingDynamicRegistration: false,
   hasSemanticTokensRefreshSupport: false,
   workspaceFolders: undefined,
   extensionRoot: undefined,
@@ -277,6 +285,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   traceServerStartup('server initialize begin');
   state.hasConfigurationCapability = Boolean(params.capabilities.workspace?.configuration);
   state.hasFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.formatting?.dynamicRegistration);
+  state.hasRangeFormattingDynamicRegistration = Boolean(params.capabilities.textDocument?.rangeFormatting?.dynamicRegistration);
   state.hasSemanticTokensRefreshSupport = Boolean(params.capabilities.workspace?.semanticTokens?.refreshSupport);
   state.workspaceFolders = params.workspaceFolders;
   state.extensionRoot = extensionRootFromInitializationOptions(params.initializationOptions);
@@ -325,6 +334,11 @@ connection.onInitialized(() => {
   if (state.hasFormattingDynamicRegistration) {
     void connection.client.register(DocumentFormattingRequest.type, {
       documentSelector: languageDocumentSelector(true)
+    });
+  }
+  if (state.hasRangeFormattingDynamicRegistration) {
+    void connection.client.register(DocumentRangeFormattingRequest.type, {
+      documentSelector: languageRangeFormattingSelector()
     });
   }
   scheduleVerilogIndexRebuild(verilogIndexStartupDelayMs);
@@ -466,9 +480,23 @@ connection.onCodeAction(withDocument(
   (doc, params: CodeActionParams, settings, svc) => getCodeActions(doc, params.range, params.context.diagnostics, settings, svc), [] as CodeAction[]
 ));
 
-connection.onDocumentFormatting(withDocument(
-  (doc, params: DocumentFormattingParams, settings, svc) => svc.getFormattingEdits?.(doc, settings, params.options), [] as TextEdit[]
-));
+const formattingRequestDependencies = {
+  getDocument: (uri: string) => documents.get(uri),
+  getSettings: getDocumentSettings,
+  onError: (error: unknown) => connection.console.error(`[BUAA CO Toolkit] 格式化请求错误: ${error}`)
+};
+
+connection.onDocumentFormatting(createFormattingRequestHandler({
+  ...formattingRequestDependencies,
+  format: (doc, params: DocumentFormattingParams, settings) =>
+    serviceForDocument(doc)?.getFormattingEdits?.(doc, effectiveSettingsForDocument(doc, settings), params.options) ?? []
+}));
+
+connection.onDocumentRangeFormatting(createFormattingRequestHandler({
+  ...formattingRequestDependencies,
+  format: (doc, params: DocumentRangeFormattingParams, settings) =>
+    serviceForDocument(doc)?.getRangeFormattingEdits?.(doc, params.range, effectiveSettingsForDocument(doc, settings), params.options) ?? []
+}));
 
 connection.languages.inlayHint.on(withDocument(
   (doc, params: InlayHintParams, settings, svc) => svc.getInlayHints?.(doc, params.range, settings), [] as InlayHint[]

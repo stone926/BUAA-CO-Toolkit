@@ -2,7 +2,7 @@
 export { buildTestbench, moduleAtPosition, parseVerilog } from './parser';
 export { buildStimulusTestbench } from './stimulusTestbench';
 export { getVerilogFoldingRanges } from './folding';
-export { getVerilogFormattingEdits } from './formatting';
+export { getVerilogFormattingEdits, getVerilogRangeFormattingEdits } from './formatting';
 export { getVerilogSemanticTokens, clearVerilogSemanticTokenCache } from './semanticTokens';
 export { getVerilogDocumentSymbols } from './symbols';
 export { getVerilogDiagnostics } from './diagnosticProvider';

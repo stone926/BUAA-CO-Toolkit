@@ -17,7 +17,7 @@
     "configuration": "./language-configuration/verilog.json",
     "grammar": { "scopeName": "source.verilog", "path": "./syntaxes/verilog.tmLanguage.json" },
     "snippets": "./snippets/verilog.json",
-    "lsp": { "selector": "language", "formatting": true, "semanticHighlighting": true }
+    "lsp": { "selector": "language", "formatting": true, "rangeFormatting": true, "semanticHighlighting": true }
   },
   {
     "key": "systemVerilog",

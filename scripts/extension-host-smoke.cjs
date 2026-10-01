@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const vscode = require('./extension-host-api.cjs');
 const { customTestbenchFixtures, runCustomTestbenchSmoke } = require('./extension-host-custom-testbench-smoke.cjs');
+const { runFormattingSmoke } = require('./extension-host-formatting-smoke.cjs');
 
 const timeoutMs = 30_000;
 const validVerilog = `module diagnostic_fixture(output wire value);
@@ -130,6 +131,7 @@ async function run() {
     const symbols = await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', diagnosticUri);
     return symbols?.some((symbol) => symbol.name === 'diagnostic_fixture');
   });
+  await runFormattingSmoke({ root, waitFor });
   // The parser reports only a warning for this identifier; the actual bundled
   // compiler must supply the error, rather than a parser or toolchain failure.
   await replaceAndSave(document, invalidVerilog);
