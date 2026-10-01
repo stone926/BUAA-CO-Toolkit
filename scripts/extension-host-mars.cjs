@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const vscode = require('vscode');
+const vscode = require('./extension-host-api.cjs');
 
 async function verifyMars({ folder, configure, bounded, waitFor }) {
   const jars = JSON.parse(process.env.CO_MARS_JARS || '[]');

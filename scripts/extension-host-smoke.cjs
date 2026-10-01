@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const vscode = require('vscode');
+const vscode = require('./extension-host-api.cjs');
 const { customTestbenchFixtures, runCustomTestbenchSmoke } = require('./extension-host-custom-testbench-smoke.cjs');
 
 const timeoutMs = 30_000;

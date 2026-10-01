@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const vscode = require('vscode');
+const vscode = require('./extension-host-api.cjs');
 
 function testbenchText(moduleName, marker) {
   return `\`timescale 1ns/1ps

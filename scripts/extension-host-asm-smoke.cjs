@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const vscode = require('vscode');
+const vscode = require('./extension-host-api.cjs');
 
 const userWords = ['3408002a', '3c091234', '3529abcd', 'ac080000'];
 const haltWords = ['1000ffff', '00000000'];
