@@ -194,6 +194,139 @@
           "include": "#strings"
         },
         {
+          "include": "#macroParameterLabels"
+        },
+        {
+          "include": "#macroLabels"
+        },
+        {
+          "include": "#macroEqvDefinitionStatement"
+        },
+        {
+          "include": "#macroInstructionStatement"
+        },
+        {
+          "include": "#macroKnownDirectiveStatement"
+        },
+        {
+          "include": "#macroUnknownDirectiveStatement"
+        },
+        {
+          "include": "#macroBareMacroStatement"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroParameterLabels": {
+      "name": "meta.label.mips",
+      "begin": "\\G[\\t ]*([%$][A-Za-z_.$][A-Za-z0-9_.$]*)(?:[\\t ]*)(:)",
+      "beginCaptures": {
+        "1": {
+          "name": "variable.parameter.macro.mips"
+        },
+        "2": {
+          "name": "punctuation.separator.label.mips"
+        }
+      },
+      "end": "(?=$)",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameterLabels"
+        },
+        {
+          "include": "#macroLabels"
+        },
+        {
+          "include": "#macroEqvDefinitionStatement"
+        },
+        {
+          "include": "#macroInstructionStatement"
+        },
+        {
+          "include": "#macroKnownDirectiveStatement"
+        },
+        {
+          "include": "#macroUnknownDirectiveStatement"
+        },
+        {
+          "include": "#macroBareMacroStatement"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameters"
+        },
+        {
+          "include": "#registers"
+        },
+        {
+          "include": "#dollarMacroParameters"
+        },
+        {
+          "include": "#characters"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "macroBodyLine": {
+      "name": "meta.macro.body-line.mips",
+      "begin": "^(?=.)",
+      "end": "$",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#macroParameterLabels"
+        },
+        {
           "include": "#macroLabels"
         },
         {
@@ -263,6 +396,12 @@
         },
         {
           "include": "#strings"
+        },
+        {
+          "include": "#macroBodyLine"
+        },
+        {
+          "include": "#macroParameterLabels"
         },
         {
           "include": "#macroLabels"

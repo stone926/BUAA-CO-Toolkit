@@ -36,7 +36,7 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 - `navigation.ts` — 定义跳转、引用查找、文档符号
 - `formatting.ts` — 4 空格缩进、逗号空格、注释列对齐
 - `signatureHelp.ts` — 指令格式与宏参数签名
-- `folding.ts` — `.macro` 与 `#region` 折叠
+- `folding.ts` — 通过 LSP 折叠 `.macro`，并处理 `#region` 标记（语言配置只保留 region 标记，避免宏名被 VS Code 提升为 minimap 区域标题）
 - `rename.ts` — 标签/数据符号/`.eqv`/宏重命名
 - `semanticTokens.ts` — 只输出上下文 semantic token（指令类别/寄存器/宏/符号）；词法类别交给 TextMate
 - `inlayHints.ts` — syscall 服务名/CP0 名/分支目标

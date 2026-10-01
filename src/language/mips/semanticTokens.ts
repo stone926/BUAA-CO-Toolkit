@@ -40,11 +40,16 @@ function buildMipsSemanticTokens(document: TextDocument, settings: CoSettings, s
   const instructionByRange = new Map(parsed.instructions.map((line) => [rangeKey(line.range), line]));
 
   for (const declaration of parsed.semantic.declarations) {
+    const isMacroParameterLabel = Boolean(
+      declaration.symbol && declaration.scope.macroParams.has(declaration.name)
+    );
     const tokenType = declaration.macro
       ? 'mipsMacro'
-      : declaration.symbol
-        ? semanticSymbolTokenType(declaration.symbol.kind)
-        : undefined;
+      : isMacroParameterLabel
+        ? 'mipsMacroParameter'
+        : declaration.symbol
+          ? semanticSymbolTokenType(declaration.symbol.kind)
+          : undefined;
     if (tokenType) {
       collector.add(declaration.selectionRange, tokenType, ['declaration']);
     }

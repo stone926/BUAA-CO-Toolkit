@@ -229,7 +229,7 @@ describe('Verilog command registration and entry behavior', () => {
     expect(writeTextFile).not.toHaveBeenCalled();
   });
 
-  it.each(['alu_tb.v', 'alu_testbench.v', '.co/iverilog/co_generated_auto_tb.v'])(
+  it.each(['alu_tb.v', 'alu_testbench.v', 'tb.v', 'testbench.v', '.co/iverilog/co_generated_auto_tb.v'])(
     'does not generate another testbench from %s', async (file) => {
       const commands = commandMap();
       setActiveDocument(`E:/work/${file}`, 'verilog', 'module arbitrary_name; endmodule');

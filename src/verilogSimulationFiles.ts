@@ -33,7 +33,7 @@ export function isCustomTestbenchPath(file: string): boolean {
   if (normalized.split('/').some((part) => part.toLowerCase() === '.co')) {
     return false;
   }
-  return /(?:_tb|_testbench)\.v$/i.test(path.basename(normalized));
+  return /(?:^|_)(?:tb|testbench)\.v$/i.test(path.basename(normalized));
 }
 
 /** The simulator's private files must never become an interactive testbench. */

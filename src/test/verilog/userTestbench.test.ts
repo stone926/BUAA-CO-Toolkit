@@ -182,12 +182,17 @@ describe('P1 module runs with .co/tb testbenches', () => {
     expect(testbenchCompileSources(workspaceFolder, result!).map(normalized)).toEqual(['e:/work/.co/tb/check_alu.v']);
   });
 
-  it.each(['alu_tb.v', 'alu_testbench.v'])('runs a user-created %s as a testbench', async (fileName) => {
-    const testbench = setFile(`E:/work/test/${fileName}`, 'module helper; endmodule\nmodule alu_tb; endmodule\n');
+  it.each([
+    { fileName: 'alu_tb.v', moduleName: 'alu_tb' },
+    { fileName: 'alu_testbench.v', moduleName: 'alu_tb' },
+    { fileName: 'tb.v', moduleName: 'tb' },
+    { fileName: 'testbench.v', moduleName: 'testbench' }
+  ])('runs a user-created $fileName as a testbench', async ({ fileName, moduleName }) => {
+    const testbench = setFile(`E:/work/test/${fileName}`, `module helper; endmodule\nmodule ${moduleName}; endmodule\n`);
 
     const result = await ensureRunnableTestbench(services(), testbench, true);
 
-    expect(result).toMatchObject({ moduleName: 'alu_tb', kind: 'active' });
+    expect(result).toMatchObject({ moduleName, kind: 'active' });
     expect(normalized(result?.sourceUri)).toBe(`e:/work/test/${fileName}`);
     expect(writeTextFileIfAbsent).not.toHaveBeenCalled();
   });

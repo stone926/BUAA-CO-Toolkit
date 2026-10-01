@@ -160,6 +160,7 @@ function qualifyMipsRule(prefix, name) {
 function mipsStatementStartPatterns(includeLabels, prefix = '') {
   const include = (name) => ({ include: `#${qualifyMipsRule(prefix, name)}` });
   return [
+    ...(includeLabels && prefix === 'macro' ? [{ include: '#macroParameterLabels' }] : []),
     ...(includeLabels ? [include('labels')] : []),
     ...(prefix ? [] : [include('macroDefinitionStatement')]),
     include('eqvDefinitionStatement'),
@@ -225,12 +226,13 @@ function buildMipsStatementRules(options) {
   };
 }
 
-function mipsLabelRule(prefix = '', operandPatterns = mipsOperandPatterns()) {
+function mipsLabelRule(prefix = '', operandPatterns = mipsOperandPatterns(),
+  identifier = MIPS_IDENTIFIER, scope = 'entity.name.label.mips') {
   return {
     name: 'meta.label.mips',
-    begin: `\\G[\\t ]*(${MIPS_IDENTIFIER})(?:[\\t ]*)(:)`,
+    begin: `\\G[\\t ]*(${identifier})(?:[\\t ]*)(:)`,
     beginCaptures: {
-      1: { name: 'entity.name.label.mips' },
+      1: { name: scope },
       2: { name: 'punctuation.separator.label.mips' },
     },
     end: '(?=$)',
@@ -312,6 +314,20 @@ function buildMipsGrammar(instructionEntries, directiveEntries, registerEntries)
     },
     labels: mipsLabelRule('', normalOperandPatterns),
     macroLabels: mipsLabelRule('macro', macroOperandPatterns),
+    macroParameterLabels: mipsLabelRule('macro', macroOperandPatterns,
+      `[%$]${MIPS_IDENTIFIER}`, 'variable.parameter.macro.mips'),
+    // A multiline macro must refresh the statement rules' \G anchor on each body line.
+    macroBodyLine: {
+      name: 'meta.macro.body-line.mips',
+      begin: '^(?=.)',
+      end: '$',
+      patterns: [
+        { include: '#comments' },
+        { include: '#strings' },
+        ...mipsStatementStartPatterns(true, 'macro'),
+        ...macroOperandPatterns,
+      ],
+    },
     macroDefinitionStatement: {
       name: 'meta.macro.definition.mips',
       begin: `\\G[\\t ]*((?i:${escapeRegex('.macro')}))[\\t ]+(${MIPS_CALLABLE_IDENTIFIER})${MIPS_IDENTIFIER_END}`,
@@ -326,6 +342,7 @@ function buildMipsGrammar(instructionEntries, directiveEntries, registerEntries)
       patterns: [
         { include: '#comments' },
         { include: '#strings' },
+        { include: '#macroBodyLine' },
         ...mipsStatementStartPatterns(true, 'macro'),
         ...macroOperandPatterns,
       ],

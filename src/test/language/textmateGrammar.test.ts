@@ -209,6 +209,34 @@ describe('generated TextMate grammars', () => {
     expect(lines[4].ruleStackDepth).toBe(1);
   });
 
+  it('scopes macro parameter labels, directives, strings, and comments inside macro bodies', () => {
+    const lines = tokenize(mipsGrammar, [
+      '.macro scoped(%entry, %exit, $dollar)',
+      '%entry: .word 1',
+      '  j %exit',
+      '%exit: nop',
+      '$dollar: .text',
+      '  value: .asciiz "%entry" # %exit stays a comment',
+      '  .data',
+      '  .text',
+      '.end_macro',
+    ].join('\n'));
+
+    expectScope(scopesAt(lines, 1, '%entry'), 'variable.parameter.macro.mips');
+    expectScope(scopesAt(lines, 1, '.word'), 'keyword.directive.mips');
+    expectScope(scopesAt(lines, 2, '%exit'), 'variable.parameter.macro.mips');
+    expectScope(scopesAt(lines, 3, '%exit'), 'variable.parameter.macro.mips');
+    expectScope(scopesAt(lines, 3, 'nop'), 'keyword.control.instruction.mips');
+    expectScope(scopesAt(lines, 4, '$dollar'), 'variable.parameter.macro.mips');
+    expectScope(scopesAt(lines, 4, '.text'), 'keyword.directive.mips');
+    expectScope(scopesAt(lines, 5, '.asciiz'), 'keyword.directive.mips');
+    expectScope(scopesAt(lines, 5, '"%entry"'), 'string.quoted.double.mips');
+    expectScope(scopesAt(lines, 5, '%exit stays a comment'), 'comment.line.number-sign.mips');
+    expectScope(scopesAt(lines, 6, '.data'), 'keyword.directive.mips');
+    expectScope(scopesAt(lines, 7, '.text'), 'keyword.directive.mips');
+    expect(lines[8].ruleStackDepth).toBe(1);
+  });
+
   it('covers Verilog directives, macros, keyword groups, identifiers, numbers, and operators', () => {
     const lines = tokenize(verilogGrammar, [
       '`define WIDTH 16',

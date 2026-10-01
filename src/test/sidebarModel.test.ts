@@ -49,6 +49,12 @@ function childLabels(node: SidebarNodeModel): string[] {
 }
 
 describe('sidebar model', () => {
+  it.each(['auto', 'P0', 'P1', 'P7'] as const)('offers ordinary ASM execution under %s', (profile) => {
+    const model = buildSidebarModel(baseContext({ profile, activeFile: {
+      languageId: 'mipsasm', fsPath: 'E:/outside/program.asm', basename: 'program.asm', isLogisimCircuit: false
+    } }));
+    expect(findCommand(model, 'co.mips.runCurrentFile')).toBeDefined();
+  });
   it('keeps project information clickable without duplicating its actions', () => {
     const model = buildSidebarModel(baseContext());
     const project = section(model, '项目');

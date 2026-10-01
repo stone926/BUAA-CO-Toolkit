@@ -76,6 +76,7 @@ vi.mock('../../process', () => ({
 import * as vscode from 'vscode';
 import { registerMips, runMarsFile, courseUserTextDumpRange, p7KernelTextDumpRange } from '../../mips';
 import { runTool } from '../../process';
+import { ensureConcreteProfile } from '../../config';
 import { maximumReplayTraceBytes } from '../../mips/replay/boundedFile';
 
 describe('official MARS runner', () => {
@@ -170,8 +171,18 @@ describe('official MARS runner', () => {
     expect((await fs.promises.readdir(runnerState.root)).sort()).toEqual(['Mars4_5.jar', 'case.asm']);
   });
 
-  it('runs terminal preflight and refuses P7 before terminal creation', async () => {
-    runnerState.profile = 'P7';
+  it.each(['auto', 'P0', 'P1', 'P7'])('runs ordinary ASM without a Profile prompt under %s', async (profile) => {
+    runnerState.profile = profile;
+    const output = await runMarsFile(testServices(), sourceUri(), 'run', { stdin: '42\n', nonInteractive: true });
+    expect(output?.result.ok).toBe(true);
+    expect(ensureConcreteProfile).not.toHaveBeenCalled();
+    expect(vi.mocked(runTool).mock.calls[0][2]?.stdin).toBe('42\n');
+  });
+
+  it.each(['auto', 'P0', 'P1', 'P7'])('runs terminal preflight without requiring a Profile under %s', async (profile) => {
+    runnerState.profile = profile;
+    const terminal = { show: vi.fn(), sendText: vi.fn() };
+    vi.mocked(vscode.window.createTerminal).mockReturnValue(terminal as unknown as vscode.Terminal);
     vscode.window.activeTextEditor = { document: {
       languageId: 'mipsasm', isUntitled: false, isDirty: false, uri: sourceUri()
     } } as vscode.TextEditor;
@@ -179,8 +190,10 @@ describe('official MARS runner', () => {
     const callback = vi.mocked(vscode.commands.registerCommand).mock.calls.find(([id]) => id === 'co.mips.runInTerminal')?.[1];
     expect(callback).toBeDefined();
     await callback!();
-    expect(vscode.window.createTerminal).not.toHaveBeenCalled();
-    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringMatching(/builtin|内置/));
+    expect(ensureConcreteProfile).not.toHaveBeenCalled();
+    expect(vscode.window.createTerminal).toHaveBeenCalled();
+    expect(terminal.sendText).toHaveBeenCalledWith(expect.stringContaining('case.asm'), true);
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
   });
 
   it.each(['Invalid Command Argument: no-such-option', 'Invalid memory configuration: BadConfig',

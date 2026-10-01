@@ -70,21 +70,17 @@ export function legacyMarsConfigurationPolicyIssues(
 
 /** Standard MARS launch policy; the policy above only validates archived fork evidence. */
 export function officialMarsConfigurationPolicyIssues(
-  profile: string,
+  _profile: string,
   memoryConfiguration: string,
   mode: LegacyMarsPolicyMode,
   courseInvocation: boolean
 ): LegacyMarsConfigurationPolicyIssue[] {
   const issues: LegacyMarsConfigurationPolicyIssue[] = [];
-  if (!LEGACY_MARS_SUPPORTED_PROFILES.has(profile)) {
-    issues.push({ code: 'official-mars.profile-unsupported', capability: `profile:${profile}`,
-      message: `原版 MARS 不支持当前 Profile ${profile} 的插件运行流程` });
-  }
   if (!(OFFICIAL_MARS_MEMORY_CONFIGURATIONS as readonly string[]).includes(memoryConfiguration)) {
     issues.push({ code: 'official-mars.memory-configuration', capability: 'memory-layout',
       message: `原版 MARS 不支持内存配置 ${memoryConfiguration}；请选择 Default、CompactDataAtZero 或 CompactTextAtZero` });
   }
-  if (courseInvocation || profile === 'P7' || mode === 'dumpKernel') {
+  if (courseInvocation || mode === 'dumpKernel') {
     issues.push({ code: 'official-mars.course-unsupported', capability: 'course-oracle',
       message: '原版 MARS 不提供课程写回 Trace、P7 异常/Timer/中断或 0x4180 内核导出；请使用内置引擎的汇编导出和 CPU 测试' });
   }

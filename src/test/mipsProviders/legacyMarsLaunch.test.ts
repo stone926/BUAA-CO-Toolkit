@@ -96,11 +96,11 @@ describe('official MARS launch preflight', () => {
     expect(result.diagnostics.map((item) => item.code)).toContain('legacy-mars.jar-unreadable');
   });
 
-  it('rejects P7 ordinary execution with a builtin recommendation', async () => {
-    config.profile = 'P7';
+  it.each(['auto', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'])('allows ordinary execution under %s', async (profile) => {
+    config.profile = profile;
     const result = await resolveLegacyMarsLaunch(URI.file(source) as never, 'run', {});
-    expect(result.launch).toBeUndefined();
-    expect(result.diagnostics.some((item) => /P7/.test(item.message) && /builtin|内置/.test(item.message))).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.launch?.profile).toBe(profile);
   });
 
   it.each(['coL2', 'efc', 'cl', 'p7irq=0x3010'])('rejects unsupported configured argument %s', async (arg) => {

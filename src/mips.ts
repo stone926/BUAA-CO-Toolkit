@@ -3,10 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as vscode from 'vscode';
-import {
-  getMachineCode,
-  ensureConcreteProfile
-} from './config';
+import { getMachineCode } from './config';
 import { basenameNoExt, dirname, ensureDirectory, workspaceFolderFor, writeTextFile } from './fsUtil';
 import { commandLine, revealOutputChannel, runTool } from './process';
 import { p7ExceptionHandlerAddress, p7KernelTextDumpEndAddress, p7UserTextBaseAddress } from './courseTesting/p7Hardware';
@@ -135,7 +132,6 @@ async function runMarsCurrentFileWithStdinFile(services: AppServices): Promise<v
 async function runMarsCurrentFileInTerminal(): Promise<void> {
   const document = await resolveCurrentMipsDocument();
   if (!document) return;
-  if (!await ensureConcreteProfile(document.uri, '运行 MARS 需要先确定项目 Profile')) return;
 
   const resolution = await resolveLegacyMarsLaunch(document.uri, 'run', {});
   const launch = resolution.launch;
@@ -163,10 +159,6 @@ export async function runMarsFile(
   options: MarsRunOptions = {}
 ): Promise<MarsRunOutput | undefined> {
   const showMessages = options.showMessages !== false && !options.nonInteractive;
-  if (!options.resolvedLaunch
-    && !await ensureConcreteProfile(asmUri, '运行 MARS 需要先确定项目 Profile')) {
-    return undefined;
-  }
   const launchResolution = options.resolvedLaunch
     ? { diagnostics: [], launch: options.resolvedLaunch }
     : await resolveLegacyMarsLaunch(asmUri, mode, options);
@@ -188,8 +180,8 @@ export async function runMarsFile(
     ...options,
     p7RiInstruction: options.p7RiInstruction || launch.p7RiInstruction
   }, launch.extraArgs);
-  if (unsupported || launch.profile === 'P7') {
-    const message = unsupported ?? '原版 MARS 不支持 P7 课程异常/中断语义；请使用 builtin 引擎。';
+  if (unsupported) {
+    const message = unsupported;
     appendMarsRunMessage(services, options, message);
     if (showMessages) vscode.window.showErrorMessage(message);
     return { result: localMarsRunFailure(launch.runtime.command, [], dirname(asmUri), message) };

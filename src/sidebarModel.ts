@@ -231,25 +231,27 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
     }
   }
 
-  if (active && isMipsFile(active) && shouldShowMipsActions(context.profile, active.languageId)) {
+  if (active && isMipsFile(active)) {
     children.push(
-      ...(context.profile === 'P7' ? [] : [actionItem(
+      actionItem(
         'core.asmRun',
         '原版 MARS 运行',
         Commands.Mips.RunCurrentFile,
         'play',
         `使用当前 ASM: ${active.basename}`,
         `${active.fsPath}\n\n使用原版 MARS 4.5 的 syscall/console 和标准内存布局；课程机器码导出与 CPU 测试使用内置引擎。`
-      )]),
-      actionItem(
+      )
+    );
+    if (shouldShowMipsActions(context.profile, active.languageId)) {
+      children.push(actionItem(
         'core.asmDumpText',
         'ASM 导出文本段',
         Commands.Mips.DumpText,
         'export',
         `写入 ${context.machineCode}`,
         `ASM:\n${active.fsPath}\n\n默认输出:\n${defaultSiblingPath(active.fsPath, context.machineCode)}\n\n${context.profile === 'P2' ? 'P2 使用 MARS。' : 'P3–P7 使用内置汇编器。'}`
-      )
-    );
+      ));
+    }
   }
 
   if (active && isVerilogFile(active) && shouldShowVerilogActions(context.profile, active.languageId)) {
@@ -461,7 +463,7 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
       `当前 Verilog:\n${active.fsPath}`,
       '',
       'P1/独立模块没有统一 Top/TB。',
-      '手动生成的 testbench 位于 .co/tb，由用户编写输入与激励；用户自建的 *_tb.v 和 *_testbench.v 也会作为 testbench 运行。',
+      '手动生成的 testbench 位于 .co/tb，由用户编写输入与激励；用户自建的 *_tb.v、*_testbench.v、tb.v 和 testbench.v 也会作为 testbench 运行。',
       '运行时先识别用户自建 testbench，再使用 .co/tb 中的用户 testbench。',
       `仿真工作目录: .co/iverilog`,
       `仿真输出: .co/out`
@@ -473,7 +475,7 @@ function verilogSimulationTooltip(context: SidebarModelContext, active: SidebarA
     '',
     `仿真工作目录: .co/iverilog`,
     `仿真输出: .co/out`,
-    '手动 testbench 提供输入与激励，支持 .co/tb 中由插件生成、需由用户编写的 testbench，也支持文件名以 _tb 或 _testbench 结尾的用户自建 testbench。自动测试使用 .co/iverilog 中仅供内部组件驱动测试的私有 testbench。'
+    '手动 testbench 提供输入与激励，支持 .co/tb 中由插件生成、需由用户编写的 testbench，也支持用户自建的 *_tb.v、*_testbench.v、tb.v 和 testbench.v。自动测试使用 .co/iverilog 中仅供内部组件驱动测试的私有 testbench。'
   ];
   lines.push('.co/tb 中新生成的 CPU testbench 在运行时选择 ASM，由插件自动汇编加载；缺少 CPU testbench 时会在选择后生成并继续仿真。普通模块与自建 testbench 不会询问 ASM。');
   return lines.join('\n');

@@ -2,7 +2,6 @@ import {
   Commands,
   HAZARD_PROFILES,
   LOGISIM_PROFILES,
-  MIPS_PROFILES,
   VERILOG_PROFILES
 } from './constants';
 import { ProjectProfile } from './projectProfile';
@@ -24,7 +23,6 @@ export interface AdvancedToolItemModel {
 }
 
 const verilogProfiles = VERILOG_PROFILES;
-const mipsProfiles = MIPS_PROFILES;
 const logisimProfiles = LOGISIM_PROFILES;
 const hazardProfiles = HAZARD_PROFILES;
 
@@ -32,13 +30,11 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
   const items: AdvancedToolItemModel[] = [];
   const activeDetail = context.activeFileName ? `当前文件: ${context.activeFileName}` : '运行时选择输入文件';
 
-  if (context.activeKind === 'mips' && shouldShowMipsTools(context.profile)) {
-    if (context.profile !== 'P7') {
-      items.push(
-        tool('mips.stdin', 'ASM 带标准输入运行', '原版 MARS', activeDetail, Commands.Mips.RunWithStdinFile),
-        tool('mips.terminal', 'ASM 终端运行', '原版 MARS', activeDetail, Commands.Mips.RunInTerminal)
-      );
-    }
+  if (context.activeKind === 'mips') {
+    items.push(
+      tool('mips.stdin', 'ASM 带标准输入运行', '原版 MARS', activeDetail, Commands.Mips.RunWithStdinFile),
+      tool('mips.terminal', 'ASM 终端运行', '原版 MARS', activeDetail, Commands.Mips.RunInTerminal)
+    );
     if (context.profile === 'P7') {
       items.push(tool('mips.kernelDump', 'ASM 导出内核文本段', '内置汇编器', activeDetail, Commands.Mips.DumpKernelText));
     }
@@ -67,10 +63,6 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
   }
 
   return items;
-}
-
-function shouldShowMipsTools(profile: ProjectProfile): boolean {
-  return profile !== 'auto' && mipsProfiles.has(profile);
 }
 
 function shouldShowLogisimTools(context: AdvancedToolContext): boolean {

@@ -54,8 +54,10 @@ describe('Verilog project source discovery', () => {
     const dut = URI.file('E:/work/mips.v');
     const userTb = URI.file('E:/work/mips_tb.v');
     const unrelatedTb = URI.file('E:/work/other_testbench.v');
+    const plainTb = URI.file('E:/work/test/tb.v');
+    const plainTestbench = URI.file('E:/work/test/testbench.v');
     const generated = URI.file('E:/work/.co/iverilog/co_generated_auto_tb.v');
-    vscodeState.module!.workspace.findFiles.mockResolvedValue([userTb, unrelatedTb, dut]);
+    vscodeState.module!.workspace.findFiles.mockResolvedValue([userTb, unrelatedTb, plainTb, plainTestbench, dut]);
     await expect(resolveVerilogProjectFiles(folder as never, [generated], {
       excludedFiles: [dut],
       excludedBasenames: ['mips_tb.v'],
@@ -64,15 +66,17 @@ describe('Verilog project source discovery', () => {
     })).resolves.toEqual([dut, generated]);
   });
 
-  it('keeps the selected custom testbench while excluding unrelated custom testbenches', async () => {
-    const dut = URI.file('E:/work/dut.v');
-    const selected = URI.file('E:/work/dut_tb.v');
-    const unrelated = URI.file('E:/work/broken_testbench.v');
-    vscodeState.module!.workspace.findFiles.mockResolvedValue([unrelated, selected, dut]);
-    await expect(resolveVerilogProjectFiles(folder as never, [selected], {
-      protectedFiles: [selected], excludeCustomTestbenches: true
-    })).resolves.toEqual([dut, selected]);
-  });
+  it.each(['dut_tb.v', 'dut_testbench.v', 'tb.v', 'testbench.v'])(
+    'keeps selected %s while excluding unrelated custom testbenches', async (fileName) => {
+      const dut = URI.file('E:/work/dut.v');
+      const selected = URI.file(`E:/work/${fileName}`);
+      const unrelated = URI.file('E:/work/broken_testbench.v');
+      vscodeState.module!.workspace.findFiles.mockResolvedValue([unrelated, selected, dut]);
+      await expect(resolveVerilogProjectFiles(folder as never, [selected], {
+        protectedFiles: [selected], excludeCustomTestbenches: true
+      })).resolves.toEqual([dut, selected]);
+    }
+  );
 
   it('invalidates on workspace Verilog changes but ignores generated and XISE files', async () => {
     const dut = URI.file('E:/work/dut.v');

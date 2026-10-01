@@ -245,7 +245,12 @@ export function getLogisimJar(resource?: vscode.Uri): string {
 }
 
 export function getRunTimeout(resource?: vscode.Uri): number {
-  return config<number>('run.timeoutMs', configDefault<number>('run.timeoutMs'), resource);
+  const fallback = configDefault<number>('run.timeoutMs');
+  const configured = config<number>('run.timeoutMs', fallback, resource);
+  // Older installations used 0 for unlimited runs. Use the current operation budget
+  // for that retired value (and malformed settings), instead of rejecting every launch.
+  return Number.isSafeInteger(configured) && configured > 0 && configured <= 0x7fffffff
+    ? configured : fallback;
 }
 
 export function showCommandBeforeRun(resource?: vscode.Uri): boolean {

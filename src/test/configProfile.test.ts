@@ -66,6 +66,7 @@ import {
   getMarsJar,
   getMarsP7Jar,
   getMemoryConfiguration,
+  getRunTimeout,
   getSimTime,
   getTestbench,
   getTopModule,
@@ -84,6 +85,22 @@ function clearConfig(): void {
 function makeUri(fsPath = '/test/asm/test.asm'): vscode.Uri {
   return { scheme: 'file', fsPath, path: fsPath } as vscode.Uri;
 }
+
+describe('manual tool timeout compatibility', () => {
+  beforeEach(clearConfig);
+
+  it.each([0, -1, 1.5, NaN, Infinity, 0x80000000, '120000'])('uses the default budget for retired or invalid value %s', (value) => {
+    const fallback = getRunTimeout(makeUri());
+    setConfig('co.run.timeoutMs', value);
+    expect(getRunTimeout(makeUri())).toBe(fallback);
+    expect(fallback).toBeGreaterThan(0);
+  });
+
+  it('preserves a valid explicit budget', () => {
+    setConfig('co.run.timeoutMs', 12345);
+    expect(getRunTimeout(makeUri())).toBe(12345);
+  });
+});
 
 describe('automatic test instruction setting migration', () => {
   beforeEach(() => {

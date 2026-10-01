@@ -65,9 +65,6 @@ export function buildMarsArgs(
   memoryConfiguration = getMemoryConfiguration(asmUri as any),
   resolved?: MarsResolvedArgumentSettings
 ): string[] {
-  if ((resolved?.profile ?? getProfile(asmUri as any)) === 'P7') {
-    throw new Error('原版 MARS 不支持 P7 课程异常/中断语义；请使用 builtin 引擎。');
-  }
   const extraArgs = resolved?.extraArgs ?? getMipsExtraArgs(asmUri as any);
   const unsupported = officialMarsUnsupportedReason(mode, options, extraArgs);
   if (unsupported) throw new Error(unsupported);

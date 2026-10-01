@@ -41,7 +41,7 @@
 - `verilog/iverilogDiagnostics.ts` / `verilog/simulationDiagnostic.ts` — stderr 解析与结构化失败报告（工作区相对路径、脱敏、限长）
 - `verilog/simulationRunner.ts` — 通用仿真入口，固定使用 bundled Icarus
 - `verilog/simulationInputs.ts` — 机器码源定位、复制与 `code.txt` alias
-- `verilog/testbenchResolver.ts` — 三种 TB 来源（私有课程 TB / `.co/tb` 模板 / 自建 `_tb.v`），各阶段都不回退私有 TB
+- `verilog/testbenchResolver.ts` — 三种 TB 来源（私有课程 TB / `.co/tb` 模板 / 自建 `*_tb.v`、`*_testbench.v`、`tb.v` 或 `testbench.v`），各阶段都不回退私有 TB
 - `verilog/userCpuProgram.ts` / `verilog/userCpuTestbench.ts` / `verilog/userTestbench.ts` — 用户 CPU 仿真的 ASM 选择、模板与目录约定
 - `verilog/verilogProject.ts` / `verilog/verilogProjectOrder.ts` — 源发现、确定性排序与按事件失效的缓存
 - `verilog/workspaceOperationQueue.ts` — 按 workspace 串行的轻量 Promise 队列
@@ -52,7 +52,7 @@
 ## 其他命令域
 
 - `mipsCommands.ts` — 汇编与机器码导出命令分派；P3–P7 强制 builtin assembler，不做 capability fallback
-- `mips.ts` — 原版 MARS runner（P2 汇编、P2–P6 run/stdin/terminal）；终端同样预检，dump 私有暂存并验证后落盘；stdout/stderr 各有 16 MiB raw ceiling
+- `mips.ts` — 原版 MARS runner（P2 汇编；普通 run/stdin/terminal 不受 Profile 限制，也不要求选择 Profile）；终端同样预检，dump 私有暂存并验证后落盘；stdout/stderr 各有 16 MiB raw ceiling；旧超时 0 回退默认预算
 - `mipsTerminal.ts` — 显式 PowerShell/sh 终端参数引用；Java、ASM 的空格/中文路径作为字面参数传递
 - `logisim.ts` — 打开电路、生成 ROM、注入 ROM、日志转 CSV
 - `hazard.ts` — 注册分析/打开报告命令，首次调用惰性加载内置引擎（详见 hazard-analysis.md）

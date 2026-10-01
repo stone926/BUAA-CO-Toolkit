@@ -10,6 +10,11 @@ function commandsFor(
 }
 
 describe('advanced tool model', () => {
+  it.each(['auto', 'P0', 'P1', 'P7'] as const)('offers ordinary MARS commands under %s', (profile) => {
+    expect(commandsFor(profile, 'mips')).toEqual(expect.arrayContaining([
+      'co.mips.runWithStdinFile', 'co.mips.runInTerminal'
+    ]));
+  });
   it('filters Verilog tools by profile and active editor kind', () => {
     const commands = commandsFor('P7', 'verilog');
 

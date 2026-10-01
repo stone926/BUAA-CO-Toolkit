@@ -109,6 +109,31 @@ describe('MIPS instruction-backed language features', () => {
     expect(semantic.some((token) => token.line === 0 && token.character >= 13)).toBe(false);
   });
 
+  it('classifies macro parameter label positions as parameter references and retains local labels', () => {
+    const source = [
+      '.macro scoped(%entry, %exit, $dollar)',
+      '%entry: .word 1',
+      '  j target',
+      'target:',
+      '  bne $t0, $zero, %exit',
+      '%exit: nop',
+      '$dollar:',
+      '  nop # comment remains lexical',
+      '.end_macro',
+    ].join('\n');
+    const semantic = decode(getMipsSemanticTokens(doc(source), mergeCoSettings({}), state()).data);
+    const macroParameterType = mipsSemanticTokenTypes.indexOf('mipsMacroParameter');
+    const labelType = mipsSemanticTokenTypes.indexOf('mipsLabel');
+
+    expect(semantic).toContainEqual({ line: 1, character: 0, length: 6, type: macroParameterType });
+    expect(semantic).toContainEqual({ line: 2, character: 4, length: 6, type: labelType });
+    expect(semantic).toContainEqual({ line: 3, character: 0, length: 6, type: labelType });
+    expect(semantic).toContainEqual({ line: 4, character: 18, length: 5, type: macroParameterType });
+    expect(semantic).toContainEqual({ line: 5, character: 0, length: 5, type: macroParameterType });
+    expect(semantic).toContainEqual({ line: 6, character: 0, length: 7, type: macroParameterType });
+    expect(semantic.some((token) => token.line === 7 && token.character >= 6)).toBe(false);
+  });
+
   it('uses prefix AST context for syscall and CP0 operand completions', () => {
     const settings = mergeCoSettings({});
     const syscallDocument = doc('li $v0, ');

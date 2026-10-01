@@ -11,7 +11,7 @@ Provider-neutral 引擎契约与解析。数据契约（SourceUnit / ProgramImag
 - `builtinExecutionProvider.ts` — P3–P7 默认 TS executor：只消费 ProgramImage，产出 raw trace、canonical CommitEvent、coverage 与原子 event artifact；生产路径走懒启动 Worker
 - `officialMarsProvider.ts` — P2 原版 MARS 标准汇编适配；不声称具备课程 ProgramImage 执行/Trace 能力
 - `fixedMarsReference.ts` — 显式开发者验证的固定 reference gate：只信插件编译内置的 `legacy-course-executor`，用同一 FileHandle 校验普通文件、精确 bytes 与 SHA-256
-- `legacyMarsLaunch.ts` — 原版 MARS 启动预检与配置快照；在副作用前拒绝课程 Trace、P7/RI/class/IRQ 扩展
+- `legacyMarsLaunch.ts` — 原版 MARS 启动预检与配置快照；普通 ASM 与 Profile 无关，在副作用前拒绝显式课程 Trace、RI/class/IRQ 扩展
 - `legacyMarsProvider.ts` — 历史 adapter 与证据兼容实现，生产解析器不注册
 
 **选择语义**：P3–P7 的 `auto`/`builtin` 均选 `builtin-ts`；旧 `mars`/`verify-both` 归 `auto`，不启动魔改 reference。课程 stdin/交互请求在 builtin preflight 报能力错误；普通控制台用独立的原版 MARS 命令。选中后的 preflight/运行失败一律 fail closed。

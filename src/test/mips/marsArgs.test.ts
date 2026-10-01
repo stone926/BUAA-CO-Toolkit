@@ -73,9 +73,13 @@ describe('official MARS arguments', () => {
     expect(() => marsInclusiveDumpRange(1, 8)).toThrow();
   });
 
-  it('rejects P7 and kernel dump before creating any command', () => {
+  it.each(['auto', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'])('runs ordinary ASM under %s', (profile) => {
+    config.profile = profile;
+    expect(buildMarsArgs(source, jar, 'run')).toContain(source.fsPath);
+  });
+
+  it('rejects course kernel dump before creating any command', () => {
     expect(officialMarsUnsupportedReason('dumpKernel', {})).toMatch(/builtin/);
-    config.profile = 'P7';
-    expect(() => buildMarsArgs(source, jar, 'run')).toThrow(/P7/);
+    expect(() => buildMarsArgs(source, jar, 'dumpKernel')).toThrow(/builtin/);
   });
 });

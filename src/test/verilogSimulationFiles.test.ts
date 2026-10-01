@@ -42,12 +42,19 @@ describe('verilog simulation file helpers', () => {
     expect(isGeneratedRuntimeTestbench('module user_tb; endmodule\n')).toBe(false);
   });
 
-  it('recognizes only custom testbench filename suffixes outside .co', () => {
+  it('recognizes custom testbench filenames outside .co', () => {
     expect(isCustomTestbenchPath('E:/work/test/alu_tb.v')).toBe(true);
     expect(isCustomTestbenchPath('E:/work/test/ALU_TESTBENCH.V')).toBe(true);
+    expect(isCustomTestbenchPath('E:/work/test/tb.v')).toBe(true);
+    expect(isCustomTestbenchPath('E:\\work\\测试 空格\\TESTBENCH.V')).toBe(true);
     expect(isCustomTestbenchPath('E:/work/test/tb_alu.v')).toBe(false);
     expect(isCustomTestbenchPath('E:/work/test/alu_tb_copy.v')).toBe(false);
+    expect(isCustomTestbenchPath('E:/work/test/notb.v')).toBe(false);
+    expect(isCustomTestbenchPath('E:/work/test/mytestbench.v')).toBe(false);
+    expect(isCustomTestbenchPath('E:/work/test/tb.vh')).toBe(false);
     expect(isCustomTestbenchPath('E:/work/.co/iverilog/private_tb.v')).toBe(false);
+    expect(isCustomTestbenchPath('E:/work/.CO/iverilog/tb.v')).toBe(false);
+    expect(isCustomTestbenchPath('E:/work/.co/tb/testbench.v')).toBe(false);
     expect(isCustomTestbenchPath('E:/work/.co/tb/alu_tb.v')).toBe(false);
     expect(isPrivateRuntimeTestbenchPath('E:/work/.co/iverilog/private_tb.v')).toBe(true);
     expect(isPrivateRuntimeTestbenchPath('E:/work/.co/isim/legacy_tb.v')).toBe(true);

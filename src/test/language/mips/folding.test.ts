@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FoldingRange } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -35,6 +37,27 @@ describe('MIPS folding', () => {
 
     expect(lineKeys(ranges)).toContain('2-4');
     expect(lineKeys(ranges)).toContain('0-5');
+  });
+
+  it('keeps macro declarations out of language folding markers and folds them through LSP', () => {
+    const configuration = JSON.parse(readFileSync(resolve(process.cwd(), 'language-configuration/mipsasm.json'), 'utf8')) as {
+      folding: { markers: { start: string; end: string } };
+    };
+    const startMarker = new RegExp(configuration.folding.markers.start);
+    const endMarker = new RegExp(configuration.folding.markers.end);
+
+    expect(startMarker.test('# region helpers')).toBe(true);
+    expect(endMarker.test('# endregion helpers')).toBe(true);
+    expect(startMarker.test('.macro increment(%x)')).toBe(false);
+    expect(endMarker.test('.end_macro')).toBe(false);
+
+    const macroRanges = getMipsFoldingRanges(doc([
+      '.macro increment(%x)',
+      'add %x, %x, 1',
+      '.end_macro'
+    ].join('\n')), defaultCoSettings, state());
+
+    expect(lineKeys(macroRanges)).toContain('0-2');
   });
 
   it('does not reuse cached ranges when text changes with the same uri and version', () => {

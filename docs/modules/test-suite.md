@@ -28,6 +28,9 @@
 
 - `scripts/verify-bundled-iverilog.mjs` / `verify-bundled-iverilog-course.mjs` — 按 host platform/arch 选择五个 runtime 之一，在隔离 PATH 下验证中文与空格路径的 syntax success/failure、compile/VVP、`$readmemh`/`$display`、watchdog 与课程兼容
 - `scripts/verify-extension-host.mjs` + `extension-host-smoke.cjs` — `@vscode/test-electron` 加载最终 VSIX 解包目录，创建中文空格工作区，验证真实激活、LSP 保存诊断与修复、`co.verilog.runSimulation`、持续测试的内置生成器/assembler/Worker oracle/Icarus 故意错误 DUT 与首失败停止
+- `scripts/extension-host-custom-testbench-smoke.cjs` — 同一真实宿主中验证 `tb.v` / `testbench.v` 的同名与异名模块选择、DUT 时钟激励、无关错误 TB 排除、编译/运行失败后的修复，以及 VCD、仿真 trace 与内置波形查看器
+- `scripts/extension-host-asm-smoke.cjs` — 同一真实宿主中验证 P3–P7 内置汇编导出（外部 Java/MARS 不可用）、中文空格路径 include/宏、逐字机器码与停机尾、P7 0x4180 handler 与独立 kernel 文件，以及错误导出保留已有产物和修复
+- `scripts/extension-host-mars.cjs` — 设置 `CO_MARS_JARS` 为本地 jar 路径 JSON 数组后，在同一真实宿主中逐 jar 验证各 Profile/工作区外 ASM 的运行、宏折叠、旧超时 0、标准输入、HexText 导出、错误与超时、真实终端执行；测试提供原生输入选择框路径并捕获失败通知，编译执行均调用真实 Java/MARS
 - `scripts/verify-mips-{cli,worker}.mjs`、`verify-process-supervisor.mjs`、`verify-real-cpu-shadow*.mjs`、`check-module-boundaries.mjs` — CLI/Worker 边界、进程树、真实 CPU shadow 与模块依赖边界
 - `scripts/package-vsix.test.mjs` — 通过真实 vsce fixture 验证五目标内容裁剪、共享许可/来源/配方保留与中文空格路径
 - `conformance/mips/test/` — ISA golden、决策向量、250+5 冻结执行语料与 phase6 evidence 聚合器；`npm run verify:phase6` 运行固定 v0.6.3 assembly-diff 与 course1 real execution differential

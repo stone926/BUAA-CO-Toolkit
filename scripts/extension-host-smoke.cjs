@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const vscode = require('vscode');
+const { customTestbenchFixtures, runCustomTestbenchSmoke } = require('./extension-host-custom-testbench-smoke.cjs');
 
 const timeoutMs = 30_000;
 const validVerilog = `module diagnostic_fixture(output wire value);
@@ -99,6 +100,7 @@ async function run() {
   assert.ok(process.env.CO_EXTENSION_ROOT, 'The runner must provide the unpacked VSIX root');
   const root = folder.uri.fsPath;
   const files = {
+    ...customTestbenchFixtures,
     '诊断 fixture.v': validVerilog,
     'command_fixture_tb.v': commandTestbench,
     'wave_fixture_tb.v': waveTestbench,
@@ -159,6 +161,8 @@ async function run() {
   assert.match(await fs.readFile(simulation.simOut.fsPath, 'utf8'), /CO_EXTENSION_HOST_SIM_OK/);
   console.log('PASS Verilog simulation command and persisted output');
 
+  await runCustomTestbenchSmoke({ root, bounded, waitFor, replaceAndSave });
+
   await configure(folder, { 'project.testbench': 'wave_fixture_tb' });
   await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, 'wave_fixture_tb.v')));
   await bounded('Waveform simulation command', () => vscode.commands.executeCommand('co.verilog.viewWaveform'));
@@ -173,6 +177,9 @@ async function run() {
       && tab.input.viewType === 'co.waveform.viewer'
       && path.resolve(tab.input.uri.fsPath) === path.resolve(dumpPath))));
   console.log('PASS waveform simulation, per-word memory dump, and built-in viewer');
+
+  await require('./extension-host-mars.cjs').verifyMars({ folder, configure, bounded, waitFor });
+  await require('./extension-host-asm-smoke.cjs').verifyBuiltinAsm({ folder, configure, bounded, replaceAndSave });
 
   await configure(folder, {
     'project.profile': 'P4',

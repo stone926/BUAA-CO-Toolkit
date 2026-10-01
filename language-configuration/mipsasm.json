@@ -63,8 +63,8 @@
   },
   "folding": {
     "markers": {
-      "start": "^\\s*(?:#\\s*region\\b|\\.[mM][aA][cC][rR][oO]\\b)",
-      "end": "^\\s*(?:#\\s*endregion\\b|\\.[eE][nN][dD]_[mM][aA][cC][rR][oO]\\b)"
+      "start": "^\\s*#\\s*region\\b",
+      "end": "^\\s*#\\s*endregion\\b"
     }
   }
 }
