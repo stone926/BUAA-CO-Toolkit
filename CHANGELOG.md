@@ -4,6 +4,10 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-10-01
+
+- feat: 增强 Verilog 保真格式化与选区支持 (98a9127)
+
 ## [1.4.3] - 2026-10-01
 
 - 修复普通 MARS 运行、标准输入和终端运行被课程 Profile 限制的问题；支持任意阶段及未配置 Profile 的 ASM，兼容旧超时值 0。
