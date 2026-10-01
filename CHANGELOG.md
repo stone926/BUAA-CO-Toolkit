@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-01
+
 - 修复普通 MARS 运行、标准输入和终端运行被课程 Profile 限制的问题；支持任意阶段及未配置 Profile 的 ASM，兼容旧超时值 0。
 - 修复宏定义被误当作区域标题、在缩略图中异常放大显示的问题，保留宏折叠。
 - 修复宏体中的汇编指令、伪指令和参数标签高亮，保持宏内外语法颜色一致。
