@@ -51,7 +51,10 @@ export class MemoryView {
     footer.append(this.range, this.previous, this.next);
     this.element.append(toolbar, this.notice, this.scroll, footer);
   }
-  reveal(): void { this.scroll.scrollTop = 0; }
+  reveal(focus = false): void {
+    this.scroll.scrollTop = 0;
+    if (focus) this.scroll.focus({ preventScroll: true });
+  }
   update(state: WorkbenchState): void {
     const addressChanged = this.state?.memoryAddress !== state.memoryAddress;
     this.state = state;

@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import { verifyWorkbenchLayout } from './verify-mars-workbench-layout.mjs';
 
 const url = process.argv[2];
 if (!url || !/^http:\/\/127\.0\.0\.1:\d+\/$/.test(url)) throw new Error('Pass the local preview fixture URL');
@@ -58,6 +59,7 @@ try {
     await writeFile(path.join(output, name + '.png'), Buffer.from(result.data, 'base64'));
   };
   await call('Page.enable'); await call('Runtime.enable');
+  await verifyWorkbenchLayout({ call, evaluate, navigate, click, screenshot });
   await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1040, deviceScaleFactor: 1, mobile: false });
   await navigate();
   await screenshot('dark');

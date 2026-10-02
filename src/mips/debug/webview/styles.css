@@ -45,6 +45,8 @@ html:has(body.vscode-light), html:has(body.vscode-high-contrast-light) { color-s
 ::-webkit-scrollbar-button { width: 0; height: 0; }
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+html { scrollbar-gutter: stable; }
+html:has(.inspection-dialog[open]) { overflow: hidden; }
 body { font-family: var(--vscode-font-family, system-ui, sans-serif); font-size: var(--vscode-font-size, 13px); line-height: 1.45; }
 button, input, select { font: inherit; }
 button {
@@ -185,13 +187,12 @@ tbody tr:hover { background: var(--hover); }
 .register-value .change-marker { margin-right: 5px; }
 .register-legend { display: flex; align-items: center; gap: 6px; color: var(--muted); background: var(--surface); font-size: 10px; padding: 8px 13px; border-top: 1px solid var(--border); }
 
-.inspection-slot { flex: 0 0 32vh; min-height: 250px; max-height: 400px; min-width: 0; }
-.inspection-slot[data-tab="syscalls"], .inspection-slot[data-tab="memory"] { flex-basis: 58vh; min-height: 440px; max-height: 740px; }
+.inspection-slot { flex: 0 0 48vh; min-height: 400px; max-height: 640px; min-width: 0; }
 .inspection { display: flex; flex-direction: column; height: 100%; }
 .inspection-header { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border-bottom: 1px solid var(--border); flex: 0 0 auto; gap: 4px; }
 .inspection-header .tabs { border: 0; min-width: 0; gap: 0; padding-inline: 4px; }
 .inspection-expand { margin-right: 10px; color: var(--accent-text); font-size: 11px; padding: 4px 8px; }
-.inspection-dialog { padding: 0; border: 1px solid var(--border); border-radius: 9px; width: min(1440px, 94vw); height: 90vh; max-width: none; max-height: none; background: var(--bg); color: var(--fg); box-shadow: 0 18px 70px #0008; }
+.inspection-dialog { position: fixed; inset: 0; margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 9px; width: min(1440px, 94vw); height: 90vh; max-width: none; max-height: none; overflow: hidden; background: var(--bg); color: var(--fg); box-shadow: 0 18px 70px #0008; }
 .inspection-dialog::backdrop { background: #0009; }
 .inspection-dialog .inspection { border: 0; }
 .inspection > [role="tabpanel"] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -267,8 +268,7 @@ body.vscode-high-contrast .tab[aria-selected="true"], body.vscode-high-contrast-
   .cpu-layout { grid-template-columns: 1fr; flex: none; min-height: 0; }
   .listing-pane { height: 390px; }
   .register-pane { height: 310px; }
-  .inspection-slot { flex: none; height: 340px; max-height: none; }
-  .inspection-slot[data-tab="syscalls"], .inspection-slot[data-tab="memory"] { height: 65vh; min-height: 460px; }
+  .inspection-slot { flex: none; height: 65vh; min-height: 460px; max-height: none; }
   .register-pane .tabs { width: 285px; max-width: 100%; border-bottom: none; }
   .register-pane .pane-title .subtle { display: inline; }
   .mode-control { margin-left: auto; }
@@ -276,6 +276,10 @@ body.vscode-high-contrast .tab[aria-selected="true"], body.vscode-high-contrast-
   .session-context { gap: 7px; }
   .status-message { flex-basis: 100%; margin: 0; }
   .summary { gap: 8px 17px; }
+}
+@media (max-width: 420px) {
+  .pane-footer { flex-wrap: wrap; justify-content: flex-end; }
+  .pane-footer > span { flex: 1 0 100%; }
 }
 @media (max-width: 580px) {
   .workbench { padding: 10px; }

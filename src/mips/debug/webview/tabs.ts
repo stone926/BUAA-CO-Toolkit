@@ -6,7 +6,10 @@ export class Tabs {
   private readonly buttons = new Map<string, HTMLButtonElement>();
   private readonly panels = new Map<string, HTMLElement>();
   private active = '';
-  constructor(label: string, private readonly changed: (id: string) => void = () => {}) {
+  constructor(label: string, private readonly callbacks: {
+    beforeChange?(): void;
+    changed?(id: string): void;
+  } = {}) {
     this.element.setAttribute('role', 'tablist');
     this.element.setAttribute('aria-label', label);
     this.element.addEventListener('keydown', event => {
@@ -38,6 +41,8 @@ export class Tabs {
   }
   activate(id: string): void {
     if (!this.buttons.has(id)) return;
+    if (id === this.active) return;
+    this.callbacks.beforeChange?.();
     this.active = id;
     for (const [key, control] of this.buttons) {
       const selected = key === id;
@@ -45,6 +50,6 @@ export class Tabs {
       control.tabIndex = selected ? 0 : -1;
       this.panels.get(key)!.hidden = !selected;
     }
-    this.changed(id);
+    this.callbacks.changed?.(id);
   }
 }

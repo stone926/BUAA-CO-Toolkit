@@ -31,7 +31,10 @@ export class ReferenceViews {
     this.search.type = 'search';
     this.search.placeholder = '搜索服务号、名称、参数…';
     this.search.setAttribute('aria-label', '搜索系统服务');
-    this.search.addEventListener('input', () => this.updateSyscalls());
+    this.search.addEventListener('input', () => {
+      this.updateSyscalls();
+      this.syscallScroll.scrollTop = 0;
+    });
     this.syscallToolbar.append(this.search, this.count);
     const syscall = table(['服务', '参数 / 返回值', '说明', '支持']);
     this.syscallBody = syscall.body;

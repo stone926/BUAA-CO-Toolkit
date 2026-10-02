@@ -90,6 +90,7 @@ export class Listing {
     this.pendingAddress = { address, center: true, requested: false };
     this.revealPendingAddress();
   }
+  focus(): void { this.content.focus({ preventScroll: true }); }
   private locatePc(): void {
     if (this.state?.pc === undefined) return;
     this.revealAddress(this.state.pc);

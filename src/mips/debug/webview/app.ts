@@ -80,13 +80,14 @@ export class WorkbenchApp {
     this.memory = new MemoryView(send);
     this.references = new ReferenceViews(request => {
       if (request.type === 'listing' && request.address !== undefined) {
-        this.inspection.close();
+        this.inspection.close(false);
         this.listing.revealAddress(request.address);
+        this.listing.focus();
         this.listing.element.scrollIntoView({ block: 'nearest' });
       } else {
         if (request.type === 'memory') {
           this.inspection.activate('memory');
-          this.memory.reveal();
+          this.memory.reveal(true);
         }
         send(request);
       }
