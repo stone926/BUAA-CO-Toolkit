@@ -1,4 +1,4 @@
-# waveform | src/waveform/ | 59 files
+# waveform | src/waveform/ | 60 files
 
 内置 VCD 波形查看器：VS Code 只读自定义编辑器（`*.vcd` 默认打开）+ "仿真并查看波形"命令。宿主侧流式解析 VCD 为列式 typed-array 模型并经 postMessage 交给 Webview；Webview 用 Canvas 画波形、DOM 虚拟列表画信号名与值
 
@@ -44,6 +44,8 @@
 - `design/waveformDumper.ts` — 从 `resources/templates/verilog/waveform_dumper.v` 渲染 dump 顶层；越界在编译期告警而非 VVP 崩溃，并把 Icarus 报错按行号归因到具体存储器
 
 ## Host
+
+- `host/waveformDumpSetup.ts` — 手动波形与自动测试用例重跑共享的 dumper/discovery/编译拒绝归因；自动重跑按本次 compile 源文件集合发现存储器，VCD 有界记录
 
 - `host/waveformEditorProvider.ts` — `CustomReadonlyEditorProvider`，按文件追踪页签并复用已打开页签
 - `host/waveformPanel.ts` — 单页签控制器：ready 握手、流式加载 + 进度、超大文件确认、按路径过滤的目录监视防抖重载、trace 附加、消息校验、状态保存

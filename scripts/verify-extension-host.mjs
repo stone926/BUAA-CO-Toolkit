@@ -22,7 +22,9 @@ await mkdir(join(userData, 'User'), { recursive: true });
 await writeFile(join(userData, 'User', 'settings.json'), JSON.stringify({
   'telemetry.telemetryLevel': 'off',
   'workbench.startupEditor': 'none',
-  'files.autoSave': 'off'
+  'files.autoSave': 'off',
+  // Fixture cleanup must not depend on a desktop Recycle Bin being available.
+  'files.enableTrash': false
 }));
 
 console.log(`VS Code smoke workspace and logs: ${sessionRoot}`);

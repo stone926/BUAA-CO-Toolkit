@@ -399,7 +399,7 @@ describe('course test reports', () => {
     expect(html).toContain('<tr class="passed">');
     expect(html).toContain('<span>轮数</span><strong>4</strong>');
     expect(html).toContain('<span>状态</span><strong>已停止</strong>');
-    expect(html).toContain('测试历史”中查看诊断摘要');
+    expect(html).toContain('点击“定位失败”查看证据');
   });
 
   it('reads legacy continuous provenance but hides internal controls and paths from HTML', () => {

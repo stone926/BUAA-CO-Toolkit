@@ -113,6 +113,7 @@ export interface AsmCaseTestOutcome {
   readonly status: 'passed' | 'failed' | 'error';
   readonly stage: 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe' | 'internal';
   readonly diagnostic: string;
+  readonly evidence?: string;
   readonly continuous?: {
     readonly sessionId: string;
     readonly state: 'passed' | 'failed' | 'error';
@@ -1016,6 +1017,7 @@ export async function recordAsmCaseTestOutcome(
         status: outcome.status,
         stage: outcome.stage,
         diagnostic: outcome.diagnostic,
+        evidence: outcome.evidence,
         state: outcome.continuous.state
       }
     );
@@ -1046,7 +1048,8 @@ export async function recordAsmCaseTestOutcome(
     ...(manifest.metadata ?? {}),
     'test.status': outcome.status,
     'test.stage': outcome.stage,
-    'test.diagnostic': outcome.diagnostic
+    'test.diagnostic': outcome.diagnostic,
+    ...(outcome.evidence ? { 'test.evidence': outcome.evidence } : {})
   };
   assertManifestStringMapEntries(metadata, 'metadata');
   await writeManifestAtomic(manifestPath, { ...manifest, metadata });

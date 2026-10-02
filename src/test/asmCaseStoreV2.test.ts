@@ -191,6 +191,42 @@ describe('ASM case manifest v2 artifact storage', () => {
       .resolves.toBe(true);
   });
 
+  it('records failure evidence and passed outcomes for the register coverage generator', async () => {
+    const sessionId = '88888888-8888-4888-8888-888888888888';
+    const failed = makeContinuousOwnedCase(sessionId, 'generated', 'builtin:register-coverage');
+    const evidence = JSON.stringify({ version: 1, index: 0, pc: 0x3004 });
+    await expect(recordAsmCaseTestOutcome(failed.manifestUri.fsPath, {
+      status: 'failed',
+      stage: 'compare',
+      diagnostic: '首个写回差异',
+      evidence,
+      continuous: { sessionId, state: 'failed' }
+    })).resolves.toBeUndefined();
+    const failedManifest = JSON.parse(fs.readFileSync(failed.manifestUri.fsPath, 'utf8')) as AsmCaseManifestV2;
+    expect(failedManifest.metadata).toMatchObject({
+      'continuous.state': 'failed',
+      'test.status': 'failed',
+      'test.stage': 'compare',
+      'test.diagnostic': '首个写回差异',
+      'test.evidence': evidence
+    });
+
+    const passed = makeContinuousOwnedCase(sessionId, 'generated', 'builtin:register-coverage');
+    await expect(recordAsmCaseTestOutcome(passed.manifestUri.fsPath, {
+      status: 'passed',
+      stage: 'compare',
+      diagnostic: '通过',
+      continuous: { sessionId, state: 'passed' }
+    })).resolves.toBeUndefined();
+    const passedManifest = JSON.parse(fs.readFileSync(passed.manifestUri.fsPath, 'utf8')) as AsmCaseManifestV2;
+    expect(passedManifest.metadata).toMatchObject({
+      'continuous.state': 'passed',
+      'test.status': 'passed',
+      'test.stage': 'compare',
+      'test.diagnostic': '通过'
+    });
+  });
+
   it('refuses continuous cleanup for a different session, manual source, or terminal evidence', async () => {
     const sessionId = '33333333-3333-4333-8333-333333333333';
     const mismatched = makeContinuousOwnedCase(sessionId, 'generated');
@@ -215,6 +251,17 @@ describe('ASM case manifest v2 artifact storage', () => {
     await expect(discardContinuousGeneratedAsmCase(manual.manifestUri.fsPath, sessionId))
       .resolves.toBe(false);
     expect(fs.existsSync(manual.dir.fsPath)).toBe(true);
+
+    const unknownGenerator = makeContinuousOwnedCase(sessionId, 'generated', 'builtin:unknown-generator');
+    await expect(discardContinuousGeneratedAsmCase(unknownGenerator.manifestUri.fsPath, sessionId))
+      .resolves.toBe(false);
+    await expect(recordAsmCaseTestOutcome(unknownGenerator.manifestUri.fsPath, {
+      status: 'failed',
+      stage: 'compare',
+      diagnostic: 'unknown generator',
+      continuous: { sessionId, state: 'failed' }
+    })).rejects.toThrow(/ownership validation/);
+    expect(fs.existsSync(unknownGenerator.dir.fsPath)).toBe(true);
 
     const failed = makeContinuousOwnedCase(sessionId, 'failed');
     await expect(discardContinuousGeneratedAsmCase(failed.manifestUri.fsPath, sessionId))
@@ -640,13 +687,14 @@ describe('ASM case manifest v2 artifact storage', () => {
 
 function makeContinuousOwnedCase(
   sessionId: string,
-  state: 'generated' | 'cancelled' | 'passed' | 'failed' | 'error'
+  state: 'generated' | 'cancelled' | 'passed' | 'failed' | 'error',
+  generator = 'builtin:random-asm'
 ): AsmCase {
   const asmCase = createCase();
   const manifest = asmCase.manifest as AsmCaseManifestV2;
   manifest.source = {
     kind: 'builtin',
-    generator: 'builtin:random-asm'
+    generator
   };
   manifest.metadata = {
     'continuous.sessionId': sessionId,

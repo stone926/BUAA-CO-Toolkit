@@ -35,7 +35,10 @@ export function registerCourseTest(context: vscode.ExtensionContext, services: A
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.Test.StartContinuousGeneratedTraceTests, () => startContinuousGeneratedTraceTests(services, continuousTraceDependencies)),
     vscode.commands.registerCommand(Commands.Test.StopContinuousTests, () => stopAutomaticTests()),
-    vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, (resource?: vscode.Uri) => openAsmCaseIndex(resource))
+    vscode.commands.registerCommand(Commands.Test.OpenAsmCaseIndex, (resource?: vscode.Uri) => openAsmCaseIndex(resource, async (directory, caseId) => {
+      const { openCourseTestFailure } = await import('./courseTestFailure');
+      await openCourseTestFailure(services, directory, caseId);
+    }))
   );
 }
 

@@ -37,7 +37,7 @@ import {
   courseTraceSimulationTime,
   p7ProbeExecutionInstructionBudget
 } from './pipeline/executionBudget';
-import { CourseTracePipeline } from './pipeline/courseTracePipeline';
+import { CourseTracePipeline, type CourseTracePipelineDependencies } from './pipeline/courseTracePipeline';
 import {
   AsmCase,
   asmCaseArtifactUri,
@@ -520,7 +520,8 @@ export async function runCourseTraceCase(
   };
 }
 
-function defaultCourseTracePipeline(): CourseTracePipeline {
+/** Reuse the automatic pipeline when one caller needs to decorate a single stage. */
+export function defaultCourseTracePipeline(overrides: Partial<CourseTracePipelineDependencies> = {}): CourseTracePipeline {
   return new CourseTracePipeline({
     createCase: createAsmCaseFromAsm,
     prepareProgram: prepareAsmCaseMachineCode,
@@ -529,7 +530,8 @@ function defaultCourseTracePipeline(): CourseTracePipeline {
     compareTraces: compareTraceIterables,
     recordOracle: recordAsmCaseOracleResult,
     updateArtifacts: updateAsmCaseArtifacts,
-    copyArtifact: copyAsmCaseArtifact
+    copyArtifact: copyAsmCaseArtifact,
+    ...overrides
   });
 }
 

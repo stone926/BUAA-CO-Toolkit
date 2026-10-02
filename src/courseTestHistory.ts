@@ -6,6 +6,7 @@ import {
 } from './asmCaseStore';
 import type { AsmCaseManifestEntry } from './courseTestReport';
 import { renderAsmCaseIndex } from './courseTestReport';
+import { acceptsInspectionMessage } from './courseTesting/failureDiagnosis';
 
 const historyRefreshDebounceMs = 500;
 
@@ -33,7 +34,7 @@ const defaultLiveDependencies: AsmCaseHistoryLiveDependencies = {
 };
 
 /** Open history and keep it current only while this panel remains open. */
-export function openAsmCaseIndex(resource?: vscode.Uri): void {
+export function openAsmCaseIndex(resource?: vscode.Uri, inspect?: (casesDirectory: string, caseId: string) => Promise<void>): void {
   const indexResource = resource ?? vscode.window.activeTextEditor?.document.uri;
   const casesDirectory = asmCaseIndexDirectory(indexResource);
   const panel = vscode.window.createWebviewPanel(
@@ -46,7 +47,23 @@ export function openAsmCaseIndex(resource?: vscode.Uri): void {
       localResourceRoots: []
     }
   );
-  attachAsmCaseIndexLiveRefresh(panel, casesDirectory);
+  let visibleCases = new Set<string>();
+  let opening = false;
+  const listener = panel.webview.onDidReceiveMessage(async (message: unknown) => {
+    if (!inspect || opening || !acceptsInspectionMessage(message) || !visibleCases.has(message.caseId)) return;
+    opening = true;
+    try { await inspect(casesDirectory, message.caseId); }
+    catch (error) { void vscode.window.showErrorMessage(`无法打开用例：${error instanceof Error ? error.message : String(error)}`); }
+    finally { opening = false; }
+  });
+  panel.onDidDispose(() => listener.dispose());
+  attachAsmCaseIndexLiveRefresh(panel, casesDirectory, {
+    ...defaultLiveDependencies,
+    render: (entries) => {
+      visibleCases = new Set(entries.map(entry => entry.manifest.caseId));
+      return renderAsmCaseIndex(entries);
+    }
+  });
 }
 
 /** Small seam for testing the watcher lifecycle without constructing a VS Code panel. */

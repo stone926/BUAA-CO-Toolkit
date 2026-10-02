@@ -214,9 +214,7 @@ async function run() {
   assert.equal(manifest.oracle.engine.id, 'builtin-ts');
   await waitFor('Continuous report tab', () => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) =>
     tab.label === '持续测试' && tab.input instanceof vscode.TabInputWebview)));
-  await vscode.commands.executeCommand('co.test.openAsmCaseIndex');
-  await waitFor('Test history tab', () => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) =>
-    tab.label === '测试历史 / 失败用例' && tab.input instanceof vscode.TabInputWebview)));
+  await require('./extension-host-course-failure.cjs').verifyCourseFailure({ folder, result, bounded, waitFor });
   console.log('PASS continuous command: generator, builtin assembler, Worker oracle, Icarus mismatch, and history');
 }
 

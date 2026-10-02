@@ -130,6 +130,9 @@ export interface IverilogGeneratedTopContext {
   /** VVP working directory; relative paths inside generated sources resolve against it. */
   readonly outDir: vscode.Uri;
   readonly testbench: TestbenchResolution;
+  /** Exact sources selected for this run; waveform discovery need not scan the workspace. */
+  readonly sourceFiles?: readonly vscode.Uri[];
+  readonly moduleRegistry?: MutableVerilogModuleProvider;
 }
 
 export interface IverilogGeneratedTopModule {
@@ -379,7 +382,7 @@ async function runIverilogInWorkspace(
   await writeTextFileIfChanged(watchdog, buildIverilogWatchdog(watchdogModule));
   const generated: IverilogGeneratedFiles = { outDir, compiled, watchdog };
   const extraTopModules: { moduleName: string; file: string }[] = [];
-  for (const extra of await options.generatedTopModules?.({ folder, outDir, testbench }) ?? []) {
+  for (const extra of await options.generatedTopModules?.({ folder, outDir, testbench, sourceFiles, moduleRegistry: options.moduleRegistry }) ?? []) {
     const file = vscode.Uri.file(path.join(outDir.fsPath, path.basename(extra.fileName)));
     await writeTextFileIfChanged(file, extra.text);
     extraTopModules.push({ moduleName: extra.moduleName, file: file.fsPath });

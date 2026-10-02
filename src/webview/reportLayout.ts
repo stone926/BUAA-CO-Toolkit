@@ -39,7 +39,7 @@ export interface ReportPageOptions {
   actions?: SafeHtml;
   body: SafeHtml;
   extraCss?: string;
-  script?: 'history' | 'continuous';
+  script?: 'history' | 'continuous' | 'failure';
 }
 
 export const html = {
@@ -68,7 +68,7 @@ export function renderReportPage(options: ReportPageOptions): string {
     subtitle: options.subtitle ? `<p class="subtitle">${html.text(options.subtitle)}</p>` : '',
     actions: options.actions ? `<nav class="actions" aria-label="报告操作">${options.actions}</nav>` : '',
     script: options.script ? `<script nonce="${nonce}">${renderResourceTemplate(
-      options.script === 'history' ? 'webview/reportFilter.js' : 'webview/continuousActions.js', {}
+      options.script === 'history' ? 'webview/reportFilter.js' : options.script === 'failure' ? 'webview/failureActions.js' : 'webview/continuousActions.js', {}
     )}</script>` : '',
     body: renderSafeHtml(options.body),
     extraCss: options.extraCss ?? '',

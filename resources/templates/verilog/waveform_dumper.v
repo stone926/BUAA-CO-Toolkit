@@ -5,7 +5,7 @@ module ${moduleName};
         // 打印 testbench 时间单位，供波形查看器把 $display trace 对齐到 VCD 时间轴。
         $printtimescale(${testbench});
         $dumpfile(${dumpFile});
-        $dumpvars(0, ${testbench});
+${dumpLimit}        $dumpvars(0, ${testbench});
         // 不带存储器的 $dumpvars 不会记录数组，小存储器（如 GRF）逐字加入。
 ${memoryDumps}    end
 endmodule

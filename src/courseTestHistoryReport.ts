@@ -14,7 +14,7 @@ export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
     const automatic = manifestSourceOf(manifest).kind !== 'selected';
     const metadata = isManifestV2(manifest) ? manifest.metadata : undefined;
     const recordedStatus = metadata?.['test.status'];
-    const state = metadata?.['continuous.state'];
+    const state = metadata?.['rerun.state'] ?? metadata?.['continuous.state'];
     const outcome = recordedStatus ?? (state === 'passed' || state === 'failed' || state === 'error' ? state : undefined);
     const diagnostic = metadata?.['test.diagnostic'];
     const uncovered = outcome === 'error' && diagnostic?.startsWith('[AUTO-COVERAGE]');
@@ -36,7 +36,7 @@ export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
       cells: [
         renderBadge(outcome === 'passed' ? '通过' : outcome === 'failed' ? '失败' : uncovered ? '未覆盖'
           : outcome === 'error' ? '错误' : pendingLabel, statusTone(outcome)),
-        html.code(manifest.caseId),
+        html.raw(`${html.code(manifest.caseId)}<div class="actions"><button type="button" class="secondary" data-report-action="inspectCase" data-case-id="${html.text(manifest.caseId)}">${outcome === 'failed' || outcome === 'error' ? '定位失败' : '查看用例'}</button></div>`),
         html.raw(`${html.text(conciseDiagnostic || fallbackDiagnostic)}${scopeNotice}`),
         escapeHtml(manifest.profile),
         escapeHtml(automatic ? '自动测试' : '手动测试'),
@@ -46,7 +46,7 @@ export function renderAsmCaseIndex(cases: AsmCaseManifestEntry[]): string {
   });
   return renderReportPage({
     title: '测试历史 / 失败用例',
-    subtitle: '按创建时间倒序排列，测试结果自动更新。使用复现编号定位用例，诊断信息已脱敏。',
+    subtitle: '按创建时间倒序排列，测试结果自动更新。点击“定位失败”查看证据、定位汇编或重跑用例。',
     extraCss: `
       table { table-layout: fixed; min-width: 800px; }
       th:nth-child(1) { width: 78px; }

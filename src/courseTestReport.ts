@@ -327,6 +327,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
     ? html.raw(`<p class="muted">仅显示最近 ${html.text(visibleIterations.length)} / ${html.text(totalIterations)} 轮。</p>`)
     : html.raw('');
   const state = report.running ? (report.stopRequested ? '正在停止' : '运行中') : '已停止';
+  const problem = visibleIterations.flatMap(iteration => iteration.results).find(item => !item.cancelled && item.status !== 'passed');
 
   return renderReportPage({
     title: '持续测试',
@@ -344,7 +345,8 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
     { label: '最近一轮错误', value: latestSummary.errors, tone: latestSummary.errors ? 'warn' : 'neutral' }
   ])}
   <div class="notice${latestSummary.failed || latestSummary.errors ? ' bad' : ''}">
-    <div>失败用例可在“测试历史”中查看诊断摘要，并用复现编号定位；完整复现数据已自动保存。</div>
+    <div>${problem ? '测试已发现问题，完整复现数据已自动保存。点击“定位失败”查看证据，修改 CPU 后可重跑同一用例。' : '发现首个问题后，可直接定位失败、查看证据并重跑用例。'}</div>
+    ${problem?.caseId && !problem.artifactsPruned ? `<div class="actions"><button type="button" data-report-action="inspectCase" data-case-id="${html.text(problem.caseId)}">定位失败</button></div>` : ''}
   </div>
   ${renderSpecialProbeResults(visibleIterations, report.running)}
   <div class="section-heading"><h2>最近测试轮次</h2><span class="muted">最新记录在前</span></div>

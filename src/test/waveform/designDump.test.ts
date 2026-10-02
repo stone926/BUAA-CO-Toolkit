@@ -297,4 +297,22 @@ endmodule
     expect(clean.status, clean.stderr).toBe(0);
     expect(dumperRejection(`${clean.stderr}\n${clean.stdout}`, retryText, [memories[0]])).toBeUndefined();
   });
+
+  it('bounds VCD recording without truncating the remaining CPU execution output', () => {
+    const directory = path.join(workDir, 'limited');
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'design.v'), '`timescale 1ns/1ps\nmodule tb; reg clk=0; always #1 clk=~clk; initial begin #2000; $display("CPU_EXECUTION_COMPLETE"); $finish; end endmodule\n');
+    fs.writeFileSync(path.join(directory, 'dump.v'), buildWaveformDumper({
+      moduleName: 'w', testbench: 'tb', dumpFile: 'tb.vcd', memories: [], maximumDumpBytes: 1024
+    }));
+    const compile = spawnSync(compiler, [
+      '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', 'tb', '-s', 'w', '-o', 'sim.vvp', 'design.v', 'dump.v'
+    ], { cwd: directory, encoding: 'utf8', timeout: 20000 });
+    expect(compile.status, compile.stderr).toBe(0);
+    const run = spawnSync(simulator, ['-N', 'sim.vvp'], { cwd: directory, encoding: 'utf8', timeout: 20000 });
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('CPU_EXECUTION_COMPLETE');
+    expect(run.stdout).toMatch(/Dump file limit \(1024 bytes\) exceeded/i);
+    expect(fs.statSync(path.join(directory, 'tb.vcd')).size).toBeLessThan(4096);
+  });
 });

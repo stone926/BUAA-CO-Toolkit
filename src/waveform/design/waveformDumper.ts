@@ -19,6 +19,8 @@ export interface WaveformDumperInput {
   /** Dump path as the simulator should open it (relative to the VVP working directory). */
   readonly dumpFile: string;
   readonly memories: readonly MemoryDump[];
+  /** Icarus stops recording at this byte budget while the normal trace keeps running. */
+  readonly maximumDumpBytes?: number;
 }
 
 /** Stable per-workspace module name, mirroring the watchdog's collision-resistant naming. */
@@ -35,6 +37,9 @@ export function waveformDumperModuleName(workspaceRoot: string): string {
  * memory to blame (see `dumperRejection`).
  */
 export function buildWaveformDumper(input: WaveformDumperInput): string {
+  if (input.maximumDumpBytes !== undefined && (!Number.isSafeInteger(input.maximumDumpBytes) || input.maximumDumpBytes <= 0)) {
+    throw new RangeError('maximumDumpBytes must be a positive safe integer');
+  }
   const memoryDumps = input.memories.map((memory) => {
     const words: string[] = [];
     for (let index = memory.first; index <= memory.last; index++) {
@@ -50,7 +55,8 @@ export function buildWaveformDumper(input: WaveformDumperInput): string {
     moduleName: input.moduleName,
     testbench: input.testbench,
     dumpFile: verilogStringLiteral(input.dumpFile),
-    memoryDumps
+    memoryDumps,
+    dumpLimit: input.maximumDumpBytes === undefined ? '' : `        $dumplimit(${input.maximumDumpBytes});\n`
   });
 }
 

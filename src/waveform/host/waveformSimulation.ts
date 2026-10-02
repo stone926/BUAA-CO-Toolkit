@@ -3,26 +3,17 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { CO_WAVE_DIR } from '../../constants';
-import { ensureDirectory, workspaceFolderFor } from '../../fsUtil';
+import { workspaceFolderFor } from '../../fsUtil';
 import type { MutableVerilogModuleProvider } from '../../language/verilog/moduleProvider';
 import { pathExists } from '../../nodeFs';
 import { samePath } from '../../pathUtils';
-import type { AppServices, RunResult } from '../../types';
+import type { AppServices } from '../../types';
 import { IverilogRunOutput, runIverilog } from '../../verilog/iverilogRunner';
-import type { TestbenchResolution } from '../../verilog/testbenchResolver';
 import type { UserCpuProgramSession } from '../../verilog/userCpuProgram';
-import { findDumpableMemories, MemoryDump } from '../design/designHierarchy';
-import {
-  buildWaveformDumper,
-  dumperRejection,
-  DumperRejection,
-  dumpFileArgument,
-  waveformDumperFileName,
-  waveformDumperModuleName
-} from '../design/waveformDumper';
-import { createDesignModuleLookup } from './designModules';
-
-const dumpfileOpenedPattern = /^VCD info: dumpfile (.+) opened for output\.?\s*$/m;
+import type { MemoryDump } from '../design/designHierarchy';
+import type { DumperRejection } from '../design/waveformDumper';
+import { WaveformDumpSetup, describeDumpMemories as describeMemories, locateDumpFile } from './waveformDumpSetup';
+export { locateDumpFile } from './waveformDumpSetup';
 
 export interface WaveformSimulationDependencies {
   readonly services: AppServices;
@@ -90,13 +81,11 @@ async function runWithDumper(
   requestedMemories: readonly MemoryDump[] | undefined,
   userCpuProgramSession: UserCpuProgramSession
 ): Promise<DumperAttempt> {
-  let memories: readonly MemoryDump[] = requestedMemories ?? [];
-  let dumperText = '';
-  let rejection: DumperRejection | undefined;
-  const rejectsMemoryDump = (result: RunResult): boolean => {
-    rejection = memories.length ? dumperRejection(`${result.stderr}\n${result.stdout}`, dumperText, memories) : undefined;
-    return rejection !== undefined;
-  };
+  const setup = new WaveformDumpSetup(
+    (testbenchName) => vscode.Uri.file(path.join(waveDirectory.fsPath, `${testbenchName}.vcd`)),
+    requestedMemories,
+    dependencies.moduleRegistry
+  );
   const run = await vscode.window.withProgress({
     location: vscode.ProgressLocation.Notification,
     title: '正在仿真并生成波形…',
@@ -113,48 +102,11 @@ async function runWithDumper(
         revealOutput: false,
         announceSuccess: false,
         simOutputDirectory: waveDirectory,
-        shouldReportCompileFailure: (result) => !rejectsMemoryDump(result),
-        acceptCompileResult: (result) => !rejectsMemoryDump(result),
-        generatedTopModules: async ({ folder, outDir, testbench }) => {
-          await ensureDirectory(waveDirectory);
-          memories = requestedMemories ?? await discoverMemories(testbench, dependencies.moduleRegistry);
-          const dumpPath = path.join(waveDirectory.fsPath, `${testbench.moduleName}.vcd`);
-          const moduleName = waveformDumperModuleName(folder.uri.fsPath);
-          dumperText = buildWaveformDumper({
-            moduleName,
-            testbench: testbench.moduleName,
-            dumpFile: dumpFileArgument(outDir.fsPath, dumpPath),
-            memories
-          });
-          return [{ moduleName, fileName: waveformDumperFileName, text: dumperText }];
-        }
+        ...setup.hooks()
       });
     } finally {
       cancellation.dispose();
     }
   });
-  return { run, memories, rejection };
-}
-
-async function discoverMemories(
-  testbench: TestbenchResolution,
-  registry: MutableVerilogModuleProvider | undefined
-): Promise<MemoryDump[]> {
-  const sources = [testbench.generatedUri, testbench.sourceUri]
-    .filter((uri): uri is vscode.Uri => uri?.scheme === 'file')
-    .map((uri) => uri.fsPath);
-  const lookup = await createDesignModuleLookup(registry, sources);
-  const root = lookup(testbench.moduleName);
-  return root ? findDumpableMemories(root, lookup) : [];
-}
-
-function describeMemories(memories: readonly MemoryDump[]): string {
-  const names = memories.slice(0, 3).map((memory) => memory.path);
-  return memories.length > names.length ? `${names.join('、')} 等 ${memories.length} 个存储器` : names.join('、');
-}
-
-/** The dump the simulator actually opened (a testbench's own `$dumpfile` may win the race). */
-export function locateDumpFile(stdout: string, workingDirectory: string): vscode.Uri | undefined {
-  const match = dumpfileOpenedPattern.exec(stdout);
-  return match ? vscode.Uri.file(path.resolve(workingDirectory, match[1].trim())) : undefined;
+  return { run, memories: setup.memories, rejection: setup.rejection };
 }

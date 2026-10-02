@@ -13,6 +13,9 @@
     status: element.className
   }));
   const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : undefined;
+  document.querySelectorAll('[data-report-action="inspectCase"]').forEach((button) => {
+    button.addEventListener('click', () => vscode?.postMessage({ action: 'inspectCase', caseId: button.getAttribute('data-case-id') }));
+  });
   const saved = vscode?.getState();
   if (saved && typeof saved.query === 'string') search.value = saved.query;
   if (saved && Array.from(status.options).some((option) => option.value === saved.status)) status.value = saved.status;

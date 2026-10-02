@@ -17,7 +17,7 @@ import {
 import { ensureDirectory, writeTextFile } from './fsUtil';
 import { checkToolchain } from './toolchain';
 import { AppServices } from './types';
-import { recordAsmCaseTestOutcome } from './asmCaseStore';
+import { asmCaseIndexDirectory, recordAsmCaseTestOutcome } from './asmCaseStore';
 import {
   discardContinuousGeneratedAsmCase,
   discardContinuousPassingAsmCase,
@@ -50,6 +50,8 @@ import { tryAcquireCourseTestSession } from './courseTesting/courseTestSession';
 import { manifestP7Of } from './courseTesting/manifestCodec';
 import type { AsmCaseManifestUnion } from './courseTesting/manifestCodec';
 import { probeScopeFromCase } from './courseTesting/p7ProbeScope';
+import { serializeFailureEvidence } from './courseTesting/failureEvidence';
+import { acceptsInspectionMessage } from './courseTesting/failureDiagnosis';
 
 interface ContinuousTraceSession {
   id: string;
@@ -254,6 +256,15 @@ export async function startContinuousGeneratedTraceTests<
         } catch (error) {
           void vscode.window.showErrorMessage(`无法打开测试历史：${error instanceof Error ? error.message : String(error)}`);
         } finally { openingHistory = false; }
+      } else if (acceptsInspectionMessage(message) && !openingHistory
+        && monitorSession.report.iterations.some(iteration => iteration.results.some(result => result.caseId === message.caseId && !result.artifactsPruned))) {
+        openingHistory = true;
+        try {
+          const { openCourseTestFailure } = await import('./courseTestFailure');
+          await openCourseTestFailure(services, asmCaseIndexDirectory(monitorResource), message.caseId);
+        } catch (error) {
+          void vscode.window.showErrorMessage(`无法打开用例：${error instanceof Error ? error.message : String(error)}`);
+        } finally { openingHistory = false; }
       }
     });
     panel.onDidDispose(() => {
@@ -391,6 +402,7 @@ export async function startContinuousGeneratedTraceTests<
                 status: result.status,
                 stage: neutralCourseTraceStage(result.stage),
                 diagnostic: publicAutomaticDiagnosticMessage(result),
+                evidence: serializeFailureEvidence(result),
                 ...(ownedCase ? {
                   continuous: {
                     sessionId: session.id,

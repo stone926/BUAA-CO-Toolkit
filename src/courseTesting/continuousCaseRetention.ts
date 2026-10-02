@@ -22,6 +22,7 @@ export interface ContinuousAsmCaseOutcome {
   readonly status: 'passed' | 'failed' | 'error';
   readonly stage: 'assemble' | 'oracle' | 'dut' | 'compare' | 'probe' | 'internal';
   readonly diagnostic: string;
+  readonly evidence?: string;
   readonly state: 'passed' | 'failed' | 'error';
 }
 
@@ -75,6 +76,7 @@ export async function recordContinuousAsmCaseOutcome(
       'test.status': outcome.status,
       'test.stage': outcome.stage,
       'test.diagnostic': outcome.diagnostic,
+      ...(outcome.evidence ? { 'test.evidence': outcome.evidence } : {}),
       'continuous.state': outcome.state
     };
     assertManifestStringMapEntries(metadata, 'metadata');
@@ -274,7 +276,9 @@ async function readContinuousOwnedAsmCase(
   }
   if (!isKnownManifest(manifest) || !isManifestV2(manifest)) return undefined;
   if (manifest.caseId !== path.basename(caseDir)) return undefined;
-  if (manifest.source.kind !== 'builtin' || manifest.source.generator !== 'builtin:random-asm') return undefined;
+  if (manifest.source.kind !== 'builtin'
+    || (manifest.source.generator !== 'builtin:random-asm'
+      && manifest.source.generator !== 'builtin:register-coverage')) return undefined;
   if (manifest.metadata?.['continuous.sessionId'] !== sessionId) return undefined;
   const state = manifest.metadata?.['continuous.state'];
   if (!state || !allowedStates.includes(state as ContinuousAsmCaseState)) return undefined;

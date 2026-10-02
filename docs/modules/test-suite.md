@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 247 files | 框架: Vitest
+# test-suite | src/test/ | 253 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -9,8 +9,8 @@
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
 | `test/language/` | 77 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
-| `test/`（根） | 46 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
-| `test/courseTesting/` | 41 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
+| `test/`（根） | 48 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
+| `test/courseTesting/` | 45 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
 | `test/verilog/` | 15 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
@@ -28,6 +28,7 @@
 
 - `scripts/verify-bundled-iverilog.mjs` / `verify-bundled-iverilog-course.mjs` — 按 host platform/arch 选择五个 runtime 之一，在隔离 PATH 下验证中文与空格路径的 syntax success/failure、compile/VVP、`$readmemh`/`$display`、watchdog 与课程兼容
 - `scripts/verify-extension-host.mjs` + `extension-host-smoke.cjs` — `@vscode/test-electron` 加载最终 VSIX 解包目录，创建中文空格工作区，验证真实激活、LSP 保存诊断与修复、`co.verilog.runSimulation`、持续测试的内置生成器/assembler/Worker oracle/Icarus 故意错误 DUT 与首失败停止
+- `scripts/extension-host-course-failure.cjs` — 同一真实宿主中从历史进入诊断，检查保存的 PC→ASM 行，经过 Worker/Icarus/私有 TB 重跑生成独立失败记录与 VCD，再从历史重新打开保存波形，确认原证据不变
 - `scripts/extension-host-custom-testbench-smoke.cjs` — 同一真实宿主中验证 `tb.v` / `testbench.v` 的同名与异名模块选择、DUT 时钟激励、无关错误 TB 排除、编译/运行失败后的修复，以及 VCD、仿真 trace 与内置波形查看器
 - `scripts/extension-host-asm-smoke.cjs` — 同一真实宿主中验证 P3–P7 内置汇编导出（外部 Java/MARS 不可用）、中文空格路径 include/宏、逐字机器码与停机尾、P7 0x4180 handler 与独立 kernel 文件，以及错误导出保留已有产物和修复
 - `scripts/extension-host-mars-workbench.cjs` — 同一真实宿主中验证生产 MARS 工作台面板与 Worker 的汇编、单步、stdin、等待输入时的内存跳转、断点、终态检查、段导出、取消、源文件变化和 P7 syscall trap；浏览器 fixture 的手动构建/检查命令见 `mips-debug.md`
@@ -50,6 +51,8 @@
 - `scripts/extension-host-formatting-smoke.cjs` 由真实宿主入口调用，通过 VS Code 全文/选区 provider 应用 edits，覆盖幂等、缩进设置和保护区域，不 mock 格式化核心。
 
 ## 回归重点
+
+- **失败排查闭环**：`src/test/courseTestFailure.test.ts` / `src/test/courseTestFailureReport.test.ts` 验证源码/trace行号分离、消息边界、占用会话与取消、重跑独立结果及历史波形重开；`src/test/courseTesting/failureEvidence.test.ts` / `src/test/courseTesting/caseInspection.test.ts` 覆盖有界导航证据、include源图映射、hash损坏降级；`src/test/courseTesting/caseRerun.test.ts` / `src/test/courseTesting/caseRerunWaveform.test.ts` 覆盖真实源闭包与 bundled Icarus VCD/trace配对、静默编译失败降级及dump限制。`node scripts/verify-course-failure-browser.mjs` 验证真实浏览器中的按钮消息、禁用态、宽/窄视口并保存截图。
 
 - **特殊测试结果展示**：通过/失败/工具错误与范围说明分别保留；运行中先发布 activeCase，完成后保存具体首失败；历史无结果和取消不冒充终态，限定目录监视、合并刷新及关闭后的异步读保护
 - **课程自动测试**：P3–P7 独立 GPR 双端口读与存储观察（每持续会话一次），随机点保留默认最大 payload；jr 生产者 × 间隔 0/1/2 的陈旧目标变异；小预算跳转毒指令、双向控制流与错误路径变异；双端口/最新写优先/load-store lane 的可观察依赖；P7 原 130 变体完整保留（36 个特殊 Timer 变体单独说明），older-MDU 四变体、Mode1 停机去断言、五种真实双 IRQ 程序及字段/顺序/重放损坏反例；continuous 的会话所有权清理与 fail-closed 保留
