@@ -46,6 +46,46 @@ describe('debug worker job', () => {
       emitProgress() { abort.abort(); return undefined; }
     })).rejects.toThrow('cancelled');
   });
+  it('inspects a suspended syscall through tagged ACKs without advancing or replacing it', async () => {
+    const waiting: { request: { id: number }; snapshot: DebugSnapshot }[] = [];
+    const commands = [
+      { kind: 'mars-debug-command', command: { kind: 'memory', address: 0x10010000, words: 1 } },
+      { kind: 'mars-debug-command', command: { kind: 'set-breakpoints', addresses: [0x400008] } }
+    ];
+    const result = await executeProductionWorkerJob('mars-debug', {
+      image: image('.data\nx: .word 42\n.text\nli $v0, 5\nsyscall\naddiu $t0, $zero, 7'), mode: { kind: 'mars' }
+    }, {
+      signal: new AbortController().signal,
+      emitProgress(batch) {
+        const progress = batch[0] as { kind: string; request: { id: number }; snapshot: DebugSnapshot };
+        if (progress.kind === 'mars-io') {
+          waiting.push(progress);
+          return commands.shift() ?? { id: progress.request.id, text: '23' };
+        }
+        if (!waiting.length) return { kind: 'continue' };
+        if (progress.snapshot.status === 'running') return undefined;
+        expect(progress.snapshot).toMatchObject({ pc: 0x400008, instructions: 2, reason: 'breakpoint' });
+        expect(progress.snapshot.gpr[2]).toBe(23);
+        expect(progress.snapshot.gpr[8]).toBe(0);
+        return { kind: 'stop' };
+      }, yieldControl: async () => undefined
+    });
+    expect(result).toMatchObject({ status: 'stopped' });
+    expect(waiting).toHaveLength(3);
+    expect(new Set(waiting.map(item => item.request.id)).size).toBe(1);
+    for (const progress of waiting) expect(progress.snapshot).toMatchObject({ pc: 0x400004, instructions: 1 });
+    expect(waiting[1].snapshot.memory.words).toEqual([{ address: 0x10010000, value: 42 }]);
+    expect(waiting[2].snapshot.breakpoints).toEqual([0x400008]);
+  });
+  it('rejects execution commands disguised as suspended-IO inspection ACKs', async () => {
+    await expect(executeProductionWorkerJob('mars-debug', { image: image('li $v0, 5\nsyscall'), mode: { kind: 'mars' } }, {
+      signal: new AbortController().signal,
+      emitProgress(batch) {
+        return (batch[0] as { kind: string }).kind === 'mars-io'
+          ? { kind: 'mars-debug-command', command: { kind: 'continue' } } : { kind: 'continue' };
+      }
+    })).rejects.toThrow('Only inspection commands');
+  });
   it('requires explicit known mode and bounded commands and image bytes', () => {
     for (const payload of [{ image: image() }, { image: image(), mode: { kind: 'course', profile: 'P2' } },
       { image: image(), mode: { kind: 'mars' }, maxSteps: 0 }, { image: image(), mode: { kind: 'mars', delayedBranching: 1 } },

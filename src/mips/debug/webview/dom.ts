@@ -4,6 +4,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   node.className = className;
+  if (className.split(' ').includes('table-scroll')) node.tabIndex = 0;
   if (text !== undefined) node.textContent = text;
   return node;
 }

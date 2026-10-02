@@ -54,7 +54,7 @@ button {
 }
 button:hover:not(:disabled) { background: var(--hover); }
 button:disabled { opacity: .4; cursor: default; }
-button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, pre:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, pre:focus-visible, .table-scroll:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); }
@@ -185,7 +185,15 @@ tbody tr:hover { background: var(--hover); }
 .register-value .change-marker { margin-right: 5px; }
 .register-legend { display: flex; align-items: center; gap: 6px; color: var(--muted); background: var(--surface); font-size: 10px; padding: 8px 13px; border-top: 1px solid var(--border); }
 
-.inspection { display: flex; flex-direction: column; flex: 0 0 29vh; min-height: 210px; max-height: 370px; }
+.inspection-slot { flex: 0 0 32vh; min-height: 250px; max-height: 400px; min-width: 0; }
+.inspection-slot[data-tab="syscalls"], .inspection-slot[data-tab="memory"] { flex-basis: 58vh; min-height: 440px; max-height: 740px; }
+.inspection { display: flex; flex-direction: column; height: 100%; }
+.inspection-header { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border-bottom: 1px solid var(--border); flex: 0 0 auto; gap: 4px; }
+.inspection-header .tabs { border: 0; min-width: 0; gap: 0; padding-inline: 4px; }
+.inspection-expand { margin-right: 10px; color: var(--accent-text); font-size: 11px; padding: 4px 8px; }
+.inspection-dialog { padding: 0; border: 1px solid var(--border); border-radius: 9px; width: min(1440px, 94vw); height: 90vh; max-width: none; max-height: none; background: var(--bg); color: var(--fg); box-shadow: 0 18px 70px #0008; }
+.inspection-dialog::backdrop { background: #0009; }
+.inspection-dialog .inspection { border: 0; }
 .inspection > [role="tabpanel"] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .panel-toolbar { display: flex; align-items: center; gap: 9px; padding: 7px 13px; flex: 0 0 auto; }
 .panel-toolbar > .muted:first-child { margin-right: auto; }
@@ -204,6 +212,7 @@ tbody tr:hover { background: var(--hover); }
 .memory-toolbar { flex-wrap: wrap; border-bottom: 1px solid var(--soft-border); }
 .memory-toolbar input { font-family: var(--mono); width: 145px; }
 .memory-toolbar select { max-width: 250px; }
+.memory-notice { padding: 5px 13px; font-size: 11px; border-bottom: 1px solid var(--soft-border); flex: 0 0 auto; }
 .address-error { color: var(--error); font-size: 11px; }
 .address-error:empty { display: none; }
 .memory-table { min-width: 470px; }
@@ -258,7 +267,8 @@ body.vscode-high-contrast .tab[aria-selected="true"], body.vscode-high-contrast-
   .cpu-layout { grid-template-columns: 1fr; flex: none; min-height: 0; }
   .listing-pane { height: 390px; }
   .register-pane { height: 310px; }
-  .inspection { flex: none; height: 315px; max-height: none; }
+  .inspection-slot { flex: none; height: 340px; max-height: none; }
+  .inspection-slot[data-tab="syscalls"], .inspection-slot[data-tab="memory"] { height: 65vh; min-height: 460px; }
   .register-pane .tabs { width: 285px; max-width: 100%; border-bottom: none; }
   .register-pane .pane-title .subtle { display: inline; }
   .mode-control { margin-left: auto; }
@@ -285,7 +295,17 @@ body.vscode-high-contrast .tab[aria-selected="true"], body.vscode-high-contrast-
   .console-input .primary { padding-inline: 12px; }
   .console-input > button:last-child { margin-left: auto; font-size: 11px; }
   .pane-title .subtle { display: none; }
+  .inspection-header .tab { padding-inline: 9px; }
+  .inspection-expand { margin-right: 4px; padding-inline: 5px; }
   .workbench-footer { display: none; }
+}
+@media (max-width: 760px) {
+  .syscall-scroll table { min-width: 0; }
+  .syscall-scroll thead { display: none; }
+  .syscall-scroll tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .syscall-scroll td { width: auto !important; padding: 4px 13px; border: 0; overflow-wrap: anywhere; }
+  .syscall-scroll td:nth-child(2), .syscall-scroll td:nth-child(3) { grid-column: 1 / -1; }
+  .syscall-scroll td:last-child { grid-column: 2; grid-row: 1; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 @media (forced-colors: active) { * { scrollbar-color: auto; } }

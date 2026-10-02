@@ -9,10 +9,10 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   common-lsp      | docs/modules/common-lsp.md      | 7 files  | 共享 LSP 基础设施
   mips-lsp        | docs/modules/mips-lsp.md        | 34 files | MIPS 汇编语言支持
   mips-core       | docs/modules/mips-core.md       | 65 files | 纯 TS MIPS 引擎核心（课程与普通 MARS ISA/profile/assembler/machine/devices/events/debug）
-  mips-debug      | docs/modules/mips-debug.md      | 18 files | 内置 MARS 调试工作台（VS Code 面板、状态投影与 Webview）
+  mips-debug      | docs/modules/mips-debug.md      | 19 files | 内置 MARS 调试工作台（VS Code 面板、状态投影与 Webview）
   mips-cli        | docs/modules/mips-cli.md        | 2 files  | 独立、版本化、有界 JSONL ISA/执行/设备接口
   mips-providers  | docs/modules/mips-providers.md  | 9 files  | Provider-neutral 引擎契约与不可变 CourseEnginePlan
-  mips-host       | docs/modules/mips-host.md       | 12 files | 懒启动 Worker、普通 MARS syscall I/O、交互调试、真实 ISA batch 与 ACK 背压
+  mips-host       | docs/modules/mips-host.md       | 13 files | 懒启动 Worker、普通 MARS syscall I/O、交互调试、真实 ISA batch 与 ACK 背压
   mips-replay     | docs/modules/mips-replay.md     | 9 files  | manifest v2 用例闭包、可信引擎注册表与证据校验
   verilog-lsp     | docs/modules/verilog-lsp.md     | 75 files | Verilog HDL 语言支持（子模块：verilog-ast 8、verilog-diagnostics 12）
   logisim-lsp     | docs/modules/logisim-lsp.md     | 2 files  | Logisim 电路文件

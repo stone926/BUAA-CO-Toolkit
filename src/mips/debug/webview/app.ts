@@ -7,7 +7,7 @@ import { Registers } from './registers';
 import { ConsoleView } from './console';
 import { MemoryView } from './memory';
 import { ReferenceViews } from './reference';
-import { Tabs } from './tabs';
+import { Inspection } from './inspection';
 
 const STATUS: Record<WorkbenchState['status'], string> = {
   empty: '准备开始', assembling: '正在汇编', paused: '已暂停', running: '运行中', input: '等待输入',
@@ -36,7 +36,7 @@ export class WorkbenchApp {
   private readonly console: ConsoleView;
   private readonly memory: MemoryView;
   private readonly references: ReferenceViews;
-  private readonly bottomTabs: Tabs;
+  private readonly inspection = new Inspection();
   private state?: WorkbenchState;
   private pending?: WorkbenchState;
   private frame = 0;
@@ -78,16 +78,24 @@ export class WorkbenchApp {
     middle.append(this.listing.element, this.registers.element);
     this.console = new ConsoleView(send);
     this.memory = new MemoryView(send);
-    this.references = new ReferenceViews(send);
-    const bottom = el('section', 'inspection pane');
-    this.bottomTabs = new Tabs('程序检查');
-    bottom.append(this.bottomTabs.element);
+    this.references = new ReferenceViews(request => {
+      if (request.type === 'listing' && request.address !== undefined) {
+        this.inspection.close();
+        this.listing.revealAddress(request.address);
+        this.listing.element.scrollIntoView({ block: 'nearest' });
+      } else {
+        if (request.type === 'memory') {
+          this.inspection.activate('memory');
+          this.memory.reveal();
+        }
+        send(request);
+      }
+    });
     for (const [id, name, panel] of [
       ['console', '控制台', this.console.element], ['memory', '内存', this.memory.element],
       ['symbols', '符号', this.references.symbols], ['syscalls', '系统服务', this.references.syscalls]
     ] as const) {
-      this.bottomTabs.add(id, name, panel);
-      bottom.append(panel);
+      this.inspection.add(id, name, panel);
     }
     const help = el('details', 'workbench-help');
     help.append(el('summary', '', '初次使用 · 操作提示'), el('p', '', '1. 打开 MIPS 源文件并汇编。 2. 点击指令旁的圆点设置断点。 3. 运行至断点或逐条执行，观察高亮寄存器和内存。点击源代码可返回编辑器。'), el('p', '', '工作台获得焦点时：F5 运行 / 暂停 · F10 单步 · Shift+F5 停止。寄存器的十进制视图按有符号 32 位整数显示；浮点页显示原始位模式。'));
@@ -102,7 +110,7 @@ export class WorkbenchApp {
     footer.append(el('span', 'engine-label', 'BUAA CO · 内置 MIPS 引擎'), shortcuts);
     const footnotes = el('div', 'workbench-footnotes');
     footnotes.append(help, footer);
-    app.append(heading, toolbar, context, this.stale, middle, bottom, footnotes);
+    app.append(heading, toolbar, context, this.stale, middle, this.inspection.element, footnotes);
     root.replaceChildren(app);
     this.setDisconnected();
     window.addEventListener('message', event => {
@@ -168,12 +176,14 @@ export class WorkbenchApp {
     this.stale.querySelector('button')!.disabled = busy;
     this.delay.hidden = !state.delaySlot;
     text(this.delay, '延迟槽');
+    // Set the final layout before measuring the listing for PC following.
+    if (state.status === 'input' && !wasInput) this.inspection.activate('console');
     this.listing.update(state);
     this.registers.update(state);
     this.console.update(state);
     this.memory.update(state);
     this.references.update(state);
-    if (state.status === 'input' && !wasInput) this.bottomTabs.activate('console');
+    if (state.status === 'input' && !wasInput) this.console.focusInput();
   }
   private runOrPause(): void {
     if (this.run.disabled) return;

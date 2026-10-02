@@ -53,6 +53,25 @@ function fixture(text: string) {
 function gpr(state: WorkbenchState, index: number): number | undefined { return state.registers.find(item => item.detail === `$${index}`)?.value; }
 
 describe('workbench controller with the real production job executor', () => {
+  it('keeps faulted machine memory inspectable but disables inspection after Stop or assembly failure', async () => {
+    const { controller, jobs, capture } = fixture('.data\nx: .word 42\n.space 252\ny: .word 77\n.text\nlw $t0, 1($zero)');
+    try {
+      expect(controller.state.memoryAvailable).toBe(false);
+      await controller.assemble(); await until(() => controller.state.status === 'paused');
+      await controller.handle({ type: 'run' }); await until(() => controller.state.status === 'error');
+      expect(controller.state.memoryAvailable).toBe(true);
+      await controller.handle({ type: 'memory', address: 0x10010100 });
+      await until(() => controller.state.memoryAddress === 0x10010100);
+      expect(controller.state.memory[0]?.value).toBe(77);
+      expect(controller.state.status).toBe('error');
+      await controller.handle({ type: 'stop' });
+      expect(controller.state.memoryAvailable).toBe(false);
+      capture.mockResolvedValueOnce({ sources: [{ id: 'main', text: 'invalid_instruction' }], includes: [] });
+      await controller.assemble();
+      expect(controller.state.status).toBe('error');
+      expect(controller.state.memoryAvailable).toBe(false);
+    } finally { controller.dispose(); await until(() => jobs.every(job => job.finished)); }
+  });
   it('shows the exact waiting syscall PC and registers after continuous execution', async () => {
     const { controller, jobs } = fixture('li $t0, 31\nli $v0, 5\nsyscall\n');
     try {
@@ -91,6 +110,33 @@ describe('workbench controller with the real production job executor', () => {
       await controller.handle({ type: 'eof' }); await until(() => controller.state.status === 'exited');
       await controller.handle({ type: 'reset' }); await until(() => controller.state.status === 'paused' && controller.state.steps === 0);
       await controller.handle({ type: 'run' }); await until(() => controller.state.status === 'input');
+    } finally { controller.dispose(); await until(() => jobs.every(job => job.finished)); }
+  });
+  it('keeps input and prompt live while switching memory pages and regions before submitting once', async () => {
+    const { controller, jobs, states } = fixture('.data\nx: .word 42\n.space 252\ny: .word 77\n.text\nli $v0, 5\nsyscall\naddiu $t0, $zero, 7\nli $v0, 10\nsyscall');
+    try {
+      await controller.assemble(); await until(() => controller.state.status === 'paused');
+      await controller.handle({ type: 'run' }); await until(() => controller.state.status === 'input');
+      const { pc, steps, inputPrompt } = controller.state;
+      const start = states.length;
+      for (const address of [0x10010100, 0x7fffeffc, 0x400000, 0x10010000]) {
+        await controller.handle({ type: 'memory', address });
+        await until(() => controller.state.memoryAddress === address);
+        expect(controller.state).toMatchObject({ status: 'input', pc, steps, inputPrompt });
+      }
+      expect(controller.state.memory[0]?.value).toBe(42);
+      await controller.handle({ type: 'breakpoint', address: 0x400008 });
+      await controller.handle({ type: 'memory', address: 0x10010100 });
+      await until(() => controller.state.memoryAddress === 0x10010100);
+      expect(controller.state.memory[0]?.value).toBe(77);
+      for (const state of states.slice(start)) expect(state).toMatchObject({ status: 'input', pc, steps, inputPrompt });
+      await controller.handle({ type: 'input', text: '23' });
+      await until(() => controller.state.status === 'paused' && controller.state.pc === 0x400008);
+      expect(controller.state.steps).toBe(2);
+      expect(gpr(controller.state, 2)).toBe(23);
+      expect(gpr(controller.state, 8)).toBe(0);
+      expect(controller.state.console).toBe('23\n');
+      expect(controller.state.inputPrompt).toBeUndefined();
     } finally { controller.dispose(); await until(() => jobs.every(job => job.finished)); }
   });
   it('reset during input cancels the old generation and queued breakpoints apply before resuming', async () => {

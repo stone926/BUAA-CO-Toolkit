@@ -1,7 +1,8 @@
 // @index mips-host — Resumable debugger transport and ordinary syscall IO with bounded command queues
 import * as path from 'path';
 import type { DebugCommand, DebugSessionOptions, DebugSnapshot } from '../core/debug/api';
-import type { MarsIoRequest } from '../core/mars/api';
+import type { MarsIoRequest, MarsIoResponse } from '../core/mars/api';
+import { isDebugInspectionCommand, type DebugIoCommand } from './debugProtocol';
 import { MarsHostIo } from './marsIo';
 import type { MarsRuntimeHost } from './marsService';
 
@@ -16,6 +17,8 @@ export class MarsDebugClient {
   private readonly abort = new AbortController();
   private readonly queue: DebugCommand[] = [];
   private waiting?: (command: DebugCommand | undefined) => void;
+  private inspectionOnly = false;
+  private pendingIo?: { id: number; response: Promise<{ response: MarsIoResponse } | { error: unknown }> };
   private timer?: ReturnType<typeof setImmediate>;
   private readonly io: MarsHostIo;
   private finished = false;
@@ -29,7 +32,7 @@ export class MarsDebugClient {
 
   command(command: DebugCommand): void {
     if (this.finished || this.abort.signal.aborted) return;
-    if (this.waiting) {
+    if (this.waiting && (!this.inspectionOnly || isDebugInspectionCommand(command))) {
       const waiting = this.waiting;
       this.waiting = undefined;
       if (this.timer) clearImmediate(this.timer);
@@ -54,7 +57,7 @@ export class MarsDebugClient {
           const item = batch[0] as { kind: string; snapshot?: DebugSnapshot; request?: MarsIoRequest };
           if (item.kind === 'mars-io' && item.request) {
             if (item.snapshot) this.callbacks.snapshot(item.snapshot);
-            return this.io.respond(item.request);
+            return this.respondToIo(item.request);
           }
           if (item.kind !== 'mars-debug' || !item.snapshot) throw new Error('Invalid debug snapshot');
           this.callbacks.snapshot(item.snapshot);
@@ -63,6 +66,7 @@ export class MarsDebugClient {
           if (this.queue.length) return this.queue.shift();
           return await new Promise<DebugCommand | undefined>(resolve => {
             this.waiting = resolve;
+            this.inspectionOnly = false;
             if (item.snapshot!.status === 'running') {
               // Yield for control events; the view independently coalesces rendering.
               this.timer = setImmediate(() => { this.waiting = undefined; this.timer = undefined; resolve(undefined); });
@@ -83,11 +87,42 @@ export class MarsDebugClient {
 
   dispose(): void { this.abort.abort(); this.release(); }
 
+  private async respondToIo(request: MarsIoRequest): Promise<MarsIoResponse | DebugIoCommand | undefined> {
+    // Repeated progress snapshots describe the same suspended syscall. Its host
+    // service runs once, even if inspection releases several Worker ACKs first.
+    const pending = this.pendingIo ??= { id: request.id, response: this.io.respond(request).then(
+      response => ({ response }), error => ({ error })) };
+    if (pending.id !== request.id) throw new Error('Unexpected debugger IO request');
+    const index = this.queue.findIndex(isDebugInspectionCommand);
+    if (index >= 0) return { kind: 'mars-debug-command', command: this.queue.splice(index, 1)[0] as DebugIoCommand['command'] };
+    let waiter!: (command: DebugCommand | undefined) => void;
+    let received: DebugCommand | undefined;
+    const command = new Promise<{ command: DebugCommand | undefined }>(resolve => {
+      waiter = value => { received = value; resolve({ command: value }); };
+      this.waiting = waiter;
+      this.inspectionOnly = true;
+    });
+    const result = await Promise.race([pending.response, command]);
+    if (this.waiting === waiter) this.waiting = undefined;
+    // If input and a command settle in the same turn, honor the command before
+    // returning the cached IO response on the next ACK instead of losing it.
+    if (received || 'command' in result) {
+      if (!received) return undefined;
+      if (!isDebugInspectionCommand(received)) throw new Error('Invalid debugger IO inspection');
+      return { kind: 'mars-debug-command', command: received };
+    }
+    this.pendingIo = undefined;
+    if ('error' in result) throw result.error;
+    return result.response;
+  }
+
   private release(): void {
     if (this.timer) clearImmediate(this.timer);
     this.timer = undefined;
     this.queue.length = 0;
     this.waiting?.(undefined);
     this.waiting = undefined;
+    this.pendingIo = undefined;
+    this.inspectionOnly = false;
   }
 }

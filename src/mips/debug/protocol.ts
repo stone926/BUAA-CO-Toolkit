@@ -28,6 +28,7 @@ export interface WorkbenchState {
   cp0: readonly WorkbenchRegister[];
   memory: readonly WorkbenchMemoryWord[];
   memoryAddress: number;
+  memoryAvailable: boolean;
   memoryRegions: readonly { name: string; address: number }[];
   symbols: readonly { name: string; value: number; segment?: string; kind?: 'label' | 'eqv' }[];
   breakpoints: readonly number[];

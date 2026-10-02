@@ -6,6 +6,7 @@ import { DebugSession } from '../core/debug/session';
 import { isDebugRecord, parseDebugBreakpoints, parseDebugMemory, requireDebugKeys } from '../core/debug/validation';
 import type { MarsIoResponse } from '../core/mars/api';
 import { parseMarsProgramImage } from './marsJobs';
+import { parseDebugIoCommand } from './debugProtocol';
 import type { WorkerJobExecutionContext } from './workerJobs';
 
 export async function executeMarsDebugJob(payload: unknown, context: WorkerJobExecutionContext): Promise<unknown> {
@@ -20,9 +21,13 @@ export async function executeMarsDebugJob(payload: unknown, context: WorkerJobEx
     if (session.running) {
       const request = session.advance();
       if (request) {
-        const ioResponse = await context.emitProgress([{ kind: 'mars-io', request, snapshot: session.snapshot() }]);
-        if (context.signal.aborted) break;
-        session.resume(ioResponse as MarsIoResponse);
+        while (!context.signal.aborted) {
+          const ioResponse = await context.emitProgress([{ kind: 'mars-io', request, snapshot: session.snapshot() }]);
+          if (context.signal.aborted) break;
+          const inspection = parseDebugIoCommand(ioResponse);
+          if (inspection) session.command(inspection);
+          else { session.resume(ioResponse as MarsIoResponse); break; }
+        }
       }
     }
     await yieldControl();

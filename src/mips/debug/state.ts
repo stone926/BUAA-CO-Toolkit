@@ -20,7 +20,7 @@ export function initialWorkbenchState(title: string, mode: DebugMode): Workbench
     title, mode: mode.kind === 'course' ? mode.profile : 'mars', modeLabel: modeLabel(mode),
     status: 'empty', message: '点击「汇编」载入程序，然后单步观察或运行到断点。',
     sourceChanged: false, steps: 0, delaySlot: false, instructions: [], registers: [], floatingPoint: [], cp0: [],
-    memory: [], memoryAddress: memoryRegions[0].address, memoryRegions, symbols: [], breakpoints: [], console: '',
+    memory: [], memoryAddress: memoryRegions[0].address, memoryAvailable: false, memoryRegions, symbols: [], breakpoints: [], console: '',
     syscalls: marsSyscallCatalog, instructionOffset: 0, instructionCount: 0
   };
 }
@@ -54,6 +54,7 @@ export function projectSnapshot(state: WorkbenchState, snapshot: DebugSnapshot, 
       register('EPC', cp0.epc, previous?.cp0?.epc),
       ...(cp0.badVaddr === undefined ? [] : [register('BadVAddr', cp0.badVaddr, previous?.cp0?.badVaddr)])] : [],
     memoryAddress: snapshot.memory.address,
+    memoryAvailable: snapshot.status !== 'stopped',
     memory: snapshot.memory.words.map(word => ({ address: word.address, value: word.value,
       changed: oldMemory.has(word.address) && oldMemory.get(word.address) !== word.value }))
   };

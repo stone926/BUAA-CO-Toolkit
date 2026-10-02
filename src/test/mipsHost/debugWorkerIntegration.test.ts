@@ -7,6 +7,7 @@ import { MipsRuntimeManager } from '../../mips/host/runtimeManager';
 import { assembleMarsSource } from '../../mips/core/assembler/marsAssembler';
 import type { DebugSnapshot } from '../../mips/core/debug/api';
 import type { WorkerProtocolObservation } from '../../mips/host/workerClient';
+import { MarsDebugClient } from '../../mips/host/debugClient';
 
 let directory: string;
 let workerPath: string;
@@ -26,6 +27,13 @@ function gate<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; });
   return { resolve, promise };
+}
+async function until(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('Worker debugger state did not settle');
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
 }
 
 describe('interactive debugger through the real production Worker', () => {
@@ -82,5 +90,66 @@ describe('interactive debugger through the real production Worker', () => {
       expect(await result).toMatchObject({ ok: false, cancelled: true });
       expect(await manager.runJob({ kind: 'ping', payload: 'after-cancel' })).toMatchObject({ ok: true, payload: { token: 'after-cancel' } });
     } finally { response.resolve({ id: 1, text: '0' }); manager.dispose(); }
+  });
+  it('inspects memory and queued breakpoints during one input request through the production client', async () => {
+    const manager = new MipsRuntimeManager({ workerPath });
+    const input = gate<string | undefined>();
+    const snapshots: DebugSnapshot[] = [];
+    let inputCalls = 0;
+    const client = new MarsDebugClient(manager, path.join(directory, '程序.asm'), {
+      snapshot: snapshot => snapshots.push(snapshot), output: () => undefined,
+      input: () => { inputCalls++; return input.promise; }
+    });
+    const image = assembleMarsSource({ id: 'main', text: '.data\nx: .word 42\n.space 252\ny: .word 77\n.text\nli $v0, 5\nsyscall\naddiu $t0, $zero, 7\nli $v0, 10\nsyscall' }).image!;
+    const running = client.run({ image, mode: { kind: 'mars' } });
+    try {
+      await until(() => snapshots.length === 1);
+      client.command({ kind: 'continue' });
+      await until(() => inputCalls === 1);
+      const start = snapshots.length;
+      for (const address of [0x10010100, 0x7fffeffc, 0x400000, 0x10010000]) {
+        client.command({ kind: 'memory', address, words: 1 });
+        await until(() => snapshots.at(-1)?.memory.address === address);
+      }
+      expect(snapshots.at(-1)?.memory.words[0].value).toBe(42);
+      client.command({ kind: 'set-breakpoints', addresses: [0x400008] });
+      client.command({ kind: 'memory', address: 0x10010100, words: 1 });
+      await until(() => snapshots.at(-1)?.memory.address === 0x10010100 && snapshots.at(-1)?.breakpoints[0] === 0x400008);
+      expect(snapshots.at(-1)?.memory.words[0].value).toBe(77);
+      for (const snapshot of snapshots.slice(start)) expect(snapshot).toMatchObject({ pc: 0x400004, instructions: 1, status: 'running' });
+      expect(inputCalls).toBe(1);
+      input.resolve('23\n');
+      client.command({ kind: 'memory', address: 0x10010200, words: 1 });
+      await until(() => snapshots.at(-1)?.reason === 'breakpoint');
+      expect(snapshots.at(-1)).toMatchObject({ pc: 0x400008, instructions: 2 });
+      expect(snapshots.at(-1)?.memory.address).toBe(0x10010200);
+      expect(snapshots.at(-1)?.gpr[2]).toBe(23);
+      expect(snapshots.at(-1)?.gpr[8]).toBe(0);
+      expect(inputCalls).toBe(1);
+      client.command({ kind: 'stop' });
+      await running;
+    } finally { input.resolve(undefined); client.dispose(); await running; manager.dispose(); }
+  });
+  it('cancels the production client after suspended input inspection without another prompt', async () => {
+    const manager = new MipsRuntimeManager({ workerPath, cancelGraceMs: 1000 });
+    const input = gate<string | undefined>();
+    const snapshots: DebugSnapshot[] = [];
+    let inputCalls = 0;
+    const client = new MarsDebugClient(manager, path.join(directory, 'input.asm'), {
+      snapshot: snapshot => snapshots.push(snapshot), output: () => undefined,
+      input: () => { inputCalls++; return input.promise; }
+    });
+    const image = assembleMarsSource({ id: 'main', text: 'li $v0, 5\nsyscall\nnop' }).image!;
+    const running = client.run({ image, mode: { kind: 'mars' } });
+    try {
+      await until(() => snapshots.length === 1);
+      client.command({ kind: 'continue' }); await until(() => inputCalls === 1);
+      client.command({ kind: 'memory', address: 0x400000, words: 1 });
+      await until(() => snapshots.at(-1)?.memory.address === 0x400000);
+      client.dispose(); await running;
+      expect(inputCalls).toBe(1);
+      expect(snapshots.at(-1)).toMatchObject({ pc: 0x400004, instructions: 1 });
+      expect(await manager.runJob({ kind: 'ping', payload: 'after-client-cancel' })).toMatchObject({ ok: true });
+    } finally { input.resolve(undefined); client.dispose(); await running; manager.dispose(); }
   });
 });

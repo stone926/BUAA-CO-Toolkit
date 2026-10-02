@@ -50,6 +50,17 @@ async function verifyMarsWorkbench({ folder, configure, bounded, waitFor }) {
     assert.equal(state.registers.find(item => item.name === '$v0').value, 5);
     send({ type: 'step' });
     await waitFor('Workbench input suspension', () => state.status === 'input');
+    const waitingPc = state.pc, waitingSteps = state.steps;
+    for (const address of [0x10010100, 0x7fffef80, 0x10010000]) {
+      send({ type: 'memory', address });
+      await waitFor('Workbench memory while stdin waits', () => state.memoryAddress === address);
+      assert.equal(state.status, 'input');
+      assert.equal(state.memory[0].address, address);
+      assert.equal(state.pc, waitingPc);
+      assert.equal(state.steps, waitingSteps);
+      assert.ok(state.inputPrompt);
+      assert.equal(state.console, '');
+    }
     send({ type: 'input', text: '41' });
     await waitFor('Workbench syscall single step', () => state.status === 'paused' && state.steps === 2);
     assert.equal(state.registers.find(item => item.name === '$v0').value, 41);

@@ -67,7 +67,7 @@ export class MarsWorkbenchController {
         if (this.state.status !== 'paused') return;
         this.client?.command({ kind: request.type === 'run' ? 'continue' : 'step' }); return;
       case 'pause': this.client?.command({ kind: 'pause' }); return;
-      case 'stop': this.stop(); this.state = { ...this.state, status: 'stopped', inputPrompt: undefined, message: '已停止。点击「复位」从入口重新开始。' }; this.publish(); return;
+      case 'stop': this.stop(); this.state = { ...this.state, status: 'stopped', memoryAvailable: false, inputPrompt: undefined, message: '已停止。点击「重置」从入口重新开始。' }; this.publish(); return;
       case 'clearConsole': this.state = { ...this.state, console: '' }; this.publish(); return;
       case 'input': case 'eof': {
         const input = this.pendingInput; this.pendingInput = undefined;
@@ -84,7 +84,7 @@ export class MarsWorkbenchController {
         this.state = { ...this.state, breakpoints: [...addresses].sort((a, b) => a - b) };
         this.client?.command({ kind: 'set-breakpoints', addresses: this.state.breakpoints }); this.publish(); return;
       }
-      case 'memory': this.client?.command({ kind: 'memory', address: request.address, words: 64 }); return;
+      case 'memory': if (this.state.memoryAvailable) this.client?.command({ kind: 'memory', address: request.address, words: 64 }); return;
       case 'listing': {
         const index = request.address === undefined ? request.offset : this.listing?.indexOfAddress(request.address) ?? -1;
         if (index >= 0) this.showListing(Math.floor(index / 256) * 256);
@@ -140,13 +140,15 @@ export class MarsWorkbenchController {
     if (!this.image) return;
     this.stop(); const generation = this.generation;
     this.snapshot = undefined;
-    this.state = { ...this.state, console: '', inputPrompt: undefined, steps: 0, status: 'assembling', message: '正在载入调试会话…' };
+    this.state = { ...this.state, console: '', inputPrompt: undefined, steps: 0, status: 'assembling', memoryAvailable: false, message: '正在载入调试会话…' };
     this.publish();
     const client = this.client = new MarsDebugClient(this.options.runtime, this.options.sourcePath, {
       snapshot: snapshot => {
         if (generation !== this.generation || this.closed) return;
         const previousPc = this.snapshot?.pc;
+        const inputPrompt = this.state.inputPrompt;
         this.state = projectSnapshot(this.state, snapshot, this.snapshot); this.snapshot = snapshot;
+        if (this.pendingInput) this.state = { ...this.state, status: 'input', inputPrompt, message: '等待控制台输入' };
         if (previousPc !== snapshot.pc) {
           const index = this.listing?.indexOfAddress(snapshot.pc) ?? -1;
           if (index >= 0) this.showListing(Math.floor(index / 256) * 256);
@@ -184,7 +186,7 @@ export class MarsWorkbenchController {
     this.publish();
   }
   private fail(error: unknown): void {
-    this.state = { ...this.state, status: 'error', inputPrompt: undefined, message: error instanceof Error ? error.message : String(error) };
+    this.state = { ...this.state, status: 'error', memoryAvailable: false, inputPrompt: undefined, message: error instanceof Error ? error.message : String(error) };
     this.publish();
   }
 }

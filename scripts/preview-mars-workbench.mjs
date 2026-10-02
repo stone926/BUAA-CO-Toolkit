@@ -37,7 +37,7 @@ const state = {
   cp0: [{ name: 'Status', value: 0x10000001, changed: false, detail: 'EXL=0 · IE=1' },
     { name: 'Cause', value: 0, changed: false, detail: 'ExcCode=0 · BD=0' }, { name: 'EPC', value: 0, changed: false }],
   memory: Array.from({ length: 32 }, (_, index) => ({ address: 0x10010000 + index * 4, value: index === 0 ? 0x6c6c6548 : index === 1 ? 0x4f43206f : 0, changed: index === 3 })),
-  memoryAddress: 0x10010000, memoryRegions: [{ name: '数据段', address: 0x10010000 }, { name: '堆', address: 0x10040000 }, { name: '栈顶', address: 0x7fffef80 }],
+  memoryAddress: 0x10010000, memoryAvailable: true, memoryRegions: [{ name: '数据段', address: 0x10010000 }, { name: '堆', address: 0x10040000 }, { name: '栈顶', address: 0x7fffef80 }],
   symbols: [{ name: 'main', value: 0x400000, segment: 'text' }, { name: 'loop', value: 0x400014, segment: 'text' }, { name: 'greeting', value: 0x10010000, segment: 'data' }, { name: 'BUFFER_SIZE', value: 256, kind: 'eqv' }],
   breakpoints: [0x400010], console: 'Hello CO!\n欢迎使用 MARS 工作台。\n', inputPrompt: undefined,
   syscalls: marsSyscallCatalog, instructionOffset: 0, instructionCount: 120
@@ -52,7 +52,7 @@ const fixture = window.__workbenchFixture = {
   publish() { window.postMessage({type:'state',state}, '*'); },
   setState(patch) { Object.assign(state, patch); this.publish(); }
 };
-if (params.get('scenario') === 'empty') Object.assign(state, {status:'empty',instructions:[],instructionCount:0,registers:[],floatingPoint:[],cp0:[],memory:[],symbols:[],console:'',pc:undefined,steps:0,message:'点击「汇编」载入程序，然后单步观察或运行到断点。'});
+if (params.get('scenario') === 'empty') Object.assign(state, {status:'empty',instructions:[],instructionCount:0,registers:[],floatingPoint:[],cp0:[],memory:[],memoryAvailable:false,symbols:[],console:'',pc:undefined,steps:0,message:'点击「汇编」载入程序，然后单步观察或运行到断点。'});
 if (params.get('scenario') === 'input') Object.assign(state, {status:'input',inputPrompt:'请输入一个整数',console:state.console+'Enter a number: ',message:'程序正在等待输入，提交后继续执行。'});
 if (params.get('scenario') === 'stale') state.sourceChanged = true;
 window.acquireVsCodeApi = () => ({ postMessage(request) {
@@ -61,9 +61,9 @@ window.acquireVsCodeApi = () => ({ postMessage(request) {
   if (request.type === 'breakpoint') state.breakpoints = state.breakpoints.includes(request.address) ? state.breakpoints.filter(address => address !== request.address) : [...state.breakpoints,request.address];
   if (request.type === 'run') state.status = 'running';
   if (request.type === 'pause') state.status = 'paused';
-  if (request.type === 'stop') state.status = 'stopped';
+  if (request.type === 'stop') { state.status = 'stopped'; state.memoryAvailable = false; }
   if (request.type === 'step') { state.pc += 4; state.steps++; state.registers[8].value++; state.registers[8].changed=true; }
-  if (request.type === 'reset') { state.pc=state.instructions[0]?.address; state.steps=0; state.status='paused'; }
+  if (request.type === 'reset') { state.pc=state.instructions[0]?.address; state.steps=0; state.status='paused'; state.memoryAvailable=true; }
   if (request.type === 'mode') {
     state.mode=request.mode; state.modeLabel=request.mode==='mars'?'MARS · Default · 延迟槽关闭':request.mode+' 课程 CPU';
   }

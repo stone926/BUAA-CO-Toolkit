@@ -50,4 +50,10 @@ export class ConsoleView {
     text(this.stateLabel, this.waiting ? '等待输入 · 输入后继续执行' : '标准输出 / 标准错误');
     this.element.classList.toggle('waiting-input', this.waiting);
   }
+
+  focusInput(): void {
+    if (!this.waiting) return;
+    this.input.focus({ preventScroll: true });
+    this.form.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 }
