@@ -19,13 +19,21 @@ const ordinaryProgram = `.include "${includeName}"
 `;
 
 async function showSource(file, text) {
-  await fs.writeFile(file.fsPath, text);
-  const document = await vscode.workspace.openTextDocument(file);
-  const edit = new vscode.WorkspaceEdit();
-  edit.replace(file, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), text);
-  assert.equal(await vscode.workspace.applyEdit(edit), true);
+  // Once opened, the editor is the only writer. Writing the same file through fs
+  // races its asynchronous reload against WorkspaceEdit's document version.
+  let document = vscode.workspace.textDocuments.find(item => !item.isClosed && item.uri.toString() === file.toString());
+  if (!document) {
+    await fs.writeFile(file.fsPath, text);
+    document = await vscode.workspace.openTextDocument(file);
+  }
+  const editor = await vscode.window.showTextDocument(document);
+  if (document.getText() !== text) {
+    assert.equal(await editor.edit(edit => {
+      edit.replace(new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), text);
+    }), true);
+  }
   assert.equal(await document.save(), true);
-  await vscode.window.showTextDocument(document);
+  assert.equal(document.getText(), text);
   return document;
 }
 

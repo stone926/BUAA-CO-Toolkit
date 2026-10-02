@@ -55,6 +55,7 @@ jobs:
       - name: Test
         run: |
           npm test
+          npm --prefix test-cli test
           node --test scripts/package-vsix.test.mjs
 
       - name: Verify generated files are committed

@@ -4,6 +4,10 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- 正式发布内置 MARS、调试工作台与 ASM 工具链整合，包含下方 1.5.0 的全部功能；1.5.0 候选被 CI 门禁拦截，未发布。
+- 清理命令行测试工具中残留的外部 MARS 验证入口，修复跨平台构建失败，并将 headless CLI 测试纳入发布门禁。
+- 修复真实 VS Code 测试脚本同时修改磁盘文件和编辑器导致的版本竞争，稳定 Linux 及其他平台的打包验证。
+
 ## [1.5.0] - 2026-10-02
 
 - 内置 MARS 汇编与执行引擎，ASM 运行、标准输入、终端运行和机器码导出不再依赖外部 MARS 或 Java。

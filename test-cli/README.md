@@ -16,6 +16,8 @@ npm run build
 
 构建产物位于 `test-cli/dist`，推荐入口为 `test-cli/dist/cli.js`。构建脚本只读取 `../src` 与 `../resources`，不会修改插件源文件。
 
+`npm test` 构建并验证当前内置引擎的 CLI 行为。`scripts/legacy-equivalence-evidence.mjs` 及其测试仅用于离线校验历史迁移证据的字节、摘要和判定；旧 `verify:legacy-equivalence` 外部 MARS 执行入口已移除。当前构建与测试均不需要 Java 或 MARS JAR。
+
 ## 运行
 
 ```bash

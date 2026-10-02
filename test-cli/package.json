@@ -14,8 +14,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "node scripts/build.mjs --typecheck-only",
     "clean": "node scripts/build.mjs --clean",
-    "test": "npm run build && node --test",
-    "verify:legacy-equivalence": "npm run build && node scripts/verify-legacy-equivalence.mjs"
+    "test": "npm run build && node --test"
   },
   "engines": {
     "node": ">=18"
