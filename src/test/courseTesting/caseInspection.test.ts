@@ -24,7 +24,8 @@ const engine = { id: 'builtin-ts', semanticsRevision: 1, capabilitiesRevision: 1
 
 describe('loadCaseInspection', () => {
   it('loads a verified image and resolves its PC to the case-local source line and traces', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'co-inspection-'));
+    // Hosted Windows runners may expose TEMP through a DOS short-path alias.
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'co-inspection-')));
     try {
       const cases = path.join(root, '.co', 'cases');
       const caseId = '20261002T000000000Z-12345678';
@@ -153,7 +154,7 @@ describe('loadCaseInspection', () => {
   });
 
   it('keeps legacy ASM and artifact paths inside the case directory', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'co-inspection-legacy-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'co-inspection-legacy-')));
     try {
       const cases = path.join(root, '.co', 'cases');
       const caseId = 'legacy-case';
