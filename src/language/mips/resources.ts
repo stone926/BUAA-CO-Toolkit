@@ -6,6 +6,7 @@ import { DocumentUri } from 'vscode-languageserver/node';
 import { CoSettings } from '../common/settings';
 import { isCourseProjectProfile } from '../../generated/projectProfiles';
 import { isBuiltinPseudoMnemonic } from '../../mips/core/assembler/pseudo';
+import { marsInstructionFacts } from '../../mips/core/assembler/marsInstructionFacts';
 import type { ProjectProfile } from '../../projectProfile';
 import {
   IsaDisplayInstructionFact,
@@ -25,6 +26,8 @@ export interface MipsInstruction {
   delaySlot?: boolean;
   /** Versioned structural facts generated from resources/mips/isa.json. */
   isa?: IsaDisplayInstructionFact;
+  /** Ordinary COP1 capabilities are separate from the course ISA catalog. */
+  ordinaryMars?: boolean;
 }
 
 export type MipsInstructionType = 'R-type' | 'I-type' | 'J-type' | 'special' | 'pseudo';
@@ -141,6 +144,7 @@ const registerByNumber = new Map(registerInfos.map((info) => [info.number, info]
 const registerAliases = new Map(registerInfos.flatMap((info) => info.names.map((name) => [name.toLowerCase(), info.names[0].toLowerCase()] as const)));
 
 export const registerNames = new Set(registerInfos.flatMap((info) => info.names.map((name) => name.toLowerCase())));
+export const floatingPointRegisterNames = Object.freeze(Array.from({ length: 32 }, (_, index) => `$f${index}`));
 export const registerDescriptions = new Map<string, string>();
 export const directives = new Set(mipsResourceData.directives);
 export const instructions: Record<string, MipsInstruction> = makeInstructionMap(mipsResourceData.instructions);
@@ -166,6 +170,7 @@ for (const info of registerInfos) {
     registerDescriptions.set(name.toLowerCase(), description);
   }
 }
+for (const name of floatingPointRegisterNames) registerDescriptions.set(name, `${name}: COP1 浮点寄存器；双精度值使用偶数寄存器及其后一寄存器。`);
 
 export function isRegister(value: string): boolean {
   const canonical = canonicalRegister(value);
@@ -249,12 +254,15 @@ function loadMipsResourceData(): MipsResourceData {
   const cp0Registers = readJsonResource<MipsCp0RegisterInfo[]>(path.join(resourceRoot, 'cp0Registers.json'));
   const pseudoForms = normalizePseudoForms(readJsonResource<MipsPseudoFormData>(path.join(resourceRoot, 'pseudoForms.json')));
   const loadedInstructions = readJsonResource<MipsInstruction[]>(path.join(resourceRoot, 'instructions.json'));
-  const instructionList = loadedInstructions.map((instruction) => ({
+  const instructionList: MipsInstruction[] = loadedInstructions.map((instruction) => ({
     ...instruction,
     mnemonic: instruction.mnemonic.toLowerCase(),
     operands: normalizeOperandRange(instruction.operands),
     ...generatedInstructionDisplayFacts(instruction)
   }));
+  for (const fact of marsInstructionFacts) instructionList.push({
+    ...fact, formats: [...fact.formats], operands: [fact.operands[0], fact.operands[1]], ordinaryMars: true
+  });
 
   validateMipsResources(registers, directiveList, instructionList, syscalls, cp0Registers);
   return {
@@ -274,12 +282,14 @@ function loadMipsInstructionMeta(): MipsInstructionMeta {
     ...loaded,
     memoryAlignment: {
       ...loaded.memoryAlignment,
+      ...Object.fromEntries(marsInstructionFacts.filter(fact => fact.memoryAlignment !== undefined).map(fact => [fact.mnemonic, fact.memoryAlignment!])),
       ...Object.fromEntries(isaDisplayInstructions
         .filter((instruction) => instruction.memoryAlignment !== undefined)
         .map((instruction) => [instruction.mnemonic, instruction.memoryAlignment!]))
     },
     writesFirstOperand: {
       ...loaded.writesFirstOperand,
+      ...Object.fromEntries(marsInstructionFacts.map(fact => [fact.mnemonic, fact.writesFirstOperand])),
       ...Object.fromEntries(isaDisplayInstructions
         .map((instruction) => [instruction.mnemonic, instruction.writesFirstOperand]))
     }

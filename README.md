@@ -36,7 +36,7 @@
 | 课程阶段或功能 | 需要配置 | 对应设置 |
 |---|---|---|
 | P0 / P3 Logisim | Logisim JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.logisim`、`co.toolchain.java` |
-| P2 ASM 运行 | MARS JAR；Java 不在 PATH 时再指定 Java | `co.toolchain.mars`、`co.toolchain.java` |
+| P2 ASM 汇编、运行与交互终端 | 无，使用内置 MARS | — |
 | P1、P4–P7 标准 Verilog 工作流 | 无 | — |
 | P5–P7 流水线冲突分析 | 无，使用插件内置分析器 | — |
 
@@ -50,7 +50,7 @@
 |---|---|
 | P3–P7 测试 CPU | **启动持续测试**；首个失败或错误会停止，并保留可复现用例 |
 | 停止或查看测试结果 | **停止持续测试**、**测试历史 / 失败用例** |
-| P2 运行 MIPS 程序 | 在 MIPS 文件的“操作”中运行 MARS |
+| P2 运行 MIPS 程序 | 在 MIPS 文件的“操作”中运行内置 ASM |
 | P1 / P4–P7 检查或运行 Verilog | 保存 `.v` 文件触发默认检查；点击编辑器右上角的运行按钮或在侧边栏运行仿真 |
 | 在 VS Code 里看波形 | 编辑器右上角的波形按钮或侧边栏 **仿真并查看波形**；也可直接打开任意 `.vcd` 文件 |
 | P0 / P3 打开电路、生成或注入 ROM | 打开 `.circ` 文件后使用“操作”区 |
@@ -94,14 +94,16 @@ P3–P7 的自动测试链路如下：
 | 场景 | 默认实现 |
 |---|---|
 | P3–P7 自动测试、ROM/机器码准备、课程文本段导出 | 内置 TypeScript 汇编器和课程执行器 |
-| P2 汇编；任意 Profile（含未配置）的普通 MIPS 运行、标准输入和终端交互 | 原版 MARS 4.5 + Java |
+| P2 汇编；任意 Profile（含未配置）的普通 MIPS 运行、标准输入和终端交互 | 内置 TypeScript MARS，共用汇编器和 Worker |
 | P3 电路运行与对拍 | Logisim + Java |
 | P1、P4–P7 Verilog 检查与仿真 | 随包 Icarus + VVP |
 | 波形查看 | 内置查看器（任意仿真器生成的 VCD） |
 
-内置汇编器面向 P3–P7 课程硬件，支持课程指令集、常用伪指令、`.text`、`.ktext`、`.data`、宏、`.eqv` 和有界 `.include`。它不是完整的 MARS 替代品：不提供 P2 syscall 控制台、标准输入或交互终端，也不承诺支持所有 MARS 扩展。CPU 测试中，数据存储器按课程约定从全零开始，因此含非零 `.data` 初值的用例会被拒绝；请在程序运行时用 store 初始化数据。
+ASM/MARS 功能统一使用插件内置 TypeScript 引擎，无需任何外部 MARS 或 Java。普通控制台模式使用 MARS 的 Default 或 Compact 内存布局，支持宏、`.eqv`、有界 `.include`、数据与 kdata 段、整数与浮点指令、普通 CP0、标准输入输出、堆分配和文件读写；“在终端运行”使用 VS Code 伪终端，支持输入、EOF 和 Ctrl+C。执行在惰性启动的 Worker 中进行，带指令预算、超时、取消和输出大小限制。失败的机器码导出保留已有文件。
 
-插件不再依赖魔改 MARS。可选控制台流程只需在 `co.toolchain.mars` 配置原版 `Mars4_5.jar`，默认采用原版 `Default` 内存布局。P3–P7 的手动和自动 CPU 测试均使用内置引擎；旧 `mars`、`verify-both` 设置自动迁移为 `auto`，旧大内存配置迁移为 `Default`，`marsP7` 不再读取。原版 MARS 不支持课程写回 Trace、P7 的 0x4180 异常入口、Timer 或外部中断；P7 使用内置汇编导出和 CPU 测试。课程组提供的 `Mars_p7` 也不是原版 MARS 4.5。旧测试记录仍保留原引擎标识；需要重新执行时请作为新用例使用内置引擎，不能把新结果冒充旧引擎的精确复现。
+课程 CPU 模式与普通控制台模式共享核心，但使用独立的语义策略。**P7 的 `syscall` 只产生 ExcCode=8 异常并从 `0x4180` 进入内核，不执行任何打印或输入服务**，符合 tutorial P7-2-6；普通 MARS 运行命令才按 `$v0` 分派服务。P3–P7 的 CPU 测试和导出继续采用课程地址布局、延迟槽、CP0、Timer 和外部中断契约。CPU 测试中的数据存储器从全零开始，非零 `.data` 初值仍会被拒绝，需用 store 初始化。
+
+旧 `co.toolchain.mars`、`marsP7` 和 `co.mips.extraArgs` 已停用；旧 `mars`、`verify-both` 引擎设置自动使用内置引擎。Java 只用于 Logisim。历史测试记录仍保留原引擎标识；重新运行需作为内置引擎的新记录，不能冒充旧引擎的精确复现。桌面 MARS 的工具窗口和 MIDI 服务不在插件控制台接口中；不支持的服务会返回明确诊断。
 
 “启动持续测试”固定采用当前 Profile 的强测试策略，而不是让用户选择生成器、批量大小或对拍后端。`co.test.instructions` 是唯一的测试侧重点设置：留空会覆盖该阶段完整课程指令集，填写真实指令可让生成器优先覆盖它们。P7 还会覆盖 CP0、异常、外部中断和 Timer；对拍关注课程定义的可观察行为，不把某一种流水线周期数当作正确性的唯一标准。
 

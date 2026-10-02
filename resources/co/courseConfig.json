@@ -53,7 +53,7 @@
       "description": "MIPS 汇编编程",
       "language": "mipsasm",
       "directories": [".co", "src", "test", "data"],
-      "requiredTools": ["mars", "java"],
+      "requiredTools": [],
       "capabilities": {
         "mips": true
       },

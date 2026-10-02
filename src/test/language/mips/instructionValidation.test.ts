@@ -30,6 +30,21 @@ function concreteInstructionFormat(format: string): string {
 
 function concreteOperand(pattern: string): string {
   switch (pattern) {
+    case '$fd':
+    case '$fd64':
+      return '$f2';
+    case '$fs':
+    case '$fs64':
+      return '$f4';
+    case '$ft':
+    case '$ft64':
+      return '$f6';
+    case 'cc':
+      return '7';
+    case 'float':
+      return '1.5';
+    case 'address':
+      return '8($sp)';
     case '$rd':
       return '$t0';
     case '$rs':
@@ -77,7 +92,7 @@ describe('instruction resource format matrix', () => {
     const result = parseInstructionLines(lines);
     const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
 
-    expect(Object.keys(instructions)).toHaveLength(114);
+    expect(Object.values(instructions).filter(instruction => !instruction.ordinaryMars)).toHaveLength(114);
     expect(errors).toEqual([]);
   });
 

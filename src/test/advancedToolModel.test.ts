@@ -10,10 +10,13 @@ function commandsFor(
 }
 
 describe('advanced tool model', () => {
-  it.each(['auto', 'P0', 'P1', 'P7'] as const)('offers ordinary MARS commands under %s', (profile) => {
-    expect(commandsFor(profile, 'mips')).toEqual(expect.arrayContaining([
+  it.each(['auto', 'P0', 'P1', 'P7'] as const)('offers built-in ASM run commands under %s', (profile) => {
+    const items = buildAdvancedToolItems({ profile, activeKind: 'mips', activeFileName: 'program.asm' });
+    expect(items.map((item) => item.command)).toEqual(expect.arrayContaining([
       'co.mips.runWithStdinFile', 'co.mips.runInTerminal'
     ]));
+    expect(items.filter((item) => ['co.mips.runWithStdinFile', 'co.mips.runInTerminal'].includes(item.command))
+      .every((item) => item.description === '内置 MIPS 引擎')).toBe(true);
   });
   it('filters Verilog tools by profile and active editor kind', () => {
     const commands = commandsFor('P7', 'verilog');

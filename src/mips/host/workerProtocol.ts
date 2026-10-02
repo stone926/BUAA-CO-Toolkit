@@ -10,7 +10,7 @@
 export const workerProtocolVersion = 2;
 
 /** Job kinds the production worker can execute. */
-export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch' | 'assembler-assemble' | 'machine-execute' | 'device-cycle-vector';
+export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch' | 'assembler-assemble' | 'machine-execute' | 'device-cycle-vector' | 'mars-assemble' | 'mars-execute';
 
 export type WorkerJob =
   | { kind: 'ping'; payload?: unknown }
@@ -18,6 +18,8 @@ export type WorkerJob =
   | { kind: 'isa-encode-batch'; payload: unknown }
   | { kind: 'assembler-assemble'; payload: unknown }
   | { kind: 'machine-execute'; payload: unknown }
+  | { kind: 'mars-assemble'; payload: unknown }
+  | { kind: 'mars-execute'; payload: unknown }
   | { kind: 'device-cycle-vector'; payload: unknown };
 
 /** Wire-level envelope; unknown string kinds are structurally valid and get a structured worker error. */
@@ -45,6 +47,8 @@ export interface WorkerAckMessage {
   kind: 'ack';
   requestId: string;
   sequence: number;
+  /** Optional response to an ordinary MARS host I/O request. */
+  response?: unknown;
 }
 
 export interface WorkerProgressMessage {
@@ -84,7 +88,7 @@ export function isWorkerInboundMessage(value: unknown): value is WorkerInboundMe
     return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId']);
   }
   if (value.kind === 'ack') {
-    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'sequence'])
+    return hasOnlyKeys(value, ['protocolVersion', 'kind', 'requestId', 'sequence', 'response'])
       && hasOwn(value, 'sequence')
       && Number.isSafeInteger(value.sequence)
       && (value.sequence as number) >= 0;

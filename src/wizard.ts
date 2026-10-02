@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
 import { ProjectProfile } from './types';
-import { getMarsJar, getLogisimJar, getJava, getMipsEngine } from './config';
+import { getLogisimJar, getJava, getMipsEngine } from './config';
 import {
   getProfileDefaults,
   getProfileDirectories,
@@ -127,18 +127,6 @@ export async function configureToolchainPaths(profile: ProjectProfile, resource:
     });
     if (javaPath) {
       toolchain.java = javaPath;
-    }
-  }
-
-  if (requiredTools.has('mars')) {
-    const marsPath = await vscode.window.showInputBox({
-      title: 'MARS 路径',
-      prompt: '输入官方 MARS 4.5 jar 文件路径',
-      value: getMarsJar(resource),
-      placeHolder: 'E:/path/to/Mars4_5.jar'
-    });
-    if (marsPath) {
-      toolchain.mars = marsPath;
     }
   }
 

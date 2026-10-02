@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_TS_ENGINE_ID,
   courseEnginePlanProfileError,
-  OFFICIAL_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
 
@@ -14,9 +13,9 @@ describe('phase-6 course engine policy', () => {
     expect(courseEnginePlanProfileError(plan, 'P4')).toMatch(/P3.*P4/);
   });
 
-  it('uses the official MARS adapter outside course profiles in auto mode', () => {
+  it('uses the internal engine outside course profiles in auto mode', () => {
     for (const profile of ['P2', 'P1', 'auto', undefined]) {
-      expect(resolveCourseEnginePlan('auto', profile).primaryEngineId).toBe(OFFICIAL_MARS_ENGINE_ID);
+      expect(resolveCourseEnginePlan('auto', profile).primaryEngineId).toBe(BUILTIN_TS_ENGINE_ID);
     }
   });
 
@@ -45,7 +44,7 @@ describe('phase-6 course engine policy', () => {
       .toMatchObject({ mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID });
     expect(resolveCourseEnginePlan('verify-both', 'P2', { deterministicConsole: true }))
       .toMatchObject({
-        mode: 'auto', primaryEngineId: OFFICIAL_MARS_ENGINE_ID
+        mode: 'auto', primaryEngineId: BUILTIN_TS_ENGINE_ID
       });
     for (const mode of ['mars', 'verify-both'] as const) {
       for (const profile of ['P3', 'P4', 'P5', 'P6', 'P7']) {

@@ -25,23 +25,16 @@
     "properties": {
       "co.toolchain.java": {
         "type": "string",
-        "description": "运行 MARS 和 Logisim 使用的 Java 命令。通常保持为 java",
+        "description": "运行 Logisim 使用的 Java 命令。通常保持为 java",
         "scope": "machine-overridable",
         "order": 10,
         "runtimeDefault": "java"
-      },
-      "co.toolchain.mars": {
-        "type": "string",
-        "description": "官方 MARS 4.5 jar 路径，用于 P2 汇编/运行以及普通 MARS 运行、stdin 和终端命令。P3-P7 课程汇编导出和测试使用内置引擎，无需配置",
-        "scope": "machine-overridable",
-        "order": 20,
-        "runtimeDefault": ""
       },
       "co.toolchain.logisim": {
         "type": "string",
         "description": "P0 和 P3 使用的 Logisim jar 路径",
         "scope": "machine-overridable",
-        "order": 30,
+        "order": 20,
         "runtimeDefault": ""
       }
     }
@@ -169,10 +162,18 @@
     "properties": {
       "co.toolchain.marsP7": {
         "type": "string",
-        "description": "已停用的 P7 MARS jar override",
-        "deprecationMessage": "此历史设置不再使用。普通 MARS 命令统一读取 co.toolchain.mars；P3-P7 课程流程使用内置引擎。请删除此项。",
+        "description": "旧版本配置的 P7 MARS jar 路径",
+        "deprecationMessage": "MIPS 汇编和运行现由内置引擎提供，此历史路径设置已忽略。请删除此项。",
         "scope": "machine-overridable",
         "order": 10,
+        "runtimeDefault": ""
+      },
+      "co.toolchain.mars": {
+        "type": "string",
+        "description": "旧版本配置的外部 MARS jar 路径",
+        "deprecationMessage": "MIPS 汇编和运行现由内置引擎提供，此历史路径设置已忽略。请删除此项。",
+        "scope": "machine-overridable",
+        "order": 20,
         "runtimeDefault": ""
       },
       "co.mips.engine": {
@@ -188,7 +189,7 @@
         "description": "P3-P7 课程 MIPS 引擎兼容设置",
         "deprecationMessage": "P3-P7 课程流程统一使用内置引擎。旧 mars 和 verify-both 值自动按 auto 处理；建议删除此项。",
         "scope": "resource",
-        "order": 20,
+        "order": 30,
         "runtimeDefault": "auto"
       },
       "co.mips.delayedBranching": {
@@ -198,10 +199,10 @@
           "on",
           "off"
         ],
-        "description": "MARS 延迟槽开关",
-        "deprecationMessage": "仅为兼容已有 MARS 配置保留。插件会按课程 Profile 自动选择延迟槽策略；建议删除该设置。",
+        "description": "普通内置 MARS 的延迟槽设置；profile 按项目阶段选择，课程 CPU 测试固定采用课程契约",
+        "deprecationMessage": "兼容普通 MARS 程序的运行偏好；通常使用 profile 默认值。此项不改变课程 CPU 测试语义。",
         "scope": "resource",
-        "order": 30,
+        "order": 40,
         "runtimeDefault": "profile"
       },
       "co.mips.memoryConfiguration": {
@@ -211,10 +212,10 @@
           "CompactDataAtZero",
           "CompactTextAtZero"
         ],
-        "description": "官方 MARS 内存模式，默认使用 Default；不影响内置课程引擎",
-        "deprecationMessage": "仅为兼容普通 MARS 命令保留。旧 auto、FixedCompactLargeText 和 CompactLargeText 值自动按官方 Default 处理；建议删除此项。",
+        "description": "普通内置 MARS 的内存布局；P3-P7 CPU 测试固定采用课程内存布局",
+        "deprecationMessage": "普通 MARS 默认使用 Default；已有 Compact 程序可以保留对应布局。此项不改变课程 CPU 测试布局。",
         "scope": "resource",
-        "order": 40,
+        "order": 50,
         "runtimeDefault": "Default"
       },
       "co.run.showCommandBeforeRun": {
@@ -222,7 +223,7 @@
         "description": "手动运行外部工具前显示完整命令",
         "deprecationMessage": "仅为兼容已有运行偏好保留。错误报告会提供必要的命令与诊断信息；建议删除该设置。",
         "scope": "resource",
-        "order": 50,
+        "order": 60,
         "runtimeDefault": false
       },
       "co.run.timeoutMs": {
@@ -231,7 +232,7 @@
         "description": "手动外部工具运行超时时间（毫秒）",
         "deprecationMessage": "仅为兼容已有超时配置保留。插件会为不同操作使用安全预算；建议删除该设置。",
         "scope": "resource",
-        "order": 60,
+        "order": 70,
         "runtimeDefault": 120000
       },
       "co.mips.extraArgs": {
@@ -239,10 +240,10 @@
         "items": {
           "type": "string"
         },
-        "description": "普通 MARS 命令追加的参数列表",
-        "deprecationMessage": "仅为兼容已有 MARS 参数保留。自定义参数可能改变课程语义；建议删除该设置。",
+        "description": "旧版本 MARS 命令追加的参数列表",
+        "deprecationMessage": "内置 MIPS 引擎不读取外部 MARS 参数，此历史设置已忽略。请删除此项。",
         "scope": "resource",
-        "order": 70,
+        "order": 80,
         "runtimeDefault": []
       },
       "co.verilog.syntax.external.timeoutMs": {
@@ -251,7 +252,7 @@
         "description": "Verilog 编译器语法检查超时时间（毫秒）",
         "deprecationMessage": "仅为兼容已有语法检查超时保留。插件会使用安全预算；建议删除该设置。",
         "scope": "resource",
-        "order": 80,
+        "order": 90,
         "runtimeDefault": 0
       },
       "co.verilog.implicitNet.ignorePatterns": {

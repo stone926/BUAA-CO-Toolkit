@@ -123,7 +123,7 @@ describe('MIPS assembly command routing', () => {
     }
   );
 
-  it('routes P2 text dumps to the official MARS provider', async () => {
+  it('routes P2 text dumps to the internal MARS assembler', async () => {
     mocks.ensureConcreteProfile.mockResolvedValue('P2');
     const source = vscode.Uri.file('E:/work/p2.asm');
 
@@ -140,7 +140,7 @@ describe('MIPS assembly command routing', () => {
       expect.objectContaining({
         mode: 'auto',
         profile: 'P2',
-        primaryEngineId: 'official-mars-configured'
+        primaryEngineId: 'builtin-ts'
       })
     );
   });

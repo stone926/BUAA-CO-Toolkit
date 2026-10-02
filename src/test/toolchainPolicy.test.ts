@@ -11,11 +11,12 @@ describe('course toolchain policy', () => {
     }
   );
 
-  it('keeps the P2 official MARS and other profile dependencies', () => {
+  it('keeps P2 independent of external MIPS tools and preserves Logisim dependencies', () => {
     for (const mode of ['auto', 'builtin', 'mars', 'verify-both'] as const) {
-      expect(getEffectiveRequiredTools('P2', mode)).toEqual(['mars', 'java']);
+      expect(getEffectiveRequiredTools('P2', mode)).toEqual([]);
       expect(getEffectiveRequiredTools('P1', mode)).toEqual(['verilogSimulator']);
       expect(getEffectiveRequiredTools('P0', mode)).toEqual(['logisim', 'java']);
+      expect(getEffectiveRequiredTools('P3', mode)).toEqual(['logisim', 'java']);
     }
   });
 });

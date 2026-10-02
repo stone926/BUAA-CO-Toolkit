@@ -29,7 +29,6 @@ import type { AppServices } from '../../types';
 import type { AssembleRequest } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
-  OFFICIAL_MARS_ENGINE_ID
 } from '../../mips/providers/courseEnginePolicy';
 
 const services = {
@@ -40,10 +39,9 @@ const services = {
 afterEach(() => { mocks.engineMode = 'auto'; });
 
 describe('phase-5 assembler provider registration', () => {
-  it('keeps legacy first and registers builtin-ts behind it', () => {
+  it('registers only the internal assembler', () => {
     const registry = registerDefaultProviders(services);
     expect(registry.assemblerProviders.map((provider) => provider.descriptor.id)).toEqual([
-      'official-mars-configured',
       'builtin-ts'
     ]);
   });
@@ -89,7 +87,7 @@ describe('phase-5 assembler provider registration', () => {
     }
   });
 
-  it('maps every P3-P7 auto assembler request to builtin and P2 to legacy', async () => {
+  it('maps every P2-P7 auto assembler request to builtin', async () => {
     const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-phase5-resolver-'));
     try {
       const sourceUri = URI.file(path.join(directory, 'main.asm'));
@@ -107,7 +105,7 @@ describe('phase-5 assembler provider registration', () => {
         target: { kind: 'userText' },
         requirements: { profile: 'P2' }
       });
-      expect(p2.provider.descriptor.id).toBe(OFFICIAL_MARS_ENGINE_ID);
+      expect(p2.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
     } finally {
       await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }

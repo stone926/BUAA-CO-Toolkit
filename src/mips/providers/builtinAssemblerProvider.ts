@@ -1,10 +1,10 @@
-// @index mips-providers — BuiltinTsAssemblerProvider：P3-P7 默认纯 TS 课程汇编器
+// @index mips-providers — BuiltinTsAssemblerProvider：P2 普通 MARS 与 P3–P7 课程共用汇编器
 
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getProfile } from '../../config';
+import { getProfile, getMemoryConfiguration, useDelayedBranching } from '../../config';
 import {
   AssembleRequest,
   AssembleResult,
@@ -35,24 +35,27 @@ import {
   wordsToHexText
 } from '../core/assembler/artifacts';
 import { sourceUnitFingerprint } from '../core/programImage';
+import { builtinAssemblerCapabilitiesRevision } from '../core/assembler/assembler';
 
 import { builtinAssemblerEngineArtifact } from '../replay/builtinAssemblerEngineArtifact';
-import { captureSourceGraph, defaultSourceCaptureLimits, SourceGraphBundle } from '../replay/sourceBundle';
+import { captureSourceGraph, defaultSourceCaptureLimits } from '../replay/sourceBundle';
 import { writeFileAtomicReplace } from '../replay/atomicFile';
-import { readBoundedRegularFile } from '../replay/boundedFile';
 import type { WorkerJob, WorkerOutboundMessage } from '../host/workerProtocol';
+import { loadCapturedSourceUnits } from '../host/sourceInput';
+import { assembleMarsProgramForService } from '../core/assembler/assemblyService';
+import type { MarsMemoryConfiguration } from '../core/profiles/marsMemoryLayout';
 
 /** Phase-5 assembler descriptor; same engine id as the executor, assembler role. */
 export const BUILTIN_TS_ASSEMBLER_DESCRIPTOR = Object.freeze({
   ...BUILTIN_TS_DESCRIPTOR,
   kind: 'assembler' as const,
-  build: 'in-extension pure TypeScript course assembler (phase 5)',
+  build: 'in-extension TypeScript MARS/course assembler',
   semanticsRevision: courseAssemblerSemanticsRevision,
-  capabilitiesRevision: 1
+  capabilitiesRevision: builtinAssemblerCapabilitiesRevision
 });
 
 export const BUILTIN_TS_ASSEMBLER_CAPABILITIES: EngineCapabilities = {
-  profiles: [...courseProfileIds],
+  profiles: ['P2', ...courseProfileIds],
   instructionLayers: Object.fromEntries(
     (['required', 'commonExtensions', 'marsCompatibility'] as const).map((layer) => [
       layer,
@@ -88,6 +91,10 @@ export interface BuiltinAssemblerWorkerRuntime {
   ): Promise<WorkerOutboundMessage>;
 }
 
+function isAssemblyProfile(profile: string): profile is CourseProfile | 'P2' {
+  return profile === 'P2' || isCourseProjectProfile(profile);
+}
+
 interface BuiltinAssembleSnapshot {
   readonly requestFingerprint: string;
   readonly sourceUri: vscode.Uri;
@@ -95,7 +102,9 @@ interface BuiltinAssembleSnapshot {
   readonly outputFile?: vscode.Uri;
   readonly courseTrace: boolean;
   readonly p7RiInstruction: boolean;
-  readonly profile: CourseProfile;
+  readonly profile: CourseProfile | 'P2';
+  readonly memoryConfiguration?: MarsMemoryConfiguration;
+  readonly delayedBranching?: boolean;
   readonly signal?: AbortSignal;
   readonly layers: readonly string[];
   readonly sourceGraphInput?: NonNullable<AssembleRequest['sourceGraphInput']>;
@@ -121,7 +130,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
     }
     const resolvedProfile = getProfile(request.sourceUri);
     const candidateProfile = request.requirements?.profile ?? resolvedProfile;
-    const profile = isCourseProjectProfile(candidateProfile) ? candidateProfile : undefined;
+    const profile = isAssemblyProfile(candidateProfile) ? candidateProfile : undefined;
     if (!profile) {
       diagnostics.push({
         code: 'builtin-ts-assembler.profile-required',
@@ -178,7 +187,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
 
   async assemble(request: AssembleRequest, context?: ProviderRunContext): Promise<AssembleResult> {
     const candidateProfile = request.requirements?.profile ?? getProfile(request.sourceUri);
-    if (!isCourseProjectProfile(candidateProfile)) {
+    if (!isAssemblyProfile(candidateProfile)) {
       this.preflightFingerprints.delete(request);
       return this.preflightFailure([{
         code: 'builtin-ts-assembler.profile-required',
@@ -259,8 +268,8 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
 
       const words = snapshot.targetKind === 'kernelText'
         ? imageSegmentWords(result.image, 'ktext')
-        : courseInstructionImageWords(result.image);
-      const haltPc = snapshot.courseTrace && snapshot.targetKind === 'userText'
+        : snapshot.profile === 'P2' ? imageSegmentWords(result.image, 'text') : courseInstructionImageWords(result.image);
+      const haltPc = snapshot.profile !== 'P2' && snapshot.courseTrace && snapshot.targetKind === 'userText'
         ? findCourseHaltPc(result.image, snapshot.profile)
         : undefined;
       if (snapshot.courseTrace && snapshot.targetKind === 'userText' && haltPc === undefined) {
@@ -276,7 +285,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
 
       const resolvedRun: ResolvedEngineRun = {
         profile: snapshot.profile,
-        memoryConfiguration: 'course-contract-v1',
+        memoryConfiguration: snapshot.memoryConfiguration ?? 'course-contract-v1',
         runtime: { kind: 'builtin-ts' },
         wallClockMs: Math.max(1, Date.now() - started),
         p7RiInstruction: snapshot.p7RiInstruction
@@ -317,13 +326,16 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
     includes: readonly AssemblerServiceInclude[]
   ): Promise<AssemblerServiceResult> {
     const payload = {
-      profile: snapshot.profile,
+      profile: snapshot.profile === 'P2' ? 'P7' as const : snapshot.profile,
       sources: units as readonly AssemblerServiceSource[],
       includes,
       layers: snapshot.layers,
       p7RiInstruction: snapshot.p7RiInstruction
     };
     if (!this.workerRuntime) {
+      if (snapshot.profile === 'P2') {
+        return assembleMarsProgramForService({ sources: units, includes, memoryConfiguration: snapshot.memoryConfiguration, delayedBranching: snapshot.delayedBranching });
+      }
       return assembleProgramForService({
         profile: snapshot.profile,
         sources: payload.sources,
@@ -333,8 +345,8 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       });
     }
     const message = await this.workerRuntime.runJob({
-      kind: 'assembler-assemble',
-      payload
+      kind: snapshot.profile === 'P2' ? 'mars-assemble' : 'assembler-assemble',
+      payload: snapshot.profile === 'P2' ? { sources: units, includes, memoryConfiguration: snapshot.memoryConfiguration, delayedBranching: snapshot.delayedBranching } : payload
     }, { signal: snapshot.signal });
     if (message.kind !== 'result') {
       throw new Error('builtin assembler worker returned progress as its terminal message');
@@ -395,7 +407,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
 
 function snapshotAssembleRequest(
   request: AssembleRequest,
-  profile: CourseProfile,
+  profile: CourseProfile | 'P2',
   signal: AbortSignal | undefined
 ): BuiltinAssembleSnapshot {
   return {
@@ -406,6 +418,7 @@ function snapshotAssembleRequest(
     courseTrace: request.courseTrace ?? false,
     p7RiInstruction: request.p7RiInstruction ?? false,
     profile,
+    ...(profile === 'P2' ? { memoryConfiguration: getMemoryConfiguration(request.sourceUri) as MarsMemoryConfiguration, delayedBranching: useDelayedBranching(request.sourceUri) } : {}),
     ...(signal ? { signal } : {}),
     layers: request.requirements?.instructionLayers ?? ['required', 'commonExtensions', 'marsCompatibility'],
     ...(request.sourceGraphInput ? {
@@ -418,23 +431,8 @@ function snapshotAssembleRequest(
   };
 }
 
-async function loadCapturedSourceUnits(stageDir: string, graph: SourceGraphBundle): Promise<SourceUnit[]> {
-  return await Promise.all(graph.units.map(async (unit) => {
-    const blob = path.join(stageDir, ...unit.blobPath.split('/'));
-    const bytes = await readBoundedRegularFile(blob, {
-      maximumBytes: graph.limits.maxBytes,
-      expectedBytes: unit.bytes,
-      label: `captured source unit ${unit.id}`
-    });
-    return {
-      id: unit.id,
-      uri: unit.provenanceUri,
-      text: bytes.toString('utf8')
-    };
-  }));
-}
-
 function builtinAssembleRequestFingerprint(request: AssembleRequest): string {
+  const profile = request.requirements?.profile ?? getProfile(request.sourceUri);
   return JSON.stringify({
     sourceUri: request.sourceUri.toString(),
     target: {
@@ -445,7 +443,8 @@ function builtinAssembleRequestFingerprint(request: AssembleRequest): string {
     p7RiInstruction: request.p7RiInstruction ?? false,
     requirements: request.requirements ?? null,
     inputGraph: request.inputGraph ?? null,
-    sourceGraphInput: request.sourceGraphInput ?? null
+    sourceGraphInput: request.sourceGraphInput ?? null,
+    ...(profile === 'P2' ? { memoryConfiguration: getMemoryConfiguration(request.sourceUri), delayedBranching: useDelayedBranching(request.sourceUri) } : {})
   });
 }
 

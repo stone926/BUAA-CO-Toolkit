@@ -1,9 +1,7 @@
-// @index toolchain — bundled Icarus 与可选 Java/MARS/Logisim 检测
-import * as fs from 'fs';
-import * as path from 'path';
+// @index toolchain — bundled Icarus 与可选 Java/Logisim 检测
 import * as vscode from 'vscode';
-import { ensureConcreteProfile, getJava, getLogisimJar, getMarsJar, getMemoryConfiguration, getMipsEngine, getProfile, type MipsEngineMode } from './config';
-import { cleanupCoTmp, coTmpDir, isFile } from './fsUtil';
+import { ensureConcreteProfile, getJava, getLogisimJar, getMipsEngine, getProfile, type MipsEngineMode } from './config';
+import { isFile } from './fsUtil';
 import { runTool } from './process';
 import { ToolDetection } from './types';
 import { getEffectiveRequiredTools } from './toolchainPolicy';
@@ -41,7 +39,7 @@ export async function checkToolchain(
     ...(options.tools ?? []).map(normalizeToolName)
   ]);
 
-  if (requiredTools.has('java') || requiredTools.has('mars')) {
+  if (requiredTools.has('java')) {
     const java = getJava(resource);
     const javaResult = await runTool(java, ['-version'], {
       cwd,
@@ -56,15 +54,6 @@ export async function checkToolchain(
       detail: firstLine(javaResult.stderr || javaResult.stdout) || java,
       suggestion: javaResult.ok ? undefined : '请安装 JRE/JDK 或设置 co.toolchain.java'
     });
-  }
-
-  if (requiredTools.has('mars')) {
-    const mars = getMarsJar(resource);
-    const marsFile = await fileCheck('MARS', mars, '请设置 co.toolchain.mars 为官方 MARS 4.5 jar 路径');
-    checks.push(marsFile);
-    if (marsFile.ok) {
-      checks.push(...await marsCapabilityChecks(output, resource, cwd, mars, options.nonInteractive));
-    }
   }
 
   if (requiredTools.has('logisim')) {
@@ -101,81 +90,6 @@ export async function checkToolchain(
   }
 
   return checks;
-}
-
-async function marsCapabilityChecks(
-  output: vscode.OutputChannel,
-  resource: vscode.Uri | undefined,
-  cwd: string,
-  mars: string,
-  nonInteractive = false
-): Promise<ToolDetection[]> {
-  const tempDir = coTmpDir(resource, 'co-mars-check-');
-  try {
-    const asm = path.join(tempDir, 'capability.asm');
-    const outFile = path.join(tempDir, 'capability.txt');
-    // Only official instructions/options are needed. The syscall output proves execution.
-    await fs.promises.writeFile(asm, [
-      '.text', 'ori $4, $0, 12345', 'ori $2, $0, 1', 'syscall',
-      'ori $2, $0, 10', 'syscall', ''
-    ].join('\n'), 'utf8');
-    const java = getJava(resource);
-    const baseArgs = ['-jar', mars, 'nc', 'mc', getMemoryConfiguration(resource), 'ae1', 'se1'];
-    const runOptions = { cwd, output, resource, timeoutMs: 10000, nonInteractive };
-    const assembled = await runTool(java, [
-      ...baseArgs, 'a', 'dump', '.text', 'HexText', outFile, asm
-    ], runOptions);
-    let hexText = '';
-    try {
-      hexText = await fs.promises.readFile(outFile, 'utf8');
-    } catch {
-      // Missing or unreadable output is a failed capability check.
-    }
-    const assembly = marsAssemblyCapabilityCheck(assembled, hexText);
-    if (!assembly.ok) {
-      return [assembly];
-    }
-    const executed = await runTool(java, [...baseArgs, '1000', asm], runOptions);
-    return [assembly, marsExecutionCapabilityCheck(executed)];
-  } finally {
-    await cleanupCoTmp(tempDir);
-  }
-}
-
-/** MARS may otherwise exit successfully after a diagnostic; also verify actual words. */
-export function marsAssemblyCapabilityCheck(
-  result: Awaited<ReturnType<typeof runTool>>,
-  hexText: string
-): ToolDetection {
-  const output = `${result.stdout}\n${result.stderr}`;
-  const words = hexText.trim().split(/\s+/).map((word) => word.toLowerCase());
-  const expectedWords = ['34043039', '34020001', '0000000c', '3402000a', '0000000c'];
-  const validDump = words.length === expectedWords.length
-    && words.every((word, index) => word === expectedWords[index]);
-  const ok = result.ok && !hasMarsDiagnostic(output) && validDump;
-  return {
-    name: 'MARS assemble/HexText',
-    ok,
-    detail: ok ? '标准汇编与 HexText 导出通过' : firstLine(output) || '未生成正确的 HexText',
-    suggestion: ok ? undefined : '请使用官方 MARS 4.5，并检查 Java 与 MARS 路径'
-  };
-}
-
-export function marsExecutionCapabilityCheck(
-  result: Awaited<ReturnType<typeof runTool>>
-): ToolDetection {
-  const output = `${result.stdout}\n${result.stderr}`;
-  const ok = result.ok && !hasMarsDiagnostic(output) && result.stdout.trim() === '12345';
-  return {
-    name: 'MARS run',
-    ok,
-    detail: ok ? '标准运行与 syscall 输出通过' : firstLine(output) || '未生成预期 syscall 输出',
-    suggestion: ok ? undefined : '请使用官方 MARS 4.5，并检查 Java 与 MARS 路径'
-  };
-}
-
-function hasMarsDiagnostic(output: string): boolean {
-  return /Error(?:\s+in|:)|Invalid (?:Command Argument|memory configuration)|Exception occurred|processing terminated due to errors|program terminated when maximum step limit/i.test(output);
 }
 
 async function fileCheck(name: string, file: string, suggestion: string): Promise<ToolDetection> {

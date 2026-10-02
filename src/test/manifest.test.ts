@@ -57,7 +57,6 @@ const publicConfigurationGroups = [
     scope: 'machine-overridable',
     keys: [
       'co.toolchain.java',
-      'co.toolchain.mars',
       'co.toolchain.logisim'
     ]
   },
@@ -90,6 +89,7 @@ const publicConfigurationGroups = [
 
 const compatibilityConfigurationKeys = [
   'co.toolchain.marsP7',
+  'co.toolchain.mars',
   'co.mips.engine',
   'co.mips.delayedBranching',
   'co.mips.memoryConfiguration',
@@ -274,7 +274,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(16);
+    expect(expectedPublicKeys).toHaveLength(15);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);
@@ -328,20 +328,26 @@ describe('package manifest', () => {
       const property = compatibilityGroup?.properties?.[key];
       expect(property?.default, key).toBeUndefined();
       expect(property?.deprecationMessage?.trim().length, key).toBeGreaterThan(0);
-      expect(property?.scope, key).toBe(['co.toolchain.marsP7', 'co.toolchain.python', 'co.toolchain.hazardCalculator'].includes(key)
+      expect(property?.scope, key).toBe(['co.toolchain.marsP7', 'co.toolchain.mars', 'co.toolchain.python', 'co.toolchain.hazardCalculator'].includes(key)
         ? 'machine-overridable'
         : 'resource');
-      expect(property?.order, key).toBe((index < 8 ? index + 1 : index + 2) * 10);
+      if (index > 0) {
+        const previous = compatibilityGroup?.properties?.[compatibilityConfigurationKeys[index - 1]];
+        expect(property?.order, key).toBeGreaterThan(previous?.order ?? 0);
+      }
     });
   });
 
-  it('publishes only official MARS memory layouts and builtin course engine choices', () => {
+  it('keeps legacy MIPS settings deprecated and out of the public settings surface', () => {
     const properties = Object.assign({}, ...(readPackage().contributes?.configuration ?? []).map((group) => group.properties ?? {}));
     expect(properties['co.mips.engine']?.enum).toEqual(['auto', 'builtin']);
     expect(properties['co.mips.engine']?.deprecationMessage).toContain('mars 和 verify-both');
     expect(properties['co.mips.memoryConfiguration']?.enum).toEqual(['Default', 'CompactDataAtZero', 'CompactTextAtZero']);
     expect(getConfigDefaults()['mips.memoryConfiguration']).toBe('Default');
-    expect(properties['co.toolchain.marsP7']?.deprecationMessage).toContain('不再使用');
+    expect(properties['co.toolchain.marsP7']?.deprecationMessage).toContain('已忽略');
+    expect(properties['co.toolchain.mars']?.deprecationMessage).toContain('已忽略');
+    expect(properties['co.mips.extraArgs']?.deprecationMessage).toContain('已忽略');
+    expect(publicConfigurationGroups.flatMap((group) => [...group.keys])).not.toContain('co.toolchain.mars');
   });
 
   it('derives generator profile descriptions from the ASM generator catalog', () => {

@@ -1,4 +1,4 @@
-# mips-core | src/mips/core/ | 41 files
+# mips-core | src/mips/core/ | 56 files
 
 纯 TypeScript MIPS 引擎核心：ISA 编解码、两遍课程汇编器、架构执行器与设备模型。**零** VS Code / LSP / 文件系统 / Worker 依赖（边界由 `scripts/check-module-boundaries.mjs` 检查）。汇编器与执行器通过不可变 `ProgramImage` 连接，因此可各自独立验证。
 
@@ -64,4 +64,24 @@
 
 **可比较域 fail closed。** `OutOfDomainReason` 覆盖课程规定输入：未加载指令字、未识别指令、除零、jalr 双寄存器相同、延迟槽内跳转、未定义 HI/LO 读取、Timer Mode 2/3 等。strict lane 一律 fail closed；`synthetic-zero` / `deterministic` 只是显式 exploratory policy，结果不得作为 strict golden。
 
-**证据分层。** 核心 full-stack 回归直接覆盖 P3–P7 的 ProgramImage 与最终状态；独立 assembly-diff 另通过 JSONL CLI 与固定 MARS 对比 text、P7 ktext 与 data 段。P3–P7 的课程 `auto` 以 builtin assembler/executor 为默认，但核心本身不读设置、不选 provider——宿主用一次性 `CourseEnginePlan` 负责（见 mips-providers.md）。
+**证据分层。** 核心 full-stack 回归直接覆盖 P3–P7 的 ProgramImage 与最终状态；独立 assembly-diff 另通过 JSONL CLI 与冻结 MARS reference 比较 text、P7 ktext 与 data 段，仅作历史 conformance 证据。课程核心不读设置、不选 provider——宿主用一次性 `CourseEnginePlan` 负责（见 mips-providers.md）。
+
+## 普通 MARS 策略与系统调用
+
+- `profiles/marsMemoryLayout.ts` — Default、CompactDataAtZero、CompactTextAtZero 的共享地址配置
+- `assembler/marsAssembler.ts` — 显式普通模式入口，复用相同两遍布局、宏、include、符号和 relocation
+- `assembler/marsInstructions.ts` — 普通模式 COP1 编码与浮点访存伪指令
+- `assembler/marsInstructionFacts.ts` — 普通模式 COP1 助记符、操作数格式与编码事实
+- `assembler/marsIntegerPseudo.ts` — 普通模式整数伪指令及延迟槽保护展开
+- `mars/api.ts` — 可恢复 syscall 请求/响应与运行结果
+- `mars/profile.ts` — 普通模式地址空间（含 ktext/kdata 与栈）、CP0 和寄存器复位策略
+- `mars/session.ts` — MarsSession 在共享 MachineSession 上分片执行、syscall 暂停/恢复与终态
+- `mars/instructionExtensions.ts` — 普通模式指令扩展的纯执行入口
+- `mars/floatingPointState.ts` — FPR 原始位、成对 double 与条件码
+- `mars/floatingPoint.ts` — COP1 算术、转换、比较、分支和访存；提交副作用延后到架构提交点
+- `mars/floatingPointText.ts` — 普通浮点输入和输出格式
+- `mars/syscalls.ts` — 控制台/文件/堆/时间/随机服务，文件和时钟委托宿主 DTO
+- `mars/syscallMemory.ts` — syscall buffer 的边界检查、UTF-8 文本与原子写入
+- `mars/random.ts` — 与 Java Random 序列兼容的可设种子随机流
+
+普通 MARS 策略不替换课程 Profile。它支持普通控制台模式的整数与浮点指令、CP0、kdata、栈和服务调用；这不是完整桌面 MARS 的 GUI/MIDI 替代。普通服务通过 syscall IO DTO 挂起和恢复执行。P7 CPU 的 `syscall` 仍按课程 tutorial P7-2-6 产生 ExcCode=8、设置 EPC/EXL 并进入 0x4180；它既不发普通 IO 请求，也不改写 `$v0` 为服务返回值。UTF-8 字面量、控制台字符串和宿主文件路径使用一致编码，支持中文与空格路径。

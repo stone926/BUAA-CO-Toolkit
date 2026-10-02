@@ -10,7 +10,7 @@
 ## 配置与 Profile
 
 - `constants.ts` — 命令 ID、Profile 能力集合、输出目录名（`.co/*`）等公共常量
-- `config.ts` — `co.*` 设置读取（分层取值 + Profile 持久化 + 值域裁剪）；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置
+- `config.ts` — `co.*` 设置读取（分层取值 + Profile 持久化 + 值域裁剪）；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置；旧 MARS jar/参数设置被忽略，延迟槽与内存布局由内置 MIPS 引擎读取
 - `configDefaults.ts` — 从 `resources/co/configDefaults.json` 加载默认值，宿主/LSP/测试共享
 - `resourcePaths.ts` — 宿主、LSP 与独立辅助入口共享扩展根与静态资源定位；Worker 管理器据此定位 Worker 入口
 - `courseConfig.ts` — Profile 定义（P0–P7）：名称/描述/能力矩阵/语言/目录/端口/内存布局，从 `resources/co/courseConfig.json` 加载缓存
@@ -20,7 +20,7 @@
 
 ## 工具链与进程
 
-- `toolchain.ts` / `toolchainPolicy.ts` — 课程有效依赖：Verilog Profile 预检内置 Icarus，P3 保留 Logisim/Java；旧引擎设置不追加 MARS。可选原版 MARS 检查标准汇编、HexText 与 syscall 执行，不探测魔改功能
+- `toolchain.ts` / `toolchainPolicy.ts` — 课程有效依赖：P2 ASM 使用内置引擎且无需外部工具；Verilog Profile 预检内置 Icarus，P0/P3 保留 Logisim/Java；工具链检查不启动 MARS
 - `process.ts` / `processCore.ts` — spawn/stdout/stderr 核心：幂等 settle、raw-byte ceiling、跨 UTF-8 chunk 解码、Windows taskkill /t 与 Unix process group 整树终止
 - `startupTrace.ts` — `CO_TRACE_STARTUP` 启动耗时追踪
 - `textChunks.ts` — 零拷贝 chunk 收集与流式逐行扫描
@@ -51,9 +51,8 @@
 
 ## 其他命令域
 
-- `mipsCommands.ts` — 汇编与机器码导出命令分派；P3–P7 强制 builtin assembler，不做 capability fallback
-- `mips.ts` — 原版 MARS runner（P2 汇编；普通 run/stdin/terminal 不受 Profile 限制，也不要求选择 Profile）；终端同样预检，dump 私有暂存并验证后落盘；stdout/stderr 各有 16 MiB raw ceiling；旧超时 0 回退默认预算
-- `mipsTerminal.ts` — 显式 PowerShell/sh 终端参数引用；Java、ASM 的空格/中文路径作为字面参数传递
+- `mipsCommands.ts` — 汇编与机器码导出命令分派；P2–P7 统一 builtin assembler，不做 capability fallback
+- `mips.ts` — 内部 MARS 运行/标准输入/终端命令 glue；业务编排见 mips-host 的 marsService，产物原子替换，禁止混入课程 Trace 模式
 - `logisim.ts` — 打开电路、生成 ROM、注入 ROM、日志转 CSV
 - `hazard.ts` — 注册分析/打开报告命令，首次调用惰性加载内置引擎（详见 hazard-analysis.md）
 - `courseTest*` / `asmCaseStore*`（`src/courseTest*.ts`、`src/asmCaseStore*.ts`）— 持续测试与用例存储，见 course-testing.md

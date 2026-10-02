@@ -14,7 +14,6 @@ import type { AppServices } from '../../types';
 import type { ExecuteRequest } from '../../mips/providers/contracts';
 import {
   BUILTIN_TS_ENGINE_ID,
-  OFFICIAL_MARS_ENGINE_ID,
   resolveCourseEnginePlan
 } from '../../mips/providers/courseEnginePolicy';
 
@@ -39,10 +38,9 @@ const request: ExecuteRequest = {
 };
 
 describe('phase-4 provider resolver registration', () => {
-  it('keeps stable registration order but defaults a gated profile to builtin', async () => {
+  it('registers only the internal course executor', async () => {
     const registry = registerDefaultProviders(services);
     expect(registry.executionProviders.map((provider) => provider.descriptor.id)).toEqual([
-      'official-mars-configured',
       'builtin-ts'
     ]);
     const selected = await resolveExecutionProvider(services, request);
@@ -63,7 +61,7 @@ describe('phase-4 provider resolver registration', () => {
       requirements: { profile: 'P5', deterministicConsole: true }
     });
 
-    expect(p2.provider.descriptor.id).toBe(OFFICIAL_MARS_ENGINE_ID);
+    expect(p2.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
     expect(p2.preflight.ok).toBe(false);
     expect(console.provider.descriptor.id).toBe(BUILTIN_TS_ENGINE_ID);
     expect(console.preflight.ok).toBe(false);

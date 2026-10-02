@@ -1,6 +1,6 @@
 # mips-lsp | src/language/mips/ | 34 files
 
-MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊断 → 补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作，另含 MARS trace 解析对比。
+MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊断 → 补全/hover/跳转/格式化/高亮/签名/折叠/重命名/内联提示/代码操作。另保留历史 MARS trace 解析对比；LSP 不启动 MARS。
 
 数据流: `syntax.ts`（行词法）→ `ast.ts` → `semantic.ts` → `parser.ts`（编排）→ 诊断 → `service.ts`；`parseCache.ts` 按 URI/设置缓存。诊断委托 `parseCache.ts`，LSP 层只做 provider。
 
@@ -23,9 +23,8 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 
 - `resources.ts` — ISA 资源加载（instructions/registers/cp0/directives/syscalls/pseudo）；真实指令 facts 合并自生成 catalog
 - `generated/isaDisplayCatalog.ts` — 与 core catalog 同 schema revision 的 LSP 展示事实（勿手改）
-- `marsArgs.ts` — 原版 MARS 参数构建与魔改参数拒绝；历史 class/range 元数据只用于档案解析
-- `officialMarsDiagnostics.ts` — 原版 CLI 参数解析失败识别，补齐退出码 0 的错误情形
-- `legacyMarsPolicy.ts` — 稳定版 MARS 兼容内存配置/异常入口策略
+- `marsArgs.ts` / `officialMarsDiagnostics.ts` — 旧 MARS CLI 参数与诊断兼容 API，仅供历史用例/测试识别，不启动外部进程
+- `legacyMarsPolicy.ts` — 历史 MARS 内存/课程语义元数据，供归档校验读取
 - `legacyMarsDiagnostics.ts` — 历史 coL1/coL2/efc/p7irq/cl 证据诊断映射
 
 ## LSP providers

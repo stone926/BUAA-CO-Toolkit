@@ -83,7 +83,7 @@ describe('BuiltinTsAssemblerProvider', () => {
     });
     const artifact = builtinAssemblerEngineDocument();
 
-    expect(courseAssemblerSemanticsRevision).toBe(4);
+    expect(courseAssemblerSemanticsRevision).toBe(5);
     expect(service.semanticsRevision).toBe(courseAssemblerSemanticsRevision);
     expect(BUILTIN_TS_ASSEMBLER_DESCRIPTOR.semanticsRevision).toBe(courseAssemblerSemanticsRevision);
     expect(artifact.engine.semanticsRevision).toBe(courseAssemblerSemanticsRevision);

@@ -88,8 +88,9 @@ export interface MemoryBusOptions {
 
 interface RegionStorage {
   readonly region: MemoryRegion;
-  readonly words: Uint32Array;
-  readonly loaded: Uint8Array | undefined;
+  readonly wordCount: number;
+  readonly words: Uint32Array | Map<number, number>;
+  readonly loaded: Uint8Array | Set<number> | undefined;
 }
 
 export class MemoryBus {
@@ -107,8 +108,10 @@ export class MemoryBus {
       const count = regionWordCount(region);
       this.storage.set(region.id, {
         region,
-        words: new Uint32Array(count),
-        loaded: region.instructionOnly ? new Uint8Array(count) : undefined
+        wordCount: count,
+        words: count > 65_536 ? new Map<number, number>() : new Uint32Array(count),
+        loaded: region.instructionOnly
+          ? (count > 65_536 ? new Set<number>() : new Uint8Array(count)) : undefined
       });
     }
   }
@@ -133,10 +136,7 @@ export class MemoryBus {
           throw new Error(`profile ${this.profile.id} 没有为 region ${region.id} 分配存储`);
         }
         const slot = (address - region.range.start) / 4;
-        storage.words[slot] = u32(segment.words[index]);
-        if (storage.loaded) {
-          storage.loaded[slot] = 1;
-        }
+        this.writeMemoryWord(region.id, address, segment.words[index]);
       }
     }
   }
@@ -166,7 +166,7 @@ export class MemoryBus {
       throw new Error(`profile ${this.profile.id} 没有为 region ${region.id} 分配存储`);
     }
     const slot = (address - region.range.start) / 4;
-    if (storage.loaded && storage.loaded[slot] === 0) {
+    if (storage.loaded && !isSlotLoaded(storage.loaded, slot)) {
       if (this.unloadedPolicy === 'synthetic-zero') {
         return { word: 0 };
       }
@@ -177,7 +177,7 @@ export class MemoryBus {
         }
       };
     }
-    return { word: u32(storage.words[slot]) };
+    return { word: this.readMemoryWord(region.id, address) };
   }
 
   /** True when the address holds a loaded instruction word. */
@@ -190,7 +190,7 @@ export class MemoryBus {
     if (!storage?.loaded) {
       return false;
     }
-    return storage.loaded[(u32(address) - region.range.start) / 4] === 1;
+    return isSlotLoaded(storage.loaded, (u32(address) - region.range.start) / 4);
   }
 
   /** Validate one data access without producing any side effect. */
@@ -348,8 +348,11 @@ export class MemoryBus {
       return [];
     }
     const entries: { address: number; value: number }[] = [];
-    for (let slot = 0; slot < storage.words.length; slot++) {
-      const value = u32(storage.words[slot]);
+    const slots = storage.words instanceof Map
+      ? [...storage.words.keys()].sort((a, b) => a - b)
+      : storage.words.keys();
+    for (const slot of slots) {
+      const value = this.readMemoryWord(regionId, storage.region.range.start + slot * 4);
       if (value !== 0) {
         entries.push({ address: u32(storage.region.range.start + slot * 4), value });
       }
@@ -363,10 +366,10 @@ export class MemoryBus {
       return 0;
     }
     const slot = (u32(wordAddress) - storage.region.range.start) / 4;
-    if (!Number.isInteger(slot) || slot < 0 || slot >= storage.words.length) {
+    if (!Number.isInteger(slot) || slot < 0 || slot >= storage.wordCount) {
       return 0;
     }
-    return u32(storage.words[slot]);
+    return u32(storage.words instanceof Map ? storage.words.get(slot) ?? 0 : storage.words[slot]);
   }
 
   private writeMemoryWord(regionId: RegionId, wordAddress: number, value: number): void {
@@ -375,14 +378,25 @@ export class MemoryBus {
       throw new Error(`region ${regionId} 没有可写存储`);
     }
     const slot = (u32(wordAddress) - storage.region.range.start) / 4;
-    if (!Number.isInteger(slot) || slot < 0 || slot >= storage.words.length) {
+    if (!Number.isInteger(slot) || slot < 0 || slot >= storage.wordCount) {
       throw new Error(`地址 ${hex8Address(wordAddress)} 超出 region ${regionId}`);
     }
-    storage.words[slot] = u32(value);
-    if (storage.loaded) {
+    if (storage.words instanceof Map) {
+      if (u32(value) === 0) { storage.words.delete(slot); }
+      else { storage.words.set(slot, u32(value)); }
+    } else {
+      storage.words[slot] = u32(value);
+    }
+    if (storage.loaded instanceof Set) {
+      storage.loaded.add(slot);
+    } else if (storage.loaded) {
       storage.loaded[slot] = 1;
     }
   }
+}
+
+function isSlotLoaded(loaded: Uint8Array | Set<number>, slot: number): boolean {
+  return loaded instanceof Set ? loaded.has(slot) : loaded[slot] === 1;
 }
 
 /** Byte enables implied by an access width at a byte address (little endian). */

@@ -14,7 +14,8 @@ import {
   parseDeviceVectorSteps,
   runDeviceCycleVectorForService
 } from '../core/machine/executeService';
-import { assembleProgramForService, parseAssemblerServiceRequest } from '../core/assembler/assemblyService';
+import { assembleProgramForService, parseAssemblerServiceRequest, assembleMarsProgramForService, parseMarsAssemblerServiceRequest } from '../core/assembler/assemblyService';
+import { executeMarsJob } from './marsJobs';
 
 export const mipsWorkerSliceSize = 128;
 export const mipsWorkerMaximumBatch = 65_536;
@@ -26,7 +27,7 @@ const operandFields = ['rs', 'rt', 'rd', 'shamt', 'immediate', 'index'] as const
 export interface WorkerJobExecutionContext {
   signal: AbortSignal;
   /** Resolves only after the host acknowledges consumption of this batch. */
-  emitProgress(batch: unknown[]): void | Promise<void>;
+  emitProgress(batch: unknown[]): unknown | Promise<unknown>;
   /** Test seam; production yields to the worker message loop with setImmediate. */
   yieldControl?: () => Promise<void>;
 }
@@ -47,6 +48,10 @@ export async function executeProductionWorkerJob(
       // Bounded DTO validation shared with the CLI; pure layout runs quickly but
       // keeps the same request shape as the process boundary.
       return assembleProgramForService(parseAssemblerServiceRequest(payload as Record<string, unknown>));
+    case 'mars-assemble':
+      return assembleMarsProgramForService(parseMarsAssemblerServiceRequest(payload as Record<string, unknown>));
+    case 'mars-execute':
+      return await executeMarsJob(payload, context);
     case 'machine-execute':
       // Bounded DTO validation is shared with the CLI; execution then streams
       // CommitEvent slices under worker protocol ACK/backpressure.

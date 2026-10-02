@@ -1,4 +1,4 @@
-// @index mips-commands — ASM 导出命令分派：P3–P7 使用 builtin，P2 保留 MARS provider
+// @index mips-commands — ASM 导出命令分派：P2 普通布局与 P3–P7 课程布局共用内部引擎
 
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -60,9 +60,8 @@ async function dumpCurrentMipsFile(
 }
 
 /**
- * Export one ASM section using the builtin assembler whenever its P3-P7 course
- * contract applies. P2 deliberately remains on MARS because the builtin
- * assembler contract starts at P3 and does not model P2's syscall workflow.
+ * Export one section with the shared internal assembler. P2 preserves ordinary
+ * MARS bytes; course profiles additionally project the DUT image and halt tail.
  */
 export async function dumpMipsFile(
   services: AppServices,
@@ -107,7 +106,8 @@ export async function dumpMipsFile(
       }
       const words = target === 'kernelText'
         ? imageSegmentWords(result.image, 'ktext')
-        : courseInstructionImageWordsWithOrdinaryHalt(result.image, profile as CourseProfile);
+        : profile === 'P2' ? imageSegmentWords(result.image, 'text')
+          : courseInstructionImageWordsWithOrdinaryHalt(result.image, profile as CourseProfile);
       await ensureDirectory(vscode.Uri.file(path.dirname(outputFile.fsPath)));
       await writeTextFile(outputFile, wordsToHexText(words));
     }

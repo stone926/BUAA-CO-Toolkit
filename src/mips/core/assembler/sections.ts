@@ -1,22 +1,37 @@
-// @index mips-core — 课程段布局/容量检查：text/ktext/data 光标与字节车道写入（纯 TS）
+// @index mips-core — Shared bounded text/kernel/data section layout and little-endian word materialization
 
 import { ProgramSegment, SourceMapEntry } from '../api';
 import { SourceSpan } from './diagnostics';
 import { WorkOrigin } from './work';
 import { hex8Address } from '../values';
 
-export type CourseSectionId = 'text' | 'ktext' | 'data';
+export type CourseSectionId = 'text' | 'ktext' | 'data' | 'kdata';
+export type DataSectionId = 'data' | 'kdata';
 
 export interface SectionBounds {
   readonly base: number;
   readonly endInclusive: number;
+  /** MARS .data can explicitly select the extern region below its default base. */
+  readonly minimumAddress?: number;
 }
 
 export interface SectionLayout {
   readonly text: SectionBounds;
   readonly ktext: SectionBounds;
   readonly data: SectionBounds;
+  readonly kdata?: SectionBounds;
 }
+
+export interface SegmentBuilderOptions {
+  readonly sectionLayout?: SectionLayout;
+  /** Course HexText dumps pad initialized data to 4 KiB; ordinary images do not. */
+  readonly dataPaddingBytes?: number;
+  /** Bounds holes and .space as well as initialized words, before allocation. */
+  readonly maximumSegmentBytes?: number;
+}
+
+export const defaultMaximumSegmentBytes = 4 * 1024 * 1024;
+export const maximumAssemblerSegmentBytes = 16 * 1024 * 1024;
 
 /** Course assembler layout contract (P7-2-2, resources/co/courseConfig.json). */
 export const courseSectionLayout: Readonly<SectionLayout> = Object.freeze({
@@ -34,224 +49,207 @@ interface RecordedOrigin {
   readonly expansionStack?: readonly SourceSpan[];
 }
 
+interface DataSectionState {
+  baseAddress: number;
+  cursor: number;
+  autoAlign: boolean;
+  initializedEnd?: number;
+  allocatedEnd?: number;
+  readonly words: Map<number, number>;
+  readonly origins: Map<number, Omit<RecordedOrigin, 'section' | 'wordIndex'>>;
+}
+
 export class CourseSegmentBuilder {
-  private textWords: number[] = [];
-  private ktextWords: number[] = [];
+  private readonly textWords: number[] = [];
+  private readonly ktextWords: number[] = [];
   private readonly usedSections = new Set<CourseSectionId>();
   private readonly textOccupied = new Set<number>();
   private readonly ktextOccupied = new Set<number>();
-  private readonly dataBytes = new Map<number, number>();
-  private textCursor = courseSectionLayout.text.base;
-  private ktextCursor = courseSectionLayout.ktext.base;
-  private dataCursor = courseSectionLayout.data.base;
-  private dataAutoAlign = true;
+  private textCursor: number;
+  private ktextCursor: number;
+  private readonly dataSections = new Map<DataSectionId, DataSectionState>();
+  readonly sectionLayout: SectionLayout;
+  private readonly dataPaddingBytes: number;
+  private readonly maximumSegmentBytes: number;
   private readonly recorded: RecordedOrigin[] = [];
-  private readonly dataOrigins = new Map<number, Omit<RecordedOrigin, 'section' | 'wordIndex'>>();
 
-  cursor(section: CourseSectionId): number {
-    switch (section) {
-      case 'text': return this.textCursor;
-      case 'ktext': return this.ktextCursor;
-      case 'data': return this.dataCursor;
+  constructor(options: SegmentBuilderOptions = {}) {
+    this.sectionLayout = options.sectionLayout ?? courseSectionLayout;
+    this.dataPaddingBytes = options.dataPaddingBytes ?? 0x1000;
+    this.maximumSegmentBytes = options.maximumSegmentBytes ?? defaultMaximumSegmentBytes;
+    if (!Number.isSafeInteger(this.maximumSegmentBytes) || this.maximumSegmentBytes < 4
+      || this.maximumSegmentBytes > maximumAssemblerSegmentBytes) {
+      throw new Error(`maximumSegmentBytes must be in 4..${maximumAssemblerSegmentBytes}`);
+    }
+    if (!Number.isSafeInteger(this.dataPaddingBytes) || this.dataPaddingBytes < 4
+      || this.dataPaddingBytes > this.maximumSegmentBytes || this.dataPaddingBytes % 4 !== 0) {
+      throw new Error('dataPaddingBytes must be a word-aligned size within maximumSegmentBytes');
+    }
+    this.textCursor = this.sectionLayout.text.base;
+    this.ktextCursor = this.sectionLayout.ktext.base;
+    for (const section of ['data', 'kdata'] as const) {
+      const bounds = this.sectionLayout[section];
+      if (!bounds) continue;
+      this.dataSections.set(section, {
+        baseAddress: bounds.base, cursor: bounds.base, autoAlign: true,
+        words: new Map(), origins: new Map()
+      });
     }
   }
 
-  /** Preserve an explicitly selected or symbol-bearing section even when it has zero words. */
-  markSectionUsed(section: CourseSectionId): void {
-    this.usedSections.add(section);
+  cursor(section: CourseSectionId): number {
+    return section === 'text' ? this.textCursor : section === 'ktext' ? this.ktextCursor : this.dataState(section).cursor;
   }
+
+  /** Preserve an explicitly selected or symbol-bearing section even when empty. */
+  markSectionUsed(section: CourseSectionId): void { this.usedSections.add(section); }
 
   setCursor(section: CourseSectionId, address: number): void {
     this.markSectionUsed(section);
-    if ((address & 3) !== 0) {
-      throw new Error(`段 ${section} 的地址 ${hex8Address(address)} 未字对齐`);
-    }
+    if ((address & 3) !== 0) throw new Error(`段 ${section} 的地址 ${hex8Address(address)} 未字对齐`);
     const bounds = this.boundsFor(section);
-    if (address < bounds.base || address > bounds.endInclusive) {
-      throw new Error(`段 ${section} 的地址 ${hex8Address(address)} 超出 ${hex8Address(bounds.base)}..${hex8Address(bounds.endInclusive)}`);
+    if (address < (bounds.minimumAddress ?? bounds.base) || address > bounds.endInclusive) {
+      throw new Error(`段 ${section} 的地址 ${hex8Address(address)} 超出 ${hex8Address(bounds.minimumAddress ?? bounds.base)}..${hex8Address(bounds.endInclusive)}`);
     }
-    if (section === 'text') this.textCursor = address;
-    else if (section === 'ktext') this.ktextCursor = address;
-    else this.dataCursor = address;
-  }
-
-  resetAutoAlign(): void {
-    this.dataAutoAlign = true;
-  }
-
-  disableAutoAlign(): void {
-    this.dataAutoAlign = false;
-  }
-
-  alignData(exponent: number): void {
-    this.markSectionUsed('data');
-    if (exponent === 0) {
-      this.disableAutoAlign();
+    if (section === 'text' || section === 'ktext') {
+      this.ensureAllocationWithinLimit(section, address + 1, bounds.base);
+      if (section === 'text') this.textCursor = address;
+      else this.ktextCursor = address;
       return;
     }
-    if (exponent < 0 || exponent > 16) {
-      throw new Error(`.align 指数必须在 0..16，实际 ${exponent}`);
-    }
-    const boundary = 2 ** exponent;
-    const aligned = Math.ceil(this.dataCursor / boundary) * boundary;
-    if (aligned > courseSectionLayout.data.base) {
-      this.ensureDataAddress(aligned - 1);
-    }
-    this.dataCursor = aligned;
+    const state = this.dataState(section);
+    const base = Math.min(state.baseAddress, address);
+    this.ensureAllocationWithinLimit(section, Math.max(address + 1, state.allocatedEnd ?? address), base);
+    state.baseAddress = base;
+    state.cursor = address;
   }
 
-  appendInstruction(
-    section: 'text' | 'ktext',
-    word: number,
-    origin: WorkOrigin
-  ): { wordIndex: number; segmentIndex: number } {
+  resetAutoAlign(section: DataSectionId = 'data'): void { this.dataState(section).autoAlign = true; }
+  disableAutoAlign(section: DataSectionId = 'data'): void { this.dataState(section).autoAlign = false; }
+
+  alignData(exponent: number, section: DataSectionId = 'data'): void {
+    this.markSectionUsed(section);
+    if (exponent === 0) { this.disableAutoAlign(section); return; }
+    if (exponent < 0 || exponent > 16) throw new Error(`.align 指数必须在 0..16，实际 ${exponent}`);
+    const state = this.dataState(section);
+    const aligned = Math.ceil(state.cursor / (2 ** exponent)) * (2 ** exponent);
+    if (aligned > state.baseAddress) this.ensureDataAddress(section, aligned - 1);
+    state.cursor = aligned;
+  }
+
+  appendInstruction(section: 'text' | 'ktext', word: number, origin: WorkOrigin): { wordIndex: number; segmentIndex: number } {
     this.markSectionUsed(section);
     const address = this.cursor(section);
     this.ensureInstructionAddress(section, address);
     const words = section === 'text' ? this.textWords : this.ktextWords;
     const occupied = section === 'text' ? this.textOccupied : this.ktextOccupied;
     const wordIndex = (address - this.boundsFor(section).base) / 4;
-    if (occupied.has(wordIndex)) {
-      throw new Error(`段 ${section} 在 ${hex8Address(address)} 重叠`);
-    }
+    if (occupied.has(wordIndex)) throw new Error(`段 ${section} 在 ${hex8Address(address)} 重叠`);
     while (words.length <= wordIndex) words.push(0);
     words[wordIndex] = word >>> 0;
     occupied.add(wordIndex);
-    this.recorded.push({
-      section,
-      wordIndex,
-      sourceId: origin.span.sourceId,
-      startOffset: origin.span.startOffset,
-      endOffset: origin.span.endOffset,
-      ...(origin.expansionStack.length ? { expansionStack: origin.expansionStack } : {})
-    });
-    this.advance(section, 4);
+    this.recorded.push({ section, wordIndex, ...originRecord(origin) });
+    if (section === 'text') this.textCursor = address + 4;
+    else this.ktextCursor = address + 4;
     return { wordIndex, segmentIndex: -1 };
   }
 
-  /** Write data bytes at a previously allocated address (pass-2 relocation patch). */
-  writeDataBytesAt(address: number, bytes: readonly number[], origin: WorkOrigin): void {
-    this.markSectionUsed('data');
-    if (bytes.length) this.ensureDataAddress(address + bytes.length - 1);
+  /** Write data at a previously allocated address (pass-2 relocation patch). */
+  writeDataBytesAt(address: number, bytes: readonly number[], origin: WorkOrigin, section: DataSectionId = 'data'): void {
+    this.markSectionUsed(section);
+    if (bytes.length) this.ensureDataAddress(section, address + bytes.length - 1);
+    const state = this.dataState(section);
     for (let offset = 0; offset < bytes.length; offset++) {
-      this.dataBytes.set(address + offset, bytes[offset] & 0xff);
-      this.dataOrigins.set(Math.floor((address + offset - courseSectionLayout.data.base) / 4), {
-        sourceId: origin.span.sourceId,
-        startOffset: origin.span.startOffset,
-        endOffset: origin.span.endOffset,
-        ...(origin.expansionStack.length ? { expansionStack: origin.expansionStack } : {})
-      });
+      const absoluteAddress = address + offset;
+      const wordAddress = Math.floor(absoluteAddress / 4) * 4;
+      const shift = (absoluteAddress & 3) * 8;
+      const previous = state.words.get(wordAddress) ?? 0;
+      state.words.set(wordAddress, ((previous & ~(0xff << shift)) | ((bytes[offset] & 0xff) << shift)) >>> 0);
+      state.origins.set(wordAddress, originRecord(origin));
+    }
+    if (bytes.length) {
+      state.initializedEnd = Math.max(state.initializedEnd ?? address, address + bytes.length);
+      state.allocatedEnd = Math.max(state.allocatedEnd ?? address, address + bytes.length);
     }
   }
 
-  /** Advance the data cursor without allocating initialized bytes (MARS `.space` semantics). */
-  appendDataSpace(bytes: number): number {
-    this.markSectionUsed('data');
-    const address = this.dataCursor;
-    if (bytes) this.ensureDataAddress(address + bytes - 1);
-    this.advance('data', bytes);
+  /** Advance without initialized bytes (MARS `.space` semantics). */
+  appendDataSpace(bytes: number, section: DataSectionId = 'data'): number {
+    this.markSectionUsed(section);
+    const state = this.dataState(section);
+    const address = state.cursor;
+    if (bytes) {
+      this.ensureDataAddress(section, address + bytes - 1);
+      state.allocatedEnd = Math.max(state.allocatedEnd ?? address, address + bytes);
+    }
+    state.cursor += bytes;
     return address;
   }
 
-  appendDataBytes(
-    bytes: readonly number[],
-    origin: WorkOrigin,
-    /** Numeric directive width; 0 disables MARS auto-alignment (strings/space). */
-    alignment = 0
-  ): number {
-    this.markSectionUsed('data');
-    if (this.dataAutoAlign && alignment > 1) {
-      const aligned = Math.ceil(this.dataCursor / alignment) * alignment;
-      if (aligned > courseSectionLayout.data.base) this.ensureDataAddress(aligned - 1);
-      this.dataCursor = aligned;
+  appendDataBytes(bytes: readonly number[], origin: WorkOrigin, alignment = 0, section: DataSectionId = 'data'): number {
+    this.markSectionUsed(section);
+    const state = this.dataState(section);
+    if (state.autoAlign && alignment > 1) {
+      const aligned = Math.ceil(state.cursor / alignment) * alignment;
+      if (aligned > state.baseAddress) this.ensureDataAddress(section, aligned - 1);
+      state.cursor = aligned;
     }
-    const address = this.dataCursor;
-    if (bytes.length) this.ensureDataAddress(address + bytes.length - 1);
-    for (let offset = 0; offset < bytes.length; offset++) {
-      this.dataBytes.set(address + offset, bytes[offset] & 0xff);
-      this.dataOrigins.set(Math.floor((address + offset - courseSectionLayout.data.base) / 4), {
-        sourceId: origin.span.sourceId,
-        startOffset: origin.span.startOffset,
-        endOffset: origin.span.endOffset,
-        ...(origin.expansionStack.length ? { expansionStack: origin.expansionStack } : {})
-      });
-    }
-    this.advance('data', bytes.length);
+    const address = state.cursor;
+    this.writeDataBytesAt(address, bytes, origin, section);
+    state.cursor += bytes.length;
     return address;
   }
 
   toSegments(): ProgramSegment[] {
     const segments: ProgramSegment[] = [];
     if (this.textWords.length || this.usedSections.has('text')) {
-      segments.push({ name: 'text', baseAddress: courseSectionLayout.text.base, words: this.textWords });
+      segments.push({ name: 'text', baseAddress: this.sectionLayout.text.base, words: this.textWords });
     }
     if (this.ktextWords.length || this.usedSections.has('ktext')) {
-      segments.push({ name: 'ktext', baseAddress: courseSectionLayout.ktext.base, words: this.ktextWords });
+      segments.push({ name: 'ktext', baseAddress: this.sectionLayout.ktext.base, words: this.ktextWords });
     }
-    if (this.dataBytes.size > 0
-      || this.dataCursor > courseSectionLayout.data.base
-      || this.usedSections.has('data')) {
-      // MARS allocates data memory in 4096-byte (1024-word) blocks and its HexText
-      // dump ends at the last allocated block boundary. `.space` advances the cursor
-      // without creating initialized bytes, but it still allocates zero-filled course
-      // DM and must therefore materialize a data segment for labels and replay.
-      const lastInitializedByte = this.dataBytes.size > 0
-        ? Math.max(...this.dataBytes.keys()) + 1
-        : courseSectionLayout.data.base;
-      const allocatedEnd = Math.ceil(lastInitializedByte / 0x1000) * 0x1000;
+    for (const [section, state] of this.dataSections) {
+      if (!this.usedSections.has(section) && state.allocatedEnd === undefined) continue;
+      const initializedBytes = (state.initializedEnd ?? state.baseAddress) - state.baseAddress;
+      const paddedBytes = Math.ceil(initializedBytes / this.dataPaddingBytes) * this.dataPaddingBytes;
       const wordCount = Math.max(
-        Math.ceil((this.dataCursor - courseSectionLayout.data.base) / 4),
-        allocatedEnd / 4
+        Math.ceil((Math.max(state.cursor, state.allocatedEnd ?? state.baseAddress) - state.baseAddress) / 4),
+        paddedBytes / 4
       );
       const words = new Array<number>(wordCount).fill(0);
-      for (const [address, byte] of this.dataBytes) {
-        const wordIndex = Math.floor((address - courseSectionLayout.data.base) / 4);
-        const lane = (address - courseSectionLayout.data.base) & 3;
-        words[wordIndex] = (words[wordIndex] & ~(0xff << (lane * 8))) | ((byte << (lane * 8)) >>> 0);
-      }
-      segments.push({ name: 'data', baseAddress: courseSectionLayout.data.base, words });
+      for (const [wordAddress, word] of state.words) words[(wordAddress - state.baseAddress) / 4] = word;
+      segments.push({ name: section, baseAddress: state.baseAddress, words });
     }
     return segments;
   }
 
   toSourceMap(): SourceMapEntry[] {
-    const segments = this.toSegments();
-    const segmentIndexByName = new Map(segments.map((segment, index) => [segment.name, index]));
+    const indices = new Map(this.toSegments().map((segment, index) => [segment.name, index]));
     const result: SourceMapEntry[] = [];
-    for (const recorded of this.recorded) {
-      const segmentIndex = segmentIndexByName.get(recorded.section);
-      if (segmentIndex === undefined) continue;
-      result.push({
-        segmentIndex,
-        wordIndex: recorded.wordIndex,
-        sourceId: recorded.sourceId,
-        startOffset: recorded.startOffset,
-        endOffset: recorded.endOffset,
-        ...(recorded.expansionStack?.length ? { expansionStack: recorded.expansionStack } : {})
-      });
+    for (const { section, ...recorded } of this.recorded) {
+      const segmentIndex = indices.get(section);
+      if (segmentIndex !== undefined) result.push({ segmentIndex, ...recorded });
     }
-    const dataIndex = segmentIndexByName.get('data');
-    if (dataIndex !== undefined) {
-      for (const [wordIndex, origin] of this.dataOrigins) {
-        result.push({
-          segmentIndex: dataIndex,
-          wordIndex,
-          sourceId: origin.sourceId,
-          startOffset: origin.startOffset,
-          endOffset: origin.endOffset,
-          ...(origin.expansionStack?.length ? { expansionStack: origin.expansionStack } : {})
-        });
+    for (const [section, state] of this.dataSections) {
+      const segmentIndex = indices.get(section);
+      if (segmentIndex === undefined) continue;
+      for (const [address, origin] of state.origins) {
+        result.push({ segmentIndex, wordIndex: (address - state.baseAddress) / 4, ...origin });
       }
     }
     return result;
   }
 
   private boundsFor(section: CourseSectionId): SectionBounds {
-    switch (section) {
-      case 'text': return courseSectionLayout.text;
-      case 'ktext': return courseSectionLayout.ktext;
-      case 'data': return courseSectionLayout.data;
-    }
+    const bounds = this.sectionLayout[section];
+    if (!bounds) throw new Error(`不支持段 ${section}`);
+    return bounds;
+  }
+
+  private dataState(section: DataSectionId): DataSectionState {
+    const state = this.dataSections.get(section);
+    if (!state) throw new Error(`不支持段 ${section}`);
+    return state;
   }
 
   private ensureInstructionAddress(section: 'text' | 'ktext', address: number): void {
@@ -259,35 +257,36 @@ export class CourseSegmentBuilder {
     if (address < bounds.base || address > bounds.endInclusive) {
       throw new Error(`段 ${section} 指令地址 ${hex8Address(address)} 超出 ${hex8Address(bounds.base)}..${hex8Address(bounds.endInclusive)}`);
     }
-    const nextTextEnd = section === 'text'
-      ? Math.max(courseSectionLayout.text.base + this.textWords.length * 4, address + 4)
-      : courseSectionLayout.text.base + this.textWords.length * 4;
-    if (this.ktextOccupied.size && nextTextEnd > courseSectionLayout.ktext.base) {
+    this.ensureAllocationWithinLimit(section, address + 4, bounds.base);
+    const textEnd = section === 'text'
+      ? Math.max(this.sectionLayout.text.base + this.textWords.length * 4, address + 4)
+      : this.sectionLayout.text.base + this.textWords.length * 4;
+    if (this.ktextOccupied.size && textEnd > this.sectionLayout.ktext.base
+      || section === 'ktext' && this.textOccupied.size && textEnd > this.sectionLayout.ktext.base) {
       throw new Error(`.text 与 .ktext 在 ${hex8Address(address)} 重叠`);
     }
-    if (section === 'ktext' && this.textOccupied.size
-      && courseSectionLayout.text.base + this.textWords.length * 4 > courseSectionLayout.ktext.base) {
-      throw new Error(`.ktext 与 .text 在 ${hex8Address(address)} 重叠`);
-    }
   }
 
-  private ensureDataAddress(address: number): void {
-    if (address < courseSectionLayout.data.base || address > courseSectionLayout.data.endInclusive) {
-      throw new Error(`数据地址 ${hex8Address(address)} 超出 ${hex8Address(courseSectionLayout.data.base)}..${hex8Address(courseSectionLayout.data.endInclusive)}`);
+  private ensureDataAddress(section: DataSectionId, address: number): void {
+    const bounds = this.boundsFor(section);
+    const state = this.dataState(section);
+    if (address < (bounds.minimumAddress ?? bounds.base) || address > bounds.endInclusive) {
+      throw new Error(`数据地址 ${hex8Address(address)} 超出 ${hex8Address(bounds.minimumAddress ?? bounds.base)}..${hex8Address(bounds.endInclusive)}`);
     }
+    const paddedBytes = Math.ceil((address + 1 - state.baseAddress) / this.dataPaddingBytes) * this.dataPaddingBytes;
+    this.ensureAllocationWithinLimit(section, state.baseAddress + paddedBytes, state.baseAddress);
   }
 
-  private advance(section: CourseSectionId, bytes: number): void {
-    switch (section) {
-      case 'text':
-        this.textCursor = (this.textCursor + bytes) >>> 0;
-        break;
-      case 'ktext':
-        this.ktextCursor = (this.ktextCursor + bytes) >>> 0;
-        break;
-      case 'data':
-        this.dataCursor = (this.dataCursor + bytes) >>> 0;
-        break;
+  private ensureAllocationWithinLimit(section: CourseSectionId, endExclusive: number, base: number): void {
+    if (endExclusive - base > this.maximumSegmentBytes) {
+      throw new Error(`段 ${section} 的大小或地址空洞超过 ${this.maximumSegmentBytes} 字节上限`);
     }
   }
+}
+
+function originRecord(origin: WorkOrigin): Omit<RecordedOrigin, 'section' | 'wordIndex'> {
+  return {
+    sourceId: origin.span.sourceId, startOffset: origin.span.startOffset, endOffset: origin.span.endOffset,
+    ...(origin.expansionStack.length ? { expansionStack: origin.expansionStack } : {})
+  };
 }

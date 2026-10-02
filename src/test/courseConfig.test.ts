@@ -37,9 +37,9 @@ describe('course config alignment', () => {
     expect(getProfileRequiredTools('P1')).toEqual(['verilogSimulator']);
   });
 
-  it('keeps legacy-only tools on P0-P3 where their profile capability still needs them', () => {
+  it('requires external tools only for Logisim profiles in P0-P3', () => {
     expect(getProfileRequiredTools('P0')).toEqual(['logisim', 'java']);
-    expect(getProfileRequiredTools('P2')).toEqual(['mars', 'java']);
+    expect(getProfileRequiredTools('P2')).toEqual([]);
     expect(getProfileRequiredTools('P3')).toEqual(['logisim', 'java']);
   });
 

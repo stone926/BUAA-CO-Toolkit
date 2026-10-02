@@ -20,7 +20,7 @@ export interface WorkerJobHandler {
   (
     request: WorkerRequestMessage,
     signal: AbortSignal,
-    emitProgress: (batch: unknown[]) => Promise<void>
+    emitProgress: (batch: unknown[]) => Promise<unknown>
   ): unknown | Promise<unknown>;
 }
 
@@ -31,6 +31,8 @@ for (const kind of [
   'isa-decode-batch',
   'isa-encode-batch',
   'assembler-assemble',
+  'mars-assemble',
+  'mars-execute',
   'machine-execute',
   'device-cycle-vector'
 ]) {
@@ -45,7 +47,7 @@ interface ActiveWorkerRequest {
   controller: AbortController;
   cancelled: boolean;
   nextSequence: number;
-  awaitingAck?: { sequence: number; resolve: () => void };
+  awaitingAck?: { sequence: number; resolve: (response?: unknown) => void };
 }
 
 const active = new Map<string, ActiveWorkerRequest>();
@@ -63,7 +65,7 @@ function handleMessage(raw: unknown): void {
     if (!awaiting || awaiting.sequence !== raw.sequence) return;
     const entry = active.get(raw.requestId)!;
     entry.awaitingAck = undefined;
-    awaiting.resolve();
+    awaiting.resolve(raw.response);
     return;
   }
   if (raw.kind === 'cancel') {
@@ -110,7 +112,7 @@ function handleMessage(raw: unknown): void {
         throw new Error('worker progress emitted before the previous batch was acknowledged');
       }
       const sequence = entry.nextSequence++;
-      await new Promise<void>((resolve) => {
+      return await new Promise<unknown>((resolve) => {
         entry.awaitingAck = { sequence, resolve };
         respond({
           protocolVersion: workerProtocolVersion,
@@ -121,7 +123,7 @@ function handleMessage(raw: unknown): void {
         });
         if (entry.cancelled) {
           entry.awaitingAck = undefined;
-          resolve();
+          resolve(undefined);
         }
       });
     }))

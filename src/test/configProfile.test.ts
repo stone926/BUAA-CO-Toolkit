@@ -173,65 +173,16 @@ describe('profile-derived project defaults', () => {
   });
 });
 
-describe('getMarsJar', () => {
+describe('retired external MARS settings', () => {
   beforeEach(() => {
     clearConfig();
   });
 
-  it('returns mars path for non-P7 profile', () => {
-    setConfig('co.project.profile', 'P5');
+  it('ignores configured MARS and P7 override paths', () => {
     setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
-
-    expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
-  });
-
-  it('ignores the retired marsP7 override for P7', () => {
-    setConfig('co.project.profile', 'P7');
     setConfig('co.toolchain.marsP7', '/opt/mars/MarsP7.jar');
-    setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
-
-    expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
-  });
-
-  it('falls back to mars when P7 profile has no marsP7 configured', () => {
-    setConfig('co.project.profile', 'P7');
-    setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
-    // marsP7 not set — should fall back to mars
-
-    expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
-  });
-
-  it('returns mars when P7 profile has empty marsP7', () => {
-    setConfig('co.project.profile', 'P7');
-    setConfig('co.toolchain.marsP7', '');
-    setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
-
-    expect(getMarsJar()).toBe('/opt/mars/Mars.jar');
-  });
-
-  it('reads the dedicated P7 key without falling back through the current profile', () => {
-    setConfig('co.project.profile', 'P6');
-    setConfig('co.toolchain.mars', '/opt/mars/Generic.jar');
-
-    expect(getMarsP7Jar()).toBe('');
-
-    setConfig('co.toolchain.marsP7', '/opt/mars/P7.jar');
-    expect(getMarsP7Jar()).toBe('/opt/mars/P7.jar');
-  });
-
-  it('returns empty string when nothing is configured', () => {
-    setConfig('co.project.profile', 'P5');
-    // mars not set
-
     expect(getMarsJar()).toBe('');
-  });
-
-  it('respects resource-scoped configuration', () => {
-    const uri = makeUri('/workspace/project.asm');
-    setConfig('co.project.profile', 'P5');
-    setConfig('co.toolchain.mars', '/opt/mars/Mars.jar');
-
-    expect(getMarsJar(uri)).toBe('/opt/mars/Mars.jar');
+    expect(getMarsP7Jar()).toBe('');
   });
 });
 

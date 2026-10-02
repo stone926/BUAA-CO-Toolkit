@@ -11,13 +11,13 @@ describe('buildWizardSettingUpdates', () => {
     ]);
   });
 
-  it('keeps machine paths global and trims user input', () => {
+  it('keeps Logisim and Java paths global and trims user input', () => {
     expect(buildWizardSettingUpdates('P7', {
-      mars: '  C:\\Tools\\Mars.jar  ',
+      java: '  C:\\Java\\bin\\java.exe  ',
       logisim: ''
     }, true)).toEqual([
       { key: 'project.profile', value: 'P7', target: 'workspaceFolder' },
-      { key: 'toolchain.mars', value: 'C:\\Tools\\Mars.jar', target: 'global' }
+      { key: 'toolchain.java', value: 'C:\\Java\\bin\\java.exe', target: 'global' }
     ]);
   });
 
@@ -35,39 +35,39 @@ describe('buildWizardSettingUpdates', () => {
 
   it('writes a machine path before clearing legacy values that would shadow it', () => {
     expect(buildWizardSettingUpdates('P7', {
-      mars: 'C:\\Tools\\Mars.jar'
+      logisim: 'C:\\Tools\\logisim.jar'
     }, true, {
-      mars: { workspaceFolder: true, workspace: true }
+      logisim: { workspaceFolder: true, workspace: true }
     })).toEqual([
       { key: 'project.profile', value: 'P7', target: 'workspaceFolder' },
-      { key: 'toolchain.mars', value: 'C:\\Tools\\Mars.jar', target: 'global' },
-      { key: 'toolchain.mars', value: undefined, target: 'workspaceFolder' },
-      { key: 'toolchain.mars', value: undefined, target: 'workspace' }
+      { key: 'toolchain.logisim', value: 'C:\\Tools\\logisim.jar', target: 'global' },
+      { key: 'toolchain.logisim', value: undefined, target: 'workspaceFolder' },
+      { key: 'toolchain.logisim', value: undefined, target: 'workspace' }
     ]);
   });
 
   it('never clears a folder setting when no resource folder is in scope', () => {
     expect(buildWizardSettingUpdates('P2', {
-      mars: 'C:\\Tools\\Mars.jar'
+      java: 'C:\\Java\\bin\\java.exe'
     }, false, {
-      mars: { workspaceFolder: true, workspace: true }
+      java: { workspaceFolder: true, workspace: true }
     })).toEqual([
       { key: 'project.profile', value: 'P2', target: 'workspace' },
-      { key: 'toolchain.mars', value: 'C:\\Tools\\Mars.jar', target: 'global' },
-      { key: 'toolchain.mars', value: undefined, target: 'workspace' }
+      { key: 'toolchain.java', value: 'C:\\Java\\bin\\java.exe', target: 'global' },
+      { key: 'toolchain.java', value: undefined, target: 'workspace' }
     ]);
   });
 
   it('inspects only paths written by this run and detects both shadowing scopes', () => {
-    const updates = buildWizardSettingUpdates('P7', { mars: 'C:\\Tools\\Mars.jar' }, true);
+    const updates = buildWizardSettingUpdates('P3', { logisim: 'C:\\Tools\\logisim.jar' }, true);
     const inspected: string[] = [];
 
     expect(inspectWizardToolchainLegacyScopes(updates, true, (key) => {
       inspected.push(key);
       return { workspaceValue: 'D:/old-workspace', workspaceFolderValue: 'D:/old-folder' };
     })).toEqual({
-      mars: { workspace: true, workspaceFolder: true }
+      logisim: { workspace: true, workspaceFolder: true }
     });
-    expect(inspected).toEqual(['toolchain.mars']);
+    expect(inspected).toEqual(['toolchain.logisim']);
   });
 });

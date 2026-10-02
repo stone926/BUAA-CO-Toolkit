@@ -30,7 +30,7 @@ export interface WorkerClientRequest {
   jobId: string;
   promise: Promise<WorkerOutboundMessage>;
   settle: (message: WorkerOutboundMessage) => void;
-  onProgress?: (batch: unknown[]) => void | Promise<void>;
+  onProgress?: (batch: unknown[]) => unknown | Promise<unknown>;
   /** Next progress sequence accepted from this worker generation. */
   expectedProgressSequence: number;
   /** True while the consumer is still applying the current progress batch. */
@@ -97,7 +97,7 @@ export class WorkerClient {
   /** Start a job. Resolves exactly once; rejections come only from worker death. */
   async start(
     job: WorkerJob,
-    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void | Promise<void> } = {}
+    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => unknown | Promise<unknown> } = {}
   ): Promise<WorkerOutboundMessage> {
     const requestId = `req-${this.requestCounter++}`;
     const jobId = `job-${requestId}`;
@@ -215,8 +215,9 @@ export class WorkerClient {
       const worker = this.worker;
       entry.progressInFlight = true;
       void (async () => {
+        let response: unknown;
         try {
-          await entry.onProgress?.(raw.batch);
+          response = await entry.onProgress?.(raw.batch);
         } catch (error) {
           this.failProgressConsumer(entry, error);
           return;
@@ -234,7 +235,8 @@ export class WorkerClient {
           protocolVersion: workerProtocolVersion,
           kind: 'ack',
           requestId: raw.requestId,
-          sequence: raw.sequence
+          sequence: raw.sequence,
+          ...(response === undefined ? {} : { response })
         };
         try {
           worker.postMessage(ack);

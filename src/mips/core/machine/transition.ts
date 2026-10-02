@@ -12,7 +12,7 @@ import {
 } from '../events/commitEvent';
 import { PreparedDeviceAccess } from '../devices/deviceBus';
 import {
-  CourseExceptionName,
+  ArchitectureExceptionName,
   CourseExecutionProfile,
   cp0RegisterNumbers,
   ExceptionStage
@@ -20,6 +20,7 @@ import {
 import {
   addSigned32WithOverflow,
   hex8Address,
+  high32,
   low32,
   multiplySigned64,
   signExtend16,
@@ -57,10 +58,15 @@ export interface TransitionContext {
   readonly memory: MemoryBus;
   readonly scope: InstructionScope;
   readonly undefinedBehavior: UndefinedBehaviorPolicy;
+  /** Explicit ordinary-MARS service mode; never enabled for course exceptions. */
+  readonly syscallServices?: boolean;
+  readonly syscallWrites?: readonly RegisterWrite[];
+  readonly syscallCommit?: () => void;
+  readonly instructionExtension?: InstructionExtension;
 }
 
 export interface PendingException {
-  readonly name: CourseExceptionName;
+  readonly name: ArchitectureExceptionName;
   readonly stage: ExceptionStage;
   readonly address?: number;
   readonly message: string;
@@ -109,7 +115,14 @@ export interface InstructionEffect {
   readonly eretTargetPc?: number;
   readonly exception?: PendingException;
   readonly outOfDomain?: ExecutionDiagnostic;
+  /** Validated coprocessor state changes applied only at the shared commit point. */
+  readonly extensionCommit?: () => void;
 }
+
+export type InstructionExtension = (
+  context: TransitionContext,
+  instruction: InstructionEffect & { readonly word: number }
+) => InstructionEffect | undefined;
 
 const controlTransferKinds = new Set(['branch', 'jump', 'jump-register', 'eret']);
 
@@ -145,6 +158,9 @@ export function evaluateInstruction(context: TransitionContext): InstructionEffe
     return withFault(base, profile, fetched.fault, 'fetch', pcBefore);
   }
   const word = u32(fetched.word ?? 0);
+
+  const extended = context.instructionExtension?.(context, { ...base, word });
+  if (extended) { return extended; }
 
   // ── D stage ────────────────────────────────────────────────────────────────
   const match = matchRuntimeInstruction(word, scope);
@@ -296,8 +312,17 @@ function dispatch(
       });
 
     case 'mul': {
-      // MIPS32 MUL writes only its GPR destination; HI/LO become UNPREDICTABLE.
-      const product = low32(multiplySigned64(rsValue, rtValue));
+      const wideProduct = multiplySigned64(rsValue, rtValue);
+      const product = low32(wideProduct);
+      // MARS additionally defines both HI/LO words; course MUL retains the MIPS
+      // UNPREDICTABLE classification required by its comparison contract.
+      if (profile.syscallMode === 'services') {
+        return {
+          ...decoded,
+          gprWrites: [{ register: rdIndex, value: product }],
+          hiLoWrites: [{ register: 'hi', value: high32(wideProduct) }, { register: 'lo', value: product }]
+        };
+      }
       return {
         ...decoded,
         gprWrites: [{ register: rdIndex, value: product }],
@@ -371,6 +396,9 @@ function dispatch(
     }
 
     case 'syscall':
+      if (context.syscallServices && profile.syscallMode === 'services') {
+        return { ...decoded, gprWrites: context.syscallWrites ?? [], extensionCommit: context.syscallCommit };
+      }
       if (!profile.exceptions) {
         return unsupportedInCourseProfile(decoded, profile, entry.mnemonic, pcBefore, word);
       }
@@ -399,6 +427,11 @@ function dispatch(
         : trapCondition(handler, rsValue, rtValue) === true;
       if (!taken) {
         return decoded;
+      }
+      if (profile.syscallMode === 'services') {
+        return { ...decoded, exception: {
+          name: 'trap', stage: 'execute', message: `${hex8Address(pcBefore)} 执行 ${entry.mnemonic} 陷阱`
+        } };
       }
       return {
         ...decoded,
@@ -446,7 +479,7 @@ const immediateTrapHandlers = new Set([
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function controlTransferTargets(
+export function controlTransferTargets(
   profile: CourseExecutionProfile,
   pcBefore: number,
   sequential: number,
@@ -517,6 +550,8 @@ function multiplyDivideEffect(
   const { state } = context;
   const { handler, rsValue, rtValue, pcBefore, word } = input;
   const dividesByZero = (handler === 'div' || handler === 'divu') && u32(rtValue) === 0;
+  // MARS's raw two-register divide returns without changing HI/LO for zero.
+  if (dividesByZero && context.profile.syscallMode === 'services') { return decoded; }
   if (dividesByZero && context.undefinedBehavior === 'fail-closed') {
     return {
       ...decoded,
@@ -668,7 +703,7 @@ function loadEffect(
     address,
     width: partial ? 4 : (access.width as 1 | 2 | 4),
     ...(partial ? { alignment: 1 as const } : {}),
-    addressOverflow: overflow
+    addressOverflow: profile.effectiveAddressOverflow !== 'wrap' && overflow
   });
   if (isMemoryFault(prepared)) {
     return withFault(decoded, profile, prepared, 'load', address);
@@ -715,7 +750,7 @@ function storeEffect(
     address,
     width: partial ? 4 : (access.width as 1 | 2 | 4),
     ...(partial ? { alignment: 1 as const, byteMask: partial.byteMask } : {}),
-    addressOverflow: overflow,
+    addressOverflow: profile.effectiveAddressOverflow !== 'wrap' && overflow,
     value: partial ? partial.word : rtValue
   });
   if (isMemoryFault(prepared)) {

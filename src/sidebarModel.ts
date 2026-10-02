@@ -235,11 +235,11 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
     children.push(
       actionItem(
         'core.asmRun',
-        '原版 MARS 运行',
+        '运行当前 ASM',
         Commands.Mips.RunCurrentFile,
         'play',
         `使用当前 ASM: ${active.basename}`,
-        `${active.fsPath}\n\n使用原版 MARS 4.5 的 syscall/console 和标准内存布局；课程机器码导出与 CPU 测试使用内置引擎。`
+        `${active.fsPath}\n\n使用内置 MIPS 引擎运行当前程序。`
       )
     );
     if (shouldShowMipsActions(context.profile, active.languageId)) {
@@ -249,7 +249,7 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
         Commands.Mips.DumpText,
         'export',
         `写入 ${context.machineCode}`,
-        `ASM:\n${active.fsPath}\n\n默认输出:\n${defaultSiblingPath(active.fsPath, context.machineCode)}\n\n${context.profile === 'P2' ? 'P2 使用 MARS。' : 'P3–P7 使用内置汇编器。'}`
+        `ASM:\n${active.fsPath}\n\n默认输出:\n${defaultSiblingPath(active.fsPath, context.machineCode)}\n\n使用内置汇编器导出。`
       ));
     }
   }

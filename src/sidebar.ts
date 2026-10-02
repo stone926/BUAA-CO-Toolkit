@@ -7,7 +7,6 @@ import {
   getMachineCode,
   getSimTime,
   getJava,
-  getMarsJar,
   getLogisimJar,
   getMipsEngine
 } from './config';
@@ -120,12 +119,9 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     const requiredTools = new Set(
       getEffectiveRequiredTools(profile, getMipsEngine(resource)).map((tool) => tool.toLowerCase())
     );
-    const showAllTools = profile !== 'auto' && requiredTools.size === 0;
+    const showAllTools = profile !== 'auto' && profile !== 'P2' && requiredTools.size === 0;
     if (showAllTools || requiredTools.has('java')) {
       tools.push(this.createToolModel('java', 'Java', getJava(resource)));
-    }
-    if (showAllTools || requiredTools.has('mars') || requiredTools.has('marsp7')) {
-      tools.push(this.createToolModel('mars', 'MARS', getMarsJar(resource)));
     }
     if (showAllTools || requiredTools.has('logisim')) {
       tools.push(this.createToolModel('logisim', 'Logisim', getLogisimJar(resource)));

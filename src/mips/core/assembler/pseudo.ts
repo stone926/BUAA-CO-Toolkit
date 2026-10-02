@@ -8,7 +8,7 @@ import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 
 export interface PseudoExpansionOptions {
   readonly profile: CourseProfile;
-  /** Course assembler always uses the compact 16-bit address model. */
+  /** Official MARS CompactDataAtZero/CompactTextAtZero address expansion model. */
   readonly compactAddresses: boolean;
   readonly maximumInstructionsPerStatement: number;
 }
@@ -197,8 +197,8 @@ function expandLoadImmediate(
       immediateOperand(expression, operandSpan(second))
     ], origin, mnemonic)];
   }
-  const high = `((${expression}) >> 16)`;
-  const low = `((${expression}) << 16) >> 16`;
+  const high = `(((${expression}) >> 16) & 65535)`;
+  const low = `((${expression}) & 65535)`;
   if (baseRegister === undefined) {
     return [
       real('lui', [at(second), immediateOperand(high, operandSpan(second))], origin, mnemonic),
@@ -405,7 +405,9 @@ export function expandLoadStorePseudo(
   mnemonic: string,
   operands: readonly ParsedInstructionOperand[],
   statement: ParsedStatement,
-  compactAddresses: boolean
+  compactAddresses: boolean,
+  /** GPR numeric offsets use ORI for unsigned 16 bits; COP1 uses adjusted LUI. */
+  ordinaryNumericOffsets = false
 ): WorkInstruction[] | undefined {
   if (operands.length !== 2 || (operands[1].kind !== 'immediate' && operands[1].kind !== 'memory')) {
     return undefined;
@@ -421,14 +423,25 @@ export function expandLoadStorePseudo(
   if (memoryBase) {
     const expr = memoryBase.expression;
     if (memoryBase.baseRegister !== undefined) {
+      const numericOffset = parsePureInteger(expr);
+      if (ordinaryNumericOffsets && numericOffset !== undefined) {
+        const unsigned = numericOffset >>> 0;
+        if (unsigned > 32767 && unsigned <= 65535) {
+          return [
+            real('ori', [{ kind: 'register', register: 1, span: operandSpan(span) }, registerNumber(0, operandSpan(span)), immediateOperand(String(unsigned), span)], origin, 'load-store-address'),
+            real('addu', [{ kind: 'register', register: 1, span: operandSpan(span) }, { kind: 'register', register: 1, span: operandSpan(span) }, registerNumber(memoryBase.baseRegister, operandSpan(span))], origin, 'load-store-address'),
+            real(mnemonic, [destination, memoryOperand(1, '0', span)], origin, 'load-store-address')
+          ];
+        }
+      }
       // MARS compact expansion for symbol($base) with a pure course-sized symbol.
-      if (compactAddresses && !containsArithmetic(expr)) {
+      if (compactAddresses && !containsArithmetic(expr) && !(ordinaryNumericOffsets && numericOffset !== undefined)) {
         return [real(mnemonic, [
           destination,
           memoryOperand(memoryBase.baseRegister, expr, span)
         ], origin, 'load-store-address')];
       }
-      const high = `(((${expr}) >> 16) + (((${expr}) >> 15) & 1))`;
+      const high = `((((${expr}) >> 16) + (((${expr}) >> 15) & 1)) & 65535)`;
       const low = `((${expr}) << 16) >> 16`;
       return [
         real('lui', [{ kind: 'register', register: 1, span: operandSpan(span) }, immediateOperand(high, span)], origin, 'load-store-address'),
@@ -450,7 +463,7 @@ export function expandLoadStorePseudo(
           real(mnemonic, [destination, memoryOperand(1, '0', span)], origin, 'load-store-address')
         ];
       }
-      const high = (value + 0x8000) >> 16;
+      const high = Math.floor(((value >>> 0) + 0x8000) / 0x10000) & 0xffff;
       const low = (value << 16) >> 16;
       return [
         real('lui', [{ kind: 'register', register: 1, span: operandSpan(span) }, immediateOperand(String(high), span)], origin, 'load-store-address'),
@@ -461,7 +474,7 @@ export function expandLoadStorePseudo(
     if (compactAddresses && !containsArithmetic(expr)) {
       return [real(mnemonic, [destination, memoryOperand(0, expr, span)], origin, 'load-store-address')];
     }
-    const high = `(((${expr}) >> 16) + (((${expr}) >> 15) & 1))`;
+    const high = `((((${expr}) >> 16) + (((${expr}) >> 15) & 1)) & 65535)`;
     const low = `((${expr}) << 16) >> 16`;
     return [
       real('lui', [{ kind: 'register', register: 1, span: operandSpan(span) }, immediateOperand(high, span)], origin, 'load-store-address'),

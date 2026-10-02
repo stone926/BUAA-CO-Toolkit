@@ -19,6 +19,7 @@ import { InstructionScope } from '../isa/decoder';
 import {
   CourseExecutionProfile,
   courseExceptionCodes,
+  architectureExceptionCodes,
   cp0RegisterNumbers
 } from '../profiles/profile';
 import { hex8, hex8Address, u32 } from '../values';
@@ -27,6 +28,8 @@ import { Cp0Snapshot, MachineState, PendingBranch } from './state';
 import {
   evaluateInstruction,
   InstructionEffect,
+  InstructionExtension,
+  PendingException,
   UndefinedBehaviorPolicy
 } from './transition';
 
@@ -71,11 +74,20 @@ export interface MachineSessionOptions {
   readonly maxSteps?: number;
   /** Expected PC of the course halt loop; when set, halting elsewhere is rejected. */
   readonly haltPc?: number;
+  /** Ordinary execution disables the course-specific self-branch completion detector. */
+  readonly detectCourseHalt?: boolean;
+  /** Enable resumable services only when the profile explicitly selects ordinary MARS. */
+  readonly syscallServices?: boolean;
+  readonly instructionExtension?: InstructionExtension;
 }
 
 export interface StepInput {
   /** HWInt lines asserted at this instruction boundary; overrides the device sample. */
   readonly hardwareInterrupts?: number;
+  /** Service results committed atomically with an ordinary syscall instruction. */
+  readonly syscallWrites?: readonly RegisterWrite[];
+  readonly syscallCommit?: () => void;
+  readonly syscallException?: PendingException;
 }
 
 export class MachineSession {
@@ -95,6 +107,9 @@ export class MachineSession {
 
   constructor(private readonly options: MachineSessionOptions) {
     const { profile } = options;
+    if (options.syscallServices && profile.syscallMode !== 'services') {
+      throw new Error('MARS services cannot be enabled on a course exception profile');
+    }
     this.state = new MachineState(profile);
     this.devices = options.devices;
     this.memory = new MemoryBus(profile, {
@@ -102,7 +117,7 @@ export class MachineSession {
       ...(options.devices ? { devices: options.devices } : {})
     });
     this.memory.loadImage(options.image);
-    this.state.pc = u32(options.image.entryPc || profile.reset.pc);
+    this.state.pc = u32(options.image.entryPc);
     this.scope = {
       profile: profile.id,
       enabledLayers: options.layers ?? profile.defaultLayers
@@ -158,13 +173,20 @@ export class MachineSession {
     const hardwareInterrupts = this.sampleInterrupts(pcBefore, input);
     const interruptAccepted = this.state.cp0?.interruptRequested(hardwareInterrupts) === true;
 
-    const effect = evaluateInstruction({
+    let effect = evaluateInstruction({
       profile: this.options.profile,
       state: this.state,
       memory: this.memory,
       scope: this.scope,
-      undefinedBehavior: this.undefinedBehavior
+      undefinedBehavior: this.undefinedBehavior,
+      syscallServices: this.options.syscallServices,
+      syscallWrites: input.syscallWrites,
+      syscallCommit: input.syscallCommit,
+      instructionExtension: this.options.instructionExtension
     });
+    if (input.syscallException && this.options.profile.syscallMode === 'services' && effect.mnemonic === 'syscall') {
+      effect = { ...effect, exception: input.syscallException, gprWrites: [], extensionCommit: undefined };
+    }
 
     if (interruptAccepted) {
       return this.acceptTrap(effect, {
@@ -186,15 +208,26 @@ export class MachineSession {
     }
     if (effect.exception) {
       if (!this.state.cp0) {
-        throw new Error(`profile ${this.options.profile.id} 产生了异常但没有 CP0`);
+        this.finished = true;
+        return {
+          status: 'out-of-domain',
+          event: this.haltEvent('out-of-domain', effect),
+          diagnostic: {
+            code: `mips-core.exec.${effect.exception.name}`,
+            message: effect.exception.message,
+            pc: pcBefore
+          }
+        };
       }
       return this.acceptTrap(effect, {
         kind: 'exception',
         name: effect.exception.name,
-        code: courseExceptionCodes[effect.exception.name],
+        code: architectureExceptionCodes[effect.exception.name],
         branchDelay: inDelaySlot,
         victimPc: pcBefore,
-        stage: effect.exception.stage
+        stage: effect.exception.stage,
+        address: effect.exception.address,
+        message: effect.exception.message
       });
     }
     return this.commit(effect);
@@ -227,7 +260,10 @@ export class MachineSession {
 
   snapshot(level: SnapshotLevel = 'registers'): MachineSnapshot {
     const gpr = this.state.gpr.toArray();
-    const dataWords = level === 'full' ? this.memory.nonZeroWords('data') : undefined;
+    const dataWords = level === 'full'
+      ? this.options.profile.memoryRegions.filter((region) => !region.instructionOnly)
+        .flatMap((region) => this.memory.nonZeroWords(region.id)).sort((a, b) => a.address - b.address)
+      : undefined;
     const base = {
       level,
       profile: this.options.profile.id,
@@ -253,7 +289,7 @@ export class MachineSession {
       return value;
     }
     if (!this.devices) {
-      this.state.cp0?.setInterruptPending(0);
+      if (!this.options.profile.exceptions?.preserveSoftwarePending) { this.state.cp0?.setInterruptPending(0); }
       return 0;
     }
     // Offer the macroscopic PC first so a scheduled external request can assert
@@ -337,6 +373,7 @@ export class MachineSession {
     }
 
     this.state.pc = u32(effect.nextPc);
+    effect.extensionCommit?.();
     this.state.pendingBranch = effect.pendingBranch;
     this.executed++;
 
@@ -359,7 +396,7 @@ export class MachineSession {
       ...(effect.mnemonic ? { mnemonic: effect.mnemonic } : {})
     };
 
-    const halted = this.updateHaltDetector(effect);
+    const halted = this.options.detectCourseHalt !== false && this.updateHaltDetector(effect);
     if (halted) {
       this.finished = true;
       return { status: 'halted', event: { ...event, haltReason: 'course-halt-loop' } };
@@ -377,6 +414,8 @@ export class MachineSession {
       readonly victimPc: number;
       readonly stage?: TrapRecord['stage'];
       readonly hardwareInterrupts?: number;
+      readonly address?: number;
+      readonly message?: string;
     }
   ): StepResult {
     const policy = this.options.profile.exceptions;
@@ -392,7 +431,8 @@ export class MachineSession {
 
     const before = cp0.snapshot();
     const epc = trap.branchDelay ? u32(trap.victimPc - 4) : u32(trap.victimPc);
-    cp0.enterTrap({ code: trap.code, branchDelay: trap.branchDelay, epc });
+    cp0.enterTrap({ code: trap.code, branchDelay: trap.branchDelay, epc,
+      ...(trap.address === undefined ? {} : { badVaddr: trap.address }) });
     const after = cp0.snapshot();
 
     this.state.pc = u32(policy.cp0.handlerPc);
@@ -408,6 +448,9 @@ export class MachineSession {
     }
     if (after.status !== before.status) {
       cp0Writes.push({ register: cp0RegisterNumbers.status, valueBefore: before.status, value: after.status });
+    }
+    if (after.badVaddr !== undefined && after.badVaddr !== before.badVaddr) {
+      cp0Writes.push({ register: 8, valueBefore: before.badVaddr ?? 0, value: after.badVaddr });
     }
 
     const record: TrapRecord = {
@@ -425,8 +468,15 @@ export class MachineSession {
     };
 
     this.haltCandidatePc = undefined;
+    const unhandled = policy.unhandled === 'fault' && !this.memory.isLoadedInstruction(policy.cp0.handlerPc);
+    if (unhandled) { this.finished = true; }
     return {
-      status: 'committed',
+      status: unhandled ? 'out-of-domain' : 'committed',
+      ...(unhandled ? { diagnostic: {
+        code: `mips-core.exec.${trap.name}`,
+        message: trap.message ?? `Unhandled ${trap.name} exception: no instruction at ${hex8Address(policy.cp0.handlerPc)}`,
+        pc: trap.victimPc
+      } } : {}),
       event: {
         sequence: this.sequence++,
         kind: trap.kind,
@@ -524,6 +574,7 @@ export function canonicalSnapshotText(snapshot: Omit<MachineSnapshot, 'digest'>)
     lines.push(`sr=${hex8(snapshot.cp0.status)}`);
     lines.push(`cause=${hex8(snapshot.cp0.cause)}`);
     lines.push(`epc=${hex8(snapshot.cp0.epc)}`);
+    if (snapshot.cp0.badVaddr !== undefined) { lines.push(`vaddr=${hex8(snapshot.cp0.badVaddr)}`); }
   }
   if (snapshot.pendingBranch) {
     lines.push(`delay=${hex8Address(snapshot.pendingBranch.originPc)}->${hex8Address(snapshot.pendingBranch.targetPc)}`);

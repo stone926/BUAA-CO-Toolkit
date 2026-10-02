@@ -134,7 +134,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     const executableAst = statement.executable;
 
     for (const label of statement.labels) {
-      if (includeDiagnostics && isRegister(label.name)) {
+      if (includeDiagnostics && (isRegister(label.name) || isFloatingPointRegister(label.name))) {
         diagnostics.push(makeDiagnostic(label.range, `寄存器 '${label.name}' 不能作为标签名`, DiagnosticSeverity.Error, 'mips-syntax-line'));
       }
       const name = label.name;
@@ -994,12 +994,12 @@ function parseIntegerOrCharLiteral(value: string): number | undefined {
 
 function isReservedIdentifier(value: string): boolean {
   const lower = value.toLowerCase();
-  return instructions[lower] !== undefined || directives.has(lower) || isRegister(value);
+  return instructions[lower] !== undefined || directives.has(lower) || isRegister(value) || isFloatingPointRegister(value);
 }
 
 function isReservedSymbolName(value: string, kind: MipsSymbol['kind']): boolean {
   const lower = value.toLowerCase();
-  if (directives.has(lower) || isRegister(value)) {
+  if (directives.has(lower) || isRegister(value) || isFloatingPointRegister(value)) {
     return true;
   }
   return kind !== 'data' && instructions[lower] !== undefined;

@@ -13,8 +13,7 @@ import { WorkerJob, WorkerOutboundMessage, workerProtocolVersion } from './worke
 /**
  * Lazy worker host (plan section 5.6). Activation only constructs this manager;
  * the first assemble/execute request starts out/mips/host/workerMain.js.
- * Phase 1 has no builtin engine yet, so production never starts a worker; the
- * skeleton is exercised by unit tests only.
+ * Ordinary MARS and course jobs share this cancellable, isolated worker.
  */
 export class MipsRuntimeManager implements vscode.Disposable {
   private readonly client: WorkerClient;
@@ -82,12 +81,11 @@ export class MipsRuntimeManager implements vscode.Disposable {
   }
 
   /**
-   * Run one bounded ISA worker job. The default execution provider remains
-   * legacy MARS, while catalog encode/decode jobs use this lazy worker path.
+   * Run one bounded assembly/execution/ISA job on the lazy worker.
    */
   async runJob(
     job: WorkerJob,
-    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => void | Promise<void> } = {}
+    options: { signal?: AbortSignal; onProgress?: (batch: unknown[]) => unknown | Promise<unknown> } = {}
   ): Promise<WorkerOutboundMessage> {
     if (this.disposed) {
       throw new Error('MipsRuntimeManager is disposed.');

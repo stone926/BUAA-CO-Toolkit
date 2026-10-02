@@ -32,8 +32,8 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
 
   if (context.activeKind === 'mips') {
     items.push(
-      tool('mips.stdin', 'ASM 带标准输入运行', '原版 MARS', activeDetail, Commands.Mips.RunWithStdinFile),
-      tool('mips.terminal', 'ASM 终端运行', '原版 MARS', activeDetail, Commands.Mips.RunInTerminal)
+      tool('mips.stdin', 'ASM 带标准输入运行', '内置 MIPS 引擎', activeDetail, Commands.Mips.RunWithStdinFile),
+      tool('mips.terminal', 'ASM 终端运行', '内置 MIPS 引擎', activeDetail, Commands.Mips.RunInTerminal)
     );
     if (context.profile === 'P7') {
       items.push(tool('mips.kernelDump', 'ASM 导出内核文本段', '内置汇编器', activeDetail, Commands.Mips.DumpKernelText));

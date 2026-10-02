@@ -17,7 +17,7 @@ describe('updateProjectSettings tool-path migration', () => {
     vi.clearAllMocks();
   });
 
-  it('writes the MARS path globally before clearing folder and workspace values', async () => {
+  it('updates P2 project profile without requesting or writing an external MIPS tool', async () => {
     const update = vi.fn(async () => undefined);
     vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
       get: vi.fn(),
@@ -28,22 +28,15 @@ describe('updateProjectSettings tool-path migration', () => {
       update
     } as never);
 
-    await updateProjectSettings('P7', { mars: 'D:/new/Mars.jar' }, vscode.Uri.file('E:/work'));
+    await updateProjectSettings('P2', {}, vscode.Uri.file('E:/work'));
 
     expect(update.mock.calls).toEqual([
-      ['project.profile', 'P7', vscode.ConfigurationTarget.WorkspaceFolder],
-      ['toolchain.mars', 'D:/new/Mars.jar', vscode.ConfigurationTarget.Global],
-      ['toolchain.mars', undefined, vscode.ConfigurationTarget.WorkspaceFolder],
-      ['toolchain.mars', undefined, vscode.ConfigurationTarget.Workspace]
+      ['project.profile', 'P2', vscode.ConfigurationTarget.WorkspaceFolder]
     ]);
   });
 
-  it('does not clear either legacy scope when the Global write fails', async () => {
-    const update = vi.fn(async (_key: string, _value: unknown, target: vscode.ConfigurationTarget) => {
-      if (target === vscode.ConfigurationTarget.Global) {
-        throw new Error('global settings are read-only');
-      }
-    });
+  it('writes a Logisim path globally before clearing folder and workspace values', async () => {
+    const update = vi.fn(async () => undefined);
     vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
       get: vi.fn(),
       inspect: vi.fn(() => ({
@@ -53,16 +46,17 @@ describe('updateProjectSettings tool-path migration', () => {
       update
     } as never);
 
-    await expect(updateProjectSettings('P7', { mars: 'D:/new/Mars.jar' }, vscode.Uri.file('E:/work')))
-      .rejects.toThrow('global settings are read-only');
+    await updateProjectSettings('P3', { logisim: 'D:/new/logisim.jar' }, vscode.Uri.file('E:/work'));
 
     expect(update.mock.calls).toEqual([
-      ['project.profile', 'P7', vscode.ConfigurationTarget.WorkspaceFolder],
-      ['toolchain.mars', 'D:/new/Mars.jar', vscode.ConfigurationTarget.Global]
+      ['project.profile', 'P3', vscode.ConfigurationTarget.WorkspaceFolder],
+      ['toolchain.logisim', 'D:/new/logisim.jar', vscode.ConfigurationTarget.Global],
+      ['toolchain.logisim', undefined, vscode.ConfigurationTarget.WorkspaceFolder],
+      ['toolchain.logisim', undefined, vscode.ConfigurationTarget.Workspace]
     ]);
   });
 
-  it('never asks for a P7 MARS override even with a historical MARS engine setting', async () => {
+  it('never asks for an external MIPS tool path for P2 or P7', async () => {
     const values = new Map<string, unknown>([
       ['project.profile', 'P6'],
       ['mips.engine', 'mars'],
@@ -84,6 +78,9 @@ describe('updateProjectSettings tool-path migration', () => {
 
     await configureToolchainPaths('P7', vscode.Uri.file('E:/work'));
 
+    expect(prompts).toEqual([]);
+
+    await configureToolchainPaths('P2', vscode.Uri.file('E:/work'));
     expect(prompts).toEqual([]);
   });
 });

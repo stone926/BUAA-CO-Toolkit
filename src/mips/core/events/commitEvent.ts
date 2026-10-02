@@ -1,5 +1,5 @@
 // @index mips-core — canonical CommitEvent 事件模型、可观测性掩码与执行诊断
-import { CourseExceptionName, ExceptionStage, RegionId } from '../profiles/profile';
+import { ArchitectureExceptionName, ExceptionStage, RegionId } from '../profiles/profile';
 
 /**
  * Canonical `CommitEvent`（计划第 5.4 节）。执行核心直接产生结构化事件，文本
@@ -86,7 +86,7 @@ export interface DeviceEvent {
 /** Exception or interrupt accepted at one commit point. */
 export interface TrapRecord {
   readonly kind: 'exception' | 'interrupt';
-  readonly name: CourseExceptionName;
+  readonly name: ArchitectureExceptionName;
   /** Value written into `Cause.ExcCode`. */
   readonly code: number;
   /** Macroscopic PC of the victim instruction. */

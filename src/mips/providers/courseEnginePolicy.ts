@@ -1,7 +1,6 @@
 // @index mips-providers — phase-6 course engine selection: pure, atomic and fail-closed
 
 import type { MipsEngineMode } from '../../config';
-import { courseProfileIds } from '../../generated/projectProfiles';
 
 /** Stable provider ids shared by policy, descriptors and replay evidence. */
 export const LEGACY_MARS_ENGINE_ID = 'legacy-mars-configured' as const;
@@ -41,8 +40,6 @@ export function courseEnginePlanProfileError(
     : undefined;
 }
 
-const builtinDefaultProfiles: ReadonlySet<string> = new Set(courseProfileIds);
-
 /**
  * Resolve a course engine without consulting configuration, the filesystem or
  * provider preflight. The selected provider is final: a later capability or
@@ -56,10 +53,7 @@ export function resolveCourseEnginePlan(
   // Old workspace rollback settings must never select the fork's course oracle.
   // Console capability failures are reported by builtin preflight, without fallback.
   const effectiveMode = mode === 'mars' || mode === 'verify-both' ? 'auto' : mode;
-  const primaryEngineId = effectiveMode === 'builtin'
-    || (profile !== undefined && builtinDefaultProfiles.has(profile))
-    ? BUILTIN_TS_ENGINE_ID
-    : OFFICIAL_MARS_ENGINE_ID;
+  const primaryEngineId = BUILTIN_TS_ENGINE_ID;
 
   return Object.freeze({
     mode: effectiveMode,

@@ -15,6 +15,7 @@ import {
   canonicalRegister,
   cp0RegistersByNumber,
   instructionMeta,
+  isFloatingPointRegister,
   isRegister,
   MipsInstruction,
   pseudoForms,
@@ -105,6 +106,11 @@ export function validateInstruction(
       )
     );
   }
+  if (isCourseProjectProfile(profile) && instruction.ordinaryMars) diagnostics.push(makeDiagnostic(
+    rangeOfText(document, lineNumber, instruction.mnemonic),
+    `${instruction.mnemonic} is supported by ordinary MARS and is outside the ${profile} course CPU instruction set.`,
+    DiagnosticSeverity.Warning, 'project-instruction'
+  ));
 }
 
 export function usesMarsPseudoInstructionForm(mnemonic: string, operands: readonly MipsInstructionOperand[], activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
@@ -363,6 +369,26 @@ function splitInstructionFormatOperands(text: string): string[] {
 }
 
 function operandMatchesPattern(operand: MipsInstructionOperand, pattern: string, activeMacro: MipsMacro | undefined, eqvSymbols: Map<string, MipsSymbol>): boolean {
+  if (/^\$f[dst](?:64)?$/.test(pattern)) {
+    if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) return true;
+    return operand.kind === 'register' && isFloatingPointRegister(operand.text)
+      && (!pattern.endsWith('64') || Number(operand.text.slice(2)) % 2 === 0);
+  }
+  if (pattern === 'cc') {
+    if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) return true;
+    return operand.kind === 'integer' && integerFitsRange(operand.value, 0, 7);
+  }
+  if (pattern === 'float') {
+    return isMacroOrEqvOperand(operand, activeMacro, eqvSymbols) || operand.kind === 'integer' || operand.kind === 'float'
+      || /^[+-]?(?:Infinity|NaN)$/i.test(operand.text);
+  }
+  if (pattern === 'address') {
+    if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols) || isLabelLikeOperand(operand, activeMacro, eqvSymbols) || isLabelPlusImmediateOperand(operand, activeMacro, eqvSymbols)) return true;
+    const memory = memoryOperand(operand);
+    return memory ? isRegisterOperand(memory.base, activeMacro, eqvSymbols)
+      && (isImmediateOperand(memory.offset, activeMacro, eqvSymbols, 'imm32') || isLabelLikeOperand(memory.offset, activeMacro, eqvSymbols) || isLabelPlusImmediateOperand(memory.offset, activeMacro, eqvSymbols))
+      : isImmediateOperand(operand, activeMacro, eqvSymbols, 'imm32');
+  }
   if (pattern === '$rd' || pattern === '$rs' || pattern === '$rt' || pattern === '$base') {
     return isRegisterOperand(operand, activeMacro, eqvSymbols);
   }

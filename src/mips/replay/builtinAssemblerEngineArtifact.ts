@@ -2,7 +2,7 @@
 
 import type { EngineArtifactIdentity } from '../providers/contracts';
 import { isaCatalogSchemaRevision, isaCatalogSha256 } from '../core/generated/isaCatalog';
-import { courseAssemblerSemanticsRevision } from '../core/assembler/assembler';
+import { courseAssemblerSemanticsRevision, builtinAssemblerCapabilitiesRevision } from '../core/assembler/assembler';
 import { canonicalJson, sha256Bytes, type CanonicalJson } from './canonical';
 
 export const builtinAssemblerArtifactSchemaRevision = 1 as const;
@@ -41,7 +41,7 @@ export function builtinAssemblerEngineDocument(): BuiltinAssemblerArtifactDocume
       id: 'builtin-ts' as const,
       kind: 'assembler' as const,
       semanticsRevision: courseAssemblerSemanticsRevision,
-      capabilitiesRevision: 1
+      capabilitiesRevision: builtinAssemblerCapabilitiesRevision
     }),
     catalog: Object.freeze({
       revision: isaCatalogSchemaRevision,

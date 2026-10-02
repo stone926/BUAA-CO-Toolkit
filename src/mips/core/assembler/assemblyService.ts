@@ -2,13 +2,17 @@
 
 import { CourseProfile, InstructionLayer } from '../generated/isaCatalog';
 import { courseProfileIds, isCourseProfile } from '../profiles/profileIds';
-import { ProgramImage } from '../api';
+import { ProgramImage, SourceUnit } from '../api';
 import { AssemblerDiagnostic } from './diagnostics';
 import {
   assembleCourseSource,
   CourseAssemblerOptions,
+  CourseAssemblerResult,
   courseAssemblerSemanticsRevision
 } from './assembler';
+import { assembleMarsSource } from './marsAssembler';
+import { isMarsMemoryConfiguration, MarsMemoryConfiguration } from '../profiles/marsMemoryLayout';
+import { maximumAssemblerSegmentBytes } from './sections';
 
 export { courseAssemblerSemanticsRevision };
 import { defaultAssemblerSourceLimits } from './sourceGraph';
@@ -26,6 +30,17 @@ export const assemblerServiceRequestFields = [
   'maximumExpandedInstructions',
   'maximumPseudoInstructionsPerStatement',
   'p7RiInstruction'
+] as const;
+
+export const marsAssemblerServiceRequestFields = [
+  'sources',
+  'includes',
+  'memoryConfiguration',
+  'delayedBranching',
+  'maximumMacroDepth',
+  'maximumExpandedInstructions',
+  'maximumPseudoInstructionsPerStatement',
+  'maximumSegmentBytes'
 ] as const;
 
 export interface AssemblerServiceSource {
@@ -49,6 +64,13 @@ export interface ParsedAssemblerServiceRequest {
   readonly maximumExpandedInstructions?: number;
   readonly maximumPseudoInstructionsPerStatement?: number;
   readonly p7RiInstruction?: boolean;
+}
+
+export interface ParsedMarsAssemblerServiceRequest extends Omit<ParsedAssemblerServiceRequest,
+  'profile' | 'layers' | 'p7RiInstruction'> {
+  readonly memoryConfiguration?: MarsMemoryConfiguration;
+  readonly delayedBranching?: boolean;
+  readonly maximumSegmentBytes?: number;
 }
 
 export interface AssemblerServiceResult {
@@ -155,7 +177,56 @@ export function parseAssemblerServiceRequest(value: Record<string, unknown>): Pa
   };
 }
 
+export function parseMarsAssemblerServiceRequest(value: Record<string, unknown>): ParsedMarsAssemblerServiceRequest {
+  requireOnlyKeys(value, marsAssemblerServiceRequestFields, 'MARS assembler request');
+  if (value.memoryConfiguration !== undefined && !isMarsMemoryConfiguration(value.memoryConfiguration)) {
+    throw new Error('memoryConfiguration must be Default, CompactDataAtZero, or CompactTextAtZero');
+  }
+  if (value.delayedBranching !== undefined && typeof value.delayedBranching !== 'boolean') {
+    throw new Error('delayedBranching must be a boolean');
+  }
+  if (value.maximumSegmentBytes !== undefined && (!Number.isSafeInteger(value.maximumSegmentBytes)
+    || (value.maximumSegmentBytes as number) < 4
+    || (value.maximumSegmentBytes as number) > maximumAssemblerSegmentBytes)) {
+    throw new Error(`maximumSegmentBytes must be in 4..${maximumAssemblerSegmentBytes}`);
+  }
+  const { profile: _profile, ...parsed } = parseAssemblerServiceRequest({ ...value, profile: 'P7' });
+  return {
+    ...parsed,
+    ...(value.memoryConfiguration !== undefined ? { memoryConfiguration: value.memoryConfiguration as MarsMemoryConfiguration } : {}),
+    ...(value.delayedBranching !== undefined ? { delayedBranching: value.delayedBranching as boolean } : {}),
+    ...(value.maximumSegmentBytes !== undefined ? { maximumSegmentBytes: value.maximumSegmentBytes as number } : {})
+  };
+}
+
 export function assembleProgramForService(request: ParsedAssemblerServiceRequest): AssemblerServiceResult {
+  const graph = serviceSourceGraph(request);
+  const result = assembleCourseSource(graph.root, {
+    ...serviceAssemblerOptions(request),
+    profile: request.profile,
+    ...(request.layers ? { layers: request.layers } : {}),
+    ...(request.p7RiInstruction !== undefined ? { p7RiInstruction: request.p7RiInstruction } : {}),
+    sourceResolver: graph.sourceResolver
+  });
+  return serviceAssemblyResult(result);
+}
+
+export function assembleMarsProgramForService(request: ParsedMarsAssemblerServiceRequest): AssemblerServiceResult {
+  const graph = serviceSourceGraph(request);
+  const result = assembleMarsSource(graph.root, {
+    ...serviceAssemblerOptions(request),
+    ...(request.memoryConfiguration ? { memoryConfiguration: request.memoryConfiguration } : {}),
+    ...(request.delayedBranching !== undefined ? { delayedBranching: request.delayedBranching } : {}),
+    ...(request.maximumSegmentBytes !== undefined ? { maximumSegmentBytes: request.maximumSegmentBytes } : {}),
+    sourceResolver: graph.sourceResolver
+  });
+  return serviceAssemblyResult(result);
+}
+
+function serviceSourceGraph(request: Pick<ParsedAssemblerServiceRequest, 'sources' | 'includes'>): {
+  root: SourceUnit;
+  sourceResolver: NonNullable<CourseAssemblerOptions['sourceResolver']>;
+} {
   const sourcesById = new Map(request.sources.map((source) => [source.id, source]));
   const includesByParent = new Map<string, Map<string, string>>();
   for (const include of request.includes ?? []) {
@@ -166,22 +237,29 @@ export function assembleProgramForService(request: ParsedAssemblerServiceRequest
     }
     bySpecifier.set(include.specifier, include.toId);
   }
-  const options: CourseAssemblerOptions = {
-    profile: request.profile,
-    ...(request.layers ? { layers: request.layers } : {}),
-    ...(request.maximumMacroDepth ? { maximumMacroDepth: request.maximumMacroDepth } : {}),
-    ...(request.maximumExpandedInstructions ? { maximumExpandedInstructions: request.maximumExpandedInstructions } : {}),
-    ...(request.maximumPseudoInstructionsPerStatement ? { maximumPseudoInstructionsPerStatement: request.maximumPseudoInstructionsPerStatement } : {}),
-    ...(request.p7RiInstruction !== undefined ? { p7RiInstruction: request.p7RiInstruction } : {}),
+  return {
+    root: sourcesById.get(request.sources[0].id)!,
     sourceResolver: {
       resolve(context) {
         const targetId = includesByParent.get(context.parentId)?.get(context.specifier);
         return targetId ? sourcesById.get(targetId) : undefined;
       }
-    },
+    }
+  };
+}
+
+function serviceAssemblerOptions(request: Pick<ParsedAssemblerServiceRequest,
+  'maximumMacroDepth' | 'maximumExpandedInstructions' | 'maximumPseudoInstructionsPerStatement'>):
+  Pick<CourseAssemblerOptions, 'sourceLimits' | 'maximumMacroDepth' | 'maximumExpandedInstructions' | 'maximumPseudoInstructionsPerStatement'> {
+  return {
+    ...(request.maximumMacroDepth ? { maximumMacroDepth: request.maximumMacroDepth } : {}),
+    ...(request.maximumExpandedInstructions ? { maximumExpandedInstructions: request.maximumExpandedInstructions } : {}),
+    ...(request.maximumPseudoInstructionsPerStatement ? { maximumPseudoInstructionsPerStatement: request.maximumPseudoInstructionsPerStatement } : {}),
     sourceLimits: defaultAssemblerSourceLimits
   };
-  const result = assembleCourseSource(sourcesById.get(request.sources[0].id)!, options);
+}
+
+function serviceAssemblyResult(result: CourseAssemblerResult): AssemblerServiceResult {
   return {
     ok: result.ok,
     semanticsRevision: courseAssemblerSemanticsRevision,

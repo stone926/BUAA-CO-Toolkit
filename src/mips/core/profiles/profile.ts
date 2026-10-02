@@ -18,7 +18,7 @@ export interface AddressRange {
 }
 
 /** Stable ids of the architectural memory regions. */
-export type MemoryRegionId = 'text' | 'data';
+export type MemoryRegionId = 'text' | 'data' | 'stack' | 'ktext' | 'kdata';
 
 /** Stable ids of the P7 memory-mapped devices. */
 export type DeviceRegionId = 'timer0' | 'timer1' | 'interrupt-generator';
@@ -79,11 +79,14 @@ export const courseExceptionCodes = {
 } as const;
 
 export type CourseExceptionName = keyof typeof courseExceptionCodes;
+export const architectureExceptionCodes = { ...courseExceptionCodes, bp: 9, trap: 13 } as const;
+export type ArchitectureExceptionName = keyof typeof architectureExceptionCodes;
 
 /** CP0 register numbers implemented by the course contract. */
 export const cp0RegisterNumbers = { status: 12, cause: 13, epc: 14 } as const;
 
 export interface Cp0Policy {
+  readonly causeImplementedMask?: number;
   /** Common entry point for every exception and interrupt (P7-2-6). */
   readonly handlerPc: number;
   /** Bits of SR that `mtc0` may change; all other bits stay zero. */
@@ -120,6 +123,10 @@ export interface HardwareInterruptWiring {
 }
 
 export interface ExceptionPolicy {
+  /** Ordinary MARS reports an exception if no handler instruction has been loaded. */
+  readonly unhandled?: 'fault';
+  /** MARS Cause.IP can be written by software without an attached hardware device. */
+  readonly preserveSoftwarePending?: boolean;
   readonly cp0: Cp0Policy;
   readonly wiring: HardwareInterruptWiring;
   /**
@@ -177,6 +184,10 @@ export interface CourseExecutionProfile {
    */
   readonly linkOffset: 4 | 8;
   readonly overflow: OverflowPolicy;
+  /** Ordinary MARS wraps effective addresses; course profiles detect signed overflow. */
+  readonly effectiveAddressOverflow?: 'wrap' | 'fault';
+  /** Services are an explicit ordinary policy; course profiles always use exceptions. */
+  readonly syscallMode?: 'services';
   readonly reset: ResetState;
   readonly memoryRegions: readonly MemoryRegion[];
   readonly deviceRegions: readonly DeviceRegion[];

@@ -315,7 +315,7 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
     const checks = getToolchainStatus(resource);
     if (checks && sameResource(resource, vscode.window.activeTextEditor?.document.uri)) {
       const toolStatus = checks
-        .filter((check) => ['MARS', 'Verilog simulator', 'Logisim'].includes(check.name))
+        .filter((check) => ['Verilog simulator', 'Logisim'].includes(check.name))
         .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
         .join(' | ');
       if (toolStatus) {

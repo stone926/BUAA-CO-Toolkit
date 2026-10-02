@@ -6,7 +6,8 @@ import type { ProjectProfile } from './projectProfile';
 
 /**
  * Course assembly and execution always use builtin providers. Historical engine
- * settings cannot introduce external dependencies; P2 still uses official MARS.
+ * settings cannot introduce external MIPS assembler dependencies. Java remains
+ * required only by profiles whose course workflow uses Logisim.
  */
 export function getEffectiveRequiredTools(
   profile: ProjectProfile,

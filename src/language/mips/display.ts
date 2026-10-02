@@ -112,6 +112,8 @@ export function syscallMarkdown(syscall: MipsSyscallInfo): string {
   ].join('\n');
 }
 
+export const p7SyscallMarkdown = 'P7 课程 CPU：`syscall` 只产生 **ExcCode=8** 异常，设置 EPC/EXL 并从 **0x4180** 进入内核，不根据 `$v0` 执行输入输出服务（tutorial P7-2-6）。普通 MARS 运行命令使用独立的控制台服务模式。';
+
 export function markdownTooltip(value: string) {
   return {
     kind: MarkupKind.Markdown,

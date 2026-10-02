@@ -13,7 +13,6 @@ import {
 } from './contracts';
 import { BuiltinTsExecutionProvider } from './builtinExecutionProvider';
 import { BuiltinTsAssemblerProvider } from './builtinAssemblerProvider';
-import { OfficialMarsProvider } from './officialMarsProvider';
 import {
   BUILTIN_TS_ENGINE_ID,
   type CourseEnginePlan,
@@ -26,7 +25,7 @@ import {
 /**
  * Provider resolver（计划第 5.3/9 节）。
  *
- * 生产只注册 builtin 课程引擎和原版 MARS P2 adapter；历史 fork 不注册。
+ * 生产只注册内部汇编器和课程执行器；普通 MARS 运行由同一 Worker 的服务模式处理。
  * 解析失败（preflight not ok）时调用方必须以
  * 结构化诊断结束任务——任何 provider 都不允许在部分执行后隐式 fallback。
  */
@@ -48,13 +47,12 @@ export function registerDefaultProviders(services: AppServices): ProviderRegistr
   if (existing) {
     return existing;
   }
-  const marsProvider = new OfficialMarsProvider(services);
   // Resolution follows the immutable plan's id and never relies on array order.
   const builtinAssemblerProvider = new BuiltinTsAssemblerProvider(services.mipsRuntime);
   const builtinExecutionProvider = new BuiltinTsExecutionProvider(services.mipsRuntime);
   const registry = {
-    assemblerProviders: [marsProvider, builtinAssemblerProvider],
-    executionProviders: [marsProvider, builtinExecutionProvider]
+    assemblerProviders: [builtinAssemblerProvider],
+    executionProviders: [builtinExecutionProvider]
   };
   defaultRegistries.set(services, registry);
   return registry;

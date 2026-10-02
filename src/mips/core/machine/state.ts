@@ -25,6 +25,7 @@ export interface Cp0Snapshot {
   readonly status: number;
   readonly cause: number;
   readonly epc: number;
+  readonly badVaddr?: number;
 }
 
 /** 32-entry general purpose register file; `$0` is hard-wired to zero. */
@@ -61,15 +62,17 @@ export class Cp0Registers {
   private statusValue: number;
   private causeValue: number;
   private epcValue: number;
+  private badVaddrValue: number;
 
   constructor(private readonly policy: Cp0Policy, snapshot: Cp0Snapshot) {
-    this.statusValue = u32(snapshot.status) & policy.statusWritableMask;
-    this.causeValue = u32(snapshot.cause) & this.causeImplementedMask();
+    this.statusValue = u32(u32(snapshot.status) & policy.statusWritableMask);
+    this.causeValue = u32(u32(snapshot.cause) & this.causeImplementedMask());
     this.epcValue = u32(snapshot.epc);
+    this.badVaddrValue = u32(snapshot.badVaddr ?? 0);
   }
 
   private causeImplementedMask(): number {
-    return u32(this.policy.causeBranchDelayBit
+    return this.policy.causeImplementedMask ?? u32(this.policy.causeBranchDelayBit
       | this.policy.causeInterruptPendingBits
       | this.policy.causeExceptionCodeBits);
   }
@@ -87,7 +90,8 @@ export class Cp0Registers {
   }
 
   snapshot(): Cp0Snapshot {
-    return { status: this.statusValue, cause: this.causeValue, epc: this.epcValue };
+    return { status: this.statusValue, cause: this.causeValue, epc: this.epcValue,
+      ...(this.policy.readableRegisters.includes(8) ? { badVaddr: this.badVaddrValue } : {}) };
   }
 
   isReadable(register: number): boolean {
@@ -100,6 +104,7 @@ export class Cp0Registers {
 
   read(register: number): number {
     switch (register) {
+      case 8: return this.badVaddrValue;
       case cp0RegisterNumbers.status:
         return this.statusValue;
       case cp0RegisterNumbers.cause:
@@ -114,13 +119,14 @@ export class Cp0Registers {
   /** Value the register would hold after an `mtc0`, with unimplemented bits masked off. */
   maskedWrite(register: number, value: number): number {
     switch (register) {
+      case 8: return u32(value);
       case cp0RegisterNumbers.status:
-        return u32(value) & this.policy.statusWritableMask;
+        return u32(u32(value) & this.policy.statusWritableMask);
       case cp0RegisterNumbers.cause:
         return u32((this.causeValue & ~this.policy.causeWritableMask)
           | (u32(value) & this.policy.causeWritableMask));
       case cp0RegisterNumbers.epc:
-        return u32(value) & this.policy.epcWritableMask;
+        return u32(u32(value) & this.policy.epcWritableMask);
       default:
         return 0;
     }
@@ -128,6 +134,7 @@ export class Cp0Registers {
 
   write(register: number, value: number): void {
     switch (register) {
+      case 8: this.badVaddrValue = u32(value); break;
       case cp0RegisterNumbers.status:
         this.statusValue = u32(value);
         break;
@@ -185,6 +192,7 @@ export class Cp0Registers {
     readonly code: number;
     readonly branchDelay: boolean;
     readonly epc: number;
+    readonly badVaddr?: number;
   }): void {
     const bd = input.branchDelay ? this.policy.causeBranchDelayBit : 0;
     const excCode = u32(input.code << this.policy.causeExceptionCodeShift)
@@ -194,6 +202,9 @@ export class Cp0Registers {
     this.causeValue = u32(cleared | bd | excCode);
     this.epcValue = u32(input.epc);
     this.statusValue = u32(this.statusValue | this.policy.statusExceptionLevelBit);
+    if (input.badVaddr !== undefined && this.policy.readableRegisters.includes(8)) {
+      this.badVaddrValue = u32(input.badVaddr);
+    }
   }
 
   /** `eret`: clear EXL and hand back the return PC. */

@@ -12,6 +12,7 @@ import {
   pseudoExpansionPreview,
   syscallAtLiV0Operand,
   syscallMarkdown,
+  p7SyscallMarkdown,
   syscallServiceBeforeLine
 } from './display';
 import {
@@ -77,7 +78,8 @@ export function getMipsHover(document: TextDocument, position: Position, setting
       }
     }
     if (instruction.mnemonic === 'syscall') {
-      const syscall = syscallServiceBeforeLine(parsed, position.line);
+      if (settings.project.profile === 'P7') details.push('', p7SyscallMarkdown);
+      const syscall = settings.project.profile === 'P7' ? undefined : syscallServiceBeforeLine(parsed, position.line);
       if (syscall) {
         details.push('', `当前 $v0 服务：**${syscall.code} ${syscall.name}** - ${syscall.description}`, '', `参数：${syscall.parameters ?? '无'}`, '', `返回值：${syscall.returns ?? '无'}`);
       }
@@ -91,7 +93,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const syscall = syscallAtLiV0Operand(parsed, wordRange);
+  const syscall = settings.project.profile === 'P7' ? undefined : syscallAtLiV0Operand(parsed, wordRange);
   if (syscall) {
     return {
       contents: {

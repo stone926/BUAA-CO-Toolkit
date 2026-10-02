@@ -1,7 +1,7 @@
 // @index config — co.*设置读取，分层取值+值域裁剪
 import * as vscode from 'vscode';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
-import { configDefault, configDefaultArray } from './configDefaults';
+import { configDefault } from './configDefaults';
 import { OFFICIAL_MARS_MEMORY_CONFIGURATIONS } from './language/mips/legacyMarsPolicy';
 import {
   ConcreteProjectProfile,
@@ -232,12 +232,16 @@ export function getJava(resource?: vscode.Uri): string {
 }
 
 export function getMarsJar(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.mars', configDefault<string>('toolchain.mars'), resource);
+  // Kept as a migration shim for historical replay/settings readers. Runtime
+  // MIPS work no longer consumes a user-configured MARS jar.
+  void resource;
+  return '';
 }
 
 /** Historical setting reader; execution never uses this retired P7 override. */
 export function getMarsP7Jar(resource?: vscode.Uri): string {
-  return layeredGetString('toolchain.marsP7', configDefault<string>('toolchain.marsP7'), resource);
+  void resource;
+  return '';
 }
 
 export function getLogisimJar(resource?: vscode.Uri): string {
@@ -272,7 +276,8 @@ export function getMemoryConfiguration(resource?: vscode.Uri): string {
 }
 
 export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
-  return layeredGetArray('mips.extraArgs', configDefaultArray('mips.extraArgs'), resource);
+  void resource;
+  return [];
 }
 
 /** The sole public automatic-test customization. The old key is migration-only. */
@@ -291,18 +296,6 @@ export function getLogisimTraceMainCircuit(_resource?: vscode.Uri): string {
 
 export function getLogisimTraceColumns(_resource?: vscode.Uri): Record<string, number> | undefined {
   return undefined;
-}
-
-function layeredGetArray(
-  vsKey: string,
-  defaultValue: string[],
-  resource?: vscode.Uri
-): string[] {
-  const configured = inspectedValue<string[]>(vsKey, resource);
-  if (Array.isArray(configured)) {
-    return configured.map((item) => String(item)).filter(Boolean);
-  }
-  return [...defaultValue];
 }
 
 function inspectedValue<T>(key: string, resource?: vscode.Uri): T | undefined {

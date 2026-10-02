@@ -3,17 +3,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Stage 1 boundary: production scheduling may reach the legacy process only
- * through LegacyMarsProvider. mips.ts remains the compatibility implementation
- * and command surface, but no other production module may consume runMarsFile.
+ * Commands share the internal runner; course orchestration uses providers.
  */
-describe('legacy MARS production boundary', () => {
-  it('keeps runMarsFile confined to its implementation and provider adapter', () => {
-    const allowed = new Set([
-      'src/mips.ts',
-      'src/mips/providers/legacyMarsProvider.ts',
-      'src/mips/providers/officialMarsProvider.ts'
-    ]);
+describe('internal MARS production boundary', () => {
+  it('keeps the console runner confined to its command surface', () => {
+    const allowed = new Set(['src/mips.ts']);
     const violations = productionTypeScriptFiles(path.join(process.cwd(), 'src'))
       .filter((file) => !allowed.has(file))
       .filter((file) => /\brunMarsFile\b/.test(readFileSync(path.join(process.cwd(), file), 'utf8')));

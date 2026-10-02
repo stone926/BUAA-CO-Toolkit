@@ -10,7 +10,8 @@ import {
   cp0Markdown,
   markdownTooltip,
   syscallByOperand,
-  syscallMarkdown
+  syscallMarkdown,
+  p7SyscallMarkdown
 } from './display';
 import { instructionWritesRegister } from './instructionValidation';
 import { getCachedMipsParse } from './parseCache';
@@ -47,7 +48,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
       continue;
     }
 
-    if (executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
+    if (settings.project.profile !== 'P7' && executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
       const operand = executable.operands[1];
       const syscall = syscallByOperand(operand);
       if (syscall) {
@@ -67,6 +68,10 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
     }
 
     if (executable.lowerMnemonic === 'syscall') {
+      if (settings.project.profile === 'P7' && inRequestedRange) {
+        hints.push({ position: executable.range.end, label: ' ExcCode=8 → 0x4180', kind: InlayHintKind.Parameter,
+          tooltip: markdownTooltip(p7SyscallMarkdown), paddingLeft: true });
+      }
       if (currentSyscall && inRequestedRange) {
         hints.push({
           position: executable.range.end,

@@ -42,14 +42,15 @@ import {
   parseAssemblerLine,
   tokenizeCode
 } from './syntax';
-import { CourseSegmentBuilder, CourseSectionId, courseSectionLayout } from './sections';
+import { CourseSegmentBuilder, CourseSectionId, DataSectionId, SegmentBuilderOptions } from './sections';
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import type { ParsedInstructionOperand } from './operands';
 import { immediateSignedKind, realInstructionForms } from './instructionForms';
 
-export const courseAssemblerSemanticsRevision = 4 as const;
+export const courseAssemblerSemanticsRevision = 5 as const;
+export const builtinAssemblerCapabilitiesRevision = 2 as const;
 
-export interface CourseAssemblerOptions {
+export interface CourseAssemblerOptions extends SegmentBuilderOptions {
   readonly profile: CourseProfile;
   readonly sourceResolver?: CourseSourceResolver;
   readonly layers?: readonly InstructionLayer[];
@@ -59,6 +60,19 @@ export interface CourseAssemblerOptions {
   readonly maximumPseudoInstructionsPerStatement?: number;
   /** Historical P7 RI victim mnemonic retained only for old manifest replay. */
   readonly p7RiInstruction?: boolean;
+  /** Official compact configurations use one-instruction label address pseudos. */
+  readonly compactAddresses?: boolean;
+  readonly externBase?: number;
+  /** Ordinary GPR loads/stores accept numeric offset($base) beyond signed 16 bits. */
+  readonly expandNumericMemoryOffsets?: boolean;
+  /** Additional ISA front end for ordinary MARS; course callers leave it absent. */
+  readonly instructionExtension?: AssemblerInstructionExtension;
+}
+
+export interface AssemblerInstructionExtension {
+  expand(statement: ParsedStatement, options: { compactAddresses: boolean; maximumInstructionsPerStatement: number }): WorkResult | undefined;
+  encode(instruction: WorkInstruction, address: number, resolve: (name: string) => number | undefined):
+    { word?: number; diagnostic?: AssemblerDiagnostic } | undefined;
 }
 
 export interface CourseAssemblerResult {
@@ -97,6 +111,7 @@ interface InstructionPatch {
 }
 
 interface DataPatch {
+  readonly section: DataSectionId;
   readonly address: number;
   readonly width: 1 | 2 | 4 | 8;
   readonly expression: string;
@@ -129,6 +144,9 @@ interface NormalizedAssemblerOptions {
   readonly maximumExpandedInstructions: number;
   readonly maximumPseudoInstructionsPerStatement: number;
   readonly p7RiInstruction: boolean;
+  readonly compactAddresses: boolean;
+  readonly expandNumericMemoryOffsets: boolean;
+  readonly instructionExtension?: AssemblerInstructionExtension;
 }
 
 interface AssemblyState {
@@ -185,9 +203,12 @@ export function assembleCourseSource(
       maximumMacroDepth: options.maximumMacroDepth ?? defaultMaximumMacroDepth,
       maximumExpandedInstructions: options.maximumExpandedInstructions ?? defaultMaximumExpandedInstructions,
       maximumPseudoInstructionsPerStatement: options.maximumPseudoInstructionsPerStatement ?? defaultMaximumPseudoPerStatement,
-      p7RiInstruction: options.p7RiInstruction ?? false
+      p7RiInstruction: options.p7RiInstruction ?? false,
+      compactAddresses: options.compactAddresses ?? false,
+      expandNumericMemoryOffsets: options.expandNumericMemoryOffsets ?? false,
+      instructionExtension: options.instructionExtension
     },
-    builder: new CourseSegmentBuilder(),
+    builder: new CourseSegmentBuilder(options),
     labels: new Map(),
     eqvs: new Map(),
     macros: macroScan.definitions,
@@ -198,7 +219,7 @@ export function assembleCourseSource(
     currentSection: 'text',
     expandedInstructionCount: 0,
     macroCounter: 0,
-    externAddress: 0x1000
+    externAddress: options.externBase ?? 0x1000
   };
 
   const queue: Array<{ line: ExpandedSourceLine; macroStack: readonly MacroFrame[] }> = [];
@@ -275,7 +296,7 @@ export function assembleCourseSource(
       state.diagnostics.push(work.diagnostic!);
       continue;
     }
-    if (state.currentSection === 'data') {
+    if (isDataSection(state.currentSection)) {
       state.diagnostics.push(assemblerDiagnostic(
         'asm.syntax.directive-in-data',
         `指令 ${mnemonic} 不能出现在 data 段`,
@@ -342,7 +363,7 @@ export function assembleCourseSource(
       state.diagnostics.push(encoded.diagnostic);
       continue;
     }
-    state.builder.writeDataBytesAt(patch.address, encoded.bytes!, patch.origin);
+    state.builder.writeDataBytesAt(patch.address, encoded.bytes!, patch.origin, patch.section);
   }
 
   if (state.diagnostics.length) {
@@ -391,7 +412,7 @@ export function assembleCourseSource(
     };
   }
   const image = buildProgramImage({
-    entryPc: courseSectionLayout.text.base,
+    entryPc: state.builder.sectionLayout.text.base,
     segments: state.builder.toSegments(),
     symbols,
     sourceMap: state.builder.toSourceMap(),
@@ -408,10 +429,19 @@ export function assembleCourseSource(
 
 // ── pass 1: directives ───────────────────────────────────────────────────────
 
+function isDataSection(section: CourseSectionId): section is DataSectionId {
+  return section === 'data' || section === 'kdata';
+}
+
+function currentDataSection(state: AssemblyState): DataSectionId {
+  if (!isDataSection(state.currentSection)) throw new Error('Expected a data section');
+  return state.currentSection;
+}
+
 function fixDataLabelsFrom(state: AssemblyState, oldAddress: number, newAddress: number): void {
   if (oldAddress === newAddress) return;
   for (const [name, symbol] of state.labels) {
-    if (symbol.kind === 'label' && symbol.segment === 'data' && symbol.value === oldAddress) {
+    if (symbol.kind === 'label' && symbol.segment === state.currentSection && symbol.value === oldAddress) {
       state.labels.set(name, { ...symbol, value: newAddress });
     }
   }
@@ -439,8 +469,7 @@ function defineLabels(statement: ParsedStatement, state: AssemblyState): void {
       ));
       continue;
     }
-    const segment = state.currentSection === 'data' ? 'data'
-      : state.currentSection === 'ktext' ? 'ktext' : 'text';
+    const segment = state.currentSection;
     state.builder.markSectionUsed(segment);
     state.labels.set(name, {
       name,
@@ -461,7 +490,7 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       state.currentSection = mnemonic === '.text' ? 'text' : 'ktext';
       state.builder.markSectionUsed(state.currentSection);
       if (operands.length === 1) {
-        const address = requiredInteger(operands[0], state, 0, 0xffff_ffff);
+        const address = requiredInteger(operands[0], state, -0x8000_0000, 0xffff_ffff);
         if (address.ok) setSectionCursor(state, state.currentSection, address.value, span, statement.expansionStack);
         else invalidDirectiveInteger(statement, operands[0], state, `${mnemonic} 地址`);
       } else if (operands.length > 1) {
@@ -474,32 +503,32 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       }
       break;
     case '.data':
-      state.currentSection = 'data';
-      state.builder.markSectionUsed('data');
-      state.builder.resetAutoAlign();
+    case '.kdata':
+      if (mnemonic === '.kdata' && !state.builder.sectionLayout.kdata) {
+        state.diagnostics.push(assemblerDiagnostic(
+          'asm.syntax.unknown-directive', '.kdata 不在课程汇编器声明支持范围内',
+          statement.mnemonicSpan, statement.expansionStack
+        ));
+        break;
+      }
+      state.currentSection = mnemonic === '.data' ? 'data' : 'kdata';
+      state.builder.markSectionUsed(state.currentSection);
+      state.builder.resetAutoAlign(state.currentSection);
       if (operands.length === 1) {
-        const address = requiredInteger(operands[0], state, 0, 0xffff_ffff);
-        if (address.ok) setSectionCursor(state, 'data', address.value, span, statement.expansionStack);
-        else invalidDirectiveInteger(statement, operands[0], state, '.data 地址');
+        const address = requiredInteger(operands[0], state, -0x8000_0000, 0xffff_ffff);
+        if (address.ok) setSectionCursor(state, state.currentSection, address.value, span, statement.expansionStack);
+        else invalidDirectiveInteger(statement, operands[0], state, `${mnemonic} 地址`);
       } else if (operands.length > 1) {
         state.diagnostics.push(assemblerDiagnostic(
           'asm.operand.wrong-count',
-          '.data 最多接受一个地址操作数',
+          `${mnemonic} 最多接受一个地址操作数`,
           span,
           statement.expansionStack
         ));
       }
       break;
-    case '.kdata':
-      state.diagnostics.push(assemblerDiagnostic(
-        'asm.syntax.unknown-directive',
-        '.kdata 不在课程汇编器声明支持范围内',
-        statement.mnemonicSpan,
-        statement.expansionStack
-      ));
-      break;
     case '.align':
-      if (state.currentSection !== 'data') {
+      if (!isDataSection(state.currentSection)) {
         state.diagnostics.push(assemblerDiagnostic(
           'asm.syntax.directive-in-text',
           '.align 只能出现在 data 段',
@@ -519,16 +548,16 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
           break;
         }
         try {
-          const oldAddress = state.builder.cursor('data');
-          state.builder.alignData(exponent.value);
-          fixDataLabelsFrom(state, oldAddress, state.builder.cursor('data'));
+          const oldAddress = state.builder.cursor(state.currentSection);
+          state.builder.alignData(exponent.value, state.currentSection);
+          fixDataLabelsFrom(state, oldAddress, state.builder.cursor(state.currentSection));
         } catch (error) {
           state.diagnostics.push(diagnosticForError('asm.section.outside-course-address-space', error, span, statement.expansionStack));
         }
       }
       break;
     case '.space':
-      if (state.currentSection !== 'data') {
+      if (!isDataSection(state.currentSection)) {
         state.diagnostics.push(assemblerDiagnostic(
           'asm.syntax.directive-in-text',
           '.space 只能出现在 data 段',
@@ -542,20 +571,21 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
         break;
       }
       {
-        const bytes = requiredInteger(operands[0], state, 0, courseSectionLayout.data.endInclusive + 1);
+        const bounds = state.builder.sectionLayout[state.currentSection]!;
+        const bytes = requiredInteger(operands[0], state, 0, bounds.endInclusive - (bounds.minimumAddress ?? bounds.base) + 1);
         if (!bytes.ok) {
           invalidDirectiveInteger(statement, operands[0], state, '.space 字节数');
           break;
         }
         try {
-          state.builder.appendDataSpace(bytes.value);
+          state.builder.appendDataSpace(bytes.value, state.currentSection);
         } catch (error) {
           state.diagnostics.push(diagnosticForError('asm.section.outside-course-address-space', error, span, statement.expansionStack));
         }
       }
       break;
     case '.word':
-      if (state.currentSection !== 'data') {
+      if (!isDataSection(state.currentSection)) {
         processRawTextWordDirective(statement, state);
         break;
       }
@@ -563,7 +593,7 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       break;
     case '.half':
     case '.byte':
-      if (state.currentSection !== 'data') {
+      if (!isDataSection(state.currentSection)) {
         state.diagnostics.push(assemblerDiagnostic(
           'asm.syntax.directive-in-text',
           `${mnemonic} 只能出现在 data 段`,
@@ -576,7 +606,7 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       break;
     case '.float':
     case '.double':
-      if (state.currentSection !== 'data') {
+      if (!isDataSection(state.currentSection)) {
         state.diagnostics.push(assemblerDiagnostic(
           'asm.syntax.directive-in-text',
           `${mnemonic} 只能出现在 data 段`,
@@ -589,7 +619,7 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
       break;
     case '.ascii':
     case '.asciiz':
-      if (state.currentSection !== 'data') {
+      if (!isDataSection(state.currentSection)) {
         state.diagnostics.push(assemblerDiagnostic(
           'asm.syntax.directive-in-text',
           `${mnemonic} 只能出现在 data 段`,
@@ -626,25 +656,37 @@ function processDirective(statement: ParsedStatement, mnemonic: string, state: A
 }
 
 function processExtern(statement: ParsedStatement, state: AssemblyState): void {
-  if (statement.operands.length !== 2) {
+  let operands = statement.operands;
+  if (operands.length === 1) {
+    const operand = operands[0];
+    const match = /^([A-Za-z_.$][A-Za-z0-9_.$]*)\s+(.+)$/.exec(operand.text);
+    if (match) {
+      const sizeOffset = operand.text.indexOf(match[2]);
+      operands = [
+        { text: match[1], span: { ...operand.span, endOffset: operand.span.startOffset + match[1].length } },
+        { text: match[2], span: { ...operand.span, startOffset: operand.span.startOffset + sizeOffset } }
+      ];
+    }
+  }
+  if (operands.length !== 2) {
     state.diagnostics.push(assemblerDiagnostic('asm.operand.wrong-count', '.extern 需要符号名和字节大小', statementSpan(statement), statement.expansionStack));
     return;
   }
-  const name = statement.operands[0].text.trim();
-  const size = requiredInteger(statement.operands[1], state, 0, 0x0010_0000);
+  const name = operands[0].text.trim();
+  const size = requiredInteger(operands[1], state, 0, 0x0010_0000);
   if (!size.ok) {
-    invalidDirectiveInteger(statement, statement.operands[1], state, '.extern 大小');
+    invalidDirectiveInteger(statement, operands[1], state, '.extern 大小');
     return;
   }
   if (state.labels.has(name) || state.eqvs.has(name)) {
-    state.diagnostics.push(assemblerDiagnostic('asm.symbol.duplicate', `重复的符号 ${name}`, statement.operands[0].span, statement.expansionStack));
+    state.diagnostics.push(assemblerDiagnostic('asm.symbol.duplicate', `重复的符号 ${name}`, operands[0].span, statement.expansionStack));
     return;
   }
   state.labels.set(name, {
     name,
     kind: 'label',
     value: state.externAddress,
-    span: statement.operands[0].span
+    span: operands[0].span
   });
   state.externAddress = (state.externAddress + size.value) >>> 0;
 }
@@ -776,7 +818,7 @@ function processRawTextWordDirective(statement: ParsedStatement, state: Assembly
         continue;
       }
       for (let index = 0; index < count.value; index++) {
-        allocateRawTextWord(state, section, repetition.value, operand.span, origin);
+        if (!allocateRawTextWord(state, section, repetition.value, operand.span, origin)) break;
       }
       continue;
     }
@@ -790,7 +832,7 @@ function allocateRawTextWord(
   expression: string,
   span: SourceSpan,
   origin: WorkInstruction['origin']
-): void {
+): boolean {
   try {
     const appended = state.builder.appendInstruction(section, 0, origin);
     state.rawTextPatches.push({
@@ -801,6 +843,7 @@ function allocateRawTextWord(
       span,
       origin
     });
+    return true;
   } catch (error) {
     state.diagnostics.push(diagnosticForError(
       error instanceof Error && /重叠/.test(error.message) ? 'asm.section.segment-overlap' : 'asm.section.outside-course-address-space',
@@ -808,6 +851,7 @@ function allocateRawTextWord(
       span,
       origin.expansionStack
     ));
+    return false;
   }
 }
 
@@ -845,7 +889,7 @@ function processNumericDataDirective(statement: ParsedStatement, mnemonic: '.wor
         continue;
       }
       for (let index = 0; index < count.value; index++) {
-        allocateDataValue(state, width, repetition.value, operand.span, origin);
+        if (!allocateDataValue(state, width, repetition.value, operand.span, origin)) break;
       }
       continue;
     }
@@ -855,17 +899,19 @@ function processNumericDataDirective(statement: ParsedStatement, mnemonic: '.wor
 
 function allocateDataValue(
   state: AssemblyState,
-  width: 1 | 2 | 4,
+  width: 1 | 2 | 4 | 8,
   expression: string,
   span: SourceSpan,
   origin: WorkInstruction['origin'],
   isFloat = false
-): void {
+): boolean {
   try {
-    const oldAddress = state.builder.cursor('data');
-    const address = state.builder.appendDataBytes(new Array<number>(width).fill(0), origin, width);
+    const section = currentDataSection(state);
+    const oldAddress = state.builder.cursor(section);
+    const address = state.builder.appendDataBytes(new Array<number>(width).fill(0), origin, width, section);
     fixDataLabelsFrom(state, oldAddress, address);
     state.dataPatches.push({
+      section,
       address,
       width,
       expression,
@@ -873,8 +919,10 @@ function allocateDataValue(
       origin,
       ...(isFloat ? { float: true } : {})
     });
+    return true;
   } catch (error) {
     state.diagnostics.push(diagnosticForError('asm.section.outside-course-address-space', error, span, origin.expansionStack));
+    return false;
   }
 }
 
@@ -894,11 +942,11 @@ function processFloatDataDirective(statement: ParsedStatement, mnemonic: '.float
         continue;
       }
       for (let index = 0; index < count.value; index++) {
-        allocateDataValue(state, width as 1 | 2 | 4, repetition.value, operand.span, origin, true);
+        if (!allocateDataValue(state, width, repetition.value, operand.span, origin, true)) break;
       }
       continue;
     }
-    allocateDataValue(state, width as 1 | 2 | 4, operand.text, operand.span, origin, true);
+    allocateDataValue(state, width, operand.text, operand.span, origin, true);
   }
 }
 
@@ -915,7 +963,7 @@ function processStringDataDirective(statement: ParsedStatement, mnemonic: '.asci
       continue;
     }
     try {
-      state.builder.appendDataBytes([...bytes, ...(mnemonic === '.asciiz' ? [0] : [])], origin);
+      state.builder.appendDataBytes([...bytes, ...(mnemonic === '.asciiz' ? [0] : [])], origin, 0, currentDataSection(state));
     } catch (error) {
       state.diagnostics.push(diagnosticForError('asm.section.outside-course-address-space', error, operand.span, statement.expansionStack));
     }
@@ -936,13 +984,18 @@ function parseDataRepetition(text: string): { value: string; count: string; span
 
 // ── pass 1: instruction expansion ────────────────────────────────────────────
 
-interface WorkResult {
+export interface WorkResult {
   readonly ok: boolean;
   readonly instructions?: readonly WorkInstruction[];
   readonly diagnostic?: AssemblerDiagnostic;
 }
 
 function statementWork(statement: ParsedStatement, state: AssemblyState): WorkResult {
+  const extension = state.options.instructionExtension?.expand(statement, {
+    compactAddresses: state.options.compactAddresses,
+    maximumInstructionsPerStatement: state.options.maximumPseudoInstructionsPerStatement
+  });
+  if (extension) return extension;
   const mnemonic = statement.mnemonic?.toLowerCase() ?? '';
   const parsedOperands = statement.operands.map((operand) => parseInstructionOperand(operand.text, operand.span));
   if (mnemonic === '_co_internal_unknown_instruction'
@@ -987,7 +1040,8 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
 
   if (isLoadStoreMnemonic(mnemonic) && parsedOperands.length === 2 && parsedOperands[1].kind === 'memory'
     && memoryOffsetNeedsPseudo(parsedOperands[1].offsetText, state)) {
-    const pseudoExpansion = expandLoadStorePseudo(mnemonic, parsedOperands, statement, false);
+    const pseudoExpansion = expandLoadStorePseudo(mnemonic, parsedOperands, statement,
+      state.options.compactAddresses, state.options.expandNumericMemoryOffsets);
     if (pseudoExpansion) return { ok: true, instructions: pseudoExpansion };
   }
 
@@ -998,7 +1052,7 @@ function statementWork(statement: ParsedStatement, state: AssemblyState): WorkRe
   if (real.ok && real.instructions) return { ok: true, instructions: real.instructions };
 
   // MARS pseudo forms sharing a real mnemonic.
-  const pseudoExpansion = expandSharedMnemonicPseudo(mnemonic, parsedOperands, statement);
+  const pseudoExpansion = expandSharedMnemonicPseudo(mnemonic, parsedOperands, statement, state.options.compactAddresses);
   if (pseudoExpansion.ok) return pseudoExpansion;
 
   return {
@@ -1136,7 +1190,8 @@ function parseBareMemoryOperand(text: string, span: SourceSpan): WorkOperand | u
 function expandSharedMnemonicPseudo(
   mnemonic: string,
   operands: readonly ReturnType<typeof parseInstructionOperand>[],
-  statement: ParsedStatement
+  statement: ParsedStatement,
+  compactAddresses = false
 ): WorkResult {
   const instructionSet = new Set([
     'add', 'addu', 'sub', 'subu', 'and', 'or', 'xor',
@@ -1162,7 +1217,7 @@ function expandSharedMnemonicPseudo(
   }
 
   if (['lw', 'lwl', 'lwr', 'sw', 'swl', 'swr', 'lb', 'lbu', 'lh', 'lhu', 'sb', 'sh'].includes(mnemonic)) {
-    const expansion = expandLoadStorePseudo(mnemonic, operands, statement, false);
+    const expansion = expandLoadStorePseudo(mnemonic, operands, statement, compactAddresses);
     if (expansion) return { ok: true, instructions: expansion };
     return { ok: false, diagnostic: undefined };
   }
@@ -1236,9 +1291,13 @@ function isLoadStoreMnemonic(mnemonic: string): boolean {
   return ['lw', 'lwl', 'lwr', 'sw', 'swl', 'swr', 'lb', 'lbu', 'lh', 'lhu', 'sb', 'sh'].includes(mnemonic);
 }
 
-/** True when a memory offset is a label expression that MARS expands in non-compact configs. */
+/** Labels use address pseudos; ordinary mode also expands numeric offsets beyond signed 16 bits. */
 function memoryOffsetNeedsPseudo(expression: string, state: AssemblyState): boolean {
-  if (parseIntegerLiteral(expression) !== undefined) return false;
+  const integer = parseIntegerLiteral(expression);
+  if (integer !== undefined) {
+    const signed = integer | 0;
+    return state.options.expandNumericMemoryOffsets && (signed < -32768 || signed > 32767);
+  }
   // MARS performs .eqv substitution during tokenization, so only a resolvable
   // .eqv turns a memory offset into a plain immediate. A label token stays a
   // pseudo address form even when its address is already known.
@@ -1269,9 +1328,7 @@ function operandToWork(operand: ReturnType<typeof parseInstructionOperand>): Wor
 function pseudoOptions(state: AssemblyState): PseudoExpansionOptions {
   return {
     profile: state.profile,
-    // Course MARS runs use FixedCompactLargeText/CompactLargeText; neither is
-    // classified as the 16-bit "Compact" pseudo-expansion model by MARS.
-    compactAddresses: false,
+    compactAddresses: state.options.compactAddresses,
     maximumInstructionsPerStatement: state.options.maximumPseudoInstructionsPerStatement
   };
 }
@@ -1311,6 +1368,8 @@ function encodeWorkInstruction(
   address: number,
   state: AssemblyState
 ): { word?: number; diagnostic?: AssemblerDiagnostic } {
+  const extended = state.options.instructionExtension?.encode(instruction, address, makeSymbolResolver(state).resolve);
+  if (extended) return extended;
   if (instruction.mnemonic === '_co_internal_unknown_instruction') {
     return { word: 0x0000_003f };
   }

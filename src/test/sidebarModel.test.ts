@@ -260,7 +260,6 @@ describe('sidebar model', () => {
   it('does not restore a materials section when tool status is available', () => {
     const model = buildSidebarModel(baseContext({
       tools: [
-        { id: 'mars', name: 'Mars', value: 'D:\\Program Files\\Mars\\Mars.jar', configured: true },
         { id: 'logisim', name: 'Logisim', value: 'D:\\Program Files\\Logisim\\logisim.jar', configured: true }
       ]
     }));

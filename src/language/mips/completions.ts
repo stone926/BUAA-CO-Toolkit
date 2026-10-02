@@ -20,6 +20,7 @@ import {
   builtinPseudoAvailability,
   cp0Registers,
   directives,
+  floatingPointRegisterNames,
   instructions,
   instructionTypeLabel,
   numericRegisters,
@@ -50,14 +51,14 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     return cp0Items;
   }
 
-  const syscallItems = syscallCompletionItems(prefixExecutable, linePrefix, position);
+  const syscallItems = settings.project.profile === 'P7' ? undefined : syscallCompletionItems(prefixExecutable, linePrefix, position);
   if (syscallItems) {
     return syscallItems;
   }
 
   const registerReplaceRange = prefixedCompletionReplaceRange(linePrefix, position, '$', isRegisterPart);
   if (registerReplaceRange) {
-    for (const name of [...registerNames, ...numericRegisters()]) {
+    for (const name of [...registerNames, ...numericRegisters(), ...floatingPointRegisterNames]) {
       items.push({
         label: name,
         kind: CompletionItemKind.Variable,
