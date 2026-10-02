@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 253 files | 框架: Vitest
+# test-suite | src/test/ | 258 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -9,12 +9,12 @@
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
 | `test/language/` | 77 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
-| `test/`（根） | 48 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
-| `test/courseTesting/` | 45 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
+| `test/`（根） | 51 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
+| `test/courseTesting/` | 46 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
 | `test/verilog/` | 15 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
-| `test/mips{Providers,Host,Replay,Cli,Debug}/` | 23 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
+| `test/mips{Providers,Host,Replay,Cli,Debug}/` | 24 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
 | `test/{hazardAnalysis,helpers,templates,webview}/` | 4 | 冲突分析解析、模板与 Webview 回归 |
 
@@ -51,6 +51,10 @@
 - `scripts/extension-host-formatting-smoke.cjs` 由真实宿主入口调用，通过 VS Code 全文/选区 provider 应用 edits，覆盖幂等、缩进设置和保护区域，不 mock 格式化核心。
 
 ## 回归重点
+
+- **编辑器组**：`src/test/editorNavigation.test.ts` 验证同文件页签复用、当前组优先和 Windows 路径；waveform source/host tests验证导航不自动分栏。真实失败排查宿主验证从历史到源码、写回对照、波形全链不增加组数，显式合并保留所有标签。
+
+- **写回对照页**：`src/test/courseTesting/writebackComparison.test.ts` 验证时间戳/空格/大小写/WARNING正规化、重复PC、同周期换序、取消/截断和动态DM定位；`src/test/courseTestWriteback.test.ts` / `src/test/courseTestWritebackReport.test.ts` 验证导航、窗口上限、字段高亮、源码行与原始日志行、缺失侧EOF、转义及关闭取消。浏览器脚本覆盖420px两侧值同时可见，真实宿主烟测覆盖新比较入口及导航。
 
 - **失败排查闭环**：`src/test/courseTestFailure.test.ts` / `src/test/courseTestFailureReport.test.ts` 验证源码/trace行号分离、消息边界、占用会话与取消、重跑独立结果及历史波形重开；`src/test/courseTesting/failureEvidence.test.ts` / `src/test/courseTesting/caseInspection.test.ts` 覆盖有界导航证据、include源图映射、hash损坏降级；`src/test/courseTesting/caseRerun.test.ts` / `src/test/courseTesting/caseRerunWaveform.test.ts` 覆盖真实源闭包与 bundled Icarus VCD/trace配对、静默编译失败降级及dump限制。`node scripts/verify-course-failure-browser.mjs` 验证真实浏览器中的按钮消息、禁用态、宽/窄视口并保存截图。
 

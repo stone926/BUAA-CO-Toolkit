@@ -2,6 +2,7 @@
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
+import { textEditorColumn } from '../../editorNavigation';
 import type { AppServices } from '../../types';
 import { getProfile, getMemoryConfiguration, useDelayedBranching } from '../../config';
 import { Commands } from '../../constants';
@@ -86,7 +87,7 @@ export function registerMarsWorkbench(context: vscode.ExtensionContext, services
           if (target.scheme !== 'file') return;
           const source = await vscode.workspace.openTextDocument(target);
           const line = Math.min(source.lineCount - 1, Math.max(0, location.line - 1));
-          await vscode.window.showTextDocument(source, { viewColumn: vscode.ViewColumn.Beside, selection: new vscode.Range(line, 0, line, 0) });
+          await vscode.window.showTextDocument(source, { viewColumn: textEditorColumn(target), selection: new vscode.Range(line, 0, line, 0) });
         } else if (request.type === 'export') {
           if (exportBusy || !controller.image) return;
           exportBusy = true;

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => {
   const panels: Array<{
     webview: { html: string; onDidReceiveMessage(listener: (message: unknown) => Promise<void>): { dispose(): void } };
     reveal: ReturnType<typeof vi.fn>;
+    viewColumn: number;
     onDidDispose(listener: () => void): { dispose(): void };
     dispose(): void;
     listener?: (message: unknown) => Promise<void>;
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => {
         }
       },
       reveal: vi.fn(),
+      viewColumn: 2,
       onDidDispose(listener: () => void) {
         panel.disposeListener = listener;
         return { dispose: vi.fn() };
@@ -54,6 +56,7 @@ const mocks = vi.hoisted(() => {
     cancelProgress() { cancellation?.(); },
     clearPanels() { panels.length = 0; activePanel = undefined; cancellation = undefined; },
     createPanel,
+    openWritebackComparison: vi.fn(async (..._args: unknown[]) => undefined),
     withProgress,
     saveAll: vi.fn(async () => true),
     openTextDocument: vi.fn(async () => ({ lineCount: 64 })),
@@ -64,7 +67,8 @@ const mocks = vi.hoisted(() => {
     findSourceAtPc: vi.fn<(...args: unknown[]) => unknown>(),
     rerun: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
     recordOutcome: vi.fn(async (..._args: unknown[]) => undefined),
-    getProfile: vi.fn(() => 'P5')
+    getProfile: vi.fn(() => 'P5'),
+    groups: [] as unknown[]
   };
 });
 
@@ -72,7 +76,7 @@ vi.mock('vscode', async () => {
   const { URI: VscodeUri } = await import('vscode-uri');
   return {
     Uri: VscodeUri,
-    ViewColumn: { Beside: 2 },
+    ViewColumn: { Active: 1, Beside: 2 },
     ProgressLocation: { Notification: 15 },
     Range: class Range {
       readonly start: { line: number; character: number };
@@ -85,6 +89,7 @@ vi.mock('vscode', async () => {
     commands: { executeCommand: mocks.executeCommand },
     workspace: { saveAll: mocks.saveAll, openTextDocument: mocks.openTextDocument },
     window: {
+      tabGroups: { all: mocks.groups },
       createWebviewPanel: mocks.createPanel,
       withProgress: mocks.withProgress,
       showTextDocument: mocks.showTextDocument
@@ -100,6 +105,7 @@ vi.mock('../courseTesting/caseInspection', () => ({
   findSourceAtPc: mocks.findSourceAtPc
 }));
 vi.mock('../courseTesting/caseRerun', () => ({ rerunCourseTestCase: mocks.rerun }));
+vi.mock('../courseTestWriteback', () => ({ openCourseWritebackComparison: mocks.openWritebackComparison }));
 
 import { openCourseTestFailure } from '../courseTestFailure';
 import { loadCaseInspection, findSourceAtPc } from '../courseTesting/caseInspection';
@@ -188,6 +194,7 @@ async function open(caseId = nextCaseId()): Promise<NonNullable<typeof mocks.act
 }
 
 beforeEach(() => {
+  mocks.groups.length = 0;
   vi.clearAllMocks();
   mocks.clearPanels();
   mocks.saveAll.mockResolvedValue(true);
@@ -217,6 +224,15 @@ afterEach(() => {
 });
 
 describe('course test failure panel', () => {
+  it('opens diagnosis in the active group and offers explicit consolidation of existing splits', async () => {
+    mocks.groups.push({ viewColumn: 1, tabs: [] }, { viewColumn: 2, tabs: [] });
+    const panel = await open('editor-groups');
+    expect(mocks.createPanel).toHaveBeenCalledWith('coTestFailure', '用例排查', 1, expect.anything());
+    expect(panel.webview.html).toContain('合并编辑器组');
+    await panel.listener?.({ action: 'joinEditors' });
+    expect(mocks.executeCommand).toHaveBeenCalledWith('workbench.action.joinAllGroups');
+    expect(panel.reveal).toHaveBeenCalledWith(1);
+  });
   it('restores a saved rerun waveform and its original-case relationship from history', async () => {
     const saved = inspection(`saved-wave-${++caseSequence}`, { 'rerun.originalCaseId': 'original-failure' });
     if (saved.asmCase.manifest.version !== 2) throw new Error('Expected v2 fixture');
@@ -242,7 +258,7 @@ describe('course test failure panel', () => {
     expect(mocks.showTextDocument).not.toHaveBeenCalled();
   });
 
-  it('navigates with one-based source lines and compares oracle against DUT at the DUT trace row', async () => {
+  it('navigates with one-based source lines and opens the writeback comparison for this inspection and column', async () => {
     const panel = await open('trace-navigation');
     await panel.listener?.({ action: 'source', index: 0 });
     expect(mocks.showTextDocument).toHaveBeenCalledTimes(1);
@@ -250,14 +266,9 @@ describe('course test failure panel', () => {
     expect(sourceOptions.selection.start.line).toBe(6); // source line 7, not trace line 12
 
     await panel.listener?.({ action: 'compare' });
-    const expected = inspection('trace-navigation');
-    expect(mocks.executeCommand).toHaveBeenCalledWith(
-      'vscode.diff',
-      expected.oracle!.uri,
-      expected.dut!.uri,
-      '参考写回 ↔ 待测 CPU 写回',
-      expect.objectContaining({ selection: expect.objectContaining({ start: { line: 26, character: 0 } }) })
-    );
+    const expected = await vi.mocked(loadCaseInspection).mock.results[0]!.value;
+    expect(mocks.openWritebackComparison).toHaveBeenCalledWith(expected, panel.viewColumn);
+    expect(mocks.executeCommand).not.toHaveBeenCalled();
   });
 
   it('saves before rerun, holds the shared session lease, and releases it after cancellation', async () => {

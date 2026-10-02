@@ -53,4 +53,4 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 ## Trace
 
 - `traceParser.ts` — 解析 coL1/coL2 为 `CpuTraceEvent[]`；legacy MARS oracle 固定用 coL2（支持停机尾证明与动态兼容检查），默认 builtin TS oracle 不经过此解析器
-- `traceCompare.ts` — 事件对比引擎
+- `traceCompare.ts` — 事件对比引擎；自动判定与交互对照共用 `iterTraceDiffEntries`（包含同周期相邻换序规则）

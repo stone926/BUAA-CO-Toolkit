@@ -1,6 +1,7 @@
 // @index waveform-source — 波形信号/scope 跳回 Verilog 源码：按层次路径解析到模块声明，在波形之外的编辑器列中打开
 
 import * as vscode from 'vscode';
+import { textEditorColumn } from '../../editorNavigation';
 import { workspaceFolderForOrFirst } from '../../fsUtil';
 import type { VerilogModuleProvider } from '../../language/verilog/moduleProvider';
 import { findDeclaration, resolveHierarchy } from '../design/designHierarchy';
@@ -45,12 +46,11 @@ export async function locateWaveformSource(
   return { uri: vscode.Uri.parse(module.uri), range: toRange(declaration.selectionRange) };
 }
 
-/** Open the location in a column other than the waveform's, so both stay visible. */
-export async function revealSourceLocation(location: SourceLocation, waveformColumn: vscode.ViewColumn | undefined): Promise<void> {
-  const viewColumn = waveformColumn === vscode.ViewColumn.One ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
+/** Reveal source in its existing editor group, or the active group if it is not open. */
+export async function revealSourceLocation(location: SourceLocation, _waveformColumn?: vscode.ViewColumn): Promise<void> {
   await vscode.window.showTextDocument(location.uri, {
     selection: location.range,
-    viewColumn,
+    viewColumn: textEditorColumn(location.uri),
     preview: true,
     preserveFocus: false
   });

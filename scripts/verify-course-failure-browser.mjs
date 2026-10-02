@@ -15,6 +15,14 @@ await mkdir(output, { recursive: true });
 const bundle = path.resolve('.vscode-test/course-failure-renderer.cjs');
 await build({ entryPoints: ['src/courseTestFailureReport.ts'], outfile: bundle, bundle: true, platform: 'node', format: 'cjs' });
 const { renderCourseTestFailure } = createRequire(import.meta.url)(bundle);
+const writebackBundle = path.resolve('.vscode-test/course-writeback-renderer.cjs');
+await build({
+  stdin: {
+    contents: "export { renderWritebackComparison } from './src/courseTestWritebackReport';\nexport { buildWritebackComparison } from './src/courseTesting/writebackComparison';",
+    resolveDir: process.cwd(), sourcefile: 'course-writeback-browser-entry.ts'
+  }, outfile: writebackBundle, bundle: true, platform: 'node', format: 'cjs'
+});
+const { renderWritebackComparison, buildWritebackComparison } = createRequire(import.meta.url)(writebackBundle);
 const base = {
   caseId: '20261002T000000000Z-abcd1234', profile: 'P5', status: 'failed',
   diagnostic: '[AUTO-MISMATCH] 写回值不一致。参考结果 PC 00003084，$8 <= 0000002a；待测 CPU PC 00003084，$8 <= 00000000',
@@ -25,9 +33,34 @@ const base = {
   sourceAvailable: true, compareAvailable: true, dutAvailable: true,
   logs: ['Icarus 仿真日志'], canRerun: true, canWaveform: true, canHazard: true, warnings: []
 };
+const oracleLines = [];
+const dutLines = ['WARNING: memory read did not fill the requested range'];
+for (let index = 0; index < 127; index++) {
+  const pc = (0x3000 + index * 4).toString(16).padStart(8, '0');
+  const target = index % 3 === 0 ? `*${(0x1000 + index * 4).toString(16)}` : `$${index % 31 + 1}`;
+  const value = (0x10000000 + index * 0x101).toString(16).padStart(8, '0');
+  const actual = index === 31 || index === 64 ? `${value.slice(0, 6)}${value[6] === 'f' ? 'e' : 'f'}${value[7]}` : value;
+  oracleLines.push(`@${pc}: ${target} <= ${value}`);
+  dutLines.push(index % 2 ? `  48@${pc.toUpperCase()}: ${target.replace('$', '$ ')} <= ${actual.toUpperCase()} ` : `38@${pc}: ${target} <= ${actual}`);
+  if (index === 40) dutLines.push('WARNING: ignored non-writeback diagnostic between trace records');
+}
+const writebackModel = await buildWritebackComparison(oracleLines.join('\n'), dutLines.join('\n'));
+assert.deepEqual(writebackModel.differences, [31, 64], 'fixture should produce the intended architectural differences');
+const writebackView = {
+  caseId: '20261002T000000000Z-abcd1234', comparison: writebackModel, focus: 31, start: 26,
+  sources: new Map([
+    ['31:oracle', { line: 32, text: 'add $1, $2, $3' }],
+    ['31:dut', { line: 34, text: 'add $1, $2, $4' }],
+    ['64:oracle', { line: 65, text: 'sw $5, 0($6)' }],
+    ['64:dut', { line: 68, text: 'sw $5, 0($7)' }]
+  ])
+};
+const writebackPage = renderWritebackComparison(writebackView);
 const server = createServer((request, response) => {
   const partial = request.url.includes('partial');
-  const page = renderCourseTestFailure(partial ? { ...base, status: 'error', diagnostic: '[AUTO-DUT] Icarus 编译失败', evidence: undefined, targets: [], compareAvailable: false, canRerun: false, canWaveform: false, warnings: ['参考写回记录不可用：文件已删除'] } : base);
+  const page = request.url.includes('writeback')
+    ? renderWritebackComparison(request.url.includes('second') ? { ...writebackView, focus: 64, start: 59 } : writebackView)
+    : renderCourseTestFailure(partial ? { ...base, status: 'error', diagnostic: '[AUTO-DUT] Icarus 编译失败', evidence: undefined, targets: [], compareAvailable: false, canRerun: false, canWaveform: false, warnings: ['参考写回记录不可用：文件已删除'] } : base);
   const nonce = page.match(/<script nonce="([^"]+)"/)?.[1];
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   response.end(page.replace(`<script nonce="${nonce}">`, `<script nonce="${nonce}">window.requests=[];window.acquireVsCodeApi=()=>({postMessage:message=>window.requests.push(message)});</script><script nonce="${nonce}">`));
@@ -91,7 +124,40 @@ try {
     const capture = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
     await writeFile(path.join(output, `${name}.png`), Buffer.from(capture.data, 'base64'));
   }
-  console.log('Failure page browser checks passed: source/waveform messages, disabled actions, wide/narrow layout.');
+  for (const [name, width] of [['writeback-wide', 1100], ['writeback-narrow', 420]]) {
+    await call('Emulation.setDeviceMetricsOverride', { width, height: 960, deviceScaleFactor: 1, mobile: false });
+    await call('Page.navigate', { url: `${url}?writeback` });
+    await until('writeback page ready', () => evaluate('Boolean(window.requests && document.querySelector("[data-writeback-action=source]"))'));
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, `${name}: page must fit its viewport`);
+    if (width <= 560) {
+      assert.equal(await evaluate('(() => { const region=document.querySelector(".writeback-table"); const table=region.querySelector("table"); const last=table.querySelector("tr[data-selected] td:last-child").getBoundingClientRect(); const bounds=region.getBoundingClientRect(); return table.scrollWidth <= region.clientWidth && last.right <= bounds.right - 1; })()'), true, `${name}: both value columns should fit without horizontal table scrolling`);
+    }
+    assert.equal(await evaluate('Boolean(document.querySelector("tr[data-selected]")?.getBoundingClientRect().height)'), true, `${name}: first difference should be rendered`);
+    assert.equal(await evaluate('(() => { const r=document.querySelector("tr[data-selected]").getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()'), true, `${name}: selected row should be visible`);
+    assert.equal(await evaluate('document.querySelector("tr[data-selected] .row-status").textContent'), '值不同');
+    assert.equal(await evaluate('document.querySelectorAll("tr[data-selected] .field-change").length'), 2, 'only the changed value digits should be highlighted');
+    assert.equal(await evaluate('document.querySelectorAll("tr.equal .field-change").length'), 0, 'matching rows must not have highlighted fields');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll(".writeback-toolbar [data-writeback-action]")].map(button => [button.dataset.writebackAction, button.disabled])'), [
+      ['first', false], ['previous', true], ['next', false]
+    ]);
+    await evaluate('document.querySelector(".writeback-toolbar [data-writeback-action=next]").click()');
+    assert.deepEqual(await evaluate('window.requests.pop()'), { action: 'next' });
+    await evaluate('document.querySelector("tr[data-selected] [data-writeback-action=source][data-side=oracle]").click()');
+    assert.deepEqual(await evaluate('window.requests.pop()'), { action: 'source', row: 31, side: 'oracle' });
+    await evaluate('document.querySelector("details").open=true; document.querySelector("[data-writeback-action=rawOracle]").click()');
+    assert.deepEqual(await evaluate('window.requests.pop()'), { action: 'rawOracle' });
+    await evaluate('document.querySelector("[data-writeback-action=rawDut]").click()');
+    assert.deepEqual(await evaluate('window.requests.pop()'), { action: 'rawDut' });
+    const capture = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    await writeFile(path.join(output, `${name}.png`), Buffer.from(capture.data, 'base64'));
+  }
+  await call('Page.navigate', { url: `${url}?writeback-second` });
+  await until('second writeback state ready', () => evaluate('Boolean(document.querySelector("[data-writeback-action=previous]"))'));
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".writeback-toolbar [data-writeback-action]")].map(button => [button.dataset.writebackAction, button.disabled])'), [
+    ['first', false], ['previous', false], ['next', true]
+  ], 'navigation should disable previous/next at the corresponding ends');
+  assert.equal(await evaluate('document.querySelector("tr[data-selected] .event-index").textContent'), '65');
+  console.log('Failure and writeback page browser checks passed: renderer actions, value-only highlights, wide/narrow layout and screenshots.');
 } finally {
   socket?.close(); child.kill(); server.close();
 }

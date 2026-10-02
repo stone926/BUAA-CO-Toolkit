@@ -55,17 +55,20 @@ async function verifyCourseFailure({ folder, result, bounded, waitFor }) {
   assert.equal(JSON.parse(original.metadata['test.evidence']).version, 1);
   const source = await expectedSource(originalDirectory, original);
   const initialIds = await caseIds(casesDirectory);
+  const initialGroups = vscode.window.tabGroups.all.length;
+  const assertNoNewGroups = () => assert.equal(vscode.window.tabGroups.all.length, initialGroups, 'Navigation must reuse editor groups instead of adding side-by-side columns');
 
   const createPanel = vscode.window.createWebviewPanel;
-  let history, failure;
+  let history, failure, comparison;
   const panels = [];
   vscode.window.createWebviewPanel = function (...args) {
     const panel = createPanel.apply(this, args);
-    if (args[0] !== 'coAsmCaseIndex' && args[0] !== 'coTestFailure') return panel;
+    if (!['coAsmCaseIndex', 'coTestFailure', 'coWritebackComparison'].includes(args[0])) return panel;
     const captured = { panel, receive: undefined };
     panels.push(panel);
     if (args[0] === 'coAsmCaseIndex') history = captured;
-    else failure = captured;
+    else if (args[0] === 'coTestFailure') failure = captured;
+    else comparison = captured;
     const originalReceive = panel.webview.onDidReceiveMessage.bind(panel.webview);
     panel.webview.onDidReceiveMessage = (callback, ...rest) => {
       captured.receive = callback;
@@ -79,11 +82,16 @@ async function verifyCourseFailure({ folder, result, bounded, waitFor }) {
   });
   try {
     await bounded('Open real test history', () => vscode.commands.executeCommand('co.test.openAsmCaseIndex'));
+    assertNoNewGroups();
+    const firstHistory = history;
+    await bounded('Reuse real test history', () => vscode.commands.executeCommand('co.test.openAsmCaseIndex'));
+    assert.equal(history, firstHistory, 'Repeated history actions must reuse the same panel');
     await waitFor('History retained failure', () => history?.panel.webview.html.includes(`data-case-id="${result.caseId}"`));
     await send('History inspect saved failure', history, { action: 'inspectCase', caseId: result.caseId });
     await waitFor('Saved failure diagnosis', () => failure?.panel.webview.html.includes('data-failure-action="source"'));
     assert.ok(failure.panel.webview.html.includes(result.caseId));
     assert.ok(failure.panel.webview.html.includes('data-failure-action="waveform"'));
+    assertNoNewGroups();
 
     await send('Diagnosis source navigation', failure, { action: 'source', index: 0 });
     await waitFor('Selected case-contained source line', () => {
@@ -91,7 +99,24 @@ async function verifyCourseFailure({ folder, result, bounded, waitFor }) {
       return editor && sameFile(editor.document.uri.fsPath, source.file) && editor.selection.start.line === source.row;
     });
     assert.equal(vscode.window.activeTextEditor.document.lineAt(source.row).text.trim(), source.text);
+    assertNoNewGroups();
     assert.ok(path.relative(originalDirectory, source.file).startsWith(`source${path.sep}`), 'Source navigation must use the saved case');
+
+    await send('Open semantic writeback comparison', failure, { action: 'compare' });
+    await waitFor('Writeback comparison at first difference', () => comparison?.panel.webview.html.includes('class="different selected"'));
+    assert.ok(comparison.panel.webview.html.includes('field-change actual'));
+    assert.equal(comparison.panel.viewColumn, failure.panel.viewColumn, 'Comparison reuses the diagnosis column');
+    assertNoNewGroups();
+    await send('Writeback source navigation', comparison, { action: 'source', row: 0, side: 'oracle' });
+    await waitFor('Writeback selected ASM line', () => {
+      const editor = vscode.window.activeTextEditor;
+      return editor && sameFile(editor.document.uri.fsPath, source.file) && editor.selection.start.line === source.row;
+    });
+    await send('Writeback original CPU log navigation', comparison, { action: 'rawDut' });
+    const firstDut = JSON.parse(original.metadata['test.evidence']).dut;
+    await waitFor('Original DUT output line', () => vscode.window.activeTextEditor?.selection.start.line === firstDut.lineNumber - 1);
+    assertNoNewGroups();
+    comparison.panel.dispose();
 
     await send('Diagnosis automatic rerun with VCD', failure, { action: 'waveform' });
     const ids = await caseIds(casesDirectory);
@@ -124,6 +149,7 @@ async function verifyCourseFailure({ folder, result, bounded, waitFor }) {
     assert.match(output, /^VCD info: dumpfile .+ opened for output\.?\s*$/m);
     assert.ok(output.includes(path.basename(dumpFile)), 'Sibling trace must declare the VCD actually opened');
     await waitFor('Automatic rerun waveform viewer', () => waveformTab(dumpFile));
+    assertNoNewGroups();
     assert.ok(failure.panel.webview.html.includes(newId));
     assert.ok(failure.panel.webview.html.includes('data-failure-action="openWaveform"'));
 
@@ -131,9 +157,18 @@ async function verifyCourseFailure({ folder, result, bounded, waitFor }) {
     await waitFor('Closed waveform viewer', () => !waveformTab(dumpFile));
     failure.panel.dispose();
     failure = undefined;
+    await vscode.commands.executeCommand('workbench.action.newGroupRight');
+    await waitFor('Explicit user split for consolidation check', () => vscode.window.tabGroups.all.length > initialGroups);
     await waitFor('History new rerun case', () => history.panel.webview.html.includes(`data-case-id="${newId}"`));
     await send('History reopen saved rerun diagnosis', history, { action: 'inspectCase', caseId: newId });
     await waitFor('Saved waveform action restored', () => failure?.panel.webview.html.includes('data-failure-action="openWaveform"'));
+    assert.ok(failure.panel.webview.html.includes('合并编辑器组'));
+    await waitFor('Reopened diagnosis tab registered', () => vscode.window.tabGroups.all.some(group => group.viewColumn === failure.panel.viewColumn
+      && group.tabs.some(tab => tab.input instanceof vscode.TabInputWebview && tab.label === '用例排查')));
+    const tabsBeforeJoin = vscode.window.tabGroups.all.flatMap(group => group.tabs).length;
+    await send('Consolidate existing editor groups', failure, { action: 'joinEditors' });
+    await waitFor('Editor groups consolidated', () => vscode.window.tabGroups.all.length === 1);
+    assert.equal(vscode.window.tabGroups.all[0].tabs.length, tabsBeforeJoin, 'Consolidation must preserve existing tabs');
     await send('Reopen saved waveform without rerunning', failure, { action: 'openWaveform' });
     await waitFor('Saved rerun waveform reopened', () => waveformTab(dumpFile));
     assert.deepEqual(await caseIds(casesDirectory), ids, 'Opening saved waveform must not create another case');

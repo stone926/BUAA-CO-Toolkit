@@ -1,4 +1,4 @@
-# orchestration | src/ | 59 files
+# orchestration | src/ | 60 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -58,6 +58,8 @@
 - `courseTest*` / `asmCaseStore*`（`src/courseTest*.ts`、`src/asmCaseStore*.ts`）— 持续测试与用例存储，见 course-testing.md
 
 ## UI
+
+- `editorNavigation.ts` — 导航目标统一策略：优先活动组的同文件页签，再复用其它组已开页签，否则在当前组打开；不隐式拆分编辑器组
 
 - `sidebar.ts` / `sidebarModel.ts` — 侧边栏 TreeView 与其纯函数数据模型
 - `wizard.ts` / `wizardSettings.ts` — 4 步项目向导：选 Profile → 项目名 → 配置外部工具 → 创建目录与模板

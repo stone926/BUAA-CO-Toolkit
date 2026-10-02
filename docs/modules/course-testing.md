@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 71 files + host adapters
+# course-testing | src/courseTesting/ | 72 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -93,6 +93,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 - `src/courseTestFailure.ts` / `src/courseTestFailureReport.ts` — 持续页与历史共用的失败排查面板：首差异、保存的源码定位、trace diff、日志、可取消重跑与波形入口；固定消息动作，按需加载
 - `failureEvidence.ts` / `failureDiagnosis.ts` — 有界首差异导航信息、历史解码、PC/场景定位目标、结果与排查提示；不把观察差异推断为根因
+- `writebackComparison.ts` / `src/courseTestWriteback.ts` / `src/courseTestWritebackReport.ts` — 共用 trace parser / 对齐 iterator 的有界事件比较；忽略排版与时间戳，41项上下文页、差异导航、逐字段高亮和源码/原始日志定位，替代原始文本 diff
 - `caseInspection.ts` — 指定 case 的 containment/hash/bounded read、ProgramImage→include 源码行、部分损坏降级；大波形只在打开时验证
 - `caseRerun.ts` / `caseRerunWaveform.ts` — 原 ASM/include/stdin/P7 闭包→独立新 case→现有 automatic pipeline；阶段校验、原证据保留、取消单列。波形仅装饰 DUT，复用私有 TB / 预算，dump 编译失败可降级存储器；波形问题不改 CPU 判定
 

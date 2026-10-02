@@ -215,6 +215,19 @@ export async function loadCaseWaveform(inspection: CaseInspection): Promise<vsco
   return resolveManifestFile(inspection.asmCase.dir.fsPath, reference.path);
 }
 
+/** Revalidate the captured artifacts when comparison is requested; don't retain logs in the diagnosis panel. */
+export async function loadCaseWritebackTexts(inspection: CaseInspection): Promise<{ oracle: string; dut: string }> {
+  const { manifest, dir } = inspection.asmCase;
+  const oracle = manifest.artifacts?.oracle?.traceOut;
+  const dut = dutTraceReference(manifest);
+  if (!oracle || !dut) throw new Error('本用例缺少成对的写回记录。');
+  const [left, right] = await Promise.all([
+    readVerifiedTextArtifact(dir.fsPath, oracle, maximumReplayTraceBytes, '参考写回记录'),
+    readVerifiedTextArtifact(dir.fsPath, dut, maximumReplayTraceBytes, '待测 CPU 写回记录')
+  ]);
+  return { oracle: left.text, dut: right.text };
+}
+
 async function resolveCaseDirectory(casesRoot: string, caseId: string): Promise<string> {
   const lexical = path.resolve(casesRoot, caseId);
   if (path.dirname(lexical) !== casesRoot) throw new Error('ASM case is outside the cases directory');
@@ -280,10 +293,11 @@ async function loadDutTraceArtifact(
   manifest: AsmCaseManifestUnion,
   warnings: string[]
 ): Promise<CaseInspectionTextArtifact | undefined> {
-  const preferred = dutArtifactCandidates(manifest).find((entry) => /(?:^|\/)(?:simOut|traceOut|dutOut)$/i.test(entry.key));
-  return preferred
-    ? await readTextArtifact(caseDir, preferred.reference, maximumReplayTraceBytes, '待测 CPU 写回记录', warnings)
-    : undefined;
+  return await readTextArtifact(caseDir, dutTraceReference(manifest), maximumReplayTraceBytes, '待测 CPU 写回记录', warnings);
+}
+
+function dutTraceReference(manifest: AsmCaseManifestUnion): ManifestArtifactReference | undefined {
+  return dutArtifactCandidates(manifest).find((entry) => /(?:^|\/)(?:simOut|traceOut|dutOut)$/i.test(entry.key))?.reference;
 }
 
 async function loadFailureLogs(
@@ -320,30 +334,30 @@ async function readTextArtifact(
 ): Promise<CaseInspectionTextArtifact | undefined> {
   if (reference === undefined) return undefined;
   try {
-    let uri: vscode.Uri;
-    let bytes: Buffer;
-    if (typeof reference === 'string') {
-      const relative = legacyRelativePath(caseDir, reference);
-      uri = await resolveManifestFile(caseDir, relative);
-      bytes = await readBoundedRegularFile(uri.fsPath, { maximumBytes, label });
-      warnings.push(`${label}来自旧版未哈希 artifact`);
-    } else {
-      uri = await resolveManifestFile(caseDir, reference.path);
-      bytes = await readBoundedRegularFile(uri.fsPath, {
-        maximumBytes,
-        expectedBytes: reference.bytes,
-        label
-      });
-      if (sha256Bytes(bytes) !== reference.sha256.toLowerCase()) throw new Error('hash does not match the manifest');
-    }
-    const text = bytes.toString('utf8');
-    if (!Buffer.from(text, 'utf8').equals(bytes)) throw new Error('is not lossless UTF-8');
+    const { uri } = await readVerifiedTextArtifact(caseDir, reference, maximumBytes, label);
+    if (typeof reference === 'string') warnings.push(`${label}来自旧版未哈希 artifact`);
     // Keep large trace/log text out of the panel's lifetime; navigation needs only its URI.
     return { uri };
   } catch (error) {
     warnings.push(`${label}不可用：${errorText(error)}`);
     return undefined;
   }
+}
+
+async function readVerifiedTextArtifact(
+  caseDir: string, reference: ManifestArtifactReference, maximumBytes: number, label: string
+): Promise<{ uri: vscode.Uri; text: string }> {
+  const relative = typeof reference === 'string' ? legacyRelativePath(caseDir, reference) : reference.path;
+  const uri = await resolveManifestFile(caseDir, relative);
+  const bytes = await readBoundedRegularFile(uri.fsPath, {
+    maximumBytes, label, ...(typeof reference === 'string' ? {} : { expectedBytes: reference.bytes })
+  });
+  if (typeof reference !== 'string' && sha256Bytes(bytes) !== reference.sha256.toLowerCase()) {
+    throw new Error(`${label} hash does not match the manifest`);
+  }
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) throw new Error(`${label} is not lossless UTF-8`);
+  return { uri, text };
 }
 
 function legacyRelativePath(caseDir: string, recordedPath: string): string {

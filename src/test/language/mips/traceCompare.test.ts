@@ -1,8 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { compareTraceIterables, compareTraces, firstTraceDiffEntry, firstTraceDiffSnapshot } from '../../../language/mips/traceCompare';
+import { compareTraceIterables, compareTraces, firstTraceDiffEntry, firstTraceDiffSnapshot, iterTraceDiffEntries } from '../../../language/mips/traceCompare';
 import { parseMarsOutput } from '../../../language/mips/traceParser';
 
 describe('CPU trace compare', () => {
+  it('exposes the same alignment entries lazily and closes source iterators on early exit', () => {
+    let oracleClosed = false;
+    let dutClosed = false;
+    let reads = 0;
+    function* events(onClose: () => void) {
+      try {
+        for (const event of parseMarsOutput('@3000: $1 <= 1\n@3004: $2 <= 2')) {
+          reads++;
+          yield event;
+        }
+      } finally { onClose(); }
+    }
+    const entries = iterTraceDiffEntries(events(() => { oracleClosed = true; }), events(() => { dutClosed = true; }));
+    expect(entries.next().value).toMatchObject({ index: 0, status: 'ok' });
+    expect(reads).toBe(2);
+    entries.return?.(undefined);
+    expect(oracleClosed).toBe(true);
+    expect(dutClosed).toBe(true);
+  });
+
   it('matches traces by PC, target, and value while ignoring cycles by default', () => {
     const mars = parseMarsOutput('10@00003000: $1 <= 00000001\n20@00003004: *00001000 <= 00000002\n');
     const sim = parseMarsOutput('100@00003000: $1 <= 00000001\n120@00003004: *00001000 <= 00000002\n');

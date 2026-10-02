@@ -31,6 +31,7 @@
 - `verilog/` — `basic_testbench.v`、`external_memory_testbench.v`、`p7_official_testbench.v`、`p7_interrupt_block*.v`、`p7_probe_block.v`、`waveform_dumper.v`（波形 dump 顶层）、`dm_store_contract.v`（P6/P7 有效 DM 写事务契约，保留 `CO_DM_STORE` 原始字段供 builtin oracle 对拍）、`p7_probe_invalid_store_observer.v` + `p7_probe_invalid_store_case.v`
 - `webview/` — `report_page.html`、`report.css`（测试/工具链/冲突分析共享主题样式）、`reportFilter.js`（测试历史搜索/结果筛选与定位入口）、`continuousActions.js`（停止/历史/定位操作）、`failureActions.js`（诊断页固定动作；路径、用例与会话由宿主持有）；`waveform_page.html`（独立波形界面，脚本/样式来自 `out/media`）。报告均使用 nonce CSP，无远程字体、脚本或图标依赖。
 - `wizard/` — `p2_main.asm`、`verilog_top.v`、基础 testbench fallback
+- `webview/writeback.css` / `webview/writebackActions.js` — 专用写回事件对照页：窄窗口字段布局、局部差异高亮、固定动作消息和当前事件滚动定位
 - `asm/` — `p7_exception_handler*.asm`、`p7_probe_prologue.asm`、`p7_probe_handler.asm`
 - `hazard/` — 冲突报告模板
 

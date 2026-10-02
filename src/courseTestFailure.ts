@@ -15,6 +15,7 @@ import { isManifestV2, manifestP7Of } from './courseTesting/manifestCodec';
 import { probeScopeFromCase, specialTimerExlNotice } from './courseTesting/p7ProbeScope';
 import { normalizePathKey } from './pathUtils';
 import type { AppServices } from './types';
+import { textEditorColumn } from './editorNavigation';
 
 const openCases = new Map<string, vscode.WebviewPanel>();
 
@@ -26,7 +27,7 @@ export async function openCourseTestFailure(services: AppServices, directory: st
   // Another report can have opened this case while the bounded read was pending.
   const opened = openCases.get(keyFor(caseId));
   if (opened) { opened.reveal(); return; }
-  const panel = vscode.window.createWebviewPanel('coTestFailure', '用例排查', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coTestFailure', '用例排查', vscode.ViewColumn.Active, {
     enableScripts: true, enableFindWidget: true, localResourceRoots: [], retainContextWhenHidden: true
   });
   let key = keyFor(caseId);
@@ -121,11 +122,8 @@ export async function openCourseTestFailure(services: AppServices, directory: st
           return;
         case 'compare':
           if (inspection.oracle && inspection.dut) {
-            const evidence = parseFailureEvidence(isManifestV2(inspection.asmCase.manifest) ? inspection.asmCase.manifest.metadata?.['test.evidence'] : undefined);
-            await vscode.commands.executeCommand('vscode.diff', inspection.oracle.uri, inspection.dut.uri, '参考写回 ↔ 待测 CPU 写回', {
-              viewColumn: vscode.ViewColumn.Beside, preview: true,
-              ...(evidence?.dut ? { selection: new vscode.Range(evidence.dut.lineNumber - 1, 0, evidence.dut.lineNumber - 1, 0) } : {})
-            });
+            const { openCourseWritebackComparison } = await import('./courseTestWriteback');
+            await openCourseWritebackComparison(inspection, panel.viewColumn);
           }
           return;
         case 'dut':
@@ -139,6 +137,14 @@ export async function openCourseTestFailure(services: AppServices, directory: st
           return;
         case 'history':
           await vscode.commands.executeCommand(Commands.Test.OpenAsmCaseIndex, inspection.asmCase.asm);
+          return;
+        case 'joinEditors':
+          await vscode.commands.executeCommand('workbench.action.joinAllGroups');
+          if (!disposed) {
+            panel.reveal(vscode.ViewColumn.Active);
+            actionMessage = '编辑器组已合并，可通过顶部标签页切换。';
+            render();
+          }
           return;
         case 'openWaveform':
           waveform = await loadCaseWaveform(inspection);
@@ -184,6 +190,7 @@ function inspectionView(inspection: CaseInspection): { view: CourseFailureView; 
       compareAvailable: !!inspection.oracle && !!inspection.dut,
       dutAvailable: !!inspection.dut, logs: inspection.logs.map(log => log.label),
       canRerun, canWaveform,
+      canJoinEditors: (vscode.window.tabGroups?.all.length ?? 1) > 1,
       canHazard: inspection.sourceAvailable && /^P[5-7]$/.test(manifest.profile) && !probe
         && !manifestP7Of(manifest)?.interruptSchedule?.length && getProfile(inspection.asmCase.asm) === manifest.profile,
       warnings: [...inspection.warnings, ...(!evidence && status === 'failed' ? ['此记录没有保存首差异定位信息，可查看完整汇编和写回记录，或重跑补充证据。'] : [])]
@@ -195,7 +202,7 @@ async function revealText(uri: vscode.Uri, line?: number): Promise<void> {
   const document = await vscode.workspace.openTextDocument(uri);
   const row = Math.min(document.lineCount - 1, Math.max(0, (line ?? 1) - 1));
   await vscode.window.showTextDocument(document, {
-    viewColumn: vscode.ViewColumn.Beside, preview: true,
+    viewColumn: textEditorColumn(uri), preview: true,
     selection: new vscode.Range(row, 0, row, 0)
   });
 }

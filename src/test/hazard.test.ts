@@ -14,6 +14,7 @@ import { buildProgramImage } from '../mips/core/programImage';
 
 const testState = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined,
+  groups: [] as Array<{ isActive?: boolean; viewColumn: number; tabs: Array<{ input: unknown }> }>,
   messages: [] as Array<(message: unknown) => Promise<void>>,
   cancel: false
 }));
@@ -23,10 +24,12 @@ vi.mock('vscode', async () => {
   testState.state = createVscodeMockState();
   const mock = createVscodeModuleMock(testState.state, vi.fn);
   Object.assign(mock.Uri, { joinPath: Utils.joinPath });
+  class TabInputText { constructor(readonly uri: { fsPath: string }) {} }
   return {
-    ...mock, ProgressLocation: { Notification: 15 },
+    ...mock, TabInputText, ViewColumn: { ...mock.ViewColumn, Active: -1 }, ProgressLocation: { Notification: 15 },
     window: {
       ...mock.window,
+      tabGroups: { get all() { return testState.groups; } },
       withProgress: vi.fn(async (_options, task) => task({ report: vi.fn() }, {
         isCancellationRequested: testState.cancel, onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() }))
       })),
@@ -55,6 +58,7 @@ let source: vscode.Uri;
 beforeEach(async () => {
   vi.clearAllMocks();
   testState.cancel = false;
+  testState.groups = [];
   testState.messages.length = 0;
   root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'co-native-hazard-'));
   source = vscode.Uri.file(path.join(root, '中文 code.txt'));
@@ -157,13 +161,17 @@ describe('native hazard command workflow', () => {
   it('validates imported JSON and ignores arbitrary webview commands or injected paths', async () => {
     const commands = commandMap();
     await commands.get(Commands.Hazard.AnalyzeCurrentMachineCode)!();
+    expect(vi.mocked(vscode.window.createWebviewPanel).mock.calls[0][2]).toBe(vscode.ViewColumn.Active);
     await testState.messages[0]({ action: 'runCommand', command: 'workbench.action.closeWindow' });
     expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+    testState.groups = [{ isActive: true, viewColumn: 4, tabs: [{ input: new vscode.TabInputText(source) }] }];
     await testState.messages[0]({ action: 'openInput', uri: 'command:evil' });
     const opened = vi.mocked(vscode.window.showTextDocument).mock.calls[0][0] as vscode.Uri;
     expect(opened.toString()).toBe(source.toString());
-    expect(vi.mocked(vscode.window.showTextDocument).mock.calls[0][1]).toEqual({ preview: false });
+    expect(vi.mocked(vscode.window.showTextDocument).mock.calls[0][1]).toEqual({ viewColumn: 4, preview: false });
     const { uri, saved } = await generatedReport();
+    await testState.messages[0]({ action: 'openJson' });
+    expect(vi.mocked(vscode.window.showTextDocument).mock.calls[1]).toEqual([uri, { viewColumn: vscode.ViewColumn.Active, preview: false }]);
     await fs.promises.writeFile(uri.fsPath, JSON.stringify({ ...saved, sourceUri: 'command:evil' }));
     await commands.get(Commands.Hazard.OpenReport)!(uri);
     expect(vscode.window.createWebviewPanel).toHaveBeenCalledTimes(1);

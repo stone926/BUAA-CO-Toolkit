@@ -47,14 +47,14 @@
 
 - `host/waveformDumpSetup.ts` — 手动波形与自动测试用例重跑共享的 dumper/discovery/编译拒绝归因；自动重跑按本次 compile 源文件集合发现存储器，VCD 有界记录
 
-- `host/waveformEditorProvider.ts` — `CustomReadonlyEditorProvider`，按文件追踪页签并复用已打开页签
+- `host/waveformEditorProvider.ts` — `CustomReadonlyEditorProvider`，按文件追踪页签并复用已打开页签；新波形在当前组打开
 - `host/waveformPanel.ts` — 单页签控制器：ready 握手、流式加载 + 进度、超大文件确认、按路径过滤的目录监视防抖重载、trace 附加、消息校验、状态保存
 - `host/waveformHtml.ts` — Webview 页面 shell 与 CSP
 - `host/waveformFileLoader.ts` — Node 流式分块解析（可取消、有进度），非 file 方案走内存切片
 - `host/waveformTraceSource.ts` — `.sim.out` 配对与时间换算
 - `host/waveformViewStateStore.ts` — workspaceState 按路径保存视图状态（上限 64 个文件）
 - `host/waveformSimulation.ts` — "仿真并查看波形"：复用 runIverilog 附加 dump 顶层；编译器拒绝存储器 dump 时只去掉被点名的存储器重试，并按 VVP 实际打开的 dumpfile 定位
-- `host/designModules.ts` / `host/waveformSourceLocator.ts` — 模块注册表（按需解析 `.co/tb` 与生成的运行时 TB）与信号/scope 跳回 Verilog 声明
+- `host/designModules.ts` / `host/waveformSourceLocator.ts` — 模块注册表（按需解析 `.co/tb` 与生成的运行时 TB）与信号/scope 跳回 Verilog 声明；复用源码页签或当前组，不主动分栏
 
 ## View（纯逻辑，Webview 使用，单测覆盖）
 

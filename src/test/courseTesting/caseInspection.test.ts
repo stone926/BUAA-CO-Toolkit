@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { loadCaseInspection, loadCaseWaveform, findSourceAtPc } from '../../courseTesting/caseInspection';
+import { loadCaseInspection, loadCaseWaveform, loadCaseWritebackTexts, findSourceAtPc } from '../../courseTesting/caseInspection';
 import { asmCaseManifestVersion2, type AsmCaseManifestV2 } from '../../courseTesting/manifestCodec';
 import type { AsmCaseManifest } from '../../asmCaseStoreCore';
 import { sha256Bytes } from '../../asmCaseStoreCore';
@@ -99,6 +99,7 @@ describe('loadCaseInspection', () => {
       expect(inspection.logs).toMatchObject([{ label: 'Icarus 编译日志' }]);
       expect(inspection.oracle).not.toHaveProperty('text');
       expect(inspection.logs[0]).not.toHaveProperty('text');
+      expect(await loadCaseWritebackTexts(inspection)).toEqual({ oracle: traceBytes.toString('utf8'), dut: dutBytes.toString('utf8') });
       const location = findSourceAtPc(inspection, 0x3000);
       const includedUnit = bundle.graph.units.find((unit) => unit.id !== rootUnit.id)!;
       expect(location).toMatchObject({ pc: 0x3000, line: 2, text: 'included: add $t0, $zero, $zero' });
@@ -116,6 +117,7 @@ describe('loadCaseInspection', () => {
       await expect(loadCaseWaveform(withWaveform)).rejects.toThrow('hash');
 
       await fs.writeFile(path.join(caseDir, 'oracle.trace'), 'tampered trace\n');
+      await expect(loadCaseWritebackTexts(inspection)).rejects.toThrow('size mismatch');
       const damagedArtifact = await loadCaseInspection(cases, caseId);
       expect(damagedArtifact.oracle).toBeUndefined();
       expect(damagedArtifact.warnings.join('\n')).toContain('size mismatch');

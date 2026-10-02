@@ -272,7 +272,7 @@ async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?:
     }
   }
 
-  const panel = vscode.window.createWebviewPanel('coToolchainReport', 'CO 工具链', vscode.ViewColumn.Beside, {
+  const panel = vscode.window.createWebviewPanel('coToolchainReport', 'CO 工具链', vscode.ViewColumn.Active, {
     enableScripts: false,
     enableFindWidget: true
   });

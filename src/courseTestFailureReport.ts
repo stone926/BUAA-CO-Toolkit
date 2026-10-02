@@ -23,6 +23,7 @@ export interface CourseFailureView {
   actionMessage?: string;
   previousCaseId?: string;
   waveformAvailable?: boolean;
+  canJoinEditors?: boolean;
 }
 
 export function renderCourseTestFailure(view: CourseFailureView): string {
@@ -51,6 +52,7 @@ export function renderCourseTestFailure(view: CourseFailureView): string {
     actions: html.raw(`${button('rerun', view.busy ? '正在重跑…' : '重跑此用例', view.canRerun, undefined, true)}
       ${view.waveformAvailable ? button('openWaveform', '打开本次波形') : ''}
       ${view.canWaveform ? button('waveform', '重跑并看波形') : ''}
+      ${view.canJoinEditors ? button('joinEditors', '合并编辑器组') : ''}
       ${button('history', '测试历史')}`),
     body: html.raw(`
       <p>${renderBadge(label, tone)} <span class="muted">${html.text(view.profile)} · 复现编号</span> ${html.code(view.caseId)}</p>

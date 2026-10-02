@@ -7,8 +7,10 @@ import {
 import type { AsmCaseManifestEntry } from './courseTestReport';
 import { renderAsmCaseIndex } from './courseTestReport';
 import { acceptsInspectionMessage } from './courseTesting/failureDiagnosis';
+import { normalizePathKey } from './pathUtils';
 
 const historyRefreshDebounceMs = 500;
+const historyPanels = new Map<string, vscode.WebviewPanel>();
 
 export interface AsmCaseHistoryPanel {
   readonly webview: { html: string };
@@ -37,16 +39,20 @@ const defaultLiveDependencies: AsmCaseHistoryLiveDependencies = {
 export function openAsmCaseIndex(resource?: vscode.Uri, inspect?: (casesDirectory: string, caseId: string) => Promise<void>): void {
   const indexResource = resource ?? vscode.window.activeTextEditor?.document.uri;
   const casesDirectory = asmCaseIndexDirectory(indexResource);
+  const key = normalizePathKey(casesDirectory);
+  const existing = historyPanels.get(key);
+  if (existing) { existing.reveal(); return; }
   const panel = vscode.window.createWebviewPanel(
     'coAsmCaseIndex',
     '测试历史 / 失败用例',
-    vscode.ViewColumn.Beside,
+    vscode.ViewColumn.Active,
     {
       enableScripts: true,
       enableFindWidget: true,
       localResourceRoots: []
     }
   );
+  historyPanels.set(key, panel);
   let visibleCases = new Set<string>();
   let opening = false;
   const listener = panel.webview.onDidReceiveMessage(async (message: unknown) => {
@@ -56,7 +62,10 @@ export function openAsmCaseIndex(resource?: vscode.Uri, inspect?: (casesDirector
     catch (error) { void vscode.window.showErrorMessage(`无法打开用例：${error instanceof Error ? error.message : String(error)}`); }
     finally { opening = false; }
   });
-  panel.onDidDispose(() => listener.dispose());
+  panel.onDidDispose(() => {
+    listener.dispose();
+    if (historyPanels.get(key) === panel) historyPanels.delete(key);
+  });
   attachAsmCaseIndexLiveRefresh(panel, casesDirectory, {
     ...defaultLiveDependencies,
     render: (entries) => {

@@ -214,7 +214,7 @@ export async function startContinuousGeneratedTraceTests<
       return;
     }
     const reportFile = vscode.Uri.file(path.join(outDir.fsPath, 'continuous-trace-report.json'));
-    const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Beside, {
+    const panel = vscode.window.createWebviewPanel('coContinuousTraceReport', '持续测试', vscode.ViewColumn.Active, {
       enableScripts: true,
       enableFindWidget: true,
       localResourceRoots: [],

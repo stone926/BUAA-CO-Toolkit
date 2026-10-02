@@ -47,7 +47,7 @@ const fileMocks = vi.hoisted(() => ({
 vi.mock('vscode', async () => ({
   Uri: URI,
   commands: { executeCommand: vscodeMocks.executeCommand },
-  ViewColumn: { Beside: 2 },
+  ViewColumn: { Active: 1, Beside: 2 },
   workspace: {
     saveAll: vscodeMocks.saveAll
   },
@@ -165,7 +165,7 @@ describe('continuous generated trace orchestration', () => {
     const deps = createDependencies();
     await startContinuousGeneratedTraceTests(createServices(), deps);
     expect(vscodeMocks.createWebviewPanel).toHaveBeenCalledWith(
-      'coContinuousTraceReport', '持续测试', 2,
+      'coContinuousTraceReport', '持续测试', 1,
       expect.objectContaining({
         enableScripts: true,
         localResourceRoots: []

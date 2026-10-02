@@ -123,8 +123,6 @@ export function compareTraceIterables(
   simEvents: Iterable<CpuTraceEvent>,
   options: TraceCompareOptions = {}
 ): TraceDiffResult {
-  const marsState = iteratorState(marsEvents);
-  const simState = iteratorState(simEvents);
   const entries: TraceDiffEntry[] = [];
   const retainedEntryLimit = normalizedRetainedEntryLimit(options.retainedEntryLimit);
   let firstDiffIndex = -1;
@@ -132,51 +130,21 @@ export function compareTraceIterables(
   let entriesTruncated = false;
   let matchedEvents = 0;
   let diffEvents = 0;
-  let index = 0;
-
-  while (true) {
-    const mars = currentIteratorEvent(marsState);
-    const sim = currentIteratorEvent(simState);
-    if (!mars && !sim) {
-      break;
-    }
-    const entry = compareAtIndex(index, mars, sim, options);
-
-    if (entry.status !== 'ok') {
-      const swapped = compareAdjacentSwapAt(
-        index,
-        mars,
-        nextIteratorEvent(marsState),
-        sim,
-        nextIteratorEvent(simState),
-        options
-      );
-      if (swapped) {
-        for (const swappedEntry of swapped) {
-          entriesTruncated = retainEntry(entries, swappedEntry, retainedEntryLimit) || entriesTruncated;
-          matchedEvents++;
-        }
-        advanceIteratorState(marsState, 2);
-        advanceIteratorState(simState, 2);
-        index += 2;
-        continue;
-      }
-    }
-
+  let oracleEvents = 0;
+  let dutEvents = 0;
+  for (const entry of iterTraceDiffEntries(marsEvents, simEvents, options)) {
+    if (entry.oracle) oracleEvents++;
+    if (entry.dut) dutEvents++;
     entriesTruncated = retainEntry(entries, entry, retainedEntryLimit) || entriesTruncated;
-
     if (entry.status === 'ok') {
       matchedEvents++;
     } else {
       diffEvents++;
       if (firstDiffIndex < 0) {
-        firstDiffIndex = index;
+        firstDiffIndex = entry.index;
         firstDiffEntry = entry;
       }
     }
-    advanceIteratorState(marsState, 1);
-    advanceIteratorState(simState, 1);
-    index++;
   }
 
   return {
@@ -186,12 +154,50 @@ export function compareTraceIterables(
     entriesTruncated,
     entries,
     summary: {
-      oracleEvents: marsState.seen,
-      dutEvents: simState.seen,
+      oracleEvents,
+      dutEvents,
       matchedEvents,
       diffEvents
     }
   };
+}
+
+/** Shared event alignment, including the course's adjacent same-moment swap rule. */
+export function* iterTraceDiffEntries(
+  oracleEvents: Iterable<CpuTraceEvent>,
+  dutEvents: Iterable<CpuTraceEvent>,
+  options: TraceCompareOptions = {}
+): IterableIterator<TraceDiffEntry> {
+  const oracleState = iteratorState(oracleEvents);
+  const dutState = iteratorState(dutEvents);
+  let index = 0;
+  try {
+    while (true) {
+      const oracle = currentIteratorEvent(oracleState);
+      const dut = currentIteratorEvent(dutState);
+      if (!oracle && !dut) return;
+      const entry = compareAtIndex(index, oracle, dut, options);
+      if (entry.status !== 'ok') {
+        const swapped = compareAdjacentSwapAt(
+          index, oracle, nextIteratorEvent(oracleState), dut, nextIteratorEvent(dutState), options
+        );
+        if (swapped) {
+          yield* swapped;
+          advanceIteratorState(oracleState, 2);
+          advanceIteratorState(dutState, 2);
+          index += 2;
+          continue;
+        }
+      }
+      yield entry;
+      advanceIteratorState(oracleState, 1);
+      advanceIteratorState(dutState, 1);
+      index++;
+    }
+  } finally {
+    oracleState.iterator.return?.();
+    dutState.iterator.return?.();
+  }
 }
 
 interface IteratorState {
@@ -201,7 +207,6 @@ interface IteratorState {
   hasCurrent: boolean;
   hasNext: boolean;
   done: boolean;
-  seen: number;
 }
 
 function iteratorState(events: Iterable<CpuTraceEvent>): IteratorState {
@@ -209,8 +214,7 @@ function iteratorState(events: Iterable<CpuTraceEvent>): IteratorState {
     iterator: events[Symbol.iterator](),
     hasCurrent: false,
     hasNext: false,
-    done: false,
-    seen: 0
+    done: false
   };
 }
 
@@ -258,7 +262,6 @@ function readIteratorEvent(state: IteratorState): CpuTraceEvent | undefined {
     state.done = true;
     return undefined;
   }
-  state.seen++;
   return next.value;
 }
 

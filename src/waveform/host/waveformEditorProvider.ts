@@ -79,7 +79,7 @@ function keyFor(uri: vscode.Uri): string {
 
 /**
  * Show `uri` in the waveform viewer: focus an existing tab of it, otherwise open
- * one beside the active editor so the source stays visible.
+ * one in the active editor group unless it is already open in another group.
  */
 export async function openWaveformEditor(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<void> {
   const key = keyFor(uri);
@@ -97,7 +97,7 @@ export async function openWaveformEditor(uri: vscode.Uri, options: { preserveFoc
     }
   }
   await vscode.commands.executeCommand('vscode.openWith', uri, WAVEFORM_VIEW_TYPE, {
-    viewColumn: vscode.window.activeTextEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active,
+    viewColumn: vscode.ViewColumn.Active,
     preserveFocus: options.preserveFocus === true,
     preview: false
   });
