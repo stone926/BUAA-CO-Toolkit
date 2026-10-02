@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-02
+
 - 内置 MARS 汇编与执行引擎，ASM 运行、标准输入、终端运行和机器码导出不再依赖外部 MARS 或 Java。
 - 新增 MARS 调试工作台，支持单步、断点、暂停、重置、寄存器、内存、符号、交互控制台及系统服务参考。
 - 汇编器、ASM 补全/悬停/诊断和调试工作台共享指令、寄存器、指示符及系统服务定义；P7 的 `syscall` 仍只产生异常并进入 `0x4180` 内核。
