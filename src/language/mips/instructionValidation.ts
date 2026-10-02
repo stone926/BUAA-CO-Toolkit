@@ -7,6 +7,8 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProjectProfile } from '../../projectProfile';
 import { isCourseProjectProfile } from '../../generated/projectProfiles';
+import { parseMarsCp0Register, parseCp0Register } from '../../mips/core/assembler/registers';
+import { maximumMarsBreakCode } from '../../mips/core/assembler/marsIntegerInstructionFacts';
 import { makeDiagnostic, rangeOfText } from '../common/lsp';
 import { CoSettings } from '../common/settings';
 import type { MipsLabelPlusImmediateAst, MipsOperandAst } from './ast';
@@ -15,6 +17,7 @@ import {
   canonicalRegister,
   cp0RegistersByNumber,
   instructionMeta,
+  instructionAvailable,
   isFloatingPointRegister,
   isRegister,
   MipsInstruction,
@@ -70,7 +73,7 @@ export function validateInstruction(
       )
     );
   }
-  validateInstructionOperands(document, lineNumber, instruction, operands, activeMacro, eqvSymbols, diagnostics);
+  validateInstructionOperands(document, lineNumber, instruction, operands, profile, activeMacro, eqvSymbols, diagnostics);
   validateMemoryAlignment(document, lineNumber, instruction.mnemonic, operands, activeMacro, eqvSymbols, diagnostics);
   validateCp0Access(document, lineNumber, instruction.mnemonic, operands, activeMacro, eqvSymbols, diagnostics);
 
@@ -109,6 +112,11 @@ export function validateInstruction(
   if (isCourseProjectProfile(profile) && instruction.ordinaryMars) diagnostics.push(makeDiagnostic(
     rangeOfText(document, lineNumber, instruction.mnemonic),
     `${instruction.mnemonic} is supported by ordinary MARS and is outside the ${profile} course CPU instruction set.`,
+    DiagnosticSeverity.Warning, 'project-instruction'
+  ));
+  if (!instructionAvailable(instruction, profile) && !instruction.ordinaryMars && (instruction.pseudo || !isCourseProjectProfile(profile))) diagnostics.push(makeDiagnostic(
+    rangeOfText(document, lineNumber, instruction.mnemonic),
+    `${instruction.mnemonic} is not supported by the internal assembler in the current mode.`,
     DiagnosticSeverity.Warning, 'project-instruction'
   ));
 }
@@ -265,6 +273,7 @@ function validateInstructionOperands(
   lineNumber: number,
   instruction: MipsInstruction,
   operands: readonly MipsInstructionOperand[],
+  profile: ProjectProfile,
   activeMacro: MipsMacro | undefined,
   eqvSymbols: Map<string, MipsSymbol>,
   diagnostics: Diagnostic[]
@@ -275,7 +284,12 @@ function validateInstructionOperands(
   if (!patterns.length) {
     return;
   }
-  if (patterns.some((pattern) => operands.every((operand, index) => operandMatchesPattern(operand, pattern[index], activeMacro, eqvSymbols)))) {
+  if (patterns.some((pattern) => operands.every((operand, index) => {
+    if (!isCourseProjectProfile(profile) && pattern[index] === 'cp0') {
+      return isMacroOrEqvOperand(operand, activeMacro, eqvSymbols) || parseMarsCp0Register(operand.text) !== undefined;
+    }
+    return operandMatchesPattern(operand, pattern[index], activeMacro, eqvSymbols);
+  }))) {
     return;
   }
   if (usesMarsPseudoInstructionForm(instruction.mnemonic, operands, activeMacro, eqvSymbols)) {
@@ -440,6 +454,11 @@ function operandMatchesPattern(operand: MipsInstructionOperand, pattern: string,
   if (pattern === 'code' || pattern === 'code16') {
     return isImmediateOperand(operand, activeMacro, eqvSymbols, 'uimm16');
   }
+  if (pattern === 'code20') {
+    if (isMacroOrEqvOperand(operand, activeMacro, eqvSymbols)) return true;
+    const value = integerOperandValue(operand);
+    return value !== undefined && value >= 0 && value <= maximumMarsBreakCode;
+  }
   if (pattern === 'label') {
     return isLabelOperand(operand, activeMacro);
   }
@@ -466,7 +485,7 @@ function cp0RegisterNumber(operand: MipsInstructionOperand, activeMacro: MipsMac
   }
   const value = operand.kind === 'integer'
     ? operand.value
-    : parseIntegerOrCharLiteral(stripLeadingDollar(operandText(operand)));
+    : parseCp0Register(operand.text) ?? parseIntegerOrCharLiteral(stripLeadingDollar(operandText(operand)));
   return value !== undefined && cp0RegistersByNumber.has(value) ? value : undefined;
 }
 

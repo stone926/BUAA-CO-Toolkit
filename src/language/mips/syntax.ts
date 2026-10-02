@@ -1,3 +1,6 @@
+// @index mips-lsp — Tolerant editor syntax adapting canonical core lexer tokens
+import { findCommentIndex, tokenizeCode } from '../../mips/core/assembler/syntax';
+export { findCommentIndex } from '../../mips/core/assembler/syntax';
 import { Range } from 'vscode-languageserver/node';
 import { parseCharLiteral } from './literals';
 
@@ -204,72 +207,14 @@ export function mipsParsedRange(line: number, range: MipsParsedRange): Range {
   return Range.create(line, range.start, line, range.end);
 }
 
+/** The LSP adapts offset tokens from the assembler lexer while retaining incomplete-source diagnostics. */
 function tokenizeMipsCode(code: string, lineNumber: number): MipsParsedToken[] {
-  const tokens: MipsParsedToken[] = [];
-  let index = 0;
-  while (index < code.length) {
-    const char = code[index];
-    if (isAsciiWhitespace(char)) {
-      index++;
-      continue;
-    }
-    if (char === '"') {
-      const end = readStringEnd(code, index);
-      tokens.push(makeToken('string', code.slice(index, end), lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (char === '\'') {
-      const end = readCharLiteralEnd(code, index);
-      const value = code.slice(index, end);
-      tokens.push(makeToken(parseCharLiteral(value) === undefined ? 'unknown' : 'number', value, lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (char === '%' && isMipsIdentifierStart(code[index + 1] ?? '')) {
-      const end = readMipsIdentifierEnd(code, index + 1);
-      tokens.push(makeToken('macroParameter', code.slice(index, end), lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (char === '$') {
-      const end = readRegisterEnd(code, index + 1);
-      tokens.push(makeToken(end > index + 1 ? 'register' : 'unknown', code.slice(index, end), lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (char === '.' && isMipsIdentifierStart(code[index + 1] ?? '')) {
-      const end = readMipsIdentifierEnd(code, index + 1);
-      tokens.push(makeToken('directive', code.slice(index, end), lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (isNumberStart(code, index)) {
-      const end = readNumberEnd(code, index);
-      tokens.push(makeToken('number', code.slice(index, end), lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (isMipsIdentifierStart(char)) {
-      const end = readMipsIdentifierEnd(code, index + 1);
-      tokens.push(makeToken('identifier', code.slice(index, end), lineNumber, index, end));
-      index = end;
-      continue;
-    }
-    if (char === ',' || char === ':' || char === '(' || char === ')') {
-      tokens.push(makeToken('punctuation', char, lineNumber, index, index + 1));
-      index++;
-      continue;
-    }
-    if (isOperatorChar(char)) {
-      tokens.push(makeToken('operator', char, lineNumber, index, index + 1));
-      index++;
-      continue;
-    }
-    tokens.push(makeToken('unknown', char, lineNumber, index, index + 1));
-    index++;
-  }
-  return tokens;
+  return tokenizeCode(code, '', 0).map(token => {
+    const kind: MipsParsedTokenKind = token.kind === 'macro-parameter' ? 'macroParameter'
+      : token.kind === 'character' ? (parseCharLiteral(token.text) === undefined ? 'unknown' : 'number')
+      : token.text === '$' ? 'unknown' : token.kind;
+    return makeToken(kind, token.text, lineNumber, token.startOffset, token.endOffset);
+  });
 }
 
 function makeExecutable(code: string, lineNumber: number, mnemonic: TextSpan): MipsParsedExecutable {
@@ -351,51 +296,6 @@ function readRegisterEnd(text: string, start: number): number {
     index++;
   }
   return index;
-}
-
-function readNumberEnd(text: string, start: number): number {
-  let index = start;
-  if ((text[index] === '+' || text[index] === '-') && isAsciiDigit(text[index + 1] ?? '')) {
-    index++;
-  }
-  while (index < text.length && isNumberPart(text[index])) {
-    index++;
-  }
-  return index;
-}
-
-function readStringEnd(text: string, start: number): number {
-  let index = start + 1;
-  let escaped = false;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === '"' && !escaped) {
-      return index + 1;
-    }
-    escaped = char === '\\' && !escaped;
-    if (char !== '\\') {
-      escaped = false;
-    }
-    index++;
-  }
-  return text.length;
-}
-
-function readCharLiteralEnd(text: string, start: number): number {
-  let index = start + 1;
-  let escaped = false;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === '\'' && !escaped) {
-      return index + 1;
-    }
-    escaped = char === '\\' && !escaped;
-    if (char !== '\\') {
-      escaped = false;
-    }
-    index++;
-  }
-  return text.length;
 }
 
 function splitMipsCommaOperandSpansWithOffsets(text: string): TextSpan[] {
@@ -535,11 +435,6 @@ function trimRightIndex(text: string, end: number): number {
   return index;
 }
 
-function isNumberStart(text: string, index: number): boolean {
-  const char = text[index];
-  return isAsciiDigit(char) || ((char === '+' || char === '-') && isAsciiDigit(text[index + 1] ?? ''));
-}
-
 function isMipsIdentifierStart(char: string): boolean {
   return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || char === '_' || char === '$';
 }
@@ -552,28 +447,12 @@ function isRegisterPart(char: string): boolean {
   return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || isAsciiDigit(char) || char === '_';
 }
 
-function isNumberPart(char: string): boolean {
-  return isAsciiDigit(char)
-    || (char >= 'A' && char <= 'F')
-    || (char >= 'a' && char <= 'f')
-    || char === 'x'
-    || char === 'X'
-    || char === 'b'
-    || char === 'B'
-    || char === '_'
-    || char === '.';
-}
-
 function isAsciiDigit(char: string): boolean {
   return char >= '0' && char <= '9';
 }
 
 function isAsciiWhitespace(char: string): boolean {
   return char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === '\f' || char === '\v';
-}
-
-function isOperatorChar(char: string): boolean {
-  return char === '+' || char === '-' || char === '*' || char === '/' || char === '<' || char === '>' || char === '=' || char === '&' || char === '|' || char === '^' || char === '~';
 }
 
 export interface MipsFormatDocument {
@@ -764,35 +643,6 @@ function isMipsDirective(line: MipsFormatLine, directive: string): boolean {
   return line.kind === 'statement'
     && line.executable?.kind === 'directive'
     && line.executable.mnemonic.toLowerCase() === directive;
-}
-
-export function findCommentIndex(line: string): number {
-  let quote: '"' | "'" | undefined;
-  let escaped = false;
-  for (let index = 0; index < line.length; index++) {
-    const char = line[index];
-    if (quote) {
-      if (char === quote && !escaped) {
-        quote = undefined;
-        escaped = false;
-        continue;
-      }
-      escaped = char === '\\' && !escaped;
-      if (char !== '\\') {
-        escaped = false;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      escaped = false;
-      continue;
-    }
-    if (char === '#') {
-      return index;
-    }
-  }
-  return -1;
 }
 
 export function isInsideAnyRange(index: number, ranges: Array<{ start: number; end: number }>): boolean {

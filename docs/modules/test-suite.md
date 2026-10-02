@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 242 files | 框架: Vitest
+# test-suite | src/test/ | 247 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -8,15 +8,15 @@
 
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
-| `test/language/` | 74 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
+| `test/language/` | 77 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
 | `test/`（根） | 46 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
 | `test/courseTesting/` | 41 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
-| `test/mipsCore/` | 21 | ISA golden、汇编器、执行器、devices 与 events |
+| `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
 | `test/verilog/` | 15 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
-| `test/waveform/` | 10 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
-| `test/mips{Providers,Host,Replay,Cli}/` | 19 | engine plan 解析与 preflight 不可变性、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI |
+| `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
+| `test/mips{Providers,Host,Replay,Cli,Debug}/` | 23 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
-| `test/{hazardAnalysis,helpers,templates,webview}/` | 9 | 冲突分析解析与动态路径、共享 fixture/格式化辅助、模板与 Webview 回归 |
+| `test/{hazardAnalysis,helpers,templates,webview}/` | 4 | 冲突分析解析、模板与 Webview 回归 |
 
 **fixtures**：`test/fixtures/syntax/{mips,verilog}/` 下分 `valid/`、`invalid/`（含 JSON 期望）与课程语料目录。
 
@@ -30,6 +30,7 @@
 - `scripts/verify-extension-host.mjs` + `extension-host-smoke.cjs` — `@vscode/test-electron` 加载最终 VSIX 解包目录，创建中文空格工作区，验证真实激活、LSP 保存诊断与修复、`co.verilog.runSimulation`、持续测试的内置生成器/assembler/Worker oracle/Icarus 故意错误 DUT 与首失败停止
 - `scripts/extension-host-custom-testbench-smoke.cjs` — 同一真实宿主中验证 `tb.v` / `testbench.v` 的同名与异名模块选择、DUT 时钟激励、无关错误 TB 排除、编译/运行失败后的修复，以及 VCD、仿真 trace 与内置波形查看器
 - `scripts/extension-host-asm-smoke.cjs` — 同一真实宿主中验证 P3–P7 内置汇编导出（外部 Java/MARS 不可用）、中文空格路径 include/宏、逐字机器码与停机尾、P7 0x4180 handler 与独立 kernel 文件，以及错误导出保留已有产物和修复
+- `scripts/extension-host-mars-workbench.cjs` — 同一真实宿主中验证生产 MARS 工作台面板与 Worker 的汇编、单步、stdin、断点、终态检查、段导出、取消、源文件变化和 P7 syscall trap；浏览器 fixture 的手动构建/检查命令见 `mips-debug.md`
 - `scripts/extension-host-mars.cjs` — 必跑的真实宿主内部 MARS 测试；Java/JAR 路径故意无效，覆盖各 Profile/工作区外 ASM、中文空格 include/宏、stdin、P2 逐字导出、错误保留产物、超时及实际伪终端输入与文件读写
 - `scripts/verify-mips-{cli,worker}.mjs`、`verify-process-supervisor.mjs`、`verify-real-cpu-shadow*.mjs`、`check-module-boundaries.mjs` — CLI/Worker 边界、进程树、真实 CPU shadow 与模块依赖边界
 - `scripts/package-vsix.test.mjs` — 通过真实 vsce fixture 验证五目标内容裁剪、共享许可/来源/配方保留与中文空格路径

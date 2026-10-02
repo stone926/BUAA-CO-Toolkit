@@ -160,7 +160,7 @@ export function tokenizeCode(text: string, _sourceId: string, baseOffset: number
       index = end;
       continue;
     }
-    if (char === '$' && isIdentifierStart(text[index + 1] ?? '')) {
+    if (char === '$' && (isIdentifierStart(text[index + 1] ?? '') || isAsciiDigit(text[index + 1] ?? ''))) {
       const end = readIdentifier(text, index + 1);
       tokens.push({ kind: 'register', text: text.slice(index, end), startOffset: baseOffset + start, endOffset: baseOffset + end });
       index = end;
@@ -189,7 +189,7 @@ export function tokenizeCode(text: string, _sourceId: string, baseOffset: number
       index++;
       continue;
     }
-    if ('+-*/%&|^~<>'.includes(char)) {
+    if ('+-*/%&|^~<>='.includes(char)) {
       let end = index + 1;
       if ((char === '<' && text[index + 1] === '<') || (char === '>' && text[index + 1] === '>')) end++;
       tokens.push({ kind: 'operator', text: text.slice(index, end), startOffset: baseOffset + start, endOffset: baseOffset + end });
@@ -304,7 +304,8 @@ export function findCommentIndex(line: string): number {
   return -1;
 }
 
-function readQuoted(text: string, start: number, quote: '"' | "'"): number {
+/** Tolerates incomplete source by returning the end of the line for an open quote. */
+export function readQuoted(text: string, start: number, quote: '"' | "'"): number {
   let escaped = false;
   for (let index = start + 1; index < text.length; index++) {
     if (text[index] === quote && !escaped) return index + 1;
@@ -333,14 +334,20 @@ function readNumber(text: string, start: number): number {
     while (index < text.length && isWordCharacter(text[index])) index++;
     return index;
   }
-  while (index < text.length && (isAsciiDigit(text[index]) || text[index] === '_')) index++;
+  while (index < text.length && (isWordCharacter(text[index]) || text[index] === '.')) {
+    const exponent = text[index] === 'e' || text[index] === 'E';
+    index++;
+    if (exponent && (text[index] === '+' || text[index] === '-')) index++;
+  }
   return index;
 }
 
 function isNumberStart(text: string, index: number): boolean {
   if (isAsciiDigit(text[index])) return true;
+  if (text[index] === '.' && isAsciiDigit(text[index + 1] ?? '')) return true;
   return (text[index] === '-' || text[index] === '+')
-    && isAsciiDigit(text[index + 1] ?? '');
+    && (isAsciiDigit(text[index + 1] ?? '')
+      || (text[index + 1] === '.' && isAsciiDigit(text[index + 2] ?? '')));
 }
 
 function isIdentifierStart(char: string): boolean {

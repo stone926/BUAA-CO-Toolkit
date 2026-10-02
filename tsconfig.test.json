@@ -16,6 +16,7 @@
     "node_modules",
     ".vscode-test",
     "out",
-    "src/waveform/webview"
+    "src/waveform/webview",
+    "src/mips/debug/webview"
   ]
 }

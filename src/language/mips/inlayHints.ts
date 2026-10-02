@@ -15,8 +15,9 @@ import {
 } from './display';
 import { instructionWritesRegister } from './instructionValidation';
 import { getCachedMipsParse } from './parseCache';
-import { MipsSyscallInfo } from './resources';
+import { MipsSyscallInfo, canonicalRegister } from './resources';
 import { MipsServerState } from './state';
+import { isCourseProjectProfile } from '../../projectProfile';
 
 export function getMipsInlayHints(document: TextDocument, range: Range, settings: CoSettings, state: MipsServerState): InlayHint[] {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -48,14 +49,14 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
       continue;
     }
 
-    if (settings.project.profile !== 'P7' && executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
+    if (!isCourseProjectProfile(settings.project.profile) && executable.lowerMnemonic === 'li' && canonicalRegister(executable.operands[0]?.text ?? '') === '$v0' && executable.operands[1]) {
       const operand = executable.operands[1];
       const syscall = syscallByOperand(operand);
       if (syscall) {
         if (inRequestedRange) {
           hints.push({
             position: operand.range.end,
-            label: ` ${syscall.name}`,
+            label: ` ${syscall.name}${syscall.supported === false ? '（不支持）' : ''}`,
             kind: InlayHintKind.Parameter,
             tooltip: markdownTooltip(syscallMarkdown(syscall)),
             paddingLeft: true
@@ -75,7 +76,7 @@ export function getMipsInlayHints(document: TextDocument, range: Range, settings
       if (currentSyscall && inRequestedRange) {
         hints.push({
           position: executable.range.end,
-          label: ` ${currentSyscall.name}`,
+          label: ` ${currentSyscall.name}${currentSyscall.supported === false ? '（不支持）' : ''}`,
           kind: InlayHintKind.Parameter,
           tooltip: markdownTooltip(syscallMarkdown(currentSyscall)),
           paddingLeft: true

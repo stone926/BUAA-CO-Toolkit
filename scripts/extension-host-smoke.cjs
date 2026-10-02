@@ -181,6 +181,7 @@ async function run() {
   console.log('PASS waveform simulation, per-word memory dump, and built-in viewer');
 
   await require('./extension-host-mars.cjs').verifyMars({ folder, configure, bounded, waitFor });
+  await require('./extension-host-mars-workbench.cjs').verifyMarsWorkbench({ folder, configure, bounded, waitFor });
   await require('./extension-host-asm-smoke.cjs').verifyBuiltinAsm({ folder, configure, bounded, replaceAndSave });
 
   await configure(folder, {

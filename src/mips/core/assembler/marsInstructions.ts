@@ -5,6 +5,7 @@ import { evaluateExpression } from './expression';
 import { parseInstructionOperand, ParsedInstructionOperand } from './operands';
 import { expandLoadStorePseudo } from './pseudo';
 import { ParsedStatement } from './syntax';
+import { parseFprRegister } from './registers';
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import {
   marsFpArithmetic as arithmetic, marsFpUnary as unary, marsFpRounding as rounding,
@@ -44,8 +45,7 @@ export function marsInstructionWork(statement: ParsedStatement, options: MarsIns
   const reg = (index: number, floating: boolean, double = false): WorkOperand => {
     const operand = parsed[index];
     if (!operand) throw new OperandError('asm.operand.wrong-count', `${sourceMnemonic}: missing operand ${index + 1}`);
-    const match = /^\$f([0-9]|[12][0-9]|3[01])$/i.exec(statement.operands[index].text.trim());
-    const register = floating ? (match ? Number(match[1]) : undefined) : (operand.kind === 'register' ? operand.register : undefined);
+    const register = floating ? parseFprRegister(statement.operands[index].text) : (operand.kind === 'register' ? operand.register : undefined);
     if (register === undefined || (double && (register & 1) !== 0)) {
       throw new OperandError('asm.operand.invalid-register', floating
         ? `${sourceMnemonic}: operand ${index + 1} requires ${double ? 'an even ' : 'a '}$f0..$f31 register`

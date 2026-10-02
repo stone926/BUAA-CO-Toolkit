@@ -9,6 +9,7 @@ import { FloatingPointState } from './floatingPointState';
 import { formatFloatingPoint, parseFloatingPoint } from './floatingPointText';
 import { readBytes, readCString, stringBytes, writeBytes } from './syscallMemory';
 import { marsMemoryCapacityBytes } from './profile';
+import { getSupportedMarsSyscall } from './syscallCatalog';
 
 export interface SyscallAction {
   readonly writes?: readonly RegisterWrite[];
@@ -44,6 +45,7 @@ export class MarsSyscalls {
   }
 
   prepare(service: number, args: readonly number[], id: number): SyscallAction {
+    if (!getSupportedMarsSyscall(service)) throw new Error(`Unsupported MARS syscall service ${service}`);
     const [a0, a1, a2] = args;
     const base = { id, service };
     const print = (text: string): SyscallAction => ({ request: { ...base, kind: 'write', text } });

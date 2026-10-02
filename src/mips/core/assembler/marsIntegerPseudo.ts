@@ -9,20 +9,26 @@ import { expandPseudoInstruction } from './pseudo';
 import { ParsedStatement } from './syntax';
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import { encodeInstructionWord } from '../isa/encoder';
-import { parseCp0Register } from './registers';
+import { parseMarsCp0Register } from './registers';
+import { marsIntegerExtensionMnemonics, maximumMarsBreakCode } from './marsIntegerInstructionFacts';
 
 export interface MarsIntegerPseudoOptions {
   readonly delayedBranching: boolean;
   readonly maximumInstructionsPerStatement: number;
 }
 
-const extended = new Set(['abs', 'subi', 'subiu', 'mulu', 'mulo', 'mulou', 'div', 'divu', 'rem', 'remu', 'rol', 'ror', 'mul', 'break', 'mfc0', 'mtc0']);
+const extended = new Set(marsIntegerExtensionMnemonics);
 const comparisons = new Set(['blt', 'bltu', 'bgt', 'bgtu', 'ble', 'bleu', 'bge', 'bgeu', 'seq', 'sne', 'sgt', 'sgtu', 'sge', 'sgeu', 'sle', 'sleu']);
+
+/** The executable ordinary integer extension registry, shared with language tooling. */
+export function isMarsIntegerExtensionMnemonic(mnemonic: string): boolean {
+  return extended.has(mnemonic.toLowerCase()) || comparisons.has(mnemonic.toLowerCase());
+}
 
 /** Adds ordinary MARS forms while leaving the course pseudo registry unchanged. */
 export function marsIntegerWork(statement: ParsedStatement, options: MarsIntegerPseudoOptions): WorkResult | undefined {
   const mnemonic = statement.mnemonic?.toLowerCase() ?? '';
-  if (!extended.has(mnemonic) && !comparisons.has(mnemonic)) return undefined;
+  if (!isMarsIntegerExtensionMnemonic(mnemonic)) return undefined;
   const parsed = statement.operands.map(operand => parseInstructionOperand(operand.text, operand.span));
   if (['div', 'divu'].includes(mnemonic) && parsed.length === 2) return undefined;
   if (mnemonic === 'mul' && parsed.length === 3 && parsed[2].kind === 'register') return undefined;
@@ -57,9 +63,8 @@ export function marsIntegerWork(statement: ParsedStatement, options: MarsInteger
     let instructions: readonly WorkInstruction[];
     if (mnemonic === 'mfc0' || mnemonic === 'mtc0') {
       if (parsed.length !== 2) throw new Error(`${mnemonic} requires a general register and CP0 register`);
-      const cp0 = parseCp0Register(statement.operands[1].text)
-        ?? parseIntegerLiteral(statement.operands[1].text);
-      if (cp0 === undefined || ![8, 12, 13, 14].includes(cp0)) throw new Error(`${mnemonic} CP0 register must be 8, 12, 13, or 14`);
+      const cp0 = parseMarsCp0Register(statement.operands[1].text);
+      if (cp0 === undefined) throw new Error(`${mnemonic} CP0 register must be 8, 12, 13, or 14`);
       instructions = [make(`_mars_${mnemonic}`, [register(0), { kind: 'cp0', register: cp0, span: parsed[1].span }])];
     } else if (comparisons.has(mnemonic)) {
       const immediateIndex = mnemonic.startsWith('b') ? 1 : 2;
@@ -76,7 +81,7 @@ export function marsIntegerWork(statement: ParsedStatement, options: MarsInteger
     } else if (mnemonic === 'break') {
       if (parsed.length > 1) throw new Error('break accepts zero or one code operand');
       const code = parsed.length ? integer(0) : 0;
-      if (code < 0 || code > 0xfffff) throw new Error('break code must be in 0..1048575');
+      if (code < 0 || code > maximumMarsBreakCode) throw new Error('break code must be in 0..1048575');
       instructions = [make('_mars_break', [constant(code)])];
     } else if (mnemonic === 'abs') {
       if (parsed.length !== 2) throw new Error('abs requires two registers');

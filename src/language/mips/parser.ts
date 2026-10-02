@@ -7,6 +7,8 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { p7ExceptionHandlerAddress } from '../../courseTesting/p7Hardware';
+import { parseMarsCp0Register, parseCp0Register } from '../../mips/core/assembler/registers';
+import { isCourseProjectProfile } from '../../projectProfile';
 import { lineAt, makeDiagnostic, rangeOfText, rangesEqual } from '../common/lsp';
 import { rangeKey } from '../common/util';
 import { CoSettings } from '../common/settings';
@@ -287,7 +289,7 @@ export function parseMips(document: TextDocument, settings: CoSettings, options:
     }
 
     if (includeDiagnostics) {
-      validateRegisterOperands(statement, activeMacro, diagnostics);
+      validateRegisterOperands(statement, activeMacro, profile, diagnostics);
     }
 
     const mnemonic = executableAst.lowerMnemonic;
@@ -881,11 +883,17 @@ function validateEqvDirective(document: TextDocument, lineNumber: number, execut
   }
 }
 
-function validateRegisterOperands(statement: MipsStatementAst, activeMacro: MipsMacro | undefined, diagnostics: Diagnostic[]): void {
+function validateRegisterOperands(statement: MipsStatementAst, activeMacro: MipsMacro | undefined, profile: CoSettings['project']['profile'], diagnostics: Diagnostic[]): void {
+  const executable = statement.executable;
+  const cp0Operand = executable && ['mfc0', 'mtc0'].includes(executable.lowerMnemonic) ? executable.operands[1] : undefined;
   for (const operand of registerOperands(statement)) {
     const reg = operand.text;
     if (activeMacro?.paramSymbols.has(reg)) {
       continue;
+    }
+    if (operand === cp0Operand) {
+      const number = isCourseProjectProfile(profile) ? parseCp0Register(reg) : parseMarsCp0Register(reg);
+      if (number !== undefined && (!isCourseProjectProfile(profile) || [12, 13, 14].includes(number))) continue;
     }
     if (!isRegister(reg) && !isFloatingPointRegister(reg)) {
       diagnostics.push(makeDiagnostic(operand.range, `未知的寄存器 '${reg}'`, DiagnosticSeverity.Error, 'unknown-register'));

@@ -68,6 +68,7 @@ describe('advanced tool model', () => {
 
   it('uses existing command identifiers only', () => {
     const contributedCommands = new Set([
+      'co.mips.openWorkbench',
       'co.mips.runWithStdinFile',
       'co.mips.runInTerminal',
       'co.mips.dumpKernelText',

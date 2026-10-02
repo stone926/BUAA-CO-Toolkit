@@ -157,6 +157,7 @@ describe('package manifest', () => {
       .map((item) => item.command);
 
     expect(visible).toEqual([
+      'co.mips.openWorkbench',
       'co.projectWizard',
       'co.selectProjectProfile',
       'co.checkToolchain',

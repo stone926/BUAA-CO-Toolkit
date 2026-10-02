@@ -5,7 +5,7 @@ import {
   getMipsDiagnostics,
   getMipsHover
 } from '../../../language/mips/service';
-import { instructions, pseudoExpansions } from '../../../language/mips/resources';
+import { instructions, pseudoExpansions, instructionAvailable } from '../../../language/mips/resources';
 import { builtinPseudoMnemonics } from '../../../mips/core/assembler/pseudo';
 import type { MipsServerState } from '../../../language/mips/state';
 import { mipsDoc } from '../../helpers/textDocument';
@@ -19,12 +19,12 @@ function state(overrides: Partial<MipsServerState> = {}): MipsServerState {
 }
 
 describe('MIPS instruction catalog-backed features', () => {
-  it('exposes every catalog instruction through mnemonic completion', () => {
+  it('exposes executable core instructions through mnemonic completion', () => {
     const completions = getMipsCompletions(mipsDoc('    '), { line: 0, character: 4 }, mergeCoSettings({}), state());
     const labels = new Set(completions.map((item) => item.label));
 
     for (const mnemonic of Object.keys(instructions)) {
-      expect(labels.has(mnemonic)).toBe(true);
+      expect(labels.has(mnemonic), mnemonic).toBe(instructionAvailable(instructions[mnemonic], 'auto'));
     }
   });
 
@@ -80,7 +80,7 @@ describe('MIPS instruction catalog-backed features', () => {
     const settings = mergeCoSettings({ project: { profile: 'P6' } });
     const completion = getMipsCompletions(mipsDoc('abs'), { line: 0, character: 3 }, settings, state())
       .find((item) => item.label === 'abs');
-    expect(completion?.detail).toContain('内建汇编器暂不支持');
+    expect(completion).toBeUndefined();
     const document = mipsDoc('abs $t0, $t1');
     const hover = getMipsHover(document, { line: 0, character: 1 }, settings, state());
     expect(JSON.stringify(hover?.contents)).toContain('MARS 展开预览');

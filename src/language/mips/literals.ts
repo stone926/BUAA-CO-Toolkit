@@ -1,3 +1,7 @@
+// @index mips-lsp — Editor literal ranges with canonical core literal parsing
+import { parseIntegerLiteralValue as parseIntegerLiteral, parseCharacterLiteral as parseCharLiteral } from '../../mips/core/assembler/literals';
+export { parseIntegerLiteralValue as parseIntegerLiteral, parseCharacterLiteral as parseCharLiteral } from '../../mips/core/assembler/literals';
+
 export function getStringRanges(code: string): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
   let start: number | undefined;
@@ -60,55 +64,12 @@ export function isNonNegativeIntegerLiteral(value: string): boolean {
   return parsed !== undefined && parsed >= 0;
 }
 
-export function parseIntegerLiteral(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  let index = 0;
-  const sign = trimmed[index] === '-' ? -1n : 1n;
-  if (trimmed[index] === '-' || trimmed[index] === '+') {
-    index++;
-  }
-  const parsedMagnitude = parseUnsignedIntegerMagnitude(trimmed.slice(index));
-  if (parsedMagnitude === undefined) {
-    return undefined;
-  }
-  const parsed = sign * parsedMagnitude;
-  if (parsed < -2147483648n || parsed > 0xffffffffn) {
-    return undefined;
-  }
-  return Number(parsed);
-}
-
 export function isFloatLiteral(value: string): boolean {
   return parseFloatLiteralShape(value.trim());
 }
 
 export function isCharLiteral(value: string): boolean {
   return parseCharLiteral(value) !== undefined;
-}
-
-export function parseCharLiteral(value: string): number | undefined {
-  const text = value.trim();
-  if (text.length < 3 || text[0] !== '\'' || text[text.length - 1] !== '\'') {
-    return undefined;
-  }
-  const body = text.slice(1, -1);
-  if (!body) {
-    return undefined;
-  }
-  if (body[0] !== '\\') {
-    return body.length === 1 ? body.charCodeAt(0) : undefined;
-  }
-  if (body.length === 2) {
-    return escapedCharValue(body[1]);
-  }
-  if (body.length === 4 && isOctalDigit(body[1]) && isOctalDigit(body[2]) && isOctalDigit(body[3])) {
-    const parsed = parseInt(body.slice(1), 8);
-    return parsed >= 0 && parsed <= 255 ? parsed : undefined;
-  }
-  return undefined;
 }
 
 export function isSymbolLike(value: string): boolean {
@@ -157,37 +118,6 @@ function readNumericLikeEnd(text: string, start: number): number {
   return index;
 }
 
-function parseUnsignedIntegerMagnitude(text: string): bigint | undefined {
-  if (!text) {
-    return undefined;
-  }
-  if (text.length > 2 && text[0] === '0' && (text[1] === 'x' || text[1] === 'X')) {
-    return parseDigits(text.slice(2), 16);
-  }
-  if (text.length > 2 && text[0] === '0' && (text[1] === 'b' || text[1] === 'B')) {
-    return parseDigits(text.slice(2), 2);
-  }
-  if (text.length > 1 && text[0] === '0') {
-    return parseDigits(text.slice(1), 8);
-  }
-  return parseDigits(text, 10);
-}
-
-function parseDigits(text: string, radix: number): bigint | undefined {
-  if (!text) {
-    return undefined;
-  }
-  let value = 0n;
-  for (const char of text) {
-    const digit = digitValue(char);
-    if (digit === undefined || digit >= radix) {
-      return undefined;
-    }
-    value = value * BigInt(radix) + BigInt(digit);
-  }
-  return value;
-}
-
 function parseFloatLiteralShape(text: string): boolean {
   let index = 0;
   if (text[index] === '-' || text[index] === '+') {
@@ -227,46 +157,6 @@ function readDecimalDigits(text: string, start: number): number {
     index++;
   }
   return index;
-}
-
-function digitValue(char: string): number | undefined {
-  if (char >= '0' && char <= '9') {
-    return char.charCodeAt(0) - '0'.charCodeAt(0);
-  }
-  const lower = char.toLowerCase();
-  if (lower >= 'a' && lower <= 'f') {
-    return lower.charCodeAt(0) - 'a'.charCodeAt(0) + 10;
-  }
-  return undefined;
-}
-
-function escapedCharValue(char: string): number | undefined {
-  switch (char) {
-    case '\'':
-      return 39;
-    case '"':
-      return 34;
-    case '\\':
-      return 92;
-    case 'n':
-      return 10;
-    case 't':
-      return 9;
-    case 'b':
-      return 8;
-    case 'r':
-      return 13;
-    case 'f':
-      return 12;
-    case '0':
-      return 0;
-    default:
-      return undefined;
-  }
-}
-
-function isOctalDigit(char: string): boolean {
-  return char >= '0' && char <= '7';
 }
 
 function isMipsIdentifierStart(char: string): boolean {

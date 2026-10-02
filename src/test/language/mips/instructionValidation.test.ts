@@ -66,6 +66,7 @@ function concreteOperand(pattern: string): string {
     case 'shamt':
       return '4';
     case 'code16':
+    case 'code20':
       return '1';
     case 'label':
       return 'target';
@@ -92,7 +93,7 @@ describe('instruction resource format matrix', () => {
     const result = parseInstructionLines(lines);
     const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === 1);
 
-    expect(Object.values(instructions).filter(instruction => !instruction.ordinaryMars)).toHaveLength(114);
+    expect(Object.values(instructions).filter(instruction => !instruction.ordinaryMars)).toHaveLength(113);
     expect(errors).toEqual([]);
   });
 

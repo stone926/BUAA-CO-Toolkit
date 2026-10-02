@@ -34,7 +34,18 @@ function parseRequest(payload: unknown): {
   if (!record(payload) || Object.keys(payload).some((key) => !['image', 'memoryConfiguration', 'delayedBranching', 'maxSteps'].includes(key))) {
     throw new Error('Invalid MARS execution request');
   }
-  const image = payload.image;
+  const program = parseMarsProgramImage(payload.image);
+  if (payload.memoryConfiguration !== undefined && !isMarsMemoryConfiguration(payload.memoryConfiguration)) throw new Error('Invalid MARS memoryConfiguration');
+  if (payload.delayedBranching !== undefined && typeof payload.delayedBranching !== 'boolean') throw new Error('Invalid MARS delayedBranching');
+  const maxSteps = payload.maxSteps ?? 10_000_000;
+  if (!Number.isSafeInteger(maxSteps) || (maxSteps as number) < 1 || (maxSteps as number) > 100_000_000) throw new Error('MARS maxSteps must be in 1..100000000');
+  return { image: program, maxSteps: maxSteps as number,
+    memoryConfiguration: payload.memoryConfiguration as MarsMemoryConfiguration | undefined,
+    delayedBranching: payload.delayedBranching as boolean | undefined };
+}
+
+/** Shared bounded execution-image boundary; metadata remains with the host listing. */
+export function parseMarsProgramImage(image: unknown): ProgramImage {
   if (!record(image) || image.formatVersion !== 1 || !uint32(image.entryPc) || (image.entryPc as number) % 4
     || !Array.isArray(image.segments) || image.segments.length > 16) throw new Error('Invalid MARS ProgramImage');
   let words = 0;
@@ -44,17 +55,10 @@ function parseRequest(payload: unknown): {
       || (words += segment.words.length) > 4_194_304 || !segment.words.every(uint32)
       || (segment.baseAddress as number) + segment.words.length * 4 > 0x1_0000_0000) throw new Error('Invalid MARS image segment');
   }
-  if (payload.memoryConfiguration !== undefined && !isMarsMemoryConfiguration(payload.memoryConfiguration)) throw new Error('Invalid MARS memoryConfiguration');
-  if (payload.delayedBranching !== undefined && typeof payload.delayedBranching !== 'boolean') throw new Error('Invalid MARS delayedBranching');
-  const maxSteps = payload.maxSteps ?? 10_000_000;
-  if (!Number.isSafeInteger(maxSteps) || (maxSteps as number) < 1 || (maxSteps as number) > 100_000_000) throw new Error('MARS maxSteps must be in 1..100000000');
   // Execution consumes only the authoritative bytes and entry point; assembler metadata
   // stays on the host for diagnostics and is not traversed across this execution boundary.
-  const program = buildProgramImage({ entryPc: image.entryPc as number,
+  return buildProgramImage({ entryPc: image.entryPc as number,
     segments: image.segments as unknown as ProgramImage['segments'], symbols: [], sourceMap: [], inputGraph: [] });
-  return { image: program, maxSteps: maxSteps as number,
-    memoryConfiguration: payload.memoryConfiguration as MarsMemoryConfiguration | undefined,
-    delayedBranching: payload.delayedBranching as boolean | undefined };
 }
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function uint32(value: unknown): boolean { return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 0xffffffff; }

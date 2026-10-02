@@ -16,6 +16,7 @@ import {
 } from '../core/machine/executeService';
 import { assembleProgramForService, parseAssemblerServiceRequest, assembleMarsProgramForService, parseMarsAssemblerServiceRequest } from '../core/assembler/assemblyService';
 import { executeMarsJob } from './marsJobs';
+import { executeMarsDebugJob } from './debugJob';
 
 export const mipsWorkerSliceSize = 128;
 export const mipsWorkerMaximumBatch = 65_536;
@@ -52,6 +53,8 @@ export async function executeProductionWorkerJob(
       return assembleMarsProgramForService(parseMarsAssemblerServiceRequest(payload as Record<string, unknown>));
     case 'mars-execute':
       return await executeMarsJob(payload, context);
+    case 'mars-debug':
+      return await executeMarsDebugJob(payload, context);
     case 'machine-execute':
       // Bounded DTO validation is shared with the CLI; execution then streams
       // CommitEvent slices under worker protocol ACK/backpressure.

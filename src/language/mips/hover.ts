@@ -23,7 +23,7 @@ import { getCachedMipsParse } from './parseCache';
 import { findMacroOverloadAtPosition } from './queries';
 import { MipsSymbol } from './model';
 import {
-  builtinPseudoAvailability,
+  instructionAvailable,
   canonicalRegister,
   MipsInstruction,
   instructions,
@@ -34,6 +34,7 @@ import {
 } from './resources';
 import { MipsServerState } from './state';
 import { getMipsWordRange } from './text';
+import { isCourseProjectProfile } from '../../projectProfile';
 
 export function getMipsHover(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): Hover | undefined {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -65,8 +66,8 @@ export function getMipsHover(document: TextDocument, position: Position, setting
   if (instruction) {
     const parsedInstruction = parsed.instructions.find((line) => rangesEqual(line.range, wordRange));
     const details = instructionHoverMarkdown(instruction, parsedInstruction);
-    if (builtinPseudoAvailability(instruction, settings.project.profile) === false) {
-      details.push('', '内建汇编器暂不支持此伪指令；MARS 仍可使用下方展开形式。');
+    if (!instructionAvailable(instruction, settings.project.profile)) {
+      details.push('', '内建汇编器暂不支持此指令（当前模式）；下方展开预览仅供参考。');
     }
     const expansion = parsedInstruction && (instruction.pseudo || parsedInstruction.usesPseudoForm)
       ? pseudoExpansionPreview(instruction.mnemonic, parsedInstruction.operands)
@@ -79,9 +80,9 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     }
     if (instruction.mnemonic === 'syscall') {
       if (settings.project.profile === 'P7') details.push('', p7SyscallMarkdown);
-      const syscall = settings.project.profile === 'P7' ? undefined : syscallServiceBeforeLine(parsed, position.line);
+      const syscall = isCourseProjectProfile(settings.project.profile) ? undefined : syscallServiceBeforeLine(parsed, position.line);
       if (syscall) {
-        details.push('', `当前 $v0 服务：**${syscall.code} ${syscall.name}** - ${syscall.description}`, '', `参数：${syscall.parameters ?? '无'}`, '', `返回值：${syscall.returns ?? '无'}`);
+        details.push('', '当前 $v0 服务：', '', syscallMarkdown(syscall));
       }
     }
     return {
@@ -93,7 +94,7 @@ export function getMipsHover(document: TextDocument, position: Position, setting
     };
   }
 
-  const syscall = settings.project.profile === 'P7' ? undefined : syscallAtLiV0Operand(parsed, wordRange);
+  const syscall = isCourseProjectProfile(settings.project.profile) ? undefined : syscallAtLiV0Operand(parsed, wordRange);
   if (syscall) {
     return {
       contents: {

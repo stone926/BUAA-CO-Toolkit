@@ -10,7 +10,7 @@
 export const workerProtocolVersion = 2;
 
 /** Job kinds the production worker can execute. */
-export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch' | 'assembler-assemble' | 'machine-execute' | 'device-cycle-vector' | 'mars-assemble' | 'mars-execute';
+export type WorkerJobKind = 'ping' | 'isa-decode-batch' | 'isa-encode-batch' | 'assembler-assemble' | 'machine-execute' | 'device-cycle-vector' | 'mars-assemble' | 'mars-execute' | 'mars-debug';
 
 export type WorkerJob =
   | { kind: 'ping'; payload?: unknown }
@@ -20,6 +20,7 @@ export type WorkerJob =
   | { kind: 'machine-execute'; payload: unknown }
   | { kind: 'mars-assemble'; payload: unknown }
   | { kind: 'mars-execute'; payload: unknown }
+  | { kind: 'mars-debug'; payload: unknown }
   | { kind: 'device-cycle-vector'; payload: unknown };
 
 /** Wire-level envelope; unknown string kinds are structurally valid and get a structured worker error. */
@@ -47,7 +48,7 @@ export interface WorkerAckMessage {
   kind: 'ack';
   requestId: string;
   sequence: number;
-  /** Optional response to an ordinary MARS host I/O request. */
+  /** Optional response to ordinary MARS I/O or an interactive debugger command. */
   response?: unknown;
 }
 

@@ -10,6 +10,7 @@ import { collectMipsOperandReferences } from './operandReferences';
 import {
   cp0RegistersByNumber, pseudoExpansions,
   directives,
+  canonicalRegister,
   isRegister,
   MipsCp0RegisterInfo,
   MipsSyscallInfo,
@@ -106,6 +107,8 @@ export function syscallMarkdown(syscall: MipsSyscallInfo): string {
     '',
     syscall.description,
     '',
+    syscall.supported === false ? '内置 MARS：**不支持此服务**' : '内置 MARS：支持（普通模式）',
+    '',
     `参数：${syscall.parameters ?? '无'}`,
     '',
     `返回值：${syscall.returns ?? '无'}`
@@ -170,7 +173,7 @@ export function syscallAtLiV0Operand(parsed: MipsParseResult, wordRange: Range) 
     return undefined;
   }
   const [target, serviceOperand] = executable.operands;
-  if (!target || !serviceOperand || target.text !== '$v0' || !rangesOverlap(wordRange, serviceOperand.range)) {
+  if (!target || !serviceOperand || canonicalRegister(target.text) !== '$v0' || !rangesOverlap(wordRange, serviceOperand.range)) {
     return undefined;
   }
   return syscallByOperand(serviceOperand);
@@ -197,7 +200,7 @@ export function syscallServiceBeforeLine(parsed: MipsParseResult, targetLine: nu
       continue;
     }
 
-    if (executable.lowerMnemonic === 'li' && executable.operands[0]?.text === '$v0' && executable.operands[1]) {
+    if (executable.lowerMnemonic === 'li' && canonicalRegister(executable.operands[0]?.text ?? '') === '$v0' && executable.operands[1]) {
       service = syscallByOperand(executable.operands[1]);
       continue;
     }

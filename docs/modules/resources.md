@@ -19,7 +19,7 @@
 - `mips/instructions.json` — 展示元数据（助记符、类型、格式、操作数、描述）
 - `mips/instructionMeta.json` — 伪指令、非 catalog 指令与 parser directive 的附加元数据
 - `mips/pseudoExpansions.json` / `pseudoForms.json` — MARS 伪指令/扩展操作数形式的**展示**模板；内建可执行能力由 core 展开 handler registry 定义
-- `mips/registers.json` / `cp0Registers.json` / `directives.json` / `syscalls.json` — 寄存器、CP0、汇编器指令、系统调用表；由 `src/language/mips/resources.ts` 加载
+- `mips/registers.json` / `cp0Registers.json` / `directives.json` — 寄存器中文用途与 CP0 展示说明、TextMate 生成输入；LSP 的寄存器解析和 directive 集合直接使用 core。普通 syscall 唯一目录为 mips-core 的 `mars/syscallCatalog.ts`，旧 `syscalls.json` 已删除
 - `verilog/keywords.json` / `systemverilog.json` — keyword group、compiler directive、system task 与 operator 目录（SystemVerilog 不进 Verilog parser）
 - `co/courseConfig.json` — Profile 定义（P0–P7）：能力矩阵、默认项、语言、目录、端口、内存布局与推断 hints
 - `co/p7Hardware.json` — P7 硬件布局：4096-word IM、3072-word DM、0x4180 异常入口、probe、Timer、CP0 与中断确认

@@ -46,8 +46,9 @@ import { CourseSegmentBuilder, CourseSectionId, DataSectionId, SegmentBuilderOpt
 import { WorkInstruction, WorkOperand, workOriginFor } from './work';
 import type { ParsedInstructionOperand } from './operands';
 import { immediateSignedKind, realInstructionForms } from './instructionForms';
+import { isAssemblerDirective } from './directives';
 
-export const courseAssemblerSemanticsRevision = 5 as const;
+export const courseAssemblerSemanticsRevision = 6 as const;
 export const builtinAssemblerCapabilitiesRevision = 2 as const;
 
 export interface CourseAssemblerOptions extends SegmentBuilderOptions {
@@ -484,6 +485,11 @@ function defineLabels(statement: ParsedStatement, state: AssemblyState): void {
 function processDirective(statement: ParsedStatement, mnemonic: string, state: AssemblyState): void {
   const span = statementSpan(statement);
   const operands = statement.operands;
+  if (!isAssemblerDirective(mnemonic)) {
+    state.diagnostics.push(assemblerDiagnostic('asm.syntax.unknown-directive',
+      `未知或不支持的 directive ${statement.mnemonic}`, statement.mnemonicSpan, statement.expansionStack));
+    return;
+  }
   switch (mnemonic) {
     case '.text':
     case '.ktext':

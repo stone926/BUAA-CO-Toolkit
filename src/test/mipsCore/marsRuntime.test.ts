@@ -4,6 +4,7 @@ import { MarsIoRequest, MarsIoResponse } from '../../mips/core/mars/api';
 import { MarsSession } from '../../mips/core/mars/session';
 import { readBytes } from '../../mips/core/mars/syscallMemory';
 import { MarsMemoryConfiguration } from '../../mips/core/profiles/marsMemoryLayout';
+import { marsSyscallCatalog, supportedMarsSyscalls } from '../../mips/core/mars/syscallCatalog';
 import { makeSession, op, textImage } from './programFixtures';
 
 function session(text: string, options: { memoryConfiguration?: MarsMemoryConfiguration; delayedBranching?: boolean; maxSteps?: number; maxIoBytes?: number } = {}): MarsSession {
@@ -27,6 +28,33 @@ function run(machine: MarsSession, respond: (request: MarsIoRequest) => Omit<Mar
 }
 
 describe('ordinary MARS runtime on the shared machine', () => {
+  it.each(supportedMarsSyscalls)('executes documented service $code ($name) through the actual runtime', service => {
+    const code = service.code;
+    const firstArgument = [4, 8, 13].includes(code) ? 'la $a0, buffer' : `li $a0, ${[14, 15, 16].includes(code) ? 3 : 0}`;
+    const secondArgument = [14, 15].includes(code) ? 'la $a1, buffer' : 'li $a1, 8';
+    const machine = session(`.data\nbuffer: .space 64\n.text\n${firstArgument}\n${secondArgument}\nli $a2, 8\nli $v0, ${code}\nsyscall\nli $v0, 10\nsyscall`);
+    const { result } = run(machine, request => {
+      switch (request.kind) {
+        case 'read-int': return { value: 7 };
+        case 'read-float': case 'read-double': return { value: 1.5 };
+        case 'read-char': return { text: 'A' };
+        case 'read-string': return { text: 'abc' };
+        case 'open': return { value: 3 };
+        case 'read-file': return { bytes: [65] };
+        case 'write-file': return { value: 8 };
+        case 'time': return { time: 1000 };
+        default: return {};
+      }
+    });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0 });
+  });
+
+  it.each(marsSyscallCatalog.filter(service => !service.supported))('rejects unavailable documented service $code without host IO', service => {
+    const { result, requests } = run(session(`li $v0, ${service.code}\nsyscall`));
+    expect(requests).toEqual([]);
+    expect(result).toMatchObject({ status: 'fault', diagnostic: { message: `Unsupported MARS syscall service ${service.code}` } });
+  });
+
   it('executes Default text, sparse static data, heap, and high stack addresses', () => {
     const machine = session(`.data\nvalue: .word 42\n.text\nla $t0, value\nlw $t1, 0($t0)\naddiu $sp, $sp, -4\nsw $t1, 0($sp)\nli $a0, 8\nli $v0, 9\nsyscall\nmove $t2, $v0\nsw $t1, 0($t2)\nlw $a0, 0($sp)\nli $v0, 1\nsyscall\nli $v0, 10\nsyscall`);
     const { result, requests } = run(machine);

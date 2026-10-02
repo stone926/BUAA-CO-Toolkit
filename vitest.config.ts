@@ -12,6 +12,7 @@ export default defineConfig({
         'src/test/**',
         // Browser-only DOM/canvas glue; its pure view logic lives in src/waveform/view and is tested.
         'src/waveform/webview/**',
+        'src/mips/debug/webview/**',
         'out/**',
         'src/extension.ts',
         'src/languageClient.ts',

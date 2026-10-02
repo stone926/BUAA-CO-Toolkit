@@ -17,7 +17,8 @@ import {
 } from './semantic';
 import { getCachedMipsParse } from './parseCache';
 import {
-  builtinPseudoAvailability,
+  instructionAvailable,
+  directiveAvailable,
   cp0Registers,
   directives,
   floatingPointRegisterNames,
@@ -38,6 +39,8 @@ import {
   suffixCompletionReplaceRange
 } from './text';
 import { buildMipsAst, MipsExecutableAst } from './ast';
+import { isCourseProjectProfile } from '../../projectProfile';
+import { canonicalRegister } from './resources';
 
 export function getMipsCompletions(document: TextDocument, position: Position, settings: CoSettings, state: MipsServerState): CompletionItem[] {
   const parsed = getCachedMipsParse(document, settings, state);
@@ -51,14 +54,14 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
     return cp0Items;
   }
 
-  const syscallItems = settings.project.profile === 'P7' ? undefined : syscallCompletionItems(prefixExecutable, linePrefix, position);
+  const syscallItems = isCourseProjectProfile(settings.project.profile) ? undefined : syscallCompletionItems(prefixExecutable, linePrefix, position);
   if (syscallItems) {
     return syscallItems;
   }
 
   const registerReplaceRange = prefixedCompletionReplaceRange(linePrefix, position, '$', isRegisterPart);
   if (registerReplaceRange) {
-    for (const name of [...registerNames, ...numericRegisters(), ...floatingPointRegisterNames]) {
+    for (const name of [...registerNames, ...numericRegisters(), ...(isCourseProjectProfile(settings.project.profile) ? [] : floatingPointRegisterNames)]) {
       items.push({
         label: name,
         kind: CompletionItemKind.Variable,
@@ -83,11 +86,11 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   }
 
   for (const instruction of Object.values(instructions)) {
-    const builtinAvailability = builtinPseudoAvailability(instruction, settings.project.profile);
+    if (!instructionAvailable(instruction, settings.project.profile)) continue;
     items.push({
       label: instruction.mnemonic,
       kind: CompletionItemKind.Keyword,
-      detail: `${instructionTypeLabel(instruction.type)} - ${instruction.summary}${builtinAvailability === false ? '（内建汇编器暂不支持）' : ''}`,
+      detail: `${instructionTypeLabel(instruction.type)} - ${instruction.summary}`,
       documentation: {
         kind: MarkupKind.Markdown,
         value: '```mipsasm\n' + instruction.formats.join('\n') + '\n```'
@@ -96,6 +99,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
   }
 
   for (const directive of directives) {
+    if (!directiveAvailable(directive, settings.project.profile)) continue;
     const item: CompletionItem = {
       label: directive,
       kind: CompletionItemKind.Keyword
@@ -159,7 +163,7 @@ export function getMipsCompletions(document: TextDocument, position: Position, s
 }
 
 function syscallCompletionItems(executable: MipsExecutableAst | undefined, linePrefix: string, position: Position): CompletionItem[] | undefined {
-  if (!executable || executable.lowerMnemonic !== 'li' || executable.operands[0]?.text !== '$v0' || operandSlotAtPosition(executable, position.character) !== 1) {
+  if (!executable || executable.lowerMnemonic !== 'li' || canonicalRegister(executable.operands[0]?.text ?? '') !== '$v0' || operandSlotAtPosition(executable, position.character) !== 1) {
     return undefined;
   }
   const replaceRange = suffixCompletionReplaceRange(linePrefix, position, isIntegerLiteralPart);

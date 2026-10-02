@@ -33,6 +33,7 @@ for (const kind of [
   'assembler-assemble',
   'mars-assemble',
   'mars-execute',
+  'mars-debug',
   'machine-execute',
   'device-cycle-vector'
 ]) {

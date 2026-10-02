@@ -1,4 +1,4 @@
-# mips-core | src/mips/core/ | 56 files
+# mips-core | src/mips/core/ | 65 files
 
 纯 TypeScript MIPS 引擎核心：ISA 编解码、两遍课程汇编器、架构执行器与设备模型。**零** VS Code / LSP / 文件系统 / Worker 依赖（边界由 `scripts/check-module-boundaries.mjs` 检查）。汇编器与执行器通过不可变 `ProgramImage` 连接，因此可各自独立验证。
 
@@ -25,16 +25,18 @@
 - `assembler/assembler.ts` — 编排：`.eqv` token substitution → layout/symbol/relocation → 伪指令展开 → ProgramImage
 - `assembler/assemblyService.ts` — CLI/Worker 共用的有界 assembler DTO（显式 include 边，不解释文件路径）
 - `assembler/sourceGraph.ts` — BOM/CRLF 归一化、递归 `.include` 展开、fingerprint 与深度/大小限额
-- `assembler/syntax.ts` — 注释/字符串感知行语法、标签与顶层逗号操作数拆分
+- `assembler/syntax.ts` — assembler/LSP 共用 token 与 comment/quote lexer；注释/字符串感知行语法、标签与顶层逗号操作数拆分
+- `assembler/capabilities.ts` — 从真实 ISA、课程 pseudo handler 与普通整数/COP1 扩展注册表导出指令可用性，LSP 直接复用
+- `assembler/directives.ts` — 汇编器与 LSP 共用的 directive 注册表
 - `assembler/work.ts` — 两遍之间的 WorkInstruction/WorkOperand 中间表示
 - `assembler/expression.ts` — MARS 风格有符号 32 位常量表达式与稳定 undefined-symbol 分类
 - `assembler/macros.ts` — `.macro` 形参替换、宏内标签去重、递归/总膨胀限额
 - `assembler/pseudo.ts` — 课程常用伪指令展开；内建能力以 handler 注册表为准
 - `assembler/sections.ts` — text/ktext/data 段布局、空洞、容量/重叠检查、MARS 4 KiB 数据块 padding
 - `assembler/operands.ts` — `off($base)` 内存形式与寄存器/立即数分类
-- `assembler/literals.ts` — dec/hex/bin/oct 与字符/字符串字面量
+- `assembler/literals.ts` — assembler/LSP 共用 dec/hex/bin/oct 与字符解析；带前导零的整数严格按八进制，另提供保留无符号值的编辑器范围检查入口；UTF-8 字符串字面量
 - `assembler/instructionForms.ts` — 操作数模式辅助（encoder、pseudo 校验、波形反汇编共享）
-- `assembler/registers.ts` — 架构寄存器事实（与 `resources/mips/registers.json` 同源）
+- `assembler/registers.ts` — assembler/LSP 共用 GPR/FPR 名称、别名和解析；普通模式 CP0 支持 8/12/13/14，课程编码仍限制课程集合
 - `assembler/diagnostics.ts` — 稳定诊断码与 offset-based SourceSpan
 - `assembler/artifacts.ts` — ProgramImage → 课程 HexText/kernel dump 与停机 PC 检测；非 data 段按绝对地址投影到 4096-word IM
 
@@ -73,6 +75,7 @@
 - `assembler/marsInstructions.ts` — 普通模式 COP1 编码与浮点访存伪指令
 - `assembler/marsInstructionFacts.ts` — 普通模式 COP1 助记符、操作数格式与编码事实
 - `assembler/marsIntegerPseudo.ts` — 普通模式整数伪指令及延迟槽保护展开
+- `assembler/marsIntegerInstructionFacts.ts` — 普通整数扩展注册表与 mulu/mulo/mulou/rol/ror、20 位 break 展示事实，runtime 与 LSP 同源
 - `mars/api.ts` — 可恢复 syscall 请求/响应与运行结果
 - `mars/profile.ts` — 普通模式地址空间（含 ktext/kdata 与栈）、CP0 和寄存器复位策略
 - `mars/session.ts` — MarsSession 在共享 MachineSession 上分片执行、syscall 暂停/恢复与终态
@@ -81,7 +84,16 @@
 - `mars/floatingPoint.ts` — COP1 算术、转换、比较、分支和访存；提交副作用延后到架构提交点
 - `mars/floatingPointText.ts` — 普通浮点输入和输出格式
 - `mars/syscalls.ts` — 控制台/文件/堆/时间/随机服务，文件和时钟委托宿主 DTO
+- `mars/syscallCatalog.ts` — runtime/LSP/GUI 唯一 syscall 参考：27 项可执行服务（1–17、30、32、34–36、40–44），MIDI 31/33 与桌面对话框 50–59 明确不支持；P7 不进入此服务策略
 - `mars/syscallMemory.ts` — syscall buffer 的边界检查、UTF-8 文本与原子写入
 - `mars/random.ts` — 与 Java Random 序列兼容的可设种子随机流
 
-普通 MARS 策略不替换课程 Profile。它支持普通控制台模式的整数与浮点指令、CP0、kdata、栈和服务调用；这不是完整桌面 MARS 的 GUI/MIDI 替代。普通服务通过 syscall IO DTO 挂起和恢复执行。P7 CPU 的 `syscall` 仍按课程 tutorial P7-2-6 产生 ExcCode=8、设置 EPC/EXL 并进入 0x4180；它既不发普通 IO 请求，也不改写 `$v0` 为服务返回值。UTF-8 字面量、控制台字符串和宿主文件路径使用一致编码，支持中文与空格路径。
+普通 MARS 策略不替换课程 Profile。它支持普通控制台模式的整数与浮点指令、CP0、kdata、栈和服务调用；内置工作台复用这些能力提供图形调试，MIDI 与桌面对话框服务不在支持范围内。普通服务通过 syscall IO DTO 挂起和恢复执行。P7 CPU 的 `syscall` 仍按课程 tutorial P7-2-6 产生 ExcCode=8、设置 EPC/EXL 并进入 0x4180；它既不发普通 IO 请求，也不改写 `$v0` 为服务返回值。UTF-8 字面量、控制台字符串和宿主文件路径使用一致编码，支持中文与空格路径。
+
+## 交互调试核心
+
+- `debug/api.ts` / `debug/validation.ts` — 调试模式、step/continue/pause/stop、断点、内存页与快照契约；命令地址和读取范围有界校验
+- `debug/session.ts` — 在共享 `MachineSession` / `MarsSession` 上执行架构单步、断点与有界 slice；普通模式可暂停等待 syscall 输入并恢复
+- `debug/listing.ts` / `debug/disassembly.ts` — 分页指令列表、源码位置映射与反汇编，复用汇编器/ISA/COP1 指令事实
+
+工作台调试观察架构状态，不提供反向单步或状态编辑，也不推演 Timer 周期或外部中断。P3–P6 课程模式不调用普通 MARS syscall 服务；P7 的 `syscall` 仍按课程异常进入 `0x4180`，普通 MARS 模式才会按 `$v0` 处理系统服务。

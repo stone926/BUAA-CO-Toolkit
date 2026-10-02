@@ -392,6 +392,11 @@
         "icon": "$(tools)"
       },
       {
+        "command": "co.mips.openWorkbench",
+        "title": "CO: 打开 MARS 调试工作台",
+        "icon": "$(debug-alt)"
+      },
+      {
         "command": "co.mips.runCurrentFile",
         "title": "CO: 运行当前 ASM 文件"
       },
@@ -502,6 +507,11 @@
       ],
       "editor/title": [
         {
+          "command": "co.mips.openWorkbench",
+          "when": "resourceLangId == mipsasm",
+          "group": "navigation@0"
+        },
+        {
           "command": "co.mips.runInTerminal",
           "when": "resourceLangId == mipsasm",
           "group": "navigation@10"
@@ -555,6 +565,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "co.mips.openWorkbench",
+          "when": "resourceLangId == mipsasm"
+        },
         {
           "command": "co.projectWizard"
         },

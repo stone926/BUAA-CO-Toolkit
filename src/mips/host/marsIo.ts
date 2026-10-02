@@ -18,6 +18,7 @@ export class MarsHostIo {
   private readonly stdoutDecoder = new StringDecoder('utf8');
   private readonly stderrDecoder = new StringDecoder('utf8');
   private disposed = false;
+  private inputEof = false;
   constructor(private readonly options: {
     cwd: string; stdin?: string | Uint8Array; console: MarsConsole; signal: AbortSignal; maximumBytes?: number;
   }) { this.input = typeof options.stdin === 'string' ? Buffer.from(options.stdin, 'utf8') : Buffer.from(options.stdin ?? []); }
@@ -124,7 +125,7 @@ export class MarsHostIo {
     await this.options.console.write(text);
   }
   private async fill(): Promise<void> {
-    if (!this.input.length && this.options.stdin === undefined && this.options.console.readLine) {
+    if (!this.input.length && !this.inputEof && this.options.stdin === undefined && this.options.console.readLine) {
       const signal = this.options.signal;
       let abort: () => void = () => undefined;
       try {
@@ -135,8 +136,9 @@ export class MarsHostIo {
             signal.addEventListener('abort', abort, { once: true });
             if (signal.aborted) abort();
           })
-        ]) ?? '';
-        this.input = Buffer.from(input, 'utf8');
+        ]);
+        this.inputEof = input === undefined;
+        this.input = Buffer.from(input ?? '', 'utf8');
       } finally { signal.removeEventListener('abort', abort); }
       this.checkActive();
       this.checkLength(this.input.length);

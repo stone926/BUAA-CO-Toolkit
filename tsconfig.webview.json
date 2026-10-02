@@ -10,7 +10,8 @@
     "noEmit": true
   },
   "include": [
-    "src/waveform/webview/**/*.ts"
+    "src/waveform/webview/**/*.ts",
+    "src/mips/debug/webview/**/*.ts"
   ],
   "exclude": [
     "node_modules"

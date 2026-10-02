@@ -7,6 +7,11 @@ import { CoSettings } from '../common/settings';
 import { isCourseProjectProfile } from '../../generated/projectProfiles';
 import { isBuiltinPseudoMnemonic } from '../../mips/core/assembler/pseudo';
 import { marsInstructionFacts } from '../../mips/core/assembler/marsInstructionFacts';
+import { marsIntegerInstructionFacts } from '../../mips/core/assembler/marsIntegerInstructionFacts';
+import { isSupportedAssemblerMnemonic } from '../../mips/core/assembler/capabilities';
+import { assemblerDirectives } from '../../mips/core/assembler/directives';
+import { gprNames, fprNames, parseGprRegister, parseFprRegister } from '../../mips/core/assembler/registers';
+import { MarsSyscallInfo, marsSyscallCatalog, supportedMarsSyscalls } from '../../mips/core/mars/syscallCatalog';
 import type { ProjectProfile } from '../../projectProfile';
 import {
   IsaDisplayInstructionFact,
@@ -38,13 +43,7 @@ interface MipsRegisterInfo {
   usage: string;
 }
 
-export interface MipsSyscallInfo {
-  code: number;
-  name: string;
-  parameters?: string;
-  returns?: string;
-  description: string;
-}
+export type MipsSyscallInfo = Pick<MarsSyscallInfo, 'code' | 'name' | 'description'> & Partial<Omit<MarsSyscallInfo, 'code' | 'name' | 'description'>>;
 
 export interface MipsCp0FieldInfo {
   name: string;
@@ -103,7 +102,7 @@ interface MipsResourceData {
   registers: MipsRegisterInfo[];
   directives: string[];
   instructions: MipsInstruction[];
-  syscalls: MipsSyscallInfo[];
+  syscalls: readonly MipsSyscallInfo[];
   cp0Registers: MipsCp0RegisterInfo[];
   pseudoForms: MipsPseudoFormGroup;
 }
@@ -141,15 +140,15 @@ const mipsResourceData = loadMipsResourceData();
 const mipsInstructionMeta = loadMipsInstructionMeta();
 const registerInfos = mipsResourceData.registers;
 const registerByNumber = new Map(registerInfos.map((info) => [info.number, info]));
-const registerAliases = new Map(registerInfos.flatMap((info) => info.names.map((name) => [name.toLowerCase(), info.names[0].toLowerCase()] as const)));
 
-export const registerNames = new Set(registerInfos.flatMap((info) => info.names.map((name) => name.toLowerCase())));
-export const floatingPointRegisterNames = Object.freeze(Array.from({ length: 32 }, (_, index) => `$f${index}`));
+export const registerNames = new Set(registerInfos.flatMap((info) => info.names
+  .filter(name => !/^\$\d+$/.test(name)).map(name => name.toLowerCase())));
+export const floatingPointRegisterNames = fprNames;
 export const registerDescriptions = new Map<string, string>();
 export const directives = new Set(mipsResourceData.directives);
 export const instructions: Record<string, MipsInstruction> = makeInstructionMap(mipsResourceData.instructions);
-export const syscalls = mipsResourceData.syscalls;
-export const syscallsByCode = new Map(syscalls.map((syscall) => [syscall.code, syscall]));
+export const syscalls = supportedMarsSyscalls;
+export const syscallsByCode = new Map(marsSyscallCatalog.map((syscall) => [syscall.code, syscall]));
 export const cp0Registers = mipsResourceData.cp0Registers;
 export const cp0RegistersByNumber = new Map(cp0Registers.map((register) => [register.number, register]));
 export const pseudoForms = mipsResourceData.pseudoForms;
@@ -170,24 +169,28 @@ for (const info of registerInfos) {
     registerDescriptions.set(name.toLowerCase(), description);
   }
 }
+
+/** Course profiles and ordinary MARS use the same executable core capability registry. */
+export function instructionAvailable(instruction: MipsInstruction, profile: ProjectProfile): boolean {
+  return isSupportedAssemblerMnemonic(instruction.mnemonic, isCourseProjectProfile(profile) ? profile : 'mars');
+}
+
+export function directiveAvailable(directive: string, profile: ProjectProfile): boolean {
+  return directives.has(directive) && (directive !== '.kdata' || !isCourseProjectProfile(profile));
+}
 for (const name of floatingPointRegisterNames) registerDescriptions.set(name, `${name}: COP1 浮点寄存器；双精度值使用偶数寄存器及其后一寄存器。`);
 
 export function isRegister(value: string): boolean {
-  const canonical = canonicalRegister(value);
-  return registerNames.has(canonical) || /^\$(?:[0-9]|[12][0-9]|3[01])$/.test(value);
+  return parseGprRegister(value) !== undefined;
 }
 
 export function isFloatingPointRegister(value: string): boolean {
-  return /^\$f(?:[0-9]|[12][0-9]|3[01])$/i.test(value);
+  return parseFprRegister(value) !== undefined;
 }
 
 export function canonicalRegister(value: string): string {
-  if (/^\$(?:[0-9]|[12][0-9]|3[01])$/.test(value)) {
-    const number = Number(value.slice(1));
-    return registerByNumber.get(number)?.names[0].toLowerCase() ?? value;
-  }
-  const lower = value.toLowerCase();
-  return registerAliases.get(lower) ?? lower;
+  const number = parseGprRegister(value);
+  return number === undefined ? value.toLowerCase() : registerByNumber.get(number)!.names[0].toLowerCase();
 }
 
 export function numericRegisters(): string[] {
@@ -248,9 +251,10 @@ export function shouldWarnPseudoInstruction(settings: CoSettings, uri: DocumentU
 
 function loadMipsResourceData(): MipsResourceData {
   const resourceRoot = resourcePath('mips');
-  const registers = readJsonResource<MipsRegisterInfo[]>(path.join(resourceRoot, 'registers.json'));
-  const directiveList = readJsonResource<string[]>(path.join(resourceRoot, 'directives.json')).map((directive) => directive.toLowerCase());
-  const syscalls = readJsonResource<MipsSyscallInfo[]>(path.join(resourceRoot, 'syscalls.json'));
+  const usage = new Map(readJsonResource<MipsRegisterInfo[]>(path.join(resourceRoot, 'registers.json')).map(info => [info.number, info.usage]));
+  const registers = gprNames.map(info => ({ number: info.number, names: [...info.names], usage: usage.get(info.number) ?? '' }));
+  const directiveList = [...assemblerDirectives];
+  const syscalls = marsSyscallCatalog;
   const cp0Registers = readJsonResource<MipsCp0RegisterInfo[]>(path.join(resourceRoot, 'cp0Registers.json'));
   const pseudoForms = normalizePseudoForms(readJsonResource<MipsPseudoFormData>(path.join(resourceRoot, 'pseudoForms.json')));
   const loadedInstructions = readJsonResource<MipsInstruction[]>(path.join(resourceRoot, 'instructions.json'));
@@ -260,9 +264,12 @@ function loadMipsResourceData(): MipsResourceData {
     operands: normalizeOperandRange(instruction.operands),
     ...generatedInstructionDisplayFacts(instruction)
   }));
-  for (const fact of marsInstructionFacts) instructionList.push({
-    ...fact, formats: [...fact.formats], operands: [fact.operands[0], fact.operands[1]], ordinaryMars: true
-  });
+  for (const fact of [...marsInstructionFacts, ...marsIntegerInstructionFacts]) {
+    const item: MipsInstruction = { ...fact, formats: [...fact.formats], operands: [fact.operands[0], fact.operands[1]], ordinaryMars: true };
+    const existing = instructionList.findIndex(instruction => instruction.mnemonic === fact.mnemonic);
+    if (existing >= 0) instructionList[existing] = { ...instructionList[existing], ...item };
+    else instructionList.push(item);
+  }
 
   validateMipsResources(registers, directiveList, instructionList, syscalls, cp0Registers);
   return {
@@ -334,7 +341,7 @@ function validateMipsResources(
   registers: MipsRegisterInfo[],
   directiveList: string[],
   instructionList: MipsInstruction[],
-  syscallList: MipsSyscallInfo[],
+  syscallList: readonly MipsSyscallInfo[],
   cp0RegisterList: MipsCp0RegisterInfo[]
 ): void {
   if (!Array.isArray(registers) || registers.length !== 32) {

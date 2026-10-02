@@ -1,4 +1,4 @@
-# mips-host | src/mips/host/ | 10 files
+# mips-host | src/mips/host/ | 12 files
 
 懒启动 Worker 宿主。P2–P7 汇编与 P3–P7 课程执行经 `AppServices.mipsRuntime` 在生产路径运行于 Worker；普通 MARS 控制台执行也使用同一 Worker。激活阶段只构造 manager，首次任务才启动 Worker。direct lane 仅用于定向测试/无 runtime host，**不是**运行中 fallback。
 
@@ -15,5 +15,7 @@
 - `marsJobs.ts` — mars-execute 有界 DTO 与分片执行；P7 CPU 仍走 machine-execute
 - `marsIo.ts` — 控制台、标准输入、文件、时钟的异步宿主适配，不把文件系统引入核心
 - `marsTerminal.ts` — VS Code Pseudoterminal，行输入、回显、EOF、Ctrl+C 与关闭取消
+- `debugClient.ts` — 复用 Worker progress/ACK 通道承载交互命令，并适配普通 MARS syscall 输入/输出
+- `debugJob.ts` — 校验调试会话 DTO，在 Worker 中运行共享 DebugSession，暂停点及 slice 通过 progress 返回
 
 `mars-assemble` 使用与课程相同的两遍汇编器；`mars-execute` 使用 MarsSession，并经 progress/ACK 的 response 返回系统调用结果。输入等待也可取消。P7 课程异常/中断 syscall 不经过普通 MARS I/O 服务。

@@ -9,11 +9,12 @@ const maximumInteger = 0xffff_ffffn;
 const minimumInteger = -0x8000_0000n;
 
 export function parseIntegerLiteral(text: string): number | undefined {
-  const parsed = tryParseIntegerLiteral(text);
-  return parsed === undefined ? undefined : Number(parsed);
+  const parsed = parseIntegerLiteralValue(text);
+  return parsed === undefined ? undefined : parsed | 0;
 }
 
-function tryParseIntegerLiteral(text: string): bigint | undefined {
+/** Preserve the written unsigned value for editor range checks; execution uses signed 32-bit. */
+export function parseIntegerLiteralValue(text: string): number | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
   let index = 0;
@@ -29,7 +30,7 @@ function tryParseIntegerLiteral(text: string): bigint | undefined {
   if (magnitude === undefined || magnitude.end !== trimmed.length) return undefined;
   const value = sign * magnitude.value;
   if (value < minimumInteger || value > maximumInteger) return undefined;
-  return BigInt.asIntN(32, value);
+  return Number(value);
 }
 
 function parseMagnitude(text: string, index: number): { value: bigint; end: number } | undefined {
@@ -37,12 +38,7 @@ function parseMagnitude(text: string, index: number): { value: bigint; end: numb
     const prefix = text[index + 1].toLowerCase();
     if (prefix === 'x') return parseDigits(text, index + 2, 16);
     if (prefix === 'b') return parseDigits(text, index + 2, 2);
-    const parsed = parseDigits(text, index + 1, 8);
-    if (parsed !== undefined && parsed.end > index + 1) return parsed;
-    // A bare 0 is decimal.
-    if (index + 1 === text.length || !isDecimalDigit(text[index + 1])) {
-      return { value: 0n, end: index + 1 };
-    }
+    return parseDigits(text, index + 1, 8);
   }
   return parseDigits(text, index, 10);
 }
@@ -66,10 +62,6 @@ function digitValue(char: string): number | undefined {
   const lower = char.toLowerCase();
   if (lower >= 'a' && lower <= 'f') return lower.charCodeAt(0) - 87;
   return undefined;
-}
-
-function isDecimalDigit(char: string): boolean {
-  return char >= '0' && char <= '9';
 }
 
 /** Parse a MIPS character literal such as 'A', '\n', '\'', or '\101'. */

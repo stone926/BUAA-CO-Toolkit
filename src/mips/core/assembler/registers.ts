@@ -1,4 +1,5 @@
-// @index mips-core — 课程 GPR/CP0 名称表（纯 TS，与 resources/mips/registers.json 同一事实）
+// @index mips-core — Canonical GPR/FPR names and course/ordinary CP0 operand parsing
+import { parseIntegerLiteral } from './literals';
 
 export interface RegisterName {
   readonly number: number;
@@ -52,7 +53,15 @@ export function parseGprRegister(text: string): number | undefined {
   return gprByToken.get(token);
 }
 
+export const fprNames: readonly string[] = Object.freeze(Array.from({ length: 32 }, (_, index) => `$f${index}`));
+
+export function parseFprRegister(text: string): number | undefined {
+  const match = /^\$f([0-9]|[12][0-9]|3[01])$/i.exec(text.trim());
+  return match ? Number(match[1]) : undefined;
+}
+
 const cp0Names = new Map<string, number>([
+  ['$badvaddr', 8], ['badvaddr', 8],
   ['$sr', 12], ['sr', 12], ['$status', 12], ['status', 12],
   ['$cause', 13], ['cause', 13],
   ['$epc', 14], ['epc', 14]
@@ -66,4 +75,11 @@ export function parseCp0Register(text: string): number | undefined {
     return number >= 0 && number <= 31 ? number : undefined;
   }
   return cp0Names.get(token);
+}
+
+export const marsCp0RegisterNumbers: readonly number[] = Object.freeze([8, 12, 13, 14]);
+
+export function parseMarsCp0Register(text: string): number | undefined {
+  const number = parseCp0Register(text) ?? parseIntegerLiteral(text);
+  return number !== undefined && marsCp0RegisterNumbers.includes(number) ? number : undefined;
 }

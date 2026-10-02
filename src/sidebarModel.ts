@@ -233,6 +233,8 @@ function actionsSection(context: SidebarModelContext): SidebarNodeModel {
 
   if (active && isMipsFile(active)) {
     children.push(
+      actionItem('core.asmWorkbench', 'MARS 调试工作台', Commands.Mips.OpenWorkbench, 'debug-alt',
+        '单步 / 断点 / 寄存器 / 内存', '打开内置 MARS 工作台，汇编并观察程序执行。课程 P7 的 syscall 仅陷入内核。'),
       actionItem(
         'core.asmRun',
         '运行当前 ASM',

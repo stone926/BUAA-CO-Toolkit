@@ -32,6 +32,7 @@ export function buildAdvancedToolItems(context: AdvancedToolContext): AdvancedTo
 
   if (context.activeKind === 'mips') {
     items.push(
+      tool('mips.workbench', 'MARS 调试工作台', '单步、断点与 syscall 参考', activeDetail, Commands.Mips.OpenWorkbench),
       tool('mips.stdin', 'ASM 带标准输入运行', '内置 MIPS 引擎', activeDetail, Commands.Mips.RunWithStdinFile),
       tool('mips.terminal', 'ASM 终端运行', '内置 MIPS 引擎', activeDetail, Commands.Mips.RunInTerminal)
     );

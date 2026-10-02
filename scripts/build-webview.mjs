@@ -4,7 +4,8 @@
  *
  * The extension host is bundled separately; webviews run in a browser
  * sandbox and need one self-contained IIFE script plus its stylesheet. Shared pure
- * modules (waveform model/view logic, the MIPS decoder) are bundled from source.
+ * modules (waveform model/view logic, the MIPS decoder) and the internal MARS
+ * workbench UI are bundled from source.
  *
  * Usage: node scripts/build-webview.mjs [--dev]
  */
@@ -17,7 +18,10 @@ const development = process.argv.includes('--dev');
 
 await esbuild.build({
   absWorkingDir: projectRoot,
-  entryPoints: { waveform: 'src/waveform/webview/main.ts' },
+  entryPoints: {
+    waveform: 'src/waveform/webview/main.ts',
+    'mars-workbench': 'src/mips/debug/webview/main.ts'
+  },
   outdir: 'out/media',
   bundle: true,
   format: 'iife',
