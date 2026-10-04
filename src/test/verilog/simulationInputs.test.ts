@@ -63,6 +63,18 @@ describe('simulation machine-code inputs', () => {
 
     expect(writtenBasenames()).toEqual(['code.txt']);
   });
+
+  it('writes one isolated automatic input without reading or writing a manual path override', async () => {
+    vi.mocked(getMachineCode).mockReturnValue('../outside/program.hex');
+    const outDir = URI.file('E:/work/.co/iverilog/automatic/slot-2');
+    await copyMachineCodeToSimDirectory(URI.file('E:/case/code.txt'), outDir, undefined, 'code.txt');
+    expect(getMachineCode).not.toHaveBeenCalled();
+    expect(vscode.workspace.fs.readFile).toHaveBeenCalledOnce();
+    expect(vscode.workspace.fs.writeFile).toHaveBeenCalledOnce();
+    expect(writtenBasenames()).toEqual(['code.txt']);
+    expect(vi.mocked(vscode.workspace.fs.writeFile).mock.calls[0][0].path)
+      .toMatch(/slot-2\/code\.txt$/);
+  });
 });
 
 function writtenBasenames(): string[] {

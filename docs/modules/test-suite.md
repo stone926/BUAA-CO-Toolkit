@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 258 files | 框架: Vitest
+# test-suite | src/test/ | 260 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -10,9 +10,9 @@
 | --- | --- | --- |
 | `test/language/` | 77 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
 | `test/`（根） | 51 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
-| `test/courseTesting/` | 46 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
+| `test/courseTesting/` | 47 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
-| `test/verilog/` | 15 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
+| `test/verilog/` | 16 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
 | `test/mips{Providers,Host,Replay,Cli,Debug}/` | 24 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
@@ -59,6 +59,7 @@
 - **失败排查闭环**：`src/test/courseTestFailure.test.ts` / `src/test/courseTestFailureReport.test.ts` 验证源码/trace行号分离、消息边界、占用会话与取消、重跑独立结果及历史波形重开；`src/test/courseTesting/failureEvidence.test.ts` / `src/test/courseTesting/caseInspection.test.ts` 覆盖有界导航证据、include源图映射、hash损坏降级；`src/test/courseTesting/caseRerun.test.ts` / `src/test/courseTesting/caseRerunWaveform.test.ts` 覆盖真实源闭包与 bundled Icarus VCD/trace配对、静默编译失败降级及dump限制。`node scripts/verify-course-failure-browser.mjs` 验证真实浏览器中的按钮消息、禁用态、宽/窄视口并保存截图。
 
 - **特殊测试结果展示**：通过/失败/工具错误与范围说明分别保留；运行中先发布 activeCase，完成后保存具体首失败；历史无结果和取消不冒充终态，限定目录监视、合并刷新及关闭后的异步读保护
+- **并发自动测试**：固定槽上限与空闲补位、同产物互斥、GPR/常规/特殊阶段屏障、首失败取消并等待退出、汇编取消不误计 error、报告串行写入与原始编号；相同 TB 跨槽一次编译，缓存失效等待旧 VVP 读租约，编译目录容量与取消等待。`scripts/benchmark-course-test-concurrency.mjs` 对指定真实 RTL 运行相同最大 payload 的 1/2/4 并发基准，保留编译次数、吞吐量与机器码/trace digest 一致性证据。
 - **课程自动测试**：P3–P7 独立 GPR 双端口读与存储观察（每持续会话一次），随机点保留默认最大 payload；jr 生产者 × 间隔 0/1/2 的陈旧目标变异；小预算跳转毒指令、双向控制流与错误路径变异；双端口/最新写优先/load-store lane 的可观察依赖；P7 原 130 变体完整保留（36 个特殊 Timer 变体单独说明），older-MDU 四变体、Mode1 停机去断言、五种真实双 IRQ 程序及字段/顺序/重放损坏反例；continuous 的会话所有权清理与 fail-closed 保留
 - **返回边界协议**：`p7ReturnProbe.test.ts` 校验不同种子、合法 jal link 重放、未命中与功能失败区别、handler 字段来源和路径内错误 EPC；`p7ReturnTestbench.test.ts` 使用真实 Icarus 检查不同 eret 停留长度、X/错位 PC、SW 低位 don't-care、未选中 IG 转发、应答随 interrupt 撤销等合法接口变体。Mode1 官方周期模型与“每次 Enable 仅发一次 IRQ、COUNT 仍重载”的变异，确保停止态新检查不会替代连续周期 IRQ 覆盖
 - **DUT 观测**：`CO_DM_STORE` 公开事务与 builtin CommitEvent 逐笔对拍（覆盖整字相同时仍能失败的地址/mask 漏检）；P6/P7 完整 testbench 下 `dm_store_contract.v` 捕获的错误全使能读改写

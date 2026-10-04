@@ -63,6 +63,8 @@ export interface TestbenchResolution {
   sourceUri?: vscode.Uri;
   generatedUri?: vscode.Uri;
   sha256?: string;
+  /** Retained private template text; shared compilation need not reopen the slot copy. */
+  generatedText?: string;
 }
 
 export interface ExistingTestbenchSearchResult {
@@ -73,6 +75,8 @@ export interface ExistingTestbenchSearchResult {
 export interface TestbenchResolutionOptions {
   /** Internal automation lane: suppress UI/path details and let the runner control termination. */
   nonInteractive?: boolean;
+  /** Private automatic simulation directory; prevents case-specific P7 stimuli from racing. */
+  runtimeDirectory?: vscode.Uri;
   /** Prepare CPU input before creating its runnable user template; false cancels. */
   beforeCreateUserCpuTestbench?: (uri: vscode.Uri, profile: UserCpuTestbenchProfile) => Promise<boolean>;
 }
@@ -139,14 +143,15 @@ export async function ensureP7InterruptTestbench(
   }
   const folder = workspaceFolderFor(resource) ?? workspaceFolderForOrFirst(topDefinition.uri);
   const baseDir = folder?.uri.fsPath ?? path.dirname(topDefinition.uri.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, CO_IVERILOG_DIR));
+  const outDir = options.runtimeDirectory ?? vscode.Uri.file(path.join(baseDir, CO_IVERILOG_DIR));
   await ensureDirectory(outDir);
   const tbUri = vscode.Uri.file(path.join(outDir.fsPath, `${p7AutoRuntimeTestbenchName}.v`));
-  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
+  const testbenchText = buildTestbench(topDefinition.module, p7AutoRuntimeTestbenchName, {
     profile: 'P7',
     interruptSchedule,
     p7Probe
-  }), options);
+  });
+  const sha256 = await writeGeneratedRuntimeTestbench(tbUri, testbenchText, options);
   if (!sha256) {
     return undefined;
   }
@@ -155,6 +160,7 @@ export async function ensureP7InterruptTestbench(
     kind: 'p7-auto',
     designSourceUri: topDefinition.uri,
     generatedUri: tbUri,
+    generatedText: generatedRuntimeTestbenchText(testbenchText),
     sha256
   };
 }
@@ -178,15 +184,12 @@ export async function ensureRunnableTestbench(
     if (!topDefinition) {
       return undefined;
     }
-    const tbUri = await privateRuntimeTestbenchUri(topDefinition.uri, automaticRuntimeTestbenchName);
-    const sha256 = await writeGeneratedRuntimeTestbench(
-      tbUri,
-      buildTestbench(topDefinition.module, automaticRuntimeTestbenchName, {
+    const tbUri = await privateRuntimeTestbenchUri(topDefinition.uri, automaticRuntimeTestbenchName, options.runtimeDirectory);
+    const testbenchText = buildTestbench(topDefinition.module, automaticRuntimeTestbenchName, {
         finishDelay: false,
         profile: getProfile(topDefinition.uri)
-      }),
-      options
-    );
+      });
+    const sha256 = await writeGeneratedRuntimeTestbench(tbUri, testbenchText, options);
     if (!sha256) {
       return undefined;
     }
@@ -195,6 +198,7 @@ export async function ensureRunnableTestbench(
       kind: 'generated',
       designSourceUri: topDefinition.uri,
       generatedUri: tbUri,
+      generatedText: generatedRuntimeTestbenchText(testbenchText),
       sha256
     };
   }
@@ -417,10 +421,10 @@ async function createAndOpenUserTestbench(
   await vscode.window.showTextDocument(tbUri, { preview: false });
 }
 
-async function privateRuntimeTestbenchUri(resource: vscode.Uri, moduleName: string): Promise<vscode.Uri> {
+async function privateRuntimeTestbenchUri(resource: vscode.Uri, moduleName: string, runtimeDirectory?: vscode.Uri): Promise<vscode.Uri> {
   const folder = workspaceFolderForOrFirst(resource);
   const baseDir = folder?.uri.fsPath ?? path.dirname(resource.fsPath);
-  const outDir = vscode.Uri.file(path.join(baseDir, CO_IVERILOG_DIR));
+  const outDir = runtimeDirectory ?? vscode.Uri.file(path.join(baseDir, CO_IVERILOG_DIR));
   await ensureDirectory(outDir);
   return vscode.Uri.file(path.join(outDir.fsPath, `${moduleName}.v`));
 }

@@ -7,7 +7,7 @@ Provider-neutral 引擎契约与解析。数据契约（SourceUnit / ProgramImag
 - `contracts.ts` — EngineDescriptor、capabilities、Assemble/Execute 请求结果、preflight 诊断
 - `courseEnginePolicy.ts` — 纯函数的 profile/capability/mode 决策
 - `providerResolver.ts` — provider 解析唯一入口：按计划的稳定 id 精确选中并贯穿一次 case；preflight 在副作用前完成，运行开始后禁止 fallback；provider 注册数组顺序不参与生产决策
-- `builtinAssemblerProvider.ts` — P2–P7 统一纯 TS 汇编器；生产路径走 Worker `assembler-assemble`，输出含 text/ktext/data/sourceMap 的 ProgramImage
+- `builtinAssemblerProvider.ts` — P2–P7 统一纯 TS 汇编器；生产路径走 Worker `assembler-assemble`，输出含 text/ktext/data/sourceMap 的 ProgramImage；明确区分 Worker 取消与真实引擎错误，避免并发首失败取消污染统计
 - `builtinExecutionProvider.ts` — P3–P7 默认 TS executor：只消费 ProgramImage，产出 raw trace、canonical CommitEvent、coverage 与原子 event artifact；生产路径走懒启动 Worker
 - `fixedMarsReference.ts` — 显式开发者验证的固定 reference gate：只信插件编译内置的 `legacy-course-executor`，用同一 FileHandle 校验普通文件、精确 bytes 与 SHA-256
 

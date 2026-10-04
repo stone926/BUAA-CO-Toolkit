@@ -5,7 +5,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 架构: Client/Server IPC, TypeScript strict
 
 子系统:
-  orchestration   | docs/modules/orchestration.md   | 60 files | 扩展宿主层（命令/配置/UI/工具链；含 Logisim 与 hazard 命令注册）
+  orchestration   | docs/modules/orchestration.md   | 61 files | 扩展宿主层（命令/配置/UI/工具链；含 Logisim 与 hazard 命令注册）
   common-lsp      | docs/modules/common-lsp.md      | 7 files  | 共享 LSP 基础设施
   mips-lsp        | docs/modules/mips-lsp.md        | 34 files | MIPS 汇编语言支持
   mips-core       | docs/modules/mips-core.md       | 65 files | 纯 TS MIPS 引擎核心（课程与普通 MARS ISA/profile/assembler/machine/devices/events/debug）
@@ -17,10 +17,10 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   verilog-lsp     | docs/modules/verilog-lsp.md     | 75 files | Verilog HDL 语言支持（子模块：verilog-ast 8、verilog-diagnostics 12）
   logisim-lsp     | docs/modules/logisim-lsp.md     | 2 files  | Logisim 电路文件
   hazard-analysis | docs/modules/hazard-analysis.md | 14 files | 内置流水线冲突分析与交互报告
-  course-testing  | docs/modules/course-testing.md  | 72 files + host adapters | 自动化测试框架与失败定位、用例重跑
+  course-testing  | docs/modules/course-testing.md  | 74 files + host adapters | 自动化测试框架与失败定位、用例重跑
   waveform        | docs/modules/waveform.md        | 60 files | 内置 VCD 波形查看器（自定义编辑器 + 仿真并查看波形）
   conformance     | conformance/mips/               | 独立 Node 包：ISA golden、冻结执行语料与 JSONL 门禁；MARS 参考仅用于历史证据
-  test-suite      | docs/modules/test-suite.md      | 258 files| Vitest 测试
+  test-suite      | docs/modules/test-suite.md      | 260 files| Vitest 测试
   resources       | docs/modules/resources.md       | ~55 files + 5 bundled Icarus runtimes | 静态资源与生成源
   highlighting    | docs/modules/syntax-highlighting.md | 3 grammars | TextMate/semantic 分层高亮
 
@@ -31,10 +31,11 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   Test: SourceUnit immutable bundle -> 一次性 CourseEnginePlan -> assembler provider -> serialized ProgramImage/DUT bytes -> CourseTracePipeline -> 同一计划的 oracle provider -> bundled Icarus/Logisim DUT -> traceCompare -> HTML/JSON v2 report
 
 自动测试与 P7:
-  P2–P7 汇编使用内置 TypeScript 引擎；普通 MARS 控制台命令使用独立服务策略。P3–P7 手动与 automatic 课程执行固定 builtin-ts；automatic 使用最大 payload 规模，用户唯一旋钮是 co.test.instructions；旧 mars/verify-both 自动迁移
+  P2–P7 汇编使用内置 TypeScript 引擎；普通 MARS 控制台命令使用独立服务策略。P3–P7 手动与 automatic 课程执行固定 builtin-ts；automatic 使用最大 payload 规模，co.test.instructions 选择侧重点，co.test.concurrency 控制并发上限（默认 4，1–8）；旧 mars/verify-both 自动迁移
   P7 stress mode（内部类型，非用户设置）: anchor(TS课程oracle对拍+中断/Timer注入) / probe(DM探针黑盒检查) / hybrid(runner 展开为前两者，P7 automatic 固定取值) / off(P3–P6 固定取值，同时关中断与 Timer)；probe 为 DUT-only，不能冒充 full-stack reference evidence
 
 专门文档:
+  automatic-test-concurrency.md: 自动测试并发、编译/文件复用策略与真实 CPU 吞吐对比
   cpu-failure-workflow.md: 自动测试失败后的交互设计与实现边界
   diagnostic-catalog.md: MIPS/Verilog 诊断代码注册表（由 scripts/generate-diagnostic-catalog.mjs 生成，--check 校验漂移）
   syntax-coverage-matrix.md: 语法覆盖矩阵

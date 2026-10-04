@@ -16,6 +16,16 @@
         "scope": "resource",
         "order": 20,
         "runtimeDefault": ""
+      },
+      "co.test.concurrency": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 8,
+        "multipleOf": 1,
+        "description": "持续测试同时执行的测试点上限。默认 4；设为 1 使用串行测试。增大可提高多核机器的吞吐量，也会增加 CPU 和内存占用；修改后下次启动测试生效。",
+        "scope": "resource",
+        "order": 30,
+        "runtimeDefault": 4
       }
     }
   },

@@ -61,6 +61,7 @@ vi.mock('vscode', () => ({
 import {
   configurationTargetForResource,
   getAutomaticTestInstructions,
+  getAutomaticTestConcurrency,
   getMachineCode,
   getMipsEngine,
   getMarsJar,
@@ -100,6 +101,19 @@ describe('manual tool timeout compatibility', () => {
     setConfig('co.run.timeoutMs', 12345);
     expect(getRunTimeout(makeUri())).toBe(12345);
   });
+});
+
+describe('automatic test concurrency', () => {
+  beforeEach(clearConfig);
+
+  it.each([[1, 1], [4, 4], [20, 8], [0, 1], [3.9, 3], [NaN, 4], [Infinity, 4], ['4', 4]])(
+    'bounds configured value %s to %s', (value, expected) => {
+      setConfig('co.test.concurrency', value);
+      expect(getAutomaticTestConcurrency()).toBe(expected);
+    }
+  );
+
+  it('defaults to four slots', () => expect(getAutomaticTestConcurrency()).toBe(4));
 });
 
 describe('automatic test instruction setting migration', () => {

@@ -26,6 +26,7 @@ const vscodeMocks = vi.hoisted(() => ({
 }));
 
 const configMocks = vi.hoisted(() => ({
+  getAutomaticTestConcurrency: vi.fn(() => 1),
   ensureConcreteProfile: vi.fn(async () => 'P5'),
   getMemoryConfiguration: vi.fn(() => 'FixedCompactLargeText'),
   getMipsEngine: vi.fn(() => 'auto')
@@ -146,6 +147,7 @@ const setup: TestSetup = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  configMocks.getAutomaticTestConcurrency.mockReturnValue(1);
   vscodeMocks.disposeListeners.splice(0);
   vscodeMocks.messageListeners.splice(0);
   policyMocks.intervalMs.mockReturnValue(1);
@@ -161,6 +163,59 @@ afterEach(() => {
 });
 
 describe('continuous generated trace orchestration', () => {
+  it('cancels concurrent peers on failure and waits for their exit before cleaning cases or releasing the session', async () => {
+    configMocks.getAutomaticTestConcurrency.mockReturnValue(2);
+    const generated = [testAsmCase('slow-peer'), testAsmCase('failure'), testAsmCase('queued')];
+    const peer = deferred<CourseTraceCaseResult>();
+    const failure = deferred<CourseTraceCaseResult>();
+    const signals: AbortSignal[] = [];
+    const deps = createDependencies({
+      runGeneratorAndCollectAsms: vi.fn(async () => ({
+        asms: generated.map(item => item.asm), asmCases: generated, source: { kind: 'generator' as const }
+      })),
+      expandTraceCases: vi.fn(async () => generated.map(asmCase => ({ asm: asmCase.asm, asmCase }))),
+      runCourseTraceCase: vi.fn(async (_services, item, options) => {
+        signals.push(options.signal!);
+        return item.asmCase!.id === 'failure' ? failure.promise : peer.promise;
+      })
+    });
+    const run = startContinuousGeneratedTraceTests(createServices(), deps);
+    await waitFor(() => signals.length === 2);
+    expect(vi.mocked(deps.runCourseTraceCase).mock.calls.map(call => call[2].automaticRunSlot)).toEqual([0, 1]);
+    failure.resolve({ asm: generated[1].asm.fsPath, status: 'failed', stage: 'compare', message: 'mismatch' });
+    await waitFor(() => signals.every(signal => signal.aborted));
+    expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalled();
+    expect(tryAcquireCourseTestSession()).toBeUndefined();
+    peer.resolve({ asm: generated[0].asm.fsPath, status: 'error', stage: 'dut', message: 'cancelled', cancelled: true });
+    await run;
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(2);
+    expect(markContinuousAsmCaseCancelled).toHaveBeenCalledWith(generated[0].manifestUri.fsPath, expect.any(String));
+    expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalledWith(generated[1].manifestUri.fsPath, expect.anything());
+    const report = JSON.parse(fileMocks.writeTextFile.mock.calls.at(-1)![1]);
+    expect(report).toMatchObject({ concurrency: 2, stopRequested: false, running: false });
+    expect(report.iterations[0]).toMatchObject({
+      status: 'failed', summary: { total: 1, passed: 0, failed: 1, errors: 0 },
+      results: [{ caseIndex: 1, asm: '测试点 2', status: 'failed' }]
+    });
+    expect(report.iterations[0]).not.toHaveProperty('activeCases');
+  });
+
+  it('serializes overlapping monitor writes while different slots complete', async () => {
+    configMocks.getAutomaticTestConcurrency.mockReturnValue(2);
+    let writes = 0;
+    let maximumWrites = 0;
+    fileMocks.writeTextFile.mockImplementation(async () => {
+      writes++;
+      maximumWrites = Math.max(maximumWrites, writes);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      writes--;
+    });
+    const deps = createDependencies({ expandTraceCases: vi.fn(async () => [{ asm }, { asm: secondAsm }]) });
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+    expect(maximumWrites).toBe(1);
+    expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(2);
+  });
+
   it('opens history in the monitor workspace and ignores unrecognized actions and supplied paths', async () => {
     const deps = createDependencies();
     await startContinuousGeneratedTraceTests(createServices(), deps);

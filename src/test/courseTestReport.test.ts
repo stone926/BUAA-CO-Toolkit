@@ -20,6 +20,7 @@ import {
   neutralCourseTraceStage,
   publicAutomaticDiagnosticMessage,
   publicAutomaticCourseTraceCaseResult,
+  publicContinuousTraceReport,
   renderAsmCaseIndex,
   renderContinuousTraceMonitor
 } from '../courseTestReport';
@@ -344,6 +345,28 @@ describe('course test reports', () => {
 
     expect(normalized.dutOut).toBeUndefined();
     expect(normalized.dutRawOut).toBe('legacy.logisim.raw.out');
+  });
+
+  it('renders every concurrent special case and preserves original ordinals after out-of-order completion', () => {
+    const report: ContinuousTraceReport = {
+      generatedAt: '', running: true, stopRequested: false, concurrency: 4,
+      iterations: [{
+        index: 1, status: 'running', startedAt: '',
+        summary: { total: 1, passed: 0, failed: 1, errors: 0 },
+        results: [{ asm: 'private/path.asm', caseIndex: 10, caseId: 'finished-11',
+          status: 'failed', stage: 'probe', message: 'failure', probeScope: 'special-timer-exl' }],
+        activeCases: [
+          { index: 11, caseId: 'active-12', probeScope: 'special-timer-exl' },
+          { index: 12, caseId: 'active-13', probeScope: 'special-timer-exl' }
+        ]
+      }]
+    };
+    const publicReport = publicContinuousTraceReport(report);
+    expect(publicReport.iterations[0].results[0]).toMatchObject({ asm: '测试点 11', caseIndex: 10 });
+    expect(publicReport.iterations[0].activeCases).toHaveLength(2);
+    const html = renderContinuousTraceMonitor(publicReport, {} as import('vscode').Uri);
+    for (const label of ['并发上限', '运行中测试点', '测试点 11', '测试点 12', '测试点 13']) expect(html).toContain(label);
+    expect(html).not.toContain('private/path.asm');
   });
 
   it('maps continuous monitor statuses into row classes and summary metrics', () => {

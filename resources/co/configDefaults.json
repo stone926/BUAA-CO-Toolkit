@@ -16,6 +16,7 @@
   "run.revealOutput": false,
   "run.showCommandBeforeRun": false,
   "run.timeoutMs": 120000,
+  "test.concurrency": 4,
   "test.instructions": "",
   "toolchain.hazardCalculator": "",
   "toolchain.java": "java",

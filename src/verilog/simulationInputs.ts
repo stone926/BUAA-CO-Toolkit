@@ -46,10 +46,12 @@ export async function resolveMachineCodeSource(resource: vscode.Uri | undefined,
 export async function copyMachineCodeToSimDirectory(
   source: vscode.Uri,
   outDir: vscode.Uri,
-  resource?: vscode.Uri
+  resource?: vscode.Uri,
+  /** Automatic course shells always read their own code.txt, independent of manual path settings. */
+  targetFileName?: string
 ): Promise<void> {
   const targets = dedupePaths([
-    path.join(outDir.fsPath, getMachineCode(resource)),
+    path.join(outDir.fsPath, targetFileName ?? getMachineCode(resource)),
     path.join(outDir.fsPath, 'code.txt')
   ]).filter((target) => !samePath(source.fsPath, target));
   if (!targets.length) {

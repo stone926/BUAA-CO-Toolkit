@@ -32,8 +32,28 @@ import {
 } from '../../mips/core/assembler/assemblyService';
 import { builtinAssemblerEngineDocument } from '../../mips/replay/builtinAssemblerEngineArtifact';
 import type { AssembleRequest } from '../../mips/providers/contracts';
+import { engineRunWasCancelled } from '../../courseTestMessages';
 
 describe('BuiltinTsAssemblerProvider', () => {
+  it.each([true, false])('preserves worker cancellation=%s without hiding a simultaneous engine error', async cancelled => {
+    const controller = new AbortController();
+    const provider = new BuiltinTsAssemblerProvider({
+      runJob: async () => {
+        controller.abort();
+        return { protocolVersion: 2, kind: 'result', requestId: 'test', ok: false,
+          ...(cancelled ? { cancelled: true as const } : {}), error: 'worker stopped' };
+      }
+    });
+    const result = await provider.assemble({
+      sourceUri: URI.file(__filename),
+      sourceGraphInput: { rootId: 'root', sources: [{ id: 'root', text: '.text\nnop\n' }], includes: [] },
+      target: { kind: 'userText' }, requirements: { profile: 'P6' }
+    }, { signal: controller.signal });
+    expect(result.ok).toBe(false);
+    expect(result.status.stopReason).toBe(cancelled ? 'cancelled' : 'engine-error');
+    expect(engineRunWasCancelled(result.status, controller.signal)).toBe(cancelled);
+  });
+
   it('rejects an unknown course profile at both provider and service boundaries', async () => {
     expect(() => parseAssemblerServiceRequest({
       profile: 'P8',

@@ -61,6 +61,7 @@ export interface GeneratorRunOptions {
   continuous?: {
     sessionId: string;
     iteration: number;
+    concurrency?: number;
   };
 }
 
@@ -138,6 +139,11 @@ export async function runGeneratorAndCollectAsms(
 ): Promise<GeneratedAsmBatch | undefined> {
   const generatedAt = new Date();
   const specs = builtinGenerationSpecs(setup);
+  // P3-P6 otherwise produce only one random point per round, leaving the other slots idle.
+  if (setup.profile !== 'P7') {
+    const count = options.continuous?.concurrency ?? 1;
+    for (let i = 1; i < count; i++) specs.push({ mode: undefined });
+  }
   // A deterministic register-file check runs once per continuous session, freeing every
   // randomized case's instruction budget for control flow, hazards and P7 exceptions.
   if (!options.continuous || options.continuous.iteration === 1) {

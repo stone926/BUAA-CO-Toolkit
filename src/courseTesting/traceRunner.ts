@@ -85,6 +85,8 @@ export interface CourseTraceRunOptions {
   source?: CourseTraceBatchSource;
   logisim?: P3LogisimTraceSetup;
   artifactOutputMode?: 'workspace' | 'case';
+  /** Fixed isolated simulator slot owned by the continuous scheduler. */
+  automaticRunSlot?: number;
   /** Snapshot override used by explicit developer lanes; normal runs read co.mips.engine once. */
   engineMode?: MipsEngineMode;
   /** Phase-4 executor shadow: run legacy + builtin and adjudicate the difference. */
@@ -231,6 +233,7 @@ export async function runCourseTraceCase(
       p7Probe: probe,
       simTime: courseTraceSimulationTime(p7ProbeExecutionInstructionBudget),
       nonInteractive: automatic,
+      automaticRunSlot: options.automaticRunSlot,
       signal: options.signal
     });
     if (!dut?.simResult?.ok || !dut.simOut) {
@@ -461,6 +464,7 @@ export async function runCourseTraceCase(
     interruptSchedule,
     simTime: courseTraceSimulationTime(maxSteps),
     nonInteractive: automatic,
+    automaticRunSlot: options.automaticRunSlot,
     signal: options.signal
   });
   if (!dut?.simResult?.ok || !dut.simOut) {

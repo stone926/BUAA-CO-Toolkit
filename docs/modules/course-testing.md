@@ -1,10 +1,10 @@
-# course-testing | src/courseTesting/ | 72 files + host adapters
+# course-testing | src/courseTesting/ | 74 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
 ## 核心设计决策
 
-**自动强度不可调。** `automaticTestPolicy.ts` 内部固定引擎、强度与外部工具预算；用户唯一的公开旋钮是 `co.test.instructions`（选择重点 payload 指令）。instruction_count 只统计 payload，生成器统一追加 `_co_test_end` 自分支 + nop。随机点 P3–P6 用满 4094 条 payload，P7 用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 路径因 Compact 内存排他 bug 单独采用 4095-word policy。
+**自动强度不可调。** `automaticTestPolicy.ts` 内部固定引擎、强度与外部工具预算；`co.test.instructions` 选择重点 payload 指令，`co.test.concurrency` 只控制并发资源上限（默认 4，1–8），不改变每点强度。instruction_count 只统计 payload，生成器统一追加 `_co_test_end` 自分支 + nop。随机点 P3–P6 用满 4094 条 payload，P7 用 1118 条且不覆盖 0x4180；工作区 legacy 回滚设置不能降低自动规模。教程硬件/builtin lane 使用完整 4096-word IM（0x3000..0x6fff）；手动 legacy v0.6.3 路径因 Compact 内存排他 bug 单独采用 4095-word policy。
 
 **独立 GPR 覆盖。** 每个持续测试会话先运行一个 127 条 payload 的独立测试点，为全部 31 个可写 GPR 写入互异非零值并经两个读端口传播存入 DM，最后发出完成标记；后续随机测试点不再重复 126 条 GPR 前导。该基础检查使用课程必需指令，不受 payload 重点指令设置影响。P4–P7 随机点固定覆盖 `ori/add/sub/lw → jr` × 间隔 0/1/2（错误旧目标写毒值，正确路径独立标记）；随机跳转将可观察毒指令计入最低预算，余量不足时改发其他指令。含 `ori` 且 payload ≥256 的程序在最后一槽发出 `_co_test_complete` 可见写，再接标准两条 halt 尾。
 
@@ -18,7 +18,9 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 **引擎边界。** 手动与 automatic case 均建立 builtin `CourseEnginePlan`，prepare 与 oracle 必须复用；旧 mars/verify-both 配置归 auto，不启动魔改 MARS 或其 capability probe。text/ktext `.word` RI、P7 异常/Timer/IRQ 与课程复位、停机语义由内置引擎提供。历史 legacy adapter 与证据只用于辨认原结果，不把官方 MARS 当作课程 oracle。
 
-**失败即停、有界留存。** 持续测试首个失败或错误立即停止，零延迟主动 yield 保持扩展宿主响应；取消不计测试 error。留存清理对同一 manifest 串行，捕获并复验目录/manifest identity 后原子移入受控 `.co/trash`，所有不确定状态 fail-closed 保留。
+**有界并发、失败即停。** 会话启动时快照并发量；P3–P6 每轮生成对应数量的独立随机点，P7 保留原有 14 点套件。GPR / 常规 / 特殊测试之间有完成屏障，同一 manifest 的 stdin 变体互斥，空闲槽立即接新点。首个失败或错误立即停止派发并 abort 同批任务，等待所有在途任务（含进程退出、manifest 写入）完成后才清理或释放会话；取消不计 error，已完成结果和失败证据保存。并发量 1 维持串行顺序，轮间零延迟主动 yield 保持扩展宿主响应。报告写入仍串行合并，caseIndex 保持原测试点编号，activeCases 展示多个活动点并兼容旧 activeCase。
+
+**有界留存。** 留存清理对同一 manifest 串行，捕获并复验目录/manifest identity 后原子移入受控 `.co/trash`，所有不确定状态 fail-closed 保留；清理始终等待整批任务结束。
 
 **中文诊断。** P7 定向检查、普通写回差异、DM 写事务与 Logisim 检查在诊断来源生成中文消息；持续测试报告使用中文类别、参考/待测标签和复现编号。旧报告中已知的 CP0 复位及写回差异英文消息在展示时兼容转换，原始记录不改写。机器状态码、协议标记、寄存器/信号名和外部工具原始诊断保持原样。
 
@@ -32,6 +34,8 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 - `automaticTestPolicy.ts` — 自动测试引擎/强度/预算唯一入口
 - `generatorWorkflow.ts` — 自动入口始终用内置 generator 与 internal policy；provenance/指令数/session 所有权随 case 首次 manifest 原子写入；部分生成失败时回收本 session 未执行的 case
 - `courseTestSession.ts` — 持续测试的原子会话租约（异步初始化前同步占位）
+- `concurrentCases.ts` — 固定槽的有界异步调度、阶段屏障、产物互斥、即时失败取消与全量 drain；不依赖 VS Code
+- `continuousTraceBatch.ts` — 单批课程测试的并发执行、活动点状态与串行结果保存
 - `executorShadowRunner.ts` — executor-only shadow，结果显式标为 `executor-only`，不计入 full-stack gate
 - `fullStackShadowRunner.ts` + `shadowBundleArtifacts.ts` — full-stack shadow：隔离物化 source closure，双端独立运行并逐字比较 image，matched/mismatch/inconclusive 都原子保存 bundle，未登记或不可比较结果阻断
 

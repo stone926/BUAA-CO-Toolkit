@@ -91,6 +91,9 @@ export interface BuiltinAssemblerWorkerRuntime {
   ): Promise<WorkerOutboundMessage>;
 }
 
+/** Preserve cancellation as a terminal outcome instead of flattening it into an engine error. */
+class AssemblyCancelledError extends Error {}
+
 function isAssemblyProfile(profile: string): profile is CourseProfile | 'P2' {
   return profile === 'P2' || isCourseProjectProfile(profile);
 }
@@ -311,7 +314,8 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       return this.failureResult(
         started,
         snapshot,
-        `builtin-ts-assembler.private-assembly-failed: ${error instanceof Error ? error.message : String(error)}`
+        `builtin-ts-assembler.private-assembly-failed: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof AssemblyCancelledError ? 'cancelled' : 'engine-error'
       );
     } finally {
       if (stageDir) {
@@ -325,6 +329,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
     units: readonly SourceUnit[],
     includes: readonly AssemblerServiceInclude[]
   ): Promise<AssemblerServiceResult> {
+    if (snapshot.signal?.aborted) throw new AssemblyCancelledError('cancelled');
     const payload = {
       profile: snapshot.profile === 'P2' ? 'P7' as const : snapshot.profile,
       sources: units as readonly AssemblerServiceSource[],
@@ -352,7 +357,8 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
       throw new Error('builtin assembler worker returned progress as its terminal message');
     }
     if (!message.ok) {
-      throw new Error(message.cancelled ? 'cancelled' : (message.error ?? 'worker assembly failed'));
+      if (message.cancelled) throw new AssemblyCancelledError('cancelled');
+      throw new Error(message.error ?? 'worker assembly failed');
     }
     return message.payload as AssemblerServiceResult;
   }
@@ -372,7 +378,10 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
     };
   }
 
-  private failureResult(started: number, snapshot: BuiltinAssembleSnapshot, stderr: string): AssembleResult {
+  private failureResult(
+    started: number, snapshot: BuiltinAssembleSnapshot, stderr: string,
+    stopReason: 'cancelled' | 'engine-error' = 'engine-error'
+  ): AssembleResult {
     return {
       ok: false,
       status: {
@@ -381,7 +390,7 @@ export class BuiltinTsAssemblerProvider implements MipsAssemblerProvider {
         stdout: '',
         stderr,
         timedOut: false,
-        stopReason: 'engine-error'
+        stopReason
       },
       descriptor: this.descriptor,
       resolvedRun: {

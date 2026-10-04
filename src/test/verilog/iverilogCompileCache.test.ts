@@ -57,6 +57,35 @@ describe('Icarus session compile cache', () => {
     expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeDefined();
   });
 
+  it('keeps independent automatic slot caches and invalidates only the affected directory', async () => {
+    const fixture = await createFixture();
+    const slot = await createSlotFixture(fixture, 0);
+    await Promise.all([compileAndStore(fixture), compileAndStore(slot)]);
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeDefined();
+    expect((await lookupIverilogCompileCache(slot.input)).hit).toBeDefined();
+    await fs.promises.writeFile(slot.watchdog, 'module __changed_watchdog; endmodule\n');
+    expect((await lookupIverilogCompileCache(slot.input)).hit).toBeUndefined();
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeDefined();
+    await prepareIverilogCompileCacheMiss(slot.input);
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeDefined();
+    clearIverilogCompileCache(fixture.root);
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeUndefined();
+  });
+
+  it('bounds cached runtime directories within one workspace', async () => {
+    const fixture = await createFixture();
+    await compileAndStore(fixture);
+    const slots = [];
+    for (let index = 0; index < 9; index++) {
+      const slot = await createSlotFixture(fixture, index);
+      slots.push(slot);
+      await compileAndStore(slot);
+    }
+    expect((await lookupIverilogCompileCache(fixture.input)).hit).toBeUndefined();
+    expect((await lookupIverilogCompileCache(slots[0].input)).hit).toBeDefined();
+    expect((await lookupIverilogCompileCache(slots[8].input)).hit).toBeDefined();
+  });
+
   it('misses when a direct source is rewritten with the same byte length', async () => {
     const fixture = await createFixture();
     await compileAndStore(fixture);
@@ -358,6 +387,28 @@ async function compileAndStore(fixture: CacheFixture): Promise<void> {
     lookup.snapshot!,
     successfulCompileResult()
   )).toBe(true);
+}
+
+async function createSlotFixture(base: CacheFixture, index: number): Promise<CacheFixture> {
+  const compileCwd = path.join(base.root, '.co', 'iverilog', 'automatic', `slot-${index}`);
+  await fs.promises.mkdir(compileCwd, { recursive: true });
+  const watchdog = path.join(compileCwd, 'co_iverilog_watchdog.v');
+  const compiled = path.join(compileCwd, 'simulation.vvp');
+  const dependencyFile = path.join(compileCwd, 'simulation.dependencies');
+  await fs.promises.copyFile(base.watchdog, watchdog);
+  return {
+    ...base, watchdog, compiled,
+    input: {
+      ...base.input, compileCwd, compiledFile: compiled, dependencyFile,
+      directSourceFiles: [base.source, watchdog],
+      compileArguments: base.input.compileArguments.map(argument => {
+        if (argument === base.compiled) return compiled;
+        if (argument === base.watchdog) return watchdog;
+        if (argument === `-Mall=${base.input.dependencyFile}`) return `-Mall=${dependencyFile}`;
+        return argument;
+      })
+    }
+  };
 }
 
 async function addConfigurationFile(fixture: CacheFixture): Promise<string> {

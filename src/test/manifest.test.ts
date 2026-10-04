@@ -48,7 +48,8 @@ const publicConfigurationGroups = [
     scope: 'resource',
     keys: [
       'co.project.profile',
-      'co.test.instructions'
+      'co.test.instructions',
+      'co.test.concurrency'
     ]
   },
   {
@@ -275,7 +276,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(15);
+    expect(expectedPublicKeys).toHaveLength(16);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);

@@ -14,6 +14,7 @@ import { automaticExternalToolTimeoutMs } from '../courseTesting/automaticTestPo
 import type { P7ProbeMetadata } from '../courseTesting/builtinAsmGenerator';
 import {
   ensureDirectory,
+  readTextFile,
   workspaceFolderFor,
   writeTextFile,
   writeTextFileIfChanged
@@ -26,6 +27,7 @@ import type { AsmCase } from '../asmCaseStore';
 import {
   asmCaseArtifactUri,
   copyAsmCaseArtifact,
+  updateAsmCaseArtifacts,
   writeAsmCaseArtifact
 } from '../asmCaseStore';
 import {
@@ -63,6 +65,7 @@ import {
   type TestbenchResolutionOptions
 } from './testbenchResolver';
 import { runSerializedWorkspaceOperation } from './workspaceOperationQueue';
+import { acquireAutomaticCompileDirectory } from './automaticCompilePool';
 import { prepareUserCpuProgram, prepareUserCpuProgramForTestbench, type UserCpuProgramSession } from './userCpuProgram';
 import {
   createVerilogSimulationFailure,
@@ -93,6 +96,8 @@ export interface IverilogRunOptions {
   nonInteractive?: boolean;
   machineCodeSource?: vscode.Uri;
   asmCase?: AsmCase;
+  /** Stable worker slot for generated cases; each slot owns its runtime files and compile cache. */
+  automaticRunSlot?: number;
   moduleRegistry?: MutableVerilogModuleProvider;
   simOutputFileName?: string;
   simOutputUri?: vscode.Uri;
@@ -298,12 +303,16 @@ export async function runIverilog(
     return undefined;
   }
 
-  return await runSerializedWorkspaceOperation(folder.uri.fsPath, options.signal, async () =>
+  const outDir = iverilogRunDirectory(folder.uri.fsPath, options);
+  return await runSerializedWorkspaceOperation(
+    options.automaticRunSlot === undefined ? folder.uri.fsPath : outDir.fsPath,
+    options.signal, async () =>
     await runIverilogInWorkspace(
       services,
       options,
       activeUri,
       folder,
+      outDir,
       options.asmCase,
       preflight,
       showMessages,
@@ -317,12 +326,12 @@ async function runIverilogInWorkspace(
   options: IverilogRunOptions,
   activeUri: vscode.Uri | undefined,
   folder: vscode.WorkspaceFolder,
+  outDir: vscode.Uri,
   asmCase: AsmCase | undefined,
   preflight: IverilogPreflightResult,
   showMessages: boolean,
   nonInteractive: boolean
 ): Promise<IverilogRunOutput | undefined> {
-  const outDir = vscode.Uri.file(path.join(folder.uri.fsPath, CO_IVERILOG_DIR));
   const programSession = options.userCpuProgramSession ?? {};
   const beforeCreateUserCpuTestbench: TestbenchResolutionOptions['beforeCreateUserCpuTestbench'] = async (uri, profile) => {
     if (asmCase || options.machineCodeSource) return true;
@@ -330,222 +339,257 @@ async function runIverilogInWorkspace(
     const program = await prepareUserCpuProgramForTestbench(services, uri, profile, outDir, options.signal, programSession);
     return program.kind === 'ready';
   };
-  const testbench = await resolveSimulationTestbench(services, activeUri, options, showMessages, beforeCreateUserCpuTestbench);
+  let testbench = await resolveSimulationTestbench(services, activeUri, options, showMessages, beforeCreateUserCpuTestbench, outDir);
   if (!testbench?.moduleName) {
     return undefined;
   }
 
-  const extraVerilogFiles = dedupeUris([
-    ...(options.extraVerilogFiles ?? []),
-    ...testbenchCompileSources(folder, testbench),
-    ...(!nonInteractive && testbench.sourceUri ? [testbench.sourceUri] : [])
-  ]).filter((uri) => !nonInteractive || (
-    !isCustomTestbenchPath(uri.fsPath)
-    && !isUserTestbenchPath(folder.uri.fsPath, uri.fsPath)
-  ));
-  const configuredTestbench = getTestbench(activeUri);
-  const excludedTestbenchSources = nonInteractive
-    ? await findUserTestbenchSourceUris(activeUri ?? folder.uri, configuredTestbench, options.moduleRegistry)
-    : [];
-  const sourceFiles = await resolveVerilogProjectFiles(folder, extraVerilogFiles, {
-    ...(nonInteractive ? {
-      excludedFiles: excludedTestbenchSources,
-      excludedBasenames: [`${configuredTestbench}.v`]
-    } : {}),
-    protectedFiles: [testbench.designSourceUri, testbench.sourceUri]
-      .filter((uri): uri is vscode.Uri => Boolean(uri)),
-    excludeCustomTestbenches: true
-  });
-  if (!sourceFiles.length) {
-    reportRunnerError(services, activeUri, showMessages, '工作区中未找到 Verilog 文件');
+  const sharedCompileLease = options.automaticRunSlot !== undefined && testbench.sha256 && !options.generatedTopModules
+    ? await acquireAutomaticCompileDirectory(folder.uri.fsPath, testbench.sha256, options.signal)
+    : undefined;
+  if (options.signal?.aborted) {
+    sharedCompileLease?.release();
     return undefined;
   }
+  try {
+    const compileDir = sharedCompileLease ? vscode.Uri.file(sharedCompileLease.directory) : outDir;
+    if (sharedCompileLease && testbench.generatedUri) {
+      const original = testbench.generatedUri;
+      const generatedUri = vscode.Uri.file(path.join(compileDir.fsPath, path.basename(original.fsPath)));
+      const generatedText = testbench.generatedText ?? await readTextFile(original);
+      await ensureDirectory(compileDir);
+      await runSerializedWorkspaceOperation(compileDir.fsPath, options.signal, async () =>
+        await writeTextFileIfChanged(generatedUri, generatedText));
+      testbench = { ...testbench, generatedUri };
+    }
+    const extraVerilogFiles = dedupeUris([
+      ...(options.extraVerilogFiles ?? []),
+      ...testbenchCompileSources(folder, testbench),
+      ...(!nonInteractive && testbench.sourceUri ? [testbench.sourceUri] : [])
+    ]).filter((uri) => !nonInteractive || (
+      !isCustomTestbenchPath(uri.fsPath)
+      && !isUserTestbenchPath(folder.uri.fsPath, uri.fsPath)
+    ));
+    const configuredTestbench = getTestbench(activeUri);
+    const excludedTestbenchSources = nonInteractive
+      ? await findUserTestbenchSourceUris(activeUri ?? folder.uri, configuredTestbench, options.moduleRegistry)
+      : [];
+    const sourceFiles = await resolveVerilogProjectFiles(folder, extraVerilogFiles, {
+      ...(nonInteractive ? {
+        excludedFiles: excludedTestbenchSources,
+        excludedBasenames: [`${configuredTestbench}.v`]
+      } : {}),
+      protectedFiles: [testbench.designSourceUri, testbench.sourceUri]
+        .filter((uri): uri is vscode.Uri => Boolean(uri)),
+      excludeCustomTestbenches: true
+    });
+    if (!sourceFiles.length) {
+      reportRunnerError(services, activeUri, showMessages, '工作区中未找到 Verilog 文件');
+      return undefined;
+    }
 
-  await ensureDirectory(outDir);
-  const userProgram = !nonInteractive && !asmCase && !options.machineCodeSource
-    ? await prepareUserCpuProgram(services, testbench.sourceUri, outDir, options.signal, programSession)
-    : { kind: 'unmanaged' as const };
-  if (userProgram.kind === 'stopped') return undefined;
-  const inputOptions = userProgram.kind === 'ready'
-    ? { ...options, machineCodeSource: userProgram.machineCodeSource }
-    : options;
-  // Workspace operations are serialized, so one deterministic watchdog is sufficient.
-  // The workspace digest keeps the name stable for caching while making collision with
-  // a user's fixed module name negligibly likely; the old random name leaked one file/case.
-  const watchdogModule = iverilogWatchdogModuleName(folder.uri.fsPath);
-  const watchdog = vscode.Uri.file(path.join(outDir.fsPath, iverilogWatchdogFileName));
-  const compiled = vscode.Uri.file(path.join(outDir.fsPath, 'simulation.vvp'));
-  const dependencies = vscode.Uri.file(path.join(outDir.fsPath, iverilogDependencyFileName));
-  const defaults = vscode.Uri.file(path.join(outDir.fsPath, iverilogDefaultsFileName));
-  const watchdogLimitPs = resolveWatchdogLimitPs(activeUri, options);
-  await writeTextFileIfChanged(defaults, iverilogSimulationDefaults);
-  await writeTextFileIfChanged(watchdog, buildIverilogWatchdog(watchdogModule));
-  const generated: IverilogGeneratedFiles = { outDir, compiled, watchdog };
-  const extraTopModules: { moduleName: string; file: string }[] = [];
-  for (const extra of await options.generatedTopModules?.({ folder, outDir, testbench, sourceFiles, moduleRegistry: options.moduleRegistry }) ?? []) {
-    const file = vscode.Uri.file(path.join(outDir.fsPath, path.basename(extra.fileName)));
-    await writeTextFileIfChanged(file, extra.text);
-    extraTopModules.push({ moduleName: extra.moduleName, file: file.fsPath });
-  }
+    await ensureDirectory(outDir);
+    const userProgram = !nonInteractive && !asmCase && !options.machineCodeSource
+      ? await prepareUserCpuProgram(services, testbench.sourceUri, outDir, options.signal, programSession)
+      : { kind: 'unmanaged' as const };
+    if (userProgram.kind === 'stopped') return undefined;
+    const inputOptions = userProgram.kind === 'ready'
+      ? { ...options, machineCodeSource: userProgram.machineCodeSource }
+      : options;
+    // Operations sharing a runtime directory are serialized, so one deterministic watchdog is sufficient.
+    // The workspace digest keeps the name stable for caching while making collision with
+    // a user's fixed module name negligibly likely; the old random name leaked one file/case.
+    const watchdogModule = iverilogWatchdogModuleName(folder.uri.fsPath);
+    const watchdog = vscode.Uri.file(path.join(compileDir.fsPath, iverilogWatchdogFileName));
+    const compiled = vscode.Uri.file(path.join(compileDir.fsPath, 'simulation.vvp'));
+    const dependencies = vscode.Uri.file(path.join(compileDir.fsPath, iverilogDependencyFileName));
+    const defaults = vscode.Uri.file(path.join(compileDir.fsPath, iverilogDefaultsFileName));
+    const watchdogLimitPs = resolveWatchdogLimitPs(activeUri, options);
+    const generated: IverilogGeneratedFiles = { outDir, compiled, watchdog };
+    const extraTopModules: { moduleName: string; file: string }[] = [];
+    for (const extra of await options.generatedTopModules?.({ folder, outDir, testbench, sourceFiles, moduleRegistry: options.moduleRegistry }) ?? []) {
+      const file = vscode.Uri.file(path.join(outDir.fsPath, path.basename(extra.fileName)));
+      await writeTextFileIfChanged(file, extra.text);
+      extraTopModules.push({ moduleName: extra.moduleName, file: file.fsPath });
+    }
 
-  await prepareIverilogRunInputs(services, activeUri, outDir, inputOptions, asmCase, testbench, showMessages);
-  if (!nonInteractive && options.revealOutput !== false) {
-    revealOutputChannel(services.output, activeUri);
-  }
-  services.output.appendLine(`Verilog backend: ${preflight.version} (bundled)`);
+    await prepareIverilogRunInputs(services, activeUri, outDir, inputOptions, asmCase, testbench, showMessages);
+    if (!nonInteractive && options.revealOutput !== false) {
+      revealOutputChannel(services.output, activeUri);
+    }
+    services.output.appendLine(`Verilog backend: ${preflight.version} (bundled)`);
 
-  const processOptions = {
-    cwd: outDir.fsPath,
-    output: services.output,
-    resource: activeUri,
-    env: buildIverilogEnvironment(preflight.runtime),
-    nonInteractive,
-    timeoutMs: nonInteractive ? automaticExternalToolTimeoutMs : undefined,
-    signal: options.signal
-  };
-  const sourceFilePaths = sourceFiles.map((uri) => uri.fsPath);
-  const directSourceFiles = [
-    ...sourceFilePaths,
-    watchdog.fsPath,
-    ...extraTopModules.map((extra) => extra.file)
-  ];
-  const compileArguments = buildIverilogCompileArgs({
-    runtime: preflight.runtime,
-    testbenchModule: testbench.moduleName,
-    watchdogModule,
-    outputFile: compiled.fsPath,
-    dependencyFile: dependencies.fsPath,
-    defaultsFile: defaults.fsPath,
-    workspaceRoot: folder.uri.fsPath,
-    sourceFiles: sourceFilePaths,
-    watchdogFile: watchdog.fsPath,
-    extraTopModules
-  });
-  const cacheInput: IverilogCompileCacheInput = {
-    workspaceRoot: folder.uri.fsPath,
-    compileCwd: outDir.fsPath,
-    runtime: { ...preflight.runtime, version: preflight.version },
-    compileArguments,
-    directSourceFiles,
-    configurationFiles: [defaults.fsPath],
-    compiledFile: compiled.fsPath,
-    dependencyFile: dependencies.fsPath
-  };
-  const cacheLookup = await lookupIverilogCompileCache(cacheInput, options.signal);
-  const compileCacheHit = cacheLookup.hit !== undefined;
-  const compile = async (): Promise<RunResult> => await runTool(
-    preflight.runtime.iverilogPath,
-    compileArguments,
-    {
+    const processOptions = {
+      cwd: outDir.fsPath,
+      output: services.output,
+      resource: activeUri,
+      env: buildIverilogEnvironment(preflight.runtime),
+      nonInteractive,
+      timeoutMs: nonInteractive ? automaticExternalToolTimeoutMs : undefined,
+      signal: options.signal
+    };
+    const sourceFilePaths = sourceFiles.map((uri) => uri.fsPath);
+    const directSourceFiles = [
+      ...sourceFilePaths,
+      watchdog.fsPath,
+      ...extraTopModules.map((extra) => extra.file)
+    ];
+    const compileArguments = buildIverilogCompileArgs({
+      runtime: preflight.runtime,
+      testbenchModule: testbench.moduleName,
+      watchdogModule,
+      outputFile: compiled.fsPath,
+      dependencyFile: dependencies.fsPath,
+      defaultsFile: defaults.fsPath,
+      workspaceRoot: folder.uri.fsPath,
+      sourceFiles: sourceFilePaths,
+      watchdogFile: watchdog.fsPath,
+      extraTopModules
+    });
+    const cacheInput: IverilogCompileCacheInput = {
+      workspaceRoot: folder.uri.fsPath,
+      compileCwd: compileDir.fsPath,
+      runtime: { ...preflight.runtime, version: preflight.version },
+      compileArguments,
+      directSourceFiles,
+      configurationFiles: [defaults.fsPath],
+      compiledFile: compiled.fsPath,
+      dependencyFile: dependencies.fsPath
+    };
+    const compile = async (): Promise<RunResult> => await runTool(
+      preflight.runtime.iverilogPath,
+      compileArguments,
+      {
+        ...processOptions,
+        cwd: compileDir.fsPath,
+        maxStdoutBytes: maximumIverilogCompileOutputBytes,
+        maxStderrBytes: maximumIverilogCompileOutputBytes
+      }
+    );
+    // The caller's verdict is taken once per compile. A rejected compile is never
+    // published: the cache keeps no compiler warnings, so a later hit could not be
+    // rejected again.
+    let compileAccepted: boolean | undefined;
+    const acceptCompile = (result: RunResult): boolean =>
+      compileAccepted ??= options.acceptCompileResult?.(result) !== false;
+    const compileStage = async (): Promise<{ compileResult: RunResult; compileCacheHit: boolean }> => {
+      await writeTextFileIfChanged(defaults, iverilogSimulationDefaults);
+      await writeTextFileIfChanged(watchdog, buildIverilogWatchdog(watchdogModule));
+      const cacheLookup = await lookupIverilogCompileCache(cacheInput, options.signal);
+      const compileCacheHit = cacheLookup.hit !== undefined;
+      let compileResult: RunResult;
+      if (cacheLookup.hit) {
+        compileResult = cacheLookup.hit.compileResult;
+      } else if (options.signal?.aborted) {
+        // Let the process supervisor produce the canonical stopped result without
+        // deleting a still-valid cache artifact after cancellation won the lookup.
+        compileResult = await compile();
+      } else {
+        await sharedCompileLease?.waitForReaders(options.signal);
+        if (options.signal?.aborted) return { compileResult: await compile(), compileCacheHit: false };
+        const cacheCanBeStored = await prepareIverilogCompileCacheMiss(cacheInput);
+        compileResult = await compile();
+        if (cacheCanBeStored && cacheLookup.snapshot && compileResult.ok && acceptCompile(compileResult)) {
+          await storeIverilogCompileCache(cacheLookup.snapshot, compileResult, options.signal);
+        }
+      }
+      if (compileResult.ok && acceptCompile(compileResult)) sharedCompileLease?.startReading();
+      return { compileResult, compileCacheHit };
+    };
+    // Equal testbenches join the short compiler lock. VVP runs outside it, and
+    // the pool read lease prevents another testbench from replacing its artifact.
+    const compilation = sharedCompileLease
+      ? await runSerializedWorkspaceOperation(compileDir.fsPath, options.signal, compileStage)
+      : await compileStage();
+    if (!compilation) return undefined;
+    const { compileResult, compileCacheHit } = compilation;
+    const baseOutput: Omit<IverilogRunOutput, 'compileResult'> = {
+      backend: 'iverilog',
+      runtimeVersion: preflight.version,
+      runtime: preflight.runtime,
+      generated,
+      testbench,
+      compileCacheHit
+    };
+    if (!compileResult.ok) {
+      await persistIverilogFailureLog(services, asmCase, 'compile', compileResult);
+      if (showMessages && options.shouldReportCompileFailure?.(compileResult) !== false) {
+        vscode.window.showErrorMessage(verilogSimulationFailureMessage(
+          createVerilogSimulationFailure('iverilog', 'compile', compileResult, folder.uri.fsPath),
+          'iverilog'
+        ));
+      }
+      return { ...baseOutput, compileResult };
+    }
+    if (!acceptCompile(compileResult)) {
+      return { ...baseOutput, compileResult };
+    }
+
+    const simResult = await runTool(preflight.runtime.vvpPath, [
+      '-N',
+      compiled.fsPath,
+      `+co_watchdog_limit_ps=${watchdogLimitPs}`
+    ], {
       ...processOptions,
-      maxStdoutBytes: maximumIverilogCompileOutputBytes,
-      maxStderrBytes: maximumIverilogCompileOutputBytes
-    }
-  );
-  // The caller's verdict is taken once per compile. A rejected compile is never
-  // published: the cache keeps no compiler warnings, so a later hit could not be
-  // rejected again.
-  let compileAccepted: boolean | undefined;
-  const acceptCompile = (result: RunResult): boolean =>
-    compileAccepted ??= options.acceptCompileResult?.(result) !== false;
-  let compileResult: RunResult;
-  if (cacheLookup.hit) {
-    compileResult = cacheLookup.hit.compileResult;
-  } else if (options.signal?.aborted) {
-    // Let the process supervisor produce the canonical stopped result without
-    // deleting a still-valid cache artifact after cancellation won the lookup.
-    compileResult = await compile();
-  } else {
-    const cacheCanBeStored = await prepareIverilogCompileCacheMiss(cacheInput);
-    compileResult = await compile();
-    if (cacheCanBeStored && cacheLookup.snapshot && compileResult.ok && acceptCompile(compileResult)) {
-      await storeIverilogCompileCache(cacheLookup.snapshot, compileResult, options.signal);
-    }
-  }
-  const baseOutput: Omit<IverilogRunOutput, 'compileResult'> = {
-    backend: 'iverilog',
-    runtimeVersion: preflight.version,
-    runtime: preflight.runtime,
-    generated,
-    testbench,
-    compileCacheHit
-  };
-  if (!compileResult.ok) {
-    await persistIverilogFailureLog(services, asmCase, 'compile', compileResult);
-    if (showMessages && options.shouldReportCompileFailure?.(compileResult) !== false) {
-      vscode.window.showErrorMessage(verilogSimulationFailureMessage(
-        createVerilogSimulationFailure('iverilog', 'compile', compileResult, folder.uri.fsPath),
-        'iverilog'
-      ));
-    }
-    return { ...baseOutput, compileResult };
-  }
-  if (!acceptCompile(compileResult)) {
-    return { ...baseOutput, compileResult };
-  }
-
-  const simResult = await runTool(preflight.runtime.vvpPath, [
-    '-N',
-    compiled.fsPath,
-    `+co_watchdog_limit_ps=${watchdogLimitPs}`
-  ], {
-    ...processOptions,
-    maxStdoutBytes: maximumIverilogSimulationOutputBytes,
-    maxStderrBytes: maximumIverilogSimulationOutputBytes
-  });
-  let simOut: vscode.Uri | undefined;
-  if (simResult.ok) {
-    const simFileName = options.simOutputUri
-      ? path.basename(options.simOutputUri.fsPath)
-      : simulationOutputFileName(testbench.moduleName, options.simOutputFileName);
-    if (options.simOutputUri) {
-      simOut = options.simOutputUri;
-    } else if (options.simOutputDirectory) {
-      await ensureDirectory(options.simOutputDirectory);
-      simOut = vscode.Uri.joinPath(options.simOutputDirectory, simFileName);
-    } else {
-      const outputDir = await simulationOutputDirectory(activeUri, outDir);
-      simOut = vscode.Uri.file(path.join(outputDir.fsPath, simFileName));
-    }
-    const expectedCaseOutput = asmCase
-      ? asmCaseArtifactUri(asmCase, 'verilog', simFileName)
-      : undefined;
-    if (asmCase
-      && options.simOutputUri
-      && options.simOutputUri.scheme === 'file'
-      && expectedCaseOutput
-      && normalizePathKey(simOut.fsPath) === normalizePathKey(expectedCaseOutput.fsPath)) {
-      // Automatic tests already target the case artifact path. Persist and bind
-      // the retained stdout in one write without reopening a trace of up to 16 MiB.
-      await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
-    } else {
+      maxStdoutBytes: maximumIverilogSimulationOutputBytes,
+      maxStderrBytes: maximumIverilogSimulationOutputBytes
+    });
+    let simOut: vscode.Uri | undefined;
+    if (simResult.ok) {
+      const simFileName = options.simOutputUri
+        ? path.basename(options.simOutputUri.fsPath)
+        : simulationOutputFileName(testbench.moduleName, options.simOutputFileName);
       if (options.simOutputUri) {
-        const outputParent = options.simOutputUri.scheme === 'file'
-          ? vscode.Uri.file(path.dirname(simOut.fsPath))
-          : simOut.with({ path: path.posix.dirname(simOut.path), query: '', fragment: '' });
-        await ensureDirectory(outputParent);
+        simOut = options.simOutputUri;
+      } else if (options.simOutputDirectory) {
+        await ensureDirectory(options.simOutputDirectory);
+        simOut = vscode.Uri.joinPath(options.simOutputDirectory, simFileName);
+      } else {
+        const outputDir = await simulationOutputDirectory(activeUri, outDir);
+        simOut = vscode.Uri.file(path.join(outputDir.fsPath, simFileName));
       }
-      await writeTextFile(simOut, simResult.stdout);
-      if (asmCase) {
-        // The process result is the authoritative bounded byte source. Reusing
-        // it avoids reopening a requested output (including virtual-file URIs).
+      const expectedCaseOutput = asmCase
+        ? asmCaseArtifactUri(asmCase, 'verilog', simFileName)
+        : undefined;
+      if (asmCase
+        && options.simOutputUri
+        && options.simOutputUri.scheme === 'file'
+        && expectedCaseOutput
+        && normalizePathKey(simOut.fsPath) === normalizePathKey(expectedCaseOutput.fsPath)) {
+        // Automatic tests already target the case artifact path. Persist and bind
+        // the retained stdout in one write without reopening a trace of up to 16 MiB.
         await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
+      } else {
+        if (options.simOutputUri) {
+          const outputParent = options.simOutputUri.scheme === 'file'
+            ? vscode.Uri.file(path.dirname(simOut.fsPath))
+            : simOut.with({ path: path.posix.dirname(simOut.path), query: '', fragment: '' });
+          await ensureDirectory(outputParent);
+        }
+        await writeTextFile(simOut, simResult.stdout);
+        if (asmCase) {
+          // The process result is the authoritative bounded byte source. Reusing
+          // it avoids reopening a requested output (including virtual-file URIs).
+          await writeAsmCaseArtifact(asmCase, 'verilog', simFileName, simResult.stdout, 'simOut');
+        }
+      }
+      if (showMessages && options.announceSuccess !== false) {
+        vscode.window.showInformationMessage('Icarus Verilog 仿真完成，输出见 .co/out');
+      }
+    } else {
+      await persistIverilogFailureLog(services, asmCase, 'simulation', simResult);
+      if (showMessages) {
+        vscode.window.showErrorMessage(verilogSimulationFailureMessage(
+          createVerilogSimulationFailure('iverilog', 'simulate', simResult, folder.uri.fsPath),
+          'iverilog'
+        ));
       }
     }
-    if (showMessages && options.announceSuccess !== false) {
-      vscode.window.showInformationMessage('Icarus Verilog 仿真完成，输出见 .co/out');
-    }
-  } else {
-    await persistIverilogFailureLog(services, asmCase, 'simulation', simResult);
-    if (showMessages) {
-      vscode.window.showErrorMessage(verilogSimulationFailureMessage(
-        createVerilogSimulationFailure('iverilog', 'simulate', simResult, folder.uri.fsPath),
-        'iverilog'
-      ));
-    }
-  }
 
-  return { ...baseOutput, compileResult, simResult, simOut };
+    return { ...baseOutput, compileResult, simResult, simOut };
+  } finally {
+    sharedCompileLease?.release();
+  }
 }
 
 function iverilogWatchdogModuleName(workspaceRoot: string): string {
@@ -556,15 +600,29 @@ function iverilogWatchdogModuleName(workspaceRoot: string): string {
   return `__co_iverilog_watchdog_${digest}`;
 }
 
+function iverilogRunDirectory(workspaceRoot: string, options: IverilogRunOptions): vscode.Uri {
+  const root = path.join(workspaceRoot, CO_IVERILOG_DIR);
+  if (options.automaticRunSlot === undefined) return vscode.Uri.file(root);
+  if (!options.nonInteractive || !options.asmCase
+    || !Number.isSafeInteger(options.automaticRunSlot)
+    || options.automaticRunSlot < 0 || options.automaticRunSlot >= 8) {
+    throw new RangeError('automaticRunSlot requires an automatic case and an integer slot from 0 to 7');
+  }
+  const directory = path.join(root, 'automatic', `slot-${options.automaticRunSlot}`);
+  return vscode.Uri.file(directory);
+}
+
 async function resolveSimulationTestbench(
   services: AppServices,
   activeUri: vscode.Uri | undefined,
   options: IverilogRunOptions,
   showMessages: boolean,
-  beforeCreateUserCpuTestbench: TestbenchResolutionOptions['beforeCreateUserCpuTestbench']
+  beforeCreateUserCpuTestbench: TestbenchResolutionOptions['beforeCreateUserCpuTestbench'],
+  runtimeDirectory: vscode.Uri
 ): Promise<TestbenchResolution | undefined> {
   const resolutionOptions: TestbenchResolutionOptions = {
     nonInteractive: options.nonInteractive,
+    ...(options.nonInteractive ? { runtimeDirectory } : {}),
     ...(!options.nonInteractive ? { beforeCreateUserCpuTestbench } : {})
   };
   if (options.nonInteractive) {
@@ -615,18 +673,29 @@ async function prepareIverilogRunInputs(
     ? asmCase?.machineCode ?? options.machineCodeSource ?? await resolveMachineCodeSource(activeUri, outDir)
     : undefined;
   if (machineCodeSource) {
-    await copyMachineCodeToSimDirectory(machineCodeSource, outDir, activeUri);
+    const automaticMachineCode = options.automaticRunSlot !== undefined;
+    if (automaticMachineCode) {
+      await copyMachineCodeToSimDirectory(machineCodeSource, outDir, activeUri, 'code.txt');
+    } else {
+      await copyMachineCodeToSimDirectory(machineCodeSource, outDir, activeUri);
+    }
     if (!options.nonInteractive) {
       services.output.appendLine(`已从 ${machineCodeSource.fsPath} 准备 ${getMachineCode(activeUri)}`);
     }
     if (asmCase) {
-      await copyAsmCaseArtifact(
-        asmCase,
-        'verilog',
-        vscode.Uri.file(path.join(outDir.fsPath, getMachineCode(activeUri))),
-        'machine-code-in-sim.txt',
-        'machineCodeInSim'
-      );
+      if (automaticMachineCode) {
+        // The slot received these exact immutable bytes, including P7 kernel
+        // layout. Bind the existing blob rather than copying it back into the case.
+        await updateAsmCaseArtifacts(asmCase, 'verilog', { machineCodeInSim: asmCase.machineCode.fsPath });
+      } else {
+        await copyAsmCaseArtifact(
+          asmCase,
+          'verilog',
+          vscode.Uri.file(path.join(outDir.fsPath, getMachineCode(activeUri))),
+          'machine-code-in-sim.txt',
+          'machineCodeInSim'
+        );
+      }
     }
   } else if (machineCodeExpected) {
     services.output.appendLine(options.nonInteractive

@@ -281,6 +281,14 @@ export function getMipsExtraArgs(resource?: vscode.Uri): string[] {
 }
 
 /** The sole public automatic-test customization. The old key is migration-only. */
+/** Snapshot once at session start; malformed settings never create an unbounded pool. */
+export function getAutomaticTestConcurrency(resource?: vscode.Uri): number {
+  const fallback = configDefault<number>('test.concurrency');
+  const value = config<unknown>('test.concurrency', fallback, resource);
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(1, Math.min(8, Math.floor(value))) : fallback;
+}
+
 export function getAutomaticTestInstructions(resource?: vscode.Uri): string {
   const current = inspectedValue<string>('test.instructions', resource);
   if (typeof current === 'string') {

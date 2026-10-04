@@ -52,6 +52,8 @@ export type CourseTraceStage = NeutralCourseTraceStage | LegacyCourseTraceStage;
 
 export interface CourseTraceCaseResult {
   asm: string;
+  /** Original zero-based ordinal, independent of concurrent completion order. */
+  caseIndex?: number;
   stdin?: string;
   caseId?: string;
   caseManifest?: string;
@@ -122,6 +124,7 @@ export interface ContinuousTraceIteration {
   summary: ContinuousCounts;
   results: CourseTraceCaseResult[];
   activeCase?: { index: number; caseId?: string; probeScope?: P7ProbeScope };
+  activeCases?: Array<{ index: number; caseId?: string; probeScope?: P7ProbeScope }>;
   message?: string;
 }
 
@@ -132,6 +135,7 @@ export interface ContinuousTraceReport {
   running: boolean;
   stopRequested: boolean;
   totalIterations?: number;
+  concurrency?: number;
   /** @deprecated legacy report provenance; new automatic reports keep it in each case manifest. */
   generator?: string;
   /** @deprecated legacy report provenance; new automatic reports keep it in each case manifest. */
@@ -225,7 +229,8 @@ export function publicAutomaticCourseTraceCaseResult(
 ): NeutralCourseTraceCaseResult {
   const neutral = neutralCourseTraceCaseResult(item);
   return {
-    asm: `测试点 ${index + 1}`,
+    asm: `测试点 ${(neutral.caseIndex ?? index) + 1}`,
+    ...(neutral.caseIndex === undefined ? {} : { caseIndex: neutral.caseIndex }),
     ...(neutral.caseId ? { caseId: neutral.caseId } : {}),
     ...(neutral.artifactsPruned ? { artifactsPruned: true } : {}),
     status: neutral.status,
@@ -259,6 +264,7 @@ export function publicContinuousTraceReport(report: ContinuousTraceReport): Cont
     running: report.running,
     stopRequested: report.stopRequested,
     ...(report.totalIterations === undefined ? {} : { totalIterations: report.totalIterations }),
+    ...(report.concurrency === undefined ? {} : { concurrency: report.concurrency }),
     iterations: report.iterations.map((iteration) => ({
       index: iteration.index,
       status: iteration.status,
@@ -272,6 +278,11 @@ export function publicContinuousTraceReport(report: ContinuousTraceReport): Cont
         ...(iteration.activeCase.caseId ? { caseId: iteration.activeCase.caseId } : {}),
         ...(iteration.activeCase.probeScope ? { probeScope: iteration.activeCase.probeScope } : {})
       } } : {}),
+      ...(iteration.activeCases ? { activeCases: iteration.activeCases.map(active => ({
+        index: active.index,
+        ...(active.caseId ? { caseId: active.caseId } : {}),
+        ...(active.probeScope ? { probeScope: active.probeScope } : {})
+      })) } : {}),
       ...(iteration.message ? {
         message: '[AUTO-ITERATION] 本轮未完成；请使用失败用例的复现编号定位'
       } : {})
@@ -331,7 +342,7 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
 
   return renderReportPage({
     title: '持续测试',
-    subtitle: '持续生成测试点并与参考结果比较；发现首个失败或错误时自动停止。',
+    subtitle: '持续生成测试点并与参考结果比较；发现首个失败或错误时停止派发并取消其他运行中的测试点。',
     extraCss: 'table { min-width: 960px; } td:nth-child(7) { min-width: 160px; } td:last-child { min-width: 280px; }',
     script: 'continuous',
     actions: html.raw(`<button type="button" class="secondary" data-report-action="openHistory">查看测试历史</button>${report.running && !report.stopRequested
@@ -340,6 +351,8 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
   ${renderMetricGrid([
     { label: '状态', value: state },
     { label: '轮数', value: totalIterations },
+    { label: '并发上限', value: report.concurrency ?? 1 },
+    { label: '运行中测试点', value: report.running ? (latest?.activeCases?.length ?? (latest?.activeCase ? 1 : 0)) : 0 },
     { label: '最近一轮通过', value: latestSummary.passed, tone: latestSummary.passed ? 'ok' : 'neutral' },
     { label: '最近一轮失败', value: latestSummary.failed, tone: latestSummary.failed ? 'bad' : 'neutral' },
     { label: '最近一轮错误', value: latestSummary.errors, tone: latestSummary.errors ? 'warn' : 'neutral' }
@@ -362,19 +375,19 @@ export function renderContinuousTraceMonitor(report: ContinuousTraceReport, _rep
 
 function renderSpecialProbeResults(iterations: readonly ContinuousTraceIteration[], running: boolean): SafeHtml {
   const recent = iterations.find(iteration => iteration.results.some(item => item.probeScope === 'special-timer-exl')
-    || running && iteration.status === 'running' && iteration.activeCase?.probeScope === 'special-timer-exl');
+    || running && iteration.status === 'running' && activeIterationCases(iteration).some(active => active.probeScope === 'special-timer-exl'));
   const rows = (recent ? [recent] : []).flatMap((iteration) => {
     const completed: ReportTableRow[] = iteration.results.flatMap((item, index) => item.probeScope !== 'special-timer-exl' ? [] : [{
       className: item.status,
       cells: [
-        String(iteration.index), `测试点 ${index + 1}`,
+        String(iteration.index), `测试点 ${(item.caseIndex ?? index) + 1}`,
         item.caseId ? html.code(item.caseId) : '—',
         renderBadge(continuousStatusLabel(item.status), statusTone(item.status)),
         html.text(baseAutomaticDiagnosticMessage(item))
       ]
     }]);
-    const active = iteration.activeCase;
-    if (running && iteration.status === 'running' && active?.probeScope === 'special-timer-exl') {
+    for (const active of activeIterationCases(iteration)) {
+      if (!running || iteration.status !== 'running' || active.probeScope !== 'special-timer-exl') continue;
       completed.push({
         className: 'running',
         cells: [String(iteration.index), `测试点 ${active.index + 1}`,
@@ -390,6 +403,10 @@ function renderSpecialProbeResults(iterations: readonly ContinuousTraceIteration
     <div class="notice">${html.text(specialTimerExlNotice)}</div>
     ${renderTable(['轮次', '测试点', '复现编号', '结果', '诊断'], rows, { label: '特殊压力测试结果' })}
   `);
+}
+
+function activeIterationCases(iteration: ContinuousTraceIteration): NonNullable<ContinuousTraceIteration['activeCases']> {
+  return iteration.activeCases ?? (iteration.activeCase ? [iteration.activeCase] : []);
 }
 
 function statusTone(status: string | undefined): 'ok' | 'bad' | 'warn' | 'neutral' {
@@ -469,7 +486,7 @@ function traceEventSummary(event: TraceEventSnapshot | undefined): string {
 }
 
 function renderAutomaticCaseLabel(index: number, item: CourseTraceCaseResult): SafeHtml {
-  const label = `测试点 ${index + 1}`;
+  const label = `测试点 ${(item.caseIndex ?? index) + 1}`;
   if (item.status === 'passed' || !item.caseId) {
     return html.text(label);
   }

@@ -124,6 +124,10 @@ ASM/MARS 功能统一使用插件内置 TypeScript 引擎，无需任何外部 M
 
 “启动持续测试”固定采用当前 Profile 的强测试策略，而不是让用户选择生成器、批量大小或对拍后端。`co.test.instructions` 是唯一的测试侧重点设置：留空会覆盖该阶段完整课程指令集，填写真实指令可让生成器优先覆盖它们。P7 还会覆盖 CP0、异常、外部中断和 Timer；对拍关注课程定义的可观察行为，不把某一种流水线周期数当作正确性的唯一标准。
 
+`co.test.concurrency` 控制同时执行的测试点上限，默认 **4**，可设 **1–8**；设为 **1** 即串行模式，修改后下次启动测试生效。并发可让多个 CPU 仿真进程重叠执行，也会增加 CPU 和内存占用；资源紧张时调低。每点测试强度保持不变，基础 GPR 检查完成后才执行常规测试，P7 特殊压力点等待全部常规点通过后再开始。发现首个失败或错误立即停止派发并取消其余运行中的测试，待进程退出后清理未完成用例；已完成的结果仍保存。报告显示并发上限及当前运行点数，测试点编号不受完成顺序影响。
+
+串行/并发的资源复用策略、实测结果和复现命令见 [自动测试并发设计与实测](docs/automatic-test-concurrency.md)。
+
 ## 功能一览
 
 | 范围 | 提供的能力 |
@@ -178,6 +182,7 @@ assign y = sel ? a : b;
 |---|---|
 | `co.project.profile` | 当前课程阶段；默认 `auto` |
 | `co.test.instructions` | 自动测试要重点覆盖的真实指令；留空使用默认全集 |
+| `co.test.concurrency` | 自动测试并发上限，默认 4，范围 1–8；1 为串行 |
 | `co.verilog.syntax.external.mode` | 内置 Icarus 检查的触发时机；默认保存时检查 |
 | `co.project.topModule`、`co.project.testbench`、`co.project.machineCode`、`co.project.simTime` | 非标准工程或手动仿真的高级覆盖项；自动测试不读取这些手动参数 |
 

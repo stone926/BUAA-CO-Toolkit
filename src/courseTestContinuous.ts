@@ -5,10 +5,10 @@ import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import {
   ensureConcreteProfile,
-  getMemoryConfiguration
+  getMemoryConfiguration,
+  getAutomaticTestConcurrency
 } from './config';
 import {
-  addContinuousResult,
   continuousStatusFromCounts,
   createContinuousCounts,
   pruneContinuousIterations,
@@ -17,20 +17,16 @@ import {
 import { ensureDirectory, writeTextFile } from './fsUtil';
 import { checkToolchain } from './toolchain';
 import { AppServices } from './types';
-import { asmCaseIndexDirectory, recordAsmCaseTestOutcome } from './asmCaseStore';
+import { asmCaseIndexDirectory } from './asmCaseStore';
 import {
   discardContinuousGeneratedAsmCase,
-  discardContinuousPassingAsmCase,
-  markContinuousAsmCaseCancelled
+  discardContinuousPassingAsmCase
 } from './courseTesting/continuousCaseRetention';
 import {
   ContinuousTraceIteration,
   ContinuousTraceReport,
   CourseTraceBatchSource,
   CourseTraceCaseResult,
-  neutralCourseTraceCaseResult,
-  neutralCourseTraceStage,
-  publicAutomaticDiagnosticMessage,
   publicContinuousTraceReport,
   renderContinuousTraceMonitor
 } from './courseTestReport';
@@ -47,10 +43,7 @@ import {
   type ContinuousAutomaticTestPolicy
 } from './courseTesting/automaticTestPolicy';
 import { tryAcquireCourseTestSession } from './courseTesting/courseTestSession';
-import { manifestP7Of } from './courseTesting/manifestCodec';
-import type { AsmCaseManifestUnion } from './courseTesting/manifestCodec';
-import { probeScopeFromCase } from './courseTesting/p7ProbeScope';
-import { serializeFailureEvidence } from './courseTesting/failureEvidence';
+import { runContinuousTraceBatch, type ContinuousTraceCaseLike, type ContinuousOwnedCase } from './courseTesting/continuousTraceBatch';
 import { acceptsInspectionMessage } from './courseTesting/failureDiagnosis';
 
 interface ContinuousTraceSession {
@@ -62,19 +55,9 @@ interface ContinuousTraceSession {
   reportFile: vscode.Uri;
   panel: vscode.WebviewPanel;
   lastMonitorFlushMs: number;
+  monitorWrites: Promise<void>;
   retainedPassingArtifacts: ContinuousRetainedArtifacts[];
   retention: ContinuousTraceRetention;
-}
-
-interface ContinuousTraceCaseLike {
-  asm: vscode.Uri;
-  stdin?: vscode.Uri;
-  asmCase?: {
-    id: string;
-    manifestUri: vscode.Uri;
-    asm: vscode.Uri;
-    manifest?: AsmCaseManifestUnion;
-  };
 }
 
 interface ContinuousGeneratedBatch<TAsmCase> {
@@ -92,6 +75,7 @@ interface ContinuousIterationRunOptions {
   revealOutput?: boolean;
   source?: CourseTraceBatchSource;
   artifactOutputMode?: 'workspace' | 'case';
+  automaticRunSlot?: number;
   signal?: AbortSignal;
 }
 
@@ -101,6 +85,7 @@ interface ContinuousGeneratorRunOptions {
   continuous: {
     sessionId: string;
     iteration: number;
+    concurrency: number;
   };
 }
 
@@ -116,11 +101,6 @@ interface ContinuousRetainedArtifacts {
   caseDir?: string;
   files: string[];
   pruneFailures: number;
-}
-
-interface ContinuousOwnedCase {
-  manifestPath: string;
-  state: 'generated' | 'cancelled' | 'passed' | 'failed' | 'error';
 }
 
 export interface ContinuousGeneratedTraceDependencies<
@@ -202,6 +182,7 @@ export async function startContinuousGeneratedTraceTests<
       return;
     }
 
+    const concurrency = getAutomaticTestConcurrency(resource);
     const automaticPolicy = deps.automaticPolicy?.() ?? continuousAutomaticTestPolicy;
     const { intervalMs, maxIterations, stopOnFailure } = automaticPolicy;
     const retention: ContinuousTraceRetention = {
@@ -227,6 +208,7 @@ export async function startContinuousGeneratedTraceTests<
       reportFile,
       panel,
       lastMonitorFlushMs: 0,
+      monitorWrites: Promise.resolve(),
       retainedPassingArtifacts: [],
       retention,
       report: {
@@ -235,6 +217,7 @@ export async function startContinuousGeneratedTraceTests<
         running: true,
         stopRequested: false,
         totalIterations: 0,
+        concurrency,
         iterations: []
       }
     };
@@ -273,7 +256,7 @@ export async function startContinuousGeneratedTraceTests<
     });
 
     services.output.appendLine('');
-    services.output.appendLine('正在启动持续测试');
+    services.output.appendLine(`正在启动持续测试（并发量 ${concurrency}）`);
 
     await updateContinuousTraceMonitor(session, { force: true });
     let index = 0;
@@ -301,7 +284,8 @@ export async function startContinuousGeneratedTraceTests<
           signal: session.abortController.signal,
           continuous: {
             sessionId: session.id,
-            iteration: index
+            iteration: index,
+            concurrency
           }
         });
         if (!generated?.asms.length) {
@@ -322,105 +306,19 @@ export async function startContinuousGeneratedTraceTests<
             });
           }
           const cases = await deps.expandTraceCases(generated.asms, generated.asmCases);
-          for (let i = 0; i < cases.length; i++) {
-            if (session.stopRequested) {
-              break;
-            }
-            const item = cases[i];
-            const caseProbeScope = item.asmCase?.manifest
-              ? probeScopeFromCase(manifestP7Of(item.asmCase.manifest)?.probe,
-                'metadata' in item.asmCase.manifest ? item.asmCase.manifest.metadata : undefined)
-              : undefined;
-            iteration.activeCase = { index: i, caseId: item.asmCase?.id, probeScope: caseProbeScope };
-            if (caseProbeScope === 'special-timer-exl') {
-              await updateContinuousTraceMonitor(session, { force: true });
-            }
-            if (session.stopRequested) {
-              delete iteration.activeCase;
-              break;
-            }
-            services.output.appendLine(`[第 ${index} 轮，测试点 ${i + 1}/${cases.length}] 正在验证`);
-            let result: CourseTraceCaseResult;
-            try {
-              result = await deps.runCourseTraceCase(services, item, {
-                ...baseRunOptions,
-                revealOutput: false,
-                source: generated.source,
-                signal: session.abortController.signal
-              });
-            } catch (error) {
-              if (session.stopRequested) {
-                iteration.status = 'stopped';
-                break;
-              }
-              result = {
-                asm: item.asm.fsPath,
-                stdin: item.stdin?.fsPath,
-                ...(item.asmCase ? {
-                  caseId: item.asmCase.id,
-                  caseManifest: item.asmCase.manifestUri.fsPath,
-                  asmSnapshot: item.asmCase.asm.fsPath
-                } : {}),
-                status: 'error',
-                stage: 'internal',
-                message: error instanceof Error ? error.message : String(error)
-              };
-            } finally {
-              delete iteration.activeCase;
-            }
-            result = neutralCourseTraceCaseResult(result);
-            if (!result.caseId && item.asmCase?.id) {
-              result = { ...result, caseId: item.asmCase.id };
-            }
-            if (caseProbeScope) {
-              result = { ...result, probeScope: caseProbeScope };
-            }
-            const resolvedManifestPath = result.caseManifest ?? item.asmCase?.manifestUri.fsPath;
-            if (!result.caseManifest && resolvedManifestPath) {
-              result = { ...result, caseManifest: resolvedManifestPath };
-            }
-            const ownedCase = resolvedManifestPath
-              ? ownedCases.get(normalizePathKey(resolvedManifestPath))
-              : undefined;
-            if (session.stopRequested && result.cancelled) {
-              if (ownedCase) {
-                ownedCase.state = 'cancelled';
-                try {
-                  await markContinuousAsmCaseCancelled(ownedCase.manifestPath, session.id);
-                } catch {
-                  services.output.appendLine('取消测试点状态保存失败');
-                }
-              }
-              iteration.status = 'stopped';
-              break;
-            }
-            if (ownedCase) {
-              ownedCase.state = result.status;
-            }
-            try {
-              await recordAsmCaseTestOutcome(resolvedManifestPath, {
-                status: result.status,
-                stage: neutralCourseTraceStage(result.stage),
-                diagnostic: publicAutomaticDiagnosticMessage(result),
-                evidence: serializeFailureEvidence(result),
-                ...(ownedCase ? {
-                  continuous: {
-                    sessionId: session.id,
-                    state: result.status
-                  }
-                } : {})
-              });
-            } catch {
-              services.output.appendLine('测试历史结果保存失败');
-            }
-            iteration.results.push(result);
-            addContinuousResult(iteration.summary, result);
-            iteration.status = continuousStatusFromCounts(iteration.summary, true, session.stopRequested);
-            await updateContinuousTraceMonitor(session, { force: caseProbeScope === 'special-timer-exl' });
-            if (shouldStopAfterIterationCounts(iteration.summary, stopOnFailure)) {
-              break;
-            }
-          }
+          await runContinuousTraceBatch({
+            cases, services, iteration, ownedCases,
+            sessionId: session.id, concurrency, stopOnFailure,
+            signal: session.abortController.signal,
+            run: (item, slot, signal) => deps.runCourseTraceCase(services, item, {
+              ...baseRunOptions,
+              revealOutput: false,
+              source: generated.source,
+              signal,
+              automaticRunSlot: slot
+            }),
+            updateMonitor: force => updateContinuousTraceMonitor(monitorSession, { force })
+          });
           iteration.status = continuousStatusFromCounts(iteration.summary, false, session.stopRequested);
         }
       } catch (error) {
@@ -539,7 +437,13 @@ async function ensureContinuousTraceToolchainReady(services: AppServices, resour
   return false;
 }
 
-async function updateContinuousTraceMonitor(session: ContinuousTraceSession, options: { force?: boolean } = {}): Promise<void> {
+function updateContinuousTraceMonitor(session: ContinuousTraceSession, options: { force?: boolean } = {}): Promise<void> {
+  const write = session.monitorWrites.then(() => flushContinuousTraceMonitor(session, options));
+  session.monitorWrites = write.catch(() => undefined);
+  return write;
+}
+
+async function flushContinuousTraceMonitor(session: ContinuousTraceSession, options: { force?: boolean }): Promise<void> {
   session.report.stopRequested = session.stopRequested;
   session.report.generatedAt = new Date().toISOString();
   const now = Date.now();
@@ -555,7 +459,7 @@ async function updateContinuousTraceMonitor(session: ContinuousTraceSession, opt
     session.panel.webview.html = renderContinuousTraceMonitor(session.report, session.reportFile);
   } catch {
     // Webview 已关闭或不可更新时停止持续测试会话
-    session.stopRequested = true;
+    requestContinuousTraceStop(session);
   }
 }
 

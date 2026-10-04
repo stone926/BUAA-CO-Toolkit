@@ -193,6 +193,15 @@ describe('builtin generator workflow', () => {
     expect(vi.mocked(generateBuiltinAsmTestCase).mock.calls.every(([options]) => options.instructionCount === 20)).toBe(true);
   });
 
+  it.each(['P3', 'P5', 'P6'] as const)('prepares one full random case per slot for %s without repeating GPR coverage', async profile => {
+    const batch = await runGeneratorAndCollectAsms(services(), setup({ profile }), {
+      continuous: { sessionId: 'parallel', iteration: 2, concurrency: 4 }
+    });
+    expect(generateBuiltinAsmTestCase).toHaveBeenCalledTimes(4);
+    expect(generateRegisterCoverageAsmTestCase).not.toHaveBeenCalled();
+    expect(batch?.asms).toHaveLength(4);
+  });
+
   it('keeps automatic generation quiet when requested', async () => {
     const state = vscodeState.state!;
     const process = await import('../../process');

@@ -1,4 +1,4 @@
-// @index verilog-iverilog-compile-cache — content-verified, single-entry-per-workspace Icarus compile cache
+// @index verilog-iverilog-compile-cache — content-verified, bounded workspace/runtime-directory Icarus compile cache
 import * as fs from 'fs';
 import * as path from 'path';
 import { normalizePathKey } from '../pathUtils';
@@ -26,6 +26,8 @@ const cacheSchemaRevision = 3;
 const maximumDependencyFileBytes = 4 * 1024 * 1024;
 const maximumDependencyEntries = 20_000;
 export const maximumIverilogCompileCacheWorkspaces = 8;
+/** One manual directory and up to eight fixed automatic worker slots. */
+const maximumCompileCacheDirectoriesPerWorkspace = 9;
 
 export interface IverilogCompileRuntimeIdentity {
   rootDir: string;
@@ -79,12 +81,12 @@ interface IverilogCompileCacheEntry {
   compileResult: RunResult;
 }
 
-/** Exactly one entry per workspace; misses replace it instead of accumulating disk artifacts. */
-const entriesByWorkspace = new Map<string, IverilogCompileCacheEntry>();
+/** Each fixed runtime directory replaces its previous entry; workspace and slot counts stay bounded. */
+const entriesByWorkspace = new Map<string, Map<string, IverilogCompileCacheEntry>>();
 
 /**
- * Build and validate the current direct-input snapshot, then check the single
- * workspace entry. Any unreadable/missing/corrupt input is a cache miss rather
+ * Build and validate the current direct-input snapshot, then check the current
+ * runtime-directory entry. Any unreadable/missing/corrupt input is a cache miss rather
  * than a simulation failure.
  */
 export async function lookupIverilogCompileCache(
@@ -97,13 +99,13 @@ export async function lookupIverilogCompileCache(
     snapshot = await createCompileSnapshot(input, workspaceKey, signal);
   } catch {
     if (signal?.aborted) return {};
-    entriesByWorkspace.delete(workspaceKey);
+    deleteDirectoryEntry(workspaceKey, input.compileCwd);
     return {};
   }
 
-  const entry = entriesByWorkspace.get(workspaceKey);
+  const entry = entriesByWorkspace.get(workspaceKey)?.get(directoryCacheKey(input.compileCwd));
   if (!entry || entry.key !== snapshot.key || !entry.compileResult.ok) {
-    if (entry) entriesByWorkspace.delete(workspaceKey);
+    if (entry) deleteDirectoryEntry(workspaceKey, input.compileCwd);
     return { snapshot };
   }
 
@@ -116,25 +118,25 @@ export async function lookupIverilogCompileCache(
       signal
     );
     if (!sameFingerprints(dependencies, entry.dependencies)) {
-      entriesByWorkspace.delete(workspaceKey);
+      deleteDirectoryEntry(workspaceKey, input.compileCwd);
       return { snapshot };
     }
     if (!await validateIverilogIncludeResolutionGuards(entry.includeResolutionGuards, signal)) {
-      entriesByWorkspace.delete(workspaceKey);
+      deleteDirectoryEntry(workspaceKey, input.compileCwd);
       return { snapshot };
     }
     const compiled = await fingerprintFile(snapshot.input.compiledFile, signal);
     if (!sameFileObservation(compiled, entry.compiled)) {
-      entriesByWorkspace.delete(workspaceKey);
+      deleteDirectoryEntry(workspaceKey, input.compileCwd);
       return { snapshot };
     }
   } catch {
     if (signal?.aborted) return {};
-    entriesByWorkspace.delete(workspaceKey);
+    deleteDirectoryEntry(workspaceKey, input.compileCwd);
     return { snapshot };
   }
 
-  setWorkspaceEntry(workspaceKey, entry);
+  setWorkspaceEntry(workspaceKey, input.compileCwd, entry);
   return {
     snapshot,
     hit: { compileResult: { ...entry.compileResult } }
@@ -150,7 +152,7 @@ export async function prepareIverilogCompileCacheMiss(
   input: IverilogCompileCacheInput
 ): Promise<boolean> {
   const normalizedInput = cloneInput(input);
-  entriesByWorkspace.delete(workspaceCacheKey(normalizedInput.workspaceRoot));
+  deleteDirectoryEntry(workspaceCacheKey(normalizedInput.workspaceRoot), normalizedInput.compileCwd);
   // Wait for both removals even if one fails. Returning early from Promise.all
   // could let the surviving rm race the compiler and delete its new output.
   const removals = await Promise.allSettled([
@@ -171,7 +173,7 @@ export async function storeIverilogCompileCache(
   signal?: AbortSignal
 ): Promise<boolean> {
   if (!compileResult.ok || compileResult.timedOut || compileResult.stopped) {
-    entriesByWorkspace.delete(snapshot.workspaceKey);
+    deleteDirectoryEntry(snapshot.workspaceKey, snapshot.input.compileCwd);
     return false;
   }
 
@@ -185,7 +187,7 @@ export async function storeIverilogCompileCache(
     );
     const dependencyKeys = new Set(dependencyPaths.map(normalizePathKey));
     if (snapshot.sourceFiles.some((source) => !dependencyKeys.has(source.path))) {
-      entriesByWorkspace.delete(workspaceKey);
+      deleteDirectoryEntry(workspaceKey, input.compileCwd);
       return false;
     }
 
@@ -199,7 +201,7 @@ export async function storeIverilogCompileCache(
     const currentDirectFiles = snapshot.directFiles.map((source) => dependencyByPath.get(source.path));
     if (currentDirectFiles.some((source) => source === undefined)
       || !sameFileObservations(currentDirectFiles as FileFingerprint[], snapshot.directFiles)) {
-      entriesByWorkspace.delete(workspaceKey);
+      deleteDirectoryEntry(workspaceKey, input.compileCwd);
       return false;
     }
     const includeResolutionGuards = await buildIverilogIncludeResolutionGuards(
@@ -209,7 +211,7 @@ export async function storeIverilogCompileCache(
     );
     const compiled = await fingerprintFile(input.compiledFile, signal);
     throwIfAborted(signal);
-    setWorkspaceEntry(workspaceKey, {
+    setWorkspaceEntry(workspaceKey, input.compileCwd, {
       key: snapshot.key,
       dependencies,
       includeResolutionGuards,
@@ -218,7 +220,7 @@ export async function storeIverilogCompileCache(
     });
     return true;
   } catch {
-    entriesByWorkspace.delete(workspaceKey);
+    deleteDirectoryEntry(workspaceKey, input.compileCwd);
     return false;
   }
 }
@@ -304,14 +306,33 @@ async function createCompileSnapshot(
   return { workspaceKey, key, input: stableInput, directFiles, sourceFiles };
 }
 
-function setWorkspaceEntry(workspaceKey: string, entry: IverilogCompileCacheEntry): void {
+function setWorkspaceEntry(workspaceKey: string, compileCwd: string, entry: IverilogCompileCacheEntry): void {
+  const directories = entriesByWorkspace.get(workspaceKey) ?? new Map<string, IverilogCompileCacheEntry>();
+  const directoryKey = directoryCacheKey(compileCwd);
+  directories.delete(directoryKey);
+  directories.set(directoryKey, entry);
+  while (directories.size > maximumCompileCacheDirectoriesPerWorkspace) {
+    const oldestDirectory = directories.keys().next().value as string | undefined;
+    if (oldestDirectory === undefined) break;
+    directories.delete(oldestDirectory);
+  }
   entriesByWorkspace.delete(workspaceKey);
-  entriesByWorkspace.set(workspaceKey, entry);
+  entriesByWorkspace.set(workspaceKey, directories);
   while (entriesByWorkspace.size > maximumIverilogCompileCacheWorkspaces) {
     const oldestWorkspace = entriesByWorkspace.keys().next().value as string | undefined;
     if (oldestWorkspace === undefined) break;
     entriesByWorkspace.delete(oldestWorkspace);
   }
+}
+
+function directoryCacheKey(compileCwd: string): string {
+  return normalizePathKey(path.resolve(compileCwd));
+}
+
+function deleteDirectoryEntry(workspaceKey: string, compileCwd: string): void {
+  const directories = entriesByWorkspace.get(workspaceKey);
+  directories?.delete(directoryCacheKey(compileCwd));
+  if (directories?.size === 0) entriesByWorkspace.delete(workspaceKey);
 }
 
 function cloneInput(input: IverilogCompileCacheInput): IverilogCompileCacheInput {

@@ -1,4 +1,4 @@
-// @index automatic-test-policy — 自动测试的内部最强策略；用户只选择 payload 指令集
+// @index automatic-test-policy — 自动测试的内部最强策略；并发资源上限独立于测试强度
 
 import type { ProjectProfile } from '../projectProfile';
 import { courseImagePolicy } from './pipeline/courseImagePolicy';
@@ -43,7 +43,7 @@ const p7ExceptionTypes = ['AdEL', 'AdES', 'Syscall', 'RI', 'Ov'] as const;
 /**
  * The automatic path intentionally has no strength knobs. It always fills the usable course
  * image, exercises both exact-trace and property-probe P7 lanes, and covers every registered
- * exception class. The one public customization (payload instruction set) is read separately.
+ * exception class. Public payload focus and concurrency are read separately.
  */
 export function automaticTestPolicy(
   profile: ProjectProfile

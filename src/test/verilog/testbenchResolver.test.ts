@@ -145,6 +145,23 @@ describe('testbench workspace discovery', () => {
     expect(generatedText).not.toContain('module mips_tb;');
   });
 
+  it('places standard and case-specific P7 automatic testbenches inside their runtime slot', async () => {
+    const resource = URI.file('E:/work/mips.v');
+    vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from('module mips(input clk, reset); endmodule'));
+    const runtimeDirectory = URI.file('E:/work/.co/iverilog/automatic/slot-3');
+    const standard = await ensureRunnableTestbench(services(), resource, false, undefined, {
+      nonInteractive: true, runtimeDirectory
+    });
+    const p7 = await ensureP7InterruptTestbench(services(), resource, [0x3010], undefined, false, {
+      nonInteractive: true, runtimeDirectory
+    });
+    for (const resolution of [standard, p7]) {
+      expect(resolution?.generatedUri?.fsPath.replace(/\\/g, '/'))
+        .toContain('/.co/iverilog/automatic/slot-3/');
+    }
+    expect(writeTextFile).toHaveBeenCalledTimes(2);
+  });
+
   it('creates an editable course CPU .co/tb and stops the first manual P6 run', async () => {
     const resource = URI.file('E:/work/mips.v');
     vscodeState.module!.workspace.fs.readFile.mockResolvedValue(Buffer.from([
