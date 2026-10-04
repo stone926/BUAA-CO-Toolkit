@@ -4,6 +4,12 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-10-04
+
+- docs: 移除冗余文档 (97119e6)
+- feat(test): add bounded concurrency and shared Icarus compilation (26433f5)
+- fix(test): canonicalize temporary case paths on Windows (83d2900)
+
 ## [1.5.2] - 2026-10-02
 
 - 写回对比改为专用事件对照页：按自动测试规则对齐、忽略时间戳与排版噪声，首差异上下文、逐字段高亮、差异导航和 PC 源码跳转；保留原始日志行入口。
