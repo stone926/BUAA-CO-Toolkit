@@ -179,6 +179,12 @@
               "include": "#strings"
             },
             {
+              "include": "#compilerDirectives"
+            },
+            {
+              "include": "#userMacros"
+            },
+            {
               "include": "#numbers"
             },
             {
@@ -231,6 +237,12 @@
           "include": "#strings"
         },
         {
+          "include": "#compilerDirectives"
+        },
+        {
+          "include": "#userMacros"
+        },
+        {
           "include": "#numbers"
         },
         {
@@ -257,15 +269,12 @@
       "patterns": [
         {
           "name": "meta.preprocessor.define.verilog",
-          "match": "^([\\t ]*)(`)(define)[\\t ]+([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
+          "match": "^([\\t ]*)(`define)[\\t ]+([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
           "captures": {
             "2": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "3": {
               "name": "keyword.control.directive.verilog"
             },
-            "4": {
+            "3": {
               "name": "entity.name.function.preprocessor.verilog"
             }
           }
@@ -276,15 +285,12 @@
       "patterns": [
         {
           "name": "meta.preprocessor.condition.verilog",
-          "match": "^([\\t ]*)(`)(ifdef|ifndef|elsif)[\\t ]+([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
+          "match": "^([\\t ]*)(`(?:ifdef|ifndef|elsif))[\\t ]+([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
           "captures": {
             "2": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "3": {
               "name": "keyword.control.directive.verilog"
             },
-            "4": {
+            "3": {
               "name": "variable.other.preprocessor.verilog"
             }
           }
@@ -295,15 +301,12 @@
       "patterns": [
         {
           "name": "meta.preprocessor.macro-reference.verilog",
-          "match": "^([\\t ]*)(`)(undef)[\\t ]+([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
+          "match": "^([\\t ]*)(`undef)[\\t ]+([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
           "captures": {
             "2": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "3": {
               "name": "keyword.control.directive.verilog"
             },
-            "4": {
+            "3": {
               "name": "entity.name.function.preprocessor.verilog"
             }
           }
@@ -314,12 +317,9 @@
       "patterns": [
         {
           "name": "meta.preprocessor.default-nettype.verilog",
-          "begin": "(`)(default_nettype)(?![A-Za-z0-9_$])",
+          "begin": "(`default_nettype)(?![A-Za-z0-9_$])",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "2": {
               "name": "keyword.control.directive.verilog"
             }
           },
@@ -349,12 +349,9 @@
         },
         {
           "name": "meta.preprocessor.timescale.verilog",
-          "begin": "(`)(timescale)(?![A-Za-z0-9_$])",
+          "begin": "(`timescale)(?![A-Za-z0-9_$])",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "2": {
               "name": "keyword.control.directive.verilog"
             }
           },
@@ -439,30 +436,16 @@
     "compilerDirectives": {
       "patterns": [
         {
-          "match": "(`)(nounconnected_drive|unconnected_drive|default_nettype|begin_keywords|endcelldefine|end_keywords|undefineall|celldefine|timescale|resetall|include|define|ifndef|pragma|elsif|endif|ifdef|undef|else|line)(?![A-Za-z0-9_$])",
-          "captures": {
-            "1": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "2": {
-              "name": "keyword.control.directive.verilog"
-            }
-          }
+          "name": "keyword.control.directive.verilog",
+          "match": "`(?:nounconnected_drive|unconnected_drive|default_nettype|begin_keywords|endcelldefine|end_keywords|undefineall|celldefine|timescale|resetall|include|define|ifndef|pragma|elsif|endif|ifdef|undef|else|line)(?![A-Za-z0-9_$])"
         }
       ]
     },
     "userMacros": {
       "patterns": [
         {
-          "match": "(`)([A-Za-z_][A-Za-z0-9_$]*)(?![A-Za-z0-9_$])",
-          "captures": {
-            "1": {
-              "name": "punctuation.definition.directive.verilog"
-            },
-            "2": {
-              "name": "entity.name.function.preprocessor.verilog"
-            }
-          }
+          "name": "entity.name.function.preprocessor.verilog",
+          "match": "`[A-Za-z_][A-Za-z0-9_$]*(?![A-Za-z0-9_$])"
         }
       ]
     },

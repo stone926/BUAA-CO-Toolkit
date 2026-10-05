@@ -595,6 +595,8 @@ function buildVerilogGrammar(keywordResource) {
             { include: '#formatStrings' },
             { include: '#formatCallParentheses' },
             { include: '#strings' },
+            { include: '#compilerDirectives' },
+            { include: '#userMacros' },
             { include: '#numbers' },
             { include: '#knownSystemTasks' },
             { include: '#genericSystemTasks' },
@@ -621,6 +623,8 @@ function buildVerilogGrammar(keywordResource) {
         { include: '#formatStrings' },
         { include: '#formatCallParentheses' },
         { include: '#strings' },
+        { include: '#compilerDirectives' },
+        { include: '#userMacros' },
         { include: '#numbers' },
         { include: '#knownSystemTasks' },
         { include: '#genericSystemTasks' },
@@ -634,11 +638,10 @@ function buildVerilogGrammar(keywordResource) {
       patterns: [
         {
           name: 'meta.preprocessor.define.verilog',
-          match: `^([\\t ]*)(\`)(define)[\\t ]+(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
+          match: `^([\\t ]*)(\`define)[\\t ]+(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
           captures: {
-            2: { name: 'punctuation.definition.directive.verilog' },
-            3: { name: 'keyword.control.directive.verilog' },
-            4: { name: 'entity.name.function.preprocessor.verilog' },
+            2: { name: 'keyword.control.directive.verilog' },
+            3: { name: 'entity.name.function.preprocessor.verilog' },
           },
         },
       ],
@@ -647,11 +650,10 @@ function buildVerilogGrammar(keywordResource) {
       patterns: [
         {
           name: 'meta.preprocessor.condition.verilog',
-          match: `^([\\t ]*)(\`)(ifdef|ifndef|elsif)[\\t ]+(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
+          match: `^([\\t ]*)(\`(?:ifdef|ifndef|elsif))[\\t ]+(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
           captures: {
-            2: { name: 'punctuation.definition.directive.verilog' },
-            3: { name: 'keyword.control.directive.verilog' },
-            4: { name: 'variable.other.preprocessor.verilog' },
+            2: { name: 'keyword.control.directive.verilog' },
+            3: { name: 'variable.other.preprocessor.verilog' },
           },
         },
       ],
@@ -660,11 +662,10 @@ function buildVerilogGrammar(keywordResource) {
       patterns: [
         {
           name: 'meta.preprocessor.macro-reference.verilog',
-          match: `^([\\t ]*)(\`)(undef)[\\t ]+(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
+          match: `^([\\t ]*)(\`undef)[\\t ]+(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
           captures: {
-            2: { name: 'punctuation.definition.directive.verilog' },
-            3: { name: 'keyword.control.directive.verilog' },
-            4: { name: 'entity.name.function.preprocessor.verilog' },
+            2: { name: 'keyword.control.directive.verilog' },
+            3: { name: 'entity.name.function.preprocessor.verilog' },
           },
         },
       ],
@@ -675,10 +676,9 @@ function buildVerilogGrammar(keywordResource) {
       patterns: [
         {
           name: 'meta.preprocessor.default-nettype.verilog',
-          begin: `(\`)(default_nettype)${VERILOG_IDENTIFIER_END}`,
+          begin: `(\`default_nettype)${VERILOG_IDENTIFIER_END}`,
           beginCaptures: {
-            1: { name: 'punctuation.definition.directive.verilog' },
-            2: { name: 'keyword.control.directive.verilog' },
+            1: { name: 'keyword.control.directive.verilog' },
           },
           end: `${VERILOG_IDENTIFIER_START}(?:(none)|(${netTypeAlternation}))${VERILOG_IDENTIFIER_END}|${directiveArgumentEnd}`,
           endCaptures: {
@@ -694,10 +694,9 @@ function buildVerilogGrammar(keywordResource) {
         },
         {
           name: 'meta.preprocessor.timescale.verilog',
-          begin: `(\`)(timescale)${VERILOG_IDENTIFIER_END}`,
+          begin: `(\`timescale)${VERILOG_IDENTIFIER_END}`,
           beginCaptures: {
-            1: { name: 'punctuation.definition.directive.verilog' },
-            2: { name: 'keyword.control.directive.verilog' },
+            1: { name: 'keyword.control.directive.verilog' },
           },
           end: `${VERILOG_IDENTIFIER_START}${timeArgument}${directiveGap}(/)${directiveGap}${timeArgument}|${directiveArgumentEnd}`,
           endCaptures: {
@@ -735,22 +734,16 @@ function buildVerilogGrammar(keywordResource) {
     compilerDirectives: {
       patterns: [
         {
-          match: `(\`)(${directiveAlternation})${VERILOG_IDENTIFIER_END}`,
-          captures: {
-            1: { name: 'punctuation.definition.directive.verilog' },
-            2: { name: 'keyword.control.directive.verilog' },
-          },
+          name: 'keyword.control.directive.verilog',
+          match: `\`(?:${directiveAlternation})${VERILOG_IDENTIFIER_END}`,
         },
       ],
     },
     userMacros: {
       patterns: [
         {
-          match: `(\`)(${VERILOG_IDENTIFIER})${VERILOG_IDENTIFIER_END}`,
-          captures: {
-            1: { name: 'punctuation.definition.directive.verilog' },
-            2: { name: 'entity.name.function.preprocessor.verilog' },
-          },
+          name: 'entity.name.function.preprocessor.verilog',
+          match: `\`${VERILOG_IDENTIFIER}${VERILOG_IDENTIFIER_END}`,
         },
       ],
     },

@@ -295,6 +295,33 @@ describe('generated TextMate grammars', () => {
     expectScope(scopesAt(lines, 1, '%h'), 'constant.other.placeholder.verilog');
   });
 
+  it.each(['verilog', 'systemverilog'])('keeps backticks inside complete directive and macro tokens in %s', (language) => {
+    const source = [
+      '`define WIDTH 8',
+      '`ifdef WIDTH',
+      '`ifndef OTHER',
+      '`elsif WIDTH',
+      '`undef WIDTH',
+      '`endif',
+      '`include "defs.vh"',
+      '`default_nettype none',
+      '`timescale 1ns/1ps',
+      'wire [`WIDTH-1:0] data = `VALUE(1);',
+      'initial $display("%d", `WIDTH, (`VALUE(1) + 1));'
+    ].join('\n');
+    const lines = tokenize(language === 'verilog' ? verilogGrammar : systemVerilogGrammar, source);
+    for (const line of lines) {
+      for (const match of line.text.matchAll(/`[A-Za-z_][A-Za-z0-9_$]*/g)) {
+        const token = line.tokens.find((candidate) => candidate.startIndex === match.index);
+        expect(token?.endIndex).toBe(match.index + match[0].length);
+        expectScope(token?.scopes ?? [], match[0] === '`WIDTH' || match[0] === '`VALUE'
+          ? 'entity.name.function.preprocessor.verilog'
+          : 'keyword.control.directive.verilog');
+        expect(token?.scopes).not.toContain('punctuation.definition.directive.verilog');
+      }
+    }
+  });
+
   it.each(['verilog', 'systemverilog'])('scopes compiler directive arguments in %s', (language) => {
     const grammar = language === 'verilog' ? verilogGrammar : systemVerilogGrammar;
     const lines = tokenize(grammar, [
