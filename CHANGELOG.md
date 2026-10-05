@@ -4,6 +4,11 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- 修复 Verilog 函数返回位宽、右移表达式与控制语句引用分析，减少位宽和未使用信号的误诊断。
+- 统一 Verilog 反引号宏调用与预处理指令的词法高亮。
+- 修复实例连接空格、模块列表闭括号、赋值续行和三元链对齐，保留已有换行与空行，并保证重复格式化稳定。
+- 格式化改为统一 Verilog 风格，移除旧 `co.verilog.format.*` 设置；缩进仍遵循编辑器的 Tab/空格与宽度设置。
+
 ## [1.5.3] - 2026-10-04
 
 - docs: 移除冗余文档 (97119e6)
