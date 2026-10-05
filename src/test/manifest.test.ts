@@ -101,15 +101,6 @@ const compatibilityConfigurationKeys = [
   'co.verilog.implicitNet.ignorePatterns',
   'co.diagnostics.disabledCodes',
   'co.diagnostics.disabledFileCodes',
-  'co.verilog.format.continuationIndent',
-  'co.verilog.format.spaceInRange',
-  'co.verilog.format.declarationRangeSpacing',
-  'co.verilog.format.spaceBeforeInstancePorts',
-  'co.verilog.format.separateElse',
-  'co.verilog.format.maxBlankLines',
-  'co.verilog.format.alignment.parameter',
-  'co.verilog.format.alignment.modulePort',
-  'co.verilog.format.alignment.ternary',
   'co.toolchain.python',
   'co.toolchain.hazardCalculator'
 ] as const;
@@ -350,6 +341,12 @@ describe('package manifest', () => {
     expect(properties['co.toolchain.mars']?.deprecationMessage).toContain('已忽略');
     expect(properties['co.mips.extraArgs']?.deprecationMessage).toContain('已忽略');
     expect(publicConfigurationGroups.flatMap((group) => [...group.keys])).not.toContain('co.toolchain.mars');
+  });
+
+  it('removes retired Verilog formatting settings from the schema and runtime defaults', () => {
+    const properties = Object.assign({}, ...(readPackage().contributes?.configuration ?? []).map((group) => group.properties ?? {}));
+    expect(Object.keys(properties).filter((key) => key.startsWith('co.verilog.format.'))).toEqual([]);
+    expect(Object.keys(getConfigDefaults()).filter((key) => key.startsWith('verilog.format.'))).toEqual([]);
   });
 
   it('derives generator profile descriptions from the ASM generator catalog', () => {

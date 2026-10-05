@@ -1,15 +1,15 @@
 // @index formatting-spacing — 仅决定相邻 token 间的水平空白
 import { verilogLanguageCatalog } from '../model';
 import { Source } from './source';
-import { Structure, Style } from './structure';
+import { Structure } from './structure';
 
 const spacedParen = new Set(['if', 'for', 'while', 'repeat', 'wait', 'case', 'casex', 'casez']);
 const binary = new Set(['=', '+', '-', '*', '/', '%', '**', '&', '|', '^', '^~', '~^', '&&', '||', '==', '!=', '===', '!==', '<', '>', '<=', '>=', '<<', '>>', '<<<', '>>>', '?', '+:', '-:']);
 const compounds = [...new Set([...Object.values(verilogLanguageCatalog.operators).flat(), '//', '/*'])]
   .filter(operator => operator.length > 1);
 
-export function horizontalSpace(source: Source, structure: Structure, style: Style, i: number, original: string): string {
-  const space = preferredSpace(source, structure, style, i, original);
+export function horizontalSpace(source: Source, structure: Structure, i: number, original: string): string {
+  const space = preferredSpace(source, structure, i, original);
   if (space || !original) return space;
   const left = source.tokens[i - 1]; const right = source.tokens[i];
   if (!left || !right) return space;
@@ -21,7 +21,7 @@ export function horizontalSpace(source: Source, structure: Structure, style: Sty
   return space;
 }
 
-function preferredSpace(source: Source, structure: Structure, style: Style, i: number, original: string): string {
+function preferredSpace(source: Source, structure: Structure, i: number, original: string): string {
   const left = source.tokens[i - 1]; const right = source.tokens[i];
   if (!left) return '';
   const a = left.value; const b = right.value;
@@ -29,12 +29,13 @@ function preferredSpace(source: Source, structure: Structure, style: Style, i: n
   if (left.kind === 'identifier' && a.startsWith('\\')) return ' ';
   if (right.kind === 'comment' || left.kind === 'comment') return ' ';
   if (b === ':' && structure.rangeColon.has(i)) return '';
-  if (a === ':' && structure.rangeColon.has(i - 1)) return style.spaceInRange ? ' ' : '';
+  if (a === ':' && structure.rangeColon.has(i - 1)) return '';
   if (b === ':' && structure.labelColon.has(i)) return '';
   if (a === ':' || b === ':') return ' ';
   if (structure.declarationRange.has(i) && b === '[' || structure.declarationRange.has(i - 1) && a === ']') {
-    return style.declarationRangeSpacing === 'preserve' ? original : style.declarationRangeSpacing === 'compact' ? '' : ' ';
+    return ' ';
   }
+  if (a === ',' && b === '.') return ' ';
   if (b === ',' || b === ';' || b === ')' || b === ']' || b === '}') return '';
   if (a === '(' || a === '[' || a === '{' || a === '.') return '';
   if (b === '.' || b === '[') return '';
@@ -42,7 +43,7 @@ function preferredSpace(source: Source, structure: Structure, style: Style, i: n
   if (b === '(') {
     if (spacedParen.has(a)) return ' ';
     if (a === '@' || a === '#') return '';
-    if (structure.list.has(i)) return structure.modulePort.has(i) || style.spaceBeforeInstancePorts ? ' ' : '';
+    if (structure.list.has(i)) return ' ';
     if (a === '@' || a === '#' || structure.unary.has(i - 1)) return '';
     if (binary.has(a)) return ' ';
     return '';

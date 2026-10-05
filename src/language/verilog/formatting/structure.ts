@@ -1,13 +1,12 @@
 // @index formatting-structure — 线性结构索引、受控语句与分支状态
 import { Source, FormatToken } from './source';
-import { CoSettings } from '../../common/settings';
 import { splitInstanceTokenGroup } from '../instanceSyntax';
 import { proceduralStatementEnd } from '../proceduralBoundary';
 
-export type Style = CoSettings['verilog']['format'];
 export interface Structure {
   indent: number[];
   extra: number[];
+  delimiterDepth: number[];
   matching: Map<number, number>;
   list: Set<number>;
   listAnchor: Map<number, number>;
@@ -30,9 +29,9 @@ const operators = new Set(['=', '?', ':', '+', '-', '*', '/', '%', '**', '&', '|
 const isCode = (token: FormatToken): boolean => (!token.protected || !!token.structural) && token.kind !== 'comment';
 const snapshot = (s: State): State => ({ ...s, blocks: s.blocks.map(b => ({ ...b })), delimiters: s.delimiters.map(d => ({ ...d })) });
 
-export function analyzeStructure(source: Source, style: Style): Structure {
+export function analyzeStructure(source: Source): Structure {
   const { tokens } = source;
-  const result: Structure = { indent: tokens.map(() => 0), extra: tokens.map(() => 0), matching: new Map(), list: new Set(), listAnchor: new Map(), modulePort: new Set(), declarationRange: new Set(), unary: new Set(), rangeColon: new Set(), labelColon: new Set(), ternaryQuestion: new Set(), preserve: new Set() };
+  const result: Structure = { indent: tokens.map(() => 0), extra: tokens.map(() => 0), delimiterDepth: tokens.map(() => 0), matching: new Map(), list: new Set(), listAnchor: new Map(), modulePort: new Set(), declarationRange: new Set(), unary: new Set(), rangeColon: new Set(), labelColon: new Set(), ternaryQuestion: new Set(), preserve: new Set() };
   const code = tokens.map((t, i) => isCode(t) ? i : -1).filter(i => i >= 0);
   const position = new Map(code.map((i, p) => [i, p]));
   const tokenIndex = new Map(tokens.map((token, i) => [token, i]));
@@ -76,6 +75,22 @@ export function analyzeStructure(source: Source, style: Style): Structure {
     ends.set(i, end);
   }
   // 模块头与实例列表边界复用已有实例分组，按独立语句扫描而非扫描每个后缀。
+  const markInstanceLists = (segment: number[]): void => {
+    const first = tokens[segment[0]];
+    if (first?.kind !== 'identifier' || segment.length <= 2) return;
+    const group = splitInstanceTokenGroup(segment.map(j => tokens[j]));
+    if (group) for (const declarator of group.declarators) {
+      if (declarator[0]?.kind !== 'identifier') continue;
+      const open = declarator.find(t => t.value === '(');
+      if (open) {
+        const j = tokenIndex.get(open as FormatToken);
+        if (j !== undefined) { result.list.add(j); result.listAnchor.set(j, segment[0]); }
+      }
+    }
+    if (tokens[segment[1]]?.value === '#' && tokens[segment[2]]?.value === '(') {
+      result.list.add(segment[2]); result.listAnchor.set(segment[2], segment[0]);
+    }
+  };
   let statementStart = 0;
   for (let p = 0; p < code.length; p++) {
     const i = code[p]; const v = tokens[i].value;
@@ -97,28 +112,14 @@ export function analyzeStructure(source: Source, style: Style): Structure {
       statementStart = q + 1;
     }
     if (v === ';') {
-      const segment = code.slice(statementStart, p + 1);
-      const first = tokens[segment[0]];
-      if (first?.kind === 'identifier' && segment.length > 2) {
-        const group = splitInstanceTokenGroup(segment.map(j => tokens[j]));
-        if (group) for (const declarator of group.declarators) {
-          if (declarator[0]?.kind !== 'identifier') continue;
-          const open = declarator.find(t => t.value === '(');
-          if (open) {
-            const j = tokenIndex.get(open as FormatToken);
-            if (j !== undefined) { result.list.add(j); result.listAnchor.set(j, segment[0]); }
-          }
-        }
-        if (tokens[segment[1]]?.value === '#' && tokens[segment[2]]?.value === '(') {
-          result.list.add(segment[2]); result.listAnchor.set(segment[2], segment[0]);
-        }
-      }
+      markInstanceLists(code.slice(statementStart, p + 1));
       statementStart = p + 1;
     } else if (['end', 'endcase', 'endgenerate', 'begin', 'generate'].includes(v)) {
       // 命名块的标签不属于块内第一条声明或实例。
       statementStart = position.get(afterClose(i)) ?? code.length;
     }
   }
+  if (statementStart < code.length) markInstanceLists(code.slice(statementStart));
   const followingCode: number[] = [];
   let upcoming = tokens.length;
   for (let i = tokens.length - 1; i >= 0; i--) {
@@ -220,7 +221,8 @@ export function analyzeStructure(source: Source, style: Style): Structure {
       }
       base = labelStart ? caseBlock.body : Math.max(base, caseBlock.body);
     }
-    if (isNewLine) { lineIndent = base; lastLine = token.line; }
+    if (isNewLine) lastLine = token.line;
+    if (isNewLine || closeBlock || scheduled !== undefined) lineIndent = base;
     result.indent[i] = isNewLine || closeBlock || scheduled !== undefined ? base : lineIndent;
     if (isNewLine && state.parameter !== undefined && !delimiter && !closeBlock && previous !== undefined && tokens[previous].value === ',') result.extra[i] = state.parameter;
     if (!isCode(token)) continue;
@@ -234,6 +236,7 @@ export function analyzeStructure(source: Source, style: Style): Structure {
     if (v === ']') bracket = Math.max(0, bracket - 1);
     if (declaration && bracket === 0 && token.kind === 'identifier') declaration = false;
     const expressionDepth = state.delimiters.length;
+    result.delimiterDepth[i] = expressionDepth;
     if (v === '?') {
       ternaryDepths.set(expressionDepth, (ternaryDepths.get(expressionDepth) ?? 0) + 1);
       if (!delimiter) result.ternaryQuestion.add(i);
@@ -261,7 +264,7 @@ export function analyzeStructure(source: Source, style: Style): Structure {
         const alternate = next(end);
         schedule(alternate, tokens[alternate]?.value === 'if' || tokens[alternate]?.value === 'begin' || tokens[alternate]?.line === tokens[end].line ? tokenIndent : tokenIndent + 1, endAt(alternate));
       }
-    } else if (['always', 'initial', 'forever', '@', '#'].includes(v)) {
+    } else if (['always', 'initial', 'forever', '@', '#'].includes(v) && !(v === '#' && result.list.has(next(i)))) {
       let body = next(i);
       if (v === '@' || v === '#') body = tokens[body]?.value === '(' ? next(result.matching.get(body) ?? body) : next(body);
       // 已有边界工具用于不完整事件控制的有界恢复；正常路径使用预计算出口。
@@ -278,7 +281,7 @@ export function analyzeStructure(source: Source, style: Style): Structure {
       const list = result.list.has(i);
       const anchor = result.listAnchor.get(i);
       const listIndent = anchor === undefined ? tokenIndent : result.indent[anchor];
-      state.delimiters.push({ index: i, close: (list ? listIndent : tokenIndent) + (list ? 1 : 0), body: (list ? listIndent : tokenIndent) + style.continuationIndent });
+      state.delimiters.push({ index: i, close: list ? listIndent : tokenIndent, body: (list ? listIndent : tokenIndent) + 1 });
     } else if ([')', ']', '}'].includes(v)) state.delimiters.pop();
     else if (opens[v]) {
       if (v === 'module') state.blocks.push({ kind: v, close: tokenIndent, body: tokenIndent + 1 });
@@ -292,12 +295,14 @@ export function analyzeStructure(source: Source, style: Style): Structure {
       state.continuation = undefined; state.parameter = undefined; declaration = false;
       const b = state.blocks[state.blocks.length - 1];
       if (b && ['case', 'casex', 'casez'].includes(b.kind)) b.label = false;
+    } else if (v === ',' && !state.delimiters.length) {
+      state.continuation = undefined;
     } else if (v === 'end') {
       const b = state.blocks[state.blocks.length - 1];
       if (b && ['case', 'casex', 'casez'].includes(b.kind)) b.label = false;
     }
     const following = tokens[next(i)];
-    if (following?.line !== token.line && !state.delimiters.length && operators.has(v) && !result.labelColon.has(i)) state.continuation ??= tokenIndent + style.continuationIndent;
+    if (following?.line !== token.line && !state.delimiters.length && (operators.has(v) || operators.has(following?.value)) && !result.labelColon.has(i)) state.continuation ??= tokenIndent + 1;
     if ((v === 'parameter' || v === 'localparam') && !state.delimiters.length) state.parameter = v.length + 1;
     previous = i;
   }

@@ -8,19 +8,19 @@ import { createLayout } from './formatting/layout';
 import { alignLayout } from './formatting/alignment';
 import { finishWhitespace, whitespaceEdits, workRange } from './formatting/edits';
 
-export function getVerilogFormattingEdits(document: TextDocument, settings: CoSettings, options: FormattingOptions): TextEdit[] {
-  return format(document, settings, options);
+export function getVerilogFormattingEdits(document: TextDocument, _settings: CoSettings, options: FormattingOptions): TextEdit[] {
+  return format(document, options);
 }
-export function getVerilogRangeFormattingEdits(document: TextDocument, range: Range, settings: CoSettings, options: FormattingOptions): TextEdit[] {
-  return format(document, settings, options, range);
+export function getVerilogRangeFormattingEdits(document: TextDocument, range: Range, _settings: CoSettings, options: FormattingOptions): TextEdit[] {
+  return format(document, options, range);
 }
-function format(document: TextDocument, settings: CoSettings, options: FormattingOptions, range?: Range): TextEdit[] {
+function format(document: TextDocument, options: FormattingOptions, range?: Range): TextEdit[] {
   const source = readSource(document);
   const work = workRange(document, source, range);
   if (!work) return [];
-  const structure = analyzeStructure(source, settings.verilog.format);
-  const layout = createLayout(source, structure, settings.verilog.format, options);
-  alignLayout(source, structure, settings.verilog.format, layout);
+  const structure = analyzeStructure(source);
+  const layout = createLayout(source, structure, options);
+  alignLayout(source, structure, layout, range ? work : undefined);
   finishWhitespace(source, layout, options, range === undefined);
   return whitespaceEdits(document, source, layout, work);
 }

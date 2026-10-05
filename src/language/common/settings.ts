@@ -38,17 +38,6 @@ export interface CoSettings {
     lint: {
       courseRules: boolean;
     };
-    format: {
-      continuationIndent: number;
-      spaceInRange: boolean;
-      declarationRangeSpacing: 'space' | 'compact' | 'preserve';
-      spaceBeforeInstancePorts: boolean;
-      separateElse: boolean;
-      maxBlankLines: number;
-      parameterAlignment: 'none' | 'equals';
-      modulePortAlignment: 'none' | 'name';
-      ternaryAlignment: 'none' | 'question';
-    };
   };
 }
 
@@ -85,17 +74,6 @@ export const defaultCoSettings: CoSettings = {
     },
     lint: {
       courseRules: configDefault<boolean>('verilog.lint.courseRules')
-    },
-    format: {
-      continuationIndent: configDefault<number>('verilog.format.continuationIndent'),
-      spaceInRange: configDefault<boolean>('verilog.format.spaceInRange'),
-      declarationRangeSpacing: configDefault<'space' | 'compact' | 'preserve'>('verilog.format.declarationRangeSpacing'),
-      spaceBeforeInstancePorts: configDefault<boolean>('verilog.format.spaceBeforeInstancePorts'),
-      separateElse: configDefault<boolean>('verilog.format.separateElse'),
-      maxBlankLines: configDefault<number>('verilog.format.maxBlankLines'),
-      parameterAlignment: configDefault<'none' | 'equals'>('verilog.format.alignment.parameter'),
-      modulePortAlignment: configDefault<'none' | 'name'>('verilog.format.alignment.modulePort'),
-      ternaryAlignment: configDefault<'none' | 'question'>('verilog.format.alignment.ternary')
     }
   }
 };
@@ -129,8 +107,7 @@ export function mergeCoSettings(value: unknown): CoSettings {
         courseRules: typeof candidate.verilog?.lint?.courseRules === 'boolean'
           ? candidate.verilog.lint.courseRules
           : defaultCoSettings.verilog.lint.courseRules
-      },
-      format: normalizeVerilogFormat(candidate.verilog?.format)
+      }
     }
   };
 }
@@ -275,69 +252,6 @@ function normalizeDiagnosticFileCode(value: string): string | undefined {
   }
   const normalizedCodePart = normalizeDisabledDiagnosticCodes([codePart])[0];
   return normalizedCodePart ? `${normalizedCodePart}@${uriPart}` : undefined;
-}
-
-type VerilogFormatAlignmentCandidate = {
-  parameter?: unknown;
-  modulePort?: unknown;
-  ternary?: unknown;
-};
-
-type VerilogFormatCandidate = Partial<Omit<
-  CoSettings['verilog']['format'],
-  'parameterAlignment' | 'modulePortAlignment' | 'ternaryAlignment'
->> & {
-  alignment?: VerilogFormatAlignmentCandidate;
-};
-
-function normalizeVerilogFormat(value: unknown): CoSettings['verilog']['format'] {
-  const candidate = typeof value === 'object' && value !== null
-    ? value as VerilogFormatCandidate
-    : {};
-  const alignment = typeof candidate.alignment === 'object' && candidate.alignment !== null && !Array.isArray(candidate.alignment)
-    ? candidate.alignment
-    : {};
-  const preset = defaultCoSettings.verilog.format;
-  return {
-    ...preset,
-    continuationIndent: normalizeInteger(candidate.continuationIndent, preset.continuationIndent, 1, 4),
-    spaceInRange: typeof candidate.spaceInRange === 'boolean' ? candidate.spaceInRange : preset.spaceInRange,
-    declarationRangeSpacing: normalizeDeclarationRangeSpacing(candidate.declarationRangeSpacing, preset.declarationRangeSpacing),
-    spaceBeforeInstancePorts: typeof candidate.spaceBeforeInstancePorts === 'boolean' ? candidate.spaceBeforeInstancePorts : preset.spaceBeforeInstancePorts,
-    separateElse: typeof candidate.separateElse === 'boolean' ? candidate.separateElse : preset.separateElse,
-    maxBlankLines: normalizeInteger(candidate.maxBlankLines, preset.maxBlankLines, 0, 3),
-    parameterAlignment: normalizeParameterAlignment(alignment.parameter, preset.parameterAlignment),
-    modulePortAlignment: normalizeModulePortAlignment(alignment.modulePort, preset.modulePortAlignment),
-    ternaryAlignment: normalizeTernaryAlignment(alignment.ternary, preset.ternaryAlignment)
-  };
-}
-
-function normalizeDeclarationRangeSpacing(
-  value: unknown,
-  fallback: CoSettings['verilog']['format']['declarationRangeSpacing']
-): CoSettings['verilog']['format']['declarationRangeSpacing'] {
-  return value === 'space' || value === 'compact' || value === 'preserve' ? value : fallback;
-}
-
-function normalizeParameterAlignment(
-  value: unknown,
-  fallback: CoSettings['verilog']['format']['parameterAlignment']
-): CoSettings['verilog']['format']['parameterAlignment'] {
-  return value === 'none' || value === 'equals' ? value : fallback;
-}
-
-function normalizeModulePortAlignment(
-  value: unknown,
-  fallback: CoSettings['verilog']['format']['modulePortAlignment']
-): CoSettings['verilog']['format']['modulePortAlignment'] {
-  return value === 'none' || value === 'name' ? value : fallback;
-}
-
-function normalizeTernaryAlignment(
-  value: unknown,
-  fallback: CoSettings['verilog']['format']['ternaryAlignment']
-): CoSettings['verilog']['format']['ternaryAlignment'] {
-  return value === 'none' || value === 'question' ? value : fallback;
 }
 
 function normalizeInteger(value: unknown, fallback: number, min: number, max: number): number {

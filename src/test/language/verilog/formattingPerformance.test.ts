@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
-import { getVerilogFormattingEdits } from '../../../language/verilog/formatting';
+import { getVerilogFormattingEdits, getVerilogRangeFormattingEdits } from '../../../language/verilog/formatting';
+import { Range } from 'vscode-languageserver/node';
 import { applyFormattingEdits, formattingDocument, formattingOptions, formattingSettings } from '../../helpers/verilogFormatting';
 
 const configuredBudget = Number(process.env.CO_FORMAT_PERF_BUDGET_MS);
@@ -31,5 +32,18 @@ describe('Verilog formatting bounded performance', () => {
   }, Math.max(120000, budget * 4));
   it('handles bounded deep blocks', () => {
     measure(`module m;\ninitial ${'begin\n'.repeat(256)}x=1;\n${'end\n'.repeat(256)}endmodule`);
+  }, Math.max(120000, budget * 4));
+  it('formats a range without rescanning a long unselected line for each assignment', () => {
+    const prefix = 'module m;\n' + Array.from({ length: 10000 }, (_, i) => `assign a${i}=x;`).join(' ') + '\n';
+    const source = prefix + 'assign y=x &&\nz;\nendmodule';
+    const document = formattingDocument(source);
+    const start = performance.now();
+    const range = Range.create(2, 0, 4, 0);
+    const edits = getVerilogRangeFormattingEdits(document, range, formattingSettings, formattingOptions);
+    expect(performance.now() - start).toBeLessThan(budget);
+    const output = applyFormattingEdits(document, edits);
+    expect(output.startsWith(prefix)).toBe(true);
+    expect(output.slice(prefix.length)).toBe('  assign y = x &&\n             z;\nendmodule');
+    expect(getVerilogRangeFormattingEdits(formattingDocument(output), range, formattingSettings, formattingOptions)).toEqual([]);
   }, Math.max(120000, budget * 4));
 });

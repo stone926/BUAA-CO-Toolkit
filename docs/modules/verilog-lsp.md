@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 75 files
+# verilog-lsp | src/language/verilog/ | 76 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -68,12 +68,15 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `formatting/structure.ts` — 块、受控语句、case 和模块/实例列表的轻量结构上下文；支持同行多个开闭事件和有界恢复
 - `formatting/spacing.ts` — 依据 token 与上下文调整间隙，不用正则改写 token 本体
 - `formatting/layout.ts` — 缩进、续行和安全换行；保留注释内部布局与已有 EOL
-- `formatting/alignment.ts` — 参数、模块端口和三元链分组对齐，按 Tab 可视列计算补齐量
+- `formatting/alignment.ts` — 参数、模块端口分组对齐，按 Tab 可视列计算补齐量
+- `formatting/continuation.ts` — 赋值右值续行锚点及同一表达式内的三元链对齐，避免不同语句之间互相补齐
 - `formatting/edits.ts` — 标准 FormattingOptions、全文/选区工作范围及合法、非重叠的局部 edits
 
 保真优先级高于布局：字符串、数字、注释正文、转义标识符及必要终止空白不被改写；指令/宏续行和关闭区域不参与普通空白清理。无法确定的语法局部保守保留，不展开宏、不增删 `begin/end`。选区以相交完整行为工作范围，末尾在下一行第 0 列时不含该行，工作范围外原文不变；不执行全局 EOF 清理。
 
-配置继续使用共享 `CoSettings` 的九项旧格式化偏好，保持既有默认与弃用状态，不增加风格预设。LSP 仅对 Verilog 注册选区能力，保持 SystemVerilog 与其他语言边界。
+格式化采用统一风格，删除九项旧 `co.verilog.format.*` 配置及读取逻辑，旧工作区值不再影响输出。缩进字符和宽度仍由 VS Code `FormattingOptions` 提供：模块参数、端口及实例内容缩进一级，独立右括号与声明起始行对齐；命名连接逗号后、实例名与端口括号之间保留空格；范围统一写成 `[31:0]`，声明范围外留空格。
+
+赋值右值在首行开始时，续行对齐右值首列；右值另起一行时缩进一级。参数等号、模块端口名及同一表达式的三元链统一对齐，三元链包括首行条件及带注释的分支。保留用户已有换行、空行和 `end else` 的分行选择；只在全文格式化时遵循标准 EOF 清理选项。LSP 仅对 Verilog 注册选区能力，保持 SystemVerilog 与其他语言边界。
 
 ## 跨文件
 

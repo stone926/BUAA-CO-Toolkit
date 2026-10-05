@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectStableFormatting, formattingDocument, formattingSettings } from '../../helpers/verilogFormatting';
+import { expectStableFormatting, formattingDocument } from '../../helpers/verilogFormatting';
 import { readSource } from '../../../language/verilog/formatting/source';
 import { analyzeStructure } from '../../../language/verilog/formatting/structure';
 
@@ -12,7 +12,7 @@ describe('Verilog formatting structure regressions', () => {
       if (typeof key === 'string' && /^\d+$/.test(key)) reads++;
       return Reflect.get(target, key, receiver);
     } });
-    analyzeStructure(source, formattingSettings.verilog.format);
+    analyzeStructure(source);
     expect(reads).toBeLessThan(source.tokens.length * 100);
     expectStableFormatting('module m(\n'.repeat(12));
   });
@@ -31,7 +31,7 @@ describe('Verilog formatting structure regressions', () => {
   });
   it('A5 recognizes the first instance in a named block', () => {
     const output = expectStableFormatting('module m;\ngenerate\nif(P) begin : g\nsub u(\n.a(a)\n);\nend\nendgenerate\nendmodule');
-    expect(output).toContain('      sub u (\n          .a(a)\n        );');
+    expect(output).toContain('      sub u (\n        .a(a)\n      );');
   });
   it('A3 tracks closing blocks and loop headers while excluding macro bodies', () => {
     const region = '// co-format: off\nend\nfor(i=0;i<2;i=i+1) begin\n`define HIDDEN end endmodule begin\n// co-format: on';
@@ -56,8 +56,8 @@ describe('Verilog formatting structure regressions', () => {
   });
   it('A5 recognizes instances after ordinary block names', () => {
     const output = expectStableFormatting('module m;\nbegin : g\nsub u(\n.a(a)\n);\nend : g\nsub v(\n.a(a)\n);\nendmodule');
-    expect(output).toContain('    sub u (\n        .a(a)\n      );');
-    expect(output).toContain('  sub v (\n      .a(a)\n    );');
+    expect(output).toContain('    sub u (\n      .a(a)\n    );');
+    expect(output).toContain('  sub v (\n    .a(a)\n  );');
   });
   it.each(['parameter', 'localparam'])('A6 keeps %s declaration-name alignment', keyword => {
     const output = expectStableFormatting(`module m;\n${keyword} A=1,\nB=2;\nendmodule`);
@@ -65,6 +65,6 @@ describe('Verilog formatting structure regressions', () => {
   });
   it('A6 distinguishes expression continuation from parameter names', () => {
     const output = expectStableFormatting('module m;\nparameter WIDTH =\n8;\nendmodule');
-    expect(output).toBe('module m;\n  parameter WIDTH =\n      8;\nendmodule');
+    expect(output).toBe('module m;\n  parameter WIDTH =\n    8;\nendmodule');
   });
 });

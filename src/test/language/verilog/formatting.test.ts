@@ -24,9 +24,9 @@ describe('Verilog formatting', () => {
     ['unbraced dangling else', 'module m;\ninitial\nif(a)\nif(b)\nx=1;\nelse\nx=2;\nelse\nx=3;\nendmodule', 'module m;\n  initial\n    if (a)\n      if (b)\n        x = 1;\n      else\n        x = 2;\n    else\n      x = 3;\nendmodule'],
     ['default without colon', 'module m;\ncase(a)\ndefault\nx=1;\nendcase\nendmodule', 'module m;\n  case (a)\n    default\n      x = 1;\n  endcase\nendmodule'],
     ['case controlled body', 'module m;\nalways @(*)\ncase(a)\n0: if(b)\nx=1;\nelse\nx=2;\n1: x=3;\nendcase\nendmodule', 'module m;\n  always @(*)\n    case (a)\n      0: if (b)\n        x = 1;\n      else\n        x = 2;\n      1: x = 3;\n    endcase\nendmodule'],
-    ['parameterized lists and multiple instances', 'module m #(\nparameter N=1\n)(\ninput a,\noutput y\n);\nsub #(\n.N(N)\n) u0(\n.a(a),\n.y()\n),u1(\na,y\n);\nendmodule', 'module m #(\n    parameter N = 1\n  ) (\n    input  a,\n    output y\n  );\n  sub #(\n      .N(N)\n    ) u0 (\n      .a(a),\n      .y()\n    ), u1 (\n      a, y\n    );\nendmodule'],
-    ['range expressions', 'module m;\nwire y=a[c?3:4];\nassign z=a[7:0];\nendmodule', 'module m;\n  wire y = a[c ? 3 : 4];\n  assign z = a[7: 0];\nendmodule'],
-    ['function task and generate', 'module m;\nfunction [3:0] f;\ninput a;\nbegin\nf=a;\nend\nendfunction\ntask t;\nbegin\nx=1;\nend\nendtask\ngenerate\nif(1) begin:g\nwire x;\nend\nendgenerate\nendmodule', 'module m;\n  function [3: 0] f;\n    input a;\n    begin\n      f = a;\n    end\n  endfunction\n  task t;\n    begin\n      x = 1;\n    end\n  endtask\n  generate\n    if (1) begin : g\n      wire x;\n    end\n  endgenerate\nendmodule'],
+    ['parameterized lists and multiple instances', 'module m #(\nparameter N=1\n)(\ninput a,\noutput y\n);\nsub #(\n.N(N)\n) u0(\n.a(a),\n.y()\n),u1(\na,y\n);\nendmodule', 'module m #(\n  parameter N = 1\n) (\n  input  a,\n  output y\n);\n  sub #(\n    .N(N)\n  ) u0 (\n    .a(a),\n    .y()\n  ), u1 (\n    a, y\n  );\nendmodule'],
+    ['range expressions', 'module m;\nwire y=a[c?3:4];\nassign z=a[7:0];\nendmodule', 'module m;\n  wire y = a[c ? 3 : 4];\n  assign z = a[7:0];\nendmodule'],
+    ['function task and generate', 'module m;\nfunction [3:0] f;\ninput a;\nbegin\nf=a;\nend\nendfunction\ntask t;\nbegin\nx=1;\nend\nendtask\ngenerate\nif(1) begin:g\nwire x;\nend\nendgenerate\nendmodule', 'module m;\n  function [3:0] f;\n    input a;\n    begin\n      f = a;\n    end\n  endfunction\n  task t;\n    begin\n      x = 1;\n    end\n  endtask\n  generate\n    if (1) begin : g\n      wire x;\n    end\n  endgenerate\nendmodule'],
     ['named block labels', 'module m;\ninitial begin:outer\nbegin:inner\nx=1;\nend:inner\nend:outer\nendmodule', 'module m;\n  initial begin : outer\n    begin : inner\n      x = 1;\n    end : inner\n  end : outer\nendmodule']
   ])('lays out %s', (_name, input, expected) => {
     const result = format(input);
@@ -66,14 +66,13 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module demo (',
-      '    input      [31: 0] a,',
-      '    output reg [3: 0]  y',
-      '  );',
+      '  input      [31:0] a,',
+      '  output reg [3:0]  y',
+      ');',
       '  always @(posedge clk) begin',
       '    if (a == 1) begin',
       "      y <= 4'b0;",
-      '    end',
-      '    else begin',
+      '    end else begin',
       '      y <= a + 1;',
       '    end',
       '  end',
@@ -81,7 +80,7 @@ describe('Verilog formatting', () => {
     ].join('\n'));
   });
 
-  it('honors configured formatting settings', () => {
+  it('ignores removed formatting settings and uses the current style', () => {
     const settings = mergeCoSettings({
       verilog: {
         format: {
@@ -109,20 +108,24 @@ describe('Verilog formatting', () => {
       'endmodule'
     ].join('\n');
 
-    expect(format(input, settings, { insertSpaces: true, tabSize: 4 })).toBe([
+    const expected = [
       'module demo (',
       '    input [31:0] a',
-      '    );',
-      '    Sub u_sub(',
+      ');',
+      '',
+      '    Sub u_sub (',
       '        .a(a)',
-      '        );',
+      '    );',
       '    always @(posedge clk) begin',
       '        if (a != 0) begin',
       '        end else begin',
       '        end',
       '    end',
       'endmodule'
-    ].join('\n'));
+    ].join('\n');
+
+    expect(format(input, settings, { insertSpaces: true, tabSize: 4 })).toBe(expected);
+    expect(format(input, settings, { insertSpaces: true, tabSize: 4 })).toBe(format(input, mergeCoSettings({}), { insertSpaces: true, tabSize: 4 }));
   });
 
   it('does not rewrite operators inside string literals or line comments', () => {
@@ -150,14 +153,14 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module demo;',
-      '  input [1: 0] a;',
-      '  output reg [3: 0] y;',
-      '  wire [7: 0] w;',
+      '  input [1:0] a;',
+      '  output reg [3:0] y;',
+      '  wire [7:0] w;',
       'endmodule'
     ].join('\n'));
   });
 
-  it('supports compact and preserved declaration range bracket spacing', () => {
+  it('ignores removed declaration range spacing settings', () => {
     const compact = mergeCoSettings({
       verilog: {
         format: {
@@ -166,11 +169,14 @@ describe('Verilog formatting', () => {
         }
       }
     });
-    expect(format('module demo;\ninput [1 : 0] a;\nendmodule', compact)).toBe([
+    const declaration = 'module demo;\ninput [1 : 0] a;\nendmodule';
+    const expected = [
       'module demo;',
-      '  input[1:0]a;',
+      '  input [1:0] a;',
       'endmodule'
-    ].join('\n'));
+    ].join('\n');
+    expect(format(declaration, compact)).toBe(expected);
+    expect(format(declaration, compact)).toBe(format(declaration));
 
     const preserve = mergeCoSettings({
       verilog: {
@@ -180,12 +186,14 @@ describe('Verilog formatting', () => {
         }
       }
     });
-    expect(format('module demo;\ninput[1 : 0]a;\noutput reg   [3 : 0]   y;\nendmodule', preserve)).toBe([
+    const spacedDeclaration = 'module demo;\ninput[1 : 0]a;\noutput reg   [3 : 0]   y;\nendmodule';
+    expect(format(spacedDeclaration, preserve)).toBe([
       'module demo;',
-      '  input[1:0]a;',
-      '  output reg   [3:0]   y;',
+      '  input [1:0] a;',
+      '  output reg [3:0] y;',
       'endmodule'
     ].join('\n'));
+    expect(format(spacedDeclaration, preserve)).toBe(format(spacedDeclaration));
   });
 
   it('preserves line comment bodies verbatim', () => {
@@ -230,7 +238,7 @@ describe('Verilog formatting', () => {
       "      PC_reg <= PC_reg + 32'd4;",
       '    RA: PC_reg <= ra;',
       '    IMM26: //absolute jump',
-      "      PC_reg <= {PC_plus4[31: 28], imm26, 2'b00};",
+      "      PC_reg <= {PC_plus4[31:28], imm26, 2'b00};",
       '    IMM16: ////branch////',
       "      PC_reg <= zero ? PC_reg : 32'd4;",
       '    default:',
@@ -250,13 +258,13 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'assign ALU_out = (ALU_op == ADD) ? (ALU_in1 + ALU_in2) :',
-      '    (ALU_op == SUB) ? (ALU_in1 - ALU_in2) :',
-      '    (ALU_op == OR)  ? (ALU_in1 | ALU_in2) :',
-      `${' '.repeat(22)}32'b0;`
+      '                 (ALU_op == SUB) ? (ALU_in1 - ALU_in2) :',
+      '                 (ALU_op == OR)  ? (ALU_in1 | ALU_in2) :',
+      `${' '.repeat(35)}32'b0;`
     ].join('\n'));
   });
 
-  it('aligns non-leading branches when the first ternary stays on the assign line', () => {
+  it('aligns every branch with the right-hand side when the first ternary stays on the assign line', () => {
     const input = [
       'assign outputA=type==ADD?a_add_b:',
       'type==SUB?a_sub_b:',
@@ -269,13 +277,13 @@ describe('Verilog formatting', () => {
     const once = format(input);
 
     expect(once).toBe([
-      'assign outputA = type == ADD ? a_add_b :',
-      '    type == SUB   ? a_sub_b :',
-      '    type == ADDIU ? a_add_b :',
-      '    type == ORI   ? a_or_b :',
-      '    type == LUI   ? b_left_shift_16 :',
-      '    type == LW    ? a_add_b :',
-      '    type == SW    ? a_add_b : none;'
+      'assign outputA = type == ADD   ? a_add_b :',
+      '                 type == SUB   ? a_sub_b :',
+      '                 type == ADDIU ? a_add_b :',
+      '                 type == ORI   ? a_or_b :',
+      '                 type == LUI   ? b_left_shift_16 :',
+      '                 type == LW    ? a_add_b :',
+      '                 type == SW    ? a_add_b : none;'
     ].join('\n'));
     expect(format(once)).toBe(once);
   });
@@ -298,16 +306,16 @@ describe('Verilog formatting', () => {
 
     expect(once).toBe([
       'assign NPC_sel =',
-      '    //0;',
-      "    (j | jal)   ? 2'b01 :",
-      "    (jr | jalr) ? 2'b10 :",
-      "    (beq | bne) ? 2'b11 : 2'b00;",
+      '  //0;',
+      "  (j | jal)   ? 2'b01 :",
+      "  (jr | jalr) ? 2'b10 :",
+      "  (beq | bne) ? 2'b11 : 2'b00;",
       'assign type =',
-      '    add   ? ADD :',
-      '    sub   ? SUB :',
-      '    addiu ? ADDIU :',
-      '    ori   ? ORI :',
-      "    new   ? NEW : 6'b111111;"
+      '  add   ? ADD :',
+      '  sub   ? SUB :',
+      '  addiu ? ADDIU :',
+      '  ori   ? ORI :',
+      "  new   ? NEW : 6'b111111;"
     ].join('\n'));
     expect(format(once)).toBe(once);
   });
@@ -323,14 +331,14 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'assign NPC_sel =',
-      "    (j | jal)   ? 2'b01 :",
-      "    (jr | jalr) ? 2'b10 :",
-      "    (beq | bne) ? 2'b11 :",
-      `${' '.repeat(18)}2'b00;`
+      "  (j | jal)   ? 2'b01 :",
+      "  (jr | jalr) ? 2'b10 :",
+      "  (beq | bne) ? 2'b11 :",
+      `${' '.repeat(16)}2'b00;`
     ].join('\n'));
   });
 
-  it('can disable multiline ternary alignment', () => {
+  it('ignores the removed multiline ternary alignment preference', () => {
     const settings = mergeCoSettings({
       verilog: {
         format: {
@@ -347,12 +355,14 @@ describe('Verilog formatting', () => {
       'new?NEW:6\'b111111;'
     ].join('\n');
 
-    expect(format(input, settings)).toBe([
+    const expected = [
       'assign type =',
-      '    add ? ADD :',
-      '    addiu ? ADDIU :',
-      "    new ? NEW : 6'b111111;"
-    ].join('\n'));
+      '  add   ? ADD :',
+      '  addiu ? ADDIU :',
+      "  new   ? NEW : 6'b111111;"
+    ].join('\n');
+    expect(format(input, settings)).toBe(expected);
+    expect(format(input, settings)).toBe(format(input));
   });
 
   it('preserves manual ternary line breaks and aligns nested parentheses', () => {
@@ -371,12 +381,12 @@ describe('Verilog formatting', () => {
     expect(format(input)).toBe([
       'module demo;',
       '  assign ExcCode =',
-      '      // LW：访问范围错误',
-      '      (type == LW && !(',
-      "          (ALU_Result >= 32'h00000000 && ALU_Result < 32'h00003000) ||",
-      "          (ALU_Result >= 32'h00007f00 && ALU_Result < 32'h00007f0c)",
-      "      )) ? 5'b00100 :",
-      "      ((type == ADD || type == SUB || type == ADDI) && overflow) ? 5'b01100 : 5'b00000;",
+      '    // LW：访问范围错误',
+      '    (type == LW && !(',
+      "      (ALU_Result >= 32'h00000000 && ALU_Result < 32'h00003000) ||",
+      "      (ALU_Result >= 32'h00007f00 && ALU_Result < 32'h00007f0c)",
+      "    )) ? 5'b00100 :",
+      "    ((type == ADD || type == SUB || type == ADDI) && overflow) ? 5'b01100 : 5'b00000;",
       'endmodule'
     ].join('\n'));
   });
@@ -399,8 +409,8 @@ describe('Verilog formatting', () => {
       "            SUBLONG = 6'b000001,",
       "            ORI     = 6'b000010;",
       '  assign outputA =',
-      '      type == ADD ? a_add_b :',
-      '      type == SUB ? a_sub_b : none;',
+      '    type == ADD ? a_add_b :',
+      '    type == SUB ? a_sub_b : none;',
       'endmodule'
     ].join('\n'));
   });
@@ -421,14 +431,14 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module DM (',
-      '    input          clk,',
-      '    input          reset,',
-      '    input          WE,',
-      '    input  [31: 0] addr,',
-      '    input  [31: 0] WD,',
-      '    input  [31: 0] PC,',
-      '    output [31: 0] data',
-      '  );',
+      '  input         clk,',
+      '  input         reset,',
+      '  input         WE,',
+      '  input  [31:0] addr,',
+      '  input  [31:0] WD,',
+      '  input  [31:0] PC,',
+      '  output [31:0] data',
+      ');',
       'endmodule'
     ].join('\n'));
   });
@@ -445,10 +455,10 @@ describe('Verilog formatting', () => {
 
     expect(format(input)).toBe([
       'module EXT (',
-      '    input wire [15: 0] imm16,',
-      '    input wire         EXTop,',
-      '    output     [31: 0] ext32',
-      '  );',
+      '  input wire [15:0] imm16,',
+      '  input wire        EXTop,',
+      '  output     [31:0] ext32',
+      ');',
       'endmodule'
     ].join('\n'));
   });
@@ -467,7 +477,7 @@ describe('Verilog formatting', () => {
     expect(format(once)).toBe(once);
   });
 
-  it('can disable vertical alignment for Verilog formatting', () => {
+  it('ignores removed vertical alignment preferences', () => {
     const settings = mergeCoSettings({
       verilog: {
         format: {
@@ -488,15 +498,17 @@ describe('Verilog formatting', () => {
       'endmodule'
     ].join('\n');
 
-    expect(format(input, settings)).toBe([
+    const expected = [
       'module demo (',
-      '    input clk,',
-      '    input [31: 0] data',
-      '  );',
-      '  parameter ADD = 1,',
+      '  input        clk,',
+      '  input [31:0] data',
+      ');',
+      '  parameter ADD     = 1,',
       '            SUBLONG = 2;',
       'endmodule'
-    ].join('\n'));
+    ].join('\n');
+    expect(format(input, settings)).toBe(expected);
+    expect(format(input, settings)).toBe(format(input));
   });
 
   it('does not treat comment-only lines ending in colon as continued expressions', () => {
@@ -517,8 +529,8 @@ describe('Verilog formatting', () => {
       '// Project Name:',
       '`default_nettype none',
       'module demo (',
-      '    input clk',
-      '  );',
+      '  input clk',
+      ');',
       'endmodule'
     ].join('\n'));
   });
@@ -618,7 +630,7 @@ describe('Verilog formatting', () => {
       '      end',
       '      else state <= `IDLE;',
       '    default: begin',
-      "      if (ctrl[2: 1] == 2'b00) ctrl[0] <= 1'b0;",
+      "      if (ctrl[2:1] == 2'b00) ctrl[0] <= 1'b0;",
       "      else _IRQ <= 1'b0;",
       '      state <= `IDLE;',
       '    end',

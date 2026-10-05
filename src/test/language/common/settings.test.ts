@@ -87,32 +87,25 @@ describe('mergeCoSettings', () => {
     const result = mergeCoSettings({ verilog: { lint: { courseRules: false } } });
     expect(result.verilog.lint.courseRules).toBe(false);
     expect(result.verilog.implicitNet).toEqual(defaultCoSettings.verilog.implicitNet);
-    expect(result.verilog.format).toEqual(defaultCoSettings.verilog.format);
+    expect(result.verilog).not.toHaveProperty('format');
   });
 
-  it('merges and normalizes Verilog format settings', () => {
+  it('ignores all retired Verilog formatting preferences', () => {
     const result = mergeCoSettings({
       verilog: {
         format: {
           continuationIndent: 0,
           spaceInRange: false,
           declarationRangeSpacing: 'compact',
-          alignment: {
-            parameter: 'equals',
-            modulePort: 'name',
-            ternary: 'question'
-          },
-          maxBlankLines: -1
+          spaceBeforeInstancePorts: false,
+          separateElse: false,
+          maxBlankLines: 0,
+          alignment: { parameter: 'none', modulePort: 'none', ternary: 'none' }
         }
       }
     });
-    expect(result.verilog.format.continuationIndent).toBe(1);
-    expect(result.verilog.format.spaceInRange).toBe(false);
-    expect(result.verilog.format.declarationRangeSpacing).toBe('compact');
-    expect(result.verilog.format.parameterAlignment).toBe('equals');
-    expect(result.verilog.format.modulePortAlignment).toBe('name');
-    expect(result.verilog.format.ternaryAlignment).toBe('question');
-    expect(result.verilog.format.maxBlankLines).toBe(0);
+    expect(result.verilog).toEqual(defaultCoSettings.verilog);
+    expect(result.verilog).not.toHaveProperty('format');
   });
 
   it('normalizes backend-neutral external Verilog syntax settings', () => {
@@ -158,9 +151,8 @@ describe('mergeCoSettings', () => {
         }
       }
     });
-    expect(result.verilog.format.parameterAlignment).toBe(defaultCoSettings.verilog.format.parameterAlignment);
-    expect(result.verilog.format.modulePortAlignment).toBe(defaultCoSettings.verilog.format.modulePortAlignment);
-    expect(result.verilog.format.ternaryAlignment).toBe(defaultCoSettings.verilog.format.ternaryAlignment);
+    expect(result.verilog).toEqual(defaultCoSettings.verilog);
+    expect(result.verilog).not.toHaveProperty('format');
   });
 
   it('normalizes disabled diagnostic codes', () => {

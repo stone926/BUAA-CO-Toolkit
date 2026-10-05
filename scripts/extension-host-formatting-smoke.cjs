@@ -1,4 +1,4 @@
-// @index formatting-smoke — 真实宿主全文/选区格式化、配置刷新与保护区回归
+// @index formatting-smoke — 真实宿主全文/选区格式化、统一风格与保护区回归
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -14,6 +14,23 @@ async function runFormattingSmoke({ root, waitFor }) {
   await vscode.window.showTextDocument(document);
   const configuration = vscode.workspace.getConfiguration('co', uri);
   const previous = configuration.inspect('verilog.format.spaceInRange')?.workspaceFolderValue;
+  const previousInstanceSpacing = configuration.inspect('verilog.format.spaceBeforeInstancePorts')?.workspaceFolderValue;
+  // Removed settings are no longer registered, so VS Code rejects configuration.update.
+  // A real stale workspace preference can still exist in settings.json.
+  async function staleSetting(key, value) {
+    const settingsDir = path.join(vscode.workspace.getWorkspaceFolder(uri).uri.fsPath, '.vscode');
+    const settingsPath = path.join(settingsDir, 'settings.json');
+    await fs.mkdir(settingsDir, { recursive: true });
+    let values = {};
+    try { values = JSON.parse(await fs.readFile(settingsPath, 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const fullKey = `co.verilog.format.${key}`;
+    if (value === undefined) delete values[fullKey];
+    else values[fullKey] = value;
+    await fs.writeFile(settingsPath, `${JSON.stringify(values, null, 2)}\n`);
+    await waitFor(`Stale formatting setting ${key} readback`, async () =>
+      vscode.workspace.getConfiguration('co', uri).get(`verilog.format.${key}`) === value);
+  }
   const spaces = { tabSize: 2, insertSpaces: true };
   const tabs = { tabSize: 4, insertSpaces: false };
   // VS Code 的命令聚合层可将空编辑返回为 undefined；首次非空请求单独验证注册成功。
@@ -37,6 +54,23 @@ async function runFormattingSmoke({ root, waitFor }) {
     await apply(initial);
     assert.match(document.getText(), /^  initial begin\r?\n    value = 1;/m);
     assert.deepEqual(await full(), [], 'A second full request must be a no-op');
+
+    // Formatting has one style, independent of stale workspace preferences.
+    const layoutSource = 'module formatting_smoke #(\nparameter N=1\n) (\ninput wire clk, reset\n);\n\n\n\nTC timer0(.clk(clk),.reset(reset));\nwire victim=a?0:\nb?1:2;\nendmodule\n';
+    await replace(layoutSource);
+    await apply(await full());
+    assert.match(document.getText(), /\n\) \(\n/);
+    assert.match(document.getText(), /\n\);\n\n\n\n/);
+    assert.match(document.getText(), /TC timer0 \(\.clk\(clk\), \.reset\(reset\)\);/);
+    const branches = document.getText().split(/\r?\n/).filter(line => line.includes('?'));
+    assert.equal(branches.length, 2);
+    assert.equal(branches[0].indexOf('?'), branches[1].indexOf('?'));
+    assert.deepEqual(await full(), [], 'Actual default layout must be stable');
+
+    await staleSetting('spaceBeforeInstancePorts', false);
+    assert.deepEqual(await full(), [], 'Removed instance spacing preferences must not affect formatting');
+    await staleSetting('spaceBeforeInstancePorts', previousInstanceSpacing);
+    assert.ok(document.getText().includes('TC timer0 ('));
 
     await replace(source);
     await apply(await full(tabs));
@@ -62,15 +96,13 @@ async function runFormattingSmoke({ root, waitFor }) {
     assert.equal(document.getText(), boundarySource.replace('wire value;', '  wire value;'));
     assert.deepEqual(await range(boundarySelection), []);
 
-    // 等待配置真正影响输出，不用固定延时冒充配置已传播。
-    for (const [enabled, expected] of [[true, /\[7: 0\]/], [false, /\[7:0\]/]]) {
-      await configuration.update('verilog.format.spaceInRange', enabled, vscode.ConfigurationTarget.WorkspaceFolder);
+    // 旧设置不再参与格式化；无论旧值为何，都使用相同的紧凑范围。
+    for (const enabled of [true, false]) {
+      await staleSetting('spaceInRange', enabled);
       await replace(source);
-      await waitFor(`Legacy range spacing setting ${enabled}`, async () => {
-        await apply(await full());
-        return expected.test(document.getText());
-      });
-      assert.deepEqual(await full(), [], 'Legacy setting output must be stable');
+      await apply(await full());
+      assert.match(document.getText(), /\[7:0\]/);
+      assert.deepEqual(await full(), [], 'Unified style must be stable regardless of stale settings');
     }
 
     const protectedPart = '// co-format: off\n  initial begin\nvalue=  2;  \n  end\n// co-format: on\n';
@@ -94,9 +126,10 @@ async function runFormattingSmoke({ root, waitFor }) {
     assert.ok(document.getText().includes(protectedHeader));
     assert.match(document.getText(), /^      value = 1;/m);
     assert.deepEqual(await full(), []);
-    console.log('PASS real Verilog full/range formatting, spaces/tabs, legacy settings, and protected regions');
+    console.log('PASS real Verilog full/range formatting, spaces/tabs, unified style, and protected regions');
   } finally {
-    await configuration.update('verilog.format.spaceInRange', previous, vscode.ConfigurationTarget.WorkspaceFolder);
+    await staleSetting('spaceInRange', previous);
+    await staleSetting('spaceBeforeInstancePorts', previousInstanceSpacing);
     // 删除独立 fixture 并清除未保存状态，不污染后续诊断或课程 smoke。
     await replace(source);
     await document.save();

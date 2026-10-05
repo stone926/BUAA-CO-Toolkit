@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 260 files | 框架: Vitest
+# test-suite | src/test/ | 263 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -8,7 +8,7 @@
 
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
-| `test/language/` | 77 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
+| `test/language/` | 80 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
 | `test/`（根） | 51 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
 | `test/courseTesting/` | 47 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
@@ -41,14 +41,16 @@
 
 ## Verilog 格式化回归
 
-- `language/verilog/formatting.test.ts` 保留课程默认布局与旧偏好 golden；辅助函数实际应用完整 TextEdit 列表，不假设首条编辑是全文替换。
+- `language/verilog/formatting.test.ts` 保留统一布局 golden 并验证旧偏好不再影响输出；辅助函数实际应用完整 TextEdit 列表，不假设首条编辑是全文替换。
 - `language/verilog/formattingSafety.test.ts` 验证 token/注释/字符串/宏保真、未完成输入、结构边界、off/on、换行和幂等性。
 - `language/verilog/formattingRange.test.ts` 验证相交完整行的选区边界、范围外不变、受保护内容以及无变化编辑。
 - `language/verilog/formattingPerformance.test.ts` 覆盖 2k/10k/50k 行文档及长字面量、深嵌套等边界；使用 `CO_FORMAT_PERF_BUDGET_MS` 可调整预算，不以空结果替代正确输出。
 - `language/verilog/formattingEditRegression.test.ts` / `language/verilog/formattingStructureRegression.test.ts` 固化审查发现的数字 token 边界、选区间隙、保护区结构、条件分支与错误恢复回归。
+- `language/verilog/formattingLayoutRegression.test.ts` / `language/verilog/formattingSpacingRegression.test.ts` / `language/verilog/formattingBlankLines.test.ts` 覆盖实例间距、模块列表闭括号、赋值右值/三元链对齐、Tab 可视列、选区上下文及空行保留。
 - `verilog/formattingEquivalence.test.ts` 用真实 bundled Icarus 分别编译原始和格式化后的合法样例，并比较确定性仿真结果；词法保真断言不替代行为证据，runtime 缺失的跳过必须单独报告。
 - `language/common/formattingRequest.test.ts` 验证配置异步等待期间的取消、文档关闭与版本变化，不允许过期 edits 返回。
 - `scripts/extension-host-formatting-smoke.cjs` 由真实宿主入口调用，通过 VS Code 全文/选区 provider 应用 edits，覆盖幂等、缩进设置和保护区域，不 mock 格式化核心。
+- `language/common/settings.test.ts` 与 `manifest.test.ts` 确认旧格式化配置已删除；真实宿主同时验证实例空格、空行保留和旧工作区偏好不再影响统一风格。
 
 ## 回归重点
 
