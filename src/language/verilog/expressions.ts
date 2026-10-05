@@ -18,6 +18,10 @@ export interface WidthInfo {
 export type VerilogConstantOverrides = ReadonlyMap<string, bigint>;
 
 export function widthOfDecl(decl: VerilogDecl, module?: VerilogModule, overrides?: VerilogConstantOverrides): WidthInfo {
+  const valueType = decl.functionReturnType ?? decl.kind;
+  if (valueType === 'real' || valueType === 'realtime' || decl.kind === 'task') {
+    return {};
+  }
   const rangeWidth = widthFromRange(decl.width, module, overrides);
   if (rangeWidth !== undefined) {
     return { width: rangeWidth };
@@ -36,10 +40,10 @@ export function widthOfDecl(decl: VerilogDecl, module?: VerilogModule, overrides
     }
     return inferred;
   }
-  if (decl.kind === 'time') {
+  if (valueType === 'time') {
     return { width: 64 };
   }
-  if (decl.kind === 'integer') {
+  if (valueType === 'integer') {
     return { width: 32 };
   }
   return { width: 1 };
@@ -161,7 +165,8 @@ function widthOfCall(expression: Extract<VerilogExpressionAst, { kind: 'callExpr
   if (integerSystemFunction(expression.callee)) {
     return { width: 32 };
   }
-  return {};
+  const decl = module?.declarations.get(expression.callee);
+  return decl?.kind === 'function' ? widthOfDecl(decl, module, overrides) : {};
 }
 
 function widthOfSelect(expression: Extract<VerilogExpressionAst, { kind: 'selectExpression' }>, module: VerilogModule | undefined, overrides?: VerilogConstantOverrides): WidthInfo {

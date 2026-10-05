@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
 import { getVerilogDiagnostics } from '../../../language/verilog/service';
+import { parseModules, widthOfExpression } from '../../../language/verilog/parser';
 
 let documentVersion = 1;
 
@@ -16,6 +17,21 @@ function codes(text: string): string[] {
 }
 
 describe('Verilog width diagnostics', () => {
+  it('keeps right shifts at the left operand width and warns about implicit index truncation', () => {
+    const text = `
+module cache #(parameter SET_BITS = 4, LINE_WORD_BITS = 2)(input [31:0] saved_addr);
+    wire [SET_BITS-1:0] set_index = saved_addr >> (LINE_WORD_BITS + 2);
+    wire [SET_BITS-1:0] explicit_index = saved_addr[LINE_WORD_BITS+2 +: SET_BITS];
+endmodule
+`;
+    const document = doc(text);
+    const module = parseModules(document, text)[0];
+    expect(widthOfExpression('saved_addr >> (LINE_WORD_BITS + 2)', module).width).toBe(32);
+    const warnings = getVerilogDiagnostics(document, mergeCoSettings({})).filter((d) => d.code === 'width-mismatch');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain("'set_index' is 4 bit(s), but its initializer is 32 bit(s)");
+  });
+
   it('does not flag ternary chains whose branches are sized parameters', () => {
     const result = codes(`
 module control(

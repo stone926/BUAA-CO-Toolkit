@@ -121,6 +121,53 @@ endmodule
     expect(result).not.toContain('syntax-malformed-assignment');
   });
 
+  it.each(['case', 'casex', 'casez'])('accepts nested control prefixes after %s labels', (caseKind) => {
+    const result = syntaxCodes(`
+module cache(input clk, input resp_ready, output reg [2:0] state);
+    localparam IDLE = 3'd0, RESPONSE = 3'd4;
+    integer i;
+    always @(posedge clk) begin
+        ${caseKind} (state)
+            RESPONSE: if (resp_ready) state <= IDLE;
+            3'd1, 3'd2: if (resp_ready) if (state) state <= IDLE;
+            3'd3: for (i = 0; i < 2; i = i + 1) if (resp_ready) state <= IDLE;
+            3'd5: repeat (2) if (resp_ready) #1 state <= IDLE;
+            3'd6: while (resp_ready) state <= IDLE;
+            default: if (resp_ready) state <= IDLE;
+        endcase
+    end
+endmodule
+`.trim());
+    expect(result).toEqual([]);
+  });
+
+  it('accepts a default case item without the optional colon before an if statement', () => {
+    expect(syntaxCodes(`
+module cache(input resp_ready, output reg state);
+    always @(*) case (state)
+        default if (resp_ready) state = 0;
+    endcase
+endmodule
+`.trim())).toEqual([]);
+  });
+
+  it('retains assignment errors after case labels and nested control prefixes', () => {
+    const text = `
+module cache(input resp_ready, output reg [2:0] state);
+    always @(*) begin
+        case (state)
+            3'd0: if (resp_ready) state extra <= 0;
+            3'd1: if (resp_ready) state <= ;
+            3'd2: repeat (2) if (resp_ready) = 0;
+            default: if (resp_ready) state <= 0
+        endcase
+    end
+endmodule
+`.trim();
+    expect(syntaxLines(text, 'syntax-malformed-assignment')).toEqual([4, 5, 6]);
+    expect(syntaxLines(text, 'syntax-missing-semicolon')).toContain(7);
+  });
+
   it('validates loop control syntax inside procedural blocks', () => {
     const result = codes(`
 module loops(input clk, output reg y);

@@ -22,8 +22,8 @@ export function declarationMarkdown(decl: VerilogDecl, module: VerilogModule): s
     : decl.kind;
   const parts = [`**${kind}**`];
   const width = widthOfDecl(decl, module).width;
-  if (width !== undefined && decl.kind !== 'task' && decl.kind !== 'function') {
-    parts.push(`位宽：\`${width}\` 位`);
+  if (width !== undefined && decl.kind !== 'task') {
+    parts.push(`${decl.kind === 'function' ? '返回位宽' : '位宽'}：\`${width}\` 位`);
   } else if (decl.width) {
     parts.push(`范围：\`${decl.width}\``);
   }

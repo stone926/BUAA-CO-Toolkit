@@ -9,6 +9,57 @@ function doc(text: string): TextDocument {
 }
 
 describe('Verilog AST and semantic model', () => {
+  it('binds generate controls and memory dimension references for navigation and rename', () => {
+    const text = [
+      'module top #(parameter MODE = 1, parameter COUNT = 4);',
+      '  reg [7:0] entries [0:COUNT-1];',
+      '  genvar i;',
+      '  if (MODE) begin : enabled',
+      '    reg [7:0] local_entries [0:COUNT-1];',
+      '    for (i = 0; i < COUNT; i = i + 1) begin : entry',
+      '      wire present;',
+      '    end',
+      '  end',
+      '  initial begin',
+      '    if (MODE) entries[0] = COUNT;',
+      '  end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    for (const name of ['MODE', 'COUNT']) {
+      const symbol = result.semantic.symbols.find((symbol) => symbol.name === name)!;
+      const ranges = verilogSemanticReferenceRanges(result.semantic, verilogSemanticTargetFromSymbol(symbol), false);
+      const uses = [...text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].slice(1);
+      expect(ranges).toHaveLength(uses.length);
+      for (const use of uses) {
+        expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(use.index))?.symbol).toBe(symbol);
+      }
+    }
+  });
+
+  it('collects case-generate selectors while preserving procedural scopes', () => {
+    const text = [
+      'module top #(parameter MODE = 1);',
+      '  case (MODE)',
+      '    1: begin : selected wire present; end',
+      '    default: begin : other wire absent; end',
+      '  endcase',
+      '  initial begin',
+      '    integer MODE;',
+      '    if (MODE) MODE = 0;',
+      '  end',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const result = parseVerilog(document, defaultCoSettings, false);
+    const parameter = result.semantic.symbols.find((symbol) => symbol.name === 'MODE' && symbol.kind === 'parameter');
+    const local = result.semantic.symbols.find((symbol) => symbol.name === 'MODE' && symbol.kind === 'signal');
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('case (MODE)') + 6))?.symbol).toBe(parameter);
+    expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('if (MODE)') + 4))?.symbol).toBe(local);
+    expect(result.ast.modules[0].generateExpressions).toHaveLength(1);
+  });
+
   it('builds a document AST with module items and procedural blocks', () => {
     const text = [
       '`define WIDTH 4',

@@ -11,6 +11,7 @@ export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'l
 export interface VerilogDecl {
   name: string;
   kind: VerilogDeclKind;
+  functionReturnType?: 'integer' | 'time' | 'real' | 'realtime';
   width?: string;
   widthRange?: Range;
   widthAst?: VerilogExpressionAst[];

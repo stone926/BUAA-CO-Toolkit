@@ -353,10 +353,19 @@ function collectReferences(
       }
     }
 
-    for (const decl of module.declarations.values()) {
+    for (const decl of dedupeDecls([
+      ...module.declarations.values(),
+      ...module.generateBlocks.flatMap((block) => block.declarations)
+    ])) {
       for (const widthExpression of decl.widthAst ?? []) {
         const widthScope = scopeAtPosition(scope, blockScopes, decl.widthRange?.start ?? decl.range.start);
         collectReferencesFromExpressionAst(document, references, declarationRangeKeys, widthScope, module, widthExpression, 0);
+      }
+      for (const dimension of decl.unpackedDimensions ?? []) {
+        const dimensionScope = scopeAtPosition(scope, blockScopes, dimension.range.start);
+        for (const expression of dimension.expressions) {
+          collectReferencesFromExpressionAst(document, references, declarationRangeKeys, dimensionScope, module, expression, 0);
+        }
       }
       if (!decl.initializer || !decl.initializerRange) {
         continue;
@@ -587,6 +596,10 @@ function collectAstDrivenModuleReferences(
     return;
   }
   const proceduralBlocks = moduleAst.proceduralBlocks;
+  for (const expression of moduleAst.generateExpressions) {
+    const scope = scopeAtPosition(moduleScope, blockScopes, document.positionAt(expression.start));
+    collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, expression, 0);
+  }
   for (const subroutine of moduleAst.subroutines) {
     collectReferencesFromSubroutineAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, subroutine);
   }

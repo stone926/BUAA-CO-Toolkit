@@ -121,6 +121,31 @@ describe('Verilog semantic tokens', () => {
     expect(tokenAt(tokens, 0, text.indexOf('.clk') + 1)?.type).toBe(type('verilogPort'));
   });
 
+  it('highlights parameter references in generate controls and unpacked memory dimensions', () => {
+    const text = [
+      'module top #(parameter OS_MODE = 1, parameter TLB_ENTRIES = 16);',
+      '  reg [31:0] entries [0:TLB_ENTRIES-1], tags [TLB_ENTRIES-1:0];',
+      '  genvar i;',
+      '  generate',
+      '    if (OS_MODE) begin : enabled',
+      '      reg [31:0] local_entries [0:TLB_ENTRIES-1];',
+      '      for (i = 0; i < TLB_ENTRIES; i = i + 1) begin : entry',
+      '        if (OS_MODE && i < TLB_ENTRIES) wire active;',
+      '      end',
+      '    end else if (!OS_MODE) begin : disabled',
+      '      wire inactive;',
+      '    end',
+      '  endgenerate',
+      'endmodule'
+    ].join('\n');
+    const document = doc(text);
+    const tokens = decode(getVerilogSemanticTokens(document, mergeCoSettings({})).data);
+    for (const match of text.matchAll(/\b(?:OS_MODE|TLB_ENTRIES)\b/g)) {
+      const position = document.positionAt(match.index);
+      expect(tokenAt(tokens, position.line, position.character)?.type, `parameter at ${match.index}`).toBe(type('verilogParameter'));
+    }
+  });
+
   it('highlights task and function declarations and calls distinctly', () => {
     const text = [
       'module m;',

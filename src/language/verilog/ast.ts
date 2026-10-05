@@ -108,6 +108,7 @@ export interface VerilogModuleAst {
   alwaysBlocks: VerilogAlwaysBlockAst[];
   proceduralBlocks: VerilogProceduralBlockAst[];
   subroutines: VerilogSubroutineAst[];
+  generateExpressions: VerilogExpressionAst[];
   items: VerilogStatementAst[];
   module: VerilogModule;
 }
@@ -237,6 +238,8 @@ function buildModuleAst(document: TextDocument, statements: VerilogStatementSour
   const items = statements
     .filter((statement) => containsRange(module.range, statement.range))
     .map((statement) => buildStatementAst(statement, module));
+  const proceduralBlocks = collectProceduralBlocksFromTokens(document, tokens, module);
+  const subroutines = collectSubroutineAsts(document, tokens, module);
   return {
     kind: 'module',
     name: module.name,
@@ -257,11 +260,56 @@ function buildModuleAst(document: TextDocument, statements: VerilogStatementSour
       instance
     })),
     alwaysBlocks: collectAlwaysBlocksFromTokens(document, tokens, module),
-    proceduralBlocks: collectProceduralBlocksFromTokens(document, tokens, module),
-    subroutines: collectSubroutineAsts(document, tokens, module),
+    proceduralBlocks,
+    subroutines,
+    generateExpressions: collectGenerateExpressionAsts(document, tokens, module, [...proceduralBlocks, ...subroutines]),
     items,
     module
   };
+}
+
+/** Generate controls are module items, outside the procedural statement trees. */
+function collectGenerateExpressionAsts(
+  document: TextDocument,
+  tokens: VerilogToken[],
+  module: VerilogModule,
+  excludedBlocks: Array<{ range: Range }>
+): VerilogExpressionAst[] {
+  const start = document.offsetAt(module.headerEnd);
+  const end = document.offsetAt(module.endmoduleRange?.start ?? module.range.end);
+  const excluded = excludedBlocks.map((block) => ({
+    start: document.offsetAt(block.range.start),
+    end: document.offsetAt(block.range.end)
+  })).sort((left, right) => left.start - right.start);
+  const expressions: VerilogExpressionAst[] = [];
+  let blockIndex = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.start < start || token.start >= end) {
+      continue;
+    }
+    while (excluded[blockIndex]?.end <= token.start) {
+      blockIndex++;
+    }
+    if (excluded[blockIndex] && token.start >= excluded[blockIndex].start) {
+      continue;
+    }
+    if (!['if', 'for', 'case', 'casex', 'casez'].includes(token.value) || tokens[index + 1]?.value !== '(') {
+      continue;
+    }
+    const close = findMatchingTokenForward(tokens, index + 1, '(', ')');
+    if (close < 0 || tokens[close].start >= end) {
+      continue;
+    }
+    const control = tokens.slice(index + 2, close);
+    for (const part of token.value === 'for' ? splitTopLevelTokens(control, ';') : [control]) {
+      const assignment = assignmentExpressionAsts(part);
+      const expression = assignment.expressions.length ? undefined : parseVerilogExpressionTokens(part);
+      expressions.push(...assignment.expressions, ...(expression ? [expression] : []));
+    }
+    index = close;
+  }
+  return expressions;
 }
 
 function declAst(decl: VerilogDecl): VerilogDeclAst {

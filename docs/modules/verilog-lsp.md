@@ -19,12 +19,13 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `instanceSyntax.ts` — 解析与语法验证共用的实例组 token 边界
 - `proceduralBoundary.ts` — always/initial 的单条过程语句边界与错误恢复
 - `syntaxParser.ts` — 语法树 + 语法诊断
-- `semanticModel.ts` — 符号表/作用域/AST 引用收集；generate 块各自成作用域
+- `semanticModel.ts` — 符号表/作用域/AST 引用收集（含 generate 控制与声明的 unpacked 数组维度）；generate 块各自成作用域
 - `model.ts` — VerilogDecl / VerilogInstance / VerilogModule / VerilogGenerateBlock / VerilogMacro 等模型类型
 
 ## 表达式与声明支持
 
 - `expressions.ts` — 位宽推断与常量折叠
+- 函数声明保留返回范围及 integer/time/real 类型，返回赋值、函数调用与 hover 复用同一位宽；右移保持左操作数位宽，赋给较窄目标仍提示截断，显式 part-select 可表达取位意图。
 - `declarations.ts` — 声明类型分类（port 方向、net/variable、parameter）
 - `driveStrength.ts` — 驱动强度前缀识别（保留源码偏移，不模拟强度）
 - `preprocessor.ts` — `define`/`include`/`ifdef` 等指令集，供补全使用

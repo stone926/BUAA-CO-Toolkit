@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
-import { getVerilogDiagnostics } from '../../../language/verilog/service';
+import { getVerilogDiagnostics, getVerilogHover } from '../../../language/verilog/service';
+import { parseModules, widthOfDecl, widthOfExpression } from '../../../language/verilog/parser';
+import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
 let version = 1;
 
@@ -14,6 +16,55 @@ function implicitNetNames(text: string): string[] {
 }
 
 describe('Verilog task/function declarations', () => {
+  it('preserves parameterized function return widths for assignments, calls and hover', () => {
+    const text = `
+module hazard #(parameter BITS = 4)(input [3:0] ready, output [3:0] result);
+    function automatic [BITS-1:0] remaining;
+        input [3:0] when_ready, stage;
+        begin remaining = when_ready == 15 ? 4'd15 : when_ready > stage ? when_ready-stage : 4'd0; end
+    endfunction
+    assign result = remaining(ready, 1);
+endmodule
+`;
+    const document = TextDocument.create('test://function-width.v', 'verilog', 1, text);
+    const settings = mergeCoSettings({});
+    const module = parseModules(document, text)[0];
+    const decl = module.declarations.get('remaining')!;
+    expect(decl.width).toBe('[BITS-1:0]');
+    expect(widthOfDecl(decl, module).width).toBe(4);
+    expect(widthOfExpression('remaining(ready, 1)', module).width).toBe(4);
+    expect(getVerilogDiagnostics(document, settings).filter((d) => d.code === 'width-mismatch')).toEqual([]);
+    const hover = getVerilogHover(document, document.positionAt(text.indexOf('remaining;')), settings, new VerilogWorkspaceIndex());
+    expect(hover?.contents).toMatchObject({ value: expect.stringContaining('返回位宽：`4` 位') });
+  });
+
+  it('reports actual truncation both into a function return and from a function call', () => {
+    const text = `
+module m(input [7:0] data, output [1:0] result);
+    function [3:0] narrow(input [7:0] value);
+        begin narrow = value; end
+    endfunction
+    assign result = narrow(data);
+endmodule
+`;
+    const document = TextDocument.create('test://function-truncation.v', 'verilog', 1, text);
+    const warnings = getVerilogDiagnostics(document, mergeCoSettings({})).filter((d) => d.code === 'width-mismatch');
+    expect(warnings).toHaveLength(2);
+    expect(warnings.map((d) => d.message)).toEqual(expect.arrayContaining([
+      expect.stringContaining("'narrow' is 4 bit(s), but this expression is 8 bit(s)"),
+      expect.stringContaining("'result' is 2 bit(s), but this expression is 4 bit(s)")
+    ]));
+  });
+
+  it.each([
+    ['', 1], ['signed', 1], ['integer', 32], ['time', 64], ['real', undefined], ['realtime', undefined], ['[UNKNOWN-1:0]', undefined]
+  ])('handles %s function return types without inventing widths', (returnType, expected) => {
+    const text = `module m; function ${returnType} f(input value); begin f = value; end endfunction endmodule`;
+    const document = TextDocument.create(`test://function-type-${version++}.v`, 'verilog', 1, text);
+    const module = parseModules(document, text)[0];
+    expect(widthOfExpression('f(0)', module).width).toBe(expected);
+  });
+
   it('does not report the task name or its locals as implicit nets', () => {
     const names = implicitNetNames(`
 module tb;

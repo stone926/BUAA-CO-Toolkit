@@ -306,12 +306,21 @@ function parseSubroutineDeclarations(document: TextDocument, text: string, token
     const nameLimit = parenOpen < 0 ? headerLimit : parenOpen;
     const nameToken = lastIdentifierToken(statement, 1, nameLimit);
     if (nameToken) {
-      result.push({
+      const decl: VerilogDecl = {
         name: nameToken.value,
         kind,
         range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[statement.length - 1].end)),
         selectionRange: tokenRange(document, nameToken)
-      });
+      };
+      if (kind === 'function') {
+        const returnTokens = statement.slice(1, statement.indexOf(nameToken));
+        applyDeclarationWidth(decl, firstRangeInfo(document, text, returnTokens));
+        const returnType = returnTokens.find((token) =>
+          token.value === 'integer' || token.value === 'time' || token.value === 'real' || token.value === 'realtime'
+        )?.value;
+        decl.functionReturnType = returnType as VerilogDecl['functionReturnType'];
+      }
+      result.push(decl);
     }
     if (parenOpen >= 0) {
       const close = findMatchingToken(statement, parenOpen, '(', ')');

@@ -126,7 +126,11 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
     }
     return start;
   }
-  let start = tokens[0]?.value === 'default' ? 1 : 0;
+  // Case labels precede the controlled statement, so strip them before its
+  // if/loop/delay prefixes. `default` also permits omitting the colon.
+  const label = findLastTopLevelToken(tokens, ':', 0, operatorIndex);
+  const defaultLabel = findLastTopLevelToken(tokens, 'default', 0, operatorIndex);
+  let start = Math.max(label, defaultLabel) + 1;
   while (start < operatorIndex) {
     const token = tokens[start];
     if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for') {
@@ -156,18 +160,6 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
     break;
   }
 
-  const label = findLastTopLevelToken(tokens, ':', start, operatorIndex);
-  if (label >= 0) {
-    start = label + 1;
-  }
-
-  while (tokens[start]?.value === '#') {
-    const next = skipDelayControl(tokens, start);
-    if (next <= start || next > operatorIndex) {
-      break;
-    }
-    start = next;
-  }
   return start;
 }
 

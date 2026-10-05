@@ -9,7 +9,7 @@
 - `assignmentAst.ts` — 从连续赋值与过程赋值收集 `AssignmentUse`
 - `astTokens.ts` — code tokens / statement tokens 提取
 - `gatePrimitives.ts` — 内建门级原语关键字集
-- `ast.ts` — `VerilogAstDocument` / `VerilogModuleAst` 顶层结构
+- `ast.ts` — `VerilogAstDocument` / `VerilogModuleAst` 顶层结构与 generate 控制表达式（排除过程块与子程序）
 
 **AST 类型层级**
 
