@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-10-05
+
 - 修复 Verilog 函数返回位宽、右移表达式与控制语句引用分析，减少位宽和未使用信号的误诊断。
 - 统一 Verilog 反引号宏调用与预处理指令的词法高亮。
 - 修复实例连接空格、模块列表闭括号、赋值续行和三元链对齐，保留已有换行与空行，并保证重复格式化稳定。
