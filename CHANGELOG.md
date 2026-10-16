@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- 修复 Verilog/SystemVerilog 手动输入 `else` 时被自动左移一级的缩进异常：`else` 紧跟自身分支的 `end`，此前会与 `if` 错位；`end`、`endcase`、`endmodule` 等闭合关键字的自动缩进保持不变。
+
 ## [1.5.4] - 2026-10-05
 
 - 修复 Verilog 函数返回位宽、右移表达式与控制语句引用分析，减少位宽和未使用信号的误诊断。
