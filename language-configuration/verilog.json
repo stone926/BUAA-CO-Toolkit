@@ -67,7 +67,7 @@
   "wordPattern": "(-?\\d+(?:\\.\\d+)?)|(?:\\\\\\S+)|(?:[`$]?[A-Za-z_][A-Za-z0-9_$]*)",
   "indentationRules": {
     "increaseIndentPattern": "^\\s*(?:(?:module|macromodule|interface|program|package|class|function|task|generate|begin|fork|case|casex|casez|clocking|covergroup|property|sequence)\\b|.*\\bbegin\\b)(?!.*\\bend\\b).*$",
-    "decreaseIndentPattern": "^\\s*(?:end(?:module|function|task|generate|class|interface|package|program|clocking|group|property|sequence)?|endcase|join(?:_any|_none)?|else\\b).*$",
+    "decreaseIndentPattern": "^\\s*(?:end(?:module|function|task|generate|class|interface|package|program|clocking|group|property|sequence)?|endcase|join(?:_any|_none)?).*$",
     "indentNextLinePattern": "^\\s*(?:(?:if|else(?:\\s+if)?|for|foreach|while|repeat|always|always_comb|always_ff|always_latch)\\b)(?!.*\\bbegin\\b).*$"
   },
   "folding": {

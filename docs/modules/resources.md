@@ -41,7 +41,7 @@
 
 - `syntaxes/` — `mips`、`verilog`、`systemverilog` TextMate grammar（由目录确定性生成）
 - `snippets/` — `mipsasm.json`、`verilog.json`
-- `language-configuration/` — `mipsasm.json`、`verilog.json`（括号配对、注释与自动闭合）
+- `language-configuration/` — `mipsasm.json`、`verilog.json`（括号配对、注释与自动闭合）。Verilog 缩进规则按 VS Code 语义编写：`decreaseIndentPattern` 只列真正的闭合关键字，不含 `else`。该模式会在输入字符命中时立刻把当前行左移一级，而 `else` 紧跟自身分支的 `end`，上一行已经给出目标缩进，命中会把本已对齐的 `else` 再移一级。规则单元回归见 `src/test/language/verilog/indentationRules.test.ts`，真实宿主逐字符输入回归见 `scripts/extension-host-indentation-smoke.cjs`
 
 ## Bundled Icarus 运行时
 
