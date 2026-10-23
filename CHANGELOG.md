@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.6] - 2026-10-23
+
 - 新增 `co.verilog.projects`，可按练习或阶段划分独立源码集合；跨文件跳转、连线视图、诊断与外部检查按工程解析，同名定义有歧义时不再猜测目标。
 - 加强重命名和常量折叠、提取的检查，保留表达式位宽与有符号上下文，避免关键字、声明冲突、作用域捕获和不完整宏重命名造成错误改写。
 - 补齐 Verilog 必填表达式、声明范围、常量上下文、参数循环依赖、重复声明、function/task、generate 和拼接检查，修复合法形参及生成作用域的误报。
