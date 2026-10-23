@@ -102,4 +102,23 @@ describe('Verilog project identity', () => {
   it('validates source-set settings without accepting empty or wildcard roots', () => {
     expect(normalizeVerilogProjects({ good: ['p7', 'p7'], empty: [], glob: ['**/*.v'], bad: [1] })).toEqual({ good: ['p7'] });
   });
+
+  it('does not let a document update replace the workspace project configuration', () => {
+    const { index, p7, top7 } = fixture();
+    index.updateDocument(TextDocument.create('file:///another-workspace/t.v', 'verilog', 1, 'module t; endmodule'), mergeCoSettings({}));
+    expect(index.getModule('alu', top7.uri)?.uri).toBe(p7.uri);
+  });
+
+  it('keeps DUT sources when checking a generated testbench with one explicit project', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'co-tb-project-')); roots.push(root);
+    await fs.mkdir(path.join(root, 'src'));
+    await fs.mkdir(path.join(root, '.co/tb'), { recursive: true });
+    const dut = path.join(root, 'src/dut.v'), tb = path.join(root, '.co/tb/dut_tb.v');
+    await fs.writeFile(dut, 'module dut; endmodule');
+    await fs.writeFile(tb, 'module dut_tb; dut u(); endmodule');
+    const folders = [{ uri: URI.file(root).toString(), name: 'test' }];
+    const project = await resolveExternalSyntaxProject(folders, URI.file(tb).toString(), 5000, { only: ['src'] });
+    expect(project?.sources.map(normalizePathKey)).toEqual([dut, tb].map(normalizePathKey));
+    await expect(resolveExternalSyntaxProject(folders, URI.file(tb).toString(), 5000, { first: ['src'], second: ['other'] })).rejects.toThrow('testbench');
+  });
 });

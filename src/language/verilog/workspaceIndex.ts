@@ -105,7 +105,6 @@ export class VerilogWorkspaceIndex {
   }
 
   updateDocument(document: TextDocument, settings: CoSettings): void {
-    this.configureProjects(this.folderUris, settings.verilog.projects);
     this.openDocumentUris.add(document.uri);
     this.updateDocumentIndexed(document, settings);
   }

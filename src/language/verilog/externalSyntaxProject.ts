@@ -25,12 +25,20 @@ export async function resolveExternalSyntaxProject(
     return undefined;
   }
   const context = new VerilogProjectContext([URI.file(root).toString()], projects);
-  if (!context.hasUniqueProject(triggerUri)) {
+  let contextUri = triggerUri;
+  if (userTestbenchTrigger(root, triggerUri).length && context.projectIds(triggerUri).some((id) => id.startsWith('isolated:'))) {
+    const sourceSets = Object.values(projects);
+    if (sourceSets.length !== 1) {
+      throw new Error('此 testbench 未归属唯一 Verilog 工程；请在 co.verilog.projects 中将它列入目标源集合。');
+    }
+    contextUri = URI.file(path.resolve(root, sourceSets[0][0])).toString();
+  }
+  if (!context.hasUniqueProject(contextUri)) {
     throw new Error('当前文件属于多个 Verilog 源集合；请从目标工程的入口文件执行检查。');
   }
-  const discovered = await scanProjectFiles(context.sourcePaths(triggerUri) ?? [root], limit);
+  const discovered = await scanProjectFiles(context.sourcePaths(contextUri) ?? [root], limit);
   const sources = orderVerilogProjectFiles(
-    discovered.filter((file) => context.sharesProject(triggerUri, URI.file(file).toString())).map((fsPath) => ({ fsPath })),
+    discovered.filter((file) => context.sharesProject(contextUri, URI.file(file).toString())).map((fsPath) => ({ fsPath })),
     userTestbenchTrigger(root, triggerUri)
   ).map((file) => file.fsPath);
   return { root, sources };

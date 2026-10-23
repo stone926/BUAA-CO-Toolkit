@@ -70,6 +70,7 @@ const publicConfigurationGroups = [
       'co.mips.instructionTokenMode',
       'co.mips.warnMissingExitSyscall',
       'co.verilog.implicitNet.diagnostic',
+      'co.verilog.projects',
       'co.verilog.syntax.external.mode',
       'co.verilog.lint.courseRules'
     ]
@@ -267,7 +268,7 @@ describe('package manifest', () => {
       publicConfigurationGroups.map((group) => ({ title: group.title, order: group.order }))
     );
     expect(Object.keys(publicProperties)).toEqual(expectedPublicKeys);
-    expect(expectedPublicKeys).toHaveLength(16);
+    expect(expectedPublicKeys).toHaveLength(17);
 
     for (const expectedGroup of publicConfigurationGroups) {
       const actualGroup = publicGroups.find((group) => group.title === expectedGroup.title);
@@ -275,7 +276,7 @@ describe('package manifest', () => {
       expect(Object.keys(actualProperties), expectedGroup.title).toEqual([...expectedGroup.keys]);
       expectedGroup.keys.forEach((key, index) => {
         expect(actualProperties[key], key).toMatchObject({
-          scope: expectedGroup.scope,
+          scope: key === 'co.verilog.projects' ? 'window' : expectedGroup.scope,
           order: (index + 1) * 10
         });
         expect(actualProperties[key]?.deprecationMessage, key).toBeUndefined();

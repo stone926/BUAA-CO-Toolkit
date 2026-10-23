@@ -38,7 +38,7 @@ export class VerilogProjectContext {
       ? sets.filter((set) => set.sources.some((source) => within(file, source))).map((set) => set.id)
       : [folder?.uri ?? 'unconfigured'];
     // Files outside declared source sets are isolated, not silently joined to all projects.
-    const result = ids.length ? ids : [`file:${uri}`];
+    const result = ids.length ? ids : [`isolated:${uri}`];
     this.memberships.set(uri, result);
     return result;
   }

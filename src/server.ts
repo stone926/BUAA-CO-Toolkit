@@ -356,7 +356,10 @@ connection.onDidChangeConfiguration((change) => {
   clearMipsSemanticTokenCache();
   resetExternalVerilogSyntaxChecks();
   refreshSemanticTokens();
-  void validateAllDocuments();
+  void getDocumentSettings('').then((settings) => {
+    verilogIndex.configureProjects(state.workspaceFolders?.map((folder) => folder.uri) ?? [], settings.verilog.projects);
+    return validateAllDocuments();
+  });
 });
 
 connection.onDidChangeWatchedFiles((params) => {
@@ -561,7 +564,6 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
     ? timeStartup(`diagnostics ${document.languageId} ${document.uri}`)
     : undefined;
   const resolvedSettings = effectiveSettingsForDocument(document, settings ?? await getDocumentSettings(document.uri));
-  verilogIndex.configureProjects(state.workspaceFolders?.map((folder) => folder.uri) ?? [], resolvedSettings.verilog.projects);
   const diagnosticLanguageId = serviceKeyForDocument(document);
   const serviceDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [];
   const diagnostics = filterDisabledDiagnostics(

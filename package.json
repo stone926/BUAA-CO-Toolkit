@@ -833,9 +833,9 @@
                 "minLength": 1
               }
             },
-            "description": "独立 Verilog 工程的源文件集合，例如 {\"P4\":[\"stone/p4\"],\"P7\":[\"stone/p7\"]}。每项是相对工作区的文件或目录（递归包含，不使用通配符）；可列共享源文件。空对象将每个工作区文件夹视为一个工程。同名定义有歧义时不会猜测跳转目标。",
-            "scope": "resource",
-            "order": 45,
+            "description": "独立 Verilog 工程的源文件集合，例如 {\"P4\":[\"stone/p4\"],\"P7\":[\"stone/p7\"]}。此设置统一应用于当前窗口；每项是相对各工作区文件夹的文件或目录（递归包含，不使用通配符）；可列共享源文件。空对象将每个工作区文件夹视为一个工程。同名定义有歧义时不会猜测跳转目标。",
+            "scope": "window",
+            "order": 50,
             "default": {}
           },
           "co.verilog.syntax.external.mode": {
@@ -852,14 +852,14 @@
             ],
             "description": "控制内置 Icarus Verilog 编译器语法检查的触发时机",
             "scope": "resource",
-            "order": 50,
+            "order": 60,
             "default": "onSave"
           },
           "co.verilog.lint.courseRules": {
             "type": "boolean",
             "description": "启用课程 Verilog Lint",
             "scope": "resource",
-            "order": 60,
+            "order": 70,
             "default": true
           }
         }
