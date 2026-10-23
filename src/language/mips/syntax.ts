@@ -1,7 +1,7 @@
 // @index mips-lsp — Tolerant editor syntax adapting canonical core lexer tokens
 import { findCommentIndex, tokenizeCode } from '../../mips/core/assembler/syntax';
 export { findCommentIndex } from '../../mips/core/assembler/syntax';
-import { Range } from 'vscode-languageserver/node';
+import { FormattingOptions, Range } from 'vscode-languageserver/node';
 import { parseCharLiteral } from './literals';
 
 export {
@@ -467,11 +467,13 @@ export type MipsFormatLine =
 
 export interface MipsBlankLine {
   kind: 'blank';
+  trailingWhitespace?: string;
 }
 
 export interface MipsCommentLine {
   kind: 'comment';
   comment: string;
+  trailingWhitespace?: string;
 }
 
 export interface MipsStatementLine {
@@ -479,6 +481,9 @@ export interface MipsStatementLine {
   labels: string[];
   executable?: MipsExecutableNode;
   comment?: string;
+  /** Keep incomplete or unsupported source intact instead of printing a partial AST. */
+  raw?: string;
+  trailingWhitespace?: string;
 }
 
 export interface MipsExecutableNode {
@@ -491,17 +496,17 @@ export interface MipsExecutableNode {
 export function parseMipsFormatDocument(text: string): MipsFormatDocument {
   return {
     kind: 'document',
-    lines: text.split(/\r?\n/).map(parseMipsFormatLine)
+    lines: text.split(/\r\n|\r|\n/).map(parseMipsFormatLine)
   };
 }
 
-export function printMipsFormatDocument(ast: MipsFormatDocument, eol = '\n'): string {
+export function printMipsFormatDocument(ast: MipsFormatDocument, eol = '\n', options?: FormattingOptions): string {
   let macroDepth = 0;
   return ast.lines.map((line) => {
     if (isMipsDirective(line, '.end_macro')) {
       macroDepth = Math.max(0, macroDepth - 1);
     }
-    const formatted = printMipsFormatLineWithContext(line, macroDepth > 0);
+    const formatted = printMipsFormatLineWithContext(line, macroDepth > 0, options);
     if (isMipsDirective(line, '.macro')) {
       macroDepth++;
     }
@@ -511,15 +516,18 @@ export function printMipsFormatDocument(ast: MipsFormatDocument, eol = '\n'): st
 
 export function parseMipsFormatLine(line: string): MipsFormatLine {
   const parsed = parseMipsSourceLine(line, 0);
+  const trailingWhitespace = line.match(/[\t ]+$/)?.[0];
   if (parsed.kind === 'blank') {
-    return { kind: 'blank' };
+    return { kind: 'blank', trailingWhitespace };
   }
   if (parsed.kind === 'comment') {
-    return { kind: 'comment', comment: normalizeMipsComment(parsed.comment?.value ?? '') };
+    return { kind: 'comment', comment: normalizeMipsComment(parsed.comment?.value ?? ''), trailingWhitespace };
   }
   return {
     kind: 'statement',
     labels: parsed.labels.map((label) => label.name),
+    raw: hasUnprintedSource(parsed) ? line : undefined,
+    trailingWhitespace,
     executable: parsed.executable
       ? {
         kind: parsed.executable.kind === 'directive' ? 'directive' : 'instruction',
@@ -532,29 +540,64 @@ export function parseMipsFormatLine(line: string): MipsFormatLine {
   };
 }
 
+function hasUnprintedSource(line: MipsParsedStatementLine): boolean {
+  // The tolerant symbol parser and the assembler lexer must agree on every
+  // boundary the printer can replace with whitespace. Otherwise formatting
+  // could split a single token (for example `$name.sub:`) into new tokens.
+  const boundaries = line.labels.flatMap((label) => [label.range.start, label.range.end, label.colonRange.start, label.colonRange.end]);
+  if (line.executable) boundaries.push(line.executable.range.start, line.executable.range.end);
+  let boundaryIndex = 0;
+  for (const token of line.tokens) {
+    while (boundaryIndex < boundaries.length && boundaries[boundaryIndex] <= token.start) boundaryIndex++;
+    if (boundaryIndex < boundaries.length && boundaries[boundaryIndex] < token.end) return true;
+  }
+  if (!line.executable) {
+    const lastLabel = line.labels[line.labels.length - 1];
+    if (line.code.slice(lastLabel?.colonRange.end ?? 0).trim()) return true;
+  }
+  // An open quote consumes the rest of the line, including its trailing spaces.
+  // Preserve that editor buffer until the literal is complete.
+  return line.tokens.some((token) => {
+    const quote = token.value[0];
+    if (token.kind === 'comment' || (quote !== '"' && quote !== "'")) return false;
+    if (token.value.length < 2 || !token.value.endsWith(quote)) return true;
+    let backslashes = 0;
+    for (let index = token.value.length - 2; index >= 0 && token.value[index] === '\\'; index--) backslashes++;
+    return backslashes % 2 !== 0;
+  });
+}
+
 export function printMipsFormatLine(line: MipsFormatLine): string {
   return printMipsFormatLineWithContext(line, false);
 }
 
-function printMipsFormatLineWithContext(line: MipsFormatLine, indentDirectives: boolean): string {
+function printMipsFormatLineWithContext(line: MipsFormatLine, indentDirectives: boolean, options?: FormattingOptions): string {
+  const trailing = options?.trimTrailingWhitespace === false ? line.trailingWhitespace ?? '' : '';
   if (line.kind === 'blank') {
-    return '';
+    return trailing;
   }
   if (line.kind === 'comment') {
-    return line.comment;
+    return line.comment + trailing;
   }
-  const formattedCode = printMipsStatement(line, indentDirectives);
+  if (line.raw !== undefined) return line.raw;
+  const tabSize = options && Number.isFinite(options.tabSize)
+    ? Math.max(1, Math.min(16, Math.floor(options.tabSize)))
+    : 4;
+  const indent = options?.insertSpaces === false ? '\t' : ' '.repeat(tabSize);
+  const formattedCode = printMipsStatement(line, indentDirectives, indent);
   if (!line.comment) {
-    return formattedCode;
+    return formattedCode + trailing;
   }
-  return `${formattedCode.padEnd(Math.max(formattedCode.length + 1, 32))}${line.comment}`;
+  let column = 0;
+  for (const char of formattedCode) column = char === '\t' ? column + tabSize - column % tabSize : column + 1;
+  return `${formattedCode}${' '.repeat(Math.max(1, 32 - column))}${line.comment}${trailing}`;
 }
 
 export function formatMipsLine(line: string): string {
   return printMipsFormatLine(parseMipsFormatLine(line));
 }
 
-function printMipsStatement(line: MipsStatementLine, indentDirectives: boolean): string {
+function printMipsStatement(line: MipsStatementLine, indentDirectives: boolean, indent: string): string {
   const labels = line.labels.map((label) => `${label}:`).join(' ');
   const executable = line.executable ? printMipsExecutable(line.executable) : '';
   if (labels && executable) {
@@ -568,7 +611,7 @@ function printMipsStatement(line: MipsStatementLine, indentDirectives: boolean):
   }
   return line.executable.kind === 'directive' && !indentDirectives
     ? executable
-    : `    ${executable}`;
+    : `${indent}${executable}`;
 }
 
 function printMipsExecutable(executable: MipsExecutableNode): string {
@@ -593,50 +636,18 @@ function normalizeMipsComment(comment: string): string {
 }
 
 function normalizeMipsOperandText(text: string): string {
-  return splitMipsCommaOperandSpans(text)
-    .map((operand) => operand.trim())
-    .join(', ');
-}
-
-function splitMipsCommaOperandSpans(text: string): string[] {
-  const operands: string[] = [];
-  let start = 0;
-  let paren = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    if (inString) {
-      if (char === '"' && !escaped) {
-        inString = false;
-        escaped = false;
-      } else if (char !== '\\') {
-        escaped = false;
-      } else {
-        escaped = !escaped;
-      }
-      continue;
-    }
-    if (char === '"') {
-      inString = true;
-      escaped = false;
-      continue;
-    }
-    if (char === '(') {
-      paren++;
-      continue;
-    }
-    if (char === ')') {
-      paren = Math.max(0, paren - 1);
-      continue;
-    }
-    if (char === ',' && paren === 0) {
-      operands.push(text.slice(start, index));
-      start = index + 1;
-    }
+  const parts: string[] = [];
+  let cursor = 0;
+  // The assembler lexer already distinguishes punctuation from both string
+  // and character literals, including escaped quotes and macro arguments.
+  for (const token of tokenizeCode(text, '', 0)) {
+    if (token.kind !== 'punctuation' || token.text !== ',') continue;
+    parts.push(text.slice(cursor, token.startOffset).trimEnd(), ',');
+    cursor = skipAsciiWhitespace(text, token.endOffset);
+    if (cursor < text.length) parts.push(' ');
   }
-  operands.push(text.slice(start));
-  return operands;
+  parts.push(text.slice(cursor));
+  return parts.join('');
 }
 
 function isMipsDirective(line: MipsFormatLine, directive: string): boolean {

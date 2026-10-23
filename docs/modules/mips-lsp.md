@@ -33,7 +33,7 @@ MIPS 汇编（`.asm` / `.s` / `.mips`）LSP：解析 → AST → 语义 → 诊�
 - `completions.ts` — 按 core 可执行能力补全指令/伪指令/寄存器/directive/标签/宏/`.eqv`；课程模式不推荐 COP1、`.kdata` 或不支持的伪指令
 - `hover.ts` — 指令/寄存器/伪指令/宏/syscall/CP0 说明（中文，不回显冗余上下文）
 - `navigation.ts` — 定义跳转、引用查找、文档符号
-- `formatting.ts` — 4 空格缩进、逗号空格、注释列对齐
+- `formatting.ts` — 遵循编辑器空格/Tab 与宽度设置（直接调用默认 4 空格）、逗号空格和注释可视列对齐；通过同一 assembler lexer 区分标点与字面量，不改写字符/字符串内容，无法完整解析的编辑中行保留原文。保留原有 LF/CRLF/CR 和默认 EOF，支持标准文件尾空白选项
 - `signatureHelp.ts` — 指令格式与宏参数签名
 - `folding.ts` — 通过 LSP 折叠 `.macro`，并处理 `#region` 标记（语言配置只保留 region 标记，避免宏名被 VS Code 提升为 minimap 区域标题）
 - `rename.ts` — 标签/数据符号/`.eqv`/宏重命名
