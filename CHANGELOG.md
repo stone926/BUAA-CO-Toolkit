@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.8] - 2026-10-23
+
 - 在编辑器右上角加入「启动持续测试」火箭按钮，P3–P7 工程可直接启动，与侧栏入口使用相同的测试流程。
 - 修复 MIPS 格式化会改写逗号字符字面量、删除未完成语句的问题；保留源码内容，并遵循编辑器的空格/Tab、缩进宽度和文件尾空白设置。
 - 补齐真实 VS Code 格式化文档、选区、保存、撤销/重做回归，覆盖 Verilog 与 MIPS，并纳入五平台安装包验证。
