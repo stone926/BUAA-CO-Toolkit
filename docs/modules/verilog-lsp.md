@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 85 files
+# verilog-lsp | src/language/verilog/ | 101 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -20,6 +20,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `instanceArray.ts` — 实例数组范围求值与端口广播/分摊宽度，供同文件和跨文件检查复用
 - `proceduralBoundary.ts` — always/initial 的单条过程语句边界与错误恢复
 - `syntaxParser.ts` — 语法树 + 语法诊断
+- `syntaxExpressionValidation.ts` — 共享表达式恢复节点、必填表达式和声明范围端点验证；输出纯语法 issue
 - `semanticModel.ts` — 符号表/作用域/AST 引用收集（含 generate 控制与声明的 unpacked 数组维度）；generate 块各自成作用域
 - `model.ts` — VerilogDecl / VerilogInstance / VerilogModule / VerilogGenerateBlock / VerilogMacro 等模型类型
 
@@ -29,7 +30,9 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - 函数声明保留返回范围及 integer/time/real 类型，返回赋值、函数调用与 hover 复用同一位宽；右移保持左操作数位宽，赋给较窄目标仍提示截断，显式 part-select 可表达取位意图。
 - `declarations.ts` — 声明类型分类（port 方向、net/variable、parameter）
 - `driveStrength.ts` — 驱动强度前缀识别（保留源码偏移，不模拟强度）
-- `preprocessor.ts` — 条件编译活动分支、define/undef 顺序、续行宏及原始源码范围；object 宏表达式按调用位置绑定，include/函数宏尚不完整展开
+- `preprocessor.ts` — 条件编译活动分支、define/undef 顺序、续行宏及原始源码范围；object 宏表达式按调用位置绑定
+- `preprocessorState.ts` — 条件栈与宏生命周期的统一状态引擎；调用时有界验证嵌套宏，支持关键字宏名/形参，诊断映射回外层调用
+- `preprocessorExpressionContexts.ts` — 宏展开后的赋值、控制和范围必填表达式验证；合法空展开不冒充语法 Error
 - `directiveBoundaries.ts` — 在代码解析入口划出编译指令及参数边界
 - `parameterOverrides.ts` — 实例参数按名/按位覆盖解析，逐级求值并报告不可求值项
 - `generateScopes.ts` — generate 块作用域查询（纯模型，含条件分支互斥）
@@ -56,6 +59,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `codeActions.ts` — 隐式连线声明、表达式折叠/抽取、实例连接补全
 - `expressionContext.ts` — hover 与重构共用表达式定位和赋值上下文；通过类型化求值观察子节点，输出保留位宽/signed 的常量，无法证明上下文时不提供重写
 - `signatureHelp.ts` — 实例端口/参数签名帮助（不含 localparam）
+- `subroutineSignatureHelp.ts` — 按词法绑定的 function/task 调用签名，保留形参顺序、方向、类型、返回信息与未完成调用位置
 - `inlayHints.ts` — 实例连接端口方向/宽度与参数提示
 - `resolveSymbol.ts` — 语义模型 + 语法 fallback 的 symbol resolution
 - `display.ts` — hover/inlay/signature 文案与宽度/参数显示 helper
@@ -92,3 +96,5 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 ## 外部编译器
 
 外部语法检查（`externalSyntaxProject.ts` / `externalSyntaxCheck.ts` / `iverilogSyntaxCheck.ts`）固定使用 bundled Icarus `-g2005 -tnull -i`，源集合与顺序复用确定性排序，保存的 `.co/tb` testbench 作为末尾源一并检查。发布时使用源码 token 改善行级报错范围，保留本地精确语法诊断及关联编译器消息；源码变化后取消旧检查并清除受影响的外部诊断。详见 verilog-diagnostics.md
+
+预处理诊断可沿索引快照检查 include 和函数宏调用；主 AST 尚未完整展开这些构造。未知 include/配置宏依赖保持不确定，形参可能由未展开源码补充时签名标记为不完整，避免错误的缺声明或参数数量断言。文件系统读取不进入新增预处理热路径。

@@ -104,6 +104,15 @@ function collectDiagnosticCodes(filePath, language) {
   }
 
   function visit(node) {
+    // Source-offset issue channels can expose a closed code contract before an
+    // LSP adapter supplies Range/Severity. Do not silently omit those producers.
+    if (ts.isTypeAliasDeclaration(node) && node.name.text.endsWith('DiagnosticCode')) {
+      const types = ts.isUnionTypeNode(node.type) ? node.type.types : [node.type];
+      for (const type of types) {
+        if (!ts.isLiteralTypeNode(type)) throw new Error(`Diagnostic code contract must contain literal codes in ${sourceLabel(filePath)}.`);
+        record(type.literal, 'diagnostic code contract');
+      }
+    }
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
       localConstants.set(node.name.text, node.initializer);
     }

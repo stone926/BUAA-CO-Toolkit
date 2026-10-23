@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 275 files | 框架: Vitest
+# test-suite | src/test/ | 286 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -8,11 +8,11 @@
 
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
-| `test/language/` | 89 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
+| `test/language/` | 98 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
 | `test/`（根） | 52 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
 | `test/courseTesting/` | 47 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
-| `test/verilog/` | 18 | 真实 bundled Icarus：语言语义差分、诊断位置、时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
+| `test/verilog/` | 20 | 真实 bundled Icarus：语言语义差分、内置诊断正反例、诊断位置、时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
 | `test/mips{Providers,Host,Replay,Cli,Debug}/` | 24 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
@@ -27,6 +27,10 @@ Verilog 修复回归包含类型化四态常量与上下文传播、非零/升�
 `language/verilog/externalDiagnosticLocations.test.ts` 覆盖行级与列级编译器诊断、精确本地错误合并、未知标识符、跨行注释、多个候选位置、跨行缺分号与 EOF。`verilog/iverilogDiagnosticLocations.test.ts` 使用中文空格路径中的真实 bundled Icarus，确认错误声明的 `<=` / `==` 及未解析标识符的最终标记范围。
 
 `serverExternalDiagnostics.test.ts` 通过内存 LSP 连接及真实文档事件验证外部诊断生命周期：首次打开文件保留结果、编辑后清除受影响文档的旧结果、取消的检查不再发布迟到结果。
+
+内置 Verilog 缺口回归按领域分在 `language/verilog/syntaxConstraints.test.ts`、`constantContexts.test.ts`、`constantFunctionDependencies.test.ts`、`declarationDiagnostics.test.ts`、`subroutineDiagnostics.test.ts`、`subroutineProviders.test.ts` 和 `preprocessorDiagnostics.test.ts`。生产入口带 workspace index，并对非法样例断言 code/severity/源码范围，对邻近合法样例防止误报。`singleItemGenerate.test.ts` 与 `singleItemGenerateNative.test.ts` 验证单项生成体的独立隐式作用域、声明与叶子模块项。
+
+`verilog/builtinDiagnosticConformance.test.ts` 与 `verilog/elaborationDiagnosticConformance.test.ts` 在中文空格路径中以真实 bundled Icarus `-g2005 -tnull -i` 对照各类非法/合法样例。自动外部调度测试同时验证合法 ANSI function 不再被内置 syntax Error 阻断。参数类型循环中会导致该 Icarus 版本异常退出的极端样例只做结构化依赖图回归，不把编译器崩溃当作成功的诊断证据。
 
 **TextMate 回归**：用 `vscode-textmate` + `vscode-oniguruma` 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步与课程真实宏/数字片段。
 

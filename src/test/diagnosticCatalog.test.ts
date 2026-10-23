@@ -19,7 +19,7 @@ function createCatalogFixture(): string {
     ''
   ].join('\n'));
   fs.writeFileSync(path.join(root, 'src', 'language', 'mips', 'producer.ts'), "makeDiagnostic(a, b, c, 'mips-literal');\n");
-  fs.writeFileSync(path.join(root, 'src', 'language', 'verilog', 'producer.ts'), "const issue = { range, message, code: 'verilog-literal' };\n");
+  fs.writeFileSync(path.join(root, 'src', 'language', 'verilog', 'producer.ts'), "const issue = { range, message, code: 'verilog-literal' };\nexport type ExampleDiagnosticCode = 'source-offset-issue' | 'source-macro-issue';\n");
   fs.writeFileSync(path.join(root, 'src', 'language', 'logisim', 'producer.ts'), "makeDiagnostic(a, b, c, `logisim-${kind}`);\n");
   return root;
 }
@@ -60,6 +60,8 @@ describe('diagnostic catalog docs', () => {
       const generated = fs.readFileSync(path.join(root, 'docs', 'diagnostic-catalog.md'), 'utf8');
       expect(generated).toContain('`mips-literal`');
       expect(generated).toContain('`verilog-literal`');
+      expect(generated).toContain('`source-offset-issue`');
+      expect(generated).toContain('`source-macro-issue`');
       expect(generated).toContain('`logisim-<kind>`');
 
       const mipsProducer = path.join(root, 'src', 'language', 'mips', 'producer.ts');

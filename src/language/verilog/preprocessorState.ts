@@ -6,8 +6,19 @@ import { macroExpansionBreaksExpression } from './preprocessorExpressionContexts
 export const preprocessorDirectives = new Set(verilogLanguageCatalog.compilerDirectives);
 
 export interface VerilogPreprocessorSource { uri: string; text: string }
+/** Closed producer contract, also consumed by the generated diagnostic catalog. */
+export type VerilogPreprocessorDiagnosticCode =
+  | 'preprocessor-undefined-macro'
+  | 'preprocessor-incomplete-expression'
+  | 'preprocessor-missing-argument'
+  | 'preprocessor-conditional-mismatch'
+  | 'preprocessor-unclosed-conditional'
+  | 'preprocessor-macro-arity'
+  | 'preprocessor-invalid-default-nettype'
+  | 'preprocessor-invalid-timescale'
+  | 'preprocessor-invalid-define';
 export interface VerilogPreprocessorIssue {
-  uri: string; start: number; end: number; code: string; message: string; severity: 'error' | 'warning';
+  uri: string; start: number; end: number; code: VerilogPreprocessorDiagnosticCode; message: string; severity: 'error' | 'warning';
 }
 export interface VerilogPreprocessorOptions {
   uri?: string;
@@ -55,7 +66,7 @@ export function preprocessVerilogTokens(text: string, tokens: VerilogToken[], op
   const includeStack = new Set<string>();
   const reported = new Set<string>();
   const rootUri = options.uri ?? '';
-  const report = (uri: string, token: VerilogToken, code: string, message: string, severity: 'error' | 'warning' = 'error') => {
+  const report = (uri: string, token: VerilogToken, code: VerilogPreprocessorDiagnosticCode, message: string, severity: 'error' | 'warning' = 'error') => {
     const key = JSON.stringify([uri, token.start, token.end, code, message]);
     if (options.collectIssues !== false && !reported.has(key)) {
       reported.add(key);
@@ -235,7 +246,7 @@ function macroArguments(tokens: VerilogToken[], start: number): { count: number;
 }
 
 function validateDirective(tokens: VerilogToken[], index: number, end: number, name: string,
-  report: (token: VerilogToken, code: string, message: string) => void): void {
+  report: (token: VerilogToken, code: VerilogPreprocessorDiagnosticCode, message: string) => void): void {
   const directive = tokens[index];
   const args: VerilogToken[] = [];
   for (let offset = index + 1; tokens[offset]?.start < end && tokens[offset].kind !== 'eof'; offset++) args.push(tokens[offset]);
@@ -269,4 +280,3 @@ function timeValue(tokens: VerilogToken[]): number | undefined {
   const exponent = timeUnits.indexOf(tokens[1].value);
   return exponent < 0 ? undefined : Number(tokens[0].value) * 10 ** (-3 * exponent);
 }
-

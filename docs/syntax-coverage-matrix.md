@@ -69,17 +69,19 @@
 | 区域 | 支持形式 | 主要诊断 |
 | --- | --- | --- |
 | 模块头 | 空端口、传统端口、ANSI 端口、`#(...)` 参数列表 | `syntax-module-declaration`, `syntax-malformed-port-list` |
-| 声明 | `input/output/inout/wire/reg/logic/integer/time/real/realtime/genvar/parameter/localparam`，并支持 `signed/unsigned/automatic/scalared/vectored` 等修饰符 | `syntax-malformed-declaration` |
+| 声明 | `input/output/inout/wire/reg/logic/integer/time/real/realtime/genvar/parameter/localparam`，支持修饰符、完整范围端点、原始声明身份、合法旧式补充声明及嵌套遮蔽 | `syntax-malformed-declaration`, `duplicate-declaration`, `conflicting-port-direction`, `missing-port-direction` |
 | 连续赋值 | 普通 `assign`、同句多赋值、带驱动强度前缀的赋值；每个 lvalue/RHS 独立建模 | `syntax-malformed-assignment`, `syntax-missing-semicolon` |
 | 过程赋值 | `always`/`initial` 内阻塞与非阻塞赋值 | `syntax-malformed-assignment`, `multi-driver`；不检查赋值风格 |
-| 表达式 | 一元、二元、三元、拼接、重复拼接、函数/系统函数调用、位选、范围选择、索引式部分选择、转义标识符、基数字面量（含 size/base/digits 之间合法空白）、实数/指数数字（仅解析，不做整数折叠） | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance`, `syntax-malformed-number` |
-| 过程控制 | `if/else`, `case/casex/casez`, `for/while/repeat/forever`, 事件控制、延迟控制；always/initial 后不强制 begin/end，case 标签支持三元表达式和 default 可选冒号；`for` 的 init/condition/step 会结构化检查 | `syntax-malformed-if`, `syntax-malformed-case`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-malformed-event-control` |
+| 表达式 | 一元、二元、三元、括号 min:typ:max、拼接、重复拼接、函数/系统函数调用、位选、范围选择、索引式部分选择、转义标识符、基数字面量（含合法空白）、实数/指数数字（仅解析，不做整数折叠） | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance`, `syntax-malformed-number`, `indefinite-concatenation-width`, `zero-width-concatenation` |
+| 过程控制 | `if/else`, `case/casex/casez`, `for/while/repeat/forever/wait`, 事件控制、延迟控制；always/initial 后不强制 begin/end，case 标签支持三元表达式和 default 可选冒号；检查必填条件和延时，Verilog-2005 的 for 条件不能为空 | `syntax-malformed-if`, `syntax-malformed-case`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-malformed-wait`, `syntax-malformed-delay`, `syntax-malformed-event-control` |
 | 块结构 | `begin/end`, `case/endcase`, `generate/endgenerate`, `function/endfunction`, `task/endtask` | `syntax-unclosed-*`, `syntax-unmatched-*` |
-| 实例化 | 命名端口、位置端口、空连接（保留位置空槽）、参数覆盖、同语句多实例、实例数组及端口广播/分摊、常见门级原语 | `syntax-malformed-instance`, `syntax-malformed-gate-primitive`, `unknown-port`, `unknown-parameter` |
-| 预处理 | 同文件 define/undef、嵌套 ifdef/ifndef/elsif/else/endif 活动分支、续行宏与按位置生效的 default_nettype；object 宏用于常量/位宽和左值；include 与函数宏不完整展开 | `missing-include`, `implicit-net:*`, `default-nettype-none` |
-| generate | 显式或隐式 generate-for/if/case，命名和无名块，分支作用域与互斥驱动 | `syntax-malformed-generate`, `syntax-unclosed-generate` |
+| 实例化 | 命名端口、位置端口、空连接（保留位置空槽）、参数覆盖、同语句多实例、实例数组及端口广播/分摊；端口/参数列表不能混用命名与位置形式；常见门级原语 | `syntax-malformed-instance`, `syntax-malformed-gate-primitive`, `unknown-port`, `unknown-parameter` |
+| 预处理 | 条件栈配对、define/undef 生命周期、续行宏、指令值校验；诊断沿索引 include 快照检查宏调用、参数数量及展开残缺，并保留调用位置；主 AST 的 include/函数宏仍不完整展开 | `preprocessor-*`, `missing-include`, `implicit-net:*`, `default-nettype-none` |
+| generate | 显式或隐式 generate-for/if/case、单项和 begin/end 生成体、独立作用域及分支互斥；genvar 控制变量与生成体只读迭代参数分开建模 | `syntax-malformed-generate`, `syntax-unclosed-generate`, `generate-loop-variable`, `invalid-genvar-use`, `invalid-assignment-target` |
 | 属性 | 支持 `(* ... *)` 前缀并保留原源码位置；不解释综合属性的硬件行为 | 后续声明/实例/过程沿用相应诊断 |
-| task/function | 常见头部、参数/局部声明和过程体；名称和局部声明进入语义作用域 | `syntax-malformed-procedural-block`, `syntax-unclosed-task`, `syntax-unclosed-function` |
+| task/function | ANSI/旧式签名、变量形参、独立词法作用域、实参数量/输出左值、函数体限制；签名帮助/导航共用绑定，未展开依赖保持签名不完整 | `subroutine-argument-count`, `unknown-subroutine`, `invalid-assignment-target`, `function-*`, `subroutine-missing-body` |
+
+常量上下文统一覆盖 packed/unpacked 范围、参数初始化、普通部分选择两端、indexed part-select 宽度、重复次数、实例数组与 generate 条件/标签/循环。`nonconstant-expression` 只报告确定运行时依赖；合法动态索引和 indexed-select 起点、负范围、X/Z、常量函数以及尚未求值的数学系统函数不因此误报。参数初始化、类型范围和函数捕获构成按声明身份绑定的依赖图，循环报告 `parameter-cycle`。
 
 ### 课程外语法分类
 
