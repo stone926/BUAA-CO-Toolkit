@@ -12,6 +12,7 @@ import { parseIverilogDiagnosticRecords } from '../../verilog/iverilogDiagnostic
 import { runProcessCore } from '../../processCore';
 import { resolveExternalSyntaxProject } from './externalSyntaxProject';
 import type { VerilogProjects } from './projectContext';
+import type { IverilogLocationData } from './externalDiagnosticLocations';
 
 export interface IverilogSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -119,7 +120,8 @@ export function parseIverilogDiagnostics(
           : DiagnosticSeverity.Error,
       source: 'Icarus Verilog',
       code: 'iverilog-syntax',
-      message: parsed.message
+      message: parsed.message,
+      data: { iverilogLocation: parsed.column === undefined ? 'line' : 'column' } satisfies IverilogLocationData
     });
   }
   return diagnosticsByUri;

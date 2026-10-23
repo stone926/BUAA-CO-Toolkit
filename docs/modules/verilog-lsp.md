@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 84 files
+# verilog-lsp | src/language/verilog/ | 85 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -91,4 +91,4 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 ## 外部编译器
 
-外部语法检查（`externalSyntaxProject.ts` / `externalSyntaxCheck.ts` / `iverilogSyntaxCheck.ts`）固定使用 bundled Icarus `-g2005 -tnull -i`，源集合与顺序复用确定性排序，保存的 `.co/tb` testbench 作为末尾源一并检查。详见 verilog-diagnostics.md
+外部语法检查（`externalSyntaxProject.ts` / `externalSyntaxCheck.ts` / `iverilogSyntaxCheck.ts`）固定使用 bundled Icarus `-g2005 -tnull -i`，源集合与顺序复用确定性排序，保存的 `.co/tb` testbench 作为末尾源一并检查。发布时使用源码 token 改善行级报错范围，保留本地精确语法诊断及关联编译器消息；源码变化后取消旧检查并清除受影响的外部诊断。详见 verilog-diagnostics.md

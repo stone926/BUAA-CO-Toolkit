@@ -1,4 +1,4 @@
-# verilog-diagnostics | src/language/verilog/ | 14 files | parent: verilog-lsp.md
+# verilog-diagnostics | src/language/verilog/ | 15 files | parent: verilog-lsp.md
 
 多类型诊断调度层。`diagnostics.ts` 是唯一入口，按类别分发给各子系统：语法错误、课程 lint、实例连接、usage、驱动冲突、跨文件与外部 Icarus
 
@@ -17,6 +17,7 @@
 - `externalSyntaxProject.ts` — 有界发现与排序参与外部检查的 Verilog 源
 - `externalSyntaxCheck.ts` — 通用/on-save 检查固定使用 bundled Icarus
 - `iverilogSyntaxCheck.ts` — bundled Icarus `-tnull -i` 检查与最小 stderr 诊断解析
+- `externalDiagnosticLocations.ts` — 基于源码 token 的外部诊断范围映射，以及保留本地精确诊断的合并
 
 **情况说明**
 
@@ -24,3 +25,5 @@
 - input/output 按实际数据方向判断截断；实例数组接受单实例宽度广播或总宽度分摊。同文件与跨文件复用同一检查。驱动比较保留位区间和数组元素，包含声明初始化、门原语和实例 output 连接；动态索引保守处理，合法 resolved net 不作普通多驱动误报。
 - 常量合法性与数值能否求出分开；合法 X/Z 和 constant function 不因求值未知而误报。数组选择逐维检查，保留范围方向并检查 indexed-select 正宽度。
 - 课程接口检查由 `co.verilog.lint.courseRules` 开关控制；外部检查触发时机由 `co.verilog.syntax.external.mode`（`off` / `onSave` / `commandOnly`）控制。
+- Icarus 行号与显式列号保留不同来源标记。只有行号的通用语法错误，若同一行存在唯一的本地语法错误范围，则保留本地诊断及其代码操作，并将编译器消息关联到该范围；已知消息中唯一出现的标识符定位到源码 token。其余情况标记该行有效代码范围，不猜测前一行或某个运算符。复用全文缓存 token，避免将跨行注释中的名字误认作代码。
+- 编辑源码时取消并丢弃受影响工作区的外部检查结果；通过既有输入防抖重发受影响的已打开文档诊断，避免将旧行号映射到新源码。watcher 按索引修订判断实际变化，首次打开文件与内容未变的保存回声不使结果失效。

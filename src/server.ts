@@ -96,6 +96,8 @@ import {
   getVerilogSignatureHelp
 } from './language/verilog/service';
 import { runExternalVerilogSyntaxCheck as executeExternalVerilogSyntaxCheck } from './language/verilog/externalSyntaxCheck';
+import { mergeVerilogExternalDiagnostics } from './language/verilog/externalDiagnosticLocations';
+import { getCachedVerilogParse } from './language/verilog/parseCache';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
@@ -191,6 +193,8 @@ interface ServerState {
   verilogExternalTimers: Map<string, ReturnType<typeof setTimeout>>;
   verilogExternalControllers: Map<string, AbortController>;
   verilogExternalRunSequences: Map<string, number>;
+  verilogDocumentVersions: Map<string, number>;
+  invalidatedVerilogDiagnosticUris: Set<string>;
   notifiedExternalToolchainError?: string;
   configurationVersion: number;
   effectiveSettingsCache: Map<string, CoSettings>;
@@ -219,6 +223,8 @@ const state: ServerState = {
   verilogExternalTimers: new Map(),
   verilogExternalControllers: new Map(),
   verilogExternalRunSequences: new Map(),
+  verilogDocumentVersions: new Map(),
+  invalidatedVerilogDiagnosticUris: new Set(),
   configurationVersion: 0,
   effectiveSettingsCache: new Map()
 };
@@ -257,6 +263,7 @@ function resetExternalVerilogSyntaxChecks(): void {
   state.verilogExternalControllers.clear();
   state.verilogExternalDiagnostics.clear();
   state.verilogExternalRunSequences.clear();
+  state.invalidatedVerilogDiagnosticUris.clear();
   state.notifiedExternalToolchainError = undefined;
 }
 
@@ -371,18 +378,24 @@ connection.onDidChangeWatchedFiles((params) => {
 });
 
 documents.onDidOpen((event) => {
+  if (event.document.languageId === languageIds.verilog) state.verilogDocumentVersions.set(event.document.uri, event.document.version);
   void updateIndexAndValidate(event.document);
 });
 
 // 防抖：快速连续输入时合并为一次解析+验证，避免每次按键都重新计算
 documents.onDidChangeContent((event) => {
+  if (event.document.languageId === languageIds.verilog) {
+    const previous = state.verilogDocumentVersions.get(event.document.uri);
+    if (previous !== undefined && previous !== event.document.version) invalidateExternalVerilogSyntaxCheck(event.document.uri);
+    state.verilogDocumentVersions.set(event.document.uri, event.document.version);
+  }
   const existing = state.contentChangeTimers.get(event.document.uri);
   if (existing) {
     clearTimeout(existing);
   }
   state.contentChangeTimers.set(event.document.uri, setTimeout(() => {
     state.contentChangeTimers.delete(event.document.uri);
-    void updateIndexAndValidate(event.document);
+    void updateIndexAndValidate(event.document).then(flushInvalidatedVerilogDiagnostics);
   }, 250));
 });
 
@@ -404,6 +417,8 @@ async function handleDocumentClosed(document: TextDocument): Promise<void> {
   state.documentSettings.delete(document.uri);
   state.updatedDocumentVersions.delete(document.uri);
   state.verilogExternalDiagnostics.delete(document.uri);
+  state.verilogDocumentVersions.delete(document.uri);
+  state.invalidatedVerilogDiagnosticUris.delete(document.uri);
   await serviceForDocument(document)?.removeDocument?.(document.uri, settings);
   connection.sendDiagnostics({
     uri: document.uri,
@@ -568,7 +583,7 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
   const serviceDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [];
   const diagnostics = filterDisabledDiagnostics(
     diagnosticLanguageId,
-    mergeExternalDiagnostics(document, serviceDiagnostics),
+    mergeExternalDiagnostics(document, serviceDiagnostics, resolvedSettings),
     resolvedSettings,
     document.uri
   );
@@ -576,23 +591,40 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
     uri: document.uri,
     diagnostics
   });
+  state.invalidatedVerilogDiagnosticUris.delete(document.uri);
   finishTrace?.();
 }
 
-function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnostic[]): Diagnostic[] {
+function mergeExternalDiagnostics(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): Diagnostic[] {
   if (document.languageId !== languageIds.verilog) {
     return diagnostics;
   }
-  const externalDiagnostics = state.verilogExternalDiagnostics.get(document.uri) ?? [];
+  const externalDiagnostics = filterDisabledDiagnostics(document.languageId,
+    state.verilogExternalDiagnostics.get(document.uri) ?? [], settings, document.uri);
   if (!externalDiagnostics.length) {
     return diagnostics;
   }
-  const externalLines = new Set(externalDiagnostics.map((diagnostic) => diagnostic.range.start.line));
-  const filtered = diagnostics.filter((diagnostic) => {
-    const code = typeof diagnostic.code === 'string' ? diagnostic.code : '';
-    return !(code.startsWith('syntax-') && externalLines.has(diagnostic.range.start.line));
-  });
-  return [...filtered, ...externalDiagnostics];
+  return mergeVerilogExternalDiagnostics(document, diagnostics, externalDiagnostics, getCachedVerilogParse(document, settings, false).ast.tokens);
+}
+
+function invalidateExternalVerilogSyntaxCheck(uri: string): void {
+  const key = workspaceKeyForUri(uri);
+  state.verilogExternalRunSequences.set(key, (state.verilogExternalRunSequences.get(key) ?? 0) + 1);
+  state.verilogExternalControllers.get(key)?.abort();
+  state.verilogExternalControllers.delete(key);
+  const scheduled = state.verilogExternalTimers.get(key);
+  if (scheduled) clearTimeout(scheduled);
+  state.verilogExternalTimers.delete(key);
+  for (const diagnosticUri of state.verilogExternalDiagnostics.keys()) {
+    if (workspaceKeyForUri(diagnosticUri) === key && documents.get(diagnosticUri)) state.invalidatedVerilogDiagnosticUris.add(diagnosticUri);
+  }
+  clearExternalDiagnosticsForWorkspace(uri);
+}
+
+async function flushInvalidatedVerilogDiagnostics(): Promise<void> {
+  if (!state.invalidatedVerilogDiagnosticUris.size) return;
+  const uris = new Set(state.invalidatedVerilogDiagnosticUris);
+  await validateDocuments((document) => uris.has(document.uri));
 }
 
 function scheduleExternalVerilogSyntaxCheck(document: TextDocument, settings: CoSettings): void {
@@ -605,7 +637,7 @@ function scheduleExternalVerilogSyntaxCheck(document: TextDocument, settings: Co
   }
   const localDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, settings) ?? [];
   if (localDiagnostics.some((diagnostic) => diagnostic.severity === 1 && typeof diagnostic.code === 'string' && diagnostic.code.startsWith('syntax-'))) {
-    clearExternalDiagnosticsForWorkspace(document.uri);
+    invalidateExternalVerilogSyntaxCheck(document.uri);
     void validateOpenVerilogDocuments();
     return;
   }
@@ -677,7 +709,7 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
       state.verilogExternalControllers.delete(controllerKey);
     }
   }
-  if (runId !== state.verilogExternalRunSequences.get(controllerKey)) {
+  if (controller.signal.aborted || runId !== state.verilogExternalRunSequences.get(controllerKey)) {
     return;
   }
   if (result.skipped) {
@@ -915,13 +947,16 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<stri
   affectedLanguageIds.add('verilog');
   affectedLanguageIds.add('*');
   if (verilogChanges.length > 50) {
+    for (const change of verilogChanges) invalidateExternalVerilogSyntaxCheck(change.uri);
     await rebuildVerilogIndex();
     return affectedLanguageIds;
   }
   const settings = await getDocumentSettings('');
   for (const change of verilogChanges) {
+    const previousRevision = verilogIndex.version;
     if (change.type === FileChangeType.Deleted) {
       verilogIndex.remove(change.uri);
+      if (verilogIndex.version !== previousRevision) invalidateExternalVerilogSyntaxCheck(change.uri);
       continue;
     }
     const openDocument = documents.get(change.uri);
@@ -930,6 +965,7 @@ async function handleWatchedFilesChanged(changes: FileEvent[]): Promise<Set<stri
     } else {
       await verilogIndex.updateFileAsync(change.uri, settings);
     }
+    if (verilogIndex.version !== previousRevision) invalidateExternalVerilogSyntaxCheck(change.uri);
   }
   return affectedLanguageIds;
 }
