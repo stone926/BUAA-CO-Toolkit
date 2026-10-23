@@ -7,12 +7,13 @@ import { lexVerilog, VerilogToken } from './lexer';
 import {
   VerilogDirective,
   VerilogInclude,
-  verilogLanguageCatalog,
   VerilogMacro,
   VerilogMacroUse
 } from './model';
 
-export const preprocessorDirectives = new Set(verilogLanguageCatalog.compilerDirectives);
+import { isVerilogMacroNameToken, preprocessVerilogTokens, preprocessorDirectives, verilogDirectiveLineEnd } from './preprocessorState';
+export { preprocessVerilogTokens, preprocessorDirectives, verilogDirectiveLineEnd } from './preprocessorState';
+export type { VerilogPreprocessorOptions, VerilogPreprocessorResult, VerilogPreprocessorIssue } from './preprocessorState';
 
 export function parseMacros(document: TextDocument, text: string): VerilogMacro[] {
   return parseMacrosFromTokens(document, lexVerilog(text).tokens);
@@ -27,7 +28,7 @@ export function parseMacrosFromTokens(document: TextDocument, tokens: VerilogTok
       continue;
     }
     const name = nextTokenOnLine(document, tokens, index + 1, token);
-    if (!name || name.kind !== 'identifier') {
+    if (!isVerilogMacroNameToken(name)) {
       continue;
     }
     const logicalEnd = verilogDirectiveLineEnd(document.getText(), token.end, true);
@@ -156,66 +157,9 @@ function tokenRange(document: TextDocument, token: VerilogToken): Range {
   return Range.create(document.positionAt(token.start), document.positionAt(token.end));
 }
 
-/** Logical directive boundaries always refer to the unmodified source offsets. */
-export function verilogDirectiveLineEnd(text: string, start: number, continuation = false): number {
-  let end = text.indexOf('\n', start);
-  while (end >= 0 && continuation && (text[end - 1] === '\\' || (text[end - 1] === '\r' && text[end - 2] === '\\'))) {
-    end = text.indexOf('\n', end + 1);
-  }
-  return end < 0 ? text.length : end;
-}
-
 /** Select active compilation branches without rewriting any token source position. */
 export function activeVerilogTokens(text: string, tokens: VerilogToken[]): VerilogToken[] {
-  const result: VerilogToken[] = [];
-  const definitions = new Set<string>();
-  const stack: { parent: boolean; taken: boolean; active: boolean }[] = [];
-  const active = () => stack[stack.length - 1]?.active ?? true;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    const name = directiveName(token);
-    if (!name || !preprocessorDirectives.has(name)) {
-      if (active() || token.kind === 'eof') result.push(token);
-      continue;
-    }
-    const end = verilogDirectiveLineEnd(text, token.end, name === 'define');
-    const argument = tokens[index + 1]?.start < end ? tokens[index + 1] : undefined;
-    if (name === 'ifdef' || name === 'ifndef') {
-      const parent = active();
-      const match = definitions.has(argument?.value ?? '') !== (name === 'ifndef');
-      stack.push({ parent, taken: match, active: parent && match });
-    } else if (name === 'elsif') {
-      const frame = stack[stack.length - 1];
-      if (frame) {
-        const match = definitions.has(argument?.value ?? '');
-        frame.active = frame.parent && !frame.taken && match;
-        frame.taken ||= match;
-      }
-    } else if (name === 'else') {
-      const frame = stack[stack.length - 1];
-      if (frame) { frame.active = frame.parent && !frame.taken; frame.taken = true; }
-    } else if (name === 'endif') {
-      stack.pop();
-    } else if (active()) {
-      if (name === 'define' && argument) definitions.add(argument.value);
-      if (name === 'undef' && argument) definitions.delete(argument.value);
-      if (name === 'undefineall') definitions.clear();
-      result.push(token);
-      // Preserve each active directive's arguments for macro/include/directive providers.
-      if (name === 'define') {
-        while (tokens[index + 1]?.start < end) result.push(tokens[++index]);
-        continue;
-      }
-      // Other active directives retain their ordinary code tokens on the same line.
-      continue;
-    }
-    if (name === 'define') {
-      while (tokens[index + 1]?.start < end) index++;
-    } else if (argument && ['ifdef', 'ifndef', 'elsif'].includes(name)) {
-      index++;
-    }
-  }
-  return result;
+  return preprocessVerilogTokens(text, tokens, { collectIssues: false, followIncludes: false }).tokens;
 }
 
 /** Value-only object-macro bindings; neither expression nor invocation positions are rewritten. */
@@ -232,7 +176,7 @@ export function objectMacroExpressionsFromTokens(text: string, tokens: VerilogTo
       const identifier = tokens[index + 1];
       const bodyStart = index + 2;
       while (tokens[index + 1]?.start < end) index++;
-      if (!identifier || identifier.kind !== 'identifier') continue;
+      if (!isVerilogMacroNameToken(identifier)) continue;
       const body = tokens.slice(bodyStart, index + 1).filter((part) => part.value !== '\\');
       const functionLike = body[0]?.value === '(' && body[0].start === identifier.end;
       if (functionLike) definitions.delete(identifier.value);
