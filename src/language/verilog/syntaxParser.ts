@@ -1231,6 +1231,11 @@ function validateForAssignmentSection(
   if (tokens.length === 0) {
     return;
   }
+  // Verilog-2005 allows a genvar declaration in a generate-for initializer.
+  if (section === 'init' && tokens[0]?.value === 'genvar') {
+    validateDeclarationList(document, tokens, diagnostics, false);
+    return;
+  }
   const assignment = parseAssignmentTokens(tokens);
   if (!assignment) {
     validateExpressionSyntax(document, tokens, diagnostics, 'syntax-malformed-for');

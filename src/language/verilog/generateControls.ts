@@ -78,4 +78,3 @@ export function generateControlExpressions(controls: VerilogGenerateControl[]): 
   return controls.flatMap((control) => [control.variable, control.initializer, control.condition, control.updateVariable, control.update, ...(control.labels ?? [])]
     .filter((expression): expression is VerilogExpressionAst => Boolean(expression)));
 }
-

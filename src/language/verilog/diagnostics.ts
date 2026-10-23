@@ -34,6 +34,8 @@ import { declarationAtPosition } from './accessPaths';
 import { visitProceduralAssignments } from './assignmentAst';
 import { uniqueModule } from './moduleResolution';
 import { collectSubroutineDiagnostics } from './subroutineDiagnostics';
+import { collectConstantContextDiagnostics } from './constantContextDiagnostics';
+import { collectConcatenationDiagnostics } from './concatenationDiagnostics';
 import { collectDeclarationDiagnostics } from './declarationDiagnostics';
 
 export function collectVerilogDiagnostics(
@@ -56,6 +58,8 @@ export function collectVerilogDiagnostics(
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   collectAssignmentTypeDiagnostics(document, ast, diagnostics);
   collectSubroutineDiagnostics(document, ast, semantic, diagnostics);
+  collectConstantContextDiagnostics(document, ast, diagnostics);
+  collectConcatenationDiagnostics(document, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, ast, diagnostics);
     collectTestbenchDiagnostics(settings, ast, diagnostics);
