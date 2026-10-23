@@ -33,6 +33,8 @@ import { collectAssignmentTypeDiagnostics } from './assignmentTypeDiagnostics';
 import { declarationAtPosition } from './accessPaths';
 import { visitProceduralAssignments } from './assignmentAst';
 import { uniqueModule } from './moduleResolution';
+import { collectSubroutineDiagnostics } from './subroutineDiagnostics';
+import { collectDeclarationDiagnostics } from './declarationDiagnostics';
 
 export function collectVerilogDiagnostics(
   document: TextDocument,
@@ -46,12 +48,14 @@ export function collectVerilogDiagnostics(
   const diagnostics: Diagnostic[] = [];
   collectSyntaxDiagnostics(document, ast, modules, diagnostics);
   collectStructuralDiagnostics(document, modules, diagnostics);
+  collectDeclarationDiagnostics(document, ast, semantic, diagnostics);
   collectIncludeDiagnostics(document, includes, diagnostics);
   collectInstancePortDiagnostics(document, modules, diagnostics);
   collectWidthDiagnostics(document, modules, ast, diagnostics);
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
   collectAssignmentTypeDiagnostics(document, ast, diagnostics);
+  collectSubroutineDiagnostics(document, ast, semantic, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, ast, diagnostics);
     collectTestbenchDiagnostics(settings, ast, diagnostics);
@@ -626,6 +630,7 @@ function collectSystemCallsFromProceduralStatement(
       }
       return;
     case 'loop':
+    case 'wait':
       addExpression(statement.condition);
       collectSystemCallsFromProceduralStatement(statement.body, addExpression);
       return;

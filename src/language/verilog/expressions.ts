@@ -8,6 +8,7 @@ import { VerilogDecl, VerilogDeclDimension, VerilogModule } from './model';
 import type { Position } from 'vscode-languageserver-types';
 import { containsPosition, containsRange } from '../common/lsp';
 import { evaluateIntegralConstant, integralConstant, integerConstantValue, resizeIntegralConstant, validIntegralWidth, VERILOG_EVALUATION_LIMITS, VerilogIntegralConstant, VerilogEvaluationContext } from './typedConstants';
+import { classifySystemFunctionConstant } from './systemFunctionConstants';
 
 export interface WidthInfo {
   width?: number;
@@ -158,30 +159,31 @@ export function evalExpressionAstConstant(expression: VerilogExpressionAst | und
 /** Preserve X/Z independently from numeric folding, and carry declaration type through references. */
 export function evalExpressionAstTypedConstant(expression: VerilogExpressionAst | undefined, module?: VerilogModule, overrides?: VerilogConstantOverrides, position?: Position, expectedType?: number | VerilogConstantContext, onValue?: (expression: VerilogExpressionAst, value: VerilogIntegralConstant) => void): VerilogIntegralConstant | undefined {
   if (!expression) { return undefined; }
-  const scoped = module && position ? moduleAtScope(module, position) : module;
   const evaluating = new Set<VerilogDecl>();
-  const evaluate = (node: VerilogExpressionAst | undefined, context?: VerilogEvaluationContext, expectedWidth?: number, expectedSigned?: boolean): VerilogIntegralConstant | undefined => evaluateIntegralConstant(node, {
+  const evaluate = (node: VerilogExpressionAst | undefined, context?: VerilogEvaluationContext, expectedWidth?: number, expectedSigned?: boolean, binding = position): VerilogIntegralConstant | undefined => evaluateIntegralConstant(node, {
     onValue,
     identifier: (name, budget, node) => {
-      if (name.startsWith('`')) { return evaluate(scoped?.macroExpressions?.get(node.start), budget); }
-      const decl = scoped?.declarations.get(name);
+      if (name.startsWith('`')) { return evaluate(module?.macroExpressions?.get(node.start), budget, undefined, undefined, binding); }
+      const decl = module && resolveDeclarationAt(module, name, binding);
       if (!decl || (decl.kind !== 'parameter' && decl.kind !== 'localparam') || evaluating.has(decl)) { return undefined; }
       evaluating.add(decl);
       try {
+        const definitionPosition = decl.initializerRange?.start ?? decl.selectionRange.start;
+        const scoped = module && moduleAtScope(module, definitionPosition);
         const declaredWidth = hasDeclaredIntegralWidth(decl) ? widthOfDecl(decl, scoped, overrides).width : undefined;
         if (hasDeclaredIntegralWidth(decl) && !validIntegralWidth(declaredWidth)) { return undefined; }
         const overridden = overrides?.get(name);
         const typedOverride = overrides?.typedValues?.get(name);
         const initial = typedOverride ?? (overridden !== undefined
           ? integralConstant(overridden, declaredWidth ?? Math.max(32, overridden.toString(2).replace('-', '').length + (overridden < 0n ? 1 : 0)), declarationSigned(decl))
-          : decl.initializer ? evaluate(decl.initializerAst ?? parseVerilogExpression(decl.initializer), budget, declaredWidth)
+          : decl.initializer ? evaluate(decl.initializerAst ?? parseVerilogExpression(decl.initializer), budget, declaredWidth, undefined, definitionPosition)
           : decl.constantValue !== undefined ? integralConstant(decl.constantValue, widthOfDecl(decl, scoped, overrides).width ?? 32, declarationSigned(decl)) : undefined);
         if (!initial) { return undefined; }
         const converted = hasDeclaredIntegralType(decl)
           ? resizeIntegralConstant(initial, declaredWidth ?? initial.width, declarationSigned(decl))
           : initial;
         if (converted && decl.widthAst?.length === 2) {
-          const left = integerConstantValue(evaluate(decl.widthAst[0], budget)), right = integerConstantValue(evaluate(decl.widthAst[1], budget));
+          const left = integerConstantValue(evaluate(decl.widthAst[0], budget, undefined, undefined, definitionPosition)), right = integerConstantValue(evaluate(decl.widthAst[1], budget, undefined, undefined, definitionPosition));
           if (left !== undefined && right !== undefined && left >= Number.MIN_SAFE_INTEGER && left <= Number.MAX_SAFE_INTEGER && right >= Number.MIN_SAFE_INTEGER && right <= Number.MAX_SAFE_INTEGER) {
             return { ...converted, packedRange: { left: Number(left), right: Number(right) } };
           }
@@ -218,8 +220,10 @@ export function hasDeclaredIntegralWidth(decl: VerilogDecl): boolean { return Bo
 function hasDeclaredIntegralType(decl: VerilogDecl): boolean { return Boolean(decl.width || decl.valueType || decl.signed !== undefined || decl.kind === 'integer' || decl.kind === 'time'); }
 function declarationSigned(decl: VerilogDecl): boolean { return decl.signed ?? ((decl.functionReturnType ?? decl.valueType ?? decl.kind) === 'integer'); }
 
+const scopeOrigins = new WeakMap<VerilogModule, VerilogModule>();
 export function resolveDeclarationAt(module: VerilogModule, name: string, position?: Position): VerilogDecl | undefined {
   if (!position) { return module.declarations.get(name); }
+  module = scopeOrigins.get(module) ?? module;
   let result = module.declarations.get(name), owner: { range: import('vscode-languageserver-types').Range } | undefined;
   for (const scope of [...module.generateBlocks, ...(module.lexicalScopes ?? [])]) {
     if (!containsPosition(scope.range, position) || (owner && !containsRange(owner.range, scope.range))) { continue; }
@@ -229,10 +233,13 @@ export function resolveDeclarationAt(module: VerilogModule, name: string, positi
   return result;
 }
 function moduleAtScope(module: VerilogModule, position: Position): VerilogModule {
+  module = scopeOrigins.get(module) ?? module;
   const declarations = new Map(module.declarations);
   const names = new Set([...module.generateBlocks, ...(module.lexicalScopes ?? [])].filter((scope) => containsPosition(scope.range, position)).flatMap((scope) => scope.declarations.map((decl) => decl.name)));
   for (const name of names) { const decl = resolveDeclarationAt(module, name, position); if (decl) { declarations.set(name, decl); } }
-  return { ...module, declarations };
+  const scoped = { ...module, declarations };
+  scopeOrigins.set(scoped, module);
+  return scoped;
 }
 
 export function typeOfExpressionAst(expression: VerilogExpressionAst | undefined, module?: VerilogModule, overrides?: VerilogConstantOverrides, position?: Position): WidthInfo {
@@ -273,6 +280,7 @@ export function classifyExpressionConstant(expression: VerilogExpressionAst | un
         if (overrides?.has(node.name) || overrides?.typedValues?.has(node.name)) return 'constant';
         const decl = module && resolveDeclarationAt(module, node.name, binding);
         if (!decl) return 'unknown';
+        if (decl.implicitGenerateParameter) return 'constant';
         if (decl.kind === 'genvar' && genvars?.has(decl)) return 'constant';
         if (decl.kind !== 'parameter' && decl.kind !== 'localparam') return 'nonConstant';
         // Cycles are definitely illegal; a separate diagnostic retains their dependency chain.
@@ -291,7 +299,14 @@ export function classifyExpressionConstant(expression: VerilogExpressionAst | un
       case 'concatenation': return combine(node.elements);
       case 'multipleConcatenation': return combine([node.repeat, ...node.elements]);
       case 'selectExpression': return combine([node.target, ...(node.select.kind === 'bitSelect' ? [node.select.index] : node.select.kind === 'rangeSelect' ? [node.select.left, node.select.right] : [node.select.base, node.select.width])]);
-      case 'callExpression': { const decl = module && resolveDeclarationAt(module, node.callee, binding); return decl?.constantFunction === false ? 'nonConstant' : ['$signed', '$unsigned', '$clog2'].includes(node.callee) || decl?.kind === 'function' ? combine(node.args) : node.system ? 'nonConstant' : 'unknown'; }
+      case 'callExpression': {
+        if (node.system) {
+          const classification = classifySystemFunctionConstant(node.callee);
+          return classification === 'constant' ? combine(node.args) : classification;
+        }
+        const decl = module && resolveDeclarationAt(module, node.callee, binding);
+        return decl?.constantFunction === false ? 'nonConstant' : decl?.kind === 'function' ? combine(node.args) : 'unknown';
+      }
       default: return 'unknown';
     }
   };

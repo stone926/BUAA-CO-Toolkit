@@ -29,7 +29,7 @@ export function collectLvalueTypeDiagnostics(document: TextDocument, module: Ver
   const expanded = expression.kind === 'identifier' && expression.name.startsWith('`')
     ? module.macroExpressions?.get(expression.start) ?? expression : expression;
   if (!isVerilogLvalueExpression(expanded)) {
-    diagnostics.push(makeDiagnostic(fallbackRange ?? Range.create(document.positionAt(expression.start), document.positionAt(expression.end)), 'This connection requires an assignable net lvalue.', DiagnosticSeverity.Error, 'invalid-assignment-target'));
+    diagnostics.push(makeDiagnostic(fallbackRange ?? Range.create(document.positionAt(expression.start), document.positionAt(expression.end)), `This context requires an assignable ${expected} lvalue.`, DiagnosticSeverity.Error, 'invalid-assignment-target'));
     return;
   }
   for (const target of assignmentTargetsFromExpressionAst(document, expression)) {

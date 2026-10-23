@@ -16,6 +16,7 @@ export type VerilogProceduralStatementAst =
   | VerilogIfStatementAst
   | VerilogCaseStatementAst
   | VerilogLoopStatementAst
+  | VerilogWaitStatementAst
   | VerilogDeclarationStatementAst
   | VerilogOtherProceduralStatementAst;
 
@@ -70,6 +71,12 @@ export interface VerilogLoopStatementAst extends VerilogProceduralStatementBase 
   controlTokens: VerilogToken[];
   initDeclarations: VerilogLocalDeclarationAst[];
   controlExpressions: VerilogExpressionAst[];
+  condition?: VerilogExpressionAst;
+  body: VerilogProceduralStatementAst;
+}
+
+export interface VerilogWaitStatementAst extends VerilogProceduralStatementBase {
+  kind: 'wait';
   condition?: VerilogExpressionAst;
   body: VerilogProceduralStatementAst;
 }
@@ -164,6 +171,9 @@ class ProceduralStatementParser {
     if (token.value === 'begin') {
       return this.parseBeginEndBlock();
     }
+    if (token.value === 'wait') {
+      return this.parseWaitStatement(stopValues);
+    }
     if (token.value === 'if') {
       return this.parseIfStatement();
     }
@@ -174,6 +184,14 @@ class ProceduralStatementParser {
       return this.parseLoopStatement();
     }
     return this.parseSimpleStatement();
+  }
+
+  private parseWaitStatement(stopValues: Set<string>): VerilogWaitStatementAst {
+    const start = this.cursor++;
+    const condition = this.parseParenthesizedExpression();
+    const body = this.parseStatement(stopValues);
+    const end = Math.max(start, this.cursor - 1);
+    return { kind: 'wait', condition, body, range: tokenIndexRange(this.document, this.tokens, start, end), tokens: this.tokens.slice(start, end + 1) };
   }
 
   private parseBeginEndBlock(): VerilogBlockStatementAst {

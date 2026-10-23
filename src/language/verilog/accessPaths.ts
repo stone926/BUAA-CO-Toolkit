@@ -109,6 +109,7 @@ export function orderedInterval(left: bigint, right: bigint): AccessInterval {
 }
 
 export function declarationIsVariable(decl: VerilogDecl): boolean {
+  if (decl.storage) return decl.storage === 'variable';
   return ['reg', 'logic', 'integer', 'real', 'realtime', 'time', 'genvar'].includes(decl.netType ?? decl.kind);
 }
 

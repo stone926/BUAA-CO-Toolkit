@@ -5,13 +5,22 @@ import { buildExpectedPorts, profilesWithCapability } from '../../courseConfig';
 import type { VerilogAstDocument } from './ast';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogExpressionAst } from './exprAst';
+import type { VerilogToken } from './lexer';
 
 export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'logic' | 'integer' | 'real' | 'realtime' | 'time' | 'parameter' | 'localparam' | 'genvar' | 'task' | 'function';
 
 export interface VerilogDecl {
+  /** Read-only per-iteration value introduced by a generate-for scope. */
+  implicitGenerateParameter?: boolean;
   name: string;
   kind: VerilogDeclKind;
   constantFunction?: boolean;
+  /** Bound captures and calls after pruning statically unreachable branches. */
+  constantFunctionDependencies?: readonly VerilogDecl[];
+  /** Storage is independent from formal direction and syntactic declaration kind. */
+  storage?: 'net' | 'variable';
+  /** A name-only entry from a non-ANSI module header, awaiting a direction declaration. */
+  headerPlaceholder?: boolean;
   signed?: boolean;
   valueType?: 'integer' | 'time' | 'real' | 'realtime';
   netType?: string;
@@ -32,6 +41,22 @@ export interface VerilogDecl {
   direction?: 'input' | 'output' | 'inout';
   directionRange?: Range;
   explicitPortNetType?: boolean;
+}
+
+export interface VerilogSubroutineSignature {
+  name: string;
+  kind: 'task' | 'function';
+  ansi: boolean;
+  /** False when unexpanded declarations may contribute unknown formals or body. */
+  complete?: boolean;
+  declaration: VerilogDecl;
+  /** Source order is also positional argument order. */
+  formals: VerilogDecl[];
+  /** Original formal/local declarations, without name-based deduplication. */
+  declarations: VerilogDecl[];
+  range: Range;
+  headerRange: Range;
+  bodyRange: Range;
 }
 
 export interface VerilogDeclDimension {
@@ -74,6 +99,8 @@ export interface VerilogModule {
   ports: VerilogDecl[];
   parameters: VerilogDecl[];
   declarations: Map<string, VerilogDecl>;
+  /** Source declarations before lookup merging; excludes nested scopes. */
+  declarationRecords?: VerilogDecl[];
   instances: VerilogInstance[];
   /**
    * Scoped generate blocks (`begin ... end` inside generate constructs) with the
@@ -81,6 +108,7 @@ export interface VerilogModule {
    */
   generateBlocks: VerilogGenerateBlock[];
   lexicalScopes?: VerilogLexicalScope[];
+  subroutines?: VerilogSubroutineSignature[];
   /** Object macro bodies bound to each original use offset, without rewriting source positions. */
   macroExpressions?: Map<number, VerilogExpressionAst>;
   range: Range;
@@ -101,6 +129,11 @@ export interface VerilogLexicalScope {
 }
 
 export interface VerilogGenerateBlock {
+  /** Single-item generated bodies still own distinct elaboration scopes. */
+  implicit?: boolean;
+  /** Direct source items, excluding explicit begin/end and labels. */
+  bodyTokens?: VerilogToken[];
+  selectionRange?: Range;
   /** Block label (`g` in `begin : g`), when present. */
   name?: string;
   range: Range;

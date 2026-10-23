@@ -10,7 +10,8 @@ export function visitProceduralAssignments(statement: VerilogProceduralStatement
     case 'block': statement.statements.forEach((child) => visitProceduralAssignments(child, visit)); return;
     case 'if': visitProceduralAssignments(statement.consequent, visit); if (statement.alternate) { visitProceduralAssignments(statement.alternate, visit); } return;
     case 'case': statement.items.forEach((item) => visitProceduralAssignments(item.body, visit)); return;
-    case 'loop': visitProceduralAssignments(statement.body, visit); return;
+    case 'loop':
+    case 'wait': visitProceduralAssignments(statement.body, visit); return;
     default: return;
   }
 }
@@ -78,6 +79,7 @@ export function collectAssignmentUsesFromProceduralStatementAst(
     case 'case':
       return statement.items.flatMap((item) => collectAssignmentUsesFromProceduralStatementAst(document, item.body, blockIndex));
     case 'loop':
+    case 'wait':
       return collectAssignmentUsesFromProceduralStatementAst(document, statement.body, blockIndex);
     case 'declaration':
     case 'other':

@@ -14,9 +14,12 @@ import { getCachedVerilogParse } from './parseCache';
 import { moduleMarkdown } from './display';
 import { activeConnectionIndex, findInstanceContext } from './resolveSymbol';
 import { overridableParameters } from './parameterOverrides';
+import { getSubroutineSignatureHelp } from './subroutineSignatureHelp';
 
 export function getVerilogSignatureHelp(document: TextDocument, position: Position, settings: CoSettings, index: VerilogWorkspaceIndex): SignatureHelp | undefined {
   const parsed = getCachedVerilogParse(document, settings, false);
+  const subroutine = getSubroutineSignatureHelp(document, position, parsed);
+  if (subroutine) return subroutine;
   const context = findInstanceContext(parsed.modules, position, index);
   if (!context?.targetModule) {
     return undefined;

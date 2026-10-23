@@ -1,10 +1,11 @@
 import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { rangeAtOffset } from '../common/lsp';
+import { containsRange, rangeAtOffset } from '../common/lsp';
 import { objectMacroExpressionsFromTokens } from './preprocessor';
 import { isIdentifierLike, lexVerilog, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
 import { parseInstanceGroup } from './instanceParser';
+import { generateItemEnd } from './generateBoundary';
 import { splitTopLevelTokens as splitTopLevel } from './tokenUtils';
 import { stripDriveStrength } from './driveStrength';
 import { verilogCodeTokens } from './directiveBoundaries';
@@ -16,6 +17,7 @@ import {
   VerilogGenerateBranch,
   VerilogInstance,
   VerilogModule,
+  VerilogSubroutineSignature,
   verilogKeywords
 } from './model';
 import { convertConstantForDecl, evalExpressionAstConstant, widthOfExpressionAst, WidthInfo } from './expressions';
@@ -71,6 +73,7 @@ export function parseModulesFromTokens(
       ports: [],
       parameters: [],
       declarations: new Map(),
+      declarationRecords: [],
       instances: [],
       generateBlocks: [],
       macroExpressions,
@@ -85,16 +88,19 @@ export function parseModulesFromTokens(
     };
 
     for (const param of parseParameterDeclarations(document, text, header.parameterTokens)) {
+      module.declarationRecords!.push(param);
       module.parameters.push(param);
       module.declarations.set(param.name, param);
     }
     for (const port of parseHeaderPorts(document, text, header.headerTokens)) {
+      module.declarationRecords!.push(port);
       module.ports.push(port);
       module.declarations.set(port.name, port);
     }
 
     const bodyTokens = tokens.filter((item) => item.start >= header.bodyStartOffset && item.start < (header.endmoduleToken?.start ?? header.endOffset));
     for (const decl of parseVerilogDeclarationTokens(document, text, bodyTokens)) {
+      module.declarationRecords!.push(decl);
       const existing = module.declarations.get(decl.name);
       if (existing && isPortKind(decl.kind)) {
         const merged = {
@@ -125,12 +131,10 @@ export function parseModulesFromTokens(
 
     module.instances = parseInstances(document, text, bodyTokens, module.name);
     module.generateBlocks = parseGenerateBlocks(document, text, bodyTokens);
-    // task/function names, arguments and locals are not module ports/parameters, but they ARE
-    // declared identifiers — register them (without promotion) so implicit-net / references don't
-    // mis-report them. They never overwrite a real module-level declaration of the same name.
-    for (const decl of parseSubroutineDeclarations(document, text, bodyTokens)) {
-      if (!module.declarations.has(decl.name)) {
-        module.declarations.set(decl.name, decl);
+    module.subroutines = parseSubroutineSignatures(document, text, bodyTokens);
+    for (const signature of module.subroutines) {
+      if (!module.generateBlocks.some((block) => containsRange(block.range, signature.range)) && !module.declarations.has(signature.name)) {
+        module.declarations.set(signature.name, signature.declaration);
       }
     }
     inferModuleParameterConstants(module);
@@ -220,6 +224,7 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
         applyDeclarationWidth(port, inheritedWidth);
       }
     }
+    port.headerPlaceholder = !port.direction;
     ports.push(port);
   }
   return ports;
@@ -299,72 +304,40 @@ export function parseVerilogDeclarationTokens(document: TextDocument, text: stri
   return declarations;
 }
 
-function parseSubroutineDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
-  const result: VerilogDecl[] = [];
+function parseSubroutineSignatures(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogSubroutineSignature[] {
+  const result: VerilogSubroutineSignature[] = [];
   for (const statement of statementSlices(tokens)) {
     const first = statement[0];
     if (!first || (first.value !== 'task' && first.value !== 'function')) {
+      for (const nested of nestedGenerateItems(statement)) result.push(...parseSubroutineSignatures(document, text, nested));
       continue;
     }
-    const kind = first.value as VerilogDeclKind; // 'task' | 'function'
-    const endValue = first.value === 'task' ? 'endtask' : 'endfunction';
+    const kind = first.value;
     const headerEnd = topLevelIndexOfValue(statement, ';', 1, statement.length);
     const headerLimit = headerEnd < 0 ? statement.length : headerEnd;
     const parenOpen = topLevelIndexOfValue(statement, '(', 1, headerLimit);
-    const nameLimit = parenOpen < 0 ? headerLimit : parenOpen;
-    const nameToken = lastIdentifierToken(statement, 1, nameLimit);
-    if (nameToken) {
-      const decl: VerilogDecl = {
-        name: nameToken.value,
-        kind,
-        range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[statement.length - 1].end)),
-        selectionRange: tokenRange(document, nameToken)
-      };
-      if (kind === 'function') {
-        const returnTokens = statement.slice(1, statement.indexOf(nameToken));
-        applyDeclarationWidth(decl, firstRangeInfo(document, text, returnTokens));
-        const returnType = returnTokens.find((token) =>
-          token.value === 'integer' || token.value === 'time' || token.value === 'real' || token.value === 'realtime'
-        )?.value;
-        decl.functionReturnType = returnType as VerilogDecl['functionReturnType'];
-        Object.assign(decl, declarationTypeInfo(returnTokens));
-      }
-      result.push(decl);
+    const nameToken = lastIdentifierToken(statement, 1, parenOpen < 0 ? headerLimit : parenOpen);
+    if (!nameToken) continue;
+    const range = Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end));
+    const declaration: VerilogDecl = { name: nameToken.value, kind, range, selectionRange: tokenRange(document, nameToken) };
+    if (kind === 'function') {
+      const returnTokens = statement.slice(1, statement.indexOf(nameToken));
+      applyDeclarationWidth(declaration, firstRangeInfo(document, text, returnTokens));
+      Object.assign(declaration, declarationTypeInfo(returnTokens));
+      declaration.functionReturnType = declaration.valueType;
     }
-    if (parenOpen >= 0) {
-      const close = findMatchingToken(statement, parenOpen, '(', ')');
-      if (close > parenOpen && close < headerLimit) {
-        result.push(...subroutineArgumentDeclarations(document, text, statement.slice(parenOpen + 1, close)));
-      }
-    }
-    if (headerEnd >= 0) {
-      const endIndex = indexOfValueFrom(statement, endValue, headerEnd + 1);
-      const body = statement.slice(headerEnd + 1, endIndex < 0 ? statement.length : endIndex);
-      result.push(...parseVerilogDeclarationTokens(document, text, body));
-      result.push(...parseSubroutineDeclarations(document, text, body));
-    }
-  }
-  return result;
-}
-
-function subroutineArgumentDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
-  const result: VerilogDecl[] = [];
-  for (const part of splitTopLevel(tokens, ',')) {
-    const nameToken = declarationNameToken(part);
-    if (!nameToken) {
-      continue;
-    }
-    // Arguments are task/function locals, not module ports — keep them as a non-port kind.
-    const width = firstRangeInfo(document, text, part);
-    result.push({
-      name: nameToken.value,
-      kind: 'reg',
-      ...declarationTypeInfo(part.slice(0, part.indexOf(nameToken))),
-      width: width?.width,
-      widthRange: width?.widthRange,
-      widthAst: width?.widthAst,
-      range: Range.create(document.positionAt(part[0].start), document.positionAt(part[part.length - 1].end)),
-      selectionRange: tokenRange(document, nameToken)
+    const endIndex = indexOfValueFrom(statement, kind === 'task' ? 'endtask' : 'endfunction', headerLimit);
+    const body = headerEnd < 0 ? [] : statement.slice(headerEnd + 1, endIndex < 0 ? statement.length : endIndex);
+    const locals = parseVerilogDeclarationTokens(document, text, body);
+    const close = parenOpen < 0 ? -1 : findMatchingToken(statement, parenOpen, '(', ')');
+    const ansi = close > parenOpen && parenOpen >= 0 ? parseHeaderPorts(document, text, statement.slice(parenOpen + 1, close)) : [];
+    const formals = ansi.length ? ansi : locals.filter((decl) => !!decl.direction);
+    for (const formal of formals) formal.storage = 'variable';
+    const headerEndOffset = headerEnd < 0 ? nameToken.end : statement[headerEnd].end;
+    result.push({ name: declaration.name, kind, ansi: parenOpen >= 0, declaration, formals,
+      declarations: [...ansi, ...locals], range,
+      headerRange: Range.create(document.positionAt(first.start), document.positionAt(headerEndOffset)),
+      bodyRange: Range.create(document.positionAt(body[0]?.start ?? headerEndOffset), document.positionAt(body[body.length - 1]?.end ?? headerEndOffset))
     });
   }
   return result;
@@ -490,61 +463,57 @@ function parseInstances(
   return instances;
 }
 
-/**
- * `begin ... end` blocks inside generate constructs, each with its own local
- * declarations. Declarations there are not module items: they live in the block's
- * scope (`g[0].w`), so they are kept apart from `module.declarations`.
- */
+/** Explicit blocks and single generated items own independent elaboration scopes. */
 function parseGenerateBlocks(
   document: TextDocument,
   text: string,
   tokens: VerilogToken[],
   branches: readonly VerilogGenerateBranch[] = [],
-  constructs = { next: 0 }
+  constructs = { next: 0 },
+  implicitBody = false
 ): VerilogGenerateBlock[] {
   const blocks: VerilogGenerateBlock[] = [];
-  for (const statement of statementSlices(tokens)) {
-    if (statement[0]?.value === 'case') {
+  if (implicitBody && tokens.length && tokens[0].value !== 'begin') {
+    blocks.push({ implicit: true, bodyTokens: tokens,
+      range: tokensRange(document, tokens, tokens[0].start, tokens[tokens.length - 1].end),
+      declarations: parseVerilogDeclarationTokens(document, text, tokens), branches: [...branches] });
+  }
+  for (const statement of generateItemSlices(tokens)) {
+    const first = statement[0];
+    if (first?.value === 'begin') {
+      const end = findMatchingToken(statement, 0, 'begin', 'end');
+      const label = statement[1]?.value === ':' && statement[2] && isIdentifierLike(statement[2].kind) ? statement[2].value : undefined;
+      const body = beginBodyTokens(statement, 0);
+      blocks.push({ name: label, selectionRange: label ? tokenRange(document, statement[2]) : undefined,
+        range: Range.create(document.positionAt(first.start), document.positionAt(statement[end >= 0 ? end : statement.length - 1].end)),
+        bodyTokens: body, declarations: parseVerilogDeclarationTokens(document, text, body), branches: [...branches] });
+      blocks.push(...parseGenerateBlocks(document, text, body, branches, constructs));
+      continue;
+    }
+    const nested = nestedGenerateItems(statement);
+    if (first?.value === 'if' || first?.value === 'case' || first?.value === 'casex' || first?.value === 'casez') {
       const construct = constructs.next++;
-      nestedGenerateItems(statement).forEach((branch, index) => {
-        blocks.push(...parseGenerateBlocks(document, text, branch, [...branches, { construct, branch: index }], constructs));
-      });
-      continue;
-    }
-    if (statement[0]?.value !== 'begin') {
-      for (const nested of nestedGenerateItems(statement)) {
-        blocks.push(...parseGenerateBlocks(document, text, nested, branches, constructs));
-      }
-      continue;
-    }
-    const end = findMatchingToken(statement, 0, 'begin', 'end');
-    const tail = end >= 0 ? statement.slice(end + 1) : [];
-    // `begin ... end else ...`: the block is the if branch, the tail its alternative.
-    const construct = tail[0]?.value === 'else' ? constructs.next++ : undefined;
-    const own = construct === undefined ? [...branches] : [...branches, { construct, branch: 0 }];
-    const label = statement[1]?.value === ':' && statement[2] && isIdentifierLike(statement[2].kind) ? statement[2].value : undefined;
-    const body = beginBodyTokens(statement, 0);
-    blocks.push({
-      name: label,
-      range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[end >= 0 ? end : statement.length - 1].end)),
-      declarations: parseVerilogDeclarationTokens(document, text, body),
-      branches: own
-    });
-    blocks.push(...parseGenerateBlocks(document, text, body, own, constructs));
-    if (tail.length) {
-      const alternative = construct === undefined ? branches : [...branches, { construct, branch: 1 }];
-      blocks.push(...parseGenerateBlocks(document, text, tail, alternative, constructs));
-    }
+      nested.forEach((branch, index) => blocks.push(...parseGenerateBlocks(document, text, branch, [...branches, { construct, branch: index }], constructs, true)));
+    } else for (const body of nested) blocks.push(...parseGenerateBlocks(document, text, body, branches, constructs, first?.value !== 'generate'));
   }
   return blocks;
 }
 
-/**
- * Token runs nested in a generate construct: the body of a generate region or
- * `begin` block, the tail of `if`/`for`/`else`, and an `else` branch that
- * follows a `begin ... end` in the same statement (`begin ... end else begin ... end`).
- * Every run is strictly shorter than `statement`, so recursion terminates.
- */
+/** Split control bodies with the same boundary used to model generate-for ranges. */
+function generateItemSlices(tokens: VerilogToken[]): VerilogToken[][] {
+  const result: VerilogToken[][] = [];
+  for (let cursor = 0; cursor < tokens.length;) {
+    if (tokens[cursor].kind === 'eof') break;
+    const close = tokens[cursor].value === 'generate' ? findMatchingToken(tokens, cursor, 'generate', 'endgenerate') : -1;
+    const end = close >= cursor ? close + 1 : generateItemEnd(tokens, cursor, Infinity);
+    const next = end > cursor ? end : cursor + 1;
+    result.push(tokens.slice(cursor, next));
+    cursor = next;
+  }
+  return result;
+}
+
+/** Direct bodies of generate regions, controls, branches, and explicit blocks. */
 function nestedGenerateItems(statement: VerilogToken[]): VerilogToken[][] {
   const first = statement[0];
   let items: VerilogToken[][] = [];
@@ -554,14 +523,24 @@ function nestedGenerateItems(statement: VerilogToken[]): VerilogToken[][] {
     const end = findMatchingToken(statement, 0, 'begin', 'end');
     items = [beginBodyTokens(statement, 0), end >= 0 ? statement.slice(end + 1) : []];
   } else if (first?.value === 'if' || first?.value === 'for') {
-    items = [controlTailTokens(statement, 0)];
-  } else if (first?.value === 'case') {
+    const open = indexOfValueFrom(statement, '(', 1);
+    const close = open < 0 ? -1 : findMatchingToken(statement, open, '(', ')');
+    if (close >= 0) {
+      const end = generateItemEnd(statement, close + 1, Infinity);
+      items = [statement.slice(close + 1, end)];
+      if (first.value === 'if' && statement[end]?.value === 'else') items.push(statement.slice(end + 1, generateItemEnd(statement, end + 1, Infinity)));
+    }
+  } else if (first?.value === 'case' || first?.value === 'casex' || first?.value === 'casez') {
     const body = controlTailTokens(statement, 0);
     const content = body[body.length - 1]?.value === 'endcase' ? body.slice(0, -1) : body;
-    items = statementSlices(content).flatMap((branch) => {
-      const colon = topLevelIndexOfValue(branch, ':', 0, branch.length);
-      return colon >= 0 ? [branch.slice(colon + 1)] : [];
-    });
+    for (let cursor = 0; cursor < content.length;) {
+      const colon = topLevelIndexOfValue(content, ':', cursor, content.length);
+      if (colon < 0) break;
+      const end = generateItemEnd(content, colon + 1, Infinity);
+      if (end <= colon + 1) break;
+      items.push(content.slice(colon + 1, end));
+      cursor = end;
+    }
   } else if (first?.value === 'else') {
     items = [statement.slice(1)];
   }

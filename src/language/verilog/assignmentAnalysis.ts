@@ -145,6 +145,9 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
   const label = findLastTopLevelToken(tokens, ':', 0, operatorIndex);
   const defaultLabel = findLastTopLevelToken(tokens, 'default', 0, operatorIndex);
   let start = Math.max(label, defaultLabel) + 1;
+  // A source fragment immediately after `begin` starts with `: block_name`.
+  // Unlike a case label, that name is part of the block header, not the lvalue.
+  if (tokens[0]?.value === ':' && tokens[1]?.kind === 'identifier') start = Math.max(start, 2);
   while (start < operatorIndex) {
     const token = tokens[start];
     if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for' || token.value === 'wait') {

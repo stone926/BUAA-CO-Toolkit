@@ -57,7 +57,7 @@ describe('Verilog AST and semantic model', () => {
     const local = result.semantic.symbols.find((symbol) => symbol.name === 'MODE' && symbol.kind === 'signal');
     expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('case (MODE)') + 6))?.symbol).toBe(parameter);
     expect(resolveVerilogSemanticAtPosition(result.semantic, document.positionAt(text.indexOf('if (MODE)') + 4))?.symbol).toBe(local);
-    expect(result.ast.modules[0].generateExpressions).toHaveLength(1);
+    expect(result.ast.modules[0].generateExpressions.map((expression) => text.slice(expression.start, expression.end))).toEqual(['MODE', '1']);
   });
 
   it('builds a document AST with module items and procedural blocks', () => {

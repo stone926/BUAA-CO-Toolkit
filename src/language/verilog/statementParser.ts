@@ -1,6 +1,7 @@
 import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { VerilogToken } from './lexer';
+import { stripLeadingGenerateBlockLabelTokens } from './tokenUtils';
 
 export interface VerilogStatementSource {
   tokens: VerilogToken[];
@@ -47,9 +48,14 @@ export function collectVerilogStatementSources(document: TextDocument, tokens: V
   let brace = 0;
   const blockStack: string[] = [];
 
+  function append(tokens: VerilogToken[]): void {
+    const normalized = stripLeadingGenerateBlockLabelTokens(tokens);
+    if (normalized.length) statements.push(makeStatement(document, normalized));
+  }
+
   function flush(): void {
     if (current.length) {
-      statements.push(makeStatement(document, current));
+      append(current);
       current = [];
     }
   }
@@ -68,7 +74,7 @@ export function collectVerilogStatementSources(document: TextDocument, tokens: V
       paren = bracket = brace = 0;
       blockStack.length = 0;
       if (token.value === 'endmodule') {
-        statements.push(makeStatement(document, [token]));
+        append([token]);
         continue;
       }
     }
@@ -107,7 +113,7 @@ export function collectVerilogStatementSources(document: TextDocument, tokens: V
 
     if (opener) {
       if (current.length > 1) {
-        statements.push(makeStatement(document, current.slice(0, -1)));
+        append(current.slice(0, -1));
         current = [token];
       }
       flush();
@@ -115,7 +121,7 @@ export function collectVerilogStatementSources(document: TextDocument, tokens: V
     } else if (closer) {
       closeBlockStack(blockStack, closer);
       if (current.length > 1) {
-        statements.push(makeStatement(document, current.slice(0, -1)));
+        append(current.slice(0, -1));
         current = [token];
       }
       flush();

@@ -1,4 +1,5 @@
 import { annotateConstantFunctions } from './constantFunctions';
+import { hasUnexpandedDeclarationDependencies } from './declarationDependencies';
 // @index semantic-model — 符号表/作用域/AST引用收集
 import { Diagnostic, Position, Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -12,7 +13,8 @@ import {
   VerilogMacro,
   VerilogMacroUse,
   VerilogModule,
-  VerilogPortConnection
+  VerilogPortConnection,
+  VerilogSubroutineSignature
 } from './model';
 import { VerilogAstDocument, VerilogModuleAst, VerilogSubroutineAst } from './ast';
 import type { VerilogProceduralBlockAst, VerilogProceduralControlAst } from './blockAst';
@@ -73,6 +75,7 @@ export interface VerilogSemanticReference {
   range: Range;
   scope: VerilogSemanticScope;
   token?: VerilogToken;
+  callable?: 'task' | 'function';
   symbol?: VerilogSemanticSymbol;
   module?: VerilogModule;
   instance?: VerilogInstance;
@@ -118,6 +121,9 @@ export interface VerilogSemanticSource {
 const collectedReferenceRangeKeys = new WeakMap<VerilogSemanticReference[], Set<string>>();
 
 export function buildVerilogSemanticModel(source: VerilogSemanticSource): VerilogSemanticModel {
+  for (const module of source.ast.modules) for (const subroutine of module.subroutines) {
+    if (subroutine.signature) subroutine.signature.complete = !hasUnexpandedDeclarationDependencies(source.ast, module, subroutine.range);
+  }
   const fileScope: VerilogSemanticScope = {
     kind: 'file',
     range: source.ast.range,
@@ -145,7 +151,7 @@ export function buildVerilogSemanticModel(source: VerilogSemanticSource): Verilo
   }
   const declarationRangeKeys = new Set(symbols.map((symbol) => rangeKey(symbol.selectionRange)));
   const references = collectReferences(source.document, source, fileScope, moduleScopes, blockScopes, declarationRangeKeys);
-  annotateConstantFunctions(source.ast.modules, references);
+  annotateConstantFunctions(source.document, source.ast.modules, references);
   return {
     documentUri: source.document.uri,
     ast: source.ast,
@@ -154,7 +160,7 @@ export function buildVerilogSemanticModel(source: VerilogSemanticSource): Verilo
     blockScopes,
     symbols,
     references,
-    unresolvedReferences: references.filter((reference) => reference.kind === 'unresolved'),
+    unresolvedReferences: references.filter((reference) => reference.kind === 'unresolved' && !reference.callable),
     diagnostics: source.diagnostics,
     declarationRangeKeys,
     referenceRangeKeys: new Set(references.map((reference) => rangeKey(reference.range)))
@@ -171,6 +177,16 @@ export function resolveVerilogSemanticAtPosition(model: VerilogSemanticModel, po
   }
   const symbol = smallestContainingSymbol(model.symbols, position);
   return symbol ? { symbol } : undefined;
+}
+
+/** Bind a callable through the same lexical scopes, including incomplete call expressions. */
+export function resolveVerilogSubroutineSignature(model: VerilogSemanticModel, name: string, position: Position): VerilogSubroutineSignature | undefined {
+  const moduleScope = model.moduleScopes.find((scope) => containsPosition(scope.range, position));
+  if (!moduleScope) return undefined;
+  const scope = scopeAtPosition(moduleScope, model.blockScopes, position);
+  const symbol = resolveIdentifierInScope(scope, name);
+  if (symbol?.decl?.kind !== 'function' && symbol?.decl?.kind !== 'task') return undefined;
+  return symbol.module?.subroutines?.find((signature) => signature.declaration === symbol.decl);
 }
 
 export function verilogSemanticTargetFromSymbol(symbol: VerilogSemanticSymbol): VerilogSemanticTarget {
@@ -266,8 +282,16 @@ function collectSymbols(
       }));
     }
     const moduleAst = source.ast.modules.find((item) => item.module === module);
+    for (const control of moduleAst?.generateControls ?? []) {
+      for (const [decl, position] of [[control.declaration, control.range.start], [control.parameter, control.bodyRange?.start]] as const) {
+        if (!decl || !position) continue;
+        const owner = scopeAtPosition(scope, blockScopes, position);
+        symbols.push(addSymbol(owner, { name: decl.name, kind: declSymbolKind(decl), uri: source.document.uri, range: decl.range,
+          selectionRange: decl.selectionRange, scope: owner, module, decl }));
+      }
+    }
     const generateDeclarations = module.generateBlocks.flatMap((block) => block.declarations);
-    for (const decl of [...generateDeclarations, ...collectBlockLocalDeclarations(source.document, moduleAst)]) {
+    for (const decl of [...(module.subroutines ?? []).map((signature) => signature.declaration), ...generateDeclarations, ...collectBlockLocalDeclarations(source.document, moduleAst)]) {
       const declScope = declarationScopeFor(module, scope, blockScopes, decl);
       if (declScope.symbols.get(decl.name)?.some((symbol) => rangesEqual(symbol.selectionRange, decl.selectionRange))) {
         continue;
@@ -364,6 +388,7 @@ function collectReferences(
 
     for (const decl of dedupeDecls([
       ...module.declarations.values(),
+      ...(module.subroutines ?? []).flatMap((signature) => signature.declarations),
       ...module.generateBlocks.flatMap((block) => block.declarations)
     ])) {
       for (const widthExpression of decl.widthAst ?? []) {
@@ -399,7 +424,7 @@ function collectBlockScopes(moduleAsts: VerilogModuleAst[], moduleScopes: Verilo
     if (!moduleScope) {
       continue;
     }
-    const generateScopes = collectGenerateBlockScopes(module, moduleScope);
+    const generateScopes = collectGenerateBlockScopes(moduleAst, moduleScope);
     result.push(...generateScopes);
     // Procedural blocks and subroutines inside a generate block resolve names through it.
     const enclosing = (range: Range) => scopeAtPosition(moduleScope, generateScopes, range.start);
@@ -412,10 +437,16 @@ function collectBlockScopes(moduleAsts: VerilogModuleAst[], moduleScopes: Verilo
 }
 
 /** One scope per generate `begin ... end` block, nested by containment. */
-function collectGenerateBlockScopes(module: VerilogModule, moduleScope: VerilogSemanticScope): VerilogSemanticScope[] {
+function collectGenerateBlockScopes(moduleAst: VerilogModuleAst, moduleScope: VerilogSemanticScope): VerilogSemanticScope[] {
+  const module = moduleAst.module;
   const result: VerilogSemanticScope[] = [];
-  const outermostFirst = [...module.generateBlocks].sort((left, right) => rangeSize(right.range) - rangeSize(left.range));
+  const loopScopes = moduleAst.generateControls.flatMap((control) => control.bodyRange ? [
+    ...(control.declaration ? [{ name: 'generate-for', range: Range.create(control.range.start, control.bodyRange.end) }] : []),
+    { name: 'generate-iteration', range: control.bodyRange }
+  ] : []);
+  const outermostFirst = [...module.generateBlocks, ...loopScopes].sort((left, right) => rangeSize(right.range) - rangeSize(left.range));
   for (const block of outermostFirst) {
+    if (result.some((scope) => rangesEqual(scope.range, block.range))) continue;
     const parent = scopeAtPosition(moduleScope, result, block.range.start);
     const scope = makeBlockScopeFromRange(module, parent, block.name ?? 'generate', block.range);
     parent.children.push(scope);
@@ -463,6 +494,9 @@ function collectProceduralStatementBlockScopes(
         result.push(...collectProceduralStatementBlockScopes(module, parent, statement.alternate));
       }
       return result;
+    case 'wait':
+      result.push(...collectProceduralStatementBlockScopes(module, parent, statement.body));
+      return result;
     case 'assignment':
     case 'declaration':
     case 'other':
@@ -480,6 +514,7 @@ function collectSubroutineBlockScopes(
     const scope = makeBlockScopeFromRange(moduleAst.module, parent, subroutine.subroutineKind, subroutine.range);
     parent.children.push(scope);
     result.push(scope);
+    result.push(...collectProceduralStatementBlockScopes(moduleAst.module, scope, subroutine.statementTree));
   }
   return result;
 }
@@ -535,7 +570,7 @@ function declarationScopeFor(
   decl: VerilogDecl
 ): VerilogSemanticScope {
   if (decl.kind === 'task' || decl.kind === 'function') {
-    return moduleScope;
+    return scopeAtPosition(moduleScope, blockScopes.filter((scope) => !rangesEqual(scope.range, decl.range) || scope.name !== decl.kind), decl.selectionRange.start);
   }
   return scopeAtPosition(moduleScope, blockScopes.filter((scope) => scope.module === module), decl.selectionRange.start);
 }
@@ -547,8 +582,14 @@ function scopeAtPosition(
 ): VerilogSemanticScope {
   return blockScopes
     .filter((scope) => scope.module === moduleScope.module && containsPosition(scope.range, position))
-    .sort((left, right) => rangeSize(left.range) - rangeSize(right.range))[0]
+    .sort((left, right) => rangeSize(left.range) - rangeSize(right.range) || scopeDepth(right) - scopeDepth(left))[0]
     ?? moduleScope;
+}
+
+function scopeDepth(scope: VerilogSemanticScope): number {
+  let depth = 0;
+  for (let parent = scope.parent; parent; parent = parent.parent) depth++;
+  return depth;
 }
 
 function collectBlockLocalDeclarations(
@@ -561,6 +602,7 @@ function collectBlockLocalDeclarations(
       result.push(...collectProceduralLocalDeclarations(document, block.statementTree));
     }
     for (const subroutine of moduleAst.subroutines) {
+      result.push(...subroutine.signature?.declarations ?? []);
       result.push(...collectProceduralLocalDeclarations(document, subroutine.statementTree));
     }
   }
@@ -585,6 +627,8 @@ function collectProceduralLocalDeclarations(document: TextDocument, statement: V
       ];
     case 'case':
       return statement.items.flatMap((item) => collectProceduralLocalDeclarations(document, item.body));
+    case 'wait':
+      return collectProceduralLocalDeclarations(document, statement.body);
     case 'assignment':
     case 'other':
       return [];
@@ -774,9 +818,17 @@ function collectReferencesFromProceduralStatementAst(
         }
       }
       return;
+    case 'wait':
+      if (statement.condition) collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.condition, 0);
+      collectReferencesFromProceduralStatementAst(document, references, declarationRangeKeys, module, moduleScope, blockScopes, statement.body);
+      return;
     case 'other':
       if (statement.expression) {
-        collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.expression, 0);
+        if (statement.expression.kind === 'identifier') {
+          addIdentifierReference(document, references, declarationRangeKeys, scope, module, statement.expression.name, Range.create(document.positionAt(statement.expression.start), document.positionAt(statement.expression.end)), undefined, 'task');
+        } else {
+          collectReferencesFromExpressionAst(document, references, declarationRangeKeys, scope, module, statement.expression, 0, 'task');
+        }
       }
       return;
   }
@@ -805,7 +857,8 @@ function collectReferencesFromExpressionAst(
   scope: VerilogSemanticScope,
   module: VerilogModule,
   expression: VerilogExpressionAst,
-  baseOffset: number
+  baseOffset: number,
+  callable: 'task' | 'function' = 'function'
 ): void {
   walkVerilogExpression(expression, (candidate) => {
     if (candidate.kind === 'callExpression' && !candidate.system) {
@@ -813,7 +866,7 @@ function collectReferencesFromExpressionAst(
         document.positionAt(baseOffset + candidate.start),
         document.positionAt(baseOffset + candidate.start + candidate.callee.length)
       );
-      addIdentifierReference(document, references, declarationRangeKeys, scope, module, candidate.callee, range);
+      addIdentifierReference(document, references, declarationRangeKeys, scope, module, candidate.callee, range, undefined, candidate === expression ? callable : 'function');
       return;
     }
     if (candidate.kind !== 'identifier') {
@@ -835,7 +888,8 @@ function addIdentifierReference(
   module: VerilogModule,
   name: string,
   range: Range,
-  token?: VerilogToken
+  token?: VerilogToken,
+  callable?: 'task' | 'function'
 ): void {
   // Macro names retain their separate preprocessor references, while argument ASTs
   // still contribute ordinary identifier references at their original offsets.
@@ -857,6 +911,7 @@ function addIdentifierReference(
     range,
     scope,
     token,
+    callable,
     symbol,
     module
   });

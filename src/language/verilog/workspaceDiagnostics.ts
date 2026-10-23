@@ -291,6 +291,7 @@ function visitProceduralStatementExpressions(
       }
       return;
     case 'loop':
+    case 'wait':
       visitExpression(statement.condition);
       visitProceduralStatementExpressions(statement.body, visitExpression);
       return;

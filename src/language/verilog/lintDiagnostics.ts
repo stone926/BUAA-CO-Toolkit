@@ -190,6 +190,7 @@ function visitProceduralClockStatements(
         && !options.requireForever
         && (!options.requireDelay || state.delaySeen || statement.hasDelayControl)
         && isClockToggleAssignment(statement, clockNames);
+    case 'wait':
     case 'declaration':
     case 'other':
       return false;
@@ -198,6 +199,7 @@ function visitProceduralClockStatements(
 
 function statementContainsEventOrWait(statement: VerilogProceduralStatementAst): boolean {
   switch (statement.kind) {
+    case 'wait': return true;
     case 'assignment':
     case 'other':
       return statement.hasEventControl || statement.hasWaitControl;
@@ -223,6 +225,7 @@ function statementContainsDelayControl(statement: VerilogProceduralStatementAst)
     case 'block':
       return statement.statements.some(statementContainsDelayControl);
     case 'loop':
+    case 'wait':
       return statementContainsDelayControl(statement.body);
     case 'if':
       return statementContainsDelayControl(statement.consequent) ||
