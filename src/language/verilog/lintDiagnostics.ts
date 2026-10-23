@@ -57,10 +57,6 @@ export function collectExplicitPortNetTypeDiagnostics(
   ast: VerilogAstDocument,
   diagnostics: Diagnostic[]
 ): void {
-  if (!hasDefaultNettypeNone(ast)) {
-    return;
-  }
-
   for (const moduleAst of ast.modules) {
     const reported = new Set<string>();
     for (const port of moduleAst.module.ports) {
@@ -70,6 +66,7 @@ export function collectExplicitPortNetTypeDiagnostics(
       if (isHeaderPortDeclaration(port, moduleAst.module.headerEnd)) {
         continue;
       }
+      if (!defaultNettypeNoneAt(ast, port.directionRange.start)) { continue; }
       const key = `${port.directionRange.start.line}:${port.directionRange.start.character}:${port.directionRange.end.line}:${port.directionRange.end.character}`;
       if (reported.has(key)) {
         continue;
@@ -94,12 +91,14 @@ function makeExplicitPortNetDiagnostic(range: Range): Diagnostic {
   );
 }
 
-function hasDefaultNettypeNone(ast: VerilogAstDocument): boolean {
-  return ast.preprocessor.some((item) =>
-    item.kind === 'directive' &&
-    item.name === 'default_nettype' &&
-    item.argument === 'none'
-  );
+function defaultNettypeNoneAt(ast: VerilogAstDocument, at: Position): boolean {
+  let nettype = 'wire';
+  for (const item of ast.preprocessor) {
+    if (item.kind !== 'directive' || item.name !== 'default_nettype') { continue; }
+    if (item.range.start.line > at.line || item.range.start.line === at.line && item.range.start.character > at.character) { continue; }
+    nettype = item.argument?.trim() ?? 'wire';
+  }
+  return nettype === 'none';
 }
 
 export function collectTestbenchDiagnostics(settings: CoSettings, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {

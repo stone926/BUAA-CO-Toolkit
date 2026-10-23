@@ -4,16 +4,30 @@ import type { VerilogAssignmentExpressionAst, VerilogModuleAst } from './ast';
 import type { VerilogExpressionAst } from './exprAst';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
 
+export function visitProceduralAssignments(statement: VerilogProceduralStatementAst, visit: (assignment: Extract<VerilogProceduralStatementAst, { kind: 'assignment' }>) => void): void {
+  switch (statement.kind) {
+    case 'assignment': visit(statement); return;
+    case 'block': statement.statements.forEach((child) => visitProceduralAssignments(child, visit)); return;
+    case 'if': visitProceduralAssignments(statement.consequent, visit); if (statement.alternate) { visitProceduralAssignments(statement.alternate, visit); } return;
+    case 'case': statement.items.forEach((item) => visitProceduralAssignments(item.body, visit)); return;
+    case 'loop': visitProceduralAssignments(statement.body, visit); return;
+    default: return;
+  }
+}
+
 export interface AssignmentUse {
   name: string;
   operator: '=' | '<=';
   range: Range;
   blockIndex: number;
+  expression: VerilogExpressionAst;
+  source: VerilogExpressionAst;
 }
 
 interface AssignmentAstTarget {
   name: string;
   range: Range;
+  expression: VerilogExpressionAst;
 }
 
 export function collectAssignmentUsesFromModuleAst(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
@@ -74,6 +88,7 @@ export function collectAssignmentUsesFromProceduralStatementAst(
 export function assignmentTargetsFromExpressionAst(document: TextDocument, expression: VerilogExpressionAst): AssignmentAstTarget[] {
   return targetIdentifiersFromExpression(expression).map((target) => ({
     name: target.name,
+    expression: target.expression,
     range: Range.create(document.positionAt(target.start), document.positionAt(target.end))
   }));
 }
@@ -96,24 +111,26 @@ function assignmentUsesFromExpressionAst(
     name: target.name,
     operator,
     range: target.range,
-    blockIndex
+    blockIndex,
+    expression: target.expression,
+    source: lhs
   }));
 }
 
-function targetIdentifiersFromExpression(expression: VerilogExpressionAst): Array<{ name: string; start: number; end: number }> {
+function targetIdentifiersFromExpression(expression: VerilogExpressionAst): Array<{ name: string; start: number; end: number; expression: VerilogExpressionAst }> {
   switch (expression.kind) {
     case 'identifier':
-      return [{ name: expression.name, start: expression.start, end: expression.end }];
+      return [{ name: expression.name, start: expression.start, end: expression.end, expression }];
     case 'selectExpression':
-      return targetIdentifiersFromExpression(expression.target);
+      return targetIdentifiersFromExpression(expression.target).map((target) => ({ ...target, expression }));
     case 'concatenation':
-      return expression.elements.flatMap(targetIdentifiersFromExpression);
-    case 'multipleConcatenation':
       return expression.elements.flatMap(targetIdentifiersFromExpression);
     case 'parenthesizedExpression':
       return targetIdentifiersFromExpression(expression.expression);
     case 'memberExpression':
-      return targetIdentifiersFromExpression(expression.target);
+      // A hierarchical member is not a write to its instance-name prefix.
+      // Cross-hierarchy accesses need elaborated identities before comparison.
+      return [];
     default:
       return [];
   }

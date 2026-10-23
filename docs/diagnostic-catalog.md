@@ -67,6 +67,7 @@
 | verilog | `<profile>-display` | `src/language/verilog/diagnostics.ts` |
 | verilog | `<profile>-port` | `src/language/verilog/diagnostics.ts` |
 | verilog | `<profile>-port-width` | `src/language/verilog/diagnostics.ts` |
+| verilog | `ambiguous-module` | `src/language/verilog/workspaceDiagnostics.ts` |
 | verilog | `constant-division-by-zero` | `src/language/verilog/diagnostics.ts` |
 | verilog | `display-format` | `src/language/verilog/diagnostics.ts` |
 | verilog | `duplicate-module` | `src/language/verilog/diagnostics.ts`, `src/language/verilog/workspaceDiagnostics.ts` |
@@ -74,6 +75,8 @@
 | verilog | `duplicate-port-connection` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
 | verilog | `explicit-port-wire` | `src/language/verilog/lintDiagnostics.ts` |
 | verilog | `implicit-net:<name>` | `src/language/verilog/lintDiagnostics.ts` |
+| verilog | `invalid-assignment-target` | `src/language/verilog/assignmentTypeDiagnostics.ts` |
+| verilog | `invalid-select-width` | `src/language/verilog/diagnostics.ts` |
 | verilog | `iverilog-syntax` | `src/language/verilog/iverilogSyntaxCheck.ts` |
 | verilog | `iverilog-toolchain` | `src/language/verilog/externalSyntaxCheck.ts`, `src/language/verilog/iverilogSyntaxCheck.ts` |
 | verilog | `localparam-override` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
@@ -90,24 +93,25 @@
 | verilog | `parameter-not-constant` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
 | verilog | `parameter-width-mismatch` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
 | verilog | `port-index-out-of-range` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
-| verilog | `port-width-mismatch` | `src/language/verilog/diagnostics.ts`, `src/language/verilog/instanceConnectionDiagnostics.ts` |
+| verilog | `port-width-mismatch` | `src/language/verilog/instanceConnectionDiagnostics.ts` |
 | verilog | `project-dm-size` | `src/language/verilog/workspaceDiagnostics.ts` |
 | verilog | `project-im-size` | `src/language/verilog/workspaceDiagnostics.ts` |
 | verilog | `project-pc-reset` | `src/language/verilog/workspaceDiagnostics.ts` |
+| verilog | `select-direction-mismatch` | `src/language/verilog/diagnostics.ts` |
 | verilog | `select-out-of-range` | `src/language/verilog/diagnostics.ts` |
 | verilog | `syntax-malformed-<kind>` | `src/language/verilog/syntaxParser.ts` |
+| verilog | `syntax-malformed-<value>` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-assignment` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-declaration` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-event-control` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-for` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-gate-primitive` | `src/language/verilog/syntaxParser.ts` |
-| verilog | `syntax-malformed-generate` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-instance` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-number` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-port-list` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-malformed-procedural-block` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-missing-semicolon` | `src/language/verilog/syntaxDiagnostics.ts`, `src/language/verilog/syntaxParser.ts` |
-| verilog | `syntax-module-declaration` | `src/language/verilog/syntaxDiagnostics.ts` |
+| verilog | `syntax-module-declaration` | `src/language/verilog/syntaxDiagnostics.ts`, `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-orphan-<value>` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-orphan-default` | `src/language/verilog/syntaxParser.ts` |
 | verilog | `syntax-orphan-else` | `src/language/verilog/syntaxParser.ts` |

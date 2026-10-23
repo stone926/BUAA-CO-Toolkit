@@ -5,8 +5,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
 import {
-  evalExpressionConstant,
-  evalExpressionAstConstant,
+  classifyExpressionConstant,
   shouldReportWidthMismatch,
   widthOfDecl,
   widthOfExpression,
@@ -19,6 +18,9 @@ import {
   VerilogPortConnection
 } from './model';
 import { overridableParameters, parameterOverridesForInstance } from './parameterOverrides';
+import { parseVerilogExpression } from './exprAst';
+import { instancePortConnectionWidths } from './instanceArray';
+import { collectLvalueTypeDiagnostics } from './assignmentTypeDiagnostics';
 
 export interface InstanceConnectionDiagnosticOptions {
   checkPorts?: boolean;
@@ -81,17 +83,29 @@ function collectPortConnectionDiagnostics(
       continue;
     }
 
-    if (!checkWidths || !targetPort || !connection.expression.trim()) {
+    if (!targetPort || !connection.expression.trim()) {
       continue;
     }
+    const expression = connection.expressionAst ?? parseVerilogExpression(connection.expression);
+    if (expression && (targetPort.direction === 'output' || targetPort.direction === 'inout')) {
+      collectLvalueTypeDiagnostics(document, parentModule, expression, 'net', diagnostics, connection.expressionRange);
+    }
+    if (!checkWidths) { continue; }
     const expected = widthOfDecl(targetPort, targetModule, parameterOverridesForInstance(instance, parentModule, targetModule));
     const actual = connection.expressionAst
-      ? widthOfExpressionAst(connection.expressionAst, parentModule)
+      ? widthOfExpressionAst(connection.expressionAst, parentModule, undefined, connection.expressionRange.start)
       : widthOfExpression(connection.expression, parentModule);
-    if (shouldReportWidthMismatch(expected, actual)) {
+    const arrayWidths = instance.arrayRange ? instancePortConnectionWidths(instance, expected.width, parentModule) : undefined;
+    const mismatch = instance.arrayRange ? actual.width !== undefined && arrayWidths !== undefined && !arrayWidths.includes(actual.width)
+      : targetPort.direction === 'output' ? shouldReportWidthMismatch(actual, expected)
+      : targetPort.direction === 'inout' ? shouldReportWidthMismatch(expected, actual) || shouldReportWidthMismatch(actual, expected)
+      : shouldReportWidthMismatch(expected, actual);
+    if (mismatch) {
       diagnostics.push(makeDiagnostic(
         connection.expressionRange,
-        `Port '${targetPort.name}' is ${expected.width} bit(s), but this connection is ${actual.width} bit(s).`,
+        instance.arrayRange
+          ? `Port '${targetPort.name}' of this instance array requires ${arrayWidths?.join(' or ')} bit(s), but this connection is ${actual.width} bit(s).`
+          : `Port '${targetPort.name}' is ${expected.width} bit(s), but this connection is ${actual.width} bit(s).`,
         DiagnosticSeverity.Warning,
         'port-width-mismatch'
       ));
@@ -148,10 +162,8 @@ function collectParameterConnectionDiagnostics(
     if (!targetParameter || !connection.expression.trim()) {
       continue;
     }
-    const value = connection.expressionAst
-      ? evalExpressionAstConstant(connection.expressionAst, parentModule)
-      : evalExpressionConstant(connection.expression, parentModule);
-    if (value === undefined) {
+    const expression = connection.expressionAst ?? parseVerilogExpression(connection.expression);
+    if (classifyExpressionConstant(expression, parentModule, undefined, connection.expressionRange.start) === 'nonConstant') {
       diagnostics.push(makeDiagnostic(
         connection.expressionRange,
         `Parameter '${targetParameter.name}' override must be a constant expression.`,
@@ -164,7 +176,7 @@ function collectParameterConnectionDiagnostics(
     }
     const expected = widthOfDecl(targetParameter, targetModule);
     const actual = connection.expressionAst
-      ? widthOfExpressionAst(connection.expressionAst, parentModule)
+      ? widthOfExpressionAst(connection.expressionAst, parentModule, undefined, connection.expressionRange.start)
       : widthOfExpression(connection.expression, parentModule);
     if (shouldReportWidthMismatch(expected, actual)) {
       diagnostics.push(makeDiagnostic(

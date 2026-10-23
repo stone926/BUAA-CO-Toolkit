@@ -75,9 +75,10 @@
 | 表达式 | 一元、二元、三元、拼接、重复拼接、函数/系统函数调用、位选、范围选择、索引式部分选择、转义标识符、基数字面量（含 size/base/digits 之间合法空白）、实数/指数数字（仅解析，不做整数折叠） | `syntax-malformed-assignment`, `syntax-malformed-declaration`, `syntax-malformed-instance`, `syntax-malformed-number` |
 | 过程控制 | `if/else`, `case/casex/casez`, `for/while/repeat/forever`, 事件控制、延迟控制；always/initial 后不强制 begin/end，case 标签支持三元表达式和 default 可选冒号；`for` 的 init/condition/step 会结构化检查 | `syntax-malformed-if`, `syntax-malformed-case`, `syntax-malformed-for`, `syntax-malformed-while`, `syntax-malformed-repeat`, `syntax-malformed-event-control` |
 | 块结构 | `begin/end`, `case/endcase`, `generate/endgenerate`, `function/endfunction`, `task/endtask` | `syntax-unclosed-*`, `syntax-unmatched-*` |
-| 实例化 | 命名端口、位置端口、空连接（保留位置空槽）、参数覆盖、同语句多实例、常见门级原语 | `syntax-malformed-instance`, `syntax-malformed-gate-primitive`, `unknown-port`, `unknown-parameter` |
-| 预处理 | 静态识别 ``include``、``define``、``default_nettype``；宏可用于位宽/表达式文本；不做完整条件编译展开 | `missing-include`, `implicit-net:*`, `default-nettype-none` |
-| generate | 常见 generate-for；课程子集要求 `begin : name` 命名块；generate-if/generate-case 只做足够的语句边界识别 | `syntax-malformed-generate`, `syntax-unclosed-generate` |
+| 实例化 | 命名端口、位置端口、空连接（保留位置空槽）、参数覆盖、同语句多实例、实例数组及端口广播/分摊、常见门级原语 | `syntax-malformed-instance`, `syntax-malformed-gate-primitive`, `unknown-port`, `unknown-parameter` |
+| 预处理 | 同文件 define/undef、嵌套 ifdef/ifndef/elsif/else/endif 活动分支、续行宏与按位置生效的 default_nettype；object 宏用于常量/位宽和左值；include 与函数宏不完整展开 | `missing-include`, `implicit-net:*`, `default-nettype-none` |
+| generate | 显式或隐式 generate-for/if/case，命名和无名块，分支作用域与互斥驱动 | `syntax-malformed-generate`, `syntax-unclosed-generate` |
+| 属性 | 支持 `(* ... *)` 前缀并保留原源码位置；不解释综合属性的硬件行为 | 后续声明/实例/过程沿用相应诊断 |
 | task/function | 常见头部、参数/局部声明和过程体；名称和局部声明进入语义作用域 | `syntax-malformed-procedural-block`, `syntax-unclosed-task`, `syntax-unclosed-function` |
 
 ### 课程外语法分类

@@ -20,7 +20,6 @@ import {
   VerilogModule
 } from './model';
 import { collectSyntaxDiagnostics } from './syntaxDiagnostics';
-import { parameterOverridesForInstance } from './parameterOverrides';
 import { collectInstanceConnectionDiagnostics } from './instanceConnectionDiagnostics';
 import {
   collectExplicitPortNetTypeDiagnostics,
@@ -30,6 +29,10 @@ import {
 import { collectContinuousProceduralDriverDiagnostics } from './driverDiagnostics';
 import { normalizeWidth } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
+import { collectAssignmentTypeDiagnostics } from './assignmentTypeDiagnostics';
+import { declarationAtPosition } from './accessPaths';
+import { visitProceduralAssignments } from './assignmentAst';
+import { uniqueModule } from './moduleResolution';
 
 export function collectVerilogDiagnostics(
   document: TextDocument,
@@ -48,6 +51,7 @@ export function collectVerilogDiagnostics(
   collectWidthDiagnostics(document, modules, ast, diagnostics);
   collectConstantDivisorDiagnostics(document, modules, ast, diagnostics);
   collectSelectBoundsDiagnostics(document, modules, ast, diagnostics);
+  collectAssignmentTypeDiagnostics(document, ast, diagnostics);
   if (settings.verilog.lint.courseRules) {
     collectCourseDiagnostics(document, settings, modules, ast, diagnostics);
     collectTestbenchDiagnostics(settings, ast, diagnostics);
@@ -92,16 +96,13 @@ function collectIncludeDiagnostics(document: TextDocument, includes: VerilogIncl
 }
 
 function collectInstancePortDiagnostics(document: TextDocument, modules: VerilogModule[], diagnostics: Diagnostic[]): void {
-  const modulesByName = new Map(modules.map((module) => [module.name, module]));
   for (const module of modules) {
     for (const instance of module.instances) {
-      const target = modulesByName.get(instance.moduleName);
+      const target = uniqueModule(modules.filter((candidate) => candidate.name === instance.moduleName));
       if (!target) {
         continue;
       }
-      collectInstanceConnectionDiagnostics(document, module, instance, target, diagnostics, {
-        checkPortWidths: false
-      });
+      collectInstanceConnectionDiagnostics(document, module, instance, target, diagnostics);
     }
   }
 }
@@ -188,6 +189,11 @@ function collectSelectBoundsDiagnostics(document: TextDocument, modules: Verilog
           collectSelectBoundsDiagnosticsForExpression(document, module, expression, 0, diagnostics);
         }
       }
+      for (const block of moduleAst.proceduralBlocks) {
+        collectSystemCallsFromProceduralStatement(block.statementTree, (expression) => {
+          if (expression) { collectSelectBoundsDiagnosticsForExpression(document, module, expression, 0, diagnostics); }
+        });
+      }
     }
 
     for (const decl of module.declarations.values()) {
@@ -239,12 +245,13 @@ function collectSelectBoundsDiagnosticsForExpression(
     if (candidate.kind !== 'selectExpression') {
       return;
     }
-    const targetName = selectedTargetIdentifier(candidate.target);
+    const selection = selectedDeclaration(candidate.target);
+    const targetName = selection?.name;
     if (!targetName) {
       return;
     }
-    const decl = module.declarations.get(targetName);
-    const bounds = decl ? declarationIndexBounds(document, decl, module) : undefined;
+    const decl = declarationAtPosition(module, targetName, document.positionAt(candidate.start + baseOffset));
+    const bounds = decl ? declarationIndexBounds(document, decl, module, selection?.depth ?? 0) : undefined;
     if (!bounds) {
       return;
     }
@@ -268,6 +275,10 @@ function collectSelectBoundsDiagnosticsForExpression(
           break;
         }
         const selected = orderedBounds(left, right);
+        if (bounds.left !== undefined && bounds.right !== undefined && left !== right && (left > right) !== (bounds.left > bounds.right)) {
+          diagnostics.push(makeDiagnostic(offsetRangeAtBase(document, candidate.select.start, candidate.select.end, baseOffset),
+            `Part-select direction is reversed relative to '${targetName}' declaration.`, DiagnosticSeverity.Error, 'select-direction-mismatch'));
+        }
         if (!rangeInsideBounds(selected, bounds)) {
           diagnostics.push(makeDiagnostic(
             offsetRangeAtBase(document, candidate.select.start, candidate.select.end, baseOffset),
@@ -281,7 +292,12 @@ function collectSelectBoundsDiagnosticsForExpression(
       case 'indexedPartSelect': {
         const base = evalExpressionAstConstant(candidate.select.base, module);
         const width = evalExpressionAstConstant(candidate.select.width, module);
-        if (base === undefined || width === undefined || width <= 0n) {
+        if (width !== undefined && width <= 0n) {
+          diagnostics.push(makeDiagnostic(expressionRangeAtBase(document, candidate.select.width, baseOffset),
+            'Indexed part-select width must be greater than zero.', DiagnosticSeverity.Error, 'invalid-select-width'));
+          break;
+        }
+        if (base === undefined || width === undefined) {
           break;
         }
         const selected = candidate.select.direction === '+:'
@@ -304,22 +320,35 @@ function collectSelectBoundsDiagnosticsForExpression(
 interface IndexBounds {
   low: bigint;
   high: bigint;
+  left?: bigint;
+  right?: bigint;
 }
 
-function selectedTargetIdentifier(expression: VerilogExpressionAst): string | undefined {
-  return expression.kind === 'identifier' ? expression.name : undefined;
-}
-
-function declarationIndexBounds(document: TextDocument, decl: VerilogDecl, module: VerilogModule): IndexBounds | undefined {
-  if (declarationHasUnpackedDimension(document, decl)) {
-    return undefined;
+function selectedDeclaration(expression: VerilogExpressionAst): { name: string; depth: number } | undefined {
+  if (expression.kind === 'identifier') { return { name: expression.name, depth: 0 }; }
+  if (expression.kind === 'parenthesizedExpression') { return selectedDeclaration(expression.expression); }
+  if (expression.kind === 'selectExpression') {
+    const target = selectedDeclaration(expression.target);
+    return target ? { ...target, depth: target.depth + 1 } : undefined;
   }
+  return undefined;
+}
+
+function declarationIndexBounds(document: TextDocument, decl: VerilogDecl, module: VerilogModule, depth: number): IndexBounds | undefined {
+  const dimensions = decl.unpackedDimensions ?? [];
+  if (depth < dimensions.length) {
+    const expressions = dimensions[depth].expressions;
+    const left = evalExpressionAstConstant(expressions[0], module);
+    const right = evalExpressionAstConstant(expressions[1], module);
+    return left === undefined || right === undefined ? undefined : { ...orderedBounds(left, right), left, right };
+  }
+  if (depth > dimensions.length) { return undefined; }
   const explicit = explicitDeclarationIndexBounds(decl, module);
   if (explicit) {
     return explicit;
   }
   const width = widthOfDecl(decl, module).width;
-  return width === undefined || width < 1 ? undefined : { low: 0n, high: BigInt(width - 1) };
+  return width === undefined || width < 1 ? undefined : { low: 0n, high: BigInt(width - 1), left: BigInt(width - 1), right: 0n };
 }
 
 function explicitDeclarationIndexBounds(decl: VerilogDecl, module: VerilogModule): IndexBounds | undefined {
@@ -333,12 +362,7 @@ function explicitDeclarationIndexBounds(decl: VerilogDecl, module: VerilogModule
   }
   const left = evalExpressionAstConstant(parseVerilogExpression(inner.slice(0, separator)), module);
   const right = evalExpressionAstConstant(parseVerilogExpression(inner.slice(separator + 1)), module);
-  return left === undefined || right === undefined ? undefined : orderedBounds(left, right);
-}
-
-function declarationHasUnpackedDimension(document: TextDocument, decl: VerilogDecl): boolean {
-  const afterName = document.getText(Range.create(decl.selectionRange.end, decl.range.end));
-  return /^\s*\[/.test(afterName);
+  return left === undefined || right === undefined ? undefined : { ...orderedBounds(left, right), left, right };
 }
 
 function bracketContents(width: string | undefined): string | undefined {
@@ -414,7 +438,6 @@ function offsetRangeAtBase(document: TextDocument, start: number, end: number, b
 }
 
 function collectWidthDiagnostics(document: TextDocument, modules: VerilogModule[], ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
-  const modulesByName = new Map(modules.map((module) => [module.name, module]));
   for (const module of modules) {
     const moduleAst = ast.modules.find((item) => item.module === module);
     collectDeclarationInitializerWidthDiagnostics(module, diagnostics);
@@ -422,53 +445,34 @@ function collectWidthDiagnostics(document: TextDocument, modules: VerilogModule[
       collectAssignmentWidthDiagnostics(document, moduleAst, diagnostics);
     }
 
-    for (const instance of module.instances) {
-      const target = modulesByName.get(instance.moduleName);
-      if (!target) {
-        continue;
-      }
-      for (const connection of instance.portConnections) {
-        const targetPort = connection.name
-          ? target.ports.find((port) => port.name === connection.name)
-          : target.ports[connection.positionalIndex];
-        if (!targetPort || !connection.expression.trim()) {
-          continue;
-        }
-        const expected = widthOfDecl(targetPort, target, parameterOverridesForInstance(instance, module, target));
-        const actual = connection.expressionAst
-          ? widthOfExpressionAst(connection.expressionAst, module)
-          : widthOfExpression(connection.expression, module);
-        if (shouldReportWidthMismatch(expected, actual)) {
-          diagnostics.push(makeDiagnostic(
-            connection.expressionRange,
-            `Port '${targetPort.name}' is ${expected.width} bit(s), but this connection is ${actual.width} bit(s).`,
-            DiagnosticSeverity.Warning,
-            'port-width-mismatch'
-          ));
-        }
-      }
-    }
   }
 }
 
 function collectAssignmentWidthDiagnostics(document: TextDocument, moduleAst: VerilogModuleAst, diagnostics: Diagnostic[]): void {
   for (const statement of moduleAst.items) {
-    if (statement.kind === 'declaration') {
+    if (statement.kind !== 'continuousAssign') {
       continue;
     }
     collectStatementAssignmentWidthDiagnostic(document, moduleAst.module, statement, diagnostics);
+  }
+  for (const block of [...moduleAst.proceduralBlocks, ...moduleAst.subroutines]) {
+    visitProceduralAssignments(block.statementTree, (assignment) => {
+      if (assignment.lhs && assignment.rhs) {
+        collectStatementAssignmentWidthDiagnostic(document, moduleAst.module, { assignments: [{ lhs: assignment.lhs, rhs: assignment.rhs, operator: assignment.operator }] }, diagnostics);
+      }
+    });
   }
 }
 
 function collectStatementAssignmentWidthDiagnostic(
   document: TextDocument,
   module: VerilogModule,
-  statement: VerilogStatementAst,
+  statement: Pick<VerilogStatementAst, 'assignments'>,
   diagnostics: Diagnostic[]
 ): void {
   for (const assignment of statement.assignments) {
-    const lhs = widthOfExpressionAst(assignment.lhs, module);
-    const rhs = widthOfExpressionAst(assignment.rhs, module);
+    const lhs = widthOfExpressionAst(assignment.lhs, module, undefined, document.positionAt(assignment.lhs.start));
+    const rhs = widthOfExpressionAst(assignment.rhs, module, undefined, document.positionAt(assignment.rhs.start));
     if (!shouldReportWidthMismatch(lhs, rhs)) {
       continue;
     }

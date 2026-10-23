@@ -8,28 +8,19 @@
 
 代表性回归素材：cpu/stone/p6/MDU.v 的 signed 运算和拼接左值；cpu/stone/p7/CP0.v 的位域宏与宏左值；cpu/stone/p0/v/elevator_tb.v 的 include、延时及 testbench 时钟；cpu/gyc/P5/cpu/cputest.v 的 task 和层次内存访问。
 
-## 已复现、必须修复
-
-3. **常量合法性与数值可求值性**：合法 X/Z 常量参数和 constant function 参数被误报 parameter-not-constant。4'd16 的溢出产生“4 bits 与 4 bits”矛盾宽度文案。
-4. **作用域与数组**：命名块局部 32 位 x 遮蔽模块 8 位 x，仍按模块类型诊断；二维 unpacked 数组 a[i][j] 被推成 1 位而非元素位宽。mem[4]、mem[0][8]、逆序 part-select 和零宽 indexed-select 漏检。
-5. **端口方向**：8 位 output 接父模块 4 位信号漏报截断，反方向却报警；同文件/跨文件应共享检查。
-6. **驱动访问路径**：不重叠切片被误报多驱动；实例 output 的切片/拼接、net 初始化和门原语驱动未完整计入。必须保留符号身份、位区间、数组维度和 generate 互斥，兼顾合法 tri/inout。
-7. **预处理状态**：ifdef 的失活分支仍参与隐式 net 和多驱动检查；default_nettype none 恢复为 wire 后仍影响后续声明。宏续行、宏参数和宏表达式需要一致的源位置模型。
-8. **合法 Verilog-2005 构造**：隐式 generate、实例数组 sub u[3:0](...)、属性 (* keep="true" *) 被拒绝或丢失声明；无名 generate-for 的旧课程限制应放宽为合法语法。
-9. **非法语法与赋值目标**：assign a+b=c、空 function 头漏检；parameter 赋值、过程写 wire、Verilog-2005 连续 assign 写 reg、output 连接常量缺少内置诊断。左值语法与类型合法性须分层。
-
 ## 后续能力（不等同于已复现缺陷）
 
 - 组合逻辑 must-write 路径分析与 latch 提示；敏感列表漏读信号；重复、覆盖和不可达 case 项。不能把缺 else/default 直接当作错误。
 - signed/X/Z 风险提示、未驱动信号、可选组合环路分析；黑盒、tri/inout 和有意悬空连接必须可表达。
 - function/task 参数数量和方向检查，系统任务格式串和参数验证，testbench 零时间循环分析。
+- 执行合法 constant function 的函数体；完整展开 include、递归对象宏和函数宏；建立宏生命周期引用后支持含 undef/重定义的安全重命名。
 - 作用域与期待类型驱动的补全；function/task/$display/$readmemh 签名；语义选区；解释 signedness/类型转换/参数来源的 hover。
 - 更广仿真与库语法：fork/join、event、disable、specify、UDP、defparam。先明确支持与恢复边界。
 - SystemVerilog 应独立规划；不能简单让 .sv/.svh 进入现有 Verilog 子集 parser。
 
 ## 架构方向
 
-统一工程配置与不可变源码快照，包含源码入口及顺序、include-only 文件、include 路径、宏、方言、顶层、库/黑盒和未保存文档。解析、预处理、符号绑定/类型、参数与 generate 展开、诊断、FS 和 LSP 分层。语法验证消费统一节点，避免模块/过程声明和表达式重复解析。诊断、导航、重构共用符号身份；外部检查使用相同工程输入，按项目修订号丢弃过期结果。
+在源集合基础上进一步统一仿真/课程测试的编译上下文，补充 include-only 文件、include 路径、配置宏、方言、顶层、库/黑盒和未保存文档快照。补全按实例参数/generate 的展开图和层次化绑定，使跨层次驱动/引用可精确追踪；继续减少语法验证对表达式的重复解析。外部分析按项目修订号丢弃过期结果，并量测依赖闭包更新成本。
 
 VIDE（本地 e44d7f0f）值得借鉴 CompilationPlan、include_only、分析快照和异步诊断 freshness。它是 Rust LSP + C++ slang + 自有语义层，依赖 pascal-lab/slang 的 vide 分支；Salsa 缓存并不保证每次只增量解析少量 token。未编译/性能验证，需评估方言、多平台打包、FFI/源码映射和分支维护成本。
 

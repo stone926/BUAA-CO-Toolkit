@@ -1,202 +1,130 @@
-import {
-  Diagnostic,
-  DiagnosticSeverity,
-  Range
-} from 'vscode-languageserver/node';
+// @index driver-diagnostics — Scope-bound, region-aware continuous/procedural/instance drivers
+import { Diagnostic, DiagnosticSeverity, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { makeDiagnostic } from '../common/lsp';
-import {
-  AssignmentUse,
-  collectContinuousAssignmentUsesFromAst,
-  collectProceduralAssignmentUsesFromAst
-} from './assignmentAst';
+import { assignmentTargetsFromExpressionAst, collectContinuousAssignmentUsesFromAst, collectProceduralAssignmentUsesFromAst } from './assignmentAst';
 import type { VerilogAstDocument, VerilogModuleAst } from './ast';
-import { parseVerilogExpression } from './exprAst';
-import { exclusiveGenerateBranches, firstConflictingIndex, generateSignalKey } from './generateScopes';
-import {
-  VerilogDecl,
-  VerilogInstance,
-  VerilogModule,
-  VerilogParseResult,
-  VerilogPortConnection
-} from './model';
+import { parseVerilogExpression, parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
+import { exclusiveGenerateBranches } from './generateScopes';
+import { VerilogInstance, VerilogModule, VerilogParseResult } from './model';
+import { resolveInstanceTargetModule, uniqueModule } from './moduleResolution';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
+import { accessPathsOverlap, declarationIsVariable, expressionAccessPaths, permitsResolvedDrivers, VerilogAccessPath } from './accessPaths';
+import { findMatchingTokenForward, splitTopLevelTokens, trimTrailingSemicolonTokens } from './tokenUtils';
 
-/** Drivers of one signal; generate-local signals are bucketed apart from same-named others. */
-interface DriverBuckets {
-  name: string;
-  /** Declared in a generate block rather than at module level. */
-  generateLocal: boolean;
-  continuous: AssignmentUse[];
-  procedural: AssignmentUse[];
-  instanceOutputs: Range[];
+interface Driver {
+  path: VerilogAccessPath;
+  range: Range;
+  kind: 'continuous' | 'procedural' | 'instance';
+  source: object;
+  initialization?: boolean;
 }
 
-export function collectContinuousProceduralDriverDiagnostics(
-  document: TextDocument,
-  ast: VerilogAstDocument,
-  diagnostics: Diagnostic[]
-): void {
+export function collectContinuousProceduralDriverDiagnostics(document: TextDocument, ast: VerilogAstDocument, diagnostics: Diagnostic[]): void {
   for (const moduleAst of ast.modules) {
-    const module = moduleAst.module;
-    const buckets = collectAssignmentDriverBuckets(document, module, moduleAst);
-    for (const drivers of buckets.values()) {
-      const { name } = drivers;
-      const alwaysDrivers = [...new Map(drivers.procedural
-        .filter((use) => moduleAst.proceduralBlocks[use.blockIndex]?.kind === 'always')
-        .map((use) => [use.blockIndex, use])).values()];
-      const conflictingAlways = firstConflictingIndex(module, alwaysDrivers.map((use) => use.range.start));
-      if (conflictingAlways >= 0) {
-        diagnostics.push(makeDiagnostic(
-          driverDiagnosticRange(module, drivers, alwaysDrivers[conflictingAlways].range),
-          `Signal '${name}' is driven by multiple always blocks.`,
-          DiagnosticSeverity.Warning,
-          'multi-driver'
-        ));
-      }
-      // Drivers on different branches of one conditional generate never coexist.
-      const conflicting = firstConflictingIndex(module, drivers.continuous.map((use) => use.range.start));
-      if (conflicting >= 0) {
-        diagnostics.push(makeDiagnostic(
-          driverDiagnosticRange(module, drivers, drivers.continuous[conflicting].range),
-          `Signal '${name}' is driven by multiple continuous assignments.`,
-          DiagnosticSeverity.Warning,
-          'multi-driver'
-        ));
-      }
-      const mixed = drivers.procedural.find((procedural) =>
-        drivers.continuous.some((continuous) => !exclusiveGenerateBranches(module, continuous.range.start, procedural.range.start)));
-      if (mixed) {
-        diagnostics.push(makeDiagnostic(
-          driverDiagnosticRange(module, drivers, mixed.range),
-          `Signal '${name}' is driven by both continuous and procedural assignments.`,
-          DiagnosticSeverity.Warning,
-          'multi-driver'
-        ));
-      }
-    }
+    const drivers = collectAssignmentDrivers(document, moduleAst);
+    addInstanceOutputDrivers(document, moduleAst.module, (instance) => uniqueModule(ast.modules.filter((item) => item.name === instance.moduleName).map((item) => item.module)), drivers);
+    reportDriverConflicts(moduleAst.module, drivers, diagnostics, false);
   }
 }
 
-export function collectWorkspaceDriverDiagnostics(
-  document: TextDocument,
-  parsed: VerilogParseResult,
-  index: VerilogWorkspaceIndex
-): Diagnostic[] {
+export function collectWorkspaceDriverDiagnostics(document: TextDocument, parsed: VerilogParseResult, index: VerilogWorkspaceIndex): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   for (const moduleAst of parsed.ast.modules) {
-    const module = moduleAst.module;
-    const buckets = collectAssignmentDriverBuckets(document, module, moduleAst);
-    addInstanceOutputDrivers(module, parsed.modules, index, buckets);
-    for (const drivers of buckets.values()) {
-      const { name } = drivers;
-      if (!drivers.instanceOutputs.length) {
-        continue;
-      }
-      const conflicting = firstConflictingIndex(module, drivers.instanceOutputs.map((range) => range.start));
-      const assignments = [...drivers.continuous, ...drivers.procedural];
-      const assigned = drivers.instanceOutputs.find((output) =>
-        assignments.some((assignment) => !exclusiveGenerateBranches(module, assignment.range.start, output.start)));
-      if (conflicting >= 0) {
-        diagnostics.push(makeDiagnostic(
-          driverDiagnosticRange(module, drivers, drivers.instanceOutputs[conflicting]),
-          `Signal '${name}' is driven by multiple instance outputs.`,
-          DiagnosticSeverity.Warning,
-          'multi-driver'
-        ));
-      } else if (assigned) {
-        diagnostics.push(makeDiagnostic(
-          driverDiagnosticRange(module, drivers, assigned),
-          `Signal '${name}' is driven by an instance output and by an assignment.`,
-          DiagnosticSeverity.Warning,
-          'multi-driver'
-        ));
-      }
-    }
+    const drivers = collectAssignmentDrivers(document, moduleAst);
+    addInstanceOutputDrivers(document, moduleAst.module, (instance) => resolveInstanceTargetModule(index, parsed.modules, instance), drivers);
+    reportDriverConflicts(moduleAst.module, drivers, diagnostics, true);
   }
   return diagnostics;
 }
 
-function collectAssignmentDriverBuckets(
-  document: TextDocument,
-  module: VerilogModule,
-  moduleAst: VerilogModuleAst
-): Map<string, DriverBuckets> {
-  const buckets = new Map<string, DriverBuckets>();
-  for (const assignment of collectContinuousAssignments(document, moduleAst)) {
-    bucketFor(buckets, module, assignment.name, assignment.range).continuous.push(assignment);
+function collectAssignmentDrivers(document: TextDocument, moduleAst: VerilogModuleAst): Driver[] {
+  const module = moduleAst.module;
+  const result: Driver[] = [];
+  for (const use of collectContinuousAssignmentUsesFromAst(document, moduleAst)) {
+    addDriver(document, module, result, use.expression, use.range, 'continuous', use.source);
   }
-  for (const assignment of collectProceduralAssignments(document, moduleAst)) {
-    bucketFor(buckets, module, assignment.name, assignment.range).procedural.push(assignment);
+  for (const use of collectProceduralAssignmentUsesFromAst(document, moduleAst)) {
+    const block = moduleAst.proceduralBlocks[use.blockIndex];
+    addDriver(document, module, result, use.expression, use.range, 'procedural', block, block?.kind === 'initial');
   }
-  return buckets;
+  const declarations = [...new Set([...module.declarations.values(), ...module.generateBlocks.flatMap((block) => block.declarations)])];
+  for (const decl of declarations) {
+    if (!decl.initializer || declarationIsVariable(decl) || ['parameter', 'localparam', 'function', 'task'].includes(decl.kind)) { continue; }
+    const expression: VerilogExpressionAst = { kind: 'identifier', name: decl.name, start: document.offsetAt(decl.selectionRange.start), end: document.offsetAt(decl.selectionRange.end) };
+    addDriver(document, module, result, expression, decl.selectionRange, 'continuous', decl);
+  }
+  for (const statement of moduleAst.items) {
+    if (statement.kind !== 'gatePrimitive') { continue; }
+    const tokens = trimTrailingSemicolonTokens(statement.tokens);
+    const primitive = tokens[0]?.value;
+    // A bidirectional switch is a legal resolved connection, not a conflicting source.
+    if (['tran', 'rtran', 'tranif0', 'tranif1', 'rtranif0', 'rtranif1'].includes(primitive)) { continue; }
+    for (const group of splitTopLevelTokens(tokens.slice(1), ',')) {
+      const open = group.findIndex((token, offset) => token.value === '(' && findMatchingTokenForward(group, offset, '(', ')') === group.length - 1);
+      if (open < 0) { continue; }
+      const ports = splitTopLevelTokens(group.slice(open + 1, -1), ',');
+      const outputs = primitive === 'buf' || primitive === 'not' ? ports.slice(0, -1) : ports.slice(0, 1);
+      for (const port of outputs) {
+        const expression = parseVerilogExpressionTokens(port);
+        if (expression) { addExpressionDrivers(document, module, result, expression, 'continuous', group); }
+      }
+    }
+  }
+  return result;
 }
 
-function collectContinuousAssignments(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
-  return collectContinuousAssignmentUsesFromAst(document, moduleAst);
-}
-
-function collectProceduralAssignments(document: TextDocument, moduleAst: VerilogModuleAst): AssignmentUse[] {
-  return collectProceduralAssignmentUsesFromAst(document, moduleAst);
-}
-
-function addInstanceOutputDrivers(
-  module: VerilogModule,
-  localModules: VerilogModule[],
-  index: VerilogWorkspaceIndex,
-  buckets: Map<string, DriverBuckets>
-): void {
+function addInstanceOutputDrivers(document: TextDocument, module: VerilogModule, resolve: (instance: VerilogInstance) => VerilogModule | undefined, drivers: Driver[]): void {
   for (const instance of module.instances) {
-    const targetModule = resolveInstanceTarget(index, localModules, instance);
-    if (!targetModule) {
-      continue;
-    }
+    const target = resolve(instance);
+    if (!target) { continue; }
     for (const connection of instance.portConnections) {
-      const targetPort = targetPortForConnection(targetModule, connection);
-      if (!targetPort || (targetPort.direction !== 'output' && targetPort.direction !== 'inout')) {
-        continue;
-      }
-      const targetName = simpleConnectionTargetName(connection.expression);
-      if (!targetName) {
-        continue;
-      }
-      bucketFor(buckets, module, targetName, connection.expressionRange).instanceOutputs.push(connection.expressionRange);
+      const port = connection.name ? target.ports.find((item) => item.name === connection.name) : target.ports[connection.positionalIndex];
+      if (port?.direction !== 'output') { continue; }
+      const expression = connection.expressionAst ?? parseVerilogExpression(connection.expression);
+      if (expression) { addExpressionDrivers(document, module, drivers, expression, 'instance', connection); }
     }
   }
 }
 
-function targetPortForConnection(targetModule: VerilogModule, connection: VerilogPortConnection): VerilogDecl | undefined {
-  return connection.name
-    ? targetModule.ports.find((port) => port.name === connection.name)
-    : targetModule.ports[connection.positionalIndex];
-}
-
-function simpleConnectionTargetName(expression: string): string | undefined {
-  const ast = parseVerilogExpression(expression);
-  return ast?.kind === 'identifier' ? ast.name : undefined;
-}
-
-function resolveInstanceTarget(index: VerilogWorkspaceIndex, localModules: VerilogModule[], instance: VerilogInstance): VerilogModule | undefined {
-  return index.getModule(instance.moduleName) ?? localModules.find((module) => module.name === instance.moduleName);
-}
-
-function bucketFor(buckets: Map<string, DriverBuckets>, module: VerilogModule, name: string, at: Range): DriverBuckets {
-  const key = generateSignalKey(module, name, at.start);
-  const existing = buckets.get(key);
-  if (existing) {
-    return existing;
+function addExpressionDrivers(document: TextDocument, module: VerilogModule, drivers: Driver[], expression: VerilogExpressionAst, kind: Driver['kind'], source: object): void {
+  for (const target of assignmentTargetsFromExpressionAst(document, expression)) {
+    addDriver(document, module, drivers, target.expression, target.range, kind, source);
   }
-  const created: DriverBuckets = {
-    name,
-    generateLocal: key !== name,
-    continuous: [],
-    procedural: [],
-    instanceOutputs: []
-  };
-  buckets.set(key, created);
-  return created;
 }
 
-function driverDiagnosticRange(module: VerilogModule, drivers: DriverBuckets, fallback: Range): Range {
-  return (drivers.generateLocal ? undefined : module.declarations.get(drivers.name)?.selectionRange) ?? fallback;
+function addDriver(document: TextDocument, module: VerilogModule, drivers: Driver[], expression: VerilogExpressionAst, range: Range, kind: Driver['kind'], source: object, initialization?: boolean): void {
+  for (const path of expressionAccessPaths(document, module, expression)) {
+    drivers.push({ path, range, kind, source, initialization });
+  }
+}
+
+function reportDriverConflicts(module: VerilogModule, drivers: Driver[], diagnostics: Diagnostic[], instanceOnly: boolean): void {
+  const buckets = new Map<string, Driver[]>();
+  for (const driver of drivers) {
+    const bucket = buckets.get(driver.path.identity) ?? [];
+    bucket.push(driver);
+    buckets.set(driver.path.identity, bucket);
+  }
+  for (const bucket of buckets.values()) {
+    let reported = false;
+    for (let index = 1; index < bucket.length && !reported; index++) {
+      const current = bucket[index];
+      if (permitsResolvedDrivers(current.path.declaration)) { continue; }
+      for (const previous of bucket.slice(0, index)) {
+        if (instanceOnly && current.kind !== 'instance' && previous.kind !== 'instance') { continue; }
+        if (previous.source === current.source || !accessPathsOverlap(previous.path, current.path)
+          || exclusiveGenerateBranches(module, previous.range.start, current.range.start)) { continue; }
+        // Initial blocks initialize variables; legacy diagnostics intentionally report competing always blocks.
+        if (previous.kind === 'procedural' && current.kind === 'procedural' && (previous.initialization || current.initialization)) { continue; }
+        const name = current.path.name;
+        const description = previous.kind === 'instance' || current.kind === 'instance'
+          ? previous.kind === current.kind ? 'multiple instance outputs' : 'an instance output and by an assignment'
+          : previous.kind === current.kind ? current.kind === 'procedural' ? 'multiple always blocks' : 'multiple continuous assignments' : 'both continuous and procedural assignments';
+        diagnostics.push(makeDiagnostic(current.path.declaration?.selectionRange ?? current.range, `Signal '${name}' is driven by ${description}.`, DiagnosticSeverity.Warning, 'multi-driver'));
+        reported = true;
+        break;
+      }
+    }
+  }
 }
