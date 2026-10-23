@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 263 files | 框架: Vitest
+# test-suite | src/test/ | 272 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -8,17 +8,21 @@
 
 | 目录 | 数量 | 重点 |
 | --- | --- | --- |
-| `test/language/` | 80 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
+| `test/language/` | 88 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
 | `test/`（根） | 51 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
 | `test/courseTesting/` | 47 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
-| `test/verilog/` | 16 | 真实 bundled Icarus：时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
+| `test/verilog/` | 17 | 真实 bundled Icarus：语言语义差分、时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
 | `test/mips{Providers,Host,Replay,Cli,Debug}/` | 24 | engine plan、Worker protocol v2/ACK/cancel、bundle 完整性、JSONL CLI 与工作台会话/Worker 边界 |
 | `test/mips/` | 4 | 跨模块集成 |
 | `test/{hazardAnalysis,helpers,templates,webview}/` | 4 | 冲突分析解析、模板与 Webview 回归 |
 
 **fixtures**：`test/fixtures/syntax/{mips,verilog}/` 下分 `valid/`、`invalid/`（含 JSON 期望）与课程语料目录。
+
+Verilog 修复回归包含类型化四态常量与上下文传播、非零/升序 packed 索引、参数覆盖类型、宏活动分支/源码范围、恢复节点与可运行模块完整性、实例数组广播/分摊、驱动位区间/数组维度/宏调用绑定、命名源集合、重命名捕获与常量重构语义。
+
+`verilog/languageSemantics.test.ts` 在中文空格路径中使用真实 bundled Icarus `-g2005` 与 VVP，比对 22 个数值表达式、5 个四态/越界表达式、time64 和常量折叠前后结果；runtime 不存在时按真实工具测试约定跳过。
 
 **TextMate 回归**：用 `vscode-textmate` + `vscode-oniguruma` 逐行 tokenizeLine 并保留 ruleStack，覆盖未闭合字符串不跨行、scope 边界、catalog 同步与课程真实宏/数字片段。
 

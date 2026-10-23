@@ -4,7 +4,7 @@
 
 ## 调研依据
 
-2026-10-23 检查了插件 parser、AST、语义模型、诊断、工作区索引和 LSP。现有 Verilog 测试 46 个文件、636 项通过。CPU 主线语料包含 stone P0/P1/P4–P7、alh P4–P7、gyc P1/P4–P7，共 205 个 .v；另有 120 个独立练习变体。均未产生 syntax-*，但主语料没有 function、generate、条件编译和实例参数覆盖，不能据此认为语言覆盖完整。P2/P3 没有 Verilog 源。
+2026-10-23 检查了插件 parser、AST、语义模型、诊断、工作区索引和 LSP。调研时的 Verilog 测试基线为 46 个文件、636 项通过。CPU 主线语料包含 stone P0/P1/P4–P7、alh P4–P7、gyc P1/P4–P7，共 205 个 .v；另有 120 个独立练习变体。均未产生 syntax-*，但主语料没有 function、generate、条件编译和实例参数覆盖，不能据此认为语言覆盖完整。P2/P3 没有 Verilog 源。
 
 代表性回归素材：cpu/stone/p6/MDU.v 的 signed 运算和拼接左值；cpu/stone/p7/CP0.v 的位域宏与宏左值；cpu/stone/p0/v/elevator_tb.v 的 include、延时及 testbench 时钟；cpu/gyc/P5/cpu/cputest.v 的 task 和层次内存访问。
 
@@ -29,7 +29,7 @@ VIDE（本地 e44d7f0f）值得借鉴 CompilationPlan、include_only、分析快
 ## 产品边界与验收
 
 - 保留明确移除 vc-*、synth-*、mixed-assignment 的产品取舍，不恢复强制风格告警。课程推荐规范不等于语法约束。
-- 回归矩阵包括端口方向×宽度×参数、驱动来源×访问路径×作用域、预处理状态序列、真实课程语料、未完成编辑、Windows 空格/中文路径和多工程同名模块。
+- 后续新诊断继续增加可编译反例和真实工具对照，特别覆盖有意 latch、优先 case、黑盒、动态索引和不完整工程，防止恢复已移除的风格噪声。
 - 不仅检查语法接受，还检查符号绑定、类型/常量、diagnostic code/range/severity、导航和安全重构。
 - 加入冷启动、单字符编辑、跨文件更新延迟和内存基线。Icarus 用于合法性/数值对照，不能作为 latch/竞争不存在的证明。
 
