@@ -5,6 +5,7 @@ const path = require('node:path');
 const vscode = require('./extension-host-api.cjs');
 const { customTestbenchFixtures, runCustomTestbenchSmoke } = require('./extension-host-custom-testbench-smoke.cjs');
 const { runFormattingSmoke } = require('./extension-host-formatting-smoke.cjs');
+const { runEditorFormattingSmoke } = require('./extension-host-editor-formatting.cjs');
 const { runIndentationSmoke } = require('./extension-host-indentation-smoke.cjs');
 
 const timeoutMs = 30_000;
@@ -133,6 +134,7 @@ async function run() {
     return symbols?.some((symbol) => symbol.name === 'diagnostic_fixture');
   });
   await runFormattingSmoke({ root, waitFor });
+  await runEditorFormattingSmoke({ root, waitFor });
   await runIndentationSmoke({ root });
   // The parser reports only a warning for this identifier; the actual bundled
   // compiler must supply the error, rather than a parser or toolchain failure.

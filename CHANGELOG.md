@@ -4,6 +4,9 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- 修复 MIPS 格式化会改写逗号字符字面量、删除未完成语句的问题；保留源码内容，并遵循编辑器的空格/Tab、缩进宽度和文件尾空白设置。
+- 补齐真实 VS Code 格式化文档、选区、保存、撤销/重做回归，覆盖 Verilog 与 MIPS，并纳入五平台安装包验证。
+
 ## [1.5.7] - 2026-10-23
 
 - 正式发布本轮 Verilog 语法、常量与作用域、宏预处理、function/task、generate 和 Icarus 报错定位增强，包含下方 1.5.6 的全部改进；1.5.6 候选被跨平台测试门禁拦截，未上架。

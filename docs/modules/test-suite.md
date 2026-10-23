@@ -62,7 +62,10 @@ Verilog 修复回归包含类型化四态常量与上下文传播、非零/升�
 - `verilog/formattingEquivalence.test.ts` 用真实 bundled Icarus 分别编译原始和格式化后的合法样例，并比较确定性仿真结果；词法保真断言不替代行为证据，runtime 缺失的跳过必须单独报告。
 - `language/common/formattingRequest.test.ts` 验证配置异步等待期间的取消、文档关闭与版本变化，不允许过期 edits 返回。
 - `scripts/extension-host-formatting-smoke.cjs` 由真实宿主入口调用，通过 VS Code 全文/选区 provider 应用 edits，覆盖幂等、缩进设置和保护区域，不 mock 格式化核心。
+- `scripts/extension-host-editor-formatting.cjs` 通过真实编辑器的文档/选区命令、撤销/重做和保存时格式化验证 Verilog 与 MIPS；检查 CRLF、范围外源码、磁盘内容、字面量和未完成语句保真，以及空格/Tab 设置和 SystemVerilog 排除边界。它与上述 provider 检查共同进入五平台打包门禁；可用 `node scripts/verify-extension-host.mjs <extension-root> --formatting-only` 单独运行相同检查，开发目录需先 `npm run compile`。
 - `language/common/settings.test.ts` 与 `manifest.test.ts` 确认旧格式化配置已删除；真实宿主同时验证实例空格、空行保留和旧工作区偏好不再影响统一风格。
+
+MIPS 的 `language/mips/formatting.test.ts` 同时验证格式化前后实际汇编的指令/数据段一致、宏参数与转义字符保真、未完成语句不丢失、幂等、编辑器空白选项和 LF/CRLF/CR。
 
 ## 回归重点
 

@@ -6,8 +6,9 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runTests } from '@vscode/test-electron';
 
-if (process.argv.length !== 3) {
-  throw new Error('Usage: node scripts/verify-extension-host.mjs <unpacked-extension-root>');
+const formattingOnly = process.argv[3] === '--formatting-only';
+if (process.argv.length !== 3 && !(process.argv.length === 4 && formattingOnly)) {
+  throw new Error('Usage: node scripts/verify-extension-host.mjs <unpacked-extension-root> [--formatting-only]');
 }
 
 const extensionRoot = resolve(process.argv[2]);
@@ -33,7 +34,7 @@ try {
     vscodeExecutablePath: process.env.CO_VSCODE_EXECUTABLE,
     version: process.env.CO_VSCODE_VERSION || 'stable',
     extensionDevelopmentPath: extensionRoot,
-    extensionTestsPath: fileURLToPath(new URL('./extension-host-smoke.cjs', import.meta.url)),
+    extensionTestsPath: fileURLToPath(new URL(formattingOnly ? './extension-host-formatting.cjs' : './extension-host-smoke.cjs', import.meta.url)),
     extensionTestsEnv: {
       CO_EXTENSION_ROOT: extensionRoot,
       ELECTRON_RUN_AS_NODE: undefined
