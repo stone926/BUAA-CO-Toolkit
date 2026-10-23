@@ -491,7 +491,8 @@
       },
       {
         "command": "co.test.stopContinuousTests",
-        "title": "CO: 停止持续测试"
+        "title": "CO: 停止持续测试",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "co.test.openAsmCaseIndex",
@@ -534,7 +535,12 @@
         },
         {
           "command": "co.test.startContinuousGeneratedTraceTests",
-          "when": "co.hasTraceProfile",
+          "when": "co.hasTraceProfile && !co.continuousTestRunning",
+          "group": "navigation@12"
+        },
+        {
+          "command": "co.test.stopContinuousTests",
+          "when": "co.continuousTestRunning",
           "group": "navigation@12"
         },
         {

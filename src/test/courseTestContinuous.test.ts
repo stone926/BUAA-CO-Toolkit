@@ -181,13 +181,16 @@ describe('continuous generated trace orchestration', () => {
     });
     const run = startContinuousGeneratedTraceTests(createServices(), deps);
     await waitFor(() => signals.length === 2);
+    expect(continuousRunningStates()).toEqual([true]);
     expect(vi.mocked(deps.runCourseTraceCase).mock.calls.map(call => call[2].automaticRunSlot)).toEqual([0, 1]);
     failure.resolve({ asm: generated[1].asm.fsPath, status: 'failed', stage: 'compare', message: 'mismatch' });
     await waitFor(() => signals.every(signal => signal.aborted));
+    expect(continuousRunningStates()).toEqual([true]);
     expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalled();
     expect(tryAcquireCourseTestSession()).toBeUndefined();
     peer.resolve({ asm: generated[0].asm.fsPath, status: 'error', stage: 'dut', message: 'cancelled', cancelled: true });
     await run;
+    expect(continuousRunningStates()).toEqual([true, false]);
     expect(deps.runCourseTraceCase).toHaveBeenCalledTimes(2);
     expect(markContinuousAsmCaseCancelled).toHaveBeenCalledWith(generated[0].manifestUri.fsPath, expect.any(String));
     expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalledWith(generated[1].manifestUri.fsPath, expect.anything());
@@ -230,7 +233,60 @@ describe('continuous generated trace orchestration', () => {
     await receive({ action: 'openHistory', resource: 'E:/another-workspace' });
     expect(vscodeMocks.executeCommand).toHaveBeenCalledWith('co.test.openAsmCaseIndex', deps.generatorFolder(setup).uri);
     await receive({ action: 'runArbitraryCommand' });
-    expect(vscodeMocks.executeCommand).toHaveBeenCalledTimes(1);
+    expect(vscodeMocks.executeCommand.mock.calls.filter(([command]) => command !== 'setContext')).toHaveLength(1);
+  });
+
+  it('keeps the toolbar busy through saving, preparation, generation and execution', async () => {
+    const pendingSave = deferred<boolean>();
+    const pendingSetup = deferred<TestSetup | undefined>();
+    const pendingGeneration = deferred<Awaited<ReturnType<TestDependencies['runGeneratorAndCollectAsms']>>>();
+    const pendingCase = deferred<CourseTraceCaseResult>();
+    vscodeMocks.saveAll.mockReturnValueOnce(pendingSave.promise);
+    const deps = createDependencies({
+      resolveGeneratorRunSetup: vi.fn(() => pendingSetup.promise),
+      runGeneratorAndCollectAsms: vi.fn(() => pendingGeneration.promise),
+      runCourseTraceCase: vi.fn(() => pendingCase.promise)
+    });
+    const run = startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(continuousRunningStates()).toEqual([true]);
+    expect(deps.resolveGeneratorRunSetup).not.toHaveBeenCalled();
+    pendingSave.resolve(true);
+    await waitFor(() => vi.mocked(deps.resolveGeneratorRunSetup).mock.calls.length === 1);
+    expect(continuousRunningStates()).toEqual([true]);
+    pendingSetup.resolve(setup);
+    await waitFor(() => vi.mocked(deps.runGeneratorAndCollectAsms).mock.calls.length === 1);
+    expect(continuousRunningStates()).toEqual([true]);
+    pendingGeneration.resolve({ asms: [asm], source: { kind: 'generator' }, asmCases: [] });
+    await waitFor(() => vi.mocked(deps.runCourseTraceCase).mock.calls.length === 1);
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+    expect(continuousRunningStates()).toEqual([true]);
+    expect(deps.runGeneratorAndCollectAsms).toHaveBeenCalledTimes(1);
+    expect(vscodeMocks.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('已有一个测试任务'));
+    pendingCase.resolve({ asm: asm.fsPath, status: 'passed', stage: 'compare', message: 'matched' });
+    await run;
+    expect(continuousRunningStates()).toEqual([true, false]);
+  });
+
+  it.each(['passed', 'failed', 'error'] as const)('restores the start action after a %s terminal result and final report cleanup', async (status) => {
+    const pendingFinalWrite = deferred<void>();
+    let finalWriteStarted = false;
+    fileMocks.writeTextFile.mockImplementation(async (_uri, text) => {
+      if ((JSON.parse(text) as { running: boolean }).running === false) {
+        finalWriteStarted = true;
+        await pendingFinalWrite.promise;
+      }
+    });
+    const deps = createDependencies({
+      runCourseTraceCase: vi.fn(async () => ({ asm: asm.fsPath, status, stage: 'compare' as const, message: status }))
+    });
+    const run = startContinuousGeneratedTraceTests(createServices(), deps);
+
+    await waitFor(() => finalWriteStarted);
+    expect(continuousRunningStates()).toEqual([true]);
+    pendingFinalWrite.resolve();
+    await run;
+    expect(continuousRunningStates()).toEqual([true, false]);
   });
 
   it('reserves the session before asynchronous startup initialization completes', async () => {
@@ -242,11 +298,14 @@ describe('continuous generated trace orchestration', () => {
     const second = startContinuousGeneratedTraceTests(createServices(), deps);
 
     await second;
+    expect(continuousRunningStates()).toEqual([true]);
     expect(vscodeMocks.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('已有一个测试任务'));
+    await waitFor(() => vi.mocked(deps.resolveGeneratorRunSetup).mock.calls.length === 1);
     expect(deps.resolveGeneratorRunSetup).toHaveBeenCalledTimes(1);
 
     pendingSetup.resolve(undefined);
     await first;
+    expect(continuousRunningStates()).toEqual([true, false]);
   });
 
   it('refuses to start while another run owns the artifact session', async () => {
@@ -261,6 +320,7 @@ describe('continuous generated trace orchestration', () => {
 
     expect(deps.resolveGeneratorRunSetup).not.toHaveBeenCalled();
     expect(deps.runGeneratorAndCollectAsms).not.toHaveBeenCalled();
+    expect(continuousRunningStates()).toEqual([]);
   });
 
   it('can cancel a session while asynchronous startup is still resolving', async () => {
@@ -271,12 +331,28 @@ describe('continuous generated trace orchestration', () => {
     const run = startContinuousGeneratedTraceTests(createServices(), deps);
 
     stopContinuousTests();
+    expect(continuousRunningStates()).toEqual([true]);
     pendingSetup.resolve(setup);
     await run;
 
     expect(vscodeMocks.showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('取消正在启动'));
     expect(vscodeMocks.createWebviewPanel).not.toHaveBeenCalled();
     expect(deps.runGeneratorAndCollectAsms).not.toHaveBeenCalled();
+    expect(continuousRunningStates()).toEqual([true, false]);
+  });
+
+  it('restores the start action when asynchronous startup throws', async () => {
+    const deps = createDependencies({
+      resolveGeneratorRunSetup: vi.fn(async () => { throw new Error('startup failed'); })
+    });
+
+    await expect(startContinuousGeneratedTraceTests(createServices(), deps)).rejects.toThrow('startup failed');
+
+    expect(continuousRunningStates()).toEqual([true, false]);
+    expect(vscodeMocks.createWebviewPanel).not.toHaveBeenCalled();
+    const lease = tryAcquireCourseTestSession();
+    expect(lease).toBeDefined();
+    lease?.release();
   });
 
   it('continues after case errors when stop-on-failure is disabled', async () => {
@@ -659,6 +735,8 @@ describe('continuous generated trace orchestration', () => {
 
     await waitFor(() => vi.mocked(deps.runCourseTraceCase).mock.calls.length === 1);
     stopContinuousTests();
+    expect(continuousRunningStates()).toEqual([true]);
+    expect(tryAcquireCourseTestSession()).toBeUndefined();
     pending.resolve({
       asm: asm.fsPath,
       status: 'error',
@@ -667,6 +745,7 @@ describe('continuous generated trace orchestration', () => {
       message: 'aborted'
     });
     await run;
+    expect(continuousRunningStates()).toEqual([true, false]);
 
     const reports = fileMocks.writeTextFile.mock.calls.map(([, text]) => JSON.parse(String(text)));
     const finalReport = reports.at(-1) as {
@@ -821,13 +900,21 @@ describe('continuous generated trace orchestration', () => {
     const firstServices = createServices();
 
     await startContinuousGeneratedTraceTests(firstServices, createDependencies());
+    expect(continuousRunningStates()).toEqual([true, false]);
     await startContinuousGeneratedTraceTests(createServices(), createDependencies());
+    expect(continuousRunningStates()).toEqual([true, false, true, false]);
 
     expect(vscodeMocks.createWebviewPanel).toHaveBeenCalledTimes(2);
     expect(vscodeMocks.showWarningMessage).not.toHaveBeenCalled();
     expect(firstServices.output.appendLine).toHaveBeenCalledWith(expect.stringContaining('最终报告写入失败'));
   });
 });
+
+function continuousRunningStates(): unknown[] {
+  return vscodeMocks.executeCommand.mock.calls
+    .filter(([command, key]) => command === 'setContext' && key === 'co.continuousTestRunning')
+    .map(([, , running]) => running);
+}
 
 function createDependencies(overrides: Partial<TestDependencies> = {}): TestDependencies {
   return {

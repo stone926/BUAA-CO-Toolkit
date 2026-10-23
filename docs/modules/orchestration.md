@@ -63,7 +63,7 @@
 - `editorNavigation.ts` — 导航目标统一策略：优先活动组的同文件页签，再复用其它组已开页签，否则在当前组打开；不隐式拆分编辑器组
 
 - `sidebar.ts` / `sidebarModel.ts` — 侧边栏 TreeView 与其纯函数数据模型
-- 编辑器标题栏的「启动持续测试」复用侧栏命令与 `co.hasTraceProfile` 能力条件，在 P3–P7 工程显示火箭按钮，不受当前源码语言限制。
+- 编辑器标题栏复用侧栏的持续测试命令：P3–P7 空闲时显示火箭启动按钮，`co.continuousTestRunning` 在启动、执行和停止清理期间切换为停止按钮；运行中切换文件或 Profile 仍保留停止入口，最终清理后恢复启动条件。
 - `wizard.ts` / `wizardSettings.ts` — 4 步项目向导：选 Profile → 项目名 → 配置外部工具 → 创建目录与模板
 - `advancedTools.ts` / `advancedToolModel.ts` — 按 Profile 过滤的低频工具
 - `configurationResource.ts` / `diagnosticSettings.ts` — 诊断快速修复的配置读改写（精确作用域）

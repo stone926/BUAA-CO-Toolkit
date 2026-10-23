@@ -158,6 +158,7 @@ export async function startContinuousGeneratedTraceTests<
   continuousTraceStartupStopRequested = false;
   let session: ContinuousTraceSession | undefined;
   try {
+    await vscode.commands.executeCommand('setContext', 'co.continuousTestRunning', true);
     await vscode.workspace.saveAll(false);
     if (continuousTraceStartupStopRequested) {
       return;
@@ -352,23 +353,31 @@ export async function startContinuousGeneratedTraceTests<
       await waitForNextContinuousIteration(session, intervalMs);
     }
   } finally {
-    continuousTraceStartReserved = false;
-    continuousTraceStartupStopRequested = false;
-    if (session) {
-      session.report.running = false;
-      session.report.stopRequested = session.stopRequested;
-      services.statusBar.text = 'CO: 持续测试已停止';
-      try {
-        await updateContinuousTraceMonitor(session, { force: true });
-      } catch {
-        services.output.appendLine('持续测试最终报告写入失败');
-      } finally {
-        if (activeContinuousTraceSession === session) {
-          activeContinuousTraceSession = undefined;
+    try {
+      continuousTraceStartReserved = false;
+      continuousTraceStartupStopRequested = false;
+      if (session) {
+        session.report.running = false;
+        session.report.stopRequested = session.stopRequested;
+        services.statusBar.text = 'CO: 持续测试已停止';
+        try {
+          await updateContinuousTraceMonitor(session, { force: true });
+        } catch {
+          services.output.appendLine('持续测试最终报告写入失败');
         }
       }
+    } finally {
+      if (activeContinuousTraceSession === session) {
+        activeContinuousTraceSession = undefined;
+      }
+      // Keep the stop action visible through cancellation and final report writes.
+      // Reset before releasing the lease so an old run cannot hide a new run's stop action.
+      try {
+        await vscode.commands.executeCommand('setContext', 'co.continuousTestRunning', false);
+      } finally {
+        sessionLease.release();
+      }
     }
-    sessionLease.release();
   }
 }
 
