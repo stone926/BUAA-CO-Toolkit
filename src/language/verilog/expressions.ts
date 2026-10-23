@@ -109,6 +109,8 @@ function widthOfExpressionInternal(expression: VerilogExpressionAst | undefined,
       return {};
     case 'parenthesizedExpression':
       return widthOfExpressionAst(expression.expression, module, overrides);
+    case 'mintypmaxExpression':
+      return widthOfExpressionAst(expression.typical, module, overrides);
     case 'callExpression':
       return widthOfCall(expression, module, overrides);
     case 'selectExpression':
@@ -245,6 +247,7 @@ function expressionType(expression: VerilogExpressionAst | undefined, module: Ve
     case 'identifier': { const decl = module?.declarations.get(expression.name); return { ...width, signed: decl ? hasDeclaredIntegralType(decl) ? declarationSigned(decl) : evalExpressionAstTypedConstant(expression, module, overrides)?.signed : undefined, unpackedDimensions: decl?.unpackedDimensions }; }
     case 'numberLiteral': return { ...width, signed: expression.parsed?.kind === 'decimal' || (expression.parsed?.kind === 'based' && expression.parsed.signed) };
     case 'parenthesizedExpression': return child(expression.expression);
+    case 'mintypmaxExpression': return child(expression.typical);
     case 'selectExpression': { const target = child(expression.target); return { ...width, signed: target.unpackedDimensions?.length ? target.signed : false, unpackedDimensions: expression.select.kind === 'bitSelect' && target.unpackedDimensions?.length ? target.unpackedDimensions.slice(1) : undefined }; }
     case 'callExpression': return { ...width, signed: expression.callee === '$signed' ? true : expression.callee === '$unsigned' ? false : declarationSigned(module?.declarations.get(expression.callee) ?? { kind: 'integer' } as VerilogDecl) };
     case 'unaryExpression': return { ...width, signed: ['+', '-', '~'].includes(expression.operator) && child(expression.argument).signed };
@@ -255,25 +258,40 @@ function expressionType(expression: VerilogExpressionAst | undefined, module: Ve
 }
 
 /** Legality does not require a two-state numeric result (X/Z and constant functions are legal). */
-export function classifyExpressionConstant(expression: VerilogExpressionAst | undefined, module?: VerilogModule, overrides?: VerilogConstantOverrides, position?: Position): 'constant' | 'nonConstant' | 'unknown' {
-  const scoped = module && position ? moduleAtScope(module, position) : module;
+export function classifyExpressionConstant(expression: VerilogExpressionAst | undefined, module?: VerilogModule, overrides?: VerilogConstantOverrides, position?: Position, genvars?: ReadonlySet<VerilogDecl>): 'constant' | 'nonConstant' | 'unknown' {
   const active = new Set<VerilogDecl>(); let steps = 0;
-  const visit = (node: VerilogExpressionAst | undefined, depth = 0): 'constant' | 'nonConstant' | 'unknown' => {
+  const visit = (node: VerilogExpressionAst | undefined, depth = 0, binding = position): 'constant' | 'nonConstant' | 'unknown' => {
     if (!node || depth >= VERILOG_EVALUATION_LIMITS.depth || ++steps > VERILOG_EVALUATION_LIMITS.steps) { return 'unknown'; }
-    const combine = (nodes: VerilogExpressionAst[]) => { const values = nodes.map((item) => visit(item, depth + 1)); return values.includes('nonConstant') ? 'nonConstant' : values.includes('unknown') ? 'unknown' : 'constant'; };
+    const child = (value: VerilogExpressionAst | undefined) => visit(value, depth + 1, binding);
+    const combine = (nodes: VerilogExpressionAst[]) => { const values = nodes.map(child); return values.includes('nonConstant') ? 'nonConstant' : values.includes('unknown') ? 'unknown' : 'constant'; };
     if (node.missing?.length) { return 'unknown'; }
     switch (node.kind) {
       case 'numberLiteral': return node.parsed ? 'constant' : 'unknown';
       case 'stringLiteral': return 'constant';
-      case 'identifier': { if (node.name.startsWith('`')) { return visit(scoped?.macroExpressions?.get(node.start), depth + 1); } if (overrides?.has(node.name) || overrides?.typedValues?.has(node.name)) { return 'constant'; } const decl = scoped?.declarations.get(node.name); if (!decl) { return 'unknown'; } if (decl.kind !== 'parameter' && decl.kind !== 'localparam') { return 'nonConstant'; } if (active.has(decl)) { return 'nonConstant'; } if (!decl.initializer) { return decl.constantValue !== undefined ? 'constant' : 'unknown'; } active.add(decl); const result = visit(decl.initializerAst ?? parseVerilogExpression(decl.initializer), depth + 1); active.delete(decl); return result; }
-      case 'parenthesizedExpression': return visit(node.expression, depth + 1);
-      case 'unaryExpression': return visit(node.argument, depth + 1);
+      case 'identifier': {
+        if (node.name.startsWith('`')) return child(module?.macroExpressions?.get(node.start));
+        if (overrides?.has(node.name) || overrides?.typedValues?.has(node.name)) return 'constant';
+        const decl = module && resolveDeclarationAt(module, node.name, binding);
+        if (!decl) return 'unknown';
+        if (decl.kind === 'genvar' && genvars?.has(decl)) return 'constant';
+        if (decl.kind !== 'parameter' && decl.kind !== 'localparam') return 'nonConstant';
+        // Cycles are definitely illegal; a separate diagnostic retains their dependency chain.
+        if (active.has(decl)) return 'nonConstant';
+        if (!decl.initializer) return decl.constantValue !== undefined ? 'constant' : 'unknown';
+        active.add(decl);
+        const result = visit(decl.initializerAst ?? parseVerilogExpression(decl.initializer), depth + 1, decl.initializerRange?.start ?? decl.selectionRange.start);
+        active.delete(decl);
+        return result;
+      }
+      case 'parenthesizedExpression': return child(node.expression);
+      case 'mintypmaxExpression': return combine([node.minimum, node.typical, node.maximum]);
+      case 'unaryExpression': return child(node.argument);
       case 'binaryExpression': return combine([node.left, node.right]);
       case 'conditionalExpression': return combine([node.condition, node.whenTrue, node.whenFalse]);
       case 'concatenation': return combine(node.elements);
       case 'multipleConcatenation': return combine([node.repeat, ...node.elements]);
       case 'selectExpression': return combine([node.target, ...(node.select.kind === 'bitSelect' ? [node.select.index] : node.select.kind === 'rangeSelect' ? [node.select.left, node.select.right] : [node.select.base, node.select.width])]);
-      case 'callExpression': { const decl = scoped?.declarations.get(node.callee); return decl?.constantFunction === false ? 'nonConstant' : ['$signed', '$unsigned', '$clog2'].includes(node.callee) || decl?.kind === 'function' ? combine(node.args) : node.system ? 'nonConstant' : 'unknown'; }
+      case 'callExpression': { const decl = module && resolveDeclarationAt(module, node.callee, binding); return decl?.constantFunction === false ? 'nonConstant' : ['$signed', '$unsigned', '$clog2'].includes(node.callee) || decl?.kind === 'function' ? combine(node.args) : node.system ? 'nonConstant' : 'unknown'; }
       default: return 'unknown';
     }
   };

@@ -184,7 +184,7 @@ endmodule
     expect(result).toContain('syntax-malformed-repeat');
   });
 
-  it('allows empty for-loop conditions as legal Verilog', () => {
+  it('rejects empty for-loop conditions in Verilog-2005', () => {
     const result = syntaxCodes(`
 module loops(output reg y);
     integer i;
@@ -193,7 +193,7 @@ module loops(output reg y);
     end
 endmodule
 `.trim());
-    expect(result).not.toContain('syntax-malformed-for');
+    expect(result).toContain('syntax-malformed-for');
   });
 
   it('reports malformed instance connections and number literals', () => {

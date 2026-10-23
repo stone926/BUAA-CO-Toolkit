@@ -15,6 +15,7 @@ export type VerilogExpressionAst =
   | VerilogCallExpressionAst
   | VerilogMemberExpressionAst
   | VerilogParenthesizedExpressionAst
+  | VerilogMintypmaxExpressionAst
   | VerilogErrorExpressionAst;
 
 export interface VerilogExpressionBase {
@@ -127,6 +128,13 @@ export interface VerilogParenthesizedExpressionAst extends VerilogExpressionBase
   expression: VerilogExpressionAst;
 }
 
+export interface VerilogMintypmaxExpressionAst extends VerilogExpressionBase {
+  kind: 'mintypmaxExpression';
+  minimum: VerilogExpressionAst;
+  typical: VerilogExpressionAst;
+  maximum: VerilogExpressionAst;
+}
+
 export type ParsedVerilogNumberLiteral =
   | {
       kind: 'real';
@@ -233,6 +241,7 @@ export function verilogExpressionHasError(expression: VerilogExpressionAst | und
     const add = (...nodes: VerilogExpressionAst[]) => { for (const child of nodes) { pending.push({ node: child, depth: depth + 1 }); } };
     switch (node.kind) {
       case 'parenthesizedExpression': add(node.expression); break;
+      case 'mintypmaxExpression': add(node.minimum, node.typical, node.maximum); break;
       case 'unaryExpression': add(node.argument); break;
       case 'binaryExpression': add(node.left, node.right); break;
       case 'conditionalExpression': add(node.condition, node.whenTrue, node.whenFalse); break;
@@ -501,9 +510,17 @@ class ExpressionParser {
 
   private parseParenthesized(): VerilogExpressionAst | undefined {
     const open = this.consume();
-    const expression = this.parseExpression(0, new Set([')']));
+    let expression = this.parseExpression(0, new Set([':', ')']));
     if (!open) {
       return undefined;
+    }
+    if (this.peek()?.value === ':') {
+      this.consume();
+      const typical = this.parseExpression(0, new Set([':', ')'])) ?? this.missingExpression('expression');
+      const missing = this.peek()?.value === ':' ? (this.consume(), undefined) : [this.missingToken(':', typical.end)];
+      const maximum = this.parseExpression(0, new Set([')'])) ?? this.missingExpression('expression');
+      expression = { kind: 'mintypmaxExpression', minimum: expression ?? this.missingExpression('expression'), typical, maximum,
+        start: expression?.start ?? open.end, end: maximum.end, missing };
     }
     const close = this.peek()?.value === ')' ? this.consume() : undefined;
     const missing = close ? undefined : [this.missingToken(')', expression?.end ?? open.end)];

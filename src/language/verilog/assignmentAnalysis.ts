@@ -147,7 +147,7 @@ function assignmentLeftHandSideStart(tokens: VerilogToken[], operatorIndex: numb
   let start = Math.max(label, defaultLabel) + 1;
   while (start < operatorIndex) {
     const token = tokens[start];
-    if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for') {
+    if (token.value === 'if' || token.value === 'while' || token.value === 'repeat' || token.value === 'for' || token.value === 'wait') {
       const open = nextTokenIndex(tokens, start + 1, '(');
       if (open < 0) {
         return start;

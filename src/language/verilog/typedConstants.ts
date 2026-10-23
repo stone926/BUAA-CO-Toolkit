@@ -98,6 +98,8 @@ function evaluate(expression: VerilogExpressionAst, resolver: VerilogTypedResolv
     case 'numberLiteral': return literalIntegralConstant(expression.parsed);
     case 'identifier': return resolvedIdentifier(expression, resolver, context);
     case 'parenthesizedExpression': return child(expression.expression, expectedWidth, expectedSigned);
+    // The bundled compiler uses typical values unless an explicit -T mode is selected.
+    case 'mintypmaxExpression': return child(expression.typical, expectedWidth, expectedSigned);
     case 'callExpression': {
       if (expression.args.length !== 1) { return undefined; }
       const arg = child(expression.args[0]); if (!arg) { return undefined; }
@@ -224,6 +226,7 @@ function inferType(expression: VerilogExpressionAst, resolver: VerilogTypedResol
       case 'numberLiteral': type = literalIntegralConstant(expression.parsed); break;
       case 'identifier': type = resolvedIdentifier(expression, resolver, context); break;
       case 'parenthesizedExpression': type = child(expression.expression); break;
+      case 'mintypmaxExpression': type = child(expression.typical); break;
       case 'unaryExpression': type = ['+', '-', '~'].includes(expression.operator) ? child(expression.argument) : { width: 1, signed: false }; break;
       case 'binaryExpression': type = ['==', '!=', '===', '!==', '<', '<=', '>', '>=', '&&', '||'].includes(expression.operator) ? { width: 1, signed: false }
         : ['<<', '<<<', '>>', '>>>', '**'].includes(expression.operator) ? child(expression.left) : common(child(expression.left), child(expression.right)); break;

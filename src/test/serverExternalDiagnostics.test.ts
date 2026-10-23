@@ -4,6 +4,7 @@ import {
   DidChangeConfigurationNotification,
   DidChangeTextDocumentNotification,
   DidOpenTextDocumentNotification,
+  DidSaveTextDocumentNotification,
   ExecuteCommandRequest,
   InitializeRequest,
   PublishDiagnosticsNotification,
@@ -88,12 +89,12 @@ async function runCompiler(): Promise<unknown> {
   });
 }
 
-async function configure(disabledCodes: string[] = []): Promise<void> {
+async function configure(disabledCodes: string[] = [], mode = 'commandOnly'): Promise<void> {
   await client.sendNotification(DidChangeConfigurationNotification.type, {
     settings: { co: {
       project: { profile: 'P5' },
       diagnostics: { disabledCodes },
-      verilog: { lint: { courseRules: false }, syntax: { external: { mode: 'commandOnly' } } }
+      verilog: { lint: { courseRules: false }, syntax: { external: { mode } } }
     } }
   });
   await barrier();
@@ -137,6 +138,37 @@ afterEach(() => {
 });
 
 describe('server external Verilog diagnostic lifecycle', () => {
+  it.each([
+    'function f(input x, input z); f = x & z; endfunction',
+    'function integer f(input integer x, input integer z); f = x & z; endfunction'
+  ])('automatically checks a saved legal ANSI function: %s', async (declaration) => {
+    await configure([], 'onSave');
+    await open(uriA, `module a(input a, output y); ${declaration} assign y = f(a, a); endmodule`);
+    expect(latestDiagnostics(uriA).filter((entry) => entry.severity === 1 && String(entry.code).startsWith('syntax-'))).toEqual([]);
+    mocks.compile.mockResolvedValueOnce({ ...compilerResult(), ok: true, diagnosticsByUri: new Map() });
+    await client.sendNotification(DidSaveTextDocumentNotification.type, { textDocument: { uri: uriA } });
+    await barrier();
+    await vi.advanceTimersByTimeAsync(500);
+    await barrier();
+    expect(mocks.compile).toHaveBeenCalledTimes(1);
+    expect(mocks.compile.mock.calls[0][0].triggerUri).toBe(uriA);
+  });
+
+  it('keeps automatic Icarus checks blocked for a real required-expression syntax error', async () => {
+    await configure([], 'onSave');
+    const text = 'module a; reg a; initial if() a=0; endmodule';
+    await open(uriA, text);
+    const error = latestDiagnostics(uriA).find((entry) => entry.code === 'syntax-malformed-if');
+    expect(error).toMatchObject({ severity: 1, range: {
+      start: { line: 0, character: text.indexOf(')') }, end: { line: 0, character: text.indexOf(')') + 1 }
+    } });
+    await client.sendNotification(DidSaveTextDocumentNotification.type, { textDocument: { uri: uriA } });
+    await barrier();
+    await vi.advanceTimersByTimeAsync(500);
+    await barrier();
+    expect(mocks.compile).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])('merges compiler context only when its diagnostic is enabled (suppressed: %s)', async (suppressed) => {
     await configure(suppressed ? ['verilog:iverilog-syntax'] : []);
     await open(uriA, 'module a(input [31:0] inputA,inputB);\nwire [31:0] a_add_b <= inputA + inputB;\nendmodule\n');

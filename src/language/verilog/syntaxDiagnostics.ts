@@ -305,7 +305,7 @@ function isInsidePortDeclarationList(tokens: VerilogToken[], index: number): boo
     }
     if (token.value === '(') {
       if (parenDepth === 0) {
-        return nearestKeywordBefore(tokens, current)?.value === 'module';
+        return isDeclarationHeaderBefore(tokens, current);
       }
       parenDepth--;
       continue;
@@ -317,17 +317,13 @@ function isInsidePortDeclarationList(tokens: VerilogToken[], index: number): boo
   return false;
 }
 
-function nearestKeywordBefore(tokens: VerilogToken[], index: number): VerilogToken | undefined {
+function isDeclarationHeaderBefore(tokens: VerilogToken[], index: number): boolean {
   for (let current = index - 1; current >= 0; current--) {
     const token = tokens[current];
-    if (token.kind === 'keyword') {
-      return token;
-    }
-    if (token.value === ';') {
-      return undefined;
-    }
+    if (token.value === 'module' || token.value === 'function' || token.value === 'task') return true;
+    if (token.value === ';' || token.value === 'endfunction' || token.value === 'endtask') return false;
   }
-  return undefined;
+  return false;
 }
 
 function findMatchingToken(tokens: VerilogToken[], openIndex: number, openValue: string, closeValue: string): number {

@@ -9,6 +9,8 @@ export function childrenOfVerilogExpression(expression: VerilogExpressionAst): V
   switch (expression.kind) {
     case 'parenthesizedExpression':
       return [expression.expression];
+    case 'mintypmaxExpression':
+      return [expression.minimum, expression.typical, expression.maximum];
     case 'unaryExpression':
       return [expression.argument];
     case 'binaryExpression':

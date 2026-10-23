@@ -5,8 +5,8 @@ import { continuousAssignmentParts, isVerilogLvalueExpression, parseAssignmentTo
 import { VerilogAstDocument, VerilogModuleAst, VerilogStatementAst, VerilogSubroutineAst } from './ast';
 import { verilogAstCodeTokens } from './astTokens';
 import { VerilogProceduralBlockAst } from './blockAst';
-import { parseVerilogExpressionTokens, parseVerilogNumberLiteral, verilogExpressionHasError, VerilogExpressionAst, VerilogMissingTokenAst } from './exprAst';
-import { childrenOfVerilogExpression } from './exprAstUtils';
+import { parseVerilogExpressionTokens, parseVerilogNumberLiteral, verilogExpressionHasError } from './exprAst';
+import { declarationRangeSyntaxIssues, expressionSyntaxIssues, mintypmaxExpressionSyntaxIssues, ExpressionSyntaxIssue } from './syntaxExpressionValidation';
 import { isVerilogGatePrimitive } from './gatePrimitives';
 import { instanceDeclaratorPortIndex, splitInstanceTokenGroup } from './instanceSyntax';
 import { stripDriveStrength } from './driveStrength';
@@ -129,45 +129,37 @@ function collectModuleHeaderDiagnostics(
       'Syntax error: module header requires balanced parentheses followed by a semicolon.',
       DiagnosticSeverity.Error, 'syntax-module-declaration'));
   }
-  const portListOpen = moduleHeaderPortListOpen(headerTokens);
-  if (portListOpen < 0) {
-    return;
+  const lists = moduleHeaderLists(headerTokens);
+  if (lists.parameters) {
+    validateDeclarationList(document, headerTokens.slice(lists.parameters[0] + 1, lists.parameters[1]), diagnostics, false, true);
   }
-  const portListClose = findMatchingToken(headerTokens, portListOpen, '(', ')');
-  if (portListClose < 0) {
-    return;
-  }
-  validateModulePortList(document, headerTokens.slice(portListOpen + 1, portListClose), diagnostics);
+  if (lists.ports) validateModulePortList(document, headerTokens.slice(lists.ports[0] + 1, lists.ports[1]), diagnostics);
 }
 
-function moduleHeaderPortListOpen(tokens: VerilogToken[]): number {
+function moduleHeaderLists(tokens: VerilogToken[]): { parameters?: [number, number]; ports?: [number, number] } {
+  const result: { parameters?: [number, number]; ports?: [number, number] } = {};
   const moduleIndex = tokens.findIndex((token) => token.value === 'module');
-  if (moduleIndex < 0) {
-    return -1;
-  }
+  if (moduleIndex < 0) return result;
   const nameIndex = nextSignificantTokenIndex(tokens, moduleIndex + 1);
-  if (nameIndex < 0 || tokens[nameIndex].kind !== 'identifier') {
-    return -1;
-  }
+  if (nameIndex < 0 || tokens[nameIndex].kind !== 'identifier') return result;
   let index = nextSignificantTokenIndex(tokens, nameIndex + 1);
-  if (index < 0) {
-    return -1;
-  }
+  if (index < 0) return result;
   if (tokens[index].value === '#') {
-    const parameterListOpen = nextSignificantTokenIndex(tokens, index + 1);
-    if (parameterListOpen < 0 || tokens[parameterListOpen].value !== '(') {
-      return -1;
-    }
-    const parameterListClose = findMatchingToken(tokens, parameterListOpen, '(', ')');
-    if (parameterListClose < 0) {
-      return -1;
-    }
-    index = nextSignificantTokenIndex(tokens, parameterListClose + 1);
+    const open = nextSignificantTokenIndex(tokens, index + 1);
+    if (open < 0 || tokens[open].value !== '(') return result;
+    const close = findMatchingToken(tokens, open, '(', ')');
+    if (close < 0) return result;
+    result.parameters = [open, close];
+    index = nextSignificantTokenIndex(tokens, close + 1);
   }
-  return tokens[index]?.value === '(' ? index : -1;
+  if (tokens[index]?.value === '(') {
+    const close = findMatchingToken(tokens, index, '(', ')');
+    if (close >= 0) result.ports = [index, close];
+  }
+  return result;
 }
 
-function validateModulePortList(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+function validateModulePortList(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], subroutine = false): void {
   let inheritsDeclarationPrefix = false;
   for (const part of splitTopLevel(tokens, ',')) {
     const directionIndexes = topLevelPortDirectionIndexes(part);
@@ -193,7 +185,7 @@ function validateModulePortList(document: TextDocument, tokens: VerilogToken[], 
         continue;
       }
       inheritsDeclarationPrefix = true;
-      validateModulePortDeclaration(document, part, diagnostics);
+      validateModulePortDeclaration(document, part, diagnostics, subroutine);
       continue;
     }
     if (inheritsDeclarationPrefix && looksLikeInheritedPortDeclarator(part)) {
@@ -202,8 +194,8 @@ function validateModulePortList(document: TextDocument, tokens: VerilogToken[], 
   }
 }
 
-function validateModulePortDeclaration(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
-  const declaratorStart = modulePortDeclaratorStart(document, tokens, diagnostics);
+function validateModulePortDeclaration(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], subroutine: boolean): void {
+  const declaratorStart = modulePortDeclaratorStart(document, tokens, diagnostics, subroutine);
   if (declaratorStart < 0) {
     diagnostics.push(makeDiagnostic(
       tokenRange(document, tokens[tokens.length - 1] ?? tokens[0]),
@@ -219,7 +211,8 @@ function validateModulePortDeclaration(document: TextDocument, tokens: VerilogTo
 function modulePortDeclaratorStart(
   document: TextDocument,
   tokens: VerilogToken[],
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
+  subroutine: boolean
 ): number {
   let index = 1;
   let sawType = false;
@@ -230,6 +223,7 @@ function modulePortDeclaratorStart(
       if (close < 0) {
         return -1;
       }
+      validateDeclarationRangeSyntax(document, tokens, index, close, diagnostics, 'syntax-malformed-port-list');
       index = close + 1;
       continue;
     }
@@ -237,7 +231,7 @@ function modulePortDeclaratorStart(
       index++;
       continue;
     }
-    if (!sawType && isAllowedDeclarationType(tokens[0].value, token.value)) {
+    if (!sawType && isAllowedDeclarationType(tokens[0].value, token.value, subroutine)) {
       sawType = true;
       index++;
       continue;
@@ -274,6 +268,7 @@ function validateModulePortDeclarator(document: TextDocument, tokens: VerilogTok
       if (close < 0) {
         return;
       }
+      validateDeclarationRangeSyntax(document, tokens, index, close, diagnostics, 'syntax-malformed-port-list');
       index = close;
       continue;
     }
@@ -305,6 +300,7 @@ function collectModuleItemDiagnostics(
   const visitedSubroutines = new Set<VerilogSubroutineAst>();
   const generateBlocks = collectGenerateBlocks(document, tokens, moduleAst);
   const generateCases = collectGenerateCases(document, tokens, moduleAst);
+  for (const block of generateCases) validateParenthesizedControl(document, block.tokens, 0, 'case', diagnostics);
   const visitedGenerateBlocks = new Set<GenerateBlockRange>();
   for (const statement of [...moduleAst.items].sort((left, right) => left.start - right.start || left.end - right.end)) {
     const generateBlock = generateBlockForStatement(statement, generateBlocks);
@@ -469,6 +465,7 @@ function isGenerateControlStatement(statement: VerilogStatementAst): boolean {
 function validateGenerateBlock(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
   for (let index = 0; index < tokens.length; index++) {
     if (tokens[index].value === 'for') validateForStatement(document, tokens, index, diagnostics);
+    if (tokens[index].value === 'if') validateParenthesizedControl(document, tokens, index, 'if', diagnostics);
   }
 }
 
@@ -594,30 +591,38 @@ function gatePrimitivePortListOpen(tokens: VerilogToken[]): number {
   return -1;
 }
 
-function validateDeclarationLikeStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
-  if (!hasTrailingSemicolon(tokens)) {
-    reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
-  }
-  const statement = stripDriveStrength(trimTrailingSemicolon(tokens));
-  const declaratorStart = declarationDeclaratorStart(document, statement, diagnostics);
-  if (declaratorStart < 0) {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[0]),
-      `Syntax error: '${tokens[0].value}' declaration is missing an identifier.`,
-      DiagnosticSeverity.Error,
-      'syntax-malformed-declaration'
-    ));
-    return;
-  }
-  for (const declarator of splitTopLevel(statement.slice(declaratorStart), ',')) {
-    validateDeclarationDeclarator(document, declarator, diagnostics);
+function validateDeclarationLikeStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], subroutine = false): void {
+  if (!hasTrailingSemicolon(tokens)) reportMissingSemicolon(document, tokens[0], tokens, diagnostics);
+  validateDeclarationList(document, stripDriveStrength(trimTrailingSemicolon(tokens)), diagnostics, subroutine);
+}
+
+/** Body declarations and module parameter headers share declaration prefixes and declarators. */
+function validateDeclarationList(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], subroutine = false, parameterHeader = false): void {
+  const parts = splitTopLevel(tokens, ',', true);
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (!part.length) continue;
+    const declaresPrefix = index === 0 || (parameterHeader && part[0].value === 'parameter');
+    if (declaresPrefix) {
+      const start = declarationDeclaratorStart(document, part, diagnostics, subroutine);
+      if (start < 0) {
+        diagnostics.push(makeDiagnostic(tokenRange(document, part[0]),
+          `Syntax error: '${part[0].value}' declaration is missing an identifier.`,
+          DiagnosticSeverity.Error, 'syntax-malformed-declaration'));
+        continue;
+      }
+      validateDeclarationDeclarator(document, part.slice(start), diagnostics);
+    } else {
+      validateDeclarationDeclarator(document, part, diagnostics);
+    }
   }
 }
 
 function declarationDeclaratorStart(
   document: TextDocument,
   tokens: VerilogToken[],
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
+  subroutine: boolean
 ): number {
   let index = 1;
   let sawType = false;
@@ -628,6 +633,7 @@ function declarationDeclaratorStart(
       if (close < 0) {
         return -1;
       }
+      validateDeclarationRangeSyntax(document, tokens, index, close, diagnostics, 'syntax-malformed-declaration');
       index = close + 1;
       continue;
     }
@@ -635,7 +641,7 @@ function declarationDeclaratorStart(
       index++;
       continue;
     }
-    if (!sawType && isAllowedDeclarationType(tokens[0].value, token.value)) {
+    if (!sawType && isAllowedDeclarationType(tokens[0].value, token.value, subroutine)) {
       sawType = true;
       index++;
       continue;
@@ -654,9 +660,9 @@ function declarationDeclaratorStart(
   return -1;
 }
 
-function isAllowedDeclarationType(firstKeyword: string, value: string): boolean {
+function isAllowedDeclarationType(firstKeyword: string, value: string, subroutine = false): boolean {
   if (verilogPortDirections.has(firstKeyword)) {
-    return verilogPortDeclarationTypes.has(value);
+    return verilogPortDeclarationTypes.has(value) || (subroutine && verilogParameterTypeKeywords.has(value));
   }
   if (firstKeyword === 'parameter' || firstKeyword === 'localparam') {
     return verilogParameterTypeKeywords.has(value);
@@ -691,6 +697,7 @@ function validateDeclarationDeclarator(document: TextDocument, tokens: VerilogTo
       if (close < 0) {
         return;
       }
+      validateDeclarationRangeSyntax(document, tokens, index, close, diagnostics, 'syntax-malformed-declaration');
       index = close;
       continue;
     }
@@ -766,56 +773,20 @@ function validateContinuousAssignmentPart(document: TextDocument, normalizedToke
   validateExpressionSyntax(document, assignment.rhsTokens, diagnostics, 'syntax-malformed-assignment');
 }
 
-function validateExpressionSyntax(
-  document: TextDocument,
-  tokens: VerilogToken[],
-  diagnostics: Diagnostic[],
-  code: string
-): void {
-  const expression = tokens.filter((token) => token.kind !== 'eof');
-  if (expression.length === 0) {
-    return;
-  }
-
-  const ast = parseVerilogExpressionTokens(expression);
-  const issue = ast ? firstExpressionSyntaxIssue(document, ast) : undefined;
-  if (issue) {
-    diagnostics.push(makeDiagnostic(issue.range, issue.message, DiagnosticSeverity.Error, code));
-  }
+function appendSyntaxIssues(issues: ExpressionSyntaxIssue[], diagnostics: Diagnostic[], code: string): void {
+  for (const issue of issues) diagnostics.push(makeDiagnostic(issue.range, issue.message, DiagnosticSeverity.Error, code));
 }
 
-interface ExpressionSyntaxIssue {
-  range: Range;
-  message: string;
+function validateExpressionSyntax(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], code: string, requiredAnchor?: VerilogToken): void {
+  appendSyntaxIssues(expressionSyntaxIssues(document, tokens, requiredAnchor), diagnostics, code);
 }
 
-function firstExpressionSyntaxIssue(document: TextDocument, expression: VerilogExpressionAst): ExpressionSyntaxIssue | undefined {
-  const missing = expression.missing?.[0];
-  if (missing) {
-    return missingTokenIssue(document, missing);
-  }
-  if (expression.kind === 'errorExpression') {
-    return {
-      range: Range.create(document.positionAt(expression.start), document.positionAt(expression.end)),
-      message: expression.unexpectedToken
-        ? `Syntax error: unexpected token '${expression.unexpectedToken}' in expression.`
-        : `Syntax error: ${expression.message}`
-    };
-  }
-  for (const child of childrenOfVerilogExpression(expression)) {
-    const issue = firstExpressionSyntaxIssue(document, child);
-    if (issue) {
-      return issue;
-    }
-  }
-  return undefined;
+function validateMintypmaxExpressionSyntax(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], code: string, requiredAnchor?: VerilogToken): void {
+  appendSyntaxIssues(mintypmaxExpressionSyntaxIssues(document, tokens, requiredAnchor), diagnostics, code);
 }
 
-function missingTokenIssue(document: TextDocument, missing: VerilogMissingTokenAst): ExpressionSyntaxIssue {
-  return {
-    range: Range.create(document.positionAt(missing.start), document.positionAt(missing.end)),
-    message: `Syntax error: expression is missing '${missing.expected}'.`
-  };
+function validateDeclarationRangeSyntax(document: TextDocument, tokens: VerilogToken[], open: number, close: number, diagnostics: Diagnostic[], code: string): void {
+  appendSyntaxIssues(declarationRangeSyntaxIssues(document, tokens, open, close), diagnostics, code);
 }
 
 function validateInstanceStatement(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
@@ -852,6 +823,7 @@ function validateSingleInstance(document: TextDocument, tokens: VerilogToken[], 
       ));
       return;
     }
+    validatePortConnections(document, tokens.slice(instanceIndex + 2, close), diagnostics, true);
     instanceIndex = close + 1;
   }
   if (tokens.length <= instanceIndex || !isIdentifierLike(tokens[instanceIndex].kind)) {
@@ -908,19 +880,30 @@ function validateSingleInstance(document: TextDocument, tokens: VerilogToken[], 
   validatePortConnections(document, tokens.slice(open + 1, close), diagnostics);
 }
 
-function validatePortConnections(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
-  for (const connection of splitTopLevel(tokens, ',')) {
+function validatePortConnections(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], parameters = false): void {
+  const connections = splitTopLevelPreserveEmpty(tokens, ',');
+  const named = connections.some((connection) => connection[0]?.value === '.');
+  const positional = connections.some((connection) => connection[0]?.value !== '.');
+  if (tokens.length && named && positional) {
+    const firstNamed = connections[0]?.[0]?.value === '.';
+    const mismatched = connections.find((connection) => (connection[0]?.value === '.') !== firstNamed);
+    const anchor = mismatched?.[0] ?? tokens.find((token) => token.value === ',') ?? tokens[0];
+    diagnostics.push(makeDiagnostic(tokenRange(document, anchor),
+      'Syntax error: named and positional connections cannot be mixed in one list.',
+      DiagnosticSeverity.Error, 'syntax-malformed-instance'));
+  }
+  for (const connection of connections) {
     if (connection[0]?.value === '.') {
-      validateNamedConnection(document, connection, diagnostics);
+      validateNamedConnection(document, connection, diagnostics, parameters);
       continue;
     }
     if (connection.length > 0) {
-      validateExpressionSyntax(document, connection, diagnostics, 'syntax-malformed-instance');
+      (parameters ? validateMintypmaxExpressionSyntax : validateExpressionSyntax)(document, connection, diagnostics, 'syntax-malformed-instance');
     }
   }
 }
 
-function validateNamedConnection(document: TextDocument, connection: VerilogToken[], diagnostics: Diagnostic[]): void {
+function validateNamedConnection(document: TextDocument, connection: VerilogToken[], diagnostics: Diagnostic[], parameters: boolean): void {
   const name = connection[1];
   if (!name || !isIdentifierLike(name.kind)) {
     diagnostics.push(makeDiagnostic(
@@ -965,7 +948,7 @@ function validateNamedConnection(document: TextDocument, connection: VerilogToke
   }
   const expression = connection.slice(3, close);
   if (expression.length > 0) {
-    validateExpressionSyntax(document, expression, diagnostics, 'syntax-malformed-instance');
+    (parameters ? validateMintypmaxExpressionSyntax : validateExpressionSyntax)(document, expression, diagnostics, 'syntax-malformed-instance');
   }
 }
 
@@ -975,7 +958,7 @@ function validateProceduralBlock(document: TextDocument, tokens: VerilogToken[],
   if (first.value === 'always' && tokens[1]?.value === '@') {
     bodyStart = validateEventControl(document, tokens, 1, diagnostics);
   } else if (tokens[1]?.value === '#') {
-    bodyStart = skipDelayControl(tokens, 1);
+    bodyStart = validateDelayControl(document, tokens, 1, diagnostics);
   }
   if (bodyStart >= tokens.length) {
     diagnostics.push(makeDiagnostic(
@@ -1002,8 +985,20 @@ function validateSubroutine(document: TextDocument, tokens: VerilogToken[], diag
   }
   const headerTerminator = firstTopLevelToken(tokens, ';', 1);
   const header = tokens.slice(1, headerTerminator < 0 ? tokens.length : headerTerminator);
-  const argumentsOpen = firstTopLevelToken(header, '(', 0);
+  const argumentsOpen = topLevelIndexes(header, (token) => token.value === '(')[0] ?? -1;
   const nameTokens = argumentsOpen < 0 ? header : header.slice(0, argumentsOpen);
+  if (argumentsOpen >= 0) {
+    const argumentsClose = findMatchingToken(header, argumentsOpen, '(', ')');
+    if (argumentsClose >= 0) validateModulePortList(document, header.slice(argumentsOpen + 1, argumentsClose), diagnostics, true);
+  }
+  for (let index = 0; index < nameTokens.length; index++) {
+    if (nameTokens[index].value !== '[') continue;
+    const close = findMatchingToken(nameTokens, index, '[', ']');
+    if (close >= 0) {
+      validateDeclarationRangeSyntax(document, nameTokens, index, close, diagnostics, 'syntax-malformed-declaration');
+      index = close;
+    }
+  }
   let rangeDepth = 0;
   const hasName = nameTokens.some((token) => {
     if (token.value === '[') rangeDepth++;
@@ -1023,7 +1018,7 @@ function validateSubroutine(document: TextDocument, tokens: VerilogToken[], diag
       'syntax-missing-semicolon'
     ));
   }
-  validateProceduralStatements(document, tokens.slice(Math.max(1, headerTerminator + 1)), diagnostics);
+  validateProceduralStatements(document, tokens.slice(Math.max(1, headerTerminator + 1)), diagnostics, true);
 }
 
 function validateEventControl(
@@ -1088,13 +1083,25 @@ function validateEventControl(
   return close + 1;
 }
 
-function validateProceduralStatements(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
+function validateProceduralStatements(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], subroutine = false): void {
   let pendingIf = 0;
   let caseDepth = 0;
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (token.kind === 'eof') {
       break;
+    }
+    if (verilogDeclarationKeywords.has(token.value)) {
+      const end = firstTopLevelToken(tokens, ';', index);
+      if (end >= 0) {
+        validateDeclarationLikeStatement(document, tokens.slice(index, end + 1), diagnostics, subroutine);
+        index = end;
+        continue;
+      }
+    }
+    if (token.value === '#') {
+      validateDelayControl(document, tokens, index, diagnostics);
+      continue;
     }
     if (token.value === 'if') {
       pendingIf++;
@@ -1136,8 +1143,8 @@ function validateProceduralStatements(document: TextDocument, tokens: VerilogTok
       validateForStatement(document, tokens, index, diagnostics);
       continue;
     }
-    if (token.value === 'while' || token.value === 'repeat') {
-      validateParenthesizedLoopControl(document, tokens, index, token.value, diagnostics);
+    if (token.value === 'while' || token.value === 'repeat' || token.value === 'wait') {
+      validateParenthesizedControl(document, tokens, index, token.value, diagnostics);
       continue;
     }
   }
@@ -1148,7 +1155,7 @@ function validateParenthesizedControl(
   document: TextDocument,
   tokens: VerilogToken[],
   keywordIndex: number,
-  kind: 'if' | 'case',
+  kind: 'if' | 'case' | 'while' | 'repeat' | 'wait',
   diagnostics: Diagnostic[]
 ): void {
   const open = nextSignificantTokenIndex(tokens, keywordIndex + 1);
@@ -1169,7 +1176,9 @@ function validateParenthesizedControl(
       DiagnosticSeverity.Error,
       `syntax-malformed-${kind}`
     ));
+    return;
   }
+  validateExpressionSyntax(document, tokens.slice(open + 1, close), diagnostics, `syntax-malformed-${kind}`, tokens[close]);
 }
 
 function validateForStatement(document: TextDocument, tokens: VerilogToken[], forIndex: number, diagnostics: Diagnostic[]): void {
@@ -1205,38 +1214,12 @@ function validateForStatement(document: TextDocument, tokens: VerilogToken[], fo
     return;
   }
   validateForAssignmentSection(document, parts[0], 'init', diagnostics);
-  validateForConditionSection(document, parts[1], diagnostics);
+  validateForConditionSection(document, parts[1], diagnostics, control[topLevelIndexes(control, (token) => token.value === ';')[1]]);
   validateForAssignmentSection(document, parts[2], 'step', diagnostics);
 }
 
 function splitTopLevelPreserveEmpty(tokens: VerilogToken[], separator: string): VerilogToken[][] {
-  const parts: VerilogToken[][] = [];
-  let start = 0;
-  let paren = 0;
-  let bracket = 0;
-  let brace = 0;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '(') {
-      paren++;
-    } else if (token.value === ')') {
-      paren = Math.max(0, paren - 1);
-    } else if (token.value === '[') {
-      bracket++;
-    } else if (token.value === ']') {
-      bracket = Math.max(0, bracket - 1);
-    } else if (token.value === '{') {
-      brace++;
-    } else if (token.value === '}') {
-      brace = Math.max(0, brace - 1);
-    }
-    if (token.value === separator && paren === 0 && bracket === 0 && brace === 0) {
-      parts.push(tokens.slice(start, index).filter((item) => item.kind !== 'eof'));
-      start = index + 1;
-    }
-  }
-  parts.push(tokens.slice(start).filter((item) => item.kind !== 'eof'));
-  return parts;
+  return splitTopLevel(tokens, separator, true);
 }
 
 function validateForAssignmentSection(
@@ -1275,51 +1258,9 @@ function validateForAssignmentSection(
   }
 }
 
-function validateForConditionSection(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
-  if (tokens.length === 0) {
-    return;
-  }
-  validateExpressionSyntax(document, tokens, diagnostics, 'syntax-malformed-for');
-}
-
-function validateParenthesizedLoopControl(
-  document: TextDocument,
-  tokens: VerilogToken[],
-  keywordIndex: number,
-  kind: 'while' | 'repeat',
-  diagnostics: Diagnostic[]
-): void {
-  const open = nextSignificantTokenIndex(tokens, keywordIndex + 1);
-  if (open < 0 || tokens[open].value !== '(') {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[keywordIndex]),
-      `Syntax error: '${kind}' is missing a parenthesized expression.`,
-      DiagnosticSeverity.Error,
-      `syntax-malformed-${kind}`
-    ));
-    return;
-  }
-  const close = findMatchingToken(tokens, open, '(', ')');
-  if (close < 0) {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[open]),
-      `Syntax error: '${kind}' expression is missing a closing parenthesis.`,
-      DiagnosticSeverity.Error,
-      `syntax-malformed-${kind}`
-    ));
-    return;
-  }
-  const expression = tokens.slice(open + 1, close);
-  if (expression.filter(isExpressionOperandToken).length === 0) {
-    diagnostics.push(makeDiagnostic(
-      tokenRange(document, tokens[open]),
-      `Syntax error: '${kind}' expression is empty.`,
-      DiagnosticSeverity.Error,
-      `syntax-malformed-${kind}`
-    ));
-    return;
-  }
-  validateExpressionSyntax(document, expression, diagnostics, `syntax-malformed-${kind}`);
+function validateForConditionSection(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[], anchor: VerilogToken): void {
+  validateExpressionSyntax(document, tokens, diagnostics, 'syntax-malformed-for',
+    document.languageId === 'verilog' ? anchor : undefined);
 }
 
 function validateProceduralAssignments(document: TextDocument, tokens: VerilogToken[], diagnostics: Diagnostic[]): void {
@@ -1467,10 +1408,15 @@ function reportMissingSemicolon(
   ));
 }
 
-function skipDelayControl(tokens: VerilogToken[], hashIndex: number): number {
+function validateDelayControl(document: TextDocument, tokens: VerilogToken[], hashIndex: number, diagnostics: Diagnostic[]): number {
   if (tokens[hashIndex + 1]?.value === '(') {
-    const close = findMatchingToken(tokens, hashIndex + 1, '(', ')');
-    return close >= 0 ? close + 1 : hashIndex + 2;
+    const open = hashIndex + 1;
+    const close = findMatchingToken(tokens, open, '(', ')');
+    if (close >= 0) {
+      validateMintypmaxExpressionSyntax(document, tokens.slice(open + 1, close), diagnostics, 'syntax-malformed-delay', tokens[close]);
+      return close + 1;
+    }
+    return hashIndex + 2;
   }
   return Math.min(tokens.length, hashIndex + 2);
 }
@@ -1492,7 +1438,8 @@ function isInsideDelimitedControl(tokens: VerilogToken[], index: number): boolea
     value === 'casez' ||
     value === 'for' ||
     value === 'while' ||
-    value === 'repeat'
+    value === 'repeat' ||
+    value === 'wait'
   );
 }
 
