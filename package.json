@@ -486,7 +486,8 @@
       },
       {
         "command": "co.test.startContinuousGeneratedTraceTests",
-        "title": "CO: 启动持续测试"
+        "title": "CO: 启动持续测试",
+        "icon": "$(rocket)"
       },
       {
         "command": "co.test.stopContinuousTests",
@@ -530,6 +531,11 @@
           "command": "co.verilog.viewWaveform",
           "when": "(resourceLangId == verilog) && co.hasVerilogProfile",
           "group": "navigation@11"
+        },
+        {
+          "command": "co.test.startContinuousGeneratedTraceTests",
+          "when": "co.hasTraceProfile",
+          "group": "navigation@12"
         },
         {
           "command": "co.logisim.openCurrentCircuit",
