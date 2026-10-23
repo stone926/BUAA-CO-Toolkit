@@ -33,6 +33,15 @@ export function getVerilogRenameEdits(document: TextDocument, position: Position
     symbol = semantic.symbols.find((candidate) => candidate.macro === resolved.macro);
   }
   if (!symbol || hasRenameConflict(semantic, symbol, newName)) return undefined;
+  if (symbol.kind === 'macro') {
+    const models = new Set([semantic, ...index.indexedFiles(symbol.uri).map((file) => file.semantic)]);
+    const definitions = [...models].flatMap((model) => model.symbols.filter((candidate) => candidate.kind === 'macro' && candidate.name === symbol!.name));
+    const changesLifetime = [...models].some((model) => model.ast.preprocessor.some((node) =>
+      node.kind === 'directive' && node.name === 'undef' && node.argument?.trim() === symbol!.name));
+    // Definition/use/undef lifetimes need a single binding before edits are safe.
+    // Never return a partial rename that changes only a redefined macro's header.
+    if (definitions.length > 1 || changesLifetime) return undefined;
+  }
   if (symbol.kind === 'module' && index.getModules(symbol.name, symbol.uri).length > 1) return undefined;
   if (symbol.kind === 'module' && index.getModules(newName, symbol.uri).some((candidate) => candidate !== symbol.module)) return undefined;
   const references = getVerilogReferences(document, {

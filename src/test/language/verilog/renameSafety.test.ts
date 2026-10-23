@@ -39,4 +39,9 @@ describe('Verilog rename safety', () => {
   it('permits names used in unrelated sibling scopes', () => {
     expect(rename('module m; initial begin : left reg a; a=0; end initial begin : right reg b; b=0; end endmodule', 'a;', 'b')).toBeDefined();
   });
+
+  it('refuses a partial rename across macro redefinition or undef lifetimes', () => {
+    expect(rename('`define W 4\nmodule m; localparam P=`W;\n`undef W\n`define W 8\nlocalparam Q=`W; endmodule', 'W 4', 'BITS')).toBeUndefined();
+    expect(rename('`define W 4\nmodule m; localparam P=`W; endmodule\n`undef W', 'W 4', 'BITS')).toBeUndefined();
+  });
 });
