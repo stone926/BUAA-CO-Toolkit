@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 76 files
+# verilog-lsp | src/language/verilog/ | 84 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -17,6 +17,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `astParser.ts` — 模块、声明、实例、端口连接、generate 结构
 - `instanceParser.ts` — 独立实例/连接建模（同句多实例共享参数头，保留空槽与源码范围）
 - `instanceSyntax.ts` — 解析与语法验证共用的实例组 token 边界
+- `instanceArray.ts` — 实例数组范围求值与端口广播/分摊宽度，供同文件和跨文件检查复用
 - `proceduralBoundary.ts` — always/initial 的单条过程语句边界与错误恢复
 - `syntaxParser.ts` — 语法树 + 语法诊断
 - `semanticModel.ts` — 符号表/作用域/AST 引用收集（含 generate 控制与声明的 unpacked 数组维度）；generate 块各自成作用域
@@ -28,7 +29,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - 函数声明保留返回范围及 integer/time/real 类型，返回赋值、函数调用与 hover 复用同一位宽；右移保持左操作数位宽，赋给较窄目标仍提示截断，显式 part-select 可表达取位意图。
 - `declarations.ts` — 声明类型分类（port 方向、net/variable、parameter）
 - `driveStrength.ts` — 驱动强度前缀识别（保留源码偏移，不模拟强度）
-- `preprocessor.ts` — `define`/`include`/`ifdef` 等指令集，供补全使用
+- `preprocessor.ts` — 条件编译活动分支、define/undef 顺序、续行宏及原始源码范围；object 宏表达式按调用位置绑定，include/函数宏尚不完整展开
 - `directiveBoundaries.ts` — 在代码解析入口划出编译指令及参数边界
 - `parameterOverrides.ts` — 实例参数按名/按位覆盖解析，逐级求值并报告不可求值项
 - `generateScopes.ts` — generate 块作用域查询（纯模型，含条件分支互斥）
@@ -53,6 +54,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `navigation.ts` — 跨文件 module/interface/macro/include 定义与引用
 - `rename.ts` — 基于引用 provider 生成 workspace edit；复用 lexer 校验名称，拒绝关键字、声明冲突和嵌套作用域引用捕获
 - `codeActions.ts` — 隐式连线声明、表达式折叠/抽取、实例连接补全
+- `expressionContext.ts` — hover 与重构共用表达式定位和赋值上下文；通过类型化求值观察子节点，输出保留位宽/signed 的常量，无法证明上下文时不提供重写
 - `signatureHelp.ts` — 实例端口/参数签名帮助（不含 localparam）
 - `inlayHints.ts` — 实例连接端口方向/宽度与参数提示
 - `resolveSymbol.ts` — 语义模型 + 语法 fallback 的 symbol resolution

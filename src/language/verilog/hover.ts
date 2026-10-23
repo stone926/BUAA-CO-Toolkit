@@ -9,8 +9,9 @@ import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { moduleAtPosition } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { formatNumericLiteralHover, numericLiteralAt } from './numericLiterals';
-import { evalExpressionAstConstant, widthOfExpressionAst } from './expressions';
-import { findSmallestVerilogExpressionAtOffset } from './exprAstUtils';
+import { widthOfExpressionAst } from './expressions';
+import { findStatementExpressionAtOffset, valueOfExpressionInStatement } from './expressionContext';
+import { integerConstantValue } from './typedConstants';
 import { connectionMarkdown, declarationMarkdown, formatBigInt, instanceMarkdown, markdownHover, moduleMarkdown } from './display';
 import { resolveInstanceTargetModule, resolveVerilogSymbol, resolvedRange } from './resolveSymbol';
 
@@ -76,17 +77,18 @@ function getVerilogExpressionHover(document: TextDocument, position: Position, s
   if (!module || !moduleAst) {
     return undefined;
   }
-  const expressions = moduleAst.items.flatMap((item) => item.expressions);
-  const expression = findSmallestVerilogExpressionAtOffset(expressions, document.offsetAt(position));
-  if (!expression) {
+  const context = findStatementExpressionAtOffset(moduleAst, document.offsetAt(position));
+  const expression = context?.expression;
+  if (!context || !expression) {
     return undefined;
   }
   const range = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
   if (!document.getText(range).trim()) {
     return undefined;
   }
-  const width = widthOfExpressionAst(expression, module);
-  const value = evalExpressionAstConstant(expression, module);
+  const typed = valueOfExpressionInStatement(document, module, context);
+  const width = typed ?? widthOfExpressionAst(expression, module, undefined, position);
+  const value = integerConstantValue(typed);
   if (width.width === undefined && value === undefined) {
     return undefined;
   }

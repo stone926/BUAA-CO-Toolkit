@@ -17,17 +17,14 @@ import { VerilogDecl, VerilogInstance, VerilogModule, VerilogPortConnection } fr
 import { moduleAtPosition } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { getVerilogLiteralCodeActions } from './numericLiterals';
-import { evalExpressionAstConstant, widthOfExpressionAst } from './expressions';
+import { evalExpressionAstConstant, evalExpressionAstTypedConstant, widthOfExpressionAst } from './expressions';
+import { findStatementExpressionAtOffset, valueOfExpressionInStatement, VerilogExpressionContext } from './expressionContext';
+import { integerConstantValue, VerilogIntegralConstant } from './typedConstants';
 import type { VerilogExpressionAst } from './exprAst';
-import type { VerilogModuleAst, VerilogStatementAst } from './ast';
-import { findSmallestVerilogExpressionMatchAtOffset } from './exprAstUtils';
-import type { VerilogExpressionMatch } from './exprAstUtils';
 import { overridableParameters } from './parameterOverrides';
 import { InstanceContext, resolveInstanceTargetModule } from './resolveSymbol';
 
-interface VerilogExpressionActionContext extends VerilogExpressionMatch {
-  statement: VerilogStatementAst;
-}
+type VerilogExpressionActionContext = VerilogExpressionContext;
 
 export function getVerilogCodeActions(document: TextDocument, range: Range, diagnostics: Diagnostic[], settings: CoSettings, index: VerilogWorkspaceIndex): CodeAction[] {
   const actions: CodeAction[] = [];
@@ -71,49 +68,37 @@ function getVerilogExpressionCodeActions(document: TextDocument, range: Range, s
     return [];
   }
 
-  const context = findExpressionActionContextAtOffset(moduleAst, document.offsetAt(range.start));
+  const context = findStatementExpressionAtOffset(moduleAst, document.offsetAt(range.start));
   if (!context) {
     return [];
   }
 
   return [
-    makeFoldConstantExpressionAction(document, context.expression, module),
+    makeFoldConstantExpressionAction(document, context, module),
     makeExtractConstantLocalparamAction(document, context, module),
     makeExtractWireAction(document, context, module),
     makeRemoveRedundantParenthesesAction(document, context.expression, context.parent)
   ].filter((action): action is CodeAction => Boolean(action));
 }
 
-function findExpressionActionContextAtOffset(moduleAst: VerilogModuleAst, offset: number): VerilogExpressionActionContext | undefined {
-  let best: VerilogExpressionActionContext | undefined;
-  for (const statement of moduleAst.items) {
-    const match = findSmallestVerilogExpressionMatchAtOffset(statement.expressions, offset);
-    if (!match) {
-      continue;
-    }
-    if (!best || expressionSize(match.expression) < expressionSize(best.expression)) {
-      best = { ...match, statement };
-    }
-  }
-  return best;
-}
-
-function makeFoldConstantExpressionAction(document: TextDocument, expression: VerilogExpressionAst, module: VerilogModule): CodeAction | undefined {
+function makeFoldConstantExpressionAction(document: TextDocument, context: VerilogExpressionActionContext, module: VerilogModule): CodeAction | undefined {
+  const { expression } = context;
   if (expression.kind === 'numberLiteral' || expression.kind === 'identifier') {
     return undefined;
   }
-  const value = evalExpressionAstConstant(expression, module);
-  if (value === undefined) {
+  const typed = valueOfExpressionInStatement(document, module, context);
+  const value = integerConstantValue(typed);
+  if (!typed || value === undefined) {
     return undefined;
   }
   const expressionRange = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
   const source = document.getText(expressionRange).trim();
-  const replacement = value.toString();
+  const replacement = constantLiteral(typed);
   if (!source || source === replacement) {
     return undefined;
   }
   return {
-    title: `Fold constant expression to ${replacement}`,
+    title: `Fold constant expression to ${value}`,
     kind: CodeActionKind.RefactorRewrite,
     edit: {
       changes: {
@@ -136,7 +121,8 @@ function makeExtractConstantLocalparamAction(
   if (!assignment) {
     return undefined;
   }
-  if (evalExpressionAstConstant(expression, module) === undefined) {
+  const typed = valueOfExpressionInStatement(document, module, context);
+  if (!typed || integerConstantValue(typed) === undefined) {
     return undefined;
   }
   const expressionRange = Range.create(document.positionAt(expression.start), document.positionAt(expression.end));
@@ -145,10 +131,12 @@ function makeExtractConstantLocalparamAction(
     return undefined;
   }
   const name = uniqueDeclarationName(module, 'EXPR_CONST');
+  const standalone = evalExpressionAstTypedConstant(expression, module, undefined, document.positionAt(expression.start));
+  const preservesContext = standalone && standalone.width === typed.width && standalone.signed === typed.signed && standalone.bits === typed.bits && !standalone.xMask && !standalone.zMask;
   const indent = lineAt(document, statement.range.start.line).text.match(/^\s*/)?.[0] ?? '';
   const insert = TextEdit.insert(
     Position.create(statement.range.start.line, 0),
-    `${indent}localparam ${name} = ${source};\n`
+    `${indent}localparam ${name} = ${preservesContext ? source : constantLiteral(typed)};\n`
   );
   return {
     title: `Extract constant expression to localparam ${name}`,
@@ -177,6 +165,9 @@ function makeExtractWireAction(
   if (!assignment) {
     return undefined;
   }
+  // Extracting a nested nonconstant expression would require propagating the
+  // enclosing operator's type into the new wire. Only extract complete RHSs.
+  if (expression !== assignment.rhs) return undefined;
   if (evalExpressionAstConstant(expression, module) !== undefined) {
     return undefined;
   }
@@ -207,6 +198,13 @@ function makeExtractWireAction(
       }
     }
   };
+}
+
+function constantLiteral(value: VerilogIntegralConstant): string {
+  const integer = integerConstantValue(value)!;
+  return value.width === 32 && value.signed
+    ? integer.toString()
+    : `${value.width}'${value.signed ? 's' : ''}h${value.bits.toString(16)}`;
 }
 
 function makeRemoveRedundantParenthesesAction(
