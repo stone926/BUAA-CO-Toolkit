@@ -6,11 +6,30 @@ import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { getCachedVerilogParse } from './parseCache';
 import { resolveVerilogSymbol, resolvedRange, sourceRangeAtPosition } from './resolveSymbol';
 import { dedupeLocations, getVerilogReferences } from './navigation';
+import { lexVerilog } from './lexer';
+import { rangesEqual } from '../common/lsp';
+import { resolveVerilogSemanticAtPosition, VerilogSemanticModel, VerilogSemanticScope, VerilogSemanticSymbol } from './semanticModel';
 
 export function getVerilogRenameEdits(document: TextDocument, position: Position, newName: string, settings: CoSettings, index: VerilogWorkspaceIndex): WorkspaceEdit | undefined {
   if (!isIdentifier(newName)) {
     return undefined;
   }
+  const resolved = resolveVerilogSymbol(document, position, settings, index);
+  if (!resolved || resolved.kind === 'include') return undefined;
+  const parsed = getCachedVerilogParse(document, settings, false);
+  let semantic = parsed.semantic;
+  let symbol = resolveVerilogSemanticAtPosition(semantic, position)?.symbol;
+  if (resolved.kind === 'portConnection') {
+    semantic = index.getSemantic(resolved.targetModule.uri) ?? semantic;
+    symbol = resolved.targetSymbol ?? semantic.symbols.find((candidate) =>
+      candidate.decl === resolved.targetPort);
+  } else if (resolved.kind === 'module') {
+    semantic = index.getSemantic(resolved.module.uri) ?? semantic;
+    symbol = semantic.symbols.find((candidate) => candidate.kind === 'module' &&
+      candidate.uri === resolved.module.uri && rangesEqual(candidate.selectionRange, resolved.module.selectionRange));
+  }
+  if (!symbol || hasRenameConflict(semantic, symbol, newName)) return undefined;
+  if (symbol.kind === 'module' && index.getModules(newName).some((candidate) => candidate !== symbol.module)) return undefined;
   const references = getVerilogReferences(document, {
     textDocument: { uri: document.uri },
     position,
@@ -43,21 +62,33 @@ export function getVerilogRenamePrepare(document: TextDocument, position: Positi
 }
 
 function isIdentifier(value: string): boolean {
-  if (!value || !isIdentifierStart(value[0])) {
-    return false;
-  }
-  for (let index = 1; index < value.length; index++) {
-    if (!isIdentifierPart(value[index])) {
-      return false;
+  // Reuse the language lexer: keywords, system identifiers and token sequences
+  // are not names. Escaped names need whitespace-aware edits, so leave those
+  // to a separate refactoring rather than emitting malformed identifiers.
+  if (!value || value.startsWith('\\')) return false;
+  const lexed = lexVerilog(value);
+  const tokens = lexed.tokens.filter((token) => token.kind !== 'eof');
+  return lexed.diagnostics.length === 0 && tokens.length === 1 &&
+    tokens[0].kind === 'identifier' && tokens[0].start === 0 && tokens[0].end === value.length;
+}
+
+function hasRenameConflict(model: VerilogSemanticModel, target: VerilogSemanticSymbol, name: string): boolean {
+  if (name === target.name) return false;
+  if (target.scope.symbols.get(name)?.some((symbol) => symbol !== target)) return true;
+  for (const reference of model.references) {
+    if (reference.symbol === target) {
+      // A renamed reference must not bind to a declaration in an inner scope.
+      for (let scope: VerilogSemanticScope | undefined = reference.scope; scope && scope !== target.scope; scope = scope.parent) {
+        if (scope.symbols.get(name)?.length) return true;
+      }
+    } else if (reference.name === name) {
+      // Introducing the new declaration must not capture existing references
+      // to an outer name. Unrelated sibling scopes remain renameable.
+      for (let scope: VerilogSemanticScope | undefined = reference.scope; scope; scope = scope.parent) {
+        if (scope === target.scope) return true;
+        if (scope.symbols.get(name)?.length) break;
+      }
     }
   }
-  return true;
-}
-
-function isIdentifierStart(char: string): boolean {
-  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || char === '_';
-}
-
-function isIdentifierPart(char: string): boolean {
-  return isIdentifierStart(char) || (char >= '0' && char <= '9');
+  return false;
 }

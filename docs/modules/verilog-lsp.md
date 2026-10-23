@@ -49,7 +49,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `completions.ts` / `completionProvider.ts` — 依赖装配与补全（实例连接上下文、宏、关键字、snippet、workspace 模块）
 - `hover.ts` — 声明/表达式宽度、常量、实例参数、include 状态；说明文字用中文，不回显源码
 - `navigation.ts` — 跨文件 module/interface/macro/include 定义与引用
-- `rename.ts` — 基于引用 provider 生成 workspace edit
+- `rename.ts` — 基于引用 provider 生成 workspace edit；复用 lexer 校验名称，拒绝关键字、声明冲突和嵌套作用域引用捕获
 - `codeActions.ts` — 隐式连线声明、表达式折叠/抽取、实例连接补全
 - `signatureHelp.ts` — 实例端口/参数签名帮助（不含 localparam）
 - `inlayHints.ts` — 实例连接端口方向/宽度与参数提示
