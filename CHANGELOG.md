@@ -4,6 +4,9 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+- 正式发布本轮 Verilog 语法、常量与作用域、宏预处理、function/task、generate 和 Icarus 报错定位增强，包含下方 1.5.6 的全部改进；1.5.6 候选被跨平台测试门禁拦截，未上架。
+- 修复 include 回归测试中硬编码 Windows 文件 URI 的平台假设，改用本机绝对路径，并保留中文、空格及传递 include 的检查。
+
 ## [1.5.6] - 2026-10-23
 
 - 新增 `co.verilog.projects`，可按练习或阶段划分独立源码集合；跨文件跳转、连线视图、诊断与外部检查按工程解析，同名定义有歧义时不再猜测目标。

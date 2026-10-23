@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { DiagnosticSeverity } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { URI } from 'vscode-uri';
 import { defaultCoSettings } from '../../../language/common/settings';
 import { getVerilogDiagnostics } from '../../../language/verilog/diagnosticProvider';
 import { lexVerilog } from '../../../language/verilog/lexer';
@@ -15,11 +16,13 @@ import * as lexer from '../../../language/verilog/lexer';
 import { buildIverilogEnvironment, buildIverilogRuntimeArgs, resolveIverilogRuntime } from '../../../verilog/iverilogRuntime';
 
 let version = 0;
+const fixtureRoot = path.join(os.tmpdir(), 'co-preprocessor-tests 空间');
+const fixtureUri = (name: string) => URI.file(path.join(fixtureRoot, ...name.split('/'))).toString();
 function diagnostics(text: string, headers: Record<string, string> = {}, complete = true) {
-  const document = TextDocument.create('file:///C:/preprocessor-tests/top.v', 'verilog', ++version, text);
+  const document = TextDocument.create(fixtureUri('top.v'), 'verilog', ++version, text);
   const index = new VerilogWorkspaceIndex({ workspaceComplete: complete });
   for (const [name, source] of Object.entries(headers)) {
-    index.updateDocument(TextDocument.create(`file:///C:/preprocessor-tests/${name}`, 'verilog', ++version, source), defaultCoSettings);
+    index.updateDocument(TextDocument.create(fixtureUri(name), 'verilog', ++version, source), defaultCoSettings);
   }
   index.updateDocument(document, defaultCoSettings);
   const result = getVerilogDiagnostics(document, defaultCoSettings, index).filter((issue) => String(issue.code).startsWith('preprocessor-'));
