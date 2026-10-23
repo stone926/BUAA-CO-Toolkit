@@ -1,6 +1,6 @@
 // @index directiveBoundaries — separate compiler-directive arguments from Verilog code tokens
 import { VerilogToken } from './lexer';
-import { preprocessorDirectives } from './preprocessor';
+import { activeVerilogTokens, verilogDirectiveLineEnd, preprocessorDirectives } from './preprocessor';
 import { verilogDeclarationKeywords } from './declarations';
 
 const netTypes = new Set(['wire', 'tri', 'tri0', 'tri1', 'wand', 'triand', 'wor', 'trior', 'trireg', 'supply0', 'supply1', 'uwire', 'none']);
@@ -11,9 +11,15 @@ const codeStarters = new Set([...verilogDeclarationKeywords, 'assign', 'module',
 
 /** Remove compiler-directive syntax from code parsing while keeping the original tokens available to preprocessor providers. */
 export function verilogCodeTokens(text: string, tokens: VerilogToken[]): VerilogToken[] {
+  tokens = activeVerilogTokens(text, tokens);
   const code: VerilogToken[] = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
+    if (token.value === '(' && tokens[index + 1]?.value === '*' && tokens[index + 2]?.value !== ')') {
+      let close = index + 2;
+      while (close < tokens.length && !(tokens[close].value === '*' && tokens[close + 1]?.value === ')')) close++;
+      if (close < tokens.length) { index = close + 1; continue; }
+    }
     const name = token.kind === 'directive' ? token.value.slice(1) : undefined;
     if (!name || !preprocessorDirectives.has(name)) {
       code.push(token);
@@ -77,17 +83,4 @@ function isTimeUnitOrInvalidArgument(token: VerilogToken): boolean {
   return timeUnits.has(token.value) || (token.kind === 'identifier' && !codeStarters.has(token.value));
 }
 
-export function directiveLineEnd(text: string, start: number, allowContinuation: boolean): number {
-  let end = text.indexOf('\n', start);
-  if (end < 0) {
-    return text.length;
-  }
-  while (allowContinuation && (text[end - 1] === '\\' || (text[end - 1] === '\r' && text[end - 2] === '\\'))) {
-    start = end + 1;
-    end = text.indexOf('\n', start);
-    if (end < 0) {
-      return text.length;
-    }
-  }
-  return end;
-}
+export const directiveLineEnd = verilogDirectiveLineEnd;

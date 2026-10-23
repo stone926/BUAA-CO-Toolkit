@@ -1,7 +1,8 @@
 import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
-import { isIdentifierLike, VerilogToken } from './lexer';
+import { objectMacroExpressionsFromTokens } from './preprocessor';
+import { isIdentifierLike, lexVerilog, VerilogToken } from './lexer';
 import { splitVerilogModuleItems } from './statementUtils';
 import { parseInstanceGroup } from './instanceParser';
 import { splitTopLevelTokens as splitTopLevel } from './tokenUtils';
@@ -17,8 +18,8 @@ import {
   VerilogModule,
   verilogKeywords
 } from './model';
-import { widthOfExpressionAst, WidthInfo } from './expressions';
-import { evalVerilogIntegerConstant, parseVerilogExpression, parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
+import { convertConstantForDecl, evalExpressionAstConstant, widthOfExpressionAst, WidthInfo } from './expressions';
+import { parseVerilogExpression, parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { normalizeWidth } from './textUtils';
 import {
   normalizeVerilogDeclKind,
@@ -38,12 +39,14 @@ interface ModuleHeaderInfo {
   endmoduleToken?: VerilogToken;
   endOffset: number;
   nextIndex: number;
+  hasCompleteHeader: boolean;
 }
 
 export function parseModulesFromTokens(
   document: TextDocument,
   text: string,
-  tokens: VerilogToken[]
+  tokens: VerilogToken[],
+  macroExpressions = objectMacroExpressionsFromTokens(text, lexVerilog(text).tokens)
 ): VerilogModule[] {
   tokens = verilogCodeTokens(text, tokens);
   const modules: VerilogModule[] = [];
@@ -70,12 +73,14 @@ export function parseModulesFromTokens(
       declarations: new Map(),
       instances: [],
       generateBlocks: [],
+      macroExpressions,
       range: Range.create(document.positionAt(header.moduleToken.start), document.positionAt(header.endOffset)),
       selectionRange: tokenRange(document, header.nameToken),
       headerEnd: document.positionAt(header.bodyStartOffset),
       uri: document.uri,
       bodyText: text.slice(header.bodyStartOffset, header.endOffset),
       hasEndmodule: Boolean(header.endmoduleToken),
+      hasCompleteHeader: header.hasCompleteHeader,
       endmoduleRange: header.endmoduleToken ? tokenRange(document, header.endmoduleToken) : undefined
     };
 
@@ -89,7 +94,7 @@ export function parseModulesFromTokens(
     }
 
     const bodyTokens = tokens.filter((item) => item.start >= header.bodyStartOffset && item.start < (header.endmoduleToken?.start ?? header.endOffset));
-    for (const decl of parseBodyDeclarations(document, text, bodyTokens)) {
+    for (const decl of parseVerilogDeclarationTokens(document, text, bodyTokens)) {
       const existing = module.declarations.get(decl.name);
       if (existing && isPortKind(decl.kind)) {
         const merged = {
@@ -144,35 +149,30 @@ function readModuleHeader(tokens: VerilogToken[], moduleIndex: number, text: str
   let index = tokens.indexOf(nameToken) + 1;
   let parameterTokens: VerilogToken[] = [];
   let headerTokens: VerilogToken[] = [];
+  let hasCompleteHeader = true;
 
   if (tokens[index]?.value === '#') {
     if (tokens[index + 1]?.value !== '(') {
       return undefined;
     }
-    const close = findMatchingToken(tokens, index + 1, '(', ')');
-    if (close < 0) {
-      return undefined;
-    }
+    const close = moduleHeaderListEnd(tokens, index + 1);
+    hasCompleteHeader &&= tokens[close]?.value === ')';
     parameterTokens = tokens.slice(index + 2, close);
-    index = close + 1;
+    index = tokens[close]?.value === ')' ? close + 1 : close;
   }
 
   if (tokens[index]?.value === '(') {
-    const close = findMatchingToken(tokens, index, '(', ')');
-    if (close < 0) {
-      return undefined;
-    }
+    const close = moduleHeaderListEnd(tokens, index);
+    hasCompleteHeader &&= tokens[close]?.value === ')';
     headerTokens = tokens.slice(index + 1, close);
-    index = close + 1;
+    index = tokens[close]?.value === ')' ? close + 1 : close;
   }
 
-  if (tokens[index]?.value !== ';') {
-    return undefined;
-  }
-  const bodyStartOffset = tokens[index].end;
-  const endmoduleIndex = findEndmoduleToken(tokens, index + 1);
+  hasCompleteHeader &&= tokens[index]?.value === ';';
+  const bodyStartOffset = tokens[index]?.value === ';' ? tokens[index].end : (tokens[index]?.start ?? text.length);
+  const endmoduleIndex = findEndmoduleToken(tokens, tokens[index]?.value === ';' ? index + 1 : index);
   const endmoduleToken = endmoduleIndex >= 0 ? tokens[endmoduleIndex] : undefined;
-  const nextModuleIndex = endmoduleToken ? -1 : tokens.findIndex((token, cursor) => cursor > index && token.value === 'module');
+  const nextModuleIndex = endmoduleToken ? -1 : tokens.findIndex((token, cursor) => cursor >= index && token.value === 'module');
   const recoveryEnd = nextModuleIndex >= 0 ? tokens[nextModuleIndex].start : text.length;
   return {
     moduleToken,
@@ -180,6 +180,7 @@ function readModuleHeader(tokens: VerilogToken[], moduleIndex: number, text: str
     parameterTokens,
     headerTokens,
     bodyStartOffset,
+    hasCompleteHeader,
     endmoduleToken,
     endOffset: endmoduleToken?.end ?? recoveryEnd,
     nextIndex: endmoduleIndex >= 0 ? endmoduleIndex + 1 : nextModuleIndex >= 0 ? nextModuleIndex : tokens.length
@@ -192,6 +193,7 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
   let inheritedWidth: DeclarationWidthInfo | undefined;
   let inheritedExplicitPortNetType: boolean | undefined;
   let inheritedDirectionRange: Range | undefined;
+  let inheritedType: Partial<VerilogDecl> = {};
   for (const part of splitTopLevel(tokens, ',')) {
     const port = parseDeclFragment(document, text, part, 'wire');
     if (!port) {
@@ -203,11 +205,13 @@ function parseHeaderPorts(document: TextDocument, text: string, tokens: VerilogT
       port.direction = direction;
       port.kind = direction;
       applyDeclarationWidth(port, width);
+      inheritedType = declarationTypeInfo(part.slice(0, part.indexOf(declarationNameToken(part)!)));
       inheritedDirection = direction;
       inheritedWidth = width;
       inheritedExplicitPortNetType = port.explicitPortNetType;
       inheritedDirectionRange = port.directionRange;
     } else if (inheritedDirection) {
+      Object.assign(port, inheritedType);
       port.direction = inheritedDirection;
       port.kind = inheritedDirection;
       port.directionRange = inheritedDirectionRange;
@@ -225,6 +229,7 @@ function parseParameterDeclarations(document: TextDocument, text: string, tokens
   const declarations: VerilogDecl[] = [];
   let inheritedWidth: DeclarationWidthInfo | undefined;
   let inheritedKind: VerilogDeclKind = 'parameter';
+  let inheritedType: Partial<VerilogDecl> = {};
   for (const part of splitTopLevel(tokens, ',')) {
     const decl = parseDeclFragment(document, text, part, inheritedKind);
     if (!decl) {
@@ -233,15 +238,17 @@ function parseParameterDeclarations(document: TextDocument, text: string, tokens
     if (part[0]?.value === 'parameter' || part[0]?.value === 'localparam') {
       inheritedWidth = firstRangeInfo(document, text, part);
       inheritedKind = decl.kind;
-    } else if (!decl.width && inheritedWidth) {
-      applyDeclarationWidth(decl, inheritedWidth);
+      inheritedType = declarationTypeInfo(part.slice(0, part.indexOf(declarationNameToken(part)!)));
+    } else {
+      Object.assign(decl, inheritedType);
+      if (!decl.width && inheritedWidth) applyDeclarationWidth(decl, inheritedWidth);
     }
     declarations.push(decl);
   }
   return declarations;
 }
 
-function parseBodyDeclarations(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
+export function parseVerilogDeclarationTokens(document: TextDocument, text: string, tokens: VerilogToken[]): VerilogDecl[] {
   const declarations: VerilogDecl[] = [];
   for (const statement of statementSlices(tokens)) {
     const first = statement[0];
@@ -270,6 +277,7 @@ function parseBodyDeclarations(document: TextDocument, text: string, tokens: Ver
       declarations.push({
         name: nameToken.value,
         kind,
+        ...declarationTypeInfo(prefix),
         width: width?.width,
         widthRange: width?.widthRange,
         widthAst: width?.widthAst,
@@ -319,6 +327,7 @@ function parseSubroutineDeclarations(document: TextDocument, text: string, token
           token.value === 'integer' || token.value === 'time' || token.value === 'real' || token.value === 'realtime'
         )?.value;
         decl.functionReturnType = returnType as VerilogDecl['functionReturnType'];
+        Object.assign(decl, declarationTypeInfo(returnTokens));
       }
       result.push(decl);
     }
@@ -331,7 +340,7 @@ function parseSubroutineDeclarations(document: TextDocument, text: string, token
     if (headerEnd >= 0) {
       const endIndex = indexOfValueFrom(statement, endValue, headerEnd + 1);
       const body = statement.slice(headerEnd + 1, endIndex < 0 ? statement.length : endIndex);
-      result.push(...parseBodyDeclarations(document, text, body));
+      result.push(...parseVerilogDeclarationTokens(document, text, body));
       result.push(...parseSubroutineDeclarations(document, text, body));
     }
   }
@@ -350,6 +359,7 @@ function subroutineArgumentDeclarations(document: TextDocument, text: string, to
     result.push({
       name: nameToken.value,
       kind: 'reg',
+      ...declarationTypeInfo(part.slice(0, part.indexOf(nameToken))),
       width: width?.width,
       widthRange: width?.widthRange,
       widthAst: width?.widthAst,
@@ -361,50 +371,17 @@ function subroutineArgumentDeclarations(document: TextDocument, text: string, to
 }
 
 function inferModuleParameterConstants(module: VerilogModule): void {
-  const evaluating = new Set<string>();
-  const resolveWidth = (expression: VerilogExpressionAst): number | undefined => widthOfExpressionAst(expression, module).width;
-  const resolve = (name: string): bigint | undefined => {
-    const decl = module.declarations.get(name);
-    if (!decl || !isConstantDecl(decl)) {
-      return undefined;
-    }
-    if (decl.constantValue !== undefined) {
-      return decl.constantValue;
-    }
-    if (!decl.initializer || evaluating.has(decl.name)) {
-      return undefined;
-    }
-    evaluating.add(decl.name);
-    try {
-      const ast = decl.initializerAst ?? parseVerilogExpression(decl.initializer);
-      const value = ast ? evalVerilogIntegerConstant(ast, resolve, resolveWidth) : undefined;
-      if (value !== undefined) {
-        decl.constantValue = value;
-      }
-      return value;
-    } finally {
-      evaluating.delete(decl.name);
-    }
-  };
-
   for (const decl of module.parameters) {
-    resolve(decl.name);
-  }
-  for (const decl of module.parameters) {
-    if (!decl.initializer) {
-      continue;
-    }
-    const inferred = widthOfExpressionAst(decl.initializerAst ?? parseVerilogExpression(decl.initializer), module);
+    const expression = decl.initializerAst ?? (decl.initializer ? parseVerilogExpression(decl.initializer) : undefined);
+    const value = evalExpressionAstConstant({ kind: 'identifier', name: decl.name, start: 0, end: 0 }, module);
+    if (value !== undefined) decl.constantValue = convertConstantForDecl(value, decl, module);
+    const inferred = widthOfExpressionAst(expression, module);
     if (inferred.width !== undefined) {
       decl.inferredWidth = inferred.width;
       decl.inferredMinWidth = inferred.minWidth;
       decl.inferredFlexible = inferred.flexible;
     }
   }
-}
-
-function isConstantDecl(decl: VerilogDecl): boolean {
-  return decl.kind === 'parameter' || decl.kind === 'localparam';
 }
 
 function topLevelIndexOfValue(tokens: VerilogToken[], value: string, from: number, to: number): number {
@@ -471,6 +448,7 @@ function parseDeclFragment(document: TextDocument, text: string, tokens: Verilog
   return {
     name: nameToken.value,
     kind,
+    ...declarationTypeInfo(cleaned.slice(0, cleaned.indexOf(nameToken))),
     direction,
     width: width?.width,
     widthRange: width?.widthRange,
@@ -526,6 +504,13 @@ function parseGenerateBlocks(
 ): VerilogGenerateBlock[] {
   const blocks: VerilogGenerateBlock[] = [];
   for (const statement of statementSlices(tokens)) {
+    if (statement[0]?.value === 'case') {
+      const construct = constructs.next++;
+      nestedGenerateItems(statement).forEach((branch, index) => {
+        blocks.push(...parseGenerateBlocks(document, text, branch, [...branches, { construct, branch: index }], constructs));
+      });
+      continue;
+    }
     if (statement[0]?.value !== 'begin') {
       for (const nested of nestedGenerateItems(statement)) {
         blocks.push(...parseGenerateBlocks(document, text, nested, branches, constructs));
@@ -542,7 +527,7 @@ function parseGenerateBlocks(
     blocks.push({
       name: label,
       range: Range.create(document.positionAt(statement[0].start), document.positionAt(statement[end >= 0 ? end : statement.length - 1].end)),
-      declarations: parseBodyDeclarations(document, text, body),
+      declarations: parseVerilogDeclarationTokens(document, text, body),
       branches: own
     });
     blocks.push(...parseGenerateBlocks(document, text, body, own, constructs));
@@ -570,6 +555,13 @@ function nestedGenerateItems(statement: VerilogToken[]): VerilogToken[][] {
     items = [beginBodyTokens(statement, 0), end >= 0 ? statement.slice(end + 1) : []];
   } else if (first?.value === 'if' || first?.value === 'for') {
     items = [controlTailTokens(statement, 0)];
+  } else if (first?.value === 'case') {
+    const body = controlTailTokens(statement, 0);
+    const content = body[body.length - 1]?.value === 'endcase' ? body.slice(0, -1) : body;
+    items = statementSlices(content).flatMap((branch) => {
+      const colon = topLevelIndexOfValue(branch, ':', 0, branch.length);
+      return colon >= 0 ? [branch.slice(colon + 1)] : [];
+    });
   } else if (first?.value === 'else') {
     items = [statement.slice(1)];
   }
@@ -884,4 +876,26 @@ function trimTrailingSemicolon(tokens: VerilogToken[]): VerilogToken[] {
 
 function isPortKind(kind: VerilogDeclKind): kind is 'input' | 'output' | 'inout' {
   return kind === 'input' || kind === 'output' || kind === 'inout';
+}
+
+/** Shared module/header/local declaration type prefix interpretation. */
+function declarationTypeInfo(tokens: VerilogToken[]): Pick<VerilogDecl, 'signed' | 'valueType' | 'netType'> {
+  const valueType = tokens.find((token) => ['integer', 'time', 'real', 'realtime'].includes(token.value))?.value as VerilogDecl['valueType'];
+  const netType = tokens.find((token) => verilogExplicitPortNetTypes.has(token.value))?.value;
+  return {
+    valueType,
+    netType,
+    signed: tokens.some((token) => token.value === 'signed') ? true : tokens.some((token) => token.value === 'unsigned') ? false : valueType === 'integer' ? true : undefined
+  };
+}
+
+function moduleHeaderListEnd(tokens: VerilogToken[], open: number): number {
+  let depth = 0;
+  for (let index = open; index < tokens.length; index++) {
+    const value = tokens[index].value;
+    if (value === ';' || value === 'module' || value === 'endmodule' || tokens[index].kind === 'eof') return index;
+    if (value === '(') depth++;
+    if (value === ')') { depth--; if (depth === 0) return index; }
+  }
+  return tokens.length;
 }

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { CO_TB_DIR } from '../constants';
 import { ensureDirectory, isFile, workspaceFolderForOrFirst, writeTextFileIfAbsent } from '../fsUtil';
-import { parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
+import { isCompleteVerilogModuleDeclaration, parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
 import type { VerilogModule } from '../language/verilog/model';
 import { isUserTestbenchPath, userTestbenchFileName } from '../verilogSimulationFiles';
 import { verilogDocumentForUri } from './documentContext';
@@ -38,7 +38,7 @@ export async function findUserTestbench(
   }
   const module = parseVerilogModuleDeclarations(document)
     .find((candidate) => candidate.name === testbenchName);
-  return module ? { uri, module } : undefined;
+  return module && isCompleteVerilogModuleDeclaration(module) ? { uri, module } : undefined;
 }
 
 /** Create the testbench only when absent, so an existing `.co/tb` file always keeps the user's edits. */

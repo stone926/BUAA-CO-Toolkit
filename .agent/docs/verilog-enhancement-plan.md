@@ -10,7 +10,6 @@
 
 ## 已复现、必须修复
 
-2. **类型化常量求值**：signed [7:0] S=8'shff 被求成 255，S<0 为 0、S>>>1 为 127；正确为 -1、1、-1。localparam [3:0] P=4'hf+4'h1 被求成 16，正确为 0。time 参数宽度被算成 32 而非 64。$signed/$unsigned 不能作为恒等函数处理。
 3. **常量合法性与数值可求值性**：合法 X/Z 常量参数和 constant function 参数被误报 parameter-not-constant。4'd16 的溢出产生“4 bits 与 4 bits”矛盾宽度文案。
 4. **作用域与数组**：命名块局部 32 位 x 遮蔽模块 8 位 x，仍按模块类型诊断；二维 unpacked 数组 a[i][j] 被推成 1 位而非元素位宽。mem[4]、mem[0][8]、逆序 part-select 和零宽 indexed-select 漏检。
 5. **端口方向**：8 位 output 接父模块 4 位信号漏报截断，反方向却报警；同文件/跨文件应共享检查。
@@ -18,7 +17,6 @@
 7. **预处理状态**：ifdef 的失活分支仍参与隐式 net 和多驱动检查；default_nettype none 恢复为 wire 后仍影响后续声明。宏续行、宏参数和宏表达式需要一致的源位置模型。
 8. **合法 Verilog-2005 构造**：隐式 generate、实例数组 sub u[3:0](...)、属性 (* keep="true" *) 被拒绝或丢失声明；无名 generate-for 的旧课程限制应放宽为合法语法。
 9. **非法语法与赋值目标**：assign a+b=c、空 function 头漏检；parameter 赋值、过程写 wire、Verilog-2005 连续 assign 写 reg、output 连接常量缺少内置诊断。左值语法与类型合法性须分层。
-10. **有界求值与错误恢复**：超大字面量按位取反触发 Maximum BigInt size exceeded；缺失模块头分隔符时模块模型可能整体丢失。所有计算应统一限制结果位数/深度/步骤，并保留可恢复节点。
 
 ## 后续能力（不等同于已复现缺陷）
 

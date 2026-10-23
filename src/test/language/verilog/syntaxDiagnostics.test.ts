@@ -296,7 +296,7 @@ endmodule
     expect(result).not.toContain('implicit-net:gen_bits');
   });
 
-  it('reports generate-for blocks without a named begin label', () => {
+  it('accepts generate-for blocks without a named begin label', () => {
     const result = codes(`
 module gen_bad(input [3:0] a, output [3:0] y);
     genvar i;
@@ -307,7 +307,7 @@ module gen_bad(input [3:0] a, output [3:0] y);
     endgenerate
 endmodule
 `.trim());
-    expect(result).toContain('syntax-malformed-generate');
+    expect(result).not.toContain('syntax-malformed-generate');
   });
 
   it('reports malformed instance port list expressions and missing commas', () => {

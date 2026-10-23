@@ -1,4 +1,5 @@
 // @index expr-ast — 递归下降表达式解析器，40+节点类型AST
+import { evaluateIntegralConstant, integralConstant, integerConstantValue, VERILOG_EVALUATION_LIMITS } from './typedConstants';
 import { isIdentifierLike, lexVerilog, VerilogToken } from './lexer';
 
 export type VerilogExpressionAst =
@@ -201,54 +202,54 @@ export function parseVerilogExpressionTokens(rawTokens: VerilogToken[]): Verilog
   if (!expression) {
     return undefined;
   }
-  return parser.isAtEnd(new Set()) ? expression : parser.wrapUnexpectedTrailingTokens(expression);
+  const result = parser.isAtEnd(new Set()) ? expression : parser.wrapUnexpectedTrailingTokens(expression);
+  if (!expressionWithinBudget(result)) {
+    return { kind: 'errorExpression', message: 'Expression exceeds analysis budget.', children: [], start: result.start, end: result.end };
+  }
+  return result;
+}
+
+function expressionWithinBudget(expression: VerilogExpressionAst): boolean {
+  const pending: { node: unknown; depth: number }[] = [{ node: expression, depth: 0 }];
+  let steps = 0;
+  while (pending.length) {
+    const { node, depth } = pending.pop()!;
+    if (++steps > VERILOG_EVALUATION_LIMITS.steps || depth > VERILOG_EVALUATION_LIMITS.depth) { return false; }
+    if (!node || typeof node !== 'object') { continue; }
+    for (const child of Object.values(node)) {
+      if (Array.isArray(child)) { for (const item of child) { if (item && typeof item === 'object') { pending.push({ node: item, depth: depth + 1 }); } } }
+      else if (child && typeof child === 'object') { pending.push({ node: child, depth: depth + 1 }); }
+    }
+  }
+  return true;
 }
 
 export function verilogExpressionHasError(expression: VerilogExpressionAst | undefined): boolean {
-  if (!expression) {
-    return false;
-  }
-  if (expression.kind === 'errorExpression' || expression.missing?.length) {
-    return true;
-  }
-  switch (expression.kind) {
-    case 'parenthesizedExpression':
-      return verilogExpressionHasError(expression.expression);
-    case 'unaryExpression':
-      return verilogExpressionHasError(expression.argument);
-    case 'binaryExpression':
-      return verilogExpressionHasError(expression.left) || verilogExpressionHasError(expression.right);
-    case 'conditionalExpression':
-      return verilogExpressionHasError(expression.condition) ||
-        verilogExpressionHasError(expression.whenTrue) ||
-        verilogExpressionHasError(expression.whenFalse);
-    case 'concatenation':
-      return expression.elements.some(verilogExpressionHasError);
-    case 'multipleConcatenation':
-      return verilogExpressionHasError(expression.repeat) || expression.elements.some(verilogExpressionHasError);
-    case 'selectExpression': {
-      if (verilogExpressionHasError(expression.target)) {
-        return true;
+  const pending: { node: VerilogExpressionAst; depth: number }[] = expression ? [{ node: expression, depth: 0 }] : [];
+  let steps = 0;
+  while (pending.length) {
+    const { node, depth } = pending.pop()!;
+    if (++steps > VERILOG_EVALUATION_LIMITS.steps || depth >= VERILOG_EVALUATION_LIMITS.depth || node.kind === 'errorExpression' || node.missing?.length) { return true; }
+    const add = (...nodes: VerilogExpressionAst[]) => { for (const child of nodes) { pending.push({ node: child, depth: depth + 1 }); } };
+    switch (node.kind) {
+      case 'parenthesizedExpression': add(node.expression); break;
+      case 'unaryExpression': add(node.argument); break;
+      case 'binaryExpression': add(node.left, node.right); break;
+      case 'conditionalExpression': add(node.condition, node.whenTrue, node.whenFalse); break;
+      case 'concatenation': add(...node.elements); break;
+      case 'multipleConcatenation': add(node.repeat, ...node.elements); break;
+      case 'selectExpression': {
+        add(node.target); const select = node.select;
+        if (select.missing?.length) { return true; }
+        if (select.kind === 'bitSelect') { add(select.index); }
+        else if (select.kind === 'rangeSelect') { add(select.left, select.right); }
+        else { add(select.base, select.width); } break;
       }
-      const select = expression.select;
-      if (select.missing?.length) {
-        return true;
-      }
-      if (select.kind === 'bitSelect') {
-        return verilogExpressionHasError(select.index);
-      }
-      if (select.kind === 'rangeSelect') {
-        return verilogExpressionHasError(select.left) || verilogExpressionHasError(select.right);
-      }
-      return verilogExpressionHasError(select.base) || verilogExpressionHasError(select.width);
+      case 'callExpression': add(...node.args); break;
+      case 'memberExpression': add(node.target); break;
     }
-    case 'callExpression':
-      return expression.args.some(verilogExpressionHasError);
-    case 'memberExpression':
-      return verilogExpressionHasError(expression.target);
-    default:
-      return false;
   }
+  return false;
 }
 
 export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLiteral | undefined {
@@ -263,6 +264,7 @@ export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLit
       return undefined;
     }
     const digits = value.split('_').join('');
+    if (digits.length > VERILOG_EVALUATION_LIMITS.bits) { return { kind: 'decimal', digits }; }
     return { kind: 'decimal', digits, value: decimalDigitsToBigInt(digits) };
   }
 
@@ -282,7 +284,8 @@ export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLit
     return undefined;
   }
   const digits = value.slice(index + 1).split('_').join('');
-  if (!digits) {
+  const validDigits = base === 'b' ? /^[01xz?]+$/i : base === 'o' ? /^[0-7xz?]+$/i : base === 'h' ? /^[0-9a-fxz?]+$/i : /^(?:[0-9]+|[xz?]+)$/i;
+  if (!validDigits.test(digits) || size === 0) {
     return undefined;
   }
   return {
@@ -291,7 +294,7 @@ export function parseVerilogNumberLiteral(value: string): ParsedVerilogNumberLit
     signed,
     base,
     digits,
-    value: basedDigitsToBigInt(base, digits)
+    value: digits.length > VERILOG_EVALUATION_LIMITS.bits ? undefined : basedDigitsToBigInt(base, digits)
   };
 }
 
@@ -300,45 +303,10 @@ export function evalVerilogIntegerConstant(
   resolveIdentifier?: VerilogConstantResolver,
   resolveWidth?: VerilogConstantWidthResolver
 ): bigint | undefined {
-  switch (expression.kind) {
-    case 'numberLiteral':
-      return expression.parsed?.value;
-    case 'identifier':
-      return resolveIdentifier?.(expression.name);
-    case 'parenthesizedExpression':
-      return evalVerilogIntegerConstant(expression.expression, resolveIdentifier, resolveWidth);
-    case 'unaryExpression':
-      return evalUnaryConstant(
-        expression.operator,
-        evalVerilogIntegerConstant(expression.argument, resolveIdentifier, resolveWidth),
-        constantWidth(expression.argument, resolveIdentifier, resolveWidth)
-      );
-    case 'binaryExpression':
-      return evalBinaryConstant(
-        expression.operator,
-        evalVerilogIntegerConstant(expression.left, resolveIdentifier, resolveWidth),
-        evalVerilogIntegerConstant(expression.right, resolveIdentifier, resolveWidth)
-      );
-    case 'conditionalExpression': {
-      const condition = evalVerilogIntegerConstant(expression.condition, resolveIdentifier, resolveWidth);
-      if (condition === undefined) {
-        return undefined;
-      }
-      return evalVerilogIntegerConstant(condition === 0n ? expression.whenFalse : expression.whenTrue, resolveIdentifier, resolveWidth);
-    }
-    case 'callExpression':
-      return evalCallConstant(expression, resolveIdentifier, resolveWidth);
-    case 'concatenation':
-      return evalConcatenationConstant(expression.elements, resolveIdentifier, resolveWidth);
-    case 'multipleConcatenation':
-      return evalMultipleConcatenationConstant(expression, resolveIdentifier, resolveWidth);
-    case 'selectExpression':
-      return evalSelectConstant(expression, resolveIdentifier, resolveWidth);
-    case 'errorExpression':
-      return undefined;
-    default:
-      return undefined;
-  }
+  return integerConstantValue(evaluateIntegralConstant(expression, {
+    identifier: (name) => { const value = resolveIdentifier?.(name); const width = resolveWidth?.({ kind: 'identifier', name, start: 0, end: 0 }) ?? 32; return value === undefined ? undefined : integralConstant(value, width, value < 0n); },
+    type: (node) => { if (node.kind !== 'identifier') { return undefined; } const width = resolveWidth?.(node); return width === undefined ? undefined : { width, signed: (resolveIdentifier?.(node.name) ?? 0n) < 0n }; }
+  }));
 }
 
 function tokenizeExpression(text: string): VerilogToken[] {
@@ -347,10 +315,22 @@ function tokenizeExpression(text: string): VerilogToken[] {
 
 class ExpressionParser {
   private index = 0;
+  private depth = 0;
+  private steps = 0;
 
   constructor(private readonly tokens: VerilogToken[]) {}
 
   parseExpression(minBindingPower: number, stopValues: Set<string>): VerilogExpressionAst | undefined {
+    if (++this.steps > VERILOG_EVALUATION_LIMITS.steps || this.depth >= VERILOG_EVALUATION_LIMITS.depth) {
+      const start = this.currentOffset();
+      this.index = this.tokens.length;
+      return this.errorExpression('Expression exceeds analysis budget.', start, this.currentOffset(), []);
+    }
+    this.depth++;
+    try { return this.parseExpressionInner(minBindingPower, stopValues); } finally { this.depth--; }
+  }
+
+  private parseExpressionInner(minBindingPower: number, stopValues: Set<string>): VerilogExpressionAst | undefined {
     if (this.isAtEnd(stopValues)) {
       return this.missingExpression('expression');
     }
@@ -872,405 +852,4 @@ function basedDigitsToBigInt(base: 'b' | 'o' | 'd' | 'h', digits: string): bigin
   } catch {
     return undefined;
   }
-}
-
-function evalUnaryConstant(operator: string, value: bigint | undefined, width: number | undefined): bigint | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  switch (operator) {
-    case '+':
-      return value;
-    case '-':
-      return -value;
-    case '~':
-      return width !== undefined ? (~value) & maskForWidth(width) : ~value;
-    case '!':
-      return value === 0n ? 1n : 0n;
-    case '&':
-      return width !== undefined && (value & maskForWidth(width)) === maskForWidth(width) ? 1n : 0n;
-    case '|':
-      return (width !== undefined ? (value & maskForWidth(width)) : value) !== 0n ? 1n : 0n;
-    case '^':
-      return reductionXor(width !== undefined ? (value & maskForWidth(width)) : value);
-    case '~&':
-      return evalUnaryConstant('&', value, width) === 1n ? 0n : 1n;
-    case '~|':
-      return evalUnaryConstant('|', value, width) === 1n ? 0n : 1n;
-    case '~^':
-    case '^~':
-      return evalUnaryConstant('^', value, width) === 1n ? 0n : 1n;
-    default:
-      return undefined;
-  }
-}
-
-function evalBinaryConstant(operator: string, left: bigint | undefined, right: bigint | undefined): bigint | undefined {
-  if (left === undefined || right === undefined) {
-    return undefined;
-  }
-  try {
-    switch (operator) {
-      case '+':
-        return left + right;
-      case '-':
-        return left - right;
-      case '*':
-        return left * right;
-      case '/':
-        return right === 0n ? undefined : left / right;
-      case '%':
-        return right === 0n ? undefined : left % right;
-      case '&':
-        return left & right;
-      case '|':
-        return left | right;
-      case '^':
-      case '^~':
-      case '~^':
-        return operator === '^' ? left ^ right : ~(left ^ right);
-      case '&&':
-        return left !== 0n && right !== 0n ? 1n : 0n;
-      case '||':
-        return left !== 0n || right !== 0n ? 1n : 0n;
-      case '==':
-      case '===':
-        return left === right ? 1n : 0n;
-      case '!=':
-      case '!==':
-        return left !== right ? 1n : 0n;
-      case '<':
-        return left < right ? 1n : 0n;
-      case '<=':
-        return left <= right ? 1n : 0n;
-      case '>':
-        return left > right ? 1n : 0n;
-      case '>=':
-        return left >= right ? 1n : 0n;
-      case '<<':
-      case '<<<':
-        return shiftLeft(left, right);
-      case '>>':
-      case '>>>':
-        return shiftRight(left, right);
-      case '**':
-        return power(left, right);
-      default:
-        return undefined;
-    }
-  } catch {
-    return undefined;
-  }
-}
-
-function shiftLeft(left: bigint, right: bigint): bigint | undefined {
-  if (right < 0n || right > 1024n) {
-    return undefined;
-  }
-  return left << right;
-}
-
-function shiftRight(left: bigint, right: bigint): bigint | undefined {
-  if (right < 0n || right > 1024n) {
-    return undefined;
-  }
-  return left >> right;
-}
-
-function power(left: bigint, right: bigint): bigint | undefined {
-  if (right < 0n || right > 128n) {
-    return undefined;
-  }
-  return left ** right;
-}
-
-function evalCallConstant(
-  expression: VerilogCallExpressionAst,
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): bigint | undefined {
-  const callee = normalizeSystemFunctionName(expression.callee);
-  if ((callee === '$signed' || callee === '$unsigned') && expression.args.length === 1) {
-    return evalVerilogIntegerConstant(expression.args[0], resolveIdentifier, resolveWidth);
-  }
-  if (callee === '$clog2' && expression.args.length === 1) {
-    const value = evalVerilogIntegerConstant(expression.args[0], resolveIdentifier, resolveWidth);
-    return value === undefined || value <= 0n ? undefined : clog2(value);
-  }
-  return undefined;
-}
-
-function evalConcatenationConstant(
-  elements: VerilogExpressionAst[],
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): bigint | undefined {
-  let result = 0n;
-  for (const element of elements) {
-    const width = constantWidth(element, resolveIdentifier, resolveWidth);
-    const value = evalVerilogIntegerConstant(element, resolveIdentifier, resolveWidth);
-    if (width === undefined || value === undefined || width < 0) {
-      return undefined;
-    }
-    result = (result << BigInt(width)) | (value & maskForWidth(width));
-  }
-  return result;
-}
-
-function evalMultipleConcatenationConstant(
-  expression: VerilogMultipleConcatenationAst,
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): bigint | undefined {
-  const repeat = evalVerilogIntegerConstant(expression.repeat, resolveIdentifier, resolveWidth);
-  const repeatedValue = evalConcatenationConstant(expression.elements, resolveIdentifier, resolveWidth);
-  const repeatedWidth = constantWidthOfConcatenation(expression.elements, resolveIdentifier, resolveWidth);
-  if (repeat === undefined || repeatedValue === undefined || repeatedWidth === undefined || repeat < 0n || repeat > 1024n) {
-    return undefined;
-  }
-  let result = 0n;
-  for (let index = 0n; index < repeat; index++) {
-    result = (result << BigInt(repeatedWidth)) | (repeatedValue & maskForWidth(repeatedWidth));
-  }
-  return result;
-}
-
-function evalSelectConstant(
-  expression: VerilogSelectExpressionAst,
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): bigint | undefined {
-  const target = evalVerilogIntegerConstant(expression.target, resolveIdentifier, resolveWidth);
-  if (target === undefined) {
-    return undefined;
-  }
-  switch (expression.select.kind) {
-    case 'bitSelect': {
-      const index = evalVerilogIntegerConstant(expression.select.index, resolveIdentifier, resolveWidth);
-      return index === undefined || index < 0n || index > 4096n ? undefined : (target >> index) & 1n;
-    }
-    case 'rangeSelect': {
-      const left = evalVerilogIntegerConstant(expression.select.left, resolveIdentifier, resolveWidth);
-      const right = evalVerilogIntegerConstant(expression.select.right, resolveIdentifier, resolveWidth);
-      if (left === undefined || right === undefined || left < 0n || right < 0n) {
-        return undefined;
-      }
-      const low = left < right ? left : right;
-      const width = absBigInt(left - right) + 1n;
-      return width > 4096n ? undefined : (target >> low) & maskForWidth(Number(width));
-    }
-    case 'indexedPartSelect': {
-      const base = evalVerilogIntegerConstant(expression.select.base, resolveIdentifier, resolveWidth);
-      const width = evalVerilogIntegerConstant(expression.select.width, resolveIdentifier, resolveWidth);
-      if (base === undefined || width === undefined || width <= 0n || width > 4096n) {
-        return undefined;
-      }
-      const low = expression.select.direction === '+:' ? base : base - width + 1n;
-      return low < 0n ? undefined : (target >> low) & maskForWidth(Number(width));
-    }
-    default:
-      return undefined;
-  }
-}
-
-function constantWidth(
-  expression: VerilogExpressionAst,
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): number | undefined {
-  const resolved = resolveWidth?.(expression);
-  if (resolved !== undefined) {
-    return resolved;
-  }
-  switch (expression.kind) {
-    case 'numberLiteral':
-      return literalWidth(expression.parsed);
-    case 'identifier':
-      return undefined;
-    case 'parenthesizedExpression':
-      return constantWidth(expression.expression, resolveIdentifier, resolveWidth);
-    case 'callExpression':
-      return constantWidthOfCall(expression, resolveIdentifier, resolveWidth);
-    case 'selectExpression':
-      return constantWidthOfSelect(expression, resolveIdentifier, resolveWidth);
-    case 'concatenation':
-      return constantWidthOfConcatenation(expression.elements, resolveIdentifier, resolveWidth);
-    case 'multipleConcatenation': {
-      const repeat = evalVerilogIntegerConstant(expression.repeat, resolveIdentifier, resolveWidth);
-      const repeated = constantWidthOfConcatenation(expression.elements, resolveIdentifier, resolveWidth);
-      return repeat === undefined || repeat < 0n || repeat > 1024n || repeated === undefined
-        ? undefined
-        : Number(repeat) * repeated;
-    }
-    case 'conditionalExpression': {
-      const trueWidth = constantWidth(expression.whenTrue, resolveIdentifier, resolveWidth);
-      const falseWidth = constantWidth(expression.whenFalse, resolveIdentifier, resolveWidth);
-      return trueWidth === undefined || falseWidth === undefined ? trueWidth ?? falseWidth : Math.max(trueWidth, falseWidth);
-    }
-    case 'unaryExpression':
-      return isReductionOperator(expression.operator) ? 1 : constantWidth(expression.argument, resolveIdentifier, resolveWidth);
-    case 'binaryExpression':
-      if (isComparisonOperator(expression.operator) || expression.operator === '&&' || expression.operator === '||') {
-        return 1;
-      }
-      if (expression.operator === '<<' || expression.operator === '>>' || expression.operator === '<<<' || expression.operator === '>>>') {
-        return constantWidth(expression.left, resolveIdentifier, resolveWidth);
-      }
-      return maxDefined(
-        constantWidth(expression.left, resolveIdentifier, resolveWidth),
-        constantWidth(expression.right, resolveIdentifier, resolveWidth)
-      );
-    case 'errorExpression':
-      return undefined;
-    default:
-      return undefined;
-  }
-}
-
-function constantWidthOfCall(
-  expression: VerilogCallExpressionAst,
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): number | undefined {
-  const callee = normalizeSystemFunctionName(expression.callee);
-  if ((callee === '$signed' || callee === '$unsigned') && expression.args.length === 1) {
-    return constantWidth(expression.args[0], resolveIdentifier, resolveWidth);
-  }
-  if (callee === '$clog2' && expression.args.length === 1) {
-    return 32;
-  }
-  return undefined;
-}
-
-function constantWidthOfSelect(
-  expression: VerilogSelectExpressionAst,
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): number | undefined {
-  switch (expression.select.kind) {
-    case 'bitSelect':
-      return 1;
-    case 'rangeSelect': {
-      const left = evalVerilogIntegerConstant(expression.select.left, resolveIdentifier, resolveWidth);
-      const right = evalVerilogIntegerConstant(expression.select.right, resolveIdentifier, resolveWidth);
-      return left === undefined || right === undefined ? undefined : Number(absBigInt(left - right) + 1n);
-    }
-    case 'indexedPartSelect': {
-      const width = evalVerilogIntegerConstant(expression.select.width, resolveIdentifier, resolveWidth);
-      return width === undefined || width < 0n || width > 4096n ? undefined : Number(width);
-    }
-    default:
-      return undefined;
-  }
-}
-
-function constantWidthOfConcatenation(
-  elements: VerilogExpressionAst[],
-  resolveIdentifier?: VerilogConstantResolver,
-  resolveWidth?: VerilogConstantWidthResolver
-): number | undefined {
-  let width = 0;
-  for (const element of elements) {
-    const elementWidth = constantWidth(element, resolveIdentifier, resolveWidth);
-    if (elementWidth === undefined) {
-      return undefined;
-    }
-    width += elementWidth;
-  }
-  return width;
-}
-
-function literalWidth(parsed: ParsedVerilogNumberLiteral | undefined): number | undefined {
-  if (!parsed || parsed.kind === 'real') {
-    return undefined;
-  }
-  if (parsed.kind === 'based') {
-    return parsed.size ?? Math.max(32, minWidthOfBasedDigits(parsed.base, parsed.digits));
-  }
-  return Math.max(32, minimalBitsForInteger(parsed.value));
-}
-
-function minWidthOfBasedDigits(base: string, digits: string): number {
-  if (base === 'b') {
-    return Math.max(1, digits.length);
-  }
-  if (base === 'o') {
-    return Math.max(1, digits.length * 3);
-  }
-  if (base === 'h') {
-    return Math.max(1, digits.length * 4);
-  }
-  return minimalBitsForDecimalText(digits);
-}
-
-function minimalBitsForDecimalText(text: string): number {
-  try {
-    return minimalBitsForInteger(BigInt(text));
-  } catch {
-    return 32;
-  }
-}
-
-function minimalBitsForInteger(value: bigint | undefined): number {
-  if (value === undefined) {
-    return 32;
-  }
-  if (value === 0n) {
-    return 1;
-  }
-  const magnitude = value < 0n ? -value : value;
-  return magnitude.toString(2).length;
-}
-
-function maskForWidth(width: number): bigint {
-  if (width <= 0) {
-    return 0n;
-  }
-  return (1n << BigInt(width)) - 1n;
-}
-
-function reductionXor(value: bigint): bigint {
-  let current = value < 0n ? -value : value;
-  let parity = 0n;
-  while (current !== 0n) {
-    parity ^= current & 1n;
-    current >>= 1n;
-  }
-  return parity;
-}
-
-function clog2(value: bigint): bigint {
-  let result = 0n;
-  let current = value - 1n;
-  while (current > 0n) {
-    current >>= 1n;
-    result++;
-  }
-  return result;
-}
-
-function normalizeSystemFunctionName(value: string): string {
-  return value.startsWith('$') ? value : `$${value}`;
-}
-
-function isReductionOperator(operator: string): boolean {
-  return operator === '&' || operator === '|' || operator === '^' || operator === '~&' || operator === '~|' || operator === '~^' || operator === '^~';
-}
-
-function isComparisonOperator(operator: string): boolean {
-  return operator === '===' || operator === '!==' || operator === '==' || operator === '!=' || operator === '<=' || operator === '>=' || operator === '<' || operator === '>';
-}
-
-function maxDefined(left: number | undefined, right: number | undefined): number | undefined {
-  if (left === undefined) {
-    return right;
-  }
-  if (right === undefined) {
-    return left;
-  }
-  return Math.max(left, right);
-}
-
-function absBigInt(value: bigint): bigint {
-  return value < 0n ? -value : value;
 }

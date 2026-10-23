@@ -10,6 +10,20 @@ import {
 } from './tokenUtils';
 import { verilogDeclarationKeywords } from './declarations';
 import { stripDriveStrength } from './driveStrength';
+import type { VerilogExpressionAst } from './exprAst';
+
+/** Grammar of a Verilog net/variable lvalue; declaration type is checked separately. */
+export function isVerilogLvalueExpression(expression: VerilogExpressionAst): boolean {
+  switch (expression.kind) {
+    case 'identifier': return !expression.name.startsWith('$');
+    case 'memberExpression': return isVerilogLvalueExpression(expression.target);
+    case 'selectExpression': return isVerilogLvalueExpression(expression.target);
+    case 'concatenation': return expression.elements.length > 0 && expression.elements.every(isVerilogLvalueExpression);
+    // Function-like macro expansion is opaque to this grammar layer.
+    case 'callExpression': return expression.callee.startsWith('`');
+    default: return false;
+  }
+}
 
 export interface AssignmentTarget {
   name: string;

@@ -8,7 +8,7 @@ import { collectVerilogStatementSources } from './statementParser';
 import { buildVerilogSemanticModel } from './semanticModel';
 
 export function parseVerilogCore(document: TextDocument): VerilogParseResult {
-  const { text, lexed, tokens, codeTokens, modules } = parseVerilogModuleSource(document);
+  const { text, lexed, tokens, codeTokens, modules, lexicalDiagnostics } = parseVerilogModuleSource(document);
   const macros = parseMacrosFromTokens(document, tokens);
   const macroUses = parseMacroUsesFromTokens(document, macros, tokens);
   const includes = parseIncludesFromTokens(document, tokens);
@@ -16,7 +16,7 @@ export function parseVerilogCore(document: TextDocument): VerilogParseResult {
   const ast = buildVerilogAst(document, {
     tokens: codeTokens,
     allTokens: lexed.tokens,
-    lexicalDiagnostics: lexed.diagnostics,
+    lexicalDiagnostics,
     statements: collectVerilogStatementSources(document, codeTokens)
   }, modules, macros, macroUses, includes, directives);
   const semantic = buildVerilogSemanticModel({

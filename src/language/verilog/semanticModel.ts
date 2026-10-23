@@ -1,3 +1,4 @@
+import { annotateConstantFunctions } from './constantFunctions';
 // @index semantic-model — 符号表/作用域/AST引用收集
 import { Diagnostic, Position, Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -135,8 +136,16 @@ export function buildVerilogSemanticModel(source: VerilogSemanticSource): Verilo
   fileScope.children.push(...moduleScopes);
   const blockScopes = collectBlockScopes(source.ast.modules, moduleScopes);
   const symbols = collectSymbols(source, fileScope, moduleScopes, blockScopes);
+  for (const module of source.modules) {
+    module.lexicalScopes = blockScopes.filter((scope) => scope.module === module).map((scope) => ({
+      name: scope.name,
+      range: scope.range,
+      declarations: [...scope.symbols.values()].flatMap((entries) => entries.flatMap((symbol) => symbol.decl ? [symbol.decl] : []))
+    }));
+  }
   const declarationRangeKeys = new Set(symbols.map((symbol) => rangeKey(symbol.selectionRange)));
   const references = collectReferences(source.document, source, fileScope, moduleScopes, blockScopes, declarationRangeKeys);
+  annotateConstantFunctions(source.ast.modules, references);
   return {
     documentUri: source.document.uri,
     ast: source.ast,
@@ -525,7 +534,7 @@ function declarationScopeFor(
   blockScopes: VerilogSemanticScope[],
   decl: VerilogDecl
 ): VerilogSemanticScope {
-  if (decl.kind === 'task' || decl.kind === 'function' || decl.direction || decl.kind === 'parameter' || decl.kind === 'localparam') {
+  if (decl.kind === 'task' || decl.kind === 'function') {
     return moduleScope;
   }
   return scopeAtPosition(moduleScope, blockScopes.filter((scope) => scope.module === module), decl.selectionRange.start);
@@ -828,6 +837,9 @@ function addIdentifierReference(
   range: Range,
   token?: VerilogToken
 ): void {
+  // Macro names retain their separate preprocessor references, while argument ASTs
+  // still contribute ordinary identifier references at their original offsets.
+  if (name.startsWith('`')) return;
   const key = rangeKey(range);
   if (declarationRangeKeys.has(key)) {
     return;

@@ -11,6 +11,10 @@ export type VerilogDeclKind = 'input' | 'output' | 'inout' | 'wire' | 'reg' | 'l
 export interface VerilogDecl {
   name: string;
   kind: VerilogDeclKind;
+  constantFunction?: boolean;
+  signed?: boolean;
+  valueType?: 'integer' | 'time' | 'real' | 'realtime';
+  netType?: string;
   functionReturnType?: 'integer' | 'time' | 'real' | 'realtime';
   width?: string;
   widthRange?: Range;
@@ -39,6 +43,7 @@ export interface VerilogDeclDimension {
 export interface VerilogInstance {
   moduleName: string;
   instanceName: string;
+  arrayRange?: VerilogDeclDimension;
   range: Range;
   moduleSelectionRange: Range;
   selectionRange: Range;
@@ -75,13 +80,24 @@ export interface VerilogModule {
    * declarations local to each; nested blocks are separate entries.
    */
   generateBlocks: VerilogGenerateBlock[];
+  lexicalScopes?: VerilogLexicalScope[];
+  /** Object macro bodies bound to each original use offset, without rewriting source positions. */
+  macroExpressions?: Map<number, VerilogExpressionAst>;
   range: Range;
   selectionRange: Range;
   headerEnd: Position;
   uri: string;
   bodyText: string;
   hasEndmodule: boolean;
+  /** False when the IDE recovered a module from an unfinished header. */
+  hasCompleteHeader?: boolean;
   endmoduleRange?: Range;
+}
+
+export interface VerilogLexicalScope {
+  name?: string;
+  range: Range;
+  declarations: VerilogDecl[];
 }
 
 export interface VerilogGenerateBlock {

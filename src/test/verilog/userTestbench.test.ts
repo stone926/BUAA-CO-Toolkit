@@ -206,8 +206,8 @@ describe('P1 module runs with .co/tb testbenches', () => {
     expect(readFile('E:/work/.co/tb/alu_tb_tb.v')).toContain('在此编写激励');
   });
 
-  it('stops on an incomplete active custom testbench instead of running another top', async () => {
-    const testbench = setFile('E:/work/test/alu_tb.v', 'module alu_tb(');
+  it.each(['module alu_tb(', 'module alu_tb(input clk; endmodule', 'module alu_tb;'])('stops on an incomplete active custom testbench instead of running another top: %s', async (source) => {
+    const testbench = setFile('E:/work/test/alu_tb.v', source);
     setFile('E:/work/main.v', 'module main; endmodule\n');
 
     const result = await ensureRunnableTestbench(services(), testbench, true);

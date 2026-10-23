@@ -1,4 +1,5 @@
-import { evalExpressionAstConstant } from './expressions';
+import { convertTypedConstantForDecl, evalExpressionAstTypedConstant, hasDeclaredIntegralWidth, widthOfDecl } from './expressions';
+import { integerConstantValue, VerilogIntegralConstant } from './typedConstants';
 import type { VerilogConstantOverrides } from './expressions';
 import { parseVerilogExpression } from './exprAst';
 import type { VerilogDecl, VerilogInstance, VerilogModule, VerilogPortConnection } from './model';
@@ -30,25 +31,32 @@ export function resolveParameterOverrides(
   targetModule: VerilogModule,
   parentOverrides?: VerilogConstantOverrides
 ): ResolvedParameterOverrides {
-  const overrides = new Map<string, bigint>();
+  const typedValues = new Map<string, VerilogIntegralConstant>();
+  const overrides = Object.assign(new Map<string, bigint>(), { typedValues });
   const unresolved: string[] = [];
-  for (const connection of instance.parameterConnections) {
-    const target = targetParameterForConnection(targetModule, connection);
-    if (!target || !connection.expression.trim()) {
-      continue;
-    }
-    const value = evalExpressionAstConstant(
+  // Declaration order makes a later parameter's declared range see earlier overrides,
+  // regardless of the order of named connections at the call site.
+  for (const target of overridableParameters(targetModule)) {
+    const connection = instance.parameterConnections.find((candidate) => targetParameterForConnection(targetModule, candidate) === target);
+    if (!connection?.expression.trim()) { continue; }
+    const expectedWidth = hasDeclaredIntegralWidth(target) ? widthOfDecl(target, targetModule, overrides).width : undefined;
+    const evaluated = evalExpressionAstTypedConstant(
       connection.expressionAst ?? parseVerilogExpression(connection.expression),
       parentModule,
-      parentOverrides
+      parentOverrides,
+      connection.expressionRange.start,
+      expectedWidth
     );
-    if (value === undefined) {
+    const value = evaluated && convertTypedConstantForDecl(evaluated, target, targetModule, overrides);
+    if (!value) {
       unresolved.push(target.name);
-    } else {
-      overrides.set(target.name, value);
+      continue;
     }
+    typedValues.set(target.name, value);
+    const integer = integerConstantValue(value);
+    if (integer !== undefined) { overrides.set(target.name, integer); }
   }
-  return { overrides: overrides.size ? overrides : undefined, unresolved };
+  return { overrides: typedValues.size ? overrides : undefined, unresolved };
 }
 
 /** Parameters an instance can override, in positional order: localparams are skipped (IEEE 1364 §12.2). */

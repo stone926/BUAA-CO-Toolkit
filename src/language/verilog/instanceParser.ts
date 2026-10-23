@@ -2,12 +2,12 @@
 import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { rangeAtOffset } from '../common/lsp';
-import { VerilogInstance, VerilogPortConnection } from './model';
+import { VerilogDeclDimension, VerilogInstance, VerilogPortConnection } from './model';
 import { isIdentifierLike, VerilogToken } from './lexer';
 import { isVerilogGatePrimitive } from './gatePrimitives';
 import { verilogDeclarationKeywords } from './declarations';
 import { parseVerilogExpressionTokens } from './exprAst';
-import { splitInstanceTokenGroup } from './instanceSyntax';
+import { instanceDeclaratorPortIndex, splitInstanceTokenGroup } from './instanceSyntax';
 import { findMatchingTokenForward as findMatchingToken, splitTopLevelTokens } from './tokenUtils';
 
 const excludedModuleItems = new Set([
@@ -66,13 +66,22 @@ function parseInstanceStatement(document: TextDocument, text: string, statement:
   if (!instanceToken || !isIdentifierLike(instanceToken.kind)) {
     return undefined;
   }
-  index++;
+  const nameIndex = index;
+  index = instanceDeclaratorPortIndex(statement, index);
+  if (index < 0) return undefined;
+  const arrayRange: VerilogDeclDimension | undefined = statement[nameIndex + 1]?.value === '[' ? {
+    range: Range.create(document.positionAt(statement[nameIndex + 1].start), document.positionAt(statement[index - 1].end)),
+    text: text.slice(statement[nameIndex + 1].start, statement[index - 1].end),
+    expressions: splitTopLevelTokens(statement.slice(nameIndex + 2, index - 1), ':')
+      .map((part) => parseVerilogExpressionTokens(part)).filter((expression): expression is NonNullable<typeof expression> => Boolean(expression))
+  } : undefined;
   const moduleSelectionRange = tokenRange(document, first);
   const selectionRange = tokenRange(document, instanceToken);
   if (statement[index]?.value === ';') {
     return {
       moduleName: first.value,
       instanceName: instanceToken.value,
+      arrayRange,
       range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
       moduleSelectionRange,
       selectionRange,
@@ -92,6 +101,7 @@ function parseInstanceStatement(document: TextDocument, text: string, statement:
   return {
     moduleName: first.value,
     instanceName: instanceToken.value,
+    arrayRange,
     range: Range.create(document.positionAt(first.start), document.positionAt(statement[statement.length - 1].end)),
     moduleSelectionRange,
     selectionRange,

@@ -25,3 +25,14 @@ export function splitInstanceTokenGroup(tokens: VerilogToken[]): VerilogInstance
     declarators: splitTopLevelTokens(trimTrailingSemicolonTokens(tokens).slice(start), ',', true)
   };
 }
+
+/** Position after a single Verilog-2005 instance-array range, or -1 if unclosed. */
+export function instanceDeclaratorPortIndex(tokens: VerilogToken[], nameIndex: number): number {
+  let index = nameIndex + 1;
+  if (tokens[index]?.value === '[') {
+    const close = findMatchingTokenForward(tokens, index, '[', ']');
+    if (close < 0) return -1;
+    index = close + 1;
+  }
+  return index;
+}

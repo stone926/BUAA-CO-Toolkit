@@ -1320,9 +1320,9 @@ describe('parseDirectives', () => {
     const document = doc(text);
     const parsed = parseVerilog(document, mergeCoSettings({}), false);
 
-    expect([...parsed.modules[0].declarations.keys()]).toEqual(['a', 'b', 'c', 'd', 'e']);
-    expect([...parseModules(document, text)[0].declarations.keys()]).toEqual(['a', 'b', 'c', 'd', 'e']);
-    expect(parsed.ast.modules[0].items.filter((item) => item.kind === 'declaration')).toHaveLength(5);
+    expect([...parsed.modules[0].declarations.keys()]).toEqual(['a', 'b', 'd', 'e']);
+    expect([...parseModules(document, text)[0].declarations.keys()]).toEqual(['a', 'b', 'd', 'e']);
+    expect(parsed.ast.modules[0].items.filter((item) => item.kind === 'declaration')).toHaveLength(4);
     expect(parsed.ast.preprocessor.some((item) => item.kind === 'directive' && item.name === 'timescale')).toBe(true);
     expect(parsed.macros[0]?.name).toBe('VALUE');
     expect(parsed.macroUses.some((use) => use.name === 'VALUE')).toBe(true);

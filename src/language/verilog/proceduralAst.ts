@@ -1,14 +1,12 @@
 import { Range } from 'vscode-languageserver-types';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { parseVerilogDeclarationTokens } from './astParser';
 import { parseAssignmentTokens } from './assignmentAnalysis';
 import { parseVerilogExpressionTokens, VerilogExpressionAst } from './exprAst';
 import { VerilogToken } from './lexer';
 import type { VerilogDecl } from './model';
 import {
-  normalizeVerilogDeclKind,
-  verilogDeclarationKeywords,
-  verilogDeclarationModifiers,
-  verilogPortDeclarationTypes
+  verilogDeclarationKeywords
 } from './declarations';
 import { findMatchingTokenForward, splitTopLevelTokens, trimEofTokens, trimTrailingSemicolonTokens } from './tokenUtils';
 
@@ -553,79 +551,13 @@ function topLevelTokenIndex(tokens: VerilogToken[], value: string): number {
 }
 
 function localDeclarationsFromTokens(document: TextDocument, tokens: VerilogToken[]): VerilogLocalDeclarationAst[] {
-  const first = tokens[0];
-  if (!first || !verilogDeclarationKeywords.has(first.value)) {
-    return [];
-  }
-  const kind = normalizeVerilogDeclKind(first.value);
-  const declarationTokens = trimTrailingSemicolonTokens(tokens);
-  const declarations: VerilogLocalDeclarationAst[] = [];
-  for (const part of splitTopLevelTokens(declarationTokens.slice(1), ',')) {
-    const name = declarationNameToken(part);
-    if (!name) {
-      continue;
-    }
-    const equal = topLevelTokenIndex(part, '=');
-    const initializer = equal >= 0 ? parseVerilogExpressionTokens(part.slice(equal + 1)) : undefined;
-    declarations.push({
-      kind: 'localDeclaration',
-      declaration: {
-        name: name.value,
-        kind,
-        range: tokensRange(document, tokens),
-        selectionRange: Range.create(document.positionAt(name.start), document.positionAt(name.end))
-      },
-      tokens: part,
-      widthExpressions: declarationWidthExpressions(part, equal >= 0 ? equal : part.length),
-      initializer
-    });
-  }
-  return declarations;
-}
-
-function declarationNameToken(tokens: VerilogToken[]): VerilogToken | undefined {
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.value === '[') {
-      const close = findMatchingTokenForward(tokens, index, '[', ']');
-      if (close >= 0) {
-        index = close;
-        continue;
-      }
-    }
-    if (
-      verilogDeclarationKeywords.has(token.value) ||
-      verilogDeclarationModifiers.has(token.value) ||
-      verilogPortDeclarationTypes.has(token.value)
-    ) {
-      continue;
-    }
-    if (token.kind === 'identifier') {
-      return token;
-    }
-  }
-  return undefined;
-}
-
-function declarationWidthExpressions(tokens: VerilogToken[], end: number): VerilogExpressionAst[] {
-  const expressions: VerilogExpressionAst[] = [];
-  for (let index = 0; index < end; index++) {
-    if (tokens[index].value !== '[') {
-      continue;
-    }
-    const close = findMatchingTokenForward(tokens, index, '[', ']');
-    if (close < 0 || close > end) {
-      continue;
-    }
-    for (const part of splitTopLevelTokens(tokens.slice(index + 1, close), ':')) {
-      const expression = parseVerilogExpressionTokens(part);
-      if (expression) {
-        expressions.push(expression);
-      }
-    }
-    index = close;
-  }
-  return expressions;
+  return parseVerilogDeclarationTokens(document, document.getText(), tokens).map((declaration) => ({
+    kind: 'localDeclaration',
+    declaration,
+    tokens,
+    widthExpressions: [...(declaration.widthAst ?? []), ...(declaration.unpackedDimensions?.flatMap((dimension) => dimension.expressions) ?? [])],
+    initializer: declaration.initializerAst
+  }));
 }
 
 function tokenIndexRange(document: TextDocument, tokens: VerilogToken[], start: number, end: number): Range {

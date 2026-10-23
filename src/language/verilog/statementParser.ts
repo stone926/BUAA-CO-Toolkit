@@ -92,6 +92,12 @@ export function collectVerilogStatementSources(document: TextDocument, tokens: V
       brace = Math.max(0, brace - 1);
     }
 
+    if (token.value === ';' && current[0]?.value === 'module') {
+      flush();
+      paren = bracket = brace = 0;
+      continue;
+    }
+
     if (paren !== 0 || bracket !== 0 || brace !== 0) {
       continue;
     }

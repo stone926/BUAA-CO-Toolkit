@@ -8,7 +8,7 @@ import {
   getTopModule
 } from '../config';
 import { buildTestbench, moduleAtPosition } from '../language/verilog/moduleUtils';
-import { parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
+import { isCompleteVerilogModuleDeclaration, parseVerilogModuleDeclarations } from '../language/verilog/moduleDeclarations';
 import type { VerilogModule } from '../language/verilog/model';
 import { ensureDirectory, isFile, pathExists, workspaceFolderFor, workspaceFolderForOrFirst, writeTextFile } from '../fsUtil';
 import { AppServices } from '../types';
@@ -437,7 +437,7 @@ async function testbenchCandidates(
   const seen = new Set<string>();
   const candidates: Array<{ module: VerilogModule; uri: vscode.Uri }> = [];
   const add = async (module: VerilogModule): Promise<void> => {
-    if (module.name !== tbName) {
+    if (module.name !== tbName || !isCompleteVerilogModuleDeclaration(module)) {
       return;
     }
     const uri = uriForVerilogModule(module);
@@ -559,7 +559,7 @@ async function activeModuleDefinition(resource: vscode.Uri | undefined): Promise
   const module = activePosition
     ? moduleAtPosition(modules, activePosition) ?? modules[0]
     : modules[0];
-  return module ? { module, uri: resource } : undefined;
+  return module && isCompleteVerilogModuleDeclaration(module) ? { module, uri: resource } : undefined;
 }
 
 async function activeTestbenchModuleName(resource: vscode.Uri | undefined): Promise<string | undefined> {
@@ -579,10 +579,11 @@ async function activeTestbenchModuleName(resource: vscode.Uri | undefined): Prom
     : undefined;
   const activeModule = activePosition ? moduleAtPosition(modules, activePosition) : undefined;
   const fileStem = path.basename(resource.fsPath, path.extname(resource.fsPath));
-  return (modules.find((module) => module.name === fileStem)
+  const selected = modules.find((module) => module.name === fileStem)
     ?? activeModule
     ?? modules.find((module) => /(?:_tb|_testbench)$/i.test(module.name))
-    ?? modules[0])?.name;
+    ?? modules[0];
+  return selected && isCompleteVerilogModuleDeclaration(selected) ? selected.name : undefined;
 }
 
 async function findTopModuleDefinition(
@@ -600,7 +601,7 @@ async function findTopModuleDefinition(
 
   for (const module of moduleRegistry?.getModules(topName) ?? []) {
     const uri = uriForVerilogModule(module);
-    if (uri && !isUserOrPrivateTestbenchUri(uri) && resource?.toString() !== uri.toString()) {
+    if (uri && isCompleteVerilogModuleDeclaration(module) && !isUserOrPrivateTestbenchUri(uri) && resource?.toString() !== uri.toString()) {
       return { module, uri };
     }
   }
@@ -636,7 +637,7 @@ async function topModuleDefinitionFromUri(uri: vscode.Uri | undefined, topName: 
   }
   const modules = parseVerilogModuleDeclarations(document);
   const module = modules.find((candidate) => candidate.name === topName);
-  return module ? { module, uri } : undefined;
+  return module && isCompleteVerilogModuleDeclaration(module) ? { module, uri } : undefined;
 }
 
 function isUserOrPrivateTestbenchUri(uri: vscode.Uri): boolean {
