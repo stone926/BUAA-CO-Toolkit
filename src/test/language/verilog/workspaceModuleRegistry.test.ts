@@ -48,6 +48,7 @@ vi.mock('vscode', () => ({
   Uri: vscodeMock.MockUri,
   EventEmitter: vscodeMock.MockEventEmitter,
   workspace: {
+    getConfiguration: () => ({ get: () => ({}) }),
     get textDocuments() {
       return vscodeMock.state.textDocuments;
     },

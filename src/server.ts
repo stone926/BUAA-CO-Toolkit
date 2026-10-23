@@ -561,6 +561,7 @@ async function validateDocument(document: TextDocument, settings?: CoSettings): 
     ? timeStartup(`diagnostics ${document.languageId} ${document.uri}`)
     : undefined;
   const resolvedSettings = effectiveSettingsForDocument(document, settings ?? await getDocumentSettings(document.uri));
+  verilogIndex.configureProjects(state.workspaceFolders?.map((folder) => folder.uri) ?? [], resolvedSettings.verilog.projects);
   const diagnosticLanguageId = serviceKeyForDocument(document);
   const serviceDiagnostics = serviceForDocument(document)?.getDiagnostics?.(document, resolvedSettings) ?? [];
   const diagnostics = filterDisabledDiagnostics(
@@ -645,6 +646,7 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
       triggerUri: uri,
       extensionRoot: state.extensionRoot,
       timeoutMs: external.timeoutMs > 0 ? external.timeoutMs : settings.run.timeoutMs,
+      projects: settings.verilog.projects,
       signal: controller.signal
     });
   } catch (error) {

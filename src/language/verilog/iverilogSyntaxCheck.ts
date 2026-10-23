@@ -11,6 +11,7 @@ import {
 import { parseIverilogDiagnosticRecords } from '../../verilog/iverilogDiagnostics';
 import { runProcessCore } from '../../processCore';
 import { resolveExternalSyntaxProject } from './externalSyntaxProject';
+import type { VerilogProjects } from './projectContext';
 
 export interface IverilogSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -18,6 +19,7 @@ export interface IverilogSyntaxCheckOptions {
   extensionRoot: string | undefined;
   timeoutMs: number;
   signal?: AbortSignal;
+  projects?: VerilogProjects;
 }
 
 export interface IverilogSyntaxCheckResult {
@@ -36,7 +38,7 @@ const maxOutputBytes = 4 * 1024 * 1024;
 export async function runIverilogSyntaxCheck(
   options: IverilogSyntaxCheckOptions
 ): Promise<IverilogSyntaxCheckResult> {
-  const project = await resolveExternalSyntaxProject(options.workspaceFolders, options.triggerUri);
+  const project = await resolveExternalSyntaxProject(options.workspaceFolders, options.triggerUri, 5000, options.projects);
   if (!project?.sources.length) {
     return emptyResult(false, 'no-files');
   }

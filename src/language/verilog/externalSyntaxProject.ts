@@ -7,6 +7,7 @@ import { CO_DIR } from '../../constants';
 import { yieldEventLoop } from '../../nodeFs';
 import { orderVerilogProjectFiles } from '../../verilog/verilogProjectOrder';
 import { isUserTestbenchPath } from '../../verilogSimulationFiles';
+import { VerilogProjectContext, VerilogProjects } from './projectContext';
 
 export interface ExternalSyntaxProject {
   root: string;
@@ -16,15 +17,20 @@ export interface ExternalSyntaxProject {
 export async function resolveExternalSyntaxProject(
   workspaceFolders: WorkspaceFolder[] | null | undefined,
   triggerUri: string,
-  limit = 5000
+  limit = 5000,
+  projects: VerilogProjects = {}
 ): Promise<ExternalSyntaxProject | undefined> {
   const root = workspaceRootFor(workspaceFolders, triggerUri);
   if (!root) {
     return undefined;
   }
-  const discovered = await scanProjectFiles(root, limit);
+  const context = new VerilogProjectContext([URI.file(root).toString()], projects);
+  if (!context.hasUniqueProject(triggerUri)) {
+    throw new Error('当前文件属于多个 Verilog 源集合；请从目标工程的入口文件执行检查。');
+  }
+  const discovered = await scanProjectFiles(context.sourcePaths(triggerUri) ?? [root], limit);
   const sources = orderVerilogProjectFiles(
-    discovered.map((fsPath) => ({ fsPath })),
+    discovered.filter((file) => context.sharesProject(triggerUri, URI.file(file).toString())).map((fsPath) => ({ fsPath })),
     userTestbenchTrigger(root, triggerUri)
   ).map((file) => file.fsPath);
   return { root, sources };
@@ -54,16 +60,24 @@ export function workspaceRootFor(
   return matching ?? (triggerPath ? path.dirname(triggerPath) : undefined);
 }
 
-async function scanProjectFiles(root: string, limit: number): Promise<string[]> {
+async function scanProjectFiles(roots: string[], limit: number): Promise<string[]> {
   const verilogFiles: string[] = [];
-  const stack = [root];
+  const stack = [...roots];
+  const seen = new Set<string>();
   while (stack.length && verilogFiles.length < limit) {
     const current = stack.pop();
     if (!current) {
       continue;
     }
+    if (seen.has(current)) continue;
+    seen.add(current);
     let entries: fs.Dirent[];
     try {
+      const stat = await fs.promises.stat(current);
+      if (stat.isFile()) {
+        if (current.toLowerCase().endsWith('.v')) verilogFiles.push(current);
+        continue;
+      }
       entries = await fs.promises.readdir(current, { withFileTypes: true });
     } catch {
       continue;

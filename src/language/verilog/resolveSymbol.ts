@@ -8,6 +8,8 @@ import { VerilogDecl, VerilogInclude, VerilogInstance, VerilogMacro, VerilogMacr
 import { moduleAtPosition, splitTopLevelCommaSpans } from './parser';
 import { getCachedVerilogParse } from './parseCache';
 import { resolveVerilogSemanticAtPosition, VerilogSemanticModel, VerilogSemanticResolution, VerilogSemanticSymbol } from './semanticModel';
+import { resolveInstanceTargetModule, uniqueModule } from './moduleResolution';
+export { resolveInstanceTargetModule } from './moduleResolution';
 export interface ResolvedDecl {
   kind: 'decl';
   decl: VerilogDecl;
@@ -124,7 +126,7 @@ export function resolveVerilogSymbol(document: TextDocument, position: Position,
   }
   const macroUse = parsed.macroUses.find((item) => containsPosition(item.selectionRange, position));
   if (macroUse) {
-    return { kind: 'macro', macro: index.getMacro(macroUse.name), macroUse, name: macroUse.name, sourceRange: macroUse.selectionRange };
+    return { kind: 'macro', macro: index.getMacro(macroUse.name, document.uri), macroUse, name: macroUse.name, sourceRange: macroUse.selectionRange };
   }
   return undefined;
 }
@@ -167,13 +169,14 @@ export function mapSemanticResolution(
     }
   }
   if (reference?.kind === 'module') {
-    const module = resolved.symbol?.module ?? index.getModule(reference.name) ?? modules.find((item) => item.name === reference.name);
+    const module = index.getModule(reference.name, reference.uri) ??
+      (index.getModules(reference.name, reference.uri).length === 0 ? uniqueModule(modules.filter((item) => item.name === reference.name)) : undefined);
     return module ? { kind: 'module', module, sourceRange: reference.range } : undefined;
   }
   if (reference?.kind === 'macro') {
     return {
       kind: 'macro',
-      macro: resolved.symbol?.macro ?? index.getMacro(reference.name),
+      macro: resolved.symbol?.macro ?? index.getMacro(reference.name, reference.uri),
       macroUse: reference.macroUse,
       name: reference.name,
       sourceRange: reference.range
@@ -203,10 +206,6 @@ export function mapSemanticResolution(
     return { kind: 'include', include: symbol.include, sourceRange: symbol.selectionRange };
   }
   return undefined;
-}
-
-export function resolveInstanceTargetModule(index: VerilogWorkspaceIndex, modules: VerilogModule[], instance: VerilogInstance): VerilogModule | undefined {
-  return index.getModule(instance.moduleName) ?? modules.find((item) => item.name === instance.moduleName);
 }
 
 export function resolveInstanceConnectionTarget(

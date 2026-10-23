@@ -41,6 +41,8 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `moduleUtils.ts` — `moduleAtPosition` / `declDetail` / `buildTestbench`，P7 testbench shell 从模板渲染
 - `stimulusTestbench.ts` — 非课程 CPU 的可编辑激励 testbench 模板
 - `moduleProvider.ts` — `MutableVerilogModuleProvider` 接口
+- `moduleResolution.ts` — 按调用者工程上下文唯一解析模块；歧义不选首个定义，诊断与 provider 共用
+- `projectContext.ts` — `co.verilog.projects` 命名源集合与文件/目录归属；LSP、宿主连线视图和外部语法检查共用
 
 ## LSP providers
 
@@ -82,6 +84,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 - `workspaceModuleRegistry.ts` — VS Code 端后台索引：保存时从文档更新，watcher 异步读盘并按内容指纹跳过保存回声；每个 URI 的修订序号防止旧读取覆盖新索引
 - `workspaceIndex.ts` — LSP 端模块/宏/引用/display 格式数据库，增量更新（≤50 逐文件，>50 全量）
+- 多个练习或不同阶段共用工作区时，用 `co.verilog.projects` 声明独立源集合，例如 `{"P4":["stone/p4"],"P7":["stone/p7"]}`。条目是文件或递归目录路径，不使用 glob；同目录独立题目可以分别列出 `ALU1.v`、`ALU2.v`。共享源码可列入多个集合。未配置时每个 VS Code 工作区文件夹是一个工程；同名定义有歧义时不猜测跳转、端口类型或跨文件重命名目标。外部检查从当前文件唯一所属集合收集源；共享入口需要从具体工程入口触发。
 - `signalWiring.ts` — 跨模块 signal driver/reader 追踪
 
 ## 外部编译器

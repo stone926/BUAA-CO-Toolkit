@@ -79,7 +79,7 @@ class VerilogSignalWiringProvider implements vscode.TreeDataProvider<WiringNode>
     const report = analyzeSignalWiring(parsed, toTextDocument(doc), {
       line: position.line,
       character: position.character
-    }, (name: string) => this.moduleRegistry.getModule(name));
+    }, (name: string) => this.moduleRegistry.getModule(name, doc.uri.toString()));
     if (!report) {
       this.message = placeholderMessage;
       return;

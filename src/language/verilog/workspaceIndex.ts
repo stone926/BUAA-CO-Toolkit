@@ -13,6 +13,7 @@ import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule, VerilogPo
 import { VerilogSemanticModel, VerilogSemanticSymbol, VerilogSemanticSymbolKind } from './semanticModel';
 import { yieldEventLoop } from '../../nodeFs';
 import { extractVerilogDisplayFormats } from './displayFormats';
+import { VerilogProjectContext, VerilogProjects } from './projectContext';
 
 export type VerilogConnectionListKind = 'ports' | 'parameters';
 
@@ -50,6 +51,9 @@ export class VerilogWorkspaceIndex {
   private rebuildSequence = 0;
   private revision = 0;
   private workspaceComplete: boolean;
+  private folderUris: string[] = [];
+  private projectsKey = '';
+  private projects = new VerilogProjectContext();
 
   constructor(options: { maxFiles?: number; workspaceComplete?: boolean } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
@@ -65,6 +69,7 @@ export class VerilogWorkspaceIndex {
   }
 
   async rebuild(workspaceFolders: WorkspaceFolder[] | null | undefined, settings: CoSettings): Promise<void> {
+    this.configureProjects(workspaceFolders?.map((folder) => folder.uri) ?? [], settings.verilog.projects);
     const sequence = ++this.rebuildSequence;
     this.setWorkspaceComplete(false);
     this.clear();
@@ -100,6 +105,7 @@ export class VerilogWorkspaceIndex {
   }
 
   updateDocument(document: TextDocument, settings: CoSettings): void {
+    this.configureProjects(this.folderUris, settings.verilog.projects);
     this.openDocumentUris.add(document.uri);
     this.updateDocumentIndexed(document, settings);
   }
@@ -234,20 +240,47 @@ export class VerilogWorkspaceIndex {
     this.invalidateCaches();
   }
 
-  getModule(name: string): VerilogModule | undefined {
-    return this.modules.get(name)?.[0];
+  configureProjects(folderUris: string[], projects: VerilogProjects): void {
+    const key = JSON.stringify([folderUris, projects]);
+    if (key === this.projectsKey) return;
+    this.folderUris = [...folderUris];
+    this.projectsKey = key;
+    this.projects = new VerilogProjectContext(folderUris, projects);
+    this.invalidateCaches();
   }
 
-  getModules(name: string): VerilogModule[] {
-    return this.modules.get(name) ?? [];
+  sharesProject(left: string, right: string): boolean {
+    return this.projects.sharesProject(left, right);
+  }
+
+  projectKey(uri: string): string {
+    return this.projects.projectIds(uri).join('\u0000');
+  }
+
+  getModule(name: string, fromUri?: string): VerilogModule | undefined {
+    const candidates = this.getModules(name, fromUri);
+    return candidates.length === 1 ? candidates[0] : undefined;
+  }
+
+  getModules(name: string, fromUri?: string): VerilogModule[] {
+    const candidates = this.modules.get(name) ?? [];
+    return fromUri ? candidates.filter((module) => this.sharesProject(fromUri, module.uri)) : candidates;
   }
 
   allModules(): VerilogModule[] {
     return [...this.indexedModules()];
   }
 
-  getMacro(name: string): VerilogMacro | undefined {
-    return this.macros.get(name)?.[0];
+  getMacro(name: string, fromUri?: string): VerilogMacro | undefined {
+    return this.resolveMacro(name, fromUri)?.macro;
+  }
+
+  resolveMacro(name: string, fromUri?: string): { uri: string; macro: VerilogMacro } | undefined {
+    const candidates = this.indexedFiles().filter((file) => !fromUri || this.sharesProject(fromUri, file.uri))
+      .flatMap((file) => file.macros.filter((macro) => macro.name === name).map((macro) => ({ uri: file.uri, macro })));
+    const local = candidates.filter((candidate) => candidate.uri === fromUri);
+    const visible = local.length ? local : candidates;
+    return visible.length === 1 ? visible[0] : undefined;
   }
 
   getMacros(name: string): VerilogMacro[] {
@@ -298,17 +331,18 @@ export class VerilogWorkspaceIndex {
     );
   }
 
-  indexedFiles(): readonly VerilogIndexedFile[] {
+  indexedFiles(fromUri?: string): readonly VerilogIndexedFile[] {
     this.fileListCache ??= [...this.files.values()];
-    return this.fileListCache;
+    return fromUri ? this.fileListCache.filter((file) => this.sharesProject(fromUri, file.uri)) : this.fileListCache;
   }
 
-  indexedModules(): readonly VerilogModule[] {
+  indexedModules(fromUri?: string): readonly VerilogModule[] {
     this.moduleListCache ??= [...this.modules.values()].flat();
-    return this.moduleListCache;
+    return fromUri ? this.moduleListCache.filter((module) => this.sharesProject(fromUri, module.uri)) : this.moduleListCache;
   }
 
-  indexedMacros(): readonly VerilogMacro[] {
+  indexedMacros(fromUri?: string): readonly VerilogMacro[] {
+    if (fromUri) return this.indexedFiles(fromUri).flatMap((file) => file.macros);
     this.macroListCache ??= [...this.macros.values()].flat();
     return this.macroListCache;
   }
@@ -318,20 +352,24 @@ export class VerilogWorkspaceIndex {
     return this.displayFormatListCache;
   }
 
-  moduleReferenceLocations(moduleName: string): readonly Location[] {
-    return this.moduleReferenceIndex.get(moduleName) ?? [];
+  moduleReferenceLocations(moduleName: string, target?: VerilogModule): readonly Location[] {
+    const locations = this.moduleReferenceIndex.get(moduleName) ?? [];
+    return target ? locations.filter((location) => sameModuleIdentity(this.getModule(moduleName, location.uri), target)) : locations;
   }
 
   interfaceConnectionLocations(
     moduleName: string,
     connectionName: string,
-    listKind: VerilogConnectionListKind
+    listKind: VerilogConnectionListKind,
+    target?: VerilogModule
   ): readonly Location[] {
-    return this.interfaceConnectionReferenceIndex.get(interfaceConnectionKey(moduleName, connectionName, listKind)) ?? [];
+    const locations = this.interfaceConnectionReferenceIndex.get(interfaceConnectionKey(moduleName, connectionName, listKind)) ?? [];
+    return target ? locations.filter((location) => sameModuleIdentity(this.getModule(moduleName, location.uri), target)) : locations;
   }
 
-  macroUseLocations(name: string): readonly Location[] {
-    return this.macroUseReferenceIndex.get(name) ?? [];
+  macroUseLocations(name: string, target?: VerilogMacro): readonly Location[] {
+    const locations = this.macroUseReferenceIndex.get(name) ?? [];
+    return target ? locations.filter((location) => this.resolveMacro(name, location.uri)?.macro === target) : locations;
   }
 
   macroDefinitionLocations(name: string): readonly Location[] {

@@ -3,8 +3,8 @@ import type { VerilogModule } from './model';
 
 export interface VerilogModuleProvider {
   readonly scanning: boolean;
-  getModule(name: string): VerilogModule | undefined;
-  getModules(name: string): VerilogModule[];
+  getModule(name: string, fromUri?: string): VerilogModule | undefined;
+  getModules(name: string, fromUri?: string): VerilogModule[];
   allModules(): VerilogModule[];
 }
 

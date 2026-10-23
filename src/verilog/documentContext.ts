@@ -44,6 +44,7 @@ export function coSettingsForUri(uri: vscode.Uri): CoSettings {
       timeoutMs: getRunTimeout(uri)
     },
     verilog: {
+      projects: config<CoSettings['verilog']['projects']>('verilog.projects', defaultCoSettings.verilog.projects, uri),
       syntax: {
         external: {
           mode: config<CoSettings['verilog']['syntax']['external']['mode']>('verilog.syntax.external.mode', defaultCoSettings.verilog.syntax.external.mode, uri),

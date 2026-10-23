@@ -30,6 +30,7 @@
     "^tb\\."
   ],
   "verilog.lint.courseRules": true,
+  "verilog.projects": {},
   "verilog.syntax.external.mode": "onSave",
   "verilog.syntax.external.timeoutMs": 0
 }

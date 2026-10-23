@@ -27,9 +27,14 @@ export function getVerilogRenameEdits(document: TextDocument, position: Position
     semantic = index.getSemantic(resolved.module.uri) ?? semantic;
     symbol = semantic.symbols.find((candidate) => candidate.kind === 'module' &&
       candidate.uri === resolved.module.uri && rangesEqual(candidate.selectionRange, resolved.module.selectionRange));
+  } else if (resolved.kind === 'macro' && resolved.macro) {
+    const owner = index.indexedFiles(document.uri).find((file) => file.macros.includes(resolved.macro!));
+    semantic = owner?.semantic ?? semantic;
+    symbol = semantic.symbols.find((candidate) => candidate.macro === resolved.macro);
   }
   if (!symbol || hasRenameConflict(semantic, symbol, newName)) return undefined;
-  if (symbol.kind === 'module' && index.getModules(newName).some((candidate) => candidate !== symbol.module)) return undefined;
+  if (symbol.kind === 'module' && index.getModules(symbol.name, symbol.uri).length > 1) return undefined;
+  if (symbol.kind === 'module' && index.getModules(newName, symbol.uri).some((candidate) => candidate !== symbol.module)) return undefined;
   const references = getVerilogReferences(document, {
     textDocument: { uri: document.uri },
     position,

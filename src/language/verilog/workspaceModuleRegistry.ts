@@ -8,6 +8,7 @@ import { parseModules } from './moduleParser';
 import { VerilogModule } from './model';
 import type { MutableVerilogModuleProvider } from './moduleProvider';
 import { yieldEventLoop } from '../../nodeFs';
+import { normalizeVerilogProjects, VerilogProjectContext } from './projectContext';
 
 /**
  * 扩展宿主侧的工作空间模块注册表。
@@ -33,14 +34,21 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     return this._scanning;
   }
 
-  /** 按名称查找模块（返回第一个匹配）。跨文件查找的核心入口。 */
-  getModule(name: string): VerilogModule | undefined {
-    return this.getModules(name)[0];
+  /** Resolve only a unique definition in the caller's declared source set. */
+  getModule(name: string, fromUri?: string): VerilogModule | undefined {
+    const modules = this.getModules(name, fromUri);
+    return modules.length === 1 ? modules[0] : undefined;
   }
 
   /** 按名称获取所有同名模块 */
-  getModules(name: string): VerilogModule[] {
-    return sortedModules(this.modules.get(name) ?? []);
+  getModules(name: string, fromUri?: string): VerilogModule[] {
+    const modules = this.modules.get(name) ?? [];
+    if (!fromUri) return sortedModules(modules);
+    const context = new VerilogProjectContext(
+      vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString()) ?? [],
+      normalizeVerilogProjects(vscode.workspace.getConfiguration('co').get('verilog.projects'))
+    );
+    return sortedModules(modules.filter((module) => context.sharesProject(fromUri, module.uri)));
   }
 
   /** 获取当前注册表中所有模块 */

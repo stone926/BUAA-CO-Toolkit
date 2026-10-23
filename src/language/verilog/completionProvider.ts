@@ -42,7 +42,7 @@ interface WorkspaceCompletionCacheEntry {
   items: CompletionItem[];
 }
 
-const workspaceCompletionCache = new WeakMap<VerilogWorkspaceIndex, WorkspaceCompletionCacheEntry>();
+const workspaceCompletionCache = new WeakMap<VerilogWorkspaceIndex, Map<string, WorkspaceCompletionCacheEntry>>();
 
 export function getVerilogCompletions(
   document: TextDocument,
@@ -140,7 +140,7 @@ export function getVerilogCompletions(
     });
   }
 
-  items.push(...workspaceCompletionItems(index));
+  items.push(...workspaceCompletionItems(index, document.uri));
 
   const textBefore = document.getText(Range.create(
     document.positionAt(Math.max(0, document.offsetAt(position) - 200)),
@@ -241,13 +241,15 @@ function moduleCompletionItem(module: VerilogModule): CompletionItem {
   };
 }
 
-function workspaceCompletionItems(index: VerilogWorkspaceIndex): CompletionItem[] {
-  const cached = workspaceCompletionCache.get(index);
+function workspaceCompletionItems(index: VerilogWorkspaceIndex, uri: string): CompletionItem[] {
+  const cache = workspaceCompletionCache.get(index) ?? new Map<string, WorkspaceCompletionCacheEntry>();
+  const key = index.projectKey(uri);
+  const cached = cache.get(key);
   if (cached?.version === index.version) {
     return cached.items;
   }
   const items: CompletionItem[] = [];
-  for (const macro of index.indexedMacros()) {
+  for (const macro of index.indexedMacros(uri)) {
     items.push({
       label: macro.name,
       kind: CompletionItemKind.Constant,
@@ -255,13 +257,15 @@ function workspaceCompletionItems(index: VerilogWorkspaceIndex): CompletionItem[
       insertText: macro.name
     });
   }
-  for (const module of index.indexedModules()) {
+  for (const module of index.indexedModules(uri)) {
     items.push(moduleCompletionItem(module));
   }
-  workspaceCompletionCache.set(index, {
+  for (const [otherKey, value] of cache) if (value.version !== index.version) cache.delete(otherKey);
+  cache.set(key, {
     version: index.version,
     items
   });
+  workspaceCompletionCache.set(index, cache);
   return items;
 }
 

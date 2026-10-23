@@ -37,12 +37,12 @@ export function getVerilogDefinition(document: TextDocument, position: Position,
     case 'portConnection':
       return Location.create(resolved.targetSymbol?.uri ?? resolved.targetModule.uri, resolved.targetSymbol?.selectionRange ?? resolved.targetPort.selectionRange);
     case 'macro': {
-      const macro = resolved.macro ?? index.getMacro(resolved.name);
+      const macro = resolved.macro ?? index.getMacro(resolved.name, document.uri);
       if (!macro) {
         return undefined;
       }
-      return index.macroDefinitionLocations(macro.name)
-        .find((location) => rangesEqual(location.range, macro.selectionRange))
+      const owner = index.indexedFiles().find((file) => file.macros.includes(macro));
+      return (owner ? Location.create(owner.uri, macro.selectionRange) : undefined)
         ?? Location.create(document.uri, macro.selectionRange);
     }
     case 'include':
@@ -127,7 +127,7 @@ function collectModuleReferences(index: VerilogWorkspaceIndex, target: VerilogMo
   if (includeDeclaration) {
     locations.push(Location.create(target.uri, target.selectionRange));
   }
-  locations.push(...index.moduleReferenceLocations(target.name));
+  locations.push(...index.moduleReferenceLocations(target.name, target));
   return dedupeLocations(locations);
 }
 
@@ -137,14 +137,15 @@ function collectInterfaceConnectionReferences(
   name: string,
   listKind: VerilogConnectionListKind
 ): Location[] {
-  return [...index.interfaceConnectionLocations(targetModule.name, name, listKind)];
+  return [...index.interfaceConnectionLocations(targetModule.name, name, listKind, targetModule)];
 }
 
 function collectMacroReferences(index: VerilogWorkspaceIndex, name: string, macro: VerilogMacro | undefined, includeDeclaration: boolean, fallbackUri: string): Location[] {
   const locations: Location[] = [];
   if (includeDeclaration) {
+    const owner = macro && index.indexedFiles().find((file) => file.macros.includes(macro));
     const definitions = macro
-      ? index.macroDefinitionLocations(name).filter((location) => rangesEqual(location.range, macro.selectionRange))
+      ? owner ? [Location.create(owner.uri, macro.selectionRange)] : []
       : index.macroDefinitionLocations(name);
     if (macro && !definitions.length) {
       locations.push(Location.create(fallbackUri, macro.selectionRange));
@@ -152,7 +153,7 @@ function collectMacroReferences(index: VerilogWorkspaceIndex, name: string, macr
       locations.push(...definitions);
     }
   }
-  locations.push(...index.macroUseLocations(name));
+  if (macro) locations.push(...index.macroUseLocations(name, macro));
   return dedupeLocations(locations);
 }
 

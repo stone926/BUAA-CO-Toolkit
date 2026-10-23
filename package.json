@@ -823,6 +823,21 @@
             "order": 40,
             "default": "warning"
           },
+          "co.verilog.projects": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "description": "独立 Verilog 工程的源文件集合，例如 {\"P4\":[\"stone/p4\"],\"P7\":[\"stone/p7\"]}。每项是相对工作区的文件或目录（递归包含，不使用通配符）；可列共享源文件。空对象将每个工作区文件夹视为一个工程。同名定义有歧义时不会猜测跳转目标。",
+            "scope": "resource",
+            "order": 45,
+            "default": {}
+          },
           "co.verilog.syntax.external.mode": {
             "type": "string",
             "enum": [

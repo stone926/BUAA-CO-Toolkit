@@ -1,6 +1,7 @@
 // @index verilog-external-syntax-check — bundled Icarus syntax check
 import { Diagnostic, DiagnosticSeverity, Range, WorkspaceFolder } from 'vscode-languageserver/node';
 import { runIverilogSyntaxCheck } from './iverilogSyntaxCheck';
+import type { VerilogProjects } from './projectContext';
 
 export interface ExternalVerilogSyntaxCheckOptions {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
@@ -8,6 +9,7 @@ export interface ExternalVerilogSyntaxCheckOptions {
   extensionRoot: string | undefined;
   timeoutMs: number;
   signal?: AbortSignal;
+  projects?: VerilogProjects;
 }
 
 export interface ExternalVerilogSyntaxCheckResult {

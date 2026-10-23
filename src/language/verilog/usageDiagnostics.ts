@@ -22,6 +22,7 @@ import {
 } from './semanticModel';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { CoSettings } from '../common/settings';
+import { resolveInstanceTargetModule as resolveInstanceTarget } from './moduleResolution';
 
 interface UsageBuckets {
   reads: Range[];
@@ -171,9 +172,6 @@ function simpleConnectionTargetName(expression: string): string | undefined {
   return ast?.kind === 'identifier' ? ast.name : undefined;
 }
 
-function resolveInstanceTarget(index: VerilogWorkspaceIndex, localModules: VerilogModule[], instance: VerilogInstance): VerilogModule | undefined {
-  return index.getModule(instance.moduleName) ?? localModules.find((module) => module.name === instance.moduleName);
-}
 
 function shouldCheckParameterUsage(decl: VerilogDecl): boolean {
   return decl.kind === 'parameter' || decl.kind === 'localparam';

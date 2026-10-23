@@ -2,6 +2,7 @@
 import { isConcreteProjectProfile, ProjectProfile } from '../../projectProfile';
 import { getProfileDefaults } from '../../courseConfig';
 import { configDefault, configDefaultArray } from '../../configDefaults';
+import { normalizeVerilogProjects, VerilogProjects } from '../verilog/projectContext';
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
@@ -25,6 +26,7 @@ export interface CoSettings {
     warnMissingExitSyscall: boolean;
   };
   verilog: {
+    projects: VerilogProjects;
     syntax: {
       external: {
         mode: 'off' | 'onSave' | 'commandOnly';
@@ -62,6 +64,7 @@ export const defaultCoSettings: CoSettings = {
     warnMissingExitSyscall: configDefault<boolean>('mips.warnMissingExitSyscall')
   },
   verilog: {
+    projects: normalizeVerilogProjects(configDefault('verilog.projects')),
     syntax: {
       external: {
         mode: configDefault<'off' | 'onSave' | 'commandOnly'>('verilog.syntax.external.mode'),
@@ -98,6 +101,7 @@ export function mergeCoSettings(value: unknown): CoSettings {
       ...(candidate.mips ?? {})
     },
     verilog: {
+      projects: normalizeVerilogProjects(candidate.verilog?.projects),
       syntax: normalizeVerilogSyntax(candidate.verilog?.syntax),
       implicitNet: {
         ...defaultCoSettings.verilog.implicitNet,

@@ -45,7 +45,7 @@ export function getVerilogHover(document: TextDocument, position: Position, sett
       return markdownHover(connectionMarkdown(resolved), hoverRange);
     }
     case 'macro': {
-      const macroDef = resolved.macro ?? index.getMacro(resolved.name);
+      const macroDef = resolved.macro ?? index.getMacro(resolved.name, document.uri);
       const bodyMd = macroDef?.body ? `\n\n\`\`\`verilog\n${macroDef.body}\n\`\`\`` : '';
       return markdownHover(`Verilog 宏 \`${resolved.name}\`${bodyMd}`, hoverRange);
     }
