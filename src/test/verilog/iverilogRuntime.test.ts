@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { isDirectory, isFile } from '../../nodeFs';
 import { runProcessCore } from '../../processCore';
+import { runIverilogSyntaxCheck } from '../../language/verilog/iverilogSyntaxCheck';
 import {
   buildIverilogIncludeArgs,
   buildIverilogEnvironment,
@@ -20,6 +21,10 @@ vi.mock('../../nodeFs', () => ({
 
 vi.mock('../../processCore', () => ({
   runProcessCore: vi.fn()
+}));
+
+vi.mock('../../language/verilog/externalSyntaxProject', () => ({
+  resolveExternalSyntaxProject: async () => ({ root: 'E:/project', sources: ['E:/project/top.v'] })
 }));
 
 describe('bundled Icarus runtime', () => {
@@ -51,6 +56,8 @@ describe('bundled Icarus runtime', () => {
       stopped: false
     });
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it.each([
     ['win32', 'x64', 'win32-x64', 'iverilog.exe', 'vvp.exe'],
@@ -217,6 +224,93 @@ describe('bundled Icarus runtime', () => {
       version: 'Icarus Verilog 13.0'
     });
     expect(runProcessCore).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows a slow first launch to finish before publishing runtime availability', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runProcessCore).mockImplementationOnce(async (_command, _args, options) => {
+      const startupMs = 12_000;
+      const timedOut = options.timeoutMs !== undefined && options.timeoutMs < startupMs;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(options.timeoutMs ?? startupMs, startupMs)));
+      return {
+        ok: !timedOut, exitCode: timedOut ? null : 0, commandLine: '', cwd: '',
+        stdout: 'Icarus Verilog version 13.0', stderr: '', timedOut,
+        stopped: timedOut, stopReason: timedOut ? 'timeout' : undefined
+      };
+    });
+    const first = preflightIverilogRuntime('E:/slow-start-runtime-case');
+    const second = preflightIverilogRuntime('E:/slow-start-runtime-case');
+    const completed = Promise.allSettled([first, second]);
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await completed).toMatchObject([
+      { status: 'fulfilled', value: { version: 'Icarus Verilog 13.0' } },
+      { status: 'fulfilled', value: { version: 'Icarus Verilog 13.0' } }
+    ]);
+    expect(runProcessCore).toHaveBeenCalledTimes(1);
+    expect(await preflightIverilogRuntime('E:/slow-start-runtime-case')).toBe(await first);
+  });
+
+  it('keeps a short syntax-check timeout from reporting a healthy pending runtime as unavailable', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runProcessCore).mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return {
+        ok: true, exitCode: 0, commandLine: '', cwd: '',
+        stdout: 'Icarus Verilog version 13.0', stderr: '', timedOut: false, stopped: false
+      };
+    });
+    const options = {
+      workspaceFolders: null, triggerUri: 'file:///E:/project/top.v',
+      extensionRoot: 'E:/short-syntax-timeout-case', timeoutMs: 1000
+    };
+    const first = runIverilogSyntaxCheck(options);
+    await vi.advanceTimersByTimeAsync(3000);
+    const initial = await first;
+    const retried = await runIverilogSyntaxCheck(options);
+
+    expect(initial.toolchainError).toBeUndefined();
+    expect(initial.ok).toBe(true);
+    expect(retried.ok).toBe(true);
+    expect(vi.mocked(runProcessCore).mock.calls.filter(([, args]) => args.includes('-V'))).toHaveLength(1);
+    expect(vi.mocked(runProcessCore).mock.calls.filter(([, args]) => args.includes('-tnull'))
+      .map(([, , options]) => options.timeoutMs)).toEqual([1000, 1000]);
+  });
+
+  it('bounds a genuinely hung probe and allows the next operation to retry', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runProcessCore).mockImplementationOnce(async (_command, _args, options) => {
+      if (!options.timeoutMs) throw new Error('Runtime probe must have a process deadline');
+      await new Promise((resolve) => setTimeout(resolve, options.timeoutMs));
+      return {
+        ok: false, exitCode: null, commandLine: '', cwd: '', stdout: '', stderr: '',
+        timedOut: true, stopped: true, stopReason: 'timeout'
+      };
+    });
+    const completed = Promise.allSettled([preflightIverilogRuntime('E:/hung-runtime-case')]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await completed).toMatchObject([{
+      status: 'rejected', reason: {
+        code: 'preflight-failed', message: expect.stringContaining('预检超时'),
+        result: { timedOut: true, stopReason: 'timeout' }
+      }
+    }]);
+
+    await expect(preflightIverilogRuntime('E:/hung-runtime-case')).resolves.toMatchObject({
+      version: 'Icarus Verilog 13.0 (stable)'
+    });
+    expect(runProcessCore).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not launch a probe for a caller that was already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(preflightIverilogRuntime('E:/cancelled-before-start-case', {
+      signal: controller.signal
+    })).rejects.toMatchObject({ message: expect.stringContaining('预检已取消') });
+    expect(isFile).not.toHaveBeenCalled();
+    expect(runProcessCore).not.toHaveBeenCalled();
   });
 
   it('isolates caller cancellation while sharing one pending runtime probe', async () => {

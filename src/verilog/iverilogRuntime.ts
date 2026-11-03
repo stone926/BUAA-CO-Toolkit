@@ -45,7 +45,6 @@ export class IverilogRuntimeError extends Error {
 
 export interface IverilogPreflightOptions {
   signal?: AbortSignal;
-  timeoutMs?: number;
 }
 
 const bundledIverilogEnvironmentOverrides = new Set([
@@ -87,7 +86,9 @@ export function buildIverilogIncludeArgs(
 
 const preflightResultsByRoot = new Map<string, IverilogPreflightResult>();
 const pendingPreflightsByRoot = new Map<string, Promise<IverilogPreflightResult>>();
-const defaultPreflightTimeoutMs = 10_000;
+// Cold Windows launches can include DLL loading and executable scanning. Keep
+// one process deadline, independent of any caller's compilation timeout.
+const defaultPreflightTimeoutMs = 30_000;
 
 /** Map a host platform/architecture pair to its bundled runtime layout. */
 export function resolveIverilogRuntimeTarget(
@@ -171,12 +172,15 @@ export function buildIverilogEnvironment(
 /**
  * Validate the bundled layout and run `iverilog -V` once per extension root.
  * Failed probes are evicted so a later operation can retry. Concurrent callers
- * share the probe but keep independent wait cancellation and timeouts.
+ * share one process deadline but keep independent wait cancellation.
  */
 export async function preflightIverilogRuntime(
   extensionRoot: string,
   options: IverilogPreflightOptions = {}
 ): Promise<IverilogPreflightResult> {
+  if (options.signal?.aborted) {
+    throw preflightWaitError('预检已取消');
+  }
   const runtime = resolveIverilogRuntime(extensionRoot);
   const normalizedRoot = path.normalize(runtime.rootDir);
   const key = runtime.target === 'win32-x64'
@@ -234,7 +238,7 @@ async function performPreflight(
       ?? (result.stopReason === 'aborted'
       ? '预检已取消'
       : result.timedOut
-        ? '预检超时'
+        ? `预检超时（iverilog -V，等待 ${timeoutMs / 1000} 秒）`
         : firstNonEmptyLine(result.stderr) ?? `退出码 ${result.exitCode ?? 'unknown'}`);
     throw new IverilogRuntimeError(
       'preflight-failed',
@@ -259,19 +263,12 @@ async function waitForSharedPreflight(
   if (options.signal?.aborted) {
     throw preflightWaitError('预检已取消');
   }
-  const timeoutMs = options.timeoutMs && options.timeoutMs > 0
-    ? options.timeoutMs
-    : undefined;
-  if (!options.signal && timeoutMs === undefined) {
+  if (!options.signal) {
     return await pending;
   }
 
   return await new Promise<IverilogPreflightResult>((resolve, reject) => {
-    let timer: NodeJS.Timeout | undefined;
     const cleanup = (): void => {
-      if (timer) {
-        clearTimeout(timer);
-      }
       options.signal?.removeEventListener('abort', onAbort);
     };
     const onAbort = (): void => {
@@ -279,12 +276,6 @@ async function waitForSharedPreflight(
       reject(preflightWaitError('预检已取消'));
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
-    if (timeoutMs !== undefined) {
-      timer = setTimeout(() => {
-        cleanup();
-        reject(preflightWaitError('预检超时'));
-      }, timeoutMs);
-    }
     void pending.then(
       (result) => {
         cleanup();

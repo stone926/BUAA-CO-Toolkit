@@ -56,7 +56,7 @@ describe('automatic toolchain engine boundary', () => {
       }
     );
 
-    expect(mocks.preflightIverilogRuntime).toHaveBeenCalledWith('E:/extension', { timeoutMs: 10_000 });
+    expect(mocks.preflightIverilogRuntime).toHaveBeenCalledWith('E:/extension');
     expect(checks).toContainEqual(expect.objectContaining({
       name: 'Verilog simulator',
       ok: true,

@@ -109,8 +109,7 @@ describe('Icarus syntax checker', () => {
 
     expect(result.ok).toBe(true);
     expect(preflightIverilogRuntime).toHaveBeenCalledWith('C:/extension', {
-      signal: undefined,
-      timeoutMs: 5000
+      signal: undefined
     });
     expect(buildIverilogEnvironment).toHaveBeenCalledOnce();
     const [command, args, runOptions] = vi.mocked(runProcessCore).mock.calls[0];

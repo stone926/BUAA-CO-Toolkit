@@ -34,7 +34,7 @@
 ## Verilog / Icarus 运行时
 
 - `verilog.ts` — Verilog 命令入口；用户 TB 统一生成到 `.co/tb`（只创建不覆盖）
-- `verilog/iverilogRuntime.ts` — 纯 platform/arch 映射到 `vendor/iverilog/<target>`；为子进程前置 bundled bin 与 `-B <lib/ivl>`，清除可重定向 compiler config 的 `IVERILOG_ICONFIG`；Windows 走 manifest-only UTF-8 补丁以兼容中文路径
+- `verilog/iverilogRuntime.ts` — 纯 platform/arch 映射到 `vendor/iverilog/<target>`；为子进程前置 bundled bin 与 `-B <lib/ivl>`，清除可重定向 compiler config 的 `IVERILOG_ICONFIG`；Windows 走 manifest-only UTF-8 补丁以兼容中文路径。会话级共享预检单独使用 30 秒进程时限，不继承语法检查或仿真预算；调用方可独立取消等待，失败不缓存
 - `verilog/iverilogRunner.ts` — `-g2005 -t vvp` 编译 + bundled `vvp -N`；手动同工作区串行，自动测试独立 slot cwd/code.txt，内容相同的私有 TB 共享编译目录/镜像，短编译锁合并首次编译而 VVP 并发
 - `verilog/automaticCompilePool.ts` — 每工作区 8 个稳定共享编译目录，按私有 TB 内容分配；VVP 读租约阻止目录复用与同 TB 的源变化重编译覆盖，等待/取消可释放，空闲工作区池有界
 - `verilog/iverilogCompileCache.ts` / `verilog/iverilogCompileCacheIo.ts` — 每 workspace/runtime-directory 单条 content-verified 编译缓存（8-workspace LRU，每工作区最多 9 条），依赖闭包与 VVP 产物每次命中按内容复验，目录级失效互不驱逐

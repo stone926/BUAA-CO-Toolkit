@@ -71,7 +71,7 @@ export async function checkToolchain(
       });
     } else {
       try {
-        const preflight = await preflightIverilogRuntime(options.extensionRoot, { timeoutMs: 10_000 });
+        const preflight = await preflightIverilogRuntime(options.extensionRoot);
         checks.push({
           name: 'Verilog simulator',
           ok: true,
@@ -83,7 +83,9 @@ export async function checkToolchain(
           name: 'Verilog simulator',
           ok: false,
           detail,
-          suggestion: '请安装与当前平台匹配的扩展包；内置 Icarus 运行时缺失或不可执行'
+          suggestion: error instanceof IverilogRuntimeError && error.result?.timedOut
+            ? '内置 Icarus 启动超时，请稍后重试工具链检查'
+            : '请安装与当前平台匹配的扩展包；内置 Icarus 运行时缺失或不可执行'
         });
       }
     }

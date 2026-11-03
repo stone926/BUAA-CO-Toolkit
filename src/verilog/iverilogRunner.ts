@@ -284,8 +284,7 @@ export async function runIverilog(
   let preflight;
   try {
     preflight = await preflightIverilogRuntime(extensionRoot, {
-      signal: options.signal,
-      timeoutMs: nonInteractive ? automaticExternalToolTimeoutMs : undefined
+      signal: options.signal
     });
   } catch (error) {
     reportRunnerError(

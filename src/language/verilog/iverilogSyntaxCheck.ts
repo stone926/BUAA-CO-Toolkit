@@ -55,8 +55,7 @@ export async function runIverilogSyntaxCheck(
   let preflight;
   try {
     preflight = await preflightIverilogRuntime(extensionRoot, {
-      signal: options.signal,
-      timeoutMs: Math.min(timeoutMs, 10000)
+      signal: options.signal
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
