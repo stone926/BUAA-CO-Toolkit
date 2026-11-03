@@ -46,6 +46,6 @@ endmodule
       [],
       defaultCoSettings,
       index
-    ).some((action) => action.title === 'Add empty instance port list')).toBe(true);
+    ).some((action) => action.title === '添加空的实例端口列表')).toBe(true);
   });
 });

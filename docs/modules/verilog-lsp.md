@@ -56,7 +56,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `hover.ts` — 声明/表达式宽度、常量、实例参数、include 状态；说明文字用中文，不回显源码
 - `navigation.ts` — 跨文件 module/interface/macro/include 定义与引用
 - `rename.ts` — 基于引用 provider 生成 workspace edit；复用 lexer 校验名称，拒绝关键字、声明冲突和嵌套作用域引用捕获
-- `codeActions.ts` — 隐式连线声明、表达式折叠/抽取、实例连接补全
+- `codeActions.ts` — 隐式连线声明、表达式折叠/抽取、实例连接补全；标题统一中文，重复诊断产生的相同 wire 插入只保留一次，诊断禁用操作复用 common-lsp
 - `expressionContext.ts` — hover 与重构共用表达式定位和赋值上下文；通过类型化求值观察子节点，输出保留位宽/signed 的常量，无法证明上下文时不提供重写
 - `signatureHelp.ts` — 实例端口/参数签名帮助（不含 localparam）
 - `subroutineSignatureHelp.ts` — 按词法绑定的 function/task 调用签名，保留形参顺序、方向、类型、返回信息与未完成调用位置

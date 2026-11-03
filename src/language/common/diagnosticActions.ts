@@ -31,11 +31,11 @@ export function getDiagnosticSuppressActions(languageId: string, diagnostics: Di
     const fileKey = diagnosticFileCodeKey(languageId, code, documentUri);
     if (!settings.diagnostics.disabledFileCodes.includes(fileKey)) {
       actions.push({
-        title: `Suppress ${code} diagnostics in this file for this workspace`,
+        title: `对此文件禁用「${code}」检查`,
         kind: CodeActionKind.QuickFix,
         diagnostics: [diagnostic],
         command: Command.create(
-          `Suppress ${code} for file`,
+          `对此文件禁用「${code}」检查`,
           disableDiagnosticCodeCommand,
           languageId,
           code,
@@ -45,11 +45,11 @@ export function getDiagnosticSuppressActions(languageId: string, diagnostics: Di
       });
     }
     actions.push({
-      title: `Suppress ${code} diagnostics in this workspace`,
+      title: `对此工作区禁用「${code}」检查`,
       kind: CodeActionKind.QuickFix,
       diagnostics: [diagnostic],
       command: Command.create(
-        `Suppress ${code}`,
+        `对此工作区禁用「${code}」检查`,
         disableDiagnosticCodeCommand,
         languageId,
         code,

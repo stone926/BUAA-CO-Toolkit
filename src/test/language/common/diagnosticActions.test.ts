@@ -41,6 +41,23 @@ describe('diagnostic suppress actions', () => {
       ['verilog', 'width-mismatch', 'file', 'file:///work/cpu.v'],
       ['verilog', 'width-mismatch', 'workspace', 'file:///work/cpu.v']
     ]);
+    expect(actions.map((action) => action.title)).toEqual([
+      '对此文件禁用「missing-endmodule」检查',
+      '对此工作区禁用「missing-endmodule」检查',
+      '对此文件禁用「width-mismatch」检查',
+      '对此工作区禁用「width-mismatch」检查'
+    ]);
+    expect(actions.every((action) => action.command?.title === action.title)).toBe(true);
+  });
+
+  it.each([
+    { disabledCodes: ['verilog:width-mismatch'] },
+    { disabledFileCodes: ['verilog:width-mismatch@file:///work/cpu.v'] }
+  ])('does not offer fixes for an already suppressed diagnostic: %j', (diagnostics) => {
+    const settings = mergeCoSettings({ diagnostics });
+    const diagnostic = { range: Range.create(0, 0, 0, 1), message: 'width mismatch', code: 'width-mismatch' };
+
+    expect(getDiagnosticSuppressActions('verilog', [diagnostic], settings, 'file:///work/cpu.v')).toEqual([]);
   });
 
   it('filters disabled diagnostic codes by language', () => {

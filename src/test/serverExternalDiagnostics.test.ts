@@ -1,6 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CodeActionRequest,
   DidChangeConfigurationNotification,
   DidChangeTextDocumentNotification,
   DidOpenTextDocumentNotification,
@@ -9,6 +10,7 @@ import {
   InitializeRequest,
   PublishDiagnosticsNotification,
   type Connection,
+  type CodeAction,
   type Diagnostic,
   type ProtocolConnection,
   type PublishDiagnosticsParams
@@ -126,6 +128,35 @@ beforeEach(async () => {
     workspaceFolders: [{ uri: workspaceUri, name: 'diagnostic-lifecycle' }]
   });
   await configure();
+});
+
+describe('server diagnostic quick fixes', () => {
+  it.each([
+    ['width-mismatch', 'module a(input [31:0] x, output y, z); assign y = x; assign z = x; endmodule'],
+    ['port-width-mismatch', 'module child(input x); endmodule\nmodule a(input [31:0] x); child u1(.x(x)); child u2(.x(x)); endmodule']
+  ])('returns one Chinese suppression action per scope for repeated %s diagnostics', async (code, text) => {
+    await open(uriA, text);
+    const diagnostics = latestDiagnostics(uriA).filter((entry) => entry.code === code);
+    expect(diagnostics).toHaveLength(2);
+
+    const result = await client.sendRequest(CodeActionRequest.type, {
+      textDocument: { uri: uriA },
+      range: diagnostics[0].range,
+      context: { diagnostics: [...diagnostics, diagnostics[0]] }
+    });
+    const actions = (result ?? []).filter((action): action is CodeAction =>
+      typeof action.command === 'object' && action.command.command === Commands.Diagnostics.DisableCode);
+
+    expect(actions.map((action) => action.title)).toEqual([
+      `对此文件禁用「${code}」检查`,
+      `对此工作区禁用「${code}」检查`
+    ]);
+    expect(actions.map((action) => action.command?.arguments)).toEqual([
+      ['verilog', code, 'file', uriA],
+      ['verilog', code, 'workspace', uriA]
+    ]);
+    expect(actions.every((action) => action.command?.title === action.title)).toBe(true);
+  });
 });
 
 afterEach(() => {

@@ -20,18 +20,18 @@ export function getMipsCodeActions(document: TextDocument, diagnostics: Diagnost
   const mnemonic = pseudoDiagnostic.code.slice('pseudo-instruction:'.length);
   return [
     CodeAction.create(
-      `Ignore '${mnemonic}' pseudo-instruction warnings until reload`,
-      Command.create(`Ignore ${mnemonic}`, mipsIgnorePseudoMnemonicCommand, mnemonic),
+      `忽略伪指令「${mnemonic}」的警告，直到重新加载窗口`,
+      Command.create(`忽略伪指令「${mnemonic}」的警告，直到重新加载窗口`, mipsIgnorePseudoMnemonicCommand, mnemonic),
       CodeActionKind.QuickFix
     ),
     CodeAction.create(
-      'Ignore pseudo-instruction warnings in this file until reload',
-      Command.create('Ignore pseudo warnings for file', mipsIgnorePseudoFileCommand, document.uri),
+      '忽略此文件中的伪指令警告，直到重新加载窗口',
+      Command.create('忽略此文件中的伪指令警告，直到重新加载窗口', mipsIgnorePseudoFileCommand, document.uri),
       CodeActionKind.QuickFix
     ),
     CodeAction.create(
-      'Disable pseudo-instruction warnings in this workspace',
-      Command.create('Disable pseudo warnings', Commands.Mips.DisablePseudoWarnings, document.uri),
+      '在此工作区禁用伪指令警告',
+      Command.create('在此工作区禁用伪指令警告', Commands.Mips.DisablePseudoWarnings, document.uri),
       CodeActionKind.QuickFix
     )
   ];

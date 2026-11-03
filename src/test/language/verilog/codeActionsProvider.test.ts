@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Range } from 'vscode-languageserver/node';
+import { Diagnostic, Range } from 'vscode-languageserver/node';
 import { defaultCoSettings } from '../../../language/common/settings';
 import { getVerilogCodeActions } from '../../../language/verilog/service';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
@@ -37,7 +37,7 @@ module top;
 endmodule
 `.trim());
 
-    expect(actionTitlesAt(document, 'u_child')).toContain('Add empty instance port list');
+    expect(actionTitlesAt(document, 'u_child')).toContain('添加空的实例端口列表');
   });
 
   it('offers an explicit empty connection expansion for shorthand ports', () => {
@@ -48,7 +48,7 @@ module top(input a, output y);
     child u_child(.a, .b(y));
 endmodule
 `.trim());
-    const action = actionAt(document, '.a', 'Add explicit empty port connection .a()');
+    const action = actionAt(document, '.a', '显式添加空端口连接 .a()');
 
     expect(action?.edit?.changes?.[document.uri]?.[0].newText).toBe('.a()');
   });
@@ -64,7 +64,7 @@ module top(input a, output y);
     );
 endmodule
 `.trim());
-    const action = actionAt(document, 'u_ordered', 'Convert ordered port connections to named connections');
+    const action = actionAt(document, 'u_ordered', '将位置端口连接转换为命名连接');
     const replacement = action?.edit?.changes?.[document.uri]?.[0].newText ?? '';
 
     expect(replacement).toContain('\n        .din(a),\n        .dout(y)\n    ');
@@ -81,7 +81,7 @@ module top(input [7:0] a);
     child #(8) u_ordered(.din(a));
 endmodule
 `.trim());
-    const action = actionAt(document, 'u_ordered', 'Convert ordered parameter assignments to named assignments');
+    const action = actionAt(document, 'u_ordered', '将位置参数赋值转换为命名赋值');
 
     expect(action?.edit?.changes?.[document.uri]?.[0].newText).toContain('.W(8)');
   });
@@ -94,9 +94,32 @@ endmodule
 `.trim());
 
     expect(actionTitlesAt(document, 'wire')).not.toEqual(expect.arrayContaining([
-      'Add empty instance port list',
-      'Fill connections',
-      'Convert ordered port connections to named connections'
+      '添加空的实例端口列表',
+      '补全端口连接',
+      '将位置端口连接转换为命名连接'
     ]));
+  });
+});
+
+describe('Verilog diagnostic code actions', () => {
+  it('deduplicates identical wire insertions while preserving fixes at different positions', () => {
+    const document = verilogDoc('module top(a, b);\ninput a;\ninput b;\nendmodule');
+    const diagnostics: Diagnostic[] = [1, 1, 2].map((line) => ({
+      code: 'explicit-port-wire',
+      message: 'port needs explicit wire',
+      range: Range.create(line, 0, line, 5)
+    }));
+    const actions = getVerilogCodeActions(document, diagnostics[0].range, diagnostics, defaultCoSettings, new VerilogWorkspaceIndex());
+    const edits = actions.flatMap((action) => action.edit?.changes?.[document.uri] ?? []);
+
+    expect(actions.map((action) => action.title)).toEqual([
+      '在端口声明中显式添加 wire',
+      '在端口声明中显式添加 wire'
+    ]);
+    expect(edits.map((edit) => edit.range.start)).toEqual([
+      { line: 1, character: 5 },
+      { line: 2, character: 5 }
+    ]);
+    expect(edits.every((edit) => edit.newText === ' wire')).toBe(true);
   });
 });

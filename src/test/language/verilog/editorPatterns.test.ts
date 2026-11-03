@@ -50,7 +50,7 @@ endmodule`);
     const definition = getVerilogDefinition(document, positionOf(document, 'data +'), settings, index);
     expect(definition?.range).toEqual(parsed.modules[0].ports[0].selectionRange);
     const actions = getVerilogCodeActions(document, rangeOf(document, '+'), [], settings, index);
-    expect(actions.some((action) => action.title === 'Extract expression to wire EXPR_WIRE')).toBe(true);
+    expect(actions.some((action) => action.title === '将表达式提取为 wire EXPR_WIRE')).toBe(true);
   });
 
   it('does not absorb a healthy module after a missing endmodule or closing delimiter', () => {
@@ -179,7 +179,7 @@ endmodule`);
   it('preserves signedness when converting integer literals', () => {
     const document = verilogDoc("module sample; localparam VALUE = 8'shff; endmodule");
     const actions = getVerilogCodeActions(document, rangeOf(document, "8'shff"), [], settings, new VerilogWorkspaceIndex());
-    const action = actions.find((item) => item.title === 'Convert literal to decimal');
+    const action = actions.find((item) => item.title === '将数值字面量转换为十进制');
     expect(action?.edit?.changes?.[document.uri]?.[0].newText).toBe("8'sd255");
   });
 

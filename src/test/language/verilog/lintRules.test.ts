@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DiagnosticSeverity, Range } from 'vscode-languageserver/node';
+import { Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { mergeCoSettings } from '../../../language/common/settings';
 import { getVerilogCodeActions, getVerilogDiagnostics } from '../../../language/verilog/service';
@@ -57,12 +57,11 @@ endmodule`;
     expect(actions.some((action) => action.title === 'Add default case item' || action.command?.command === 'co.verilog.disableLintRule')).toBe(false);
   });
 
-  it('keeps width suppression scope explicit while targeting the diagnostic document root', () => {
+  it('leaves width suppression actions to the shared diagnostic provider', () => {
     const document = doc('module demo; endmodule');
     const diagnostic = {
       range: Range.create(0, 0, 0, 6),
       message: 'width mismatch',
-      severity: DiagnosticSeverity.Warning,
       code: 'width-mismatch'
     };
 
@@ -74,10 +73,7 @@ endmodule`;
       new VerilogWorkspaceIndex()
     ).filter((action) => action.command?.command === 'co.diagnostics.disableCode');
 
-    expect(actions.map((action) => action.command?.arguments)).toEqual([
-      ['verilog', 'width-mismatch', 'file', document.uri],
-      ['verilog', 'width-mismatch', 'workspace', document.uri]
-    ]);
+    expect(actions).toEqual([]);
   });
 
   it('recognizes common delayed testbench clock generation forms', () => {
@@ -252,7 +248,7 @@ endmodule
     expect(explicitWire).toBeDefined();
 
     const actions = getVerilogCodeActions(document, explicitWire!.range, [explicitWire!], settings, new VerilogWorkspaceIndex());
-    const action = actions.find((candidate) => candidate.title === 'Add explicit wire to port declaration');
+    const action = actions.find((candidate) => candidate.title === '在端口声明中显式添加 wire');
     const edit = action?.edit?.changes?.[document.uri]?.[0];
     expect(edit?.newText).toBe(' wire');
     expect(edit?.range.start).toEqual(explicitWire!.range.end);
@@ -271,7 +267,7 @@ endmodule
     expect(implicit).toBeDefined();
 
     const actions = getVerilogCodeActions(document, implicit!.range, [implicit!], settings, new VerilogWorkspaceIndex());
-    const action = actions.find((candidate) => candidate.title === 'Declare wire missing');
+    const action = actions.find((candidate) => candidate.title === '声明 wire missing');
     const edit = action?.edit?.changes?.[document.uri]?.[0];
     expect(edit?.newText).toBe('    wire missing;\n');
     expect(edit?.range.start).toEqual({ line: 1, character: 0 });

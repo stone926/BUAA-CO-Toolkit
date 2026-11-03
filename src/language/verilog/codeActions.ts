@@ -2,16 +2,15 @@
 import {
   CodeAction,
   CodeActionKind,
-  Command,
   Diagnostic,
   Position,
   Range,
   TextEdit
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Commands } from '../../constants';
 import { containsPosition, lineAt } from '../common/lsp';
 import { CoSettings } from '../common/settings';
+import { rangeKey } from '../common/util';
 import { VerilogWorkspaceIndex } from './workspaceIndex';
 import { VerilogDecl, VerilogInstance, VerilogModule, VerilogPortConnection } from './model';
 import { moduleAtPosition } from './parser';
@@ -39,20 +38,26 @@ export function getVerilogCodeActions(document: TextDocument, range: Range, diag
   }
 
   const explicitWireDiagnostics = diagnostics.filter((diagnostic) => diagnostic.code === 'explicit-port-wire');
+  const seenWireEdits = new Set<string>();
   for (const diagnostic of explicitWireDiagnostics) {
+    const edit = TextEdit.insert(diagnostic.range.end, ' wire');
+    const key = rangeKey(edit.range);
+    if (seenWireEdits.has(key)) {
+      continue;
+    }
+    seenWireEdits.add(key);
     actions.push({
-      title: 'Add explicit wire to port declaration',
+      title: '在端口声明中显式添加 wire',
       kind: CodeActionKind.QuickFix,
       diagnostics: [diagnostic],
       edit: {
         changes: {
-          [document.uri]: [TextEdit.insert(diagnostic.range.end, ' wire')]
+          [document.uri]: [edit]
         }
       }
     });
   }
 
-  actions.push(...getWidthMismatchCodeActions(document, diagnostics, settings));
   actions.push(...getInstanceCodeActions(document, range, settings, index));
   actions.push(...getVerilogExpressionCodeActions(document, range, settings));
   actions.push(...getVerilogLiteralCodeActions(document, range));
@@ -98,7 +103,7 @@ function makeFoldConstantExpressionAction(document: TextDocument, context: Veril
     return undefined;
   }
   return {
-    title: `Fold constant expression to ${value}`,
+    title: `将常量表达式折叠为 ${value}`,
     kind: CodeActionKind.RefactorRewrite,
     edit: {
       changes: {
@@ -139,7 +144,7 @@ function makeExtractConstantLocalparamAction(
     `${indent}localparam ${name} = ${preservesContext ? source : constantLiteral(typed)};\n`
   );
   return {
-    title: `Extract constant expression to localparam ${name}`,
+    title: `将常量表达式提取为 localparam ${name}`,
     kind: CodeActionKind.RefactorExtract,
     edit: {
       changes: {
@@ -187,7 +192,7 @@ function makeExtractWireAction(
     `${indent}wire ${wireRangeText(width)}${name};\n${indent}assign ${name} = ${source};\n`
   );
   return {
-    title: `Extract expression to wire ${name}`,
+    title: `将表达式提取为 wire ${name}`,
     kind: CodeActionKind.RefactorExtract,
     edit: {
       changes: {
@@ -223,7 +228,7 @@ function makeRemoveRedundantParenthesesAction(
     return undefined;
   }
   return {
-    title: 'Remove redundant parentheses',
+    title: '移除多余括号',
     kind: CodeActionKind.RefactorRewrite,
     edit: {
       changes: {
@@ -294,51 +299,9 @@ function expressionSize(expression: VerilogExpressionAst): number {
   return expression.end - expression.start;
 }
 
-function getWidthMismatchCodeActions(document: TextDocument, diagnostics: Diagnostic[], settings: CoSettings): CodeAction[] {
-  const actions: CodeAction[] = [];
-  const codes = new Set(['width-mismatch', 'port-width-mismatch']);
-  const seen = new Set<string>();
-  for (const diagnostic of diagnostics) {
-    const code = typeof diagnostic.code === 'string' ? diagnostic.code : undefined;
-    if (!code || !codes.has(code) || seen.has(code)) {
-      continue;
-    }
-    seen.add(code);
-    // 对此文件禁用
-    actions.push({
-      title: `对此文件禁用「${code}」检查`,
-      kind: CodeActionKind.QuickFix,
-      diagnostics: [diagnostic],
-      command: Command.create(
-        `对此文件禁用 ${code}`,
-        Commands.Diagnostics.DisableCode,
-        document.languageId,
-        code,
-        'file',
-        document.uri
-      )
-    });
-    // 对此工作区禁用
-    actions.push({
-      title: `对此工作区禁用「${code}」检查`,
-      kind: CodeActionKind.QuickFix,
-      diagnostics: [diagnostic],
-      command: Command.create(
-        `对此工作区禁用 ${code}`,
-        Commands.Diagnostics.DisableCode,
-        document.languageId,
-        code,
-        'workspace',
-        document.uri
-      )
-    });
-  }
-  return actions;
-}
-
 function makeDeclareWireAction(document: TextDocument, module: VerilogModule, name: string): CodeAction {
   return {
-    title: `Declare wire ${name}`,
+    title: `声明 wire ${name}`,
     kind: CodeActionKind.QuickFix,
     edit: {
       changes: {
@@ -369,7 +332,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
 
   if (!instance.portListRange) {
     actions.push({
-      title: 'Add empty instance port list',
+      title: '添加空的实例端口列表',
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
@@ -384,7 +347,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
       continue;
     }
     actions.push({
-      title: `Add explicit empty port connection .${connection.name}()`,
+      title: `显式添加空端口连接 .${connection.name}()`,
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
@@ -404,7 +367,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
   const missingPorts = target.ports.filter((port) => !namedPorts.has(port.name));
   if (target.ports.length && missingPorts.length && !hasOrderedPortConnections && (instance.portListRange || !instance.portConnections.length)) {
     actions.push({
-      title: 'Fill connections',
+      title: '补全端口连接',
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
@@ -420,7 +383,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
   const missingParams = targetParams.filter((param) => !namedParams.has(param.name));
   if (targetParams.length && missingParams.length && !hasOrderedParameterConnections) {
     actions.push({
-      title: 'Fill parameters',
+      title: '补全参数赋值',
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
@@ -432,7 +395,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
 
   if (instance.portListRange && instance.portConnections.some((connection) => !connection.name)) {
     actions.push({
-      title: 'Convert ordered port connections to named connections',
+      title: '将位置端口连接转换为命名连接',
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
@@ -444,7 +407,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
 
   if (instance.parameterListRange && instance.parameterConnections.some((connection) => !connection.name)) {
     actions.push({
-      title: 'Convert ordered parameter assignments to named assignments',
+      title: '将位置参数赋值转换为命名赋值',
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {
@@ -457,7 +420,7 @@ function getInstanceCodeActions(document: TextDocument, range: Range, settings: 
   const emptyConnections = instance.portConnections.filter((connection) => connection.name && connection.expression.trim() === '');
   if (instance.portListRange && emptyConnections.length) {
     actions.push({
-      title: 'Remove empty port connections',
+      title: '移除空端口连接',
       kind: CodeActionKind.RefactorRewrite,
       edit: {
         changes: {

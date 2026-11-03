@@ -3,7 +3,7 @@
 各语言共用的 LSP 基础设施：配置合并、诊断过滤与快速修复、位置/语义 token 辅助、解析缓存。
 
 - `settings.ts` — `CoSettings` 接口、默认值与 `mergeCoSettings`；诊断禁用键解析
-- `diagnosticActions.ts` — 诊断过滤（按 code / 按文件 code）与 QuickFix 生成
+- `diagnosticActions.ts` — 诊断过滤（按 code / 按文件 code）与统一的中文诊断禁用 QuickFix；同一 code 每个作用域只生成一条，各语言 provider 不重复生成
 - `lsp.ts` — Position/Range 辅助（`lineAt`、`containsPosition`、`rangesEqual`、`makeDiagnostic` 等）
 - `semanticTokens.ts` — `SemanticTokenCollector`：单行边界校验、去重、排序、重叠保护与 LSP 相对位置编码
 - `util.ts` — `rangeKey`（去重键）、`escapeRegExp`、`escapeHtml`、`createMipsTokenRegex`

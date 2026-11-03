@@ -171,7 +171,7 @@ endmodule
 `.trim();
     const document = doc(text);
     const actions = codeActionsAt(document, '*');
-    const fold = actions.find((action) => action.title === 'Fold constant expression to 10');
+    const fold = actions.find((action) => action.title === '将常量表达式折叠为 10');
 
     expect(fold?.kind).toBe('refactor.rewrite');
     expect(fold?.edit?.changes?.[document.uri]?.[0].newText).toBe('10');
@@ -186,7 +186,7 @@ endmodule
 `.trim();
     const document = doc(text);
     const actions = codeActionsAt(document, '*');
-    const extract = actions.find((action) => action.title === 'Extract constant expression to localparam EXPR_CONST');
+    const extract = actions.find((action) => action.title === '将常量表达式提取为 localparam EXPR_CONST');
     const edits = extract?.edit?.changes?.[document.uri] ?? [];
 
     expect(extract?.kind).toBe('refactor.extract');
@@ -204,7 +204,7 @@ endmodule
 `.trim();
     const document = doc(text);
     const actions = codeActionsAt(document, '*');
-    const extract = actions.find((action) => action.title === 'Extract constant expression to localparam EXPR_CONST_1');
+    const extract = actions.find((action) => action.title === '将常量表达式提取为 localparam EXPR_CONST_1');
     const edits = extract?.edit?.changes?.[document.uri] ?? [];
 
     expect(edits.some((edit) => edit.newText === '    localparam EXPR_CONST_1 = (WIDTH + 1) * 2;\n')).toBe(true);
@@ -219,7 +219,7 @@ endmodule
 `.trim();
     const document = doc(text);
     const actions = codeActionsAt(document, '+');
-    const extract = actions.find((action) => action.title === 'Extract expression to wire EXPR_WIRE');
+    const extract = actions.find((action) => action.title === '将表达式提取为 wire EXPR_WIRE');
     const edits = extract?.edit?.changes?.[document.uri] ?? [];
 
     expect(extract?.kind).toBe('refactor.extract');
@@ -236,7 +236,7 @@ endmodule
 `.trim();
     const document = doc(text);
     const actions = codeActionsAt(document, '+');
-    const extract = actions.find((action) => action.title === 'Extract expression to wire EXPR_WIRE_1');
+    const extract = actions.find((action) => action.title === '将表达式提取为 wire EXPR_WIRE_1');
     const edits = extract?.edit?.changes?.[document.uri] ?? [];
 
     expect(edits.some((edit) => edit.newText === '    wire [7:0] EXPR_WIRE_1;\n    assign EXPR_WIRE_1 = a + b;\n')).toBe(true);
@@ -253,7 +253,7 @@ endmodule
     const document = doc(text);
     const actions = codeActionsAt(document, '*');
 
-    expect(actions.map((action) => action.title)).not.toContain('Extract expression to wire EXPR_WIRE');
+    expect(actions.map((action) => action.title)).not.toContain('将表达式提取为 wire EXPR_WIRE');
   });
 
   it('offers a safe redundant parentheses code action', () => {
@@ -264,7 +264,7 @@ endmodule
 `.trim();
     const document = doc(text);
     const actions = codeActionsAt(document, '(a)');
-    const remove = actions.find((action) => action.title === 'Remove redundant parentheses');
+    const remove = actions.find((action) => action.title === '移除多余括号');
 
     expect(remove?.kind).toBe('refactor.rewrite');
     expect(remove?.edit?.changes?.[document.uri]?.[0].newText).toBe('a');
@@ -279,6 +279,6 @@ endmodule
     const document = doc(text);
     const actions = codeActionsAt(document, '(a + b)');
 
-    expect(actions.map((action) => action.title)).not.toContain('Remove redundant parentheses');
+    expect(actions.map((action) => action.title)).not.toContain('移除多余括号');
   });
 });

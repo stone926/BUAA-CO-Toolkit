@@ -23,10 +23,10 @@ export function getVerilogLiteralCodeActions(document: TextDocument, range: Rang
     return [];
   }
   const bases: Array<{ base: NumericLiteralInfo['base']; title: string }> = [
-    { base: 'b', title: 'Convert literal to binary' },
-    { base: 'o', title: 'Convert literal to octal' },
-    { base: 'd', title: 'Convert literal to decimal' },
-    { base: 'h', title: 'Convert literal to hexadecimal' }
+    { base: 'b', title: '将数值字面量转换为二进制' },
+    { base: 'o', title: '将数值字面量转换为八进制' },
+    { base: 'd', title: '将数值字面量转换为十进制' },
+    { base: 'h', title: '将数值字面量转换为十六进制' }
   ];
   return bases.map((item) => ({
     title: item.title,

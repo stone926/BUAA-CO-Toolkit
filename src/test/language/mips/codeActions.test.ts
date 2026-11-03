@@ -16,5 +16,11 @@ describe('MIPS code actions', () => {
 
     const disableAction = actions.find((action) => action.command?.command === Commands.Mips.DisablePseudoWarnings);
     expect(disableAction?.command?.arguments).toEqual([document.uri]);
+    expect(actions.map((action) => action.title)).toEqual([
+      '忽略伪指令「move」的警告，直到重新加载窗口',
+      '忽略此文件中的伪指令警告，直到重新加载窗口',
+      '在此工作区禁用伪指令警告'
+    ]);
+    expect(actions.every((action) => action.command?.title === action.title)).toBe(true);
   });
 });
