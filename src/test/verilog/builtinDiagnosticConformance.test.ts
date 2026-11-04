@@ -39,6 +39,12 @@ const fixtures: Fixture[] = [
   { name: 'runtime system function in parameter', code: 'nonconstant-expression',
     bad: 'module m; localparam P=[|$random()|]; endmodule',
     good: 'module m; localparam P=$pow(2,3); wire [P:0] a; endmodule' },
+  { name: 'bare random system function in parameter', code: 'nonconstant-expression',
+    bad: 'module m; localparam P=[|$random|]; endmodule',
+    good: 'module m; integer value; initial value=$random; endmodule' },
+  { name: 'bare time system function in parameter', code: 'nonconstant-expression',
+    bad: 'module m; localparam P=[|$time|]; endmodule',
+    good: 'module m; time value; initial value=$time; endmodule' },
   { name: 'required if condition', code: 'syntax-malformed-if',
     bad: 'module m; reg a; initial if([|)|] a=0; endmodule',
     good: 'module m; reg a; initial if(1) a=0; endmodule' },
@@ -144,6 +150,12 @@ const fixtures: Fixture[] = [
 ];
 
 const legalRegressions = [
+  ['system control tasks without parentheses', 'module m; initial begin #20; $dumpall; $dumpflush; $dumpon; $dumpoff; $monitoron; $monitoroff; $stop; $finish; end endmodule'],
+  ['system control tasks with arguments', 'module m; initial begin $finish(0); $stop(1); $dumpvars(0,m); end endmodule'],
+  ['bare system functions in expressions', 'module m; time value; integer count; real seconds; initial begin value=$time; count=$stime+$random; seconds=$realtime; $display("%t %d %f", value, count, seconds); end endmodule'],
+  ['file and math system calls', 'module m; integer fd, status, value; real root; reg [7:0] memory[0:7]; initial begin fd=$fopen("data.txt","r"); status=$fscanf(fd,"%d",value); root=$sqrt(4.0); $fclose(fd); $readmemh("rom.txt",memory); $strobe("%d",value); end endmodule'],
+  ['system function names containing embedded dollar signs', 'module m; integer value; initial if($test$plusargs("mode")) value=$value$plusargs("value=%d",value); endmodule'],
+  ['escaped dollar names are user symbols', 'module m; integer \\$time ; task \\$finish ; begin end endtask initial begin \\$time =1; $display("%d", \\$time ); \\$finish ; end endmodule'],
   ['named function body sharing its return name', 'module m; function f(input a); begin:f f=a; end endfunction endmodule'],
   ['ANSI function', 'module m(input a,output y); function f(input x,input z); f=x&z; endfunction assign y=f(a,a); endmodule'],
   ['ANSI integer function', 'module m(input a,output y); function integer f(input integer x,input integer z); f=x&z; endfunction assign y=f(a,a); endmodule'],

@@ -2,7 +2,7 @@
 import { Diagnostic, DiagnosticSeverity, Position, Range } from 'vscode-languageserver/node';
 import { makeDiagnostic } from '../common/lsp';
 import { CoSettings } from '../common/settings';
-import { systemTasks, VerilogModule, verilogKeywords } from './model';
+import { VerilogModule, verilogKeywords } from './model';
 import { safeRegExp } from './textUtils';
 import type { VerilogSemanticModel } from './semanticModel';
 import type { VerilogExpressionAst } from './exprAst';
@@ -29,9 +29,7 @@ export function collectImplicitNetDiagnostics(
   for (const reference of semantic.unresolvedReferences) {
     if (
       verilogKeywords.has(reference.name) ||
-      systemTasks.has(reference.name) ||
       isMacroReferenceName(reference.name) ||
-      isSystemTaskReferenceName(reference.name) ||
       ignorePatterns.some((pattern) => pattern.test(reference.name))
     ) {
       continue;
@@ -47,10 +45,6 @@ export function collectImplicitNetDiagnostics(
 
 function isMacroReferenceName(name: string): boolean {
   return name.startsWith('`') && name.length > 1;
-}
-
-function isSystemTaskReferenceName(name: string): boolean {
-  return name.startsWith('$') && systemTasks.has(name.slice(1));
 }
 
 export function collectExplicitPortNetTypeDiagnostics(

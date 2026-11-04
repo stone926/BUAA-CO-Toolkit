@@ -183,7 +183,7 @@ export function getVerilogCompletions(
     items.push({
       label: `$${task}`,
       kind: CompletionItemKind.Function,
-      detail: 'Verilog system task'
+      detail: 'Verilog system task/function'
     });
   }
 

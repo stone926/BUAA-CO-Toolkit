@@ -11,7 +11,7 @@ import { isVerilogGatePrimitive } from './gatePrimitives';
 import { instanceDeclaratorPortIndex, splitInstanceTokenGroup } from './instanceSyntax';
 import { stripDriveStrength } from './driveStrength';
 import { isIdentifierLike, VerilogToken } from './lexer';
-import { systemTasks, VerilogModule, verilogKeywords } from './model';
+import { VerilogModule, verilogKeywords } from './model';
 import {
   verilogDeclarationKeywords,
   verilogDeclarationModifiers,
@@ -1055,7 +1055,7 @@ function validateEventControl(
     return atIndex + 2;
   }
   const rawContent = tokens.slice(atIndex + 2, close);
-  const content = rawContent.filter((token) => token.value === '*' || isExpressionToken(token));
+  const content = rawContent.filter((token) => token.value === '*' || isExpressionOperandToken(token));
   if (content.length === 0) {
     diagnostics.push(makeDiagnostic(
       tokenRange(document, next),
@@ -1523,19 +1523,8 @@ function previousToken(tokens: VerilogToken[], index: number): VerilogToken | un
   return undefined;
 }
 
-function isExpressionToken(token: VerilogToken): boolean {
-  if (token.kind === 'eof') {
-    return false;
-  }
-  if (token.kind === 'systemIdentifier') {
-    const name = token.value.startsWith('$') ? token.value.slice(1) : token.value;
-    return !systemTasks.has(name);
-  }
-  return token.kind === 'identifier' || token.kind === 'number' || token.kind === 'string' || token.kind === 'directive';
-}
-
 function isExpressionOperandToken(token: VerilogToken): boolean {
-  return token.kind === 'systemIdentifier' || isExpressionToken(token);
+  return token.kind === 'systemIdentifier' || token.kind === 'identifier' || token.kind === 'number' || token.kind === 'string' || token.kind === 'directive';
 }
 
 function tokenRange(document: TextDocument, token: VerilogToken): Range {

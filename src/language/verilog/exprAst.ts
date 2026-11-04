@@ -461,6 +461,18 @@ class ExpressionParser {
       if (this.peek()?.value === '(') {
         return this.parseCall(token);
       }
+      // System calls may omit parentheses when they have no arguments. Keep
+      // their identity independent of the completion catalog, including VPI calls.
+      if (token.kind === 'systemIdentifier') {
+        return {
+          kind: 'callExpression',
+          callee: token.value,
+          system: true,
+          args: [],
+          start: token.start,
+          end: token.end
+        };
+      }
       return {
         kind: 'identifier',
         name: token.value,

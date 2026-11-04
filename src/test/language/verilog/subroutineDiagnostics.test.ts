@@ -6,6 +6,8 @@ import { mergeCoSettings } from '../../../language/common/settings';
 import { getVerilogDiagnostics } from '../../../language/verilog/service';
 import { parseVerilogCore } from '../../../language/verilog/parseCore';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
+import { parseVerilogExpression } from '../../../language/verilog/exprAst';
+import { classifyExpressionConstant } from '../../../language/verilog/expressions';
 
 const settings = mergeCoSettings({ verilog: { lint: { courseRules: false } } });
 let version = 1;
@@ -25,6 +27,51 @@ function expectError(source: string, code: string, selected: string, occurrence 
 }
 
 describe('bound Verilog subroutine diagnostics', () => {
+  it.each(['$finish', '$stop', '$dumpall', '$dumpflush', '$dumpon', '$dumpoff', '$monitoron', '$monitoroff', '$vendor_task'])
+  ('accepts system tasks with and without parentheses: %s', (name) => {
+    for (const call of [name, `${name}()`]) {
+      const source = `module m; initial begin #20; ${call}; end endmodule`;
+      expect(check(source).diagnostics).toEqual([]);
+    }
+  });
+  it.each(['$time', '$stime', '$realtime', '$random', '$vendor_function'])
+  ('models a bare system function as the same call as %s()', (name) => {
+    expect(parseVerilogExpression(name)).toEqual({ kind: 'callExpression', callee: name, system: true, args: [], start: 0, end: name.length });
+    const source = `module m; real value; initial value=${name}; endmodule`;
+    expect(check(source).diagnostics).toEqual([]);
+  });
+  it.each(['$time', '$stime', '$realtime', '$random'])('rejects bare runtime %s in a constant context', (name) => {
+    expect(classifyExpressionConstant(parseVerilogExpression(name))).toBe('nonConstant');
+    expectError(`module m; localparam P=${name}; endmodule`, 'nonconstant-expression', name);
+  });
+  it('preserves system call arguments as ordinary symbol references', () => {
+    const source = 'module m(input a); initial begin $display("%d %d", $time, a); $readmemh("rom.txt", missing); $vendor_task(missing2); end endmodule';
+    const { diagnostics } = check(source);
+    expect(diagnostics.map((issue) => issue.code).sort()).toEqual(['implicit-net:missing', 'implicit-net:missing2']);
+    const document = TextDocument.create('test://system-arguments.v', 'verilog', 1, source);
+    const parsed = parseVerilogCore(document);
+    expect(parsed.semantic.references.filter((reference) => reference.name.startsWith('$')).map((reference) => reference.name)).toEqual([]);
+    expect(parsed.semantic.references.filter((reference) => ['a', 'missing', 'missing2'].includes(reference.name)).map((reference) => reference.name)).toEqual(['a', 'missing', 'missing2']);
+  });
+  it.each(['finish', 'display', 'random', 'sin', 'fopen'])('still diagnoses an undeclared ordinary identifier named %s', (name) => {
+    expect(check(`module m; initial $display("%d", ${name}); endmodule`).diagnostics.map((issue) => issue.code)).toContain(`implicit-net:${name}`);
+    expectError(`module m; initial ${name}; endmodule`, 'unknown-subroutine', name);
+    expect(check(`module m; integer ${name}; initial $display("%d", ${name}); endmodule`).diagnostics).toEqual([]);
+  });
+  it.each(['$time', '$stime', '$realtime', '$random', '$vendor_function'])('accepts %s as an event expression', (name) => {
+    expect(check(`module m; initial @(${name}) $finish; endmodule`).diagnostics).toEqual([]);
+  });
+  it('retains syntax diagnostics inside incomplete system calls', () => {
+    const result = check('module m; integer value; initial value=$signed(1 + ); endmodule').diagnostics;
+    expect(result.some((issue) => String(issue.code).startsWith('syntax-'))).toBe(true);
+    expect(result.some((issue) => issue.code === 'unknown-subroutine')).toBe(false);
+  });
+  it('binds escaped identifiers containing a leading dollar as user symbols', () => {
+    const source = 'module m; integer \\$time ; task \\$finish ; begin end endtask initial begin \\$time = 1; $display("%d", \\$time ); \\$finish ; end endmodule';
+    expect(check(source).diagnostics).toEqual([]);
+    const parsed = parseVerilogCore(TextDocument.create('test://escaped-system-names.v', 'verilog', 1, source));
+    expect(parsed.semantic.references.filter((reference) => reference.name.startsWith('\\')).every((reference) => reference.symbol)).toBe(true);
+  });
   it.each(['f(a)', 'f(a,a,a)'])('checks function positional arity: %s', (call) => {
     const source = `module m(input a, output y); function f(input x,input z); f=x&z; endfunction assign y=${call}; endmodule`;
     expectError(source, 'subroutine-argument-count', 'f', 4);

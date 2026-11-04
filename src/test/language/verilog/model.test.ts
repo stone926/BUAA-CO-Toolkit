@@ -41,24 +41,67 @@ describe('verilogKeywords', () => {
 });
 
 describe('systemTasks', () => {
-  it('contains common system tasks', () => {
-    expect(systemTasks.has('display')).toBe(true);
-    expect(systemTasks.has('write')).toBe(true);
-    expect(systemTasks.has('monitor')).toBe(true);
-    expect(systemTasks.has('finish')).toBe(true);
-    expect(systemTasks.has('stop')).toBe(true);
-    expect(systemTasks.has('readmemh')).toBe(true);
-    expect(systemTasks.has('readmemb')).toBe(true);
-    expect(systemTasks.has('dumpfile')).toBe(true);
-    expect(systemTasks.has('dumpvars')).toBe(true);
-    expect(systemTasks.has('time')).toBe(true);
+  // IEEE 1364-2005 clauses 17 and 18: completion/highlighting coverage must
+  // include every radix variant, not only the most common $display/$write.
+  it.each(['display', 'write', 'strobe', 'monitor', 'fdisplay', 'fwrite', 'fstrobe', 'fmonitor', 'swrite'])(
+    'contains every radix variant of $%s', (name) => {
+      for (const radix of ['', 'b', 'h', 'o']) {
+        expect(systemTasks.has(`${name}${radix}`), `$${name}${radix}`).toBe(true);
+      }
+    },
+  );
+
+  it.each([
+    ['file I/O', [
+      'fopen', 'fclose', 'fgetc', 'ungetc', 'fgets', 'fscanf', 'sscanf', 'fread',
+      'rewind', 'fseek', 'ftell', 'fflush', 'ferror', 'feof', 'sformat',
+      'readmemb', 'readmemh', 'sdf_annotate',
+    ]],
+    ['simulation control and time', [
+      'monitoroff', 'monitoron', 'finish', 'stop', 'printtimescale', 'timeformat',
+      'time', 'stime', 'realtime',
+    ]],
+    ['conversion and math', [
+      'bitstoreal', 'realtobits', 'itor', 'rtoi', 'signed', 'unsigned',
+      'clog2', 'ln', 'log10', 'exp', 'sqrt', 'pow', 'floor', 'ceil',
+      'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'hypot',
+      'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
+    ]],
+    ['random distributions, queues, and plusargs', [
+      'random', 'dist_uniform', 'dist_normal', 'dist_exponential', 'dist_poisson',
+      'dist_chi_square', 'dist_t', 'dist_erlang',
+      'q_initialize', 'q_add', 'q_remove', 'q_full', 'q_exam',
+      'test$plusargs', 'value$plusargs',
+    ]],
+    ['value change dumps', [
+      'dumpfile', 'dumpvars', 'dumpoff', 'dumpon', 'dumpall', 'dumplimit', 'dumpflush',
+      'dumpports', 'dumpportsoff', 'dumpportson', 'dumpportsall', 'dumpportslimit', 'dumpportsflush',
+    ]],
+    ['timing checks', [
+      'setup', 'hold', 'setuphold', 'recovery', 'removal', 'recrem',
+      'skew', 'timeskew', 'fullskew', 'period', 'width', 'nochange',
+    ]],
+    ['legacy simulator calls and vendor extensions', [
+      'countdrivers', 'getpattern', 'input', 'key', 'nokey', 'list', 'log', 'nolog',
+      'reset', 'reset_count', 'reset_value', 'save', 'restart', 'incsave', 'scale',
+      'scope', 'showscopes', 'showvars', 'sreadmemb', 'sreadmemh',
+      'fsdbDumpfile', 'fsdbDumpvars', 'fsdbDumpoff', 'fsdbDumpon',
+    ]],
+  ])('contains %s names', (_category, names) => {
+    for (const name of names) {
+      expect(systemTasks.has(name), `$${name}`).toBe(true);
+    }
   });
 
-  it('contains utility system functions', () => {
-    expect(systemTasks.has('clog2')).toBe(true);
-    expect(systemTasks.has('random')).toBe(true);
-    expect(systemTasks.has('signed')).toBe(true);
-    expect(systemTasks.has('unsigned')).toBe(true);
+  it('contains all synchronous and asynchronous PLA modeling tasks', () => {
+    for (const mode of ['sync', 'async']) {
+      for (const operation of ['and', 'nand', 'or', 'nor']) {
+        for (const format of ['array', 'plane']) {
+          const name = `${mode}$${operation}$${format}`;
+          expect(systemTasks.has(name), `$${name}`).toBe(true);
+        }
+      }
+    }
   });
 
   it('does not contain task names that require $ prefix', () => {

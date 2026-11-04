@@ -6,6 +6,14 @@ import { getVerilogCompletions } from '../../../language/verilog/service';
 import { VerilogWorkspaceIndex } from '../../../language/verilog/workspaceIndex';
 
 describe('Verilog completions', () => {
+  it('offers system task and function families from the shared catalog', () => {
+    const index = new VerilogWorkspaceIndex();
+    const current = doc('file:///system-calls.v', 'module top;\n  initial \nendmodule\n');
+    const completions = getVerilogCompletions(current, { line: 1, character: 10 }, defaultCoSettings, index);
+    for (const label of ['$finish', '$stime', '$fscanf', '$test$plusargs', '$sqrt', '$displayh', '$dumpflush']) {
+      expect(completions.find((item) => item.label === label)).toMatchObject({ detail: 'Verilog system task/function' });
+    }
+  });
   it('refreshes cached workspace completions when the index changes', () => {
     const index = new VerilogWorkspaceIndex();
     const current = doc('file:///top.v', 'module top;\n  \nendmodule\n');
