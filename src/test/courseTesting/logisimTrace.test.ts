@@ -519,7 +519,7 @@ describe('Logisim trace helpers', () => {
       '00003010'
     );
 
-    expect(result.error).toContain('PC=0x00000000');
+    expect(result.error).toContain('复位后首条 PC 应为 0x00003000，实际为 0x00000000');
     expect(state.rowsSeen).toBe(1);
   });
 
@@ -527,12 +527,13 @@ describe('Logisim trace helpers', () => {
     const spec = parseLogisimTraceSpec(projectWithMainPins(), 'main');
     const state = createLogisimPcProgressState();
     const line = '00000000\t00003004\t0\t0 0000\t00000000\t0\t00000000\t00000000';
+    inspectLogisimPcProgress(line.replace('00003004', '00003000'), spec, state, '00003010', 3);
 
     expect(inspectLogisimPcProgress(line, spec, state, '00003010', 3).error).toBeUndefined();
     expect(inspectLogisimPcProgress(line, spec, state, '00003010', 3).error).toBeUndefined();
     const result = inspectLogisimPcProgress(line, spec, state, '00003010', 3);
 
     expect(result.error).toContain('连续 3 行停在 0x00003004');
-    expect(state.rowsSeen).toBe(3);
+    expect(state.rowsSeen).toBe(4);
   });
 });

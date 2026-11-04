@@ -13,6 +13,15 @@ const result = (overrides: Partial<CourseTraceCaseResult>): CourseTraceCaseResul
 });
 
 describe('public automatic outcome diagnosis', () => {
+  it('retains actionable Logisim reset errors while stripping local paths', () => {
+    const message = publicAutomaticDiagnosticMessage(result({
+      status: 'error', stage: 'dut', dutBackend: 'logisim',
+      message: '测试中止：Logisim 复位后首条 PC 应为 0x00003000，实际为 0x00000000；请检查 reset 连线 E:/PRIVATE/cpu.circ'
+    }));
+    expect(message).toContain('实际为 0x00000000');
+    expect(message).toContain('reset 连线');
+    expect(message).not.toContain('PRIVATE');
+  });
   it('retains the first probe failure with its scenario and Chinese kind', () => {
     const message = publicAutomaticDiagnosticMessage(result({
       probe: {

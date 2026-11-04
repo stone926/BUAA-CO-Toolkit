@@ -46,6 +46,8 @@ export interface LogisimTraceSpec {
   instruction?: LogisimTraceOutputColumn;
   hasHalt: boolean;
   mappingMode: LogisimTraceMappingMode;
+  /** Private generated reset marker; asserted rows are not CPU execution. */
+  resetColumn?: number;
 }
 
 export interface LogisimTraceIgnoredOutputPin {
@@ -355,6 +357,12 @@ export function parseLogisimTraceLine(
     throw new Error(`Logisim 表格第 ${lineNumber} 行有 ${cells.length} 列，应为 ${spec.columns.length} 列。`);
   }
 
+  if (spec.resetColumn !== undefined) {
+    const reset = parseLogisimTraceValue(cells[spec.resetColumn], 1);
+    if (reset.unknown) throw new Error(`Logisim 第 ${lineNumber} 行的自动复位标记未知。`);
+    if (reset.numeric === 1) return undefined;
+  }
+
   const values = Object.fromEntries(requiredLabels.map((label) => {
     const column = spec.required[label];
     return [label, parseLogisimTraceValue(cells[column.index], column.width)];
@@ -455,6 +463,14 @@ export function inspectLogisimPcProgress(
   }
 
   state.rowsSeen++;
+  if (state.rowsSeen === 1 && pc !== formatHex(p3TextBase, 8)) {
+    return {
+      rowSeen: true,
+      pc,
+      halted: false,
+      error: `Logisim 复位后首条 PC 应为 0x${formatHex(p3TextBase, 8)}，实际为 0x${pc}；请检查 reset 连线与 PC 异步复位。`
+    };
+  }
   const haltPc = Number.parseInt(haltPcHex, 16);
   const pcValue = Number.parseInt(pc, 16);
   if (Number.isFinite(pcValue) && (pcValue < p3TextBase || pcValue > haltPc)) {

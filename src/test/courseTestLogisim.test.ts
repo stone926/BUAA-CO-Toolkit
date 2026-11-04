@@ -41,6 +41,10 @@ vi.mock('../courseTesting/logisimTrace', () => ({
   setLogisimMainCircuit: p3PipelineState.setMainCircuit
 }));
 
+vi.mock('../courseTesting/logisimReset', () => ({
+  prepareP3LogisimReset: (text: string, traceSpec: unknown) => ({ text, traceSpec, applied: false })
+}));
+
 vi.mock('../fsUtil', () => ({
   readTextFile: p3PipelineState.readTextFile,
   workspaceFolderFor: vi.fn(() => undefined)

@@ -6,6 +6,7 @@ import { spawnSync } from 'child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseModules } from '../../language/verilog/parser';
+import { buildTestbench } from '../../language/verilog/moduleUtils';
 import { buildUserTestbenchText, userCpuTestbenchProfile } from '../../verilog/userCpuTestbench';
 import { buildIverilogEnvironment, buildIverilogRuntimeArgs, resolveIverilogRuntime } from '../../verilog/iverilogRuntime';
 
@@ -60,7 +61,64 @@ describe.skipIf(!runtimeAvailable)('generated user CPU testbench with bundled Ic
       expect(runImage(workDir, profile, empty)).toContain('first=00000000 kernel=00000000');
     });
   }
+
+  for (const profile of ['P4', 'P5', 'P6', 'P7'] as const) {
+    it(`${profile} holds reset through clock edges before the first instruction in automatic and user testbenches`, () => {
+      const external = profile === 'P6' || profile === 'P7';
+      const dut = resetProbeDut(profile);
+      const module = parseModules(TextDocument.create(`${profile}.v`, 'verilog', 1, dut), dut)[0];
+      const runtime = resolveIverilogRuntime(extensionRoot);
+      const environment = buildIverilogEnvironment(runtime);
+      for (const mode of ['automatic', 'user'] as const) {
+        const tb = mode === 'automatic'
+          ? buildTestbench(module, 'mips_tb', { profile, finishDelay: false })
+          : buildUserTestbenchText(module, 'mips_tb', { profile, configuredTop: true, simTime: '1us' });
+        const stem = `${profile}-${mode}-reset`;
+        fs.writeFileSync(path.join(workDir, `${stem}-dut.v`), dut);
+        fs.writeFileSync(path.join(workDir, `${stem}-tb.v`), tb);
+        fs.writeFileSync(path.join(workDir, 'code.txt'), `${Array(imageWords).fill('00000000').join('\n')}\n`);
+        const compile = spawnSync(compiler, [
+          ...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'mips_tb', '-o', `${stem}.vvp`, `${stem}-dut.v`, `${stem}-tb.v`
+        ], { cwd: workDir, env: environment, encoding: 'utf8', timeout: 10000 });
+        expect(compile.status, compile.stdout + compile.stderr).toBe(0);
+        const run = spawnSync(simulator, ['-N', `${stem}.vvp`], { cwd: workDir, env: environment, encoding: 'utf8', timeout: 5000 });
+        expect(run.status, run.stdout + run.stderr).toBe(0);
+        expect(run.stdout).toContain(`CO_RESET_OK edges=${external ? 5 : 2} first=${external ? 22 : 25} pc=00003000`);
+      }
+    });
+  }
 });
+
+function resetProbeDut(profile: 'P4' | 'P5' | 'P6' | 'P7'): string {
+  const external = profile === 'P6' || profile === 'P7';
+  const shell = external
+    ? syntheticDut(profile).split('    reg [31:0] first_instruction;')[0]
+    : '`timescale 1ns/1ps\nmodule mips(input clk, input reset);\n';
+  return `${shell}
+    reg [31:0] pc;
+    integer reset_edges = 0;
+    ${external ? 'always @(*) i_inst_addr = pc;' : ''}
+    initial begin
+        #1;
+        if (reset !== 1'b1) $fatal(1, "reset not asserted before first edge");
+        #18;
+        if (reset !== 1'b1) $fatal(1, "reset released early");
+        #81 $fatal(1, "no active instruction");
+    end
+    always @(negedge reset) if ($time != 20) $fatal(1, "wrong reset release time");
+    always @(posedge clk) begin
+        if (reset) begin
+            reset_edges = reset_edges + 1;
+            pc <= 32'h3000;
+        end else begin
+            if (reset !== 1'b0 || pc !== 32'h3000) $fatal(1, "CPU state was not reset");
+            $display("CO_RESET_OK edges=%0d first=%0d pc=%08h", reset_edges, $time, pc);
+            $finish;
+        end
+    end
+endmodule
+`;
+}
 
 function runImage(workDir: string, profile: 'P6' | 'P7', words: string[]): string {
   fs.writeFileSync(path.join(workDir, 'code.txt'), `${words.join('\n')}\n`);

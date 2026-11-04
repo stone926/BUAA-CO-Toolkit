@@ -61,6 +61,9 @@ export function baseAutomaticDiagnosticMessage(item: CourseTraceCaseResult): str
     case 'oracle':
       return '[AUTO-ORACLE] 参考结果未生成';
     case 'dut':
+      if (item.dutBackend === 'logisim') {
+        return `[AUTO-DUT] ${safeEvidenceText(item.message.replace(/^\[AUTO-DUT\] /, '')) || 'Logisim 仿真未完成'}`;
+      }
       return item.dutFailure
         ? `[AUTO-DUT] ${verilogSimulationFailureMessage(item.dutFailure, item.dutBackend === 'isim' ? undefined : item.dutBackend)}`
         : '[AUTO-DUT] CPU 仿真未完成；请检查工具链和顶层接口';

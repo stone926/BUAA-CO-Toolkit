@@ -1,4 +1,4 @@
-# course-testing | src/courseTesting/ | 74 files + host adapters
+# course-testing | src/courseTesting/ | 75 files + host adapters
 
 P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → 内置 TS 课程 oracle → Verilog（bundled Icarus）或 Logisim 仿真 Trace → 对比/Probe 检查 → HTML/JSON 报告。通用 Verilog 仿真与自动 DUT lane 固定使用扩展内置 Icarus，运行目录 `.co/iverilog`。
 
@@ -92,6 +92,7 @@ P3–P7 自动化测试：生成 ASM → 内置 TS assembler/ProgramImage → �
 
 - `logisimTraceProfile.ts` — 从 courseConfig 读取的 Trace profile（text base、ROM 容量、列顺序、halt/PC 策略）
 - `logisimTrace.ts` / `logisimPrep.ts` — 电路 XML 端口标注推导、Trace 解析、PC 监控自动 kill 与单用例 ROM 注入
+- `logisimReset.ts` — 派生电路驱动课程顶层的 1 位高有效 reset，保持至首个内置 Clock 下降沿；私有观察列剔除复位期间的输出，不修改用户电路或 CPU 内部状态。无 reset 的自初始化测试顶层保持原流程；有 reset 但时钟不唯一时明确报错。
 
 ## 宿主入口与用例存储
 

@@ -1,4 +1,4 @@
-# test-suite | src/test/ | 286 files | 框架: Vitest
+# test-suite | src/test/ | 287 files | 框架: Vitest
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | `test/language/` | 98 | MIPS/Verilog/Logisim/common 的 parser、diagnostic、provider 与真实工程语料回归 |
 | `test/`（根） | 52 | 配置/Profile、工具链、进程、报告、侧边栏、模板、fixture 快照 |
-| `test/courseTesting/` | 47 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
+| `test/courseTesting/` | 48 | 生成器、oracle 差分、manifest v1/v2、probe 场景与 DUT 契约 |
 | `test/mipsCore/` | 26 | ISA golden、汇编器、执行器、devices/events 与架构调试会话 |
 | `test/verilog/` | 20 | 真实 bundled Icarus：语言语义差分、内置诊断正反例、诊断位置、时间尺度、格式化等价性、DM store 契约、runtime/runner/缓存失效 |
 | `test/waveform/` | 11 | VCD 解析、进制与反汇编、视窗/标记/行模型、宿主与面板、设计 dump |
@@ -23,6 +23,8 @@
 Verilog 修复回归包含类型化四态常量与上下文传播、非零/升序 packed 索引、参数覆盖类型、宏活动分支/源码范围、恢复节点与可运行模块完整性、实例数组广播/分摊、驱动位区间/数组维度/宏调用绑定、命名源集合、重命名捕获与常量重构语义。
 
 `verilog/languageSemantics.test.ts` 在中文空格路径中使用真实 bundled Icarus `-g2005` 与 VVP，比对 22 个数值表达式、5 个四态/越界表达式、time64 和常量折叠前后结果；runtime 不存在时按真实工具测试约定跳过。
+
+`courseTesting/logisimReset.test.ts` 覆盖派生电路复位、输出列与显式外观兼容、复位行剔除及歧义报错。`verilog/userCpuTestbenchRuntime.test.ts` 使用真实 bundled Icarus 检查 P4–P7 自动与用户 TB：初始拉高 reset，保持至 20 ns，P4/P5 覆盖 2 个上升沿、P6/P7 覆盖 5 个上升沿，首次有效执行 PC 为 0x3000。
 
 `language/verilog/externalDiagnosticLocations.test.ts` 覆盖行级与列级编译器诊断、精确本地错误合并、未知标识符、跨行注释、多个候选位置、跨行缺分号与 EOF。`verilog/iverilogDiagnosticLocations.test.ts` 使用中文空格路径中的真实 bundled Icarus，确认错误声明的 `<=` / `==` 及未解析标识符的最终标记范围。
 

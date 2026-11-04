@@ -308,7 +308,8 @@ async function loadFailureLogs(
   const result: Array<{ label: string; uri: vscode.Uri }> = [];
   for (const { key, reference } of dutArtifactCandidates(manifest)) {
     if (!/(?:compile|simulation).*log$/i.test(key)) continue;
-    const label = /compile/i.test(key) ? 'Icarus 编译日志' : 'Icarus 仿真日志';
+    const label = key.startsWith('logisim/') ? 'Logisim 仿真日志'
+      : /compile/i.test(key) ? 'Icarus 编译日志' : 'Icarus 仿真日志';
     const artifact = await readTextArtifact(caseDir, reference, maximumReplaySnapshotBytes, label, warnings);
     if (artifact) result.push({ label, ...artifact });
   }

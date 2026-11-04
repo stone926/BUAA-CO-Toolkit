@@ -32,6 +32,7 @@ import {
 import {
   preparedCircuitFileName
 } from './courseTesting/logisimPrep';
+import { prepareP3LogisimReset } from './courseTesting/logisimReset';
 import { ensureDirectory, readTextFile, workspaceFolderFor, writeTextFile } from './fsUtil';
 import {
   findLogisimRomTargets,
@@ -237,17 +238,22 @@ export async function runP3LogisimTraceCase(
   }
 
   let preparedCircuit: vscode.Uri;
+  let preparedSetup = setup;
   try {
     const injected = injectMachineCodeIntoLogisimRom(setup.circuitText, logisimCode.text, setup.romTarget.index);
-    const derivedText = setLogisimMainCircuit(injected.text, setup.traceCircuit);
+    const reset = prepareP3LogisimReset(injected.text, setup.traceSpec);
+    const derivedText = setLogisimMainCircuit(reset.text, setup.traceCircuit);
+    preparedSetup = { ...setup, traceSpec: reset.traceSpec };
     const folder = workspaceFolderFor(setup.circuit) ?? workspaceFolderFor(asm);
     const baseDir = folder?.uri.fsPath ?? path.dirname(setup.circuit.fsPath);
     const circuitName = preparedCircuitFileName(setup.circuit.fsPath, asm.fsPath, baseDir);
     preparedCircuit = await writeAsmCaseArtifact(asmCase, 'logisim', circuitName, derivedText, 'preparedCircuit');
+    await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-trace-spec.json', JSON.stringify(reset.traceSpec, null, 2), 'traceSpec');
     await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-code.txt', logisimCode.text, 'machineCodeWithHalt');
     await pipeline.copyArtifact(asmCase, 'logisim', setup.circuit, 'circuit-template.circ', 'circuitTemplate');
     await updateAsmCaseMetadata(asmCase, {
-      'dut.logisim.traceCircuit': setup.traceCircuit
+      'dut.logisim.traceCircuit': setup.traceCircuit,
+      'dut.logisim.automaticReset': String(reset.applied)
     });
   } catch (error) {
     return {
@@ -255,6 +261,7 @@ export async function runP3LogisimTraceCase(
       ...caseResultFields(asmCase),
       status: 'error',
       stage: 'dut',
+      dutBackend: 'logisim',
       message: error instanceof Error ? error.message : String(error),
       machineCode: asmCase.machineCode.fsPath
     };
@@ -420,7 +427,7 @@ export async function runP3LogisimTraceCase(
 
   const logisimRun = await pipeline.runLogisimDut(
     services,
-    setup,
+    preparedSetup,
     preparedCircuit,
     logisimCode.haltPcHex,
     asm,
@@ -436,6 +443,7 @@ export async function runP3LogisimTraceCase(
     ? asmCaseArtifactUri(asmCase, 'logisim', logisimRawOutputFileNameForCase(item))
     : vscode.Uri.file(path.join(outDir!.fsPath, logisimRawOutputFileNameForCase(item)));
   await writeTextFile(rawOut, logisimRun.stdout);
+  await writeAsmCaseArtifact(asmCase, 'logisim', 'logisim-stderr.txt', logisimRun.stderr, 'simulationLog');
   if (caseOutputMode) {
     await pipeline.updateArtifacts(asmCase, 'logisim', { logisimOut: rawOut.fsPath });
   } else {
@@ -449,6 +457,7 @@ export async function runP3LogisimTraceCase(
       status: 'error',
       ...(engineRunWasCancelled(logisimRun.result, options.signal) ? { cancelled: true as const } : {}),
       stage: 'dut',
+      dutBackend: 'logisim',
       message: engineStageFailureMessage('测试中止：被测电路命令行运行失败', logisimRun.result),
       machineCode: asmCase.machineCode.fsPath,
       oracleOut: oracle.outputFile.fsPath,
@@ -460,10 +469,10 @@ export async function runP3LogisimTraceCase(
 
   let parsedLogisim: ReturnType<typeof parseLogisimTraceOutput>;
   try {
-    parsedLogisim = parseLogisimTraceOutput(logisimRun.stdout, setup.traceSpec);
+    parsedLogisim = parseLogisimTraceOutput(logisimRun.stdout, preparedSetup.traceSpec);
     const fetchValidation = validateP3LogisimFetchTrace(
       parsedLogisim.rows,
-      setup.traceSpec,
+      preparedSetup.traceSpec,
       parseMachineCodeWords(logisimCode.text),
       logisimCode.haltPcHex
     );
@@ -476,6 +485,7 @@ export async function runP3LogisimTraceCase(
       ...caseResultFields(asmCase),
       status: 'error',
       stage: 'dut',
+      dutBackend: 'logisim',
       message: error instanceof Error ? error.message : String(error),
       machineCode: asmCase.machineCode.fsPath,
       oracleOut: oracle.outputFile.fsPath,
@@ -808,7 +818,8 @@ export async function runLogisimTraceCli(
   if (outputLimitError && !nonInteractive) {
     services.output.appendLine(outputLimitError);
   }
-  const finalStderr = [run.stderr.trimEnd(), pcError, outputLimitError].filter(Boolean).join('\n');
+  const timeoutError = run.timedOut && !haltedByPc ? `Logisim 仿真超时（${timeoutMs} 毫秒）；未到达停机 PC 0x${haltPcHex}。` : undefined;
+  const finalStderr = [pcError, outputLimitError, timeoutError, run.stderr.trimEnd()].filter(Boolean).join('\n');
   return {
     result: {
       ok: run.ok,

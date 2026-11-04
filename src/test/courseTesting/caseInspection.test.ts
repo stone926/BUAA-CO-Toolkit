@@ -66,6 +66,8 @@ describe('loadCaseInspection', () => {
       const graphBytes = await fs.readFile(bundle.graphPath);
       const compileLog = Buffer.from('compile failed: unknown port\n', 'utf8');
       await fs.writeFile(path.join(caseDir, 'verilog', 'compile.log'), compileLog);
+      const logisimLog = Buffer.from('Logisim 复位后首条 PC 应为 0x00003000\n', 'utf8');
+      await fs.writeFile(path.join(caseDir, 'logisim-stderr.txt'), logisimLog);
       const snapshot = (filePath: string, bytes: Buffer) => ({ path: filePath, sha256: sha256Bytes(bytes), bytes: bytes.byteLength });
       let manifest: AsmCaseManifestV2 = {
         version: asmCaseManifestVersion2,
@@ -87,7 +89,8 @@ describe('loadCaseInspection', () => {
           oracle: { traceOut: snapshot('oracle.trace', traceBytes) },
           dut: {
             'verilog/simOut': snapshot('verilog/sim.out', dutBytes),
-            'verilog/compileLog': snapshot('verilog/compile.log', compileLog)
+            'verilog/compileLog': snapshot('verilog/compile.log', compileLog),
+            'logisim/simulationLog': snapshot('logisim-stderr.txt', logisimLog)
           }
         }
       };
@@ -97,7 +100,7 @@ describe('loadCaseInspection', () => {
       expect(inspection.sourceAvailable).toBe(true);
       expect(inspection.oracle?.uri.fsPath.toLowerCase()).toBe(path.join(caseDir, 'oracle.trace').toLowerCase());
       expect(inspection.dut?.uri.fsPath.toLowerCase()).toBe(path.join(caseDir, 'verilog', 'sim.out').toLowerCase());
-      expect(inspection.logs).toMatchObject([{ label: 'Icarus 编译日志' }]);
+      expect(inspection.logs).toMatchObject([{ label: 'Icarus 编译日志' }, { label: 'Logisim 仿真日志' }]);
       expect(inspection.oracle).not.toHaveProperty('text');
       expect(inspection.logs[0]).not.toHaveProperty('text');
       expect(await loadCaseWritebackTexts(inspection)).toEqual({ oracle: traceBytes.toString('utf8'), dut: dutBytes.toString('utf8') });

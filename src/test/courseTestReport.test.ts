@@ -32,6 +32,15 @@ const historyEngineEvidence = {
 };
 
 describe('course test reports', () => {
+  it('keeps a Logisim diagnosis stable across public serialization and rendering', () => {
+    const result: CourseTraceCaseResult = {
+      asm: 'private.asm', status: 'error', stage: 'dut', dutBackend: 'logisim',
+      message: 'Logisim 复位后首条 PC 应为 0x00003000，实际为 0x00000000'
+    };
+    const once = publicAutomaticCourseTraceCaseResult(result, 0);
+    expect(publicAutomaticCourseTraceCaseResult(once, 0).message).toBe(once.message);
+    expect(once.message).toContain('实际为 0x00000000');
+  });
   it('offers stop only while running and explains empty monitor/history states', () => {
     const report: ContinuousTraceReport = { generatedAt: '', running: true, stopRequested: false, iterations: [] };
     const render = () => renderContinuousTraceMonitor(report, {} as never);
