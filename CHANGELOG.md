@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.11] - 2026-11-04
+
 - 修复 P3 Logisim 自动测试未驱动 reset、导致需要复位的 CPU 从 PC=0 开始并提前终止的问题；仅在派生测试电路中施加一次异步复位，排除复位期间的写回记录。
 - P3 仿真失败报告保留具体 PC、复位或超时原因，排查页可打开保存的 Logisim 运行日志。
 - 补充真实 Icarus 回归，验证 P4–P7 自动与用户测试台在时钟上升沿保持复位，并从复位后的 PC=0x3000 开始执行。
