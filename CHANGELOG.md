@@ -4,6 +4,12 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.10] - 2026-11-04
+
+- fix(verilog): recognize parenthesis-free system calls (399f4a2)
+- fix(verilog): isolate Icarus preflight from compilation timeouts (910b70c)
+- fix(lsp): deduplicate quick fixes and localize action titles (aeb8fac)
+
 ## [1.5.9] - 2026-10-23
 
 - 持续测试启动和运行时，编辑器右上角的火箭按钮切换为「停止持续测试」；手动停止、自然结束或出错退出后恢复启动入口，停止清理期间仍保持停止按钮。
