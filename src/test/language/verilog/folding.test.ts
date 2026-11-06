@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FoldingRange } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -13,6 +15,57 @@ function lineKeys(ranges: FoldingRange[]): string[] {
 }
 
 describe('Verilog folding', () => {
+  it('keeps conditional directives out of minimap region markers and folds them through LSP', () => {
+    const configuration = JSON.parse(readFileSync(resolve(process.cwd(), 'language-configuration/verilog.json'), 'utf8')) as {
+      folding: { markers: { start: string; end: string } };
+    };
+    const startMarker = new RegExp(configuration.folding.markers.start);
+    const endMarker = new RegExp(configuration.folding.markers.end);
+
+    expect(startMarker.test('// region helpers')).toBe(true);
+    expect(endMarker.test('// endregion helpers')).toBe(true);
+    expect(startMarker.test('  `ifdef SOMETHING_LIKE_LOCAL_TEST')).toBe(false);
+    expect(startMarker.test('  `ifndef OTHER')).toBe(false);
+    expect(endMarker.test('  `endif')).toBe(false);
+
+    const ranges = getVerilogFoldingRanges(doc([
+      'module m;',
+      '`ifdef OUTER',
+      '  `ifndef INNER',
+      '    initial $display("local");',
+      '  `endif',
+      '`elsif OTHER',
+      '  wire other;',
+      '`else',
+      '  wire fallback;',
+      '`endif',
+      'endmodule',
+    ].join('\n')), defaultCoSettings);
+
+    expect(lineKeys(ranges)).toContain('1-9');
+    expect(lineKeys(ranges)).toContain('2-4');
+  });
+
+  it('ignores conditional-looking text in comments, strings and continued macro bodies', () => {
+    const ranges = getVerilogFoldingRanges(doc([
+      '/*',
+      '`ifdef COMMENT',
+      '`endif',
+      '*/',
+      '`define BODY \\',
+      '  `ifdef MACRO \\',
+      '  `endif',
+      'module m;',
+      '  initial $display("`ifdef STRING");',
+      '  initial $display("`endif");',
+      'endmodule',
+      '`endif',
+      '`ifdef INCOMPLETE',
+    ].join('\n')), defaultCoSettings);
+
+    expect(ranges).toEqual([]);
+  });
+
   it('folds module headers and instance port lists without folding the whole module', () => {
     const text = [
       'module CPU(',

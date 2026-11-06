@@ -9,6 +9,8 @@ MIPS、Verilog 与 SystemVerilog 的 TextMate 词法高亮，以及与 LSP seman
 - MIPS macro bodies — each physical body line gets the same instruction/directive/operand scopes as top-level code; `%parameter:` label placeholders retain parameter coloring, while real macro-local labels remain symbol-colored
 - 约束 — semantic provider 不重复发送整段注释、字符串、数字或关键字，避免覆盖主题的嵌套 TextMate scope
 - Verilog/SystemVerilog 编译指令与宏引用将反引号和名称作为完整 token 着色，后方参数保留各自类别；Verilog 宏的 semantic token 同样覆盖反引号。
+- Verilog/SystemVerilog 普通标识符提供 TextMate 基础着色（含格式化系统任务的参数及嵌套括号），保证非活动条件编译分支也有高亮；活动分支的角色仍由 semantic tokens 细分。
+- 语言 folding markers 仅声明显式注释 region，避免条件宏名被 VS Code 当作缩略图标题；Verilog 的条件编译块通过 LSP 独立折叠，包含未启用的嵌套分支。
 
 ## 单一事实源
 

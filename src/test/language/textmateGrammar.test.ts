@@ -284,6 +284,35 @@ describe('generated TextMate grammars', () => {
     expectScope(scopesAt(lines, 10, "'hff"), 'constant.numeric.verilog');
   });
 
+  it.each(['verilog', 'systemverilog'])('colors identifiers in every conditional branch in %s', (language) => {
+    const grammar = language === 'verilog' ? verilogGrammar : systemVerilogGrammar;
+    const lines = tokenize(grammar, [
+      '`ifdef SOMETHING_LIKE_LOCAL_TEST',
+      '  $display("@%h: $%d <= %h", E_pc, E_regWriteId, E_regWriteData);',
+      '`else',
+      '  $display("%d@%h: $%d <= %h", $time, E_pc, E_regWriteId, E_regWriteData);',
+      '`endif',
+      '  $display("%h", (D_pc + D_memoryAddress), D_memoryWriteOutputData);',
+      '  assign result = source;',
+      '  // E_pc is a comment',
+    ].join('\n'));
+
+    for (const line of [1, 3]) {
+      for (const name of ['E_pc', 'E_regWriteId', 'E_regWriteData']) {
+        expectScope(scopesAt(lines, line, name), 'variable.other.readwrite.verilog');
+      }
+      expectScope(scopesAt(lines, line, '%h'), 'constant.other.placeholder.verilog');
+      expectScope(scopesAt(lines, line, '$display'), 'support.function.system-task.verilog');
+    }
+    for (const name of ['D_pc', 'D_memoryAddress', 'D_memoryWriteOutputData']) {
+      expectScope(scopesAt(lines, 5, name), 'variable.other.readwrite.verilog');
+    }
+    expectScope(scopesAt(lines, 6, 'source'), 'variable.other.readwrite.verilog');
+    expectScope(scopesAt(lines, 0, 'SOMETHING_LIKE_LOCAL_TEST'), 'variable.other.preprocessor.verilog');
+    expectScope(scopesAt(lines, 7, 'E_pc'), 'comment.line.double-slash.verilog');
+    expect(lines.every((line) => line.ruleStackDepth === 1)).toBe(true);
+  });
+
   it('limits in-string format scopes to formatting system-task calls', () => {
     const lines = tokenize(verilogGrammar, [
       '$readmemh("rom%h.mem", memory);',

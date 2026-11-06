@@ -602,6 +602,7 @@ function buildVerilogGrammar(keywordResource) {
             { include: '#genericSystemTasks' },
             { include: '#escapedIdentifiers' },
             { include: '#keywords' },
+            { include: '#identifiers' },
             { include: '#operators' },
             { include: '#punctuation' },
           ],
@@ -630,6 +631,7 @@ function buildVerilogGrammar(keywordResource) {
         { include: '#genericSystemTasks' },
         { include: '#escapedIdentifiers' },
         { include: '#keywords' },
+        { include: '#identifiers' },
         { include: '#operators' },
         { include: '#punctuation' },
       ],
@@ -819,6 +821,16 @@ function buildVerilogGrammar(keywordResource) {
     keywords: {
       patterns: keywordPatterns,
     },
+    identifiers: {
+      // Inactive preprocessor branches have no semantic model. Keep their
+      // identifiers colored lexically; semantic tokens refine active roles.
+      patterns: [
+        {
+          name: 'variable.other.readwrite.verilog',
+          match: `${VERILOG_IDENTIFIER_START}${VERILOG_IDENTIFIER}${VERILOG_IDENTIFIER_END}`,
+        },
+      ],
+    },
     operators: {
       patterns: [
         {
@@ -869,6 +881,7 @@ function buildVerilogGrammar(keywordResource) {
       { include: '#escapedIdentifiers' },
       { include: '#namedBlocks' },
       { include: '#keywords' },
+      { include: '#identifiers' },
       { include: '#operators' },
       { include: '#punctuation' },
     ],

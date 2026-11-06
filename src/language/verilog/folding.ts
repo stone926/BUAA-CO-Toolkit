@@ -9,6 +9,8 @@ import { CoSettings, defaultCoSettings } from '../common/settings';
 import { getCachedVerilogParse } from './parseCache';
 import type { VerilogAstDocument } from './ast';
 import type { VerilogProceduralStatementAst } from './proceduralAst';
+import { lexVerilog } from './lexer';
+import { verilogDirectiveLineEnd } from './preprocessor';
 
 const foldingCache = new DocumentResultCache<FoldingRange[]>();
 
@@ -20,6 +22,7 @@ function buildVerilogFoldingRanges(document: TextDocument): FoldingRange[] {
   const parsed = getCachedVerilogParse(document, defaultCoSettings, false);
   const ranges: FoldingRange[] = [];
   ranges.push(...astFoldingRanges(parsed.ast));
+  ranges.push(...conditionalFoldingRanges(document));
   ranges.push(...regionFoldingRanges(document));
   return dedupeFoldingRanges(ranges);
 }
@@ -93,6 +96,30 @@ function dedupeFoldingRanges(ranges: FoldingRange[]): FoldingRange[] {
     result.push(range);
   }
   return result;
+}
+
+/** Conditional compilation is structural folding, not a named minimap region. */
+function conditionalFoldingRanges(document: TextDocument): FoldingRange[] {
+  const text = document.getText();
+  const ranges: FoldingRange[] = [];
+  const stack: number[] = [];
+  let definitionEnd = 0;
+  // Use unfiltered source tokens so nested inactive branches still fold.
+  for (const token of lexVerilog(text).tokens) {
+    if (token.start < definitionEnd || token.kind !== 'directive') continue;
+    if (token.value === '`define') {
+      definitionEnd = verilogDirectiveLineEnd(text, token.end, true);
+    } else if (token.value === '`ifdef' || token.value === '`ifndef') {
+      stack.push(document.positionAt(token.start).line);
+    } else if (token.value === '`endif') {
+      const startLine = stack.pop();
+      const endLine = document.positionAt(token.start).line;
+      if (startLine !== undefined && endLine > startLine) {
+        ranges.push({ startLine, endLine });
+      }
+    }
+  }
+  return ranges;
 }
 
 function regionFoldingRanges(document: TextDocument): FoldingRange[] {

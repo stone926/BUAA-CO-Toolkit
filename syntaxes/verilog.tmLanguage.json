@@ -56,6 +56,9 @@
       "include": "#keywords"
     },
     {
+      "include": "#identifiers"
+    },
+    {
       "include": "#operators"
     },
     {
@@ -200,6 +203,9 @@
               "include": "#keywords"
             },
             {
+              "include": "#identifiers"
+            },
+            {
               "include": "#operators"
             },
             {
@@ -256,6 +262,9 @@
         },
         {
           "include": "#keywords"
+        },
+        {
+          "include": "#identifiers"
         },
         {
           "include": "#operators"
@@ -557,6 +566,14 @@
         {
           "name": "keyword.other.unsupported.verilog",
           "match": "(?<![A-Za-z0-9_$])(?:defparam)(?![A-Za-z0-9_$])"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.readwrite.verilog",
+          "match": "(?<![A-Za-z0-9_$])[A-Za-z_][A-Za-z0-9_$]*(?![A-Za-z0-9_$])"
         }
       ]
     },

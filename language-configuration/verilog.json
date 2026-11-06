@@ -72,8 +72,8 @@
   },
   "folding": {
     "markers": {
-      "start": "^\\s*(?://\\s*region\\b|`(?:ifdef|ifndef)\\b)",
-      "end": "^\\s*(?://\\s*endregion\\b|`endif\\b)"
+      "start": "^\\s*//\\s*region\\b",
+      "end": "^\\s*//\\s*endregion\\b"
     }
   }
 }
