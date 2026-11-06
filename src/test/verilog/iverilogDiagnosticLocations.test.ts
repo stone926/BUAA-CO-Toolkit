@@ -9,7 +9,7 @@ import { URI } from 'vscode-uri';
 import { mergeCoSettings } from '../../language/common/settings';
 import { getVerilogDiagnostics } from '../../language/verilog/diagnosticProvider';
 import { mergeVerilogExternalDiagnostics } from '../../language/verilog/externalDiagnosticLocations';
-import { parseIverilogDiagnostics } from '../../language/verilog/iverilogSyntaxCheck';
+import { parseIverilogDiagnostics, runIverilogSyntaxCheck } from '../../language/verilog/iverilogSyntaxCheck';
 import { buildIverilogEnvironment, buildIverilogRuntimeArgs, resolveIverilogRuntime } from '../../verilog/iverilogRuntime';
 
 const runtime = resolveIverilogRuntime(path.resolve(__dirname, '../../..'));
@@ -21,6 +21,28 @@ describe.skipIf(!available)('diagnostic locations from real bundled Icarus', () 
   let directory: string;
   beforeAll(() => { directory = fs.mkdtempSync(path.join(os.tmpdir(), 'co syntax 定位 ')); });
   afterAll(() => { if (directory) fs.rmSync(directory, { recursive: true, force: true }); });
+
+  it.each(['inferred', 'explicit-file', 'explicit-directory'])('preserves mixed-case document URIs for %s project diagnostics', async (mode) => {
+    const root = path.join(directory, `Project ${mode}`);
+    const rtl = path.join(root, 'Mixed RTL');
+    fs.mkdirSync(rtl, { recursive: true });
+    const file = path.join(rtl, 'CPU.v');
+    fs.writeFileSync(file, 'module top(output y); assign y = missing_case_signal; endmodule\n');
+    const uri = URI.file(file).toString();
+    const result = await runIverilogSyntaxCheck({
+      workspaceFolders: [{ uri: URI.file(root).toString(), name: 'mixed-case project' }],
+      triggerUri: uri,
+      extensionRoot: path.resolve(__dirname, '../../..'),
+      timeoutMs: testToolTimeoutMs,
+      projects: mode === 'inferred' ? {} : { CPU: [mode === 'explicit-file' ? file : rtl] }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.toolchainError).toBeUndefined();
+    expect([...result.diagnosticsByUri.keys()]).toEqual([uri]);
+    expect(result.diagnosticsByUri.get(uri)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'iverilog-syntax', message: expect.stringContaining('missing_case_signal') })
+    ]));
+  });
 
   function check(source: string) {
     const file = path.join(directory, 'alu with spaces.v');

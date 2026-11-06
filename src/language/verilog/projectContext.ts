@@ -1,7 +1,7 @@
 // @index verilog-project-context — explicit source-set membership shared by LSP and compiler inputs
 import * as path from 'path';
 import { URI } from 'vscode-uri';
-import { normalizePathKey } from '../../pathUtils';
+import { dedupePaths, normalizePathKey } from '../../pathUtils';
 import type { ProjectScope } from '../../projectSettings';
 
 /** Named source sets. Entries are files or directory trees, relative to a workspace folder. */
@@ -18,19 +18,24 @@ export function normalizeVerilogProjects(value: unknown): VerilogProjects {
 export class VerilogProjectContext {
   private readonly memberships = new Map<string, readonly string[]>();
   private readonly roots: Array<{ uri: string; key: string }>;
-  private readonly sets: Array<{ id: string; name: string; anchor: string; root: string; sources: string[] }>;
+  private readonly sets: Array<{ id: string; name: string; anchor: string; root: string; sources: Array<{ key: string; fsPath: string }> }>;
 
   constructor(folderUris: readonly string[] = [], projects: VerilogProjects = {}, private readonly inferred = false, anchors: Record<string, string> = {}) {
     this.roots = folderUris.map((uri) => ({ uri, key: uriPathKey(uri) })).sort((a, b) => b.key.length - a.key.length);
     this.sets = this.roots.flatMap((folder) => {
       const definitions = Object.entries(projects).map(([name, sources]) => ({
         id: `${folder.uri}#${name}`, name, root: folder.key,
-        sources: sources.map((source) => normalizePathKey(path.resolve(URI.parse(folder.uri).fsPath, source)).replace(/\/$/, ''))
+        sources: sources.map((source) => {
+          const fsPath = path.resolve(URI.parse(folder.uri).fsPath, source);
+          // Comparison keys are case-insensitive on Windows; compiler inputs
+          // must retain their spelling so diagnostics match document URIs.
+          return { fsPath, key: normalizePathKey(fsPath).replace(/\/$/, '') };
+        })
       }));
       const proposed = definitions.map((set) => {
         if (anchors[set.name]) return path.resolve(URI.parse(folder.uri).fsPath, anchors[set.name]);
-        const privateSources = set.sources.filter((source) => !definitions.some((other) => other !== set && other.sources.some((entry) => within(source, entry))));
-        const owned = privateSources.length ? privateSources : set.sources;
+        const privateSources = set.sources.filter((source) => !definitions.some((other) => other !== set && other.sources.some((entry) => within(source.key, entry.key))));
+        const owned = (privateSources.length ? privateSources : set.sources).map((source) => source.key);
         if (!/\.vh?$/i.test(owned[0])) return owned[0];
         let directory = path.posix.dirname(owned[0]);
         while (!owned.every((source) => within(source, directory))) {
@@ -42,7 +47,7 @@ export class VerilogProjectContext {
       });
       return definitions.map((set, index) => ({ ...set,
         anchor: !anchors[set.name] && proposed.filter((entry) => entry === proposed[index]).length > 1
-          ? set.sources.find((source) => !definitions.some((other) => other !== set && other.sources.includes(source))) ?? set.sources[0]
+          ? set.sources.find((source) => !definitions.some((other) => other !== set && other.sources.some((entry) => entry.key === source.key)))?.key ?? set.sources[0].key
           : proposed[index]
       }));
     });
@@ -55,7 +60,7 @@ export class VerilogProjectContext {
     const folder = this.roots.find((root) => within(file, root.key));
     const sets = folder ? this.sets.filter((set) => set.root === folder.key) : this.sets;
     const ids = sets.length
-      ? sets.filter((set) => set.sources.some((source) => within(file, source))).map((set) => set.id)
+      ? sets.filter((set) => set.sources.some((source) => within(file, source.key))).map((set) => set.id)
       : [folder?.uri ?? 'unconfigured'];
     // Generated/unindexed files can use a single inferred workspace project.
     // Explicit source sets and files outside the workspace remain isolated.
@@ -73,7 +78,7 @@ export class VerilogProjectContext {
     const ids = this.projectIds(uri);
     const folder = this.roots.find((root) => within(uriPathKey(uri), root.key));
     if (!folder) return [];
-    const count = this.sets.filter((set) => set.root === folder.key && set.sources.some((source) => within(source, folder.key))).length;
+    const count = this.sets.filter((set) => set.root === folder.key && set.sources.some((source) => within(source.key, folder.key))).length;
     return this.sets.filter((set) => ids.includes(set.id)).map((set) => ({
       name: set.name, rootPath: set.anchor, workspacePath: URI.parse(folder.uri).fsPath, isolated: count > 1
     }));
@@ -87,7 +92,7 @@ export class VerilogProjectContext {
   sourcePaths(uri: string): string[] | undefined {
     const ids = this.projectIds(uri);
     const selected = this.sets.filter((set) => ids.includes(set.id));
-    return selected.length ? [...new Set(selected.flatMap((set) => set.sources))] : undefined;
+    return selected.length ? dedupePaths(selected.flatMap((set) => set.sources.map((source) => source.fsPath))) : undefined;
   }
 }
 
