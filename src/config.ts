@@ -1,5 +1,6 @@
 // @index config — co.*设置读取，分层取值+值域裁剪
 import * as vscode from 'vscode';
+import { activeProjectResource } from './configurationResource';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
 import { configDefault } from './configDefaults';
 import { OFFICIAL_MARS_MEMORY_CONFIGURATIONS } from './language/mips/legacyMarsPolicy';
@@ -28,7 +29,7 @@ import {
  * 2. 默认值
  */
 
-export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
+export function config<T>(key: string, fallback: T, resource = activeProjectResource()): T {
   const value = vscode.workspace.getConfiguration('co', resource).get<T>(key);
   if (value !== undefined && value !== null) {
     return value;
@@ -39,9 +40,11 @@ export function config<T>(key: string, fallback: T, resource?: vscode.Uri): T {
 export type ProfileInferenceProvider = (resource?: vscode.Uri) => Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'>;
 
 let profileInferenceProvider: ProfileInferenceProvider | undefined;
+let profileInferenceReady: (() => Promise<void>) | undefined;
 
-export function setProfileInferenceProvider(provider: ProfileInferenceProvider | undefined): void {
+export function setProfileInferenceProvider(provider: ProfileInferenceProvider | undefined, whenReady?: () => Promise<void>): void {
   profileInferenceProvider = provider;
+  profileInferenceReady = provider ? whenReady : undefined;
 }
 
 /** Write resource-scoped settings to the owning folder in multi-root workspaces. */
@@ -71,7 +74,7 @@ export interface ConfiguredProjectProfile {
   source: ProfileConfiguredSource;
 }
 
-export function getConfiguredProjectProfile(resource?: vscode.Uri): ConfiguredProjectProfile {
+export function getConfiguredProjectProfile(resource = activeProjectResource()): ConfiguredProjectProfile {
   const inspected = vscode.workspace.getConfiguration('co', resource).inspect<ProjectProfile>('project.profile');
   const vsValue = normalizeProjectProfile(
     inspected?.workspaceFolderValue
@@ -87,7 +90,7 @@ export function getConfiguredProjectProfile(resource?: vscode.Uri): ConfiguredPr
   return { profile: 'auto', source: 'default' };
 }
 
-export function getProfileResolution(resource?: vscode.Uri): ProfileResolution {
+export function getProfileResolution(resource = activeProjectResource()): ProfileResolution {
   const configured = getConfiguredProjectProfile(resource);
   if (isConcreteProjectProfile(configured.profile)) {
     return resolveProjectProfile({
@@ -108,23 +111,11 @@ export function getProfile(resource?: vscode.Uri): ProjectProfile {
   return resolution.effectiveProfile ?? resolution.configuredProfile;
 }
 
-export async function persistInferredProfile(resource?: vscode.Uri): Promise<ConcreteProjectProfile | undefined> {
-  const resolution = getProfileResolution(resource);
-  if (resolution.configuredProfile !== 'auto' || resolution.source !== 'inferred' || !resolution.effectiveProfile) {
-    return resolution.effectiveProfile;
-  }
-  await vscode.workspace.getConfiguration('co', resource).update(
-    'project.profile',
-    resolution.effectiveProfile,
-    configurationTargetForResource(resource)
-  );
-  return resolution.effectiveProfile;
-}
-
-export async function ensureConcreteProfile(resource?: vscode.Uri, detail?: string): Promise<ConcreteProjectProfile | undefined> {
+export async function ensureConcreteProfile(resource = activeProjectResource(), detail?: string): Promise<ConcreteProjectProfile | undefined> {
+  if (getConfiguredProjectProfile(resource).profile === 'auto') await profileInferenceReady?.();
   const resolution = getProfileResolution(resource);
   if (resolution.effectiveProfile) {
-    await persistInferredProfile(resource);
+    // An inferred stage belongs to this source set, not the whole workspace.
     return resolution.effectiveProfile;
   }
   const picked = await vscode.window.showQuickPick(
@@ -306,7 +297,7 @@ export function getLogisimTraceColumns(_resource?: vscode.Uri): Record<string, n
   return undefined;
 }
 
-function inspectedValue<T>(key: string, resource?: vscode.Uri): T | undefined {
+function inspectedValue<T>(key: string, resource = activeProjectResource()): T | undefined {
   const inspected = vscode.workspace.getConfiguration('co', resource).inspect<T>(key);
   return inspected?.workspaceFolderValue
     ?? inspected?.workspaceValue

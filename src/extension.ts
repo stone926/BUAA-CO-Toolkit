@@ -38,6 +38,7 @@ import { renderToolchainReport } from './webview/toolchainReport';
 import { timeStartup, traceStartup } from './startupTrace';
 import { migrateLegacySemanticColorRules } from './legacySemanticColorMigration';
 import { disableDiagnosticCode } from './diagnosticSettings';
+import { activeProjectResource, clearActiveProjectResource } from './configurationResource';
 import {
   clearVerilogProjectDiscoveryCache,
   invalidateVerilogProjectDiscoveryCachesForUri
@@ -96,8 +97,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const moduleRegistry = new WorkspaceModuleRegistry({
     initialScanDelayMs: verilogModuleRegistryStartupDelayMs
   });
-  setProfileInferenceProvider((resource) => buildProfileInferenceInput(resource, moduleRegistry));
-  context.subscriptions.push({ dispose: () => setProfileInferenceProvider(undefined) });
+  setProfileInferenceProvider((resource) => buildProfileInferenceInput(resource, moduleRegistry), () => moduleRegistry.whenReady());
+  context.subscriptions.push({ dispose: () => { setProfileInferenceProvider(undefined); clearActiveProjectResource(); } });
   moduleRegistry.activate();
   context.subscriptions.push(moduleRegistry);
   context.subscriptions.push(moduleRegistry.onDidChange(() => {
@@ -176,7 +177,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCourseTest(context, services);
   registerAdvancedTools(context);
 
-  function cachedToolchainStatus(resource = vscode.window.activeTextEditor?.document.uri): ToolDetection[] | undefined {
+  function cachedToolchainStatus(resource = activeProjectResource()): ToolDetection[] | undefined {
     const now = Date.now();
     const key = toolchainCacheKey(resource);
     const cached = toolchainCache.get(key);
@@ -201,10 +202,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.CheckToolchain, async () => {
-      const resource = vscode.window.activeTextEditor?.document.uri;
-      const checks = await showToolchainReport(output, services.extensionRoot);
+      const resource = activeProjectResource();
+      await moduleRegistry.whenReady();
+      const checks = await showToolchainReport(output, services.extensionRoot, resource);
       toolchainCache.set(toolchainCacheKey(resource), { checks, timestamp: Date.now() });
-      scheduleRefreshProjectUi(resource);
+      scheduleRefreshProjectUi();
     }),
     vscode.commands.registerCommand(Commands.SelectProjectProfile, () => selectProjectProfile()),
     vscode.commands.registerCommand(Commands.ProjectWizard, () => runProjectWizard()),
@@ -220,7 +222,7 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  function scheduleRefreshProjectUi(resource = vscode.window.activeTextEditor?.document.uri): void {
+  function scheduleRefreshProjectUi(resource = activeProjectResource()): void {
     if (refreshTimer) {
       clearTimeout(refreshTimer);
     }
@@ -230,7 +232,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }, 300);
   }
 
-  function refreshProjectUi(resource = vscode.window.activeTextEditor?.document.uri): void {
+  function refreshProjectUi(resource = activeProjectResource()): void {
     updateCoContext(resource);
     sidebarProvider.refresh();
     updateStatus(statusBar, cachedToolchainStatus);
@@ -260,9 +262,8 @@ export async function deactivate(): Promise<void> {
   await stopLanguageServer();
 }
 
-async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?: string): Promise<ToolDetection[]> {
+async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?: string, resource = activeProjectResource()): Promise<ToolDetection[]> {
   output.appendLine('正在检查 CO 工具链...');
-  const resource = vscode.window.activeTextEditor?.document.uri;
   const checks = await checkToolchain(output, resource, { promptForProfile: true, extensionRoot });
   output.appendLine('');
   for (const check of checks) {
@@ -282,7 +283,7 @@ async function showToolchainReport(output: vscode.OutputChannel, extensionRoot?:
 
 async function selectProjectProfile(): Promise<void> {
   const profiles: ProjectProfile[] = [...ALL_PROFILES];
-  const resource = vscode.window.activeTextEditor?.document.uri;
+  const resource = activeProjectResource();
   const resolution = getProfileResolution(resource);
   const current = resolution.configuredProfile;
   const picked = await vscode.window.showQuickPick(
@@ -307,7 +308,7 @@ async function selectProjectProfile(): Promise<void> {
 }
 
 function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => ToolDetection[] | undefined): void {
-  const resource = vscode.window.activeTextEditor?.document.uri;
+  const resource = activeProjectResource();
   const profileText = statusProfileText(resource);
   statusBar.text = `CO: ${profileText}`;
   statusBar.tooltip = 'BUAA CO Toolkit - 点击检查工具链';
@@ -315,7 +316,7 @@ function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (res
 
   if (getToolchainStatus) {
     const checks = getToolchainStatus(resource);
-    if (checks && sameResource(resource, vscode.window.activeTextEditor?.document.uri)) {
+    if (checks && sameResource(resource, activeProjectResource())) {
       const toolStatus = checks
         .filter((check) => ['Verilog simulator', 'Logisim'].includes(check.name))
         .map((check) => `${check.name} ${check.ok ? 'OK' : '✗'}`)
@@ -331,7 +332,7 @@ function toolchainCacheKey(resource?: vscode.Uri): string {
   const folder = resource
     ? vscode.workspace.getWorkspaceFolder(resource)
     : vscode.workspace.workspaceFolders?.[0];
-  return folder?.uri.toString() ?? 'global';
+  return resource?.toString() ?? folder?.uri.toString() ?? 'global';
 }
 
 function sameResource(left?: vscode.Uri, right?: vscode.Uri): boolean {

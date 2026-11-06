@@ -133,6 +133,29 @@ describe('profile resolver', () => {
     expect(result.effectiveProfile).toBeUndefined();
   });
 
+  it.each([[false, 'P5'], [true, 'P4']] as const)('uses the selected conditional trace branch (local=%s)', (local, expected) => {
+    const result = resolveProjectProfile({
+      modules: [module('mips', ['clk', 'reset'])],
+      verilogTexts: [[
+        ...(local ? ['`define LOCAL'] : []),
+        '`ifdef LOCAL', '$display("@%h: $%d <= %h", pc,id,data);',
+        '`else', '$display("%d@%h: $%d <= %h", $time,pc,id,data);', '`endif'
+      ].join('\n')]
+    });
+    expect(result.effectiveProfile).toBe(expected);
+  });
+
+  it('ignores unused trace macro bodies and display-looking text inside strings', () => {
+    expect(resolveProjectProfile({
+      modules: [module('mips', ['clk', 'reset'])],
+      verilogTexts: [[
+        '`define UNUSED $display("@%h: $%d <= %h", pc,id,data);',
+        '$display("// debug message");',
+        '$display("%d@%h: $%d <= %h", $time,pc,id,data);'
+      ].join('\n')]
+    }).effectiveProfile).toBe('P5');
+  });
+
   it('infers P2 for ASM-only context', () => {
     const result = resolveProjectProfile({
       configuredProfile: 'auto',

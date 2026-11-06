@@ -5,6 +5,7 @@ import { ProfileResolverFile, ProfileResolverInput } from './profileResolver';
 import type { VerilogModuleProvider } from './language/verilog/moduleProvider';
 import { workspaceFolderForOrFirst } from './fsUtil';
 import { normalizePathKey } from './pathUtils';
+import { activeProjectResource } from './configurationResource';
 
 const scanTtlMs = 30000;
 const maxProfileFiles = 3000;
@@ -19,16 +20,23 @@ export function buildProfileInferenceInput(
   resource: vscode.Uri | undefined,
   moduleRegistry: VerilogModuleProvider
 ): Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'> {
-  const activeResource = resource ?? currentTextDocument()?.uri;
+  const activeResource = activeProjectResource(resource) ?? currentTextDocument()?.uri;
   const activeDocument = documentFor(activeResource);
+  const activeLanguageId = activeDocument?.languageId ?? languageIdForPath(activeResource?.fsPath);
   const folder = workspaceFolderForOrFirst(activeResource);
-  const modules = moduleRegistry.allModules();
+  const sources = moduleRegistry.getProjectSources?.(
+    activeLanguageId === 'verilog' ? activeResource?.toString() : undefined
+  );
+  const modules = sources ? sources.flatMap((source) => source.modules) : moduleRegistry.allModules();
+  const projectFileKeys = sources && new Set(sources.map((source) => normalizePathKey(vscode.Uri.parse(source.uri).fsPath)));
+  const files = folder ? workspaceProfileFiles(folder.uri.fsPath, activeResource) : activeResource ? profileFileForUri(activeResource) : [];
   return {
-    activeLanguageId: activeDocument?.languageId ?? languageIdForPath(activeResource?.fsPath),
+    activeLanguageId,
     activeFilePath: activeResource?.fsPath,
-    files: folder ? workspaceProfileFiles(folder.uri.fsPath, activeResource) : activeResource ? profileFileForUri(activeResource) : [],
+    files: projectFileKeys ? files.filter((file) => file.languageId !== 'verilog' || projectFileKeys.has(normalizePathKey(file.path))) : files,
     modules,
-    verilogTexts: modules.map((module) => module.bodyText).filter(Boolean)
+    ...(sources ? { verilogDisplayFormats: sources.flatMap((source) => source.displayFormats) }
+      : { verilogTexts: modules.map((module) => module.bodyText).filter(Boolean) })
   };
 }
 
@@ -92,7 +100,7 @@ async function scanWorkspaceProfileFiles(root: string): Promise<ProfileResolverF
 
   try {
     const sourceFiles = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(root, '**/*.{v,asm,s,mips,circ}'),
+      new vscode.RelativePattern(root, '**/*.{v,vh,asm,s,mips,circ}'),
       profileFileExcludeGlob,
       maxProfileFiles
     );
@@ -154,7 +162,7 @@ function currentTextDocument(): vscode.TextDocument | undefined {
   if (active?.uri.scheme === 'file') {
     return active;
   }
-  return vscode.window.visibleTextEditors
+  return (vscode.window.visibleTextEditors ?? [])
     .map((editor) => editor.document)
     .find((document) => document.uri.scheme === 'file') ?? active;
 }
@@ -173,7 +181,7 @@ function languageIdForPath(filePath: string | undefined): string | undefined {
     return undefined;
   }
   const lower = filePath.toLowerCase();
-  if (lower.endsWith('.v')) {
+  if (lower.endsWith('.v') || lower.endsWith('.vh')) {
     return 'verilog';
   }
   if (/\.(asm|s|mips)$/.test(lower)) {
@@ -188,6 +196,7 @@ function languageIdForPath(filePath: string | undefined): string | undefined {
 function isProfileRelevantFile(name: string): boolean {
   const lower = name.toLowerCase();
   return lower.endsWith('.v')
+    || lower.endsWith('.vh')
     || lower.endsWith('.asm')
     || lower.endsWith('.s')
     || lower.endsWith('.mips')

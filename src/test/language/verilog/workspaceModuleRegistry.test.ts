@@ -238,7 +238,9 @@ describe('WorkspaceModuleRegistry', () => {
     const registry = new WorkspaceModuleRegistry();
 
     registry.activate();
-    await waitFor(() => !registry.scanning);
+    await registry.whenReady();
+
+    expect(registry.scanning).toBe(false);
 
     expect(normalize(registry.getModule('mips')?.uri ?? '')).toBe(normalize(file));
     expect(registry.getModule('ignored')).toBeUndefined();

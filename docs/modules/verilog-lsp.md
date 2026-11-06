@@ -37,7 +37,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `parameterOverrides.ts` — 实例参数按名/按位覆盖解析，逐级求值并报告不可求值项
 - `generateScopes.ts` — generate 块作用域查询（纯模型，含条件分支互斥）
 - `numericLiterals.ts` — 数字字面量 hover 格式化与进制/位宽代码操作
-- `displayFormats.ts` — `$display`/`$write` 格式串提取，供 trace 格式推断
+- `displayFormats.ts` — 基于活动分支 code tokens 提取 `$display` 格式串，供 Profile 推断；排除注释、字符串伪调用和未使用的宏定义体，索引复用已有 tokens
 - `tokenUtils.ts` — token 区间/种类/文本提取
 - `statementUtils.ts` — 顶层逗号区间切分
 - `textUtils.ts` — 解析与符号回退复用的文本、宽度和列表处理辅助；格式化不再依赖字符级等号扫描

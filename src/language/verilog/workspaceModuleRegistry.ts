@@ -7,10 +7,11 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseVerilogModuleSource } from './moduleDeclarations';
 import { parseIncludesFromTokens } from './preprocessor';
 import { VerilogModule } from './model';
-import type { MutableVerilogModuleProvider } from './moduleProvider';
+import type { MutableVerilogModuleProvider, VerilogModuleSource } from './moduleProvider';
 import { yieldEventLoop } from '../../nodeFs';
 import { normalizeVerilogProjects, VerilogProjectContext } from './projectContext';
 import { inferVerilogProjects, VerilogProjectSource } from './projectInference';
+import { extractVerilogDisplayFormatsFromTokens } from './displayFormats';
 
 /**
  * 扩展宿主侧的工作空间模块注册表。
@@ -22,12 +23,14 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private readonly modulesByUri = new Map<string, VerilogModule[]>();
   private readonly textHashes = new Map<string, string>();
   private readonly revisions = new Map<string, number>();
-  private readonly projectSources = new Map<string, VerilogProjectSource>();
+  private readonly projectSources = new Map<string, VerilogProjectSource & VerilogModuleSource>();
   private projectContext: { key: string; context: VerilogProjectContext } | undefined;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private scanTimer: ReturnType<typeof setTimeout> | undefined;
   private _scanning = true;
   private _disposed = false;
+  private resolveReady!: () => void;
+  private readonly ready = new Promise<void>((resolve) => { this.resolveReady = resolve; });
 
   readonly onDidChange = this._onDidChange.event;
 
@@ -36,6 +39,10 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   /** 是否正在执行初始扫描 */
   get scanning(): boolean {
     return this._scanning;
+  }
+
+  whenReady(): Promise<void> {
+    return this.ready;
   }
 
   /** Resolve only a unique definition in the caller's declared source set. */
@@ -55,6 +62,13 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   /** 获取当前注册表中所有模块 */
   allModules(): VerilogModule[] {
     return sortedModules([...this.modules.values()].flat());
+  }
+
+  getProjectSources(fromUri?: string): readonly VerilogModuleSource[] {
+    const sources = [...this.projectSources.values()];
+    if (!fromUri) return sources;
+    const context = this.resolveProjectContext();
+    return sources.filter((source) => context.sharesProject(fromUri, source.uri));
   }
 
   /** 按谓词查找模块，保持与 getModules 一致的稳定排序 */
@@ -90,6 +104,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders?.length) {
       this._scanning = false;
+      this.resolveReady();
       return;
     }
 
@@ -152,6 +167,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     this.projectSources.clear();
     this.projectContext = undefined;
     this._scanning = false;
+    this.resolveReady();
   }
 
   private indexDocument(document: vscode.TextDocument): boolean {
@@ -191,7 +207,10 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     // 清除该文件的旧条目后再添加
     this.removeDocument(uri);
     this.addModules(uri, parsed.modules);
-    this.projectSources.set(uri, { uri, modules: parsed.modules, includes: parseIncludesFromTokens(document, parsed.tokens) });
+    this.projectSources.set(uri, {
+      uri, modules: parsed.modules, includes: parseIncludesFromTokens(document, parsed.tokens),
+      displayFormats: extractVerilogDisplayFormatsFromTokens(parsed.codeTokens)
+    });
     this.textHashes.set(uri, hash);
     return true;
   }
@@ -252,6 +271,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
       await yieldEventLoop();
     }
     this._scanning = false;
+    this.resolveReady();
     this.fireDidChange();
   }
 

@@ -20,7 +20,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   course-testing  | docs/modules/course-testing.md  | 75 files + host adapters | 自动化测试框架与失败定位、用例重跑
   waveform        | docs/modules/waveform.md        | 60 files | 内置 VCD 波形查看器（自定义编辑器 + 仿真并查看波形）
   conformance     | conformance/mips/               | 独立 Node 包：ISA golden、冻结执行语料与 JSONL 门禁；MARS 参考仅用于历史证据
-  test-suite      | docs/modules/test-suite.md      | 289 files| Vitest 测试
+  test-suite      | docs/modules/test-suite.md      | 290 files| Vitest 测试
   resources       | docs/modules/resources.md       | ~55 files + 5 bundled Icarus runtimes | 静态资源与生成源
   highlighting    | docs/modules/syntax-highlighting.md | 3 grammars | TextMate/semantic 分层高亮
 

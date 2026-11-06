@@ -19,6 +19,7 @@ import {
 import { ProjectProfile } from './types';
 import { workspaceFolderForOrFirst } from './fsUtil';
 import { getEffectiveRequiredTools } from './toolchainPolicy';
+import { activeProjectResource } from './configurationResource';
 
 export type SidebarItem = vscode.TreeItem & { children?: SidebarItem[]; contextValue?: string };
 
@@ -47,7 +48,7 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
   private buildModelContext() {
     const activeDocument = this.currentTextDocument();
-    const resource = activeDocument?.uri;
+    const resource = activeProjectResource(activeDocument?.uri);
     const profile = getProfile(resource);
     const folder = workspaceFolderForOrFirst(resource);
 

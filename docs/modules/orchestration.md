@@ -10,12 +10,12 @@
 ## 配置与 Profile
 
 - `constants.ts` — 命令 ID、Profile 能力集合、输出目录名（`.co/*`）等公共常量
-- `config.ts` — `co.*` 设置读取（分层取值 + Profile 持久化 + 值域裁剪）；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置；旧 MARS jar/参数设置被忽略，延迟槽与内存布局由内置 MIPS 引擎读取
+- `config.ts` — `co.*` 设置读取（分层取值 + 显式 Profile 持久化 + 值域裁剪）；运行时自动推断不写入工作区 Profile，避免切换独立工程后沿用上一阶段；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置；旧 MARS jar/参数设置被忽略，延迟槽与内存布局由内置 MIPS 引擎读取
 - `configDefaults.ts` — 从 `resources/co/configDefaults.json` 加载默认值，宿主/LSP/测试共享
 - `resourcePaths.ts` — 宿主、LSP 与独立辅助入口共享扩展根与静态资源定位；Worker 管理器据此定位 Worker 入口
 - `courseConfig.ts` — Profile 定义（P0–P7）：名称/描述/能力矩阵/语言/目录/端口/内存布局，从 `resources/co/courseConfig.json` 加载缓存
 - `projectProfile.ts` / `generated/projectProfiles.ts` — 生成物（勿手改）与稳定导出入口，并校验 ISA profilePolicies 一致性
-- `profileInference.ts` / `profileResolver.ts` — Profile 推断：端口签名、display 格式、文件类型分布与四级置信度
+- `profileInference.ts` / `profileResolver.ts` — Profile 推断：按当前源集合收集端口签名和活动分支 display 格式，不混入兄弟工程；复用模块索引的文件级格式摘要（保留模块外 define），文件类型分布与四级置信度；异步运行入口等待初始索引就绪，状态读取保持同步
 - `extension.ts` 的文件监听仅在文件增删或配置变化时清理 Profile 文件列表；普通内容变更仍失效工具链状态并更新工程视图
 
 ## 工具链与进程
@@ -67,9 +67,9 @@
 - 编辑器标题栏复用侧栏的持续测试命令：P3–P7 空闲时显示火箭启动按钮，`co.continuousTestRunning` 在启动、执行和停止清理期间切换为停止按钮；运行中切换文件或 Profile 仍保留停止入口，最终清理后恢复启动条件。
 - `wizard.ts` / `wizardSettings.ts` — 4 步项目向导：选 Profile → 项目名 → 配置外部工具 → 创建目录与模板
 - `advancedTools.ts` / `advancedToolModel.ts` — 按 Profile 过滤的低频工具
-- `configurationResource.ts` / `diagnosticSettings.ts` — 诊断快速修复的配置读改写（精确作用域）
+- `configurationResource.ts` / `diagnosticSettings.ts` — 诊断快速修复的配置读改写（精确作用域）；共享源码上下文在报告/Webview 获得焦点后保留，状态栏、工具链及设置读取使用同一资源，工具链缓存按文件隔离
 - `webview/reportLayout.ts` — 报告 Webview 共享 shell/CSS、状态徽标、可横向滚动表格与 nonce CSP；历史报告按需加载本地筛选脚本
-- `webview/toolchainReport.ts` — 无宿主依赖的工具链报告渲染（汇总、状态与操作建议）
+- `webview/toolchainReport.ts` — 无宿主依赖的工具链报告渲染（汇总、状态与操作建议）；检查命令等待模块注册表初始扫描就绪后推断阶段
 - `templates/templateRegistry.ts` — `resources/templates` 受控占位替换加载器
 - `legacySemanticColorMigration.ts` — 一次性清理旧的全局 semantic token 规则
 - `workflowInputs.ts` / `types.ts` — 文件选择辅助与 `AppServices`/`RunResult`/`ToolDetection` 等公共类型

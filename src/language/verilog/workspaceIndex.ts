@@ -12,7 +12,7 @@ import { getCachedStrippedText, getCachedVerilogParse, clearCachedVerilogParse }
 import { VerilogInclude, VerilogMacro, VerilogMacroUse, VerilogModule, VerilogPortConnection } from './model';
 import { VerilogSemanticModel, VerilogSemanticSymbol, VerilogSemanticSymbolKind } from './semanticModel';
 import { yieldEventLoop } from '../../nodeFs';
-import { extractVerilogDisplayFormats } from './displayFormats';
+import { extractVerilogDisplayFormatsFromTokens } from './displayFormats';
 import { VerilogProjectContext, VerilogProjects } from './projectContext';
 import { inferVerilogProjects } from './projectInference';
 
@@ -192,7 +192,7 @@ export class VerilogWorkspaceIndex {
       macros: parsed.macros,
       macroUses: parsed.macroUses,
       includes: parsed.includes,
-      displayFormats: extractVerilogDisplayFormats(text),
+      displayFormats: extractVerilogDisplayFormatsFromTokens(parsed.ast.tokens),
       semantic: parsed.semantic
     };
     this.files.set(document.uri, file);

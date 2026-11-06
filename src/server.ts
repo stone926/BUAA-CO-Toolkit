@@ -203,6 +203,7 @@ interface ServerState {
 
 interface VerilogProfileSnapshot {
   indexVersion: number;
+  projectKey: string;
   files: Array<{ path: string; languageId?: string }>;
   modules: NonNullable<ProfileResolverInput['modules']>;
   verilogDisplayFormatsByUri: Map<string, string[]>;
@@ -814,7 +815,7 @@ function effectiveSettingsForDocument(document: TextDocument, settings: CoSettin
     return settings;
   }
   return cachedEffectiveSettings(effectiveSettingsCacheKey(document.uri, document.version), () => {
-    const snapshot = verilogProfileSnapshot();
+    const snapshot = verilogProfileSnapshot(document.languageId === languageIds.verilog ? document.uri : undefined);
     return applyResolvedProfile(settings, {
       activeLanguageId: serviceKeyForDocument(document),
       activeFilePath: fsPathFromUri(document.uri),
@@ -825,18 +826,21 @@ function effectiveSettingsForDocument(document: TextDocument, settings: CoSettin
   });
 }
 
-function verilogProfileSnapshot(): VerilogProfileSnapshot {
-  if (state.verilogProfileSnapshot?.indexVersion === verilogIndex.version) {
+function verilogProfileSnapshot(fromUri?: string): VerilogProfileSnapshot {
+  const projectKey = fromUri ? verilogIndex.projectKey(fromUri) : 'global';
+  if (state.verilogProfileSnapshot?.indexVersion === verilogIndex.version && state.verilogProfileSnapshot.projectKey === projectKey) {
     return state.verilogProfileSnapshot;
   }
-  const files = verilogIndex.indexedFiles()
+  const indexedFiles = verilogIndex.indexedFiles(fromUri);
+  const files = indexedFiles
     .map((file) => ({ path: fsPathFromUri(file.uri), languageId: languageIds.verilog }))
     .filter((file): file is { path: string; languageId: typeof languageIds.verilog } => Boolean(file.path));
   const snapshot: VerilogProfileSnapshot = {
     indexVersion: verilogIndex.version,
+    projectKey,
     files,
-    modules: verilogIndex.allModules(),
-    verilogDisplayFormatsByUri: new Map(verilogIndex.indexedFiles().map((file) => [file.uri, file.displayFormats]))
+    modules: [...verilogIndex.indexedModules(fromUri)],
+    verilogDisplayFormatsByUri: new Map(indexedFiles.map((file) => [file.uri, file.displayFormats]))
   };
   state.verilogProfileSnapshot = snapshot;
   return snapshot;
@@ -1014,7 +1018,7 @@ async function settingsForUri(uri: string): Promise<CoSettings> {
   }
   return cachedEffectiveSettings(effectiveSettingsCacheKey(uri, 0), () => {
     const languageId = isVerilogUri(uri) ? languageIds.verilog : '';
-    const snapshot = verilogProfileSnapshot();
+    const snapshot = verilogProfileSnapshot(languageId === languageIds.verilog ? uri : undefined);
     return applyResolvedProfile(settings, {
       activeLanguageId: languageId,
       activeFilePath: fsPathFromUri(uri),
