@@ -48,6 +48,19 @@ export function inferVerilogProjectLayout(folderUris: readonly string[], sources
       group.add(source.file);
       groups.set(owner, group);
     }
+    // Preserve each source's home definitions before dependency closures add
+    // shared files to caller projects. A reused library resolves its private
+    // dependencies in its own design, while caller-local replacements win.
+    const homeDefinitions = new Map<string, Map<string, string[]>>();
+    for (const group of groups.values()) {
+      const names = new Map<string, string[]>();
+      for (const file of group) for (const module of byPath.get(file)!.modules) {
+        const candidates = names.get(module.name) ?? [];
+        if (!candidates.includes(file)) candidates.push(file);
+        names.set(module.name, candidates);
+      }
+      for (const file of group) homeDefinitions.set(file, names);
+    }
 
     for (const [owner, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
       // Snapshot initial local definitions before traversal. A local variant
@@ -66,7 +79,8 @@ export function inferVerilogProjectLayout(folderUris: readonly string[], sources
         }
         for (const module of source.modules) for (const instance of module.instances) {
           if (localNames.has(instance.moduleName)) continue;
-          for (const candidate of definitions.get(instance.moduleName) ?? []) add(candidate);
+          const candidates = homeDefinitions.get(source.file)?.get(instance.moduleName) ?? definitions.get(instance.moduleName);
+          for (const candidate of candidates ?? []) add(candidate);
         }
       }
       const label = (folders.length > 1 ? `${path.posix.basename(root)}/` : '') +

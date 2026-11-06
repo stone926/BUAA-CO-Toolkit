@@ -23,6 +23,25 @@ function fixture(complete = true) {
 }
 
 describe('automatic Verilog projects', () => {
+  it('resolves reused libraries in their home project without importing sibling CPU variants', () => {
+    const { index, add } = fixture();
+    add('p4/mips.v', 'module mips; CPU u(); endmodule');
+    add('p4/cpu.v', 'module CPU; ALU a(); endmodule');
+    add('p4/alu.v', 'module ALU; endmodule');
+    add('p4/timer.v', 'module TC; endmodule');
+    add('p8/mips.v', 'module mips; shared_system s(); endmodule');
+    const system = add('p8/system.v', 'module shared_system; CPU c(); TC t(); endmodule');
+    const cpu = add('p8/cpu.v', 'module CPU; ALU a(); endmodule');
+    const alu = add('p8/alu.v', 'module ALU; endmodule');
+    const timer = add('p8/timer.v', 'module TC; endmodule');
+    const top = add('p9/mips.v', 'module mips; shared_system s(); endmodule');
+    expect(index.getModule('shared_system', top.uri)?.uri).toBe(system.uri);
+    expect(index.getModule('CPU', top.uri)?.uri).toBe(cpu.uri);
+    expect(index.getModule('ALU', top.uri)?.uri).toBe(alu.uri);
+    expect(index.getModule('TC', top.uri)?.uri).toBe(timer.uri);
+    expect(index.getModules('mips', top.uri).map((module) => module.uri)).toEqual([top.uri]);
+    expect(index.indexedFiles(top.uri)).toHaveLength(5);
+  });
   it('separates nested CPU variants and retains shared dependency closures', () => {
     const { index, add, settings } = fixture();
     const helper = add('common/helper.v', 'module helper; endmodule');
