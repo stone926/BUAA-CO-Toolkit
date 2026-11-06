@@ -31,6 +31,7 @@ export function buildProfileInferenceInput(
   const projectFileKeys = sources && new Set(sources.map((source) => normalizePathKey(vscode.Uri.parse(source.uri).fsPath)));
   const files = folder ? workspaceProfileFiles(folder.uri.fsPath, activeResource) : activeResource ? profileFileForUri(activeResource) : [];
   return {
+    projectScopes: activeResource ? moduleRegistry.getProjectScopes?.(activeResource.toString()) : undefined,
     activeLanguageId,
     activeFilePath: activeResource?.fsPath,
     files: projectFileKeys ? files.filter((file) => file.languageId !== 'verilog' || projectFileKeys.has(normalizePathKey(file.path))) : files,

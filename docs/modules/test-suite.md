@@ -1,8 +1,10 @@
-# test-suite | src/test/ | 290 files | 框架: Vitest
+# test-suite | src/test/ | 291 files | 框架: Vitest
 
 `helpers/testTimeouts.ts` 统一测试时限：Vitest 默认单测 60 秒、准备/清理钩子 120 秒，真实 Icarus 子进程 30 秒，给并发编译和大量文件操作预留调度余量；性能回归及专门验证取消/超时行为的用例保留自身预算，不改变生产工具时限。
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
+
+`projectSettings.test.ts` 验证项目级路径/文件边界、共享依赖与显式源列表身份、工作区默认值隔离；Profile 集成、真实 LSP 连接、仿真源发现及向导测试覆盖手动配置只写目标项目并保留兄弟项目行为。
 
 `profileInference.test.ts` 使用真实宿主模块注册表验证 P4/P5 子模块/头文件上下文隔离、条件编译 trace、切换报告后保留源码上下文、初始扫描等待及运行命令不固化自动阶段；`profileResolver.test.ts` 验证活动分支和无效格式证据过滤。
 

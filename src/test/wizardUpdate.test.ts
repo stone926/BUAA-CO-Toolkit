@@ -15,6 +15,8 @@ vi.mock('vscode', async () => {
 describe('updateProjectSettings tool-path migration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vscodeState.state!.workspaceFolders.splice(0);
+    vscodeState.state!.workspaceFolders.push({ uri: vscode.Uri.file('E:/work'), name: 'work' });
   });
 
   it('updates P2 project profile without requesting or writing an external MIPS tool', async () => {
@@ -31,7 +33,7 @@ describe('updateProjectSettings tool-path migration', () => {
     await updateProjectSettings('P2', {}, vscode.Uri.file('E:/work'));
 
     expect(update.mock.calls).toEqual([
-      ['project.profile', 'P2', vscode.ConfigurationTarget.WorkspaceFolder]
+      ['project.overrides', { '.': { profile: 'P2' } }, vscode.ConfigurationTarget.WorkspaceFolder]
     ]);
   });
 
@@ -49,7 +51,7 @@ describe('updateProjectSettings tool-path migration', () => {
     await updateProjectSettings('P3', { logisim: 'D:/new/logisim.jar' }, vscode.Uri.file('E:/work'));
 
     expect(update.mock.calls).toEqual([
-      ['project.profile', 'P3', vscode.ConfigurationTarget.WorkspaceFolder],
+      ['project.overrides', { '.': { profile: 'P3' } }, vscode.ConfigurationTarget.WorkspaceFolder],
       ['toolchain.logisim', 'D:/new/logisim.jar', vscode.ConfigurationTarget.Global],
       ['toolchain.logisim', undefined, vscode.ConfigurationTarget.WorkspaceFolder],
       ['toolchain.logisim', undefined, vscode.ConfigurationTarget.Workspace]

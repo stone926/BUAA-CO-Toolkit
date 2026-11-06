@@ -5,6 +5,7 @@ import {
   isConcreteProjectProfile
 } from './projectProfile';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
+import type { ProjectScope } from './projectSettings';
 import {
   getProfileDefaults,
   getProfileInferenceConfig,
@@ -12,7 +13,7 @@ import {
   ProfileInferenceConfig
 } from './courseConfig';
 
-export type ProfileConfiguredSource = 'settings' | 'default';
+export type ProfileConfiguredSource = 'settings' | 'default' | 'project';
 export type ProfileResolutionSource = ProfileConfiguredSource | 'inferred' | 'manualFallback';
 export type ProfileInferenceConfidence = 'explicit' | 'strong' | 'weak' | 'none';
 
@@ -47,6 +48,7 @@ export interface ProfileResolverFile {
 }
 
 export interface ProfileResolverInput {
+  projectScopes?: readonly ProjectScope[];
   configuredProfile?: ProjectProfile;
   configuredSource?: ProfileConfiguredSource;
   topModule?: string;
@@ -78,6 +80,10 @@ export function resolveProjectProfile(input: ProfileResolverInput): ProfileResol
   const configuredProfile = input.configuredProfile ?? 'auto';
   const configuredSource = input.configuredSource ?? 'default';
   if (isConcreteProjectProfile(configuredProfile)) {
+    if (configuredSource !== 'project' && input.projectScopes?.some((scope) => scope.isolated)) {
+      const inferred = resolveProjectProfile({ ...input, configuredProfile: 'auto' });
+      if (inferred.effectiveProfile && inferred.confidence === 'strong') return inferred;
+    }
     return {
       configuredProfile,
       configuredSource,
@@ -118,7 +124,7 @@ export function resolveProjectProfile(input: ProfileResolverInput): ProfileResol
 }
 
 export function applyResolvedProfile<T extends {
-  project: { profile: ProjectProfile; topModule: string; testbench: string };
+  project: { profile: ProjectProfile; topModule: string; testbench: string; profileSource?: 'project' };
 }>(
   settings: T,
   input: Omit<ProfileResolverInput, 'configuredProfile' | 'configuredSource' | 'topModule'>
@@ -126,7 +132,7 @@ export function applyResolvedProfile<T extends {
   const resolution = resolveProjectProfile({
     ...input,
     configuredProfile: settings.project.profile,
-    configuredSource: 'settings',
+    configuredSource: settings.project.profileSource ?? 'settings',
     topModule: settings.project.topModule
   });
   if (!resolution.effectiveProfile || resolution.effectiveProfile === settings.project.profile) {

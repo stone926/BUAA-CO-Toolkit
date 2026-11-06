@@ -8,10 +8,10 @@ import {
   VERILOG_CONTEXT_PROFILES
 } from './constants';
 import {
-  configurationTargetForResource,
   getProfileResolution,
   setProfileInferenceProvider
 } from './config';
+import { getProjectScopes, setProjectProfile } from './config';
 import {
   disableDiagnosticCodeCommand
 } from './language/common/settings';
@@ -285,7 +285,8 @@ async function selectProjectProfile(): Promise<void> {
   const profiles: ProjectProfile[] = [...ALL_PROFILES];
   const resource = activeProjectResource();
   const resolution = getProfileResolution(resource);
-  const current = resolution.configuredProfile;
+  const scopes = getProjectScopes(resource);
+  const current = resolution.effectiveProfile ?? resolution.configuredProfile;
   const picked = await vscode.window.showQuickPick(
     profiles.map((profile) => ({
       label: profile,
@@ -293,18 +294,13 @@ async function selectProjectProfile(): Promise<void> {
       profile
     })),
     {
-      title: '选择项目 Profile'
+      title: `选择项目 Profile${scopes.length === 1 ? ` — ${scopes[0].name}` : ''}`
     }
   );
   if (!picked) {
     return;
   }
-  await vscode.workspace.getConfiguration('co', resource).update(
-    'project.profile',
-    picked.profile,
-    configurationTargetForResource(resource)
-  );
-  vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
+  await setProjectProfile(picked.profile, resource);
 }
 
 function updateStatus(statusBar: vscode.StatusBarItem, getToolchainStatus?: (resource?: vscode.Uri) => ToolDetection[] | undefined): void {

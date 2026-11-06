@@ -1,4 +1,4 @@
-# orchestration | src/ | 62 files
+# orchestration | src/ | 63 files
 
 扩展宿主层：生命周期、命令注册、配置读取、Profile 推断、UI、工具链、MIPS/Verilog/Logisim 操作命令与用例存储。**不含**语言智能逻辑（在 `src/language/` 的 LSP Server 端）。这一层只做 VS Code glue，业务逻辑必须落在下面的领域模块里。
 
@@ -12,11 +12,14 @@
 - `constants.ts` — 命令 ID、Profile 能力集合、输出目录名（`.co/*`）等公共常量
 - `config.ts` — `co.*` 设置读取（分层取值 + 显式 Profile 持久化 + 值域裁剪）；运行时自动推断不写入工作区 Profile，避免切换独立工程后沿用上一阶段；显式 Profile 的默认项直接来自 courseConfig，向导无需写冗余设置；旧 MARS jar/参数设置被忽略，延迟槽与内存布局由内置 MIPS 引擎读取
 - `configDefaults.ts` — 从 `resources/co/configDefaults.json` 加载默认值，宿主/LSP/测试共享
+- `projectSettings.ts` — 项目专属 overrides 的纯校验、路径匹配与原始配置合并；工作区是容器/默认设置作用域，项目是独立源集合/目录或显式文件。`co.project.overrides` 保存 profile/topModule/testbench/machineCode/simTime，键相对所属工作区；共享依赖设置冲突时不任取一个调用者。
 - `resourcePaths.ts` — 宿主、LSP 与独立辅助入口共享扩展根与静态资源定位；Worker 管理器据此定位 Worker 入口
 - `courseConfig.ts` — Profile 定义（P0–P7）：名称/描述/能力矩阵/语言/目录/端口/内存布局，从 `resources/co/courseConfig.json` 加载缓存
 - `projectProfile.ts` / `generated/projectProfiles.ts` — 生成物（勿手改）与稳定导出入口，并校验 ISA profilePolicies 一致性
 - `profileInference.ts` / `profileResolver.ts` — Profile 推断：按当前源集合收集端口签名和活动分支 display 格式，不混入兄弟工程；复用模块索引的文件级格式摘要（保留模块外 define），文件类型分布与四级置信度；异步运行入口等待初始索引就绪，状态读取保持同步
 - `extension.ts` 的文件监听仅在文件增删或配置变化时清理 Profile 文件列表；普通内容变更仍失效工具链状态并更新工程视图
+
+手动 Profile 选择和项目向导通过同一写入入口，仅修改当前项目的 override，保留其它项目和字段。例如在 `lrz/p5/C_ALU.v` 选择 P5，会写入 `co.project.overrides: {"p5":{"profile":"P5"}}`，不会写入工作区 `co.project.profile`。旧的工作区 Profile 作为默认值保留；多项目工作区中，项目专属配置优先，其次是可靠的当前项目推断，最后使用工作区默认值。项目内显式 `auto` 恢复推断；父项目 override 不越过独立项目边界。侧边栏分别显示当前项目和工作区，并标明 Profile 来源。
 
 ## 工具链与进程
 
@@ -45,7 +48,7 @@
 - `verilog/simulationInputs.ts` — 机器码源定位、复制与 `code.txt` alias
 - `verilog/testbenchResolver.ts` — 三种 TB 来源（私有课程 TB / `.co/tb` 模板 / 自建 `*_tb.v`、`*_testbench.v`、`tb.v` 或 `testbench.v`），各阶段都不回退私有 TB
 - `verilog/userCpuProgram.ts` / `verilog/userCpuTestbench.ts` / `verilog/userTestbench.ts` — 用户 CPU 仿真的 ASM 选择、模板与目录约定
-- `verilog/verilogProject.ts` / `verilog/verilogProjectOrder.ts` — 源发现、确定性排序与按事件失效的缓存
+- `verilog/verilogProject.ts` / `verilog/verilogProjectOrder.ts` — 工作区发现基线缓存、当前项目源集合过滤、确定性排序与按事件失效；仿真沿当前设计入口仅编译该项目和共享依赖，独立保留显式生成源码
 - `verilog/workspaceOperationQueue.ts` — 按 workspace 串行的轻量 Promise 队列
 - `verilog/documentContext.ts` — VS Code 文档到 LSP `TextDocument` 的适配
 - `verilogSignalView.ts` — 信号连线面板（`coVerilogSignal` 视图）

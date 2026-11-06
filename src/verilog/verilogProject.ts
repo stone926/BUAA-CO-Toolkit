@@ -42,6 +42,7 @@ export async function resolveVerilogProjectFiles(
     excludedBasenames?: readonly string[];
     protectedFiles?: readonly vscode.Uri[];
     excludeCustomTestbenches?: boolean;
+    projectSourceUris?: readonly vscode.Uri[];
   } = {}
 ): Promise<vscode.Uri[]> {
   const baseline = await resolveVerilogProjectDiscoveryBaseline(folder);
@@ -51,8 +52,10 @@ export async function resolveVerilogProjectFiles(
   ].map((uri) => normalizePathKey(uri.fsPath)));
   const excludedKeys = new Set((exclusions.excludedFiles ?? []).map((uri) => normalizePathKey(uri.fsPath)));
   const excludedBasenames = new Set((exclusions.excludedBasenames ?? []).map((name) => name.toLowerCase()));
+  const projectKeys = exclusions.projectSourceUris && new Set(exclusions.projectSourceUris.map((uri) => normalizePathKey(uri.fsPath)));
   const files = baseline.discovered.filter((uri) => {
     const key = normalizePathKey(uri.fsPath);
+    if (projectKeys && !projectKeys.has(key)) return false;
     return protectedKeys.has(key)
       || (!excludedKeys.has(key)
         && !excludedBasenames.has(path.basename(uri.fsPath).toLowerCase())

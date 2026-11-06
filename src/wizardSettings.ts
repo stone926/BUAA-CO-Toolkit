@@ -34,11 +34,9 @@ export function buildWizardSettingUpdates(
   hasResource: boolean,
   legacyScopes: WizardToolchainLegacyScopes = {}
 ): WizardSettingUpdate[] {
-  const updates: WizardSettingUpdate[] = [{
-    key: 'project.profile',
-    value: profile,
-    target: hasResource ? 'workspaceFolder' : 'workspace'
-  }];
+  // Project intent is persisted by the shared project-scoped writer. This plan
+  // handles machine tools and removal of legacy tool-path overrides only.
+  const updates: WizardSettingUpdate[] = [];
   for (const [key, rawValue] of Object.entries(toolchain)) {
     if (typeof rawValue !== 'string') {
       continue;

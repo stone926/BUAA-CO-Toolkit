@@ -13,7 +13,12 @@ export interface VerilogProjectSource {
 
 /** Pure, deterministic inference over an existing index; never reads the filesystem. */
 export function inferVerilogProjects(folderUris: readonly string[], sources: readonly VerilogProjectSource[]): VerilogProjects {
+  return inferVerilogProjectLayout(folderUris, sources).projects;
+}
+
+export function inferVerilogProjectLayout(folderUris: readonly string[], sources: readonly VerilogProjectSource[]): { projects: VerilogProjects; anchors: Record<string, string> } {
   const result: VerilogProjects = Object.create(null);
+  const anchors: Record<string, string> = Object.create(null);
   const folders = folderUris.map(filePath).sort((a, b) => b.length - a.length);
   for (const root of folders) {
     const files = sources.map((source) => ({ ...source, file: filePath(source.uri) }))
@@ -72,9 +77,10 @@ export function inferVerilogProjects(folderUris: readonly string[], sources: rea
         const uri = byPath.get(file)!.uri;
         return path.isAbsolute(uri) ? uri : URI.parse(uri).fsPath;
       });
+      anchors[name] = owner;
     }
   }
-  return result;
+  return { projects: result, anchors };
 }
 
 function splitDirectories(directories: string[], boundaries: Set<string>): void {

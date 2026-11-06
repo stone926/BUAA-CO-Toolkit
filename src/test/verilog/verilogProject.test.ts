@@ -24,6 +24,15 @@ vi.mock('vscode', async () => {
 const folder = { uri: URI.file('E:/work'), name: 'work', index: 0 };
 
 describe('Verilog project source discovery', () => {
+  it('uses only the selected project sources while retaining explicit generated sources', async () => {
+    const a = URI.file('E:/work/p4/mips.v');
+    const b = URI.file('E:/work/p5/mips.v');
+    const shared = URI.file('E:/work/lib/alu.v');
+    const generated = URI.file('E:/work/.co/iverilog/generated_tb.v');
+    vscodeState.module!.workspace.findFiles.mockResolvedValue([a, b, shared]);
+    expect(await resolveVerilogProjectFiles(folder as never, [generated], { projectSourceUris: [a, shared] }))
+      .toEqual(orderVerilogProjectFiles([a, shared], [generated]));
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     clearVerilogProjectDiscoveryCache();

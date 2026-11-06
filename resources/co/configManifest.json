@@ -5,16 +5,29 @@
     "properties": {
       "co.project.profile": {
         "type": "string",
-        "description": "当前项目 Profile。auto 会根据项目文件、Verilog 顶层接口和 trace 格式推断具体 P 并保存；无法推断时会要求手动选择并保存",
+        "description": "工作区默认 Profile。独立项目的 co.project.overrides 配置优先；多项目工作区中，可靠的项目推断也优先于此默认值。auto 不写入固定阶段。侧边栏的手动选择只修改当前项目。",
         "scope": "resource",
         "order": 10,
         "runtimeDefault": "auto"
+      },
+      "co.project.overrides": {
+        "type": "object",
+        "description": "项目专属设置，键为相对工作区的项目目录或源文件路径，例如 {\"p4\":{\"profile\":\"P4\"},\"p5\":{\"profile\":\"P5\"}}。支持 profile、topModule、testbench、machineCode、simTime；共享依赖沿所属项目使用设置。工作区只是项目容器。",
+        "additionalProperties": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "profile": { "type": "string", "enum": ["auto", "P0", "P1", "P2", "P3", "P4", "P5", "P6", "P7"] },
+            "topModule": { "type": "string" }, "testbench": { "type": "string" },
+            "machineCode": { "type": "string" }, "simTime": { "type": "string" }
+          }
+        },
+        "scope": "resource", "order": 20, "runtimeDefault": {}
       },
       "co.test.instructions": {
         "type": "string",
         "description": "自动测试重点覆盖的真实指令。用逗号或空白分隔；留空时覆盖当前 Profile 的完整课程指令集。测试规模、中断、异常、外设和持续测试策略由插件自动使用最强安全配置。",
         "scope": "resource",
-        "order": 20,
+        "order": 30,
         "runtimeDefault": ""
       },
       "co.test.concurrency": {
@@ -24,7 +37,7 @@
         "multipleOf": 1,
         "description": "持续测试同时执行的测试点上限。默认 4；设为 1 使用串行测试。增大可提高多核机器的吞吐量，也会增加 CPU 和内存占用；修改后下次启动测试生效。",
         "scope": "resource",
-        "order": 30,
+        "order": 40,
         "runtimeDefault": 4
       }
     }

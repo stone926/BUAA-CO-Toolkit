@@ -9,6 +9,7 @@
   "mips.warnMissingExitSyscall": true,
   "mips.warnPseudoInstruction": true,
   "project.machineCode": "code.txt",
+  "project.overrides": {},
   "project.profile": "auto",
   "project.simTime": "200us",
   "project.testbench": "mips_tb",

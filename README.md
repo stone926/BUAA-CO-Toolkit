@@ -27,7 +27,9 @@
 
 新项目：先在 VS Code 中打开一个文件夹或工作区，然后在命令面板（`Ctrl+Shift+P`）运行 **`CO: 项目向导`**。向导可以创建课程目录、模板文件，并写入 Profile。
 
-已有项目：运行 **`CO: 选择项目 Profile`**，选择 P0–P7；也可以把 `co.project.profile` 设为 `auto`，插件会根据项目文件、顶层接口和 trace 格式推断。不能唯一推断时，插件会提示你选择。
+已有项目：打开目标项目的源码文件，运行 **`CO: 选择项目 Profile`**，选择 P0–P7。选择只保存到当前项目的 `co.project.overrides`，同一工作区里的其它项目保持独立；选择 `auto` 可恢复自动推断。不能唯一推断时，插件会提示你选择。
+
+一个 VS Code 工作区文件夹可以包含多个项目，例如 `p4/` 和 `p5/`。插件按源集合与依赖识别项目，侧边栏分别显示“当前项目”和“工作区”。手动设置示例：`"co.project.overrides": {"p4":{"profile":"P4"},"p5":{"profile":"P5"}}`。`co.project.profile` 保留为工作区默认值；项目专属设置和多项目工作区中的可靠项目推断优先于此默认值。
 
 ### 3. 只配置当前工作流需要的外部工具
 
@@ -180,7 +182,8 @@ assign y = sel ? a : b;
 
 | 设置 | 用途 |
 |---|---|
-| `co.project.profile` | 当前课程阶段；默认 `auto` |
+| `co.project.profile` | 工作区默认课程阶段；默认 `auto` |
+| `co.project.overrides` | 按项目目录或独立源文件保存 Profile、顶层模块和 testbench 等专属设置 |
 | `co.test.instructions` | 自动测试要重点覆盖的真实指令；留空使用默认全集 |
 | `co.test.concurrency` | 自动测试并发上限，默认 4，范围 1–8；1 为串行 |
 | `co.verilog.syntax.external.mode` | 内置 Icarus 检查的触发时机；默认保存时检查 |

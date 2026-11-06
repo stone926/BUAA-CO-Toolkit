@@ -1,5 +1,6 @@
 import type * as vscode from 'vscode';
 import type { VerilogModule } from './model';
+import type { ProjectScope } from '../../projectSettings';
 
 export interface VerilogModuleSource {
   uri: string;
@@ -13,6 +14,7 @@ export interface VerilogModuleProvider {
   getModules(name: string, fromUri?: string): VerilogModule[];
   allModules(): VerilogModule[];
   getProjectSources?(fromUri?: string): readonly VerilogModuleSource[];
+  getProjectScopes?(fromUri: string): readonly ProjectScope[];
 }
 
 export interface MutableVerilogModuleProvider extends VerilogModuleProvider {

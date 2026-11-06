@@ -5,10 +5,8 @@ import {
 } from '../wizardSettings';
 
 describe('buildWizardSettingUpdates', () => {
-  it('persists only the Profile inside a workspace folder', () => {
-    expect(buildWizardSettingUpdates('P1', {}, true)).toEqual([
-      { key: 'project.profile', value: 'P1', target: 'workspaceFolder' }
-    ]);
+  it('leaves project Profile persistence to the project-scoped writer', () => {
+    expect(buildWizardSettingUpdates('P1', {}, true)).toEqual([]);
   });
 
   it('keeps Logisim and Java paths global and trims user input', () => {
@@ -16,7 +14,6 @@ describe('buildWizardSettingUpdates', () => {
       java: '  C:\\Java\\bin\\java.exe  ',
       logisim: ''
     }, true)).toEqual([
-      { key: 'project.profile', value: 'P7', target: 'workspaceFolder' },
       { key: 'toolchain.java', value: 'C:\\Java\\bin\\java.exe', target: 'global' }
     ]);
   });
@@ -39,7 +36,6 @@ describe('buildWizardSettingUpdates', () => {
     }, true, {
       logisim: { workspaceFolder: true, workspace: true }
     })).toEqual([
-      { key: 'project.profile', value: 'P7', target: 'workspaceFolder' },
       { key: 'toolchain.logisim', value: 'C:\\Tools\\logisim.jar', target: 'global' },
       { key: 'toolchain.logisim', value: undefined, target: 'workspaceFolder' },
       { key: 'toolchain.logisim', value: undefined, target: 'workspace' }
@@ -52,7 +48,6 @@ describe('buildWizardSettingUpdates', () => {
     }, false, {
       java: { workspaceFolder: true, workspace: true }
     })).toEqual([
-      { key: 'project.profile', value: 'P2', target: 'workspace' },
       { key: 'toolchain.java', value: 'C:\\Java\\bin\\java.exe', target: 'global' },
       { key: 'toolchain.java', value: undefined, target: 'workspace' }
     ]);

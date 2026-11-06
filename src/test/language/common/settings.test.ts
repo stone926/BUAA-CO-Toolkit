@@ -42,6 +42,7 @@ describe('mergeCoSettings', () => {
       project: { profile: 'P1', topModule: '', testbench: '', machineCode: '', simTime: '' }
     });
     expect(result.project).toEqual({
+      overrides: {},
       profile: 'P1',
       topModule: 'main',
       testbench: 'main_tb',
@@ -220,6 +221,6 @@ describe('mergeCoSettings', () => {
       }
     };
     const result = mergeCoSettings(full);
-    expect(result.project).toEqual(full.project);
+    expect(result.project).toEqual({ overrides: {}, ...full.project });
   });
 });

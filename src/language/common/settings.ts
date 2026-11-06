@@ -3,6 +3,7 @@ import { isConcreteProjectProfile, ProjectProfile } from '../../projectProfile';
 import { getProfileDefaults } from '../../courseConfig';
 import { configDefault, configDefaultArray } from '../../configDefaults';
 import { normalizeVerilogProjects, VerilogProjects } from '../verilog/projectContext';
+import { normalizeProjectOverrides, ProjectOverrides } from '../../projectSettings';
 export const disableDiagnosticCodeCommand = 'co.diagnostics.disableCode';
 
 export interface CoSettings {
@@ -11,6 +12,8 @@ export interface CoSettings {
     disabledFileCodes: string[];
   };
   project: {
+    overrides: ProjectOverrides;
+    profileSource?: 'project';
     profile: ProjectProfile;
     topModule: string;
     testbench: string;
@@ -49,6 +52,7 @@ export const defaultCoSettings: CoSettings = {
     disabledFileCodes: configDefaultArray('diagnostics.disabledFileCodes')
   },
   project: {
+    overrides: {},
     profile: configDefault<ProjectProfile>('project.profile'),
     topModule: configDefault<string>('project.topModule'),
     testbench: configDefault<string>('project.testbench'),
@@ -123,6 +127,8 @@ function normalizeProject(value: Partial<CoSettings['project']> | undefined): Co
     : defaultCoSettings.project.profile;
   const profileDefaults = isConcreteProjectProfile(profile) ? getProfileDefaults(profile) : {};
   return {
+    overrides: normalizeProjectOverrides(candidate.overrides),
+    ...(candidate.profileSource === 'project' ? { profileSource: 'project' as const } : {}),
     profile,
     // The manifest intentionally publishes blank top/testbench defaults. Keep that
     // sentinel while Profile is auto so the inference layer can distinguish an

@@ -47,6 +47,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `moduleProvider.ts` — `MutableVerilogModuleProvider` 接口
 - `moduleResolution.ts` — 按调用者工程上下文唯一解析模块；歧义不选首个定义，诊断与 provider 共用
 - `projectContext.ts` — `co.verilog.projects` 命名源集合与文件/目录归属；LSP、宿主连线视图和外部语法检查共用
+- 项目 identity 保留独立目录的原始 anchor，不将共享依赖的公共祖先误当成项目根；显式文件集合排除公共依赖后确定 anchor，同目录独立文件保留各自文件身份。宿主配置与 LSP 共用此身份。
 - `projectInference.ts` — 基于同名模块目录分叉与实例/include 依赖闭包推断源集合；纯索引计算，无文件系统访问
 
 ## LSP providers
@@ -91,6 +92,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 - `workspaceModuleRegistry.ts` — VS Code 端后台索引：保存时从文档更新，watcher 异步读盘并按内容指纹跳过保存回声；每个 URI 的修订序号防止旧读取覆盖新索引
 - `workspaceIndex.ts` — LSP 端模块/宏/引用/display 格式数据库，增量更新（≤50 逐文件，>50 全量）
+- LSP 缓存工作区原始配置，并按当前文档和最新项目身份应用 `co.project.overrides` 后再归一化，避免工作区阶段派生的默认顶层/testbench 污染项目；实际推断缓存包含索引修订。
 - 未配置 `co.verilog.projects` 时，后台索引自动按同名模块的目录分叉（支持多层课程/CPU 目录）划分源集合，沿实例和相对 include 依赖补齐共享源码。推断按索引修订缓存，文件变化后失效，无新增启动扫描，也不会自动写入用户设置；初始扫描完成前不发布跨文件重复/歧义诊断。同目录重复或无本地定义的多候选依赖保留诊断，不任意选择目标。
 - 自动推断统一用于 LSP、宿主连线和外部语法检查。重复/歧义诊断提供“自动分析并配置独立 Verilog 工程”快速修复，可将推断结果（含共享依赖）保存到工作区设置；已有显式配置优先且不会被覆盖。手工配置示例 `{"P4":["stone/p4"],"P7":["stone/p7"]}`，条目为文件/递归目录，可使用绝对路径，不使用 glob；同目录独立题目可以分别列出 `ALU1.v`、`ALU2.v`。共享入口需从具体工程入口触发外部检查。
 - `signalWiring.ts` — 跨模块 signal driver/reader 追踪

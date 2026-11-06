@@ -10,7 +10,7 @@ import { VerilogModule } from './model';
 import type { MutableVerilogModuleProvider, VerilogModuleSource } from './moduleProvider';
 import { yieldEventLoop } from '../../nodeFs';
 import { normalizeVerilogProjects, VerilogProjectContext } from './projectContext';
-import { inferVerilogProjects, VerilogProjectSource } from './projectInference';
+import { inferVerilogProjectLayout, VerilogProjectSource } from './projectInference';
 import { extractVerilogDisplayFormatsFromTokens } from './displayFormats';
 
 /**
@@ -69,6 +69,10 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     if (!fromUri) return sources;
     const context = this.resolveProjectContext();
     return sources.filter((source) => context.sharesProject(fromUri, source.uri));
+  }
+
+  getProjectScopes(fromUri: string) {
+    return this.resolveProjectContext().projectScopes(fromUri);
   }
 
   /** 按谓词查找模块，保持与 getModules 一致的稳定排序 */
@@ -220,8 +224,8 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     const configured = normalizeVerilogProjects(vscode.workspace.getConfiguration('co').get('verilog.projects'));
     const key = JSON.stringify([folders, configured]);
     if (this.projectContext?.key === key) return this.projectContext.context;
-    const projects = Object.keys(configured).length ? configured : inferVerilogProjects(folders, [...this.projectSources.values()]);
-    const context = new VerilogProjectContext(folders, projects, !Object.keys(configured).length);
+    const layout = Object.keys(configured).length ? { projects: configured, anchors: {} } : inferVerilogProjectLayout(folders, [...this.projectSources.values()]);
+    const context = new VerilogProjectContext(folders, layout.projects, !Object.keys(configured).length, layout.anchors);
     this.projectContext = { key, context };
     return context;
   }

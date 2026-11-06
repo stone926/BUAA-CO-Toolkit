@@ -1,5 +1,8 @@
 // @index config — co.*设置读取，分层取值+值域裁剪
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { normalizeProjectOverrides, ProjectScope, resolveProjectOverride } from './projectSettings';
+import { normalizePathKey } from './pathUtils';
 import { activeProjectResource } from './configurationResource';
 import { DELAYED_BRANCHING_PROFILES } from './constants';
 import { configDefault } from './configDefaults';
@@ -30,6 +33,11 @@ import {
  */
 
 export function config<T>(key: string, fallback: T, resource = activeProjectResource()): T {
+  if (key.startsWith('project.') && key !== 'project.overrides') {
+    const override = projectOverrideForResource(resource);
+    const field = key.slice('project.'.length) as keyof NonNullable<typeof override>;
+    if (override?.[field] !== undefined) return override[field] as T;
+  }
   const value = vscode.workspace.getConfiguration('co', resource).get<T>(key);
   if (value !== undefined && value !== null) {
     return value;
@@ -62,6 +70,10 @@ function layeredGetString(
   defaultValue: string,
   resource?: vscode.Uri
 ): string {
+  const override = projectOverrideForResource(resource ?? activeProjectResource());
+  const field = vsKey.slice('project.'.length) as keyof NonNullable<typeof override>;
+  const local = override?.[field];
+  if (typeof local === 'string' && local.trim()) return local.trim();
   const vsValue = inspectedValue<string>(vsKey, resource);
   if (vsValue && vsValue.trim()) {
     return vsValue.trim();
@@ -75,6 +87,8 @@ export interface ConfiguredProjectProfile {
 }
 
 export function getConfiguredProjectProfile(resource = activeProjectResource()): ConfiguredProjectProfile {
+  const override = projectOverrideForResource(resource);
+  if (override?.profile) return { profile: override.profile, source: 'project' };
   const inspected = vscode.workspace.getConfiguration('co', resource).inspect<ProjectProfile>('project.profile');
   const vsValue = normalizeProjectProfile(
     inspected?.workspaceFolderValue
@@ -92,7 +106,7 @@ export function getConfiguredProjectProfile(resource = activeProjectResource()):
 
 export function getProfileResolution(resource = activeProjectResource()): ProfileResolution {
   const configured = getConfiguredProjectProfile(resource);
-  if (isConcreteProjectProfile(configured.profile)) {
+  if (configured.source === 'project' && isConcreteProjectProfile(configured.profile)) {
     return resolveProjectProfile({
       configuredProfile: configured.profile,
       configuredSource: configured.source
@@ -102,7 +116,7 @@ export function getProfileResolution(resource = activeProjectResource()): Profil
     ...(profileInferenceProvider?.(resource) ?? {}),
     configuredProfile: configured.profile,
     configuredSource: configured.source,
-    topModule: getTopModule(resource)
+    topModule: layeredGetString('project.topModule', configDefault<string>('project.topModule'), resource)
   });
 }
 
@@ -112,7 +126,7 @@ export function getProfile(resource?: vscode.Uri): ProjectProfile {
 }
 
 export async function ensureConcreteProfile(resource = activeProjectResource(), detail?: string): Promise<ConcreteProjectProfile | undefined> {
-  if (getConfiguredProjectProfile(resource).profile === 'auto') await profileInferenceReady?.();
+  await profileInferenceReady?.();
   const resolution = getProfileResolution(resource);
   if (resolution.effectiveProfile) {
     // An inferred stage belongs to this source set, not the whole workspace.
@@ -132,13 +146,46 @@ export async function ensureConcreteProfile(resource = activeProjectResource(), 
   if (!picked) {
     return undefined;
   }
-  await vscode.workspace.getConfiguration('co', resource).update(
-    'project.profile',
-    picked.profile,
-    configurationTargetForResource(resource)
-  );
-  vscode.window.showInformationMessage(`Profile 已设置为 ${picked.profile}`);
-  return picked.profile;
+  return await setProjectProfile(picked.profile, resource) ? picked.profile : undefined;
+}
+
+export function getProjectScopes(resource = activeProjectResource()): readonly ProjectScope[] {
+  if (!resource) return [];
+  const known = profileInferenceProvider?.(resource)?.projectScopes;
+  if (known?.length) return known;
+  const folder = vscode.workspace.getWorkspaceFolder(resource);
+  if (!folder) return [];
+  const rootPath = path.extname(resource.fsPath) ? path.dirname(resource.fsPath) : resource.fsPath;
+  return [{ name: path.basename(rootPath), rootPath, workspacePath: folder.uri.fsPath, isolated: true }];
+}
+
+function projectOverrideForResource(resource: vscode.Uri | undefined) {
+  if (!resource) return undefined;
+  const folder = vscode.workspace.getWorkspaceFolder?.(resource);
+  if (!folder) return undefined;
+  return resolveProjectOverride(vscode.workspace.getConfiguration('co', resource).get('project.overrides'), resource.fsPath, folder.uri.fsPath, profileInferenceProvider?.(resource)?.projectScopes);
+}
+
+/** Manual choices target a project anchor; a workspace folder is only a container. */
+export async function setProjectProfile(profile: ProjectProfile, resource = activeProjectResource()): Promise<boolean> {
+  await profileInferenceReady?.();
+  const scopes = getProjectScopes(resource);
+  if (!scopes.length) {
+    void vscode.window.showErrorMessage('请先打开目标项目的源码文件，再选择项目 Profile。');
+    return false;
+  }
+  const scope = scopes.length === 1 ? scopes[0] : await vscode.window.showQuickPick(
+    scopes.map((entry) => ({ label: entry.name, description: entry.rootPath, scope: entry })),
+    { title: '此文件由多个项目共享，请选择要修改的项目' }
+  ).then((entry) => entry?.scope);
+  if (!scope || !resource) return false;
+  const relative = path.relative(scope.workspacePath, scope.rootPath).replace(/\\/g, '/') || '.';
+  const configuration = vscode.workspace.getConfiguration('co', resource);
+  const current = normalizeProjectOverrides(configuration.get('project.overrides'));
+  const key = Object.keys(current).find((entry) => normalizePathKey(path.resolve(scope.workspacePath, entry)) === normalizePathKey(scope.rootPath)) ?? relative;
+  await configuration.update('project.overrides', { ...current, [key]: { ...current[key], profile } }, configurationTargetForResource(resource));
+  void vscode.window.showInformationMessage(`项目 ${scope.name} 的 Profile 已设置为 ${profile}`);
+  return true;
 }
 
 export function getTopModule(resource?: vscode.Uri): string {
@@ -183,7 +230,7 @@ function configuredProfileDefault(
   fallback: string,
   resource?: vscode.Uri
 ): string {
-  const configured = getConfiguredProjectProfile(resource).profile;
+  const configured = getProfileResolution(resource).effectiveProfile;
   if (!isConcreteProjectProfile(configured)) {
     return fallback;
   }

@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { buildProfileInferenceInput, clearProfileInferenceCache } from '../profileInference';
 import { WorkspaceModuleRegistry } from '../language/verilog/workspaceModuleRegistry';
 import { activeProjectResource, clearActiveProjectResource } from '../configurationResource';
-import { ensureConcreteProfile, getProfileResolution, setProfileInferenceProvider } from '../config';
+import { ensureConcreteProfile, getProfileResolution, getTopModule, getTestbench, setProjectProfile, setProfileInferenceProvider } from '../config';
 
 const mocks = vi.hoisted(() => ({
   state: undefined as ReturnType<typeof import('./helpers/vscodeMock').createVscodeMockState> | undefined
@@ -26,6 +26,33 @@ function source(file: string, text: string): vscode.Uri {
 }
 
 describe('project-scoped Profile inference', () => {
+  it('keeps manual Profile choices within one project despite a legacy workspace Profile', async () => {
+    const p4 = source('p4/mips.v', 'module mips(input clk, input reset); initial $display("@%h: $%d <= %h",pc,id,data); endmodule');
+    const p5 = source('p5/mips.v', 'module mips(input clk, input reset); initial $display("%d@%h: $%d <= %h",$time,pc,id,data); endmodule');
+    const helper5 = source('p5/C_ALU.v', 'module alu; endmodule');
+    mocks.state!.config.set('co.project.profile', 'P5');
+    expect(getProfileResolution(p4).effectiveProfile).toBe('P4');
+    expect(await setProjectProfile('P6', helper5)).toBe(true);
+    expect(mocks.state!.config.get('co.project.overrides')).toEqual({ p5: { profile: 'P6' } });
+    expect(mocks.state!.config.get('co.project.profile')).toBe('P5');
+    expect(getProfileResolution(p5).effectiveProfile).toBe('P6');
+    expect(getProfileResolution(p4).effectiveProfile).toBe('P4');
+    await setProjectProfile('P4', p4);
+    await setProjectProfile('auto', p5);
+    expect(getProfileResolution(p4).source).toBe('project');
+    expect(getProfileResolution(p5).effectiveProfile).toBe('P5');
+  });
+
+  it('resolves project entrypoints separately from the workspace defaults', () => {
+    const p4 = source('p4/mips.v', 'module mips(input clk, input reset); endmodule');
+    const p5 = source('p5/mips.v', 'module mips(input clk, input reset); endmodule');
+    mocks.state!.config.set('co.project.topModule', 'workspace_top');
+    mocks.state!.config.set('co.project.overrides', { p4: { profile: 'P4', topModule: 'cpu4', testbench: 'tb4' }, p5: { profile: 'P5', topModule: 'cpu5', testbench: 'tb5' } });
+    expect(getTopModule(p4)).toBe('cpu4');
+    expect(getTopModule(p5)).toBe('cpu5');
+    expect(getTestbench(p4)).toBe('tb4');
+    expect(getTestbench(p5)).toBe('tb5');
+  });
   afterEach(() => { registry.dispose(); setProfileInferenceProvider(undefined); clearActiveProjectResource(); });
   beforeEach(() => {
     vi.clearAllMocks();

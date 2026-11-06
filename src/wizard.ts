@@ -4,7 +4,8 @@ import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CONCRETE_PROFILES } from './constants';
 import { ProjectProfile } from './types';
-import { getLogisimJar, getJava, getMipsEngine } from './config';
+import { getLogisimJar, getJava, getMipsEngine, getProjectScopes, setProjectProfile } from './config';
+import { activeProjectResource } from './configurationResource';
 import {
   getProfileDefaults,
   getProfileDirectories,
@@ -23,7 +24,8 @@ import {
 } from './wizardSettings';
 
 export async function runProjectWizard(): Promise<void> {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  const resource = activeProjectResource();
+  const workspaceFolder = (resource && vscode.workspace.getWorkspaceFolder(resource)) || vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
     vscode.window.showErrorMessage('请先打开一个工作区文件夹');
     return;
@@ -100,12 +102,18 @@ export async function runProjectWizard(): Promise<void> {
     return;
   }
 
-  const rootPath = workspaceFolder.uri.fsPath;
+  const scopes = getProjectScopes(resource);
+  if (scopes.length > 1) {
+    void vscode.window.showErrorMessage('此文件由多个项目共享，请先打开目标项目的入口文件。');
+    return;
+  }
+  const anchor = scopes[0]?.rootPath ?? workspaceFolder.uri.fsPath;
+  const rootPath = /\.vh?$/i.test(anchor) ? path.dirname(anchor) : anchor;
   try {
     if (createStructure.value) {
       await createProjectStructure(rootPath, profile);
     }
-    await updateProjectSettings(profile, toolchainConfig, workspaceFolder.uri);
+    await updateProjectSettings(profile, toolchainConfig, vscode.Uri.file(rootPath));
     vscode.window.showInformationMessage(createStructure.value
       ? `CO 项目 '${projectName}' (${profile}) 创建成功！`
       : `CO 项目 '${projectName}' (${profile}) 设置已更新`);
@@ -250,6 +258,7 @@ export async function updateProjectSettings(
   toolchainConfig: WizardToolchainSettings,
   resource?: vscode.Uri
 ): Promise<void> {
+  if (!await setProjectProfile(profile, resource)) return;
   const config = vscode.workspace.getConfiguration('co', resource);
   const baseUpdates = buildWizardSettingUpdates(profile, toolchainConfig, Boolean(resource));
   const legacyScopes = inspectWizardToolchainLegacyScopes(

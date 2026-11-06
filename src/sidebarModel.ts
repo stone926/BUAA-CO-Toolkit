@@ -49,9 +49,12 @@ export interface SidebarActiveFileModel {
 
 export interface SidebarModelContext {
   profile: ProjectProfile;
+  projectName?: string;
+  projectPath?: string;
   workspaceName?: string;
   workspacePath?: string;
   configSource: 'VS Code settings';
+  profileScopeDescription?: string;
   topModule: string;
   testbench: string;
   machineCode: string;
@@ -78,6 +81,7 @@ export function buildSidebarModel(context: SidebarModelContext): SidebarNodeMode
 function projectSection(context: SidebarModelContext): SidebarNodeModel {
   const toolSummary = summarizeTools(context.tools);
   const children: SidebarNodeModel[] = [
+    ...(context.projectName ? [infoItem('project.current', '当前项目', context.projectName, context.projectPath ?? '请从目标项目入口操作共享文件', 'folder')] : []),
     infoItem('project.profile', 'Profile', profileDescription(context.profile), `${configSourceTooltip(context)}\n\n点击选择项目 Profile。`, context.profile === 'auto' ? 'warning' : 'symbol-class', {
       command: Commands.SelectProjectProfile,
       title: '选择 Profile'
@@ -98,8 +102,8 @@ function projectSection(context: SidebarModelContext): SidebarNodeModel {
       '项目向导',
       Commands.ProjectWizard,
       'new-folder',
-      '创建结构 / 写入工作区设置',
-      workspaceTooltip(context, '项目向导会在当前工作区创建课程目录，并写入 VS Code 工作区设置。')
+      '创建结构 / 配置当前项目',
+      workspaceTooltip(context, '项目向导会创建当前项目的课程目录，并写入项目专属设置。')
     ),
   ];
   return sectionItem('project', '项目', true, children);
@@ -422,6 +426,7 @@ function summarizeTools(tools: SidebarToolModel[]): { description: string; toolt
 
 function configSourceTooltip(context: SidebarModelContext): string {
   const lines = [
+    ...(context.profileScopeDescription ? [`Profile 来源: ${context.profileScopeDescription}`] : []),
     `当前配置来源: ${context.configSource}`,
     `Profile: ${context.profile}`
   ];

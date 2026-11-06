@@ -15,6 +15,7 @@ import { yieldEventLoop } from '../../nodeFs';
 import { extractVerilogDisplayFormatsFromTokens } from './displayFormats';
 import { VerilogProjectContext, VerilogProjects } from './projectContext';
 import { inferVerilogProjects } from './projectInference';
+import { inferVerilogProjectLayout } from './projectInference';
 
 export type VerilogConnectionListKind = 'ports' | 'parameters';
 
@@ -57,6 +58,7 @@ export class VerilogWorkspaceIndex {
   private configuredProjects: VerilogProjects = {};
   private projectContext: VerilogProjectContext | undefined;
   private inferredProjects: VerilogProjects | undefined;
+  private inferredAnchors: Record<string, string> = {};
 
   constructor(options: { maxFiles?: number; workspaceComplete?: boolean } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
@@ -258,7 +260,12 @@ export class VerilogWorkspaceIndex {
   /** Same effective source sets are passed to external compiler discovery. */
   get effectiveProjects(): VerilogProjects {
     if (Object.keys(this.configuredProjects).length) return this.configuredProjects;
-    return this.inferredProjects ??= inferVerilogProjects(this.folderUris, [...this.files.values()]);
+    if (!this.inferredProjects) {
+      const layout = inferVerilogProjectLayout(this.folderUris, [...this.files.values()]);
+      this.inferredProjects = layout.projects;
+      this.inferredAnchors = layout.anchors;
+    }
+    return this.inferredProjects;
   }
 
   inferProjects(): VerilogProjects {
@@ -266,8 +273,10 @@ export class VerilogWorkspaceIndex {
   }
 
   private get projects(): VerilogProjectContext {
-    return this.projectContext ??= new VerilogProjectContext(this.folderUris, this.effectiveProjects, !Object.keys(this.configuredProjects).length);
+    return this.projectContext ??= new VerilogProjectContext(this.folderUris, this.effectiveProjects, !Object.keys(this.configuredProjects).length, this.inferredAnchors);
   }
+
+  getProjectScopes(uri: string) { return this.projects.projectScopes(uri); }
 
   projectKey(uri: string): string {
     return this.projects.projectIds(uri).join('\u0000');

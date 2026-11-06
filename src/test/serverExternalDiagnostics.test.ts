@@ -131,6 +131,21 @@ beforeEach(async () => {
 });
 
 describe('server diagnostic quick fixes', () => {
+  it('applies per-project profiles and entrypoints before LSP diagnostics', async () => {
+    await client.sendNotification(DidChangeConfigurationNotification.type, { settings: { co: {
+      project: { profile: 'P5', overrides: { p4: { profile: 'P4', topModule: 'cpu4' }, p5: { profile: 'P5', topModule: 'cpu5' } } },
+      verilog: { lint: { courseRules: true }, syntax: { external: { mode: 'commandOnly' } } }
+    } } });
+    await barrier();
+    const p4 = `${workspaceUri}/p4/mips.v`, p5 = `${workspaceUri}/p5/mips.v`;
+    await open(p4, 'module cpu4(input wire clk, input wire reset); endmodule');
+    await open(p5, 'module cpu5(input wire clk, input wire reset); endmodule');
+    await client.sendRequest(ExecuteCommandRequest.type, { command: Commands.Server.InferVerilogProjects });
+    await barrier();
+    expect(latestDiagnostics(p4)).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'project-pc-reset' })]));
+    expect(latestDiagnostics(p4).find((entry) => entry.code === 'project-pc-reset')?.message).toContain('P4:');
+    expect(latestDiagnostics(p5).find((entry) => entry.code === 'project-pc-reset')?.message).toContain('P5:');
+  });
   it.each([
     ['width-mismatch', 'module a(input [31:0] x, output y, z); assign y = x; assign z = x; endmodule'],
     ['port-width-mismatch', 'module child(input x); endmodule\nmodule a(input [31:0] x); child u1(.x(x)); child u2(.x(x)); endmodule']

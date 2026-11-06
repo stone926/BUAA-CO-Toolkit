@@ -101,6 +101,8 @@ import { getCachedVerilogParse } from './language/verilog/parseCache';
 import { verilogSemanticTokenTypes } from './language/verilog/model';
 import { isVerilogUri, VerilogWorkspaceIndex } from './language/verilog/workspaceIndex';
 import { extractVerilogDisplayFormats } from './language/verilog/displayFormats';
+import { applyProjectOverride } from './projectSettings';
+import { workspaceRootFor } from './language/verilog/externalSyntaxProject';
 import { samePath } from './pathUtils';
 import { startupTraceEnabled, timeStartup, traceStartup } from './startupTrace';
 import { languageIds, languageDocumentSelector, languageRangeFormattingSelector, languageServiceForDocument, LanguageServiceId } from './language/languageRegistry';
@@ -186,7 +188,8 @@ interface ServerState {
   workspaceFolders: WorkspaceFolder[] | null | undefined;
   extensionRoot?: string;
   globalSettings: CoSettings;
-  documentSettings: Map<string, Thenable<CoSettings>>;
+  documentSettings: Map<string, Thenable<unknown>>;
+  globalSettingsRaw?: unknown;
   updatedDocumentVersions: Map<string, number>;
   contentChangeTimers: Map<string, ReturnType<typeof setTimeout>>;
   verilogExternalDiagnostics: Map<string, Diagnostic[]>;
@@ -356,6 +359,7 @@ connection.onDidChangeConfiguration((change) => {
   if (state.hasConfigurationCapability) {
     state.documentSettings.clear();
   } else {
+    state.globalSettingsRaw = change.settings?.co;
     state.globalSettings = mergeCoSettings(change.settings?.co);
   }
   state.configurationVersion++;
@@ -817,6 +821,7 @@ function effectiveSettingsForDocument(document: TextDocument, settings: CoSettin
   return cachedEffectiveSettings(effectiveSettingsCacheKey(document.uri, document.version), () => {
     const snapshot = verilogProfileSnapshot(document.languageId === languageIds.verilog ? document.uri : undefined);
     return applyResolvedProfile(settings, {
+      projectScopes: verilogIndex.getProjectScopes(document.uri),
       activeLanguageId: serviceKeyForDocument(document),
       activeFilePath: fsPathFromUri(document.uri),
       files: profileFilesWithActive(snapshot.files, document.uri, serviceKeyForDocument(document)),
@@ -993,18 +998,19 @@ function serviceKeyForDocument(document: TextDocument): string {
 }
 
 async function getDocumentSettings(resource: string): Promise<CoSettings> {
+  const merge = (value: unknown) => mergeCoSettings(applyProjectOverride(value, fsPathFromUri(resource), resource ? workspaceRootFor(state.workspaceFolders, resource) : undefined, verilogIndex.getProjectScopes(resource)));
   if (!state.hasConfigurationCapability) {
-    return state.globalSettings;
+    return merge(state.globalSettingsRaw ?? state.globalSettings);
   }
   let result = state.documentSettings.get(resource);
   if (!result) {
     result = connection.workspace.getConfiguration({
       scopeUri: resource || undefined,
       section: 'co'
-    }).then(mergeCoSettings);
+    });
     state.documentSettings.set(resource, result);
   }
-  return result;
+  return merge(await result);
 }
 
 async function settingsForUri(uri: string): Promise<CoSettings> {
@@ -1020,6 +1026,7 @@ async function settingsForUri(uri: string): Promise<CoSettings> {
     const languageId = isVerilogUri(uri) ? languageIds.verilog : '';
     const snapshot = verilogProfileSnapshot(languageId === languageIds.verilog ? uri : undefined);
     return applyResolvedProfile(settings, {
+      projectScopes: verilogIndex.getProjectScopes(uri),
       activeLanguageId: languageId,
       activeFilePath: fsPathFromUri(uri),
       files: profileFilesWithActive(snapshot.files, uri, languageId),
@@ -1030,7 +1037,7 @@ async function settingsForUri(uri: string): Promise<CoSettings> {
 }
 
 function needsProfileInference(settings: CoSettings): boolean {
-  return settings.project.profile === 'auto';
+  return settings.project.profile === 'auto' || settings.project.profileSource !== 'project';
 }
 
 documents.listen(connection);

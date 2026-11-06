@@ -373,7 +373,15 @@ async function runIverilogInWorkspace(
     const excludedTestbenchSources = nonInteractive
       ? await findUserTestbenchSourceUris(activeUri ?? folder.uri, configuredTestbench, options.moduleRegistry)
       : [];
+    const projectUri = testbench.designSourceUri ?? activeUri;
+    const projectSources = projectUri && options.moduleRegistry?.getProjectSources?.(projectUri.toString());
+    const scopes = projectUri && options.moduleRegistry?.getProjectScopes?.(projectUri.toString());
+    if (projectSources && (!projectSources.length || (scopes && scopes.length > 1))) {
+      reportRunnerError(services, activeUri, showMessages, '无法确定唯一项目，请从目标项目的设计文件运行仿真。');
+      return undefined;
+    }
     const sourceFiles = await resolveVerilogProjectFiles(folder, extraVerilogFiles, {
+      ...(projectSources ? { projectSourceUris: projectSources.map((source) => vscode.Uri.parse(source.uri)) } : {}),
       ...(nonInteractive ? {
         excludedFiles: excludedTestbenchSources,
         excludedBasenames: [`${configuredTestbench}.v`]

@@ -2,6 +2,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   getProfile,
+  getProfileResolution,
+  getProjectScopes,
   getTopModule,
   getTestbench,
   getMachineCode,
@@ -51,12 +53,16 @@ export class CoSidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     const resource = activeProjectResource(activeDocument?.uri);
     const profile = getProfile(resource);
     const folder = workspaceFolderForOrFirst(resource);
+    const scopes = getProjectScopes(resource);
 
     return {
       profile,
+      projectName: scopes.length === 1 ? scopes[0].name : scopes.length > 1 ? '共享源文件' : undefined,
+      projectPath: scopes.length === 1 ? scopes[0].rootPath : undefined,
       workspaceName: folder?.name,
       workspacePath: folder?.uri.fsPath,
       configSource: 'VS Code settings' as const,
+      profileScopeDescription: getProfileResolution(resource).source === 'project' ? '当前项目专属设置' : getProfileResolution(resource).source === 'inferred' ? '当前项目自动推断' : '工作区默认设置',
       topModule: getTopModule(resource),
       testbench: getTestbench(resource),
       machineCode: getMachineCode(resource),
