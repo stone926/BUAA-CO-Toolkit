@@ -4,11 +4,13 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import * as vscode from 'vscode';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { parseModules } from './moduleParser';
+import { parseVerilogModuleSource } from './moduleDeclarations';
+import { parseIncludesFromTokens } from './preprocessor';
 import { VerilogModule } from './model';
 import type { MutableVerilogModuleProvider } from './moduleProvider';
 import { yieldEventLoop } from '../../nodeFs';
 import { normalizeVerilogProjects, VerilogProjectContext } from './projectContext';
+import { inferVerilogProjects, VerilogProjectSource } from './projectInference';
 
 /**
  * 扩展宿主侧的工作空间模块注册表。
@@ -20,6 +22,8 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   private readonly modulesByUri = new Map<string, VerilogModule[]>();
   private readonly textHashes = new Map<string, string>();
   private readonly revisions = new Map<string, number>();
+  private readonly projectSources = new Map<string, VerilogProjectSource>();
+  private projectContext: { key: string; context: VerilogProjectContext } | undefined;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private scanTimer: ReturnType<typeof setTimeout> | undefined;
   private _scanning = true;
@@ -44,10 +48,7 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
   getModules(name: string, fromUri?: string): VerilogModule[] {
     const modules = this.modules.get(name) ?? [];
     if (!fromUri) return sortedModules(modules);
-    const context = new VerilogProjectContext(
-      vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString()) ?? [],
-      normalizeVerilogProjects(vscode.workspace.getConfiguration('co').get('verilog.projects'))
-    );
+    const context = this.resolveProjectContext();
     return sortedModules(modules.filter((module) => context.sharesProject(fromUri, module.uri)));
   }
 
@@ -123,6 +124,8 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
 
   /** 移除某个文件的所有模块 */
   removeDocument(uri: string): boolean {
+    this.projectContext = undefined;
+    this.projectSources.delete(uri);
     const hadText = this.textHashes.delete(uri);
     const existing = this.modulesByUri.get(uri);
     if (!existing) {
@@ -146,6 +149,8 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     this.modulesByUri.clear();
     this.textHashes.clear();
     this.revisions.clear();
+    this.projectSources.clear();
+    this.projectContext = undefined;
     this._scanning = false;
   }
 
@@ -181,15 +186,25 @@ export class WorkspaceModuleRegistry implements MutableVerilogModuleProvider {
     if (this.textHashes.get(uri) === hash) {
       return false;
     }
-    const parsed = parseModules(
-      TextDocument.create(uri, 'verilog', version, text),
-      text
-    );
+    const document = TextDocument.create(uri, 'verilog', version, text);
+    const parsed = parseVerilogModuleSource(document);
     // 清除该文件的旧条目后再添加
     this.removeDocument(uri);
-    this.addModules(uri, parsed);
+    this.addModules(uri, parsed.modules);
+    this.projectSources.set(uri, { uri, modules: parsed.modules, includes: parseIncludesFromTokens(document, parsed.tokens) });
     this.textHashes.set(uri, hash);
     return true;
+  }
+
+  private resolveProjectContext(): VerilogProjectContext {
+    const folders = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString()) ?? [];
+    const configured = normalizeVerilogProjects(vscode.workspace.getConfiguration('co').get('verilog.projects'));
+    const key = JSON.stringify([folders, configured]);
+    if (this.projectContext?.key === key) return this.projectContext.context;
+    const projects = Object.keys(configured).length ? configured : inferVerilogProjects(folders, [...this.projectSources.values()]);
+    const context = new VerilogProjectContext(folders, projects, !Object.keys(configured).length);
+    this.projectContext = { key, context };
+    return context;
   }
 
   private addModules(uri: string, modules: VerilogModule[]): void {

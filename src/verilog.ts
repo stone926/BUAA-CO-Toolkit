@@ -32,6 +32,7 @@ import {
   setVerilogSimulationModuleRegistry
 } from './verilog/simulationRunner';
 import { isCustomTestbenchPath, isPrivateRuntimeTestbenchPath } from './verilogSimulationFiles';
+import { configureVerilogProjects } from './verilog/projectConfiguration';
 
 export { coSettingsForUri, toTextDocument } from './verilog/documentContext';
 export { runVerilogSimulation };
@@ -40,6 +41,7 @@ export type { VerilogSimulationRunOptions, VerilogSimulationRunOutput } from './
 export function registerVerilog(context: vscode.ExtensionContext, services: AppServices, moduleRegistry?: MutableVerilogModuleProvider): void {
   setVerilogSimulationModuleRegistry(moduleRegistry);
   context.subscriptions.push(
+    vscode.commands.registerCommand(Commands.Verilog.ConfigureProjects, configureVerilogProjects),
     vscode.commands.registerCommand(Commands.Verilog.GenerateTestbench, () => generateTestbench(moduleRegistry)),
     vscode.commands.registerCommand(Commands.Verilog.CheckSyntax, () => checkVerilogSyntax()),
     vscode.commands.registerCommand(Commands.Verilog.RunSimulation, () => runVerilogSimulation(services, { moduleRegistry }))

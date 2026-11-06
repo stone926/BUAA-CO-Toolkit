@@ -41,4 +41,14 @@ describe('external syntax project sources', () => {
     expect(await sourcesFor('alu.v')).toEqual(['alu.v']);
     expect(await sourcesFor('.co/iverilog/co_generated_alu_tb.v')).toEqual(['alu.v']);
   });
+
+  it('infers separate CPU sources and includes shared module dependencies', async () => {
+    for (const variant of ['a', 'b']) {
+      write(`${variant}/alu.v`, 'module alu; shared u(); endmodule');
+      write(`${variant}/top.v`, 'module top; alu u(); endmodule');
+    }
+    write('lib/shared.v', 'module shared; endmodule');
+    expect(await sourcesFor('a/top.v')).toEqual(['a/alu.v', 'a/top.v', 'lib/shared.v']);
+    expect(await sourcesFor('b/top.v')).toEqual(['b/alu.v', 'b/top.v', 'lib/shared.v']);
+  });
 });

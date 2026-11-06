@@ -8,6 +8,10 @@ import { yieldEventLoop } from '../../nodeFs';
 import { orderVerilogProjectFiles } from '../../verilog/verilogProjectOrder';
 import { isUserTestbenchPath } from '../../verilogSimulationFiles';
 import { VerilogProjectContext, VerilogProjects } from './projectContext';
+import { inferVerilogProjects, VerilogProjectSource } from './projectInference';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import { parseVerilogModuleSource } from './moduleDeclarations';
+import { parseIncludesFromTokens } from './preprocessor';
 
 export interface ExternalSyntaxProject {
   root: string;
@@ -24,9 +28,23 @@ export async function resolveExternalSyntaxProject(
   if (!root) {
     return undefined;
   }
-  const context = new VerilogProjectContext([URI.file(root).toString()], projects);
+  const folderUri = URI.file(root).toString();
+  if (!Object.keys(projects).length) {
+    const files = await scanProjectFiles([root], limit);
+    const sources: VerilogProjectSource[] = [];
+    for (const file of files) {
+      try {
+        const document = TextDocument.create(URI.file(file).toString(), 'verilog', 0, await fs.promises.readFile(file, 'utf8'));
+        const parsed = parseVerilogModuleSource(document);
+        sources.push({ uri: document.uri, modules: parsed.modules, includes: parseIncludesFromTokens(document, parsed.tokens) });
+      } catch { /* A concurrent delete must not fail project inference. */ }
+    }
+    projects = inferVerilogProjects([folderUri], sources);
+  }
+  const context = new VerilogProjectContext([folderUri], projects);
   let contextUri = triggerUri;
-  if (userTestbenchTrigger(root, triggerUri).length && context.projectIds(triggerUri).some((id) => id.startsWith('isolated:'))) {
+  const generatedTrigger = path.relative(root, fsPathFromUri(triggerUri) ?? root).split(path.sep)[0] === CO_DIR;
+  if ((generatedTrigger || userTestbenchTrigger(root, triggerUri).length) && context.projectIds(triggerUri).some((id) => id.startsWith('isolated:'))) {
     const sourceSets = Object.values(projects);
     if (sourceSets.length !== 1) {
       throw new Error('此 testbench 未归属唯一 Verilog 工程；请在 co.verilog.projects 中将它列入目标源集合。');
@@ -38,7 +56,7 @@ export async function resolveExternalSyntaxProject(
   }
   const discovered = await scanProjectFiles(context.sourcePaths(contextUri) ?? [root], limit);
   const sources = orderVerilogProjectFiles(
-    discovered.filter((file) => context.sharesProject(contextUri, URI.file(file).toString())).map((fsPath) => ({ fsPath })),
+    discovered.filter((file) => file.toLowerCase().endsWith('.v') && context.sharesProject(contextUri, URI.file(file).toString())).map((fsPath) => ({ fsPath })),
     userTestbenchTrigger(root, triggerUri)
   ).map((file) => file.fsPath);
   return { root, sources };
@@ -83,7 +101,7 @@ async function scanProjectFiles(roots: string[], limit: number): Promise<string[
     try {
       const stat = await fs.promises.stat(current);
       if (stat.isFile()) {
-        if (current.toLowerCase().endsWith('.v')) verilogFiles.push(current);
+        if (/\.vh?$/i.test(current)) verilogFiles.push(current);
         continue;
       }
       entries = await fs.promises.readdir(current, { withFileTypes: true });
@@ -102,7 +120,7 @@ async function scanProjectFiles(roots: string[], limit: number): Promise<string[
         continue;
       }
       const lowerName = entry.name.toLowerCase();
-      if (lowerName.endsWith('.v')) {
+      if (lowerName.endsWith('.v') || lowerName.endsWith('.vh')) {
         verilogFiles.push(fullPath);
         if (verilogFiles.length >= limit) {
           break;

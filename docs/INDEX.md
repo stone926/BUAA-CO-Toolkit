@@ -5,7 +5,7 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
 架构: Client/Server IPC, TypeScript strict
 
 子系统:
-  orchestration   | docs/modules/orchestration.md   | 61 files | 扩展宿主层（命令/配置/UI/工具链；含 Logisim 与 hazard 命令注册）
+  orchestration   | docs/modules/orchestration.md   | 62 files | 扩展宿主层（命令/配置/UI/工具链；含 Logisim 与 hazard 命令注册）
   common-lsp      | docs/modules/common-lsp.md      | 7 files  | 共享 LSP 基础设施
   mips-lsp        | docs/modules/mips-lsp.md        | 34 files | MIPS 汇编语言支持
   mips-core       | docs/modules/mips-core.md       | 65 files | 纯 TS MIPS 引擎核心（课程与普通 MARS ISA/profile/assembler/machine/devices/events/debug）
@@ -14,13 +14,13 @@ LSP: src/server.ts (路由) + src/languageClient.ts (客户端)
   mips-providers  | docs/modules/mips-providers.md  | 9 files  | Provider-neutral 引擎契约与不可变 CourseEnginePlan
   mips-host       | docs/modules/mips-host.md       | 13 files | 懒启动 Worker、普通 MARS syscall I/O、交互调试、真实 ISA batch 与 ACK 背压
   mips-replay     | docs/modules/mips-replay.md     | 9 files  | manifest v2 用例闭包、可信引擎注册表与证据校验
-  verilog-lsp     | docs/modules/verilog-lsp.md     | 101 files | Verilog HDL 语言支持（子模块：verilog-ast 15、verilog-diagnostics 22）
+  verilog-lsp     | docs/modules/verilog-lsp.md     | 102 files | Verilog HDL 语言支持（子模块：verilog-ast 15、verilog-diagnostics 22）
   logisim-lsp     | docs/modules/logisim-lsp.md     | 2 files  | Logisim 电路文件
   hazard-analysis | docs/modules/hazard-analysis.md | 14 files | 内置流水线冲突分析与交互报告
   course-testing  | docs/modules/course-testing.md  | 75 files + host adapters | 自动化测试框架与失败定位、用例重跑
   waveform        | docs/modules/waveform.md        | 60 files | 内置 VCD 波形查看器（自定义编辑器 + 仿真并查看波形）
   conformance     | conformance/mips/               | 独立 Node 包：ISA golden、冻结执行语料与 JSONL 门禁；MARS 参考仅用于历史证据
-  test-suite      | docs/modules/test-suite.md      | 287 files| Vitest 测试
+  test-suite      | docs/modules/test-suite.md      | 289 files| Vitest 测试
   resources       | docs/modules/resources.md       | ~55 files + 5 bundled Icarus runtimes | 静态资源与生成源
   highlighting    | docs/modules/syntax-highlighting.md | 3 grammars | TextMate/semantic 分层高亮
 

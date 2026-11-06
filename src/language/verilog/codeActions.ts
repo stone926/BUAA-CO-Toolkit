@@ -22,11 +22,21 @@ import { integerConstantValue, VerilogIntegralConstant } from './typedConstants'
 import type { VerilogExpressionAst } from './exprAst';
 import { overridableParameters } from './parameterOverrides';
 import { InstanceContext, resolveInstanceTargetModule } from './resolveSymbol';
+import { Commands } from '../../constants';
 
 type VerilogExpressionActionContext = VerilogExpressionContext;
 
 export function getVerilogCodeActions(document: TextDocument, range: Range, diagnostics: Diagnostic[], settings: CoSettings, index: VerilogWorkspaceIndex): CodeAction[] {
   const actions: CodeAction[] = [];
+  const projectDiagnostics = diagnostics.filter((diagnostic) => diagnostic.code === 'ambiguous-module' || diagnostic.code === 'duplicate-module');
+  if (projectDiagnostics.length && !Object.keys(settings.verilog.projects).length) {
+    actions.push({
+      title: '自动分析并配置独立 Verilog 工程',
+      kind: CodeActionKind.QuickFix,
+      diagnostics: projectDiagnostics,
+      command: { title: '自动配置 Verilog 工程', command: Commands.Verilog.ConfigureProjects, arguments: [document.uri] }
+    });
+  }
   const implicit = diagnostics.find((diagnostic) => typeof diagnostic.code === 'string' && diagnostic.code.startsWith('implicit-net:'));
   if (implicit && typeof implicit.code === 'string') {
     const name = implicit.code.slice('implicit-net:'.length);

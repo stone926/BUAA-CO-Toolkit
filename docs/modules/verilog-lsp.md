@@ -1,4 +1,4 @@
-# verilog-lsp | src/language/verilog/ | 101 files
+# verilog-lsp | src/language/verilog/ | 102 files
 
 Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/过程/块 AST → 语义模型（符号表 + 引用）→ 多类型诊断 → 补全/hover（含宽度推断与常量折叠）/跳转/格式化/高亮/折叠/签名/重命名/内联提示/代码操作，外加跨文件 `workspaceIndex`。SystemVerilog（`.sv` / `.svh`）刻意只走独立 language id + TextMate grammar，不接此 parser，避免 unsupported SV AST 产生误诊断
 
@@ -47,6 +47,7 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 - `moduleProvider.ts` — `MutableVerilogModuleProvider` 接口
 - `moduleResolution.ts` — 按调用者工程上下文唯一解析模块；歧义不选首个定义，诊断与 provider 共用
 - `projectContext.ts` — `co.verilog.projects` 命名源集合与文件/目录归属；LSP、宿主连线视图和外部语法检查共用
+- `projectInference.ts` — 基于同名模块目录分叉与实例/include 依赖闭包推断源集合；纯索引计算，无文件系统访问
 
 ## LSP providers
 
@@ -90,7 +91,8 @@ Verilog HDL（`.v` / `.vh`）LSP：词法 → 递归下降解析 → 表达式/�
 
 - `workspaceModuleRegistry.ts` — VS Code 端后台索引：保存时从文档更新，watcher 异步读盘并按内容指纹跳过保存回声；每个 URI 的修订序号防止旧读取覆盖新索引
 - `workspaceIndex.ts` — LSP 端模块/宏/引用/display 格式数据库，增量更新（≤50 逐文件，>50 全量）
-- 多个练习或不同阶段共用工作区时，用 `co.verilog.projects` 声明独立源集合，例如 `{"P4":["stone/p4"],"P7":["stone/p7"]}`。条目是文件或递归目录路径，不使用 glob；同目录独立题目可以分别列出 `ALU1.v`、`ALU2.v`。共享源码可列入多个集合。未配置时每个 VS Code 工作区文件夹是一个工程；同名定义有歧义时不猜测跳转、端口类型或跨文件重命名目标。外部检查从当前文件唯一所属集合收集源；共享入口需要从具体工程入口触发。
+- 未配置 `co.verilog.projects` 时，后台索引自动按同名模块的目录分叉（支持多层课程/CPU 目录）划分源集合，沿实例和相对 include 依赖补齐共享源码。推断按索引修订缓存，文件变化后失效，无新增启动扫描，也不会自动写入用户设置；初始扫描完成前不发布跨文件重复/歧义诊断。同目录重复或无本地定义的多候选依赖保留诊断，不任意选择目标。
+- 自动推断统一用于 LSP、宿主连线和外部语法检查。重复/歧义诊断提供“自动分析并配置独立 Verilog 工程”快速修复，可将推断结果（含共享依赖）保存到工作区设置；已有显式配置优先且不会被覆盖。手工配置示例 `{"P4":["stone/p4"],"P7":["stone/p7"]}`，条目为文件/递归目录，可使用绝对路径，不使用 glob；同目录独立题目可以分别列出 `ALU1.v`、`ALU2.v`。共享入口需从具体工程入口触发外部检查。
 - `signalWiring.ts` — 跨模块 signal driver/reader 追踪
 
 ## 外部编译器

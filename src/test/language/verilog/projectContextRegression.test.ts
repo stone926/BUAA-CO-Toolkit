@@ -44,13 +44,13 @@ describe('Verilog project identity', () => {
     }
   });
 
-  it('does not guess when an unconfigured source set has ambiguous definitions', () => {
+  it('automatically separates directory variants without explicit settings', () => {
     const { index, settings, top7, p7 } = fixture(false);
-    expect(getVerilogDefinition(top7, top7.positionAt(top7.getText().indexOf('alu u')), settings, index)).toBeUndefined();
+    expect(getVerilogDefinition(top7, top7.positionAt(top7.getText().indexOf('alu u')), settings, index)?.uri).toBe(p7.uri);
     const diagnostics = getVerilogDiagnostics(top7, settings, index);
-    expect(diagnostics.some((d) => d.code === 'ambiguous-module')).toBe(true);
+    expect(diagnostics.some((d) => d.code === 'ambiguous-module')).toBe(false);
     expect(diagnostics.some((d) => d.code === 'port-width-mismatch')).toBe(false);
-    expect(getVerilogRenameEdits(p7, p7.positionAt(7), 'renamed', settings, index)).toBeUndefined();
+    expect(getVerilogRenameEdits(p7, p7.positionAt(7), 'renamed', settings, index)?.changes?.[top7.uri]).toBeDefined();
   });
 
   it('scopes module and port references and rename edits to their bound definition', () => {

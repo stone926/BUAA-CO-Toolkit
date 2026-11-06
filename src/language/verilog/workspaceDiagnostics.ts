@@ -89,6 +89,7 @@ function getWorkspaceInstanceDiagnostics(document: TextDocument, settings: CoSet
 
 function getWorkspaceModuleDiagnostics(index: VerilogWorkspaceIndex, parsed: VerilogParseResult): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
+  if (!index.complete) return diagnostics;
   for (const module of parsed.modules) {
     const duplicates = index.getModules(module.name, module.uri).filter((candidate) => candidate.uri !== module.uri);
     if (duplicates.length) {

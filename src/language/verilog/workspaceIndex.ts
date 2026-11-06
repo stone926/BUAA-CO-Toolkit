@@ -14,6 +14,7 @@ import { VerilogSemanticModel, VerilogSemanticSymbol, VerilogSemanticSymbolKind 
 import { yieldEventLoop } from '../../nodeFs';
 import { extractVerilogDisplayFormats } from './displayFormats';
 import { VerilogProjectContext, VerilogProjects } from './projectContext';
+import { inferVerilogProjects } from './projectInference';
 
 export type VerilogConnectionListKind = 'ports' | 'parameters';
 
@@ -53,7 +54,9 @@ export class VerilogWorkspaceIndex {
   private workspaceComplete: boolean;
   private folderUris: string[] = [];
   private projectsKey = '';
-  private projects = new VerilogProjectContext();
+  private configuredProjects: VerilogProjects = {};
+  private projectContext: VerilogProjectContext | undefined;
+  private inferredProjects: VerilogProjects | undefined;
 
   constructor(options: { maxFiles?: number; workspaceComplete?: boolean } = {}) {
     this.maxFiles = options.maxFiles ?? 5000;
@@ -244,12 +247,26 @@ export class VerilogWorkspaceIndex {
     if (key === this.projectsKey) return;
     this.folderUris = [...folderUris];
     this.projectsKey = key;
-    this.projects = new VerilogProjectContext(folderUris, projects);
+    this.configuredProjects = projects;
     this.invalidateCaches();
   }
 
   sharesProject(left: string, right: string): boolean {
     return this.projects.sharesProject(left, right);
+  }
+
+  /** Same effective source sets are passed to external compiler discovery. */
+  get effectiveProjects(): VerilogProjects {
+    if (Object.keys(this.configuredProjects).length) return this.configuredProjects;
+    return this.inferredProjects ??= inferVerilogProjects(this.folderUris, [...this.files.values()]);
+  }
+
+  inferProjects(): VerilogProjects {
+    return inferVerilogProjects(this.folderUris, [...this.files.values()]);
+  }
+
+  private get projects(): VerilogProjectContext {
+    return this.projectContext ??= new VerilogProjectContext(this.folderUris, this.effectiveProjects, !Object.keys(this.configuredProjects).length);
   }
 
   projectKey(uri: string): string {
@@ -400,6 +417,8 @@ export class VerilogWorkspaceIndex {
 
   private invalidateCaches(): void {
     this.revision++;
+    this.projectContext = undefined;
+    this.inferredProjects = undefined;
     this.fileListCache = undefined;
     this.moduleListCache = undefined;
     this.macroListCache = undefined;

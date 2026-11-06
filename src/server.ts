@@ -320,7 +320,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       inlayHintProvider: true,
       executeCommandProvider: {
-        commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand, verilogExternalSyntaxCommand]
+        commands: [mipsIgnorePseudoFileCommand, mipsIgnorePseudoMnemonicCommand, verilogExternalSyntaxCommand, Commands.Server.InferVerilogProjects]
       },
       semanticTokensProvider: {
         legend: {
@@ -543,7 +543,10 @@ connection.onPrepareRename(withDocument(
 ));
 
 connection.onExecuteCommand(async (params) => {
-  if (params.command === mipsIgnorePseudoFileCommand && typeof params.arguments?.[0] === 'string') {
+  if (params.command === Commands.Server.InferVerilogProjects) {
+    if (!verilogIndex.complete) await rebuildVerilogIndex();
+    return verilogIndex.inferProjects();
+  } else if (params.command === mipsIgnorePseudoFileCommand && typeof params.arguments?.[0] === 'string') {
     mipsState.ignoredPseudoInstructionFiles.add(params.arguments[0]);
     await validateDocuments(isMipsDocument);
   } else if (params.command === mipsIgnorePseudoMnemonicCommand && typeof params.arguments?.[0] === 'string') {
@@ -680,7 +683,9 @@ async function runExternalVerilogSyntaxCheck(uri: string, settings: CoSettings, 
       triggerUri: uri,
       extensionRoot: state.extensionRoot,
       timeoutMs: external.timeoutMs > 0 ? external.timeoutMs : settings.run.timeoutMs,
-      projects: settings.verilog.projects,
+      // A save can arrive before the background scan completes. In that case
+      // discovery must infer from disk rather than a partial index snapshot.
+      projects: verilogIndex.complete ? verilogIndex.effectiveProjects : settings.verilog.projects,
       signal: controller.signal
     });
   } catch (error) {

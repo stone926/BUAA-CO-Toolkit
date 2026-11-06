@@ -419,6 +419,10 @@
         "title": "CO: ASM 导出内核文本段"
       },
       {
+        "command": "co.verilog.configureProjects",
+        "title": "CO: Verilog 自动分析并配置独立工程"
+      },
+      {
         "command": "co.verilog.generateTestbench",
         "title": "CO: Verilog 生成 Testbench"
       },
@@ -624,6 +628,10 @@
         },
         {
           "command": "co.mips.dumpKernelText",
+          "when": "false"
+        },
+        {
+          "command": "co.verilog.configureProjects",
           "when": "false"
         },
         {
@@ -845,7 +853,7 @@
                 "minLength": 1
               }
             },
-            "description": "独立 Verilog 工程的源文件集合，例如 {\"P4\":[\"stone/p4\"],\"P7\":[\"stone/p7\"]}。此设置统一应用于当前窗口；每项是相对各工作区文件夹的文件或目录（递归包含，不使用通配符）；可列共享源文件。空对象将每个工作区文件夹视为一个工程。同名定义有歧义时不会猜测跳转目标。",
+            "description": "独立 Verilog 工程的源文件集合，例如 {\"P4\":[\"stone/p4\"],\"P7\":[\"stone/p7\"]}。此设置统一应用于当前窗口；每项是相对各工作区文件夹或绝对路径的文件或目录（递归包含，不使用通配符）；可列共享源文件。空对象按同名模块的目录边界及实例/include 依赖自动推断独立工程，无需写入设置；显式配置优先。同目录或依赖不明确的重复定义仍会报告诊断，并提供自动配置快速修复。",
             "scope": "window",
             "order": 50,
             "default": {}

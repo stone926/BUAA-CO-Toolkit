@@ -19,7 +19,7 @@ export class VerilogProjectContext {
   private readonly roots: Array<{ uri: string; key: string }>;
   private readonly sets: Array<{ id: string; root: string; sources: string[] }>;
 
-  constructor(folderUris: readonly string[] = [], projects: VerilogProjects = {}) {
+  constructor(folderUris: readonly string[] = [], projects: VerilogProjects = {}, private readonly inferred = false) {
     this.roots = folderUris.map((uri) => ({ uri, key: uriPathKey(uri) })).sort((a, b) => b.key.length - a.key.length);
     this.sets = this.roots.flatMap((folder) => Object.entries(projects).map(([name, sources]) => ({
       id: `${folder.uri}#${name}`,
@@ -37,8 +37,9 @@ export class VerilogProjectContext {
     const ids = sets.length
       ? sets.filter((set) => set.sources.some((source) => within(file, source))).map((set) => set.id)
       : [folder?.uri ?? 'unconfigured'];
-    // Files outside declared source sets are isolated, not silently joined to all projects.
-    const result = ids.length ? ids : [`isolated:${uri}`];
+    // Generated/unindexed files can use a single inferred workspace project.
+    // Explicit source sets and files outside the workspace remain isolated.
+    const result = ids.length ? ids : this.inferred && folder && sets.length === 1 ? [sets[0].id] : [`isolated:${uri}`];
     this.memberships.set(uri, result);
     return result;
   }

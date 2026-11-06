@@ -77,6 +77,18 @@ afterEach(() => {
 });
 
 describe('WorkspaceModuleRegistry', () => {
+  it('uses the same inferred directory projects as the language server', () => {
+    const root = makeTempDir();
+    vscodeMock.state.workspaceFolders.push({ uri: vscodeMock.MockUri.file(root) });
+    const registry = new WorkspaceModuleRegistry();
+    const a = writeVerilog(root, 'a/alu.v', 'module alu; shared u(); endmodule');
+    const b = writeVerilog(root, 'b/alu.v', 'module alu; shared u(); endmodule');
+    const shared = writeVerilog(root, 'lib/shared.v', 'module shared; endmodule');
+    for (const file of [a, b, shared]) registry.updateUri(vscodeMock.MockUri.file(file) as never);
+    expect(normalize(registry.getModule('alu', a)?.uri ?? '')).toBe(normalize(a));
+    expect(normalize(registry.getModule('alu', b)?.uri ?? '')).toBe(normalize(b));
+    expect(normalize(registry.getModule('shared', a)?.uri ?? '')).toBe(normalize(shared));
+  });
   it('accepts Verilog header files but leaves SystemVerilog to its lexical language', () => {
     const root = makeTempDir();
     const header = writeVerilog(root, 'include/defs.vh', 'module HeaderModule; endmodule\n');

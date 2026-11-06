@@ -124,6 +124,7 @@ describe('Verilog command registration and entry behavior', () => {
     await commands.get(Commands.Verilog.RunSimulation)!();
 
     expect([...commands.keys()]).toEqual([
+      Commands.Verilog.ConfigureProjects,
       Commands.Verilog.GenerateTestbench,
       Commands.Verilog.CheckSyntax,
       Commands.Verilog.RunSimulation

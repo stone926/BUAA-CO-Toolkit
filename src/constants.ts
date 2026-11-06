@@ -88,6 +88,7 @@ export const Commands = {
   },
 
   Verilog: {
+    ConfigureProjects: 'co.verilog.configureProjects',
     GenerateTestbench: 'co.verilog.generateTestbench',
     CheckSyntax: 'co.verilog.checkSyntax',
     RunSimulation: 'co.verilog.runSimulation',
@@ -126,6 +127,7 @@ export const Commands = {
   },
 
   Server: {
+    InferVerilogProjects: 'co.internal.verilog.inferProjects',
     MipsIgnorePseudoWarningsForFile: 'co.server.mips.ignorePseudoWarningsForFile',
     MipsIgnorePseudoWarningsForMnemonic: 'co.server.mips.ignorePseudoWarningsForMnemonic',
     InternalVerilogCheckSyntax: 'co.internal.verilog.checkSyntax'
