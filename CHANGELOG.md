@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.13] - 2026-11-06
+
 - 发布独立项目识别、项目级配置及 Verilog 高亮修复，包含下方 1.5.12 的全部改进；1.5.12 候选被 Windows 安装包验证拦截，未上架。
 - 修复 Windows 项目源路径大小写丢失导致 Icarus 诊断无法在编辑器显示的问题，覆盖自动推断及显式文件、目录源集合。
 
