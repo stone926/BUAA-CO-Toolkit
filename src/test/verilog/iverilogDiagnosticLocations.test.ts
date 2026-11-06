@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -25,7 +26,7 @@ describe.skipIf(!available)('diagnostic locations from real bundled Icarus', () 
     const file = path.join(directory, 'alu with spaces.v');
     fs.writeFileSync(file, source);
     const result = spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-tnull', '-i', file], {
-      cwd: directory, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: 10000
+      cwd: directory, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: testToolTimeoutMs
     });
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);

@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -54,7 +55,7 @@ describe.skipIf(!available)('Verilog formatting real Icarus equivalence', () => 
         const outputFile = path.join(directory, `${name}.vvp`);
         fs.writeFileSync(sourceFile, text);
         const args = buildIverilogCompileArgs({ runtime, testbenchModule: 'tb', watchdogModule: '__watchdog', outputFile, dependencyFile: path.join(directory, `${name}.d`), defaultsFile, workspaceRoot: directory, watchdogFile, sourceFiles: [sourceFile] });
-        const options = { cwd: directory, encoding: 'utf8' as const, timeout: 15000, env: buildIverilogEnvironment(runtime) };
+        const options = { cwd: directory, encoding: 'utf8' as const, timeout: testToolTimeoutMs, env: buildIverilogEnvironment(runtime) };
         const compile = spawnSync(runtime.iverilogPath, args, options);
         expect(compile.error, `${name} compile error`).toBeUndefined();
         expect(compile.status, `${name}: ${compile.stderr}`).toBe(0);

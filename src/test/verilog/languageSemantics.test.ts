@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -91,7 +92,7 @@ describe.skipIf(!available)('Verilog language semantics against bundled Icarus -
     const sourceFile = path.join(directory, `${name}.v`);
     const outputFile = path.join(directory, `${name}.vvp`);
     fs.writeFileSync(sourceFile, text);
-    const options = { cwd: directory, encoding: 'utf8' as const, timeout: 10000, env: buildIverilogEnvironment(runtime) };
+    const options = { cwd: directory, encoding: 'utf8' as const, timeout: testToolTimeoutMs, env: buildIverilogEnvironment(runtime) };
     const compile = spawnSync(runtime.iverilogPath, [
       ...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'tb', '-o', outputFile, sourceFile
     ], options);

@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 // @index builtin-diagnostic-conformance — Real bundled Icarus differential checks for audited diagnostic gaps.
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -226,7 +227,7 @@ async function check(source: string) {
   const compiler = await runProcessCore(runtime.iverilogPath, [
     ...buildIverilogRuntimeArgs(runtime), '-g2005', '-tnull', '-i',
     ...buildIverilogIncludeArgs(directory, [leafPath, sourcePath]), leafPath, sourcePath
-  ], { cwd: directory, env: buildIverilogEnvironment(runtime), timeoutMs: 5_000,
+  ], { cwd: directory, env: buildIverilogEnvironment(runtime), timeoutMs: testToolTimeoutMs,
     maxStdoutBytes: 128 * 1024, maxStderrBytes: 128 * 1024 });
   expect(compiler.timedOut, compiler.stderr).toBe(false);
   expect(compiler.exitCode, compiler.stderr).not.toBeNull();

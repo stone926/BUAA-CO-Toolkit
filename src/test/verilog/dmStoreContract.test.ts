@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -99,7 +100,7 @@ describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus
         const result = spawnSync(compiler, [
           '-B', path.join(runtimeRoot, 'lib', 'ivl'), '-g2005', '-s', 'contract_tb',
           '-o', `${file}.vvp`, `${profile}.v`, `${file}.v`
-        ], { cwd: workDir, encoding: 'utf8', timeout: 10000 });
+        ], { cwd: workDir, encoding: 'utf8', timeout: testToolTimeoutMs });
         expect(result.error).toBeUndefined();
         expect(result.status, result.stderr).toBe(0);
       }
@@ -159,7 +160,7 @@ describe.skipIf(!runtimeAvailable)('public DM store contract with bundled Icarus
 
 function runVector(workDir: string, profile: string, mode: string, index: number) {
   const result = spawnSync(simulator, ['-N', `${profile}-${mode}.vvp`, `+vector=${index}`], {
-    cwd: workDir, encoding: 'utf8', timeout: 5000
+    cwd: workDir, encoding: 'utf8', timeout: testToolTimeoutMs
   });
   expect(result.error).toBeUndefined();
   return result;

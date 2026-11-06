@@ -1,10 +1,14 @@
 import { defineConfig } from 'vitest/config';
+import { testCaseTimeoutMs, testHookTimeoutMs } from './src/test/helpers/testTimeouts';
 
 export default defineConfig({
   test: {
     include: ['src/test/**/*.test.ts'],
     globals: false,
-    testTimeout: 10000,
+    // Parallel compiler/filesystem tests can contend on busy Windows hosts.
+    // Performance regressions retain their own explicit elapsed-time budgets.
+    testTimeout: testCaseTimeoutMs,
+    hookTimeout: testHookTimeoutMs,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

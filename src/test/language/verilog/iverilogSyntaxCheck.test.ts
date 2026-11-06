@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../../helpers/testTimeouts';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -104,7 +105,7 @@ describe('Icarus syntax checker', () => {
       workspaceFolders: [{ uri: URI.file(root).toString(), name: 'workspace' }],
       triggerUri,
       extensionRoot: 'C:/extension',
-      timeoutMs: 5000
+      timeoutMs: testToolTimeoutMs
     });
 
     expect(result.ok).toBe(true);
@@ -134,7 +135,7 @@ describe('Icarus syntax checker', () => {
     expect(path.normalize(runOptions.cwd).toLowerCase()).toBe(path.normalize(root).toLowerCase());
     expect(runOptions).toMatchObject({
       env: { PATH: 'bundled-bin' },
-      timeoutMs: 5000
+      timeoutMs: testToolTimeoutMs
     });
   });
 
@@ -161,7 +162,7 @@ describe('Icarus syntax checker', () => {
         workspaceFolders: [{ uri: URI.file(root).toString(), name: 'workspace' }],
         triggerUri: URI.file(file).toString(),
         extensionRoot: '/extension',
-        timeoutMs: 5000
+        timeoutMs: testToolTimeoutMs
       });
 
       const [, args] = vi.mocked(runProcessCore).mock.calls[0];
@@ -180,7 +181,7 @@ describe('Icarus syntax checker', () => {
       workspaceFolders: [{ uri: URI.file(root).toString(), name: 'workspace' }],
       triggerUri,
       extensionRoot: undefined,
-      timeoutMs: 5000
+      timeoutMs: testToolTimeoutMs
     });
 
     expect(result.toolchainError).toContain('扩展安装目录');
@@ -203,7 +204,7 @@ describe('Icarus syntax checker', () => {
       workspaceFolders: [{ uri: URI.file(root).toString(), name: 'workspace' }],
       triggerUri,
       extensionRoot: 'C:/extension',
-      timeoutMs: 5000
+      timeoutMs: testToolTimeoutMs
     });
 
     expect(result.toolchainError).toContain('missing bundled files');

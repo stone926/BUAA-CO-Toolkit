@@ -1,4 +1,6 @@
-# test-suite | src/test/ | 287 files | 框架: Vitest
+# test-suite | src/test/ | 289 files | 框架: Vitest
+
+`helpers/testTimeouts.ts` 统一测试时限：Vitest 默认单测 60 秒、准备/清理钩子 120 秒，真实 Icarus 子进程 30 秒，给并发编译和大量文件操作预留调度余量；性能回归及专门验证取消/超时行为的用例保留自身预算，不改变生产工具时限。
 
 单元/集成测试，目录结构镜像 `src/`。测试文件名规则为 `<name>.test.ts`。
 
@@ -21,6 +23,8 @@
 **fixtures**：`test/fixtures/syntax/{mips,verilog}/` 下分 `valid/`、`invalid/`（含 JSON 期望）与课程语料目录。
 
 Verilog 修复回归包含类型化四态常量与上下文传播、非零/升序 packed 索引、参数覆盖类型、宏活动分支/源码范围、恢复节点与可运行模块完整性、实例数组广播/分摊、驱动位区间/数组维度/宏调用绑定、命名源集合、重命名捕获与常量重构语义。
+
+`language/verilog/projectInference.test.ts` 覆盖自动工程的嵌套目录边界、共享模块/include、真实歧义、增量更新、显式配置优先及扫描期间诊断抑制；`verilog/projectConfiguration.test.ts` 检查快速修复的工作区设置写入与已有配置保护。外部编译源集合和宿主模块注册表另验证与 LSP 推断一致。
 
 `verilog/languageSemantics.test.ts` 在中文空格路径中使用真实 bundled Icarus `-g2005` 与 VVP，比对 22 个数值表达式、5 个四态/越界表达式、time64 和常量折叠前后结果；runtime 不存在时按真实工具测试约定跳过。
 

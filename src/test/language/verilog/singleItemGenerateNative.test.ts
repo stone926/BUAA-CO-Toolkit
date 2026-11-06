@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../../helpers/testTimeouts';
 // @index single-generate-native-tests — Real bundled Icarus checks for implicit generate scopes
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -18,7 +19,7 @@ describe.skipIf(!available)('single generated items against real bundled Icarus 
   function compile(source: string) {
     const file = path.join(directory, `${sequence++}.v`);
     fs.writeFileSync(file, source);
-    return spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-tnull', '-i', file], { encoding: 'utf8', timeout: 10000, env: buildIverilogEnvironment(runtime) });
+    return spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-tnull', '-i', file], { encoding: 'utf8', timeout: testToolTimeoutMs, env: buildIverilogEnvironment(runtime) });
   }
   it.each(invalidSingleGenerateCases)('rejects %s', (_name, marked) => {
     const result = compile(marked.replace('[[', '').replace(']]', ''));

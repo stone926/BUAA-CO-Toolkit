@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -51,9 +52,9 @@ endmodule\n`;
     const output = path.join(dir, `${mode}.vvp`);
     const environment = buildIverilogEnvironment(runtime);
     const compile = spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'tb', '-o', output, path.join(dir, `${mode}.v`)],
-      { env: environment, encoding: 'utf8', timeout: 10000 });
+      { env: environment, encoding: 'utf8', timeout: testToolTimeoutMs });
     expect(compile.status, compile.stderr).toBe(0);
-    const result = spawnSync(runtime.vvpPath, ['-N', output], { env: environment, encoding: 'utf8', timeout: 10000 });
+    const result = spawnSync(runtime.vvpPath, ['-N', output], { env: environment, encoding: 'utf8', timeout: testToolTimeoutMs });
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).toContain('PROTOCOL_DONE');
     return result.stdout;

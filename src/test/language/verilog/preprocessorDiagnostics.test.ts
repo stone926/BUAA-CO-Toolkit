@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../../helpers/testTimeouts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -251,7 +252,7 @@ describe.skipIf(!fs.existsSync(runtime.iverilogPath))('preprocessor legal contro
     try {
       fs.writeFileSync(filename, source);
       const compiled = spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-tnull', '-i', filename], {
-        cwd: directory, encoding: 'utf8', timeout: 10000, env: buildIverilogEnvironment(runtime)
+        cwd: directory, encoding: 'utf8', timeout: testToolTimeoutMs, env: buildIverilogEnvironment(runtime)
       });
       expect(compiled.error).toBeUndefined();
       expect(compiled.status, compiled.stderr).toBe(0);

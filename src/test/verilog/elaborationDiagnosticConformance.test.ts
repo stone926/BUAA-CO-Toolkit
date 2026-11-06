@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -68,7 +69,7 @@ describe.skipIf(!available)('audited elaboration diagnostics against real bundle
     index.updateDocument(document, settings);
     const diagnostics = getVerilogDiagnostics(document, settings, index);
     const result = spawnSync(runtime.iverilogPath, [...buildIverilogRuntimeArgs(runtime), '-g2005', '-tnull', '-i', file], {
-      cwd: directory, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: 5000
+      cwd: directory, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: testToolTimeoutMs
     });
     expect(result.error).toBeUndefined();
     return { document, diagnostics, result };

@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 // @index test-user-cpu-testbench-runtime — 用户 CPU TB 从 code.txt 读取 P6/P7 用户段和内核段的真实 Icarus 回归
 import * as fs from 'fs';
 import * as os from 'os';
@@ -40,7 +41,7 @@ describe.skipIf(!runtimeAvailable)('generated user CPU testbench with bundled Ic
       const result = spawnSync(compiler, [
         ...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'mips_tb',
         '-o', `${profile}.vvp`, `${profile}-dut.v`, `${profile}-tb.v`
-      ], { cwd: workDir, env: environment, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+      ], { cwd: workDir, env: environment, encoding: 'utf8', timeout: testToolTimeoutMs, maxBuffer: 1024 * 1024 });
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
     }
@@ -79,9 +80,9 @@ describe.skipIf(!runtimeAvailable)('generated user CPU testbench with bundled Ic
         fs.writeFileSync(path.join(workDir, 'code.txt'), `${Array(imageWords).fill('00000000').join('\n')}\n`);
         const compile = spawnSync(compiler, [
           ...buildIverilogRuntimeArgs(runtime), '-g2005', '-s', 'mips_tb', '-o', `${stem}.vvp`, `${stem}-dut.v`, `${stem}-tb.v`
-        ], { cwd: workDir, env: environment, encoding: 'utf8', timeout: 10000 });
+        ], { cwd: workDir, env: environment, encoding: 'utf8', timeout: testToolTimeoutMs });
         expect(compile.status, compile.stdout + compile.stderr).toBe(0);
-        const run = spawnSync(simulator, ['-N', `${stem}.vvp`], { cwd: workDir, env: environment, encoding: 'utf8', timeout: 5000 });
+        const run = spawnSync(simulator, ['-N', `${stem}.vvp`], { cwd: workDir, env: environment, encoding: 'utf8', timeout: testToolTimeoutMs });
         expect(run.status, run.stdout + run.stderr).toBe(0);
         expect(run.stdout).toContain(`CO_RESET_OK edges=${external ? 5 : 2} first=${external ? 22 : 25} pc=00003000`);
       }
@@ -124,7 +125,7 @@ function runImage(workDir: string, profile: 'P6' | 'P7', words: string[]): strin
   fs.writeFileSync(path.join(workDir, 'code.txt'), `${words.join('\n')}\n`);
   const runtime = resolveIverilogRuntime(extensionRoot);
   const result = spawnSync(simulator, ['-N', `${profile}.vvp`], {
-    cwd: workDir, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024
+    cwd: workDir, env: buildIverilogEnvironment(runtime), encoding: 'utf8', timeout: testToolTimeoutMs, maxBuffer: 1024 * 1024
   });
   expect(result.error).toBeUndefined();
   expect(result.status, result.stdout + result.stderr).toBe(0);

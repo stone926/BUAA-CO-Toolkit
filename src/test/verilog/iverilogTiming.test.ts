@@ -1,3 +1,4 @@
+import { testToolTimeoutMs } from '../helpers/testTimeouts';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -75,7 +76,7 @@ endmodule
       workspaceRoot: directory, watchdogFile,
       sourceFiles: testbenchFirst ? [tb, dut, explicit] : [dut, explicit, tb]
     });
-    const options = { cwd: directory, encoding: 'utf8' as const, timeout: 20000, env: buildIverilogEnvironment(runtime) };
+    const options = { cwd: directory, encoding: 'utf8' as const, timeout: testToolTimeoutMs, env: buildIverilogEnvironment(runtime) };
     const compile = spawnSync(runtime.iverilogPath, args, options);
     expect(compile.error).toBeUndefined();
     expect(compile.status, compile.stderr).toBe(0);
