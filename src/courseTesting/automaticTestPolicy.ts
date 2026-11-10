@@ -70,6 +70,6 @@ export const continuousAutomaticTestPolicy: ContinuousAutomaticTestPolicy = Obje
   intervalMs: 0,
   maxIterations: 0,
   stopOnFailure: true,
-  retainedPassingCases: 20,
+  retainedPassingCases: 10,
   reportRetainedIterations: 200
 });

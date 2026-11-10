@@ -38,7 +38,7 @@ describe('automatic test policy', () => {
       intervalMs: 0,
       maxIterations: 0,
       stopOnFailure: true,
-      retainedPassingCases: 20,
+      retainedPassingCases: 10,
       reportRetainedIterations: 200
     });
   });

@@ -112,6 +112,8 @@ import {
 } from '../courseTesting/continuousCaseRetention';
 import { recordAsmCaseTestOutcome } from '../asmCaseStore';
 import { tryAcquireCourseTestSession } from '../courseTesting/courseTestSession';
+import { continuousAutomaticTestPolicy } from '../courseTesting/automaticTestPolicy';
+import { renderContinuousTraceMonitor } from '../courseTestReport';
 
 interface TestSetup {
   resource: URI;
@@ -824,6 +826,49 @@ describe('continuous generated trace orchestration', () => {
 
     expect(discardContinuousGeneratedAsmCase).toHaveBeenCalledTimes(3);
     expect(deps.runCourseTraceCase).not.toHaveBeenCalled();
+  });
+
+  it.each(['failed', 'error'] as const)('retains the latest ten passing cases across batches and preserves %s evidence', async (problemStatus) => {
+    const generatedCases = Array.from({ length: 13 }, (_, index) => testAsmCase(`retention-${index}`));
+    const batches = [generatedCases.slice(0, 5), generatedCases.slice(5, 10), generatedCases.slice(10)];
+    let generation = 0;
+    const deps = createDependencies({
+      automaticPolicy: () => ({
+        ...continuousAutomaticTestPolicy,
+        maxIterations: batches.length,
+        // Exercise retention with an older problem as well as subsequent passing cases.
+        stopOnFailure: false
+      }),
+      runGeneratorAndCollectAsms: vi.fn(async () => {
+        expect(discardContinuousPassingAsmCase).not.toHaveBeenCalled();
+        const asmCases = batches[generation++];
+        return { asms: asmCases.map(item => item.asm), asmCases, source: { kind: 'generator' as const } };
+      }),
+      expandTraceCases: vi.fn<TestDependencies['expandTraceCases']>(async (_asms, asmCases) => asmCases!.map(asmCase => ({ asm: asmCase.asm, asmCase }))),
+      runCourseTraceCase: vi.fn<TestDependencies['runCourseTraceCase']>(async (_services, item) => ({
+        asm: item.asm.fsPath,
+        asmSnapshot: item.asmCase!.asm.fsPath,
+        status: item.asmCase!.id === generatedCases[0].id ? problemStatus : 'passed',
+        stage: 'compare' as const,
+        message: 'result'
+      }))
+    });
+
+    await startContinuousGeneratedTraceTests(createServices(), deps);
+
+    expect(vi.mocked(discardContinuousPassingAsmCase).mock.calls.map(([manifest]) => manifest))
+      .toEqual(generatedCases.slice(1, 3).map(item => item.manifestUri.fsPath));
+    expect(discardContinuousGeneratedAsmCase).not.toHaveBeenCalled();
+    const report = vi.mocked(renderContinuousTraceMonitor).mock.calls.at(-1)![0];
+    const results = report.iterations.flatMap(iteration => iteration.results);
+    expect(results.filter(result => result.status === 'passed' && !result.artifactsPruned)
+      .map(result => result.caseId).sort())
+      .toEqual(generatedCases.slice(3).map(item => item.id).sort());
+    expect(results.find(result => result.caseId === generatedCases[0].id)).toMatchObject({
+      status: problemStatus,
+      caseManifest: generatedCases[0].manifestUri.fsPath,
+      asmSnapshot: generatedCases[0].asm.fsPath
+    });
   });
 
   it('rotates a refused passing-retention case without starving a later victim', async () => {
