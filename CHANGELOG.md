@@ -4,6 +4,8 @@ All notable changes to BUAA CO Toolkit are documented in this file.
 
 ## [Unreleased]
 
+## [1.5.15] - 2026-11-10
+
 - 发布跨会话历史留存改进，包含下方 1.5.14 的全部内容；1.5.14 候选被独立 CLI 的旧策略断言拦截，未上架，现已同步该检查。
 
 ## [1.5.14] - 2026-11-10
